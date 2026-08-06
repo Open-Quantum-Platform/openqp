@@ -1,10 +1,12 @@
 import importlib.util
+import os
 import sys
 import tempfile
 import types
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -804,6 +806,217 @@ class TestOQPTesterCollection(unittest.TestCase):
         self.assertNotEqual(legacy_dir, semantic_dir)
         self.assertEqual(legacy_artifact, "H2O_RHF-HF_ENERGY__legacy")
         self.assertEqual(semantic_artifact, "H2O_RHF-HF_ENERGY")
+
+    def test_restart_companion_reuses_project_and_runs_after_producer(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            producer = root / "QMMM/job.oqp"
+            restart = root / "QMMM/job.restart.oqp"
+            self._write(producer)
+            self._write(restart)
+            calls = []
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_restart_pair_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                tester.output_dir = str(root / "output")
+                tester.omp_threads = 1
+                tester.max_workers = 2
+                tester.results = []
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                tester._log_result_status = lambda _result: None
+
+                def fake_isolated(path):
+                    calls.append(path)
+                    return {
+                        "project": tester._project_name_for_input(path),
+                        "input_file": path,
+                        "log_file": "job.log",
+                        "status": "PASSED",
+                        "message": "matched",
+                        "execution_time": 0.0,
+                    }
+
+                tester._run_isolated = fake_isolated
+                tester.run_tests(str(root), input_format="oqp")
+
+                self.assertEqual(calls, [str(producer), str(restart)])
+                self.assertEqual(
+                    tester._project_name_for_input(str(producer)), "job")
+                self.assertEqual(
+                    tester._project_name_for_input(str(restart)), "job")
+                self.assertEqual(
+                    tester._case_output_dir(str(producer)),
+                    tester._case_output_dir(str(restart)),
+                )
+
+    def test_isolated_subprocess_uses_its_case_directory(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_file = root / "HESS/viewer.oqp"
+            self._write(input_file)
+            output_dir = root / "output"
+            calls = []
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_subprocess_cwd_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(output_dir)
+                tester.omp_threads = 1
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+
+                def fake_run(cmd, **kwargs):
+                    calls.append((cmd, kwargs))
+                    payload = {
+                        "project": "viewer",
+                        "input_file": str(input_file),
+                        "log_file": "viewer.log",
+                        "status": "PASSED",
+                        "message": "matched",
+                        "execution_time": 0.0,
+                    }
+                    return types.SimpleNamespace(
+                        stdout=tester_module._RESULT_MARKER
+                        + tester_module.json.dumps(payload),
+                        stderr="",
+                        returncode=0,
+                    )
+
+                relative_pythonpath = os.pathsep.join(
+                    ("pyoqp", "", str(root / "absolute-package")))
+                with (
+                    mock.patch.object(
+                        tester_module.subprocess, "run", side_effect=fake_run
+                    ),
+                    mock.patch.dict(
+                        tester_module.os.environ,
+                        {"PYTHONPATH": relative_pythonpath}, clear=False,
+                    ),
+                ):
+                    result = tester._run_isolated(str(input_file))
+
+                expected_dir = Path(
+                    tester._case_output_dir(str(input_file.resolve()), "viewer")
+                )
+                self.assertEqual(result["status"], "PASSED")
+                self.assertEqual(len(calls), 1)
+                cmd, kwargs = calls[0]
+                isolated_index = cmd.index("--isolated") + 1
+                self.assertEqual(Path(cmd[isolated_index]), input_file.resolve())
+                caller_index = cmd.index("--caller-cwd") + 1
+                self.assertEqual(Path(cmd[caller_index]), Path.cwd())
+                self.assertEqual(Path(kwargs["cwd"]), expected_dir)
+                self.assertTrue(expected_dir.is_dir())
+                child_pythonpath = kwargs["env"]["PYTHONPATH"].split(os.pathsep)
+                self.assertEqual(
+                    child_pythonpath,
+                    [
+                        str((Path.cwd() / "pyoqp").resolve()),
+                        str(Path.cwd()),
+                        str((root / "absolute-package").resolve()),
+                    ],
+                )
+
+    def test_isolated_worker_preserves_caller_relative_runtime_inputs(self):
+        calls = []
+
+        class RecordingRunner:
+            def __init__(self, **kwargs):
+                self.mol = types.SimpleNamespace(config={
+                    "guess": {"file": "guess.json", "file2": "old.json"},
+                    "md": {"velocity": "velocity.dat"},
+                    "dftb": {
+                        "parameter_path": "dftb-params",
+                        "library_path": "libdftb.so",
+                        "executable": "dftb-probe",
+                    },
+                    "xtb": {
+                        "parameter_path": "gfn1.opxtb",
+                        "library_path": "libxtb.so",
+                    },
+                    "qmmm": {
+                        "pdb_file": "system.pdb",
+                        "qm_atoms_xyz": "qm.xyz",
+                        "forcefield_files": "local.xml tip3p.xml",
+                    },
+                })
+                calls.append(("init", Path.cwd(), self.mol))
+
+            def run(self, test_mod=False):
+                calls.append(("run", Path.cwd(), self.mol))
+
+            def test(self):
+                return "matched", 0.0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_file = root / "case.oqp"
+            self._write(input_file)
+            self._write(root / "system.pdb")
+            self._write(root / "qm.xyz")
+            self._write(root / "local.xml")
+            (root / "dftb-params").mkdir()
+            for name in ("libdftb.so", "dftb-probe", "gfn1.opxtb", "libxtb.so"):
+                self._write(root / name)
+            worker_cwd = Path.cwd()
+
+            with load_oqp_tester(
+                RecordingRunner, "oqp_tester_caller_paths_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(root / "output")
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                result = tester.run_single_test(
+                    str(input_file), caller_cwd=str(root))
+
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(calls[0][0:2], ("init", root.resolve()))
+            self.assertEqual(calls[1][0:2], ("run", worker_cwd))
+            config = calls[1][2].config
+            self.assertEqual(
+                config["guess"]["file"], str((root / "guess.json").resolve()))
+            self.assertEqual(
+                config["guess"]["file2"], str((root / "old.json").resolve()))
+            self.assertEqual(
+                config["md"]["velocity"], str((root / "velocity.dat").resolve()))
+            self.assertEqual(
+                config["dftb"]["parameter_path"],
+                str((root / "dftb-params").resolve()),
+            )
+            self.assertEqual(
+                config["dftb"]["library_path"],
+                str((root / "libdftb.so").resolve()),
+            )
+            self.assertEqual(
+                config["dftb"]["executable"],
+                str((root / "dftb-probe").resolve()),
+            )
+            self.assertEqual(
+                config["xtb"]["parameter_path"],
+                str((root / "gfn1.opxtb").resolve()),
+            )
+            self.assertEqual(
+                config["xtb"]["library_path"],
+                str((root / "libxtb.so").resolve()),
+            )
+            self.assertEqual(
+                config["qmmm"]["pdb_file"], str((root / "system.pdb").resolve()))
+            self.assertEqual(
+                config["qmmm"]["qm_atoms_xyz"], str((root / "qm.xyz").resolve()))
+            self.assertEqual(
+                config["qmmm"]["forcefield_files"],
+                f"{(root / 'local.xml').resolve()} tip3p.xml",
+            )
+            self.assertEqual(calls[1][2].oqp_runtime_cwd, str(root.resolve()))
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):
         class NoopRunner:

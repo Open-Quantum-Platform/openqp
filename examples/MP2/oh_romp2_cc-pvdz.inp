@@ -1,0 +1,23 @@
+[input]
+system=
+ 8   0.000000000   0.000000000   0.000000000
+ 1   0.000000000   0.000000000   0.970000000
+
+charge=0
+method=mp2
+basis=cc-pvdz
+runtype=energy
+functional=
+
+
+[guess]
+type=huckel
+save_mol=false
+
+
+[scf]
+type=rohf
+multiplicity=2
+maxit=50
+conv=1.0e-10
+save_molden=false

@@ -353,6 +353,10 @@ lc_gamma = ok
         self.assertEqual("OPENQP_XTB_LIBRARY", cls.ENV_LIBRARY)
         self.assertEqual("OPENQP_XTB_PARAMETER_PATH", cls.ENV_PARAMETER)
         self.assertEqual("openqp_xtb", cls.PIP_LOCATOR)
+        resolver = (ROOT / "pyoqp" / "oqp" / "library" /
+                    "openqp_dftb.py").read_text(encoding="utf-8")
+        self.assertIn("os.environ.get(self.ENV_PARAMETER)", resolver)
+        self.assertIn("importlib.import_module(self.PIP_LOCATOR)", resolver)
 
     def test_xtb_adapter_lc_gamma_codes_and_probe_rejection(self):
         openqp_xtb = _import_or_skip("oqp.library.openqp_xtb")

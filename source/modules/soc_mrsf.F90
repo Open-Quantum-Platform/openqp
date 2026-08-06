@@ -1036,11 +1036,20 @@ subroutine diag_soc(hsoc, singlet_energies, triplet_energies, e_ref, ns, nt, eva
 
   ! --- 2. Diagonalize via LAPACK zheev ---
   ! Workspace query
-  call zheev('V', 'U', nstate_, evec, nstate_, eval, work_query, -1_blas_int, rwork, info)
-  lwork_ = int(real(work_query(1)), blas_int)
-  allocate(work(lwork_))
+  ! nstate_ is the number of spin-orbit states -- small, and the same
+  ! small-eigenproblem regime eigen_blas_threads describes.
+  block
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+    use eigen, only: eigen_blas_scope_enter, eigen_blas_scope_exit
+    integer(c_int64_t) :: nb
+    nb = eigen_blas_scope_enter(int(nstate_))
+    call zheev('V', 'U', nstate_, evec, nstate_, eval, work_query, -1_blas_int, rwork, info)
+    lwork_ = int(real(work_query(1)), blas_int)
+    allocate(work(lwork_))
 
-  call zheev('V', 'U', nstate_, evec, nstate_, eval, work, lwork_, rwork, info)
+    call zheev('V', 'U', nstate_, evec, nstate_, eval, work, lwork_, rwork, info)
+    call eigen_blas_scope_exit(nb)
+  end block
 
   if (info /= 0) then
     call show_message('(A,I0)', 'ZHEEV failed in diag_soc, info=', int(info), WITH_ABORT)
