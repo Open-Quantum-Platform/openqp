@@ -340,14 +340,26 @@ contains
         ! estimate it from the vectors-per-basis-function ratio observed at
         ! this tolerance; the log prints the actual count afterwards.
         !
-        ! lvec is the exception: it is allocated at the CAPACITY the
-        ! factorisation may need, not at the rank it turns out to have, so the
-        ! guard has to charge that same capacity or it waves through a job that
-        ! then fails in this very allocation.  The MO blocks below really are
-        ! sized by the rank, so they keep the estimate.
+        ! Charge the CAPACITY, not the expected rank.  lvec is allocated at the
+        ! capacity the factorisation may need rather than the rank it turns out
+        ! to have, and boo/bov/bvv are then allocated at the rank it reached --
+        ! which a tight cholesky_tol can drive all the way to that same cap.
+        ! Sizing them on the observed ~15/nbf ratio waves through a job that
+        ! then dies in the allocation at the bottom of this routine.
+        !
+        ! All four are live together: lvec is not released until after the three
+        ! MO blocks are built from it, and the packed AO store is still held
+        ! alongside them.  So they add rather than compete.
+        !
+        ! bvv was charged here before but boo and bov were not, which is the
+        ! larger of the two errors on an occupied-heavy case: boo goes as no^2
+        ! and bov as no*nv per vector.  Bounding all three by the cap costs some
+        ! conservatism when the rank comes in low, and that is the right way to
+        ! be wrong for a guard whose whole purpose is to refuse before the
+        ! allocator does.
         mem_mo = mem_mo &
-               + real(nbf*(nbf+1)/2,dp)*real(cholesky_eri_max_vectors(nbf,20),dp) &
-               + rnv**2*15.0_dp*real(nbf,dp)
+               + (real(nbf*(nbf+1)/2,dp) + rno**2 + rno*rnv + rnv**2) &
+                 * real(cholesky_eri_max_vectors(nbf,20),dp)
       else
         mem_mo = mem_mo + rnv**4
       end if
