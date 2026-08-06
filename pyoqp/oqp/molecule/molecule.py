@@ -403,16 +403,29 @@ class Molecule:
             # A guard that cannot be evaluated must not block labelling.
             return None
 
-    def label_molecular_orbitals(self):
+    def label_molecular_orbitals(self, required=False):
         """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
 
         Stores the result under ``symmetry_metadata['mo_labels']``; never
         changes SCF/integral/response behavior.
+
+        ``required=True`` means an internal consumer needs the irreps to do its
+        job, not that the user asked to see them, and it bypasses
+        ``[symmetry] label_mo``. That flag is a DISPLAY control: it decides
+        whether the MO symmetry table is printed. Letting it also gate
+        computation coupled the Davidson guess coverage to a formatting
+        preference -- with ``label_mo=false`` and symmetry otherwise enabled,
+        the labels were never computed, ``stage_response_symmetry`` bailed with
+        ``skipped_no_mo_labels``, no ``OQP::sym_pair_irrep`` was staged, and
+        ``mrinivec`` fell back to the historical seeds. The unseeded-block
+        defect this PR exists to fix silently came back, and nothing said so.
+        The log dump stays gated on the flag, so the display contract is
+        unchanged.
         """
         meta = self.symmetry_metadata
         if not meta or meta.get('status', 'disabled') == 'disabled':
             return None
-        if not meta.get('label_mo', True):
+        if not required and not meta.get('label_mo', True):
             return None
         detection = meta.get('detection')
         if not detection:
@@ -480,10 +493,13 @@ class Molecule:
                     shells, detection['operations'])
             except Exception as exc:
                 meta['reduction_maps'] = {'status': 'error', 'error': str(exc)}
-            try:
-                self._dump_mo_labels_log(result)
-            except Exception:
-                pass
+            # Printing stays gated on the user's display flag even when an
+            # internal consumer forced the computation (required=True).
+            if meta.get('label_mo', True):
+                try:
+                    self._dump_mo_labels_log(result)
+                except Exception:
+                    pass
             return result
         except Exception as exc:
             # Labeling must never break the run in the metadata-only phase.
@@ -622,6 +638,28 @@ class Molecule:
         except Exception:
             pass
         return staged
+
+    def _td_multiplicity(self):
+        """Target spin multiplicity of the response calculation, or None.
+
+        The validated schema key is ``[tdhf] multiplicity``
+        (``OQP_CONFIG_SCHEMA``); ``mult`` is an alias that appears in
+        hand-written test configs and is what the Fortran side calls the field
+        (``infos%tddft%mult``). Reading only ``mult``, as the state-label
+        formatter did, meant every production config fell through: ``terms``
+        was never built and the newly visible label line printed a bare irrep
+        (``A1``) instead of the spin-resolved term (``1A1``/``3A1``). Prefer the
+        schema key and keep the alias as a fallback so existing test configs
+        keep working.
+        """
+        tdhf = self.config.get('tdhf', {}) or {}
+        value = tdhf.get('multiplicity', tdhf.get('mult'))
+        if value in (None, ''):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     def _full_group_decline_reason(self):
         """Why the non-abelian 'full' integral tier must not be used, or None.
@@ -891,7 +929,9 @@ class Molecule:
 
             mo_labels = meta.get('mo_labels')
             if not mo_labels or mo_labels.get('status') != 'ok':
-                mo_labels = self.label_molecular_orbitals()
+                # required=True: the guess coverage needs the irreps whether or
+                # not the user asked to SEE the MO label table.
+                mo_labels = self.label_molecular_orbitals(required=True)
             if not mo_labels or mo_labels.get('status') != 'ok':
                 meta['response_symmetry'] = {'status': 'skipped_no_mo_labels'}
                 return False
@@ -900,7 +940,28 @@ class Molecule:
             nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
             nbf = len(mo_labels['alpha']['labels'])
 
-            if td_type in ('sf', 'mrsf'):
+            if td_type == 'mrsf' and self._td_multiplicity() == 5:
+                # QUINTET MRSF runs a DIFFERENT response space, and staging the
+                # usual one produced a table of the wrong length that every
+                # consumer then silently discarded.
+                #
+                # tdhf_mrsf_energy dispatches mrst==5 to inivec as
+                #   call inivec(..., noccb, nocca, nvec, infos)
+                # so inside inivec the occupied index runs 1..noccb (BETA
+                # occupied) and the virtual index noccb_param+1..nbf with
+                # noccb_param = nocca (ALPHA virtual): xvec_dim is
+                # noccb*(nbf-nocca), the transpose of the singlet/triplet
+                # nocca*(nbf-noccb). The guards in report_seed_irrep_coverage
+                # and mrinivec both compare size(pair_irrep) against the real
+                # xvec_dim and return when it differs, so every open-shell
+                # quintet fell out of the coverage check without a word --
+                # exactly the silent, state-shifting failure this PR is about.
+                #
+                # Layout is unchanged: ij = (j-nocca-1)*noccb + i, occupied
+                # index fastest within each virtual, same as the loop below.
+                occ_labels = mo_labels.get('beta', mo_labels['alpha'])['labels'][:nb]
+                vir_labels = mo_labels['alpha']['labels'][na:]
+            elif td_type in ('sf', 'mrsf'):
                 occ_labels = mo_labels['alpha']['labels'][:na]
                 vir_labels = mo_labels.get('beta', mo_labels['alpha'])['labels'][nb:]
             else:
@@ -1043,7 +1104,18 @@ class Molecule:
             nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
 
             c_alpha = self._mo_coefficients('OQP::VEC_MO_A', nbf)
-            if td_type in ('sf', 'mrsf'):
+            if td_type == 'mrsf' and self._td_multiplicity() == 5:
+                # Quintet MRSF transposes the response space -- beta occupied
+                # to alpha virtual, see the matching branch in
+                # stage_response_symmetry. Building the singlet/triplet space
+                # here gives an amplitude matrix of the wrong shape; the
+                # divisibility guard below catches that only when the two sizes
+                # do not happen to divide, so the rest of the time the labels
+                # were quietly computed from a misreading of the buffer.
+                c_beta = self._mo_coefficients('OQP::VEC_MO_B', nbf)
+                occ, vir = c_beta[:, :nb], c_alpha[:, na:]
+                reference_labels = mo_labels['alpha']['labels'][nb:na]
+            elif td_type in ('sf', 'mrsf'):
                 # Spin-flip: occupied alpha -> virtual beta.
                 c_beta = self._mo_coefficients('OQP::VEC_MO_B', nbf)
                 occ, vir = c_alpha[:, :na], c_beta[:, nb:]
@@ -1074,7 +1146,7 @@ class Molecule:
             result = dict(result)
             result['status'] = 'ok'
             result['td_type'] = td_type
-            multiplicity = self.config.get('tdhf', {}).get('mult')
+            multiplicity = self._td_multiplicity()
             if multiplicity:
                 result['terms'] = [
                     f"{int(multiplicity)}{lbl.upper()}" for lbl in result['labels']
