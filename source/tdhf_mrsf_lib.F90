@@ -561,7 +561,7 @@ contains
       use tagarray, only: TA_OK
       integer(8), contiguous, pointer :: pair_irrep(:)
       integer(4) :: ta_status
-      integer :: nirr, ir, kk, best_idx, kpos, nadd, nper, ncur, nmiss
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
       integer :: nstates_req
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
@@ -609,9 +609,32 @@ contains
                 end if
               end do
               if (best_idx == 0) cycle           ! irrep has no live pair
-              ! pick a victim whose irrep keeps a representative without it
+              ! Pick a victim, under BOTH rules.
+              !
+              ! (1) Only from the slack beyond the requested states. This is
+              !     the invariant tdhf_mrsf_energy documents, and until now it
+              !     existed only as prose: the loop scanned 1..nvec, so a seed
+              !     belonging to a requested root could be displaced. The guard
+              !     that enforced it was added with a measurement (CH3Br
+              !     nstate=6: the historical guess had found the true root and
+              !     a substitution missed it, 0.191632 -> 0.191978 Ha) and was
+              !     later dropped in favour of rule (2) alone -- but (2) is not
+              !     a superset of (1): keeping an irrep represented says nothing
+              !     about whether the displaced vector was some requested root's
+              !     own starting point.
+              !
+              !     Note nvec = min(max(nstates,6), mxvec), so for nstate >= 6
+              !     there is NO slack and this correctly does nothing. That is
+              !     the intended behaviour, not a defeat: when coverage cannot
+              !     be bought for free the run must say so and let the user
+              !     raise nstate, never silently trade a requested root's seed
+              !     for a block.
+              !
+              ! (2) Never the last representative of its own irrep, or the
+              !     substitution would remove exactly the coverage it is trying
+              !     to add.
               kpos = 0
-              do k = 1, nvec
+              do k = nstates_req + 1, nvec
                 if (itmp(k) < 1 .or. itmp(k) > xvec_dim) cycle
                 ncur = 0
                 do kk = 1, nvec
