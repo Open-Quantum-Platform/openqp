@@ -490,6 +490,32 @@ contains
 
 
   ! Construct TD trial vector
+    !
+    ! KNOWN DEFECT, left in place deliberately -- do not "fix" this in one line.
+    ! On the ROHF path the SAME array goes in as both ea and eb, and it holds
+    ! the ROHF canonical eigenvalues, i.e. the Guest-Saunders 0.5/0.5 average
+    ! 0.5*(fa(p,p)+fb(p,p)) -- not the alpha and beta Fock diagonals the sigma
+    ! actually uses. UMRSF above does it correctly from fa(i,i)/fb(i,i).
+    ! So mrinivec's xm, which orders the seeds and preconditions the residuals,
+    ! is not the diagonal of the operator being solved. The clearest symptom:
+    ! with ea == eb the open-open entry xm = 0.5*(eb(lr1)-ea(lr1)
+    ! +eb(lr2)-ea(lr2)) is IDENTICALLY ZERO for every ROHF MRSF run, while the
+    ! true one-electron value is not. Instrumented on CH2O 6-31G: the folded
+    ! open-open seed came out at exactly 0.00000000 and its two partners at
+    ! -0.19359070 / +0.19359070, perfectly antisymmetric, which is what ea == eb
+    ! forces. (xm also omits the two-electron part of the sigma entirely, on
+    ! every path -- that part is a preconditioner approximation, not a bug.)
+    !
+    ! Correcting it MEASURABLY HELPS AND MEASURABLY HURTS. Filling both arrays
+    ! from fa/fb on the ROHF path makes H2O_BHHLYP_SOC at nstate=12 return
+    ! 0.60340877 as its 11th singlet -- a genuine root, stable at nstate=20 and
+    ! 30, that the shipped reference skips (already noted in 908496c0). The same
+    ! change also breaks six shipped tests, including SOC couplings by 9694 on
+    ! that very deck, numerical frequencies by 0.133, and it makes triplet MRSF
+    ! fail to converge outright on h2o_rohf_mrsf-t with bhhlyp and cam-b3lyp.
+    !
+    ! So a real repair has to come with the reference regeneration and the
+    ! triplet convergence failure understood, not as a swap of two arguments.
     if (mrst==1 .or. mrst==3) then
       if (.not. umrsf) then
         call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
