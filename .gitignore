@@ -50,3 +50,6 @@ fort.6
 .venv-symmetry/
 build_dev/
 openqp_test_tmp_*/
+
+# SOC regression runs write timestamped scratch trees into the repo root
+openqp_soc_test_tmp_*/
