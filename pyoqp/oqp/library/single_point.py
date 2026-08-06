@@ -960,6 +960,28 @@ class Gradient(Calculator):
         # abelian irreps are 1-dim). No-op unless the reduction is active.
         grads = self.mol.symmetrize_gradient(grads)
 
+        # Push the projected gradient back into the library buffer. get_grad()
+        # reads that buffer, so without this the projection reaches
+        # self.mol.grads (printed output, optimiser) while get_data()['grad']
+        # and the QM/MM driver still see the unprojected skeleton -- the log
+        # shows the right gradient and the stored result is wrong.
+        #
+        # Which row the buffer holds is NOT simply the last row of the array.
+        # tddft_grad allocates np.zeros((nstate + 1, natom, 3)) and fills only
+        # the REQUESTED states, so with nstate=6 and grad=3 rows 4..6 are still
+        # zero. Writing arr[-1] there stores a zero gradient -- an error that
+        # hides well, because max|0 - g_ref| happens to equal max|g_ref| just
+        # as the unprojected skeleton's largest deviation did.
+        buffer_row = None
+        if self.method == 'hf':
+            buffer_row = 0                       # scf_grad returns one row
+        elif self.method == 'tdhf' and len(self.grads):
+            buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
+        if buffer_row is not None:
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            if 0 <= buffer_row < arr.shape[0]:
+                self.mol.set_grad(arr[buffer_row])
+
         self.mol.grads = grads
 
 #        if self.mol.config['input']['qmmm_flag']:

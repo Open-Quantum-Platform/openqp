@@ -1180,9 +1180,26 @@ class Molecule:
     def symmetrize_gradient(self, grads):
         """Project gradients onto the totally symmetric component.
 
-        Valid in the standard orientation when the petite reduction is
-        active: g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}. Exact for the
-        skeleton two-electron gradient and a noise-cleaner for the rest.
+        g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}, exact for the skeleton
+        two-electron gradient and a noise-cleaner for the rest.
+
+        The operator MUST be expressed in the frame the gradient lives in.
+        ``op['matrix']`` is the sign-diagonal operation in the standard
+        orientation; ``op['matrix_input_frame']`` is the same operation
+        conjugated back to the input frame. Both are orthogonal 3x3 Cartesian
+        matrices, so the formula is unchanged -- only the frame differs, and
+        picking the wrong one is silent.
+
+        This used ``op['matrix']`` unconditionally, which was correct while the
+        reduction always reoriented the molecule and became wrong the moment
+        ``move_to_standard_frame=false`` existed. On the shipped
+        ``h2o_rhf_6-31g_hf`` deck -- C2v water lying on a diagonal -- the
+        standard-frame operator zeroes the x component of every gradient it
+        touches: |g_H| came out 0.00989131 against a reference 0.01314967, a
+        25% shortfall. Not a rotation: the norm itself is wrong. Energies were
+        unaffected, which is why an energy-only verification missed it, and an
+        already-aligned test molecule cannot detect it at all because the two
+        frames coincide there.
         """
         meta = self.symmetry_metadata
         if not meta or meta.get('integral_symmetry', {}).get('status') != 'active':
@@ -1196,13 +1213,26 @@ class Molecule:
             full = meta.get('reduction_maps_full')
             if meta.get('integral_symmetry', {}).get('full_group') and full:
                 operations = full['operations']
+            # Which frame is the staged reduction operating in? The staging
+            # records 'input' only on the no-move path; everything else moved
+            # the molecule first. reduction_maps_full is built exclusively on
+            # the standard-frame branch, so the two never combine.
+            matrix_key = 'matrix' \
+                if meta.get('integral_symmetry', {}).get('frame') != 'input' \
+                else 'matrix_input_frame'
+            if any(matrix_key not in op for op in operations):
+                # Refuse rather than project with an operator from the wrong
+                # frame. Returning the skeleton gradient unprojected keeps a
+                # small symmetry-breaking residual; projecting with the wrong
+                # operator deletes whole Cartesian components.
+                return grads
             arr = np.asarray(grads, dtype=float)
             shape = arr.shape
             natom = len(operations[0]['permutation'])
             flat = arr.reshape(-1, natom, 3)
             result = np.zeros_like(flat)
             for op in operations:
-                matrix = np.asarray(op['matrix'], dtype=float)
+                matrix = np.asarray(op[matrix_key], dtype=float)
                 permutation = list(op['permutation'])
                 # g_{perm(a)} = M g_a  =>  contribution (M^T g)[perm[a]]
                 result += np.einsum('kj,sak->saj', matrix, flat[:, permutation, :])
@@ -1482,6 +1512,27 @@ class Molecule:
         )
 
         return copy.deepcopy(grad)
+
+    def set_grad(self, grad):
+        """Write a gradient (natom, 3) or flat 3*natom back into the library buffer.
+
+        ``get_grad`` reads the raw buffer the Fortran layer wrote. Anything the
+        Python layer does to a gradient afterwards -- notably
+        ``symmetrize_gradient`` -- is invisible to every consumer that goes
+        through ``get_grad``: the regression comparison
+        (``get_data()['grad']``), and the QM/MM driver. Without this the
+        projected gradient reaches the printed output while the raw skeleton
+        gradient reaches everything else, so the log looks right and the stored
+        result is wrong.
+        """
+        natom = int(self.data['natom'])
+        arr = np.ascontiguousarray(np.asarray(grad, dtype=float).reshape(-1))
+        if arr.size != 3 * natom:
+            raise ValueError(
+                'set_grad expects %d values, got %d' % (3 * natom, arr.size))
+        buf = oqp.ffi.buffer(
+            self.data._data.grad, 3 * natom * oqp.ffi.sizeof("double"))
+        buf[:] = arr.tobytes()
 
     def get_nac(self):
         """
