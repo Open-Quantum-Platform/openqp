@@ -1161,10 +1161,6 @@ contains
     if (present(nschwz)) nschwz = int2_driver%skipped
 
     ! Scaling (everything except diagonal is halved)
-    if (present(f_old)) then
-      int2_data%f(:,:,1) = int2_data%f(:,:,1) + f_old
-      f_old = int2_data%f(:,:,1)
-    end if
     f =  0.5 * int2_data%f(:,:,1)
     do nf = 1, ubound(f,2)
       ii = 0
@@ -1176,7 +1172,28 @@ contains
 
     ! Petite-list runs produce a skeleton matrix; project onto the
     ! totally symmetric component: F <- (1/|G|) sum_op T_op F T_op^T.
+    !
+    ! Project the INCREMENT, before it is accumulated, and accumulate in this
+    ! (proper packed) representation.  Projection is linear, so per-increment
+    ! and once-at-the-end agree as long as EVERY increment is a skeleton -- and
+    ! that is exactly what cannot be assumed: the density guard above switches
+    ! the reduction off for any build whose density is not invariant, so f_old
+    ! would otherwise hold a mix of skeleton and already-complete increments,
+    ! and projecting that sum wrecks the complete part.
+    !
+    ! Measured: TRAH rebuilds its Fock from trial orbital rotations whose
+    ! densities are not invariant, so the guard fires mid-run (41 times on
+    ! H2O/6-31G*/BHHLYP) and the accumulator ends up mixed.  Accumulating the
+    ! raw skeleton gave -104.1346575310 Ha against -76.3679552116 from the same
+    ! deck with DIIS, which is not a convergence failure -- it is below the true
+    ! energy, so the operator itself was wrong.  Projecting per increment keeps
+    ! f_old complete at every step and costs nothing.
     if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis, f)
+
+    if (present(f_old)) then
+      f = f + f_old
+      f_old = f
+    end if
 
     call int2_driver%clean()
 
