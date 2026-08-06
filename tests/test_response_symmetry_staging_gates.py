@@ -265,6 +265,74 @@ class StaleIntegralStagingTests(unittest.TestCase):
         mol.stage_integral_symmetry_maps()
         self.assertNotIn('OQP::sym_petite_enable', mol.data)
 
+    def test_active_status_is_dropped_so_metadata_matches_the_tags(self):
+        """`status == 'active'` drives _petite_is_staged() and
+        symmetrize_gradient(); leaving it projects a gradient with the previous
+        geometry's operations after the reduction was turned off."""
+        mol = self._staged()
+        mol.symmetry_metadata['integral_symmetry'] = {'status': 'active',
+                                                      'n_operations': 8}
+        mol.symmetry_metadata['use_integral_symmetry'] = False
+        mol.stage_integral_symmetry_maps()
+        self.assertNotEqual(
+            mol.symmetry_metadata.get('integral_symmetry', {}).get('status'),
+            'active')
+
+    def test_reoriented_status_survives_invalidation(self):
+        """The staging body REQUIRES it; clearing it would disable the
+        reduction outright, so only 'active' may be dropped."""
+        mol = self._staged()
+        mol.symmetry_metadata['integral_symmetry'] = {'status': 'reoriented'}
+        mol._clear_integral_symmetry_tags(mol.symmetry_metadata)
+        self.assertEqual(
+            mol.symmetry_metadata['integral_symmetry']['status'], 'reoriented')
+
+
+class StaleMoLabelsTests(unittest.TestCase):
+    """MO labels describe one geometry and must not be reused across steps.
+
+    Reachable whenever the ordinary post-SCF relabelling does not run -- most
+    obviously with label_mo=false, where label_molecular_orbitals() returns
+    early and step N's labels persist into step N+1. The staged pair table is
+    then well formed and describes the wrong orbitals.
+    """
+
+    def _mol(self, labels_key, current_geom):
+        meta = {
+            'status': 'enabled',
+            'label_mo': False,
+            'detection': {'character_table': C2V, 'operations': []},
+            'mo_labels': {'status': 'ok', 'geometry_key': labels_key,
+                          'alpha': {'labels': ['a1', 'b2']}},
+        }
+        mol = _molecule({'tdhf': {'type': 'mrsf'}}, meta)
+        mol.get_system = lambda: current_geom
+        return mol
+
+    def test_labels_from_the_same_geometry_are_reused(self):
+        mol = self._mol(None, [0.0, 0.0, 0.0])
+        key = mol._symmetry_geometry_key()
+        mol.symmetry_metadata['mo_labels']['geometry_key'] = key
+        self.assertIsNotNone(mol._usable_mo_labels(mol.symmetry_metadata))
+
+    def test_labels_from_a_different_geometry_are_rejected(self):
+        mol = self._mol('a-key-from-some-other-structure', [0.0, 0.0, 0.0])
+        self.assertIsNone(mol._usable_mo_labels(mol.symmetry_metadata))
+
+    def test_a_moved_atom_changes_the_key(self):
+        a = self._mol(None, [0.0, 0.0, 0.0])._symmetry_geometry_key()
+        b = self._mol(None, [0.0, 0.0, 0.001])._symmetry_geometry_key()
+        self.assertIsNotNone(a)
+        self.assertNotEqual(a, b)
+
+    def test_unknown_geometry_keeps_the_cached_labels(self):
+        """None means 'cannot tell'. Recomputing unconditionally would pay the
+        dense O(|G| n_AO^3) relabelling on every call."""
+        mol = self._mol('whatever', [0.0, 0.0, 0.0])
+        mol.get_system = lambda: (_ for _ in ()).throw(RuntimeError('no geometry'))
+        self.assertIsNone(mol._symmetry_geometry_key())
+        self.assertIsNotNone(mol._usable_mo_labels(mol.symmetry_metadata))
+
 
 class TdMultiplicityKeyTests(unittest.TestCase):
     """The schema key is 'multiplicity'; 'mult' is only an alias."""

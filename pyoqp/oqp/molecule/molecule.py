@@ -484,6 +484,9 @@ class Molecule:
             state = self._label_scf_state(result)
             if state is not None:
                 result['scf_state'] = state
+            # Stamp the geometry these labels describe. They are orbital
+            # irreps of ONE structure, and the metadata outlives a step.
+            result['geometry_key'] = self._symmetry_geometry_key()
             meta['mo_labels'] = result
             # Gate A of the reductions plan: shell/AO symmetry maps
             # (metadata only; consumed by future petite-list code).
@@ -655,6 +658,41 @@ class Molecule:
             pass
         return staged
 
+    def _symmetry_geometry_key(self):
+        """Fingerprint of the current geometry, or None if unavailable.
+
+        Used to decide whether cached ``mo_labels`` still describe the
+        structure in front of us. Returning None means "cannot tell", and the
+        callers then keep the cached labels -- the historical behaviour --
+        rather than paying the dense O(|G| n_AO^3) relabelling on every call.
+        """
+        try:
+            import hashlib
+            coords = np.ascontiguousarray(
+                np.asarray(self.get_system(), dtype=float).ravel())
+            return hashlib.md5(coords.tobytes()).hexdigest()
+        except Exception:
+            return None
+
+    def _usable_mo_labels(self, meta):
+        """Cached MO labels for the CURRENT geometry, or None.
+
+        ``stage_response_symmetry`` and ``label_excited_states`` rebuild their
+        tables from these labels, so reusing labels computed at a previous
+        geometry stages a fresh, well-formed table describing the wrong
+        orbitals. That is reachable whenever the ordinary post-SCF relabelling
+        does not run -- most obviously with ``label_mo=false``, where
+        ``label_molecular_orbitals()`` returns early and the step-N labels
+        simply persist into step N+1.
+        """
+        labels = meta.get('mo_labels')
+        if not labels or labels.get('status') != 'ok':
+            return None
+        key = self._symmetry_geometry_key()
+        if key is not None and labels.get('geometry_key') != key:
+            return None
+        return labels
+
     #: Every tag written by the integral-symmetry staging path. Absence means
     #: "not staged", which is what each Fortran consumer treats as inactive.
     _INTEGRAL_SYMMETRY_TAGS = (
@@ -684,6 +722,19 @@ class Molecule:
         if meta:
             meta.pop('reduction_maps', None)
             meta.pop('reduction_maps_full', None)
+            # The metadata must not outlive the tags either. `status ==
+            # 'active'` is what _petite_is_staged() and symmetrize_gradient()
+            # key off, so leaving it behind means a gradient gets projected
+            # with the previous geometry's operations after the reduction has
+            # been turned off -- metadata and runtime state disagreeing is the
+            # same class of bug as the stale tags themselves.
+            #
+            # Only 'active' is dropped: 'reoriented' is set by
+            # reorient_for_integral_symmetry BEFORE staging runs, and the
+            # staging body requires it, so clearing that would disable the
+            # reduction outright.
+            if meta.get('integral_symmetry', {}).get('status') == 'active':
+                meta.pop('integral_symmetry', None)
 
     def _clear_full_group_tags(self, meta=None):
         """Drop any staged non-abelian (full point group) reduction artefacts.
@@ -1011,10 +1062,12 @@ class Molecule:
         try:
             from oqp.library.symmetry import product_irrep
 
-            mo_labels = meta.get('mo_labels')
-            if not mo_labels or mo_labels.get('status') != 'ok':
-                # required=True: the guess coverage needs the irreps whether or
-                # not the user asked to SEE the MO label table.
+            # required=True: the guess coverage needs the irreps whether or
+            # not the user asked to SEE the MO label table. The geometry check
+            # matters for the same reason -- stale labels stage a well-formed
+            # table for the wrong structure.
+            mo_labels = self._usable_mo_labels(meta)
+            if mo_labels is None:
                 mo_labels = self.label_molecular_orbitals(required=True)
             if not mo_labels or mo_labels.get('status') != 'ok':
                 meta['response_symmetry'] = {'status': 'skipped_no_mo_labels'}
@@ -1177,8 +1230,8 @@ class Molecule:
                 return None
 
             # MO labels provide the SOMO reference product for sf/mrsf.
-            mo_labels = meta.get('mo_labels')
-            if not mo_labels or mo_labels.get('status') != 'ok':
+            mo_labels = self._usable_mo_labels(meta)
+            if mo_labels is None:
                 # required=True for the same reason as in
                 # stage_response_symmetry: these labels are an INPUT to the
                 # state assignment, not the MO table the user asked to see.

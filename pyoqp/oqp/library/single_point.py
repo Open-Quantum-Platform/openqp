@@ -490,7 +490,23 @@ class SinglePoint(Calculator):
 
         self.swapmo()
 
-        if symmetry_on:
+        # Reached when symmetry is on, AND when it is off but a PREVIOUS step
+        # left the reduction active. The method gates itself, but it also
+        # invalidates the previously staged maps ahead of those gates, and that
+        # invalidation is exactly what a run which has just turned symmetry off
+        # needs -- the reusable OPENQP API reloads configuration into the same
+        # molecule, so `sym_petite_enable` and the old maps would otherwise stay
+        # live for a new geometry or basis.
+        #
+        # Not called unconditionally: `reference()` is driven with lightweight
+        # stand-in molecules in the test suite, and a bare call breaks every one
+        # of them. Keying off the recorded status means the extra call happens
+        # only for a molecule that really did stage something.
+        previously_staged = bool(
+            getattr(self.mol, 'symmetry_metadata', None)
+            and self.mol.symmetry_metadata.get(
+                'integral_symmetry', {}).get('status') == 'active')
+        if symmetry_on or previously_staged:
             self.mol.stage_integral_symmetry_maps()
 
         scf_flag = self._run_scf()
