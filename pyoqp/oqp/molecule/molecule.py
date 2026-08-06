@@ -639,6 +639,23 @@ class Molecule:
             pass
         return staged
 
+    def _clear_full_group_tags(self, meta=None):
+        """Drop any staged non-abelian (full point group) reduction artefacts.
+
+        `OQP::sym_op_blocks` is written only by the full tier, and its mere
+        PRESENCE is what makes the Fortran side take the blocked path. Nothing
+        on the abelian path overwrites it, so it has to be deleted explicitly
+        or a molecule that staged the full group once keeps taking that path
+        after falling back.
+        """
+        try:
+            del self.data['OQP::sym_op_blocks']
+        except Exception:
+            pass
+        if meta is None:
+            meta = self.symmetry_metadata or {}
+        meta.pop('reduction_maps_full', None)
+
     def _td_multiplicity(self):
         """Target spin multiplicity of the response calculation, or None.
 
@@ -794,6 +811,19 @@ class Molecule:
                 full_declined = self._full_group_decline_reason()
                 if full_declined:
                     want_full = False
+            # Drop any full-group artefacts from an EARLIER staging before
+            # choosing a tier. The tag store outlives one step, and the
+            # abelian path overwrites OQP::sym_shell_map but never wrote
+            # OQP::sym_op_blocks, so a molecule that staged the full tier once
+            # (HF) and then falls back to abelian (a functional set on a later
+            # step, or the overlap gate rejecting the full group) would leave
+            # the old dense blocks in place. Fortran keys off their presence:
+            # int2 selects the blocked path, then symmetrize_skeleton_fock
+            # returns on the size mismatch -- so the abelian skeleton
+            # symmetrisation is skipped entirely and silently. Clearing on
+            # EVERY entry makes the tier a property of this staging call
+            # rather than of the molecule's history.
+            self._clear_full_group_tags(meta)
             full_group = False
             full_ops = None
             try:
@@ -885,6 +915,14 @@ class Molecule:
                 del self.data[tag]
             except Exception:
                 pass
+        # ...and the metadata that describes them. Every bail below sets its own
+        # status, but the ones that return before reaching them would otherwise
+        # leave the PREVIOUS step's 'active'/'pair_table_staged' in the
+        # serialized metadata while no table exists -- Fortran falls back
+        # correctly, but anything reading the metadata is told otherwise.
+        meta = self.symmetry_metadata
+        if meta:
+            meta.pop('response_symmetry', None)
 
     def stage_response_symmetry(self):
         """Stage per-pair irrep indices for response-space blocking.
@@ -1095,7 +1133,14 @@ class Molecule:
             # MO labels provide the SOMO reference product for sf/mrsf.
             mo_labels = meta.get('mo_labels')
             if not mo_labels or mo_labels.get('status') != 'ok':
-                mo_labels = self.label_molecular_orbitals()
+                # required=True for the same reason as in
+                # stage_response_symmetry: these labels are an INPUT to the
+                # state assignment, not the MO table the user asked to see.
+                # Honouring label_mo here meant a direct call to
+                # label_excited_states() with label_mo=false silently produced
+                # no state labels; the single_point path only hid it because it
+                # stages first.
+                mo_labels = self.label_molecular_orbitals(required=True)
             if not mo_labels or mo_labels.get('status') != 'ok':
                 meta['state_labels'] = {'status': 'skipped_no_mo_labels'}
                 return None
@@ -1231,6 +1276,15 @@ class Molecule:
         Stores the result under ``symmetry_metadata['mode_labels']``.
         """
         meta = self.symmetry_metadata
+        # Clear first, on EVERY path. These labels are keyed to a particular
+        # set of modes, and the metadata outlives them: a molecule that
+        # labelled one Hessian and then reads a cached one with detection
+        # unavailable (or label_modes off) would otherwise keep the previous
+        # labels, and the frequency formatter prints them against the new modes
+        # whenever the counts happen to match. Wrong labels are worse than no
+        # column, because nothing marks them as stale.
+        if meta:
+            meta.pop('mode_labels', None)
         if not meta or meta.get('status', 'disabled') == 'disabled':
             return None
         if not meta.get('label_modes', True):
@@ -1311,8 +1365,8 @@ class Molecule:
                                  ' abelian operations only,')
                     lines.append('   and the non-abelian mismatch is a measured'
                                  ' 3e-04 error (see docs/planned/')
-                    lines.append('   integral-symmetry.md). Set method=hf to use the'
-                                 ' full group.')
+                    lines.append('   integral-symmetry.md). Remove the [input]'
+                                 ' functional to use the full group.')
                 if active.get('reoriented'):
                     lines.append('   geometry reoriented to the symmetry standard orientation')
             response = meta.get('response_symmetry')
