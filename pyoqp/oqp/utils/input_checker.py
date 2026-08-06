@@ -3309,8 +3309,12 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     optimizer = _as_lower(_get(config, "casscf", "optimizer", "newton")).replace("_", "-")
-    if optimizer not in {"newton", "newton-ah", "augmented-hessian", "microiteration",
-                         "steepest-descent", "steepest", "diagnostic", "powell", "scipy-powell", "scipy"}:
+    # Exactly the set oqp.library.casscf._casscf_options implements; anything
+    # else used to pass validation and then die with a bare ValueError at run
+    # time.  Underscore spellings are folded above, so newton_ah reaches here
+    # as newton-ah.
+    if optimizer not in {"newton", "newton-ah", "augmented-hessian",
+                         "microiteration", "powell"}:
         report.add(
             "ERROR",
             "casscf.optimizer",
@@ -4028,6 +4032,29 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             expected="only one regularization scheme",
             action="Use either [pt2] edshft OR level_shift/imaginary_shift, not both.",
         )
+
+    # Both of these are validated and then reach nothing: no PT2 kernel reads
+    # either value, so a user who sets them silently gets the built-in
+    # behaviour.  Say so rather than accepting the input and ignoring it --
+    # a wrong number that is obeyed and a wrong number that is discarded look
+    # identical in the output otherwise.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.denominator_cutoff", denominator_cutoff, 1.0e-10),
+            ("pt2.intruder_threshold", intruder_threshold, 1.0e-6)):
+        try:
+            _set_explicitly = float(_dead_val) != float(_dead_default)
+        except (TypeError, ValueError):
+            _set_explicitly = True
+        if _set_explicitly:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any PT2 kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
 
     valid_cutoff, denominator_cutoff_float = _check_float_literal(
         denominator_cutoff,
