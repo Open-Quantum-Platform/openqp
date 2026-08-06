@@ -659,18 +659,42 @@ class Molecule:
         return staged
 
     def _symmetry_geometry_key(self):
-        """Fingerprint of the current geometry, or None if unavailable.
+        """Fingerprint of the state the MO labels describe, or None.
 
-        Used to decide whether cached ``mo_labels`` still describe the
-        structure in front of us. Returning None means "cannot tell", and the
-        callers then keep the cached labels -- the historical behaviour --
-        rather than paying the dense O(|G| n_AO^3) relabelling on every call.
+        Covers the geometry AND the converged orbitals. Coordinates alone are
+        not enough: MO irreps describe the SCF SOLUTION, so the same molecule
+        at identical coordinates can legitimately produce different labels
+        after a different guess, an orbital swap, or a symmetry-broken
+        stability solution. With ``label_mo=false`` suppressing the ordinary
+        post-SCF relabelling, a coordinates-only key would accept those stale
+        labels and stage a pair table for orbitals that no longer exist.
+
+        Hashing the coefficients is O(n_AO^2) against the O(|G| n_AO^3)
+        relabelling it guards, so it is cheap enough to do on every check.
+
+        Returning None means "cannot tell", and the callers then keep the
+        cached labels -- the historical behaviour -- rather than paying that
+        relabelling on every call.
         """
         try:
             import hashlib
+            digest = hashlib.md5()
             coords = np.ascontiguousarray(
                 np.asarray(self.get_system(), dtype=float).ravel())
-            return hashlib.md5(coords.tobytes()).hexdigest()
+            digest.update(coords.tobytes())
+            seen_orbitals = False
+            for tag in ('OQP::VEC_MO_A', 'OQP::VEC_MO_B'):
+                try:
+                    mo = np.asarray(self.data[tag], dtype=float)
+                except Exception:
+                    continue
+                digest.update(np.ascontiguousarray(mo.ravel()).tobytes())
+                seen_orbitals = True
+            if not seen_orbitals:
+                # Labels are built FROM the orbitals; without them there is
+                # nothing meaningful to key against.
+                return None
+            return digest.hexdigest()
         except Exception:
             return None
 
@@ -703,6 +727,28 @@ class Molecule:
         'OQP::sym_op_blocks',
         'OQP::sym_petite_enable',
     )
+
+    def has_staged_integral_symmetry(self):
+        """True when petite-reduction tags are live in the native store.
+
+        Asks the TAG STORE, deliberately, not the metadata. The metadata is
+        the thing that gets replaced: ``load_config()`` ->
+        ``initialize_symmetry_metadata()`` assigns a brand-new dict and erases
+        ``integral_symmetry.status``, while ``apply_config()`` leaves the
+        native tags untouched. Keying "did a previous step stage something?"
+        off the metadata therefore answered False in exactly the case that
+        produces stale tags -- reconfiguring one molecule through the
+        ``OpenQP.set()`` path and turning the reduction off.
+
+        The tags outlive the metadata, so they are what has to be asked.
+        """
+        for tag in self._INTEGRAL_SYMMETRY_TAGS:
+            try:
+                self.data[tag]
+                return True
+            except Exception:
+                continue
+        return False
 
     def _clear_integral_symmetry_tags(self, meta=None):
         """Drop every staged petite-list / skeleton-symmetrisation artefact.

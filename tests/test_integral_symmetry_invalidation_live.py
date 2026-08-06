@@ -138,5 +138,39 @@ class IntegralSymmetryInvalidationTests(unittest.TestCase):
                              f'{tag} survived into a run with the reduction off')
 
 
+    def test_reload_config_route_still_clears(self):
+        """The route the previous test MISSED.
+
+        `load_config()` calls `initialize_symmetry_metadata()`, which replaces
+        the metadata dict and erases `integral_symmetry.status`, while
+        `apply_config()` leaves the native tags alone. A "was it staged
+        before?" check keyed on metadata therefore answers False in exactly
+        this case, and the staged maps survive with `sym_petite_enable=1`.
+        The earlier test mutated the metadata in place and so never exercised
+        it.
+        """
+        from oqp.library.single_point import SinglePoint
+        mol = self._run('sym_reload', 'true')
+        self.assertTrue(_has(mol, 'OQP::sym_petite_enable'))
+
+        case = os.path.join(self.workdir, 'sym_reload')
+        off = os.path.join(case, 'off.inp')
+        with open(off, 'w', encoding='utf-8') as handle:
+            handle.write(INPUT.format(use='false'))
+        mol.load_config(off)
+        # Precondition: the reload really did erase the status, so the fix
+        # cannot be passing for the wrong reason.
+        self.assertNotEqual(
+            mol.symmetry_metadata.get('integral_symmetry', {}).get('status'),
+            'active')
+        self.assertTrue(mol.has_staged_integral_symmetry(),
+                        'tags should still be live before reference() runs')
+
+        SinglePoint(mol).reference(do_init_scf=False)
+        for tag in TAGS:
+            self.assertFalse(_has(mol, tag),
+                             f'{tag} survived a load_config() that disabled the reduction')
+
+
 if __name__ == '__main__':
     unittest.main()

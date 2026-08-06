@@ -297,7 +297,7 @@ class StaleMoLabelsTests(unittest.TestCase):
     then well formed and describes the wrong orbitals.
     """
 
-    def _mol(self, labels_key, current_geom):
+    def _mol(self, labels_key, current_geom, orbitals=None):
         meta = {
             'status': 'enabled',
             'label_mo': False,
@@ -305,30 +305,58 @@ class StaleMoLabelsTests(unittest.TestCase):
             'mo_labels': {'status': 'ok', 'geometry_key': labels_key,
                           'alpha': {'labels': ['a1', 'b2']}},
         }
-        mol = _molecule({'tdhf': {'type': 'mrsf'}}, meta)
+        data = FakeData()
+        if orbitals is not None:
+            data['OQP::VEC_MO_A'] = orbitals
+        mol = _molecule({'tdhf': {'type': 'mrsf'}}, meta, data)
         mol.get_system = lambda: current_geom
         return mol
 
     def test_labels_from_the_same_geometry_are_reused(self):
-        mol = self._mol(None, [0.0, 0.0, 0.0])
+        mol = self._mol(None, [0.0, 0.0, 0.0], orbitals=np.eye(2))
         key = mol._symmetry_geometry_key()
         mol.symmetry_metadata['mo_labels']['geometry_key'] = key
         self.assertIsNotNone(mol._usable_mo_labels(mol.symmetry_metadata))
 
     def test_labels_from_a_different_geometry_are_rejected(self):
-        mol = self._mol('a-key-from-some-other-structure', [0.0, 0.0, 0.0])
+        mol = self._mol('a-key-from-some-other-structure', [0.0, 0.0, 0.0], orbitals=np.eye(2))
         self.assertIsNone(mol._usable_mo_labels(mol.symmetry_metadata))
 
     def test_a_moved_atom_changes_the_key(self):
-        a = self._mol(None, [0.0, 0.0, 0.0])._symmetry_geometry_key()
-        b = self._mol(None, [0.0, 0.0, 0.001])._symmetry_geometry_key()
+        a = self._mol(None, [0.0, 0.0, 0.0], orbitals=np.eye(2))._symmetry_geometry_key()
+        b = self._mol(None, [0.0, 0.0, 0.001], orbitals=np.eye(2))._symmetry_geometry_key()
         self.assertIsNotNone(a)
         self.assertNotEqual(a, b)
+
+    def test_same_geometry_but_different_orbitals_rejects_the_labels(self):
+        """MO irreps describe the SCF SOLUTION, not just the structure.
+
+        Identical coordinates with a different converged solution -- another
+        guess, an orbital swap, a symmetry-broken stability solution -- must
+        not reuse the old labels. A coordinates-only key accepted them.
+        """
+        mol = self._mol(None, [0.0, 0.0, 0.0], orbitals=np.eye(2))
+        mol.data['OQP::VEC_MO_A'] = np.array([[1.0, 0.0], [0.0, 1.0]])
+        key_a = mol._symmetry_geometry_key()
+        mol.data['OQP::VEC_MO_A'] = np.array([[0.0, 1.0], [1.0, 0.0]])
+        key_b = mol._symmetry_geometry_key()
+        self.assertIsNotNone(key_a)
+        self.assertNotEqual(key_a, key_b,
+                            'swapped orbitals must change the label key')
+
+        mol.symmetry_metadata['mo_labels']['geometry_key'] = key_a
+        self.assertIsNone(mol._usable_mo_labels(mol.symmetry_metadata))
+
+    def test_without_orbitals_there_is_no_key(self):
+        """Labels are built FROM the orbitals; with none there is nothing
+        meaningful to key against."""
+        mol = self._mol(None, [0.0, 0.0, 0.0])
+        self.assertIsNone(mol._symmetry_geometry_key())
 
     def test_unknown_geometry_keeps_the_cached_labels(self):
         """None means 'cannot tell'. Recomputing unconditionally would pay the
         dense O(|G| n_AO^3) relabelling on every call."""
-        mol = self._mol('whatever', [0.0, 0.0, 0.0])
+        mol = self._mol('whatever', [0.0, 0.0, 0.0], orbitals=np.eye(2))
         mol.get_system = lambda: (_ for _ in ()).throw(RuntimeError('no geometry'))
         self.assertIsNone(mol._symmetry_geometry_key())
         self.assertIsNotNone(mol._usable_mo_labels(mol.symmetry_metadata))

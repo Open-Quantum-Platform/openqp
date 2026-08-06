@@ -502,10 +502,13 @@ class SinglePoint(Calculator):
         # stand-in molecules in the test suite, and a bare call breaks every one
         # of them. Keying off the recorded status means the extra call happens
         # only for a molecule that really did stage something.
-        previously_staged = bool(
-            getattr(self.mol, 'symmetry_metadata', None)
-            and self.mol.symmetry_metadata.get(
-                'integral_symmetry', {}).get('status') == 'active')
+        # Asks the TAG STORE, not the metadata. load_config() replaces the
+        # metadata dict wholesale, so a status-based check answers False in
+        # exactly the case that strands tags: reconfiguring one molecule and
+        # turning the reduction off. getattr keeps the lightweight stand-in
+        # molecules used across the test suite working.
+        previously_staged = getattr(
+            self.mol, 'has_staged_integral_symmetry', lambda: False)()
         if symmetry_on or previously_staged:
             self.mol.stage_integral_symmetry_maps()
 
