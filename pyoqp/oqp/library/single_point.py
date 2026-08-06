@@ -479,6 +479,13 @@ class SinglePoint(Calculator):
         # guess/basis stage; stage the maps once the basis exists.
         symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
                            self.mol.symmetry_metadata.get('use_integral_symmetry'))
+        # Start every reference from the reduction OFF. The enable flag lives in
+        # the tag store, which survives across jobs sharing a Molecule, so a run
+        # that reoriented once could otherwise leave it set for a later job whose
+        # maps were never staged -- petite quartet weights against a shell map
+        # for a different geometry. stage_integral_symmetry_maps turns it back
+        # on when, and only when, the reduction is genuinely active.
+        self._set_petite_enabled(False)
         if symmetry_on:
             self.mol.reorient_for_integral_symmetry()
 
@@ -827,10 +834,11 @@ class SinglePoint(Calculator):
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).excitation(ref_energy)
 
-        # Response-space symmetry blocking (no-op unless
-        # [symmetry] use_response_symmetry is enabled).
-        if getattr(self.mol, 'symmetry_metadata', None) and \
-                self.mol.symmetry_metadata.get('use_response_symmetry'):
+        # Stage the per-pair irrep table whenever symmetry detection produced
+        # usable orbital labels.  The Davidson guess needs it for irrep
+        # coverage; the experimental residual projection is gated separately
+        # by [symmetry] use_response_symmetry inside stage_response_symmetry.
+        if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
         self.tddft()
@@ -951,6 +959,28 @@ class Gradient(Calculator):
         # onto the totally symmetric component (exact for 1-dim irreps; all
         # abelian irreps are 1-dim). No-op unless the reduction is active.
         grads = self.mol.symmetrize_gradient(grads)
+
+        # Push the projected gradient back into the library buffer. get_grad()
+        # reads that buffer, so without this the projection reaches
+        # self.mol.grads (printed output, optimiser) while get_data()['grad']
+        # and the QM/MM driver still see the unprojected skeleton -- the log
+        # shows the right gradient and the stored result is wrong.
+        #
+        # Which row the buffer holds is NOT simply the last row of the array.
+        # tddft_grad allocates np.zeros((nstate + 1, natom, 3)) and fills only
+        # the REQUESTED states, so with nstate=6 and grad=3 rows 4..6 are still
+        # zero. Writing arr[-1] there stores a zero gradient -- an error that
+        # hides well, because max|0 - g_ref| happens to equal max|g_ref| just
+        # as the unprojected skeleton's largest deviation did.
+        buffer_row = None
+        if self.method == 'hf':
+            buffer_row = 0                       # scf_grad returns one row
+        elif self.method == 'tdhf' and len(self.grads):
+            buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
+        if buffer_row is not None:
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            if 0 <= buffer_row < arr.shape[0]:
+                self.mol.set_grad(arr[buffer_row])
 
         self.mol.grads = grads
 

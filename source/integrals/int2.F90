@@ -172,6 +172,7 @@ module int2_compute
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure, public, pass :: init => int2_compute_t_init
     procedure, public, pass :: enable_petite => int2_compute_t_enable_petite
+    procedure, public, pass :: disable_petite => int2_compute_t_disable_petite
     procedure, public, pass :: set_screening => int2_compute_t_set_screening
     procedure, public, pass :: set_cutoff => int2_compute_t_set_cutoff
     procedure, public, pass :: clean => int2_compute_t_clean
@@ -288,6 +289,20 @@ contains
 !> @detail Loads the shell map written by pyoqp when use_integral_symmetry
 !>   is enabled. Only valid when the contracted density is totally
 !>   symmetric and the caller symmetrizes the resulting skeleton matrix.
+  !> @brief Withdraw the petite reduction after enable_petite already accepted it
+  !> @detail Used when a check that needs data enable_petite does not have --
+  !>         the density's symmetry -- decides the reduction is not valid.
+  subroutine int2_compute_t_disable_petite(this)
+    implicit none
+    class(int2_compute_t), intent(inout) :: this
+    this%petite = .false.
+    this%sym_shell_map => null()
+    this%sym_nops = 0
+    this%sym_full = .false.
+  end subroutine int2_compute_t_disable_petite
+
+!###############################################################################
+
   subroutine int2_compute_t_enable_petite(this, infos)
     use types, only: information
     use oqp_tagarray_driver
@@ -321,8 +336,24 @@ contains
 
     block
       real(kind=dp), contiguous, pointer :: blocks(:)
+      ! sym_full means the NON-ABELIAN tier, which is what line ~707 keys on to
+      ! loosen the Schwarz test by a factor nops. Dense operator blocks are no
+      ! longer sufficient evidence for that: the no-reorient path stages them
+      ! for an ABELIAN group, because there the operator is dense while the
+      ! group, the shell map and the orbit weights are the standard-frame
+      ! abelian ones -- so it must screen exactly as that path does.
+      !
+      ! Reading block presence as "full tier" loosened screening eightfold on
+      ! the no-move path and cost more than the reduction saved: benzene
+      ! cc-pVTZ went 14.1 s -> 23.5 s at an identical 12 iterations.
       call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
-      this%sym_full = status == TA_OK
+      block
+        integer(8), contiguous, pointer :: nonab(:)
+        integer(4) :: st_na
+        this%sym_full = .false.
+        call tagarray_get_data(infos%dat, OQP_sym_nonabelian, nonab, status=st_na)
+        if (st_na == TA_OK) this%sym_full = nonab(1) /= 0
+      end block
     end block
 
   end subroutine int2_compute_t_enable_petite
