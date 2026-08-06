@@ -627,6 +627,22 @@ class Molecule:
         existed and no output said so.
         """
         meta = self.symmetry_metadata
+        # Invalidate FIRST, before ANY gate below can return.
+        #
+        # Every tag this method stages describes one geometry and one basis,
+        # and the tag store outlives a single step. Clearing them at the point
+        # of a successful re-stage is not enough: the gates that return early
+        # -- no detection, the frame not reoriented, no basis, no shell
+        # purity, an AO-count mismatch, a failed overlap-invariance check --
+        # all leave the PREVIOUS step's maps in place, with
+        # OQP::sym_petite_enable still 1. Fortran then applies a stale petite
+        # list and a stale skeleton symmetrisation to the new geometry, which
+        # is a wrong-integrals bug rather than a missed optimisation.
+        #
+        # Same reasoning as _clear_response_symmetry_tags: make a bail mean
+        # "nothing staged", which every consumer already handles, instead of
+        # "whatever was true last time".
+        self._clear_integral_symmetry_tags(meta)
         if not meta or not meta.get('use_integral_symmetry'):
             return False
         staged = self._stage_integral_symmetry_maps(meta)
@@ -638,6 +654,36 @@ class Molecule:
         except Exception:
             pass
         return staged
+
+    #: Every tag written by the integral-symmetry staging path. Absence means
+    #: "not staged", which is what each Fortran consumer treats as inactive.
+    _INTEGRAL_SYMMETRY_TAGS = (
+        'OQP::sym_shell_map',
+        'OQP::sym_ao_target',
+        'OQP::sym_ao_sign',
+        'OQP::sym_atom_weight',
+        'OQP::sym_op_blocks',
+        'OQP::sym_petite_enable',
+    )
+
+    def _clear_integral_symmetry_tags(self, meta=None):
+        """Drop every staged petite-list / skeleton-symmetrisation artefact.
+
+        Deliberately deletes ``OQP::sym_petite_enable`` rather than setting it
+        to 0: absence and 0 are equivalent to the consumers, and deleting
+        cannot leave a half-configured state where the flag says active but
+        the maps are gone.
+        """
+        for tag in self._INTEGRAL_SYMMETRY_TAGS:
+            try:
+                del self.data[tag]
+            except Exception:
+                pass
+        if meta is None:
+            meta = self.symmetry_metadata or {}
+        if meta:
+            meta.pop('reduction_maps', None)
+            meta.pop('reduction_maps_full', None)
 
     def _clear_full_group_tags(self, meta=None):
         """Drop any staged non-abelian (full point group) reduction artefacts.

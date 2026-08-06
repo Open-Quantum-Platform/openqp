@@ -216,6 +216,56 @@ class FullGroupTagsAreClearedTests(unittest.TestCase):
         mol._clear_full_group_tags({})  # must not raise
 
 
+class StaleIntegralStagingTests(unittest.TestCase):
+    """A staging attempt that BAILS must not leave the previous one active.
+
+    Every early return in the staging body -- no detection, frame not
+    reoriented, no basis, no shell purity, AO-count mismatch, failed overlap
+    invariance -- used to return before any invalidation, so the prior step's
+    petite maps stayed in the tag store with ``sym_petite_enable`` still 1.
+    Fortran would then apply them to the NEW geometry: wrong integrals, not a
+    missed optimisation.
+    """
+
+    ALL_TAGS = (
+        'OQP::sym_shell_map', 'OQP::sym_ao_target', 'OQP::sym_ao_sign',
+        'OQP::sym_atom_weight', 'OQP::sym_op_blocks', 'OQP::sym_petite_enable',
+    )
+
+    def _staged(self):
+        """A molecule carrying a complete, previously-staged petite setup."""
+        data = FakeData({t: np.ones(2) for t in self.ALL_TAGS})
+        meta = {
+            'use_integral_symmetry': True,
+            'reduction_maps': {'n_operations': 8},
+            'reduction_maps_full': {'n_operations': 24},
+            # No 'detection' -> the FIRST gate in the staging body returns.
+        }
+        return _molecule({'symmetry': {'use_integral_symmetry': 'true'}}, meta, data)
+
+    def test_a_bail_on_missing_detection_clears_everything(self):
+        mol = self._staged()
+        self.assertFalse(mol.stage_integral_symmetry_maps())
+        for tag in self.ALL_TAGS:
+            self.assertNotIn(tag, mol.data, f'{tag} survived a failed staging')
+        self.assertNotIn('reduction_maps', mol.symmetry_metadata)
+        self.assertNotIn('reduction_maps_full', mol.symmetry_metadata)
+
+    def test_turning_integral_symmetry_off_also_clears(self):
+        """The flag gate returns even earlier than the staging body."""
+        mol = self._staged()
+        mol.symmetry_metadata['use_integral_symmetry'] = False
+        self.assertFalse(mol.stage_integral_symmetry_maps())
+        for tag in self.ALL_TAGS:
+            self.assertNotIn(tag, mol.data, f'{tag} survived with the flag off')
+
+    def test_petite_enable_is_deleted_not_left_asserting_active(self):
+        """Absence and 0 are equivalent to the consumers; a surviving 1 is not."""
+        mol = self._staged()
+        mol.stage_integral_symmetry_maps()
+        self.assertNotIn('OQP::sym_petite_enable', mol.data)
+
+
 class TdMultiplicityKeyTests(unittest.TestCase):
     """The schema key is 'multiplicity'; 'mult' is only an alias."""
 
