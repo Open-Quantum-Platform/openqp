@@ -165,6 +165,8 @@ will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
     energy_shift=1e-6
     energy_gap=1e-5
     meci_search=auto
+    mecp_search=auglag
+    gap_sigma=10.0
     pen_sigma=1.0
     pen_alpha=0.0
     pen_incre=1.0
@@ -189,7 +191,7 @@ will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
     decoherence=edc
     thrshe=1.0e9
     tdc=fd
-    trivial=True
+    trivial=False
     init_temp=300.0
     velocity=maxwell
     seed=1
@@ -284,6 +286,20 @@ guess section handle the guess orbitals
       filename   name or absolute path to molden or json file
 
 - save_mol // save complete data to a json file
+
+For overlap-aligned excited-state calculations, the saved JSON also contains
+a public `state_tracking` record.  `order` maps each saved current-root index
+to its previous-step index (zero-based), while `lineage` carries the initial
+physical-state identity through root exchanges.  `phase_step` is the sign
+applied to each raw current response vector and `phase_initial` is that raw
+vector's correction to the transported initial gauge.  External dynamics
+drivers should consume this joint state gauge instead of independently fitting
+the sign of every pairwise NAC vector.  `matched_overlap` and `margin` expose
+weak or ambiguous correspondences.
+`raw_order` preserves the pre-alignment solver-root map; `output_reordered` is
+true only for internal numerical-NAC displacement workers, whose response
+vectors are restored to the central structure's physical-root order before
+the +dx/-dx finite difference.
 
       True       save complete calculation data to json file
       False      do not save data (default)
@@ -650,13 +666,50 @@ automatically.
     
 - meci-search // choose the algorithm for conical intersection optimization
 
-      auto       native default: short two-state penalty then BaekA if needed;
-                 multistate searches select BaekA directly
+      auto       default: two-state searches use auglag, with BaekA held back
+                 as a rescue on the recovery budget if auglag does not meet
+                 the criteria; multistate searches select BaekA directly.
+                 Backends other than oqp resolve auto to auglag
       penalty    use the modified penalty method
       ubp        use the update branching plane method
+      auglag     use the branching-plane projection with a least-squares
+                 Lagrange multiplier; the reported objective is an augmented
+                 Lagrangian value rather than the ratio used by ubp
       hybrid     use the penalty function then swith to ubp after energy gap is lower than the threshold
       baeka      use the additive Baek adaptive penalty for two or more states
-    
+
+- mecp-search // choose the algorithm for spin-crossing (MECP) optimization
+
+      auto       (default) sqp when lib=oqp, auglag on the backends that
+                 bring their own optimizer
+      sqp        sequential quadratic programming: solves the KKT equations
+                 of the constrained problem for the step and the multiplier
+                 together, so the multiplier is a result rather than a formula
+                 and there is no penalty parameter, i.e. gap_sigma is unused.
+                 Works in delocalized internal coordinates with the native
+                 model Hessian. Requires lib=oqp because it replaces the outer
+                 optimizer with its own trust-region step control. coordsys=cart
+                 is honoured; the other settings, including tric, select DLC,
+                 because a dense KKT system needs a non-redundant basis.
+                 Converges tighter and in fewer steps than auglag on the cases
+                 tested so far, which is why auto selects it natively.
+      auglag     least-squares multiplier plus gradient projection; with
+                 gap_sigma=1 the converged form is the plain Bearpark gradient
+                 projection. The gap term and the projected mean gradient are
+                 orthogonal, so both must vanish separately and the stationary
+                 point is a true crossing. Selected by auto on the scipy and
+                 geometric backends, which supply their own optimizer
+      penalty    Levine-Martinez smooth penalty
+      quad       legacy fixed-weight quadratic penalty.  Its stationary point
+                 balances the mean gradient against the gap term, leaving a
+                 residual gap of order 1/gap_weight, so it generally cannot
+                 satisfy energy_gap.  Kept only to reproduce earlier runs
+
+- gap_sigma // strength of the gap term in the auglag objectives
+
+      10.0 (default), must be positive; 1.0 reproduces the plain Bearpark
+      projection, larger values reach the seam faster
+
 - pen_sigma // set the sigma in the penalty function
 
       1.0 (defaut)

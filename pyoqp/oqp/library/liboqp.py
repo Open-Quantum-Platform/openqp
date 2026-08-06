@@ -655,21 +655,23 @@ class OQPAutoMECIOpt:
                 self.metrics = self.baeka_optimizer.metrics
                 return
 
-            # Reserve most of the public maxit budget for the adaptive method.
-            # Ten penalty steps are enough to establish a useful seam-directed
-            # geometry at the standard maxit=30, while very small user budgets
-            # remain respected.
-            penalty_steps = min(20, max(3, total_steps // 3))
-            penalty_steps = min(penalty_steps, total_steps)
-            optimize_config["meci_search"] = "penalty"
+            # The first phase uses auglag rather than the plain penalty: the
+            # penalty is stationary at a finite gap, so on its own it stalls
+            # above energy_gap.  auglag converges on its own, so it gets the
+            # whole public budget and BaekA is held back as a rescue on the
+            # recovery budget.  Splitting the budget evenly measured worse:
+            # BaekA restarts its sigma ladder from scratch and gives back the
+            # progress auglag had already made.
+            penalty_steps = total_steps
+            optimize_config["meci_search"] = "auglag"
             optimize_config["maxit"] = penalty_steps
             native_config["auto_recovery"] = False
 
             dump_log(
                 self.mol,
                 title=(
-                    "PyOQP: Automatic two-state MECI phase 1/2: penalty "
-                    "search for up to %d steps" % penalty_steps
+                    "PyOQP: Automatic two-state MECI phase 1/2: augmented "
+                    "Lagrangian search for up to %d steps" % penalty_steps
                 ),
             )
             self.penalty_optimizer = OQPMECIOpt(self.mol)
@@ -679,8 +681,8 @@ class OQPAutoMECIOpt:
                 dump_log(
                     self.mol,
                     title=(
-                        "PyOQP: Automatic MECI converged in the penalty phase; "
-                        "BaekA escalation was not needed"
+                        "PyOQP: Automatic MECI converged in the augmented "
+                        "Lagrangian phase; BaekA escalation was not needed"
                     ),
                 )
                 return
@@ -699,9 +701,9 @@ class OQPAutoMECIOpt:
             dump_log(
                 self.mol,
                 title=(
-                    "PyOQP: Automatic two-state MECI phase 2/2: penalty "
-                    "criteria were not met; restarting the retained geometry "
-                    "with BaekA for up to %d steps" % baeka_steps
+                    "PyOQP: Automatic two-state MECI phase 2/2: augmented "
+                    "Lagrangian criteria were not met; restarting the retained "
+                    "geometry with BaekA for up to %d steps" % baeka_steps
                 ),
             )
             self.baeka_optimizer = OQPBaekAOpt(self.mol)

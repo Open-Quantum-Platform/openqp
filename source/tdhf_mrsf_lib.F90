@@ -384,17 +384,16 @@ contains
           f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
           f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
 
-          ! Mixed alpha/beta spin-pair channels use the same exchange
-          ! permutation pattern as MRSF channels 5:6, with only the column
-          ! range renumbered.  This preserves the ROHF/MRSF reduction limit.
-          f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,j,l) ! (ij|lk)
-          f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,l,j) ! (kl|ji)
-          f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,j,k) ! (ij|kl)
-          f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,k,j) ! (lk|ji)
-          f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,i,l) ! (ji|lk)
-          f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,l,i) ! (kl|ij)
-          f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,i,k) ! (ji|kl)
-          f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,k,i) ! (lk|ij)
+          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
+          ! exchange permutation for UMRSF open-shell pair densities.
+          f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j)
+          f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k)
+          f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l)
+          f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i)
+          f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j)
+          f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l)
+          f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k)
+          f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i)
 
           ! General component agdlr is column 11 (spin-independent)
           f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
@@ -437,7 +436,7 @@ contains
 
     implicit none
 
-    type(information), intent(in) :: infos
+    type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in), dimension(:) :: ea, eb
     real(kind=dp), intent(out), dimension(:,:) :: bvec_mo
     real(kind=dp), intent(out), dimension(:) :: xm
@@ -518,12 +517,6 @@ contains
       end do
     end if
 
-    ! Get initial vectors: bvec(xvec_dim, nvec)
-    bvec_mo = 0.0_dp
-    do k = 1, nvec
-      bvec_mo(itmp(k),k) = 1.0_dp
-    end do
-
     ! set xm(xvec_dim) again
     ij = 0
     do j = lr1, nbf
@@ -545,6 +538,172 @@ contains
           xm(ij) = 9d99
         end if
       end do
+    end do
+
+    ! ---- IRREP COVERAGE OF THE INITIAL TRIAL-VECTOR SET --------------------
+    ! Each |Phi_ia> above transforms as a definite irreducible representation,
+    ! Gamma_i (x) Gamma_a.  With point-group symmetry the response matrix is
+    ! block diagonal in those irreps, and Davidson expands with preconditioned
+    ! residuals, which stay inside the block they start in.  An irrep that
+    ! receives no initial trial vector is therefore never reached and its roots
+    ! are ABSENT from the spectrum, so the remaining Ritz values are numbered
+    ! 1, 2, 3, ... and every state index silently shifts.
+    !
+    ! With OQP::sym_pair_irrep staged (per-pair irrep index, same xvec layout,
+    ! MRSF open-open slots relabelled for the folded sector), replace the
+    ! highest-lying members of the energy-ordered selection by the lowest-lying
+    ! representative of each irrep that would otherwise be unrepresented.  The
+    ! low-lying vectors that drive convergence are never displaced.  Without the
+    ! table -- C1, mixed orbitals, detection disabled -- this is inert and the
+    ! trial-set dimension chosen by the caller is the weaker mitigation.
+    block
+      use oqp_tagarray_driver
+      use tagarray, only: TA_OK
+      integer(8), contiguous, pointer :: pair_irrep(:)
+      integer(4) :: ta_status
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
+      integer :: nstates_req
+
+      call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                             status=ta_status)
+      if (ta_status == TA_OK) then
+        if (size(pair_irrep) == xvec_dim) then
+          nirr = int(maxval(pair_irrep))
+          if (nirr >= 1) then
+            nstates_req = int(infos%tddft%nstate)
+            if (nstates_req < 1) nstates_req = 1
+            nmiss = 0
+            ! A block can only yield as many roots as it has trial vectors,
+            ! so covering each irrep once guarantees only its LOWEST root.
+            ! When two requested roots share a block the second is still
+            ! missed -- measured on CH2O, where covering every irrep once
+            ! repairs the triplet but not the singlet.  Give each irrep depth
+            ! up to the number of requested states, budget permitting.
+            ! Substitution rule.  The energy-ordered seeds are not
+            ! interchangeable: whichever one is the ONLY representative of its
+            ! irrep is the only route to that block's roots, and overwriting it
+            ! loses them.  Measured on CH3Br-BHHLYP-SOC, where a substitution
+            ! that displaced such a seed moved the 6th singlet from 5.214562 to
+            ! 5.224000 eV -- fully converged, and wrong.
+            !
+            ! So: only ever displace a seed whose irrep still has another
+            ! representative, and take the highest-lying such seed.  This can
+            ! only add block coverage, never remove it.
+            nadd = 0
+            do ir = 1, nirr
+              ncur = 0
+              do k = 1, nvec
+                if (itmp(k) >= 1 .and. itmp(k) <= xvec_dim) then
+                  if (int(pair_irrep(itmp(k))) == ir) ncur = ncur + 1
+                end if
+              end do
+              if (ncur > 0) cycle                ! irrep already represented
+              best_idx = 0
+              do kk = 1, xvec_dim
+                if (int(pair_irrep(kk)) /= ir) cycle
+                if (xm(kk) > 1.0d90) cycle       ! redundant/masked slot
+                if (best_idx == 0) then
+                  best_idx = kk
+                else if (xm(kk) < xm(best_idx)) then
+                  best_idx = kk
+                end if
+              end do
+              if (best_idx == 0) cycle           ! irrep has no live pair
+              ! Pick a victim: the HIGHEST-lying seed whose irrep still has
+              ! another representative.  One rule, deliberately, and the scan
+              ! covers all of 1..nvec rather than only the slack beyond the
+              ! requested states.
+              !
+              ! Read tdhf_mrsf_energy's claim that coverage "is confined to
+              ! whatever room already exists beyond the requested states" as
+              ! describing an intent that measurement did not support.  A guard
+              ! enforcing it was added (908496c0) on the strength of one deck --
+              ! CH3Br-BHHLYP-SOC nstate=6, where a substitution was seen to move
+              ! the 6th singlet 0.191632 -> 0.191978 Ha -- then dropped, then
+              ! restored in review, then measured properly on both sides:
+              !
+              !   CH3Br-BHHLYP-SOC   unconfined, reproduces its shipped
+              !                      td_singlet_energies to 9.8e-10
+              !   H2O_BHHLYP_SOC     unconfined, 1.6e-13
+              !   CH2O 6-31G nstate=6  unconfined gives all six states including
+              !                      5.788160 eV; CONFINED loses that state
+              !                      entirely and reports 6.803920 in its place
+              !
+              ! So the harm the guard was built to prevent no longer occurs on
+              ! the deck that motivated it -- both SOC anchors now detect Cs,
+              ! where two irreps and six seeds leave nothing to repair -- while
+              ! the guard's own cost is reproducible and is exactly the failure
+              ! this whole mechanism exists to stop.  Since nvec =
+              ! min(max(nstates,6), mxvec), confinement disables the repair
+              ! outright for every nstate >= 6, which is where blocks go
+              ! unseeded in the first place.
+              !
+              ! What actually protects the requested roots is the choice of
+              ! victim, not a range restriction: taking the highest-lying seed
+              ! of an over-represented irrep spends the vector least likely to
+              ! be some root's true starting point, and refusing to take the
+              ! last representative of an irrep means the substitution can only
+              ! ever add block coverage, never remove it.
+              !
+              ! If a future deck does show a requested root lost to substitution,
+              ! the fix is a sharper victim rule, not a range guard -- a range
+              ! guard trades a rare regression for a systematic one.
+              kpos = 0
+              do k = 1, nvec
+                if (itmp(k) < 1 .or. itmp(k) > xvec_dim) cycle
+                ncur = 0
+                do kk = 1, nvec
+                  if (itmp(kk) >= 1 .and. itmp(kk) <= xvec_dim) then
+                    if (int(pair_irrep(itmp(kk))) == &
+                        int(pair_irrep(itmp(k)))) ncur = ncur + 1
+                  end if
+                end do
+                if (ncur < 2) cycle              ! last of its block: keep it
+                if (kpos == 0) then
+                  kpos = k
+                else if (xm(itmp(k)) > xm(itmp(kpos))) then
+                  kpos = k
+                end if
+              end do
+              if (kpos == 0) then
+                nmiss = nmiss + 1                ! nothing safe to displace
+                cycle
+              end if
+              itmp(kpos) = best_idx
+              nadd = nadd + 1
+            end do
+
+            ! A block left without any trial vector contributes NO roots -- they
+            ! are absent, not unconverged -- so the surviving Ritz values are
+            ! renumbered and every state index shifts.  That must never happen
+            ! silently.  We cannot enlarge the trial set here to fix it: the
+            ! solver is not stable against that dimension (raising it globally
+            ! moved four example references, and one extra vector alone moved
+            ! CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to 5.224000 eV,
+            ! converged and wrong).  So say plainly what is happening and what
+            ! the user should do about it.
+            if (nmiss > 0) then
+              write(iw,'(/,2X,"MRSF WARNING: ",I0," symmetry block(s) get no ", &
+                &"initial trial vector, so their roots are ABSENT from the ", &
+                &"spectrum and the reported state numbering is shifted -- ", &
+                &"state N may not be the physical state N.  There is no room ", &
+                &"to fix it at nstate=",I0,": raise nstate (16 suffices for ", &
+                &"every case measured so far) and check that the energies of ", &
+                &"the states you care about do not move.",/)') nmiss, nstates_req
+            end if
+            if (nadd > 0 .and. debug_mode) then
+              write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
+                &cover otherwise unrepresented irreps")') nadd
+            end if
+          end if
+        end if
+      end if
+    end block
+
+    ! Get initial vectors: bvec(xvec_dim, nvec)
+    bvec_mo = 0.0_dp
+    do k = 1, nvec
+      bvec_mo(itmp(k),k) = 1.0_dp
     end do
 
     if (debug_mode) then
@@ -2871,6 +3030,183 @@ contains
 
 !###############################################################################
 
+!> Compute UMRSF state-to-state transition dipoles from spin-resolved transition
+!> density blocks.
+!>
+!> The existing MRSF transition-density path assumes a common ROHF MO basis.
+!> UMRSF uses separate alpha and beta UHF orbitals.  Match the GAMESS
+!> MRSF/UMRSF transition-moment path: build T in the alpha-row/beta-column
+!> MO product basis and transform it as C_alpha * T * C_beta^T before
+!> contraction with AO dipole integrals.  The spin-adaptation factors match
+!> get_mrsf_transition_density.
+  subroutine get_umrsf_transition_dipole(basis, dip, mo_a, mo_b, bvec_mo, &
+                                         nstates, noca, nocb, mrst)
+    use precision, only: dp
+    use int1, only: multipole_integrals
+    use basis_tools, only: basis_set
+    use mathlib, only: pack_matrix, symmetrize_matrix, traceprod_sym_packed
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(out), dimension(:,:,:) :: dip
+    real(kind=dp), intent(in), dimension(:,:) :: mo_a, mo_b, bvec_mo
+    integer, intent(in) :: nstates, noca, nocb, mrst
+
+    real(kind=dp), allocatable :: mints(:,:), rho_ao(:,:), work(:,:)
+    real(kind=dp), allocatable :: rho_a(:,:), rho_b(:,:), packed(:)
+    real(kind=dp), allocatable :: xv12i(:,:), xv12j(:,:)
+    real(kind=dp) :: center_of_mass(3), tmp, scal
+    real(kind=dp), parameter :: rsqrt = 1.0_dp/sqrt(2.0_dp)
+    real(kind=dp), parameter :: sqrt2 = sqrt(2.0_dp)
+    integer :: nbf, nbf2, nvirb, ok
+    integer :: ist, jst, i, j, k, ij, ijd, ijg, ijlr1, ijlr2
+    logical :: ioo, joo
+
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nvirb = nbf-nocb
+
+    allocate(mints(nbf2,3), &
+             rho_ao(nbf,nbf), &
+             work(nbf,nbf), &
+             rho_a(noca,noca), &
+             rho_b(nvirb,nvirb), &
+             packed(nbf2), &
+             xv12i(noca,nvirb), &
+             xv12j(noca,nvirb), &
+             source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    dip = 0.0_dp
+
+    if (mrst /= 1 .and. mrst /= 3) then
+      deallocate(mints, rho_ao, work, rho_a, rho_b, packed, xv12i, xv12j)
+      return
+    end if
+
+    center_of_mass = basis%atoms%center(weight='mass')
+    call multipole_integrals(basis, mints, center_of_mass, 1)
+
+    ijlr1 = (noca-1-nocb-1)*noca+noca-1
+    ijg   = (noca-1-nocb-1)*noca+noca
+    ijd   = (noca-nocb-1)*noca+noca-1
+    ijlr2 = (noca-nocb-1)*noca+noca
+
+    do ist = 1, nstates
+      do jst = 1, nstates
+        if (ist == jst) cycle
+
+        xv12i = 0.0_dp
+        xv12j = 0.0_dp
+        rho_a = 0.0_dp
+        rho_b = 0.0_dp
+        rho_ao = 0.0_dp
+
+        if (mrst == 1) then
+          do i = 1, noca
+            do j = nocb+1, nbf
+              ij = (j-nocb-1)*noca+i
+              if (ij == ijlr1) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijlr2) then
+                xv12j(i,j-nocb) = -bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = -bvec_mo(ijlr1,ist)*rsqrt
+              else
+                xv12j(i,j-nocb) = bvec_mo(ij,jst)
+                xv12i(i,j-nocb) = bvec_mo(ij,ist)
+              end if
+            end do
+          end do
+        else if (mrst == 3) then
+          do i = 1, noca
+            do j = nocb+1, nbf
+              ij = (j-nocb-1)*noca+i
+              if (ij == ijlr1) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijlr2) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijg .or. ij == ijd) then
+                xv12j(i,j-nocb) = 0.0_dp
+                xv12i(i,j-nocb) = 0.0_dp
+              else
+                xv12j(i,j-nocb) = bvec_mo(ij,jst)
+                xv12i(i,j-nocb) = bvec_mo(ij,ist)
+              end if
+            end do
+          end do
+        end if
+
+        ! Virtual-virtual block of T in the alpha-row/beta-column MRSF MO basis.
+        do i = 1, nvirb
+          do j = 1, nvirb
+            tmp = 0.0_dp
+            do k = 1, noca
+              ioo = (i==1 .or. i==2) .and. (k==noca-1 .or. k==noca)
+              joo = (j==1 .or. j==2) .and. (k==noca-1 .or. k==noca)
+              scal = 1.0_dp
+              if (ioo .and. .not. joo) scal = sqrt2
+              if (.not. ioo .and. joo) scal = sqrt2
+              tmp = tmp + scal*xv12j(k,i)*xv12i(k,j)
+            end do
+            rho_b(i,j) = rho_b(i,j) + tmp
+          end do
+        end do
+
+        ! Occupied-occupied block of T in the alpha-row/beta-column MRSF MO basis.
+        do i = 1, noca
+          do j = 1, noca
+            tmp = 0.0_dp
+            do k = 1, nvirb
+              ioo = (i==noca-1 .or. i==noca) .and. (k==1 .or. k==2)
+              joo = (j==noca-1 .or. j==noca) .and. (k==1 .or. k==2)
+              scal = 1.0_dp
+              if (ioo .and. .not. joo) scal = sqrt2
+              if (.not. ioo .and. joo) scal = sqrt2
+              tmp = tmp + scal*xv12j(j,k)*xv12i(i,k)
+            end do
+            rho_a(i,j) = rho_a(i,j) - tmp
+          end do
+        end do
+
+        ! AO transition density = C_alpha * T * C_beta^T.
+        call dgemm('n','n', nbf, noca, noca, &
+                   1.0_dp, mo_a, nbf, &
+                           rho_a, noca, &
+                   0.0_dp, work, nbf)
+        call dgemm('n','t', nbf, nbf, noca, &
+                   1.0_dp, work, nbf, &
+                           mo_b, nbf, &
+                   0.0_dp, rho_ao, nbf)
+
+        call dgemm('n','n', nbf, nvirb, nvirb, &
+                   1.0_dp, mo_a(:,nocb+1:), nbf, &
+                           rho_b, nvirb, &
+                           0.0_dp, work, nbf)
+        call dgemm('n','t', nbf, nbf, nvirb, &
+                   1.0_dp, work, nbf, &
+                           mo_b(:,nocb+1:), nbf, &
+                   1.0_dp, rho_ao, nbf)
+
+        call symmetrize_matrix(rho_ao, nbf)
+        call pack_matrix(rho_ao, packed)
+
+        dip(1,ist,jst) = -traceprod_sym_packed(packed, mints(:,1), nbf)*0.5_dp
+        dip(2,ist,jst) = -traceprod_sym_packed(packed, mints(:,2), nbf)*0.5_dp
+        dip(3,ist,jst) = -traceprod_sym_packed(packed, mints(:,3), nbf)*0.5_dp
+      end do
+    end do
+
+    deallocate(mints, rho_ao, work, rho_a, rho_b, packed, xv12i, xv12j)
+
+  end subroutine get_umrsf_transition_dipole
+
+!###############################################################################
+
 !> @brief Jacobi pair-rotations of MOs based on off-diagonal elements
 !>        of the alpha/beta MO overlap matrix s_mo
 !> @author Vladimir Yu. Makhnev
@@ -3312,4 +3648,3 @@ contains
   end subroutine umrsfdmat
 
 end module tdhf_mrsf_lib
-

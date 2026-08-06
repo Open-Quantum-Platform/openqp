@@ -416,6 +416,27 @@ def test_harmless_whitespace_and_bare_calls_normalize_to_compact_input():
     )
 
 
+def test_file_basis_scheme_and_whitespace_round_trip_without_path_case_loss():
+    spaced = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp basis="FILE:My Basis.JSON" '
+        'geom="h2o.xyz" energy'
+    )
+    assert spaced.basis == 'file:My Basis.JSON'
+    rendered = oqp_input.render_canonical_oqp(spaced)
+    assert 'basis="file:My Basis.JSON"' in rendered
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert reparsed.basis == spaced.basis
+    assert oqp_input.lower_to_legacy(reparsed)["input"]["basis"] == (
+        'file:My Basis.JSON')
+
+    route = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/FiLe:Basis.JSON geom="h2o.xyz" energy'
+    )
+    assert route.basis == 'file:Basis.JSON'
+    assert oqp_input.parse_canonical_oqp(
+        oqp_input.render_canonical_oqp(route)).basis == route.basis
+
+
 def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses():
     spec, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() pcm nmr d4'
@@ -585,6 +606,80 @@ def test_string_enums_are_not_globally_coerced_to_bool_or_null():
     assert reparsed.modifiers[0].kwargs["init_basis"] is None
 
 
+def test_namd_counter_rng_controls_lower_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,seed=20260803,rng_stream=7,first_hop_step=2)'
+    )
+    assert legacy["md"]["seed"] == "20260803"
+    assert legacy["md"]["rng_stream"] == "7"
+    assert legacy["md"]["first_hop_step"] == "2"
+
+
+def test_namd_baeck_an_check_controls_lower_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,nacme_check=baeck_an,ba_gap_max=0.05,nacme_gate=error,'
+        'nacme_gate_invariant_tol=1e-11,nacme_gate_abs_tol=2e-4,'
+        'nacme_gate_rel_tol=0.5,nacme_gate_consecutive=4,'
+        'nve_gate=warn,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,'
+        'nve_gate_transition_tol=1e-7,nve_gate_consecutive=2,'
+        'trajectory_interval=1,restart_interval=1,trajectory_file="dense.trj",'
+        'restart_file="state.npz")'
+    )
+    assert legacy["md"]["nacme_check"] == "baeck_an"
+    assert legacy["md"]["ba_gap_max"] == "0.05"
+    assert legacy["md"]["nacme_gate"] == "error"
+    assert legacy["md"]["nacme_gate_invariant_tol"] == "1e-11"
+    assert legacy["md"]["nacme_gate_abs_tol"] == "0.0002"
+    assert legacy["md"]["nacme_gate_rel_tol"] == "0.5"
+    assert legacy["md"]["nacme_gate_consecutive"] == "4"
+    assert legacy["md"]["nve_gate"] == "warn"
+    assert legacy["md"]["nve_gate_abs_tol"] == "0.004"
+    assert legacy["md"]["nve_gate_step_tol"] == "0.0008"
+    assert legacy["md"]["nve_gate_transition_tol"] == "1e-07"
+    assert legacy["md"]["nve_gate_consecutive"] == "2"
+    assert legacy["md"]["trajectory_interval"] == "1"
+    assert legacy["md"]["restart_interval"] == "1"
+    assert legacy["md"]["trajectory_file"] == "dense.trj"
+    assert legacy["md"]["restart_file"] == "state.npz"
+
+
+def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
+        'namd(S1,nstep=10,ensemble=nvt,thermostat=langevin,'
+        'thermostat_temperature=310,thermostat_friction=2.5) '
+        'qmmm(pdb_file="drop.pdb",forcefield_files="tip3p.xml",'
+        'qm_atoms="0-2",cutoff=NoCutoff) '
+        'droplet(enabled=true,center="1.0,2.0,3.0",radius=18.0,buffer=1.5,'
+        'force_constant=12.0,target=water_com,max_penetration=8.0) '
+        'solute_com(enabled=true,center="1.0,2.0,3.0",force_constant=4.0)'
+    )
+    assert legacy["md"]["ensemble"] == "nvt"
+    assert legacy["md"]["thermostat"] == "langevin"
+    assert legacy["md"]["thermostat_temperature"] == "310"
+    assert legacy["md"]["thermostat_friction"] == "2.5"
+    assert legacy["droplet"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0", "radius": "18.0",
+        "buffer": "1.5", "force_constant": "12.0", "target": "water_com",
+        "max_penetration": "8.0",
+    }
+    assert legacy["solute_com"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0",
+        "force_constant": "4.0",
+    }
+    assert "odp" not in legacy
+
+
+def test_droplet_and_solute_com_reject_non_namd_drivers():
+    with pytest.raises(oqp_input.OQPInputError, match="connected only to namd"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'droplet(enabled=true,radius=10)'
+        )
+
+
 def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="reactant.xyz" geom2="previous.xyz" '
@@ -595,6 +690,28 @@ def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
     assert legacy["input"]["system2"] == str((tmp_path / "previous.xyz").resolve())
     assert legacy["neb"]["product"] == str((tmp_path / "product.xyz").resolve())
     assert legacy["neb"]["nimage"] == "7"
+
+
+def test_restart_manifest_paths_can_be_rebased_to_the_source_directory(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    spec = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/sto-3g '
+        'namd(S1,velocity="velocities.dat") '
+        'guess(type=json,file="guess.json") '
+        'qmmm(pdb_file="cluster.pdb",forcefield_files="./local.xml amber14/tip3p.xml",qm_atoms="0-1") '
+        'geom="geometry.xyz"'
+    )
+
+    rebased = oqp_input.rebase_calculation_paths(spec, source_dir=source_dir)
+    rendered = oqp_input.render_canonical_oqp(rebased)
+
+    assert f'geom="{(source_dir / "geometry.xyz").resolve()}"' in rendered
+    assert f'velocity="{(source_dir / "velocities.dat").resolve()}"' in rendered
+    assert f'file="{(source_dir / "guess.json").resolve()}"' in rendered
+    assert f'pdb_file="{(source_dir / "cluster.pdb").resolve()}"' in rendered
+    assert str((source_dir / "local.xml").resolve()) in rendered
+    assert "amber14/tip3p.xml" in rendered
 
 
 def test_compact_pdb_geometry_resolves_only_path_prefix(tmp_path):
@@ -1794,3 +1911,41 @@ def test_cas_orbital_file_resolves_from_the_oqp_directory(tmp_path):
     )
 
     assert legacy["cas"]["orbital_file"] == str(tmp_path / "start.json")
+def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
+    text = (
+        'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '
+        'namd(T0,nstep=1,dt=0.1,velocity=zero) '
+        'odp(enabled=true,cv="distance(1,2);angle(3,1,4)",'
+        'scale="0.5,1.0",reference_r="2.1,1.9",'
+        'reference_p="2.5,2.2",center=0.5,k_parallel=0.02,'
+        'k_perpendicular=0.005,window=1)'
+    )
+    spec, legacy = _parse(text)
+    assert legacy["input"]["runtype"] == "namd"
+    assert legacy["odp"] == {
+        "enabled": "True",
+        "cv": "distance(1,2);angle(3,1,4)",
+        "scale": "0.5,1.0",
+        "reference_r": "2.1,1.9",
+        "reference_p": "2.5,2.2",
+        "center": "0.5",
+        "k_parallel": "0.02",
+        "k_perpendicular": "0.005",
+        "window": "1",
+    }
+    rendered = oqp_input.render_canonical_oqp(spec)
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert oqp_input.lower_to_legacy(reparsed)["odp"] == legacy["odp"]
+
+    with pytest.raises(OQPInputError, match="requires the NVE namd"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'odp(enabled=true,k_parallel=0.1)'
+        )
+
+    _, disabled = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+        'odp(enabled=false,k_parallel=0.1)'
+    )
+    assert disabled["input"]["runtype"] == "energy"
+    assert disabled["odp"]["enabled"] == "False"

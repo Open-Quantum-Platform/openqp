@@ -139,6 +139,19 @@ REGISTRY = (
     # Excitation energies: meaningful only for excited-state methods; a ground
     # state run stores the placeholder [0].
     RegKey('td_energies', runtypes='*', required=True, needs_excited=True),
+    # Transition dipoles between excited states. Excitation ENERGIES alone do
+    # not test the response vectors' use in property evaluation: the UMRSF path
+    # matched its td_energies reference exactly while emitting identically zero
+    # transition dipoles (and therefore zero oscillator strengths) for every
+    # state, because nothing compared them. Sign/phase is arbitrary per state,
+    # so compare magnitudes; the relative tolerance follows the same reasoning
+    # as the IR/Raman and SOC entries -- a response property tracks the SCF
+    # convergence path more loosely than the energy, while a real regression
+    # (a zeroed or misconstructed density) is orders of magnitude larger.
+    # Not `required`: existing references predate the key and are skipped until
+    # they are regenerated.
+    RegKey('td_trans_dipole', runtypes='*', required=False, needs_excited=True,
+           phase_invariant=True, rtol=1e-4),
     # SOC matrix elements are large (10^4-10^5 cm^-1), so the default absolute
     # round(diff,4) gate (~5e-5) would demand ~10 significant figures -- tighter
     # than ULP-level BLAS/compiler/integral-screening noise (~1e-8 relative),

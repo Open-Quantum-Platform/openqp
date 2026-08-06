@@ -100,6 +100,7 @@ Python API.
 | DFT grids | Lebedev plus SG-0/SG-1/SG-2/SG-3 pruned grids with per-element DE2 radial quadrature; OpenMP-parallel XC kernels |
 | Excited-state robustness | Davidson auto-restart; MINRES/AUTO Z-vector fallbacks |
 | Parallelism & deployment | OpenMP and MPI; BLAS/LAPACK optimization; pip install and Docker images |
+| BLAS/LAPACK threading | Parallel regions declare their own width, so a global BLAS setter cannot serialize them; dense eigensolves size their thread count to the matrix, since LAPACK's eigensolvers do not thread the way GEMM does — see [docs/blas_threading.md](docs/blas_threading.md) |
 
 **Tutorials:** [SCF convergence & guesses](https://open-quantum-platform.github.io/openqp-tutorials/scf-convergence/) · [Effective core potentials](https://open-quantum-platform.github.io/openqp-tutorials/effective-core-potentials/)
 
@@ -112,7 +113,7 @@ Python API.
 | [libecpint](https://github.com/robashaw/libecpint) | Effective Core Potentials |
 | [DFT-D4](https://dftd4.readthedocs.io/en/latest/) | Dispersion correction |
 | [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) | AI-driven ab initio molecular dynamics |
-| [Molden](https://www.theochem.ru.nl/molden/) format | Visualization compatible with common graphics tools |
+| [Molden](https://www.theochem.ru.nl/molden/) format | Standards-oriented geometry, basis, SCF/Dyson orbitals, and optional frequency sections for common graphics tools |
 | [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) | Browser-based inspection of log, JSON, Molden, cube, and XYZ outputs |
 | Optional [DFTB+](https://dftbplus.org/) backend | Ground-state energy, gradient, and geometry optimization |
 | Optional [MOKIT](https://github.com/1234zou/MOKIT) | Broader external wavefunction conversion workflows |
@@ -166,12 +167,15 @@ Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_t
 - [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/)
 - [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
 - [Example inputs](examples)
+- [BLAS/LAPACK threading](docs/blas_threading.md) — how OpenQP's OpenMP regions and a threaded BLAS are kept out of each other's way, and how to check which BLAS you actually linked
 
 ### Graphic Web Tools
 
 - [OpenQP Web](https://app.openqp.org/) — prepare inputs and preview structures locally in the browser.
 - [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/) — browser-based input builder.
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) — inspect OpenQP log, JSON, Molden, cube, and XYZ outputs in the browser; files are processed locally and never uploaded.
+
+Current full JSON output includes a portable Molden-ordered AO basis and SCF orbital block. Hessian JSON adds the same orbital data beside frequencies and normal modes, and MRSF-EKT JSON adds state-specific IP/EA Dyson orbitals transformed to the AO basis. Frequency Molden output combines `[Atoms]`, `[GTO]`, `[MO]`, `[FREQ]`, standard one-value-per-mode `[INT]`, optional `[RAMAN]`, `[FR-COORD]`, and `[FR-NORM-COORD]` sections in one file. EKT runs with `save_molden=True` also write a `dyson` Molden file whose labeled orbital records correspond to individual IP/EA roots. The small `examples/HESS/H2O_RHF-DFT_VIEWER_EXPORT` example exercises the combined JSON/Molden export path.
 
 ### Citing OpenQP
 If you use OpenQP in your research, please cite the OpenQP platform paper:

@@ -728,8 +728,11 @@ contains
       integer, allocatable, intent(INOUT) :: v(:)
       integer, intent(IN) :: newsz
       integer, allocatable :: nv(:)
+      integer :: nold
       if (allocated(v)) then
-        allocate (nv(1:newsz), source=v)
+        nold = min(size(v), newsz)
+        allocate (nv(1:newsz))
+        nv(1:nold) = v(1:nold)
         call move_alloc(from=nv, to=v)
       end if
     end subroutine reallocate_int
@@ -742,8 +745,11 @@ contains
       real(kind=fp), allocatable, intent(INOUT) :: v(:)
       integer, intent(IN) :: newsz
       real(kind=fp), allocatable :: nv(:)
+      integer :: nold
       if (allocated(v)) then
-        allocate (nv(1:newsz), source=v)
+        nold = min(size(v), newsz)
+        allocate (nv(1:newsz))
+        nv(1:nold) = v(1:nold)
         call move_alloc(from=nv, to=v)
       end if
     end subroutine reallocate_real
