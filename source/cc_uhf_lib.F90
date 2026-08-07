@@ -863,12 +863,17 @@ contains
   !> repeated indices vanish.  Restricting the loops is the same sum evaluated
   !> once instead of 36 times.
   subroutine triples(et)
+    use messages, only: show_message, with_abort
     real(dp), intent(out) :: et
     integer  :: i, j, k, a, b, c, e, m, jk, ik, ji
     integer  :: itr, ntrip
     integer, allocatable :: ti(:), tj(:), tk(:)
     real(dp) :: dd, tc, td, num, eijk, eab
     real(dp), allocatable :: Q(:,:,:,:)
+    !> Triples whose denominator was too small to divide by.  Counted rather
+    !> than acted on inside the region: this is an OpenMP loop, and aborting
+    !> from one thread mid-flight is not something to do for a diagnostic.
+    integer :: nsing
 
     et = 0.0_dp
 
@@ -939,9 +944,10 @@ contains
       end do
     end do
 
+    nsing = 0
     !$omp parallel default(shared) &
     !$omp   private(itr,i,j,k,a,b,c,e,m,dd,tc,td,num,Q,jk,ik,ji,eijk,eab) &
-    !$omp   reduction(+:et)
+    !$omp   reduction(+:et) reduction(+:nsing)
     allocate(Q(nv,nv,nv,1))
     !$omp do schedule(dynamic)
     do itr = 1, ntrip
@@ -971,7 +977,10 @@ contains
           eab = eijk - eso(no+a) - eso(no+b)
           do c = b+1, nv
             dd = eab - eso(no+c)
-            if (abs(dd) < 1.0e-12_dp) cycle
+            if (abs(dd) < 1.0e-12_dp) then
+              nsing = nsing + 1
+              cycle
+            end if
             num = Q(a,b,c,1) - Q(b,a,c,1) - Q(c,b,a,1)
             tc = num / dd
             ! disc(i,j,k,a,b,c), inlined against the packed (b,c) planes.
@@ -997,6 +1006,21 @@ contains
     deallocate(Q)
     !$omp end parallel
     deallocate(ti, tj, tk)
+
+    ! A denominator this small means the perturbative correction is singular
+    ! for that excitation -- the reference is too near-degenerate for (T) to be
+    ! defined, not merely awkward.  Skipping the term drops what is typically a
+    ! dominant contribution and makes the reported energy a function of the
+    ! 1e-12 cutoff rather than of the physics, so returning it as a converged
+    ! (T) correction states more than is known.  Refuse and say why.
+    if (nsing > 0) then
+      call show_message('CCSD(T): open-shell (T) has ' // &
+          'near-degenerate triples whose denominators vanish, so the ' // &
+          'perturbative correction is not defined for this reference. ' // &
+          'Use method=ccsd, or a reference that is not near-degenerate ' // &
+          '(a multireference treatment is the right tool for one that is).', &
+          with_abort)
+    end if
 
     deallocate(gvv, t2o, t2v, gov, gvvp)
 

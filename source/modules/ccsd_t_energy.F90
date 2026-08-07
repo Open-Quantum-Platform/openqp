@@ -78,7 +78,7 @@ contains
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
     real(kind=dp) :: mem_ao, mem_mo, mem_mo_solver, mem_solver, rno, rnv
-    real(kind=dp) :: chol_cap, mem_triples
+    real(kind=dp) :: chol_cap, mem_triples, solver_base, headroom, nlad
     real(kind=dp), allocatable :: lvec(:,:), bvv(:,:), boo(:,:), bov(:,:)
     integer :: nchol, maxchol
     real(kind=dp) :: chol_tol, chol_err
@@ -399,31 +399,50 @@ contains
       ! same capped size here rather than the tuned one.
       nthr_est = 1
       !$ nthr_est = omp_get_max_threads()
-      lad_blk = 8.0e6_dp
+      ! On the Cholesky route each thread's block is three buffers, not one --
+      ! Wblk, Vblk and the Bsub gather -- which is why ladder_contraction
+      ! divides its runtime budget before sizing them.
+      nlad = merge(3.0_dp, 1.0_dp, use_chol)
+
+      ! Everything the solver holds apart from those private blocks.  It has to
+      ! be known BEFORE the blocks are capped, because they get what is left,
+      ! not a share of the whole budget: capping at budget/(nlad*nthr) and then
+      ! charging nlad*nthr of them spends the entire allowance on the ladder
+      ! alone, so adding any persistent storage guaranteed a refusal.  That is
+      ! self-defeating for a guard, and it is what the earlier three-buffer
+      ! correction turned from a third of the budget into all of it.
+      solver_base = mem_mo_solver &
+                  + rno**4 + 2.0_dp*rno**3*rnv &
+                  + 14.0_dp*rno**2*rnv**2 &
+                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
+                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
+                    * (rno*rnv + rno**2*rnv**2)
+
+      ! Bounded by the problem before it is bounded by the machine.  At runtime
+      ! bsize = max(1, min(nv, target/nv^3)) and Wblk is (nv,bsize,nv,nv), so a
+      ! block is bsize*nv^3 with bsize capped at nv -- it cannot exceed nv^4 no
+      ! matter how much memory is free, and cannot fall below nv^3.  Sizing it
+      ! from available memory alone let the estimate grow to whatever the budget
+      ! happened to be, which reported a 460 MB peak for a job that needs about
+      ! a megabyte and made float noise at the boundary decide pass or fail.
+      lad_blk = min(8.0e6_dp, rnv**4)
       if (oqp_available_memory_gb() > 0.0_dp) then
-        lad_blk = min(lad_blk, max(rnv**3, &
-            OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb() &
-            *1.073741824e9_dp/8.0_dp/3.0_dp/real(nthr_est,dp)))
+        ! ladder_contraction probes again once the persistent storage is real
+        ! and picks smaller blocks if that is what fits; mirror it rather than
+        ! assume the tuned size.  The nv^3 floor stands: if even one minimum
+        ! block per thread does not fit, refusing is the correct answer.
+        headroom = OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb() &
+                 *1.073741824e9_dp/8.0_dp - solver_base
+        headroom = max(headroom, 0.0_dp)
+        lad_blk = min(lad_blk, max(rnv**3, headroom/(nlad*real(nthr_est,dp))))
       end if
       ! On the Cholesky route each thread's block is not one buffer but three:
       ! the dressed integrals Wblk, the assembled Vblk of the same shape, and
-      ! the Bsub gather -- which is why ladder_contraction divides the runtime
-      ! budget by 3 before sizing them.  Charging one buffer per thread let
-      ! the guard pass jobs that failed as soon as the ladder's parallel
-      ! region allocated its private storage.
-      ! The o^2v^2-shaped allowance below cannot stand in for the occupied-heavy
-      ! shapes: ccsd_iterate allocates Woooo(no^4) and both Looov and tmp2b at
-      ! no^3*nv, concurrently with the oooo/ooov blocks it was handed.  When
-      ! no >> nv -- a large minimal-basis case -- 14*o^2v^2 is nowhere near
-      ! them, and the job passed here and then failed allocating the solver
-      ! workspace.  Charge them at their own dimensions.
-      mem_solver = mem_mo_solver &
-                 + rno**4 + 2.0_dp*rno**3*rnv &
-                 + 14.0_dp*rno**2*rnv**2 &
-                 + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
-                 + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
-                   * (rno*rnv + rno**2*rnv**2) &
-                 + merge(3.0_dp, 1.0_dp, use_chol)*real(nthr_est,dp)*lad_blk
+      ! solver_base already carries the occupied-heavy shapes -- Woooo at no^4
+      ! and both Looov and tmp2b at no^3*nv, which ccsd_iterate allocates
+      ! concurrently with the blocks it was handed, and which a flat o^2v^2
+      ! allowance cannot stand in for once no >> nv.
+      mem_solver = solver_base + nlad*real(nthr_est,dp)*lad_blk
       ! A third window, not a tail of the solver.  ccsd_iterate frees its whole
       ! working set before returning, and triples_correction is called after
       ! that, so the triples stage holds the persisting MO blocks and the
