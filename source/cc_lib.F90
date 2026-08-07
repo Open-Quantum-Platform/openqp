@@ -737,7 +737,7 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   logical :: use_chol
   integer :: nchol_
   integer :: nthr_use, max_thr
-  real(dp) :: target_dp, avail_gb, share_dp, per_thread
+  real(dp) :: target_dp, avail_gb, share_dp, per_thread, nbuf_dp
 
   no2 = no*no
   nv2 = nv*nv
@@ -755,8 +755,15 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   ! the allocator.
   target_dp = 8.0e6_dp
   avail_gb = oqp_available_memory_gb()
+  ! One buffer per thread on the explicit route, three on the Cholesky one:
+  ! Wblk always, plus Vblk and Bsub only when use_chol.  Dividing by three
+  ! unconditionally handed an explicit run a third of the blocks and a third of
+  ! the threads the memory actually supported -- a real slowdown for no reason,
+  ! and it disagreed with the pre-flight estimate, which picks the multiplier
+  ! from use_chol.  The two have to agree or they are sizing different jobs.
+  nbuf_dp = merge(3.0_dp, 1.0_dp, use_chol)
   if (avail_gb > 0.0_dp) then
-    share_dp = OQP_MEMORY_SAFETY_FRACTION*avail_gb*1.073741824e9_dp/8.0_dp/3.0_dp
+    share_dp = OQP_MEMORY_SAFETY_FRACTION*avail_gb*1.073741824e9_dp/8.0_dp/nbuf_dp
     share_dp = share_dp/real(max(1,nthreads_now()), dp)
     if (share_dp < target_dp) target_dp = max(real(nv2,dp)*real(nv,dp), share_dp)
   end if
@@ -797,7 +804,7 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   if (avail_gb > 0.0_dp) then
     per_thread = real(nv2,dp)*real(nv,dp)*real(bsize,dp)
     max_thr = int(OQP_MEMORY_SAFETY_FRACTION*avail_gb*1.073741824e9_dp/8.0_dp &
-                  /3.0_dp/max(1.0_dp, per_thread))
+                  /nbuf_dp/max(1.0_dp, per_thread))
     if (max_thr < nthr_use) then
       nthr_use = max(1, max_thr)
       write(iw,'(2X,A,I0,A,I0,A)') 'CCSD: ladder limited to ', nthr_use, &
@@ -1024,6 +1031,7 @@ end subroutine diis_extrapolate
 subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts, e_t)
 
 !$ use omp_lib
+  use messages, only: show_message, with_abort
 
   integer, intent(in) :: no, nv
   real(dp), intent(in) :: eo(no), ev(nv)
@@ -1044,6 +1052,9 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
   integer :: ntask, itask
   integer, allocatable :: ta(:), tb(:), tc(:)
   real(dp) :: et_local
+  !> Triples whose denominator vanished.  Counted through a reduction rather
+  !> than acted on in place: the check sits inside an OpenMP region.
+  integer :: nsing
 
   ! permutation bookkeeping: 1=abc 2=acb 3=bac 4=bca 5=cab 6=cba
   integer, parameter :: wid(6,6) = reshape( &
@@ -1145,7 +1156,8 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
 
   et_local = 0.0_dp
 
-  !$omp parallel default(shared) reduction(+:et_local)
+  nsing = 0
+  !$omp parallel default(shared) reduction(+:et_local) reduction(+:nsing)
   block
     real(dp), allocatable :: w(:,:,:,:), v(:,:,:,:), z(:,:,:), d3(:,:,:)
     integer :: p, q, t, ia, ib, ic, pa(6), pb(6), pc(6)
@@ -1175,6 +1187,14 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
         do j = 1, no
           do i = 1, no
             d3(i,j,k) = (eijk(i,j,k) - ev(ia) - ev(ib) - ev(ic)) * fac
+            ! Checked here, where the denominator is formed, rather than at the
+            ! division below -- that one runs six times per triple.  The
+            ! division is unconditional, so a vanishing d3 does not merely drop
+            ! a term as the open-shell path did: it puts Inf or NaN straight
+            ! into the accumulator and the run reports it as a converged
+            ! CCSD(T) energy.  Counted rather than aborted on the spot, because
+            ! this is inside an OpenMP region.
+            if (abs(d3(i,j,k)) < 1.0e-12_dp) nsing = nsing + 1
           end do
         end do
       end do
@@ -1231,6 +1251,20 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
     deallocate(w, v, z, d3)
   end block
   !$omp end parallel
+
+  ! A vanishing triples denominator means the perturbative correction is not
+  ! defined for this reference -- too near-degenerate for (T) rather than
+  ! merely awkward.  The division above is unconditional, so the alternative to
+  ! refusing is an Inf or NaN reported as a converged energy.  Same rule the
+  ! open-shell path applies; it had a skip to make consistent, this one had
+  ! nothing at all.
+  if (nsing > 0) then
+    call show_message('CCSD(T): near-degenerate triples with vanishing ' // &
+        'denominators -- the perturbative correction is not defined for ' // &
+        'this reference. Use method=ccsd, or a reference that is not ' // &
+        'near-degenerate (a multireference treatment is the right tool ' // &
+        'for one that is).', with_abort)
+  end if
 
   e_t = 2.0_dp * et_local
   if (pe%size > 1) call pe%allreduce(e_t, 1)
