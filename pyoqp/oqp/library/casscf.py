@@ -1087,7 +1087,14 @@ class CASSCF:
             sa_energy = float(np.dot(weights, energies[roots]))
             report_energies = [float(energies[r]) for r in roots]
         mol.energies = report_energies
-        mol.mol_energy.energy = float(report_energies[0])
+        # For a state average the optimised quantity is the weighted objective,
+        # not root 0.  Publishing report_energies[0] as the scalar total energy
+        # meant generated .json references and every consumer of
+        # mol_energy.energy recorded state 0 while the run had optimised
+        # something else; the state-averaged CASCI path already publishes the
+        # weighted value.  The per-root list stays in mol.energies.
+        mol.mol_energy.energy = float(
+            sa_energy if sa_enabled else report_energies[0])
         mol.data["OQP::CASSCF_ENERGIES"] = _as_f64c(report_energies)
 
         self._write_log(ref_energy, ncore, nact, active_nelec, settings, options,
@@ -1107,7 +1114,16 @@ class CASSCF:
         if not roots:
             nstate = nstate or max(2, int(settings.nroot))
             roots = list(range(nstate))
-        weights = getattr(settings, "state_average_weights", None)
+        # equal_weights is a switch, not a fallback: an input carrying both
+        # equal_weights=true and weights=0.9,0.1 used to optimise the 90/10
+        # objective whenever the list happened to match the root count, while
+        # the CASCI state-average path (fci.py: `if settings.
+        # state_average_equal_weights`) correctly replaces it.  Branch on the
+        # switch first so the two paths agree.
+        if getattr(settings, "state_average_equal_weights", False):
+            weights = None
+        else:
+            weights = getattr(settings, "state_average_weights", None)
         if weights is None or len(weights) != len(roots):
             weights = np.full(len(roots), 1.0 / len(roots))
         weights = np.asarray(weights, dtype=float)

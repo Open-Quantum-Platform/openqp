@@ -3249,8 +3249,13 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
                    "with a two-phase fallback.",
         )
     hessian_mode = str(_get(config, "casscf", "hessian", "fd") or "fd").strip().lower()
+    # "analytical" is deliberately NOT here: _hessian_provider implements only
+    # analytic/exact and owns that rejection (see
+    # test_native_dispatch_declines_unknown_spellings).  Accepting the spelling
+    # at preflight only moved the failure to execution time, so reject it here
+    # where the user can act on it.
     if hessian_mode not in {"fd", "finite-difference", "finite_difference",
-                            "analytic", "analytical", "exact"}:
+                            "analytic", "exact"}:
         report.add(
             "ERROR",
             "casscf.hessian",
@@ -3777,6 +3782,40 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             action="Make [pt2] variant match [input] method.",
         )
 
+    # The CASPT2 family accepts h0 too, and only Fock/CASPT2 and Dyall/NEVPT2
+    # aliases are implemented -- but the choice-set check below sits inside the
+    # QDPT branch, so `[pt2] h0=invalid` on a plain caspt2 input passed preflight
+    # and then raised inside _caspt2_options.  Check the spelling for every PT2
+    # method first; the QDPT branch below still narrows it further.
+    if canonical_method in PT2_VARIANTS or canonical_method in PT2_QDPT_METHODS:
+        _h0_any = str(_get(config, "pt2", "h0", "") or "").strip().lower()
+        if _h0_any and _h0_any not in {"fock", "caspt2", "dyall", "nevpt2"}:
+            report.add(
+                "ERROR",
+                "pt2.h0",
+                "Unknown PT2 zeroth-order Hamiltonian.",
+                value=_h0_any,
+                expected="fock (CASPT2) or dyall (NEVPT2)",
+                action="Use [pt2] h0=fock for CASPT2/MRMP2-style H0, or h0=dyall for NEVPT2.",
+            )
+
+    # Strong contraction is single-state only -- native_caspt2_energy raises
+    # NotImplementedError immediately for the multistate methods -- but the
+    # checker only verified the H0 choice, so such an input passed preflight
+    # and died on the first step.  Reject it here instead.
+    if canonical_method in (PT2_MS_METHODS | PT2_XMS_METHODS):
+        _contr = str(_get(config, "pt2", "contraction", "") or "").strip().lower()
+        if _contr in {"strong", "sc", "sc-nevpt2"}:
+            report.add(
+                "ERROR",
+                "pt2.contraction",
+                "Strongly contracted NEVPT2 is single-state only.",
+                value=_contr,
+                expected="none/uncontracted for MS/XMS methods",
+                action="Use method=caspt2 with contraction=strong for SC-NEVPT2, "
+                       "or drop contraction for the multistate methods.",
+            )
+
     if canonical_method in PT2_QDPT_METHODS:
         h0_mode = str(_get(config, "pt2", "h0", "fock") or "fock").strip().lower()
         if h0_mode not in {"fock", "caspt2", ""}:
@@ -4032,6 +4071,30 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             expected="only one regularization scheme",
             action="Use either [pt2] edshft OR level_shift/imaginary_shift, not both.",
         )
+
+    # Also accepted and read by nothing: the PT2 report/benchmark controls and
+    # the CI-artifact options on the CASSCF path (parsed into FCISettings but
+    # never consulted after the final CASSCF CI solve).  regression.py exempts
+    # several of these from feature-coverage as though the I/O existed.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.reference_report", _get(config, "pt2", "reference_report", False), False),
+            ("pt2.benchmark_required", _get(config, "pt2", "benchmark_required", False), False),
+            ("ci.root_tracking", _get(config, "ci", "root_tracking", "energy"), "energy")):
+        try:
+            _differs = str(_dead_val).strip().lower() not in {
+                "", "false", "0", str(_dead_default).strip().lower()}
+        except Exception:
+            _differs = False
+        if _differs:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
 
     # Same class as the two below: accepted, documented, and read by nothing.
     #   pt2.print_amplitudes / save_amplitudes -- no PT2 engine reads either
