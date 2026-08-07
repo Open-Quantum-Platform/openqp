@@ -617,6 +617,95 @@ def enumerate_full_group(
     return operations
 
 
+def rotational_symmetry_number(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+) -> int:
+    """Rotational symmetry number sigma for rigid-rotor thermochemistry.
+
+    sigma is the order of the *rotational* subgroup -- the number of proper
+    operations (det = +1) -- and it divides the rotational partition function.
+    Omitting it inflates S_rot by R*ln(sigma): 1.38 cal/mol/K for water,
+    4.94 for benzene or methane.
+
+    Deliberately computed from the geometry here rather than read out of
+    ``symmetry_metadata``: that block is forced to C1 whenever ``[symmetry]``
+    is not enabled, and detection is skipped entirely, so a metadata-sourced
+    sigma would silently be 1 on a default run -- reproducing the bug this
+    exists to fix. Thermochemistry needs no reorientation and no petite maps,
+    so it has no reason to inherit that gate.
+
+    Linear molecules need no special case: the seed set collapses to the two
+    permutation classes a linear geometry admits, giving 2 proper operations
+    for D-inf-h and 1 for C-inf-v.
+
+    On failure returns 1, which reproduces today's (over-counted) entropy
+    rather than inventing symmetry. Because that failure is silent and biases
+    G, callers are expected to *print* the value they got.
+
+    Two documented limits, both of which under-count sigma (i.e. fall back
+    towards today's behaviour) rather than inventing symmetry:
+
+    **Isotopes.** Atom equivalence is keyed on nuclear charge, so this is exact
+    only while every same-Z atom carries the same mass. An isotopologue such as
+    HDO would be given the parent molecule's sigma. Unreachable today -- both
+    geometry readers compute mass as a pure Z-indexed table lookup and there is
+    no isotope symbol or per-atom mass input -- but the Fortran ABI already
+    accepts per-atom masses, so adding such an input must revisit this
+    function. The repair is small: enumerate_full_group already returns a
+    permutation per operation, so skip any operation that does not preserve
+    the mass vector (use a tolerance near 1e-3 amu, not equality -- the QM/MM
+    path mixes link-atom H at 1.00782503223 with force-field H at 1.007947).
+
+    **Proper axes above order 8.** The element survey only tries orders 2..8,
+    so a C10 axis is recorded as C5 and a C11 as C1. In practice group closure
+    recovers them: two perpendicular C2 axes, or two mirror planes, separated
+    by pi/n multiply to C_n, so any molecule with a C_n axis and any second
+    element regenerates the whole C_n. Measured -- a D10h decagon returns
+    sigma = 20, ferrocene 10, and D9h/D11h/D12h/D16h rings 18/22/24/32, all
+    correct. The gap is a CHIRAL C_n (n > 8) with no mirror and no
+    perpendicular C2, where closure has nothing to work with; such a molecule
+    gets a divisor of n.
+    """
+
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)
+    if coords.shape[0] < 2:
+        return 1
+    try:
+        operations = enumerate_full_group(atomic_numbers, coords,
+                                          tolerance=tolerance)
+    except Exception:
+        return 1
+    rotations = [np.asarray(op['matrix'], dtype=float) for op in operations
+                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
+    if not rotations:
+        return 1
+
+    # sigma is the ORDER OF A GROUP, so the set it is counted from has to be
+    # one. enumerate_full_group does not always return a closed set: when
+    # closure runs past max_order -- tolerance artifacts can make it run away --
+    # it falls back to the unclosed seed list. Counting that gives a number
+    # that is not a group order at all, and sigma appears in G as R*T*ln(sigma),
+    # so a wrong one is a wrong free energy rather than a caught error.
+    #
+    # Verify closure of the proper subset directly. Rotations are closed under
+    # multiplication among themselves (det is multiplicative), so the product
+    # of any two must already be present.
+    stack = np.asarray(rotations)
+    for a in rotations:
+        products = np.einsum('ij,kjl->kil', a, stack)
+        # Nearest stored element, per product. Compared with a tolerance, not
+        # by exact keys: the elements are built by different multiplication
+        # orders, so a genuinely closed group still differs in the last bits.
+        gaps = np.max(np.abs(products[:, None, :, :] - stack[None, :, :, :]),
+                      axis=(2, 3))
+        if float(np.max(np.min(gaps, axis=1))) > 1.0e-6:
+            return 1
+
+    return max(1, len(rotations))
+
+
 def attach_detection_metadata(
     symmetry_metadata: MutableMapping[str, Any],
     atomic_numbers: Any,

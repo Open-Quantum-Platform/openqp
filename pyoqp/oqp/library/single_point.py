@@ -1190,14 +1190,34 @@ class Hessian(Calculator):
             info=(self.mol.get_atoms(), freqs, modes),
         )
 
+        # Rigid-rotor inputs that do not depend on temperature. Both are derived
+        # here rather than read from symmetry_metadata: that block is forced to
+        # C1 whenever [symmetry] is off, so a metadata-sourced sigma would be 1
+        # on a default run. `linear` comes from the principal moments so the
+        # cached-Hessian (hess.read) path works without a cache-format change.
+        # Imported here rather than at module scope: symmetry_detect is needed
+        # only on this path, and a top-level import breaks the stub-based module
+        # loading several tests use. molecule.py imports it the same way.
+        from oqp.library.symmetry_detect import rotational_symmetry_number
+
+        thermo_atoms = self.mol.get_atoms()
+        thermo_linear = (len(thermo_atoms) > 1 and int(np.count_nonzero(
+            np.asarray(inertia, dtype=float) > 1.0e-8)) < 3)
+        thermo_sigma = rotational_symmetry_number(
+            thermo_atoms, self.mol.get_system(),
+            tolerance=float((getattr(self.mol, 'symmetry_metadata', None)
+                             or {}).get('tolerance', 1.0e-5)))
+
         for t in self.temperature:
             thermal_data = thermal_analysis(
                 energy=energy,
-                atoms=self.mol.get_atoms(),
+                atoms=thermo_atoms,
                 mass=self.mol.get_mass(),
                 freqs=freqs,
                 inertia=inertia,
                 temperature=t,
+                linear=thermo_linear,
+                sigma=thermo_sigma,
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)

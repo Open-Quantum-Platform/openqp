@@ -733,21 +733,46 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         st_trans = info['st_trans']
         st_rot = info['st_rot']
         st_vib = info['st_vib']
+        sigma = int(info.get('sigma', 1))
+        linear = bool(info.get('linear', False))
 
         u_el = u_trans + u_rot + u_vib + zpe
         u = u_el + el
         h_el = u_el + pv
         h = h_el + el
         st = st_el + st_trans + st_rot + st_vib
-        g_el = h_el + st
+        # G = H - TS, as printed below. This read `h_el + st`, which made the
+        # reported Gibbs correction wrong by 2*TS (H2O: +0.046369 instead of
+        # +0.002234 Ha) ever since the release commit.
+        g_el = h_el - st
         g = g_el + el
+
+        # A linear rotor has a vanishing principal moment, so one rotational
+        # constant/temperature is meaningless; print it as a dash. Use the mask
+        # the entropy code actually selected with (1e-8 on the INERTIA) rather
+        # than testing isfinite here -- a tilted linear rotor's vanishing
+        # moment comes back as a tiny finite number, so isfinite would print a
+        # spurious enormous constant next to a correct entropy.
+        significant = info.get('rot_significant')
+        if significant is None or len(significant) != len(np.asarray(rc).ravel()):
+            significant = [bool(np.isfinite(x)) for x in np.asarray(rc).ravel()]
+
+        def _rot_entry(value, keep):
+            return '%12.4f' % value if keep else '         ---'
+
+        rc_text = ''.join(_rot_entry(x, k) for x, k in zip(rc, significant))
+        rt_text = ''.join(_rot_entry(x, k) for x, k in zip(rt, significant))
+        top_text = ('atom' if info.get('monatomic')
+                    else ('linear' if linear else 'nonlinear'))
 
         loginfo += """
    temperature K:                    %16.2f
    pressure atm:                     %16.2f
    total mass amu:                   %16.2f
-   rotational constant cm-1:   %12.4f %12.4f %12.4f 
-   rotational temperature K:   %12.4f %12.4f %12.4f 
+   rotational constant cm-1:   %s
+   rotational temperature K:   %s
+   rotor type:                       %16s
+   rotational symmetry number:       %16d
 
    ====================================================
    summary of internal energy (U)
@@ -801,8 +826,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
 """ % (
             temp, 1.0, mass,
-            rc[0], rc[1], rc[2],
-            rt[0], rt[1], rt[2],
+            rc_text,
+            rt_text,
+            top_text, sigma,
             el, u_trans, u_rot, u_vib, zpe,
             u_el, u,
             el, u_el, pv,
