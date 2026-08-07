@@ -46,6 +46,7 @@ module parallel
       procedure, pass(self) :: init => par_env_t_init
       procedure, pass(self) :: barrier => par_env_t_barrier
       procedure, pass(self) :: get_hostnames
+      procedure, pass(self) :: local_size => par_env_t_local_size
 
       procedure, pass(self) :: par_env_t_bcast_int32_scalar
       procedure, pass(self) :: par_env_t_allreduce_int32_scalar
@@ -118,6 +119,33 @@ contains
 #endif
   end subroutine par_env_t_init
 
+!##################################
+!> @brief How many ranks of this communicator share the caller's node.
+!>
+!> Anything that sizes a replicated allocation against the machine's memory
+!> needs this: available memory is reported per node, but a replicated array
+!> is paid for once per rank on that node, so a per-rank estimate compared
+!> against a node-wide limit passes on every rank at once and still exceeds
+!> the node.  Returns 1 without MPI, or when MPI cannot answer.
+  function par_env_t_local_size(self) result(n)
+    class(par_env_t), intent(inout) :: self
+    integer :: n
+#ifdef ENABLE_MPI
+    integer(PARALLEL_INT) :: node_comm, local_n, ierr
+#endif
+    n = 1
+#ifdef ENABLE_MPI
+    if (.not. self%use_mpi) return
+    call MPI_Comm_split_type(self%comm, MPI_COMM_TYPE_SHARED, &
+                             int(0, kind=PARALLEL_INT), MPI_INFO_NULL, &
+                             node_comm, ierr)
+    if (ierr /= 0) return
+    call MPI_Comm_size(node_comm, local_n, ierr)
+    if (ierr == 0 .and. local_n >= 1) n = int(local_n)
+    call MPI_Comm_free(node_comm, ierr)
+#endif
+  end function par_env_t_local_size
+!##################################
   subroutine par_env_t_barrier(self)
     class(par_env_t) :: self
 #ifndef ENABLE_MPI

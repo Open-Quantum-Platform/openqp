@@ -232,6 +232,7 @@ class SinglePoint(Calculator):
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
         self._configure_mp2()
+        self._configure_cc()
         self.energy_func = {
             'hf': oqp.hf_energy,
             'rpa': oqp.tdhf_energy,
@@ -242,10 +243,26 @@ class SinglePoint(Calculator):
             'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
             'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
             'mp2': oqp.mp2_energy,
+            'ccsd': oqp.ccsd_t_energy,
+            'ccsd(t)': oqp.ccsd_t_energy,
         }
 
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
+
+    def _configure_cc(self):
+        """Validate the reference and select whether (T) is evaluated."""
+        if self.method not in ('ccsd', 'ccsd(t)'):
+            return
+        if self.functional:
+            raise ValueError(
+                f'method={self.method} requires an HF reference; '
+                'remove [input] functional.')
+        if self.mol.config['scf']['type'] not in ('rhf', 'uhf', 'rohf'):
+            raise ValueError(
+                f'method={self.method} needs an RHF, UHF or ROHF reference '
+                f"(got [scf] type={self.mol.config['scf']['type']}).")
+        self.mol.data.set_cc_triples(self.method == 'ccsd(t)')
 
     def _configure_mp2(self):
         if self.method != 'mp2':
@@ -420,7 +437,7 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2']:
+        if self.method not in ['hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)']:
             raise ValueError(f'Unknown method type {self.method}')
 
         target_converger = self.mol.config['scf']['converger_type']
@@ -428,13 +445,29 @@ class SinglePoint(Calculator):
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
 
-            # ixcore
-            self.ixcore_shift()
+            # ixcore.  The shift overwrites the unselected occupied orbital
+            # energies with -100000 so the TD trial vectors leave the requested
+            # core available.  Coupled cluster reads those same energies as its
+            # amplitude denominators, so applying it there would not restrict
+            # anything -- it would silently return a meaningless correlation
+            # energy.  Skip it, and say so rather than ignoring the keyword
+            # quietly.
+            if self.method in ('ccsd', 'ccsd(t)'):
+                if str(self.mol.config['tdhf']['ixcore']) != '-1':
+                    dump_log(
+                        self.mol,
+                        title='PyOQP: ignoring [tdhf] ixcore for %s; it shifts '
+                              'the orbital energies the CC denominators are '
+                              'built from' % self.method,
+                        section='input',
+                    )
+            else:
+                self.ixcore_shift()
 
             # compute excitations
             if self.method == 'tdhf':
                 energies = self.excitation(ref_energy)
-            elif self.method == 'mp2':
+            elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
             else:
                 energies = ref_energy
@@ -445,10 +478,11 @@ class SinglePoint(Calculator):
         return energies
 
     def correlation(self, ref_energy):
-        # ground-state post-SCF correlation (MP2): the Fortran driver updates
-        # mol_energy.energy in place to the correlated total.
-        dump_log(self.mol, title='PyOQP: MP2 correlation steps', section='')
-        self.energy_func['mp2'](self.mol)
+        # Ground-state post-SCF correlation (MP2 / CCSD / CCSD(T)): the Fortran
+        # driver updates mol_energy.energy in place to the correlated total.
+        label = self.method.upper()
+        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='')
+        self.energy_func[self.method](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
 
@@ -713,8 +747,14 @@ class SinglePoint(Calculator):
 
         # --- Stage 3: stability safeguard ---
         # Applied only when the user opts in with [scf] stability=true.  Covers
-        # ground-state targets (method='hf') and spin-flip excited-state
-        # reference SCFs (method='tdhf' with type sf/mrsf/umrsf).  A
+        # ground-state targets (method='hf', and the coupled-cluster methods
+        # that build on the same ground-state determinant) and spin-flip
+        # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
+        # CCSD and CCSD(T) belong with 'hf' here: they correlate the converged
+        # reference, so an unstable UHF/ROHF determinant is exactly as wrong a
+        # starting point for them as it is for the HF energy itself, and
+        # silently ignoring the option the user asked for is the worst of the
+        # available behaviours.  A
         # DIIS-converged but *unstable* open-shell solution is just as wrong a
         # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
         # building MRSF on it makes the reference (and the excited states)
@@ -725,8 +765,9 @@ class SinglePoint(Calculator):
         # is reverted below by restoring the snapshot.
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
+        ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
         if (converged and stability and not rstctmo and primary != 'trah'
-                and (self.method == 'hf' or spin_flip_reference)):
+                and (ground_state_target or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op

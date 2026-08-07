@@ -186,6 +186,15 @@ module types
     integer(c_int64_t) :: mrsf_fp32         = 0         !< FP32 MRSF response digestion
     integer(c_int64_t) :: mrsf_zv_warmstart = 1         !< MRSF z-vector warm-start (1=on, default)
     logical(c_bool) :: qmmm_flag = .false.       !< QM/MM Flag
+    ! Coupled-cluster controls -- keep in sync with control_parameters in include/oqp.h
+    integer(c_int64_t) :: cc_maxit  = 50         !< max CCSD iterations
+    real(c_double) :: cc_conv       = 1.0e-7_dp  !< CCSD amplitude/energy convergence
+    integer(c_int64_t) :: cc_ndiis  = 8          !< CCSD DIIS subspace size (0 = no DIIS)
+    integer(c_int64_t) :: cc_nfzc   = 0          !< frozen core orbitals excluded from CC
+    integer(c_int64_t) :: cc_triples = 1         !< evaluate the (T) correction (0=off, 1=on)
+    integer(c_int64_t) :: cc_cholesky = 2        !< Cholesky-factorise the ladder integrals (0=off, 1=on, 2=auto on memory)
+    real(c_double) :: cc_cholesky_tol = 1.0e-10_dp !< Cholesky truncation threshold
+    integer(c_int64_t) :: cc_cholesky_direct = 0 !< 0=auto (on memory), 1=always, 2=never
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

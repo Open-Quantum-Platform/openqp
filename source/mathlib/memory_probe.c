@@ -1,0 +1,436 @@
+/*
+ * How much memory this process may actually use.
+ *
+ * Modules that allocate a large array up front (conventional coupled
+ * cluster, for example) want to refuse before the allocator does, with a
+ * message that says what was needed and what was there.  A fixed ceiling
+ * compiled into the source cannot do that: the same binary runs on a
+ * laptop and on a 500 GB node.
+ *
+ * "Available" is the smallest of several limits, because any one of them
+ * can bind first:
+ *
+ *   - physical RAM (sysconf, or sysctl on the BSDs/macOS);
+ *   - what the kernel thinks is reclaimable right now -- MemAvailable on
+ *     Linux, which is what actually decides whether a big allocation
+ *     succeeds when other jobs share the node;
+ *   - the cgroup memory limit, v2 then v1.  This is the one that binds
+ *     under SLURM, Kubernetes, or Docker, where physical RAM is
+ *     irrelevant and exceeding the cgroup gets the process OOM-killed
+ *     rather than a failed malloc.
+ *
+ * OQP_MEMORY_LIMIT_GB overrides the probe entirely.  Use it when the
+ * automatic answer is wrong -- a batch system that does not use cgroups,
+ * or a deliberately smaller budget than the machine allows.
+ *
+ * Returns 0 when nothing could be determined; callers must treat 0 as
+ * "unknown" and skip the check rather than refusing every job.
+ */
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#endif
+
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_host.h>
+#endif
+
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
+#if defined(__APPLE__)
+/* Pages the kernel can hand out without evicting anything that is still in
+ * use: free, inactive (clean, first to be reclaimed) and purgeable.  This is
+ * the BSD analogue of Linux's MemAvailable; total RAM is not, and using it
+ * let the guard admit a job on a busy machine that then swapped or failed to
+ * allocate.  Returns 0 if the port cannot be queried. */
+static uint64_t darwin_available(void)
+{
+    mach_port_t host = mach_host_self();
+    vm_statistics64_data_t vm;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    vm_size_t pagesz = 0;
+
+    if (host_page_size(host, &pagesz) != KERN_SUCCESS || pagesz == 0)
+        return 0;
+    if (host_statistics64(host, HOST_VM_INFO64,
+                          (host_info64_t) &vm, &count) != KERN_SUCCESS)
+        return 0;
+
+    return ((uint64_t) vm.free_count
+          + (uint64_t) vm.inactive_count
+          + (uint64_t) vm.purgeable_count) * (uint64_t) pagesz;
+}
+#endif
+
+#if defined(__FreeBSD__)
+/* Same intent as darwin_available(): free + inactive + cache pages. */
+static uint64_t freebsd_available(void)
+{
+    const char *keys[3] = { "vm.stats.vm.v_free_count",
+                            "vm.stats.vm.v_inactive_count",
+                            "vm.stats.vm.v_cache_count" };
+    uint64_t pages = 0;
+    int pagesz = 0;
+    size_t len;
+    int i;
+
+    len = sizeof pagesz;
+    if (sysctlbyname("hw.pagesize", &pagesz, &len, NULL, 0) != 0 || pagesz <= 0)
+        return 0;
+
+    for (i = 0; i < 3; i++) {
+        unsigned int v = 0;
+        len = sizeof v;
+        /* v_cache_count is gone on FreeBSD 12+; a missing key just contributes
+         * nothing rather than invalidating the estimate. */
+        if (sysctlbyname(keys[i], &v, &len, NULL, 0) == 0)
+            pages += (uint64_t) v;
+    }
+    if (pages == 0) return 0;
+    return pages * (uint64_t) pagesz;
+}
+#endif
+
+/* Smaller of two limits, treating 0 as "no information". */
+static uint64_t tighter(uint64_t a, uint64_t b)
+{
+    if (a == 0) return b;
+    if (b == 0) return a;
+    return a < b ? a : b;
+}
+
+#if defined(__linux__)
+/* First value of `key` in /proc/meminfo, in bytes (the file reports kB). */
+static uint64_t meminfo_bytes(const char *key)
+{
+    FILE *f = fopen("/proc/meminfo", "r");
+    char line[256];
+    size_t keylen = strlen(key);
+    uint64_t kb = 0;
+
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, key, keylen) == 0 && line[keylen] == ':') {
+            if (sscanf(line + keylen + 1, "%llu", (unsigned long long *) &kb) != 1)
+                kb = 0;
+            break;
+        }
+    }
+    fclose(f);
+    return kb * 1024ull;
+}
+
+/* A cgroup limit file holds either a byte count or "max"/a huge sentinel. */
+static uint64_t cgroup_limit(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    char buf[64];
+    unsigned long long v;
+
+    if (!f) return 0;
+    if (!fgets(buf, sizeof buf, f)) { fclose(f); return 0; }
+    fclose(f);
+
+    if (strncmp(buf, "max", 3) == 0) return 0;
+    if (sscanf(buf, "%llu", &v) != 1) return 0;
+    /* v1 writes a sentinel near UINT64_MAX to mean "unlimited". */
+    if (v >= (1ull << 62)) return 0;
+    return (uint64_t) v;
+}
+
+/* What a cgroup directory still allows: its limit minus what is already
+ * charged against it.  A cap is not an allowance -- half of a 16 GB cgroup
+ * may already be resident (this process's SCF data, or sibling MPI ranks in
+ * the same job cgroup), and a guard that compares a new allocation against
+ * the cap admits jobs the kernel will kill.  Clamped to 1 byte when the
+ * charge has reached the cap, because 0 means "no information" to tighter().
+ * No limit file, or an unlimited one, yields 0: nothing to subtract from. */
+static uint64_t cgroup_remaining(const char *dir, const char *limit_leaf,
+                                 const char *usage_leaf)
+{
+    char file[4352];
+    uint64_t lim, use;
+
+    if (snprintf(file, sizeof file, "%s/%s", dir, limit_leaf)
+            >= (int) sizeof file)
+        return 0;
+    lim = cgroup_limit(file);
+    if (lim == 0) return 0;
+
+    use = 0;
+    if (snprintf(file, sizeof file, "%s/%s", dir, usage_leaf)
+            < (int) sizeof file)
+        use = cgroup_limit(file);   /* plain byte count; same parser */
+
+    return use < lim ? lim - use : 1;
+}
+
+/* Tightest remaining allowance on the path from this process's own cgroup up
+ * to `mount`.  The effective limit of a nested cgroup is the minimum over its
+ * ancestors, and under Slurm or systemd the job's cgroup IS nested -- probing
+ * only the mount root reads the (usually absent) top-level limit and misses
+ * the allocation that actually binds.  Inside a cgroup namespace, the common
+ * container case, /proc/self/cgroup reports "/" and this walk degenerates to
+ * exactly the root probe it generalises. */
+static uint64_t cgroup_walk(const char *mount, const char *relpath,
+                            const char *limit_leaf, const char *usage_leaf)
+{
+    char path[4096];
+    uint64_t best = 0;
+    size_t base;
+
+    if (snprintf(path, sizeof path, "%s%s", mount, relpath)
+            >= (int) sizeof path)
+        return 0;
+    base = strlen(mount);
+
+    for (;;) {
+        char *cut;
+        best = tighter(best, cgroup_remaining(path, limit_leaf, usage_leaf));
+        cut = strrchr(path, '/');
+        if (!cut || (size_t)(cut - path) < base) break;
+        *cut = '\0';
+    }
+    return best;
+}
+
+/* The `root` field of the mount at `mountpoint`, from /proc/self/mountinfo.
+ *
+ * Line format is: id parent major:minor ROOT MOUNTPOINT options... so the two
+ * fields wanted are the fourth and fifth.  Returns 0 when the mount is not
+ * listed, which leaves the caller with the unmodified path. */
+static int cgroup_mount_root(const char *mountpoint, char *out, size_t outsz)
+{
+    FILE *f = fopen("/proc/self/mountinfo", "r");
+    char line[4096];
+    int found = 0;
+
+    if (!f) return 0;
+    /* Hand-split on spaces rather than strtok_r: that is POSIX, and under a
+     * strict -std=c11 compile it is an implicit declaration.  Mountinfo escapes
+     * spaces in paths as \040, which cannot occur in the cgroup mount points
+     * looked up here, so plain fields are enough. */
+    while (fgets(line, sizeof line, f)) {
+        const char *p = line, *root = NULL, *mnt = NULL;
+        size_t rootlen = 0, mntlen = 0;
+        int field;
+
+        for (field = 1; field <= 5; field++) {
+            const char *start;
+            while (*p == ' ') p++;
+            start = p;
+            while (*p && *p != ' ' && *p != '\n') p++;
+            if (p == start) break;
+            if (field == 4) { root = start; rootlen = (size_t)(p - start); }
+            if (field == 5) { mnt  = start; mntlen  = (size_t)(p - start); }
+        }
+        if (!root || !mnt) continue;
+        if (strlen(mountpoint) != mntlen ||
+            strncmp(mnt, mountpoint, mntlen) != 0) continue;
+        if (rootlen < outsz) {
+            memcpy(out, root, rootlen);
+            out[rootlen] = '\0';
+            found = 1;
+        }
+        break;
+    }
+    fclose(f);
+    return found;
+}
+
+/* Drop the mount's hierarchy root from a /proc/self/cgroup path.
+ *
+ * /proc/self/cgroup reports paths relative to the hierarchy root, not to the
+ * mount point.  Those coincide only when the cgroup filesystem is mounted with
+ * root "/".  A container that bind-mounts its own pod or service cgroup at
+ * /sys/fs/cgroup has a non-root mount root, and concatenating the two then
+ * yields a doubled path that does not exist -- so the walk falls back to the
+ * looser ancestor cap and can admit an allocation past the process's real
+ * limit.  Strip the prefix so the join lands inside the mount. */
+static const char *cgroup_relative(const char *cgpath, const char *mountpoint,
+                                   char *rootbuf, size_t rootsz)
+{
+    size_t rlen;
+
+    if (!cgroup_mount_root(mountpoint, rootbuf, rootsz)) return cgpath;
+    if (rootbuf[0] == '/' && rootbuf[1] == '\0') return cgpath;
+
+    rlen = strlen(rootbuf);
+    if (strncmp(cgpath, rootbuf, rlen) != 0) return cgpath;
+    if (cgpath[rlen] == '\0') return "/";
+    if (cgpath[rlen] != '/') return cgpath;   /* only a partial name match */
+    return cgpath + rlen;
+}
+
+/* The process's own cgroup limit, resolved through /proc/self/cgroup.
+ * v2 lines read "0::<path>"; v1 lists one line per controller and the
+ * memory one reads "<n>:memory:<path>". */
+static uint64_t cgroup_self_limit(void)
+{
+    char rootbuf[4096];
+    FILE *f = fopen("/proc/self/cgroup", "r");
+    char line[4096];
+    uint64_t best = 0;
+
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        if (strncmp(line, "0::", 3) == 0) {
+            best = tighter(best,
+                cgroup_walk("/sys/fs/cgroup",
+                            cgroup_relative(line + 3, "/sys/fs/cgroup",
+                                            rootbuf, sizeof rootbuf),
+                            "memory.max", "memory.current"));
+        } else {
+            char *c1 = strchr(line, ':');
+            if (!c1) continue;
+            char *c2 = strchr(c1 + 1, ':');
+            if (!c2) continue;
+            *c2 = '\0';
+            /* the controller field may list several, comma separated */
+            if (strstr(c1 + 1, "memory")) {
+                best = tighter(best,
+                    cgroup_walk("/sys/fs/cgroup/memory",
+                                cgroup_relative(c2 + 1, "/sys/fs/cgroup/memory",
+                                                rootbuf, sizeof rootbuf),
+                                "memory.limit_in_bytes",
+                                "memory.usage_in_bytes"));
+            }
+        }
+    }
+    fclose(f);
+    return best;
+}
+#endif
+
+/*
+ * Whether the number oqp_available_memory_bytes() returns already accounts for
+ * memory this process has allocated.
+ *
+ * The probe reports what REMAINS -- MemAvailable, or a cgroup limit minus
+ * current usage -- so anything already allocated has been subtracted from it,
+ * and a caller sizing a future peak must not charge those bytes a second time.
+ * OQP_MEMORY_LIMIT_GB is the opposite: a flat budget for the whole job, with
+ * nothing subtracted, so against it the caller must charge the full peak.
+ *
+ * Returns 1 for the override (resident memory still counts against it),
+ * 0 for the live probe (resident memory is already excluded).
+ */
+/* OQP_MEMORY_LIMIT_GB as a positive, finite number of GB.
+ *
+ * strtod alone is not enough: it stops at the first character it cannot use
+ * and reports success for the prefix, so a mistyped "1O" (letter O for zero)
+ * parsed as 1.0 and silently imposed a 1 GB budget -- aborting jobs that fit,
+ * against a limit nobody set.  The file's contract is that an unparseable
+ * override falls through to the probe, so require the WHOLE string to be a
+ * number, allowing only surrounding whitespace, and reject anything not
+ * finite or beyond what the return type can hold.
+ *
+ * Returns 1 and writes *gb on success, 0 otherwise.  One parser, so the two
+ * callers cannot drift apart on what counts as valid.
+ */
+static int parse_memory_limit_gb(double *gb)
+{
+    const char *env = getenv("OQP_MEMORY_LIMIT_GB");
+    char *end = NULL;
+    double v;
+
+    if (!env || !*env) return 0;
+
+    errno = 0;
+    v = strtod(env, &end);
+    if (end == env) return 0;                     /* nothing numeric at all */
+    while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')
+        end++;
+    if (*end != '\0') return 0;                   /* trailing junk: "1O", "8GB" */
+    if (errno == ERANGE) return 0;                /* over/underflowed */
+    if (!(v > 0.0) || !(v < 1.0e12)) return 0;    /* also rejects NaN and inf */
+
+    *gb = v;
+    return 1;
+}
+
+int oqp_memory_budget_includes_resident(void)
+{
+    double gb;
+    return parse_memory_limit_gb(&gb) ? 1 : 0;
+}
+
+uint64_t oqp_available_memory_bytes(void)
+{
+    uint64_t limit = 0;
+    double gb;
+
+    /* Unparseable overrides fall through to the probe rather than guessing. */
+    if (parse_memory_limit_gb(&gb))
+        return (uint64_t) (gb * 1073741824.0);
+
+#if defined(__linux__)
+    {
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long pagesz = sysconf(_SC_PAGESIZE);
+        if (pages > 0 && pagesz > 0)
+            limit = (uint64_t) pages * (uint64_t) pagesz;
+    }
+    limit = tighter(limit, meminfo_bytes("MemAvailable"));
+    /* The job's own (possibly nested) cgroup first; the mount-root probes
+     * stay as a fallback for setups where /proc/self/cgroup is unreadable. */
+    limit = tighter(limit, cgroup_self_limit());
+    limit = tighter(limit, cgroup_remaining("/sys/fs/cgroup",
+                                            "memory.max", "memory.current"));
+    limit = tighter(limit, cgroup_remaining("/sys/fs/cgroup/memory",
+                                            "memory.limit_in_bytes",
+                                            "memory.usage_in_bytes"));
+
+#elif defined(__APPLE__) || defined(__FreeBSD__)
+    {
+        uint64_t bytes = 0;
+        uint64_t avail;
+        size_t len = sizeof bytes;
+#if defined(HW_MEMSIZE)
+        int mib[2] = { CTL_HW, HW_MEMSIZE };
+#else
+        int mib[2] = { CTL_HW, HW_PHYSMEM };
+#endif
+        if (sysctl(mib, 2, &bytes, &len, NULL, 0) == 0)
+            limit = bytes;
+
+        /* HW_MEMSIZE/HW_PHYSMEM is the machine's total RAM, which says nothing
+         * about what is free right now.  The Linux branch above reports what
+         * remains (MemAvailable, cgroup limit minus current usage), and the
+         * callers assume that meaning on every platform: a guard fed total RAM
+         * on a busy 64 GB Mac accepts a job whose additional allocation does
+         * not fit.  Tighten to a real remaining-memory estimate, and if the
+         * kernel will not give one, report unknown (0) rather than pretending
+         * an idle machine -- callers skip the check on 0, which is the
+         * documented contract and the safer of the two wrong answers. */
+#if defined(__APPLE__)
+        avail = darwin_available();
+#else
+        avail = freebsd_available();
+#endif
+        limit = avail == 0 ? 0 : tighter(limit, avail);
+    }
+
+#elif !defined(_WIN32)
+    {
+        long pages = sysconf(_SC_PHYS_PAGES);
+        long pagesz = sysconf(_SC_PAGESIZE);
+        if (pages > 0 && pagesz > 0)
+            limit = (uint64_t) pages * (uint64_t) pagesz;
+    }
+#endif
+
+    return limit;
+}

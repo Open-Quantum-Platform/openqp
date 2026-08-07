@@ -101,6 +101,13 @@ def _generic_input(section, key, value_text):
             'mp2/cc-pvdz geom="h2o.xyz" energy '
             "mp2(%s=%s)" % (key, value_text)
         )
+    if section == "cc":
+        # The [cc] solver controls only mean anything on a coupled-cluster
+        # route, the same way [mp2] needs an mp2 route.
+        return (
+            'ccsd_t/cc-pvdz geom="h2o.xyz" energy '
+            "cc(%s=%s)" % (key, value_text)
+        )
     if section == "dftb":
         route = 'dftb geom="h2o.xyz" energy'
     elif section == "tdhf":
@@ -180,8 +187,11 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    # main's generic keys + the [dftb] open-shell reference/unpaired pair.
-    assert len(checked) == 219
+    # 204 at the merge base; main's generic keys plus the [dftb] open-shell
+    # reference/unpaired pair took it to 219, and the [cc] section adds the
+    # remaining 7 (including the Cholesky controls cholesky, cholesky_tol and
+    # cholesky_direct).
+    assert len(checked) == 226
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():
