@@ -1252,12 +1252,21 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
   end block
   !$omp end parallel
 
+  ! Agree across ranks BEFORE deciding.  The triples are striped by rank above,
+  ! so a singular triple is seen only by whichever rank owns it; aborting on
+  ! that rank alone would leave the others waiting in the e_t all-reduce below
+  ! for a participant that has already stopped -- trading a wrong number for a
+  ! hung job, which is not an improvement.  Reduce first, then every rank takes
+  ! the same branch.
+  if (pe%size > 1) call pe%allreduce(nsing, 1)
+
   ! A vanishing triples denominator means the perturbative correction is not
   ! defined for this reference -- too near-degenerate for (T) rather than
   ! merely awkward.  The division above is unconditional, so the alternative to
   ! refusing is an Inf or NaN reported as a converged energy.  Same rule the
   ! open-shell path applies; it had a skip to make consistent, this one had
-  ! nothing at all.
+  ! nothing at all.  (The open-shell triples are not striped -- that path runs
+  ! under a rank-0 guard -- so its count needs no reduction.)
   if (nsing > 0) then
     call show_message('CCSD(T): near-degenerate triples with vanishing ' // &
         'denominators -- the perturbative correction is not defined for ' // &

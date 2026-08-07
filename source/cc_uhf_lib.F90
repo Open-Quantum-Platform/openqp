@@ -137,7 +137,13 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples, nbf) result(gb
   solve = nso**4 + (nv*(nv-1.0_dp)/2.0_dp)**2 &
         + 3.0_dp*(no*(no-1.0_dp)/2.0_dp)*(nv*(nv-1.0_dp)/2.0_dp) &
         + no**4 + 2.0_dp*no**2*nv**2 &
-        + 7.0_dp*no**2*nv**2 + 10.0_dp*no**2*nv**2 &
+        + 7.0_dp*no**2*nv**2 &
+        ! The ten ring panels are not all the same shape.  Eight are o^2v^2
+        ! -- t2ring, wring, zring, wjbnf, gnfme, wjbme, and gring/yring as
+        ! (nv,no,nv,no) -- but hring and hringp are (no,no,nv,no), so they go
+        ! as o^3v.  Calling all ten o^2v^2 understated the solver peak on an
+        ! occupied-heavy reference, where o^3v is the larger of the two.
+        + 8.0_dp*no**2*nv**2 + 2.0_dp*no**3*nv &
         + 2.0_dp*real(max(ndiis,0),dp)*amp
 
   nthr = 1
