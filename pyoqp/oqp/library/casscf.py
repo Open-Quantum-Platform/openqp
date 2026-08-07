@@ -1020,6 +1020,22 @@ class CASSCF:
         oqp.fci_ao_integrals(mol)
         enuc = float(mol.mol_energy.nenergy)
 
+        # Honour [cas] orbital_source before EITHER optimizer path starts.
+        # CASCI routes through load_cas_mo_coeff; CASSCF did not, so a
+        # validated orbital file was ignored and the run silently started from
+        # the current RHF coefficients.  It also corrupted a PT2 CASSCF
+        # reference: the PT2 path reloads the JSON afterwards, discarding the
+        # orbitals CASSCF had just optimised.  Writing the requested
+        # coefficients into the handle here fixes both, and leaves
+        # orbital_source=rhf (every committed example) byte-identical.
+        from oqp.library.cas_orbitals import load_cas_mo_coeff
+        _cur = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
+        _start, _src = load_cas_mo_coeff(mol.config, nbf, _cur)
+        if _src != "rhf":
+            _tgt = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
+            mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
+                np.asarray(_start, dtype=float).T.reshape(_tgt.shape))
+
         ncore = int(settings.frozen_core)
         nact = int(settings.active_orbitals)
         nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
@@ -1093,8 +1109,16 @@ class CASSCF:
         # mol_energy.energy recorded state 0 while the run had optimised
         # something else; the state-averaged CASCI path already publishes the
         # weighted value.  The per-root list stays in mol.energies.
-        mol.mol_energy.energy = float(
-            sa_energy if sa_enabled else report_energies[0])
+        if sa_enabled:
+            _scalar = sa_energy
+        else:
+            # State-specific: `report_energies` is ordered from root 0, so
+            # publishing [0] for casscf.root=1 handed back the ground root
+            # while the optimiser had followed root 1.
+            _root = int(getattr(options, "root", 0) or 0)
+            _scalar = (energies[_root] if _root < len(energies)
+                       else report_energies[0])
+        mol.mol_energy.energy = float(_scalar)
         mol.data["OQP::CASSCF_ENERGIES"] = _as_f64c(report_energies)
 
         self._write_log(ref_energy, ncore, nact, active_nelec, settings, options,

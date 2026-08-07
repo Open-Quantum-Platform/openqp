@@ -2804,6 +2804,28 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     pt2_grad_runtypes = {"energy", "grad", "optimize", "meci", "mecp", "ts",
                          "mep", "neb", "irc"}
     if method in PT2_METHOD_ALIASES:
+        # Single-state PT2 returns a one-element mol.energies, so the
+        # state-specific optimizer's energies[istate] is out of range for the
+        # schema's default optimize.istate=1 -- an otherwise default input
+        # failed on its first step.
+        if (PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS
+                and runtype in {"optimize", "ts", "mep", "irc"}):
+            _istate = _get(config, "optimize", "istate", 1)
+            try:
+                _istate_i = int(_istate)
+            except (TypeError, ValueError):
+                _istate_i = 1
+            if _istate_i != 0:
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "Single-state PT2 exposes only one energy (index 0).",
+                    value=_istate,
+                    expected="0",
+                    action="Set [optimize] istate=0 for caspt2/mrmp2, or use a "
+                           "multistate method (ms-caspt2/mcqdpt2) to optimize "
+                           "an excited root.",
+                )
         if runtype not in pt2_grad_runtypes:
             report.add(
                 "ERROR",
@@ -4024,6 +4046,20 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             value=target_roots,
             action="Remove duplicate PT2 root slots.",
         )
+    # A one-element explicit list passes the count/bounds checks below, and
+    # _reference_roots then honours it -- so the runtime diagonalises a 1x1
+    # effective Hamiltonian and still reports an MS/XMS result.
+    if (parsed_target_roots and len(parsed_target_roots) < 2
+            and canonical_method in (PT2_MS_METHODS | PT2_XMS_METHODS)):
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Multistate PT2 needs at least two target roots.",
+            value=target_roots,
+            expected="two or more root slots",
+            action="List two or more roots, or use the single-state method "
+                   "(caspt2/mrmp2) for one root.",
+        )
     if parsed_target_roots and max(parsed_target_roots) >= retained_roots:
         report.add(
             "ERROR",
@@ -4123,6 +4159,28 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
                 expected="the built-in behaviour regardless of this value",
                 action="Remove the key, or track its implementation before "
                        "relying on it; the run below ignores it.",
+            )
+
+    # `[pt2] frozen` was never parsed here, so `frozen=banana` reached
+    # _caspt2_options and died on a bare int().  Documented values are `auto`,
+    # `-1` (same as auto) and a non-negative count.
+    _frozen_raw = _get(config, "pt2", "frozen", "auto")
+    _frozen_txt = str(_frozen_raw).strip().lower()
+    if _frozen_txt not in {"", "auto", "-1"}:
+        _frozen_ok = False
+        try:
+            _frozen_ok = int(_frozen_txt) >= 0
+        except (TypeError, ValueError):
+            _frozen_ok = False
+        if not _frozen_ok:
+            report.add(
+                "ERROR",
+                "pt2.frozen",
+                "PT2 frozen-core selector must be auto, -1, or a non-negative count.",
+                value=_frozen_raw,
+                expected="auto | -1 | a non-negative integer",
+                action="Use [pt2] frozen=auto for the standard deep cores, or "
+                       "an explicit non-negative number of frozen orbitals.",
             )
 
     # Both of these are validated and then reach nothing: no PT2 kernel reads

@@ -762,6 +762,23 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector):
     (e2, components) : total SC-NEVPT2 correlation and a dict of the eight
         per-subspace energies.
     """
+    # dm4 is nact^8 doubles and is built before anything else looks at size:
+    # CAS(2,12) is only 144 determinants and sails through [cas] max_det, yet
+    # dm4 alone is ~3.4 GiB.  The module docstring claims `[pt2] max_active`
+    # guards this, but no such key or check exists anywhere in the tree, so the
+    # calculation simply exhausts memory.  Refuse up front with a message that
+    # names the real number instead.
+    _dm4_bytes = 8 * int(nact) ** 8
+    _dm4_cap = 2 * 1024 ** 3
+    if _dm4_bytes > _dm4_cap:
+        raise ValueError(
+            "strongly contracted NEVPT2 needs a dense four-particle RDM of "
+            "nact^8 = %d doubles (~%.1f GiB) for nact=%d, above the %.0f GiB "
+            "ceiling. Reduce [cas] active_orbitals, or use "
+            "[pt2] contraction=none for the uncontracted NEVPT2, which does "
+            "not form dm4."
+            % (int(nact) ** 8, _dm4_bytes / 1024 ** 3, int(nact),
+               _dm4_cap / 1024 ** 3))
     dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
     B = _blocks(h1e_mo, eri_mo, ncore, nact, eps)
     h1e, h2e = B['h1e'], B['h2e']
