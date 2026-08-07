@@ -4235,7 +4235,11 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
     for _dead_key, _dead_val, _dead_default in (
             ("pt2.reference_report", _get(config, "pt2", "reference_report", False), False),
             ("pt2.benchmark_required", _get(config, "pt2", "benchmark_required", False), False),
-            ("ci.root_tracking", _get(config, "ci", "root_tracking", "energy"), "energy")):
+            ("ci.root_tracking", _get(config, "ci", "root_tracking", "energy"), "energy"),
+            ("casscf.diagnostic_report",
+             _get(config, "casscf", "diagnostic_report", False), False),
+            ("casscf.diagnostic_benchmark_required",
+             _get(config, "casscf", "diagnostic_benchmark_required", False), False)):
         try:
             _differs = str(_dead_val).strip().lower() not in {
                 "", "false", "0", str(_dead_default).strip().lower()}

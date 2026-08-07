@@ -85,6 +85,7 @@ def how_long(start, end):
 
 def _to_yes_no(value):
     return 'yes' if bool(value) else 'no'
+@mpi_dump
 def print_module_banner(mol, title, info=""):
     """Print a native-style module banner identical to the Fortran
     ``print_module_info`` (source/printing.F90): a 40-wide ``+`` rule, the

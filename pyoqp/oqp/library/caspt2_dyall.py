@@ -267,6 +267,14 @@ def _reference_roots(options) -> list:
 
 # --------------------------------------------------------------------------- log
 def _log(mol, text: str = "") -> None:
+    # Direct append, so it bypasses the mpi_dump guard the shared log relies on.
+    # Under MPI every rank reaches this, and during the numerical-gradient
+    # task-group fan-out each group is on a DIFFERENT displaced geometry -- so
+    # the summaries interleave into one file. world_rank, not rank: inside a
+    # task_groups split every group root has rank 0.
+    from oqp.utils.mpi_utils import MPIManager
+    if getattr(mol, "usempi", False) and MPIManager().world_rank != 0:
+        return
     with open(mol.log, "a") as handle:
         handle.write(text + "\n")
 
@@ -1115,10 +1123,18 @@ def native_caspt2_energy(mol, ref_energy=None):
     # orbital_source=json silently used the current RHF coefficients instead,
     # giving a different reference (and a different active-space energy) from
     # the one requested.
-    from oqp.library.cas_orbitals import load_cas_mo_coeff
     _default = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
-    coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default)
-    coeff = np.asarray(coeff, dtype=float)
+    if options.reference == "casscf":
+        # _run_casscf_reference has just optimised the orbitals -- seeded from
+        # the JSON file if one was configured, since CASSCF now honours
+        # orbital_source itself -- and committed them to the handle.  Re-reading
+        # the file here would throw that optimisation away and leave PT2
+        # correlating the UNoptimised file orbitals.
+        coeff = _default
+    else:
+        from oqp.library.cas_orbitals import load_cas_mo_coeff
+        coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default)
+        coeff = np.asarray(coeff, dtype=float)
     eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
         (nbf, nbf, nbf, nbf), order="F"
     )

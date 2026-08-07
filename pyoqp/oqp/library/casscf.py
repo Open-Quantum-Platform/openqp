@@ -157,6 +157,14 @@ def _casscf_options(config: dict) -> CASSCFOptions:
 
 # --------------------------------------------------------------------------- log
 def _log(mol, text: str = "") -> None:
+    # Direct append, so it bypasses the mpi_dump guard the shared log relies on.
+    # Under MPI every rank reaches this, and during the numerical-gradient
+    # task-group fan-out each group is on a DIFFERENT displaced geometry -- so
+    # the summaries interleave into one file. world_rank, not rank: inside a
+    # task_groups split every group root has rank 0.
+    from oqp.utils.mpi_utils import MPIManager
+    if getattr(mol, "usempi", False) and MPIManager().world_rank != 0:
+        return
     with open(mol.log, "a") as handle:
         handle.write(text + "\n")
 

@@ -192,6 +192,17 @@ SCHEMA = {
         "solver": {"type": _string, "default": "auto"},
         "eig_tol": {"type": float, "default": "1.0e-10"},
     },
+    # method=fci reads its own section exclusively (fci._settings_from_config),
+    # so the helper writes here rather than to [cas]+[ci]; the stub needs the
+    # section or section("fci", ...) raises "Unknown OpenQP section".
+    "fci": {
+        "nroot": {"type": int, "default": "1"},
+        "active_electrons": {"type": int, "default": "0"},
+        "active_orbitals": {"type": int, "default": "0"},
+        "frozen_core": {"type": int, "default": "0"},
+        "solver": {"type": _string, "default": "auto"},
+        "eig_tol": {"type": float, "default": "1.0e-10"},
+    },
     "casscf": {
         "max_macro_iterations": {"type": int, "default": "20"},
         "root": {"type": int, "default": "0"},
@@ -1507,7 +1518,11 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
                   .theory("fci", nroot=2)
                   .to_input_dict())
         self.assertEqual(config["input"]["method"], "fci")
-        self.assertEqual(config["ci"]["nroot"], "2")
+        # [fci], not [ci]: fci._settings_from_config reads this section
+        # exclusively, so a value written to [ci] passed preflight and then had
+        # no effect -- the run silently used the default single root.  Pin the
+        # section the runtime actually consumes.
+        self.assertEqual(config["fci"]["nroot"], "2")
 
     def test_sa_casscf_enables_state_averaging_and_solves_every_root(self):
         openqp = load_openqp_module()

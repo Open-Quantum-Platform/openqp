@@ -1072,11 +1072,24 @@ class OpenQP:
         if cas_updates:
             self.section("cas", **cas_updates)
 
-        ci_updates = dict(ci or {})
-        if nroot is not None:
-            ci_updates["nroot"] = nroot
-        if ci_updates:
-            self.section("ci", **ci_updates)
+        # method=fci reads its active space and root count from [fci] ONLY
+        # (fci._settings_from_config), while every other method in this stack
+        # reads [cas] + [ci].  Writing the helper's arguments to [ci]/[cas] for
+        # an FCI job therefore passed preflight and silently ran the default
+        # one-root, all-electron calculation.
+        if method == "fci":
+            fci_updates = dict(cas_updates)
+            if nroot is not None:
+                fci_updates["nroot"] = nroot
+            fci_updates.update(ci or {})
+            if fci_updates:
+                self.section("fci", **fci_updates)
+        else:
+            ci_updates = dict(ci or {})
+            if nroot is not None:
+                ci_updates["nroot"] = nroot
+            if ci_updates:
+                self.section("ci", **ci_updates)
 
         if casscf:
             self.section("casscf", **casscf)
@@ -1156,7 +1169,7 @@ class OpenQP:
             state_average=sa, **keywords)
 
     def caspt2(self, active_electrons=None, active_orbitals=None,
-               frozen_core=None, nroot=1, variant=None, h0=None,
+               frozen_core=None, nroot=None, variant=None, h0=None,
                ipea_shift=None, imaginary_shift=None, level_shift=None,
                runtype=None, basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP CASPT2 setup.
@@ -1203,7 +1216,7 @@ class OpenQP:
             frozen_core=frozen_core, nroot=nroot, pt2=opts, **keywords)
 
     def qdpt2(self, active_electrons=None, active_orbitals=None,
-              frozen_core=None, nroot=1, variant=None, edshft=None,
+              frozen_core=None, nroot=None, variant=None, edshft=None,
               runtype=None, basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP QDPT2 setup in the GAMESS convention.
 

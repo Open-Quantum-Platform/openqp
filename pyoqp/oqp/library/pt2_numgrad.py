@@ -218,7 +218,13 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
                 x = x0.copy()
                 x[i] += sign * step
                 mol.update_system(x)
-                energies = sp.energy(do_init_scf=False)
+                # The central point runs SinglePoint.energy() with the
+                # configured [scf] init_scf preconvergence stage; forcing it off
+                # here differentiated a different pipeline from the one the
+                # central energy came from, and removed the convergence aid
+                # exactly where a displaced geometry is most likely to need it.
+                # Skip it only under an explicit warm-start policy.
+                energies = sp.energy(do_init_scf=(guess_mode != "warm"))
                 if len(energies) != nstate:
                     raise RuntimeError(
                         'PT2 numerical gradient: displaced geometry '
