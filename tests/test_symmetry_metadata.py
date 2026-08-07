@@ -217,12 +217,14 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertTrue(metadata['strict'])
         self.assertAlmostEqual(metadata['tolerance'], 2e-4)
 
-    def test_symmetry_metadata_round_trips_through_data(self):
+    def _molecule_for_put_data(self, coord):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
         molecule.tag = []
         molecule.config = {}
         molecule.config_tag = {}
+        molecule._state_tracking_fresh = True
+        molecule.get_system = lambda: coord
         molecule.symmetry_metadata = {
             'status': 'disabled',
             'point_group': 'c1',
@@ -238,11 +240,94 @@ class TestSymmetryMetadata(unittest.TestCase):
             'tolerance': 1e-5,
             'raw': {'enabled': 'false'},
         }
+        return molecule
 
-        payload = {'symmetry_metadata': {'point_group': 'c2v', 'raw': {'point_group': 'c2v'}}}
-        molecule.put_data(payload)
+    def test_symmetry_metadata_round_trips_at_the_same_geometry(self):
+        coord = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+        molecule = self._molecule_for_put_data(coord)
+
+        molecule.put_data({
+            'coord': coord,
+            'symmetry_metadata': {'point_group': 'c2v',
+                                  'detection': {'point_group': 'c2v'}},
+        })
 
         self.assertEqual(molecule.symmetry_metadata['point_group'], 'c2v')
+        self.assertEqual(
+            molecule.symmetry_metadata['detection']['point_group'], 'c2v')
+
+    def test_geometry_derived_metadata_does_not_follow_a_guess_to_a_new_geometry(self):
+        """A guess file is read routinely at a *different* geometry.
+
+        Every optimiser step and every finite-difference displacement reads the
+        reference job's guess, and a displaced geometry generally has lower
+        symmetry than the reference -- so carrying the producer's point group,
+        operations and standard-frame transform over would assert symmetry the
+        molecule does not have.
+        """
+        molecule = self._molecule_for_put_data([0.0, 0.0, 0.0, 0.0, 0.0, 1.4])
+
+        molecule.put_data({
+            'coord': [0.0, 0.0, 0.0, 0.0, 0.0, 1.405],
+            'symmetry_metadata': {'point_group': 'c2v',
+                                  'detection': {'point_group': 'c2v'},
+                                  'integral_symmetry': {'status': 'reoriented'}},
+        })
+
+        # Falls back to this job's own detection rather than vanishing --
+        # consumers index these keys directly.
+        self.assertEqual(molecule.symmetry_metadata['point_group'], 'c1')
+        self.assertNotIn('detection', molecule.symmetry_metadata)
+        self.assertNotIn('integral_symmetry', molecule.symmetry_metadata)
+
+    def test_staging_state_is_never_restored_from_a_guess_file(self):
+        """These have a Fortran-side half that put_data does not restore.
+
+        Inheriting the Python half alone claims a reduction that is not staged
+        in this process: symmetrize_gradient gates on status == 'active' and
+        would project with the producer's operations, and _petite_is_staged
+        would let the stability path switch the Fortran flag on with no maps.
+        A job that never asked for integral symmetry could pick both up.
+        """
+        coord = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+        molecule = self._molecule_for_put_data(coord)
+
+        molecule.put_data({
+            'coord': coord,  # same geometry -- the permissive case
+            'symmetry_metadata': {
+                'integral_symmetry': {'status': 'active'},
+                'reduction_maps': {'n_operations': 8},
+                'reduction_maps_full': {'n_operations': 24},
+                'detection': {'point_group': 'c2v'},
+            },
+        })
+
+        for key in ('integral_symmetry', 'reduction_maps',
+                    'reduction_maps_full'):
+            self.assertNotIn(key, molecule.symmetry_metadata, key)
+        # Descriptive geometry data still comes across when it matches.
+        self.assertEqual(
+            molecule.symmetry_metadata['detection']['point_group'], 'c2v')
+
+    def test_guess_file_never_overrides_this_job_symmetry_switches(self):
+        """The bug this pins: a numerical-Hessian child reoriented itself even
+        though its own input said use_integral_symmetry=false, because the
+        parent's guess JSON carried True and won. Water/6-31G HF frequencies
+        went from 1828.86/3906.50/4001.54 to -2675.60/697.64/2728.85 cm^-1.
+        """
+        coord = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+        molecule = self._molecule_for_put_data(coord)
+
+        molecule.put_data({
+            'coord': coord,
+            'symmetry_metadata': {'use_integral_symmetry': True,
+                                  'use_response_symmetry': True,
+                                  'status': 'enabled'},
+        })
+
+        self.assertFalse(molecule.symmetry_metadata['use_integral_symmetry'])
+        self.assertFalse(molecule.symmetry_metadata['use_response_symmetry'])
+        self.assertEqual(molecule.symmetry_metadata['status'], 'disabled')
 
     def test_get_results_and_hess_json_include_symmetry_metadata(self):
         molecule_module = load_molecule_module()
