@@ -60,6 +60,7 @@ contains
     real(dp) :: hbare(NDET,NDET), work36(NDET,NDET)
     real(dp) :: asing(NSING,NSING), atrip(NTRIP,NTRIP), aquint(1,1)
     real(dp) :: asing_keep(NSING,NSING), atrip_keep(NTRIP,NTRIP)
+    real(dp) :: asing_all(NSING,NSING,0:NSEAM-1), atrip_all(NTRIP,NTRIP,0:NSEAM-1)
     real(dp) :: esing(NSING), etrip(NTRIP), equint(1)
     real(dp) :: esing_all(NSING,0:NSEAM-1), etrip_all(NTRIP,0:NSEAM-1)
     real(dp) :: equint_all(0:NSEAM-1)
@@ -181,6 +182,8 @@ contains
       esing_all(:,iseam) = esing
       etrip_all(:,iseam) = etrip
       equint_all(iseam)  = aquint(1,1)
+      asing_all(:,:,iseam) = asing
+      atrip_all(:,:,iseam) = atrip
       if (iseam == SEAM_NATIVE) then
         asing_keep = asing
         atrip_keep = atrip
@@ -231,6 +234,22 @@ contains
     call native_print_block(infos, 'quintet', 'Q', 6.0_dp, 1, equint, qvec, &
                             csf_label(NDET:NDET), eref, esing(1), thresh)
 
+    ! Full spin-adapted spectra of the covariant seams, in the same format as
+    ! the value-based blocks above.  Each seam subtracts its own quintet root
+    ! in the energy law E(state) = E_SCF + omega(state).
+    do iseam = 0, NSEAM-1
+      if (iseam == SEAM_NATIVE) cycle
+      eref = infos%mol_energy%energy - equint_all(iseam)
+      call native_print_block(infos, 'singlet, '//trim(SEAM_NAME(iseam))//' seam', &
+                              'S', 0.0_dp, NSING, esing_all(:,iseam), &
+                              asing_all(:,:,iseam), csf_label(1:NSING), eref, &
+                              esing_all(1,iseam), thresh)
+      call native_print_block(infos, 'triplet, '//trim(SEAM_NAME(iseam))//' seam', &
+                              'T', 2.0_dp, NTRIP, etrip_all(:,iseam), &
+                              atrip_all(:,:,iseam), csf_label(NSING+1:NSING+NTRIP), &
+                              eref, esing_all(1,iseam), thresh)
+    end do
+
     call native_seam_covariance(h_eff,eri_act,va_act,vb_act,c_h,dets,ucsf, &
                                 npair,pairs,esing_all,gauge_dev)
     call native_print_seam_compare(act,npair,pairs,eps_act,pair_thc,pair_aniso, &
@@ -240,6 +259,11 @@ contains
     call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err, &
                            esing_all,etrip_all,equint_all,pair_aniso)
     write(iw,'(/,5x,a)') 'Machine-readable QMRSF-DK results written to qmrsf_dk_full_live.dat'
+
+    call native_write_seam_states(infos%mol_energy%energy,csf_label, &
+                                  esing_all,etrip_all,equint_all, &
+                                  asing_all,atrip_all)
+    write(iw,'(5x,a)') 'Per-seam eigenvectors written to qmrsf_dk_seam_states.dat'
 
     deallocate(h_act,eri_act,cact)
     call flush(iw)
@@ -1043,7 +1067,7 @@ contains
     write(iw,'(/,5x,a)') 'Singlet excitation energies (eV)'
     write(iw,'(7x,a,3(a10),a12)') 'State ', &
          (SEAM_NAME(m), m=0,NSEAM-1), 'S3R-Haar'
-    do k = 2, min(NSING,7)
+    do k = 2, NSING
       do m = 0, NSEAM-1
         de(m) = (esing_all(k,m)-esing_all(1,m))/UNITS_EV
       end do
@@ -1097,5 +1121,45 @@ contains
     end do
     close(u)
   end subroutine native_write_dump
+
+
+!> @brief Dump the spin-adapted spectra and eigenvectors of every seam
+!>        convention, so that state characters (leading configurations) can be
+!>        analyzed for the covariant seams exactly as for the value-based one.
+!> @detail Eigenvectors are written in the configuration-state-function basis;
+!>         the CSF occupation labels are listed once, singlets first.  Energies
+!>         follow the per-seam law E(state) = E_SCF + omega - A_quintet(seam).
+  subroutine native_write_seam_states(escf,csf_label,esing_all,etrip_all, &
+                                      equint_all,asing_all,atrip_all)
+    real(dp), intent(in) :: escf
+    character(len=8), intent(in) :: csf_label(NDET)
+    real(dp), intent(in) :: esing_all(NSING,0:NSEAM-1), etrip_all(NTRIP,0:NSEAM-1)
+    real(dp), intent(in) :: equint_all(0:NSEAM-1)
+    real(dp), intent(in) :: asing_all(NSING,NSING,0:NSEAM-1)
+    real(dp), intent(in) :: atrip_all(NTRIP,NTRIP,0:NSEAM-1)
+    integer :: u,m,k
+    open(newunit=u,file='qmrsf_dk_seam_states.dat',status='replace',action='write')
+    write(u,'(a,4(1x,i0))') 'QMRSF_DK_SEAM_STATES_V1',NACT,NSING,NTRIP,NSEAM
+    write(u,'(es24.16)') escf
+    do k = 1, NSING
+      write(u,'(a)') trim(csf_label(k))
+    end do
+    do k = 1, NTRIP
+      write(u,'(a)') trim(csf_label(NSING+k))
+    end do
+    do m = 0, NSEAM-1
+      write(u,'(a)') trim(SEAM_NAME(m))
+      write(u,'(es24.16)') equint_all(m)
+      write(u,'(*(es24.16,1x))') esing_all(:,m)
+      do k = 1, NSING
+        write(u,'(*(es24.16,1x))') asing_all(:,k,m)
+      end do
+      write(u,'(*(es24.16,1x))') etrip_all(:,m)
+      do k = 1, NTRIP
+        write(u,'(*(es24.16,1x))') atrip_all(:,k,m)
+      end do
+    end do
+    close(u)
+  end subroutine native_write_seam_states
 
 end module qmrsf_dk_paper_native_mod
