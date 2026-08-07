@@ -29,12 +29,14 @@ module qmrsf_dk_paper_native_mod
   integer, parameter :: NSEAM = 3
   character(len=6), parameter :: SEAM_NAME(0:NSEAM-1) = &
        (/ 'native', 'S3R   ', 'Haar  ' /)
-  !> A second adjacent pair is treated as a doublet only when its orbital-energy
-  !> gap is small compared with the spread of the four active orbitals; the
-  !> closest adjacent pair is always treated, so that the construction stays
-  !> smooth as a degeneracy is approached instead of switching on at a
-  !> threshold.
-  real(dp), parameter :: PAIR_GAP_FRACTION = 0.25_dp
+  !> An adjacent orbital pair is treated as a doublet when it is degenerate to
+  !> within PAIR_GAP_THRESHOLD, which is loose enough to cover the
+  !> distance-degenerate frontier pairs of a separated dimer and tight enough to
+  !> exclude genuinely split orbitals.  When the reference carries no such
+  !> degeneracy the frontier pair is used instead, so that the construction is
+  !> continuous as a degeneracy is approached and does not switch between
+  !> subspaces along a potential energy surface.
+  real(dp), parameter :: PAIR_GAP_THRESHOLD = 1.0e-2_dp
 
 contains
 
@@ -467,39 +469,45 @@ contains
 
 
 !> @brief Identify the degenerate-pair candidates among the four active orbitals.
-!> @detail The pair with the smallest adjacent orbital-energy gap is always
-!>         taken, so that the treatment does not switch on abruptly as a
-!>         degeneracy is approached.  A second, disjoint adjacent pair is taken
-!>         as well when its gap is small compared with the spread of the four
-!>         orbitals, which is what a doubly degenerate frontier set such as the
-!>         e1g/e2u pi orbitals of benzene requires.
+!> @detail Every adjacent pair that is degenerate to within PAIR_GAP_THRESHOLD is
+!>         treated, up to the two disjoint pairs that a doubly degenerate
+!>         frontier set such as the e1g/e2u pi orbitals of benzene or the
+!>         distance-degenerate combinations of a separated dimer requires.  A
+!>         reference without such a degeneracy has no orientation freedom to
+!>         remove; the frontier pair is then used, which leaves the construction
+!>         continuous as a degeneracy is approached and keeps the same subspace
+!>         along a potential energy surface.
   pure subroutine native_find_pairs(eps,npair,pairs)
     real(dp), intent(in) :: eps(NACT)
     integer, intent(out) :: npair, pairs(2,2)
-    real(dp) :: gap(NACT-1), spread
+    real(dp) :: gap(NACT-1)
     integer :: k, kbest, ksecond
     do k = 1, NACT-1
       gap(k) = abs(eps(k+1)-eps(k))
     end do
-    spread = maxval(eps) - minval(eps)
+    npair = 0
+    pairs = 0
     kbest = minloc(gap,1)
-    npair = 1
-    pairs(:,1) = (/ kbest, kbest+1 /)
-    pairs(:,2) = 0
-    ksecond = 0
-    do k = 1, NACT-1
-      if (k == kbest .or. k == kbest-1 .or. k == kbest+1) cycle
-      if (ksecond == 0) then
-        ksecond = k
-      else if (gap(k) < gap(ksecond)) then
-        ksecond = k
-      end if
-    end do
-    if (ksecond /= 0 .and. spread > 0.0_dp) then
-      if (gap(ksecond) < PAIR_GAP_FRACTION*spread) then
+    if (gap(kbest) < PAIR_GAP_THRESHOLD) then
+      npair = 1
+      pairs(:,1) = (/ kbest, kbest+1 /)
+      ksecond = 0
+      do k = 1, NACT-1
+        if (abs(k-kbest) < 2) cycle
+        if (gap(k) >= PAIR_GAP_THRESHOLD) cycle
+        if (ksecond == 0) then
+          ksecond = k
+        else if (gap(k) < gap(ksecond)) then
+          ksecond = k
+        end if
+      end do
+      if (ksecond /= 0) then
         npair = 2
         pairs(:,2) = (/ ksecond, ksecond+1 /)
       end if
+    else
+      npair = 1
+      pairs(:,1) = (/ NACT/2, NACT/2+1 /)
     end if
   end subroutine native_find_pairs
 
