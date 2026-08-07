@@ -4033,6 +4033,35 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
             action="Use either [pt2] edshft OR level_shift/imaginary_shift, not both.",
         )
 
+    # Same class as the two below: accepted, documented, and read by nothing.
+    #   pt2.print_amplitudes / save_amplitudes -- no PT2 engine reads either
+    #   pt2.max_memory                        -- CASPT2Options never parses it
+    #   casscf.max_function_evaluations       -- no optimizer reads it
+    # regression.py exempts several of these from the feature-coverage gate as
+    # though the I/O existed, so nothing else would tell the user.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.print_amplitudes", _get(config, "pt2", "print_amplitudes", False), False),
+            ("pt2.save_amplitudes", _get(config, "pt2", "save_amplitudes", False), False),
+            ("pt2.max_memory", _get(config, "pt2", "max_memory", 2048), 2048),
+            ("casscf.max_function_evaluations",
+             _get(config, "casscf", "max_function_evaluations", 0), 0)):
+        _differs = False
+        try:
+            _differs = float(_dead_val) != float(_dead_default)
+        except (TypeError, ValueError):
+            _differs = str(_dead_val).strip().lower() not in {
+                "", "false", "0", str(_dead_default).strip().lower()}
+        if _differs:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
+
     # Both of these are validated and then reach nothing: no PT2 kernel reads
     # either value, so a user who sets them silently gets the built-in
     # behaviour.  Say so rather than accepting the input and ignoring it --

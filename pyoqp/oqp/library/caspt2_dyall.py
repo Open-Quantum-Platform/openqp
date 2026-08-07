@@ -229,7 +229,13 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         contraction=contraction,
         root=int(raw.get("root", raw.get("state", 0))),
         target_roots=_as_int_tuple(raw.get("target_roots", ())),
-        nroot=int(raw.get("nroot", 0) or 0),
+        # 0 is the documented default meaning "follow the CI"; taking it
+        # literally made _reference_roots do max(2, 0) and silently solve two
+        # states for any input with [ci] nroot > 2 -- including the compact
+        # job.caspt2(variant="ms-caspt2", nroot=3) helpers, which write nroot
+        # only to [ci].
+        nroot=int(raw.get("nroot", 0) or 0) or int(
+            (config.get("ci", {}) or {}).get("nroot", 0) or 0),
         ipea_shift=float(raw.get("ipea_shift", 0.0)),
         level_shift=float(raw.get("level_shift", 0.0)),
         imaginary_shift=float(raw.get("imaginary_shift", 0.0)),
@@ -237,7 +243,13 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         frozen=(-1 if str(raw.get("frozen", "auto")).strip().lower() in {"auto", "", "none", "-1"}
                 else int(raw.get("frozen"))),
         semi_canonical=_as_bool(raw.get("semi_canonical", True), "pt2.semi_canonical"),
-        max_det=int(raw.get("max_det", 12000)),
+        # [pt2] max_det is NOT in OQP_CONFIG_SCHEMA, so an input naming it is
+        # rejected by the parser -- yet _build_operators' own error message
+        # tells the user to raise it.  Fall back to [cas] max_det, which is a
+        # real key, so the guard can actually be lifted.
+        max_det=int(raw.get("max_det", 0) or 0)
+                or int((config.get("cas", {}) or {}).get("max_det", 0) or 0)
+                or 12000,
         engine=engine,
         max_terms=int(raw.get("max_terms", 30_000_000)),
         nproc=max(1, int(raw.get("nproc", 1))),
@@ -1098,7 +1110,15 @@ def native_caspt2_energy(mol, ref_energy=None):
 
     oqp.fci_ao_integrals(mol)
     hcore_ao = _unpack_lower_triangle(np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
-    coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
+    # Honour [cas] orbital_source: the standalone CASCI driver routes through
+    # load_cas_mo_coeff, and this path did not -- so a PT2 run asking for
+    # orbital_source=json silently used the current RHF coefficients instead,
+    # giving a different reference (and a different active-space energy) from
+    # the one requested.
+    from oqp.library.cas_orbitals import load_cas_mo_coeff
+    _default = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
+    coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default)
+    coeff = np.asarray(coeff, dtype=float)
     eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
         (nbf, nbf, nbf, nbf), order="F"
     )
@@ -1220,6 +1240,21 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
         # to <~1 uEh.  No external determinant space: the contracted perturbers
         # are formed directly from the active 1-/2-/3-/4-RDM and integral blocks.
         from oqp.library.nevpt2_sc import sc_nevpt2_energy
+        # sc_nevpt2_energy takes no regularisation: the contracted denominators
+        # are built inside it.  Accepting a shift and returning the unshifted
+        # energy -- while the PT2 summary prints the shift back to the user --
+        # is worse than refusing, so refuse.
+        _unapplied = [name for name, value in (
+            ("level_shift", options.level_shift),
+            ("imaginary_shift", options.imaginary_shift),
+            ("edshft", options.edshft)) if value]
+        if _unapplied:
+            raise ValueError(
+                "[pt2] %s cannot be applied to strongly contracted NEVPT2 "
+                "(h0=dyall, contraction=strong): the contracted denominators are "
+                "formed internally and no shift reaches them. Remove the shift, "
+                "or use contraction=none for a shifted NEVPT2."
+                % ", ".join(_unapplied))
         e2, comp = sc_nevpt2_energy(h1e, eri, eps, ncore, nact, active_nelec,
                                     coeffs[:, root])
         e_caspt2 = e_casci + e2

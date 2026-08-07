@@ -302,6 +302,17 @@ def _target_spin_setting(value, label: str) -> str:
 
 
 def _save_npz_artifact(mol, suffix: str, **arrays) -> str:
+    """Write one .npz artifact, from the MPI world root only.
+
+    Every rank reaches this with the same destination path, so an unguarded
+    write means concurrent truncation of the same ZIP -- a nondeterministic or
+    corrupt artifact rather than a clean one.  `world_rank`, not `rank`: inside
+    an MPIManager.task_groups split every group root has rank == 0 and they all
+    share this path, exactly as `mpi_dump` guards the shared log.
+    """
+    from oqp.utils.mpi_utils import MPIManager
+    if MPIManager().world_rank != 0 and getattr(mol, "usempi", False):
+        return ""
     log_dir = str(getattr(mol, "log_path", "") or ".")
     project = os.path.basename(str(getattr(mol, "project_name", "") or "oqp"))
     if not project:

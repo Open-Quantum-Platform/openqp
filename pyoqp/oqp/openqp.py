@@ -1064,7 +1064,13 @@ class OpenQP:
         return self._wf_setup(
             "sa-casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
-            frozen_core=frozen_core, nroot=keywords.pop("nroot", nstate),
+            frozen_core=frozen_core,
+            # target_roots may be noncontiguous or not start at zero, e.g.
+            # sa_casscf(nstate=2, target_roots=[1, 2]).  Solving only `nstate`
+            # roots then makes validation reject root 2, so the CI has to be
+            # sized to the highest root actually requested.
+            nroot=keywords.pop("nroot", None)
+                  or max([nstate] + [int(r) + 1 for r in (target_roots or ())]),
             state_average=sa, **keywords)
 
     def caspt2(self, active_electrons=None, active_orbitals=None,
