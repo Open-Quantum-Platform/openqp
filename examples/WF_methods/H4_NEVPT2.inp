@@ -1,0 +1,60 @@
+# RHF/6-31G/NEVPT2 of linear H4 in a CAS(4,4) active space, CASCI reference.
+# NEVPT2 = Dyall's zeroth-order Hamiltonian ([pt2] h0=dyall), for which the CASCI
+# reference is an exact H0 eigenstate.  This is the fully UNCONTRACTED
+# (determinant-space) flavour:
+#   E(CASCI)   = -2.1594801208
+#   E(2)       = -0.0280053140    (uncontracted Dyall-H0 NEVPT2)
+#   E(NEVPT2)  = -2.1874854348
+# It sits ~0.4 mEh below the strongly contracted PySCF SC-NEVPT2 value
+# (-0.0275992508); the strong contraction is in H4_SC-NEVPT2.inp.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=6-31g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=0
+orbital_source=rhf
+sort_orbitals=energy
+max_det=20000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-11
+integral_backend=native
+target_spin=any
+
+[pt2]
+reference=casci
+# h0=dyall selects NEVPT2 (Dyall H0); h0=fock would be CASPT2.
+h0=dyall
+# contraction=none = uncontracted determinant space; =strong = SC-NEVPT2.
+contraction=none
+ipea_shift=0.0
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true

@@ -38,6 +38,10 @@ tests/test_legacy_example_conversion.py::test_every_current_legacy_example_is_co
 # are not regenerated into the shared geometry catalog. These two tests enforce
 # that wiring. Unquarantine when xTB .oqp converter support + example-catalog
 # regeneration land (run tools/convert_legacy_examples.py and commit the diff).
+# [xtb] is now the ONLY section this test is blocked on: the six
+# multiconfigurational sections ([cas]/[casscf]/[ci]/[fci]/[pt2]/
+# [state_average]) it also used to mask are wired and enforced by
+# test_every_schema_section_except_xtb_is_fully_owned, which is not quarantined.
 tests/test_oqp_input_schema_manifest.py::test_every_schema_keyword_has_exactly_one_semantic_input_owner  # [xtb] in OQP_CONFIG_SCHEMA but not in oqp_input SECTION_NAMES/converter
 tests/test_legacy_example_conversion.py::test_shared_xyz_catalog_is_real_cartesian_geometry_only  # xTB example geometries not regenerated into the shared catalog
 

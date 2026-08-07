@@ -1,0 +1,54 @@
+# RHF/STO-3G/CASSCF CAS(4,4) of water with the trust-region augmented-Hessian
+# orbital converger ([casscf] converger=ah, alias trah) and the ANALYTIC
+# orbital Hessian ([casscf] hessian=analytic).  Same CASSCF solution as the
+# default two-phase converger (-75.0085688882, vs PySCF -75.0085688625) in
+# fewer macroiterations (16 vs 20) and a fraction of the CI work: the exact
+# Hessian (fixed-CI + CI-relaxation parts, validated against the FD Hessian
+# to ~1e-7) replaces 2*n_par+1 CI solves per macroiteration by ~1 --
+# measured 15 CI evaluations total vs 376 with hessian=fd.
+# converger=auto runs ah with an automatic fallback to the default two-phase
+# scheme on stagnation -- never worse than the default.
+[input]
+system=
+   O   0.000000000   0.000000000   0.117300000
+   H   0.000000000   0.757200000  -0.469200000
+   H   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=energy
+basis=sto-3g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=100
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=3
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=50
+converger=ah
+hessian=analytic

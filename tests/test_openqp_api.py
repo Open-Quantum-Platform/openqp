@@ -178,6 +178,54 @@ SCHEMA = {
         "trust": {"type": float, "default": "0.1"},
         "constraints_file": {"type": str, "default": ""},
     },
+    # Wavefunction stack.  Only the keys the API helpers touch; types and
+    # defaults mirror OQP_CONFIG_SCHEMA in oqp/molecule/oqpdata.py.
+    "cas": {
+        "active_electrons": {"type": int, "default": "0"},
+        "active_orbitals": {"type": int, "default": "0"},
+        "frozen_core": {"type": int, "default": "0"},
+        "orbital_source": {"type": _string, "default": "rhf"},
+        "max_det": {"type": int, "default": "5000"},
+    },
+    "ci": {
+        "nroot": {"type": int, "default": "1"},
+        "solver": {"type": _string, "default": "auto"},
+        "eig_tol": {"type": float, "default": "1.0e-10"},
+    },
+    # method=fci reads its own section exclusively (fci._settings_from_config),
+    # so the helper writes here rather than to [cas]+[ci]; the stub needs the
+    # section or section("fci", ...) raises "Unknown OpenQP section".
+    "fci": {
+        "nroot": {"type": int, "default": "1"},
+        "active_electrons": {"type": int, "default": "0"},
+        "active_orbitals": {"type": int, "default": "0"},
+        "frozen_core": {"type": int, "default": "0"},
+        "solver": {"type": _string, "default": "auto"},
+        "eig_tol": {"type": float, "default": "1.0e-10"},
+    },
+    "casscf": {
+        "max_macro_iterations": {"type": int, "default": "20"},
+        "root": {"type": int, "default": "0"},
+        "converger": {"type": _string, "default": "twophase"},
+        "hessian": {"type": _string, "default": "fd"},
+        "gradient_norm_tol": {"type": float, "default": "1.0e-6"},
+    },
+    "state_average": {
+        "enabled": {"type": bool, "default": "False"},
+        "weights": {"type": str, "default": "1.0"},
+        "nstate": {"type": int, "default": "0"},
+        "target_roots": {"type": str, "default": ""},
+        "equal_weights": {"type": bool, "default": "True"},
+    },
+    "pt2": {
+        "variant": {"type": _string, "default": "auto"},
+        "h0": {"type": _string, "default": "fock"},
+        "contraction": {"type": _string, "default": "uncontracted"},
+        "ipea_shift": {"type": float, "default": "0.0"},
+        "imaginary_shift": {"type": float, "default": "0.0"},
+        "level_shift": {"type": float, "default": "0.0"},
+        "edshft": {"type": float, "default": "0.0"},
+    },
 }
 
 
@@ -1409,6 +1457,196 @@ $$$$
         job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
         with self.assertRaises(ValueError):
             job.theory("ccsd(t)", functional="pbe")
+
+
+
+class TestOpenQPWavefunctionAPI(unittest.TestCase):
+    """The FCI/CAS/PT2 stack through the compact Python API.
+
+    These methods were reachable from input files and from the `.oqp` concise
+    format long before `OpenQP.theory()` knew about them; `job.theory("casscf")`
+    fell through to the unknown-method ValueError.  Each test below pins one
+    helper AND its `theory()` spelling, so the dispatcher cannot drift away
+    from the helper it delegates to."""
+
+    def _job(self, openqp, project):
+        return (openqp.OpenQP(project=project)
+                .molecule(geometry="water", basis="6-31g", charge=0,
+                          multiplicity=1))
+
+    def test_casscf_helper_sets_method_active_space_and_converger(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_casscf")
+                  .casscf(active_electrons=4, active_orbitals=4, frozen_core=1,
+                          nroot=1, converger="trah", hessian="analytic")
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["cas"]["active_electrons"], "4")
+        self.assertEqual(config["cas"]["active_orbitals"], "4")
+        self.assertEqual(config["cas"]["frozen_core"], "1")
+        self.assertEqual(config["ci"]["nroot"], "1")
+        self.assertEqual(config["casscf"]["converger"], "trah")
+        self.assertEqual(config["casscf"]["hessian"], "analytic")
+
+    def test_theory_dispatches_the_wavefunction_methods(self):
+        openqp = load_openqp_module()
+        for method, expected in (
+            ("casscf", "casscf"),
+            ("sa-casscf", "sa-casscf"),
+            ("casci", "casci"),
+            ("caspt2", "caspt2"),
+            ("ms-caspt2", "ms-caspt2"),
+            ("xms-caspt2", "xms-caspt2"),
+            ("mrmp2", "mrmp2"),
+            ("mcqdpt2", "mcqdpt2"),
+            ("xmcqdpt2", "xmcqdpt2"),
+        ):
+            with self.subTest(method=method):
+                config = (self._job(openqp, "h2o_" + expected)
+                          .theory(method, active_electrons=4,
+                                  active_orbitals=4)
+                          .to_input_dict())
+                self.assertEqual(config["input"]["method"], expected)
+                self.assertEqual(config["cas"]["active_orbitals"], "4")
+
+    def test_theory_fci_needs_no_active_space(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2_fci")
+                  .theory("fci", nroot=2)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "fci")
+        # [fci], not [ci]: fci._settings_from_config reads this section
+        # exclusively, so a value written to [ci] passed preflight and then had
+        # no effect -- the run silently used the default single root.  Pin the
+        # section the runtime actually consumes.
+        self.assertEqual(config["fci"]["nroot"], "2")
+
+    def test_sa_casscf_enables_state_averaging_and_solves_every_root(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa")
+                  .sa_casscf(active_electrons=2, active_orbitals=2, nstate=3)
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "sa-casscf")
+        self.assertEqual(config["state_average"]["enabled"], "True")
+        self.assertEqual(config["state_average"]["nstate"], "3")
+        # every averaged root has to be solved for
+        self.assertEqual(config["ci"]["nroot"], "3")
+
+    def test_sa_casscf_explicit_weights_turn_off_equal_weighting(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa_w")
+                  .sa_casscf(active_electrons=2, active_orbitals=2, nstate=2,
+                             weights="0.7,0.3")
+                  .to_input_dict())
+        self.assertEqual(config["state_average"]["weights"], "0.7,0.3")
+        self.assertEqual(config["state_average"]["equal_weights"], "False")
+
+    def test_nevpt2_is_caspt2_with_the_dyall_h0(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_nevpt2")
+                  .nevpt2(active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "caspt2")
+        self.assertEqual(config["pt2"]["h0"], "dyall")
+        self.assertEqual(config["pt2"]["contraction"], "uncontracted")
+
+    def test_sc_nevpt2_selects_strong_contraction(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_scnevpt2")
+                  .theory("sc-nevpt2", active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "caspt2")
+        self.assertEqual(config["pt2"]["h0"], "dyall")
+        self.assertEqual(config["pt2"]["contraction"], "strong")
+
+    def test_multistate_helpers_derive_at_least_two_ci_roots(self):
+        """A default multistate PT2 helper call must produce an input its own
+        preflight accepts.
+
+        The helpers hardcoded nroot=1 and later merely defaulted it to None --
+        which leaves [ci] nroot at the schema default of 1, so the "multistate
+        PT2 needs at least two roots" gate rejected the helper's own output.
+        This pins the DERIVED value for every multistate variant, and that the
+        single-state variants are left alone."""
+        openqp = load_openqp_module()
+        for helper, variant, expected in (
+            ("caspt2", "caspt2", "1"),
+            ("caspt2", "ms-caspt2", "2"),
+            ("caspt2", "xms-caspt2", "2"),
+            ("qdpt2", "mrmp2", "1"),
+            ("qdpt2", "mcqdpt2", "2"),
+            ("qdpt2", "xmcqdpt2", "2"),
+        ):
+            with self.subTest(helper=helper, variant=variant):
+                job = self._job(openqp, f"h4_{variant}")
+                config = getattr(job, helper)(
+                    active_electrons=4, active_orbitals=4,
+                    variant=variant).to_input_dict()
+                self.assertEqual(config["ci"]["nroot"], expected)
+
+        # An explicit request still wins, and a contradictory one is refused.
+        config = (self._job(openqp, "h4_ms3")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          variant="ms-caspt2", nroot=3).to_input_dict())
+        self.assertEqual(config["ci"]["nroot"], "3")
+        with self.assertRaises(ValueError):
+            (self._job(openqp, "h4_ms1")
+             .caspt2(active_electrons=4, active_orbitals=4,
+                     variant="ms-caspt2", nroot=1))
+
+    def test_caspt2_shifts_reach_the_pt2_section(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_caspt2")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          ipea_shift=0.25, imaginary_shift=0.1)
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["ipea_shift"], "0.25")
+        self.assertEqual(config["pt2"]["imaginary_shift"], "0.1")
+
+    def test_qdpt2_variant_and_isa_shift(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_xmcqdpt2")
+                  .qdpt2(active_electrons=4, active_orbitals=4,
+                         variant="xmcqdpt2", edshft=0.02)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "xmcqdpt2")
+        self.assertEqual(config["pt2"]["edshft"], "0.02")
+
+    def test_active_space_is_required_where_it_is_meaningful(self):
+        openqp = load_openqp_module()
+        for method in ("casci", "casscf", "sa_casscf", "caspt2", "nevpt2",
+                       "qdpt2"):
+            with self.subTest(method=method):
+                job = self._job(openqp, "missing_" + method)
+                with self.assertRaises(ValueError):
+                    getattr(job, method)()
+
+    def test_wavefunction_helpers_reject_a_functional(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h2o_bad").dft("bhhlyp")
+        with self.assertRaises(ValueError):
+            job.casscf(active_electrons=4, active_orbitals=4,
+                       functional="bhhlyp")
+
+    def test_casscf_clears_a_functional_left_by_a_prior_dft_setup(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_after_dft")
+                  .dft("bhhlyp")
+                  .casscf(active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["functional"], "")
+
+    def test_qdpt2_rejects_an_unknown_variant(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_bad")
+        with self.assertRaises(ValueError):
+            job.qdpt2(active_electrons=4, active_orbitals=4, variant="nope")
+
 
 if __name__ == "__main__":
     unittest.main()
