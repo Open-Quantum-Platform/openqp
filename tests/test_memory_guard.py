@@ -122,8 +122,15 @@ def test_budget_says_whether_resident_memory_still_counts(monkeypatch):
     assert oqp.lib.oqp_memory_budget_includes_resident() == 1, \
         "an explicit budget still has to cover memory already allocated"
 
+    # Surrounding whitespace is still a number.
+    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "  64  ")
+    assert oqp.lib.oqp_memory_budget_includes_resident() == 1
+
     # Unparseable values fall through to the probe, so they follow its meaning.
-    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "not-a-number")
-    assert oqp.lib.oqp_memory_budget_includes_resident() == 0
-    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "-8")
-    assert oqp.lib.oqp_memory_budget_includes_resident() == 0
+    # "1O" is the one that matters: a mistyped 10 with a letter O. strtod stops
+    # at the O and reports success for the "1", so a prefix-only parse silently
+    # imposed a 1 GB budget and aborted jobs against a limit nobody set. The
+    # whole string has to be a number.
+    for bad in ("not-a-number", "-8", "0", "1O", "8GB", "64 GB", "1e400", ""):
+        monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", bad)
+        assert oqp.lib.oqp_memory_budget_includes_resident() == 0, bad

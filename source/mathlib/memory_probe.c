@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/sysctl.h>
@@ -326,31 +327,54 @@ static uint64_t cgroup_self_limit(void)
  * Returns 1 for the override (resident memory still counts against it),
  * 0 for the live probe (resident memory is already excluded).
  */
-int oqp_memory_budget_includes_resident(void)
+/* OQP_MEMORY_LIMIT_GB as a positive, finite number of GB.
+ *
+ * strtod alone is not enough: it stops at the first character it cannot use
+ * and reports success for the prefix, so a mistyped "1O" (letter O for zero)
+ * parsed as 1.0 and silently imposed a 1 GB budget -- aborting jobs that fit,
+ * against a limit nobody set.  The file's contract is that an unparseable
+ * override falls through to the probe, so require the WHOLE string to be a
+ * number, allowing only surrounding whitespace, and reject anything not
+ * finite or beyond what the return type can hold.
+ *
+ * Returns 1 and writes *gb on success, 0 otherwise.  One parser, so the two
+ * callers cannot drift apart on what counts as valid.
+ */
+static int parse_memory_limit_gb(double *gb)
 {
     const char *env = getenv("OQP_MEMORY_LIMIT_GB");
+    char *end = NULL;
+    double v;
 
-    if (env && *env) {
-        char *end = NULL;
-        double gb = strtod(env, &end);
-        if (end != env && gb > 0.0)
-            return 1;
-    }
-    return 0;
+    if (!env || !*env) return 0;
+
+    errno = 0;
+    v = strtod(env, &end);
+    if (end == env) return 0;                     /* nothing numeric at all */
+    while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')
+        end++;
+    if (*end != '\0') return 0;                   /* trailing junk: "1O", "8GB" */
+    if (errno == ERANGE) return 0;                /* over/underflowed */
+    if (!(v > 0.0) || !(v < 1.0e12)) return 0;    /* also rejects NaN and inf */
+
+    *gb = v;
+    return 1;
+}
+
+int oqp_memory_budget_includes_resident(void)
+{
+    double gb;
+    return parse_memory_limit_gb(&gb) ? 1 : 0;
 }
 
 uint64_t oqp_available_memory_bytes(void)
 {
     uint64_t limit = 0;
-    const char *env = getenv("OQP_MEMORY_LIMIT_GB");
+    double gb;
 
-    if (env && *env) {
-        char *end = NULL;
-        double gb = strtod(env, &end);
-        if (end != env && gb > 0.0)
-            return (uint64_t) (gb * 1073741824.0);
-        /* Unparseable: fall through to the probe rather than guessing. */
-    }
+    /* Unparseable overrides fall through to the probe rather than guessing. */
+    if (parse_memory_limit_gb(&gb))
+        return (uint64_t) (gb * 1073741824.0);
 
 #if defined(__linux__)
     {

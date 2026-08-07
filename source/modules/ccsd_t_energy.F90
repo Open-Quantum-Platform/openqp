@@ -78,7 +78,7 @@ contains
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
     real(kind=dp) :: mem_ao, mem_mo, mem_mo_solver, mem_solver, rno, rnv
-    real(kind=dp) :: chol_cap
+    real(kind=dp) :: chol_cap, mem_triples
     real(kind=dp), allocatable :: lvec(:,:), bvv(:,:), boo(:,:), bov(:,:)
     integer :: nchol, maxchol
     real(kind=dp) :: chol_tol, chol_err
@@ -290,12 +290,28 @@ contains
               OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
         end if
       end select
+      ! Say which of the two reasons actually applied.  The memory sentence was
+      ! printed for the forced route as well, so a user who set
+      ! cholesky_direct=true on a machine where the store fits comfortably was
+      ! told it "would not fit" -- a false reason in the log is worse than no
+      ! reason, because it is the first thing consulted when sizing the next job.
       if (use_direct) then
-        write(iw,'(2X,A,I0,A)') 'CCSD(T): the packed AO store ('// &
-            trim(oqp_mem_str(packed_gb))//' x ', nrank_local, &
-            ' local ranks) would not fit; factorising directly.'
+        if (int(infos%control%cc_cholesky_direct) == 1) then
+          write(iw,'(2X,A)') 'CCSD(T): [cc] cholesky_direct=true; building the ' // &
+              'Cholesky vectors directly from the integrals, without the ' // &
+              'packed AO store.'
+        else
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): the packed AO store ('// &
+              trim(oqp_mem_str(packed_gb))//' x ', nrank_local, &
+              ' local ranks) would not fit; factorising directly.'
+        end if
       end if
     end if
+
+    ! Resolved here rather than with the other solver options below, because
+    ! the guard has to know whether the triples stage will run at all before it
+    ! can size that stage's peak.
+    do_t = infos%control%cc_triples /= 0
 
     ! ---- memory guard ------------------------------------------------------
     ! Common to both paths: the packed AO integrals (nbf^4/8) and the
@@ -408,7 +424,20 @@ contains
                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
                    * (rno*rnv + rno**2*rnv**2) &
                  + merge(3.0_dp, 1.0_dp, use_chol)*real(nthr_est,dp)*lad_blk
-      mem_gb = max(mem_ao + mem_mo, mem_solver) * 8.0_dp / 1.073741824e9_dp
+      ! A third window, not a tail of the solver.  ccsd_iterate frees its whole
+      ! working set before returning, and triples_correction is called after
+      ! that, so the triples stage holds the persisting MO blocks and the
+      ! amplitudes rather than the iteration intermediates -- but it gives every
+      ! OpenMP thread w(no,no,no,6), v(no,no,no,6), z(no,no,no) and d3(no,no,no)
+      ! of its own, 14*no^3 per thread.  Only the ladder block was being scaled
+      ! by the thread count, so an occupied-heavy ccsd(t) on many threads passed
+      ! the guard and then exhausted memory the moment the triples region
+      ! opened.  Costs nothing for method=ccsd, which never enters it.
+      mem_triples = 0.0_dp
+      if (do_t) mem_triples = mem_mo_solver + rno*rnv + rno**2*rnv**2 &
+                            + real(nthr_est,dp)*14.0_dp*rno**3
+      mem_gb = max(max(mem_ao + mem_mo, mem_solver), mem_triples) &
+             * 8.0_dp / 1.073741824e9_dp
     end if
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
         ', correlated occ = ', no, ', virt = ', nv
@@ -482,7 +511,7 @@ contains
     end if
 
     ! ---- coupled cluster ---------------------------------------------------
-    do_t = infos%control%cc_triples /= 0
+    ! do_t was resolved before the memory guard, which needs it.
     opts%maxit      = int(infos%control%cc_maxit)
     opts%conv       = infos%control%cc_conv
     opts%ndiis      = int(infos%control%cc_ndiis)
