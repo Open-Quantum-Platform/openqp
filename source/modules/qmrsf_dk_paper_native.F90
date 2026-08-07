@@ -20,6 +20,17 @@ module qmrsf_dk_paper_native_mod
   integer, parameter :: NSING = 20
   integer, parameter :: NTRIP = 15
 
+  !> Seam conventions for the exchange tensor that carries c_H; see
+  !> @ref native_seam_mask.  The active pair whose orientation the value-based
+  !> seam is sensitive to is the middle one of the four energy-ordered SOMOs.
+  integer, parameter :: SEAM_NATIVE = 0
+  integer, parameter :: SEAM_S3R    = 1
+  integer, parameter :: SEAM_HAAR   = 2
+  integer, parameter :: NSEAM = 3
+  integer, parameter :: PAIR_A = 2, PAIR_B = 3
+  character(len=6), parameter :: SEAM_NAME(0:NSEAM-1) = &
+       (/ 'native', 'S3R   ', 'Haar  ' /)
+
 contains
 
   subroutine qmrsf_dk_paper_native(infos)
@@ -41,14 +52,18 @@ contains
     real(dp) :: h1(NSO,NSO), g(NSO,NSO,NSO,NSO)
     real(dp) :: h1k(NSO,NSO), gk(NSO,NSO,NSO,NSO)
     real(dp) :: hdet(NDET,NDET), hkdet(NDET,NDET), ucsf(NDET,NDET), hcsf(NDET,NDET)
-    real(dp) :: work36(NDET,NDET)
+    real(dp) :: hbare(NDET,NDET), work36(NDET,NDET)
     real(dp) :: asing(NSING,NSING), atrip(NTRIP,NTRIP), aquint(1,1)
+    real(dp) :: asing_keep(NSING,NSING), atrip_keep(NTRIP,NTRIP)
     real(dp) :: esing(NSING), etrip(NTRIP), equint(1)
+    real(dp) :: esing_all(NSING,0:NSEAM-1), etrip_all(NTRIP,0:NSEAM-1)
+    real(dp) :: equint_all(0:NSEAM-1)
     real(dp) :: ecore, c_h, c_ref, orth_err, cross_err, vxc_max
     real(dp) :: eref, thresh, aquint_diag, qvec(1,1)
+    real(dp) :: pair_thc, pair_aniso, gauge_dev(0:NSEAM-1)
     character(len=8) :: csf_label(NDET)
     integer :: dets(4,NDET), act(NACT)
-    integer :: nbf, ncore, i, j, ierr
+    integer :: nbf, ncore, i, j, ierr, iseam
     logical :: is_dft
 
     open(unit=iw, file=infos%log_filename, position='append')
@@ -96,50 +111,74 @@ contains
     ! in each antisymmetrized contraction.  H_K is built after zeroing every
     ! Hartree density pair (ii|**) and (**|jj), exactly as _exchange_eri in the
     ! published reference implementation; H_DK = H - (1-c_H) H_K.
+    !
+    ! That mask is not invariant to the orientation of a degenerate active pair,
+    ! so the two covariant alternatives of native_seam_mask are evaluated in the
+    ! same run and reported side by side.  Only the seam differs between them;
+    ! the reference orbitals, h_eff, the active integrals, the v_xc diagonal, the
+    ! spin adaptation and every block structure are shared.
     call native_build_spinorb(h_eff,eri_act,1.0_dp,h1,g)
     call native_gen_dets(dets)
-    call native_build_h(dets,h1,g,hdet)
-    call native_exchange_eri(eri_act,eri_k)
-    hzero = 0.0_dp
-    call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
-    call native_build_h(dets,h1k,gk,hkdet)
-    hdet = hdet - (1.0_dp-c_h)*hkdet
-    call native_add_vxc_diag(dets,va_act,vb_act,hdet)
+    call native_build_h(dets,h1,g,hbare)
     call native_build_ucsf(dets,ucsf,orth_err,csf_label)
-    call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
-               0.0_dp,work36,NDET)
-    call dgemm('N','N',NDET,NDET,NDET,1.0_dp,ucsf,NDET,work36,NDET, &
-               0.0_dp,hcsf,NDET)
+    call native_pair_doublet(eri_act,PAIR_A,PAIR_B,pair_thc,pair_aniso)
+    hzero = 0.0_dp
 
-    cross_err = 0.0_dp
-    do i = 1, NDET
-      do j = 1, NDET
-        if ((i <= NSING .and. j > NSING) .or. &
-            (i > NSING .and. i <= NSING+NTRIP .and. &
-             (j <= NSING .or. j > NSING+NTRIP)) .or. &
-            (i > NSING+NTRIP .and. j <= NSING+NTRIP)) then
-          cross_err = max(cross_err,abs(hcsf(i,j)))
-        end if
-      end do
+    do iseam = 0, NSEAM-1
+      call native_seam_mask(eri_act,iseam,PAIR_A,PAIR_B,eri_k)
+      call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
+      call native_build_h(dets,h1k,gk,hkdet)
+      hdet = hbare - (1.0_dp-c_h)*hkdet
+      call native_add_vxc_diag(dets,va_act,vb_act,hdet)
+      call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
+                 0.0_dp,work36,NDET)
+      call dgemm('N','N',NDET,NDET,NDET,1.0_dp,ucsf,NDET,work36,NDET, &
+                 0.0_dp,hcsf,NDET)
+
+      if (iseam == SEAM_NATIVE) then
+        cross_err = 0.0_dp
+        do i = 1, NDET
+          do j = 1, NDET
+            if ((i <= NSING .and. j > NSING) .or. &
+                (i > NSING .and. i <= NSING+NTRIP .and. &
+                 (j <= NSING .or. j > NSING+NTRIP)) .or. &
+                (i > NSING+NTRIP .and. j <= NSING+NTRIP)) then
+              cross_err = max(cross_err,abs(hcsf(i,j)))
+            end if
+          end do
+        end do
+      end if
+
+      asing = hcsf(1:NSING,1:NSING)
+      atrip = hcsf(NSING+1:NSING+NTRIP,NSING+1:NSING+NTRIP)
+      aquint = hcsf(NDET:NDET,NDET:NDET)
+      call diag_symm_full(0,NSING,asing,NSING,esing,ierr)
+      if (ierr /= 0) then
+        write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the singlet manifold failed, info = ',ierr
+        close(iw)
+        return
+      end if
+      call diag_symm_full(0,NTRIP,atrip,NTRIP,etrip,ierr)
+      if (ierr /= 0) then
+        write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the triplet manifold failed, info = ',ierr
+        close(iw)
+        return
+      end if
+      esing_all(:,iseam) = esing
+      etrip_all(:,iseam) = etrip
+      equint_all(iseam)  = aquint(1,1)
+      if (iseam == SEAM_NATIVE) then
+        asing_keep = asing
+        atrip_keep = atrip
+      end if
     end do
 
-    asing = hcsf(1:NSING,1:NSING)
-    atrip = hcsf(NSING+1:NSING+NTRIP,NSING+1:NSING+NTRIP)
-    aquint = hcsf(NDET:NDET,NDET:NDET)
-    call diag_symm_full(0,NSING,asing,NSING,esing,ierr)
-    if (ierr /= 0) then
-      write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the singlet manifold failed, info = ',ierr
-      close(iw)
-      return
-    end if
-    call diag_symm_full(0,NTRIP,atrip,NTRIP,etrip,ierr)
-    if (ierr /= 0) then
-      write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the triplet manifold failed, info = ',ierr
-      close(iw)
-      return
-    end if
-    equint(1) = aquint(1,1)
-    aquint_diag = aquint(1,1)
+    esing = esing_all(:,SEAM_NATIVE)
+    etrip = etrip_all(:,SEAM_NATIVE)
+    asing = asing_keep
+    atrip = atrip_keep
+    equint(1) = equint_all(SEAM_NATIVE)
+    aquint_diag = equint_all(SEAM_NATIVE)
     qvec(1,1) = 1.0_dp
 
     vxc_max = max(maxval(abs(va_act)),maxval(abs(vb_act)))
@@ -178,7 +217,13 @@ contains
     call native_print_block(infos, 'quintet', 'Q', 6.0_dp, 1, equint, qvec, &
                             csf_label(NDET:NDET), eref, esing(1), thresh)
 
-    call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err)
+    call native_seam_covariance(h_eff,eri_act,va_act,vb_act,c_h,dets,ucsf, &
+                                esing_all,gauge_dev)
+    call native_print_seam_compare(act,pair_thc,pair_aniso,esing_all,equint_all, &
+                                   eref,gauge_dev)
+
+    call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err, &
+                           esing_all,etrip_all,equint_all,pair_aniso)
     write(iw,'(/,5x,a)') 'Machine-readable QMRSF-DK results written to qmrsf_dk_full_live.dat'
 
     deallocate(h_act,eri_act,cact)
@@ -262,6 +307,127 @@ contains
       if (p==q .or. r==s) eri_k(p,q,r,s)=0.0_dp
     end do; end do; end do; end do
   end subroutine native_exchange_eri
+
+
+!> @brief Rotate the active two-electron tensor inside one orbital plane.
+!> @detail Returns g'_{pqrs} = R_{pa} R_{qb} R_{rc} R_{sd} g_{abcd} for the
+!>         SO(2) rotation R of the (ia,ib) plane by @p theta, i.e. the tensor
+!>         as seen from the orbital frame a' = cos(theta) a + sin(theta) b,
+!>         b' = -sin(theta) a + cos(theta) b.
+  subroutine native_rotate_pair(g,ia,ib,theta,gout)
+    real(dp), intent(in) :: g(NACT,NACT,NACT,NACT), theta
+    integer, intent(in) :: ia,ib
+    real(dp), intent(out) :: gout(NACT,NACT,NACT,NACT)
+    real(dp) :: r(NACT,NACT), t1(NACT,NACT,NACT,NACT), t2(NACT,NACT,NACT,NACT)
+    real(dp) :: c,s
+    integer :: p,q,rr,ss,a
+    c = cos(theta); s = sin(theta)
+    r = 0.0_dp
+    do p=1,NACT; r(p,p)=1.0_dp; end do
+    r(ia,ia)= c; r(ia,ib)= s
+    r(ib,ia)=-s; r(ib,ib)= c
+    t1 = 0.0_dp
+    do p=1,NACT; do a=1,NACT
+      if (r(p,a)==0.0_dp) cycle
+      t1(p,:,:,:) = t1(p,:,:,:) + r(p,a)*g(a,:,:,:)
+    end do; end do
+    t2 = 0.0_dp
+    do q=1,NACT; do a=1,NACT
+      if (r(q,a)==0.0_dp) cycle
+      t2(:,q,:,:) = t2(:,q,:,:) + r(q,a)*t1(:,a,:,:)
+    end do; end do
+    t1 = 0.0_dp
+    do rr=1,NACT; do a=1,NACT
+      if (r(rr,a)==0.0_dp) cycle
+      t1(:,:,rr,:) = t1(:,:,rr,:) + r(rr,a)*t2(:,:,a,:)
+    end do; end do
+    gout = 0.0_dp
+    do ss=1,NACT; do a=1,NACT
+      if (r(ss,a)==0.0_dp) cycle
+      gout(:,:,:,ss) = gout(:,:,:,ss) + r(ss,a)*t1(:,:,:,a)
+    end do; end do
+  end subroutine native_rotate_pair
+
+
+!> @brief Gauge-invariant anisotropy of the degenerate pair (ia,ib).
+!> @detail The pair charge distributions split into the SO(2)-invariant
+!>         rho_s = (a^2+b^2)/sqrt2 and the Lambda doublet
+!>         (d,x) = ((a^2-b^2)/sqrt2, sqrt2 ab), which rotates by 2*theta.  The
+!>         doublet interaction matrix V = [[V_dd,V_dx],[V_dx,V_xx]] with
+!>         V_dd = ((aa|aa)+(bb|bb))/2 - (aa|bb), V_xx = 2(ab|ba),
+!>         V_dx = (aa|ab) - (bb|ab) obeys V(theta) = R(2 theta) V R(2 theta)^T,
+!>         so its eigenvalue splitting is the frame-independent measure of the
+!>         anisotropy that makes the value-based seam non-covariant, and
+!>         @p thc is the frame angle that diagonalizes it.
+  subroutine native_pair_doublet(eri,ia,ib,thc,aniso)
+    real(dp), intent(in) :: eri(NACT,NACT,NACT,NACT)
+    integer, intent(in) :: ia,ib
+    real(dp), intent(out) :: thc,aniso
+    real(dp) :: vdd,vxx,vdx
+    vdd = 0.5_dp*(eri(ia,ia,ia,ia)+eri(ib,ib,ib,ib)) - eri(ia,ia,ib,ib)
+    vxx = 2.0_dp*eri(ia,ib,ib,ia)
+    vdx = eri(ia,ia,ia,ib) - eri(ib,ib,ia,ib)
+    thc = 0.25_dp*atan2(2.0_dp*vdx, vdd-vxx)
+    aniso = sqrt((vdd-vxx)**2 + 4.0_dp*vdx**2)
+  end subroutine native_pair_doublet
+
+
+!> @brief Build the seam exchange tensor under the requested convention.
+!> @detail The value-based mask of @ref native_exchange_eri is not covariant
+!>         under a rotation of a degenerate active pair: it sends the doublet
+!>         component d to the Hartree side and x to the exchange side, so every
+!>         dressed element containing K_ab or J_ab moves by
+!>         (1/2) sin^2(2 theta) Lambda.  Both alternatives below remove that
+!>         freedom by treating the doublet isotropically; each reduces to the
+!>         value-based mask when the pair carries no anisotropy, and both are
+!>         inert at c_H = 1, where the seam is multiplied by (1 - c_H).
+!>           mode 0  SEAM_NATIVE  the published value-based mask
+!>           mode 1  SEAM_S3R     mean of the mask evaluated in the two
+!>                                symmetry frames of the doublet (the frame
+!>                                that diagonalizes V and its 45-degree
+!>                                partner); doublet channel weight 1/2
+!>           mode 2  SEAM_HAAR    mean of the mask over the full SO(2) orbit
+!>                                (Reynolds projection); the traceless part of
+!>                                the doublet-doublet channel carries 1/4
+  subroutine native_seam_mask(eri,mode,ia,ib,eri_k)
+    real(dp), intent(in) :: eri(NACT,NACT,NACT,NACT)
+    integer, intent(in) :: mode,ia,ib
+    real(dp), intent(out) :: eri_k(NACT,NACT,NACT,NACT)
+    integer, parameter :: NQUAD = 360
+    real(dp) :: grot(NACT,NACT,NACT,NACT), mrot(NACT,NACT,NACT,NACT)
+    real(dp) :: back(NACT,NACT,NACT,NACT), acc(NACT,NACT,NACT,NACT)
+    real(dp) :: th,thc,aniso,pi
+    integer :: k
+
+    pi = acos(-1.0_dp)
+    select case (mode)
+    case (SEAM_NATIVE)
+      call native_exchange_eri(eri,eri_k)
+    case (SEAM_S3R)
+      call native_pair_doublet(eri,ia,ib,thc,aniso)
+      acc = 0.0_dp
+      do k = 0, 1
+        th = thc + real(k,dp)*pi/4.0_dp
+        call native_rotate_pair(eri,ia,ib,th,grot)
+        call native_exchange_eri(grot,mrot)
+        call native_rotate_pair(mrot,ia,ib,-th,back)
+        acc = acc + back
+      end do
+      eri_k = 0.5_dp*acc
+    case (SEAM_HAAR)
+      acc = 0.0_dp
+      do k = 0, NQUAD-1
+        th = real(k,dp)*(0.5_dp*pi)/real(NQUAD,dp)
+        call native_rotate_pair(eri,ia,ib,th,grot)
+        call native_exchange_eri(grot,mrot)
+        call native_rotate_pair(mrot,ia,ib,-th,back)
+        acc = acc + back
+      end do
+      eri_k = acc/real(NQUAD,dp)
+    case default
+      call native_exchange_eri(eri,eri_k)
+    end select
+  end subroutine native_seam_mask
 
 
   subroutine native_gen_dets(dets)
@@ -578,9 +744,132 @@ contains
   end function native_open_label
 
 
-  subroutine native_write_dump(c_h,c_ref,aq,es,et,orth_err,cross_err)
+!> @brief Gauge-covariance gate for the seam conventions.
+!> @detail Rotates the degenerate active pair by a fixed test angle, rebuilds the
+!>         singlet spectrum from the rotated one- and two-electron integrals, and
+!>         returns the largest excitation-energy change per seam.  The active
+!>         orbitals are only re-expressed, so the physical spectrum cannot depend
+!>         on the angle: the covariant seams must return zero to machine
+!>         precision, while the value-based seam exposes the gauge freedom.  The
+!>         v_xc diagonal is left alone because at a degenerate pair its block is
+!>         proportional to the identity and therefore already rotation invariant.
+  subroutine native_seam_covariance(h_eff,eri,va,vb,c_h,dets,ucsf,esing_ref,dev)
+    use eigen, only: diag_symm_full
+    use physical_constants, only: UNITS_EV
+    use oqp_linalg
+    real(dp), intent(in) :: h_eff(NACT,NACT), eri(NACT,NACT,NACT,NACT)
+    real(dp), intent(in) :: va(NACT,NACT), vb(NACT,NACT), c_h
+    integer, intent(in) :: dets(4,NDET)
+    real(dp), intent(in) :: ucsf(NDET,NDET), esing_ref(NSING,0:NSEAM-1)
+    real(dp), intent(out) :: dev(0:NSEAM-1)
+
+    real(dp), parameter :: THETA_TEST = 0.6457718232379019_dp   ! 37 degrees
+    real(dp) :: hrot(NACT,NACT), grot(NACT,NACT,NACT,NACT)
+    real(dp) :: eri_k(NACT,NACT,NACT,NACT), hzero(NACT,NACT)
+    real(dp) :: h1(NSO,NSO), g(NSO,NSO,NSO,NSO)
+    real(dp) :: h1k(NSO,NSO), gk(NSO,NSO,NSO,NSO)
+    real(dp) :: hbare(NDET,NDET), hkdet(NDET,NDET), hdet(NDET,NDET)
+    real(dp) :: work36(NDET,NDET), hcsf(NDET,NDET)
+    real(dp) :: asing(NSING,NSING), esing(NSING)
+    real(dp) :: r(NACT,NACT), c, s
+    integer :: m, k, p, a, ierr
+
+    c = cos(THETA_TEST); s = sin(THETA_TEST)
+    r = 0.0_dp
+    do p = 1, NACT; r(p,p) = 1.0_dp; end do
+    r(PAIR_A,PAIR_A)= c; r(PAIR_A,PAIR_B)= s
+    r(PAIR_B,PAIR_A)=-s; r(PAIR_B,PAIR_B)= c
+    hrot = matmul(r,matmul(h_eff,transpose(r)))
+    call native_rotate_pair(eri,PAIR_A,PAIR_B,THETA_TEST,grot)
+
+    call native_build_spinorb(hrot,grot,1.0_dp,h1,g)
+    call native_build_h(dets,h1,g,hbare)
+    hzero = 0.0_dp
+    dev = 0.0_dp
+    do m = 0, NSEAM-1
+      call native_seam_mask(grot,m,PAIR_A,PAIR_B,eri_k)
+      call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
+      call native_build_h(dets,h1k,gk,hkdet)
+      hdet = hbare - (1.0_dp-c_h)*hkdet
+      call native_add_vxc_diag(dets,va,vb,hdet)
+      call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
+                 0.0_dp,work36,NDET)
+      call dgemm('N','N',NDET,NDET,NDET,1.0_dp,ucsf,NDET,work36,NDET, &
+                 0.0_dp,hcsf,NDET)
+      asing = hcsf(1:NSING,1:NSING)
+      call diag_symm_full(0,NSING,asing,NSING,esing,ierr)
+      if (ierr /= 0) then
+        dev(m) = -1.0_dp
+        cycle
+      end if
+      do k = 2, NSING
+        dev(m) = max(dev(m), abs((esing(k)-esing(1)) &
+                                -(esing_ref(k,m)-esing_ref(1,m)))/UNITS_EV)
+      end do
+    end do
+  end subroutine native_seam_covariance
+
+
+!> @brief Report the singlet spectrum under every seam convention.
+!> @detail The value-based seam leaves the orientation of a degenerate active
+!>         pair free, so its excitation energies are only defined up to that
+!>         freedom; the two covariant seams remove it.  Their spread is the
+!>         residual ambiguity of the convention itself.
+  subroutine native_print_seam_compare(act,thc,aniso,esing_all,equint_all,eref,dev)
+    use io_constants, only: iw
+    use physical_constants, only: UNITS_EV
+    integer, intent(in) :: act(NACT)
+    real(dp), intent(in) :: thc,aniso,eref
+    real(dp), intent(in) :: esing_all(NSING,0:NSEAM-1), equint_all(0:NSEAM-1)
+    real(dp), intent(in) :: dev(0:NSEAM-1)
+    integer :: k,m
+    real(dp) :: de(0:NSEAM-1), spread
+
+    write(iw,'(/,1x,78("^"))')
+    write(iw,'(/,8x,a,/)') 'Seam convention comparison'
+    write(iw,'(5x,a,i0,a,i0)') 'Degenerate-pair candidate (active orbitals) = ', &
+         act(PAIR_A),', ',act(PAIR_B)
+    write(iw,'(5x,a,f12.6)') 'Doublet anisotropy |Lambda| (Hartree)      = ',aniso
+    write(iw,'(5x,a,f12.6)') 'Symmetry-frame angle of the pair (degrees) = ', &
+         thc*180.0_dp/acos(-1.0_dp)
+    write(iw,'(/,5x,a)') 'The value-based seam sends the doublet component d to the Hartree'
+    write(iw,'(5x,a)')   'side and x to the exchange side, so its dressed elements move by'
+    write(iw,'(5x,a)')   '(1/2) sin^2(2 theta) Lambda when the pair is rotated.  S3R and Haar'
+    write(iw,'(5x,a)')   'weight the doublet isotropically and are therefore orientation'
+    write(iw,'(5x,a)')   'independent; they coincide with the value-based seam at Lambda = 0'
+    write(iw,'(5x,a)')   'and are inert at c_H = 1.'
+
+    write(iw,'(/,5x,a)') 'Gauge-covariance gate: largest change of any singlet'
+    write(iw,'(5x,a)')   'excitation energy when the pair is rotated by 37 degrees (eV)'
+    do m = 0, NSEAM-1
+      write(iw,'(7x,a8,es14.4)') SEAM_NAME(m), dev(m)
+    end do
+
+    write(iw,'(/,5x,a)') 'Ground-state total energy (Hartree)'
+    do m = 0, NSEAM-1
+      write(iw,'(7x,a8,f22.10)') SEAM_NAME(m), eref+esing_all(1,m)
+    end do
+
+    write(iw,'(/,5x,a)') 'Singlet excitation energies (eV)'
+    write(iw,'(7x,a,3(a10),a12)') 'State ', &
+         (SEAM_NAME(m), m=0,NSEAM-1), 'S3R-Haar'
+    do k = 2, min(NSING,7)
+      do m = 0, NSEAM-1
+        de(m) = (esing_all(k,m)-esing_all(1,m))/UNITS_EV
+      end do
+      spread = de(SEAM_S3R)-de(SEAM_HAAR)
+      write(iw,'(7x,a1,i0,3x,3f10.4,f12.4)') 'S',k-1,(de(m),m=0,NSEAM-1),spread
+    end do
+    write(iw,'(1x,78("=")/)')
+  end subroutine native_print_seam_compare
+
+
+  subroutine native_write_dump(c_h,c_ref,aq,es,et,orth_err,cross_err, &
+                               esing_all,etrip_all,equint_all,aniso)
     real(dp), intent(in) :: c_h,c_ref,aq,es(NSING),et(NTRIP),orth_err,cross_err
-    integer :: u
+    real(dp), intent(in) :: esing_all(NSING,0:NSEAM-1), etrip_all(NTRIP,0:NSEAM-1)
+    real(dp), intent(in) :: equint_all(0:NSEAM-1), aniso
+    integer :: u,m
     open(newunit=u,file='qmrsf_dk_full_live.dat',status='replace',action='write')
     write(u,'(a,4(1x,i0))') 'QMRSF_DK_NATIVE_V1',NACT,NSING,NTRIP,1
     write(u,'(2es24.16)') c_h,c_ref
@@ -589,6 +878,14 @@ contains
     write(u,'(*(es24.16,1x))') et
     write(u,'(es24.16)') aq
     write(u,'(2es24.16)') orth_err,cross_err
+    write(u,'(a,1x,i0)') 'QMRSF_DK_SEAMS_V1',NSEAM
+    write(u,'(es24.16)') aniso
+    do m = 0, NSEAM-1
+      write(u,'(a)') trim(SEAM_NAME(m))
+      write(u,'(es24.16)') equint_all(m)
+      write(u,'(*(es24.16,1x))') esing_all(:,m)
+      write(u,'(*(es24.16,1x))') etrip_all(:,m)
+    end do
     close(u)
   end subroutine native_write_dump
 
