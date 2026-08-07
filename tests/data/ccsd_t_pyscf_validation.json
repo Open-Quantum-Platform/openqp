@@ -1,0 +1,180 @@
+{
+  "_comment": [
+    "Closed-shell CCSD(T) reference energies for the native OpenQP path.",
+    "Produced with PySCF (RHF conv_tol=1e-12, CCSD conv_tol=1e-11) on the same",
+    "geometry and basis, then reproduced end-to-end through OpenQP's own Rys",
+    "integral engine, cc_ao2mo transformation and cc_lib solver.",
+    "",
+    "cartesian=true marks the Pople sets, where OpenQP uses 6d Cartesian shells;",
+    "PySCF needs gto.M(..., cart=True) to be compared against them.  Without it",
+    "the two codes are running different basis sets (28 vs 30 functions for",
+    "CO/6-31G*) and the correlation energies are not comparable.",
+    "",
+    "scf_reference is PySCF's RHF total energy.  The CC tolerances below only",
+    "mean anything when OpenQP reproduces that number: a correlation energy is",
+    "defined relative to its reference determinant."
+  ],
+  "tolerance": {
+    "scf": 1e-07,
+    "ccsd": 1e-07,
+    "triples": 1e-08
+  },
+  "cases": [
+    {
+      "name": "H2O/STO-3G",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.96
+        ],
+        [
+          1,
+          0.93,
+          0.0,
+          -0.24
+        ]
+      ],
+      "basis": "sto-3g",
+      "cartesian": true,
+      "nfzc": 0,
+      "nbf": 7,
+      "scf_reference": -74.9633586356,
+      "e_ccsd": -0.0497527187,
+      "e_triples": -6.78524e-05
+    },
+    {
+      "name": "H2O/6-31G",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.96
+        ],
+        [
+          1,
+          0.93,
+          0.0,
+          -0.24
+        ]
+      ],
+      "basis": "6-31g",
+      "cartesian": true,
+      "nfzc": 1,
+      "nbf": 13,
+      "scf_reference": -75.9839234862,
+      "e_ccsd": -0.1347050202,
+      "e_triples": -0.0009928024
+    },
+    {
+      "name": "CO/6-31G*",
+      "atoms": [
+        [
+          6,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          8,
+          0.0,
+          0.0,
+          1.13
+        ]
+      ],
+      "basis": "6-31g*",
+      "cartesian": true,
+      "nfzc": 2,
+      "nbf": 30,
+      "scf_reference": -112.7371772158,
+      "e_ccsd": -0.2896318382,
+      "e_triples": -0.0106487491
+    },
+    {
+      "name": "H2O/cc-pVDZ",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.96
+        ],
+        [
+          1,
+          0.93,
+          0.0,
+          -0.24
+        ]
+      ],
+      "basis": "cc-pvdz",
+      "cartesian": false,
+      "nfzc": 1,
+      "nbf": 24,
+      "scf_reference": -76.0266405516,
+      "e_ccsd": -0.2114096255,
+      "e_triples": -0.0030479857
+    },
+    {
+      "name": "HF/cc-pVDZ",
+      "atoms": [
+        [
+          9,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.92
+        ]
+      ],
+      "basis": "cc-pvdz",
+      "cartesian": false,
+      "nfzc": 0,
+      "nbf": 19,
+      "scf_reference": -100.0192889143,
+      "e_ccsd": -0.208867101,
+      "e_triples": -0.0019426215
+    },
+    {
+      "name": "Ne/cc-pVDZ",
+      "atoms": [
+        [
+          10,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "basis": "cc-pvdz",
+      "cartesian": false,
+      "nfzc": 1,
+      "nbf": 14,
+      "scf_reference": -128.4887755517,
+      "e_ccsd": -0.1890167049,
+      "e_triples": -0.0010440031
+    }
+  ]
+}

@@ -169,6 +169,15 @@ struct control_parameters {
     int64_t   mrsf_fp32;
     int64_t   mrsf_zv_warmstart;
     bool      qmmm_flag;
+    /* Coupled cluster -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   cc_maxit;
+    double    cc_conv;
+    int64_t   cc_ndiis;
+    int64_t   cc_nfzc;
+    int64_t   cc_triples;
+    int64_t   cc_cholesky;
+    double    cc_cholesky_tol;
+    int64_t   cc_cholesky_direct;
 };
 
 struct mpi_communicator {
@@ -195,6 +204,11 @@ struct electron_shell {
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
 int oqp_have_openmp(void);
+
+/* 1 when the memory budget is a flat OQP_MEMORY_LIMIT_GB that still has to
+   cover memory already allocated; 0 when it is the live probe, which reports
+   what remains and has therefore already subtracted it. */
+int oqp_memory_budget_includes_resident(void);
 void oqp_omp_set_num_threads(int n);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
         int32_t *type_id, int32_t *ndims, int64_t *dims, void **v);
@@ -574,6 +588,7 @@ int64_t casscf_energy(struct oqp_handle_t *inf, const int32_t *iopt,
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
+void cholesky_eri_selftest(struct oqp_handle_t *inf);
 void hess_skel_selftest(struct oqp_handle_t *inf);
 void hess_skel_open_selftest(struct oqp_handle_t *inf);
 void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);
@@ -606,6 +621,7 @@ void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
+void ccsd_t_energy(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);

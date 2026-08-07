@@ -27,6 +27,15 @@ SCHEMA = {
         "omp_threads": {"type": int, "default": "0"},
         "qmmm_flag": {"type": bool, "default": "False"},
     },
+    "cc": {
+        "maxit": {"type": int, "default": "50"},
+        "conv": {"type": float, "default": "1e-7"},
+        "ndiis": {"type": int, "default": "8"},
+        "nfzc": {"type": int, "default": "0"},
+        "cholesky": {"type": str, "default": "auto"},
+        "cholesky_tol": {"type": float, "default": "1e-10"},
+        "cholesky_direct": {"type": str, "default": "auto"},
+    },
     "qmmm": {
         "forcefield_files": {"type": str, "default": ""},
         "pdb_file": {"type": str, "default": ""},
@@ -404,6 +413,73 @@ $$$$
         self.assertEqual(config["input"]["method"], "hf")
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["scf"]["type"], "rhf")
+
+    def test_ccsd_helper_sets_method_and_cc_section(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd(reference="rhf", nfzc=1, conv=1.0e-8)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "ccsd")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["cc"]["nfzc"], "1")
+
+    def test_ccsd_helper_routes_the_factorisation_controls_to_cc(self):
+        """The Cholesky controls belong to [cc].  Absent from the helper's own
+        signature they land in **scf_keywords and are applied to [scf], so the
+        call fails on an unknown scf keyword instead of configuring the route
+        it names."""
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd_t_chol")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd_t(reference="rhf", cholesky=False, cholesky_tol=1.0e-8,
+                    cholesky_direct=True)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["cc"]["cholesky"], "False")
+        self.assertEqual(config["cc"]["cholesky_direct"], "True")
+        self.assertNotIn("cholesky", config.get("scf", {}))
+
+    def test_ccsd_t_helper_selects_the_triples_method(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd_t")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd_t(reference="rhf")
+        )
+
+        self.assertEqual(job.to_input_dict()["input"]["method"], "ccsd(t)")
+
+    def test_ccsd_helper_accepts_an_open_shell_reference(self):
+        """UHF and ROHF are supported; they route to the spin-orbital solver."""
+        openqp = load_openqp_module()
+
+        for reference in ("uhf", "rohf"):
+            job = (
+                openqp.OpenQP(project=f"ch2_{reference}")
+                .molecule("C 0 0 0; H 0 0.99 0.33; H 0 -0.99 0.33",
+                          basis="sto-3g", multiplicity=3)
+                .ccsd_t(reference=reference)
+            )
+            config = job.to_input_dict()
+            self.assertEqual(config["input"]["method"], "ccsd(t)")
+            self.assertEqual(config["scf"]["type"], reference)
+
+    def test_ccsd_helper_rejects_a_dft_functional(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
+        with self.assertRaises(ValueError):
+            job.ccsd(functional="pbe")
 
     def test_dft_helper_sets_functional_separately_from_hf(self):
         openqp = load_openqp_module()
@@ -1347,8 +1423,30 @@ $$$$
         job._require_mrsf_theory_for("SOC")
         job._require_mrsf_theory_for("NAMD")
 
-if __name__ == "__main__":
-    unittest.main()
+
+    def test_generic_theory_dispatcher_accepts_the_cc_methods(self):
+        """job.theory("ccsd") must work, not just the named job.theory.ccsd()."""
+        openqp = load_openqp_module()
+
+        for spelling, expected in (("ccsd", "ccsd"),
+                                   ("ccsd(t)", "ccsd(t)"),
+                                   ("ccsd-t", "ccsd(t)"),
+                                   ("ccsdt", "ccsd(t)")):
+            job = (
+                openqp.OpenQP(project="generic")
+                .molecule(geometry="water", basis="sto-3g")
+                .theory(spelling)
+            )
+            self.assertEqual(job.to_input_dict()["input"]["method"], expected,
+                             spelling)
+
+    def test_generic_theory_dispatcher_rejects_a_functional_for_cc(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
+        with self.assertRaises(ValueError):
+            job.theory("ccsd(t)", functional="pbe")
+
 
 
 class TestOpenQPWavefunctionAPI(unittest.TestCase):
@@ -1498,3 +1596,7 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         job = self._job(openqp, "h4_bad")
         with self.assertRaises(ValueError):
             job.qdpt2(active_electrons=4, active_orbitals=4, variant="nope")
+
+
+if __name__ == "__main__":
+    unittest.main()

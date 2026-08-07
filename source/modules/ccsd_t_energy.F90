@@ -1,0 +1,946 @@
+!> @file ccsd_t_energy.F90
+!>
+!> @brief Driver for the closed-shell CCSD(T) ground-state energy method.
+!>
+!> CCSD(T) is a post-SCF ground-state correlation method: PyOQP converges the
+!> RHF reference first, and this driver adds the coupled-cluster singles and
+!> doubles correlation energy plus the perturbative triples correction on top.
+!> Dispatched from Python as `[input] method = ccsd(t)`, or as `method = ccsd`
+!> to stop after the doubles.
+!>
+!> The AO integrals come from the shared `int2_compute` engine through a
+!> collecting consumer (`cc_ao2mo`), are transformed to the MO basis, and are
+!> then consumed by the parallel coupled-cluster kernels in `cc_lib`.
+module ccsd_t_energy_mod
+
+  implicit none
+
+  private
+  public :: ccsd_t_energy
+
+  character(len=*), parameter :: module_name = "ccsd_t_energy_mod"
+
+contains
+
+  !> C-bound entry point: `[input] method = ccsd(t)` dispatches here.
+  subroutine ccsd_t_energy_C(c_handle) bind(C, name="ccsd_t_energy")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call ccsd_t_energy(inf)
+  end subroutine ccsd_t_energy_C
+
+  !> Closed-shell CCSD(T) correlation on the converged RHF reference.
+  subroutine ccsd_t_energy(infos)
+
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
+    use basis_tools, only: basis_set
+    use printing, only: print_module_info
+    use messages, only: show_message, with_abort
+    use int2_compute, only: int2_compute_t
+    use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length, &
+                        cc_build_full_mo
+    use cc_uhf_lib, only: cc_uhf_spinorb_build, cc_uhf_spinorb_gb, cc_uhf_peak_gb, &
+                        cc_uhf_ccsd_t
+    use mp2_lib, only: semicanonicalize
+    use cc_lib, only: cc_ccsd_t_energy, cc_options_t
+    use cholesky_direct, only: cholesky_direct_decompose
+    use cholesky_eri, only: cholesky_eri_decompose, cholesky_eri_max_vectors, &
+                            cholesky_transform_vv, cholesky_transform_block, &
+                            cholesky_assemble_mo_blocks
+    use parallel, only: par_env_t
+    use memory_info, only: oqp_memory_check, oqp_available_memory_gb, &
+                           oqp_mem_str, OQP_MEMORY_SAFETY_FRACTION, &
+                           oqp_budget_includes_resident
+!$  use omp_lib, only: omp_get_max_threads
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+
+    type(basis_set), pointer :: basis
+    type(int2_compute_t) :: int2_driver
+    type(cc_eri_collect_t), target :: eri_data
+    type(cc_options_t) :: opts
+    type(par_env_t) :: pe
+
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_energy_a(:)
+    real(kind=dp), allocatable, target :: gao(:)
+    real(kind=dp), allocatable :: cmo(:,:), eo(:), ev(:)
+    real(kind=dp), allocatable :: oooo(:,:,:,:), ooov(:,:,:,:), oovv(:,:,:,:)
+    real(kind=dp), allocatable :: ovov(:,:,:,:), ovvv(:,:,:,:), vvvv(:,:,:,:)
+
+    integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
+    real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
+    real(kind=dp) :: mem_ao, mem_mo, mem_mo_solver, mem_solver, rno, rnv
+    real(kind=dp) :: chol_cap, mem_triples, solver_base, headroom, nlad
+    real(kind=dp), allocatable :: lvec(:,:), bvv(:,:), boo(:,:), bov(:,:)
+    integer :: nchol, maxchol
+    real(kind=dp) :: chol_tol, chol_err
+    logical :: use_chol, chol_trunc, use_direct
+    integer :: chol_npass
+    real(kind=dp) :: packed_gb, avail_gb, vvvv_gb
+    integer :: nthr_est
+    real(kind=dp) :: lad_blk
+    integer :: nthr, niter, nrank_local
+    logical :: open_shell
+    logical :: converged, do_t
+
+    open(unit=iw, file=infos%log_filename, position="append")
+    call print_module_info('CCSD_T_Energy', 'Computing CCSD(T) ground-state correlation')
+
+    ! ---- reference checks -------------------------------------------------
+    open_shell = infos%control%scftype /= 1
+    if (infos%control%hamilton /= 10) then
+      call show_message('CCSD(T) requires an HF reference; remove the DFT &
+                        &functional from [input]', with_abort)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+
+    nbf  = basis%nbf
+    nocc = int(infos%mol_prop%nelec_a)
+    nfzc = int(infos%control%cc_nfzc)
+
+    if (nfzc < 0 .or. nfzc >= nocc) then
+      call show_message('CCSD(T): invalid frozen-core count', with_abort)
+    end if
+
+    no  = nocc - nfzc
+    nmo = nbf - nfzc
+    nv  = nmo - no
+
+    if (no <= 0 .or. nv <= 0) then
+      call show_message('CCSD(T): no correlated occupied or virtual orbitals', with_abort)
+    end if
+
+    ! The parallel environment is needed by the memory guard below, which has
+    ! to know how many ranks share this node before it can compare a per-rank
+    ! estimate against a node-wide limit.
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    ! ---- factorisation route -----------------------------------------------
+    ! Decided BEFORE the memory guard, because it changes what the guard is
+    ! measuring.  With Cholesky every MO block comes from the vectors, so the
+    ! packed store exists only to produce them.  The direct factorisation
+    ! produces the same vectors without it, but sweeps the shell-pair list once
+    ! per pivot block and is measurably slower wherever both fit -- so it is
+    ! chosen on memory, never on speed.
+    !
+    ! Deciding this after the guard made auto-direct unreachable: the guard
+    ! charged for a packed store the direct path never allocates, so exactly
+    ! the jobs the direct route exists to rescue were refused before reaching
+    ! it.
+    ! auto (the default) takes the vectors only when the explicit v^4 ladder
+    ! array will not fit.  Factorising is not free: the ladder integrals are
+    ! rebuilt from the vectors block by block, which costs nchol/no^2 times the
+    ! ladder contraction it feeds.  nchol tracks nbf while no^2 does not, so for
+    ! the small occupied spaces where v^4 fits comfortably the vectors are much
+    ! the slower route -- measured 52.1 s against 9.3 s for the CCSD iterations
+    ! of H2O/cc-pVQZ (nchol = 1680, no = 4), for the same energy to 1e-10.
+    ! Memory is the only reason to pay for it, exactly as for cholesky_direct.
+    ! Every closed-shell store this routine sizes below is replicated per rank
+    ! while the probe reports the node, so both route decisions and the guard
+    ! must charge the node for all the ranks sitting on it.  Deciding per rank
+    ! and guarding per node made the two disagree: a job whose explicit route
+    ! fit one rank but not four kept use_chol false and then aborted at the
+    ! guard, instead of factorising and running.
+    nrank_local = pe%local_size()
+
+    select case (int(infos%control%cc_cholesky))
+    case (0)
+      use_chol = .false.
+    case (1)
+      use_chol = .true.
+    case default
+      ! Only the closed-shell path has the choice; the open-shell solver reads
+      ! the spin-orbital tensor and never touches these blocks, so it keeps the
+      ! vectors it would have had before this was a choice at all.
+      use_chol = open_shell
+      vvvv_gb = 0.0_dp
+      if (.not. open_shell) then
+        ! Start from the explicit route and factorise only on evidence.  The
+        ! probe returns negative when it could not determine anything, and the
+        ! documented contract for that is to let the job proceed rather than
+        ! act on a number nobody has -- the same way cholesky_direct's auto
+        ! leaves use_direct false below.  Defaulting the other way would put
+        ! every job on an unprobeable platform on the slow path silently.
+        avail_gb = oqp_available_memory_gb()
+        if (avail_gb > 0.0_dp) then
+          ! Charge the explicit route for its whole peak, not just v^4.  The
+          ! solver intermediates go as o^2v^2 and ov^3, which reach v^4 itself
+          ! once o/v is around a sixth -- benzene/cc-pVDZ is already there --
+          ! so sizing on v^4 alone would pick the explicit route for a job that
+          ! then fails the memory guard a few lines below instead of quietly
+          ! factorising.  Same two peaks the guard compares, with rnv**4 for
+          ! the ladder; kept in step with it.
+          rno = real(no,dp)
+          rnv = real(nv,dp)
+          mem_ao = real(cc_packed_length(nbf),dp) &
+                   + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+          mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3 &
+                   + rnv**4
+          ! The per-thread ladder buffers too: the guard charges them below,
+          ! and any term the decision leaves out but the guard counts is a
+          ! band where auto keeps the explicit route and then aborts at the
+          ! guard it was sized against.  One buffer per thread here -- the
+          ! explicit route is what is being sized; only the Cholesky ladder
+          ! carries three.
+          nthr_est = 1
+          !$ nthr_est = omp_get_max_threads()
+          lad_blk = 8.0e6_dp
+          lad_blk = min(lad_blk, max(rnv**3, &
+              OQP_MEMORY_SAFETY_FRACTION*avail_gb &
+              *1.073741824e9_dp/8.0_dp/3.0_dp/real(nthr_est,dp)))
+          mem_solver = mem_mo + 14.0_dp*rno**2*rnv**2 &
+                     + 4.0_dp*rno*rnv**3 &
+                     + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
+                       * (rno*rnv + rno**2*rnv**2) &
+                     + real(nthr_est,dp)*lad_blk
+          vvvv_gb = max(mem_ao + mem_mo, mem_solver)*8.0_dp/1.073741824e9_dp
+          use_chol = vvvv_gb*real(nrank_local,dp) > &
+              OQP_MEMORY_SAFETY_FRACTION*avail_gb
+        end if
+        ! Only reachable with vvvv_gb set: use_chol starts false here and the
+        ! branch above is the only thing that raises it.
+        if (use_chol) then
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): the explicit ladder route ('// &
+              trim(oqp_mem_str(vvvv_gb))//' x ', nrank_local, &
+              ' local ranks) would not fit; factorising.'
+        end if
+      end if
+    end select
+
+    ! The factorisation exists on the closed-shell path only: the spin-orbital
+    ! solver builds its tensor from the packed AO store and never reads the
+    ! vectors.  An explicit request for it on an open-shell reference cannot be
+    ! honoured, and honouring it silently with a conventional high-memory run
+    ! is the worst answer for exactly the user who set it -- someone trying to
+    ! fit a job.  Refuse and say why.  cholesky=true merely gets a note: it is
+    ! a preference the path has no use for, not an order it must obey.
+    if (open_shell) then
+      if (int(infos%control%cc_cholesky_direct) == 1) then
+        call show_message('CCSD(T): [cc] cholesky_direct is not available for ' // &
+            'open-shell references -- the spin-orbital solver never uses the ' // &
+            'Cholesky vectors, so the run would take the conventional ' // &
+            'high-memory route the setting exists to avoid. Remove it.', &
+            with_abort)
+      end if
+      if (int(infos%control%cc_cholesky) == 1) then
+        write(iw,'(2X,A)') 'CCSD(T): NOTE: [cc] cholesky is ignored for ' // &
+            'open-shell references; the spin-orbital solver has no ' // &
+            'factorised route.'
+      end if
+    end if
+
+    ! cholesky_direct=true is an order, not a preference: it exists so a job
+    ! can be run without the packed AO store at all.  With cholesky left at
+    ! auto, a case whose explicit route fit would decline the vectors and the
+    ! direct request below -- gated on use_chol -- was silently ignored, which
+    ! is the one thing an explicit setting must never be.  Promote it to the
+    ! factorised route.  Against an explicit cholesky=false the two settings
+    ! contradict each other outright, and a contradiction acted on either way
+    ! surprises whoever meant the other half; refuse and say so.
+    if (.not. open_shell .and. int(infos%control%cc_cholesky_direct) == 1) then
+      if (.not. use_chol) then
+        if (int(infos%control%cc_cholesky) == 0) then
+          ! No close(iw) here: show_message writes through this very unit, so
+          ! closing it first sends the explanation nowhere and leaves only the
+          ! bare ERROR STOP.
+          call show_message('CCSD(T): [cc] cholesky_direct=true contradicts ' // &
+              'cholesky=false -- the direct factorisation produces the ' // &
+              'Cholesky vectors that cholesky=false refuses. Drop one of them.', &
+              with_abort)
+        end if
+        use_chol = .true.
+        write(iw,'(2X,A)') 'CCSD(T): cholesky_direct=true; factorising even ' // &
+            'though the explicit ladder route would fit.'
+      end if
+    end if
+    chol_tol = infos%control%cc_cholesky_tol
+    if (use_chol) then
+      ! A non-positive tolerance never satisfies the `vmax < tol` stop, so the
+      ! decomposition would run to the vector cap dividing by sqrt(vmax) as the
+      ! diagonal reaches zero -- NaNs and an expensive way to get nothing.  An
+      ! infinite one is worse because it is quiet: it stops at nchol = 0 and
+      ! every assembled MO block is zero.  `> 0` also rejects NaN.
+      if (.not. (chol_tol > 0.0_dp) .or. .not. (chol_tol < huge(chol_tol))) then
+        call show_message('CCSD(T): [cc] cholesky_tol must be a positive number', &
+                          with_abort)
+      end if
+    end if
+    packed_gb = real(cc_packed_length(nbf), dp)*8.0_dp/1.073741824e9_dp
+    use_direct = .false.
+    if (use_chol .and. .not. open_shell) then
+      select case (int(infos%control%cc_cholesky_direct))
+      case (1); use_direct = .true.
+      case (2); use_direct = .false.
+      case default
+        ! Per node, like the guard: the packed store is allocated by every
+        ! local rank, so one rank's copy against the whole node's budget was
+        ! the wrong comparison for the same reason as above.
+        if (oqp_available_memory_gb() > 0.0_dp) then
+          use_direct = packed_gb*real(nrank_local,dp) > &
+              OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
+        end if
+      end select
+      ! Say which of the two reasons actually applied.  The memory sentence was
+      ! printed for the forced route as well, so a user who set
+      ! cholesky_direct=true on a machine where the store fits comfortably was
+      ! told it "would not fit" -- a false reason in the log is worse than no
+      ! reason, because it is the first thing consulted when sizing the next job.
+      if (use_direct) then
+        if (int(infos%control%cc_cholesky_direct) == 1) then
+          write(iw,'(2X,A)') 'CCSD(T): [cc] cholesky_direct=true; building the ' // &
+              'Cholesky vectors directly from the integrals, without the ' // &
+              'packed AO store.'
+        else
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): the packed AO store ('// &
+              trim(oqp_mem_str(packed_gb))//' x ', nrank_local, &
+              ' local ranks) would not fit; factorising directly.'
+        end if
+      end if
+    end if
+
+    ! Resolved here rather than with the other solver options below, because
+    ! the guard has to know whether the triples stage will run at all before it
+    ! can size that stage's peak.
+    do_t = infos%control%cc_triples /= 0
+
+    ! ---- memory guard ------------------------------------------------------
+    ! Common to both paths: the packed AO integrals (nbf^4/8) and the
+    ! half-transformed intermediate that lives alongside them (nbf^4/4 at
+    ! nmo ~ nbf).  The open-shell path has its own, larger accounting below,
+    ! so it is charged only for what it actually builds here.  The direct
+    ! route allocates neither, so it is charged for neither.
+    if (use_direct) then
+      mem_ao = 0.0_dp
+    else
+      mem_ao = real(cc_packed_length(nbf),dp)
+      ! The half-transformed intermediate charged here belongs to
+      ! cc_build_mo_blocks alone.  The stored-Cholesky route factorises the
+      ! packed array in place and assembles its MO blocks from the vectors, so
+      ! it never allocates one, and charging it refused jobs that fit.
+      !
+      ! Open shell is excluded here for a different reason, not because it has
+      ! no such workspace: cc_build_full_mo allocates half(nmopair, npair),
+      ! which is fourth order rather than the O(nbf^2) an earlier version of
+      ! this comment claimed.  It is charged in cc_uhf_peak_gb instead, where
+      ! the rest of that path's accounting lives.
+      if (.not. use_chol .and. .not. open_shell) then
+        mem_ao = mem_ao + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+      end if
+    end if
+
+    if (open_shell) then
+      mem_gb = mem_ao * 8.0_dp / 1.073741824e9_dp
+    else
+      ! Closed shell has two competing peaks and the larger one decides.
+      !
+      ! Transformation: the packed AO store and the half-transformed
+      ! intermediate are both live while all six MO blocks are being filled --
+      ! not just the ladder integrals.  When no and nv are comparable, oovv,
+      ! ovov and ovvv together rival vvvv, so counting nv^4 alone understates
+      ! the stage badly enough to admit a job that dies in the allocator.
+      !
+      ! Solution: the AO store is gone by then, but the six blocks stay and
+      ! ccsd_iterate adds roughly a dozen o^2v^2-shaped intermediates, four
+      ! o v^3 / v^3 o ones, plus a DIIS history of 2*ndiis amplitude pairs.
+      rno = real(no,dp)
+      rnv = real(nv,dp)
+      ! The six MO integral blocks persist into the solver, so they seed both
+      ! windows; what differs is the factorisation storage added below.
+      mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3
+      mem_mo_solver = mem_mo
+      if (use_chol) then
+        ! The ladder integrals are replaced by the vectors and a per-block
+        ! assembly buffer.  nchol is not known until the factorisation runs, so
+        ! estimate it from the vectors-per-basis-function ratio observed at
+        ! this tolerance; the log prints the actual count afterwards.
+        !
+        ! Charge the CAPACITY, not the expected rank.  lvec is allocated at the
+        ! capacity the factorisation may need rather than the rank it turns out
+        ! to have, and boo/bov/bvv are then allocated at the rank it reached --
+        ! which a tight cholesky_tol can drive all the way to that same cap.
+        ! Sizing them on the observed ~15/nbf ratio waves through a job that
+        ! then dies in the allocation at the bottom of this routine.
+        !
+        ! Two windows, not one, and they hold different things.
+        !
+        ! Transformation: lvec is allocated before the MO blocks and released
+        ! only after they have been built FROM it, so lvec, boo, bov and bvv are
+        ! all live at once, with the packed AO store still held alongside them.
+        ! bvv was charged here before but boo and bov were not -- the larger
+        ! omission on an occupied-heavy case, since boo goes as no^2 and bov as
+        ! no*nv per vector.
+        !
+        ! Solver: by then lvec and boo/bov have been deallocated and only bvv is
+        ! carried in.  Charging the solver for all four overstates its peak and
+        ! refuses jobs that fit, which is the mirror of the bug above and just
+        ! as wrong.
+        chol_cap = real(cholesky_eri_max_vectors(nbf,20),dp)
+        mem_mo = mem_mo &
+               + (real(nbf*(nbf+1)/2,dp) + rno**2 + rno*rnv + rnv**2)*chol_cap
+        mem_mo_solver = mem_mo_solver + rnv**2*chol_cap
+      else
+        mem_mo = mem_mo + rnv**4
+        mem_mo_solver = mem_mo_solver + rnv**4
+      end if
+      ! The ladder gives every thread a dressed-integral block, so this part of
+      ! the cost scales with the thread count and not with the problem alone.
+      ! Left out, the estimate understated a wide run badly.  The block is
+      ! capped against available memory in ladder_contraction, so charge that
+      ! same capped size here rather than the tuned one.
+      nthr_est = 1
+      !$ nthr_est = omp_get_max_threads()
+      ! On the Cholesky route each thread's block is three buffers, not one --
+      ! Wblk, Vblk and the Bsub gather -- which is why ladder_contraction
+      ! divides its runtime budget before sizing them.
+      nlad = merge(3.0_dp, 1.0_dp, use_chol)
+
+      ! Everything the solver holds apart from those private blocks.  It has to
+      ! be known BEFORE the blocks are capped, because they get what is left,
+      ! not a share of the whole budget: capping at budget/(nlad*nthr) and then
+      ! charging nlad*nthr of them spends the entire allowance on the ladder
+      ! alone, so adding any persistent storage guaranteed a refusal.  That is
+      ! self-defeating for a guard, and it is what the earlier three-buffer
+      ! correction turned from a third of the budget into all of it.
+      solver_base = mem_mo_solver &
+                  + rno**4 + 2.0_dp*rno**3*rnv &
+                  + 14.0_dp*rno**2*rnv**2 &
+                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
+                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
+                    * (rno*rnv + rno**2*rnv**2)
+
+      ! Bounded by the problem before it is bounded by the machine.  At runtime
+      ! bsize = max(1, min(nv, target/nv^3)) and Wblk is (nv,bsize,nv,nv), so a
+      ! block is bsize*nv^3 with bsize capped at nv -- it cannot exceed nv^4 no
+      ! matter how much memory is free, and cannot fall below nv^3.  Sizing it
+      ! from available memory alone let the estimate grow to whatever the budget
+      ! happened to be, which reported a 460 MB peak for a job that needs about
+      ! a megabyte and made float noise at the boundary decide pass or fail.
+      lad_blk = min(8.0e6_dp, rnv**4)
+      if (oqp_available_memory_gb() > 0.0_dp) then
+        ! ladder_contraction probes again once the persistent storage is real
+        ! and picks smaller blocks if that is what fits; mirror it rather than
+        ! assume the tuned size.  The nv^3 floor stands: if even one minimum
+        ! block per thread does not fit, refusing is the correct answer.
+        headroom = OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb() &
+                 *1.073741824e9_dp/8.0_dp - solver_base
+        headroom = max(headroom, 0.0_dp)
+        lad_blk = min(lad_blk, max(rnv**3, headroom/(nlad*real(nthr_est,dp))))
+      end if
+      ! On the Cholesky route each thread's block is not one buffer but three:
+      ! the dressed integrals Wblk, the assembled Vblk of the same shape, and
+      ! solver_base already carries the occupied-heavy shapes -- Woooo at no^4
+      ! and both Looov and tmp2b at no^3*nv, which ccsd_iterate allocates
+      ! concurrently with the blocks it was handed, and which a flat o^2v^2
+      ! allowance cannot stand in for once no >> nv.
+      mem_solver = solver_base + nlad*real(nthr_est,dp)*lad_blk
+      ! A third window, not a tail of the solver.  ccsd_iterate frees its whole
+      ! working set before returning, and triples_correction is called after
+      ! that, so the triples stage holds the persisting MO blocks and the
+      ! amplitudes rather than the iteration intermediates -- but it gives every
+      ! OpenMP thread w(no,no,no,6), v(no,no,no,6), z(no,no,no) and d3(no,no,no)
+      ! of its own, 14*no^3 per thread.  Only the ladder block was being scaled
+      ! by the thread count, so an occupied-heavy ccsd(t) on many threads passed
+      ! the guard and then exhausted memory the moment the triples region
+      ! opened.  Costs nothing for method=ccsd, which never enters it.
+      mem_triples = 0.0_dp
+      if (do_t) mem_triples = mem_mo_solver + rno*rnv + rno**2*rnv**2 &
+                            + real(nthr_est,dp)*14.0_dp*rno**3
+      mem_gb = max(max(mem_ao + mem_mo, mem_solver), mem_triples) &
+             * 8.0_dp / 1.073741824e9_dp
+    end if
+    write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
+        ', correlated occ = ', no, ', virt = ', nv
+    if (nfzc > 0) write(iw,'(2X,A,I0)') 'CCSD(T): frozen core orbitals = ', nfzc
+    ! Refuse against what this machine can actually give, not a constant.
+    ! A fixed cap is wrong twice over: it lets a laptop start a job that dies
+    ! in the allocator, and it refuses a 500 GB node that had the memory.
+    !
+    ! mem_gb is what ONE rank allocates, and the closed-shell path replicates
+    ! the AO/MO stores and the solver intermediates on every rank -- only parts
+    ! of the ladder and the triples are partitioned.  Available memory, on the
+    ! other hand, is reported per node.  Comparing the two directly lets every
+    ! rank on a node pass its own check while their sum is what actually gets
+    ! OOM-killed, so charge the node for all the ranks sitting on it.
+    ! The open-shell path is charged here too, for a smaller thing: its solver
+    ! runs on rank 0 alone and is guarded separately below, but the AO store it
+    ! is fed from is allocated by EVERY rank, because the integral work is
+    ! distributed by shell pair and each rank accumulates its share into a
+    ! full-length buffer before the reduction.  mem_gb is exactly that store on
+    ! this path, and skipping the check let n ranks on a node each take an
+    ! nbf^4/8 array with nothing measuring the sum.
+    !
+    ! nrank_local was resolved above, where the route decisions already
+    ! charged it; the guard and the decisions must count the same ranks or
+    ! they disagree about which jobs fit.
+    if (nrank_local > 1) then
+      write(iw,'(2X,A,I0,A,A,A)') 'CCSD(T): ', nrank_local, &
+          ' MPI ranks share this node; each needs ', &
+          trim(oqp_mem_str(mem_gb)), ' and the estimate is charged for all.'
+    end if
+    call oqp_memory_check(mem_gb*real(nrank_local, dp), 'CCSD(T)', &
+        'use a smaller basis, freeze more core orbitals, or place fewer ' // &
+        'ranks per node', iw)
+
+    ! ---- reference orbitals ------------------------------------------------
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
+
+    allocate(cmo(nbf,nmo), eo(no), ev(nv), stat=ok)
+    if (ok /= 0) call show_message('CCSD(T): cannot allocate MO arrays', with_abort)
+
+    ! Drop the frozen core columns; keep the rest in energy order.
+    do p = 1, nmo
+      cmo(:,p) = mo_a(:, nfzc+p)
+    end do
+    do i = 1, no
+      eo(i) = mo_energy_a(nfzc+i)
+    end do
+    do i = 1, nv
+      ev(i) = mo_energy_a(nocc+i)
+    end do
+
+    ! ---- AO integrals ------------------------------------------------------
+    ! Skipped entirely on the direct route, which is why the guard above did
+    ! not charge for it.
+    if (.not. use_direct) then
+    allocate(gao(cc_packed_length(nbf)), stat=ok)
+    if (ok /= 0) call show_message('CCSD(T): cannot allocate the AO integral &
+                                   &store -- system too large for in-core CC', with_abort)
+    gao = 0.0_dp
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+
+    eri_data%g => gao
+    eri_data%nbf = nbf
+    eri_data%npair = nbf*(nbf+1)/2
+    call int2_driver%run(eri_data)
+    call eri_data%clean()
+    call int2_driver%clean()
+    end if
+
+    ! ---- coupled cluster ---------------------------------------------------
+    ! do_t was resolved before the memory guard, which needs it.
+    opts%maxit      = int(infos%control%cc_maxit)
+    opts%conv       = infos%control%cc_conv
+    opts%ndiis      = int(infos%control%cc_ndiis)
+    opts%do_triples = do_t
+    opts%verbose    = 1
+    opts%iw         = iw
+
+    e_ref = infos%mol_energy%energy
+
+    ! Report the decomposition actually in force.  A silent fallback to one
+    ! rank looks exactly like a slow run, so make the parallel width visible.
+    ! Only the closed-shell solver is distributed; the spin-orbital one is
+    ! threaded but not, so claiming its rank count would be claiming a
+    ! speed-up that is not there -- every rank would repeat the same work.
+    nthr = 1
+    !$ nthr = omp_get_max_threads()
+
+    if (open_shell) then
+      write(iw,'(2X,A,I0)') 'CCSD(T): OpenMP threads = ', nthr
+      if (pe%size > 1) then
+        write(iw,'(2X,A,I0,A)') 'CCSD(T): the open-shell solver is not MPI-parallel; ' // &
+            'solving on rank 0 of ', int(pe%size), ' and broadcasting the result.'
+        write(iw,'(2X,A)') 'CCSD(T): give it threads rather than ranks.'
+      end if
+      ! Every rank running the same solve would multiply both the peak memory
+      ! and the CPU time by the rank count for no gain -- the spin-orbital
+      ! kernels take no decomposition.  Solve once and hand the answers out.
+      if (pe%rank == 0) then
+        call run_open_shell()
+      else
+        ! Release the AO store here rather than at the end of the routine.
+        ! Every rank has to allocate it -- the integral work is distributed by
+        ! shell pair and each rank accumulates its own share into a full-length
+        ! buffer before the reduction -- but only rank 0 transforms it, and
+        ! that solve is the longest phase of the run.  Held to the end, an
+        ! n-rank node carries n copies of an nbf^4/8 array throughout it for
+        ! nothing.
+        if (allocated(gao)) deallocate(gao)
+        e_ccsd = 0.0_dp; e_t = 0.0_dp; t_ccsd = 0.0_dp; t_trip = 0.0_dp
+        niter = 0
+        converged = .false.
+      end if
+      if (pe%size > 1) call bcast_open_shell_results()
+    else
+      write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
+                                 ', OpenMP threads = ', nthr
+
+      ! The ladder integrals (nv^4) are the largest array in the run and the
+      ! only consumer of the vvvv block.  Factorising the AO integrals lets the
+      ! ladder rebuild them per block from an nv^2 x nchol object instead, so
+      ! vvvv is never allocated.  It costs flops -- the assembly is nchol/no^2
+      ! times the ladder DGEMM -- which is the trade that turns a job that does
+      ! not fit into one that does.
+
+
+
+      if (use_chol) then
+        maxchol = cholesky_eri_max_vectors(nbf, 20)
+        allocate(lvec(nbf*(nbf+1)/2, maxchol), stat=ok)
+        if (ok /= 0) call show_message('CCSD(T): cannot allocate Cholesky vectors', &
+                                       with_abort)
+        if (use_direct) then
+          call cholesky_direct_decompose(basis, infos, chol_tol, maxchol, lvec, &
+                                         nchol, chol_err, chol_trunc, chol_npass)
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): direct factorisation used ', &
+              chol_npass, ' integral passes'
+        else
+          call cholesky_eri_decompose(nbf, gao, chol_tol, maxchol, lvec, nchol, &
+                                      chol_err, chol_trunc)
+        end if
+        write(iw,'(2X,A,I0,A,ES9.2,A,F5.1,A)') &
+            'CCSD(T): Cholesky vectors = ', nchol, ' (residual ', chol_err, &
+            ', ', real(nchol,dp)/real(nbf,dp), ' per basis function)'
+        if (nchol == 0) then
+          ! A tolerance above the largest AO-integral diagonal stops the
+          ! decomposition before it takes a single vector, and neither backend
+          ! calls that truncation -- it reached the tolerance, in its own terms.
+          ! Left alone, the zero-width blocks below reconstruct every
+          ! two-electron block as zero and the run reports a converged
+          ! correlated energy that is nothing of the kind.  Silently returning
+          ! an HF-like number for a CCSD(T) request is the worst of the
+          ! failure modes on this path, so refuse it explicitly.
+          call show_message('CCSD(T): the Cholesky decomposition produced no ' // &
+              'vectors -- [cc] cholesky_tol is larger than the largest ' // &
+              'integral diagonal, so every reconstructed two-electron block ' // &
+              'would be zero. Tighten cholesky_tol (1e-10 is a sane default).', &
+              with_abort)
+        end if
+        if (chol_trunc) then
+          ! Refuse rather than warn.  A truncated factorisation means the
+          ! requested residual was never reached, so cholesky_tol has stopped
+          ! being an accuracy control and the correlation energy carries an
+          ! integral error of unknown size.  Returning it as a successful
+          ! result publishes a number nobody can bound -- and a warning in a
+          ! log is not a bound.  Every other "cannot honour what you asked"
+          ! case on this path aborts (an unusable cholesky_tol, cholesky_direct
+          ! on an open-shell reference); this is the same kind of case and the
+          ! only one that was quiet about it.
+          write(iw,'(2X,A)') 'CCSD(T): the Cholesky decomposition hit its vector ' // &
+              'cap before reaching [cc] cholesky_tol.'
+          call show_message('CCSD(T): the Cholesky decomposition reached the ' // &
+              'vector cap without converging to [cc] cholesky_tol, so the ' // &
+              'correlation energy would carry an unbounded integral error. ' // &
+              'Loosen cholesky_tol, or set [cc] cholesky=false to use the ' // &
+              'explicit ladder route.', with_abort)
+        end if
+        allocate(boo(no*no, nchol), bov(no*nv, nchol), bvv(nv*nv, nchol), stat=ok)
+        if (ok /= 0) call show_message('CCSD(T): cannot allocate the MO Cholesky &
+                                       &blocks', with_abort)
+        call cholesky_transform_block(nbf, no, cmo(:, 1:no), no, cmo(:, 1:no), &
+                                      lvec, nchol, boo)
+        call cholesky_transform_block(nbf, no, cmo(:, 1:no), nv, cmo(:, no+1:nmo), &
+                                      lvec, nchol, bov)
+        call cholesky_transform_block(nbf, nv, cmo(:, no+1:nmo), nv, &
+                                      cmo(:, no+1:nmo), lvec, nchol, bvv)
+        deallocate(lvec)
+      end if
+
+      allocate(oooo(no,no,no,no), ooov(no,no,no,nv), oovv(no,no,nv,nv), &
+               ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), stat=ok)
+      if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
+      if (use_chol) then
+        allocate(vvvv(1,1,1,1), stat=ok)
+      else
+        allocate(vvvv(nv,nv,nv,nv), stat=ok)
+      end if
+      if (ok /= 0) call show_message('CCSD(T): cannot allocate the ladder integrals', &
+                                     with_abort)
+
+      if (use_chol) then
+        ! Every block comes from the vectors, so the packed AO store has no
+        ! consumer left -- which is the point: it can be released here, and
+        ! with the direct factorisation it is never built at all.
+        call cholesky_assemble_mo_blocks(no, nv, nchol, boo, bov, bvv, &
+                                         oooo, ooov, oovv, ovov, ovvv)
+        deallocate(boo, bov)
+      else
+        call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
+                                oooo, ooov, oovv, ovov, ovvv, vvvv)
+      end if
+      if (allocated(gao)) deallocate(gao)
+
+      if (use_chol) then
+        call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                              pe, opts, e_ccsd, e_t, converged, &
+                              time_ccsd=t_ccsd, time_triples=t_trip, &
+                              bvv=bvv, nchol=nchol)
+      else
+        call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                              pe, opts, e_ccsd, e_t, converged, &
+                              time_ccsd=t_ccsd, time_triples=t_trip)
+      end if
+
+      deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv)
+      if (allocated(bvv)) deallocate(bvv)
+    end if
+    deallocate(cmo, eo, ev)
+
+    ! ---- report ------------------------------------------------------------
+    ! Every rank has the same energies by now, and every rank has the same
+    ! log file open in append mode.  Letting them all write the final table
+    ! would repeat it once per rank and interleave the lines, which is the one
+    ! part of this output that downstream tooling parses.  Emit it once.
+    if (pe%rank == 0) then
+    write(iw,'(/,2X,60("="))')
+    if (do_t) then
+      write(iw,'(2X,A)') 'CCSD(T)  (coupled cluster, ground state)'
+    else
+      write(iw,'(2X,A)') 'CCSD  (coupled cluster, ground state)'
+    end if
+    write(iw,'(2X,60("="))')
+    write(iw,'(2X,A,F20.10)') 'E(reference, SCF)      = ', e_ref
+    write(iw,'(2X,A,F20.10)') 'E(CCSD, correlation)   = ', e_ccsd
+    write(iw,'(2X,A,F20.10)') 'E(CCSD, total)         = ', e_ref + e_ccsd
+    if (do_t) then
+      write(iw,'(2X,A,F20.10)') 'E((T), correction)     = ', e_t
+      write(iw,'(2X,A,F20.10)') 'E(CCSD(T), correlation)= ', e_ccsd + e_t
+      write(iw,'(2X,A,F20.10)') 'E(CCSD(T), total)      = ', e_ref + e_ccsd + e_t
+    end if
+    write(iw,'(2X,A)') repeat('-', 60)
+    write(iw,'(2X,A,F14.2,A)') 'CCSD iterations        = ', t_ccsd, ' s'
+    if (do_t) write(iw,'(2X,A,F14.2,A)') '(T) correction         = ', t_trip, ' s'
+    write(iw,'(2X,60("="),/)')
+    end if
+
+    if (.not. converged) then
+      call show_message('CCSD did not converge; increase [cc] maxit', with_abort)
+    end if
+
+    infos%mol_energy%energy = e_ref + e_ccsd + e_t
+    infos%mol_energy%etot   = e_ref + e_ccsd + e_t
+
+    close(iw)
+
+  contains
+
+    !> Open-shell (UHF/ROHF) CCSD(T) via the spin-orbital solver.
+    !>
+    !> Both spins are semicanonicalised first: a ROHF Fock matrix is not
+    !> diagonal in its occ-occ and vir-vir blocks and the coupled-cluster
+    !> denominators are undefined until it is.  For UHF it is a no-op.
+    subroutine run_open_shell()
+
+      use oqp_tagarray_driver, only: OQP_VEC_MO_B, OQP_FOCK_A, OQP_FOCK_B
+      use mathlib, only: unpack_matrix
+
+      real(kind=dp), contiguous, pointer :: mo_b(:,:), fock_a(:), fock_b(:)
+      real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
+      real(kind=dp), allocatable :: eri_aa(:,:,:,:), eri_bb(:,:,:,:), eri_ab(:,:,:,:)
+      real(kind=dp), allocatable :: gso(:,:,:,:), eso(:), etmp(:)
+      real(kind=dp), allocatable :: fso(:,:), fov(:,:), fao(:,:), fmo_a(:,:), fmo_b(:,:), scr(:,:)
+      integer, allocatable :: ord(:)
+      integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
+      integer :: nocc_seen, nvir_seen
+      real(kind=dp) :: so_gb, peak_gb, resident_gb
+
+      noa = int(infos%mol_prop%nelec_a) - nfzc
+      nob = int(infos%mol_prop%nelec_b) - nfzc
+      nocc_so = noa + nob
+      nso = 2*nmo
+
+      write(iw,'(2X,A,I0,A,I0,A,I0)') 'CCSD(T): open shell, alpha occ = ', noa, &
+          ', beta occ = ', nob, ', spin orbitals = ', nso
+
+      if (nob < 0 .or. nocc_so <= 0 .or. nso-nocc_so <= 0) then
+        call show_message('CCSD(T): no correlated occupied or virtual spin orbitals', &
+                          with_abort)
+      end if
+
+      ! Peak over the whole path, not just the spin-orbital tensor: the solver
+      ! intermediates and the DIIS history are the same order of magnitude, and
+      ! a guard that ignores them waves jobs through that then die allocating.
+      so_gb = cc_uhf_spinorb_gb(nmo)
+      peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis), &
+                               nthreads=nthr, triples=do_t, nbf=nbf)
+      ! peak_gb is the whole path's live high-water mark, packed AO store
+      ! included -- the store is still resident while the spin-block tensors
+      ! are transformed out of it, so the assembly stage genuinely holds both.
+      ! But the probe reports what is left AFTER that store was allocated
+      ! (MemAvailable, or the cgroup limit minus current usage), and gao was
+      ! allocated well before this point.  Charging the full peak against it
+      ! counts the store twice and refuses open-shell jobs that fit.  Compare
+      ! only what is still to be allocated.  The replicated cost across local
+      ! ranks is already charged by the guard before the dispatch above.
+      !
+      ! OQP_MEMORY_LIMIT_GB is the exception: it is a flat budget for the whole
+      ! job with nothing subtracted, so against it the store still has to be
+      ! paid for and the full peak is the right number.
+      resident_gb = 0.0_dp
+      if (allocated(gao) .and. .not. oqp_budget_includes_resident()) &
+          resident_gb = packed_gb
+      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
+      call oqp_memory_check(max(peak_gb - resident_gb, 0.0_dp), &
+          'CCSD(T) open shell', &
+          'freeze more core orbitals or use a smaller basis', iw)
+
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+      call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+
+      allocate(ca_sc(nbf,nbf), cb_sc(nbf,nbf), ea_sc(nbf), eb_sc(nbf), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell MO alloc failed', with_abort)
+
+      ! Semicanonicalise the CORRELATED window only.  The occupied rotation
+      ! mixes core with valence, so rotating the full space and then dropping
+      ! the first nfzc columns would correlate a different subspace than the
+      ! requested frozen core -- and would drop a different spatial orbital
+      ! from each spin, since alpha and beta rotate separately.  Freezing
+      ! first keeps the correlated space equal to the span of the reference
+      ! orbitals nfzc+1..nbf, which is what frozen-core CC means everywhere
+      ! else; the rotation within that space is what makes the denominators
+      ! well defined and leaves the energy unchanged.
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_a), mo_a, fock_a, ca_sc, ea_sc, &
+                            nfzc=nfzc)
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_b), mo_b, fock_b, cb_sc, eb_sc, &
+                            nfzc=nfzc)
+
+      allocate(eri_aa(nmo,nmo,nmo,nmo), eri_bb(nmo,nmo,nmo,nmo), &
+               eri_ab(nmo,nmo,nmo,nmo), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell MO integral alloc failed', &
+                                      with_abort)
+      call cc_build_full_mo(nbf, nmo, ca_sc(:,nfzc+1:nbf), ca_sc(:,nfzc+1:nbf), gao, eri_aa)
+      call cc_build_full_mo(nbf, nmo, cb_sc(:,nfzc+1:nbf), cb_sc(:,nfzc+1:nbf), gao, eri_bb)
+      call cc_build_full_mo(nbf, nmo, ca_sc(:,nfzc+1:nbf), cb_sc(:,nfzc+1:nbf), gao, eri_ab)
+      deallocate(gao)
+
+      allocate(eso(nso), etmp(nso), ord(nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital energy alloc failed', &
+                                      with_abort)
+
+      ! Interleaved spin-orbital energies, then permuted so the occupied ones
+      ! come first in ascending energy -- the ordering the solver assumes.
+      do p = 1, nmo
+        eso(2*p-1) = ea_sc(nfzc+p)
+        eso(2*p)   = eb_sc(nfzc+p)
+      end do
+      ! Partition by occupation first, sort by energy second.  Ordering all
+      ! spin orbitals by energy and then calling the lowest nocc_so of them
+      ! occupied assumes the two spins share an Aufbau boundary, and they need
+      ! not -- a beta virtual can lie below an alpha occupied.  Where that
+      ! happens the permutation silently exchanges an occupied orbital for a
+      ! virtual one and the whole correlation treatment is built on a different
+      ! determinant than the SCF converged.  The occupations are known here, so
+      ! they decide the partition and energy only orders within it.
+      nocc_seen = 0
+      nvir_seen = 0
+      do p = 1, nmo
+        if (p <= noa) then
+          nocc_seen = nocc_seen + 1
+          ord(nocc_seen) = 2*p-1
+        else
+          nvir_seen = nvir_seen + 1
+          ord(nocc_so+nvir_seen) = 2*p-1
+        end if
+        if (p <= nob) then
+          nocc_seen = nocc_seen + 1
+          ord(nocc_seen) = 2*p
+        else
+          nvir_seen = nvir_seen + 1
+          ord(nocc_so+nvir_seen) = 2*p
+        end if
+      end do
+
+      do i = 1, nocc_so-1
+        do j = i+1, nocc_so
+          if (eso(ord(j)) < eso(ord(i))) then
+            q = ord(i); ord(i) = ord(j); ord(j) = q
+          end if
+        end do
+      end do
+      do i = nocc_so+1, nso-1
+        do j = i+1, nso
+          if (eso(ord(j)) < eso(ord(i))) then
+            q = ord(i); ord(i) = ord(j); ord(j) = q
+          end if
+        end do
+      end do
+      do p = 1, nso
+        etmp(p) = eso(ord(p))
+      end do
+      eso = etmp
+
+      ! Build the tensor already in the sorted order.  Doing it the other way
+      ! round -- build interleaved, then `gso = gso(ord,ord,ord,ord)` -- makes
+      ! a full second copy of the biggest array in the run, so the true peak
+      ! was twice what the guard above reported.
+      allocate(gso(nso,nso,nso,nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital tensor alloc failed', &
+                                      with_abort)
+      call cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, gso, ord=ord)
+      deallocate(eri_aa, eri_bb, eri_ab)
+
+      ! Occupied-virtual Fock block in the same spin-orbital basis.  It is zero
+      ! for UHF but not for ROHF: semicanonicalisation only diagonalises the
+      ! occ-occ and vir-vir blocks, and the solver needs what is left over --
+      ! both in the amplitude equations and in the correlation energy, where
+      ! Brillouin no longer holds.
+      allocate(fao(nbf,nbf), fmo_a(nbf,nbf), fmo_b(nbf,nbf), scr(nbf,nbf), &
+               fso(nso,nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell Fock alloc failed', with_abort)
+      call unpack_matrix(fock_a, fao, 'U')
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, ca_sc, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, ca_sc, nbf, scr, nbf, 0.0_dp, fmo_a, nbf)
+      call unpack_matrix(fock_b, fao, 'U')
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, cb_sc, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, cb_sc, nbf, scr, nbf, 0.0_dp, fmo_b, nbf)
+
+      fso = 0.0_dp
+      do p = 1, nmo
+        do q = 1, nmo
+          fso(2*p-1, 2*q-1) = fmo_a(nfzc+p, nfzc+q)
+          fso(2*p,   2*q  ) = fmo_b(nfzc+p, nfzc+q)
+        end do
+      end do
+      fso = fso(ord,ord)
+
+      allocate(fov(nocc_so, nso-nocc_so), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): fov alloc failed', with_abort)
+      fov = fso(1:nocc_so, nocc_so+1:nso)
+      deallocate(fao, fmo_a, fmo_b, scr, fso)
+
+      call cc_uhf_ccsd_t(nso, nocc_so, eso, gso, int(infos%control%cc_maxit), &
+                         infos%control%cc_conv, do_t, e_ccsd, e_t, converged, niter, &
+                         fov=fov, time_ccsd=t_ccsd, time_triples=t_trip, &
+                         ndiis_in=int(infos%control%cc_ndiis))
+
+      write(iw,'(2X,A,I0)') 'CCSD(T): open-shell iterations = ', niter
+
+      deallocate(gso, eso, etmp, ord, ca_sc, cb_sc, ea_sc, eb_sc, fov)
+
+    end subroutine run_open_shell
+
+    !> Hand the rank-0 solve's results to every other rank, so all ranks leave
+    !> with the same energies and the same view of whether it converged.
+    subroutine bcast_open_shell_results()
+      real(kind=dp) :: buf(4)
+      integer :: iconv(2)
+
+      buf = [e_ccsd, e_t, t_ccsd, t_trip]
+      call pe%bcast(buf, 4)
+      e_ccsd = buf(1); e_t = buf(2); t_ccsd = buf(3); t_trip = buf(4)
+
+      iconv(1) = merge(1, 0, converged)
+      iconv(2) = niter
+      call pe%bcast(iconv, 2)
+      converged = iconv(1) /= 0
+      niter = iconv(2)
+    end subroutine bcast_open_shell_results
+
+
+  end subroutine ccsd_t_energy
+
+end module ccsd_t_energy_mod

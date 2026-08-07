@@ -20,11 +20,12 @@ SUPPORTED_RUNTYPES = {
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {
-    "hf", "tdhf", "mp2", "dftb", "xtb",
+    "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
     "fci", "casci", "casscf", "sa-casscf", "sacasscf",
     "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
+CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 MP2_VARIANTS = {
@@ -210,7 +211,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -2233,6 +2234,125 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
                 action="Set finite same_spin_scale and opposite_spin_scale values.",
                 wiki=WIKI_HELP["mp2.variant"],
             )
+
+
+def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
+    """Validate the reference and [cc] block for coupled-cluster runs."""
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method not in CC_METHODS:
+        return
+
+    functional = _get(config, "input", "functional", "")
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    nfzc = _get(config, "cc", "nfzc", 0)
+    maxit = _get(config, "cc", "maxit", 50)
+
+    if functional:
+        report.add(
+            "ERROR",
+            "input.functional",
+            "Coupled cluster requires an HF reference, not a DFT functional.",
+            value=functional,
+            expected="empty functional",
+            action=f"Remove [input] functional for method={method}.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if scf_type not in ("rhf", "uhf", "rohf"):
+        report.add(
+            "ERROR",
+            "scf.type",
+            "Coupled cluster needs an RHF, UHF or ROHF reference.",
+            value=scf_type,
+            expected="rhf, uhf or rohf",
+            action="Set [scf] type to rhf, uhf or rohf.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif scf_type in ("uhf", "rohf"):
+        # The open-shell path goes through the spin-orbital solver, which
+        # stores the full (2*nmo)^4 tensor -- sixteen times the closed-shell
+        # one.  Warn rather than block: the Fortran side refuses on size.
+        report.add(
+            "INFO",
+            "scf.type",
+            "Open-shell coupled cluster uses the spin-orbital solver, which is "
+            "much slower and stores sixteen times the integrals of the "
+            "closed-shell path.",
+            value=scf_type,
+            expected=scf_type,
+            action="Prefer a closed-shell RHF reference where the chemistry allows.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    try:
+        bad_nfzc = int(nfzc) < 0
+    except (TypeError, ValueError):
+        bad_nfzc = True
+    if bad_nfzc:
+        report.add(
+            "ERROR",
+            "cc.nfzc",
+            "The frozen-core count must be a non-negative integer.",
+            value=str(nfzc),
+            action="Set [cc] nfzc to 0 or the number of core orbitals to freeze.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    try:
+        bad_maxit = int(maxit) < 1
+    except (TypeError, ValueError):
+        bad_maxit = True
+    if bad_maxit:
+        report.add(
+            "ERROR",
+            "cc.maxit",
+            "The CCSD iteration limit must be a positive integer.",
+            value=str(maxit),
+            action="Set [cc] maxit to a positive number of iterations.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    # Both solvers require the amplitude RMS and the energy change to fall
+    # strictly below conv, so conv=0 (or a negative or non-finite value) can
+    # never be met: the run would burn every iteration and then abort.
+    conv = _get(config, "cc", "conv", 1e-7)
+    try:
+        conv_value = float(conv)
+        bad_conv = not math.isfinite(conv_value) or conv_value <= 0.0
+    except (TypeError, ValueError):
+        bad_conv = True
+    if bad_conv:
+        report.add(
+            "ERROR",
+            "cc.conv",
+            "The coupled-cluster convergence threshold must be a positive number.",
+            value=str(conv),
+            expected="a positive value such as 1e-7",
+            action="Set [cc] conv to a positive threshold.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    # The Cholesky decomposition stops when the largest remaining diagonal
+    # falls below the tolerance.  Zero or negative never stops it, so it runs
+    # to the vector cap dividing by the square root of a diagonal that has
+    # reached zero; infinite stops it immediately at zero vectors, which is
+    # quieter and worse -- every assembled MO block would be zero.
+    chol_tol = _get(config, "cc", "cholesky_tol", 1e-10)
+    try:
+        chol_value = float(chol_tol)
+        bad_chol = not math.isfinite(chol_value) or chol_value <= 0.0
+    except (TypeError, ValueError):
+        bad_chol = True
+    if bad_chol:
+        report.add(
+            "ERROR",
+            "cc.cholesky_tol",
+            "The Cholesky decomposition tolerance must be a positive number.",
+            value=str(chol_tol),
+            expected="a positive value such as 1e-10",
+            action="Set [cc] cholesky_tol to a positive threshold.",
+            wiki=WIKI_HELP["input.method"],
+        )
 
 
 def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
@@ -4554,6 +4674,18 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 ),
             )
 
+    if method in CC_METHODS and runtype != "energy":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "Coupled cluster currently supports energy-only calculations.",
+            value=runtype,
+            expected="energy",
+            action="Use runtype=energy until CC gradients and derivative workflows are implemented.",
+            wiki=WIKI_HELP["input.method"],
+        )
+        return
+
     if method == "mp2" and runtype != "energy":
         report.add(
             "ERROR",
@@ -5906,6 +6038,7 @@ def check_input_values(
     _check_symmetry(config, report)
     _check_tdhf(config, report)
     _check_mp2(config, report)
+    _check_cc(config, report)
     _check_fci(config, report)
     _check_casci(config, report)
     _check_casscf(config, report)

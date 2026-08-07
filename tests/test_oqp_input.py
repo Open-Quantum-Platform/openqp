@@ -1911,6 +1911,147 @@ def test_cas_orbital_file_resolves_from_the_oqp_directory(tmp_path):
     )
 
     assert legacy["cas"]["orbital_file"] == str(tmp_path / "start.json")
+def test_coupled_cluster_route_selects_method_and_lowers_cc_section(tmp_path):
+    """ccsd/ccsd_t are models in their own right, not tdhf variants."""
+    spec, legacy = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(nfzc=1,conv=1e-8)', tmp_path
+    )
+
+    assert spec.physical_method == "CCSD(T)"
+    assert legacy["input"]["method"] == "ccsd(t)"
+    assert legacy["input"]["runtype"] == "energy"
+    assert legacy["scf"]["type"] == "rhf"
+    assert legacy["cc"] == {"nfzc": "1", "conv": "1e-08"}
+
+
+def test_coupled_cluster_route_lowers_the_cholesky_controls(tmp_path):
+    """The factorisation controls are documented `.oqp` options too; leaving
+    them out of the cc manifest made the parser reject the syntax it advertises
+    and left semantic input unable to turn Cholesky off or pick the direct
+    route."""
+    spec, legacy = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() '
+        'cc(cholesky=false,cholesky_tol=1e-8,cholesky_direct=true)',
+        tmp_path,
+    )
+
+    assert spec.physical_method == "CCSD(T)"
+    assert legacy["cc"]["cholesky"] == "False"
+    assert legacy["cc"]["cholesky_tol"] == "1e-08"
+    assert legacy["cc"]["cholesky_direct"] == "True"
+
+    _, plain = _parse('ccsd/6-31g geom="h2o.xyz" energy()', tmp_path)
+    assert plain["input"]["method"] == "ccsd"
+    assert spec.physical_method == "CCSD(T)"
+
+
+def test_cholesky_accepts_auto_alongside_the_boolean_spellings(tmp_path):
+    """`cholesky` is auto/true/false, not a bool: factorising costs nchol/no^2
+    times the ladder contraction it feeds, so it is worth taking only when the
+    explicit v^4 route will not fit.  `auto` is the default and has to survive
+    the semantic route; `true`/`false` still pin it either way."""
+    _, auto = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(cholesky=auto)', tmp_path)
+    assert auto["cc"]["cholesky"] == "auto"
+
+    _, forced = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(cholesky=true)', tmp_path)
+    assert forced["cc"]["cholesky"] == "True"
+
+
+def test_coupled_cluster_spellings_agree(tmp_path):
+    for alias in ("ccsd_t", "ccsd-t", "ccsdt"):
+        _, legacy = _parse('%s/6-31g geom="h2o.xyz" energy()' % alias, tmp_path)
+        assert legacy["input"]["method"] == "ccsd(t)", alias
+
+
+def test_cc_route_accepts_the_factorisation_controls(tmp_path):
+    """The inline route whitelist gated which [cc] keys a model call may carry.
+    Leaving the factorisation controls out of it meant the lowering below would
+    have placed them correctly, but the route rejected them first."""
+    _, legacy = _parse(
+        'ccsd_t(nfzc=1,cholesky=false,cholesky_tol=1e-8,cholesky_direct=true)'
+        '/sto-3g geom="h2o.xyz" energy()',
+        tmp_path,
+    )
+    assert legacy["cc"]["cholesky"] == "False"
+    assert legacy["cc"]["cholesky_tol"] == "1e-08"
+    assert legacy["cc"]["cholesky_direct"] == "True"
+    assert legacy["cc"]["nfzc"] == "1"
+
+
+def test_ccsd_t_route_accepts_the_parenthesised_spelling(tmp_path):
+    """`ccsd(t)` is what `[input] method` and the Python API call it, so it is
+    what people write in a route too.  Without a special case it parses as the
+    model `ccsd` with a positional option `t` and is rejected for the
+    positional, which describes the parse rather than the problem."""
+    for spelling in ("ccsd(t)", "CCSD(T)", "ccsd( t )"):
+        _, legacy = _parse('%s/6-31g geom="h2o.xyz" energy()' % spelling, tmp_path)
+        assert legacy["input"]["method"] == "ccsd(t)", spelling
+
+    # the underscore spelling still carries model options
+    _, legacy = _parse(
+        'ccsd_t(reference=uhf)/6-31g geom="h2o.xyz" energy()', tmp_path)
+    assert legacy["input"]["method"] == "ccsd(t)"
+    assert legacy["scf"]["type"] == "uhf"
+
+
+def test_coupled_cluster_reference_is_route_owned(tmp_path):
+    spec, uhf = _parse(
+        'ccsd_t(reference=uhf,nfzc=1)/sto-3g geom="ch2.xyz" mult=3 energy()',
+        tmp_path,
+    )
+    assert spec.reference_method == "UHF"
+    assert uhf["scf"] == {"type": "uhf", "multiplicity": "3"}
+    # reference selects the SCF; it is not a [cc] solver keyword
+    assert uhf["cc"] == {"nfzc": "1"}
+
+    _, rohf = _parse(
+        'ccsd_t(reference=rohf)/sto-3g geom="oh.xyz" mult=2 energy()', tmp_path
+    )
+    assert rohf["scf"]["type"] == "rohf"
+
+
+def test_coupled_cluster_rejects_what_it_cannot_do():
+    # No gradients yet.
+    with pytest.raises(OQPInputError, match="energy"):
+        oqp_input.parse_canonical_oqp('ccsd_t/6-31g geom="h2o.xyz" grad()')
+    # HF reference only, so the route has no functional slot.
+    with pytest.raises(OQPInputError, match="does not take a functional"):
+        oqp_input.parse_canonical_oqp('ccsd_t/pbe/6-31g geom="h2o.xyz" energy()')
+    # A DFT reference cannot be smuggled in through the reference option.
+    with pytest.raises(OQPInputError, match="reference must be"):
+        oqp_input.parse_canonical_oqp(
+            'ccsd_t(reference=rks)/6-31g geom="h2o.xyz" energy()'
+        )
+    # Ground state only.
+    with pytest.raises(OQPInputError, match="S0"):
+        oqp_input.parse_canonical_oqp('ccsd_t/6-31g geom="h2o.xyz" energy(S1)')
+
+
+def test_natural_requests_reach_the_cc_methods(tmp_path):
+    """The prose path knew only the older spellings, so a request like
+    'Run a CCSD(T)/cc-pVDZ energy' was rejected outright."""
+    for text, expected in (
+        ("Run a CCSD(T)/cc-pVDZ energy for h2o.xyz.", "ccsd(t)"),
+        ("Run a CCSD/6-31g energy for h2o.xyz.", "ccsd"),
+        ("Run a ccsd_t/6-31g energy for h2o.xyz.", "ccsd(t)"),
+    ):
+        res = oqp_input.resolve_oqp_text(
+            text, source_path=tmp_path / "probe.oqp"
+        )
+        assert res.legacy_config["input"]["method"] == expected, text
+
+
+def test_natural_cc_support_matches_the_established_mp2_spelling(tmp_path):
+    """CC should be understood exactly where MP2 already is -- no better, and
+    no worse. This pins the parity rather than any one phrasing."""
+    form = "Run a %s/cc-pVDZ energy for h2o.xyz."
+    for label, expected in (("MP2", "mp2"), ("CCSD", "ccsd"), ("CCSD(T)", "ccsd(t)")):
+        res = oqp_input.resolve_oqp_text(
+            form % label, source_path=tmp_path / "probe.oqp"
+        )
+        assert res.legacy_config["input"]["method"] == expected, label
 def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
     text = (
         'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '

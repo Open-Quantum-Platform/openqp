@@ -89,7 +89,7 @@ class CalculationSpec:
             return {"rks": "RHF", "uks": "UHF", "roks": "ROHF"}[self.model]
         if self.model in {"rhf", "uhf", "rohf"}:
             return self.model.upper()
-        if self.model == "mp2" and "reference" in self.model_options:
+        if self.model in {"mp2", "ccsd", "ccsd_t"} and "reference" in self.model_options:
             return str(self.model_options["reference"]).upper()
         mult = int(self.options.get("mult", 1))
         return "RHF" if mult == 1 else "UHF"
@@ -121,6 +121,8 @@ class CalculationSpec:
             "uhf": "UHF",
             "rohf": "ROHF",
             "mp2": "MP2",
+            "ccsd": "CCSD",
+            "ccsd_t": "CCSD(T)",
             "dftb": "DFTB",
             "dftb0": "DFTB0",
             "tddftb": "TD-DFTB (TDA)",
@@ -189,6 +191,7 @@ def _normalize_geometry_owned_section_call(
 
 DEFAULT_SINGLET_MODELS = {
     "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
+    "ccsd", "ccsd_t",
     "tddft", "tda", "tdhf", "tda-hf",
     # Multiconfigurational models keep a closed-shell RHF reference unless the
     # user asks for another one; see WF_MODELS below.
@@ -236,7 +239,7 @@ PRIMARY_ALIASES = {
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 
 SECTION_NAMES = {
-    "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
+    "input", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
     "oqp", "neb", "hess", "nac", "md", "odp", "qmmm", "droplet",
     "solute_com", "json", "tests",
@@ -271,6 +274,7 @@ GENERIC_SCHEMA_KEYS = {
     "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
+    "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
     "pcm": _keys("enabled backend mode model solvent epsilon radii"),
     "dftb": _keys("""
@@ -477,6 +481,10 @@ MODEL_ALIASES = {
     "uhf": "uhf",
     "rohf": "rohf",
     "mp2": "mp2",
+    "ccsd": "ccsd",
+    "ccsd_t": "ccsd_t",
+    "ccsd-t": "ccsd_t",
+    "ccsdt": "ccsd_t",
     "dftb": "dftb",
     "dftb0": "dftb0",
     "dftb-noscc": "dftb0",
@@ -672,6 +680,11 @@ RESPONSE_MODEL_OPTIONS = {"nstate"}
 MP2_MODEL_OPTIONS = {
     "reference", "variant", "same_spin_scale", "opposite_spin_scale",
 }
+# Coupled cluster takes the reference plus the [cc] solver controls inline,
+# the same shape MP2 uses for its spin-scaling knobs.
+CC_MODELS = {"ccsd", "ccsd_t"}
+CC_MODEL_OPTIONS = {"reference", "nfzc", "conv", "maxit", "ndiis",
+                    "cholesky", "cholesky_tol", "cholesky_direct"}
 RESPONSE_MODELS = {
     "mrsf", "mrsf-hf", "mrsf-dftb", "umrsf", "umrsf-hf", "sf", "sf-hf",
     "sf-dftb", "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
@@ -685,6 +698,10 @@ ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd"}
 
 _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
+
+#> The `ccsd(t)` route spelling, which has to be recognised before model
+#> options are parsed -- see _parse_route.
+_CCSD_T_ROUTE_RE = re.compile(r"ccsd\s*\(\s*t\s*\)", re.IGNORECASE)
 
 
 def _is_integer(value: Any) -> bool:
@@ -927,7 +944,17 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
         )
-    model_call = _parse_call(parts[0]) if "(" in parts[0] else CallSpec(parts[0])
+    # `ccsd(t)` is the spelling the legacy deck's `method=` and the Python API
+    # both use, so it is the one people try first in a route as well.  Left
+    # alone it parses as the model `ccsd` with a positional option `t` and is
+    # rejected for using a positional option -- an error that describes the
+    # parse rather than the problem, and sends the reader looking for a way to
+    # name the argument.  Normalise it to the route alias before options are
+    # read; `ccsd_t`, `ccsd-t` and `ccsdt` continue through MODEL_ALIASES.
+    head = parts[0].strip()
+    if _CCSD_T_ROUTE_RE.fullmatch(head):
+        head = "ccsd_t"
+    model_call = _parse_call(head) if "(" in head else CallSpec(head)
     alias = model_call.name.lower().replace("_", "-")
     if alias not in MODEL_ALIASES:
         close = difflib.get_close_matches(alias, MODEL_ALIASES, n=1, cutoff=0.6)
@@ -942,7 +969,8 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     allowed_model_options = (
         RESPONSE_MODEL_OPTIONS
         if model in RESPONSE_MODELS
-        else MP2_MODEL_OPTIONS if model == "mp2" else set()
+        else MP2_MODEL_OPTIONS if model == "mp2"
+        else CC_MODEL_OPTIONS if model in CC_MODELS else set()
     )
     unknown_model_options = set(model_options) - allowed_model_options
     if unknown_model_options:
@@ -968,14 +996,14 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     } and len(parts) != 1:
         raise OQPInputError("%s does not take a functional or basis route component" % alias)
     if model in {
-        "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
-        "umrsf-hf", "sf-hf", "tda-hf",
+        "hf", "rhf", "uhf", "rohf", "mp2", "ccsd", "ccsd_t", "tdhf",
+        "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf",
     } | WF_MODELS and len(parts) == 3:
         raise OQPInputError("%s route is model/basis; it does not take a functional" % alias)
     if len(parts) == 2:
         if model in {
-            "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
-            "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
+            "hf", "rhf", "uhf", "rohf", "mp2", "ccsd", "ccsd_t", "tdhf",
+            "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
             basis = parts[1]
@@ -1279,6 +1307,18 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         raise OQPInputError("roks requires an open-shell mult value such as mult=2 or mult=3")
     if model == "mp2" and driver.name != "energy":
         raise OQPInputError("MP2 currently supports energy() only")
+    if model in CC_MODELS and driver.name != "energy":
+        raise OQPInputError("Coupled cluster currently supports energy() only")
+    if model in CC_MODELS and "reference" in spec.model_options:
+        reference = str(spec.model_options["reference"]).strip().lower()
+        if reference not in {"rhf", "rohf", "uhf"}:
+            raise OQPInputError("Coupled cluster reference must be rhf, rohf, or uhf")
+        mult = spec.options.get("mult", 1)
+        if reference == "rhf" and mult != 1:
+            raise OQPInputError("Coupled cluster reference=rhf requires mult=1")
+        if reference == "rohf" and mult < 2:
+            raise OQPInputError(
+                "Coupled cluster reference=rohf requires an open-shell mult value")
     if model == "mp2" and "reference" in spec.model_options:
         reference = str(spec.model_options["reference"]).strip().lower()
         if reference not in {"rhf", "rohf", "uhf"}:
@@ -1754,7 +1794,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             )
         if model in {
             "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
-            "dftb", "dftb0",
+            "ccsd", "ccsd_t", "dftb", "dftb0",
         } and state.label != "S0":
             raise OQPInputError("%s only supports the ground-state label S0" % model)
         if model in {
@@ -1816,6 +1856,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         reserved["dftb"] = {"type", "target_multiplicity", "reference_multiplicity"}
     if model == "mp2":
         reserved["mp2"] = set(spec.model_options)
+    if model in CC_MODELS:
+        reserved["cc"] = set(spec.model_options) - {"reference"}
     modifier_names: set[str] = set()
     for call in spec.modifiers:
         if call.name in modifier_names:
@@ -2090,7 +2132,7 @@ def _default_state(spec: CalculationSpec) -> Optional[StateRef]:
         return StateRef(label="S0")
     ground_models = {
         "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
-        "dftb", "dftb0",
+        "ccsd", "ccsd_t", "dftb", "dftb0",
     }
     if spec.driver.name == "namd" and {
         "active", "init_state"
@@ -2378,6 +2420,8 @@ def lower_to_legacy(
         method = "hf"
     elif spec.model == "mp2":
         method = "mp2"
+    elif spec.model in CC_MODELS:
+        method = "ccsd(t)" if spec.model == "ccsd_t" else "ccsd"
     elif spec.model in {
         "dftb", "dftb0", "tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"
     }:
@@ -2427,7 +2471,7 @@ def lower_to_legacy(
         put("scf", "multiplicity", 3)
     else:
         ref_mult = spec.options.get("mult", 1)
-        if spec.model == "mp2" and "reference" in spec.model_options:
+        if spec.model in {"mp2"} | CC_MODELS and "reference" in spec.model_options:
             ref_type = str(spec.model_options["reference"]).strip().lower()
         else:
             ref_type = {
@@ -2441,6 +2485,11 @@ def lower_to_legacy(
         for key, value in spec.model_options.items():
             if key != "reference":
                 put("mp2", key, value)
+
+    if spec.model in CC_MODELS:
+        for key, value in spec.model_options.items():
+            if key != "reference":
+                put("cc", key, value)
 
     if spec.model in RESPONSE_MODELS:
         td_type = {
@@ -2809,6 +2858,8 @@ def _natural_model(text: str) -> Optional[str]:
         (r"\btda\b", "tda"),
         (r"\btddft\b|\btd[- ]?dft\b", "tddft"),
         (r"\btdhf\b", "tdhf"),
+        (r"\bccsd\s*\(\s*t\s*\)|\bccsd[- _]t\b|\bccsdt\b", "ccsd_t"),
+        (r"\bccsd\b|\bcoupled[- ]cluster\b|결합\s*클러스터", "ccsd"),
         (r"\bmp2\b", "mp2"),
         (r"\bdft\b|밀도\s*범함수", "dft"),
         (r"\bhf\b|hartree[- ]?fock|하트리", "hf"),
@@ -2833,7 +2884,8 @@ def _natural_route_components(text: str, model: str) -> Tuple[str, str]:
     # Natural requests commonly retain the familiar method/functional/basis
     # slash triplet even when the rest is Korean or English prose.
     slash = re.search(
-        r"(?:umrsf(?:[- ]?tddft)?|mrsf(?:[- ]?tddftb?)?|sf[- ]?tddft|tddft|tdhf|tda|dft|hf|mp2)"
+        r"(?:umrsf(?:[- ]?tddft)?|mrsf(?:[- ]?tddftb?)?|sf[- ]?tddft|tddft|tdhf|tda|dft|hf"
+        r"|ccsd\s*\(\s*t\s*\)|ccsd[- _]t|ccsdt|ccsd|mp2)"
         r"\s*/\s*([A-Za-z0-9+*()._-]+)(?:\s*/\s*([A-Za-z0-9+*()._-]+))?",
         text, re.I,
     )
@@ -2842,7 +2894,8 @@ def _natural_route_components(text: str, model: str) -> Tuple[str, str]:
         if second:
             functional = first.lower()
             basis = second.lower().rstrip(".")
-        elif model in {"hf", "mp2", "tdhf", "dftb", "tddftb", "mrsf-dftb"}:
+        elif model in {"hf", "mp2", "ccsd", "ccsd_t", "tdhf", "dftb",
+                       "tddftb", "mrsf-dftb"}:
             basis = first.lower().rstrip(".")
         else:
             functional = first.lower()

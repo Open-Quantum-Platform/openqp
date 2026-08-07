@@ -72,6 +72,15 @@ def install_single_point_stubs():
     qmmm = types.ModuleType("oqp.utils.qmmm")
     sys.modules["oqp.utils.qmmm"] = qmmm
 
+    # Stubbed like the rest so this file runs on its own.  Without it the
+    # import only resolved when some earlier test in the same session had
+    # already cached the real package, which made a single-file run fail.
+    tb_backends = types.ModuleType("oqp.utils.tb_backends")
+    setattr(tb_backends, "is_tb_method", lambda method: False)
+    setattr(tb_backends, "make_tb_adapter", lambda mol: None)
+    setattr(tb_backends, "tb_config", lambda *args, **kwargs: {})
+    sys.modules["oqp.utils.tb_backends"] = tb_backends
+
     library = types.ModuleType("oqp.library")
     library.__path__ = []
     sys.modules["oqp.library"] = library
@@ -489,6 +498,35 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertTrue(converged)
         self.assertEqual(calc.mol.data.convergers, ["diis", "diis"])
         self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_stability_safeguard_relaxes_unstable_coupled_cluster_reference(self):
+        # CCSD and CCSD(T) correlate the converged ground-state determinant, so
+        # an unstable UHF/ROHF reference is as wrong for them as it is for the
+        # HF energy itself.  The gate used to read method=='hf', which silently
+        # dropped the safeguard the user had explicitly opted into and fed the
+        # unstable -2.0 solution straight into the correlation step.
+        for method in ("ccsd", "ccsd(t)"):
+            with self.subTest(method=method):
+                calc = self.make_calculator()
+                calc.method = method
+                calc.stability = True
+
+                def scf_unstable_then_relaxes(calc=calc):
+                    calc.scf_calls += 1
+                    if calc.scf_calls == 1:
+                        calc.mol.mol_energy.energy = -2.0
+                        calc.mol.mol_energy.SCF_converged = True
+                    else:
+                        calc.mol.mol_energy.energy = -2.5
+                        calc.mol.mol_energy.SCF_converged = True
+
+                calc.scf = scf_unstable_then_relaxes
+
+                converged = calc._run_scf()
+
+                self.assertTrue(converged)
+                self.assertIn("trah", calc.mol.data.convergers)
+                self.assertEqual(calc.mol.mol_energy.energy, -2.5)
 
 
 if __name__ == "__main__":
