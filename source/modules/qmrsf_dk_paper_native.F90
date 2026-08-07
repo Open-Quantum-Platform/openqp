@@ -27,9 +27,14 @@ module qmrsf_dk_paper_native_mod
   integer, parameter :: SEAM_S3R    = 1
   integer, parameter :: SEAM_HAAR   = 2
   integer, parameter :: NSEAM = 3
-  integer, parameter :: PAIR_A = 2, PAIR_B = 3
   character(len=6), parameter :: SEAM_NAME(0:NSEAM-1) = &
        (/ 'native', 'S3R   ', 'Haar  ' /)
+  !> A second adjacent pair is treated as a doublet only when its orbital-energy
+  !> gap is small compared with the spread of the four active orbitals; the
+  !> closest adjacent pair is always treated, so that the construction stays
+  !> smooth as a degeneracy is approached instead of switching on at a
+  !> threshold.
+  real(dp), parameter :: PAIR_GAP_FRACTION = 0.25_dp
 
 contains
 
@@ -37,7 +42,7 @@ contains
     use types, only: information
     use io_constants, only: iw
     use printing, only: print_module_info
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
     use qmrsf_ao2mo_mod, only: qmrsf_active_integrals
     use eigen, only: diag_symm_full
     use oqp_linalg
@@ -61,6 +66,9 @@ contains
     real(dp) :: ecore, c_h, c_ref, orth_err, cross_err, vxc_max
     real(dp) :: eref, thresh, aquint_diag, qvec(1,1)
     real(dp) :: pair_thc, pair_aniso, gauge_dev(0:NSEAM-1)
+    real(dp) :: eps_act(NACT)
+    real(dp), contiguous, pointer :: e_mo(:)
+    integer :: npair, pairs(2,2)
     character(len=8) :: csf_label(NDET)
     integer :: dets(4,NDET), act(NACT)
     integer :: nbf, ncore, i, j, ierr, iseam
@@ -121,12 +129,17 @@ contains
     call native_gen_dets(dets)
     call native_build_h(dets,h1,g,hbare)
     call native_build_ucsf(dets,ucsf,orth_err,csf_label)
-    call native_pair_doublet(eri_act,PAIR_A,PAIR_B,pair_thc,pair_aniso)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, e_mo)
+    do i = 1, NACT
+      eps_act(i) = e_mo(act(i))
+    end do
+    call native_find_pairs(eps_act,npair,pairs)
+    call native_pair_doublet(eri_act,pairs(1,1),pairs(2,1),pair_thc,pair_aniso)
     call native_dump_active(h_eff,eri_act,va_act,vb_act,c_h)
     hzero = 0.0_dp
 
     do iseam = 0, NSEAM-1
-      call native_seam_mask(eri_act,iseam,PAIR_A,PAIR_B,eri_k)
+      call native_seam_mask(eri_act,iseam,npair,pairs,eri_k)
       call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
       call native_build_h(dets,h1k,gk,hkdet)
       hdet = hbare - (1.0_dp-c_h)*hkdet
@@ -219,8 +232,9 @@ contains
                             csf_label(NDET:NDET), eref, esing(1), thresh)
 
     call native_seam_covariance(h_eff,eri_act,va_act,vb_act,c_h,dets,ucsf, &
-                                esing_all,gauge_dev)
-    call native_print_seam_compare(act,pair_thc,pair_aniso,esing_all,equint_all, &
+                                npair,pairs,esing_all,gauge_dev)
+    call native_print_seam_compare(act,npair,pairs,eps_act,pair_thc,pair_aniso, &
+                                   esing_all,equint_all, &
                                    infos%mol_energy%energy,gauge_dev)
 
     call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err, &
@@ -400,51 +414,93 @@ contains
 !>           4 R   every remaining off-diagonal distribution.
 !>         (Dd,Dx) is the Lambda doublet: it rotates by twice the orbital angle,
 !>         while H and R are unmixed by the pair rotation.
-  pure subroutine native_pair_channel(d,ia,ib,ich,p)
+  pure subroutine native_pair_channel(d,npair,pairs,ich,p)
     real(dp), intent(in) :: d(NACT,NACT)
-    integer, intent(in) :: ia,ib,ich
+    integer, intent(in) :: npair,pairs(2,2),ich
     real(dp), intent(out) :: p(NACT,NACT)
-    real(dp) :: h(NACT,NACT),dd(NACT,NACT),dx(NACT,NACT),tr,df
-    integer :: t
-    h = 0.0_dp; dd = 0.0_dp; dx = 0.0_dp
-    do t = 1, NACT
-      if (t /= ia .and. t /= ib) h(t,t) = d(t,t)
+    real(dp) :: h(NACT,NACT),db(NACT,NACT),tr,df
+    integer :: t,k,ia,ib
+    logical :: inpair(NACT)
+    h = 0.0_dp; db = 0.0_dp; inpair = .false.
+    do k = 1, npair
+      ia = pairs(1,k); ib = pairs(2,k)
+      inpair(ia) = .true.; inpair(ib) = .true.
+      tr = 0.5_dp*(d(ia,ia)+d(ib,ib))
+      df = 0.5_dp*(d(ia,ia)-d(ib,ib))
+      h(ia,ia) = tr;  h(ib,ib) = tr
+      db(ia,ia) = df; db(ib,ib) = -df
+      db(ia,ib) = d(ia,ib); db(ib,ia) = d(ib,ia)
     end do
-    tr = 0.5_dp*(d(ia,ia)+d(ib,ib))
-    df = 0.5_dp*(d(ia,ia)-d(ib,ib))
-    h(ia,ia) = tr;  h(ib,ib) = tr
-    dd(ia,ia) = df; dd(ib,ib) = -df
-    dx(ia,ib) = d(ia,ib); dx(ib,ia) = d(ib,ia)
+    do t = 1, NACT
+      if (.not.inpair(t)) h(t,t) = d(t,t)
+    end do
     select case (ich)
-    case (1); p = h
-    case (2); p = dd
-    case (3); p = dx
-    case default; p = d - h - dd - dx
+    case (1); p = h                 ! SO(2)-invariant Hartree span
+    case (2); p = db                ! every Lambda doublet
+    case default; p = d - h - db    ! remaining off-diagonal distributions
     end select
   end subroutine native_pair_channel
+
+
+!> @brief Identify the degenerate-pair candidates among the four active orbitals.
+!> @detail The pair with the smallest adjacent orbital-energy gap is always
+!>         taken, so that the treatment does not switch on abruptly as a
+!>         degeneracy is approached.  A second, disjoint adjacent pair is taken
+!>         as well when its gap is small compared with the spread of the four
+!>         orbitals, which is what a doubly degenerate frontier set such as the
+!>         e1g/e2u pi orbitals of benzene requires.
+  pure subroutine native_find_pairs(eps,npair,pairs)
+    real(dp), intent(in) :: eps(NACT)
+    integer, intent(out) :: npair, pairs(2,2)
+    real(dp) :: gap(NACT-1), spread
+    integer :: k, kbest, ksecond
+    do k = 1, NACT-1
+      gap(k) = abs(eps(k+1)-eps(k))
+    end do
+    spread = maxval(eps) - minval(eps)
+    kbest = minloc(gap,1)
+    npair = 1
+    pairs(:,1) = (/ kbest, kbest+1 /)
+    pairs(:,2) = 0
+    ksecond = 0
+    do k = 1, NACT-1
+      if (k == kbest .or. k == kbest-1 .or. k == kbest+1) cycle
+      if (ksecond == 0) then
+        ksecond = k
+      else if (gap(k) < gap(ksecond)) then
+        ksecond = k
+      end if
+    end do
+    if (ksecond /= 0 .and. spread > 0.0_dp) then
+      if (gap(ksecond) < PAIR_GAP_FRACTION*spread) then
+        npair = 2
+        pairs(:,2) = (/ ksecond, ksecond+1 /)
+      end if
+    end if
+  end subroutine native_find_pairs
 
 
 !> @brief Channel decomposition of the active two-electron tensor.
 !> @detail ch(:,:,:,:,i,j) is the part of the tensor whose first
 !>         charge-distribution index pair lies in channel i and whose second
 !>         lies in channel j; the sixteen parts sum back to the tensor.
-  subroutine native_seam_channels(g,ia,ib,ch)
+  subroutine native_seam_channels(g,npair,pairs,ch)
     real(dp), intent(in) :: g(NACT,NACT,NACT,NACT)
-    integer, intent(in) :: ia,ib
-    real(dp), intent(out) :: ch(NACT,NACT,NACT,NACT,4,4)
-    real(dp) :: p1(NACT,NACT,NACT,NACT,4), m(NACT,NACT), p(NACT,NACT)
+    integer, intent(in) :: npair,pairs(2,2)
+    real(dp), intent(out) :: ch(NACT,NACT,NACT,NACT,3,3)
+    real(dp) :: p1(NACT,NACT,NACT,NACT,3), m(NACT,NACT), p(NACT,NACT)
     integer :: i,j,q,r,s,t
-    do i = 1, 4
+    do i = 1, 3
       do r = 1, NACT; do s = 1, NACT
         m = g(:,:,r,s)
-        call native_pair_channel(m,ia,ib,i,p)
+        call native_pair_channel(m,npair,pairs,i,p)
         p1(:,:,r,s,i) = p
       end do; end do
     end do
-    do i = 1, 4; do j = 1, 4
+    do i = 1, 3; do j = 1, 3
       do t = 1, NACT; do q = 1, NACT
         m = p1(t,q,:,:,i)
-        call native_pair_channel(m,ia,ib,j,p)
+        call native_pair_channel(m,npair,pairs,j,p)
         ch(t,q,:,:,i,j) = p
       end do; end do
     end do; end do
@@ -472,58 +528,71 @@ contains
 !>         Both reduce to the published mask when the pair carries no doublet
 !>         content, and both are inert at c_H = 1 because the seam enters
 !>         multiplied by (1 - c_H).
-  subroutine native_seam_mask(eri,mode,ia,ib,eri_k)
+  subroutine native_seam_mask(eri,mode,npair,pairs,eri_k)
     real(dp), intent(in) :: eri(NACT,NACT,NACT,NACT)
-    integer, intent(in) :: mode,ia,ib
+    integer, intent(in) :: mode,npair,pairs(2,2)
     real(dp), intent(out) :: eri_k(NACT,NACT,NACT,NACT)
-    integer, parameter :: ICH_DD = 2, ICH_DX = 3, ICH_R = 4
-    real(dp) :: ch(NACT,NACT,NACT,NACT,4,4)
-    real(dp) :: ed(NACT,NACT), ex(NACT,NACT)
-    real(dp) :: gdd,gxx,gdx,gxd,ndd,nxx,ndx,nxd,s2
-    integer :: i,p,q,r,s
+    integer, parameter :: ICH_H = 1, ICH_D = 2, ICH_R = 3
+    integer, parameter :: NQUAD = 64
+    real(dp) :: ch(NACT,NACT,NACT,NACT,3,3)
+    real(dp) :: g1(NACT,NACT,NACT,NACT), g2(NACT,NACT,NACT,NACT)
+    real(dp) :: m1(NACT,NACT,NACT,NACT), b1(NACT,NACT,NACT,NACT)
+    real(dp) :: acc(NACT,NACT,NACT,NACT)
+    real(dp) :: tha,thb,pi,wgt
+    integer :: ka,kb,nb
 
-    if (mode == SEAM_NATIVE) then
+    select case (mode)
+
+    case (SEAM_NATIVE)
       call native_exchange_eri(eri,eri_k)
-      return
-    end if
 
-    call native_seam_channels(eri,ia,ib,ch)
-    eri_k = ch(:,:,:,:,ICH_R,ICH_R)
-    do i = ICH_DD, ICH_DX
-      eri_k = eri_k + 0.5_dp*(ch(:,:,:,:,i,ICH_R) + ch(:,:,:,:,ICH_R,i))
-    end do
+    case (SEAM_S3R)
+      ! Keep the off-diagonal distributions as the published mask does, but give
+      ! every channel that touches a Lambda doublet the uniform weight 1/2, so
+      ! that d and x are treated alike and no orientation survives.  For a single
+      ! pair this is the mean of the published mask taken in the two symmetry
+      ! frames of the doublet.
+      call native_seam_channels(eri,npair,pairs,ch)
+      eri_k = ch(:,:,:,:,ICH_R,ICH_R) &
+            + 0.5_dp*(ch(:,:,:,:,ICH_D,ICH_R) + ch(:,:,:,:,ICH_R,ICH_D) &
+                    + ch(:,:,:,:,ICH_D,ICH_D))
 
-    if (mode == SEAM_S3R) then
-      eri_k = eri_k + 0.5_dp*(ch(:,:,:,:,ICH_DD,ICH_DD) + ch(:,:,:,:,ICH_DD,ICH_DX) &
-                            + ch(:,:,:,:,ICH_DX,ICH_DD) + ch(:,:,:,:,ICH_DX,ICH_DX))
-      return
-    end if
+    case (SEAM_HAAR)
+      ! Reynolds projection: the mean of the published mask over the whole orbit
+      ! of the group that leaves the reference invariant, which is one SO(2) per
+      ! degenerate pair.  Evaluated by quadrature over the product group, so no
+      ! channel algebra and no reference frame enter.
+      pi = acos(-1.0_dp)
+      nb = 1
+      if (npair >= 2) nb = NQUAD
+      wgt = 1.0_dp/real(NQUAD*nb,dp)
+      acc = 0.0_dp
+      do ka = 0, NQUAD-1
+        tha = real(ka,dp)*(0.5_dp*pi)/real(NQUAD,dp)
+        call native_rotate_pair(eri,pairs(1,1),pairs(2,1),tha,g1)
+        do kb = 0, nb-1
+          if (npair >= 2) then
+            thb = real(kb,dp)*(0.5_dp*pi)/real(nb,dp)
+            call native_rotate_pair(g1,pairs(1,2),pairs(2,2),thb,g2)
+          else
+            thb = 0.0_dp
+            g2 = g1
+          end if
+          call native_exchange_eri(g2,m1)
+          if (npair >= 2) then
+            call native_rotate_pair(m1,pairs(1,2),pairs(2,2),-thb,b1)
+          else
+            b1 = m1
+          end if
+          call native_rotate_pair(b1,pairs(1,1),pairs(2,1),-tha,g2)
+          acc = acc + g2
+        end do
+      end do
+      eri_k = wgt*acc
 
-    ! Reynolds projection of the doublet-doublet block.  In the orthonormal
-    ! doublet directions e_d = (E_aa - E_bb)/sqrt2 and e_x = (E_ab + E_ba)/sqrt2
-    ! the block is a 2x2 matrix G; averaging the mask over the SO(2) orbit sends
-    ! G to (G + G^T + I tr G)/8, i.e. keeps half of the trace and a quarter of
-    ! the traceless part.
-    s2 = sqrt(2.0_dp)
-    ed = 0.0_dp; ex = 0.0_dp
-    ed(ia,ia) =  1.0_dp/s2; ed(ib,ib) = -1.0_dp/s2
-    ex(ia,ib) =  1.0_dp/s2; ex(ib,ia) =  1.0_dp/s2
-    gdd = 0.0_dp; gxx = 0.0_dp; gdx = 0.0_dp; gxd = 0.0_dp
-    do p = 1, NACT; do q = 1, NACT; do r = 1, NACT; do s = 1, NACT
-      gdd = gdd + ed(p,q)*ed(r,s)*eri(p,q,r,s)
-      gxx = gxx + ex(p,q)*ex(r,s)*eri(p,q,r,s)
-      gdx = gdx + ed(p,q)*ex(r,s)*eri(p,q,r,s)
-      gxd = gxd + ex(p,q)*ed(r,s)*eri(p,q,r,s)
-    end do; end do; end do; end do
-    ndd = (3.0_dp*gdd + gxx)/8.0_dp
-    nxx = (gdd + 3.0_dp*gxx)/8.0_dp
-    ndx = 0.25_dp*gdx
-    nxd = 0.25_dp*gxd
-    do p = 1, NACT; do q = 1, NACT; do r = 1, NACT; do s = 1, NACT
-      eri_k(p,q,r,s) = eri_k(p,q,r,s) &
-                     + ndd*ed(p,q)*ed(r,s) + nxx*ex(p,q)*ex(r,s) &
-                     + ndx*ed(p,q)*ex(r,s) + nxd*ex(p,q)*ed(r,s)
-    end do; end do; end do; end do
+    case default
+      call native_exchange_eri(eri,eri_k)
+    end select
   end subroutine native_seam_mask
 
 
@@ -850,13 +919,13 @@ contains
 !>         precision, while the value-based seam exposes the gauge freedom.  The
 !>         v_xc diagonal is left alone because at a degenerate pair its block is
 !>         proportional to the identity and therefore already rotation invariant.
-  subroutine native_seam_covariance(h_eff,eri,va,vb,c_h,dets,ucsf,esing_ref,dev)
+  subroutine native_seam_covariance(h_eff,eri,va,vb,c_h,dets,ucsf,npair,pairs,esing_ref,dev)
     use eigen, only: diag_symm_full
     use physical_constants, only: UNITS_EV
     use oqp_linalg
     real(dp), intent(in) :: h_eff(NACT,NACT), eri(NACT,NACT,NACT,NACT)
     real(dp), intent(in) :: va(NACT,NACT), vb(NACT,NACT), c_h
-    integer, intent(in) :: dets(4,NDET)
+    integer, intent(in) :: dets(4,NDET), npair, pairs(2,2)
     real(dp), intent(in) :: ucsf(NDET,NDET), esing_ref(NSING,0:NSEAM-1)
     real(dp), intent(out) :: dev(0:NSEAM-1)
 
@@ -868,23 +937,35 @@ contains
     real(dp) :: hbare(NDET,NDET), hkdet(NDET,NDET), hdet(NDET,NDET)
     real(dp) :: work36(NDET,NDET), hcsf(NDET,NDET)
     real(dp) :: asing(NSING,NSING), esing(NSING)
-    real(dp) :: r(NACT,NACT), c, s
-    integer :: m, k, p, a, ierr
+    real(dp) :: r(NACT,NACT), rk(NACT,NACT), gtmp(NACT,NACT,NACT,NACT), c, s, th
+    integer :: m, k, p, ia, ib, ierr
 
-    c = cos(THETA_TEST); s = sin(THETA_TEST)
+    ! Rotate EVERY degenerate pair, each by its own angle, so that a system with
+    ! more than one degenerate pair (the e1g/e2u frontier pi of benzene, say) is
+    ! tested over its full gauge group and not just one factor of it.
     r = 0.0_dp
     do p = 1, NACT; r(p,p) = 1.0_dp; end do
-    r(PAIR_A,PAIR_A)= c; r(PAIR_A,PAIR_B)= s
-    r(PAIR_B,PAIR_A)=-s; r(PAIR_B,PAIR_B)= c
+    grot = eri
+    do k = 1, npair
+      th = THETA_TEST*real(k,dp)/real(npair,dp) + 0.11_dp*real(k-1,dp)
+      c = cos(th); s = sin(th)
+      ia = pairs(1,k); ib = pairs(2,k)
+      rk = 0.0_dp
+      do p = 1, NACT; rk(p,p) = 1.0_dp; end do
+      rk(ia,ia)= c; rk(ia,ib)= s
+      rk(ib,ia)=-s; rk(ib,ib)= c
+      r = matmul(rk,r)
+      call native_rotate_pair(grot,ia,ib,th,gtmp)
+      grot = gtmp
+    end do
     hrot = matmul(r,matmul(h_eff,transpose(r)))
-    call native_rotate_pair(eri,PAIR_A,PAIR_B,THETA_TEST,grot)
 
     call native_build_spinorb(hrot,grot,1.0_dp,h1,g)
     call native_build_h(dets,h1,g,hbare)
     hzero = 0.0_dp
     dev = 0.0_dp
     do m = 0, NSEAM-1
-      call native_seam_mask(grot,m,PAIR_A,PAIR_B,eri_k)
+      call native_seam_mask(grot,m,npair,pairs,eri_k)
       call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
       call native_build_h(dets,h1k,gk,hkdet)
       hdet = hbare - (1.0_dp-c_h)*hkdet
@@ -912,11 +993,12 @@ contains
 !>         pair free, so its excitation energies are only defined up to that
 !>         freedom; the two covariant seams remove it.  Their spread is the
 !>         residual ambiguity of the convention itself.
-  subroutine native_print_seam_compare(act,thc,aniso,esing_all,equint_all,escf,dev)
+  subroutine native_print_seam_compare(act,npair,pairs,eps_act,thc,aniso, &
+                                      esing_all,equint_all,escf,dev)
     use io_constants, only: iw
     use physical_constants, only: UNITS_EV
-    integer, intent(in) :: act(NACT)
-    real(dp), intent(in) :: thc,aniso,escf
+    integer, intent(in) :: act(NACT), npair, pairs(2,2)
+    real(dp), intent(in) :: eps_act(NACT), thc, aniso, escf
     real(dp), intent(in) :: esing_all(NSING,0:NSEAM-1), equint_all(0:NSEAM-1)
     real(dp), intent(in) :: dev(0:NSEAM-1)
     integer :: k,m
@@ -924,8 +1006,13 @@ contains
 
     write(iw,'(/,1x,78("^"))')
     write(iw,'(/,8x,a,/)') 'Seam convention comparison'
-    write(iw,'(5x,a,i0,a,i0)') 'Degenerate-pair candidate (active orbitals) = ', &
-         act(PAIR_A),', ',act(PAIR_B)
+    write(iw,'(5x,a,4f12.6)') 'Active orbital energies (Hartree)          = ',eps_act
+    write(iw,'(5x,a,i0)')     'Degenerate-pair candidates                 = ',npair
+    do m = 1, npair
+      write(iw,'(7x,a,i0,a,i0,a,es10.2)') 'pair: active orbitals ', &
+           act(pairs(1,m)),', ',act(pairs(2,m)), &
+           '   gap = ',abs(eps_act(pairs(2,m))-eps_act(pairs(1,m)))
+    end do
     write(iw,'(5x,a,f12.6)') 'Doublet anisotropy |Lambda| (Hartree)      = ',aniso
     write(iw,'(5x,a,f12.6)') 'Symmetry-frame angle of the pair (degrees) = ', &
          thc*180.0_dp/acos(-1.0_dp)
