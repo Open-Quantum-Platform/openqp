@@ -1658,6 +1658,24 @@ def solve_fci(
     # fallbacks, so it is left to _determinant_index to build on demand.
     det_index = None
     nspin = 2 * norb
+    # This tensor is (2*norb)**4 doubles and does NOT depend on the determinant
+    # count, so the ndet x ndet budget above can pass while this allocation is
+    # what actually exhausts memory: 2 electrons in 50 orbitals is only 2500
+    # determinants (~48 MiB Hamiltonian, inside max_memory=128) while gspin
+    # alone is ~763 MiB.  It is built here for BOTH the dense and the Davidson
+    # branch below, so it is checked once, here -- at the allocation, not in
+    # resolve_ci_solve, because the native driver never reaches this code and
+    # must stay free to accept a wide active space under a small budget.
+    _spin_bytes = 8 * nspin ** 4
+    if _spin_bytes > budget_bytes:
+        raise ValueError(
+            f"The Python CI solver's spin-orbital integral tensor for "
+            f"norb={norb} needs ~{_spin_bytes / 1024 ** 3:.2f} GiB, exceeding "
+            f"the configured max_memory budget of "
+            f"{budget_bytes / 1024 ** 2:.0f} MiB.  This allocation does not "
+            f"depend on the determinant count, so fewer electrons will not "
+            f"help: reduce active_orbitals, or raise max_memory."
+        )
     hspin, gspin = _spin_orbital_integrals(h1e, eri)
 
     if solver == "dense":

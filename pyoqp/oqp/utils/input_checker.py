@@ -2784,6 +2784,46 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
         action="Set [state_average] root_tracking=overlap.",
         fallback="overlap",
     )
+    # ...but the validated value is then DISCARDED: root_tracking is not a
+    # FCISettings field, and neither CASSCF path performs any overlap matching
+    # between macroiterations.  Each fresh CI solve is consumed in current
+    # energy order, so an orbital step that reorders nearby roots can move
+    # unequal weights -- or a noncontiguous target_roots subset -- onto
+    # different physical states and optimize a discontinuous objective.
+    #
+    # This cannot go in the "differs from its default" dead-key list below: the
+    # DEFAULT here is `overlap`, i.e. the value that does not exist, so a
+    # differs-from-default test would never fire on the case that matters.
+    # Warn whenever state-averaging is actually active over several roots,
+    # which is exactly when energy ordering can be insufficient.
+    _sa_enabled = str(_get(config, "state_average", "enabled", False)
+                      ).strip().lower() in _TRUE_BOOL
+    if _sa_enabled or _as_lower(_get(config, "input", "method", "")) in {
+            "sa-casscf", "sacasscf"}:
+        try:
+            _sa_n = int(_get(config, "state_average", "nstate", 0) or 0)
+        except (TypeError, ValueError):
+            _sa_n = 0
+        if not _sa_n:
+            try:
+                _sa_n = int(_get(config, "ci", "nroot", 1) or 1)
+            except (TypeError, ValueError):
+                _sa_n = 1
+        _sa_targets = _as_list(_get(config, "state_average", "target_roots", []))
+        if _sa_n > 1 or len(_sa_targets) > 1:
+            report.add(
+                "WARNING",
+                "state_average.root_tracking",
+                "State-average roots are followed by energy order only: "
+                "[state_average] root_tracking is validated but not applied, "
+                "and no overlap matching is performed between SA-CASSCF "
+                "macroiterations.",
+                value=_get(config, "state_average", "root_tracking", "overlap"),
+                expected="an implemented tracking scheme",
+                action=("Check the per-iteration state energies for root "
+                        "flips, especially with unequal weights or a "
+                        "noncontiguous target_roots subset."),
+            )
 
     if orbital_file_raw is None:
         orbital_file = ""
@@ -2919,10 +2959,48 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     )
 
     # The PT2 family carries central-difference numerical gradients
-    # (pt2_numgrad.py) wired through the Gradient seam, so every
-    # gradient-consuming driver works for it; casci/casscf remain energy-only.
-    pt2_grad_runtypes = {"energy", "grad", "optimize", "meci", "mecp", "ts",
-                         "mep", "neb", "irc"}
+    # (pt2_numgrad.py) wired through the Gradient seam, so the gradient-
+    # consuming drivers work for it; casci/casscf remain energy-only.
+    #
+    # meci/mecp/neb are deliberately NOT here.  Listing them made this gate
+    # advertise workflows that either cannot pass preflight or are broken:
+    #   - meci is rejected a few thousand lines down by "MECI optimization
+    #     requires an excited-state method" (tdhf/dftb/xtb only), and its
+    #     BaekA selector treats root 0 as the internal reference while PT2
+    #     roots are 0-based -- so the two gates contradict each other.
+    #   - neb is likewise rejected by "NEB currently supports HF/DFT and
+    #     TDHF/MRSF state-specific surfaces".
+    #   - mecp is WORSE: it passes preflight, but MECPOpt.one_step evaluates
+    #     both surfaces through sp.reference()/sp.excitation(), bypassing the
+    #     PT2 energy dispatch entirely, while its Gradient.gradient() call does
+    #     dispatch PT2 -- so the optimizer mixes TDHF energies with PT2
+    #     gradients.  It also needs two different multiplicities, and PT2 here
+    #     is restricted to a closed-shell singlet.
+    # Each is rejected explicitly below with its own reason, so the user gets
+    # one clear message instead of a self-contradicting pair or a silent
+    # mismatch.  Wiring these up properly is a feature, not a checker fix.
+    pt2_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    _pt2_unsupported_runtypes = {
+        "meci": ("MECI requires an excited-state response method; the PT2 "
+                 "numerical-gradient path does not provide the state pair "
+                 "MECIOpt needs."),
+        "mecp": ("MECP crosses two different spin multiplicities and evaluates "
+                 "both surfaces outside the PT2 energy dispatch; PT2 here is "
+                 "restricted to a closed-shell singlet reference."),
+        "neb": ("NEB currently supports HF/DFT and TDHF/MRSF state-specific "
+                "surfaces only."),
+    }
+    if method in PT2_METHOD_ALIASES and runtype in _pt2_unsupported_runtypes:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            f"{runtype.upper()} is not implemented for the PT2 methods. "
+            + _pt2_unsupported_runtypes[runtype],
+            value=f"{method}/{runtype}",
+            expected="energy, grad, optimize, ts, mep, or irc",
+            action=("Use a PT2 runtype that is wired to the numerical-gradient "
+                    "path, or run this workflow with method=tdhf."),
+        )
     if method in PT2_METHOD_ALIASES:
         # Single-state PT2 returns a one-element mol.energies, so the
         # state-specific optimizer's energies[istate] is out of range for the
