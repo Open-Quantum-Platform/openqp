@@ -423,12 +423,20 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
         _ka_u, _kb_u, e0_ext, V = merged
         nuniq = int(e0_ext.size)
     else:
+        # Count first, as the Fortran path does.  Checking val.size only AFTER
+        # _stream_all had built and concatenated the whole stream meant a large
+        # reference could exhaust memory before reaching the guard the user set
+        # precisely to stop that -- the term count per reference is exact and
+        # costs nothing.
+        if sup_a.size:
+            _total = int(sup_a.size) * _terms_per_reference(
+                norb, int(_popcount(sup_a[0])), int(_popcount(sup_b[0])))
+            if _total > max_terms:
+                raise ValueError(
+                    f"direct QDPT2 stream would produce {_total} terms > [pt2] "
+                    f"max_terms={max_terms}; raise the guard or shrink the space")
         ka, kb, val, e0, src = _stream_all(h1e, eri, eps, norb, ncore, nact,
                                            sup_a, sup_b, nproc)
-        if val.size > max_terms:
-            raise ValueError(
-                f"direct QDPT2 stream produced {val.size} terms > [pt2] "
-                f"max_terms={max_terms}; raise the guard or shrink the space")
 
         # merge duplicate external determinants
         order = np.lexsort((kb, ka))

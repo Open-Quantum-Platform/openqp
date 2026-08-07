@@ -1106,6 +1106,28 @@ class OpenQP:
                 f"{method} requires active_electrons=... and active_orbitals=..."
             )
 
+    @staticmethod
+    def _multistate_nroot(nroot, method, multistate):
+        """Root count for a PT2 helper, DERIVED rather than defaulted.
+
+        A multistate PT2 diagonalizes an effective Hamiltonian over the
+        reference states, so one root is not a multistate calculation.  Leaving
+        the helper's `nroot` unset let `[ci] nroot` keep its schema default of
+        1, and the "multistate PT2 needs at least two roots" preflight gate
+        then rejected the helper's own output.  An explicit request always
+        wins; a smaller explicit request for a multistate variant is the user
+        contradicting themselves, and is refused here rather than deeper in.
+        """
+        if nroot is None:
+            return 2 if method in multistate else 1
+        nroot = int(nroot)
+        if method in multistate and nroot < 2:
+            raise ValueError(
+                f"{method} is a multistate method and needs at least two "
+                f"reference roots; got nroot={nroot}."
+            )
+        return nroot
+
     def fci(self, nroot=1, frozen_core=None, runtype=None, basis=None,
             reference="rhf", **keywords):
         """Use a compact OpenQP full-CI setup on an RHF reference."""
@@ -1192,6 +1214,8 @@ class OpenQP:
                            ("level_shift", level_shift)):
             if value is not None:
                 opts[key] = value
+        nroot = self._multistate_nroot(
+            nroot, method, {"ms-caspt2", "xms-caspt2"})
         return self._wf_setup(
             method, runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
@@ -1231,6 +1255,7 @@ class OpenQP:
         opts = dict(keywords.pop("pt2", None) or {})
         if edshft is not None:
             opts["edshft"] = edshft
+        nroot = self._multistate_nroot(nroot, method, {"mcqdpt2", "xmcqdpt2"})
         return self._wf_setup(
             method, runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,

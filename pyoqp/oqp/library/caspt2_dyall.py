@@ -58,13 +58,14 @@ with :mod:`oqp.library.fci`; the reference comes from :mod:`oqp.library.casscf`
 (or a CASCI in the supplied orbitals).
 
 Scope: validation-grade.  Q is the full external determinant space, so this is
-limited to small systems; ``[pt2] max_det`` guards the determinant count.  The
+limited to small systems; ``[cas] max_det`` guards the determinant count.  The
 IPEA shift (``[pt2] ipea_shift``) and the PT2 frozen core (``[pt2] frozen``,
 default = the standard deep cores) are applied.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import comb
 import time
 
 import numpy as np
@@ -75,6 +76,8 @@ from oqp.library.fci import (
     _as_i64c,
     _build_dense_hamiltonian,
     _determinants,
+    check_ao_eri_budget,
+    contiguous_active_space,
     _spin_orbital_integrals,
     _transform_integrals,
     _unpack_lower_triangle,
@@ -258,6 +261,21 @@ def _caspt2_options(config: dict) -> CASPT2Options:
 
 def _reference_roots(options) -> list:
     if options.variant == "caspt2":
+        # A single-state run used to DISCARD target_roots and always correct
+        # options.root -- which is stuck at 0, because [pt2] root is not a
+        # schema key and so cannot be set from an input at all.  So
+        # `pt2.nroot=2, target_roots=1` passed validation and then silently
+        # reported the ground-state correction instead of the requested one.
+        targets = [int(r) for r in (options.target_roots or ())]
+        if len(targets) == 1:
+            return targets
+        if len(targets) > 1:
+            raise ValueError(
+                f"[pt2] target_roots names {len(targets)} roots but the method "
+                "is single-state (caspt2/mrmp2/NEVPT2), which corrects one "
+                "root at a time.  Give exactly one root, or select a "
+                "multistate method (ms-caspt2, xms-caspt2, mcqdpt2, xmcqdpt2)."
+            )
         return [int(options.root)]
     if options.target_roots:
         return [int(r) for r in options.target_roots]
@@ -687,14 +705,21 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
                      active_occ=None, ipea=0.0):
     """Assemble the full electronic Hamiltonian, the H0 operator and the external space."""
     full_nelec = (ncore + active_nelec[0], ncore + active_nelec[1])
-    full_dets = _determinants(norb, full_nelec)
-    ndet = len(full_dets)
+    # Count the space BEFORE enumerating it.  _determinants materialises the
+    # complete list, so a combinatorially large space exhausted memory (or was
+    # OOM-killed) without ever reaching the guard that exists to prevent
+    # exactly that -- the FCI resolver counts with binomials first for the same
+    # reason.  The message names [cas] max_det because [pt2] max_det is not a
+    # schema key, so the parser rejects the input this error used to recommend.
+    ndet = comb(norb, full_nelec[0]) * comb(norb, full_nelec[1])
     if ndet > max_det:
         raise ValueError(
             f"CASPT2 uncontracted determinant space too large: ndet={ndet} > "
-            f"[pt2] max_det={max_det}.  Reduce the basis/active space; an RDM-based "
-            "contraction (larger systems) is a separate step."
+            f"max_det={max_det}.  Raise [cas] max_det, or reduce the "
+            "basis/active space; an RDM-based contraction (larger systems) is "
+            "a separate step."
         )
+    full_dets = _determinants(norb, full_nelec)
     det_index = {det: i for i, det in enumerate(full_dets)}
 
     hspin, gspin = _spin_orbital_integrals(h1e, eri)
@@ -1098,14 +1123,13 @@ def native_caspt2_energy(mol, ref_energy=None):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
 
     nbf = int(mol.data.get_basis()["nbf"])
-    ncore = int(settings.frozen_core)
-    nact = int(settings.active_orbitals)
+    # Same shared planner CASCI/CASSCF use: deriving the active electron count
+    # from frozen_core alone ignored [cas] active_electrons, so an explicit
+    # count either failed on an impossible space or silently correlated a
+    # different one.
     nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
-    active_nelec = (nelec[0] - ncore, nelec[1] - ncore)
-    if nact <= 0 or ncore + nact > nbf:
-        raise ValueError("CASPT2 needs a valid [cas] active_orbitals / frozen_core")
-    if min(active_nelec) < 0:
-        raise ValueError("frozen_core exceeds the available electron count")
+    ncore, nact, active_nelec, _plan = contiguous_active_space(
+        nbf, nelec, settings, "CASPT2")
 
     roots = _reference_roots(options)
     weights = np.full(len(roots), 1.0 / len(roots))
@@ -1116,6 +1140,7 @@ def native_caspt2_energy(mol, ref_energy=None):
     if options.reference == "casscf":
         _run_casscf_reference(mol, ref_energy, roots, weights)
 
+    check_ao_eri_budget(nbf, settings.max_memory, "[cas]")
     oqp.fci_ao_integrals(mol)
     hcore_ao = _unpack_lower_triangle(np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
     # Honour [cas] orbital_source: the standalone CASCI driver routes through

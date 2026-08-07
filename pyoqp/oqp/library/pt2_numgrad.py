@@ -156,7 +156,10 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     # Central-point energies: reuse the ones the caller just computed.
     central = mol.energies
     if not central:
-        central = sp.energy(do_init_scf=False)
+        # Same init_scf policy as the displaced points below: the central and
+        # displaced energies must come from the SAME pipeline or the finite
+        # difference is not a derivative of anything.
+        central = sp.energy(do_init_scf=(guess_mode != 'warm'))
     central = np.asarray([float(e) for e in central], dtype=float)
     nstate = central.size
 
@@ -270,8 +273,14 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
         mol.config['guess']['type'] = guess_type_saved
         try:
             mol.update_system(x0)
+            # Restore through the configured pipeline too.  Forcing init_scf
+            # off here left `mol` holding orbitals and energies from a
+            # different pipeline than every other evaluation -- and if the
+            # auxiliary stage selects or stabilizes a different SCF solution,
+            # the drift check below only warns while that state persists.
             closure = np.asarray(
-                [float(e) for e in sp.energy(do_init_scf=False)], dtype=float)
+                [float(e) for e in sp.energy(do_init_scf=(guess_mode != 'warm'))],
+                dtype=float)
             drift = float(np.max(np.abs(closure - central))) if closure.size == nstate \
                 else float('inf')
             if drift > 1.0e-10:

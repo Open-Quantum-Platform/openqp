@@ -83,6 +83,8 @@ import oqp
 from oqp.library.fci import (
     _determinants,
     active_space_plan,
+    check_ao_eri_budget,
+    contiguous_active_space,
     solve_active_ci,
     resolve_ci_solve,
     _transform_integrals,
@@ -1025,6 +1027,11 @@ class CASSCF:
             raise ValueError("CASSCF currently supports closed-shell singlets")
 
         nbf = int(mol.data.get_basis()["nbf"])
+        # Both FCI and CASCI weigh the dense nbf**4 AO ERI against max_memory
+        # before asking for it; CASSCF did not, so a job with [cas]
+        # max_memory=512 still attempted the multi-gigabyte allocation here
+        # and only met the budget later, on the CI side.
+        check_ao_eri_budget(nbf, settings.max_memory, "[cas]")
         oqp.fci_ao_integrals(mol)
         enuc = float(mol.mol_energy.nenergy)
 
@@ -1044,14 +1051,15 @@ class CASSCF:
             mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
                 np.asarray(_start, dtype=float).T.reshape(_tgt.shape))
 
-        ncore = int(settings.frozen_core)
-        nact = int(settings.active_orbitals)
+        # Resolve the active space through the shared planner rather than
+        # deriving it from frozen_core alone: that derivation ignored [cas]
+        # active_electrons outright, so job.casscf(active_electrons=4,
+        # active_orbitals=4) on H2O asked for five active electrons per spin in
+        # four orbitals, and a merely inconsistent pair ran a DIFFERENT CAS
+        # than the one requested.
         nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
-        active_nelec = (nelec[0] - ncore, nelec[1] - ncore)
-        if nact <= 0 or ncore + nact > nbf:
-            raise ValueError("CASSCF needs a valid [cas] active_orbitals / frozen_core")
-        if min(active_nelec) < 0:
-            raise ValueError("frozen_core exceeds the available electron count")
+        ncore, nact, active_nelec, _plan = contiguous_active_space(
+            nbf, nelec, settings, "CASSCF")
 
         weights, roots, sa_enabled = self._state_average_plan(settings, options)
 
@@ -1144,8 +1152,15 @@ class CASSCF:
         roots = list(getattr(settings, "state_average_target_roots", ()) or ())
         nstate = int(getattr(settings, "state_average_nstate", 0) or 0)
         if not roots:
-            nstate = nstate or max(2, int(settings.nroot))
-            roots = list(range(nstate))
+            # nstate=0 is documented -- and validated in the checker -- as
+            # "inherit [ci] nroot".  max(2, nroot) broke that promise for the
+            # one case where it is observable: with the default ci.nroot=1 a
+            # method=sa-casscf input silently optimised a TWO-state average
+            # instead of the single-root objective it asked for.  Inherit
+            # literally; a one-state average is just the state-specific
+            # objective, which is what the input describes.
+            nstate = nstate or int(settings.nroot)
+            roots = list(range(max(1, nstate)))
         # equal_weights is a switch, not a fallback: an input carrying both
         # equal_weights=true and weights=0.9,0.1 used to optimise the 90/10
         # objective whenever the list happened to match the root count, while

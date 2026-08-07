@@ -1563,6 +1563,41 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         self.assertEqual(config["pt2"]["h0"], "dyall")
         self.assertEqual(config["pt2"]["contraction"], "strong")
 
+    def test_multistate_helpers_derive_at_least_two_ci_roots(self):
+        """A default multistate PT2 helper call must produce an input its own
+        preflight accepts.
+
+        The helpers hardcoded nroot=1 and later merely defaulted it to None --
+        which leaves [ci] nroot at the schema default of 1, so the "multistate
+        PT2 needs at least two roots" gate rejected the helper's own output.
+        This pins the DERIVED value for every multistate variant, and that the
+        single-state variants are left alone."""
+        openqp = load_openqp_module()
+        for helper, variant, expected in (
+            ("caspt2", "caspt2", "1"),
+            ("caspt2", "ms-caspt2", "2"),
+            ("caspt2", "xms-caspt2", "2"),
+            ("qdpt2", "mrmp2", "1"),
+            ("qdpt2", "mcqdpt2", "2"),
+            ("qdpt2", "xmcqdpt2", "2"),
+        ):
+            with self.subTest(helper=helper, variant=variant):
+                job = self._job(openqp, f"h4_{variant}")
+                config = getattr(job, helper)(
+                    active_electrons=4, active_orbitals=4,
+                    variant=variant).to_input_dict()
+                self.assertEqual(config["ci"]["nroot"], expected)
+
+        # An explicit request still wins, and a contradictory one is refused.
+        config = (self._job(openqp, "h4_ms3")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          variant="ms-caspt2", nroot=3).to_input_dict())
+        self.assertEqual(config["ci"]["nroot"], "3")
+        with self.assertRaises(ValueError):
+            (self._job(openqp, "h4_ms1")
+             .caspt2(active_electrons=4, active_orbitals=4,
+                     variant="ms-caspt2", nroot=1))
+
     def test_caspt2_shifts_reach_the_pt2_section(self):
         openqp = load_openqp_module()
         config = (self._job(openqp, "h4_caspt2")

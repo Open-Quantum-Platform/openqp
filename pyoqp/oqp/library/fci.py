@@ -1431,7 +1431,23 @@ def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspa
                 current = np.column_stack([current, vec])
                 new_cols.append(vec)
         if not new_cols:
-            return theta, ritz
+            # Every preconditioned correction collapsed onto the existing
+            # subspace.  Returning the Ritz pairs here published them as
+            # CONVERGED even with a residual above eig_tol -- and unlike the
+            # dense-root path, the iterative caller does no residual check of
+            # its own, so an explicit solver=davidson job (or a large
+            # solver=auto one) could report an energy that violates the
+            # requested tolerance without any diagnostic.  The subspace cannot
+            # grow, so this is a stall, not convergence.
+            if np.max(residual_norms) <= tol:
+                return theta, ritz
+            raise ValueError(
+                f"FCI Davidson stalled: the search subspace can no longer be "
+                f"expanded (every preconditioned correction is linearly "
+                f"dependent on it) at a max residual of "
+                f"{np.max(residual_norms):.3e} > eig_tol={tol:.3e}.  Loosen "
+                f"[ci] eig_tol, raise max_subspace, or improve the guess."
+            )
         sigma = np.column_stack([sigma, matvec(np.column_stack(new_cols))])
         basis = current
 
@@ -2331,6 +2347,57 @@ def active_space_plan(
     )
 
 
+def contiguous_active_space(
+    norb: int,
+    nelec: tuple[int, int],
+    settings,
+    label: str,
+) -> tuple[int, int, tuple[int, int], ActiveSpacePlan]:
+    """Resolve ``(ncore, nact, active_nelec, plan)`` for the drivers that
+    assume a contiguous core/active partition.
+
+    CASSCF and the PT2 reference derived the active electron count as
+    ``nelec - frozen_core`` and so ignored ``[cas] active_electrons``
+    entirely: ``active_electrons=4, active_orbitals=4`` on H2O left
+    ``frozen_core`` at its default and asked for CAS(10,4), which cannot hold
+    the electrons; a merely *inconsistent* pair silently ran a different
+    active space than the one requested.  ``active_space_plan`` is the one
+    place that reconciles the two, so route through it.
+
+    Both drivers build their orbital blocks as ``range(ncore)`` /
+    ``range(ncore, ncore + nact)`` and cannot honour a scattered
+    ``active_orbital_indices`` selection -- previously they did not even look
+    at it.  Reject that explicitly rather than computing a different space.
+    """
+    if not settings.active_orbitals and not tuple(
+            getattr(settings, "active_orbital_indices", ()) or ()):
+        raise ValueError(f"{label} needs a valid [cas] active_orbitals / frozen_core")
+    plan = active_space_plan(norb, nelec, settings)
+    ncore, nact = len(plan.core), len(plan.active)
+    if (tuple(plan.core) != tuple(range(ncore))
+            or tuple(plan.active) != tuple(range(ncore, ncore + nact))):
+        raise ValueError(
+            f"{label} requires a contiguous core/active orbital partition, but "
+            "[cas] active_orbital_indices / core_orbital_indices select a "
+            "scattered set.  Reorder the orbitals ([cas] sort_orbitals or an "
+            "orbital file) so the active space is contiguous, or run "
+            "method=casci, which supports arbitrary selections."
+        )
+    return ncore, nact, tuple(plan.nelec), plan
+
+
+def check_ao_eri_budget(nbf: int, max_memory, section: str) -> None:
+    """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
+    dense_bytes = 8 * int(nbf) ** 4
+    budget_bytes = max(1, int(max_memory)) * 1024 * 1024
+    if dense_bytes > budget_bytes:
+        raise ValueError(
+            f"Dense AO ERI for nbf={nbf} needs ~{dense_bytes / 1024 ** 3:.2f} GiB, "
+            f"exceeding the {section} max_memory budget of {int(max_memory)} MiB. "
+            "Dense FCI is only intended for small basis sets."
+        )
+
+
 def apply_active_space(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -2844,14 +2911,7 @@ class FCI:
 
     def _check_ao_eri_budget(self, nbf: int) -> None:
         """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
-        dense_bytes = 8 * int(nbf) ** 4
-        budget_bytes = max(1, int(self.settings.max_memory)) * 1024 * 1024
-        if dense_bytes > budget_bytes:
-            raise ValueError(
-                f"Dense AO ERI for nbf={nbf} needs ~{dense_bytes / 1024 ** 3:.2f} GiB, "
-                f"exceeding the {self.active_section} max_memory budget of {self.settings.max_memory} MiB. "
-                "Dense FCI is only intended for small basis sets."
-            )
+        check_ao_eri_budget(nbf, self.settings.max_memory, self.active_section)
 
     def _native_mo_integrals(self):
         nbf = int(self.mol.data.get_basis()["nbf"])
