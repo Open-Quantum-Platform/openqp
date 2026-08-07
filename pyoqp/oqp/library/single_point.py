@@ -2,6 +2,7 @@
 import os
 import sys
 import oqp
+import json
 import copy
 import time
 import shutil
@@ -119,7 +120,7 @@ def _no_integral_symmetry_in_child(config):
     return config
 
 
-def _displacement_run_signature(origin_coord, atoms, dx, state):
+def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
     """Short provenance hash naming WHICH run a scratch gradient belongs to.
 
     Finite-difference scratch files are matched by name on restart. Keying
@@ -136,15 +137,29 @@ def _displacement_run_signature(origin_coord, atoms, dx, state):
         reused scratch   1798.99   4047.08   4141.15
         actual answer    1384.73   4886.70   5092.94
 
-    -- reported with exit status 0 and no warning. Folding everything that
-    defines a displacement into the name makes a changed run miss cleanly and
-    recompute instead of matching by accident.
+    -- reported with exit status 0 and no warning.
+
+    Geometry is not the only axis. ``model_signature`` is
+    ``Molecule._hessian_request_signature``, the repository's own definition of
+    "the same Hamiltonian" -- basis and custom libraries, functional, grids and
+    CAM, PCM, DFTB parameter sets, SCF and response settings, QM/MM embedding,
+    and the target state. Without it, changing only the functional and rerunning
+    in the same directory reuses gradients from the old Hamiltonian, which is
+    the identical defect reached by a different axis. The sidecar Hessian cache
+    already signs on exactly these sections; the scratch now agrees with it.
+
+    Array lengths are folded in explicitly because ``tobytes()`` does not encode
+    shape.
     """
-    return hashlib.sha1(
-        np.asarray(origin_coord, dtype=float).tobytes()
-        + np.asarray(atoms, dtype=float).tobytes()
-        + repr((float(dx), int(state))).encode()
-    ).hexdigest()[:10]
+    coord = np.asarray(origin_coord, dtype=float).ravel()
+    charges = np.asarray(atoms, dtype=float).ravel()
+    digest = hashlib.sha256()
+    digest.update(repr((int(coord.size), int(charges.size), float(dx))).encode())
+    digest.update(coord.tobytes())
+    digest.update(charges.tobytes())
+    digest.update(json.dumps(model_signature, sort_keys=True,
+                             default=str).encode())
+    return digest.hexdigest()[:12]
 
 
 class Calculator:
@@ -1587,7 +1602,8 @@ class Hessian(Calculator):
         guess_file = self.mol.log.replace('.log', '.json')
         # Provenance for the scratch tag -- see _displacement_run_signature.
         run_signature = _displacement_run_signature(
-            origin_coord, atoms, dx, self.state)
+            origin_coord, atoms, dx,
+            self.mol._hessian_request_signature(self.state))
         variables_wrapper = [
             {
                 'idx': idx,
@@ -1749,16 +1765,23 @@ def grad_wrapper(key_dict):
         status = 'computed'
 
         # Remove any gradient left over from an earlier run BEFORE launching
-        # the child. The failure detection below is `np.loadtxt(dat)` raising
-        # FileNotFoundError, so a stale file makes a failed child look like a
-        # successful one. Reproduced on this branch: with a previous run's
-        # scratch in place, a numerical Hessian in which every one of the 18
-        # displacements failed still exited 0 and printed a full set of
-        # frequencies -- assembled entirely from the old gradients. That is
-        # exactly the silent success the raise added in this PR is meant to
-        # stop, and the raise never fired because nothing reported a failure.
-        if os.path.exists(dat):
+        # the child. The failure detection below is `np.loadtxt(dat)` raising,
+        # so a stale file makes a failed child look like a successful one.
+        # Reproduced on this branch: with a previous run's scratch in place, a
+        # numerical Hessian in which every one of the 18 displacements failed
+        # still exited 0 and printed a full set of frequencies -- assembled
+        # entirely from the old gradients. That is exactly the silent success
+        # the raise added in this PR is meant to stop, and the raise never
+        # fired because nothing reported a failure.
+        #
+        # FileNotFoundError is tolerated rather than pre-checked with exists():
+        # two runs sharing one scratch directory can race between the check and
+        # the unlink, and losing that race must not abort the worker -- an
+        # unhandled raise here reaches the pool and strands the other ranks.
+        try:
             os.remove(dat)
+        except FileNotFoundError:
+            pass
 
         # modify config
         config['input']['runtype'] = 'grad'
@@ -1803,8 +1826,16 @@ def grad_wrapper(key_dict):
             dump_log(mol, title='', section='end')
     try:
         grad = np.loadtxt(dat).reshape(-1)
+        # A child that died mid-write leaves a short or non-finite file, which
+        # np.loadtxt either parses into the wrong shape or rejects with
+        # ValueError -- neither of which is FileNotFoundError, so the old
+        # handler let it through as a successful displacement or crashed the
+        # worker. The NAC wrapper already validates like this; the Hessian one
+        # did not.
+        if grad.size != np.asarray(coord).size or not np.all(np.isfinite(grad)):
+            raise ValueError('incomplete numerical-Hessian worker output')
 
-    except FileNotFoundError:
+    except (OSError, ValueError):
         grad = np.zeros_like(coord)
         status = 'failed'
 
@@ -2486,6 +2517,16 @@ def nacme_wrapper(key_dict):
         status = 'loaded'
     else:
         status = 'computed'
+
+        # Same reasoning as grad_wrapper: the failure signal is the read below
+        # raising, so a coupling left by an earlier run would let a failed
+        # child report success. The cache marker guards the restart='loaded'
+        # path above, but not this one -- an unmarked or rejected file is still
+        # sitting there and still parses.
+        try:
+            os.remove(dat)
+        except FileNotFoundError:
+            pass
 
         # modify config
         config['input']['runtype'] = 'nacme'

@@ -455,6 +455,8 @@ class Molecule:
             meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
             return False
 
+        input_coords = None
+        rollback = None
         try:
             from oqp.library.symmetry_detect import attach_detection_metadata
 
@@ -485,57 +487,58 @@ class Molecule:
                 total_rotation = rotation @ total_rotation
                 coords = (coords - origin) @ rotation.T
                 self.update_system(coords.ravel())
-            if not converged:
-                # Put the molecule back. `input_coords` was captured above and
-                # never used, so every failure exit left the geometry rotated --
-                # and translated, since the standard frame is centred on the
-                # charge-weighted centroid, which moves EVERY molecule including
-                # C1 where the rotation is exactly the identity.
-                self.update_system(input_coords.ravel())
-                # The loop above called attach_detection_metadata once per
-                # attempt, so meta['detection'] describes the last ROTATED
-                # frame -- coordinates that have just been rolled back. The
-                # caller's restore block cannot repair it: that block keys off
-                # '_reorient_input_coords', which is only set on the success
-                # path below. Left alone, the MO/state/mode labellers (and
-                # response blocking, when enabled) run with operations
-                # expressed for a frame the molecule is no longer in.
-                self._detect_symmetry_metadata()
-                meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
-                return False
+            if converged:
+                # OpenQP contract: ALL outputs (geometry, gradients, MOs)
+                # are consistently in the standard orientation. The transform
+                # below maps user input axes to it:
+                #   r_std = (r_input - origin) @ rotation^T
+                # so input-frame vectors are recovered via v_input = v_std @ R.
+                meta['integral_symmetry'] = {
+                    'status': 'reoriented',
+                    'input_to_standard': {
+                        'rotation': total_rotation.tolist(),
+                        'origin': total_origin.tolist(),
+                    },
+                }
+                # Kept for the second phase, and deliberately OUTSIDE the
+                # integral_symmetry block: every bail in
+                # stage_integral_symmetry_maps replaces that block wholesale,
+                # which would take the coordinates with it. The caller pops
+                # this key immediately after staging, so it never reaches
+                # save_data.
+                meta['_reorient_input_coords'] = input_coords.tolist()
+                return True
 
-            # OpenQP contract: ALL outputs (geometry, gradients, MOs)
-            # are consistently in the standard orientation. The transform
-            # below maps user input axes to it:
-            #   r_std = (r_input - origin) @ rotation^T
-            # so input-frame vectors are recovered via v_input = v_std @ R.
-            meta['integral_symmetry'] = {
-                'status': 'reoriented',
-                'input_to_standard': {
-                    'rotation': total_rotation.tolist(),
-                    'origin': total_origin.tolist(),
-                },
-            }
-            # Kept for the second phase, and deliberately OUTSIDE the
-            # integral_symmetry block: every bail in
-            # stage_integral_symmetry_maps replaces that block wholesale, which
-            # would take the coordinates with it. The caller pops this key
-            # immediately after staging, so it never reaches save_data.
-            meta['_reorient_input_coords'] = input_coords.tolist()
-            return True
+            rollback = {'status': 'skipped_orientation_not_converged'}
         except Exception as exc:
+            rollback = {'status': 'error', 'error': str(exc)}
+
+        # Rollback -- deliberately OUTSIDE the try/except above.
+        #
+        # `input_coords` is captured just before the first rotation. If the
+        # throw happened earlier it is still None and there is nothing to undo,
+        # because the geometry was never moved; restoring from inside the
+        # handler used to raise NameError in exactly that case.
+        #
+        # Re-detection lives out here for two reasons. The loop rewrote
+        # meta['detection'] once per ROTATED attempt, so it describes a frame
+        # the molecule has just left -- and the caller cannot repair it, since
+        # the caller's restore block keys off '_reorient_input_coords', which
+        # only exists on the success path above. Left alone, the MO/state/mode
+        # labellers (and response blocking, when enabled) run with operations
+        # for a frame the molecule is no longer in.
+        #
+        # Running it here rather than inside the handler also keeps
+        # _detect_symmetry_metadata's strict contract intact: a strict
+        # point-group mismatch stays the fatal error it is meant to be, instead
+        # of being swallowed, or of downgrading a plain non-convergence into
+        # status='error'. The status is recorded first so it survives that
+        # raise.
+        if input_coords is not None:
             self.update_system(input_coords.ravel())
-            # Same repair as the non-converged exit -- the detection may
-            # already have been rewritten for a rotated frame before the throw.
-            # Guarded, because this handler IS the fail-safe contract of this
-            # function: re-detection must not replace one exception with
-            # another (_detect_symmetry_metadata raises on a strict mismatch).
-            try:
-                self._detect_symmetry_metadata()
-            except Exception:
-                pass
-            meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
-            return False
+        meta['integral_symmetry'] = rollback
+        self._detect_symmetry_metadata()
+        return False
 
     def stage_integral_symmetry_maps(self):
         """Stage petite-list maps for the Fortran SCF (requires the basis).

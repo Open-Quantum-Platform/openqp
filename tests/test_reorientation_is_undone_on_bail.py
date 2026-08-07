@@ -32,11 +32,63 @@ class FailureExitsRestoreTheGeometry(unittest.TestCase):
         return source[start:end]
 
     def test_the_non_converged_exit_restores(self):
-        body = self._reorient_source()
-        bail = body.index("'skipped_orientation_not_converged'")
-        window = body[:bail]
-        self.assertIn('self.update_system(input_coords.ravel())', window,
-                      'the non-converged exit must put the molecule back')
+        """Behavioural: run the non-converged path and read the geometry back.
+
+        This asserted source text -- that `update_system` appeared before the
+        'skipped_orientation_not_converged' literal. That is a statement about
+        line order, not about the molecule, and it went red when the rollback
+        was hoisted out of the try/except so a strict point-group mismatch
+        would stop being swallowed. The geometry was restored correctly the
+        whole time. Assert on the coordinates instead, so the test tracks the
+        behaviour it is named for.
+        """
+        import numpy as np
+        import oqp.library.symmetry_detect as sd
+        from oqp.molecule.molecule import Molecule
+
+        coord = np.array([0.0, 0.0, -0.0776,
+                          -1.0076, 1.0076, -1.1612,
+                          1.0076, -1.0076, -1.1612])
+        atoms = [8.0, 1.0, 1.0]
+
+        mol = Molecule.__new__(Molecule)
+        mol._system = coord.copy()
+        mol.config = {'input': {'runtype': 'grad'}}
+        mol.get_system = lambda: mol._system
+        mol.get_atoms = lambda: np.array(atoms)
+        mol.update_system = lambda x: setattr(
+            mol, '_system', np.asarray(x, dtype=float).copy())
+        mol.symmetry_metadata = {
+            'status': 'enabled', 'enabled': True, 'use_integral_symmetry': True,
+            'tolerance': 1e-5, 'strict': False,
+            'requested_point_group': 'auto', 'requested_subgroup': 'auto',
+        }
+
+        real = sd.attach_detection_metadata
+        real(mol.symmetry_metadata, np.array(atoms), coord.reshape(-1, 3))
+
+        def never_converges(meta, at, co):
+            real(meta, at, co)
+            rot = np.asarray(meta['detection']['orientation'], dtype=float)
+            if np.max(np.abs(rot - np.eye(3))) < 1e-12:
+                meta['detection']['orientation'] = [[0.0, 1.0, 0.0],
+                                                    [-1.0, 0.0, 0.0],
+                                                    [0.0, 0.0, 1.0]]
+            return meta
+
+        sd.attach_detection_metadata = never_converges
+        try:
+            staged = mol.reorient_for_integral_symmetry()
+        finally:
+            sd.attach_detection_metadata = real
+
+        self.assertFalse(staged)
+        self.assertEqual(
+            mol.symmetry_metadata['integral_symmetry']['status'],
+            'skipped_orientation_not_converged')
+        np.testing.assert_array_equal(
+            np.asarray(mol.get_system(), dtype=float), coord,
+            'the non-converged exit must put the molecule back')
 
     def test_the_exception_handler_restores(self):
         body = self._reorient_source()

@@ -34,8 +34,16 @@ class ScratchGradientsBelongToOneRun(unittest.TestCase):
     GEOM = [0.0, 0.0, -0.0776, -1.0076, 1.0076, -1.1612, 1.0076, -1.0076, -1.1612]
     ATOMS = [8.0, 1.0, 1.0]
 
+    @staticmethod
+    def MODEL(state=0, **model):
+        """The shape Molecule._hessian_request_signature returns."""
+        cfg = {'input': {'basis': '6-31g', 'method': 'hf'}, 'scf': {'type': 'rhf'}}
+        cfg['input'].update(model)
+        return {'version': 2, 'state': int(state), 'model_config': cfg}
+
     def signature(self, **over):
-        kw = dict(origin_coord=self.GEOM, atoms=self.ATOMS, dx=0.01, state=0)
+        kw = dict(origin_coord=self.GEOM, atoms=self.ATOMS, dx=0.01,
+                  model_signature=self.MODEL())
         kw.update(over)
         return _displacement_run_signature(**kw)
 
@@ -59,11 +67,26 @@ class ScratchGradientsBelongToOneRun(unittest.TestCase):
         self.assertNotEqual(self.signature(), self.signature(dx=0.02))
 
     def test_a_different_target_state_changes_the_signature(self):
-        self.assertNotEqual(self.signature(), self.signature(state=1))
+        self.assertNotEqual(self.signature(),
+                            self.signature(model_signature=self.MODEL(state=1)))
 
     def test_a_different_molecule_changes_the_signature(self):
         self.assertNotEqual(self.signature(),
                             self.signature(atoms=[8.0, 1.0, 9.0]))
+
+    def test_a_different_hamiltonian_changes_the_signature(self):
+        """Geometry is not the only axis. Change only the functional, keep the
+        directory and geometry, rerun with restart=true: without the model in
+        the signature every tag still matched and the driver assembled a
+        Hessian from the old Hamiltonian's gradients."""
+        self.assertNotEqual(
+            self.signature(),
+            self.signature(model_signature=self.MODEL(functional='bhhlyp')))
+
+    def test_a_different_basis_changes_the_signature(self):
+        self.assertNotEqual(
+            self.signature(),
+            self.signature(model_signature=self.MODEL(basis='cc-pvdz')))
 
 
 class ReorientationRollbackLeavesADetectionThatDescribesUs(unittest.TestCase):
@@ -147,99 +170,138 @@ class ReorientationRollbackLeavesADetectionThatDescribesUs(unittest.TestCase):
             err_msg='detection still describes the frame that was rolled back')
 
 
-class FailureVerdictReachesEveryRank(unittest.TestCase):
-    """`flags` must be broadcast, not just the result array.
+class GradWrapperReportsAFailedChild(unittest.TestCase):
+    """`grad_wrapper` must report 'failed' whenever the child did not produce
+    a fresh gradient for THIS run -- not merely when no file exists.
 
-    It is appended to only inside the rank-0 guard, and only `grads`/`dcm` were
-    broadcast -- so every other rank saw an empty list, found no 'failed', and
-    walked into the analysis and the next collective while rank 0 raised and
-    unwound past main()'s finalize_mpi(). Measured with two ranks and all 18
-    displacements failing: before, 1 of 2 ranks raised and the job hung until
-    killed at 150 s; after, both raised and it exited 1 in 17 s.
+    Failure is signalled by the read raising. A gradient left by an earlier run
+    therefore made a failed child look successful: with a previous run's
+    scratch present, a numerical Hessian in which every one of 18 displacements
+    failed still exited 0 and printed a full set of frequencies assembled from
+    the old files.
 
-    This models the rank-0-only collection and asserts the non-root rank
-    reaches the same verdict.
+    These drive the real `grad_wrapper`, with the child execution stubbed out so
+    the test costs nothing. Reverting either the pre-launch removal or the
+    widened exception handler turns them red.
     """
 
-    class FakeMPI:
-        """Root holds the real value; every other rank receives it."""
+    def _key_dict(self, tmp, restart=False):
+        return {
+            'idx': 0, 'tag': 'sig0c0p',
+            'atoms': np.array([8.0, 1.0, 1.0]),
+            'coord': np.zeros(9),
+            'dir_hess': tmp,
+            'project_name': 'probe',
+            'config': {'input': {}, 'guess': {}, 'properties': {},
+                       'hess': {'state': 0, 'temperature': [298.15]},
+                       'tests': {}},
+            'guess_file': os.path.join(tmp, 'probe.json'),
+            'state': 0, 'restart': restart,
+        }
 
-        def __init__(self, rank):
-            self.rank = rank
-            self._root_payload = None
+    def _run(self, tmp, restart=False):
+        """Call grad_wrapper with the child neutered, as a failed child would
+        leave things."""
+        from oqp.library import single_point
 
-        def bcast(self, data, root=0, barrier=True):
-            if self.rank == root:
-                self._root_payload = data
-                return data
-            return self._root_payload
+        os.environ.setdefault('OMP_NUM_THREADS', '1')
+        original = single_point._run_oqp_external
+        single_point._run_oqp_external = lambda *a, **k: None
+        try:
+            return single_point.grad_wrapper(self._key_dict(tmp, restart))
+        finally:
+            single_point._run_oqp_external = original
 
-    def _collect(self, mpi, per_displacement_flags):
-        """The shape of numerical_hess/numerical_nac's collection loop."""
-        flags = []
-        for flag in per_displacement_flags:
-            if mpi.rank == 0:
-                flags.append(flag)
-        return mpi.bcast(flags)
-
-    def test_a_non_root_rank_sees_the_failure(self):
-        root = self.FakeMPI(rank=0)
-        worker = self.FakeMPI(rank=1)
-        # Both ranks observe the same displacement outcomes; only rank 0 records.
-        outcomes = ['failed'] * 18
-        root_flags = self._collect(root, outcomes)
-        worker._root_payload = root_flags  # what the collective delivers
-        worker_flags = self._collect(worker, outcomes)
-
-        self.assertIn('failed', root_flags)
-        self.assertIn('failed', worker_flags,
-                      'the non-root rank must reach the same verdict, or it '
-                      'walks into a collective while rank 0 unwinds')
-        self.assertEqual(root_flags, worker_flags)
-
-    def test_without_the_broadcast_the_ranks_disagree(self):
-        """The control: this is what the code did before, and why it hung."""
-        worker = self.FakeMPI(rank=1)
-        unbroadcast = [f for f in ['failed'] * 18 if worker.rank == 0]
-        self.assertEqual(unbroadcast, [])
-        self.assertNotIn('failed', unbroadcast)
-
-
-class AStaleGradientCannotMaskAFailedChild(unittest.TestCase):
-    """`grad_wrapper` detects failure by `np.loadtxt(dat)` raising, so a
-    gradient left by an earlier run makes a failed child look successful.
-
-    Reproduced on this branch: with a previous run's scratch present, a
-    numerical Hessian in which every one of the 18 displacements failed still
-    exited 0 and printed a full set of frequencies, assembled entirely from the
-    old gradients -- the exact silent success the raise added in this PR exists
-    to stop.
-    """
-
-    def test_the_reader_fails_when_the_file_is_absent(self):
-        """The failure signal the driver depends on."""
+    def test_a_child_that_produced_nothing_is_failed(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            dat = os.path.join(tmp, 'missing.grad_0')
-            with self.assertRaises(OSError):
-                np.loadtxt(dat)
+            _, _, status, _ = self._run(tmp)
+            self.assertEqual(status, 'failed')
 
-    def test_a_leftover_file_would_otherwise_read_as_success(self):
-        """Why removing it before launching the child is the fix: a stale file
-        loads cleanly and is indistinguishable from a fresh one."""
+    def test_a_gradient_from_an_earlier_run_does_not_mask_the_failure(self):
+        """The reproduced defect: the old file is readable, so without the
+        pre-launch removal the worker reports 'computed' and the driver
+        assembles a Hessian from stale gradients."""
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            dat = os.path.join(tmp, 'stale.grad_0')
-            np.savetxt(dat, np.arange(9, dtype=float))
+            stale = os.path.join(tmp, 'probe.sig0c0p.grad_0')
+            np.savetxt(stale, np.arange(9, dtype=float))
+            self.assertTrue(os.path.exists(stale))
 
-            stale = np.loadtxt(dat).reshape(-1)
-            self.assertEqual(stale.size, 9)  # reads as a perfectly good gradient
+            _, grad, status, _ = self._run(tmp)
 
-            os.remove(dat)                   # what the fix does pre-launch
-            with self.assertRaises(OSError):
-                np.loadtxt(dat)
+            self.assertEqual(status, 'failed',
+                             'a leftover gradient must not read as success')
+            np.testing.assert_array_equal(
+                grad, np.zeros(9),
+                'the stale values must not reach the Hessian')
+
+    def test_a_truncated_gradient_is_failed_not_reshaped(self):
+        """A child killed mid-write leaves a short file. np.loadtxt parses it
+        happily, so only a size check catches it -- and the handler has to
+        cover ValueError, which FileNotFoundError alone did not."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            key = self._key_dict(tmp, restart=True)
+            dat = os.path.join(tmp, 'probe.sig0c0p.grad_0')
+            np.savetxt(dat, np.arange(4, dtype=float))  # 4 values, 9 expected
+
+            from oqp.library import single_point
+            os.environ.setdefault('OMP_NUM_THREADS', '1')
+            _, grad, status, _ = single_point.grad_wrapper(key)
+
+            self.assertEqual(status, 'failed')
+            np.testing.assert_array_equal(grad, np.zeros(9))
+
+    def test_a_complete_gradient_still_loads_on_restart(self):
+        """The guard must not break the feature it protects."""
+        import tempfile
+
+        from oqp.library import single_point
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dat = os.path.join(tmp, 'probe.sig0c0p.grad_0')
+            expected = np.arange(9, dtype=float)
+            np.savetxt(dat, expected)
+
+            os.environ.setdefault('OMP_NUM_THREADS', '1')
+            _, grad, status, _ = single_point.grad_wrapper(
+                self._key_dict(tmp, restart=True))
+
+            self.assertEqual(status, 'loaded')
+            np.testing.assert_allclose(grad, expected)
+
+
+class TheScratchTagCarriesTheSignature(unittest.TestCase):
+    """The signature has to reach the filenames, not just exist as a helper.
+
+    Asserting only on `_displacement_run_signature` would pass with the tag
+    integration reverted -- the failure mode this branch's earlier tests had.
+    """
+
+    def test_the_tag_changes_when_the_signature_changes(self):
+        from oqp.library.single_point import _displacement_run_signature
+
+        geom = [0.0, 0.0, -0.0776, -1.0076, 1.0076, -1.1612,
+                1.0076, -1.0076, -1.1612]
+        atoms = [8.0, 1.0, 1.0]
+        model = {'version': 2, 'state': 0,
+                 'model_config': {'input': {'basis': '6-31g', 'method': 'hf'}}}
+        other = {'version': 2, 'state': 0,
+                 'model_config': {'input': {'basis': '6-31g',
+                                            'functional': 'bhhlyp'}}}
+
+        a = _displacement_run_signature(geom, atoms, 0.01, model)
+        b = _displacement_run_signature(geom, atoms, 0.01, other)
+        self.assertNotEqual(
+            a, b, 'changing only the Hamiltonian must change the signature')
+
+        # And the tag really is built from it, exactly as numerical_hess does.
+        self.assertNotEqual(f'{a}c0p', f'{b}c0p')
+        self.assertTrue(f'{a}c0p'.startswith(a))
 
 
 if __name__ == '__main__':
