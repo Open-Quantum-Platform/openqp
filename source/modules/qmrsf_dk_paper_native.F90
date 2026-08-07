@@ -122,6 +122,7 @@ contains
     call native_build_h(dets,h1,g,hbare)
     call native_build_ucsf(dets,ucsf,orth_err,csf_label)
     call native_pair_doublet(eri_act,PAIR_A,PAIR_B,pair_thc,pair_aniso)
+    call native_dump_active(h_eff,eri_act,va_act,vb_act,c_h)
     hzero = 0.0_dp
 
     do iseam = 0, NSEAM-1
@@ -220,7 +221,7 @@ contains
     call native_seam_covariance(h_eff,eri_act,va_act,vb_act,c_h,dets,ucsf, &
                                 esing_all,gauge_dev)
     call native_print_seam_compare(act,pair_thc,pair_aniso,esing_all,equint_all, &
-                                   eref,gauge_dev)
+                                   infos%mol_energy%energy,gauge_dev)
 
     call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err, &
                            esing_all,etrip_all,equint_all,pair_aniso)
@@ -389,44 +390,140 @@ contains
 !>           mode 2  SEAM_HAAR    mean of the mask over the full SO(2) orbit
 !>                                (Reynolds projection); the traceless part of
 !>                                the doublet-doublet channel carries 1/4
+!> @brief Split a charge-distribution matrix into the four seam channels.
+!> @detail For the pair plane (ia,ib) the symmetric distribution matrices
+!>         decompose orthogonally into
+!>           1 H   the SO(2)-invariant Hartree span: the diagonal outside the
+!>                 pair plus the pair trace rho_s = (a^2+b^2)/sqrt2,
+!>           2 Dd  the doublet component d = (a^2-b^2)/sqrt2,
+!>           3 Dx  the doublet component x = sqrt2 ab,
+!>           4 R   every remaining off-diagonal distribution.
+!>         (Dd,Dx) is the Lambda doublet: it rotates by twice the orbital angle,
+!>         while H and R are unmixed by the pair rotation.
+  pure subroutine native_pair_channel(d,ia,ib,ich,p)
+    real(dp), intent(in) :: d(NACT,NACT)
+    integer, intent(in) :: ia,ib,ich
+    real(dp), intent(out) :: p(NACT,NACT)
+    real(dp) :: h(NACT,NACT),dd(NACT,NACT),dx(NACT,NACT),tr,df
+    integer :: t
+    h = 0.0_dp; dd = 0.0_dp; dx = 0.0_dp
+    do t = 1, NACT
+      if (t /= ia .and. t /= ib) h(t,t) = d(t,t)
+    end do
+    tr = 0.5_dp*(d(ia,ia)+d(ib,ib))
+    df = 0.5_dp*(d(ia,ia)-d(ib,ib))
+    h(ia,ia) = tr;  h(ib,ib) = tr
+    dd(ia,ia) = df; dd(ib,ib) = -df
+    dx(ia,ib) = d(ia,ib); dx(ib,ia) = d(ib,ia)
+    select case (ich)
+    case (1); p = h
+    case (2); p = dd
+    case (3); p = dx
+    case default; p = d - h - dd - dx
+    end select
+  end subroutine native_pair_channel
+
+
+!> @brief Channel decomposition of the active two-electron tensor.
+!> @detail ch(:,:,:,:,i,j) is the part of the tensor whose first
+!>         charge-distribution index pair lies in channel i and whose second
+!>         lies in channel j; the sixteen parts sum back to the tensor.
+  subroutine native_seam_channels(g,ia,ib,ch)
+    real(dp), intent(in) :: g(NACT,NACT,NACT,NACT)
+    integer, intent(in) :: ia,ib
+    real(dp), intent(out) :: ch(NACT,NACT,NACT,NACT,4,4)
+    real(dp) :: p1(NACT,NACT,NACT,NACT,4), m(NACT,NACT), p(NACT,NACT)
+    integer :: i,j,q,r,s,t
+    do i = 1, 4
+      do r = 1, NACT; do s = 1, NACT
+        m = g(:,:,r,s)
+        call native_pair_channel(m,ia,ib,i,p)
+        p1(:,:,r,s,i) = p
+      end do; end do
+    end do
+    do i = 1, 4; do j = 1, 4
+      do t = 1, NACT; do q = 1, NACT
+        m = p1(t,q,:,:,i)
+        call native_pair_channel(m,ia,ib,j,p)
+        ch(t,q,:,:,i,j) = p
+      end do; end do
+    end do; end do
+  end subroutine native_seam_channels
+
+
+!> @brief Build the seam exchange tensor under the requested convention.
+!> @detail The value-based mask of @ref native_exchange_eri keeps exactly the
+!>         off-diagonal charge distributions, i.e. the channels (Dx,R) on both
+!>         index pairs, and discards the doublet component d together with the
+!>         Hartree span.  Splitting one doublet that way is what breaks the
+!>         invariance: under a rotation of the pair d and x mix, so every
+!>         dressed element containing K_ab or J_ab moves by
+!>         (1/2) sin^2(2 theta) Lambda, while the antisymmetrized J - K does
+!>         not move at all.  The alternatives below weight the doublet
+!>         isotropically and are therefore orientation independent by
+!>         construction, with no reference frame entering their definition:
+!>           mode 0  SEAM_NATIVE  the published mask, (Dx,R) x (Dx,R)
+!>           mode 1  SEAM_S3R     every channel touching the doublet at 1/2
+!>           mode 2  SEAM_HAAR    the same, except that the doublet-doublet
+!>                                block keeps 1/2 of its trace and 1/4 of its
+!>                                traceless part -- the Reynolds projection,
+!>                                i.e. the mean of the published mask over the
+!>                                whole SO(2) orbit
+!>         Both reduce to the published mask when the pair carries no doublet
+!>         content, and both are inert at c_H = 1 because the seam enters
+!>         multiplied by (1 - c_H).
   subroutine native_seam_mask(eri,mode,ia,ib,eri_k)
     real(dp), intent(in) :: eri(NACT,NACT,NACT,NACT)
     integer, intent(in) :: mode,ia,ib
     real(dp), intent(out) :: eri_k(NACT,NACT,NACT,NACT)
-    integer, parameter :: NQUAD = 360
-    real(dp) :: grot(NACT,NACT,NACT,NACT), mrot(NACT,NACT,NACT,NACT)
-    real(dp) :: back(NACT,NACT,NACT,NACT), acc(NACT,NACT,NACT,NACT)
-    real(dp) :: th,thc,aniso,pi
-    integer :: k
+    integer, parameter :: ICH_DD = 2, ICH_DX = 3, ICH_R = 4
+    real(dp) :: ch(NACT,NACT,NACT,NACT,4,4)
+    real(dp) :: ed(NACT,NACT), ex(NACT,NACT)
+    real(dp) :: gdd,gxx,gdx,gxd,ndd,nxx,ndx,nxd,s2
+    integer :: i,p,q,r,s
 
-    pi = acos(-1.0_dp)
-    select case (mode)
-    case (SEAM_NATIVE)
+    if (mode == SEAM_NATIVE) then
       call native_exchange_eri(eri,eri_k)
-    case (SEAM_S3R)
-      call native_pair_doublet(eri,ia,ib,thc,aniso)
-      acc = 0.0_dp
-      do k = 0, 1
-        th = thc + real(k,dp)*pi/4.0_dp
-        call native_rotate_pair(eri,ia,ib,th,grot)
-        call native_exchange_eri(grot,mrot)
-        call native_rotate_pair(mrot,ia,ib,-th,back)
-        acc = acc + back
-      end do
-      eri_k = 0.5_dp*acc
-    case (SEAM_HAAR)
-      acc = 0.0_dp
-      do k = 0, NQUAD-1
-        th = real(k,dp)*(0.5_dp*pi)/real(NQUAD,dp)
-        call native_rotate_pair(eri,ia,ib,th,grot)
-        call native_exchange_eri(grot,mrot)
-        call native_rotate_pair(mrot,ia,ib,-th,back)
-        acc = acc + back
-      end do
-      eri_k = acc/real(NQUAD,dp)
-    case default
-      call native_exchange_eri(eri,eri_k)
-    end select
+      return
+    end if
+
+    call native_seam_channels(eri,ia,ib,ch)
+    eri_k = ch(:,:,:,:,ICH_R,ICH_R)
+    do i = ICH_DD, ICH_DX
+      eri_k = eri_k + 0.5_dp*(ch(:,:,:,:,i,ICH_R) + ch(:,:,:,:,ICH_R,i))
+    end do
+
+    if (mode == SEAM_S3R) then
+      eri_k = eri_k + 0.5_dp*(ch(:,:,:,:,ICH_DD,ICH_DD) + ch(:,:,:,:,ICH_DD,ICH_DX) &
+                            + ch(:,:,:,:,ICH_DX,ICH_DD) + ch(:,:,:,:,ICH_DX,ICH_DX))
+      return
+    end if
+
+    ! Reynolds projection of the doublet-doublet block.  In the orthonormal
+    ! doublet directions e_d = (E_aa - E_bb)/sqrt2 and e_x = (E_ab + E_ba)/sqrt2
+    ! the block is a 2x2 matrix G; averaging the mask over the SO(2) orbit sends
+    ! G to (G + G^T + I tr G)/8, i.e. keeps half of the trace and a quarter of
+    ! the traceless part.
+    s2 = sqrt(2.0_dp)
+    ed = 0.0_dp; ex = 0.0_dp
+    ed(ia,ia) =  1.0_dp/s2; ed(ib,ib) = -1.0_dp/s2
+    ex(ia,ib) =  1.0_dp/s2; ex(ib,ia) =  1.0_dp/s2
+    gdd = 0.0_dp; gxx = 0.0_dp; gdx = 0.0_dp; gxd = 0.0_dp
+    do p = 1, NACT; do q = 1, NACT; do r = 1, NACT; do s = 1, NACT
+      gdd = gdd + ed(p,q)*ed(r,s)*eri(p,q,r,s)
+      gxx = gxx + ex(p,q)*ex(r,s)*eri(p,q,r,s)
+      gdx = gdx + ed(p,q)*ex(r,s)*eri(p,q,r,s)
+      gxd = gxd + ex(p,q)*ed(r,s)*eri(p,q,r,s)
+    end do; end do; end do; end do
+    ndd = (3.0_dp*gdd + gxx)/8.0_dp
+    nxx = (gdd + 3.0_dp*gxx)/8.0_dp
+    ndx = 0.25_dp*gdx
+    nxd = 0.25_dp*gxd
+    do p = 1, NACT; do q = 1, NACT; do r = 1, NACT; do s = 1, NACT
+      eri_k(p,q,r,s) = eri_k(p,q,r,s) &
+                     + ndd*ed(p,q)*ed(r,s) + nxx*ex(p,q)*ex(r,s) &
+                     + ndx*ed(p,q)*ex(r,s) + nxd*ex(p,q)*ed(r,s)
+    end do; end do; end do; end do
   end subroutine native_seam_mask
 
 
@@ -815,11 +912,11 @@ contains
 !>         pair free, so its excitation energies are only defined up to that
 !>         freedom; the two covariant seams remove it.  Their spread is the
 !>         residual ambiguity of the convention itself.
-  subroutine native_print_seam_compare(act,thc,aniso,esing_all,equint_all,eref,dev)
+  subroutine native_print_seam_compare(act,thc,aniso,esing_all,equint_all,escf,dev)
     use io_constants, only: iw
     use physical_constants, only: UNITS_EV
     integer, intent(in) :: act(NACT)
-    real(dp), intent(in) :: thc,aniso,eref
+    real(dp), intent(in) :: thc,aniso,escf
     real(dp), intent(in) :: esing_all(NSING,0:NSEAM-1), equint_all(0:NSEAM-1)
     real(dp), intent(in) :: dev(0:NSEAM-1)
     integer :: k,m
@@ -840,14 +937,20 @@ contains
     write(iw,'(5x,a)')   'and are inert at c_H = 1.'
 
     write(iw,'(/,5x,a)') 'Gauge-covariance gate: largest change of any singlet'
-    write(iw,'(5x,a)')   'excitation energy when the pair is rotated by 37 degrees (eV)'
+    write(iw,'(5x,a)')   'excitation energy when the pair is rotated by 37 degrees (eV).'
+    write(iw,'(5x,a)')   'Meaningful only at an exact degeneracy, where the rotation is a'
+    write(iw,'(5x,a)')   'symmetry of the reference; elsewhere the diagonal v_xc patch is'
+    write(iw,'(5x,a)')   'itself orientation dependent and every convention moves.'
     do m = 0, NSEAM-1
       write(iw,'(7x,a8,es14.4)') SEAM_NAME(m), dev(m)
     end do
 
+    ! Each convention has its own quintet configuration state function, so the
+    ! energy law E(state) = E_SCF + omega(state) must subtract that convention's
+    ! own A_quintet, not the value-based one.
     write(iw,'(/,5x,a)') 'Ground-state total energy (Hartree)'
     do m = 0, NSEAM-1
-      write(iw,'(7x,a8,f22.10)') SEAM_NAME(m), eref+esing_all(1,m)
+      write(iw,'(7x,a8,f22.10)') SEAM_NAME(m), escf + esing_all(1,m) - equint_all(m)
     end do
 
     write(iw,'(/,5x,a)') 'Singlet excitation energies (eV)'
@@ -862,6 +965,25 @@ contains
     end do
     write(iw,'(1x,78("=")/)')
   end subroutine native_print_seam_compare
+
+
+!> @brief Dump the active-space inputs of the seam so that an independent
+!>        implementation can be applied to exactly the same integrals.
+  subroutine native_dump_active(h_eff,eri,va,vb,c_h)
+    real(dp), intent(in) :: h_eff(NACT,NACT), eri(NACT,NACT,NACT,NACT)
+    real(dp), intent(in) :: va(NACT,NACT), vb(NACT,NACT), c_h
+    integer :: u,p,q,r,s
+    open(newunit=u,file='qmrsf_dk_active.dat',status='replace',action='write')
+    write(u,'(a,1x,i0)') 'QMRSF_DK_ACTIVE_V1',NACT
+    write(u,'(es24.16)') c_h
+    do p = 1, NACT; write(u,'(*(es24.16,1x))') h_eff(p,:); end do
+    do p = 1, NACT; write(u,'(*(es24.16,1x))') va(p,:); end do
+    do p = 1, NACT; write(u,'(*(es24.16,1x))') vb(p,:); end do
+    do p = 1, NACT; do q = 1, NACT; do r = 1, NACT; do s = 1, NACT
+      write(u,'(es24.16)') eri(p,q,r,s)
+    end do; end do; end do; end do
+    close(u)
+  end subroutine native_dump_active
 
 
   subroutine native_write_dump(c_h,c_ref,aq,es,et,orth_err,cross_err, &
