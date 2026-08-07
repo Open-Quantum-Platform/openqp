@@ -5,6 +5,7 @@ import oqp
 import copy
 import time
 import shutil
+import hashlib
 import platform
 import subprocess
 import multiprocessing
@@ -116,6 +117,34 @@ def _no_integral_symmetry_in_child(config):
     symmetry = config.setdefault('symmetry', {})
     symmetry['use_integral_symmetry'] = 'false'
     return config
+
+
+def _displacement_run_signature(origin_coord, atoms, dx, state):
+    """Short provenance hash naming WHICH run a scratch gradient belongs to.
+
+    Finite-difference scratch files are matched by name on restart. Keying
+    them on the displaced coordinate and sign alone is not enough to identify
+    a gradient: rerun the same deck at a PERTURBED geometry with
+    ``[hess] restart=true`` and every name is bit-identical to the previous
+    run's, so ``grad_wrapper`` reports all of them 'loaded' -- it never
+    compares coordinates -- and the driver returns the PREVIOUS geometry's
+    Hessian for the new structure.
+
+    Measured on water/6-31G HF, populating the scratch at one geometry and
+    rerunning at another, in cm^-1:
+
+        reused scratch   1798.99   4047.08   4141.15
+        actual answer    1384.73   4886.70   5092.94
+
+    -- reported with exit status 0 and no warning. Folding everything that
+    defines a displacement into the name makes a changed run miss cleanly and
+    recompute instead of matching by accident.
+    """
+    return hashlib.sha1(
+        np.asarray(origin_coord, dtype=float).tobytes()
+        + np.asarray(atoms, dtype=float).tobytes()
+        + repr((float(dx), int(state))).encode()
+    ).hexdigest()[:10]
 
 
 class Calculator:
@@ -1556,15 +1585,19 @@ class Hessian(Calculator):
         self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
+        # Provenance for the scratch tag -- see _displacement_run_signature.
+        run_signature = _displacement_run_signature(
+            origin_coord, atoms, dx, self.state)
         variables_wrapper = [
             {
                 'idx': idx,
-                # Scratch files are keyed by WHICH coordinate was displaced and
-                # in which direction, never by list position: a restart whose
-                # unique-atom list differs (symmetry_unique toggled, geometry
-                # perturbed) then simply misses and recomputes instead of
-                # silently reading a gradient for a different displacement.
-                'tag': f'c{cols[idx % nred]}{"p" if idx < nred else "m"}',
+                # Scratch files are keyed by the run signature above plus WHICH
+                # coordinate was displaced and in which direction, never by list
+                # position: a restart whose unique-atom list differs
+                # (symmetry_unique toggled, geometry perturbed) then simply
+                # misses and recomputes instead of silently reading a gradient
+                # for a different displacement -- or a different geometry.
+                'tag': f'{run_signature}c{cols[idx % nred]}{"p" if idx < nred else "m"}',
                 'atoms': atoms,
                 'coord': coord,
                 'dir_hess': dir_hess,
@@ -1607,6 +1640,14 @@ class Hessian(Calculator):
         pool.close()
 
         grads = self.mpi_manager.bcast(grads)
+        # `flags` is appended to only inside the rank-0 guard above, and only
+        # the result array was broadcast. Every other rank therefore saw an
+        # empty list, read no 'failed', took the success branch, and walked on
+        # into the analysis and the next collective -- while rank 0 raised and
+        # unwound past main()'s finalize_mpi(). One rank aborting while the
+        # rest block in a collective is a hang, not a failure. The verdict has
+        # to be broadcast alongside the data it describes.
+        flags = self.mpi_manager.bcast(flags)
         # compute hessian
         forward = np.array(grads[0:nred])
         backward = np.array(grads[nred:])
@@ -1706,6 +1747,18 @@ def grad_wrapper(key_dict):
         status = 'loaded'
     else:
         status = 'computed'
+
+        # Remove any gradient left over from an earlier run BEFORE launching
+        # the child. The failure detection below is `np.loadtxt(dat)` raising
+        # FileNotFoundError, so a stale file makes a failed child look like a
+        # successful one. Reproduced on this branch: with a previous run's
+        # scratch in place, a numerical Hessian in which every one of the 18
+        # displacements failed still exited 0 and printed a full set of
+        # frequencies -- assembled entirely from the old gradients. That is
+        # exactly the silent success the raise added in this PR is meant to
+        # stop, and the raise never fired because nothing reported a failure.
+        if os.path.exists(dat):
+            os.remove(dat)
 
         # modify config
         config['input']['runtype'] = 'grad'
@@ -2378,6 +2431,9 @@ class NAC(Calculator):
         pool.close()
 
         dcm = self.mpi_manager.bcast(dcm)
+        # Same rank-0-only `flags` hazard as the numerical Hessian above; this
+        # driver has the identical shape, so it needs the identical broadcast.
+        flags = self.mpi_manager.bcast(flags)
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])

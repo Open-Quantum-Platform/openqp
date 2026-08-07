@@ -492,6 +492,15 @@ class Molecule:
                 # charge-weighted centroid, which moves EVERY molecule including
                 # C1 where the rotation is exactly the identity.
                 self.update_system(input_coords.ravel())
+                # The loop above called attach_detection_metadata once per
+                # attempt, so meta['detection'] describes the last ROTATED
+                # frame -- coordinates that have just been rolled back. The
+                # caller's restore block cannot repair it: that block keys off
+                # '_reorient_input_coords', which is only set on the success
+                # path below. Left alone, the MO/state/mode labellers (and
+                # response blocking, when enabled) run with operations
+                # expressed for a frame the molecule is no longer in.
+                self._detect_symmetry_metadata()
                 meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
                 return False
 
@@ -516,6 +525,15 @@ class Molecule:
             return True
         except Exception as exc:
             self.update_system(input_coords.ravel())
+            # Same repair as the non-converged exit -- the detection may
+            # already have been rewritten for a rotated frame before the throw.
+            # Guarded, because this handler IS the fail-safe contract of this
+            # function: re-detection must not replace one exception with
+            # another (_detect_symmetry_metadata raises on a strict mismatch).
+            try:
+                self._detect_symmetry_metadata()
+            except Exception:
+                pass
             meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
             return False
 
