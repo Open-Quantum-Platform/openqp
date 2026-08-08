@@ -157,9 +157,9 @@ class OQPEngine:
         # Report the requested coordinate system by name (TRIC and RIC are both
         # RedundantInternalCoordinates objects, so the class name is ambiguous),
         # and flag when it fell back to Cartesians (e.g. for a linear molecule).
-        requested = (coordsys or "tric").lower()
+        requested = (coordsys or "auto").lower()
         if requested in ("auto",):
-            requested = "tric"
+            requested = "dlc"
         label = {"cart": "CART", "cartesian": "CART"}.get(requested, requested.upper())
         if (type(self.coords).__name__ == "CartesianCoordinates"
                 and requested not in ("cart", "cartesian")):

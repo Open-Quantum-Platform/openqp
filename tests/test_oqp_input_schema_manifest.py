@@ -222,6 +222,7 @@ def test_geometric_backend_is_canonical_only_through_opt_driver_options():
 def test_native_optimization_and_meci_defaults_are_automatic():
     defaults = _schema_defaults_from_ast()
 
+    assert defaults["optimize"]["lib"] == ("oqp", "str")
     assert defaults["oqp"]["coordsys"] == ("auto", "str")
     assert defaults["oqp"]["auto_recovery"] == ("True", "bool")
     assert defaults["optimize"]["meci_search"] == ("auto", "str")

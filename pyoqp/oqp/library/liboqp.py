@@ -7,7 +7,8 @@ step-determination loop through :class:`oqp.library.oqp_engine.OQPEngine`
 (redundant internal coordinates + restricted-step RFO / P-RFO with model-Hessian
 BFGS/Bofill updates).
 
-Selected with ``[optimize] lib=oqp``.  Supported runtypes:
+This is the default geometry backend; ``[optimize] lib=oqp`` is optional.
+Supported runtypes:
 
 * ``optimize`` -> :class:`OQPOpt`   (state-specific minimum)
 * ``ts``       -> :class:`OQPTSOpt` (transition state, eigenvector following)
