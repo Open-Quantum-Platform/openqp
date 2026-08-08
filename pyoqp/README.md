@@ -605,7 +605,9 @@ optimize section handle the geometry optimization
 
 This is the traditional sectioned `.inp` interface.  New concise `.oqp` files
 do not expose `lib`; all geometry drivers use the native OpenQP optimizer
-automatically.
+automatically. Traditional `.inp` files also default to the native backend, so
+`lib=oqp` may be omitted for `optimize`, `ts`, `meci`, `mecp`, `tci`, `neb`,
+`irc`, and `mep`.
 
 - lib // choose the optimization library
 
@@ -695,8 +697,10 @@ automatically.
                  together, so the multiplier is a result rather than a formula
                  and there is no penalty parameter, i.e. gap_sigma is unused.
                  Works in delocalized internal coordinates with the native
-                 model Hessian. Requires lib=oqp because it replaces the outer
-                 optimizer with its own trust-region step control. coordsys=cart
+                 model Hessian. It is available only on the default oqp backend
+                 because it replaces the outer optimizer with its own
+                 trust-region step control; lib=oqp need not be written.
+                 coordsys=cart
                  is honoured; the other settings, including tric, select DLC,
                  because a dense KKT system needs a non-redundant basis.
                  Converges tighter and in fewer steps than auglag on the cases

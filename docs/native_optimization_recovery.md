@@ -9,8 +9,10 @@ dftb(model=dtcam)
 geom="molecule.xyz"
 ```
 
-`opt`, `meci`, `mecp`, and `tci` use the native `lib=oqp` optimizer unless a
-different backend is explicit. `lib=geometric` remains available:
+Every geometry driver implemented natively -- `opt`, `ts`, `meci`, `mecp`,
+`tci`, `neb`, `irc`, and `mep` -- uses the native optimizer when `lib` is
+omitted. The automatic native coordinate profile starts in DLC. A different
+backend remains an explicit opt-in; for example, `lib=geometric`:
 
 ```text
 mrsf-tddftb(nstate=3)
