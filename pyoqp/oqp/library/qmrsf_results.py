@@ -484,9 +484,15 @@ def _build_qmrsf_dk_native_results(dump, ref_energy):
     """Apply the paper energy law to the native spin-adapted eigenvalues."""
     anchor = dump['a_quintet']
 
+    # Every manifold is reported against the lowest singlet total, which is the
+    # convention of the native log; using each manifold's own lowest root would
+    # zero the first triplet and the quintet and hide the singlet-triplet and
+    # singlet-quintet gaps.
+    singlet_ground = float(ref_energy) + (dump['singlet'][0] - anchor)
+
     def _states(eigenvalues, multiplicity):
         total = [float(ref_energy) + (value - anchor) for value in eigenvalues]
-        base = total[0]
+        base = singlet_ground
         return [
             {
                 'index': i,

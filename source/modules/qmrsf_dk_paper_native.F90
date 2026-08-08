@@ -27,6 +27,8 @@ module qmrsf_dk_paper_native_mod
   integer, parameter :: SEAM_S3R    = 1
   integer, parameter :: SEAM_HAAR   = 2
   integer, parameter :: NSEAM = 3
+  !> Value that both [dftgrid] and [tdhf] use for an unspecified CAM parameter.
+  real(dp), parameter :: CAM_UNSET = -1.0_dp
   character(len=6), parameter :: SEAM_NAME(0:NSEAM-1) = &
        (/ 'native', 'S3R   ', 'Haar  ' /)
   !> An adjacent orbital pair is treated as a doublet when it is degenerate to
@@ -59,7 +61,7 @@ contains
     real(dp) :: hzero(NACT,NACT), eri_k(NACT,NACT,NACT,NACT)
     real(dp) :: eri_klr(NACT,NACT,NACT,NACT)
     real(dp) :: h1klr(NSO,NSO), gklr(NSO,NSO,NSO,NSO), hklrdet(NDET,NDET)
-    real(dp) :: a_ref, b_ref, a_h, b_h, cam_mu
+    real(dp) :: a_ref, b_ref, a_h, b_h, mu_ref, mu_h
     logical  :: is_cam
     real(dp) :: h1(NSO,NSO), g(NSO,NSO,NSO,NSO)
     real(dp) :: h1k(NSO,NSO), gk(NSO,NSO,NSO,NSO)
@@ -112,18 +114,27 @@ contains
     ! alpha*K + beta*K_lr rather than a single scaled K.  The reference values
     ! come from [dftgrid]; the response may override them through [tdhf], with
     ! -1 meaning "inherit", as in the MRSF response.
-    a_ref = c_ref; b_ref = 0.0_dp; a_h = c_h; b_h = 0.0_dp; cam_mu = 0.0_dp
+    a_ref = c_ref; b_ref = 0.0_dp; a_h = c_h; b_h = 0.0_dp
+    mu_ref = 0.0_dp; mu_h = 0.0_dp
     if (is_cam) then
       a_ref  = infos%dft%cam_alpha
       b_ref  = infos%dft%cam_beta
-      cam_mu = infos%dft%cam_mu
-      a_h = infos%tddft%cam_alpha; if (a_h < 0.0_dp) a_h = a_ref
-      b_h = infos%tddft%cam_beta;  if (b_h < 0.0_dp) b_h = b_ref
-      if (infos%tddft%cam_mu > 0.0_dp) cam_mu = infos%tddft%cam_mu
-      if (cam_mu <= 0.0_dp .or. a_ref < 0.0_dp .or. b_ref < 0.0_dp) then
+      mu_ref = infos%dft%cam_mu
+      ! CAM_UNSET is the "not specified" sentinel of both input sections.  A
+      ! genuine beta may be negative -- the DTCAM presets set beta = -0.20 for
+      ! the reference and -0.10 for the response -- so only the exact sentinel
+      ! may be treated as absent.  The two range parameters are likewise
+      ! independent: those presets use mu = 0.33 for the reference and 0.30 for
+      ! the response.
+      a_h  = infos%tddft%cam_alpha; if (a_h  == CAM_UNSET) a_h  = a_ref
+      b_h  = infos%tddft%cam_beta;  if (b_h  == CAM_UNSET) b_h  = b_ref
+      mu_h = infos%tddft%cam_mu;    if (mu_h == CAM_UNSET) mu_h = mu_ref
+      if (a_ref == CAM_UNSET .or. b_ref == CAM_UNSET .or. &
+          mu_ref <= 0.0_dp .or. mu_h <= 0.0_dp) then
         write(iw,'(/,5x,a)') 'QMRSF-DK: the range-separation parameters of this '// &
              'reference are incomplete.'
-        write(iw,'(5x,a,3f10.6)') 'alpha, beta, mu = ',a_ref,b_ref,cam_mu
+        write(iw,'(5x,a,3f10.6)') 'reference alpha, beta, mu = ',a_ref,b_ref,mu_ref
+        write(iw,'(5x,a,3f10.6)') 'kernel    alpha, beta, mu = ',a_h,b_h,mu_h
         call flush(iw)
         close(iw)
         return
@@ -134,7 +145,7 @@ contains
     allocate(eri_lr(NACT,NACT,NACT,NACT))
     if (is_cam) then
       call qmrsf_active_integrals(infos, NACT, act, ncore, h_act, eri_act, ecore, &
-                                  kcore_act, cam_mu, eri_lr, kcore_lr)
+                                  kcore_act, mu_h, eri_lr, kcore_lr, mu_ref)
     else
       call qmrsf_active_integrals(infos, NACT, act, ncore, h_act, eri_act, ecore, kcore_act)
       eri_lr = 0.0_dp
@@ -265,8 +276,8 @@ contains
       write(iw,'(5x,a)')        'reference core exchange and the seam.'
       write(iw,'(5x,a)')        'qmrsf_dk_active.dat carries the plain active integrals only,'
       write(iw,'(5x,a)')        'so it does not reproduce this spectrum on its own.'
-      write(iw,'(5x,a,3f10.6)') 'reference alpha, beta, mu              = ',a_ref,b_ref,cam_mu
-      write(iw,'(5x,a,3f10.6)') 'kernel    alpha, beta, mu              = ',a_h,b_h,cam_mu
+      write(iw,'(5x,a,3f10.6)') 'reference alpha, beta, mu              = ',a_ref,b_ref,mu_ref
+      write(iw,'(5x,a,3f10.6)') 'kernel    alpha, beta, mu              = ',a_h,b_h,mu_h
     end if
     write(iw,'(/,5x,a)')        'Numerical checks'
     write(iw,'(5x,a,es12.4)')   'Spin-adaptation orthonormality error   = ',orth_err

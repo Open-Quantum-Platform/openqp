@@ -1130,6 +1130,14 @@ class SinglePoint(Calculator):
             gauge = self.mol.canonicalize_qmrsf_active_orbitals()
             dump_log(self.mol, title='PyOQP: QMRSF active-orbital gauge',
                      section='', info=gauge)
+            # The native routine returns without writing its results file when
+            # a manifold fails to diagonalize or the reference is rejected.  A
+            # dump left by an earlier calculation in this directory would then
+            # be read against the new reference energy, so remove it first and
+            # let its absence report the failure.
+            stale_dump = os.path.join(os.getcwd(), 'qmrsf_dk_full_live.dat')
+            if os.path.isfile(stale_dump):
+                os.remove(stale_dump)
         fn(self.mol)
         response_elapsed = time.perf_counter() - response_start
 
@@ -1188,6 +1196,10 @@ class SinglePoint(Calculator):
                     format_qmrsf_dk_log_table,
                 )
                 dump_path = os.path.join(os.getcwd(), 'qmrsf_dk_full_live.dat')
+                # A dump left by an earlier calculation in the same directory
+                # would be combined with this run's reference energy, so the
+                # file is removed before the native call above and its absence
+                # here means the response did not complete.
                 if os.path.isfile(dump_path):
                     dump = parse_qmrsf_dk_dump(dump_path)
                     ref_scalar = ref_energy[0] if isinstance(ref_energy, (list, tuple)) else ref_energy

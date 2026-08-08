@@ -49,7 +49,7 @@ contains
   !> @param[out]   ecore    E_nuc + frozen-core electronic constant
   !> @param[out]   kcore_act optional active projection of K[D_core]
   subroutine qmrsf_active_integrals(infos, nact, act, ncore, h_act, eri_act, ecore, kcore_act, &
-                                   cam_mu, eri_lr_act, kcore_lr_act)
+                                   cam_mu, eri_lr_act, kcore_lr_act, cam_mu_core)
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_Hcore
@@ -72,6 +72,10 @@ contains
     real(dp), intent(in),  optional :: cam_mu
     real(dp), intent(out), optional :: eri_lr_act(nact,nact,nact,nact)
     real(dp), intent(out), optional :: kcore_lr_act(nact,nact)
+    !> Range-separation parameter of the reference, when it differs from the
+    !> response one; the DTCAM presets set the two independently.  Defaults to
+    !> cam_mu.
+    real(dp), intent(in),  optional :: cam_mu_core
 
     type(basis_set), pointer :: basis
     real(dp), contiguous, pointer :: mo_a(:,:), hcore_p(:)
@@ -85,12 +89,14 @@ contains
     type(int2_rhf_data_t) :: int2_data
 
     integer :: nbf, ntri, npair, i, p, q, r, s, pr, ii, jj, kl
-    real(dp) :: psq, mu
+    real(dp) :: psq, mu, mu_core
     logical  :: want_lr
 
     basis => infos%basis
     mu = 0.0_dp
     if (present(cam_mu)) mu = cam_mu
+    mu_core = mu
+    if (present(cam_mu_core)) mu_core = cam_mu_core
     want_lr = present(eri_lr_act) .and. mu > 0.0_dp
     if (present(eri_lr_act))   eri_lr_act = 0.0_dp
     if (present(kcore_lr_act)) kcore_lr_act = 0.0_dp
@@ -254,13 +260,13 @@ contains
         deallocate(kcore_sq,tmp)
 
         ! Same quantity built from the erf-attenuated integrals only.
-        if (present(kcore_lr_act) .and. mu > 0.0_dp) then
+        if (present(kcore_lr_act) .and. mu_core > 0.0_dp) then
           call int2_driver%init(basis, infos)
           call int2_driver%set_screening()
           int2_data = int2_rhf_data_t(nfocks=1, d=dcore, &
                                       scale_exchange=-2.0_dp, scale_coulomb=0.0_dp)
           call int2_driver%run(int2_data, cam=.true., &
-                               alpha=0.0_dp, beta=-2.0_dp, mu=mu, &
+                               alpha=0.0_dp, beta=-2.0_dp, mu=mu_core, &
                                alpha_coulomb=0.0_dp, beta_coulomb=0.0_dp)
           allocate(kcore_sq(nbf,nbf),tmp(nbf,nact))
           call fock_postscale(int2_data%f(:,1,1), nbf, ntri, kcore_sq)
