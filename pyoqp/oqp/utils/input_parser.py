@@ -62,3 +62,18 @@ class OQPConfigParser(configparser.ConfigParser):
                             raise
 
         return config
+
+
+def schema_section_defaults(schema, section):
+    """Return one schema section with the parser's normal type conversion."""
+    if section not in schema:
+        raise KeyError(section)
+    parser = OQPConfigParser(schema={section: schema[section]})
+    converted = {}
+    for option, description in schema[section].items():
+        converter = description['type']
+        if converter == bool:
+            converted[option] = parser.getboolean(section, option)
+        else:
+            converted[option] = converter(parser[section][option])
+    return converted

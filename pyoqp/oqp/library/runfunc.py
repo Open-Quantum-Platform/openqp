@@ -301,7 +301,13 @@ def get_optimizer(mol):
     # Keep the native backend genuinely optional in user input: omitting both
     # [optimize] and optimize.lib must still select oqp.
     optimize_config = mol.config.setdefault('optimize', {})
-    lib = str(optimize_config.get('lib', 'oqp')).strip().lower()
+    if 'lib' not in optimize_config:
+        from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+        from oqp.utils.input_parser import schema_section_defaults
+        defaults = schema_section_defaults(OQP_CONFIG_SCHEMA, 'optimize')
+        for key, value in defaults.items():
+            optimize_config.setdefault(key, value)
+    lib = str(optimize_config['lib']).strip().lower()
 
     # BaekA generalizes the adjacent-gap adaptive penalty from two to N states.
     # It is selected as a MECI search algorithm rather than as a separate
