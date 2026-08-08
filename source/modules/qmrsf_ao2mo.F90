@@ -48,7 +48,8 @@ contains
   !> @param[out]   eri_act  nact^4 two-electron integrals (pq|rs), CHEMIST order
   !> @param[out]   ecore    E_nuc + frozen-core electronic constant
   !> @param[out]   kcore_act optional active projection of K[D_core]
-  subroutine qmrsf_active_integrals(infos, nact, act, ncore, h_act, eri_act, ecore, kcore_act)
+  subroutine qmrsf_active_integrals(infos, nact, act, ncore, h_act, eri_act, ecore, kcore_act, &
+                                   cam_mu, eri_lr_act, kcore_lr_act)
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_Hcore
@@ -64,6 +65,13 @@ contains
     real(dp), intent(out) :: eri_act(nact,nact,nact,nact)
     real(dp), intent(out) :: ecore
     real(dp), intent(out), optional :: kcore_act(nact,nact)
+    !> Range-separated companions.  When cam_mu is present and positive the
+    !> erf-attenuated active tensor (pq|erf(mu r)/r|rs) and the matching core
+    !> exchange are returned, so that a caller can assemble the CAM exchange
+    !> operator alpha*K + beta*K_lr.
+    real(dp), intent(in),  optional :: cam_mu
+    real(dp), intent(out), optional :: eri_lr_act(nact,nact,nact,nact)
+    real(dp), intent(out), optional :: kcore_lr_act(nact,nact)
 
     type(basis_set), pointer :: basis
     real(dp), contiguous, pointer :: mo_a(:,:), hcore_p(:)
@@ -77,9 +85,15 @@ contains
     type(int2_rhf_data_t) :: int2_data
 
     integer :: nbf, ntri, npair, i, p, q, r, s, pr, ii, jj, kl
-    real(dp) :: psq
+    real(dp) :: psq, mu
+    logical  :: want_lr
 
     basis => infos%basis
+    mu = 0.0_dp
+    if (present(cam_mu)) mu = cam_mu
+    want_lr = present(eri_lr_act) .and. mu > 0.0_dp
+    if (present(eri_lr_act))   eri_lr_act = 0.0_dp
+    if (present(kcore_lr_act)) kcore_lr_act = 0.0_dp
     if (present(kcore_act)) kcore_act = 0.0_dp
     nbf  = basis%nbf
     ntri = nbf*(nbf+1)/2
@@ -142,6 +156,32 @@ contains
       eri_act(:,:,s,r) = gmo
     end do
     call int2_driver%clean()
+
+    ! Long-range companion: the CAM driver runs the plain integrals with the
+    ! alpha scales and the erf-attenuated ones with the beta scales, so setting
+    ! every alpha scale to zero and beta_coulomb to one leaves exactly the
+    ! attenuated Coulomb probe (pq|erf(mu r)/r|rs).
+    if (want_lr) then
+      call int2_driver%init(basis, infos)
+      call int2_driver%set_screening()
+      int2_data = int2_rhf_data_t(nfocks=npair, d=dprobe, &
+                                  scale_exchange=0.0_dp, scale_coulomb=1.0_dp)
+      call int2_driver%run(int2_data, cam=.true., &
+                           alpha=0.0_dp, beta=0.0_dp, mu=mu, &
+                           alpha_coulomb=0.0_dp, beta_coulomb=1.0_dp)
+      do pr = 1, npair
+        r = pidx(pr); s = qidx(pr)
+        call fock_postscale(int2_data%f(:,pr,1), nbf, ntri, gsq)
+        call dgemm('N','N',nbf,nact,nbf,1.0_dp,gsq,nbf,cact,nbf, &
+                   0.0_dp,tmp,nbf)
+        call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+                   0.0_dp,gmo,nact)
+        eri_lr_act(:,:,r,s) = gmo
+        eri_lr_act(:,:,s,r) = gmo
+      end do
+      call int2_driver%clean()
+    end if
+
     deallocate(gsq, gmo, tmp, dprobe, pidx, qidx)
 
     ! --------------------------- frozen core --------------------------------
@@ -212,6 +252,25 @@ contains
         call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
                    0.0_dp,kcore_act,nact)
         deallocate(kcore_sq,tmp)
+
+        ! Same quantity built from the erf-attenuated integrals only.
+        if (present(kcore_lr_act) .and. mu > 0.0_dp) then
+          call int2_driver%init(basis, infos)
+          call int2_driver%set_screening()
+          int2_data = int2_rhf_data_t(nfocks=1, d=dcore, &
+                                      scale_exchange=-2.0_dp, scale_coulomb=0.0_dp)
+          call int2_driver%run(int2_data, cam=.true., &
+                               alpha=0.0_dp, beta=-2.0_dp, mu=mu, &
+                               alpha_coulomb=0.0_dp, beta_coulomb=0.0_dp)
+          allocate(kcore_sq(nbf,nbf),tmp(nbf,nact))
+          call fock_postscale(int2_data%f(:,1,1), nbf, ntri, kcore_sq)
+          call int2_driver%clean()
+          call dgemm('N','N',nbf,nact,nbf,1.0_dp,kcore_sq,nbf,cact,nbf, &
+                     0.0_dp,tmp,nbf)
+          call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+                     0.0_dp,kcore_lr_act,nact)
+          deallocate(kcore_sq,tmp)
+        end if
       end if
       deallocate(ccore, dcore, vcore_sq)
     end if

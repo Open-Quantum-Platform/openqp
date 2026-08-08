@@ -53,9 +53,14 @@ contains
 
     real(dp), contiguous, pointer :: mo_a(:,:)
     real(dp), allocatable :: h_act(:,:), eri_act(:,:,:,:), cact(:,:)
+    real(dp), allocatable :: eri_lr(:,:,:,:)
     real(dp) :: va_act(NACT,NACT), vb_act(NACT,NACT)
-    real(dp) :: h_eff(NACT,NACT), kcore_act(NACT,NACT)
+    real(dp) :: h_eff(NACT,NACT), kcore_act(NACT,NACT), kcore_lr(NACT,NACT)
     real(dp) :: hzero(NACT,NACT), eri_k(NACT,NACT,NACT,NACT)
+    real(dp) :: eri_klr(NACT,NACT,NACT,NACT)
+    real(dp) :: h1klr(NSO,NSO), gklr(NSO,NSO,NSO,NSO), hklrdet(NDET,NDET)
+    real(dp) :: a_ref, b_ref, a_h, b_h, cam_mu
+    logical  :: is_cam
     real(dp) :: h1(NSO,NSO), g(NSO,NSO,NSO,NSO)
     real(dp) :: h1k(NSO,NSO), gk(NSO,NSO,NSO,NSO)
     real(dp) :: hdet(NDET,NDET), hkdet(NDET,NDET), ucsf(NDET,NDET), hcsf(NDET,NDET)
@@ -96,13 +101,44 @@ contains
     end do
 
     is_dft = (infos%control%hamilton == 20)
+    is_cam = is_dft .and. infos%dft%cam_flag
     c_ref = 1.0_dp
     if (is_dft) c_ref = infos%dft%hfscale
     c_h = infos%tddft%hfscale
     if (c_h < 0.0_dp) c_h = c_ref
 
+    ! A range-separated functional treats alpha + beta*erf(mu r) of the
+    ! interaction by exact exchange, so its exchange operator is
+    ! alpha*K + beta*K_lr rather than a single scaled K.  The reference values
+    ! come from [dftgrid]; the response may override them through [tdhf], with
+    ! -1 meaning "inherit", as in the MRSF response.
+    a_ref = c_ref; b_ref = 0.0_dp; a_h = c_h; b_h = 0.0_dp; cam_mu = 0.0_dp
+    if (is_cam) then
+      a_ref  = infos%dft%cam_alpha
+      b_ref  = infos%dft%cam_beta
+      cam_mu = infos%dft%cam_mu
+      a_h = infos%tddft%cam_alpha; if (a_h < 0.0_dp) a_h = a_ref
+      b_h = infos%tddft%cam_beta;  if (b_h < 0.0_dp) b_h = b_ref
+      if (infos%tddft%cam_mu > 0.0_dp) cam_mu = infos%tddft%cam_mu
+      if (cam_mu <= 0.0_dp) then
+        write(iw,'(/,5x,a)') 'QMRSF-DK: the range-separation parameter mu is '// &
+             'not set for this functional.'
+        call flush(iw)
+        close(iw)
+        return
+      end if
+    end if
+
     allocate(h_act(NACT,NACT), eri_act(NACT,NACT,NACT,NACT))
-    call qmrsf_active_integrals(infos, NACT, act, ncore, h_act, eri_act, ecore, kcore_act)
+    allocate(eri_lr(NACT,NACT,NACT,NACT))
+    if (is_cam) then
+      call qmrsf_active_integrals(infos, NACT, act, ncore, h_act, eri_act, ecore, &
+                                  kcore_act, cam_mu, eri_lr, kcore_lr)
+    else
+      call qmrsf_active_integrals(infos, NACT, act, ncore, h_act, eri_act, ecore, kcore_act)
+      eri_lr = 0.0_dp
+      kcore_lr = 0.0_dp
+    end if
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     allocate(cact(nbf,NACT))
@@ -116,7 +152,7 @@ contains
     ! After stripping the spin-averaged semilocal v_xc from F^(0), the paper's
     ! one-electron operator is h_act+(1-c_ref)K_core.  This direct expression is
     ! independent of OpenQP's stored effective-ROHF Fock representation.
-    h_eff = h_act + (1.0_dp-c_ref)*kcore_act
+    h_eff = h_act + (1.0_dp-a_ref)*kcore_act - b_ref*kcore_lr
 
     ! Paper seam: scale exchange-VALUE integrals, not merely the exchange role
     ! in each antisymmetrized contraction.  H_K is built after zeroing every
@@ -138,14 +174,24 @@ contains
     end do
     call native_find_pairs(eps_act,npair,pairs)
     call native_pair_doublet(eri_act,pairs(1,1),pairs(2,1),pair_thc,pair_aniso)
-    call native_dump_active(h_eff,eri_act,va_act,vb_act,c_h)
+    call native_dump_active(h_eff,eri_act,va_act,vb_act,a_h)
     hzero = 0.0_dp
 
     do iseam = 0, NSEAM-1
       call native_seam_mask(eri_act,iseam,npair,pairs,eri_k)
       call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
       call native_build_h(dets,h1k,gk,hkdet)
-      hdet = hbare - (1.0_dp-c_h)*hkdet
+      ! Remove the exchange the functional already provides: K - K^HF, which is
+      ! (1-c_h) K for a global hybrid and (1-alpha) K - beta K^lr for a
+      ! range-separated one.  The seam mask is applied to both ranges, so the
+      ! covariant conventions act on the full exchange operator.
+      hdet = hbare - (1.0_dp-a_h)*hkdet
+      if (is_cam) then
+        call native_seam_mask(eri_lr,iseam,npair,pairs,eri_klr)
+        call native_build_spinorb(hzero,eri_klr,1.0_dp,h1klr,gklr)
+        call native_build_h(dets,h1klr,gklr,hklrdet)
+        hdet = hdet + b_h*hklrdet
+      end if
       call native_add_vxc_diag(dets,va_act,vb_act,hdet)
       call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
                  0.0_dp,work36,NDET)
@@ -211,7 +257,14 @@ contains
     write(iw,'(5x,a,i0)')       'Doubly occupied (inactive) orbitals    = ',ncore
     write(iw,'(5x,a,4(i0,1x))') 'Active (singly occupied) orbitals      = ',act
     write(iw,'(5x,a,f10.6)')    'Exact exchange in the reference        = ',c_ref
-    write(iw,'(5x,a,f10.6)')    'Exact exchange in the dressed kernel   = ',c_h
+    write(iw,'(5x,a,f10.6)')    'Exact exchange in the dressed kernel   = ',a_h
+    if (is_cam) then
+      write(iw,'(5x,a)')        'Range-separated dressed kernel: the exact-exchange operator'
+      write(iw,'(5x,a)')        'is alpha*K + beta*K(erf(mu r)/r), applied to both the'
+      write(iw,'(5x,a)')        'reference core exchange and the seam.'
+      write(iw,'(5x,a,3f10.6)') 'reference alpha, beta, mu              = ',a_ref,b_ref,cam_mu
+      write(iw,'(5x,a,3f10.6)') 'kernel    alpha, beta, mu              = ',a_h,b_h,cam_mu
+    end if
     write(iw,'(/,5x,a)')        'Numerical checks'
     write(iw,'(5x,a,es12.4)')   'Spin-adaptation orthonormality error   = ',orth_err
     write(iw,'(5x,a,es12.4)')   'Largest neglected inter-multiplicity coupling = ',cross_err
@@ -252,13 +305,13 @@ contains
                               eref, esing_all(1,iseam), thresh)
     end do
 
-    call native_seam_covariance(h_eff,eri_act,va_act,vb_act,c_h,dets,ucsf, &
-                                npair,pairs,esing_all,gauge_dev)
+    call native_seam_covariance(h_eff,eri_act,va_act,vb_act,a_h,dets,ucsf, &
+                                npair,pairs,esing_all,gauge_dev,eri_lr,b_h)
     call native_print_seam_compare(act,npair,pairs,eps_act,pair_thc,pair_aniso, &
                                    esing_all,equint_all, &
                                    infos%mol_energy%energy,gauge_dev)
 
-    call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err, &
+    call native_write_dump(a_h,a_ref,equint(1),esing,etrip,orth_err,cross_err, &
                            esing_all,etrip_all,equint_all,pair_aniso)
     write(iw,'(/,5x,a)') 'Machine-readable QMRSF-DK results written to qmrsf_dk_full_live.dat'
 
@@ -267,7 +320,7 @@ contains
                                   asing_all,atrip_all)
     write(iw,'(5x,a)') 'Per-seam eigenvectors written to qmrsf_dk_seam_states.dat'
 
-    deallocate(h_act,eri_act,cact)
+    deallocate(h_act,eri_act,eri_lr,cact)
     call flush(iw)
     close(iw)
   end subroutine qmrsf_dk_paper_native
@@ -951,7 +1004,8 @@ contains
 !>         precision, while the value-based seam exposes the gauge freedom.  The
 !>         v_xc diagonal is left alone because at a degenerate pair its block is
 !>         proportional to the identity and therefore already rotation invariant.
-  subroutine native_seam_covariance(h_eff,eri,va,vb,c_h,dets,ucsf,npair,pairs,esing_ref,dev)
+  subroutine native_seam_covariance(h_eff,eri,va,vb,c_h,dets,ucsf,npair,pairs,esing_ref,dev, &
+                                    eri_lr,b_h)
     use eigen, only: diag_symm_full
     use physical_constants, only: UNITS_EV
     use oqp_linalg
@@ -960,6 +1014,9 @@ contains
     integer, intent(in) :: dets(4,NDET), npair, pairs(2,2)
     real(dp), intent(in) :: ucsf(NDET,NDET), esing_ref(NSING,0:NSEAM-1)
     real(dp), intent(out) :: dev(0:NSEAM-1)
+    !> Long-range companions of the range-separated exchange operator; absent
+    !> for a global hybrid, where b_h is zero.
+    real(dp), intent(in), optional :: eri_lr(NACT,NACT,NACT,NACT), b_h
 
     real(dp), parameter :: THETA_TEST = 0.6457718232379019_dp   ! 37 degrees
     real(dp) :: hrot(NACT,NACT), grot(NACT,NACT,NACT,NACT)
@@ -970,6 +1027,10 @@ contains
     real(dp) :: work36(NDET,NDET), hcsf(NDET,NDET)
     real(dp) :: asing(NSING,NSING), esing(NSING)
     real(dp) :: r(NACT,NACT), rk(NACT,NACT), gtmp(NACT,NACT,NACT,NACT), c, s, th
+    real(dp) :: grot_lr(NACT,NACT,NACT,NACT), eri_klr(NACT,NACT,NACT,NACT)
+    real(dp) :: h1klr(NSO,NSO), gklr(NSO,NSO,NSO,NSO), hklrdet(NDET,NDET)
+    real(dp) :: beta_h
+    logical  :: has_lr
     integer :: m, k, p, ia, ib, ierr
 
     ! Rotate EVERY degenerate pair, each by its own angle, so that a system with
@@ -977,7 +1038,11 @@ contains
     ! tested over its full gauge group and not just one factor of it.
     r = 0.0_dp
     do p = 1, NACT; r(p,p) = 1.0_dp; end do
+    beta_h = 0.0_dp
+    if (present(b_h)) beta_h = b_h
+    has_lr = present(eri_lr) .and. abs(beta_h) > 0.0_dp
     grot = eri
+    if (has_lr) grot_lr = eri_lr
     do k = 1, npair
       th = THETA_TEST*real(k,dp)/real(npair,dp) + 0.11_dp*real(k-1,dp)
       c = cos(th); s = sin(th)
@@ -989,6 +1054,10 @@ contains
       r = matmul(rk,r)
       call native_rotate_pair(grot,ia,ib,th,gtmp)
       grot = gtmp
+      if (has_lr) then
+        call native_rotate_pair(grot_lr,ia,ib,th,gtmp)
+        grot_lr = gtmp
+      end if
     end do
     hrot = matmul(r,matmul(h_eff,transpose(r)))
 
@@ -1001,6 +1070,12 @@ contains
       call native_build_spinorb(hzero,eri_k,1.0_dp,h1k,gk)
       call native_build_h(dets,h1k,gk,hkdet)
       hdet = hbare - (1.0_dp-c_h)*hkdet
+      if (has_lr) then
+        call native_seam_mask(grot_lr,m,npair,pairs,eri_klr)
+        call native_build_spinorb(hzero,eri_klr,1.0_dp,h1klr,gklr)
+        call native_build_h(dets,h1klr,gklr,hklrdet)
+        hdet = hdet + beta_h*hklrdet
+      end if
       call native_add_vxc_diag(dets,va,vb,hdet)
       call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
                  0.0_dp,work36,NDET)
