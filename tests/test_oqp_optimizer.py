@@ -925,6 +925,17 @@ class TestTRICandDLC(unittest.TestCase):
             gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
         self.assertTrue(np.all(np.isnan(gradient)))
 
+    def test_dlc_partial_rank_gradient_requests_recovery(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        ncoord = len(ic.q(self.WATER_X))
+        original_inverse = ic._g_inverse
+        try:
+            ic._g_inverse = lambda _b: (np.eye(ncoord), ncoord - 1)
+            gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        finally:
+            ic._g_inverse = original_inverse
+        self.assertTrue(np.all(np.isnan(gradient)))
+
     def test_safe_matmul_suppresses_handled_overflow(self):
         left = np.full((2, 2), 1.0e308)
         with warnings.catch_warnings():

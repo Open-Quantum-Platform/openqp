@@ -568,7 +568,11 @@ class DelocalizedInternalCoordinates:
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
         ginv, rank = self._g_inverse(b)
-        if rank == 0 and b.shape[0]:
+        # A DLC basis represents exactly the molecular vibrational subspace.
+        # Losing even one direction makes the Cartesian-to-DLC transformation
+        # physically incomplete, so signal the engine to use its Cartesian
+        # recovery instead of silently projecting out that direction.
+        if rank < b.shape[0]:
             return np.full(b.shape[0], np.nan, dtype=float)
         return _safe_matmul(ginv, _safe_matmul(
             b, np.asarray(gx, dtype=float).reshape(-1)))
