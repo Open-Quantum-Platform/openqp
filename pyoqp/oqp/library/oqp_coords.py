@@ -349,13 +349,21 @@ class RedundantInternalCoordinates:
         if natom < 2:
             return None
 
-        bonds, neighbours, _ = _covalent_graph(atoms, x, bond_factor)
+        bonds, neighbours, fragments = _covalent_graph(atoms, x, bond_factor)
         # Single connected graph, then augment so the internals span 3N-6 (long
         # conjugated / floppy systems are otherwise rank-deficient and force a
         # slow Cartesian fallback).
         bonds = _connect_fragments(bonds, neighbours, x, natom)
         bonds, neighbours = _augment_internals(atoms, x, bonds, neighbours, natom)
         primitives = _make_internals(bonds, neighbours, x)
+        # A bridge that merely reaches the formal 3N-6 rank can still leave a
+        # weak relative translation/rotation in a molecular complex.  Add
+        # direct inter-fragment distances only when the retained Wilson metric
+        # is poorly conditioned.  They are redundant primitives, so they
+        # strengthen the DLC span without inventing more bonded angles or
+        # torsions between otherwise separate molecules.
+        primitives = _augment_interfragment_distances(
+            primitives, fragments, x, natom)
 
         coords = cls(primitives, natom)
         # Only a genuinely degenerate set (e.g. exactly linear) stays rank
@@ -511,7 +519,20 @@ class DelocalizedInternalCoordinates:
         if not np.all(np.isfinite(g)):
             raise ValueError("non-finite DLC metric")
         w, v = np.linalg.eigh(g)
-        u = v[:, w > eig_tol]
+        target = 3 * ric.natom - 6 if ric.natom > 2 else 3 * ric.natom - 5
+        cutoff = eig_tol * max(float(w[-1]) if w.size else 0.0, 1.0)
+        active = np.flatnonzero(w > cutoff)
+        if active.size < target:
+            raise ValueError(
+                "rank-deficient DLC basis: %d coordinates for target %d"
+                % (active.size, target)
+            )
+        # Internal primitives are invariant to overall translation/rotation,
+        # so the physical non-linear molecular space contains exactly 3N-6
+        # directions.  Discard any smaller numerical modes above the cutoff
+        # instead of exposing a dimension that changes across platforms.
+        active = active[-target:]
+        u = v[:, active]
         return cls(ric, u, ric.q(x))
 
     def _disp_prim(self, x):
@@ -539,14 +560,19 @@ class DelocalizedInternalCoordinates:
         except (np.linalg.LinAlgError, ValueError):
             n = b.shape[0]
             return np.zeros((n, n)), 0
-        keep = w > eig_tol
+        cutoff = eig_tol * max(float(w[-1]) if w.size else 0.0, 1.0)
+        keep = w > cutoff
         inv = np.dot(v[:, keep] / w[keep], v[:, keep].T)
         return inv, int(np.count_nonzero(keep))
 
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
         ginv, rank = self._g_inverse(b)
-        if rank == 0 and b.shape[0]:
+        # A DLC basis represents exactly the molecular vibrational subspace.
+        # Losing even one direction makes the Cartesian-to-DLC transformation
+        # physically incomplete, so signal the engine to use its Cartesian
+        # recovery instead of silently projecting out that direction.
+        if rank < b.shape[0]:
             return np.full(b.shape[0], np.nan, dtype=float)
         return _safe_matmul(ginv, _safe_matmul(
             b, np.asarray(gx, dtype=float).reshape(-1)))
@@ -757,6 +783,89 @@ def _make_internals(bonds, neighbours, x):
     return primitives
 
 
+def _primitive_metric_quality(primitives, natom, x, eig_tol=1.0e-6):
+    """Return Wilson-B rank and retained eigenvalue ratio for primitives."""
+    coords = RedundantInternalCoordinates(primitives, natom)
+    b = coords.b_matrix(x)
+    if b.size == 0 or not np.all(np.isfinite(b)):
+        return 0, 0.0
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        metric = np.dot(b.T, b)
+    if not np.all(np.isfinite(metric)):
+        return 0, 0.0
+    try:
+        values = np.linalg.eigvalsh(0.5 * metric + 0.5 * metric.T)
+    except (np.linalg.LinAlgError, ValueError):
+        return 0, 0.0
+    scale = max(float(values[-1]) if values.size else 0.0, 1.0)
+    retained = values[values > eig_tol * scale]
+    if retained.size == 0:
+        return 0, 0.0
+    return int(retained.size), float(retained[0] / scale)
+
+
+def _augment_interfragment_distances(primitives, fragments, x, natom,
+                                     quality_tol=1.0e-4,
+                                     candidate_window=48):
+    """Condition a multi-fragment internal span with direct distances.
+
+    For ``F`` disconnected non-linear fragments, intrafragment coordinates are
+    short of the full complex by ``6(F-1)`` relative rigid-body modes.  The
+    connected primitive graph normally supplies them through one bridge and its
+    associated angles/torsions.  If that span is numerically weak, greedily add
+    inter-fragment distances that improve the smallest retained Wilson-metric
+    eigenvalue.  The search is bounded so large clusters do not turn coordinate
+    construction into a cubic scan over every atom pair.
+    """
+    if len(fragments) < 2:
+        return primitives
+
+    target = 3 * natom - 6 if natom > 2 else 3 * natom - 5
+    current = list(primitives)
+    rank, quality = _primitive_metric_quality(current, natom, x)
+    if rank >= target and quality >= quality_tol:
+        return current
+
+    existing = {
+        tuple(sorted(primitive.atoms))
+        for primitive in current
+        if isinstance(primitive, Bond)
+    }
+    candidates = []
+    for left_index, left in enumerate(fragments):
+        for right in fragments[left_index + 1:]:
+            for atom_left in left:
+                for atom_right in right:
+                    pair = tuple(sorted((atom_left, atom_right)))
+                    if pair not in existing:
+                        distance = float(np.linalg.norm(
+                            x[atom_left] - x[atom_right]))
+                        candidates.append((distance, pair))
+    candidates.sort()
+
+    while candidates and (rank < target or quality < quality_tol):
+        best = None
+        for index, (_, pair) in enumerate(candidates[:candidate_window]):
+            trial = current + [Bond(*pair)]
+            trial_rank, trial_quality = _primitive_metric_quality(
+                trial, natom, x)
+            score = (min(trial_rank, target), trial_quality)
+            if best is None or score > best[0]:
+                best = (score, index, pair, trial_rank, trial_quality)
+        if best is None:
+            break
+        _, index, pair, trial_rank, trial_quality = best
+        improves_rank = trial_rank > rank
+        improves_quality = trial_quality > quality * (1.0 + 1.0e-3)
+        if not improves_rank and not improves_quality:
+            break
+        current.append(Bond(*pair))
+        candidates.pop(index)
+        rank, quality = trial_rank, trial_quality
+
+    return current
+
+
 def _augment_internals(atoms, x, bonds, neighbours, natom, fragments=None):
     """Add auxiliary bonds (+ the angles/torsions they enable) until the bonded
     internal set spans the 3N-6 internal degrees of freedom.
@@ -824,13 +933,13 @@ def _augment_internals(atoms, x, bonds, neighbours, natom, fragments=None):
     return bonds, neighbours
 
 
-def build_coordinates(atoms, x, coordsys="tric"):
+def build_coordinates(atoms, x, coordsys="auto"):
     """Return a coordinate system for ``atoms``/``x``.
 
     ``coordsys`` selects the working coordinates:
 
-    * ``tric`` (default) / ``auto`` -- translation-rotation internal coordinates;
-    * ``dlc`` -- delocalized internal coordinates;
+    * ``auto`` (default) / ``dlc`` -- delocalized internal coordinates;
+    * ``tric`` -- translation-rotation internal coordinates;
     * ``ric`` / ``internal`` -- redundant internal coordinates;
     * ``cart`` / ``cartesian`` -- Cartesians.
 
@@ -839,7 +948,7 @@ def build_coordinates(atoms, x, coordsys="tric"):
     optimizer always has a usable coordinate system.
     """
     natom = len(np.asarray(atoms, dtype=int).reshape(-1))
-    cs = (coordsys or "tric").lower()
+    cs = (coordsys or "auto").lower()
 
     if cs in ("cart", "cartesian"):
         return CartesianCoordinates(natom)
@@ -849,7 +958,7 @@ def build_coordinates(atoms, x, coordsys="tric"):
     if cs in ("ric", "internal"):
         return ric if ric is not None else CartesianCoordinates(natom)
 
-    if cs == "dlc":
+    if cs in ("auto", "dlc"):
         if ric is None:
             return CartesianCoordinates(natom)
         try:
@@ -857,7 +966,7 @@ def build_coordinates(atoms, x, coordsys="tric"):
         except Exception:
             return ric
 
-    # tric / auto / anything else
+    # tric / anything else
     tric = _build_tric(atoms, x)
     if tric is not None:
         return tric

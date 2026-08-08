@@ -756,7 +756,7 @@ class TestInternalCoordinates(unittest.TestCase):
         ]
         for atoms, x in cases:
             ic = NC.build_coordinates(atoms, x)
-            self.assertIsInstance(ic, NC.RedundantInternalCoordinates)
+            self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
             B = ic.b_matrix(x)
             h = 1.0e-6
             Bn = np.zeros_like(B)
@@ -822,6 +822,66 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
 
+    def test_auto_and_omitted_coordsys_select_dlc(self):
+        for coordsys in (None, "auto"):
+            ic = NC.build_coordinates(
+                self.WATER_AT, self.WATER_X, coordsys=coordsys)
+            self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
+            self.assertEqual(len(ic.q(self.WATER_X)), 3)
+
+        engine = NE.OQPEngine(self.WATER_AT, self.WATER_X)
+        self.assertIsInstance(engine.coords, NC.DelocalizedInternalCoordinates)
+        self.assertEqual(engine.coordsys, "DLC")
+
+    def test_water_dimer_dlc_spans_all_twelve_vibrational_modes(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+
+        _, _, fragments = NC._covalent_graph(atoms, geometry)
+        self.assertEqual(len(fragments), 2)
+
+        ic = NC.build_coordinates(atoms, geometry)
+        self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
+        self.assertEqual(len(ic.q(geometry)), 12)
+        _, rank = ic._g_inverse(ic.b_matrix(geometry))
+        self.assertEqual(rank, 12)
+
+    def test_rank_deficient_dimer_primitives_are_not_silently_accepted(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+        bonds, neighbours, fragments = NC._covalent_graph(atoms, geometry)
+        self.assertEqual(len(fragments), 2)
+        intrafragment = NC.RedundantInternalCoordinates(
+            NC._make_internals(bonds, neighbours, geometry), len(atoms))
+
+        with self.assertRaisesRegex(ValueError, "rank-deficient DLC basis"):
+            NC.DelocalizedInternalCoordinates.from_ric(
+                intrafragment, geometry)
+
+    def test_ill_conditioned_dimer_gets_direct_interfragment_distance(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+        bonds, neighbours, fragments = NC._covalent_graph(atoms, geometry)
+        bonds = NC._connect_fragments(
+            bonds, neighbours, geometry, len(atoms))
+        bonds, neighbours = NC._augment_internals(
+            atoms, geometry, bonds, neighbours, len(atoms))
+        primitives = NC._make_internals(bonds, neighbours, geometry)
+        _, quality_before = NC._primitive_metric_quality(
+            primitives, len(atoms), geometry)
+
+        conditioned = NC._augment_interfragment_distances(
+            primitives, fragments, geometry, len(atoms), quality_tol=0.03)
+        rank_after, quality_after = NC._primitive_metric_quality(
+            conditioned, len(atoms), geometry)
+
+        self.assertGreater(len(conditioned), len(primitives))
+        self.assertEqual(rank_after, 12)
+        self.assertGreater(quality_after, quality_before)
+
     def test_dlc_linear_algebra_is_warning_free(self):
         """Coordinate products must not leak handled Accelerate FP flags."""
         ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
@@ -863,6 +923,17 @@ class TestTRICandDLC(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("error", RuntimeWarning)
             gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        self.assertTrue(np.all(np.isnan(gradient)))
+
+    def test_dlc_partial_rank_gradient_requests_recovery(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        ncoord = len(ic.q(self.WATER_X))
+        original_inverse = ic._g_inverse
+        try:
+            ic._g_inverse = lambda _b: (np.eye(ncoord), ncoord - 1)
+            gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        finally:
+            ic._g_inverse = original_inverse
         self.assertTrue(np.all(np.isnan(gradient)))
 
     def test_safe_matmul_suppresses_handled_overflow(self):
@@ -1349,6 +1420,31 @@ class TestDispatchAndValidation(unittest.TestCase):
         ic._check_optimize(cfg, report)
         self.assertEqual(report.errors, [],
                          "oqp/optimize should validate clean")
+
+        # Omit optimize.lib entirely: every workflow implemented by the native
+        # backend must inherit oqp rather than requiring boilerplate input.
+        for runtype in ("optimize", "ts", "meci", "mecp", "tci",
+                        "neb", "irc", "mep"):
+            native_default = ic.CheckReport()
+            method = "tdhf" if runtype in {"meci", "mecp", "tci"} else "hf"
+            config = {
+                "input": {"runtype": runtype, "method": method},
+                "optimize": {
+                    "istate": 1 if method == "tdhf" else 0,
+                    "jstate": 2,
+                    "kstate": 3,
+                    "imult": 1,
+                    "jmult": 3,
+                },
+            }
+            ic._check_optimize(config, native_default)
+            lib_errors = [
+                diagnostic for diagnostic in native_default.errors
+                if diagnostic.path == "optimize.lib"
+            ]
+            self.assertEqual(
+                lib_errors, [],
+                f"omitted optimize.lib should select oqp for {runtype}")
 
         # mep/meci are supported on oqp; a non-optimization runtype is not.
         report2 = ic.CheckReport()
