@@ -120,9 +120,10 @@ contains
       a_h = infos%tddft%cam_alpha; if (a_h < 0.0_dp) a_h = a_ref
       b_h = infos%tddft%cam_beta;  if (b_h < 0.0_dp) b_h = b_ref
       if (infos%tddft%cam_mu > 0.0_dp) cam_mu = infos%tddft%cam_mu
-      if (cam_mu <= 0.0_dp) then
-        write(iw,'(/,5x,a)') 'QMRSF-DK: the range-separation parameter mu is '// &
-             'not set for this functional.'
+      if (cam_mu <= 0.0_dp .or. a_ref < 0.0_dp .or. b_ref < 0.0_dp) then
+        write(iw,'(/,5x,a)') 'QMRSF-DK: the range-separation parameters of this '// &
+             'reference are incomplete.'
+        write(iw,'(5x,a,3f10.6)') 'alpha, beta, mu = ',a_ref,b_ref,cam_mu
         call flush(iw)
         close(iw)
         return
@@ -256,12 +257,14 @@ contains
     write(iw,'(/,5x,a,i0)')     'Basis functions                        = ',nbf
     write(iw,'(5x,a,i0)')       'Doubly occupied (inactive) orbitals    = ',ncore
     write(iw,'(5x,a,4(i0,1x))') 'Active (singly occupied) orbitals      = ',act
-    write(iw,'(5x,a,f10.6)')    'Exact exchange in the reference        = ',c_ref
+    write(iw,'(5x,a,f10.6)')    'Exact exchange in the reference        = ',a_ref
     write(iw,'(5x,a,f10.6)')    'Exact exchange in the dressed kernel   = ',a_h
     if (is_cam) then
       write(iw,'(5x,a)')        'Range-separated dressed kernel: the exact-exchange operator'
       write(iw,'(5x,a)')        'is alpha*K + beta*K(erf(mu r)/r), applied to both the'
       write(iw,'(5x,a)')        'reference core exchange and the seam.'
+      write(iw,'(5x,a)')        'qmrsf_dk_active.dat carries the plain active integrals only,'
+      write(iw,'(5x,a)')        'so it does not reproduce this spectrum on its own.'
       write(iw,'(5x,a,3f10.6)') 'reference alpha, beta, mu              = ',a_ref,b_ref,cam_mu
       write(iw,'(5x,a,3f10.6)') 'kernel    alpha, beta, mu              = ',a_h,b_h,cam_mu
     end if
