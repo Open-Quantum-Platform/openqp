@@ -171,6 +171,16 @@ def test_shared_stack_packaging_contract_is_declared():
     assert 'libmulticharge.a' not in source
     assert 'libmctc-lib.a' not in source
     assert 'INSTALL_RPATH_USE_LINK_PATH FALSE' in source
+    d4_link = re.search(
+        r'target_link_libraries\(oqp\s+'
+        r'"\$<BUILD_INTERFACE:\$\{DFTD4_DFTD4_LIB\}>"'
+        r'.*?\)',
+        source,
+        re.DOTALL,
+    )
+    assert d4_link is not None
+    assert "DFTD4_MCTC_LIB" in d4_link.group(0)
+    assert "DFTD4_MULTICHARGE_LIB" not in d4_link.group(0)
     assert 'oqp_dftd4_disp_v2' in header
     assert 'mctc-lib-0.4.2/' in manifest
     assert 'multicharge-0.3.0/' in manifest

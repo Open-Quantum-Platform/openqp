@@ -111,11 +111,12 @@ target_include_directories(oqp PRIVATE
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-# The three libraries are shared on every supported platform.  Link with the
-# unversioned linker names in the external prefix; each binary records its
-# upstream SOVERSION name, and the wheel installs a regular file under that
-# name next to liboqp.  Keep all three on the link line because the shim calls
-# mctc-lib directly while dftd4 itself calls multicharge and mctc-lib.
+# The three libraries are shared on every supported platform.  Validate all
+# three artifacts, but link liboqp only to the libraries whose APIs the shim
+# calls directly: dftd4 and mctc-lib.  dftd4 itself records the canonical
+# multicharge and mctc-lib SOVERSION dependencies.  Adding multicharge to
+# liboqp's own link line would create an unnecessary direct DT_NEEDED/install-
+# name edge and obscure the intended replaceable dependency graph.
 foreach(_d4_shared_library IN ITEMS
         "${DFTD4_DFTD4_LIB}"
         "${DFTD4_MULTICHARGE_LIB}"
@@ -128,7 +129,6 @@ foreach(_d4_shared_library IN ITEMS
 endforeach()
 target_link_libraries(oqp
         "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
-        "$<BUILD_INTERFACE:${DFTD4_MULTICHARGE_LIB}>"
         "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>")
 
 # Both liboqp and every DFT-D4 dependency live in the wheel's oqp/lib
