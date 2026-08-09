@@ -147,6 +147,7 @@ def test_legacy_fallback_never_discards_charge_or_parameters():
 
 
 def test_shared_stack_packaging_contract_is_declared():
+    top_level = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     external = (ROOT / "external" / "CMakeLists.txt").read_text(encoding="utf-8")
     source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
     header = (ROOT / "include" / "oqp.h").read_text(encoding="utf-8")
@@ -171,6 +172,8 @@ def test_shared_stack_packaging_contract_is_declared():
     assert 'libmulticharge.a' not in source
     assert 'libmctc-lib.a' not in source
     assert 'INSTALL_RPATH_USE_LINK_PATH FALSE' in source
+    assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
+    assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
     d4_link = re.search(
         r'target_link_libraries\(oqp\s+'
         r'"\$<BUILD_INTERFACE:\$\{DFTD4_DFTD4_LIB\}>"'
