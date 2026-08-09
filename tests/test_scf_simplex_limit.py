@@ -36,11 +36,12 @@ class SCFSimplexLimitTests(unittest.TestCase):
     def setUpClass(cls):
         cls.checker = load_input_checker()
 
-    def check(self, diis_type, maxdiis):
+    def check(self, diis_type, maxdiis, vshift=0.0):
         report = self.checker.CheckReport()
         self.checker._check_scf(
             {"scf": {"type": "rhf", "multiplicity": 1,
-                     "diis_type": diis_type, "maxdiis": maxdiis}},
+                     "diis_type": diis_type, "maxdiis": maxdiis,
+                     "vshift": vshift}},
             report,
         )
         return report
@@ -58,6 +59,12 @@ class SCFSimplexLimitTests(unittest.TestCase):
                                    ("vdiis", 13), ("cdiis", 20)):
             with self.subTest(diis_type=diis_type, maxdiis=maxdiis):
                 self.assertTrue(self.check(diis_type, maxdiis).ok)
+
+    def test_level_shifted_cdiis_uses_the_simplex_limit(self):
+        report = self.check("cdiis", 14, vshift=0.1)
+        self.assertFalse(report.ok)
+        self.assertIn("level-shifted cdiis", report.to_text())
+        self.assertTrue(self.check("cdiis", 13, vshift=0.1).ok)
 
 
 if __name__ == "__main__":
