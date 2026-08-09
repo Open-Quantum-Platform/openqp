@@ -1741,6 +1741,7 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     maxdiis = _get(config, "scf", "maxdiis", 7)
     vshift = _get(config, "scf", "vshift", 0.0)
     alternative_scf = _as_lower(_get(config, "scf", "alternative_scf", "trah"))
+    escalation = _as_lower(_get(config, "scf", "escalation", ""))
     init_scf = _as_lower(_get(config, "scf", "init_scf", "no"))
     functional = _get(config, "input", "functional", "")
 
@@ -1814,12 +1815,21 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     effective_init_converger = (
         converger if init_converger in {"", "none"} else init_converger
     )
+    if escalation:
+        fallback_convergers = [
+            stage.strip() for stage in escalation.split(",") if stage.strip()
+        ]
+    else:
+        fallback_convergers = ["soscf"]
+        if alternative_scf:
+            fallback_convergers.append(alternative_scf)
     has_active_diis_stage = (
         converger in diis_convergers
         or (
             init_scf != "no"
             and effective_init_converger in diis_convergers
         )
+        or any(stage in diis_convergers for stage in fallback_convergers)
     )
     diis_uses_simplex_history = (
         diis_type in {"ediis", "adiis", "vdiis"} or vshift != 0.0
@@ -1854,7 +1864,6 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     # scf.escalation: optional comma-separated ladder overriding the default
     # DIIS -> SOSCF -> TRAH chain. Each stage must be a concrete converger
     # (not the 'auto'/'ml' manager modes).
-    escalation = _as_lower(_get(config, "scf", "escalation", ""))
     escalation_stages = {"diis", "soscf", "trah"}
     for stage in (s.strip() for s in escalation.split(",") if s.strip()):
         if stage not in escalation_stages:

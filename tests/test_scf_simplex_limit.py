@@ -37,14 +37,17 @@ class SCFSimplexLimitTests(unittest.TestCase):
         cls.checker = load_input_checker()
 
     def check(self, diis_type, maxdiis, vshift=0.0, converger="diis",
-              init_scf="no", init_converger="diis"):
+              init_scf="no", init_converger="diis", escalation="",
+              alternative_scf="trah"):
         report = self.checker.CheckReport()
         self.checker._check_scf(
             {"scf": {"type": "rhf", "multiplicity": 1,
                      "diis_type": diis_type, "maxdiis": maxdiis,
                      "vshift": vshift, "converger_type": converger,
                      "init_scf": init_scf,
-                     "init_converger": init_converger}},
+                     "init_converger": init_converger,
+                     "escalation": escalation,
+                     "alternative_scf": alternative_scf}},
             report,
         )
         return report
@@ -91,6 +94,25 @@ class SCFSimplexLimitTests(unittest.TestCase):
             self.check(
                 "adiis", 14, converger="soscf", init_scf="rhf",
                 init_converger="soscf",
+            ).ok
+        )
+
+    def test_explicit_diis_escalation_is_limited(self):
+        report = self.check(
+            "ediis", 14, converger="soscf", escalation="diis,trah"
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("scf.maxdiis", report.to_text())
+
+    def test_diis_alternative_is_limited_only_without_override(self):
+        report = self.check(
+            "adiis", 14, converger="soscf", alternative_scf="diis"
+        )
+        self.assertFalse(report.ok)
+        self.assertTrue(
+            self.check(
+                "adiis", 14, converger="soscf", alternative_scf="diis",
+                escalation="trah",
             ).ok
         )
 
