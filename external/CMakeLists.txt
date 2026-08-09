@@ -80,8 +80,14 @@ if(APPLE)
     set(_OQP_DFTD4_PLATFORM_KEY "-macos-default")
   endif()
 endif()
+set(_OQP_DFTD4_BLAS_ABI_KEY "")
+if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+  # The stack's WITH_ILP64 interface must bind to Accelerate's genuine
+  # $NEWLAPACK$ILP64 symbols, not its classic LP64 Fortran entry points.
+  set(_OQP_DFTD4_BLAS_ABI_KEY "-accel-ilp64-alias1")
+endif()
 set(_OQP_DFTD4_CACHE_KEY
-    "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
+    "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
@@ -838,6 +844,19 @@ list(APPEND DFTD4_COMMON_ARGS
 set(DFTD4_BLAS_ARGS "")
 if(BLA_SIZEOF_INTEGER EQUAL 8)
     list(APPEND DFTD4_BLAS_ARGS -DWITH_ILP64=ON)
+endif()
+if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+    if(NOT OQP_ACC_ALIAS OR NOT EXISTS "${OQP_ACC_ALIAS}")
+        message(FATAL_ERROR
+            "Accelerate ILP64 DFT-D4 build requires the generated alias list")
+    endif()
+    # Multicharge and DFT-D4 are separate shared-library links, so OpenQP's
+    # own target_link_options cannot affect them.  Route their classic
+    # Fortran symbol references to the same genuine Accelerate ILP64 entry
+    # points used by liboqp.  Cover their command-line tools as well.
+    list(APPEND DFTD4_BLAS_ARGS
+        "-DCMAKE_SHARED_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}"
+        "-DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}")
 endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
     oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${LIBBLAS})

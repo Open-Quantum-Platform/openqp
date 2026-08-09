@@ -50,7 +50,11 @@ post-patch source trees plus `patches/` to reproduce or modify the libraries.
 The three libraries are built with `BUILD_SHARED_LIBS=ON`. DFT-D4 and
 multicharge use their `WITH_ILP64` option when OpenQP uses an eight-byte BLAS
 interface; their ordinary Fortran integers remain four bytes. `WITH_OpenMP`
-matches the OpenQP build.
+matches the OpenQP build. On macOS Accelerate ILP64 builds, the two BLAS-using
+shared libraries and their command-line tools receive OpenQP's generated
+alias-list link option so classic Fortran names resolve to the genuine
+`$NEWLAPACK$ILP64` entry points rather than Accelerate's LP64 compatibility
+interface.
 
 To use a modified implementation, rebuild the ABI-compatible shared library
 with the same Fortran compiler ABI and BLAS/OpenMP settings, then replace its
