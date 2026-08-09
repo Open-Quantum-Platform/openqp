@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import struct
 import tarfile
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ def load_script(name):
 COLLECTOR = load_script("collect_docker_runtime")
 WHEELHOUSE = load_script("record_wheelhouse")
 OCI_VERIFY = load_script("verify_oci_artifact")
+ELF_STACK = load_script("normalize_elf_stack")
 
 
 class DockerDistributionTests(unittest.TestCase):
@@ -50,6 +52,8 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("USER 65532:65532", runtime)
         self.assertIn("wheelhouse-manifest.json", runtime)
         self.assertIn("runtime-library-manifest.json", runtime)
+        self.assertIn("normalize_elf_stack.py", runtime)
+        self.assertIn("--openqp-package", runtime)
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
@@ -71,6 +75,31 @@ class DockerDistributionTests(unittest.TestCase):
                 "symbol_suffix": "none",
             },
         )
+
+    def test_elf_stack_normalizer_clears_only_execute_permission(self):
+        for elf_class, header_size, phentsize, flags_offset in (
+            (1, 52, 32, 24),
+            (2, 64, 56, 4),
+        ):
+            data = bytearray(header_size + phentsize)
+            data[:6] = b"\x7fELF" + bytes((elf_class, 1))
+            if elf_class == 1:
+                struct.pack_into("<I", data, 28, header_size)
+                struct.pack_into("<H", data, 42, phentsize)
+                struct.pack_into("<H", data, 44, 1)
+            else:
+                struct.pack_into("<Q", data, 32, header_size)
+                struct.pack_into("<H", data, 54, phentsize)
+                struct.pack_into("<H", data, 56, 1)
+            struct.pack_into("<I", data, header_size, ELF_STACK.PT_GNU_STACK)
+            struct.pack_into("<I", data, header_size + flags_offset, 0x7)
+
+            with self.subTest(elf_class=elf_class), tempfile.TemporaryDirectory() as temporary:
+                library = Path(temporary) / "liboqp.so"
+                library.write_bytes(data)
+                self.assertTrue(ELF_STACK.clear_executable_stack(library))
+                self.assertEqual(ELF_STACK.gnu_stack_flags(library.read_bytes()), 0x6)
+                self.assertFalse(ELF_STACK.clear_executable_stack(library))
 
     def test_workflow_is_ephemeral_build_only_with_attestations(self):
         workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
