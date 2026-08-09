@@ -172,6 +172,22 @@ install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RENAME "${DFTD4_DFTD4_RUNTIME_NAME}")
 
+# CMake's generated macOS install_name_tool command can be defeated when the
+# GNU Darwin linker has already injected @loader_path: its duplicate add makes
+# the whole multi-edit command fail, leaving build-cache RPATHs in the wheel.
+# Normalize the four final package files one edit at a time after all of them
+# have been installed.  The configured script is intentionally macOS-only;
+# Linux keeps CMake's native $ORIGIN install-RPATH handling.
+if(APPLE)
+  set(_OQP_MACOS_RPATH_SANITIZER
+      "${CMAKE_CURRENT_BINARY_DIR}/sanitize_macos_package_rpaths.cmake")
+  configure_file(
+      "${CMAKE_SOURCE_DIR}/cmake/sanitize_macos_package_rpaths.cmake.in"
+      "${_OQP_MACOS_RPATH_SANITIZER}"
+      @ONLY)
+  install(SCRIPT "${_OQP_MACOS_RPATH_SANITIZER}")
+endif()
+
 # Bundle the complete, patched source trees used to build the three libraries.
 # This keeps wheel and Docker distributions self-contained for corresponding-
 # source delivery instead of relying on an ephemeral BuildKit/cache directory

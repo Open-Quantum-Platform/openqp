@@ -22,6 +22,7 @@ WHEEL_SMOKE = ROOT / ".github" / "scripts" / "wheel_smoke_test.py"
 COMPLIANCE = ROOT / "external" / "dftd4-corresponding-source"
 BUILD_INFO_GENERATOR = COMPLIANCE / "generate-build-info.cmake"
 APPLY_PATCH_HELPER = COMPLIANCE / "apply-patch.cmake"
+MACOS_RPATH_SANITIZER = ROOT / "cmake" / "sanitize_macos_package_rpaths.cmake.in"
 MCTC_PATCH = COMPLIANCE / "patches" / "mctc-lib-0.4.2-disable-tests.patch"
 DFTD4_PATCH = (
     COMPLIANCE / "patches" / "dftd4-3.7.0-disable-tests-and-mstore.patch"
@@ -476,6 +477,20 @@ Load command 21
             raise AssertionError("absolute runtime search path passed wheel gate")
 
 
+def test_macos_package_rpath_sanitizer_is_fail_closed_and_runs_last():
+    sanitizer = MACOS_RPATH_SANITIZER.read_text(encoding="utf-8")
+    source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "install_name_tool REQUIRED" in sanitizer
+    assert "-delete_rpath" in sanitizer
+    assert "-add_rpath" in sanitizer
+    assert "Nonlocal RPATH survived package normalization" in sanitizer
+    assert sanitizer.count("_oqp_read_macos_rpaths(") >= 3
+    assert 'install(SCRIPT "${_OQP_MACOS_RPATH_SANITIZER}")' in source
+    assert source.index('RENAME "${DFTD4_DFTD4_RUNTIME_NAME}"') < source.index(
+        'install(SCRIPT "${_OQP_MACOS_RPATH_SANITIZER}")'
+    )
+
+
 def test_wheel_smoke_probes_loaded_paths_and_removal_failures():
     source = WHEEL_SMOKE.read_text(encoding="utf-8")
     assert 'D4_CHILD_MARKER = "OQP_D4_CHILD_RESULT="' in source
@@ -535,6 +550,7 @@ if __name__ == "__main__":
     test_high_level_callers_forward_actual_input_charge()
     test_wheel_metadata_requires_exact_canonical_soversion_edges()
     test_wheel_metadata_rejects_every_nonlocal_runtime_search_path()
+    test_macos_package_rpath_sanitizer_is_fail_closed_and_runs_last()
     test_wheel_smoke_probes_loaded_paths_and_removal_failures()
     test_distribution_gates_require_build_info_and_exact_patches()
     print("DFT-D4 shared-interface unit tests passed")
