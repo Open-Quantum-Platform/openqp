@@ -66,8 +66,8 @@ Before approving either wheel, Docker-image, or other binary publication:
 1. Confirm that every bundled LGPL library remains a separately replaceable
    shared library, including the DFT-D4 stack, and inspect the repaired wheel or
    image rather than relying only on CMake options.
-2. Confirm that NLopt is absent from the binary, or document and validate a
-   compliant replaceable-library route.
+2. Confirm from both the dependency table and dynamic symbols that NLopt is
+   absent and the native deterministic simplex-QP implementation is in use.
 3. Confirm that license texts, copyright notices, modification notices, source
    locations, and any required written offer or corresponding source are
    shipped with the exact artifact.
@@ -208,6 +208,6 @@ The published image must:
 5. publish an SBOM and build-provenance attestation together with the immutable
    image digest.
 
-The current `docker-build.yml` is deliberately build-only while those artifact
-checks are being implemented. Re-enable registry publication only through the
-manual protected path described above.
+The current `docker-build.yml` is deliberately build-only while final compliance
+and release authorization remain pending. Re-enable registry publication only
+through the manual protected path described above.

@@ -183,12 +183,34 @@ dependency_graph = {
     d4_paths["multicharge"]: {"mctc"},
     d4_paths["mctc"]: set(),
 }
+oqp_deps = ""
 for owner, required_edges in dependency_graph.items():
     metadata = native_metadata(owner, inspect_command)
+    if owner == liboqp_path:
+        oqp_deps = metadata
     dependencies = parse_dynamic_dependencies(metadata, sys.platform)
     assert_canonical_dependency_graph(
         owner, dependencies, required_edges, d4_names, sys.platform
     )
+
+# NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
+# the native dependency table and defined/undefined dynamic symbols so a stale
+# link or an accidentally retained call cannot pass the wheel gate.
+assert "nlopt" not in oqp_deps.lower(), (
+    f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
+)
+if sys.platform == "darwin":
+    symbol_commands = [
+        ["nm", "-gU", str(liboqp_path)],
+        ["nm", "-u", str(liboqp_path)],
+    ]
+else:
+    symbol_commands = [["nm", "-D", str(liboqp_path)]]
+symbol_text = "\n".join(
+    subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    for command in symbol_commands
+)
+assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
 
 for path in (liboqp_path, *d4_paths.values()):
     rpath_metadata = native_metadata(path, rpath_command)

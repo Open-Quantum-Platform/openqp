@@ -14,14 +14,13 @@ configuration.
 
 | Component | Version | How used in the default wheel | License | Upstream source |
 | --- | --- | --- | --- | --- |
-| NLopt | 2.9.1 | Statically linked into `liboqp`; the current build leaves NLopt's `NLOPT_LUKSAN` option enabled | LGPL-2.1-or-later for the combined default NLopt build, together with the additional upstream notices reproduced in `nlopt-notices.txt` | <https://github.com/stevengj/nlopt/tree/v2.9.1> |
 | Libxc | 7.0.0 | Statically linked into `liboqp` | MPL-2.0 | <https://gitlab.com/libxc/libxc/-/tree/7.0.0> |
 | tagarray | 1.0.0 | Statically linked into `liboqp` | MIT; Copyright (c) 2023 Igor S. Gerasimov | <https://github.com/Open-Quantum-Platform/tagarray/tree/v1.0.0> |
 | libecpint | 1.0.7 | Statically linked into `liboqp` | MIT; Copyright (c) 2021 Robert A. Shaw | <https://github.com/robashaw/libecpint/tree/v1.0.7> |
 | Faddeeva implementation bundled by libecpint | libecpint 1.0.7 copy | Statically linked into `liboqp` | MIT; Copyright (c) 2012 Massachusetts Institute of Technology | <http://ab-initio.mit.edu/Faddeeva> |
-| mctc-lib | 0.4.2 | Statically linked into `liboqp` as part of the DFT-D4 stack | Apache-2.0; Copyright 2020-2025 Sebastian Ehlert | <https://github.com/grimme-lab/mctc-lib/tree/v0.4.2> |
-| multicharge | 0.3.0 | Statically linked into `liboqp` as part of the DFT-D4 stack | Apache-2.0; Copyright 2021 Sebastian Ehlert | <https://github.com/grimme-lab/multicharge/tree/v0.3.0> |
-| DFT-D4 | 3.7.0 | Statically linked into `liboqp` | LGPL-3.0-or-later; Copyright 2017-2021 E. Caldeweyher, S. Ehlert, S. Grimme | <https://github.com/dftd4/dftd4/tree/v3.7.0> |
+| mctc-lib | 0.4.2 | Package-local, separately replaceable shared library in the DFT-D4 stack (SOVERSION 0) | Apache-2.0; Copyright 2020-2025 Sebastian Ehlert | <https://github.com/grimme-lab/mctc-lib/tree/v0.4.2> |
+| multicharge | 0.3.0 | Package-local, separately replaceable shared library in the DFT-D4 stack (SOVERSION 0) | Apache-2.0; Copyright 2021 Sebastian Ehlert | <https://github.com/grimme-lab/multicharge/tree/v0.3.0> |
+| DFT-D4 | 3.7.0 | Package-local, separately replaceable shared library (SOVERSION 3) | LGPL-3.0-or-later; Copyright 2017-2021 E. Caldeweyher, S. Ehlert, S. Grimme | <https://github.com/dftd4/dftd4/tree/v3.7.0> |
 | OpenBLAS | 0.3.30 | Shared library bundled into Linux wheels by `auditwheel`; macOS wheels use the system Accelerate framework instead | BSD-3-Clause | <https://github.com/OpenMathLib/OpenBLAS/tree/v0.3.30> |
 | GCC runtime libraries | Release-builder version | Linux wheels bundle `libgfortran`, `libgomp`, and `libquadmath`; macOS wheels may additionally bundle `libgcc_s` and `libstdc++` | The licenses marked in the corresponding GCC sources, including GPLv3 with GCC Runtime Library Exception 3.1 and LGPL-2.1-or-later components | <https://gcc.gnu.org/> |
 
@@ -40,7 +39,6 @@ should also be inspected after repair.
 - GNU LGPL version 2.1: `licenses/third_party/lgpl-2.1.txt`
 - GNU LGPL version 3: `licenses/third_party/lgpl-3.0.txt`
 - Libxc MPL-2.0: `licenses/third_party/libxc-mpl-2.0.txt`
-- NLopt license and copyright notices: `licenses/third_party/nlopt-notices.txt`
 - libecpint MIT license: `licenses/third_party/libecpint-mit.txt`
 - Faddeeva MIT notice: `licenses/third_party/faddeeva-mit.txt`
 - tagarray MIT license: `licenses/third_party/tagarray-mit.txt`
@@ -63,20 +61,21 @@ The default build applies the following build-time changes:
 The patch logic is distributed with OpenQP and is the preferred form for
 reproducing these build changes.
 
-## Important LGPL distribution requirement
+## LGPL distribution arrangement
 
-Including notices and license texts is necessary but is not, by itself,
-sufficient for distribution of a statically linked LGPL Combined Work. The
-default build currently statically links DFT-D4 and an LGPL-enabled NLopt into
-`liboqp`. A distributor must additionally satisfy the applicable LGPL source,
-installation-information, and relinking requirements, including providing the
-materials needed to relink the application with a modified version of each
-LGPL library where required.
+NLopt has been removed from the OpenQP source, build graph, and default binary;
+E-DIIS and A-DIIS now use OpenQP's deterministic simplex-QP implementation.
 
-The current OpenQP wheel build does not generate such a relinking kit. A public
-binary release must therefore either change those dependencies to a compliant
-dynamic-link arrangement, omit/replace the LGPL code, or add and verify the
-required relinking materials before publication.
+The DFT-D4 stack is dynamically linked through package-local SOVERSION files.
+Each of its three shared libraries can be replaced independently without
+rebuilding `liboqp`. The complete patched source trees and the OpenQP build
+recipe used for those libraries are installed under
+`oqp/share/corresponding-source/dftd4-stack/` in the wheel and Docker image.
+
+Release automation must still inspect every repaired wheel and final container,
+verify the loader-relative dependency graph and absence of alternate hidden
+copies, and run the packaged libraries. Notices and source files alone do not
+prove that a particular binary artifact preserved this arrangement.
 
 ## Optional configurations
 

@@ -2,7 +2,10 @@ include(ExternalProject)
 
 set(_OQP_EXTERNALS_CACHE_REVISION "1")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
-set(_OQP_NLOPT_VERSION "2.9.1")
+# NLopt is no longer built or linked. Keep its former aggregate-key fragment
+# verbatim so this removal does not select a fresh cache namespace and rebuild
+# otherwise ABI-compatible Libxc/libecpint/TagArray artifacts.
+set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")
 set(_OQP_LIBXC_VERSION "7.0.0")
 set(_OQP_TAGARRAY_VERSION "1.0.0")
 set(_OQP_LIBECPINT_VERSION "1.0.7")
@@ -20,7 +23,7 @@ set(_OQP_DFTD4_VERSION "3.7.0")
 # satisfy a shared-library reuse check.
 set(_OQP_DFTD4_LINKAGE "shared")
 set(_OQP_EXTERNALS_VERSION_KEY
-    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-nlopt${_OQP_NLOPT_VERSION}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
+    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
 # Give only the DFT-D4 stack a new nested cache namespace.  Putting these
 # tokens in _OQP_EXTERNALS_VERSION_KEY would invalidate unrelated heavy cached
@@ -227,41 +230,6 @@ ExternalProject_Add(libint2
                ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
 endif()
-endif()
-
-oqp_set_external_paths(NLOPT nlopt
-        "${CMAKE_BINARY_DIR}/external/nlopt"
-        "${CMAKE_BINARY_DIR}/external/nlopt/src/nlopt"
-        "${CMAKE_BINARY_DIR}/external/nlopt/build-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/nlopt/stamp-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/install/nlopt")
-set(NLOPT_LIBRARY "${NLOPT_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}nlopt${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "NLOPT_LIBRARY" FORCE)
-oqp_reuse_or_build(nlopt "${NLOPT_LIBRARY}" "${NLOPT_BUILD_DIR}/nlopt.f")
-if(NOT TARGET nlopt)
-ExternalProject_Add(nlopt
-        PREFIX ${NLOPT_PREFIX}
-        URL https://github.com/stevengj/nlopt/archive/v${_OQP_NLOPT_VERSION}.tar.gz
-        URL_HASH SHA256=1e6c33f8cbdc4138d525f3326c231f14ed50d99345561e85285638c49b64ee93
-        SOURCE_DIR ${NLOPT_SOURCE_DIR}
-        BINARY_DIR ${NLOPT_BUILD_DIR}
-        STAMP_DIR  ${NLOPT_STAMP_DIR}
-        BUILD_BYPRODUCTS ${NLOPT_LIBRARY}
-        UPDATE_COMMAND ""
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=OFF
-                   -DNLOPT_CXX=OFF
-                   -DNLOPT_FORTRAN=ON
-                   -DNLOPT_GUILE=OFF
-                   -DNLOPT_MATLAB=OFF
-                   -DNLOPT_OCTAVE=OFF
-                   -DNLOPT_PYTHON=OFF
-                   -DNLOPT_SWIG=OFF
-                   -DNLOPT_TESTS=OFF
-                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   ${OQP_EXTERNAL_GENERATOR_ARGS}
-        )
 endif()
 
 set(LIBXC_CMAKE_ARGS

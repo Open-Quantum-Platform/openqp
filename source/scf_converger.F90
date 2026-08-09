@@ -214,12 +214,13 @@
 ! MEMBERS:
 !   b    [REAL(dp), ALLOCATABLE]: Energy history from previous iterations.
 !   xlog [REAL(dp), ALLOCATABLE]: History of interpolation coefficients.
-!   t    [TYPE(ediis_opt_data)]: Optimization data structure for NLOpt.
-!   fun  [PROCEDURE(eadiis_f), POINTER]: Pointer to the objective function.
+!   nlog       [INTEGER]: Number of remembered interpolation solutions.
+!   last_x     [REAL(dp), ALLOCATABLE]: Cached deterministic solution.
+!   last_na    [INTEGER]: Dimension of the cached solution.
 !
 ! METHODS:
 !   init  - Initializes the E-DIIS instance.
-!   clean - Deallocates additional arrays (b, xlog).
+!   clean - Deallocates additional arrays (b, xlog, last_x).
 !   setup - Prepares the optimization problem with energy and matrix data.
 !   run   - Solves the optimization problem and returns a `scf_conv_interp_result`.
 !
@@ -637,15 +638,6 @@ module scf_converger
     procedure, pass :: setup => cdiis_setup
   end type cdiis_converger
 
-  !> @brief Datatype to pass optimization parameters to NLOpt for E/A-DIIS
-  !> @detail Used for solving constraint minimization problems in E/A-DIIS:
-  !>         \f$ min \{ x^T A x + bx,\ x_i \geq 0,\ \sum_i{x_i} = 1 \} \f$
-  type :: ediis_opt_data
-    real(kind=8), pointer :: b(:) => null()       !< Energy or linear term coefficients
-    real(kind=8), pointer :: A(:,:) => null()     !< Quadratic term matrix
-    procedure(eadiis_f), pointer, nopass :: fun => null() !< Objective function pointer
-  end type ediis_opt_data
-
   !> @brief Energy DIIS (E-DIIS) converger
   !> @detail Optimizes the following function:
   !>         \f$ E_\mathrm{E-DIIS} = \sum_{i} c_i E_i - 0.5 \sum_{i,j} c_i c_j Tr( (D_i-D_j) (F_i-F_j) ) \f$
@@ -654,8 +646,10 @@ module scf_converger
   type, extends(cdiis_converger) :: ediis_converger
     real(kind=dp), allocatable :: b(:)            !< Energy history
     real(kind=dp), allocatable :: xlog(:,:)       !< Interpolation coefficients history
-    type(ediis_opt_data) :: t                     !< Optimization data for NLOpt
-    procedure(eadiis_f), pointer, nopass :: fun => null() !< Pointer to objective function
+    integer :: nlog = 0                           !< Valid columns in xlog
+    real(kind=dp), allocatable :: last_x(:)       !< Cached deterministic solution
+    integer :: last_na = 0                        !< Dimension of last_x
+    logical :: solution_current = .false.         !< last_x matches current equations
   contains
     procedure, pass :: init  => ediis_init
     procedure, pass :: clean => ediis_clean
@@ -686,13 +680,6 @@ module scf_converger
       class(subconverger), intent(inout) :: self
     end subroutine
 
-    subroutine eadiis_f(val, n, t, grad, need_gradient, d)
-      import
-      implicit none
-      real(kind=8) :: val, t(*), grad(*)
-      integer(kind=4), intent(in) :: n, need_gradient
-      type(ediis_opt_data), intent(in) :: d
-    end subroutine
   end interface
 
   !> @brief SOSCF subconverger type
@@ -1963,9 +1950,12 @@ contains
 
     call self%cdiis_converger%init(params)
     self%conv_name = 'E-DIIS'
-    self%fun => ediis_fun
-    allocate(self%b(self%maxdiis))
+    allocate(self%b(self%maxdiis), source=0.0_dp)
     allocate(self%xlog(self%maxdiis, self%maxdiis), source=0.0_dp)
+    allocate(self%last_x(self%maxdiis), source=0.0_dp)
+    self%nlog = 0
+    self%last_na = 0
+    self%solution_current = .false.
   end subroutine ediis_init
 
 !> @brief Finalize E-DIIS subconverger
@@ -1975,6 +1965,10 @@ contains
     call self%cdiis_converger%clean()
     if (allocated(self%b)) deallocate(self%b)
     if (allocated(self%xlog)) deallocate(self%xlog)
+    if (allocated(self%last_x)) deallocate(self%last_x)
+    self%nlog = 0
+    self%last_na = 0
+    self%solution_current = .false.
   end subroutine ediis_clean
 
 !> @brief Prepare E-DIIS subconverger to run
@@ -1985,6 +1979,10 @@ contains
 
     maxdiis = self%maxdiis
     na = self%dat%num_saved
+    if (self%last_setup > 0) then
+      call ediis_shift_xlog(self, max(0, self%old_dim + self%last_setup - na))
+      self%solution_current = .false.
+    end if
     nfocks = self%dat%num_focks
     ! Factor to account RHF/UHF cases
     factor = 1.0_dp / nfocks
@@ -2037,26 +2035,14 @@ contains
   !> @param[out] res  results of the calculation
   subroutine ediis_run(self, res)
     use io_constants, only: iw
-    use nlopt
+    use simplex_qp, only: solve_simplex_qp, SIMPLEX_QP_SUCCESS, &
+                          SIMPLEX_QP_EXACT_MAX_N
     class(ediis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-    real(kind=dp), parameter :: tol = 1.0e-5_dp
-    real(kind=dp), parameter :: constrtol = 1.0e-8_dp
-    real(kind=dp) :: minf, minf_min
-    real(kind=dp), allocatable :: x(:), xmin(:)
+    real(kind=dp), allocatable :: hqp(:, :), gqp(:), xmin(:)
     real(kind=dp), pointer :: err(:)
-    real(kind=dp) :: diis_error
-    integer(kind=4) :: ires
-    integer :: na, i, j, ifock
-    logical :: is_a_repeat
-    ! NLOpt's f77-style API stores a C POINTER in the opt handle argument
-    ! (NLOpt documents it as integer*8), so the handles must be 8 bytes
-    ! REGARDLESS of the build's default integer width. With a default-width
-    ! declaration, LP64 builds (4-byte default integer, e.g. native macOS
-    ! Accelerate) let nlo_create() write an 8-byte pointer into 4-byte storage
-    ! => stack corruption => SIGSEGV (exit -11) in every EDIIS/ADIIS SCF.
-    integer(kind=8) :: opt_global, opt_lbfgs
-    type(ediis_opt_data) :: t
+    real(kind=dp) :: diis_error, minf
+    integer :: na, ifock, qp_status
 
     allocate(scf_conv_interp_result :: res)
     res%dat => self%dat
@@ -2071,135 +2057,46 @@ contains
     if (self%last_setup /= 0) return
 
     na = self%dat%num_saved
-    if (self%iter > self%maxdiis) then
-      do i = 1, self%maxdiis-1
-        self%xlog(:, i) = cshift(self%xlog(:, i+1), 1)
-        self%xlog(i+1:, i) = 0.0_dp
-      end do
-    end if
+    allocate(xmin(na))
 
-    allocate(x(na), xmin(na))
-    opt_global = 0
-    minf_min = huge(1.0_dp)
-
-    ! Initialize E-DIIS equation parameters for NLOpt
-    t = ediis_opt_data(A=self%a(1:na, 1:na), b=self%b(1:na), fun=self%fun)
-    ! Set up the Improved Stochastic Ranking Evolution Strategy
-    ! It will run coarse global optimization, which will be further refined via L-BFGS
-    call nlo_create(opt_global, NLOPT_GN_ISRES, na)
-    ! Max. number of calls to the objective function
-    call nlo_set_maxeval(ires, opt_global, 100*(na+1))
-    ! Relative convergence tolerance for arguments
-    call nlo_set_xtol_rel(ires, opt_global, 1.0e-2_dp)
-    ! Absolute convergence tolerance for function value
-    call nlo_set_ftol_abs(ires, opt_global, 1.0e-4_dp)
-    ! Relative convergence tolerance for function value
-    call nlo_set_ftol_rel(ires, opt_global, 1.0e-4_dp)
-    ! Sum of coeffs equal to 1
-    call nlo_add_equality_constraint(ires, opt_global, eadiis_constraints, 0, constrtol)
-    ! 0 <= c_i <= 1
-    call nlo_set_lower_bounds1(ires, opt_global, 0.0_dp)
-    call nlo_set_upper_bounds1(ires, opt_global, 1.0_dp)
-    ! Objective function
-    call nlo_set_min_objective(ires, opt_global, eadiis_fun, t)
-
-    x = 1.0_dp / na
-    call nlo_optimize(ires, opt_global, x(:na), minf)
-    call nlo_destroy(opt_global)
-
-    ! Refine the results of global optimization via L-BFGS
-    opt_lbfgs = 0
-    call nlo_create(opt_lbfgs, NLOPT_LD_LBFGS, na)
-    call nlo_set_xtol_rel(ires, opt_lbfgs, tol)
-    call nlo_set_ftol_abs(ires, opt_lbfgs, tol*tol)
-    call nlo_set_ftol_rel(ires, opt_lbfgs, tol*tol)
-    ! Here, the modified E-DIIS equations are used, because L-BFGS does not support
-    ! equality constraints
-    ! They utilize the following variable substitution:
-    ! c_i = t_i^2/\sum_i{t_i^2}
-    call nlo_set_min_objective(ires, opt_lbfgs, eadiis_objective, t)
-    call nlo_optimize(ires, opt_lbfgs, x(:na), minf)
-    ! Because we used modified E-DIIS equations, we need to compute
-    ! coefficients `c` from `t`:
-    x = x**2 / sum(x**2)
-    ! Get prediction of the new SCF energy
-    call eadiis_fun(minf, int(na, 4), x, x, int(0,4), t)
-
-    if (ires < 0) then
-      if (self%verbose > 2) write(iw, '(10X,"*** nlopt0 failed:",I4," ***")') ires
-    elseif (minf < minf_min) then
-      is_a_repeat = any([(norm2(self%xlog(:na, j) - x(:na)) < 1.0e-4_dp, &
-                          j = 1, min(self%iter, self%maxdiis))]) .or. &
-                    any(1.0_dp - x(1:na-1) < 1.0e-4_dp)
-      if (.not. is_a_repeat) then
-        minf_min = minf
-        xmin = x
-        if (self%verbose > 2) then
-          write(iw, '(A,*(F15.6))') 'nlopt0: improving x at ', xmin(:)
-          write(iw, '(A,*(F15.6))') 'nlopt0: improved val = ', minf
-        end if
-      elseif (self%verbose > 2) then
-        write(iw, '(A,*(F15.6))') 'nlopt0: found rep at ', x(:)
-        write(iw, '(A,*(F15.6))') 'nlopt0: rep val = ', minf
-      end if
+    ! Repeated calls without new SCF data are required to return the same
+    ! interpolation. Reuse the cached deterministic solution in that case.
+    if (self%solution_current .and. self%last_na == na) then
+      xmin = self%last_x(1:na)
     else
+      allocate(hqp(na, na), gqp(na))
+      select type (self)
+      type is (adiis_converger)
+        ! b(n) in the historical A-DIIS expression is constant on the simplex.
+        hqp = self%a(1:na, 1:na) + transpose(self%a(1:na, 1:na))
+        gqp = 2.0_dp*self%b(1:na)
+      class default
+        hqp = -0.5_dp*(self%a(1:na, 1:na) + &
+                       transpose(self%a(1:na, 1:na)))
+        gqp = self%b(1:na)
+      end select
+
+      if (self%nlog > 0) then
+        call solve_simplex_qp( &
+          hqp, gqp, xmin, minf, qp_status, &
+          forbidden=self%xlog(:na, 1:self%nlog), nforbidden=self%nlog, &
+          forbid_vertices_before=max(0, na - 1), preferred=na)
+      else
+        call solve_simplex_qp( &
+          hqp, gqp, xmin, minf, qp_status, &
+          forbid_vertices_before=max(0, na - 1), preferred=na)
+      end if
+
       if (self%verbose > 2) then
-        write(iw, '(A,*(F15.6))') 'nlopt0: found min at ', x(:)
-        write(iw, '(A,*(F15.6))') 'nlopt0: min val = ', minf
+        if (qp_status /= SIMPLEX_QP_SUCCESS) &
+          write(iw, '(10X,"simplex QP status:",I4)') qp_status
+        if (na > SIMPLEX_QP_EXACT_MAX_N) &
+          write(iw, '(10X,"simplex QP deterministic fallback for dimension",I4)') na
+        write(iw, '(A,*(F15.6))') 'simplex QP coefficients: ', xmin
+        write(iw, '(A,ES20.10)') 'simplex QP objective: ', minf
       end if
+      call ediis_record_solution(self, xmin)
     end if
-
-    ! If no solution found, try the alternative:
-    ! Start from the trivial guess [x(1:n-1)=0, x(n) = 1]
-    ! then run two L-BFGS iterations and average with
-    ! [x(1:i-i), x(i+1:n) = 0, x(i) = 1] vector and run few L-BFGS steps again
-    ! for all [ i = n-1, 1 ] and then [i = 1, n]
-    if (minf_min > 1.0e99_dp) then
-      call nlo_set_maxeval(ires, opt_lbfgs, 2)
-      call nlo_set_xtol_rel(ires, opt_lbfgs, 0.1_dp)
-      xmin = 0.0_dp
-      xmin(na) = 1.0_dp
-      do i = na-1, 1, -1
-        x = 0.0_dp
-        x(i) = 1.0_dp
-        xmin = (xmin + x) / (1 + sum(x))
-        call nlo_optimize(ires, opt_lbfgs, xmin, minf)
-        if (ires < 0) then
-          if (self%verbose > 2) then
-            write(iw, '(10X,"*** nlopt2 failed:",I4," ***")') ires
-          end if
-          exit
-        end if
-        xmin = xmin**2 / sum(xmin**2)
-      end do
-      if (ires >= 0) then
-        do i = 1, na
-          x = 0.0_dp
-          x(i) = 1.0_dp
-          xmin = (xmin + x) / (1 + sum(x))
-          call nlo_optimize(ires, opt_lbfgs, xmin, minf)
-          if (ires < 0) then
-            if (self%verbose > 2) then
-              write(iw, '(10X,"*** nlopt2 failed:",I4," ***")') ires
-            end if
-            exit
-          end if
-          xmin = xmin**2 / sum(xmin**2)
-        end do
-      end if
-      ! If still no success, the default is minimum energy + small contribution from others:
-      if (ires < 0) then
-        xmin = 1.0_dp
-        xmin(minloc(self%b(1:na-1))) = 10.0_dp
-        xmin = xmin / sum(xmin)
-        if (self%verbose > 2) write(iw, *) 'nlopt2: unoptimal default'
-      end if
-      call eadiis_fun(minf_min, int(na, 4), xmin, xmin, int(0,4), t)
-    end if
-
-    minf = minf_min
-    self%xlog(:na, min(self%iter, self%maxdiis)) = xmin(1:na)
-    call nlo_destroy(opt_lbfgs)
 
     res%ierr = 0
     select type (res)
@@ -2216,6 +2113,60 @@ contains
     res%error = diis_error
   end subroutine ediis_run
 
+  !> @brief Shift remembered coefficient vectors when the SCF ring buffer evicts
+  !>        one or more old states.
+  subroutine ediis_shift_xlog(self, nshift)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    class(ediis_converger), intent(inout) :: self
+    integer, intent(in) :: nshift
+    real(kind=dp) :: work(self%maxdiis), mass
+    integer :: j, new_count, old_na, nkeep
+
+    if (nshift <= 0 .or. self%nlog <= 0) return
+    old_na = min(self%old_dim, self%maxdiis)
+    if (old_na <= 0 .or. nshift >= old_na) then
+      self%xlog = 0.0_dp
+      self%nlog = 0
+      return
+    end if
+
+    nkeep = old_na - nshift
+    new_count = 0
+    do j = 1, self%nlog
+      work = 0.0_dp
+      work(1:nkeep) = self%xlog(nshift + 1:old_na, j)
+      mass = sum(work(1:nkeep))
+      if (.not. ieee_is_finite(mass) .or. &
+          mass <= sqrt(epsilon(1.0_dp))) cycle
+      new_count = new_count + 1
+      self%xlog(:, new_count) = work/mass
+    end do
+    if (new_count < self%maxdiis) &
+      self%xlog(:, new_count + 1:self%maxdiis) = 0.0_dp
+    self%nlog = new_count
+  end subroutine ediis_shift_xlog
+
+  !> @brief Record a valid interpolation and cache it for repeated run calls.
+  subroutine ediis_record_solution(self, x)
+    class(ediis_converger), intent(inout) :: self
+    real(kind=dp), intent(in) :: x(:)
+    integer :: na
+
+    na = size(x)
+    if (self%nlog >= self%maxdiis) then
+      if (self%maxdiis > 1) &
+        self%xlog(:, 1:self%maxdiis - 1) = self%xlog(:, 2:self%maxdiis)
+      self%nlog = self%maxdiis - 1
+    end if
+    self%nlog = self%nlog + 1
+    self%xlog(:, self%nlog) = 0.0_dp
+    self%xlog(1:na, self%nlog) = x
+    self%last_x = 0.0_dp
+    self%last_x(1:na) = x
+    self%last_na = na
+    self%solution_current = .true.
+  end subroutine ediis_record_solution
+
 !==============================================================================
 ! adiis_converger Methods
 !==============================================================================
@@ -2230,9 +2181,12 @@ contains
 
     call self%cdiis_converger%init(params)
     self%conv_name = 'A-DIIS'
-    self%fun => adiis_fun
-    allocate(self%b(self%maxdiis))
+    allocate(self%b(self%maxdiis), source=0.0_dp)
     allocate(self%xlog(self%maxdiis, self%maxdiis), source=0.0_dp)
+    allocate(self%last_x(self%maxdiis), source=0.0_dp)
+    self%nlog = 0
+    self%last_na = 0
+    self%solution_current = .false.
   end subroutine adiis_init
 
   !> @brief Prepare A-DIIS subconverger to run
@@ -2243,6 +2197,10 @@ contains
 
     maxdiis = self%maxdiis
     na = self%dat%num_saved
+    if (self%last_setup > 0) then
+      call ediis_shift_xlog(self, max(0, self%old_dim + self%last_setup - na))
+      self%solution_current = .false.
+    end if
     nfocks = self%dat%num_focks
     ! Factor to account RHF/UHF cases
     factor = 1.0_dp / nfocks
@@ -2266,117 +2224,6 @@ contains
     ! DIIS matrix is already prepared nothing to do here
     self%last_setup = 0
   end subroutine adiis_setup
-
-!==============================================================================
-! Optimization Helper Routines
-!==============================================================================
-
-  !> @brief Modified E/A-DIIS objective function wrapper, which allows to use unconstrained optimization
-  !> @details The following variable substitution is used:
-  !>          \f$ c_i = t_i^2 / \sum_i{t_i^2} \f$
-  !> @note This is standard interface to work with NLOpt library
-  !> @param[out] val Function value
-  !> @param[in] n Dimension of the problem
-  !> @param[in] t Vector of arguments
-  !> @param[out] grad Vector of function gradient
-  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
-  !> @param[in] d Datatype storing function parameters
-  subroutine eadiis_objective(val, n, t, grad, need_gradient, d)
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, t(n), grad(n)
-    type(ediis_opt_data), intent(in) :: d
-    real(kind=8) :: x(n), tnorm, jac(n,n)
-    integer :: i, j
-
-    tnorm = 1.0_dp / sum(t(1:n)**2)
-    x = (t(1:n)**2) * tnorm
-    call d%fun(val, n, x, grad, need_gradient, d)
-
-    if (need_gradient /= 0) then
-      jac = 0.0_dp
-      do i = 1, n
-        jac(i,i) = 1.0_dp
-        do j = 1, n
-          jac(j,i) = 2.0_dp * tnorm * t(j) * (jac(j,i) - x(i))
-        end do
-      end do
-      grad(1:n) = matmul(jac, grad(1:n))
-    end if
-  end subroutine eadiis_objective
-
-  !> @brief Non-modified E/A-DIIS objective function wrapper
-  !> @note This is standard interface to work with NLOpt library
-  !> @param[out] val Function value
-  !> @param[in] n Dimension of the problem
-  !> @param[in] t Vector of arguments
-  !> @param[out] grad Vector of function gradient
-  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
-  !> @param[in] d Datatype storing function parameters
-  subroutine eadiis_fun(val, n, x, grad, need_gradient, d)
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, x(n), grad(n)
-    type(ediis_opt_data), intent(in) :: d
-
-    call d%fun(val, n, x, grad, need_gradient, d)
-  end subroutine eadiis_fun
-
-  !> @brief E-DIIS objective function calculation
-  !> @note This is standard interface to work with NLOpt library
-  !> @param[out] val Function value
-  !> @param[in] n Dimension of the problem
-  !> @param[in] t Vector of arguments
-  !> @param[out] grad Vector of function gradient
-  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
-  !> @param[in] d Datatype storing function parameters
-  subroutine ediis_fun(val, n, x, grad, need_gradient, d)
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, x(*), grad(*)
-    type(ediis_opt_data), intent(in) :: d
-
-    if (need_gradient /= 0) then
-      grad(1:n) = d%b(1:n) - matmul(d%A(1:n, 1:n), x(1:n))
-    end if
-    val = dot_product(x(1:n), d%b(1:n)) - &
-          0.5_dp * dot_product(x(1:n), matmul(d%A(1:n, 1:n), x(1:n)))
-  end subroutine ediis_fun
-
-  !> @brief E/A-DIIS constraints
-  !> @note This is standard interface to work with NLOpt library
-  !> @param[out] val Function value
-  !> @param[in] n Dimension of the problem
-  !> @param[in] t Vector of arguments
-  !> @param[out] grad Vector of function gradient
-  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
-  !> @param[in] d Datatype storing function parameters
-  subroutine eadiis_constraints(val, n, x, grad, need_gradient, d)
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, x(n), grad(n)
-    class(ediis_converger), intent(in) :: d
-
-    if (need_gradient /= 0) grad = 1.0_dp
-    val = sum(x) - 1.0_dp
-  end subroutine eadiis_constraints
-
-  !> @brief A-DIIS objective function calculation
-  !> @note This is standard interface to work with NLOpt library
-  !> @param[out] val Function value
-  !> @param[in] n Dimension of the problem
-  !> @param[in] t Vector of arguments
-  !> @param[out] grad Vector of function gradient
-  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
-  !> @param[in] d Datatype storing function parameters
-  subroutine adiis_fun(val, n, x, grad, need_gradient, d)
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, x(*), grad(*)
-    type(ediis_opt_data), intent(in) :: d
-
-    if (need_gradient /= 0) then
-      grad(1:n) = 2.0_dp * d%b(1:n) + matmul(d%A(1:n, 1:n), x(1:n)) + &
-                  matmul(x(1:n), d%A(1:n, 1:n))
-    end if
-    val = d%b(n) + 2.0_dp * dot_product(x(1:n), d%b(1:n)) + &
-          dot_product(x(1:n), matmul(d%A(1:n, 1:n), x(1:n)))
-  end subroutine adiis_fun
 
 !==============================================================================
 ! Debug Printing (optional)

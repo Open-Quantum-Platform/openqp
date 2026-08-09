@@ -90,7 +90,7 @@ jobs:
             # SKIPPED. ddX is still built from source; the bundled-externals cache
             # above (keyed on external/CMakeLists.txt) pays that cost once.
             #
-            # External deps (libxc, nlopt, ...) are fetched via ExternalProject and
+            # External deps (libxc, libecpint, ...) are fetched via ExternalProject and
             # the upstream hosts intermittently return HTTP 504. The bundled-
             # externals cache persists across retries, so a re-run only re-fetches
             # whatever failed.

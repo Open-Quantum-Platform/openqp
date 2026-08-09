@@ -1,6 +1,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Internal deterministic simplex-QP test ABI. H/forbidden are column-major. */
+void oqp_simplex_qp_solve(int64_t n, const double *h, const double *g,
+                          double *x, double *value, int *status);
+void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
+                                int64_t nforbidden, const double *forbidden,
+                                int64_t forbid_vertices_before, double *x,
+                                double *value, int *status);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {

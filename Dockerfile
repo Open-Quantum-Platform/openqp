@@ -78,6 +78,8 @@ RUN openqp /opt/openqp/examples/other/h2o_rhf_6-31g_hf.inp
 # and their complete corresponding source before this image can be published.
 RUN python3 - <<'PY'
 from pathlib import Path
+import re
+import subprocess
 import sys
 
 from oqp.runtime import resolve_oqp_root
@@ -103,6 +105,16 @@ required.extend([
 missing = [str(path) for path in required if not path.is_file()]
 if missing:
     raise SystemExit(f"DFT-D4 runtime/corresponding-source files missing: {missing}")
+liboqp = root / "lib" / "liboqp.so"
+dependency_text = subprocess.run(
+    ["readelf", "-d", str(liboqp)], check=True, capture_output=True, text=True
+).stdout
+symbol_text = subprocess.run(
+    ["nm", "-D", str(liboqp)], check=True, capture_output=True, text=True
+).stdout
+native_metadata = dependency_text + "\n" + symbol_text
+if re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", native_metadata):
+    raise SystemExit(f"NLopt dependency or symbol leaked into {liboqp}:\n{native_metadata}")
 print(f"DFT-D4 shared libraries and corresponding source retained under {root}")
 PY
 

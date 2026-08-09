@@ -55,6 +55,7 @@ for attr_name in dir(lib):
             'oqp_namd_droplet_boundary', 'oqp_namd_com_restraint',
             'oqp_namd_langevin_thermostat',
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
+            'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:
