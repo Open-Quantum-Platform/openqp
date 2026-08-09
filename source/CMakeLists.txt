@@ -25,6 +25,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/hess1_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/grd2_hess_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/cholesky_eri_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
 )
 
 message(STATUS ${SOURCES})
@@ -100,11 +101,6 @@ endif()
 
 target_compile_definitions(oqp PRIVATE OQP_BLAS_INT=${BLA_SIZEOF_INTEGER})
 set_property(SOURCE ${SOURCES_mathlib_ilp64} APPEND PROPERTY COMPILE_DEFINITIONS OQP_BLAS_INT=${BLA_SIZEOF_INTEGER})
-
-# NLopt include
-add_dependencies(oqp nlopt)
-target_include_directories(oqp PUBLIC ${NLOPT_BUILD_DIR})
-target_link_libraries(oqp ${NLOPT_LIBRARY})
 
 # DFT-D4 dispersion (native, see external/CMakeLists.txt). dftd4_interface.F90
 # (globbed into SOURCES above) `use`s the dftd4/mctc-lib modules, so the module

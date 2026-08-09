@@ -59,4 +59,29 @@ got = {k: list(map(int, basis[k])) for k in ("centers", "ncontr", "angs")}
 expect = {"centers": [0, 1], "ncontr": [3, 3], "angs": [0, 0]}
 assert got == expect, f"basis metadata ABI corrupt: {got} != {expect}"
 
-print(f"wheel smoke test OK: energy {energy} | basis metadata ABI clean")
+# 4. NLopt was replaced by OpenQP's deterministic simplex-QP solver. Inspect
+#    both the native dependency table and dynamic symbols so a stale link or an
+#    accidentally retained call cannot pass the wheel gate.
+from oqp.runtime import resolve_oqp_root  # noqa: E402
+
+oqp_root, native_suffix = resolve_oqp_root()
+liboqp_path = os.path.join(oqp_root, "lib", f"liboqp.{native_suffix}")
+if sys.platform == "darwin":
+    dependency_commands = [["otool", "-L", liboqp_path]]
+    symbol_commands = [["nm", "-gU", liboqp_path], ["nm", "-u", liboqp_path]]
+else:
+    dependency_commands = [["readelf", "-d", liboqp_path]]
+    symbol_commands = [["nm", "-D", liboqp_path]]
+
+native_metadata = "\n".join(
+    subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    for command in (*dependency_commands, *symbol_commands)
+)
+assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", native_metadata), (
+    f"NLopt dependency or symbol leaked into {liboqp_path}:\n{native_metadata}"
+)
+
+print(
+    f"wheel smoke test OK: energy {energy} | basis metadata ABI clean | "
+    "NLopt dependency and symbols absent"
+)
