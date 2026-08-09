@@ -72,7 +72,8 @@ RUN python3 .github/scripts/record_wheelhouse.py /opt/openqp-wheelhouse \
 # numerical/ABI/D4 canonical-replaceability gate used for release wheels.
 RUN python3 -m pip install --no-index --find-links=/opt/openqp-wheelhouse \
       "OpenQP==${OPENQP_VERSION}" && \
-    python3 .github/scripts/wheel_smoke_test.py /opt/openqp
+    OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH=/opt/openblas/lib \
+      python3 .github/scripts/wheel_smoke_test.py /opt/openqp
 
 # Copy only the non-glibc shared-library closure required by the installed
 # OpenQP wheel.  The collector fails on unresolved dependencies or colliding

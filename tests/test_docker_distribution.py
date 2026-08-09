@@ -51,6 +51,15 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
+        self.assertIn(
+            "OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH=/opt/openblas/lib",
+            dockerfile,
+        )
+        wheel_smoke = (
+            ROOT / ".github" / "scripts" / "wheel_smoke_test.py"
+        ).read_text()
+        self.assertIn("OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH", wheel_smoke)
+        self.assertIn("external runtime directory contains a DFT-D4 library", wheel_smoke)
         self.assertEqual(
             lock["images"]["builder"]["openblas_abi"],
             {

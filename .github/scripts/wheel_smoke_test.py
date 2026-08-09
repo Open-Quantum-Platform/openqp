@@ -337,11 +337,33 @@ print("OQP_D4_CHILD_RESULT=" + json.dumps({
 
 def run_d4_child():
     child_env = os.environ.copy()
+    external_runtime_path = child_env.pop(
+        "OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH", ""
+    )
     for variable in (
         "PYTHONPATH", "OPENQP_ROOT", "LD_LIBRARY_PATH",
         "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
     ):
         child_env.pop(variable, None)
+    if external_runtime_path:
+        runtime_directories = [
+            Path(entry) for entry in external_runtime_path.split(os.pathsep)
+            if entry
+        ]
+        assert runtime_directories, "external runtime path is empty"
+        for directory in runtime_directories:
+            assert directory.is_absolute() and directory.is_dir(), (
+                f"invalid external runtime directory: {directory}"
+            )
+            assert not any(
+                candidate.name.startswith(
+                    ("libdftd4", "libmulticharge", "libmctc-lib")
+                )
+                for candidate in directory.iterdir()
+            ), f"external runtime directory contains a DFT-D4 library: {directory}"
+        child_env["LD_LIBRARY_PATH"] = os.pathsep.join(
+            str(directory) for directory in runtime_directories
+        )
     return subprocess.run(
         [sys.executable, "-c", D4_CHILD_SCRIPT],
         cwd=tmp,
