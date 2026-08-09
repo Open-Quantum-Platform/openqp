@@ -28,6 +28,11 @@ def make_runtime_root(root, suffix):
 
 
 class RuntimeRootResolutionTests(unittest.TestCase):
+    def test_wheel_native_libraries_are_installed_under_package_lib(self):
+        pyproject = (ROOT / "pyproject.toml").read_text()
+
+        self.assertIn('CMAKE_INSTALL_LIBDIR = "lib"', pyproject)
+
     def test_python_runtime_prefers_package_local_root_over_openqp_root(self):
         runtime = load_runtime_module()
         suffix = runtime.library_suffix()
