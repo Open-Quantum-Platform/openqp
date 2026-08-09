@@ -155,6 +155,16 @@ class SimplexQPTests(unittest.TestCase):
                 self.assertEqual(status, 0)
                 np.testing.assert_allclose(x, reference, atol=2.0e-13)
 
+    def test_large_common_linear_offset_does_not_change_solution(self):
+        h = 2.0*np.eye(2)
+        g = np.array([1.0e14 - 0.2, 1.0e14 + 0.2])
+        expected_x1 = (2.0 - (g[0] - g[1]))/4.0
+
+        x, _, status = self.solve(h, g)
+
+        self.assertEqual(status, 0)
+        np.testing.assert_allclose(x, [expected_x1, 1.0 - expected_x1], atol=1.0e-13)
+
     def test_nonfinite_input_returns_latest_vertex(self):
         g = np.array([0.0, np.nan, 0.0])
         x, value, status = self.solve(np.eye(3), g)

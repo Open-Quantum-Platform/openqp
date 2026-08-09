@@ -84,6 +84,10 @@ class NLoptRemovalTests(unittest.TestCase):
         self.assertIn("xmin(na) = 1.0_dp", scf)
         self.assertIn("using latest SCF state without interpolation", scf)
 
+        checker = (ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py").read_text()
+        self.assertIn('diis_type in {"ediis", "adiis", "vdiis"}', checker)
+        self.assertIn("maxdiis > 13", checker)
+
     def test_post_build_ci_requires_native_simplex_tests(self):
         ci = (ROOT / ".github" / "workflows" / "CI.yml").read_text()
         self.assertIn('OQP_REQUIRE_NATIVE_TESTS: "1"', ci)

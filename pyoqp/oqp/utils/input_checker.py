@@ -1706,6 +1706,7 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     converger = _as_lower(_get(config, "scf", "converger_type", "diis"))
     init_converger = _as_lower(_get(config, "scf", "init_converger", "diis"))
     diis_type = _as_lower(_get(config, "scf", "diis_type", "cdiis"))
+    maxdiis = _get(config, "scf", "maxdiis", 7)
     alternative_scf = _as_lower(_get(config, "scf", "alternative_scf", "trah"))
     init_scf = _as_lower(_get(config, "scf", "init_scf", "no"))
     functional = _get(config, "input", "functional", "")
@@ -1770,6 +1771,16 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             value=diis_type,
             expected=", ".join(sorted(DIIS_TYPES)),
             action="Choose one of the implemented DIIS types.",
+        )
+
+    if diis_type in {"ediis", "adiis", "vdiis"} and maxdiis > 13:
+        report.add(
+            "ERROR",
+            "scf.maxdiis",
+            "The deterministic E-DIIS/A-DIIS simplex solver supports at most 13 stored states.",
+            value=maxdiis,
+            expected="maxdiis <= 13 for ediis, adiis, or vdiis",
+            action="Use maxdiis=13 or less, or select cdiis for a larger history.",
         )
 
     if alternative_scf not in SCF_CONVERGERS:

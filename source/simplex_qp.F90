@@ -63,13 +63,15 @@ contains
       old_vertices = max(0, min(n, forbid_vertices_before))
 
     allocate(hs(n, n), gs(n), best(n), best_any(n), candidate(n))
-    input_scale = max(maxval(abs(h(1:n, 1:n))), maxval(abs(g)))
+    ! A common offset in g is constant on the simplex.  Remove it before
+    ! choosing the scale so a large absolute energy does not erase the small
+    ! coefficient differences that determine the minimizer.
+    gs = g - g(pref)
+    input_scale = max(maxval(abs(h(1:n, 1:n))), maxval(abs(gs)))
     if (input_scale > 0.0_dp) then
       hs = 0.5_dp*(h(1:n, 1:n)/input_scale + &
                    transpose(h(1:n, 1:n))/input_scale)
-      ! Subtracting a constant from every linear coefficient leaves a simplex
-      ! objective unchanged up to an additive constant and improves scaling.
-      gs = g/input_scale - g(pref)/input_scale
+      gs = gs/input_scale
     else
       hs = 0.0_dp
       gs = 0.0_dp
