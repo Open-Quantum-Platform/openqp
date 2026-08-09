@@ -147,12 +147,15 @@ def verify(
                 or "artifactType" in manifest
                 or isinstance(manifest.get("blobs"), list)
             )
-            if is_image and is_attestation:
-                raise ValueError("OCI manifest is ambiguously image and attestation")
-            if is_image:
-                images.append((descriptor, manifest))
-            elif is_attestation:
+            # BuildKit exports attestation manifests in OCI-image shape: they
+            # may carry both an image-config descriptor and a layers list.
+            # Explicit attestation markers must therefore take precedence;
+            # the attestation config and payload descriptors are still
+            # authenticated below before their contents are trusted.
+            if is_attestation:
                 attestations.append((descriptor, manifest))
+            elif is_image:
+                images.append((descriptor, manifest))
             else:
                 raise ValueError("unrecognized OCI index manifest structure")
 

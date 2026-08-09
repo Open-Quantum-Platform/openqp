@@ -321,10 +321,16 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     "application/vnd.in-toto+json",
                 )
             )
+        attestation_config = self._json_blob(
+            blobs,
+            {},
+            "application/vnd.oci.image.config.v1+json",
+        )
         attestation = self._json_blob(
             blobs,
             {
                 "schemaVersion": 2,
+                "config": attestation_config,
                 "subject": {"digest": image_digest},
                 "layers": statements,
             },
