@@ -1,45 +1,14 @@
-from setuptools import setup
-from setuptools import find_packages
+"""Retired standalone PyOQP packaging entry point.
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+OpenQP 1.3.0 is built only from the repository root, where ``pyproject.toml``
+owns the license expression, bundled license files, native library, and Python
+wrapper as one distribution.  Keeping a second setuptools build below
+``pyoqp/`` would permit an incomplete artifact without those legal files.
+"""
 
-setup(
-    name="OpenQP",
-    version="1.3.0",
-    author="Jingbai Li",
-    author_email="lijingbai@zspu.edu.cn",
-    description="Python Wrapper for Open Quantum Platform",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="",
-    install_requires=[
-        'numpy>=1.20.0',
-        'scipy>=1.10.0',
-        # 'dftd4>=3.5.0',
-        'cffi>=1.16.0',
-        'mpi4py>=4.0.0',
-        'basis_set_exchange',
-        'openmm>=8.1.1',
-    ],
-    extras_require={
-        'geometric': ['geometric>=1.0'],
-    },
-    packages=find_packages(),
-    include_package_data=False,
-    package_data={"oqp": ["*.py"]},
-    entry_points={
-        'console_scripts': [
-            'openqp=oqp.pyoqp:main',
-        ],
-    },
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: OS Independent",
-        "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering :: Physics",
-        "Topic :: Scientific/Engineering :: Chemistry",
-        "Topic :: Software Development :: Libraries :: Python Modules"
-    ],
-    keywords=["science", "MRSF-TDDFT"],
+OPENQP_VERSION = "1.3.0"
+
+raise SystemExit(
+    "pyoqp/setup.py is retired; build OpenQP from the repository root with "
+    "`python -m build` or `python -m pip install .`"
 )

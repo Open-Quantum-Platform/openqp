@@ -38,9 +38,11 @@ name: Build and release distributions
     paths:
       - ".github/workflows/build_wheels.yml"
       - "CMakeLists.txt"
+      - "CONTRIBUTING.md"
       - "LICENSE"
       - "LICENSING.md"
       - "MANIFEST.in"
+      - "SUSTAINABILITY.md"
       - "THIRD_PARTY_NOTICES.md"
       - "pyproject.toml"
       - "basis_sets/**"
@@ -55,9 +57,11 @@ name: Build and release distributions
     paths:
       - ".github/workflows/build_wheels.yml"
       - "CMakeLists.txt"
+      - "CONTRIBUTING.md"
       - "LICENSE"
       - "LICENSING.md"
       - "MANIFEST.in"
+      - "SUSTAINABILITY.md"
       - "THIRD_PARTY_NOTICES.md"
       - "pyproject.toml"
       - "basis_sets/**"
@@ -464,8 +468,48 @@ jobs:
               raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
-          if not wheels:
-              raise SystemExit("No wheel artifacts were downloaded")
+          expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          expected_platform_tags = {
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+          }
+
+          def wheel_key(wheel):
+              _, python_tag, abi_tag, platform_tag = wheel.name[:-4].rsplit("-", 3)
+              if python_tag != abi_tag or python_tag not in expected_python_tags:
+                  raise SystemExit(f"{wheel.name}: unexpected interpreter/ABI tags")
+              if "manylinux" in platform_tag and platform_tag.endswith("_x86_64"):
+                  platform = "linux-x86_64"
+              elif "manylinux" in platform_tag and platform_tag.endswith("_aarch64"):
+                  platform = "linux-aarch64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_x86_64"):
+                  platform = "macos-x86_64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
+                  platform = "macos-arm64"
+              else:
+                  raise SystemExit(f"{wheel.name}: unexpected platform tag")
+              return python_tag, platform
+
+          observed_wheels = {}
+          for wheel in wheels:
+              key = wheel_key(wheel)
+              if key in observed_wheels:
+                  raise SystemExit(
+                      f"Duplicate wheel target {key}: "
+                      f"{observed_wheels[key].name}, {wheel.name}"
+                  )
+              observed_wheels[key] = wheel
+          expected_wheels = {
+              (python_tag, platform)
+              for python_tag in expected_python_tags
+              for platform in expected_platform_tags
+          }
+          missing_wheels = sorted(expected_wheels - observed_wheels.keys())
+          extra_wheels = sorted(observed_wheels.keys() - expected_wheels)
+          if missing_wheels or extra_wheels:
+              raise SystemExit(
+                  f"Incomplete configured wheel matrix; missing={missing_wheels}, "
+                  f"extra={extra_wheels}"
+              )
           bad_wheel_names = [
               wheel.name for wheel in wheels
               if not wheel.name.lower().startswith(f"openqp-{version}-")
@@ -528,6 +572,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       release_tag: ${{ steps.release.outputs.release_tag }}
+      release_sha: ${{ steps.release.outputs.release_sha }}
       version: ${{ steps.release.outputs.version }}
     permissions:
       actions: read
@@ -598,6 +643,7 @@ jobs:
               )
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               print(f"release_tag={release_tag}", file=output)
+              print(f"release_sha={release_sha}", file=output)
               print(f"version={version}", file=output)
           PY
 
@@ -722,8 +768,48 @@ jobs:
               raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
-          if not wheels:
-              raise SystemExit("No wheel artifacts were downloaded")
+          expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          expected_platform_tags = {
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+          }
+
+          def wheel_key(wheel):
+              _, python_tag, abi_tag, platform_tag = wheel.name[:-4].rsplit("-", 3)
+              if python_tag != abi_tag or python_tag not in expected_python_tags:
+                  raise SystemExit(f"{wheel.name}: unexpected interpreter/ABI tags")
+              if "manylinux" in platform_tag and platform_tag.endswith("_x86_64"):
+                  platform = "linux-x86_64"
+              elif "manylinux" in platform_tag and platform_tag.endswith("_aarch64"):
+                  platform = "linux-aarch64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_x86_64"):
+                  platform = "macos-x86_64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
+                  platform = "macos-arm64"
+              else:
+                  raise SystemExit(f"{wheel.name}: unexpected platform tag")
+              return python_tag, platform
+
+          observed_wheels = {}
+          for wheel in wheels:
+              key = wheel_key(wheel)
+              if key in observed_wheels:
+                  raise SystemExit(
+                      f"Duplicate wheel target {key}: "
+                      f"{observed_wheels[key].name}, {wheel.name}"
+                  )
+              observed_wheels[key] = wheel
+          expected_wheels = {
+              (python_tag, platform)
+              for python_tag in expected_python_tags
+              for platform in expected_platform_tags
+          }
+          missing_wheels = sorted(expected_wheels - observed_wheels.keys())
+          extra_wheels = sorted(observed_wheels.keys() - expected_wheels)
+          if missing_wheels or extra_wheels:
+              raise SystemExit(
+                  f"Incomplete configured wheel matrix; missing={missing_wheels}, "
+                  f"extra={extra_wheels}"
+              )
           bad_wheel_names = [
               wheel.name for wheel in wheels
               if not wheel.name.lower().startswith(f"openqp-{version}-")
@@ -807,6 +893,36 @@ jobs:
         with:
           name: verified-openqp-pypi-${{ needs.manual_pypi_preflight.outputs.version }}-${{ github.run_id }}
           path: dist
+
+      - name: Revalidate release tag and GitHub Release after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.manual_pypi_preflight.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.manual_pypi_preflight.outputs.release_tag }}
+        run: |
+          test "$(gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')" = "${RELEASE_SHA}" || {
+            echo "Release tag moved after preflight approval."
+            exit 1
+          }
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            > "${RUNNER_TEMP}/approved-release.json"
+          RELEASE_JSON="${RUNNER_TEMP}/approved-release.json" python - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["RELEASE_JSON"]) as handle:
+              release = json.load(handle)
+          if (
+              release.get("tag_name") != os.environ["RELEASE_TAG"]
+              or release.get("draft")
+              or not release.get("published_at")
+          ):
+              raise SystemExit(
+                  "GitHub Release changed or is no longer published after approval"
+              )
+          print("Release tag and published GitHub Release revalidated after approval.")
+          PY
 
       - name: Attach approved artifacts to GitHub Release
         env:
