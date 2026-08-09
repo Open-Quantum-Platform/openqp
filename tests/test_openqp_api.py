@@ -306,6 +306,9 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(config["input"]["d4"], "True")
         self.assertEqual(config["d4"]["s8"], "0.95948085")
         self.assertEqual(config["d4"]["alp"], "16.0")
+        self.assertEqual(job.d4.s8, "0.95948085")
+        job.d4.s8 = 1.25
+        self.assertEqual(job.to_input_dict()["d4"]["s8"], "1.25")
 
     def test_odp_section_is_exposed_through_settings_api(self):
         openqp = load_openqp_module()

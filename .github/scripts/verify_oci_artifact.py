@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 
+SPDX_PREDICATE_TYPES = {"https://spdx.dev/Document"}
+SLSA_PROVENANCE_PREDICATE_TYPES = {
+    "https://slsa.dev/provenance/v0.2",
+    "https://slsa.dev/provenance/v1",
+}
+
+
 def _blob_path(digest: str) -> str:
     algorithm, value = digest.split(":", 1)
     if algorithm != "sha256" or len(value) != 64:
@@ -176,13 +183,13 @@ def verify(
             raise ValueError(
                 f"attestations do not identify image {image_digest}; subjects={subjects}"
             )
-        if not any("spdx" in value.lower() for value in image_predicate_types):
+        if not image_predicate_types.intersection(SPDX_PREDICATE_TYPES):
             raise ValueError(
                 f"candidate image has no SPDX SBOM; "
                 f"image_predicates={image_predicate_types}, all_predicates={predicate_types}"
             )
-        if not any(
-            "slsa.dev/provenance" in value for value in image_predicate_types
+        if not image_predicate_types.intersection(
+            SLSA_PROVENANCE_PREDICATE_TYPES
         ):
             raise ValueError(
                 f"candidate image has no SLSA provenance; "

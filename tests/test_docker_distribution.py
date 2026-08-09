@@ -410,6 +410,57 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             with self.assertRaisesRegex(ValueError, "descriptor digest mismatch"):
                 OCI_VERIFY.verify(tampered_layer, "1.3.0", "a" * 40)
 
+            forged_spdx = self._json_blob(
+                blobs,
+                {
+                    "_type": "https://in-toto.io/Statement/v1",
+                    "subject": [{
+                        "name": "openqp/openqp",
+                        "digest": {"sha256": image_digest.split(":", 1)[1]},
+                    }],
+                    "predicateType": "https://example.test/not-spdx",
+                    "predicate": {},
+                },
+                "application/vnd.in-toto+json",
+            )
+            forged_provenance = self._json_blob(
+                blobs,
+                {
+                    "_type": "https://in-toto.io/Statement/v1",
+                    "subject": [{
+                        "name": "openqp/openqp",
+                        "digest": {"sha256": image_digest.split(":", 1)[1]},
+                    }],
+                    "predicateType": "https://slsa.dev/provenance-forged",
+                    "predicate": {},
+                },
+                "application/vnd.in-toto+json",
+            )
+            for name, layers, error in (
+                ("forged-spdx", [forged_spdx, statements[1]], "no SPDX SBOM"),
+                ("forged-slsa", [statements[0], forged_provenance], "no SLSA provenance"),
+            ):
+                forged_attestation = self._json_blob(
+                    blobs,
+                    {"schemaVersion": 2, "subject": {"digest": image_digest},
+                     "layers": layers},
+                )
+                forged_attestation["platform"] = {
+                    "os": "unknown", "architecture": "unknown"
+                }
+                forged_attestation["annotations"] = dict(attestation["annotations"])
+                forged_index = json.dumps(
+                    {"schemaVersion": 2,
+                     "manifests": [image, forged_attestation]},
+                    sort_keys=True,
+                ).encode()
+                forged_artifact = Path(temporary) / f"{name}.oci.tar"
+                self._write_oci(forged_artifact, forged_index, blobs)
+                with self.assertRaisesRegex(ValueError, error):
+                    OCI_VERIFY.verify(
+                        forged_artifact, "1.3.0", "a" * 40
+                    )
+
             unrelated_spdx = self._json_blob(
                 blobs,
                 {
