@@ -94,12 +94,24 @@ def verify(
         if len(images) != 1:
             raise ValueError(f"expected one OCI image manifest, found {len(images)}")
         image_descriptor = images[0]
-        platform = image_descriptor.get("platform", {})
-        if platform.get("os") != "linux" or platform.get("architecture") != "amd64":
-            raise ValueError(f"unexpected OCI image platform: {platform}")
-
         image_manifest = _descriptor_json(archive, image_descriptor)
         config = _descriptor_json(archive, image_manifest["config"])
+        config_platform = {
+            "os": config.get("os"),
+            "architecture": config.get("architecture"),
+        }
+        expected_platform = {"os": "linux", "architecture": "amd64"}
+        if config_platform != expected_platform:
+            raise ValueError(f"unexpected OCI image platform: {config_platform}")
+        descriptor_platform = image_descriptor.get("platform")
+        # OCI descriptors may omit the optional platform object for a
+        # single-platform archive.  When present it must agree with the image
+        # configuration, which is the authoritative runtime platform record.
+        if descriptor_platform and descriptor_platform != config_platform:
+            raise ValueError(
+                "OCI descriptor/config platform mismatch: "
+                f"{descriptor_platform} != {config_platform}"
+            )
         layers = image_manifest.get("layers")
         if not isinstance(layers, list):
             raise ValueError("OCI image manifest layers must be a list")
