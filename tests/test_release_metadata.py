@@ -55,3 +55,12 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertIn("name: pypi", workflow)
         self.assertIn("LicenseRef-OpenQP-Research-1.0", workflow)
         self.assertNotIn("publish_existing_artifacts", workflow)
+
+    def test_pypi_sealed_artifact_survives_failed_job_reruns(self):
+        workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        artifact_name = "verified-openqp-pypi-${{"
+        artifact_lines = [line for line in workflow.splitlines() if artifact_name in line]
+        self.assertEqual(len(artifact_lines), 2)
+        self.assertTrue(all("github.run_id" in line for line in artifact_lines))
+        self.assertTrue(all("github.run_attempt" not in line for line in artifact_lines))

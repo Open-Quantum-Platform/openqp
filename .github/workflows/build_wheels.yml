@@ -783,7 +783,7 @@ jobs:
       - name: Seal verified distributions for the approval job
         uses: actions/upload-artifact@v4
         with:
-          name: verified-openqp-pypi-${{ steps.release.outputs.version }}-${{ github.run_attempt }}
+          name: verified-openqp-pypi-${{ steps.release.outputs.version }}-${{ github.run_id }}
           path: dist/*
           if-no-files-found: error
           retention-days: 7
@@ -805,7 +805,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: verified-openqp-pypi-${{ needs.manual_pypi_preflight.outputs.version }}-${{ github.run_attempt }}
+          name: verified-openqp-pypi-${{ needs.manual_pypi_preflight.outputs.version }}-${{ github.run_id }}
           path: dist
 
       - name: Attach approved artifacts to GitHub Release
