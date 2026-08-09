@@ -15,6 +15,7 @@ replaceable DFT-D4 shared-library stack.  This covers failure classes that an
 
 Usage: wheel_smoke_test.py <project-dir>
 """
+import json
 import os
 import re
 import shutil
@@ -113,18 +114,229 @@ def native_metadata(path, command):
     return metadata
 
 
-oqp_deps = native_metadata(liboqp_path, inspect_command)
-assert "libdftd4" in oqp_deps and "libmctc-lib" in oqp_deps, oqp_deps
-d4_deps = native_metadata(d4_paths["dftd4"], inspect_command)
-assert "libmulticharge" in d4_deps and "libmctc-lib" in d4_deps, d4_deps
-multicharge_deps = native_metadata(d4_paths["multicharge"], inspect_command)
-assert "libmctc-lib" in multicharge_deps, multicharge_deps
+def parse_dynamic_dependencies(metadata, platform_name):
+    """Return exact DT_NEEDED/install-name entries from native-tool output."""
+    if platform_name == "darwin":
+        dependencies = []
+        for line in metadata.splitlines()[1:]:
+            match = re.match(
+                r"\s*(.+?)\s+\(compatibility version [^)]+\)$", line
+            )
+            if match:
+                dependencies.append(match.group(1))
+        return dependencies
+    return re.findall(
+        r"\(NEEDED\)\s+Shared library:\s*\[([^]]+)\]", metadata
+    )
+
+
+def assert_canonical_dependency_graph(
+    owner, dependencies, required, canonical_names, platform_name
+):
+    """Require exactly the canonical SOVERSION name at every D4-stack edge."""
+    prefixes = {
+        "dftd4": "libdftd4",
+        "multicharge": "libmulticharge",
+        "mctc": "libmctc-lib",
+    }
+    stack_entries = {}
+    owner_basename = str(owner).rsplit("/", 1)[-1]
+    for dependency in dependencies:
+        basename = dependency.rsplit("/", 1)[-1]
+        logical_name = next(
+            (name for name, prefix in prefixes.items()
+             if basename.startswith(prefix)),
+            None,
+        )
+        if logical_name is None:
+            continue
+        canonical = canonical_names[logical_name]
+        allowed = {canonical}
+        if platform_name == "darwin":
+            allowed = {f"@rpath/{canonical}", f"@loader_path/{canonical}"}
+        assert dependency in allowed, (
+            f"{owner} has noncanonical {logical_name} dependency "
+            f"{dependency!r}; expected one of {sorted(allowed)}"
+        )
+        # ``otool -L`` reports a dylib's LC_ID_DYLIB before its actual load
+        # commands.  Validate that install ID above, but do not count it as a
+        # dependency edge from the library to itself.
+        if platform_name == "darwin" and basename == owner_basename:
+            continue
+        stack_entries.setdefault(logical_name, []).append(dependency)
+
+    assert set(stack_entries) == set(required), (
+        f"{owner} DFT-D4 dependency edges are {stack_entries}; "
+        f"expected exactly {sorted(required)}"
+    )
+    duplicates = {
+        name: entries for name, entries in stack_entries.items()
+        if len(entries) != 1
+    }
+    assert not duplicates, f"{owner} has duplicate DFT-D4 edges: {duplicates}"
+
+
+assert liboqp_path.is_file(), f"missing package-local OpenQP library: {liboqp_path}"
+dependency_graph = {
+    liboqp_path: {"dftd4", "mctc"},
+    d4_paths["dftd4"]: {"multicharge", "mctc"},
+    d4_paths["multicharge"]: {"mctc"},
+    d4_paths["mctc"]: set(),
+}
+for owner, required_edges in dependency_graph.items():
+    metadata = native_metadata(owner, inspect_command)
+    dependencies = parse_dynamic_dependencies(metadata, sys.platform)
+    assert_canonical_dependency_graph(
+        owner, dependencies, required_edges, d4_names, sys.platform
+    )
 
 for path in (liboqp_path, *d4_paths.values()):
     rpath_metadata = native_metadata(path, rpath_command)
     assert local_rpath in rpath_metadata, (
         f"{path} lacks package-local RPATH {local_rpath}:\n{rpath_metadata}"
     )
+
+# A repaired wheel must not retain a canonical file while secretly relinking to
+# an auditwheel/delocate hash copy in ``*.libs`` or ``.dylibs``.  Inspect the
+# complete installed artifact, not just oqp/lib.
+artifact_root = Path(oqp_root).parent
+stack_prefixes = {
+    "dftd4": "libdftd4",
+    "multicharge": "libmulticharge",
+    "mctc": "libmctc-lib",
+}
+for logical_name, prefix in stack_prefixes.items():
+    candidates = set()
+    for candidate in artifact_root.rglob(f"{prefix}*"):
+        filename = candidate.name
+        is_native = (
+            filename.endswith(".dylib") if sys.platform == "darwin"
+            else ".so" in filename
+        )
+        if candidate.is_file() and is_native:
+            candidates.add(candidate.absolute())
+    expected = {d4_paths[logical_name].absolute()}
+    assert candidates == expected, (
+        f"installed wheel contains alternate {logical_name} binaries: "
+        f"{sorted(map(str, candidates))}; expected only {sorted(map(str, expected))}"
+    )
+
+
+D4_CHILD_MARKER = "OQP_D4_CHILD_RESULT="
+D4_CHILD_SCRIPT = r'''
+import ctypes
+import json
+import os
+import sys
+
+import numpy as np
+
+from oqp.library.single_point import dftd4_native_disp
+
+z_values = [8, 1, 1]
+xyz_values = np.asarray([
+    0.0, 0.0, 0.2225904,
+    0.0, 1.427594, -0.890371,
+    0.0, -1.427594, -0.890371,
+], dtype=np.float64).reshape(3, 3)
+energy, _ = dftd4_native_disp(
+    z_values, xyz_values, "pbe", False, total_charge=0.0
+)
+reference = -0.00019542038860006095
+if abs(energy - reference) >= 1.0e-12:
+    raise AssertionError(f"DFT-D4 child energy {energy} != {reference}")
+
+if sys.platform == "darwin":
+    dyld = ctypes.CDLL(None)
+    dyld._dyld_image_count.restype = ctypes.c_uint32
+    dyld._dyld_get_image_name.argtypes = [ctypes.c_uint32]
+    dyld._dyld_get_image_name.restype = ctypes.c_char_p
+    image_paths = []
+    for index in range(dyld._dyld_image_count()):
+        value = dyld._dyld_get_image_name(index)
+        if value:
+            image_paths.append(value.decode("utf-8", errors="surrogateescape"))
+else:
+    image_paths = []
+    with open("/proc/self/maps", encoding="utf-8") as maps:
+        for line in maps:
+            fields = line.rstrip("\n").split(None, 5)
+            if len(fields) == 6 and fields[5].startswith("/"):
+                image_paths.append(fields[5].removesuffix(" (deleted)"))
+
+prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
+loaded_stack = sorted({
+    os.path.realpath(path) for path in image_paths
+    if os.path.basename(path).startswith(prefixes)
+})
+print("OQP_D4_CHILD_RESULT=" + json.dumps({
+    "energy": energy,
+    "loaded_stack": loaded_stack,
+}, sort_keys=True))
+'''
+
+
+def run_d4_child():
+    child_env = os.environ.copy()
+    for variable in (
+        "PYTHONPATH", "OPENQP_ROOT", "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
+    ):
+        child_env.pop(variable, None)
+    return subprocess.run(
+        [sys.executable, "-c", D4_CHILD_SCRIPT],
+        cwd=tmp,
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def require_successful_d4_child():
+    result = run_d4_child()
+    assert result.returncode == 0, (
+        f"isolated DFT-D4 child failed rc={result.returncode}"
+        f"\n--- stdout ---\n{result.stdout[-4000:]}"
+        f"\n--- stderr ---\n{result.stderr[-4000:]}"
+    )
+    payloads = [
+        line[len(D4_CHILD_MARKER):]
+        for line in result.stdout.splitlines()
+        if line.startswith(D4_CHILD_MARKER)
+    ]
+    assert len(payloads) == 1, (
+        f"isolated DFT-D4 child emitted no unique result: {result.stdout[-4000:]}"
+    )
+    payload = json.loads(payloads[0])
+    loaded = {Path(path).resolve() for path in payload["loaded_stack"]}
+    expected = {path.resolve() for path in d4_paths.values()}
+    assert loaded == expected, (
+        "DFT-D4 child loaded noncanonical/alternate libraries: "
+        f"{sorted(map(str, loaded))}; expected {sorted(map(str, expected))}"
+    )
+    return payload
+
+
+# Prove a fresh interpreter can run D4 and that every canonical file is
+# necessary.  Rename one file at a time and always restore it, even when the
+# negative child check itself fails.
+require_successful_d4_child()
+for logical_name, path in d4_paths.items():
+    hidden_path = path.with_name(f".{path.name}.wheel-smoke-hidden")
+    assert not hidden_path.exists(), f"stale wheel-smoke file: {hidden_path}"
+    path.rename(hidden_path)
+    try:
+        missing_result = run_d4_child()
+        assert missing_result.returncode != 0, (
+            f"DFT-D4 child still worked with canonical {logical_name} removed; "
+            "a hidden alternate copy is satisfying the load\n"
+            f"--- stdout ---\n{missing_result.stdout[-4000:]}\n"
+            f"--- stderr ---\n{missing_result.stderr[-4000:]}"
+        )
+    finally:
+        hidden_path.rename(path)
+require_successful_d4_child()
 
 # 5. The legacy neutral ABI must preserve the validated numerical result.  The
 #    high-level charge-aware v2 path must reproduce it for charge=0 and respond
