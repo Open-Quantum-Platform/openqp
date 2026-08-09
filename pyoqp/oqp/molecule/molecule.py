@@ -1911,10 +1911,19 @@ class Molecule:
         """
         Collect computed results to dict
         """
+        energy = self.mol_energy.energy
+        if self.config.get('input', {}).get('d4', False):
+            final_energies = getattr(self, 'energies', None)
+            if final_energies is not None and np.asarray(final_energies).size:
+                # LastStep applies DFT-D4 to ``mol.energies`` after the native
+                # SCF energy has been stored in ``mol_energy``.  The public
+                # result and regression data must expose that final value.
+                energy = float(np.asarray(final_energies).ravel()[0])
+
         data = {
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
-            'energy': self.mol_energy.energy,
+            'energy': energy,
             'symmetry_metadata': self.symmetry_metadata,
         }
 
