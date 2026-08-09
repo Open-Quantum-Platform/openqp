@@ -1,0 +1,424 @@
+NLopt 2.9.1 upstream license and copyright notices
+
+The sections below reproduce the indicated files from the unmodified NLopt 2.9.1 source archive.
+
+
+===== COPYING =====
+
+NLopt combines several free/open-source nonlinear optimization
+libraries by various authors.  See the COPYING, COPYRIGHT, and README
+files in the subdirectories for the original copyright and licensing
+information of these packages.
+
+The compiled NLopt library, i.e. the combined work of all of the
+included optimization routines, is licensed under the conjunction of
+all of these licensing terms. By default, the most restrictive terms
+are for the code in the "luksan" directory, which is licensed under
+the GNU Lesser General Public License (GNU LGPL), version 2.1 or
+later (see luksan/COPYRIGHT). That means that, by default, the compiled
+NLopt library is governed by the terms of the LGPL.
+
+---------------------------------------------------------------------------
+
+However, NLopt also offers the option to be built without the code in
+the "luksan" directory. In this case, NLopt, including any modifications
+to the abovementioned packages, are licensed under the standard "MIT License:"
+
+Copyright (c) 2007-2024 Massachusetts Institute of Technology
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+===== COPYRIGHT =====
+
+/* Copyright (c) 2007-2020 Massachusetts Institute of Technology
+ *                         and other contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+ */
+
+
+===== src/algs/ags/COPYRIGHT =====
+
+The MIT License (MIT)
+
+Copyright (c) 2018 Sovrasov V.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===== src/algs/bobyqa/COPYRIGHT =====
+
+/* Copyright (c) 2009 M. J. D. Powell (mjdp@cam.ac.uk)
+ * Modifications Copyright (c) 2010 Massachusetts Institute of Technology
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+ */
+
+
+===== src/algs/cobyla/COPYRIGHT =====
+
+Copyright (c) 1992, Michael J. D. Powell (M.J.D.Powell@damtp.cam.ac.uk)
+Copyright (c) 2004, Jean-Sebastien Roy (js@jeannot.org)
+Copyright (c) 2008, Steven G. Johnson (stevenj@alum.mit.edu)
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+===== src/algs/direct/COPYING =====
+
+This code is based on the DIRECT 2.0.4 Fortran code by Gablonsky et al. at
+	http://www4.ncsu.edu/~ctk/SOFTWARE/DIRECTv204.tar.gz
+The C version was initially converted via f2c and then cleaned up and
+reorganized by Steven G. Johnson (stevenj@alum.mit.edu), August 2007.
+
+******** Copyright and license for the original Fortran DIRECT code ********
+Copyright (c) 1999, 2000, 2001 North Carolina State University
+
+This program is distributed under the MIT License (see
+http://www.opensource.org/licenses/mit-license.php):
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===== src/algs/esch/COPYRIGHT =====
+
+/* Copyright (c) 2008-2013 Carlos Henrique da Silva Santos
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+ */
+
+
+===== src/algs/luksan/COPYRIGHT =====
+
+---------------------------------------------------------------------------
+
+Copyright:
+
+    Subroutines PBUN, PNEW, PVAR, PSEN, Copyright ACM, 2001. The original
+    versions were published in Transactions on Mathematical Software, 
+    Vol.27, 2001, pp.193-213. Here are the author's modifications. They
+    are posted here by permission of ACM for your personal use. Not for
+    redistribution. Subroutines PLIP, PSEN, Copyright Jan Vlcek, 2007. 
+    The remaining subroutines, Copyright Ladislav Luksan, 2007. Many of  
+    sparse matrix modules were prepared by Miroslav Tuma.
+
+License: 
+
+    This library (with exception of PBUN, PNEW, PVAR, PSEN) is a free 
+    software; you can redistribute it and/or modify it under the terms 
+    of the GNU Lesser General Public License as published by the Free 
+    Software Foundation; either version 2.1 of the License, or (at your 
+    option) any later version (see http://www.gnu.org/copyleft/gpl.html).
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+    Lesser General Public License for more details.
+
+    Permission is hereby granted to use or copy this program under the
+    terms of the GNU LGPL, provided that the Copyright, this License,
+    and the Availability of the original version is retained on all copies.
+    User documentation of any code that uses this code or any modified
+    version of this code must cite the Copyright, this License, the
+    Availability note, and "Used by permission." Permission to modify
+    the code and to distribute modified code is granted, provided the
+    Copyright, this License, and the Availability note are retained,
+    and a notice that the code was modified is included.
+
+Availability:
+
+    http://www.cs.cas.cz/~luksan/subroutines.html
+
+Acknowledgements:
+
+    This work was supported by the Grant Agency of the Czech Academy of 
+    Sciences, under grant IAA1030405.
+
+    
+
+
+===== src/algs/newuoa/COPYRIGHT =====
+
+/* Copyright (c) 2004 M. J. D. Powell (mjdp@cam.ac.uk)
+ * Copyright (c) 2007-2011 Massachusetts Institute of Technology
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+ */
+
+
+===== src/algs/slsqp/COPYRIGHT =====
+
+Copyright (c) 1988 Dieter Kraft
+
+Copyright (c) 1994 Association for Computing Machinery
+
+Copyright (c) 2001, 2002 Enthought, Inc.
+All rights reserved.
+
+Copyright (c) 2003-2009 SciPy Developers.
+All rights reserved.
+
+Copyright (c) 2010 Massachusetts Institute of Technology
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+  a. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+  b. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  c. Neither the name of the Enthought nor the names of its contributors
+     may be used to endorse or promote products derived from this software
+     without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+C      http://permalink.gmane.org/gmane.comp.python.scientific.devel/6725
+C      ------
+C      From: Deborah Cotton <cotton@hq.acm.org>
+C      Date: Fri, 14 Sep 2007 12:35:55 -0500
+C      Subject: RE: Algorithm License requested
+C      To: Alan Isaac
+C
+C      Prof. Issac,
+C
+C      In that case, then because the author consents to [the ACM] releasing
+C      the code currently archived at http://www.netlib.org/toms/733 under the
+C      BSD license, the ACM hereby releases this code under the BSD license.
+C
+C      Regards,
+C
+C      Deborah Cotton, Copyright & Permissions
+C      ACM Publications
+C      2 Penn Plaza, Suite 701**
+C      New York, NY 10121-0701
+C      permissions@acm.org
+C      212.869.7440 ext. 652
+C      Fax. 212.869.0481
+C      ------
+
+
+===== src/algs/stogo/COPYRIGHT =====
+
+The original StoGO code is:
+
+Copyright (c) 1998 by S. Zertchaninov and K. Madsen.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+----------------------------------------------------------------------
+
+The StoGO source code on the authors' web site has no copyright or
+license information, but I (Steven G. Johnson) contacted the author
+K. Madsen for clarification and he gave me permission to distribute
+it under the MIT license above.  See the correspondence below:
+
+----------------------------------------------------------------------
+Date: Fri, 24 Aug 2007 10:46:09 +0200
+From: Kaj Madsen <km@imm.dtu.dk>
+To: stevenj@math.mit.edu
+Subject: RE: open source license for StoGO software?
+
+The MIT licence is ok with me, and so is your copyright suggestion. 
+
+Kaj Madsen. 
+
+-----Original Message-----
+From: Steven G. Johnson [mailto:stevenj@fftw.org] 
+Sent: 23. august 2007 22:23
+To: Kaj Madsen
+Subject: RE: open source license for StoGO software?
+
+On Thu, 23 Aug 2007, Kaj Madsen wrote:
+> Many thanks for your mail. You can definitely consider the software as
+> open source, please use it as you like, however please refer to us if 
+> you publish results based on the software.
+>
+> I am now in a heavy administrative position as a Head of Department 
+> (has been since 1998, therefore I never really followed up on this). 
+> The paper was never published, however I am attaching two fdf-files, 
+> one with the paper, one with some descriptions of the code. I hope 
+> this makes sense, otherwise please don't hesitate to contact me again.
+
+Thanks so much for your response!
+
+To be open source it needs some specific open-source license to specify
+the permissions in legal terms.  The simplest open-source license is
+probably the MIT license, is this okay?
+
+        http://opensource.org/licenses/mit-license.php
+
+Also, I need to know who the authors are for the copyright statement. 
+Should I list it as:
+        Copyright (c) 1998 by S. Zertchaninov and K. Madsen ?
+
+Thanks again!  I will definitely cite it if I publish any results based
+on StoGO!  (It's one of the few public global-optimization programs that
+is able to exploit gradient information.)
+
+Regards,
+Steven G. Johnson

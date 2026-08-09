@@ -1,14 +1,30 @@
-name: Build and publish wheels
+name: Build and release distributions
 
 "on":
   workflow_dispatch:
     inputs:
-      publish_artifacts_run_id:
-        description: "Existing workflow run ID containing openqp-* artifacts to publish"
+      action:
+        description: "Build artifacts, or publish a verified run to GitHub Release and PyPI"
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - publish_pypi
+      release_tag:
+        description: "Exact published release tag (required for publish_pypi)"
         required: false
         type: string
-      release_tag:
-        description: "Release tag to publish when publishing existing artifacts"
+      release_sha:
+        description: "Exact 40-character commit SHA behind the release tag (required for publish_pypi)"
+        required: false
+        type: string
+      artifacts_run_id:
+        description: "Successful release workflow run containing the artifacts (required for publish_pypi)"
+        required: false
+        type: string
+      confirmation:
+        description: "Type: publish OpenQP to PyPI"
         required: false
         type: string
   # Run the smoke build on pushes to main so the bundled-externals cache is
@@ -22,12 +38,16 @@ name: Build and publish wheels
     paths:
       - ".github/workflows/build_wheels.yml"
       - "CMakeLists.txt"
+      - "LICENSE"
+      - "LICENSING.md"
       - "MANIFEST.in"
+      - "THIRD_PARTY_NOTICES.md"
       - "pyproject.toml"
       - "basis_sets/**"
       - "cmake/**"
       - "external/**"
       - "include/**"
+      - "licenses/**"
       - "pyoqp/**"
       - "source/**"
   pull_request:
@@ -35,12 +55,16 @@ name: Build and publish wheels
     paths:
       - ".github/workflows/build_wheels.yml"
       - "CMakeLists.txt"
+      - "LICENSE"
+      - "LICENSING.md"
       - "MANIFEST.in"
+      - "THIRD_PARTY_NOTICES.md"
       - "pyproject.toml"
       - "basis_sets/**"
       - "cmake/**"
       - "external/**"
       - "include/**"
+      - "licenses/**"
       - "pyoqp/**"
       - "source/**"
   release:
@@ -52,7 +76,7 @@ permissions:
 jobs:
   build_sdist:
     name: Build source distribution
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish_artifacts_run_id == ''
+    if: github.event_name != 'workflow_dispatch' || inputs.action == 'build'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -159,8 +183,7 @@ jobs:
       github.event_name == 'release'
       || (github.event_name == 'pull_request'
           && contains(github.event.pull_request.labels.*.name, 'release'))
-      || (github.event_name == 'workflow_dispatch'
-          && github.event.inputs.publish_artifacts_run_id == '')
+      || (github.event_name == 'workflow_dispatch' && inputs.action == 'build')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -344,77 +367,451 @@ jobs:
           print(f"Release tag matches OpenQP version {version}.")
           PY
 
-  publish:
-    name: Publish release artifacts
+  verify_release_artifacts:
+    name: Verify release distributions
     if: github.event_name == 'release'
     needs:
       - build_sdist
       - build_wheels
       - verify_release_version
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      id-token: write
-    environment:
-      name: pypi
-      url: https://pypi.org/p/openqp
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - uses: actions/download-artifact@v4
         with:
           pattern: openqp-*
           path: dist
           merge-multiple: true
 
-      - name: Show artifacts
-        run: ls -lh dist
-
-      - name: Attach artifacts to GitHub Release
+      - name: Verify versions and packaged license files
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+        run: |
+          python - <<'PY'
+          import glob
+          import os
+          import re
+          import tarfile
+          import tomllib
+          import zipfile
+          from email import policy
+          from email.parser import BytesParser
+          from pathlib import Path, PurePosixPath
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          version = project["version"]
+          expected_tag = f"v{version}"
+          if os.environ["RELEASE_TAG"] != expected_tag:
+              raise SystemExit(f"Release tag must be {expected_tag!r}")
 
-  publish_existing_artifacts:
-    name: Publish existing release artifacts
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_artifacts_run_id != ''
+          patterns = project.get("license-files")
+          if not isinstance(patterns, list) or not patterns:
+              raise SystemExit("project.license-files must declare every shipped license/notice file")
+
+          license_files = {}
+          for pattern in patterns:
+              for raw_path in glob.glob(pattern, recursive=True):
+                  path = Path(raw_path)
+                  if path.is_file():
+                      license_files[path.as_posix()] = path.read_bytes()
+
+          mandatory = {"LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"}
+          missing = mandatory - license_files.keys()
+          if missing:
+              raise SystemExit(
+                  "project.license-files does not include required files: "
+                  + ", ".join(sorted(missing))
+              )
+          if any(not content for content in license_files.values()):
+              raise SystemExit("Declared license/notice files must not be empty")
+
+          def validate_metadata(data, archive_name):
+              metadata = BytesParser(policy=policy.default).parsebytes(data)
+              normalized_name = re.sub(r"[-_.]+", "-", metadata.get("Name", "")).lower()
+              if normalized_name != "openqp":
+                  raise SystemExit(f"{archive_name}: unexpected project name {metadata.get('Name')!r}")
+              if metadata.get("Version") != version:
+                  raise SystemExit(
+                      f"{archive_name}: metadata version {metadata.get('Version')!r} "
+                      f"does not match {version!r}"
+                  )
+              if metadata.get("License-Expression") != "LicenseRef-OpenQP-Research-1.0":
+                  raise SystemExit(
+                      f"{archive_name}: License-Expression must be "
+                      "'LicenseRef-OpenQP-Research-1.0'"
+                  )
+              recorded = {PurePosixPath(value).as_posix() for value in metadata.get_all("License-File", [])}
+              unrecorded = set(license_files) - recorded
+              if unrecorded:
+                  raise SystemExit(
+                      f"{archive_name}: missing License-File metadata for "
+                      + ", ".join(sorted(unrecorded))
+                  )
+
+          dist = Path("dist")
+          sdists = sorted(dist.glob("*.tar.gz"))
+          wheels = sorted(dist.glob("*.whl"))
+          unexpected = sorted(
+              path.name for path in dist.iterdir()
+              if path.is_file() and path not in sdists and path not in wheels
+          )
+          if unexpected:
+              raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
+          if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
+              raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
+          if not wheels:
+              raise SystemExit("No wheel artifacts were downloaded")
+          bad_wheel_names = [
+              wheel.name for wheel in wheels
+              if not wheel.name.lower().startswith(f"openqp-{version}-")
+          ]
+          if bad_wheel_names:
+              raise SystemExit(
+                  "Wheel filename version does not match release: "
+                  + ", ".join(bad_wheel_names)
+              )
+
+          sdist = sdists[0]
+          prefix = f"openqp-{version}/"
+          with tarfile.open(sdist, "r:gz") as archive:
+              members = {member.name: member for member in archive.getmembers() if member.isfile()}
+              metadata_name = prefix + "PKG-INFO"
+              if metadata_name not in members:
+                  raise SystemExit(f"{sdist.name}: missing {metadata_name}")
+              validate_metadata(archive.extractfile(members[metadata_name]).read(), sdist.name)
+              for relative_path, expected_content in license_files.items():
+                  member_name = prefix + relative_path
+                  if member_name not in members:
+                      raise SystemExit(f"{sdist.name}: missing {relative_path}")
+                  actual = archive.extractfile(members[member_name]).read()
+                  if actual != expected_content:
+                      raise SystemExit(f"{sdist.name}: {relative_path} differs from the tagged source")
+
+          for wheel in wheels:
+              with zipfile.ZipFile(wheel) as archive:
+                  names = set(archive.namelist())
+                  metadata_names = [
+                      name for name in names if name.endswith(".dist-info/METADATA")
+                  ]
+                  if len(metadata_names) != 1:
+                      raise SystemExit(f"{wheel.name}: expected exactly one METADATA file")
+                  validate_metadata(archive.read(metadata_names[0]), wheel.name)
+                  dist_info = metadata_names[0].removesuffix("METADATA")
+                  for relative_path, expected_content in license_files.items():
+                      member_name = dist_info + "licenses/" + relative_path
+                      if member_name not in names:
+                          raise SystemExit(f"{wheel.name}: missing {member_name}")
+                      if archive.read(member_name) != expected_content:
+                          raise SystemExit(
+                              f"{wheel.name}: {relative_path} differs from the tagged source"
+                          )
+
+          print(
+              f"Verified OpenQP {version}: {len(wheels)} wheels, one sdist, and "
+              f"{len(license_files)} license/notice files."
+          )
+          PY
+
+      - name: Check distribution metadata rendering
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+  manual_pypi_preflight:
+    name: Verify an explicit PyPI publication request
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'publish_pypi'
     runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      version: ${{ steps.release.outputs.version }}
     permissions:
       actions: read
-      contents: write
-      id-token: write
-    environment:
-      name: pypi
-      url: https://pypi.org/p/openqp
+      contents: read
     steps:
-      - name: Validate publish inputs
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate exact tag, commit, release, and source workflow run
+        id: release
         env:
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          ARTIFACTS_RUN_ID: ${{ inputs.artifacts_run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          test -n "$RELEASE_TAG" || {
-            echo "release_tag is required when publish_artifacts_run_id is set."
+          python - <<'PY'
+          import os
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          confirmation = os.environ["CONFIRMATION"]
+          dispatch_ref = os.environ["DISPATCH_REF"]
+          dispatch_sha = os.environ["DISPATCH_SHA"].lower()
+          release_sha = os.environ["RELEASE_SHA"]
+          release_tag = os.environ["RELEASE_TAG"]
+          run_id = os.environ["ARTIFACTS_RUN_ID"]
+          if confirmation != "publish OpenQP to PyPI":
+              raise SystemExit('confirmation must exactly equal "publish OpenQP to PyPI"')
+          if not re.fullmatch(r"[0-9a-f]{40}", release_sha):
+              raise SystemExit("release_sha must be an exact lowercase 40-character commit SHA")
+          if not re.fullmatch(r"[0-9]+", run_id):
+              raise SystemExit("artifacts_run_id must contain digits only")
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          expected_tag = f"v{version}"
+          if release_tag != expected_tag:
+              raise SystemExit(
+                  f"release_tag {release_tag!r} does not match package version {version!r}; "
+                  f"expected {expected_tag!r}"
+              )
+          if dispatch_ref != f"refs/tags/{release_tag}":
+              raise SystemExit(
+                  f"Run this manual workflow from the exact {release_tag!r} tag, "
+                  f"not {dispatch_ref!r}"
+              )
+          if dispatch_sha != release_sha:
+              raise SystemExit(
+                  f"Manual workflow ref resolves to {dispatch_sha}, not {release_sha}"
+              )
+          checkout_sha = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip().lower()
+          if checkout_sha != release_sha:
+              raise SystemExit(
+                  f"Checked out {checkout_sha}, not requested release SHA {release_sha}"
+              )
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"release_tag={release_tag}", file=output)
+              print(f"version={version}", file=output)
+          PY
+
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          test "$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")" = "${RELEASE_SHA}" || {
+            echo "Release tag does not resolve to the requested commit SHA."
             exit 1
           }
 
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            > "${RUNNER_TEMP}/release.json"
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACTS_RUN_ID}" \
+            > "${RUNNER_TEMP}/source-run.json"
+
+          RELEASE_JSON="${RUNNER_TEMP}/release.json" \
+          RUN_JSON="${RUNNER_TEMP}/source-run.json" \
+          python - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["RELEASE_JSON"]) as handle:
+              release = json.load(handle)
+          with open(os.environ["RUN_JSON"]) as handle:
+              run = json.load(handle)
+
+          expected_tag = os.environ["RELEASE_TAG"]
+          expected_sha = os.environ["RELEASE_SHA"].lower()
+          if (
+              release.get("tag_name") != expected_tag
+              or release.get("draft")
+              or not release.get("published_at")
+          ):
+              raise SystemExit("The requested tag is not an exact published GitHub Release")
+          if run.get("event") != "release" or run.get("conclusion") != "success":
+              raise SystemExit("Artifact source must be a successful release-event workflow run")
+          if str(run.get("head_sha", "")).lower() != expected_sha:
+              raise SystemExit("Artifact workflow run SHA does not match release_sha")
+          workflow_path = str(run.get("path", "")).split("@", 1)[0]
+          if workflow_path != ".github/workflows/build_wheels.yml":
+              raise SystemExit(
+                  f"Artifacts came from unexpected workflow {run.get('path')!r}"
+              )
+          print("Exact release tag, SHA, and artifact workflow run verified.")
+          PY
+
       - uses: actions/download-artifact@v4
         with:
           pattern: openqp-*
           path: dist
           merge-multiple: true
-          run-id: ${{ github.event.inputs.publish_artifacts_run_id }}
+          run-id: ${{ inputs.artifacts_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Show artifacts
-        run: ls -lh dist
+      - name: Verify downloaded versions and packaged license files
+        run: |
+          python - <<'PY'
+          import glob
+          import re
+          import tarfile
+          import tomllib
+          import zipfile
+          from email import policy
+          from email.parser import BytesParser
+          from pathlib import Path, PurePosixPath
 
-      - name: Attach artifacts to GitHub Release
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          version = project["version"]
+          patterns = project.get("license-files")
+          if not isinstance(patterns, list) or not patterns:
+              raise SystemExit("project.license-files must declare every shipped license/notice file")
+
+          license_files = {}
+          for pattern in patterns:
+              for raw_path in glob.glob(pattern, recursive=True):
+                  path = Path(raw_path)
+                  if path.is_file():
+                      license_files[path.as_posix()] = path.read_bytes()
+
+          mandatory = {"LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"}
+          missing = mandatory - license_files.keys()
+          if missing:
+              raise SystemExit(
+                  "project.license-files does not include required files: "
+                  + ", ".join(sorted(missing))
+              )
+          if any(not content for content in license_files.values()):
+              raise SystemExit("Declared license/notice files must not be empty")
+
+          def validate_metadata(data, archive_name):
+              metadata = BytesParser(policy=policy.default).parsebytes(data)
+              normalized_name = re.sub(r"[-_.]+", "-", metadata.get("Name", "")).lower()
+              if normalized_name != "openqp":
+                  raise SystemExit(f"{archive_name}: unexpected project name {metadata.get('Name')!r}")
+              if metadata.get("Version") != version:
+                  raise SystemExit(
+                      f"{archive_name}: metadata version {metadata.get('Version')!r} "
+                      f"does not match {version!r}"
+                  )
+              if metadata.get("License-Expression") != "LicenseRef-OpenQP-Research-1.0":
+                  raise SystemExit(
+                      f"{archive_name}: License-Expression must be "
+                      "'LicenseRef-OpenQP-Research-1.0'"
+                  )
+              recorded = {PurePosixPath(value).as_posix() for value in metadata.get_all("License-File", [])}
+              unrecorded = set(license_files) - recorded
+              if unrecorded:
+                  raise SystemExit(
+                      f"{archive_name}: missing License-File metadata for "
+                      + ", ".join(sorted(unrecorded))
+                  )
+
+          dist = Path("dist")
+          sdists = sorted(dist.glob("*.tar.gz"))
+          wheels = sorted(dist.glob("*.whl"))
+          unexpected = sorted(
+              path.name for path in dist.iterdir()
+              if path.is_file() and path not in sdists and path not in wheels
+          )
+          if unexpected:
+              raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
+          if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
+              raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
+          if not wheels:
+              raise SystemExit("No wheel artifacts were downloaded")
+          bad_wheel_names = [
+              wheel.name for wheel in wheels
+              if not wheel.name.lower().startswith(f"openqp-{version}-")
+          ]
+          if bad_wheel_names:
+              raise SystemExit(
+                  "Wheel filename version does not match release: "
+                  + ", ".join(bad_wheel_names)
+              )
+
+          sdist = sdists[0]
+          prefix = f"openqp-{version}/"
+          with tarfile.open(sdist, "r:gz") as archive:
+              members = {member.name: member for member in archive.getmembers() if member.isfile()}
+              metadata_name = prefix + "PKG-INFO"
+              if metadata_name not in members:
+                  raise SystemExit(f"{sdist.name}: missing {metadata_name}")
+              validate_metadata(archive.extractfile(members[metadata_name]).read(), sdist.name)
+              for relative_path, expected_content in license_files.items():
+                  member_name = prefix + relative_path
+                  if member_name not in members:
+                      raise SystemExit(f"{sdist.name}: missing {relative_path}")
+                  actual = archive.extractfile(members[member_name]).read()
+                  if actual != expected_content:
+                      raise SystemExit(f"{sdist.name}: {relative_path} differs from the tagged source")
+
+          for wheel in wheels:
+              with zipfile.ZipFile(wheel) as archive:
+                  names = set(archive.namelist())
+                  metadata_names = [
+                      name for name in names if name.endswith(".dist-info/METADATA")
+                  ]
+                  if len(metadata_names) != 1:
+                      raise SystemExit(f"{wheel.name}: expected exactly one METADATA file")
+                  validate_metadata(archive.read(metadata_names[0]), wheel.name)
+                  dist_info = metadata_names[0].removesuffix("METADATA")
+                  for relative_path, expected_content in license_files.items():
+                      member_name = dist_info + "licenses/" + relative_path
+                      if member_name not in names:
+                          raise SystemExit(f"{wheel.name}: missing {member_name}")
+                      if archive.read(member_name) != expected_content:
+                          raise SystemExit(
+                              f"{wheel.name}: {relative_path} differs from the tagged source"
+                          )
+
+          print(
+              f"Verified OpenQP {version}: {len(wheels)} wheels, one sdist, and "
+              f"{len(license_files)} license/notice files."
+          )
+          PY
+
+      - name: Check distribution metadata rendering
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+      - name: Seal verified distributions for the approval job
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-openqp-pypi-${{ steps.release.outputs.version }}-${{ github.run_attempt }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish_to_pypi:
+    name: Publish approved distributions to GitHub and PyPI
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.action == 'publish_pypi'
+      && needs.manual_pypi_preflight.result == 'success'
+    needs: manual_pypi_preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openqp
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-openqp-pypi-${{ needs.manual_pypi_preflight.outputs.version }}-${{ github.run_attempt }}
+          path: dist
+
+      - name: Attach approved artifacts to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.manual_pypi_preflight.outputs.release_tag }}
         run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish to PyPI
