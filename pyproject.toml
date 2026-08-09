@@ -42,6 +42,7 @@ wheel.packages = ["pyoqp/oqp"]
 USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
 ENABLE_OPENTRAH = "OFF"
+CMAKE_INSTALL_LIBDIR = "lib"
 # LINALG_LIB is intentionally NOT pinned here: CMake's native-BLAS platform
 # policy resolves it per OS/arch -- macOS -> Accelerate ($NEWLAPACK$ILP64);
 # Linux x86_64 -> MKL; Linux aarch64 -> OpenBLAS -- so a plain `pip install .`
