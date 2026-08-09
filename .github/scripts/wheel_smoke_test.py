@@ -131,6 +131,42 @@ def parse_dynamic_dependencies(metadata, platform_name):
     )
 
 
+def parse_runtime_search_paths(metadata, platform_name):
+    """Return individual LC_RPATH/RPATH/RUNPATH entries."""
+    if platform_name == "darwin":
+        return re.findall(
+            r"^\s*path\s+(\S+)\s+\(offset\s+\d+\)\s*$",
+            metadata,
+            re.MULTILINE,
+        )
+    encoded_paths = re.findall(
+        r"\((?:RPATH|RUNPATH)\).*?\[([^]]*)\]", metadata
+    )
+    return [
+        entry
+        for encoded_path in encoded_paths
+        for entry in encoded_path.split(":")
+        if entry
+    ]
+
+
+def assert_package_local_runtime_search_paths(
+    path, metadata, platform_name, local_rpath
+):
+    runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
+    assert runtime_search_paths, (
+        f"{path} lacks package-local RPATH {local_rpath}:\n{metadata}"
+    )
+    nonlocal_search_paths = [
+        entry for entry in runtime_search_paths
+        if entry != local_rpath and not entry.startswith(f"{local_rpath}/")
+    ]
+    assert not nonlocal_search_paths, (
+        f"{path} contains non-package-local runtime search paths "
+        f"{nonlocal_search_paths}:\n{metadata}"
+    )
+
+
 def assert_canonical_dependency_graph(
     owner, dependencies, required, canonical_names, platform_name
 ):
@@ -193,8 +229,8 @@ for owner, required_edges in dependency_graph.items():
 
 for path in (liboqp_path, *d4_paths.values()):
     rpath_metadata = native_metadata(path, rpath_command)
-    assert local_rpath in rpath_metadata, (
-        f"{path} lacks package-local RPATH {local_rpath}:\n{rpath_metadata}"
+    assert_package_local_runtime_search_paths(
+        path, rpath_metadata, sys.platform, local_rpath
     )
 
 # A repaired wheel must not retain a canonical file while secretly relinking to

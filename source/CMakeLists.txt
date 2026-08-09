@@ -147,7 +147,8 @@ endif()
 set_target_properties(oqp PROPERTIES
         BUILD_RPATH "${DFTD4_INSTALL}/lib"
         INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
-        INSTALL_RPATH_USE_LINK_PATH FALSE)
+        INSTALL_RPATH_USE_LINK_PATH FALSE
+        INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE)
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.

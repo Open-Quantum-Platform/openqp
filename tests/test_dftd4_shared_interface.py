@@ -99,7 +99,9 @@ def _load_wheel_artifact_helpers():
     selected = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in {
-            "parse_dynamic_dependencies", "assert_canonical_dependency_graph"
+            "parse_dynamic_dependencies", "assert_canonical_dependency_graph",
+            "parse_runtime_search_paths",
+            "assert_package_local_runtime_search_paths",
         }
     ]
     namespace = {"re": re}
@@ -157,6 +159,7 @@ def test_shared_stack_packaging_contract_is_declared():
 
     assert '-DBUILD_SHARED_LIBS=ON' in external
     assert 'd4stack-${_OQP_DFTD4_LINKAGE}1' in external
+    assert 'd4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1' in external
     assert '-omp${ENABLE_OPENMP}' in external
     assert '-patch${_OQP_DFTD4_PATCHSET_KEY}' in external
     assert "find_program(OQP_DFTD4_PATCH_EXECUTABLE NAMES patch)" in external
@@ -172,6 +175,8 @@ def test_shared_stack_packaging_contract_is_declared():
     assert 'libmulticharge.a' not in source
     assert 'libmctc-lib.a' not in source
     assert 'INSTALL_RPATH_USE_LINK_PATH FALSE' in source
+    assert 'INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE' in source
+    assert '-DCMAKE_INSTALL_REMOVE_ENVIRONMENT_RPATH=TRUE' in external
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
     d4_link = re.search(
@@ -433,6 +438,44 @@ def test_wheel_metadata_requires_exact_canonical_soversion_edges():
         raise AssertionError("delocate .dylibs dependency passed the exact-name gate")
 
 
+def test_wheel_metadata_rejects_every_nonlocal_runtime_search_path():
+    helpers = _load_wheel_artifact_helpers()
+    parse = helpers["parse_runtime_search_paths"]
+    validate = helpers["assert_package_local_runtime_search_paths"]
+
+    mac_metadata = """
+Load command 20
+          cmd LC_RPATH
+      cmdsize 32
+         path @loader_path (offset 12)
+Load command 21
+          cmd LC_RPATH
+      cmdsize 64
+         path @loader_path/vendor (offset 12)
+"""
+    assert parse(mac_metadata, "darwin") == [
+        "@loader_path", "@loader_path/vendor"
+    ]
+    validate("liboqp.dylib", mac_metadata, "darwin", "@loader_path")
+
+    linux_metadata = """
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN:$ORIGIN/vendor]
+"""
+    assert parse(linux_metadata, "linux") == ["$ORIGIN", "$ORIGIN/vendor"]
+    validate("liboqp.so", linux_metadata, "linux", "$ORIGIN")
+
+    for platform_name, local_rpath, metadata in (
+        ("darwin", "@loader_path", mac_metadata + "\n         path /tmp/cache (offset 12)\n"),
+        ("linux", "$ORIGIN", linux_metadata.replace("]", ":/tmp/cache]")),
+    ):
+        try:
+            validate("liboqp", metadata, platform_name, local_rpath)
+        except AssertionError as exc:
+            assert "non-package-local runtime search paths" in str(exc)
+        else:
+            raise AssertionError("absolute runtime search path passed wheel gate")
+
+
 def test_wheel_smoke_probes_loaded_paths_and_removal_failures():
     source = WHEEL_SMOKE.read_text(encoding="utf-8")
     assert 'D4_CHILD_MARKER = "OQP_D4_CHILD_RESULT="' in source
@@ -487,6 +530,7 @@ if __name__ == "__main__":
     test_build_info_generation_is_valid_json_and_scrubs_transient_paths()
     test_high_level_callers_forward_actual_input_charge()
     test_wheel_metadata_requires_exact_canonical_soversion_edges()
+    test_wheel_metadata_rejects_every_nonlocal_runtime_search_path()
     test_wheel_smoke_probes_loaded_paths_and_removal_failures()
     test_distribution_gates_require_build_info_and_exact_patches()
     print("DFT-D4 shared-interface unit tests passed")
