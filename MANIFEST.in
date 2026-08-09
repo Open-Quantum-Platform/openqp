@@ -1,3 +1,4 @@
 include README.md LICENSE
+include external/dftd4-corresponding-source/README.md
 recursive-include basis_sets *
 recursive-include examples *
