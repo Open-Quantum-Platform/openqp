@@ -83,7 +83,8 @@ def _load_dftd4_functions(library):
         ):
             selected.append(node)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {
-            "_dftd4_damping_values", "dftd4_native_disp"
+            "_dftd4_damping_values", "_dftd4_damping_from_config",
+            "dftd4_native_disp"
         }:
             selected.append(node)
     namespace = {
@@ -130,6 +131,20 @@ def test_v2_receives_charge_and_explicit_damping():
     assert list(call[7]) == [1.0, 2.0, 3.0, 4.0, 5.0, 16.0]
 
 
+def test_schema_damping_defaults_and_explicit_values_reach_runtime_helper():
+    functions = _load_dftd4_functions(_V2Library())
+    from_config = functions["_dftd4_damping_from_config"]
+
+    assert from_config({"d4": {}}) is None
+    assert from_config({"d4": {
+        "s6": "1.0", "s8": "2.0", "s9": "3.0",
+        "a1": "4.0", "a2": "5.0", "alp": "16.0",
+    }}) == {
+        "s6": 1.0, "s8": 2.0, "s9": 3.0,
+        "a1": 4.0, "a2": 5.0, "alp": 16.0,
+    }
+
+
 def test_legacy_fallback_never_discards_charge_or_parameters():
     library = _LegacyLibrary()
     functions = _load_dftd4_functions(library)
@@ -158,7 +173,8 @@ def test_shared_stack_packaging_contract_is_declared():
         ROOT / "external" / "dftd4-corresponding-source" / "README.md"
     ).read_text(encoding="utf-8")
 
-    assert '-DBUILD_SHARED_LIBS=ON' in external
+    assert '-DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}' in external
+    assert 'set(_OQP_DFTD4_LINKAGE "static")' in external
     assert 'd4stack-${_OQP_DFTD4_LINKAGE}1' in external
     assert 'd4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1' in external
     assert 'accel-ilp64-alias1' in external
@@ -173,9 +189,10 @@ def test_shared_stack_packaging_contract_is_declared():
     assert "CMAKE_Fortran_FLAGS_RELEASE" in external
     assert external.count("CMAKE_ARGS ${DFTD4_COMMON_ARGS}") == 3
     assert "flags${_oqp_external_flags_hash}" in external
-    assert 'libdftd4.a' not in source
-    assert 'libmulticharge.a' not in source
-    assert 'libmctc-lib.a' not in source
+    assert '$<INSTALL_INTERFACE:dftd4>' in source
+    assert '$<INSTALL_INTERFACE:multicharge>' in source
+    assert '$<INSTALL_INTERFACE:mctc-lib>' in source
+    assert '$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>' in source
     assert 'INSTALL_RPATH_USE_LINK_PATH FALSE' in source
     assert 'INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE' in source
     assert '-DCMAKE_INSTALL_REMOVE_ENVIRONMENT_RPATH=TRUE' in external
@@ -184,6 +201,7 @@ def test_shared_stack_packaging_contract_is_declared():
     assert source.count('check_accelerate_aliases.cmake') >= 2
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
+    assert 'if(BUILD_SHARED_LIBS)\n    add_test(NAME oqp_dftd4_dynamic_dependencies' in top_level
     d4_link = re.search(
         r'target_link_libraries\(oqp\s+'
         r'"\$<BUILD_INTERFACE:\$\{DFTD4_DFTD4_LIB\}>"'
@@ -288,6 +306,7 @@ set(CMAKE_Fortran_FLAGS [=[-O2
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
 set(PROJECT_VERSION "1.3.0")
 set(ENABLE_OPENMP ON)
+set(BUILD_SHARED_LIBS ON)
 set(LINALG_LIB "OpenBLAS")
 set(_LINALG_LIB_TYPE "other")
 set(BLA_SIZEOF_INTEGER 8)
@@ -372,6 +391,7 @@ def test_high_level_callers_forward_actual_input_charge():
     assert "total_charge = float(mol.config.get('input', {}).get('charge', 0))" in source
     assert "total_charge = float(self.mol.config.get('input', {}).get('charge', 0))" in source
     assert "total_charge=total_charge, damping_params=self.d4_param" in source
+    assert "damping_params=damping_params" in source
 
 
 def test_wheel_metadata_requires_exact_canonical_soversion_edges():

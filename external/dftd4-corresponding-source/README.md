@@ -47,7 +47,10 @@ but it is neither a standalone build script nor a record of the values resolved
 for a particular binary. Use `BUILD-INFO.json` for those values and the complete
 post-patch source trees plus `patches/` to reproduce or modify the libraries.
 
-The three libraries are built with `BUILD_SHARED_LIBS=ON`. DFT-D4 and
+Normal OpenQP builds create the three libraries with `BUILD_SHARED_LIBS=ON` so
+they remain package-local and replaceable. The explicitly requested static
+OpenQP configuration (`BUILD_SHARED_LIBS=OFF`) instead builds and installs the
+matching static archives so that configuration remains linkable. DFT-D4 and
 multicharge use their `WITH_ILP64` option when OpenQP uses an eight-byte BLAS
 interface; their ordinary Fortran integers remain four bytes. `WITH_OpenMP`
 matches the OpenQP build. On macOS Accelerate ILP64 builds, the two BLAS-using
