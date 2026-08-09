@@ -36,12 +36,15 @@ class SCFSimplexLimitTests(unittest.TestCase):
     def setUpClass(cls):
         cls.checker = load_input_checker()
 
-    def check(self, diis_type, maxdiis, vshift=0.0):
+    def check(self, diis_type, maxdiis, vshift=0.0, converger="diis",
+              init_scf="no", init_converger="diis"):
         report = self.checker.CheckReport()
         self.checker._check_scf(
             {"scf": {"type": "rhf", "multiplicity": 1,
                      "diis_type": diis_type, "maxdiis": maxdiis,
-                     "vshift": vshift}},
+                     "vshift": vshift, "converger_type": converger,
+                     "init_scf": init_scf,
+                     "init_converger": init_converger}},
             report,
         )
         return report
@@ -63,8 +66,33 @@ class SCFSimplexLimitTests(unittest.TestCase):
     def test_level_shifted_cdiis_uses_the_simplex_limit(self):
         report = self.check("cdiis", 14, vshift=0.1)
         self.assertFalse(report.ok)
-        self.assertIn("level-shifted cdiis", report.to_text())
+        self.assertIn("level-shifted DIIS", report.to_text())
         self.assertTrue(self.check("cdiis", 13, vshift=0.1).ok)
+
+    def test_level_shift_overrides_every_diis_subtype(self):
+        report = self.check("none", 14, vshift=0.1)
+        self.assertFalse(report.ok)
+        self.assertIn("scf.maxdiis", report.to_text())
+
+    def test_dormant_diis_settings_do_not_limit_soscf_or_trah(self):
+        for converger in ("soscf", "trah"):
+            with self.subTest(converger=converger):
+                self.assertTrue(
+                    self.check("ediis", 14, converger=converger).ok
+                )
+
+    def test_active_initial_diis_stage_is_limited(self):
+        report = self.check(
+            "adiis", 14, converger="soscf", init_scf="rhf",
+            init_converger="diis",
+        )
+        self.assertFalse(report.ok)
+        self.assertTrue(
+            self.check(
+                "adiis", 14, converger="soscf", init_scf="rhf",
+                init_converger="soscf",
+            ).ok
+        )
 
 
 if __name__ == "__main__":

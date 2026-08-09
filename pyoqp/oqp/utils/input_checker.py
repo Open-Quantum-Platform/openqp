@@ -1806,10 +1806,25 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose one of the implemented DIIS types.",
         )
 
-    uses_simplex_history = (
-        diis_type in {"ediis", "adiis", "vdiis"}
-        or (diis_type == "cdiis" and vshift != 0.0)
+    # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
+    # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
+    # TRAH never construct the simplex solver.  An explicitly configured
+    # initial SCF is a second active stage and may independently use DIIS.
+    diis_convergers = {"diis", "auto", "ml"}
+    effective_init_converger = (
+        converger if init_converger in {"", "none"} else init_converger
     )
+    has_active_diis_stage = (
+        converger in diis_convergers
+        or (
+            init_scf != "no"
+            and effective_init_converger in diis_convergers
+        )
+    )
+    diis_uses_simplex_history = (
+        diis_type in {"ediis", "adiis", "vdiis"} or vshift != 0.0
+    )
+    uses_simplex_history = has_active_diis_stage and diis_uses_simplex_history
     if uses_simplex_history and maxdiis > 13:
         report.add(
             "ERROR",
@@ -1817,11 +1832,12 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             "The deterministic E-DIIS/A-DIIS simplex solver supports at most 13 stored states.",
             value=maxdiis,
             expected=(
-                "maxdiis <= 13 for ediis, adiis, vdiis, or level-shifted cdiis"
+                "maxdiis <= 13 for an active E-DIIS/A-DIIS/v-DIIS or "
+                "level-shifted DIIS stage"
             ),
             action=(
-                "Use maxdiis=13 or less, or use cdiis with vshift=0 for a "
-                "larger history."
+                "Use maxdiis=13 or less, or use unshifted cdiis/SOSCF/TRAH "
+                "for a larger history."
             ),
         )
 
