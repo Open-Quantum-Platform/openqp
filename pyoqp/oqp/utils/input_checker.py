@@ -2365,6 +2365,25 @@ def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
     multiplicity = _get(config, "scf", "multiplicity", 1)
     functional = _get(config, "input", "functional", "")
     d4_enabled = _get(config, "input", "d4", False)
+    # FCI._settings_from_config reads [fci] ONLY -- it never parses the shared
+    # [state_average] section, so every state-average field stays at its
+    # disabled default and the run publishes energies[0] as the scalar instead
+    # of the requested weighted average, with nothing reporting the
+    # discrepancy.  Reject the opt-in rather than accept and ignore it.
+    if str(_get(config, "state_average", "enabled", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "state_average.enabled",
+            "method=fci does not read the [state_average] section, so state "
+            "averaging would be silently ignored and the lowest root reported.",
+            value=True,
+            expected="state_average.enabled=false for method=fci",
+            action=("Use method=sa-casscf for a state-averaged orbital "
+                    "optimization, or method=casci for a fixed-orbital state "
+                    "average; for a plain FCI run set [state_average] "
+                    "enabled=false and choose roots with [fci] nroot."),
+        )
     nroot = _get(config, "fci", "nroot", 1)
     active_electrons = _get(config, "fci", "active_electrons", 0)
     active_orbitals = _get(config, "fci", "active_orbitals", 0)
@@ -3024,6 +3043,44 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                            "multistate method (ms-caspt2/mcqdpt2) to optimize "
                            "an excited root.",
                 )
+        # runtype=grad selects its state through [properties] grad, not
+        # optimize.istate, and that selector was unvalidated: a single-state
+        # caspt2/mrmp2 job with grad=1 passed preflight and then ran the whole
+        # central PT2 calculation before pt2_numerical_gradient raised for an
+        # out-of-range state.  Bound it here, against the number of PT2
+        # energies the method actually publishes.
+        if runtype == "grad":
+            _single = PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS
+            if _single:
+                _nstates = 1
+            else:
+                _tr = _as_list(_get(config, "pt2", "target_roots", []))
+                try:
+                    _nstates = len(_tr) if _tr else max(
+                        1, int(_get(config, "pt2", "nroot", 0) or 0)
+                        or int(_get(config, "ci", "nroot", 1) or 1))
+                except (TypeError, ValueError):
+                    _nstates = 1
+            for _g in _as_list(_get(config, "properties", "grad", [])):
+                try:
+                    _gi = int(_g)
+                except (TypeError, ValueError):
+                    continue
+                if _gi < 0 or _gi >= _nstates:
+                    report.add(
+                        "ERROR",
+                        "properties.grad",
+                        ("Single-state PT2 exposes only one energy (index 0)."
+                         if _single else
+                         f"This PT2 job publishes {_nstates} state(s), "
+                         f"indices 0..{_nstates - 1}."),
+                        value=_g,
+                        expected="0" if _single else f"0..{_nstates - 1}",
+                        action=("Set [properties] grad=0 for caspt2/mrmp2, or "
+                                "use a multistate method (ms-caspt2/mcqdpt2) "
+                                "and request more roots via [pt2] target_roots "
+                                "/ nroot."),
+                    )
         if runtype not in pt2_grad_runtypes:
             report.add(
                 "ERROR",

@@ -38,6 +38,13 @@ _CASPT2_VARIANTS = {
     "ms-caspt2": "ms-caspt2", "mscaspt2": "ms-caspt2",
     "xms-caspt2": "xms-caspt2", "xmscaspt2": "xms-caspt2",
 }
+# Every method key `theory()` routes into the wavefunction stack.  All of them
+# require an HF reference, so the dispatcher rejects `functional` for the whole
+# set rather than each branch repeating the check.
+_WF_METHOD_KEYS = frozenset(
+    {"fci", "full-ci", "casci", "cas-ci", "casscf", "sa-casscf", "sacasscf",
+     "nevpt2", "sc-nevpt2", "scnevpt2", "mrmp2", "mcqdpt2", "xmcqdpt2", "qdpt2"}
+) | frozenset(_CASPT2_VARIANTS)
 RUNTYPE_SECTIONS = {
     "grad": "properties",
     "hess": "hess",
@@ -109,6 +116,31 @@ class _DFTBSectionProxy(_SectionProxy):
 
     def __call__(self, *args, **kwargs):
         return self._owner._dftb(*args, **kwargs)
+
+
+class _FCISectionProxy(_SectionProxy):
+    """Callable [fci] section proxy.
+
+    ``job.fci(...)`` runs the FCI helper, while ``job.fci.nroot`` reads and
+    ``job.fci.nroot = 2`` writes the [fci] section through the standard schema
+    interface -- a plain method here would shadow the ``__getattr__`` section
+    proxy and break attribute access for this one section, exactly as it does
+    for [dftb] and [xtb].
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._fci(*args, **kwargs)
+
+
+class _CASSCFSectionProxy(_SectionProxy):
+    """Callable [casscf] section proxy.
+
+    ``job.casscf(...)`` runs the CASSCF helper, while ``job.casscf.hessian``
+    reads and ``job.casscf.hessian = "analytic"`` writes the [casscf] section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._casscf(*args, **kwargs)
 
 
 class _XTBSectionProxy(_SectionProxy):
@@ -741,8 +773,18 @@ class OpenQP:
         # a response-method convention and would silently state-average or
         # over-solve here.  SA-CASSCF is the one method for which it is
         # meaningful, and it takes it as the number of averaged states.
+        #
+        # `functional` is a formal argument of THIS dispatcher, so it never
+        # reaches the HF-only rejection inside _wf_setup: job.theory("casscf",
+        # functional="pbe") used to clear it silently and run the HF-reference
+        # method, while the direct job.casscf(functional="pbe") correctly
+        # refuses.  Apply the same rejection here instead of quietly running a
+        # different theory than the caller asked for.
+        if method_key in _WF_METHOD_KEYS and functional not in (None, ""):
+            raise ValueError(
+                f"{method_key} requires an HF reference; do not pass functional.")
         if method_key in {"fci", "full-ci"}:
-            return self.fci(
+            return self._fci(
                 runtype=runtype, basis=basis,
                 reference=reference or "rhf", **keywords)
         if method_key in {"casci", "cas-ci"}:
@@ -750,7 +792,7 @@ class OpenQP:
                 runtype=runtype, basis=basis,
                 reference=reference or "rhf", **keywords)
         if method_key == "casscf":
-            return self.casscf(
+            return self._casscf(
                 runtype=runtype, basis=basis,
                 reference=reference or "rhf", **keywords)
         if method_key in {"sa-casscf", "sacasscf"}:
@@ -1128,7 +1170,7 @@ class OpenQP:
             )
         return nroot
 
-    def fci(self, nroot=1, frozen_core=None, runtype=None, basis=None,
+    def _fci(self, nroot=1, frozen_core=None, runtype=None, basis=None,
             reference="rhf", **keywords):
         """Use a compact OpenQP full-CI setup on an RHF reference."""
         return self._wf_setup(
@@ -1145,7 +1187,7 @@ class OpenQP:
             active_electrons=active_electrons, active_orbitals=active_orbitals,
             frozen_core=frozen_core, nroot=nroot, **keywords)
 
-    def casscf(self, active_electrons=None, active_orbitals=None,
+    def _casscf(self, active_electrons=None, active_orbitals=None,
                frozen_core=None, nroot=1, root=None, converger=None,
                hessian=None, max_macro_iterations=None, runtype=None,
                basis=None, reference="rhf", **keywords):
@@ -1343,6 +1385,26 @@ class OpenQP:
         [dftb] section like every other schema section.
         """
         return _DFTBSectionProxy(self, "dftb")
+
+    @property
+    def fci(self):
+        """Callable [fci] section proxy.
+
+        ``job.fci(...)`` runs the FCI helper, while ``job.fci.nroot`` /
+        ``job.fci.nroot = 2`` read and write the [fci] section like every
+        other schema section.
+        """
+        return _FCISectionProxy(self, "fci")
+
+    @property
+    def casscf(self):
+        """Callable [casscf] section proxy.
+
+        ``job.casscf(...)`` runs the CASSCF helper, while
+        ``job.casscf.hessian`` / ``job.casscf.hessian = "analytic"`` read and
+        write the [casscf] section like every other schema section.
+        """
+        return _CASSCFSectionProxy(self, "casscf")
 
     def tddftb(self, **kwargs):
         """Use the conventional singlet TD-DFTB (TDA) response helper."""

@@ -2656,9 +2656,23 @@ class FCI:
         h1e_mo, eri_mo, plan, ecore, metadata = self._native_mo_integrals()
         nact = plan.nact
         nelec = plan.nelec
-        determinants = _determinants(nact, nelec)
         target_multiplicity = _target_spin_multiplicity(self.settings.target_spin)
         determinant_count = int(metadata["determinants"])
+        # Enforce the cap BEFORE enumerating.  _determinants materializes the
+        # full alpha x beta product as Python tuples, so a half-filled
+        # 20-orbital active space tried to build tens of billions of objects
+        # and was OOM-killed on the way to the ValueError that resolve_ci_solve
+        # would have raised.  metadata["determinants"] is the same binomial
+        # count that cap is compared against, and it is already available here.
+        if determinant_count > int(self.settings.max_det):
+            raise ValueError(
+                f"{self.data_prefix} determinant space has {determinant_count} "
+                f"determinants, exceeding max_det={self.settings.max_det}. "
+                f"Reduce the active space ({self.active_section} "
+                f"frozen_core/active_orbitals) or raise "
+                f"{self.active_section} max_det."
+            )
+        determinants = _determinants(nact, nelec)
 
         def solve_and_diagnose(window_nroot: int):
             # The spin filter stays here rather than in the engine: the root

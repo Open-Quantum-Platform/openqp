@@ -1214,10 +1214,16 @@ def native_caspt2_energy(mol, ref_energy=None):
     use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
 
     if options.variant == "caspt2":
+        # `roots` came from _reference_roots, which honours [pt2] target_roots;
+        # options.root is pinned at 0 because [pt2] root is not a schema key, so
+        # reading it here threw the selection away and corrected the ground root
+        # under an input that had asked for an excited one -- and with a CASSCF
+        # reference it could optimise root 1 and then correct root 0.
+        _root = int(roots[0])
         if use_direct:
             from oqp.library.qdpt2_direct import direct_qdpt2
             res = direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore,
-                               nact, active_nelec, nbf, enuc, [options.root],
+                               nact, active_nelec, nbf, enuc, [_root],
                                options, rotate=False)
             e_casci = float(res["ref_energies"][0])
             e2 = float(res["e2"][0])
@@ -1229,12 +1235,12 @@ def native_caspt2_energy(mol, ref_energy=None):
             mol.data["OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS"] = np.ascontiguousarray([e2], dtype=np.float64)
             _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                        e_casci, e2, e_caspt2, res["n_external"], e_casci,
-                       float(res["min_denoms"][0]), float(s2[options.root]),
-                       int(mult[options.root]), time.time() - t0)
+                       float(res["min_denoms"][0]), float(s2[_root]),
+                       int(mult[_root]), time.time() - t0, root=_root)
         else:
             _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                                  nbf, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa,
-                                 s2, mult, time.time() - t0)
+                                 s2, mult, time.time() - t0, root=_root)
     else:
         if use_direct:
             from oqp.library.qdpt2_direct import direct_qdpt2
@@ -1270,8 +1276,13 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
 
 
 def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
-                         norb, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa, s2, mult, wall):
-    root = options.root
+                         norb, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa, s2, mult, wall,
+                         root=None):
+    # The caller resolves the reference root through _reference_roots, the only
+    # place that honours [pt2] target_roots.  Re-reading options.root here
+    # discarded that: it is pinned at 0, because [pt2] root is not a schema key
+    # and cannot be set from an input at all.
+    root = int(options.root) if root is None else int(root)
     e_casci = float(energies[root])
     # active occupations for the IPEA shift = diagonal of the active 1-RDM block
     active_occ = np.diag(D_sa)[ncore:ncore + nact]
@@ -1304,7 +1315,8 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
         n_external = sum(1 for _ in comp)
         _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                    e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom,
-                   float(s2[root]), int(mult[root]), wall, sc_components=comp)
+                   float(s2[root]), int(mult[root]), wall, sc_components=comp,
+                   root=root)
         mol.energies = [e_caspt2]
         mol.mol_energy.energy = e_caspt2
         mol.data["OQP::CASPT2_ENERGIES"] = np.ascontiguousarray([e_caspt2], dtype=np.float64)
@@ -1329,7 +1341,7 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
 
     _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, len(external), e_ref_check, min_denom,
-               float(s2[root]), int(mult[root]), wall)
+               float(s2[root]), int(mult[root]), wall, root=root)
 
 
 def _multistate_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
@@ -1387,7 +1399,7 @@ def _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_l
 
 def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom, s2, mult, wall,
-               sc_components=None):
+               sc_components=None, root=None):
     ref_label = "CASSCF" if options.reference == "casscf" else "CASCI"
     if options.contraction == "strong":
         method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
@@ -1398,7 +1410,10 @@ def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
     else:
         method_name, title = "CASPT2", "CASPT2 (uncontracted, Fock zeroth order)"
     _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_label, title)
-    _log(mol, f"   PyOQP reference root:               {options.root}")
+    # The root actually corrected, not options.root: the latter is pinned at 0
+    # ([pt2] root is not a schema key), so the summary used to report root 0
+    # for a target_roots=1 run that had correctly corrected root 1.
+    _log(mol, f"   PyOQP reference root:               {int(options.root) if root is None else int(root)}")
     _log(mol)
     _log(mol, "   --- second order ---")
     if sc_components is not None:
