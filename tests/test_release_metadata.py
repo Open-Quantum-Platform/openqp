@@ -33,8 +33,11 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_legacy_pyoqp_distribution_is_retired(self):
         setup_py = (ROOT / "pyoqp" / "setup.py").read_text()
+        readme = (ROOT / "pyoqp" / "README.md").read_text()
         self.assertIn("pyoqp/setup.py is retired", setup_py)
         self.assertNotIn("setup(", setup_py)
+        self.assertNotIn("cd pyoqp && pip install .", readme)
+        self.assertIn("top-level\npip install", readme)
 
     def test_docker_image_is_versioned_but_not_automatically_pushed(self):
         workflow = (ROOT / ".github" / "workflows" / "docker-build.yml").read_text()
@@ -90,3 +93,5 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertEqual(len(artifact_lines), 2)
         self.assertTrue(all("github.run_id" in line for line in artifact_lines))
         self.assertTrue(all("github.run_attempt" not in line for line in artifact_lines))
+        seal_step = workflow[workflow.index("Seal verified distributions"):]
+        self.assertIn("overwrite: true", seal_step.split("publish_to_pypi:", 1)[0])

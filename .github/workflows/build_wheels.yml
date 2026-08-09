@@ -872,6 +872,7 @@ jobs:
           name: verified-openqp-pypi-${{ steps.release.outputs.version }}-${{ github.run_id }}
           path: dist/*
           if-no-files-found: error
+          overwrite: true
           retention-days: 7
 
   publish_to_pypi:
