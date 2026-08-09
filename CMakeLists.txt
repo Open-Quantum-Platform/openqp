@@ -67,6 +67,8 @@ project(Open-Quantum-Package
   VERSION 1.2.1
   LANGUAGES C CXX Fortran)
 
+include(GNUInstallDirs)
+
 set(CMAKE_Fortran_STANDARD 2003)
 
 include(FortranCInterface)
