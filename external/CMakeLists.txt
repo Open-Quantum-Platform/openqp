@@ -33,6 +33,7 @@ if(NOT OQP_DFTD4_PATCH_EXECUTABLE
   message(FATAL_ERROR
       "The DFT-D4 corresponding-source transformations require the 'patch' executable")
 endif()
+
 set(OQP_DFTD4_PATCH_EXECUTABLE "${OQP_DFTD4_PATCH_EXECUTABLE}"
     CACHE INTERNAL "patch executable for DFT-D4 source transformations" FORCE)
 set(DFTD4_MCTC_PATCH
@@ -56,12 +57,14 @@ set(DFTD4_DFTD4_PATCH_SHA256 "${DFTD4_DFTD4_PATCH_SHA256}"
 string(SHA256 _OQP_DFTD4_PATCHSET_KEY
     "${DFTD4_MCTC_PATCH_SHA256}|${DFTD4_DFTD4_PATCH_SHA256}")
 string(SUBSTRING "${_OQP_DFTD4_PATCHSET_KEY}" 0 12 _OQP_DFTD4_PATCHSET_KEY)
-# The DFT-D4 stack deliberately stays shared even when another bundled
-# dependency follows OpenQP's global BUILD_SHARED_LIBS setting.  Keep this
-# explicit in its cache namespace: the former OpenQP build stored static D4
-# archives under otherwise-identical aggregate keys, and those must never
-# satisfy a shared-library reuse check.
+# Normal OpenQP builds keep the DFT-D4 stack replaceable and shared.  Preserve
+# the explicit BUILD_SHARED_LIBS=OFF configuration by building/installing the
+# matching static archives instead; the linkage remains part of the D4-only
+# cache namespace so the two modes can never reuse one another's artifacts.
 set(_OQP_DFTD4_LINKAGE "shared")
+if(NOT BUILD_SHARED_LIBS)
+  set(_OQP_DFTD4_LINKAGE "static")
+endif()
 set(_OQP_EXTERNALS_VERSION_KEY
     "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-nlopt${_OQP_NLOPT_VERSION}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
@@ -786,9 +789,9 @@ endif()
 # ---------------------------------------------------------------------------
 # DFT-D4 dispersion (native): mctc-lib -> multicharge -> dftd4.
 # Replaces the former `dftd4` Python (cffi) package. All three install into one
-# shared prefix so dftd4 finds its deps via find_package().  They are always
-# built as replaceable shared libraries and linked dynamically by liboqp; this
-# is independent of the linkage selected for the other bundled dependencies.
+# prefix so dftd4 finds its deps via find_package().  Normal shared OpenQP
+# builds use replaceable shared libraries; the supported static OpenQP mode
+# builds and exports the corresponding static archives.
 # Follows the reuse/stand-in pattern above.
 # ---------------------------------------------------------------------------
 if(OQP_REUSE_EXTERNALS)
@@ -834,7 +837,7 @@ set(DFTD4_COMMON_ARGS
         -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
         -DCMAKE_INSTALL_LIBDIR=lib
         -DCMAKE_BUILD_TYPE=Release
-        -DBUILD_SHARED_LIBS=ON
+        -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DWITH_TESTS=OFF
         -DWITH_OpenMP=${ENABLE_OPENMP}
         -DCMAKE_INSTALL_RPATH=${DFTD4_ORIGIN_RPATH}
@@ -903,14 +906,21 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
+if(BUILD_SHARED_LIBS)
+    set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}")
+    set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_SHARED_LIBRARY_SUFFIX}")
+else()
+    set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_STATIC_LIBRARY_PREFIX}")
+    set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+endif()
 set(DFTD4_MCTC_LIB
-    "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    "${DFTD4_INSTALL}/lib/${_OQP_DFTD4_LIBRARY_PREFIX}mctc-lib${_OQP_DFTD4_LIBRARY_SUFFIX}"
     CACHE INTERNAL "DFTD4_MCTC_LIB" FORCE)
 set(DFTD4_MULTICHARGE_LIB
-    "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    "${DFTD4_INSTALL}/lib/${_OQP_DFTD4_LIBRARY_PREFIX}multicharge${_OQP_DFTD4_LIBRARY_SUFFIX}"
     CACHE INTERNAL "DFTD4_MULTICHARGE_LIB" FORCE)
 set(DFTD4_DFTD4_LIB
-    "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    "${DFTD4_INSTALL}/lib/${_OQP_DFTD4_LIBRARY_PREFIX}dftd4${_OQP_DFTD4_LIBRARY_SUFFIX}"
     CACHE INTERNAL "DFTD4_DFTD4_LIB" FORCE)
 
 # Upstream sets VERSION and SOVERSION on all three targets.  The wheel carries
@@ -921,7 +931,23 @@ set(DFTD4_DFTD4_LIB
 string(REGEX REPLACE "\\..*" "" _OQP_MCTC_LIB_SOVERSION "${_OQP_MCTC_LIB_VERSION}")
 string(REGEX REPLACE "\\..*" "" _OQP_MULTICHARGE_SOVERSION "${_OQP_MULTICHARGE_VERSION}")
 string(REGEX REPLACE "\\..*" "" _OQP_DFTD4_SOVERSION "${_OQP_DFTD4_VERSION}")
-if(APPLE)
+if(NOT BUILD_SHARED_LIBS)
+    set(DFTD4_MCTC_RUNTIME_SOURCE "${DFTD4_MCTC_LIB}"
+        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_MULTICHARGE_RUNTIME_SOURCE "${DFTD4_MULTICHARGE_LIB}"
+        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_DFTD4_RUNTIME_SOURCE "${DFTD4_DFTD4_LIB}"
+        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_MCTC_RUNTIME_NAME
+        "${CMAKE_STATIC_LIBRARY_PREFIX}mctc-lib${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_NAME" FORCE)
+    set(DFTD4_MULTICHARGE_RUNTIME_NAME
+        "${CMAKE_STATIC_LIBRARY_PREFIX}multicharge${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_NAME" FORCE)
+    set(DFTD4_DFTD4_RUNTIME_NAME
+        "${CMAKE_STATIC_LIBRARY_PREFIX}dftd4${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
+elseif(APPLE)
     set(DFTD4_MCTC_RUNTIME_SOURCE
         "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib.${_OQP_MCTC_LIB_VERSION}${CMAKE_SHARED_LIBRARY_SUFFIX}"
         CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
@@ -961,6 +987,16 @@ else()
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 endif()
 
+set(DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_LIB}")
+set(DFTD4_MULTICHARGE_ARTIFACTS "${DFTD4_MULTICHARGE_LIB}")
+set(DFTD4_DFTD4_ARTIFACTS "${DFTD4_DFTD4_LIB}")
+if(BUILD_SHARED_LIBS)
+    list(APPEND DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_RUNTIME_SOURCE}")
+    list(APPEND DFTD4_MULTICHARGE_ARTIFACTS
+        "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}")
+    list(APPEND DFTD4_DFTD4_ARTIFACTS "${DFTD4_DFTD4_RUNTIME_SOURCE}")
+endif()
+
 # Record the values resolved by this configure, rather than presenting the
 # variable-based ExternalProject recipe as if it contained those values.
 set(DFTD4_BUILD_INFO_FILE
@@ -976,7 +1012,7 @@ oqp_set_external_paths(DFTD4_MCTC "${_OQP_DFTD4_CACHE_KEY}-mctc-lib"
     "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${DFTD4_INSTALL}")
 oqp_reuse_or_build(mctc-lib
-    "${DFTD4_MCTC_LIB}" "${DFTD4_MCTC_RUNTIME_SOURCE}"
+    ${DFTD4_MCTC_ARTIFACTS}
     "${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt"
     "${DFTD4_MCTC_SOURCE_DIR}/LICENSE"
     "${DFTD4_MCTC_STAMP_DIR}/openqp-corresponding-source-ready")
@@ -989,7 +1025,7 @@ ExternalProject_Add(mctc-lib
         SOURCE_DIR ${DFTD4_MCTC_SOURCE_DIR}
         BINARY_DIR ${DFTD4_MCTC_BUILD_DIR}
         STAMP_DIR  ${DFTD4_MCTC_STAMP_DIR}
-        BUILD_BYPRODUCTS ${DFTD4_MCTC_LIB} ${DFTD4_MCTC_RUNTIME_SOURCE}
+        BUILD_BYPRODUCTS ${DFTD4_MCTC_ARTIFACTS}
         UPDATE_COMMAND ""
         PATCH_COMMAND ${CMAKE_COMMAND}
                 "-DPATCH_EXECUTABLE=${OQP_DFTD4_PATCH_EXECUTABLE}"
@@ -1009,7 +1045,7 @@ oqp_set_external_paths(DFTD4_MC "${_OQP_DFTD4_CACHE_KEY}-multicharge"
     "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${DFTD4_INSTALL}")
 oqp_reuse_or_build(multicharge
-    "${DFTD4_MULTICHARGE_LIB}" "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+    ${DFTD4_MULTICHARGE_ARTIFACTS}
     "${DFTD4_MC_SOURCE_DIR}/CMakeLists.txt"
     "${DFTD4_MC_SOURCE_DIR}/LICENSE"
     "${DFTD4_MC_STAMP_DIR}/openqp-corresponding-source-ready")
@@ -1022,7 +1058,7 @@ ExternalProject_Add(multicharge
         SOURCE_DIR ${DFTD4_MC_SOURCE_DIR}
         BINARY_DIR ${DFTD4_MC_BUILD_DIR}
         STAMP_DIR  ${DFTD4_MC_STAMP_DIR}
-        BUILD_BYPRODUCTS ${DFTD4_MULTICHARGE_LIB} ${DFTD4_MULTICHARGE_RUNTIME_SOURCE}
+        BUILD_BYPRODUCTS ${DFTD4_MULTICHARGE_ARTIFACTS}
         UPDATE_COMMAND ""
         PATCH_COMMAND ${CMAKE_COMMAND} -E touch ${DFTD4_MC_STAMP_DIR}/openqp-corresponding-source-ready
         CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
@@ -1037,9 +1073,9 @@ oqp_set_external_paths(DFTD4_D4 "${_OQP_DFTD4_CACHE_KEY}-dftd4"
     "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${DFTD4_INSTALL}")
 oqp_reuse_or_build(dftd4
-    "${DFTD4_DFTD4_LIB}" "${DFTD4_DFTD4_RUNTIME_SOURCE}"
-    "${DFTD4_MULTICHARGE_LIB}" "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
-    "${DFTD4_MCTC_LIB}" "${DFTD4_MCTC_RUNTIME_SOURCE}"
+    ${DFTD4_DFTD4_ARTIFACTS}
+    ${DFTD4_MULTICHARGE_ARTIFACTS}
+    ${DFTD4_MCTC_ARTIFACTS}
     "${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt"
     "${DFTD4_D4_SOURCE_DIR}/COPYING"
     "${DFTD4_D4_SOURCE_DIR}/COPYING.LESSER"
@@ -1053,7 +1089,7 @@ ExternalProject_Add(dftd4
         SOURCE_DIR ${DFTD4_D4_SOURCE_DIR}
         BINARY_DIR ${DFTD4_D4_BUILD_DIR}
         STAMP_DIR  ${DFTD4_D4_STAMP_DIR}
-        BUILD_BYPRODUCTS ${DFTD4_DFTD4_LIB} ${DFTD4_DFTD4_RUNTIME_SOURCE}
+        BUILD_BYPRODUCTS ${DFTD4_DFTD4_ARTIFACTS}
         UPDATE_COMMAND ""
         PATCH_COMMAND ${CMAKE_COMMAND}
                 "-DPATCH_EXECUTABLE=${OQP_DFTD4_PATCH_EXECUTABLE}"

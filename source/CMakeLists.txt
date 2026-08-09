@@ -115,26 +115,38 @@ target_include_directories(oqp PRIVATE
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-# The three libraries are shared on every supported platform.  Validate all
-# three artifacts, but link liboqp only to the libraries whose APIs the shim
-# calls directly: dftd4 and mctc-lib.  dftd4 itself records the canonical
-# multicharge and mctc-lib SOVERSION dependencies.  Adding multicharge to
-# liboqp's own link line would create an unnecessary direct DT_NEEDED/install-
-# name edge and obscure the intended replaceable dependency graph.
-foreach(_d4_shared_library IN ITEMS
-        "${DFTD4_DFTD4_LIB}"
-        "${DFTD4_MULTICHARGE_LIB}"
-        "${DFTD4_MCTC_LIB}")
-  if(_d4_shared_library MATCHES "\\.a$")
-    message(FATAL_ERROR
-      "DFT-D4 stack must be dynamically linked, found static archive: "
-      "${_d4_shared_library}")
-  endif()
-endforeach()
-target_link_libraries(oqp
-        "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
-        "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>")
-if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+if(BUILD_SHARED_LIBS)
+  # Link liboqp only to the shared libraries whose APIs the shim calls
+  # directly. dftd4 records its canonical multicharge and mctc-lib SOVERSION
+  # dependencies, so adding multicharge here would create a redundant edge.
+  foreach(_d4_shared_library IN ITEMS
+          "${DFTD4_DFTD4_LIB}"
+          "${DFTD4_MULTICHARGE_LIB}"
+          "${DFTD4_MCTC_LIB}")
+    if(_d4_shared_library MATCHES "\\.a$")
+      message(FATAL_ERROR
+        "Shared OpenQP requires dynamically linked DFT-D4 libraries, found: "
+        "${_d4_shared_library}")
+    endif()
+  endforeach()
+  target_link_libraries(oqp
+          "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
+          "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>")
+else()
+  # Static archives do not carry transitive link dependencies.  Keep all three
+  # on the in-tree link line and export relocatable -L/-l requirements for
+  # installed liboqp.a consumers.
+  target_link_libraries(oqp
+          "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
+          "$<BUILD_INTERFACE:${DFTD4_MULTICHARGE_LIB}>"
+          "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>"
+          "$<INSTALL_INTERFACE:dftd4>"
+          "$<INSTALL_INTERFACE:multicharge>"
+          "$<INSTALL_INTERFACE:mctc-lib>")
+  target_link_directories(oqp PUBLIC
+          "$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>")
+endif()
+if(BUILD_SHARED_LIBS AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # The DFT-D4 stack is linked in separate ExternalProjects.  Fail the OpenQP
   # build if either BLAS-using dylib retained a classic LP64 Accelerate symbol
   # despite declaring WITH_ILP64=ON.
@@ -155,11 +167,13 @@ if(APPLE)
 else()
   set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
-set_target_properties(oqp PROPERTIES
-        BUILD_RPATH "${DFTD4_INSTALL}/lib"
-        INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
-        INSTALL_RPATH_USE_LINK_PATH FALSE
-        INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE)
+if(BUILD_SHARED_LIBS)
+  set_target_properties(oqp PROPERTIES
+          BUILD_RPATH "${DFTD4_INSTALL}/lib"
+          INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
+          INSTALL_RPATH_USE_LINK_PATH FALSE
+          INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE)
+endif()
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
@@ -177,15 +191,23 @@ EXPORT "${PROJECT_NAME}Targets"
 # runtime SONAME/install-name that liboqp and the DFT-D4 libraries reference.
 # Replacing one of these files with an ABI-compatible build therefore changes
 # the implementation used at the next process start.
-install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RENAME "${DFTD4_MCTC_RUNTIME_NAME}")
-install(FILES "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RENAME "${DFTD4_MULTICHARGE_RUNTIME_NAME}")
-install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RENAME "${DFTD4_DFTD4_RUNTIME_NAME}")
+if(BUILD_SHARED_LIBS)
+  install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RENAME "${DFTD4_MCTC_RUNTIME_NAME}")
+  install(FILES "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RENAME "${DFTD4_MULTICHARGE_RUNTIME_NAME}")
+  install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RENAME "${DFTD4_DFTD4_RUNTIME_NAME}")
+else()
+  install(FILES
+          "${DFTD4_MCTC_LIB}"
+          "${DFTD4_MULTICHARGE_LIB}"
+          "${DFTD4_DFTD4_LIB}"
+          DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 # CMake's generated macOS install_name_tool command can be defeated when the
 # GNU Darwin linker has already injected @loader_path: its duplicate add makes
@@ -193,7 +215,7 @@ install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
 # Normalize the four final package files one edit at a time after all of them
 # have been installed.  The configured script is intentionally macOS-only;
 # Linux keeps CMake's native $ORIGIN install-RPATH handling.
-if(APPLE)
+if(BUILD_SHARED_LIBS AND APPLE)
   set(_OQP_MACOS_RPATH_SANITIZER
       "${CMAKE_CURRENT_BINARY_DIR}/sanitize_macos_package_rpaths.cmake")
   configure_file(

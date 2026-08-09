@@ -52,6 +52,15 @@ def _dftd4_damping_values(damping_params):
     return 1, values
 
 
+def _dftd4_damping_from_config(config):
+    """Return explicit damping from the schema, or ``None`` for defaults."""
+    section = config.get('d4', {})
+    raw = {key: section.get(key, '') for key in _D4_DAMPING_KEYS}
+    if not any(str(value).strip() for value in raw.values()):
+        return None
+    return {key: float(raw[key]) for key in _D4_DAMPING_KEYS}
+
+
 def dftd4_native_disp(atoms, coordinates, functional, do_grad,
                        total_charge=0.0, damping_params=None):
     """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
@@ -165,7 +174,9 @@ class LastStep(Calculator):
 
         self.do_d4 = mol.config['input']['d4']
         self.res = None
-        self.set_param(param)
+        self.set_param(
+            _dftd4_damping_from_config(mol.config) if param is None else param
+        )
         self.natom = 0
 
         dump_log(
@@ -1475,6 +1486,7 @@ class Hessian(Calculator):
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
         total_charge = float(self.mol.config.get('input', {}).get('charge', 0))
+        damping_params = _dftd4_damping_from_config(self.mol.config)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1484,7 +1496,7 @@ class Hessian(Calculator):
         def disp_grad(coord_flat):
             _, grad = dftd4_native_disp(
                 atoms, coord_flat.reshape((-1, 3)), functional, True,
-                total_charge=total_charge
+                total_charge=total_charge, damping_params=damping_params
             )
             return np.asarray(grad, dtype=float).reshape(-1)
 

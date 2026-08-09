@@ -234,7 +234,7 @@ PRIMARY_ALIASES = {
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 
 SECTION_NAMES = {
-    "input", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
+    "input", "d4", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
     "oqp", "neb", "hess", "nac", "md", "odp", "qmmm", "droplet",
     "solute_com", "json", "tests",
@@ -266,6 +266,7 @@ GENERIC_SCHEMA_KEYS = {
     """),
     "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
+    "d4": _keys("s6 s8 s9 a1 a2 alp"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
@@ -1860,8 +1861,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 raise OQPInputError("%s does not accept options" % call.name)
             if spec.driver.name not in {"hess", "thermo"}:
                 raise OQPInputError("%s requires hess(...) or thermo() as the primary driver" % call.name)
-        if call.name == "d4" and (call.args or call.kwargs):
-            raise OQPInputError("d4() does not accept options")
+        if call.name == "d4" and call.args:
+            raise OQPInputError("d4 accepts named damping parameters only")
         if call.name == "d4" and "d4" in spec.options:
             raise OQPInputError("DFT-D4 is specified twice; use d4() once")
         if call.name in SECTION_NAMES and call.args:
@@ -2436,6 +2437,8 @@ def lower_to_legacy(
     for call in spec.modifiers:
         if call.name == "d4":
             put("input", "d4", True)
+            for key, value in call.kwargs.items():
+                put("d4", key, value)
             continue
         if call.name in {"ir", "raman"}:
             # Hessian workflows already compute and log both intensities.  The

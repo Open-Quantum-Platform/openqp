@@ -74,7 +74,7 @@ function(oqp_generate_dftd4_build_info output_file)
       CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION
       CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION
       CMAKE_Fortran_COMPILER_ID CMAKE_Fortran_COMPILER_VERSION
-      ENABLE_OPENMP LINALG_LIB
+      ENABLE_OPENMP BUILD_SHARED_LIBS LINALG_LIB
       _OQP_MCTC_LIB_VERSION _OQP_MCTC_LIB_URL _OQP_MCTC_LIB_SHA256
       _OQP_MULTICHARGE_VERSION _OQP_MULTICHARGE_URL _OQP_MULTICHARGE_SHA256
       _OQP_DFTD4_VERSION _OQP_DFTD4_URL _OQP_DFTD4_SHA256
@@ -140,6 +140,12 @@ function(oqp_generate_dftd4_build_info output_file)
     set(_openmp_json true)
   else()
     set(_openmp_json false)
+  endif()
+
+  if(BUILD_SHARED_LIBS)
+    set(_build_shared_libs_json true)
+  else()
+    set(_build_shared_libs_json false)
   endif()
 
   set(_revision_json null)
@@ -241,7 +247,7 @@ function(oqp_generate_dftd4_build_info output_file)
     "\"resolved_blas_libraries\": ${_blas_json}, "
     "\"resolved_lapack_libraries\": ${_lapack_json}, "
     "\"integer_bytes\": ${BLA_SIZEOF_INTEGER}},\n"
-    "    \"build_shared_libs\": true\n"
+    "    \"build_shared_libs\": ${_build_shared_libs_json}\n"
     "  },\n"
     "  \"canonical_runtime_names\": {"
     "\"mctc-lib\": ${DFTD4_MCTC_RUNTIME_NAME_json}, "
