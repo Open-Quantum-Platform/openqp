@@ -324,6 +324,14 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  add_test(NAME oqp_dftd4_dynamic_dependencies
+    COMMAND ${CMAKE_COMMAND}
+      "-DOQP_LIBRARY=$<TARGET_FILE:oqp>"
+      "-DDFTD4_LIBRARY=${DFTD4_DFTD4_RUNTIME_SOURCE}"
+      "-DMULTICHARGE_LIBRARY=${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+      "-DMCTC_LIBRARY=${DFTD4_MCTC_RUNTIME_SOURCE}"
+      "-DDFTD4_LIBRARY_DIR=${DFTD4_INSTALL}/lib"
+      -P "${CMAKE_SOURCE_DIR}/cmake/check_dftd4_dynamic.cmake")
   if(ENABLE_DDX)
     add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
     target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)

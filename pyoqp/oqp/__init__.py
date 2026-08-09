@@ -4,8 +4,8 @@ import os
 from oqp.utils.mpi_utils import MPIManager
 from oqp.runtime import resolve_oqp_root
 MPIManager()
-# DFT-D4 is linked natively into liboqp (source/dftd4_interface.F90); the
-# external `dftd4` Python package is no longer required or imported.
+# DFT-D4 is linked dynamically into liboqp (source/dftd4_interface.F90); the
+# package-local shared libraries replace the external Python `dftd4` package.
 
 
 try:

@@ -111,30 +111,43 @@ target_link_libraries(oqp ${NLOPT_LIBRARY})
 # dirs must be on the include path and the ExternalProjects must build first.
 add_dependencies(oqp dftd4)
 set(DFTD4_MODTAG ${CMAKE_Fortran_COMPILER_ID}-${CMAKE_Fortran_COMPILER_VERSION})
-target_include_directories(oqp PUBLIC
+target_include_directories(oqp PRIVATE
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-# dftd4/multicharge/mctc-lib reference BLAS/LAPACK symbols (e.g. ssytri_) but are
-# linked after the static liblapack/libblas archives. With a static NetLib build
-# the linker has already passed those archives, so the referenced objects are
-# never pulled in and liboqp.so ends up with an undefined symbol that only bites
-# at load time (e.g. `import oqp`). Wrap the dispersion libs together with
-# LAPACK/BLAS in a RESCAN group so the cross-references resolve regardless of
-# order. (For shared BLAS/LAPACK, e.g. macOS Accelerate, LIBLAPACK is unset and
-# symbols resolve dynamically, so the plain link is used.)
-# The RESCAN LINK_GROUP is a GNU-ld feature; the Apple linker (ld64) rejects it
-# AND does a global archive scan that resolves the cross-references regardless of
-# order, so the bug never occurs there -- restrict RESCAN to non-Apple linkers.
-if(LIBLAPACK AND NOT APPLE)
-  target_link_libraries(oqp
-          "$<LINK_GROUP:RESCAN,${DFTD4_INSTALL}/lib/libdftd4.a,${DFTD4_INSTALL}/lib/libmulticharge.a,${DFTD4_INSTALL}/lib/libmctc-lib.a,${LIBLAPACK},${LIBBLAS}>")
+# The three libraries are shared on every supported platform.  Link with the
+# unversioned linker names in the external prefix; each binary records its
+# upstream SOVERSION name, and the wheel installs a regular file under that
+# name next to liboqp.  Keep all three on the link line because the shim calls
+# mctc-lib directly while dftd4 itself calls multicharge and mctc-lib.
+foreach(_d4_shared_library IN ITEMS
+        "${DFTD4_DFTD4_LIB}"
+        "${DFTD4_MULTICHARGE_LIB}"
+        "${DFTD4_MCTC_LIB}")
+  if(_d4_shared_library MATCHES "\\.a$")
+    message(FATAL_ERROR
+      "DFT-D4 stack must be dynamically linked, found static archive: "
+      "${_d4_shared_library}")
+  endif()
+endforeach()
+target_link_libraries(oqp
+        "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
+        "$<BUILD_INTERFACE:${DFTD4_MULTICHARGE_LIB}>"
+        "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>")
+
+# Both liboqp and every DFT-D4 dependency live in the wheel's oqp/lib
+# directory.  A loader-relative RPATH makes that directory self-contained and
+# lets users replace the three SOVERSION files without editing global loader
+# paths.  Do not append the persistent build-cache path to installed binaries.
+if(APPLE)
+  set(_OQP_PACKAGE_LIB_RPATH "@loader_path")
 else()
-  target_link_libraries(oqp
-          ${DFTD4_INSTALL}/lib/libdftd4.a
-          ${DFTD4_INSTALL}/lib/libmulticharge.a
-          ${DFTD4_INSTALL}/lib/libmctc-lib.a)
+  set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
+set_target_properties(oqp PROPERTIES
+        BUILD_RPATH "${DFTD4_INSTALL}/lib"
+        INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
+        INSTALL_RPATH_USE_LINK_PATH FALSE)
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
@@ -146,3 +159,38 @@ EXPORT "${PROJECT_NAME}Targets"
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# Wheels cannot portably preserve a shared-library symlink chain.  Install the
+# fully-versioned upstream binaries as three ordinary files named for the
+# runtime SONAME/install-name that liboqp and the DFT-D4 libraries reference.
+# Replacing one of these files with an ABI-compatible build therefore changes
+# the implementation used at the next process start.
+install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RENAME "${DFTD4_MCTC_RUNTIME_NAME}")
+install(FILES "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RENAME "${DFTD4_MULTICHARGE_RUNTIME_NAME}")
+install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RENAME "${DFTD4_DFTD4_RUNTIME_NAME}")
+
+# Bundle the complete, patched source trees used to build the three libraries.
+# This keeps wheel and Docker distributions self-contained for corresponding-
+# source delivery instead of relying on an ephemeral BuildKit/cache directory
+# or on an upstream URL remaining available.  The manifest records the pinned
+# archives, hashes, licenses, and the two build-file-only modifications.
+set(_OQP_DFTD4_SOURCE_DESTINATION
+    "${CMAKE_INSTALL_DATADIR}/corresponding-source/dftd4-stack")
+install(DIRECTORY "${DFTD4_MCTC_SOURCE_DIR}/"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}/${DFTD4_MCTC_SOURCE_NAME}")
+install(DIRECTORY "${DFTD4_MC_SOURCE_DIR}/"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}/${DFTD4_MULTICHARGE_SOURCE_NAME}")
+install(DIRECTORY "${DFTD4_D4_SOURCE_DIR}/"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}/${DFTD4_DFTD4_SOURCE_NAME}")
+install(FILES
+        "${CMAKE_SOURCE_DIR}/external/dftd4-corresponding-source/README.md"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}")
+install(FILES "${CMAKE_SOURCE_DIR}/external/CMakeLists.txt"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}"
+        RENAME "openqp-external-build.cmake")

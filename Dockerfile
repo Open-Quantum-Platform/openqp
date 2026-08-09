@@ -73,5 +73,38 @@ ENV OMP_NUM_THREADS=4
 # example comparisons.
 RUN openqp /opt/openqp/examples/other/h2o_rhf_6-31g_hf.inp
 
+# The external-build cache mount above is intentionally ephemeral.  Verify that
+# the installed application itself retained the replaceable DFT-D4 libraries
+# and their complete corresponding source before this image can be published.
+RUN python3 - <<'PY'
+from pathlib import Path
+import sys
+
+from oqp.runtime import resolve_oqp_root
+
+root, _ = resolve_oqp_root()
+root = Path(root)
+if sys.platform == "darwin":
+    libraries = [
+        "libdftd4.3.dylib", "libmulticharge.0.dylib", "libmctc-lib.0.dylib"
+    ]
+else:
+    libraries = ["libdftd4.so.3", "libmulticharge.so.0", "libmctc-lib.so.0"]
+required = [root / "lib" / name for name in libraries]
+source = root / "share" / "corresponding-source" / "dftd4-stack"
+required.extend([
+    source / "README.md",
+    source / "openqp-external-build.cmake",
+    source / "mctc-lib-0.4.2" / "LICENSE",
+    source / "multicharge-0.3.0" / "LICENSE",
+    source / "dftd4-3.7.0" / "COPYING",
+    source / "dftd4-3.7.0" / "COPYING.LESSER",
+])
+missing = [str(path) for path in required if not path.is_file()]
+if missing:
+    raise SystemExit(f"DFT-D4 runtime/corresponding-source files missing: {missing}")
+print(f"DFT-D4 shared libraries and corresponding source retained under {root}")
+PY
+
 # Set entrypoint if required
 ENTRYPOINT ["bash"]

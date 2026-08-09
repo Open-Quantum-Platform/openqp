@@ -19,6 +19,8 @@ openqp_test_tmp_*/
 f90deps.mk
 objdir*
 external/*
+!external/dftd4-corresponding-source/
+!external/dftd4-corresponding-source/README.md
 basis_sets/*
 bin/*
 lib/*
