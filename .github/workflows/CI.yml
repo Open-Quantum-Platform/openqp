@@ -180,6 +180,10 @@ jobs:
          # MPI leg would re-run identical assertions against the same code.
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
+            # rather than skip, if the extension or its C ABI symbols are absent.
+            OQP_REQUIRE_NATIVE_TESTS: "1"
            run: |
             # --forked is not optional here: 39 test files mutate sys.modules,
             # and tests/test_analytic_hessian.py replaces the whole `oqp`

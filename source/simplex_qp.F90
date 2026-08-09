@@ -6,12 +6,16 @@ module simplex_qp
   implicit none
   private
 
-  integer, parameter, public :: SIMPLEX_QP_EXACT_MAX_N = 12
+  ! E-DIIS/A-DIIS use seven vectors by default.  Thirteen is still small
+  ! enough for deterministic all-face enumeration (8191 faces) and covers the
+  ! largest regression that exposed the former projected-gradient inaccuracy.
+  integer, parameter, public :: SIMPLEX_QP_EXACT_MAX_N = 13
   integer, parameter, public :: SIMPLEX_QP_SUCCESS = 0
-  integer, parameter, public :: SIMPLEX_QP_APPROXIMATE = 1
+  integer, parameter, public :: SIMPLEX_QP_DIMENSION_LIMIT = 1
   integer, parameter, public :: SIMPLEX_QP_INVALID_INPUT = 2
   integer, parameter, public :: SIMPLEX_QP_NONFINITE_INPUT = 3
   integer, parameter, public :: SIMPLEX_QP_EIGEN_FAILURE = 4
+  integer, parameter, public :: SIMPLEX_QP_NO_ALLOWED_CANDIDATE = 5
 
   public :: solve_simplex_qp, simplex_qp_objective
 
@@ -77,32 +81,34 @@ contains
     best_value = huge(1.0_dp)
     best_any_value = huge(1.0_dp)
 
-    if (n == 1 .or. &
-        (maxval(abs(hs)) == 0.0_dp .and. maxval(abs(gs)) == 0.0_dp)) then
-      candidate = 0.0_dp
-      candidate(pref) = 1.0_dp
-      call consider(candidate)
+    if (maxval(abs(hs)) == 0.0_dp .and. maxval(abs(gs)) == 0.0_dp) then
+      call search_flat_candidates()
       status = SIMPLEX_QP_SUCCESS
     else if (n <= SIMPLEX_QP_EXACT_MAX_N) then
       call enumerate_faces()
       status = SIMPLEX_QP_SUCCESS
-      if (eigen_failed) then
-        call projected_fallback()
-        status = SIMPLEX_QP_EIGEN_FAILURE
-      end if
+      if (eigen_failed) status = SIMPLEX_QP_EIGEN_FAILURE
     else
-      call projected_fallback()
-      status = SIMPLEX_QP_APPROXIMATE
+      ! Never return an uncertified iterative approximation as a usable QP
+      ! solution.  The SCF caller converts this explicit failure into the safe
+      ! latest-state (no-interpolation) fallback.
+      status = SIMPLEX_QP_DIMENSION_LIMIT
     end if
 
     ! If the unconstrained minimizer was rejected as a repeated solution, probe
     ! deterministic points on the segment toward the preferred (latest) state.
-    if (have_best_any) call consider_repeat_boundary()
+    if (have_best_any .and. status /= SIMPLEX_QP_DIMENSION_LIMIT) &
+      call consider_repeat_boundary()
+
+    if (status == SIMPLEX_QP_SUCCESS .and. .not. have_best) &
+      status = SIMPLEX_QP_NO_ALLOWED_CANDIDATE
 
     x = 0.0_dp
-    if (have_best) then
+    if (status == SIMPLEX_QP_SUCCESS .and. have_best) then
       x(1:n) = best
     else
+      ! Every non-success status has one documented, finite fallback whenever
+      ! the inputs themselves are finite: the requested latest-state vertex.
       x(pref) = 1.0_dp
     end if
     value = simplex_qp_objective(h(1:n, 1:n), g, x(1:n))
@@ -191,94 +197,27 @@ contains
       end do
     end subroutine enumerate_faces
 
-    subroutine projected_fallback()
-      integer :: i, start, iter, nstarts, best_linear
-      real(dp), allocatable :: current(:), trial(:), gradient(:)
-      real(dp) :: lipschitz, step, qcurrent, qtrial
+    subroutine search_flat_candidates()
+      integer :: i
 
-      allocate(current(n), trial(n), gradient(n))
+      ! All simplex points have the same objective.  Probe the preferred state
+      ! first for the normal tie rule, then deterministic interior/vertex
+      ! alternatives so a forbidden preferred point cannot be reported as a
+      ! successful solution.  In particular, the uniform point handles the
+      ! common case where every old vertex is excluded but mixtures are valid.
+      candidate = 0.0_dp
+      candidate(pref) = 1.0_dp
+      call consider(candidate)
+
       candidate = 1.0_dp/real(n, dp)
       call consider(candidate)
-      do i = 1, n
+
+      do i = n, 1, -1
         candidate = 0.0_dp
         candidate(i) = 1.0_dp
         call consider(candidate)
       end do
-
-      lipschitz = maxval(sum(abs(hs), dim=2))
-      best_linear = minloc(gs, dim=1)
-      nstarts = min(n, 32) + 3
-      do start = 1, nstarts
-        current = 0.0_dp
-        select case (start)
-        case (1)
-          current = 1.0_dp/real(n, dp)
-        case (2)
-          current(pref) = 1.0_dp
-        case (3)
-          current(best_linear) = 1.0_dp
-        case default
-          current(start - 3) = 1.0_dp
-        end select
-
-        if (lipschitz <= 64.0_dp*epsilon(1.0_dp)) then
-          call consider(current)
-          cycle
-        end if
-        step = 1.0_dp/lipschitz
-        qcurrent = scaled_objective(current)
-        do iter = 1, 500
-          gradient = matmul(hs, current) + gs
-          trial = current - step*gradient
-          call project_simplex(trial)
-          qtrial = scaled_objective(trial)
-          if (qtrial > qcurrent + &
-              256.0_dp*epsilon(1.0_dp)*max(1.0_dp, abs(qcurrent))) then
-            step = 0.5_dp*step
-            if (step <= tiny(1.0_dp)) exit
-            cycle
-          end if
-          if (sqrt(sum((trial - current)**2)) <= &
-              128.0_dp*epsilon(1.0_dp)* &
-              max(1.0_dp, sqrt(sum(current**2)))) then
-            current = trial
-            exit
-          end if
-          current = trial
-          qcurrent = qtrial
-        end do
-        call consider(current)
-      end do
-    end subroutine projected_fallback
-
-    subroutine project_simplex(v)
-      real(dp), intent(inout) :: v(:)
-      real(dp), allocatable :: sorted(:)
-      real(dp) :: cumulative, theta, key
-      integer :: i, j
-
-      allocate(sorted(size(v)))
-      sorted = v
-      do i = 2, size(sorted)
-        key = sorted(i)
-        j = i - 1
-        do while (j >= 1)
-          if (sorted(j) >= key) exit
-          sorted(j + 1) = sorted(j)
-          j = j - 1
-        end do
-        sorted(j + 1) = key
-      end do
-      cumulative = 0.0_dp
-      theta = sorted(1) - 1.0_dp
-      do i = 1, size(sorted)
-        cumulative = cumulative + sorted(i)
-        if (sorted(i) - (cumulative - 1.0_dp)/real(i, dp) > 0.0_dp) &
-          theta = (cumulative - 1.0_dp)/real(i, dp)
-      end do
-      v = max(v - theta, 0.0_dp)
-      if (sum(v) > 0.0_dp) v = v/sum(v)
-    end subroutine project_simplex
+    end subroutine search_flat_candidates
 
     subroutine consider(raw)
       real(dp), intent(in) :: raw(:)

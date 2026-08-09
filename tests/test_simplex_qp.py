@@ -9,20 +9,49 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
+NATIVE_TESTS_REQUIRED = os.getenv("OQP_REQUIRE_NATIVE_TESTS") == "1"
+_RUNTIME_ERROR = ""
 
 
 def _runtime_available():
+    global _RUNTIME_ERROR
     try:
         os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp
 
-        return hasattr(oqp.lib, "oqp_simplex_qp_solve")
-    except Exception:
+        missing = [
+            name for name in (
+                "oqp_simplex_qp_solve",
+                "oqp_simplex_qp_solve_avoid",
+            )
+            if not hasattr(oqp.lib, name)
+        ]
+        if missing:
+            _RUNTIME_ERROR = f"missing native symbols: {', '.join(missing)}"
+            return False
+        return True
+    except Exception as exc:
+        _RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
         return False
 
 
-@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+RUNTIME_AVAILABLE = _runtime_available()
+
+
+class NativeSimplexQPBuildGate(unittest.TestCase):
+    @unittest.skipUnless(
+        NATIVE_TESTS_REQUIRED,
+        "source-only run; set OQP_REQUIRE_NATIVE_TESTS=1 after building OpenQP",
+    )
+    def test_required_runtime_and_symbols(self):
+        self.assertTrue(
+            RUNTIME_AVAILABLE,
+            f"compiled OpenQP runtime is required: {_RUNTIME_ERROR}",
+        )
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
 class SimplexQPTests(unittest.TestCase):
     @staticmethod
     def _pointer(ffi, array):
@@ -147,11 +176,63 @@ class SimplexQPTests(unittest.TestCase):
                 signature,
             )
 
-    def test_large_problem_uses_deterministic_fallback(self):
+    def test_ill_conditioned_thirteen_dimensional_solution_is_certified(self):
         n = 13
-        x, _, status = self.solve(2.0*np.eye(n), np.zeros(n))
+        i = np.arange(n)[:, None]
+        k = np.arange(n)[None, :]
+        q = np.sqrt(2.0 / n) * np.cos(np.pi * (i + 0.5) * k / n)
+        q[:, 0] = 1.0 / np.sqrt(n)
+        eigenvalues = np.geomspace(1.0e-3, 1.0, n)
+        h = q @ np.diag(eigenvalues) @ q.T
+        target = np.arange(1, n + 1, dtype=np.float64)
+        target /= target.sum()
+        g = -h @ target
+
+        x, value, status = self.solve(h, g)
+        self.assertEqual(status, 0)
+        self.assert_simplex(x)
+        np.testing.assert_allclose(x, target, atol=1.0e-9, rtol=0.0)
+
+        gradient = h @ x + g
+        lagrange = -float(np.mean(gradient[x > 1.0e-10]))
+        kkt_residual = float(np.max(np.abs(gradient + lagrange)))
+        value_star = 0.5 * target @ h @ target + g @ target
+        self.assertLess(kkt_residual, 1.0e-10)
+        self.assertLessEqual(value - value_star, 1.0e-12)
+
+    def test_above_exact_dimension_limit_is_explicit_failure(self):
+        n = 14
+        g = np.linspace(-0.2, 0.3, n)
+        x, _, status = self.solve(2.0*np.eye(n), g)
         self.assertEqual(status, 1)
-        np.testing.assert_allclose(x, np.full(n, 1.0/n), atol=1.0e-14)
+        expected = np.zeros(n)
+        expected[-1] = 1.0
+        np.testing.assert_array_equal(x, expected)
+
+    def test_flat_problem_uses_allowed_interior_when_preferred_is_forbidden(self):
+        forbidden = np.array([[0.0], [1.0]])
+        x, _, status = self.avoid(
+            np.zeros((2, 2)), np.zeros(2), forbidden
+        )
+        self.assertEqual(status, 0)
+        self.assert_simplex(x)
+        self.assertGreaterEqual(np.linalg.norm(x - forbidden[:, 0]), 1.0e-4)
+
+    def test_flat_singleton_reports_no_allowed_candidate(self):
+        x, _, status = self.avoid(
+            np.zeros((1, 1)), np.zeros(1), np.ones((1, 1))
+        )
+        self.assertEqual(status, 5)
+        np.testing.assert_array_equal(x, [1.0])
+
+    def test_flat_problem_uses_mixture_when_all_old_vertices_are_forbidden(self):
+        x, _, status = self.avoid(
+            np.zeros((2, 2)), np.zeros(2), np.empty((2, 0)),
+            forbid_vertices_before=2,
+        )
+        self.assertEqual(status, 0)
+        self.assert_simplex(x)
+        self.assertLess(float(np.max(x)), 1.0 - 1.0e-4)
 
     def test_forbidden_solution_and_old_vertex_are_avoided(self):
         uniform = np.full(3, 1.0/3.0)
