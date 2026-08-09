@@ -368,6 +368,25 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             with self.assertRaisesRegex(ValueError, "platform mismatch"):
                 OCI_VERIFY.verify(wrong_platform, "1.3.0", "a" * 40)
 
+            for empty_platform in ({}, None):
+                image_with_empty_platform = dict(image)
+                image_with_empty_platform["platform"] = empty_platform
+                empty_platform_index = json.dumps(
+                    {"schemaVersion": 2,
+                     "manifests": [image_with_empty_platform, attestation]},
+                    sort_keys=True,
+                ).encode()
+                empty_platform_artifact = (
+                    Path(temporary) / f"empty-platform-{empty_platform is None}.oci.tar"
+                )
+                self._write_oci(
+                    empty_platform_artifact, empty_platform_index, blobs
+                )
+                with self.assertRaisesRegex(ValueError, "platform mismatch"):
+                    OCI_VERIFY.verify(
+                        empty_platform_artifact, "1.3.0", "a" * 40
+                    )
+
             tampered_blobs = dict(blobs)
             config_path = OCI_VERIFY._blob_path(config["digest"])
             tampered_blobs[config_path] = tampered_blobs[config_path].replace(

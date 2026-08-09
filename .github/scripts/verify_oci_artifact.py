@@ -107,7 +107,10 @@ def verify(
         # OCI descriptors may omit the optional platform object for a
         # single-platform archive.  When present it must agree with the image
         # configuration, which is the authoritative runtime platform record.
-        if descriptor_platform and descriptor_platform != config_platform:
+        if (
+            "platform" in image_descriptor
+            and descriptor_platform != config_platform
+        ):
             raise ValueError(
                 "OCI descriptor/config platform mismatch: "
                 f"{descriptor_platform} != {config_platform}"
