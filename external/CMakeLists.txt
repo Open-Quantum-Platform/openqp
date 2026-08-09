@@ -853,10 +853,11 @@ if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
     # Multicharge and DFT-D4 are separate shared-library links, so OpenQP's
     # own target_link_options cannot affect them.  Route their classic
     # Fortran symbol references to the same genuine Accelerate ILP64 entry
-    # points used by liboqp.  Cover their command-line tools as well.
+    # points used by liboqp.  Do not set CMAKE_EXE_LINKER_FLAGS here: CMake's
+    # compiler probe runs before Accelerate is discovered and would otherwise
+    # receive aliases whose real symbols are not yet on its link line.
     list(APPEND DFTD4_BLAS_ARGS
-        "-DCMAKE_SHARED_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}"
-        "-DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}")
+        "-DCMAKE_SHARED_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}")
 endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
     oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${LIBBLAS})

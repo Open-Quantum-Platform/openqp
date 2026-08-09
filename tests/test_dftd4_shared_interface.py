@@ -180,7 +180,7 @@ def test_shared_stack_packaging_contract_is_declared():
     assert 'INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE' in source
     assert '-DCMAKE_INSTALL_REMOVE_ENVIRONMENT_RPATH=TRUE' in external
     assert 'CMAKE_SHARED_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}' in external
-    assert 'CMAKE_EXE_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}' in external
+    assert 'CMAKE_EXE_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}' not in external
     assert source.count('check_accelerate_aliases.cmake') >= 2
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
