@@ -2035,8 +2035,7 @@ contains
   !> @param[out] res  results of the calculation
   subroutine ediis_run(self, res)
     use io_constants, only: iw
-    use simplex_qp, only: solve_simplex_qp, SIMPLEX_QP_SUCCESS, &
-                          SIMPLEX_QP_EXACT_MAX_N
+    use simplex_qp, only: solve_simplex_qp, SIMPLEX_QP_SUCCESS
     class(ediis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
     real(kind=dp), allocatable :: hqp(:, :), gqp(:), xmin(:)
@@ -2087,15 +2086,25 @@ contains
           forbid_vertices_before=max(0, na - 1), preferred=na)
       end if
 
+      if (qp_status == SIMPLEX_QP_SUCCESS) then
+        call ediis_record_solution(self, xmin)
+      else
+        ! A failed or uncertified QP must never be consumed as an
+        ! interpolation.  Continue SCF with the newest stored state, which is
+        ! equivalent to applying no DIIS extrapolation for this step.  Do not
+        ! add the fallback coefficient vector to the repeat-avoidance history.
+        xmin = 0.0_dp
+        xmin(na) = 1.0_dp
+        self%solution_current = .false.
+        res%active_converger_name = trim(self%conv_name)//' fallback'
+        write(iw, '(10X,"WARNING: simplex QP status",I4, &
+                   "; using latest SCF state without interpolation")') qp_status
+      end if
+
       if (self%verbose > 2) then
-        if (qp_status /= SIMPLEX_QP_SUCCESS) &
-          write(iw, '(10X,"simplex QP status:",I4)') qp_status
-        if (na > SIMPLEX_QP_EXACT_MAX_N) &
-          write(iw, '(10X,"simplex QP deterministic fallback for dimension",I4)') na
         write(iw, '(A,*(F15.6))') 'simplex QP coefficients: ', xmin
         write(iw, '(A,ES20.10)') 'simplex QP objective: ', minf
       end if
-      call ediis_record_solution(self, xmin)
     end if
 
     res%ierr = 0

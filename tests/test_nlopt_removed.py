@@ -73,6 +73,28 @@ class NLoptRemovalTests(unittest.TestCase):
         self.assertIn('b"nlopt_"', container_smoke)
         self.assertIn('b"libnlopt"', container_smoke)
 
+    def test_simplex_qp_failures_use_explicit_latest_state_fallback(self):
+        solver = (ROOT / "source" / "simplex_qp.F90").read_text()
+        self.assertIn("SIMPLEX_QP_EXACT_MAX_N = 13", solver)
+        self.assertIn("SIMPLEX_QP_DIMENSION_LIMIT = 1", solver)
+        self.assertIn("SIMPLEX_QP_NO_ALLOWED_CANDIDATE = 5", solver)
+        self.assertNotIn("projected_fallback", solver)
+
+        scf = (ROOT / "source" / "scf_converger.F90").read_text()
+        self.assertIn("xmin(na) = 1.0_dp", scf)
+        self.assertIn("using latest SCF state without interpolation", scf)
+
+    def test_post_build_ci_requires_native_simplex_tests(self):
+        ci = (ROOT / ".github" / "workflows" / "CI.yml").read_text()
+        self.assertIn('OQP_REQUIRE_NATIVE_TESTS: "1"', ci)
+        for filename in (
+            "test_simplex_qp.py",
+            "test_ediis_adiis_regression.py",
+        ):
+            test_source = (ROOT / "tests" / filename).read_text()
+            self.assertIn("OQP_REQUIRE_NATIVE_TESTS", test_source)
+            self.assertIn("runtime is required", test_source)
+
 
 if __name__ == "__main__":
     unittest.main()
