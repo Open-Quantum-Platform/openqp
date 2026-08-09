@@ -20,6 +20,11 @@ uploads them to PyPI. Publication is a separate, explicit manual action protecte
 by exact tag, commit, workflow-run, package-metadata, and GitHub-environment
 checks.
 
+Neither that two-stage workflow nor a source-only GitHub Release resolves
+copyright ownership. Before a v1.3.0 branch is merged, tagged, or made public
+under the OpenQP Research License, the release owner must clear the separate
+source-distribution authorization gate below.
+
 The workflow does not require `OQP_EXTERNALS_ROOT`. Linux wheel jobs set the
 standard `XDG_CACHE_HOME` to a cached checkout-local directory so OpenQP's
 existing cache auto-discovery uses `$XDG_CACHE_HOME/openqp/externals`. macOS
@@ -35,20 +40,24 @@ wheel jobs use the default `~/Library/Caches/openqp/externals` location.
    license describe the exact source and binaries being built.
 4. Write detailed release notes as described below and include them in the
    release-preparation pull request for review.
-5. Merge the release-preparation pull request only after its checks pass.
-6. Create and push a matching tag, for example `v1.3.0`.
-7. Publish a GitHub Release from that tag using the reviewed release notes. It
+5. Complete the source-distribution authorization gate below. If it is not
+   cleared, keep the release branch private and do not merge, tag, or publish a
+   GitHub Release under the new license.
+6. Merge the release-preparation pull request only after its checks and the
+   authorization gate pass.
+7. Create and push a matching tag, for example `v1.3.0`.
+8. Publish a GitHub Release from that tag using the reviewed release notes. It
    is a source release at this point; do not manually attach unverified binaries.
-8. Wait for the full distribution workflow to finish and record the successful
+9. Wait for the full distribution workflow to finish and record the successful
    release-event workflow run ID and exact 40-character tag commit SHA.
-9. Complete the binary-distribution gate below. If any item is unresolved, stop
+10. Complete the binary-distribution gate below. If any item is unresolved, stop
    here and leave the release source-only.
-10. In the Actions UI select the exact release tag (for example `v1.3.0`) in
+11. In the Actions UI select the exact release tag (for example `v1.3.0`) in
     **Use workflow from**, then manually dispatch `build_wheels.yml` with action
     `publish_pypi`, the same exact tag, SHA, verified release-run ID, and the
     requested confirmation text. A dispatch from `main` is rejected by the
     `pypi` environment's `v*` tag policy.
-11. Review the protected `pypi` deployment, approve it only after checking the
+12. Review the protected `pypi` deployment, approve it only after checking the
     displayed tag and SHA, and then verify both GitHub release assets and PyPI.
 
 The workflow verifies that the GitHub Release tag is exactly `v` plus the
@@ -58,6 +67,23 @@ The workflow verifies that the GitHub Release tag is exactly `v` plus the
 Pushing a `v*` tag by itself does not start the distribution workflow. Publishing
 a GitHub Release from the tag builds and verifies the full candidate matrix.
 It still does not authorize public binary distribution.
+
+## Source Distribution Authorization Gate
+
+Before any v1.3.0 source is published under the Research License, obtain and
+archive evidence that Open Quantum Inc. has sufficient authority to license
+every surviving copyrightable contribution on both the research and commercial
+terms. This includes founder rights, historical contributors, employer or
+institution interests, university and sponsor rules, and imported third-party
+material. A Git commit, pull-request checkbox, DCO, or newly adopted CLA is not
+by itself retroactive permission for earlier contributions.
+
+The signed founder/company assignment, contributor schedule and permissions,
+university/funder review, and third-party provenance record must be reviewed by
+qualified counsel. If any required authority is missing, do not publish the
+new-license branch, tag, source archive, wheel, or container; either complete
+the permissions, retain the applicable historical GPL route, or replace the
+affected material with independently documented code.
 
 ## Binary Distribution Gate
 
