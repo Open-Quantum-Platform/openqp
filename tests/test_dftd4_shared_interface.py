@@ -18,6 +18,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
+MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
 WHEEL_SMOKE = ROOT / ".github" / "scripts" / "wheel_smoke_test.py"
 COMPLIANCE = ROOT / "external" / "dftd4-corresponding-source"
 BUILD_INFO_GENERATOR = COMPLIANCE / "generate-build-info.cmake"
@@ -143,6 +144,49 @@ def test_schema_damping_defaults_and_explicit_values_reach_runtime_helper():
         "s6": 1.0, "s8": 2.0, "s9": 3.0,
         "a1": 4.0, "a2": 5.0, "alp": 16.0,
     }
+
+
+def test_d4_public_result_uses_the_dispersion_corrected_energy():
+    source = MOLECULE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(MOLECULE))
+    molecule = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Molecule"
+    )
+    get_results = next(
+        node for node in molecule.body
+        if isinstance(node, ast.FunctionDef) and node.name == "get_results"
+    )
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.Module(body=[get_results], type_ignores=[]),
+            str(MOLECULE),
+            "exec",
+        ),
+        namespace,
+    )
+
+    fake = SimpleNamespace(
+        config={"input": {"d4": True, "method": "hf"}},
+        mol_energy=SimpleNamespace(energy=-10.0),
+        energies=[-10.25],
+        symmetry_metadata={},
+        data={"OQP::td_energies": [0.0]},
+        get_atoms=lambda: np.array([1]),
+        get_system=lambda: np.zeros(3),
+        get_grad=lambda: [],
+        get_nac=lambda: [],
+        get_soc=lambda: [],
+        get_hess=lambda: [],
+        get_mrsf_ekt_results=lambda: {},
+        get_state_tracking=lambda: None,
+        explicit_scf_props=lambda: [],
+    )
+
+    assert namespace["get_results"](fake)["energy"] == -10.25
+    fake.config["input"]["d4"] = False
+    assert namespace["get_results"](fake)["energy"] == -10.0
 
 
 def test_legacy_fallback_never_discards_charge_or_parameters():
