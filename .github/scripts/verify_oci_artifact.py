@@ -17,6 +17,10 @@ SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v1",
 }
 OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
+OCI_INDEX_MEDIA_TYPES = {
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+}
 
 
 def _blob_path(digest: str) -> str:
@@ -79,6 +83,41 @@ def _archive_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _leaf_manifests(
+    archive: tarfile.TarFile,
+    descriptors: Any,
+    seen_indexes: set[str] | None = None,
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Authenticate and flatten nested OCI indexes into leaf manifests."""
+    if not isinstance(descriptors, list):
+        raise ValueError("OCI index manifests must be a list")
+    if seen_indexes is None:
+        seen_indexes = set()
+    leaves = []
+    for descriptor in descriptors:
+        if not isinstance(descriptor, dict):
+            raise ValueError("OCI index manifest descriptor must be an object")
+        manifest = _descriptor_json(archive, descriptor)
+        media_type = descriptor.get("mediaType")
+        if media_type in OCI_INDEX_MEDIA_TYPES:
+            digest = str(descriptor.get("digest"))
+            if digest in seen_indexes:
+                raise ValueError(f"cyclic OCI index descriptor: {digest}")
+            nested = manifest.get("manifests")
+            if not isinstance(nested, list):
+                raise ValueError("OCI index descriptor does not contain manifests")
+            seen_indexes.add(digest)
+            leaves.extend(_leaf_manifests(archive, nested, seen_indexes))
+            seen_indexes.remove(digest)
+        else:
+            if "manifests" in manifest:
+                raise ValueError(
+                    "OCI manifest contains a nested index under a non-index media type"
+                )
+            leaves.append((descriptor, manifest))
+    return leaves
+
+
 def verify(
     artifact: Path, expected_version: str, expected_revision: str
 ) -> dict[str, Any]:
@@ -87,10 +126,7 @@ def verify(
         descriptors = index.get("manifests", [])
         images = []
         attestations = []
-        for descriptor in descriptors:
-            if not isinstance(descriptor, dict):
-                raise ValueError("OCI index manifest descriptor must be an object")
-            manifest = _descriptor_json(archive, descriptor)
+        for descriptor, manifest in _leaf_manifests(archive, descriptors):
             annotations = descriptor.get("annotations", {})
             platform = descriptor.get("platform", {})
             attestation_hint = (

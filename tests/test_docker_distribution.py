@@ -371,6 +371,20 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(unmarked, unmarked_index, blobs)
             OCI_VERIFY.verify(unmarked, "1.3.0", "a" * 40)
 
+            nested_index_descriptor = self._json_blob(
+                blobs,
+                {"schemaVersion": 2,
+                 "manifests": [image_without_platform, attestation]},
+                "application/vnd.oci.image.index.v1+json",
+            )
+            nested_index = json.dumps(
+                {"schemaVersion": 2, "manifests": [nested_index_descriptor]},
+                sort_keys=True,
+            ).encode()
+            nested = Path(temporary) / "candidate-nested-index.oci.tar"
+            self._write_oci(nested, nested_index, blobs)
+            OCI_VERIFY.verify(nested, "1.3.0", "a" * 40)
+
             image_with_wrong_platform = dict(image)
             image_with_wrong_platform["platform"] = {
                 "os": "linux", "architecture": "arm64"
