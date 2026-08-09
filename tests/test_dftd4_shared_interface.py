@@ -604,6 +604,19 @@ def test_distribution_gates_require_build_info_and_exact_patches():
     assert "--dry-run -R" in helper
 
 
+def test_wheel_cache_does_not_dirty_release_source_metadata():
+    ignored = {
+        line.strip()
+        for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text(
+        encoding="utf-8"
+    )
+    assert ".cache/" in ignored
+    assert "${{ github.workspace }}/.cache/openqp/externals" in workflow
+
+
 if __name__ == "__main__":
     test_v2_receives_charge_and_explicit_damping()
     test_legacy_fallback_never_discards_charge_or_parameters()
