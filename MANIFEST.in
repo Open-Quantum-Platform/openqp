@@ -1,5 +1,5 @@
 include README.md CONTRIBUTING.md LICENSE LICENSING.md SUSTAINABILITY.md THIRD_PARTY_NOTICES.md
 recursive-include licenses/third_party *
-include external/dftd4-corresponding-source/README.md
+recursive-include external/dftd4-corresponding-source *
 recursive-include basis_sets *
 recursive-include examples *

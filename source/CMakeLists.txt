@@ -174,8 +174,9 @@ install(FILES "${DFTD4_DFTD4_RUNTIME_SOURCE}"
 # Bundle the complete, patched source trees used to build the three libraries.
 # This keeps wheel and Docker distributions self-contained for corresponding-
 # source delivery instead of relying on an ephemeral BuildKit/cache directory
-# or on an upstream URL remaining available.  The manifest records the pinned
-# archives, hashes, licenses, and the two build-file-only modifications.
+# or on an upstream URL remaining available. BUILD-INFO.json records resolved
+# build settings; the checked-in unified patches record the two build-file-only
+# modifications exactly.
 set(_OQP_DFTD4_SOURCE_DESTINATION
     "${CMAKE_INSTALL_DATADIR}/corresponding-source/dftd4-stack")
 install(DIRECTORY "${DFTD4_MCTC_SOURCE_DIR}/"
@@ -186,7 +187,14 @@ install(DIRECTORY "${DFTD4_D4_SOURCE_DIR}/"
         DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}/${DFTD4_DFTD4_SOURCE_NAME}")
 install(FILES
         "${CMAKE_SOURCE_DIR}/external/dftd4-corresponding-source/README.md"
+        "${CMAKE_SOURCE_DIR}/external/dftd4-corresponding-source/apply-patch.cmake"
+        "${CMAKE_SOURCE_DIR}/external/dftd4-corresponding-source/generate-build-info.cmake"
+        "${DFTD4_BUILD_INFO_FILE}"
         DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}")
+install(FILES
+        "${DFTD4_MCTC_PATCH}"
+        "${DFTD4_DFTD4_PATCH}"
+        DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}/patches")
 install(FILES "${CMAKE_SOURCE_DIR}/external/CMakeLists.txt"
         DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}"
         RENAME "openqp-external-build.cmake")
