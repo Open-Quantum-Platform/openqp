@@ -189,6 +189,19 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             "size": len(payload),
         }
 
+    @staticmethod
+    def _write_oci(path, index, blobs):
+        layout = b'{"imageLayoutVersion":"1.0.0"}'
+        with tarfile.open(path, "w") as archive:
+            for name, payload in {
+                "index.json": index,
+                "oci-layout": layout,
+                **blobs,
+            }.items():
+                info = tarfile.TarInfo(name)
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+
     def test_oci_verifier_requires_labels_sbom_and_provenance(self):
         blobs = {}
         config = self._json_blob(
@@ -252,20 +265,56 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             {"schemaVersion": 2, "manifests": [image, attestation]},
             sort_keys=True,
         ).encode()
-        layout = b'{"imageLayoutVersion":"1.0.0"}'
-
         with tempfile.TemporaryDirectory() as temporary:
             artifact = Path(temporary) / "candidate.oci.tar"
-            with tarfile.open(artifact, "w") as archive:
-                for name, payload in {
-                    "index.json": index,
-                    "oci-layout": layout,
-                    **blobs,
-                }.items():
-                    info = tarfile.TarInfo(name)
-                    info.size = len(payload)
-                    archive.addfile(info, io.BytesIO(payload))
+            self._write_oci(artifact, index, blobs)
             summary = OCI_VERIFY.verify(artifact, "1.3.0", "a" * 40)
+
+            tampered_blobs = dict(blobs)
+            config_path = OCI_VERIFY._blob_path(config["digest"])
+            tampered_blobs[config_path] = tampered_blobs[config_path].replace(
+                b'"amd64"', b'"arm64"'
+            )
+            tampered = Path(temporary) / "tampered.oci.tar"
+            self._write_oci(tampered, index, tampered_blobs)
+            with self.assertRaisesRegex(ValueError, "descriptor digest mismatch"):
+                OCI_VERIFY.verify(tampered, "1.3.0", "a" * 40)
+
+            unrelated_spdx = self._json_blob(
+                blobs,
+                {
+                    "_type": "https://in-toto.io/Statement/v1",
+                    "subject": [
+                        {
+                            "name": "unrelated/image",
+                            "digest": {"sha256": "b" * 64},
+                        }
+                    ],
+                    "predicateType": "https://spdx.dev/Document",
+                    "predicate": {},
+                },
+                "application/vnd.in-toto+json",
+            )
+            unrelated_attestation = self._json_blob(
+                blobs,
+                {
+                    "schemaVersion": 2,
+                    "subject": {"digest": image_digest},
+                    "layers": [unrelated_spdx, statements[1]],
+                },
+            )
+            unrelated_attestation["platform"] = {
+                "os": "unknown", "architecture": "unknown"
+            }
+            unrelated_attestation["annotations"] = dict(attestation["annotations"])
+            unrelated_index = json.dumps(
+                {"schemaVersion": 2, "manifests": [image, unrelated_attestation]},
+                sort_keys=True,
+            ).encode()
+            unrelated = Path(temporary) / "unrelated-sbom.oci.tar"
+            self._write_oci(unrelated, unrelated_index, blobs)
+            with self.assertRaisesRegex(ValueError, "candidate image has no SPDX SBOM"):
+                OCI_VERIFY.verify(unrelated, "1.3.0", "a" * 40)
         self.assertEqual(summary["image_digest"], image_digest)
         self.assertEqual(summary["platform"], "linux/amd64")
 

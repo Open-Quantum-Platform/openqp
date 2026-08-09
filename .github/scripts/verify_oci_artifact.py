@@ -29,7 +29,31 @@ def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
 def _descriptor_json(
     archive: tarfile.TarFile, descriptor: dict[str, Any]
 ) -> dict[str, Any]:
-    return _read_json(archive, _blob_path(str(descriptor["digest"])))
+    digest = str(descriptor["digest"])
+    member_name = _blob_path(digest)
+    member = archive.getmember(member_name)
+    handle = archive.extractfile(member)
+    if handle is None or not member.isfile():
+        raise ValueError(f"OCI blob is not a regular file: {member_name}")
+    payload = handle.read()
+
+    declared_size = descriptor.get("size")
+    if not isinstance(declared_size, int) or declared_size < 0:
+        raise ValueError(f"invalid OCI descriptor size for {digest}: {declared_size}")
+    if len(payload) != declared_size:
+        raise ValueError(
+            f"OCI descriptor size mismatch for {digest}: "
+            f"declared {declared_size}, actual {len(payload)}"
+        )
+    actual_digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    if actual_digest != digest:
+        raise ValueError(
+            f"OCI descriptor digest mismatch: declared {digest}, actual {actual_digest}"
+        )
+    value = json.loads(payload)
+    if not isinstance(value, dict):
+        raise ValueError(f"OCI descriptor does not contain a JSON object: {digest}")
+    return value
 
 
 def _archive_sha256(path: Path) -> str:
@@ -90,6 +114,7 @@ def verify(
 
         image_digest = str(image_descriptor["digest"])
         predicate_types: set[str] = set()
+        image_predicate_types: set[str] = set()
         subjects: set[str] = set()
         if not attestations:
             raise ValueError("OCI archive contains no attestation manifest")
@@ -108,19 +133,32 @@ def verify(
                 predicate_type = statement.get("predicateType")
                 if predicate_type:
                     predicate_types.add(str(predicate_type))
+                statement_subjects: set[str] = set()
                 for statement_subject in statement.get("subject", []):
                     digest = statement_subject.get("digest", {}).get("sha256")
                     if digest:
-                        subjects.add(f"sha256:{digest}")
+                        subject_digest = f"sha256:{digest}"
+                        statement_subjects.add(subject_digest)
+                        subjects.add(subject_digest)
+                if predicate_type and image_digest in statement_subjects:
+                    image_predicate_types.add(str(predicate_type))
 
         if image_digest not in subjects:
             raise ValueError(
                 f"attestations do not identify image {image_digest}; subjects={subjects}"
             )
-        if not any("spdx" in value.lower() for value in predicate_types):
-            raise ValueError(f"OCI archive has no SPDX SBOM: {predicate_types}")
-        if not any("slsa.dev/provenance" in value for value in predicate_types):
-            raise ValueError(f"OCI archive has no SLSA provenance: {predicate_types}")
+        if not any("spdx" in value.lower() for value in image_predicate_types):
+            raise ValueError(
+                f"candidate image has no SPDX SBOM; "
+                f"image_predicates={image_predicate_types}, all_predicates={predicate_types}"
+            )
+        if not any(
+            "slsa.dev/provenance" in value for value in image_predicate_types
+        ):
+            raise ValueError(
+                f"candidate image has no SLSA provenance; "
+                f"image_predicates={image_predicate_types}, all_predicates={predicate_types}"
+            )
 
     return {
         "archive": artifact.name,
@@ -129,7 +167,7 @@ def verify(
         "platform": "linux/amd64",
         "version": expected_version,
         "revision": expected_revision,
-        "predicate_types": sorted(predicate_types),
+        "predicate_types": sorted(image_predicate_types),
     }
 
 
