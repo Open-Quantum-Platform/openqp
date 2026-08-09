@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,12 @@ from pathlib import Path
 ENERGY_REFERENCE = -1.1167593075
 D4_ENERGY_REFERENCE = -0.00019542038860006095
 D4_CHILD_MARKER = "OQP_D4_CONTAINER_RESULT="
+PT_LOAD = 1
+PT_DYNAMIC = 2
+DT_NULL = 0
+DT_NEEDED = 1
+DT_STRTAB = 5
+DT_STRSZ = 10
 
 
 def sha256(path: Path) -> str:
@@ -43,20 +50,112 @@ def ldd_dependencies(path: Path) -> dict[str, Path]:
     return dependencies
 
 
+def elf_needed(path: Path) -> list[str]:
+    """Read direct DT_NEEDED entries without requiring binutils at runtime."""
+    data = path.read_bytes()
+    if len(data) < 16 or data[:4] != b"\x7fELF":
+        raise AssertionError(f"not an ELF runtime library: {path}")
+    if data[5] == 1:
+        endian = "<"
+    elif data[5] == 2:
+        endian = ">"
+    else:
+        raise AssertionError(f"unsupported ELF byte order for {path}: {data[5]}")
+
+    elf_class = data[4]
+    if elf_class == 1:
+        header_size, phoff_offset, phentsize_offset, phnum_offset = 52, 28, 42, 44
+        address_format, dynamic_format = "I", "II"
+        program_header_size = 32
+    elif elf_class == 2:
+        header_size, phoff_offset, phentsize_offset, phnum_offset = 64, 32, 54, 56
+        address_format, dynamic_format = "Q", "QQ"
+        program_header_size = 56
+    else:
+        raise AssertionError(f"unsupported ELF class for {path}: {elf_class}")
+    if len(data) < header_size:
+        raise AssertionError(f"truncated ELF header: {path}")
+
+    phoff = struct.unpack_from(endian + address_format, data, phoff_offset)[0]
+    phentsize = struct.unpack_from(endian + "H", data, phentsize_offset)[0]
+    phnum = struct.unpack_from(endian + "H", data, phnum_offset)[0]
+    if phnum == 0xFFFF or phentsize < program_header_size:
+        raise AssertionError(f"unsupported ELF program-header table: {path}")
+    if phoff + phentsize * phnum > len(data):
+        raise AssertionError(f"truncated ELF program-header table: {path}")
+
+    loads: list[tuple[int, int, int]] = []
+    dynamic: tuple[int, int] | None = None
+    for index in range(phnum):
+        entry = phoff + index * phentsize
+        segment_type = struct.unpack_from(endian + "I", data, entry)[0]
+        if elf_class == 1:
+            offset, virtual_address, file_size = struct.unpack_from(
+                endian + "III", data, entry + 4
+            )
+            file_size = struct.unpack_from(endian + "I", data, entry + 16)[0]
+        else:
+            offset, virtual_address = struct.unpack_from(endian + "QQ", data, entry + 8)
+            file_size = struct.unpack_from(endian + "Q", data, entry + 32)[0]
+        if offset + file_size > len(data):
+            raise AssertionError(f"ELF segment extends past end of file: {path}")
+        if segment_type == PT_LOAD:
+            loads.append((virtual_address, offset, file_size))
+        elif segment_type == PT_DYNAMIC:
+            dynamic = (offset, file_size)
+    if dynamic is None:
+        raise AssertionError(f"ELF library has no PT_DYNAMIC segment: {path}")
+
+    dynamic_size = struct.calcsize(endian + dynamic_format)
+    string_table_address = None
+    string_table_size = None
+    needed_offsets: list[int] = []
+    dynamic_offset, dynamic_bytes = dynamic
+    for entry in range(dynamic_offset, dynamic_offset + dynamic_bytes, dynamic_size):
+        if entry + dynamic_size > len(data):
+            raise AssertionError(f"truncated ELF dynamic table: {path}")
+        tag, value = struct.unpack_from(endian + dynamic_format, data, entry)
+        if tag == DT_NULL:
+            break
+        if tag == DT_NEEDED:
+            needed_offsets.append(value)
+        elif tag == DT_STRTAB:
+            string_table_address = value
+        elif tag == DT_STRSZ:
+            string_table_size = value
+    if string_table_address is None or string_table_size is None:
+        raise AssertionError(f"ELF dynamic string table is incomplete: {path}")
+
+    string_table_offset = None
+    for virtual_address, offset, file_size in loads:
+        if virtual_address <= string_table_address < virtual_address + file_size:
+            string_table_offset = offset + string_table_address - virtual_address
+            break
+    if string_table_offset is None or string_table_offset + string_table_size > len(data):
+        raise AssertionError(f"ELF dynamic string table is outside load segments: {path}")
+
+    names = []
+    for needed_offset in needed_offsets:
+        if needed_offset >= string_table_size:
+            raise AssertionError(f"ELF DT_NEEDED offset is out of range: {path}")
+        start = string_table_offset + needed_offset
+        end = data.find(b"\0", start, string_table_offset + string_table_size)
+        if end < 0:
+            raise AssertionError(f"unterminated ELF DT_NEEDED name: {path}")
+        names.append(data[start:end].decode("utf-8"))
+    return names
+
+
 def assert_stack_edges(
-    owner: Path, dependencies: dict[str, Path], expected: dict[str, Path]
+    owner: Path, needed: list[str], expected: dict[str, Path]
 ) -> None:
     prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
-    actual = {
-        name: resolved
-        for name, resolved in dependencies.items()
-        if name.startswith(prefixes)
-    }
-    normalized_expected = {name: path.resolve() for name, path in expected.items()}
-    if actual != normalized_expected:
+    actual = {name for name in needed if name.startswith(prefixes)}
+    expected_names = set(expected)
+    if actual != expected_names:
         raise AssertionError(
             f"noncanonical DFT-D4 dependency graph for {owner}: "
-            f"{actual} != {normalized_expected}"
+            f"{actual} != {expected_names}"
         )
 
 
@@ -173,7 +272,7 @@ def main() -> None:
         if any("nlopt" in name.lower() for name in dependencies):
             raise AssertionError(f"NLopt dependency leaked into runtime: {owner}")
         all_dependencies[owner] = dependencies
-        assert_stack_edges(owner, dependencies, expected)
+        assert_stack_edges(owner, elf_needed(owner), expected)
 
     openblas_paths = {
         resolved

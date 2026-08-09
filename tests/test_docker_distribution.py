@@ -27,6 +27,7 @@ COLLECTOR = load_script("collect_docker_runtime")
 WHEELHOUSE = load_script("record_wheelhouse")
 OCI_VERIFY = load_script("verify_oci_artifact")
 ELF_STACK = load_script("normalize_elf_stack")
+CONTAINER_SMOKE = load_script("container_runtime_smoke")
 
 
 class DockerDistributionTests(unittest.TestCase):
@@ -100,6 +101,41 @@ class DockerDistributionTests(unittest.TestCase):
                 self.assertTrue(ELF_STACK.clear_executable_stack(library))
                 self.assertEqual(ELF_STACK.gnu_stack_flags(library.read_bytes()), 0x6)
                 self.assertFalse(ELF_STACK.clear_executable_stack(library))
+
+    def test_container_smoke_reads_direct_elf_needed_entries(self):
+        data = bytearray(0x240)
+        data[:6] = b"\x7fELF\x02\x01"
+        struct.pack_into("<Q", data, 32, 64)
+        struct.pack_into("<H", data, 54, 56)
+        struct.pack_into("<H", data, 56, 2)
+
+        # One PT_LOAD maps the whole file at 0x400000; PT_DYNAMIC is at 0x100.
+        struct.pack_into("<IIQQQQQQ", data, 64, 1, 4, 0, 0x400000, 0,
+                         len(data), len(data), 0x1000)
+        struct.pack_into("<IIQQQQQQ", data, 120, 2, 4, 0x100, 0x400100, 0,
+                         0x60, 0x60, 8)
+
+        strings = b"\0libdftd4.so.3\0libmctc-lib.so.0\0"
+        data[0x180:0x180 + len(strings)] = strings
+        dynamic_entries = (
+            (5, 0x400180),
+            (10, len(strings)),
+            (1, 1),
+            (1, strings.index(b"libmctc-lib.so.0")),
+            (0, 0),
+        )
+        for index, entry in enumerate(dynamic_entries):
+            struct.pack_into("<QQ", data, 0x100 + index * 16, *entry)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            library = Path(temporary) / "liboqp.so"
+            library.write_bytes(data)
+            needed = CONTAINER_SMOKE.elf_needed(library)
+        self.assertEqual(needed, ["libdftd4.so.3", "libmctc-lib.so.0"])
+        CONTAINER_SMOKE.assert_stack_edges(
+            Path("liboqp.so"), needed,
+            {"libdftd4.so.3": Path("d4"), "libmctc-lib.so.0": Path("mctc")},
+        )
 
     def test_workflow_is_ephemeral_build_only_with_attestations(self):
         workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
