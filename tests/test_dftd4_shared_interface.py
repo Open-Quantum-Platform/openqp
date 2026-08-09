@@ -433,6 +433,7 @@ def test_wheel_smoke_probes_loaded_paths_and_removal_failures():
 
 
 def test_distribution_gates_require_build_info_and_exact_patches():
+    top_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     wheel = WHEEL_SMOKE.read_text(encoding="utf-8")
     docker = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     container_smoke = (
@@ -456,6 +457,10 @@ def test_distribution_gates_require_build_info_and_exact_patches():
     assert "json.loads(build_info_text)" in container_smoke
     assert '"sha256": sha256(patch_path)' in container_smoke
     assert "recursive-include external/dftd4-corresponding-source *" in manifest
+    assert "include(GNUInstallDirs)" in top_cmake
+    assert top_cmake.index("include(GNUInstallDirs)") < top_cmake.index(
+        "add_subdirectory(source)"
+    )
     assert "string(JSON _schema" in generator
     assert "source_revision" in generator
     assert "--untracked-files=normal" in generator
