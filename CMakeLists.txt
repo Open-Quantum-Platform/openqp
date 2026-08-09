@@ -288,10 +288,12 @@ if(ENABLE_DDX)
   endif()
 endif()
 
-# Fix possible issues with DYLD_LIBRARY_PATH
-if(APPLE)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-endif()
+# Installed wheels must never inherit external build/cache directories from
+# the link search path.  Each packaged shared dependency is either installed
+# beside liboqp and found through a loader-relative RPATH, or linked into
+# liboqp statically.  Keep this disabled globally as well as on the oqp target
+# so helper targets cannot reintroduce machine-local paths into a wheel.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 if(${LINALG_LIB} STREQUAL none)
     message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
