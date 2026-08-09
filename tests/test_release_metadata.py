@@ -29,9 +29,21 @@ class ReleaseMetadataTests(unittest.TestCase):
             version,
         )
 
-    def test_docker_image_tag_comes_from_pyproject_version(self):
+    def test_docker_image_is_versioned_but_not_automatically_pushed(self):
         workflow = (ROOT / ".github" / "workflows" / "docker-build.yml").read_text()
 
         self.assertIn("docker_tag=v{version}", workflow)
         self.assertIn("tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}", workflow)
-        self.assertIn("docker push openqp/openqp:${{ steps.version.outputs.docker_tag }}", workflow)
+        self.assertIn("OPENQP_VERSION=${{ steps.version.outputs.version }}", workflow)
+        self.assertIn("OPENQP_REVISION=${{ github.sha }}", workflow)
+        self.assertIn("load: true", workflow)
+        self.assertNotIn("docker push ", workflow)
+        self.assertNotIn("push: true", workflow)
+
+    def test_pypi_publication_requires_manual_protected_job(self):
+        workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        self.assertIn("inputs.action == 'publish_pypi'", workflow)
+        self.assertIn("name: pypi", workflow)
+        self.assertIn("LicenseRef-OpenQP-Research-1.0", workflow)
+        self.assertNotIn("publish_existing_artifacts", workflow)
