@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Verify a build-only OpenQP OCI archive and its embedded attestations."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import tarfile
+from pathlib import Path
+from typing import Any
+
+
+def _blob_path(digest: str) -> str:
+    algorithm, value = digest.split(":", 1)
+    if algorithm != "sha256" or len(value) != 64:
+        raise ValueError(f"unsupported OCI digest: {digest}")
+    return f"blobs/{algorithm}/{value}"
+
+
+def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
+    member = archive.getmember(member_name)
+    handle = archive.extractfile(member)
+    if handle is None:
+        raise ValueError(f"OCI member is not a regular file: {member_name}")
+    return json.load(handle)
+
+
+def _descriptor_json(
+    archive: tarfile.TarFile, descriptor: dict[str, Any]
+) -> dict[str, Any]:
+    return _read_json(archive, _blob_path(str(descriptor["digest"])))
+
+
+def _archive_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify(
+    artifact: Path, expected_version: str, expected_revision: str
+) -> dict[str, Any]:
+    with tarfile.open(artifact, mode="r:*") as archive:
+        index = _read_json(archive, "index.json")
+        descriptors = index.get("manifests", [])
+        images = []
+        attestations = []
+        for descriptor in descriptors:
+            annotations = descriptor.get("annotations", {})
+            platform = descriptor.get("platform", {})
+            if (
+                annotations.get("vnd.docker.reference.type")
+                == "attestation-manifest"
+                or platform == {"architecture": "unknown", "os": "unknown"}
+            ):
+                attestations.append(descriptor)
+            else:
+                images.append(descriptor)
+
+        if len(images) != 1:
+            raise ValueError(f"expected one OCI image manifest, found {len(images)}")
+        image_descriptor = images[0]
+        platform = image_descriptor.get("platform", {})
+        if platform.get("os") != "linux" or platform.get("architecture") != "amd64":
+            raise ValueError(f"unexpected OCI image platform: {platform}")
+
+        image_manifest = _descriptor_json(archive, image_descriptor)
+        config = _descriptor_json(archive, image_manifest["config"])
+        labels = config.get("config", {}).get("Labels", {})
+        expected_labels = {
+            "org.opencontainers.image.source": (
+                "https://github.com/Open-Quantum-Platform/openqp"
+            ),
+            "org.opencontainers.image.version": expected_version,
+            "org.opencontainers.image.revision": expected_revision,
+            "org.opencontainers.image.licenses": (
+                "LicenseRef-OpenQP-Research-1.0"
+            ),
+        }
+        mismatches = {
+            name: {"actual": labels.get(name), "expected": expected}
+            for name, expected in expected_labels.items()
+            if labels.get(name) != expected
+        }
+        if mismatches:
+            raise ValueError(f"OCI labels do not match artifact inputs: {mismatches}")
+
+        image_digest = str(image_descriptor["digest"])
+        predicate_types: set[str] = set()
+        subjects: set[str] = set()
+        if not attestations:
+            raise ValueError("OCI archive contains no attestation manifest")
+        for descriptor in attestations:
+            manifest = _descriptor_json(archive, descriptor)
+            subject = manifest.get("subject")
+            if isinstance(subject, dict) and subject.get("digest"):
+                subjects.add(str(subject["digest"]))
+            annotation_subject = descriptor.get("annotations", {}).get(
+                "vnd.docker.reference.digest"
+            )
+            if annotation_subject:
+                subjects.add(str(annotation_subject))
+            for layer in manifest.get("layers", []):
+                statement = _descriptor_json(archive, layer)
+                predicate_type = statement.get("predicateType")
+                if predicate_type:
+                    predicate_types.add(str(predicate_type))
+                for statement_subject in statement.get("subject", []):
+                    digest = statement_subject.get("digest", {}).get("sha256")
+                    if digest:
+                        subjects.add(f"sha256:{digest}")
+
+        if image_digest not in subjects:
+            raise ValueError(
+                f"attestations do not identify image {image_digest}; subjects={subjects}"
+            )
+        if not any("spdx" in value.lower() for value in predicate_types):
+            raise ValueError(f"OCI archive has no SPDX SBOM: {predicate_types}")
+        if not any("slsa.dev/provenance" in value for value in predicate_types):
+            raise ValueError(f"OCI archive has no SLSA provenance: {predicate_types}")
+
+    return {
+        "archive": artifact.name,
+        "archive_sha256": _archive_sha256(artifact),
+        "image_digest": image_digest,
+        "platform": "linux/amd64",
+        "version": expected_version,
+        "revision": expected_revision,
+        "predicate_types": sorted(predicate_types),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("artifact", type=Path)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--revision", required=True)
+    parser.add_argument("--summary", type=Path, required=True)
+    args = parser.parse_args()
+
+    summary = verify(args.artifact, args.version, args.revision)
+    args.summary.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    print(json.dumps(summary, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

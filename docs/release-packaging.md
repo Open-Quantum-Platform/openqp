@@ -211,3 +211,41 @@ The published image must:
 The current `docker-build.yml` is deliberately build-only while final compliance
 and release authorization remain pending. Re-enable registry publication only
 through the manual protected path described above.
+
+### Current container candidate implementation
+
+The candidate Dockerfile uses two digest-pinned inputs recorded in
+`docker/base-images.lock.json`. The `openqp-buildenv:1` image is a builder stage
+only; OpenQP is built as a wheel, installed from an offline wheelhouse, and
+exercised with the full numerical/ABI/DFT-D4 wheel smoke test. The final stage
+starts from a pinned Python slim runtime and receives only the installed wheel,
+its required shared-library closure, legal materials, and runtime manifests.
+It does not inherit the compiler, source checkout, external cache, or static
+archives from the build environment.
+
+The current pinned builder is Linux/amd64 with Python 3.12, so the candidate
+runtime is also Python 3.12. A Python 3.11 container requires a new matching
+builder; do not describe the current image as Python 3.11-compatible exact
+bits. The proposed companion-repository migration is documented in
+`docs/openqp-dev-buildenv-hardening-plan.md`.
+
+The build produces an OCI archive with an embedded SPDX SBOM and max-mode
+provenance, verifies the OCI labels and attestation subjects locally, and then
+lets the ephemeral runner discard it. The workflow has no registry
+credentials, package-write permission, login, push, release attachment,
+retained image artifact, or exported build cache.
+
+The container remains publication-ineligible for two explicit reasons:
+
+1. dependency wheels are resolved during a candidate build and hashed only
+   afterward; publication requires a reviewed hash lock or reuse of an already
+   verified exact release-run wheelhouse; and
+2. copied Ubuntu GNU runtime libraries have exact binary/source package
+   versions and copyright files recorded, but the matching source archives are
+   not yet bundled for components whose terms require corresponding source.
+
+Both `/usr/share/licenses/openqp/wheelhouse-manifest.json` and
+`runtime-library-manifest.json` record `publication_gate.ready: false`. The
+final-stage smoke test also rejects NLopt files/dependencies/symbol strings,
+build tools, caches, static archives, alternate DFT-D4 copies, missing
+corresponding source, unresolved dependencies, and legal-file omissions.

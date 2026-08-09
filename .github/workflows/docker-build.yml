@@ -1,4 +1,4 @@
-name: Build Multi-Platform Docker Image
+name: Build Docker Release Candidate
 
 "on":
   release:
@@ -8,6 +8,8 @@ name: Build Multi-Platform Docker Image
     branches:
       - main
 
+# Build-only: no registry credentials, package write permission, login, push,
+# release attachment, retained image artifact, or exported build cache.
 permissions:
   contents: read
 
@@ -15,113 +17,121 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Keep in sync with the FROM line in Dockerfile and the openqp-dev repo's
-      # buildenv.Dockerfile / publish-buildenv.yml (which publishes this tag).
-      BUILDENV_IMAGE: openqp/openqp-buildenv:1
+      # build-push-action v6 otherwise uploads a retained build-record artifact.
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
-      - name: Read package version
-        id: version
-        run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import re
-          from pathlib import Path
-
-          pyproject = Path("pyproject.toml").read_text()
-          match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
-          if not match:
-              raise SystemExit("Could not find project.version in pyproject.toml")
-          version = match.group(1)
-          print(f"version={version}")
-          print(f"docker_tag=v{version}")
-          PY
-
-      - name: Verify published release tag and licensing files
-        if: github.event_name == 'release'
+      - name: Verify source, immutable bases, version, and license inputs
+        id: source
         env:
+          EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          python - <<'PY'
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
           import os
+          import subprocess
           import tomllib
           from pathlib import Path
 
-          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
-          expected_tag = f"v{project['version']}"
-          if os.environ["RELEASE_TAG"] != expected_tag:
-              raise SystemExit(
-                  f"Published release tag {os.environ['RELEASE_TAG']!r} does not "
-                  f"match package version; expected {expected_tag!r}"
-              )
+          root = Path.cwd()
+          project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
+          version = project["version"]
+          expected_tag = f"v{version}"
+          revision = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip()
+          if len(revision) != 40:
+              raise SystemExit(f"Checkout revision is not a full SHA: {revision!r}")
+
           if project.get("license") != "LicenseRef-OpenQP-Research-1.0":
               raise SystemExit(
                   "project.license must be LicenseRef-OpenQP-Research-1.0"
               )
-          for filename in ("LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"):
-              path = Path(filename)
+          for filename in (
+              "LICENSE",
+              "LICENSING.md",
+              "SUSTAINABILITY.md",
+              "THIRD_PARTY_NOTICES.md",
+          ):
+              path = root / filename
               if not path.is_file() or not path.read_bytes():
-                  raise SystemExit(f"Required licensing file is missing or empty: {filename}")
-          print(f"Verified published OpenQP release {expected_tag}.")
+                  raise SystemExit(f"Required legal file missing or empty: {filename}")
+
+          lock = json.loads((root / "docker/base-images.lock.json").read_text())
+          dockerfile = (root / "Dockerfile").read_text()
+          for stage in ("builder", "runtime"):
+              image = lock["images"][stage]
+              pinned = f"{image['reference']}@{image['digest']}"
+              expected_from = f"FROM {pinned} AS {stage}"
+              if expected_from not in dockerfile:
+                  raise SystemExit(
+                      f"Dockerfile {stage} does not match base lock: {expected_from}"
+                  )
+              if image.get("platform") != "linux/amd64":
+                  raise SystemExit(f"Unexpected locked {stage} platform: {image}")
+          if "--base-lock=docker/base-images.lock.json" not in dockerfile:
+              raise SystemExit(
+                  "Dockerfile OpenBLAS runtime check does not match the base lock"
+              )
+
+          if os.environ["EVENT_NAME"] == "release":
+              release_tag = os.environ["RELEASE_TAG"]
+              if release_tag != expected_tag:
+                  raise SystemExit(
+                      f"Release tag {release_tag!r} != package tag {expected_tag!r}"
+                  )
+              tagged_revision = subprocess.check_output(
+                  ["git", "rev-parse", f"{release_tag}^{{commit}}"], text=True
+              ).strip()
+              if tagged_revision != revision:
+                  raise SystemExit(
+                      f"Checkout {revision} is not exact tag {release_tag} "
+                      f"({tagged_revision})"
+                  )
+
+          print(f"version={version}")
+          print(f"docker_tag={expected_tag}")
+          print(f"revision={revision}")
           PY
 
       - name: Set up Docker Buildx
-        id: setup-buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      # The build environment (toolchain, ILP64 OpenBLAS, Python deps) is a
-      # prebuilt image, built and published by the
-      # Open-Quantum-Platform/openqp-dev companion repo
-      # (.github/workflows/publish-buildenv.yml). Here we only pull it; if it is
-      # missing, fail loudly rather than rebuild a recipe this repo no longer
-      # carries.
-      - name: Prepare build environment image
-        id: buildenv
-        run: |
-          if ! docker pull "${BUILDENV_IMAGE}"; then
-            echo "::error::${BUILDENV_IMAGE} not found in registry. Publish it from" \
-                 "the openqp-dev repo (publish-buildenv.yml) before building here."
-            exit 1
-          fi
-          echo "source=registry" >> "${GITHUB_OUTPUT}"
-
-      - name: Cache Docker build mounts
-        if: steps.buildenv.outputs.source == 'registry'
-        id: docker-cache-mounts
-        uses: actions/cache@v4
-        with:
-          path: docker-cache-mounts
-          key: docker-cache-mounts-${{ runner.os }}-${{ hashFiles('Dockerfile', 'pyproject.toml', 'external/CMakeLists.txt') }}
-          restore-keys: |
-            docker-cache-mounts-${{ runner.os }}-
-
-      - name: Restore Docker build mounts
-        if: steps.buildenv.outputs.source == 'registry'
-        uses: reproducible-containers/buildkit-cache-dance@v3
-        with:
-          builder: ${{ steps.setup-buildx.outputs.name }}
-          cache-dir: docker-cache-mounts
-          dockerfile: Dockerfile
-          skip-extraction: ${{ steps.docker-cache-mounts.outputs.cache-hit }}
-
-      - name: Build OpenQP image
-        if: steps.buildenv.outputs.source == 'registry'
-        uses: docker/build-push-action@v6
+      - name: Build attested OCI candidate without publishing
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}
+          platforms: linux/amd64
+          tags: openqp/openqp:${{ steps.source.outputs.docker_tag }}
           build-args: |
-            OPENQP_VERSION=${{ steps.version.outputs.version }}
-            OPENQP_REVISION=${{ github.sha }}
-          # Intentionally build-only. Do not publish a binary image until the
-          # third-party static-linking obligations have a separately approved
-          # distribution path.
-          load: true
-          # BuildKit's GitHub cache keeps source-independent Docker layers.
-          # actions/cache + buildkit-cache-dance above keep the pip/OpenQP
-          # externals cache mounts. pyproject.toml or external/CMakeLists.txt
-          # changes get a new mount-cache key and refresh subsequent builds.
-          cache-from: type=gha,scope=openqp-docker
-          cache-to: type=gha,mode=max,scope=openqp-docker
+            OPENQP_VERSION=${{ steps.source.outputs.version }}
+            OPENQP_REVISION=${{ steps.source.outputs.revision }}
+          outputs: type=oci,dest=${{ runner.temp }}/openqp-${{ steps.source.outputs.docker_tag }}.oci.tar
+          sbom: true
+          provenance: mode=max
+          push: false
+
+      - name: Verify OCI labels, digest, SBOM, and provenance
+        env:
+          OCI_ARCHIVE: ${{ runner.temp }}/openqp-${{ steps.source.outputs.docker_tag }}.oci.tar
+          OCI_SUMMARY: ${{ runner.temp }}/openqp-${{ steps.source.outputs.docker_tag }}.oci.json
+          OPENQP_VERSION: ${{ steps.source.outputs.version }}
+          OPENQP_REVISION: ${{ steps.source.outputs.revision }}
+        run: |
+          python .github/scripts/verify_oci_artifact.py \
+            "$OCI_ARCHIVE" \
+            --version "$OPENQP_VERSION" \
+            --revision "$OPENQP_REVISION" \
+            --summary "$OCI_SUMMARY"
+          cat "$OCI_SUMMARY"
+
+      # The OCI archive remains only on the ephemeral runner and is discarded
+      # after verification.  A future protected publication job must rebuild
+      # from the same exact tag/SHA and then verify its registry digest.

@@ -31,14 +31,22 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_docker_image_is_versioned_but_not_automatically_pushed(self):
         workflow = (ROOT / ".github" / "workflows" / "docker-build.yml").read_text()
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        pyproject = (ROOT / "pyproject.toml").read_text()
+        version = find_version(r'^version\s*=\s*"([^"]+)"', pyproject, "pyproject.toml")
 
-        self.assertIn("docker_tag=v{version}", workflow)
-        self.assertIn("tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}", workflow)
-        self.assertIn("OPENQP_VERSION=${{ steps.version.outputs.version }}", workflow)
-        self.assertIn("OPENQP_REVISION=${{ github.sha }}", workflow)
-        self.assertIn("load: true", workflow)
+        self.assertEqual(dockerfile.count(f"ARG OPENQP_VERSION={version}"), 2)
+        self.assertIn('expected_tag = f"v{version}"', workflow)
+        self.assertIn("tags: openqp/openqp:${{ steps.source.outputs.docker_tag }}", workflow)
+        self.assertIn("OPENQP_VERSION=${{ steps.source.outputs.version }}", workflow)
+        self.assertIn("OPENQP_REVISION=${{ steps.source.outputs.revision }}", workflow)
+        self.assertIn("outputs: type=oci", workflow)
+        self.assertIn("sbom: true", workflow)
+        self.assertIn("provenance: mode=max", workflow)
+        self.assertIn("push: false", workflow)
         self.assertNotIn("docker push ", workflow)
         self.assertNotIn("push: true", workflow)
+        self.assertNotIn("load: true", workflow)
 
     def test_pypi_publication_requires_manual_protected_job(self):
         workflow = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()

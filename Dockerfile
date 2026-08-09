@@ -1,14 +1,90 @@
 # syntax=docker/dockerfile:1.7
-# OpenQP image: install the checked-out sources with the standard
-# `pip install .` route (scikit-build-core builds the native library and the
-# Python package together) on top of the prebuilt build environment (compiler
-# toolchain, ILP64 OpenBLAS, Python dependencies -- see
-# docker/buildenv.Dockerfile), so image builds do not reinstall prerequisites.
-# Keep the tag below in sync with .github/workflows/docker-build.yml and
-# docker/buildenv.Dockerfile.
-FROM openqp/openqp-buildenv:1
+#
+# Release-candidate container for OpenQP.  Both inputs are immutable registry
+# digests recorded in docker/base-images.lock.json.  The build environment is
+# used only to compile and verify a wheel; no compiler, source checkout, or
+# external-build cache is inherited by the final runtime image.
+#
+# The current openqp-buildenv:1 image is Ubuntu 24.04/Python 3.12 and is
+# linux/amd64-only.  The runtime therefore deliberately uses the same Python
+# minor version and a newer glibc baseline.  Moving the container to Python
+# 3.11 requires publishing the proposed Python-3.11 builder first; see
+# docs/openqp-dev-buildenv-hardening-plan.md.
+FROM openqp/openqp-buildenv:1@sha256:83a2ba2108bc2bb1123e7dfac31320833817242681ee41f36e5ee950dfb22a3e AS builder
 
-ARG OPENQP_VERSION=dev
+ARG OPENQP_VERSION=1.3.0
+ARG OPENQP_REVISION=unknown
+
+ENV CC=gcc-14 \
+    CXX=g++-14 \
+    FC=gfortran-14 \
+    CMAKE_ARGS="-DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DENABLE_MPI=OFF -DENABLE_DDX=OFF -DENABLE_OPENQP_DFTB=OFF -DOQP_ALLOW_REFERENCE_BLAS=OFF -DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals"
+ARG NINJA_JOBS=
+
+WORKDIR /opt/openqp
+
+# Install source-independent build requirements and download the complete
+# runtime dependency wheelhouse.  The final stage has no networked package
+# installation: it installs only these exact builder-resolved wheels.
+COPY pyproject.toml /tmp/openqp-pyproject.toml
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    python3 - <<'PY'
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+project = tomllib.loads(Path("/tmp/openqp-pyproject.toml").read_text())
+build_requirements = list(project.get("build-system", {}).get("requires", []))
+runtime_requirements = list(project.get("project", {}).get("dependencies", []))
+
+subprocess.check_call(
+    [sys.executable, "-m", "pip", "install", *dict.fromkeys(build_requirements)]
+)
+Path("/opt/openqp-wheelhouse").mkdir(parents=True, exist_ok=True)
+subprocess.check_call(
+    [
+        sys.executable,
+        "-m",
+        "pip",
+        "download",
+        "--only-binary=:all:",
+        "--dest=/opt/openqp-wheelhouse",
+        *dict.fromkeys(runtime_requirements),
+    ]
+)
+PY
+
+# Build exactly one wheel from the checked-out source.  BuildKit cache mounts
+# are ephemeral and never copied into the runtime image.
+COPY . /opt/openqp
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    --mount=type=cache,target=/root/.cache/openqp/externals,sharing=locked \
+    ${NINJA_JOBS:+env CMAKE_BUILD_PARALLEL_LEVEL=${NINJA_JOBS}} \
+    python3 -m pip wheel --no-build-isolation --no-deps \
+      --wheel-dir=/opt/openqp-wheelhouse .
+
+RUN python3 .github/scripts/record_wheelhouse.py /opt/openqp-wheelhouse \
+      --expected-openqp-version="${OPENQP_VERSION}" \
+      --output=/opt/openqp-wheelhouse/wheelhouse-manifest.json
+
+# Install from the offline wheelhouse in the builder and run the same strong
+# numerical/ABI/D4 canonical-replaceability gate used for release wheels.
+RUN python3 -m pip install --no-index --find-links=/opt/openqp-wheelhouse \
+      "OpenQP==${OPENQP_VERSION}" && \
+    python3 .github/scripts/wheel_smoke_test.py /opt/openqp
+
+# Copy only the non-glibc shared-library closure required by the installed
+# OpenQP wheel.  The collector fails on unresolved dependencies or colliding
+# SONAMEs and records package versions, hashes, and license files.
+RUN python3 .github/scripts/collect_docker_runtime.py \
+      --output=/opt/openqp-runtime \
+      --base-lock=docker/base-images.lock.json
+
+
+FROM python:3.12.13-slim-trixie@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS runtime
+
+ARG OPENQP_VERSION=1.3.0
 ARG OPENQP_REVISION=unknown
 LABEL org.opencontainers.image.title="OpenQP" \
       org.opencontainers.image.description="Open Quantum Platform research software" \
@@ -18,214 +94,36 @@ LABEL org.opencontainers.image.title="OpenQP" \
       org.opencontainers.image.revision="${OPENQP_REVISION}" \
       org.opencontainers.image.licenses="LicenseRef-OpenQP-Research-1.0"
 
-# Install Python build/runtime dependencies in a source-independent layer.
-# Changes to pyproject.toml invalidate this layer automatically; source-only
-# PRs then reuse it instead of re-downloading scipy, basis_set_exchange, etc.
-COPY pyproject.toml /tmp/openqp-pyproject.toml
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    python3 - <<'PY'
-import subprocess
-import sys
-import tomllib
+ENV OMP_NUM_THREADS=4 \
+    LD_LIBRARY_PATH=/opt/openblas/lib:/opt/openqp-runtime/lib \
+    HOME=/work \
+    XDG_CACHE_HOME=/work/.cache
 
-with open("/tmp/openqp-pyproject.toml", "rb") as handle:
-    project = tomllib.load(handle)
+# The builder-produced wheelhouse is mounted read-only for this instruction;
+# it is not copied into an image layer.  No compiler or package index is used.
+RUN --mount=type=bind,from=builder,source=/opt/openqp-wheelhouse,target=/tmp/wheelhouse,ro \
+    python -m pip install --no-cache-dir --no-index \
+      --find-links=/tmp/wheelhouse "OpenQP==${OPENQP_VERSION}"
 
-requirements = []
-requirements.extend(project.get("build-system", {}).get("requires", []))
-requirements.extend(project.get("project", {}).get("dependencies", []))
-
-deduped = []
-for requirement in requirements:
-    if requirement not in deduped:
-        deduped.append(requirement)
-
-subprocess.check_call([sys.executable, "-m", "pip", "install", *deduped])
-PY
-
-# Copy and install the checked-out OpenQP source.  GitHub Actions has already
-# checked out the branch/PR being tested, so do not clone main again here.
-# USE_LIBINT=OFF and ENABLE_OPENMP=ON are the pyproject
-# defaults; CC/CXX/FC select the gcc-14 toolchain and CMAKE_ARGS points the
-# ILP64 BLAS/LAPACK search at the OpenBLAS in the build environment (LAPACK is
-# bundled in libopenblas).  OPENQP_ROOT is intentionally not set: the
-# pip-installed package locates itself, and pointing it at the source tree
-# would be wrong.
-COPY . /opt/openqp
+COPY --from=builder /opt/openqp-runtime/openblas/ /opt/openblas/lib/
+COPY --from=builder /opt/openqp-runtime/lib/ /opt/openqp-runtime/lib/
+COPY --from=builder /opt/openqp-runtime/licenses/ /usr/share/licenses/openqp/runtime-packages/
+COPY --from=builder /opt/openqp-runtime/runtime-library-manifest.json /usr/share/licenses/openqp/
+COPY --from=builder /opt/openqp-wheelhouse/wheelhouse-manifest.json /usr/share/licenses/openqp/
 COPY LICENSE LICENSING.md SUSTAINABILITY.md THIRD_PARTY_NOTICES.md /usr/share/licenses/openqp/
+COPY docker/THIRD_PARTY_RUNTIME.md /usr/share/licenses/openqp/
 COPY licenses/third_party/ /usr/share/licenses/openqp/third_party/
-WORKDIR /opt/openqp
-ENV CC=gcc-14 CXX=g++-14 FC=gfortran-14
-ENV CMAKE_ARGS="-DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals"
-# NINJA_JOBS caps compile parallelism for memory-constrained builders (the
-# Fortran modules are RAM-heavy); empty = use all cores (the CI default).
-ARG NINJA_JOBS=
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    --mount=type=cache,target=/root/.cache/openqp/externals,sharing=locked \
-    ${NINJA_JOBS:+env CMAKE_BUILD_PARALLEL_LEVEL=${NINJA_JOBS}} \
-    pip3 install --no-build-isolation --no-deps .
 
-ENV OMP_NUM_THREADS=4
+# Verify the actual minimal final stage, including an end-to-end calculation,
+# exact DFT-D4 load paths and removal tests, corresponding source, shared
+# dependency closure, legal files, and absence of build tools/static archives.
+RUN --mount=type=bind,from=builder,source=/opt/openqp/.github/scripts/container_runtime_smoke.py,target=/tmp/container_runtime_smoke.py,ro \
+    python /tmp/container_runtime_smoke.py
 
-# Run a lightweight install smoke test.  The full example suite is covered by
-# the regular CI workflow; Docker image builds should only check that the
-# installed launcher can execute a bundled input, not gate on reference-sensitive
-# example comparisons.
-RUN openqp /opt/openqp/examples/other/h2o_rhf_6-31g_hf.inp
+RUN mkdir -p /work/.cache && chown -R 65532:65532 /work
+WORKDIR /work
+USER 65532:65532
 
-# The external-build cache mount above is intentionally ephemeral.  Verify that
-# the installed application itself retained the replaceable DFT-D4 libraries
-# and their complete corresponding source before this image can be published.
-RUN python3 - <<'PY'
-import hashlib
-import json
-from pathlib import Path
-import re
-import subprocess
-import sys
-
-from oqp.runtime import resolve_oqp_root
-
-root, _ = resolve_oqp_root()
-root = Path(root)
-if sys.platform == "darwin":
-    libraries = {
-        "dftd4": "libdftd4.3.dylib",
-        "multicharge": "libmulticharge.0.dylib",
-        "mctc-lib": "libmctc-lib.0.dylib",
-    }
-else:
-    libraries = {
-        "dftd4": "libdftd4.so.3",
-        "multicharge": "libmulticharge.so.0",
-        "mctc-lib": "libmctc-lib.so.0",
-    }
-required = [root / "lib" / name for name in libraries.values()]
-source = root / "share" / "corresponding-source" / "dftd4-stack"
-required.extend([
-    source / "README.md",
-    source / "BUILD-INFO.json",
-    source / "apply-patch.cmake",
-    source / "generate-build-info.cmake",
-    source / "openqp-external-build.cmake",
-    source / "patches" / "mctc-lib-0.4.2-disable-tests.patch",
-    source / "patches" / "dftd4-3.7.0-disable-tests-and-mstore.patch",
-    source / "mctc-lib-0.4.2" / "LICENSE",
-    source / "multicharge-0.3.0" / "LICENSE",
-    source / "dftd4-3.7.0" / "COPYING",
-    source / "dftd4-3.7.0" / "COPYING.LESSER",
-])
-missing = [str(path) for path in required if not path.is_file()]
-if missing:
-    raise SystemExit(f"DFT-D4 runtime/corresponding-source files missing: {missing}")
-build_info_path = source / "BUILD-INFO.json"
-build_info_text = build_info_path.read_text(encoding="utf-8")
-build_info = json.loads(build_info_text)
-if (
-    build_info.get("schema") != "org.open-quantum-platform.dftd4-build-info"
-    or build_info.get("schema_version") != 1
-    or build_info.get("canonical_runtime_names") != libraries
-):
-    raise SystemExit("DFT-D4 BUILD-INFO.json schema/runtime names are invalid")
-components = {item["name"]: item for item in build_info.get("components", [])}
-expected_components = {
-    "mctc-lib": (
-        "0.4.2",
-        "https://github.com/grimme-lab/mctc-lib/archive/refs/tags/v0.4.2.tar.gz",
-        "c7aa45c0a3e6f96e3316e15fc6cdbe48b15234940d3773927a57bb7bfe9744ac",
-        "Apache-2.0",
-    ),
-    "multicharge": (
-        "0.3.0",
-        "https://github.com/grimme-lab/multicharge/archive/refs/tags/v0.3.0.tar.gz",
-        "2fcc1f80871f404f005e9db458ffaec95bb28a19516a0245278cd3175b63a6b2",
-        "Apache-2.0",
-    ),
-    "dftd4": (
-        "3.7.0",
-        "https://github.com/dftd4/dftd4/archive/refs/tags/v3.7.0.tar.gz",
-        "f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c",
-        "LGPL-3.0-or-later",
-    ),
-}
-for name, expected in expected_components.items():
-    component = components.get(name, {})
-    actual = tuple(
-        component.get(field)
-        for field in ("version", "archive_url", "sha256", "license")
-    )
-    if actual != expected:
-        raise SystemExit(f"DFT-D4 BUILD-INFO component is invalid: {name}")
-if len(build_info.get("components", [])) != len(expected_components):
-    raise SystemExit("DFT-D4 BUILD-INFO has duplicate/extra components")
-build = build_info.get("build", {})
-blas = build.get("blas", {})
-if (
-    not build.get("cmake_version")
-    or not build.get("generator")
-    or not build.get("system", {}).get("name")
-    or not build.get("system", {}).get("processor")
-    or build.get("build_type") != "Release"
-    or build.get("build_shared_libs") is not True
-    or not isinstance(build.get("openmp"), bool)
-    or not blas.get("requested_provider")
-    or not blas.get("resolved_provider")
-    or blas.get("integer_bytes") != 8
-    or not blas.get("resolved_blas_libraries")
-    or not blas.get("resolved_lapack_libraries")
-):
-    raise SystemExit("DFT-D4 BUILD-INFO.json resolved build data are incomplete")
-for library_kind in ("resolved_blas_libraries", "resolved_lapack_libraries"):
-    if any("/" in name or "\\" in name for name in blas[library_kind]):
-        raise SystemExit("Absolute BLAS/LAPACK path leaked into DFT-D4 BUILD-INFO")
-for language in ("c", "cxx", "fortran"):
-    compiler = build.get("compilers", {}).get(language, {})
-    if (
-        not compiler.get("id")
-        or not compiler.get("version")
-        or compiler.get("executable") != Path(compiler.get("executable", "")).name
-    ):
-        raise SystemExit(f"DFT-D4 compiler record is invalid: {language}")
-forwarded_flags = build.get("forwarded_flags", {})
-if set(forwarded_flags) != {
-    "c", "c_release", "fortran", "fortran_release"
-} or not all(isinstance(value, str) for value in forwarded_flags.values()):
-    raise SystemExit("DFT-D4 forwarded flag record is incomplete")
-patches = {item["file"]: item for item in build_info.get("patches", [])}
-expected_patches = {
-    "mctc-lib-0.4.2-disable-tests.patch": "mctc-lib",
-    "dftd4-3.7.0-disable-tests-and-mstore.patch": "dftd4",
-}
-if len(build_info.get("patches", [])) != len(expected_patches):
-    raise SystemExit("DFT-D4 BUILD-INFO has duplicate/extra patches")
-for patch_name, component in expected_patches.items():
-    patch_path = source / "patches" / patch_name
-    digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
-    if patches.get(patch_name) != {
-        "component": component,
-        "file": patch_name,
-        "sha256": digest,
-        "strip": 1,
-    }:
-        raise SystemExit(f"DFT-D4 patch record is invalid: {patch_name}")
-for forbidden in (
-    "/private/tmp/", "/tmp/", "/private/var/folders/", "/root/.cache/",
-    "/.cache/openqp/", "/host-cache/", "/Library/Caches/openqp/", "/opt/openqp",
-):
-    if forbidden in build_info_text:
-        raise SystemExit(f"Transient path leaked into DFT-D4 BUILD-INFO: {forbidden}")
-liboqp = root / "lib" / "liboqp.so"
-dependency_text = subprocess.run(
-    ["readelf", "-d", str(liboqp)], check=True, capture_output=True, text=True
-).stdout
-symbol_text = subprocess.run(
-    ["nm", "-D", str(liboqp)], check=True, capture_output=True, text=True
-).stdout
-native_metadata = dependency_text + "\n" + symbol_text
-if re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", native_metadata):
-    raise SystemExit(f"NLopt dependency or symbol leaked into {liboqp}:\n{native_metadata}")
-print(f"DFT-D4 shared libraries and corresponding source retained under {root}")
-PY
-
-# Set entrypoint if required
+# Preserve the historical interactive-container interface.  Users may invoke
+# OpenQP inside the shell or override the entrypoint for batch execution.
 ENTRYPOINT ["bash"]
