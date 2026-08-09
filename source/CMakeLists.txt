@@ -135,14 +135,23 @@ if(BUILD_SHARED_LIBS)
 else()
   # Static archives do not carry transitive link dependencies.  Keep all three
   # on the in-tree link line and export relocatable -L/-l requirements for
-  # installed liboqp.a consumers.
-  target_link_libraries(oqp
-          "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
-          "$<BUILD_INTERFACE:${DFTD4_MULTICHARGE_LIB}>"
-          "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>"
-          "$<INSTALL_INTERFACE:dftd4>"
-          "$<INSTALL_INTERFACE:multicharge>"
-          "$<INSTALL_INTERFACE:mctc-lib>")
+  # installed liboqp.a consumers.  Bundled NetLib is also static and was
+  # linked earlier, before multicharge introduced its LAPACK references; put
+  # the complete cycle in a GNU-ld rescan group so those late references are
+  # resolved for both in-tree executables and downstream static consumers.
+  if(LIBLAPACK AND NOT APPLE)
+    target_link_libraries(oqp
+            "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>>"
+            "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>>")
+  else()
+    target_link_libraries(oqp
+            "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
+            "$<BUILD_INTERFACE:${DFTD4_MULTICHARGE_LIB}>"
+            "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>"
+            "$<INSTALL_INTERFACE:dftd4>"
+            "$<INSTALL_INTERFACE:multicharge>"
+            "$<INSTALL_INTERFACE:mctc-lib>")
+  endif()
   target_link_directories(oqp PUBLIC
           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>")
 endif()
