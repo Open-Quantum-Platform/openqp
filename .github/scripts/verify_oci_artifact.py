@@ -26,9 +26,9 @@ def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
     return json.load(handle)
 
 
-def _descriptor_json(
+def _descriptor_bytes(
     archive: tarfile.TarFile, descriptor: dict[str, Any]
-) -> dict[str, Any]:
+) -> bytes:
     digest = str(descriptor["digest"])
     member_name = _blob_path(digest)
     member = archive.getmember(member_name)
@@ -50,7 +50,14 @@ def _descriptor_json(
         raise ValueError(
             f"OCI descriptor digest mismatch: declared {digest}, actual {actual_digest}"
         )
-    value = json.loads(payload)
+    return payload
+
+
+def _descriptor_json(
+    archive: tarfile.TarFile, descriptor: dict[str, Any]
+) -> dict[str, Any]:
+    digest = str(descriptor["digest"])
+    value = json.loads(_descriptor_bytes(archive, descriptor))
     if not isinstance(value, dict):
         raise ValueError(f"OCI descriptor does not contain a JSON object: {digest}")
     return value
@@ -93,6 +100,13 @@ def verify(
 
         image_manifest = _descriptor_json(archive, image_descriptor)
         config = _descriptor_json(archive, image_manifest["config"])
+        layers = image_manifest.get("layers")
+        if not isinstance(layers, list):
+            raise ValueError("OCI image manifest layers must be a list")
+        for layer in layers:
+            if not isinstance(layer, dict):
+                raise ValueError("OCI image layer descriptor must be an object")
+            _descriptor_bytes(archive, layer)
         labels = config.get("config", {}).get("Labels", {})
         expected_labels = {
             "org.opencontainers.image.source": (

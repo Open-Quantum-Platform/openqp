@@ -233,6 +233,14 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
 
     def test_oci_verifier_requires_labels_sbom_and_provenance(self):
         blobs = {}
+        layer_payload = b"openqp-rootfs-layer"
+        layer_digest = hashlib.sha256(layer_payload).hexdigest()
+        layer = {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": f"sha256:{layer_digest}",
+            "size": len(layer_payload),
+        }
+        blobs[f"blobs/sha256/{layer_digest}"] = layer_payload
         config = self._json_blob(
             blobs,
             {
@@ -251,7 +259,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         )
         image = self._json_blob(
             blobs,
-            {"schemaVersion": 2, "config": config, "layers": []},
+            {"schemaVersion": 2, "config": config, "layers": [layer]},
         )
         image["platform"] = {"os": "linux", "architecture": "amd64"}
         image_digest = image["digest"]
@@ -308,6 +316,19 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(tampered, index, tampered_blobs)
             with self.assertRaisesRegex(ValueError, "descriptor digest mismatch"):
                 OCI_VERIFY.verify(tampered, "1.3.0", "a" * 40)
+
+            tampered_layer_blobs = dict(blobs)
+            tampered_layer_blobs[OCI_VERIFY._blob_path(layer["digest"])] = (
+                b"tampered-rootfs-lyr"
+            )
+            self.assertEqual(
+                len(tampered_layer_blobs[OCI_VERIFY._blob_path(layer["digest"])]),
+                layer["size"],
+            )
+            tampered_layer = Path(temporary) / "tampered-layer.oci.tar"
+            self._write_oci(tampered_layer, index, tampered_layer_blobs)
+            with self.assertRaisesRegex(ValueError, "descriptor digest mismatch"):
+                OCI_VERIFY.verify(tampered_layer, "1.3.0", "a" * 40)
 
             unrelated_spdx = self._json_blob(
                 blobs,
