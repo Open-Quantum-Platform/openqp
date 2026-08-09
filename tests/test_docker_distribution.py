@@ -101,6 +101,8 @@ class DockerDistributionTests(unittest.TestCase):
             "static archives leaked",
             "build tool leaked",
             "corresponding source missing",
+            "DFT-D4 BUILD-INFO schema/runtime names are invalid",
+            "DFT-D4 patch record is invalid",
             'publication_gate", {}).get("ready") is not False',
         ):
             self.assertIn(required, smoke)

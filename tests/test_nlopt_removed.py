@@ -63,9 +63,15 @@ class NLoptRemovalTests(unittest.TestCase):
         self.assertRegex(wheel, r"nlopt\|nlo_")
 
         docker = (ROOT / "Dockerfile").read_text()
-        self.assertIn("readelf", docker)
-        self.assertIn("nm", docker)
-        self.assertRegex(docker, r"nlopt\|nlo_")
+        container_smoke = (
+            ROOT / ".github" / "scripts" / "container_runtime_smoke.py"
+        ).read_text()
+        self.assertIn("container_runtime_smoke.py", docker)
+        self.assertIn("ldd_dependencies", container_smoke)
+        self.assertIn("NLopt dependency leaked", container_smoke)
+        self.assertIn("NLopt symbols/strings leaked", container_smoke)
+        self.assertIn('b"nlopt_"', container_smoke)
+        self.assertIn('b"libnlopt"', container_smoke)
 
 
 if __name__ == "__main__":

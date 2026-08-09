@@ -274,7 +274,12 @@ def main() -> None:
     corresponding_source = root / "share/corresponding-source/dftd4-stack"
     required_source = (
         corresponding_source / "README.md",
+        corresponding_source / "BUILD-INFO.json",
+        corresponding_source / "apply-patch.cmake",
+        corresponding_source / "generate-build-info.cmake",
         corresponding_source / "openqp-external-build.cmake",
+        corresponding_source / "patches/mctc-lib-0.4.2-disable-tests.patch",
+        corresponding_source / "patches/dftd4-3.7.0-disable-tests-and-mstore.patch",
         corresponding_source / "mctc-lib-0.4.2/LICENSE",
         corresponding_source / "multicharge-0.3.0/LICENSE",
         corresponding_source / "dftd4-3.7.0/COPYING",
@@ -283,6 +288,91 @@ def main() -> None:
     missing_source = [str(path) for path in required_source if not path.is_file()]
     if missing_source:
         raise AssertionError(f"DFT-D4 corresponding source missing: {missing_source}")
+
+    build_info_path = corresponding_source / "BUILD-INFO.json"
+    build_info_text = build_info_path.read_text(encoding="utf-8")
+    build_info = json.loads(build_info_text)
+    expected_runtime_names = {
+        "dftd4": "libdftd4.so.3",
+        "multicharge": "libmulticharge.so.0",
+        "mctc-lib": "libmctc-lib.so.0",
+    }
+    if (
+        build_info.get("schema") != "org.open-quantum-platform.dftd4-build-info"
+        or build_info.get("schema_version") != 1
+        or build_info.get("canonical_runtime_names") != expected_runtime_names
+    ):
+        raise AssertionError("DFT-D4 BUILD-INFO schema/runtime names are invalid")
+    expected_components = {
+        "mctc-lib": (
+            "0.4.2",
+            "https://github.com/grimme-lab/mctc-lib/archive/refs/tags/v0.4.2.tar.gz",
+            "c7aa45c0a3e6f96e3316e15fc6cdbe48b15234940d3773927a57bb7bfe9744ac",
+            "Apache-2.0",
+        ),
+        "multicharge": (
+            "0.3.0",
+            "https://github.com/grimme-lab/multicharge/archive/refs/tags/v0.3.0.tar.gz",
+            "2fcc1f80871f404f005e9db458ffaec95bb28a19516a0245278cd3175b63a6b2",
+            "Apache-2.0",
+        ),
+        "dftd4": (
+            "3.7.0",
+            "https://github.com/dftd4/dftd4/archive/refs/tags/v3.7.0.tar.gz",
+            "f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c",
+            "LGPL-3.0-or-later",
+        ),
+    }
+    components = {item["name"]: item for item in build_info.get("components", [])}
+    if len(build_info.get("components", [])) != len(expected_components):
+        raise AssertionError("DFT-D4 BUILD-INFO has duplicate/extra components")
+    for name, expected in expected_components.items():
+        component = components.get(name, {})
+        actual = tuple(
+            component.get(field)
+            for field in ("version", "archive_url", "sha256", "license")
+        )
+        if actual != expected:
+            raise AssertionError(f"DFT-D4 BUILD-INFO component is invalid: {name}")
+    build = build_info.get("build", {})
+    blas = build.get("blas", {})
+    if (
+        build.get("build_type") != "Release"
+        or build.get("build_shared_libs") is not True
+        or not isinstance(build.get("openmp"), bool)
+        or blas.get("integer_bytes") != 8
+        or not blas.get("resolved_blas_libraries")
+        or not blas.get("resolved_lapack_libraries")
+    ):
+        raise AssertionError("DFT-D4 BUILD-INFO resolved build data are incomplete")
+    expected_patches = {
+        "mctc-lib-0.4.2-disable-tests.patch": "mctc-lib",
+        "dftd4-3.7.0-disable-tests-and-mstore.patch": "dftd4",
+    }
+    patches = {item["file"]: item for item in build_info.get("patches", [])}
+    if len(build_info.get("patches", [])) != len(expected_patches):
+        raise AssertionError("DFT-D4 BUILD-INFO has duplicate/extra patches")
+    for patch_name, component in expected_patches.items():
+        patch_path = corresponding_source / "patches" / patch_name
+        if patches.get(patch_name) != {
+            "component": component,
+            "file": patch_name,
+            "sha256": sha256(patch_path),
+            "strip": 1,
+        }:
+            raise AssertionError(f"DFT-D4 patch record is invalid: {patch_name}")
+    for forbidden in (
+        "/private/tmp/",
+        "/tmp/",
+        "/private/var/folders/",
+        "/root/.cache/",
+        "/.cache/openqp/",
+        "/host-cache/",
+        "/Library/Caches/openqp/",
+        "/opt/openqp",
+    ):
+        if forbidden in build_info_text:
+            raise AssertionError(f"transient path leaked into DFT-D4 BUILD-INFO: {forbidden}")
 
     static_archives = []
     for base in (root, Path("/opt/openblas"), Path("/opt/openqp-runtime")):

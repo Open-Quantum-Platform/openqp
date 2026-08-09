@@ -435,10 +435,14 @@ def test_wheel_smoke_probes_loaded_paths_and_removal_failures():
 def test_distribution_gates_require_build_info_and_exact_patches():
     wheel = WHEEL_SMOKE.read_text(encoding="utf-8")
     docker = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    container_smoke = (
+        ROOT / ".github" / "scripts" / "container_runtime_smoke.py"
+    ).read_text(encoding="utf-8")
+    assert "container_runtime_smoke.py" in docker
     source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     generator = BUILD_INFO_GENERATOR.read_text(encoding="utf-8")
-    for gate in (wheel, docker, source):
+    for gate in (wheel, container_smoke, source):
         assert "BUILD-INFO.json" in gate
         assert "apply-patch.cmake" in gate
         assert "mctc-lib-0.4.2-disable-tests.patch" in gate or (
@@ -449,8 +453,8 @@ def test_distribution_gates_require_build_info_and_exact_patches():
         )
     assert "json.loads(build_info_text)" in wheel
     assert "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in wheel
-    assert "json.loads(build_info_text)" in docker
-    assert "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in docker
+    assert "json.loads(build_info_text)" in container_smoke
+    assert '"sha256": sha256(patch_path)' in container_smoke
     assert "recursive-include external/dftd4-corresponding-source *" in manifest
     assert "string(JSON _schema" in generator
     assert "source_revision" in generator
