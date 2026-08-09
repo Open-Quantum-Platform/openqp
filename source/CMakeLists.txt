@@ -134,6 +134,17 @@ endforeach()
 target_link_libraries(oqp
         "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"
         "$<BUILD_INTERFACE:${DFTD4_MCTC_LIB}>")
+if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+  # The DFT-D4 stack is linked in separate ExternalProjects.  Fail the OpenQP
+  # build if either BLAS-using dylib retained a classic LP64 Accelerate symbol
+  # despite declaring WITH_ILP64=ON.
+  add_custom_command(TARGET oqp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} "-DLIB=${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/check_accelerate_aliases.cmake
+    COMMAND ${CMAKE_COMMAND} "-DLIB=${DFTD4_DFTD4_RUNTIME_SOURCE}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/check_accelerate_aliases.cmake
+    COMMENT "Verifying DFT-D4 stack uses Accelerate ILP64 symbols")
+endif()
 
 # Both liboqp and every DFT-D4 dependency live in the wheel's oqp/lib
 # directory.  A loader-relative RPATH makes that directory self-contained and

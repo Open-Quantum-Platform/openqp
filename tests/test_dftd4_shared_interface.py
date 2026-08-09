@@ -161,6 +161,7 @@ def test_shared_stack_packaging_contract_is_declared():
     assert '-DBUILD_SHARED_LIBS=ON' in external
     assert 'd4stack-${_OQP_DFTD4_LINKAGE}1' in external
     assert 'd4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1' in external
+    assert 'accel-ilp64-alias1' in external
     assert '-omp${ENABLE_OPENMP}' in external
     assert '-patch${_OQP_DFTD4_PATCHSET_KEY}' in external
     assert "find_program(OQP_DFTD4_PATCH_EXECUTABLE NAMES patch)" in external
@@ -178,6 +179,9 @@ def test_shared_stack_packaging_contract_is_declared():
     assert 'INSTALL_RPATH_USE_LINK_PATH FALSE' in source
     assert 'INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE' in source
     assert '-DCMAKE_INSTALL_REMOVE_ENVIRONMENT_RPATH=TRUE' in external
+    assert 'CMAKE_SHARED_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}' in external
+    assert 'CMAKE_EXE_LINKER_FLAGS:STRING=-Wl,-alias_list,${OQP_ACC_ALIAS}' in external
+    assert source.count('check_accelerate_aliases.cmake') >= 2
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
     d4_link = re.search(
