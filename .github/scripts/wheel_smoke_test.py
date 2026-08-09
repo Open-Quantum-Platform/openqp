@@ -15,6 +15,7 @@ replaceable DFT-D4 shared-library stack.  This covers failure classes that an
 
 Usage: wheel_smoke_test.py <project-dir>
 """
+import hashlib
 import json
 import os
 import re
@@ -392,7 +393,12 @@ assert abs(charged_energy - neutral_energy) > 1.0e-12, (
 source_root = Path(oqp_root) / "share" / "corresponding-source" / "dftd4-stack"
 required_sources = [
     source_root / "README.md",
+    source_root / "BUILD-INFO.json",
+    source_root / "apply-patch.cmake",
+    source_root / "generate-build-info.cmake",
     source_root / "openqp-external-build.cmake",
+    source_root / "patches" / "mctc-lib-0.4.2-disable-tests.patch",
+    source_root / "patches" / "dftd4-3.7.0-disable-tests-and-mstore.patch",
     source_root / "mctc-lib-0.4.2" / "LICENSE",
     source_root / "multicharge-0.3.0" / "LICENSE",
     source_root / "dftd4-3.7.0" / "COPYING",
@@ -400,6 +406,105 @@ required_sources = [
 ]
 missing_sources = [str(path) for path in required_sources if not path.is_file()]
 assert not missing_sources, f"DFT-D4 corresponding source missing: {missing_sources}"
+
+build_info_path = source_root / "BUILD-INFO.json"
+build_info_text = build_info_path.read_text(encoding="utf-8")
+build_info = json.loads(build_info_text)
+assert build_info["schema"] == "org.open-quantum-platform.dftd4-build-info"
+assert build_info["schema_version"] == 1
+expected_components = {
+    "mctc-lib": {
+        "version": "0.4.2",
+        "archive_url": (
+            "https://github.com/grimme-lab/mctc-lib/archive/refs/tags/"
+            "v0.4.2.tar.gz"
+        ),
+        "sha256": "c7aa45c0a3e6f96e3316e15fc6cdbe48b15234940d3773927a57bb7bfe9744ac",
+        "license": "Apache-2.0",
+    },
+    "multicharge": {
+        "version": "0.3.0",
+        "archive_url": (
+            "https://github.com/grimme-lab/multicharge/archive/refs/tags/"
+            "v0.3.0.tar.gz"
+        ),
+        "sha256": "2fcc1f80871f404f005e9db458ffaec95bb28a19516a0245278cd3175b63a6b2",
+        "license": "Apache-2.0",
+    },
+    "dftd4": {
+        "version": "3.7.0",
+        "archive_url": (
+            "https://github.com/dftd4/dftd4/archive/refs/tags/v3.7.0.tar.gz"
+        ),
+        "sha256": "f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c",
+        "license": "LGPL-3.0-or-later",
+    },
+}
+components = {
+    entry["name"]: {key: value for key, value in entry.items() if key != "name"}
+    for entry in build_info["components"]
+}
+assert components == expected_components, components
+assert len(build_info["components"]) == len(expected_components)
+
+build = build_info["build"]
+assert build["cmake_version"] and build["generator"]
+assert build["system"]["name"] and build["system"]["processor"]
+assert build["build_type"] == "Release"
+assert build["build_shared_libs"] is True
+assert isinstance(build["openmp"], bool)
+assert build["blas"]["requested_provider"]
+assert build["blas"]["resolved_provider"]
+assert build["blas"]["integer_bytes"] == 8
+for library_kind in ("resolved_blas_libraries", "resolved_lapack_libraries"):
+    library_names = build["blas"][library_kind]
+    assert library_names and all(
+        "/" not in name and "\\" not in name for name in library_names
+    ), (library_kind, library_names)
+for compiler in build["compilers"].values():
+    assert compiler["id"] and compiler["version"]
+    assert compiler["executable"] == Path(compiler["executable"]).name
+for flag_name in ("c", "c_release", "fortran", "fortran_release"):
+    assert isinstance(build["forwarded_flags"][flag_name], str)
+
+manifest_runtime_names = build_info["canonical_runtime_names"]
+assert manifest_runtime_names == {
+    "dftd4": d4_names["dftd4"],
+    "multicharge": d4_names["multicharge"],
+    "mctc-lib": d4_names["mctc"],
+}
+revision = build_info["openqp"]["source_revision"]
+assert revision is None or re.fullmatch(r"[0-9a-fA-F]{40}", revision)
+dirty = build_info["openqp"]["source_tree_dirty"]
+assert dirty is None or isinstance(dirty, bool)
+if revision is not None:
+    assert dirty is False
+
+patch_records = {entry["file"]: entry for entry in build_info["patches"]}
+expected_patch_names = {
+    "mctc-lib-0.4.2-disable-tests.patch": "mctc-lib",
+    "dftd4-3.7.0-disable-tests-and-mstore.patch": "dftd4",
+}
+assert set(patch_records) == set(expected_patch_names)
+assert len(build_info["patches"]) == len(expected_patch_names)
+for patch_name, component in expected_patch_names.items():
+    patch_path = source_root / "patches" / patch_name
+    digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+    assert patch_records[patch_name] == {
+        "component": component,
+        "file": patch_name,
+        "sha256": digest,
+        "strip": 1,
+    }
+
+for forbidden_path in (
+    "/private/tmp/", "/tmp/", "/private/var/folders/", "/root/.cache/",
+    "/.cache/openqp/", "/host-cache/", "/Library/Caches/openqp/", "/opt/openqp",
+):
+    assert forbidden_path not in build_info_text, (
+        f"transient build/cache/source path leaked into BUILD-INFO.json: "
+        f"{forbidden_path}"
+    )
 
 print(
     f"wheel smoke test OK: energy {energy} | basis ABI clean | "
