@@ -354,6 +354,23 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(no_platform, index_without_platform, blobs)
             OCI_VERIFY.verify(no_platform, "1.3.0", "a" * 40)
 
+            unmarked_attestation_manifest = self._json_blob(
+                blobs,
+                {"schemaVersion": 2, "subject": {"digest": image_digest},
+                 "blobs": statements},
+                "application/vnd.oci.artifact.manifest.v1+json",
+            )
+            unmarked_index = json.dumps(
+                {"schemaVersion": 2,
+                 "manifests": [
+                     image_without_platform, unmarked_attestation_manifest
+                 ]},
+                sort_keys=True,
+            ).encode()
+            unmarked = Path(temporary) / "candidate-unmarked-attestation.oci.tar"
+            self._write_oci(unmarked, unmarked_index, blobs)
+            OCI_VERIFY.verify(unmarked, "1.3.0", "a" * 40)
+
             image_with_wrong_platform = dict(image)
             image_with_wrong_platform["platform"] = {
                 "os": "linux", "architecture": "arm64"

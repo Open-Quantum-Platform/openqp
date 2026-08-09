@@ -16,6 +16,7 @@ SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v0.2",
     "https://slsa.dev/provenance/v1",
 }
+OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
 
 
 def _blob_path(digest: str) -> str:
@@ -87,21 +88,41 @@ def verify(
         images = []
         attestations = []
         for descriptor in descriptors:
+            if not isinstance(descriptor, dict):
+                raise ValueError("OCI index manifest descriptor must be an object")
+            manifest = _descriptor_json(archive, descriptor)
             annotations = descriptor.get("annotations", {})
             platform = descriptor.get("platform", {})
-            if (
+            attestation_hint = (
                 annotations.get("vnd.docker.reference.type")
                 == "attestation-manifest"
                 or platform == {"architecture": "unknown", "os": "unknown"}
-            ):
-                attestations.append(descriptor)
+            )
+            config_descriptor = manifest.get("config")
+            is_image = (
+                isinstance(config_descriptor, dict)
+                and config_descriptor.get("mediaType")
+                == OCI_IMAGE_CONFIG_MEDIA_TYPE
+                and isinstance(manifest.get("layers"), list)
+            )
+            is_attestation = (
+                attestation_hint
+                or "subject" in manifest
+                or "artifactType" in manifest
+                or isinstance(manifest.get("blobs"), list)
+            )
+            if is_image and is_attestation:
+                raise ValueError("OCI manifest is ambiguously image and attestation")
+            if is_image:
+                images.append((descriptor, manifest))
+            elif is_attestation:
+                attestations.append((descriptor, manifest))
             else:
-                images.append(descriptor)
+                raise ValueError("unrecognized OCI index manifest structure")
 
         if len(images) != 1:
             raise ValueError(f"expected one OCI image manifest, found {len(images)}")
-        image_descriptor = images[0]
-        image_manifest = _descriptor_json(archive, image_descriptor)
+        image_descriptor, image_manifest = images[0]
         config = _descriptor_json(archive, image_manifest["config"])
         config_platform = {
             "os": config.get("os"),
@@ -154,8 +175,7 @@ def verify(
         subjects: set[str] = set()
         if not attestations:
             raise ValueError("OCI archive contains no attestation manifest")
-        for descriptor in attestations:
-            manifest = _descriptor_json(archive, descriptor)
+        for descriptor, manifest in attestations:
             subject = manifest.get("subject")
             if isinstance(subject, dict) and subject.get("digest"):
                 subjects.add(str(subject["digest"]))
@@ -164,7 +184,17 @@ def verify(
             )
             if annotation_subject:
                 subjects.add(str(annotation_subject))
-            for layer in manifest.get("layers", []):
+            attestation_config = manifest.get("config")
+            if isinstance(attestation_config, dict):
+                _descriptor_bytes(archive, attestation_config)
+            payload_descriptors = manifest.get("layers")
+            if payload_descriptors is None:
+                payload_descriptors = manifest.get("blobs")
+            if not isinstance(payload_descriptors, list):
+                raise ValueError("attestation manifest has no layer/blob descriptors")
+            for layer in payload_descriptors:
+                if not isinstance(layer, dict):
+                    raise ValueError("attestation payload descriptor must be an object")
                 statement = _descriptor_json(archive, layer)
                 predicate_type = statement.get("predicateType")
                 if predicate_type:
