@@ -2,11 +2,13 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,6 +139,20 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         )
         with self.assertRaisesRegex(RuntimeError, "unresolved"):
             COLLECTOR.parse_ldd("libgomp.so.1 => not found\n")
+
+    def test_ldd_uses_only_explicit_package_runtime_paths(self):
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(COLLECTOR.subprocess, "run", return_value=completed) as run:
+            COLLECTOR.ldd(
+                Path("/tmp/owner.so"),
+                (Path("/package/oqp/lib"), Path("/opt/openblas/lib")),
+            )
+
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(
+            environment["LD_LIBRARY_PATH"],
+            os.pathsep.join(("/package/oqp/lib", "/opt/openblas/lib")),
+        )
 
     @staticmethod
     def _write_wheel(path, name, version, tag="py3-none-any"):

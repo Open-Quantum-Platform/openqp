@@ -14,6 +14,7 @@ import argparse
 import ctypes
 import hashlib
 import json
+import os
 import platform
 import re
 import shutil
@@ -84,9 +85,18 @@ def parse_ldd(output: str) -> list[tuple[str, Path]]:
     return resolved
 
 
-def ldd(path: Path) -> list[tuple[str, Path]]:
+def ldd(
+    path: Path, library_paths: tuple[Path, ...] = ()
+) -> list[tuple[str, Path]]:
+    environment = os.environ.copy()
+    environment.pop("LD_LIBRARY_PATH", None)
+    if library_paths:
+        environment["LD_LIBRARY_PATH"] = os.pathsep.join(
+            str(directory) for directory in library_paths
+        )
     result = subprocess.run(
-        ["ldd", str(path)], capture_output=True, text=True, check=False
+        ["ldd", str(path)], capture_output=True, text=True, check=False,
+        env=environment,
     )
     output = result.stdout + result.stderr
     if result.returncode != 0:
@@ -218,6 +228,10 @@ def collect(
     package_lib = package_root / "lib"
     if not package_lib.is_dir():
         raise RuntimeError(f"installed OpenQP library directory missing: {package_lib}")
+    openblas_lib = Path("/opt/openblas/lib")
+    if not openblas_lib.is_dir():
+        raise RuntimeError(f"pinned OpenBLAS library directory missing: {openblas_lib}")
+    runtime_search_paths = (package_lib, openblas_lib)
 
     seeds = sorted(
         {
@@ -273,7 +287,7 @@ def collect(
         if owner in inspected:
             continue
         inspected.add(owner)
-        for soname, dependency in ldd(owner):
+        for soname, dependency in ldd(owner, runtime_search_paths):
             dependency = dependency.resolve()
             if not dependency.is_file():
                 raise RuntimeError(f"ldd dependency does not exist: {dependency}")
