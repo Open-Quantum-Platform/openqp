@@ -819,7 +819,14 @@ def _optimize(mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
         history = [(0, objective, 0.0, 0.0, 0.0)]
         return C, energies, coeffs, history, True, 0
 
-    if converger not in ("", "twophase", "two-phase", "default"):
+    # "" and "default" mean TRAH -- that is what _CAS_CONVERGER_CODE sends to
+    # the native driver, and what _CONV_ALIASES resolves them to.  Excluding
+    # them here meant the SAME accepted input ran TRAH natively but the legacy
+    # two-phase optimizer whenever the native driver was unavailable or
+    # declined (a multi-root Davidson solve with an explicit subspace, for
+    # instance) -- a different algorithm and convergence path depending on the
+    # backend.  Only an explicit two-phase request stays on the legacy body.
+    if converger not in ("twophase", "two-phase", "2phase"):
         from oqp.library.casscf_convergers import run_converger
         return run_converger(converger, mol, C, evaluate, pairs, nbf, options,
                              obj_weights, obj_roots, hess_fn=hess_fn)

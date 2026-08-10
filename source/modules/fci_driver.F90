@@ -158,7 +158,7 @@ contains
     integer :: norb, nact, ncore, na, nb, nroot, solver, maxiter, subspace
     integer :: mult, maxmem, nthreads, want_s2, nspin, ierr, nguess
     real(dp) :: ecore, eig_tol, cutoff
-    integer(i8) :: ndet, dense_bytes, budget_bytes
+    integer(i8) :: ndet, dense_bytes, budget_bytes, spin_bytes
 
     integer(i8), allocatable :: dets(:), skeys(:), sperm(:)
     real(dp), allocatable :: h_act(:), eri_act(:), hspin(:), gspin(:)
@@ -218,6 +218,19 @@ contains
     call build_determinants(nact, na, nb, ndet, dets)
     call fci_sort_dets(ndet, dets, skeys, sperm)
 
+    ! The (2*nact)^4 spin-integral tensor is allocated here, BEFORE the solver
+    ! dispatch below computed budget_bytes -- and that check only ever covered
+    ! the dense Hamiltonian.  CAS(2,30) is 900 determinants, so a ~6 MiB
+    ! Hamiltonian cleared max_memory=64 while this allocation alone is ~99 MiB.
+    ! Weigh it first, so the native driver honours the same ceiling the Python
+    ! fallback does.
+    budget_bytes = int(max(1, maxmem), i8) * 1024_i8 * 1024_i8
+    spin_bytes = 8_i8 * int(nspin, i8)**4
+    if (spin_bytes > budget_bytes) then
+      status = FCI_ERR_BUDGET
+      return
+    end if
+
     allocate(h_act(0:int(nact, i8)**2 - 1_i8), &
              eri_act(0:int(nact, i8)**4 - 1_i8), &
              hspin(0:int(nspin, i8)**2 - 1_i8), &
@@ -238,11 +251,12 @@ contains
 
     ! ---- solver dispatch, matching solve_fci's "auto" rule exactly
     dense_bytes = 8_i8 * ndet * ndet
-    budget_bytes = int(max(1, maxmem), i8) * 1024_i8 * 1024_i8
+    ! gspin stays live while the dense Hamiltonian is built, so the auto rule
+    ! and the dense guard weigh the pair -- matching solve_fci exactly.
     if (solver == 0) then
-      solver = merge(1, 2, dense_bytes <= budget_bytes)
+      solver = merge(1, 2, dense_bytes + spin_bytes <= budget_bytes)
     end if
-    if (solver == 1 .and. dense_bytes > budget_bytes) then
+    if (solver == 1 .and. dense_bytes + spin_bytes > budget_bytes) then
       status = FCI_ERR_BUDGET
       return
     end if

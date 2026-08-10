@@ -265,17 +265,28 @@ def _caspt2_options(config: dict) -> CASPT2Options:
 
 
 def _pt2_memory(options, settings) -> tuple:
-    """(budget_MiB, label) for the PT2 allocation guards.
+    """(budget_MiB, label) for the PT2 allocation guards: the TIGHTER of the
+    two configured ceilings.
 
-    [pt2] max_memory is a schema key that no guard read: they all used
-    [cas] max_memory, so a job asking for pt2.max_memory=256 was still allowed
-    to allocate against the default cas.max_memory=2048.  0 means "inherit
-    [cas]", so inputs that never mention the PT2 key are unchanged.
+    [pt2] max_memory used to be a schema key no guard read -- they all used
+    [cas] max_memory, so pt2.max_memory=256 still allocated against the default
+    cas.max_memory=2048.  An "unset means inherit [cas]" sentinel does NOT work
+    here: schema expansion materializes pt2.max_memory=2048 into every config,
+    so the sentinel never fires and the committed examples (cas.max_memory=512)
+    would silently run their PT2 guards at 2048 -- looser than before the key
+    was wired at all.
+
+    There is no way to distinguish "user asked for 2048" from "schema filled in
+    2048", so take the minimum: neither configured ceiling is ever exceeded,
+    the result is never looser than the historical [cas]-only behaviour, and an
+    explicit lowering of either key is honoured.  Raising the budget therefore
+    means raising [cas] max_memory, which is the documented knob for it.
     """
     pt2_mem = int(getattr(options, "max_memory", 0) or 0)
-    if pt2_mem:
+    cas_mem = int(settings.max_memory)
+    if pt2_mem and pt2_mem < cas_mem:
         return pt2_mem, "[pt2]"
-    return int(settings.max_memory), "[cas]"
+    return cas_mem, "[cas]"
 
 
 def _reference_roots(options) -> list:
@@ -721,7 +732,7 @@ class _ZerothOrder:
 
 
 def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0="fock",
-                     active_occ=None, ipea=0.0):
+                     active_occ=None, ipea=0.0, max_memory=None):
     """Assemble the full electronic Hamiltonian, the H0 operator and the external space."""
     full_nelec = (ncore + active_nelec[0], ncore + active_nelec[1])
     # Count the space BEFORE enumerating it.  _determinants materialises the
@@ -738,6 +749,27 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
             "basis/active space; an RDM-based contraction (larger systems) is "
             "a separate step."
         )
+    # The AO-ERI guard upstream covers the nbf^4 tensors, and max_det covers the
+    # determinant count -- neither covers what this routine itself allocates.
+    # A 2-electron / 50-orbital case with max_det=5000 clears both and then
+    # materializes a ~763 MiB (2*norb)^4 spin tensor plus the dense ndet x ndet
+    # Hamiltonian here.  Both are live simultaneously, so weigh them together
+    # against the configured PT2 ceiling before building either.
+    if max_memory is not None:
+        _spin_bytes = 8 * (2 * int(norb)) ** 4
+        _ham_bytes = 8 * int(ndet) * int(ndet)
+        _budget = max(1, int(max_memory)) * 1024 ** 2
+        if _spin_bytes + _ham_bytes > _budget:
+            raise ValueError(
+                "uncontracted PT2 needs ~%.2f GiB for the spin-orbital "
+                "integral tensor (norb=%d) plus ~%.2f GiB for the dense "
+                "%d x %d Hamiltonian, both live at once, exceeding the "
+                "configured max_memory budget of %d MiB.  Reduce the basis or "
+                "active space, raise [cas] max_memory, or use "
+                "[pt2] contraction=strong (SC-NEVPT2), which forms no external "
+                "determinant space."
+                % (_spin_bytes / 1024 ** 3, norb, _ham_bytes / 1024 ** 3,
+                   ndet, ndet, int(max_memory)))
     full_dets = _determinants(norb, full_nelec)
     det_index = {det: i for i, det in enumerate(full_dets)}
 
@@ -1063,12 +1095,12 @@ def _xms_rotation(h1e, eri, D_sa, coeffs, dets, ncore, nact, norb, roots, det_in
 
 
 def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
-                active_nelec, norb, enuc, roots, options):
+                active_nelec, norb, enuc, roots, options, max_memory=None):
     """MS-/XMS-CASPT2 effective Hamiltonian over the reference roots."""
     active_occ = np.diag(D_sa)[ncore:ncore + nact]
     full_dets, det_index, hfull, h0op, external = _build_operators(
         h1e, eri, eps, ncore, nact, active_nelec, norb, options.max_det, options.h0,
-        active_occ=active_occ, ipea=options.ipea_shift
+        active_occ=active_occ, ipea=options.ipea_shift, max_memory=max_memory
     )
 
     refs = [_embed_reference(coeffs[:, r], dets, ncore, nact, norb, det_index) for r in roots]
@@ -1219,8 +1251,23 @@ def native_caspt2_energy(mol, ref_energy=None):
     # PT2 frozen core: fold the deepest atomic cores out of the first-order space.
     # Default (frozen<0) = the standard deep cores, matching OpenMolcas and removing the
     # spurious deep-core over-correlation; frozen=0 correlates all; frozen=N freezes N.
-    nfrozen = _standard_core_count(mol) if options.frozen < 0 else int(options.frozen)
-    nfrozen = max(0, min(nfrozen, ncore))
+    if options.frozen < 0:
+        # Automatic atomic-core choice: clamping is correct here, the count is
+        # derived rather than requested.
+        nfrozen = max(0, min(_standard_core_count(mol), ncore))
+    else:
+        # An EXPLICIT count is documented as "freeze exactly N".  Silently
+        # clamping an impossible request changed the correlated-electron space
+        # out from under a comparison that depended on it.
+        nfrozen = int(options.frozen)
+        if nfrozen > ncore:
+            raise ValueError(
+                "[pt2] frozen=%d exceeds the %d inactive orbital(s) available "
+                "([cas] frozen_core=%d): only inactive orbitals can be frozen "
+                "out of the first-order space.  Lower [pt2] frozen, raise "
+                "[cas] frozen_core, or use frozen=auto for the standard deep "
+                "cores." % (nfrozen, ncore, ncore))
+        nfrozen = max(0, nfrozen)
     options._pt2_nfrozen = nfrozen
     if nfrozen:
         h1e, eri, eps, D_sa, ncore, nbf, enuc = _freeze_core(
@@ -1269,7 +1316,8 @@ def native_caspt2_energy(mol, ref_energy=None):
                                   rotate=(options.variant == "xms"))
         else:
             result = _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
-                                 active_nelec, nbf, enuc, roots, options)
+                                 active_nelec, nbf, enuc, roots, options,
+                                 max_memory=_pt2_memory(options, settings)[0])
         _multistate_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                            roots, result, s2, mult, time.time() - t0)
     return mol.energies
@@ -1360,7 +1408,8 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
 
     full_dets, det_index, hfull, h0op, external = _build_operators(
         h1e, eri, eps, ncore, nact, active_nelec, norb, options.max_det, options.h0,
-        active_occ=active_occ, ipea=options.ipea_shift
+        active_occ=active_occ, ipea=options.ipea_shift,
+        max_memory=_pt2_memory(options, settings)[0]
     )
     vec = _embed_reference(coeffs[:, root], dets, ncore, nact, norb, det_index)
     e_ref_check = float(vec @ hfull @ vec) + enuc

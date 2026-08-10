@@ -2977,6 +2977,41 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
         action="Set [ci] ci_print_threshold to zero or a positive value.",
     )
 
+    # CASSCF and the PT2 drivers build their orbital blocks as range(ncore) then
+    # range(ncore, ncore+nact), so contiguous_active_space() rejects a scattered
+    # explicit selection -- but only at runtime, after the reference SCF (and
+    # after a whole CASSCF optimization for a PT2 casscf reference).  The input
+    # is deterministically wrong, so say so here.  CASCI keeps arbitrary
+    # selections; it supports them.
+    if method in ({"casscf", "sa-casscf", "sacasscf"} | set(PT2_METHOD_ALIASES)):
+        _act = [str(x).strip() for x in _as_list(
+            _get(config, "cas", "active_orbital_indices", [])) if str(x).strip()]
+        _cor = [str(x).strip() for x in _as_list(
+            _get(config, "cas", "core_orbital_indices", [])) if str(x).strip()]
+        if _act:
+            try:
+                _a = [int(x) for x in _act]
+                _c = [int(x) for x in _cor]
+            except (TypeError, ValueError):
+                _a = _c = None
+            if _a is not None:
+                _ok = (sorted(_c) == list(range(1, len(_c) + 1))
+                       and sorted(_a) == list(range(len(_c) + 1,
+                                                    len(_c) + len(_a) + 1)))
+                if not _ok:
+                    report.add(
+                        "ERROR",
+                        "cas.active_orbital_indices",
+                        f"{method} requires a contiguous core/active orbital "
+                        "partition; this selection is scattered.",
+                        value=",".join(_act),
+                        expected="core 1..nc then active nc+1..nc+na",
+                        action=("Reorder the orbitals ([cas] sort_orbitals or "
+                                "an orbital file) so the active space is "
+                                "contiguous, or use method=casci, which "
+                                "supports arbitrary selections."),
+                    )
+
     # Two opt-ins whose whole point is an assurance that is never delivered, so
     # a warning is not enough -- a user who sets them is told the run honoured
     # them.  Reject until they are implemented (see the unimplemented-keyword
@@ -3004,6 +3039,25 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 action=("Leave [casscf] max_function_evaluations at 0 and bound "
                         "the run with [casscf] max_macro_iterations instead."),
             )
+
+    # casscf.diagnostic_benchmark_required: same shape -- no runtime path writes
+    # the diagnostic report, reads the reference, applies the tolerance, or
+    # fails on a mismatch, so an explicitly REQUIRED benchmark is never
+    # performed and the run reports success anyway.
+    if str(_get(config, "casscf", "diagnostic_benchmark_required", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_benchmark_required",
+            "The CASSCF diagnostic benchmark is not implemented: no runtime "
+            "path writes the diagnostic report or compares it against "
+            "[casscf] diagnostic_benchmark_reference_file, so requiring it "
+            "would silently pass.",
+            value=True,
+            expected="casscf.diagnostic_benchmark_required=false",
+            action=("Compare the CASSCF diagnostics against your reference "
+                    "outside the run for now."),
+        )
 
     # pt2.benchmark_required: nothing reads benchmark_reference_file, compares
     # against benchmark_tolerance, or fails on a mismatch, so a run that
@@ -4494,14 +4548,12 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
 
     # Same class as the two below: accepted, documented, and read by nothing.
     #   pt2.print_amplitudes / save_amplitudes -- no PT2 engine reads either
-    #   pt2.max_memory                        -- CASPT2Options never parses it
     #   casscf.max_function_evaluations       -- no optimizer reads it
     # regression.py exempts several of these from the feature-coverage gate as
     # though the I/O existed, so nothing else would tell the user.
     for _dead_key, _dead_val, _dead_default in (
             ("pt2.print_amplitudes", _get(config, "pt2", "print_amplitudes", False), False),
             ("pt2.save_amplitudes", _get(config, "pt2", "save_amplitudes", False), False),
-            ("pt2.max_memory", _get(config, "pt2", "max_memory", 2048), 2048),
             ("casscf.max_function_evaluations",
              _get(config, "casscf", "max_function_evaluations", 0), 0)):
         _differs = False
