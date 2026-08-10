@@ -595,7 +595,17 @@ class SinglePoint(Calculator):
                         .get('status', 'disabled') != 'disabled':
                     self.mol._detect_symmetry_metadata()
                 # Rebuild everything the moved coordinates invalidate --
-                # including the guess.
+                # including the guess, via the SAME initialisation path this
+                # run was configured to use.
+                #
+                # A bare _prep_guess() here was not enough: it discards
+                # whatever _init_convergence() produced, and swapmo() has
+                # already run by this point, so a job relying on a projected
+                # [scf] init_scf guess or on [guess] swapmo -- a restricted/MOM
+                # core-hole calculation, say -- reached _run_scf() without the
+                # initialisation it asked for, and could converge to a
+                # different solution. Re-run the configured path, then re-apply
+                # the orbital swaps, exactly as the code above does.
                 #
                 # An earlier version stopped at the integrals, to keep the
                 # orbitals produced by [scf] init_scf. But AO basis functions
@@ -610,7 +620,11 @@ class SinglePoint(Calculator):
                 # the honest repair; a stale starting point is not worth
                 # protecting, and the cost lands only on a path that is already
                 # getting no reduction.
-                self._prep_guess()
+                if self.init_scf != 'no' and do_init_scf:
+                    self._init_convergence()
+                else:
+                    self._prep_guess()
+                self.swapmo()
 
         scf_flag = self._run_scf()
 
@@ -1603,6 +1617,28 @@ class Hessian(Calculator):
         # what the density is built from, so a mixed one there means the
         # reference solution is not the symmetric one. Declining costs only
         # time; trusting a broken branch costs the answer.
+        # The labeller reads meta['detection'] -- the STORED detection -- while
+        # everything above deliberately uses `ops` detected fresh from
+        # origin_coord, because a TS search or IRC hands this routine a
+        # geometry the stored block no longer describes. Labelling against the
+        # stale one would let the guard pass for the wrong reason: stale C1
+        # metadata has a single irrep, so EVERY orbital comes back pure, and
+        # the fresh C2v operations would then be used to reconstruct a
+        # symmetry-broken solution's Hessian. A guard that cannot fail is not a
+        # guard. Require the stored detection to be the one just computed, and
+        # decline otherwise rather than labelling against the wrong group.
+        stored = meta.get('detection') or {}
+        stored_ops = stored.get('operations') or []
+        if str(stored.get('point_group', '')).lower() \
+                != str(detection.get('point_group', '')).lower():
+            return decline('stored_detection_is_stale_for_this_geometry')
+        if len(stored_ops) != len(ops):
+            return decline('stored_detection_is_stale_for_this_geometry')
+        for stored_op, fresh_op in zip(stored_ops, ops):
+            if list(stored_op.get('permutation', [])) \
+                    != list(fresh_op.get('permutation', [])):
+                return decline('stored_detection_is_stale_for_this_geometry')
+
         try:
             labels = self.mol.label_molecular_orbitals()
         except Exception:
@@ -1622,6 +1658,28 @@ class Hessian(Calculator):
             return decline('no_occupied_orbitals_to_check')
         if 'mixed' in occupied:
             return decline('symmetry_broken_electronic_solution')
+
+        # A numerical Hessian of an EXCITED state differentiates that root, so
+        # the root has to respect the operations too -- pure occupied SCF
+        # orbitals say nothing about it. A degenerate or symmetry-mixed excited
+        # state breaks the reconstruction identity exactly as a broken ground
+        # state does, and the result would be reconstructed and symmetrised
+        # without complaint.
+        if int(self.state) > 0:
+            try:
+                states = self.mol.label_excited_states()
+            except Exception:
+                return decline('state_labelling_failed')
+            if not states or states.get('status') != 'ok':
+                return decline('state_labelling_unavailable')
+            state_labels = list(states.get('labels') or [])
+            # [hess] state is 1-based over excited roots: state 1 is the first
+            # entry produced by the labeller.
+            index = int(self.state) - 1
+            if index >= len(state_labels):
+                return decline('requested_state_not_labelled')
+            if str(state_labels[index]).lower() == 'mixed':
+                return decline('symmetry_mixed_excited_state')
 
         meta['hess_symmetry_unique'] = {
             'status': 'active',

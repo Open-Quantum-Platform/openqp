@@ -423,13 +423,25 @@ class SymmetryUniqueDeclinesOnABrokenElectronicSolution(unittest.TestCase):
     differentiated onto a different one.
     """
 
-    def _hessian(self, labels):
+    @staticmethod
+    def _detection_for(geom):
+        """The detection a job would really be carrying at this geometry."""
+        from oqp.library.symmetry_detect import detect_point_group
+        return detect_point_group([8.0, 1.0, 1.0],
+                                  np.asarray(geom, dtype=float).reshape(-1, 3),
+                                  tolerance=1.0e-5)
+
+    def _hessian(self, labels, detection='match', states=None, state=0):
         from oqp.library.single_point import Hessian
 
         hess = Hessian.__new__(Hessian)
         mol = types.SimpleNamespace()
         mol.config = {'hess': {'symmetry_unique': True}}
-        mol.symmetry_metadata = {'status': 'enabled', 'tolerance': 1.0e-5}
+        stored = (self._detection_for(self.GEOM) if detection == 'match'
+                  else detection)
+        mol.symmetry_metadata = {'status': 'enabled', 'tolerance': 1.0e-5,
+                                 'detection': stored}
+        mol.label_excited_states = lambda: states
         mol.get_atoms = lambda: np.array([8.0, 1.0, 1.0])
         mol.data = {'nelec_A': np.array([5]), 'nelec_B': np.array([5])}
         mol.label_molecular_orbitals = lambda: labels
@@ -438,7 +450,7 @@ class SymmetryUniqueDeclinesOnABrokenElectronicSolution(unittest.TestCase):
         mol._parse_bool_like = lambda v: str(v).strip().lower() in (
             'true', 't', '1', 'yes')
         hess.mol = mol
-        hess.state = 0
+        hess.state = state
         return hess
 
     GEOM = np.array([0.0, 0.0, -0.0776,
@@ -476,3 +488,161 @@ class SymmetryUniqueDeclinesOnABrokenElectronicSolution(unittest.TestCase):
         hess = self._hessian({'status': 'skipped_no_basis'})
         self.assertEqual(
             hess._symmetry_unique_displacements(self.GEOM, 0.01), (None, None))
+
+    def test_a_stale_stored_detection_declines_rather_than_labelling_wrong(self):
+        """The guard must not pass for the wrong reason.
+
+        Everything above this check uses operations detected FRESH from
+        origin_coord, because a TS search or IRC hands the routine a geometry
+        the stored block no longer describes. But the MO labeller reads
+        meta['detection'] -- the stored one. Left alone, stale C1 metadata has
+        a single irrep, so every orbital comes back pure and the guard passes
+        vacuously, after which the fresh C2v operations reconstruct a
+        symmetry-broken solution's Hessian. A guard that cannot fail is not a
+        guard.
+        """
+        pure = {'status': 'ok', 'alpha': {'labels': ['a1'] * 13}}
+        stale = {'point_group': 'c1',
+                 'operations': [{'permutation': [0, 1, 2]}]}
+
+        hess = self._hessian(pure, detection=stale)
+        self.assertEqual(
+            hess._symmetry_unique_displacements(self.GEOM, 0.01), (None, None),
+            'a stored detection that does not match the fresh one must '
+            'decline, not label against the wrong group')
+        self.assertEqual(
+            hess.mol.symmetry_metadata['hess_symmetry_unique']['status'],
+            'stored_detection_is_stale_for_this_geometry')
+
+
+class SymmetryUniqueChecksTheRequestedExcitedState(unittest.TestCase):
+    """A numerical Hessian of an excited state differentiates that root, so the
+    root has to respect the operations too.
+
+    Pure occupied SCF orbitals say nothing about it: a degenerate or
+    symmetry-mixed excited state breaks the reconstruction identity exactly as
+    a broken ground state does.
+    """
+
+    GEOM = SymmetryUniqueDeclinesOnABrokenElectronicSolution.GEOM
+    PURE_MOS = {'status': 'ok', 'alpha': {'labels': ['a1'] * 13}}
+
+    def _hessian(self, states, state):
+        return SymmetryUniqueDeclinesOnABrokenElectronicSolution._hessian(
+            SymmetryUniqueDeclinesOnABrokenElectronicSolution(),
+            self.PURE_MOS, states=states, state=state)
+
+    def test_a_mixed_excited_root_declines(self):
+        states = {'status': 'ok', 'labels': ['a1', 'mixed', 'b2']}
+        hess = self._hessian(states, state=2)
+        self.assertEqual(
+            hess._symmetry_unique_displacements(self.GEOM, 0.01), (None, None))
+        self.assertEqual(
+            hess.mol.symmetry_metadata['hess_symmetry_unique']['status'],
+            'symmetry_mixed_excited_state')
+
+    def test_a_clean_excited_root_still_reduces(self):
+        states = {'status': 'ok', 'labels': ['a1', 'b2', 'b2']}
+        hess = self._hessian(states, state=2)
+        uniq, ops = hess._symmetry_unique_displacements(self.GEOM, 0.01)
+        self.assertIsNotNone(uniq)
+
+    def test_unavailable_state_labels_decline(self):
+        hess = self._hessian({'status': 'skipped_amplitude_shape_mismatch'},
+                             state=1)
+        self.assertEqual(
+            hess._symmetry_unique_displacements(self.GEOM, 0.01), (None, None))
+
+    def test_a_ground_state_hessian_does_not_need_state_labels(self):
+        """state=0 must not start demanding excited-state metadata."""
+        hess = self._hessian(None, state=0)
+        uniq, ops = hess._symmetry_unique_displacements(self.GEOM, 0.01)
+        self.assertIsNotNone(uniq)
+
+
+class RollbackReappliesTheConfiguredInitialisation(unittest.TestCase):
+    """After the rollback the run must reach _run_scf() with the guess it was
+    configured to use.
+
+    The rollback regenerates the guess because the orbitals are frame
+    dependent. A bare `_prep_guess()` there was not enough: it discards
+    whatever `_init_convergence()` produced, and `swapmo()` has already run by
+    that point, so a job relying on a projected `[scf] init_scf` guess or on
+    `[guess] swapmo` -- a restricted/MOM core-hole calculation -- reached the
+    SCF without the initialisation it asked for.
+
+    Drives the real `reference()` and records the call order, stopping at the
+    SCF.
+    """
+
+    class _Stop(Exception):
+        pass
+
+    def _drive(self, init_scf):
+        from oqp.library import single_point as sp
+
+        calls = []
+        obj = sp.SinglePoint.__new__(sp.SinglePoint)
+        obj.method = 'hf'
+        obj.init_scf = init_scf
+        obj._init_convergence = lambda: calls.append('init_convergence')
+        obj._prep_guess = lambda: calls.append('prep_guess')
+        obj.swapmo = lambda: calls.append('swapmo')
+        obj._set_petite_enabled = lambda flag: calls.append('petite_off')
+
+        def run_scf():
+            calls.append('run_scf')
+            raise self._Stop()
+
+        obj._run_scf = run_scf
+
+        mol = types.SimpleNamespace()
+        mol.symmetry_metadata = {
+            'status': 'enabled',
+            'use_integral_symmetry': True,
+            # What a successful reorientation followed by a declining staging
+            # leaves behind -- the real bail-out, e.g. a spherical basis
+            # reaching skipped_basis_mismatch.
+            '_reorient_input_coords': [0.0, 0.0, 0.0, 0.0, 0.0, 1.4],
+            'integral_symmetry': {'status': 'skipped_basis_mismatch'},
+        }
+        mol.reorient_for_integral_symmetry = lambda: calls.append('reorient')
+        mol.stage_integral_symmetry_maps = lambda: calls.append('stage')
+        mol.update_system = lambda x: calls.append('restore_geometry')
+        mol._detect_symmetry_metadata = lambda: calls.append('redetect')
+        obj.mol = mol
+
+        original_dump = sp.dump_log
+        sp.dump_log = lambda *a, **k: None
+        try:
+            obj.reference()
+        except self._Stop:
+            pass
+        finally:
+            sp.dump_log = original_dump
+        return calls
+
+    def test_the_init_scf_path_is_rerun_after_the_rollback(self):
+        calls = self._drive(init_scf='rhf')
+        restore = calls.index('restore_geometry')
+        after = calls[restore:]
+        self.assertIn('init_convergence', after,
+                      'the configured init_scf guess must be rebuilt in the '
+                      'restored frame, not replaced by a bare guess')
+        self.assertNotIn('prep_guess', after,
+                         'a job configured for init_scf must not silently drop '
+                         'to the plain guess')
+
+    def test_swapmo_is_reapplied_after_the_rollback(self):
+        calls = self._drive(init_scf='rhf')
+        restore = calls.index('restore_geometry')
+        self.assertIn('swapmo', calls[restore:],
+                      'swapmo already ran before the rollback, so the swaps '
+                      'are lost unless they are reapplied')
+
+    def test_a_plain_guess_job_still_uses_the_plain_guess(self):
+        calls = self._drive(init_scf='no')
+        restore = calls.index('restore_geometry')
+        after = calls[restore:]
+        self.assertIn('prep_guess', after)
+        self.assertNotIn('init_convergence', after)
