@@ -394,7 +394,10 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         maxmove align opt_ends end_fmax neb_output irc_step irc_direction
         mep_step path_gtol
     """),
-    "hess": _keys("type state dx nproc read restart temperature clean"),
+    # symmetry_unique arrives with #319 (symmetry-unique displacement set);
+    # the schema gained it without the concise language, which this PR's
+    # section-ownership gate catches.
+    "hess": _keys("type state dx nproc read restart temperature clean symmetry_unique"),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
         nstep dt active substep decoherence edc_c thrshe tdc trivial
@@ -626,7 +629,10 @@ DRIVER_OPTIONS = {
         "frms", "climb_fmax", "dt", "neb_dt", "maxmove", "align",
         "opt_ends", "end_fmax", "output",
     },
-    "hess": {"type", "dx", "nproc", "read", "restart", "temperature", "clean"},
+    # symmetry_unique (#319) selects the symmetry-unique displacement set, so
+    # it is a hess driver option like dx/nproc rather than a generic key.
+    "hess": {"type", "dx", "nproc", "read", "restart", "temperature", "clean",
+             "symmetry_unique"},
     "nac": {"type", "dx", "nproc", "restart", "clean", "align"},
     "bp": {"type", "dx", "nproc", "restart", "clean", "align"},
     "nacme": {"dt", "align"},
