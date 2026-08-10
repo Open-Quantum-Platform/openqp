@@ -470,6 +470,16 @@ class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
                 self.assertFalse(detect._every_atom_is_its_own_class(
                     np.asarray(charges, dtype=float), coords, 1.0e-5))
 
+    def test_coordinates_that_overflow_the_norm_are_left_to_the_detector(self):
+        """Every comparison against inf-inf is false, which would read as
+        'no atom has a partner' and screen a symmetric molecule down to 1."""
+        detect = load_symmetry_detect_module()
+        charges = np.asarray([1.0, 1.0, 1.0, 1.0])
+        finite = np.array([[1.0, 0.5, 0.0], [-1.0, -0.5, 0.0],
+                           [0.3, -1.2, 0.7], [-0.3, 1.2, 0.7]])
+        self.assertFalse(detect._every_atom_is_its_own_class(
+            charges, finite * 1.0e200, 1.0e-5))
+
     def test_carbon_monoxide_is_left_to_the_detector(self):
         """Linear geometries are excluded from the screen by construction.
 

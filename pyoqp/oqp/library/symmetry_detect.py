@@ -456,7 +456,7 @@ def detect_point_group(
     tolerance:
         Absolute displacement tolerance for accepting a symmetry operation.
     """
-    _require_usable_tolerance(tolerance)
+    tolerance = _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -530,7 +530,7 @@ def enumerate_full_group(
     atom permutations, in the frame of the given coordinates.
     """
 
-    _require_usable_tolerance(tolerance)
+    tolerance = _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -658,10 +658,14 @@ def _every_atom_is_its_own_class(
     a rotation about the molecular axis fixes every atom without being the
     identity, so the argument above does not close there. Near-linear matters
     because the match is approximate. A rotation by theta moves an atom by
-    2*sin(theta/2)*d(atom, axis), and the smallest angle any operation here can
-    carry is 2*pi/_MAX_GROUP_ORDER (closure is capped there, so no higher order
-    survives), hence every atom within tolerance/(2*sin(pi/_MAX_GROUP_ORDER))
-    of some line is fixed to within tolerance by a proper rotation.
+    2*sin(theta/2)*d(atom, axis), so every atom within
+    tolerance/(2*sin(theta/2)) of some line is fixed to within tolerance by
+    that rotation. The smallest angle worth guarding against is
+    2*pi/_MAX_GROUP_ORDER: seeds carry order 8 at most, and closure keeps at
+    most _MAX_GROUP_ORDER elements before bailing back to the seeds, so a
+    closed group returned at the default cap has no element of higher order.
+    (A caller passing a larger ``max_order`` to ``enumerate_full_group`` could
+    exceed it; ``rotational_symmetry_number`` never does.)
 
     That test is made on the off-axis extent of the geometry rather than with
     `_is_linear`, which takes its axis from the first atom with a non-negligible
@@ -698,10 +702,15 @@ def _every_atom_is_its_own_class(
     off_axis = float(np.hypot(singular[1], singular[2]))
     collinear_limit = (np.sqrt(coords.shape[0]) * float(tolerance)
                        / (2.0 * np.sin(np.pi / _MAX_GROUP_ORDER)))
-    if off_axis <= collinear_limit:
+    if not np.isfinite(off_axis) or off_axis <= collinear_limit:
         return False
 
     radii = np.linalg.norm(centered, axis=1)
+    # Coordinates large enough to overflow the norm make every subsequent
+    # comparison false, which would read as "no atom has a partner" and screen
+    # a symmetric molecule down to sigma = 1. Decline instead.
+    if not bool(np.all(np.isfinite(radii))):
+        return False
     order = np.lexsort((radii, charges))
     charges_sorted = charges[order]
     radii_sorted = radii[order]
