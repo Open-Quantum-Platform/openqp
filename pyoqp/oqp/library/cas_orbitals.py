@@ -8,18 +8,31 @@ from pathlib import Path
 import numpy as np
 
 
-def _matrix_from_json_value(value, nbf: int) -> np.ndarray:
+def _matrix_from_json_value(value, nbf: int, *, restart_orientation: bool = False) -> np.ndarray:
+    """Return AO-rows x MO-columns coefficients.
+
+    ``restart_orientation`` selects the convention of the OQP::VEC_MO_A /
+    OQP::VEC_MO_B keys, which OpenQP writes MO-major; the ``mo_coeff*`` aliases
+    are AO-rows x MO-columns as documented.
+
+    The orientation used to be decided by ndim rather than by key, so only the
+    FLAT form was transposed -- and ``Molecule.save_data`` writes OQP::VEC_MO_A
+    as a 2-D matrix.  Feeding a saved restart file straight back through
+    ``[cas] orbital_file`` therefore loaded the TRANSPOSE of the intended
+    orbitals, silently: on H4/STO-3G it turned a -2.1147 singlet CASCI into a
+    -3.7105 "triplet" below the RHF energy.  The convention now follows the key
+    name, so both spellings of the same key round-trip.
+    """
     arr = np.asarray(value, dtype=float)
     if arr.ndim == 1:
         if arr.size != nbf * nbf:
             raise ValueError(f"MO coefficient vector has {arr.size} values, expected {nbf * nbf}")
-        # OpenQP restart JSON stores OQP::VEC_MO_A in the orientation consumed by
-        # Molecule.load_data; FCI historically transposes after reshape.
-        return arr.reshape((nbf, nbf)).T
+        arr = arr.reshape((nbf, nbf))
+        return arr.T if restart_orientation else arr
     if arr.ndim == 2:
         if arr.shape != (nbf, nbf):
             raise ValueError(f"MO coefficient matrix has shape {arr.shape}, expected {(nbf, nbf)}")
-        return arr
+        return arr.T if restart_orientation else arr
     raise ValueError("MO coefficients must be a flat nbf*nbf array or an nbf x nbf matrix")
 
 
@@ -39,7 +52,10 @@ def load_mo_coeff_from_json(filename: str | Path, nbf: int, *, spin: str = "alph
     keys = ["OQP::VEC_MO_A", "mo_coeff_alpha", "mo_coeff"] if spin.startswith("a") else ["OQP::VEC_MO_B", "mo_coeff_beta", "mo_coeff"]
     for key in keys:
         if key in data:
-            return np.ascontiguousarray(_matrix_from_json_value(data[key], nbf), dtype=np.float64)
+            return np.ascontiguousarray(
+                _matrix_from_json_value(data[key], nbf,
+                                        restart_orientation=key.startswith("OQP::")),
+                dtype=np.float64)
     raise ValueError(f"No MO coefficient key found in {filename}; tried {', '.join(keys)}")
 
 

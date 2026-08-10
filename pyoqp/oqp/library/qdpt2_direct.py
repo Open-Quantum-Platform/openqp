@@ -286,7 +286,7 @@ def _terms_per_reference(norb, na_occ, nb_occ):
 
 
 def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
-                    max_terms, nthreads):
+                    max_terms, nthreads, max_memory=None):
     """Run the liboqp OpenMP streaming kernel; returns (ka, kb, e0, V) with the
     external space already merged/unique, or None when the kernel is absent."""
     try:
@@ -314,6 +314,22 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
     cvec = np.ascontiguousarray(C, dtype=np.float64)          # [nsup, nstate]
     ka_in = np.ascontiguousarray(sup_a).view(np.int64)
     kb_in = np.ascontiguousarray(sup_b).view(np.int64)
+    # cap comes from max_terms, which bounds the TERM COUNT, not the bytes:
+    # these four arrays are 8*cap*(3 + nstate) bytes and a CAS(8,8)-in-16 run
+    # stays inside the 30M-term default while asking for ~597 MiB at two
+    # states.  Weigh them against the configured PT2/CAS ceiling before
+    # allocating.
+    if max_memory is not None:
+        _out_bytes = 8 * int(cap) * (3 + int(nstate))
+        _budget = max(1, int(max_memory)) * 1024 ** 2
+        if _out_bytes > _budget:
+            raise ValueError(
+                "direct QDPT2 stream buffers need ~%.2f GiB (%d terms x %d "
+                "states), exceeding the configured max_memory budget of %d "
+                "MiB.  Lower [pt2] max_terms, reduce the reference space, or "
+                "raise [cas] max_memory."
+                % (_out_bytes / 1024 ** 3, int(cap), int(nstate),
+                   int(max_memory)))
     out_ka = np.zeros(cap, dtype=np.int64)
     out_kb = np.zeros(cap, dtype=np.int64)
     out_e0 = np.zeros(cap, dtype=np.float64)
@@ -352,7 +368,8 @@ def _regularized_inverse(d, options):
 
 
 def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
-                 active_nelec, norb, enuc, roots, options, rotate):
+                 active_nelec, norb, enuc, roots, options, rotate,
+                 max_memory=None):
     """Matrix-free diagonal-H0 QDPT2 over the reference roots.
 
     Inputs mirror :func:`oqp.library.caspt2_dyall._multistate` (semicanonical,
@@ -360,6 +377,20 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     if norb > 63:
         raise ValueError("direct QDPT2 supports up to 63 orbitals per spin "
                          f"(got norb={norb}); reduce the basis or freeze more")
+    # The IPEA shift is a one-electron bias on the ACTIVE H0 diagonal, applied
+    # by _h0_integrals on the dense path.  This engine builds its zeroth-order
+    # state energies straight from the semicanonical `eps` and never sees it,
+    # so a nonzero pt2.ipea_shift was accepted, echoed in the summary, and then
+    # produced exactly the zero-shift answer -- while engine=dense applied it.
+    # A scientific result that depends on which engine ran is worse than a
+    # refusal, and implementing the bias here is a physics change, not a guard.
+    if float(getattr(options, "ipea_shift", 0.0) or 0.0) != 0.0:
+        raise ValueError(
+            "[pt2] ipea_shift is not implemented for the direct QDPT2 engine: "
+            "the zeroth-order energies here come from the semicanonical orbital "
+            "energies, and the shift is applied to the active H0 diagonal on "
+            "the dense path only.  Set [pt2] engine=dense to apply the shift, "
+            "or ipea_shift=0.0 for the direct engine.")
     nstate = len(roots)
     eps = np.asarray(eps, dtype=float)
 
@@ -407,13 +438,18 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     # thread scaling at ~2.4x -- a key-range-parallel merge is the follow-up.
     nproc = int(getattr(options, "nproc", 1))
     max_terms = int(getattr(options, "max_terms", 30_000_000))
+    # The caller passes the RESOLVED ceiling (min of [cas] and [pt2]); falling
+    # back to options.max_memory alone would use the looser of the two.
+    _pt2_max_memory = (int(max_memory) if max_memory
+                       else (int(getattr(options, "max_memory", 0) or 0) or None))
     engine = str(getattr(options, "engine", "auto"))
     merged = None
     if engine in {"auto", "fortran"}:
         import os
         kernel_threads = nproc if nproc > 1 else max(1, min(8, os.cpu_count() or 1))
         merged = _stream_fortran(h1e, eri, eps, norb, ncore, nact,
-                                 sup_a, sup_b, C, max_terms, kernel_threads)
+                                 sup_a, sup_b, C, max_terms, kernel_threads,
+                                 max_memory=_pt2_max_memory)
         if merged is None and engine == "fortran":
             raise RuntimeError(
                 "[pt2] engine=fortran requested but liboqp lacks "
@@ -435,6 +471,17 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                 raise ValueError(
                     f"direct QDPT2 stream would produce {_total} terms > [pt2] "
                     f"max_terms={max_terms}; raise the guard or shrink the space")
+            # Same byte check as the kernel path: the NumPy fallback builds
+            # ka/kb/val/e0/src of _total entries plus the merge buffers.
+            if _pt2_max_memory is not None:
+                _bytes = 8 * int(_total) * 5
+                if _bytes > _pt2_max_memory * 1024 ** 2:
+                    raise ValueError(
+                        "direct QDPT2 NumPy stream needs ~%.2f GiB for %d "
+                        "terms, exceeding the configured max_memory budget of "
+                        "%d MiB.  Lower [pt2] max_terms, reduce the reference "
+                        "space, or raise [cas] max_memory."
+                        % (_bytes / 1024 ** 3, int(_total), _pt2_max_memory))
         ka, kb, val, e0, src = _stream_all(h1e, eri, eps, norb, ncore, nact,
                                            sup_a, sup_b, nproc)
 

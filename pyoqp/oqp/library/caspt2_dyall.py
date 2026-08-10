@@ -759,17 +759,27 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
         _spin_bytes = 8 * (2 * int(norb)) ** 4
         _ham_bytes = 8 * int(ndet) * int(ndet)
         _budget = max(1, int(max_memory)) * 1024 ** 2
-        if _spin_bytes + _ham_bytes > _budget:
+        # A non-diagonal H0 -- which Dyall always is, since its active
+        # two-electron operator is nonzero, so _diagonal_zeroth_order declines
+        # and the second branch below always runs -- keeps gspin and hfull LIVE
+        # while building gspin0 and a second dense H0.  Count the pair when the
+        # zeroth order cannot be diagonal.
+        _pairs = 2 if str(h0).strip().lower() == "dyall" else 1
+        _peak = (_spin_bytes + _ham_bytes) * _pairs
+        if _peak > _budget:
             raise ValueError(
                 "uncontracted PT2 needs ~%.2f GiB for the spin-orbital "
                 "integral tensor (norb=%d) plus ~%.2f GiB for the dense "
-                "%d x %d Hamiltonian, both live at once, exceeding the "
-                "configured max_memory budget of %d MiB.  Reduce the basis or "
-                "active space, raise [cas] max_memory, or use "
+                "%d x %d Hamiltonian%s -- ~%.2f GiB live at once, exceeding "
+                "the configured max_memory budget of %d MiB.  Reduce the basis "
+                "or active space, raise [cas] max_memory, or use "
                 "[pt2] contraction=strong (SC-NEVPT2), which forms no external "
                 "determinant space."
                 % (_spin_bytes / 1024 ** 3, norb, _ham_bytes / 1024 ** 3,
-                   ndet, ndet, int(max_memory)))
+                   ndet, ndet,
+                   ", doubled because the Dyall zeroth order is not diagonal "
+                   "and holds a second operator pair" if _pairs == 2 else "",
+                   _peak / 1024 ** 3, int(max_memory)))
     full_dets = _determinants(norb, full_nelec)
     det_index = {det: i for i, det in enumerate(full_dets)}
 
@@ -968,6 +978,18 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     blocks = [range(ncore), range(ncore, ncore + nact), range(ncore + nact, nbf)]
 
     full_nelec_un = (ncore + active_nelec[0], ncore + active_nelec[1])
+    # This multi-set path bypasses _build_operators, so it never met the
+    # determinant cap that path now checks: a 10-electron/20-orbital system with
+    # a small CAS(2,2) reference cleared the ACTIVE-space cap and then tried to
+    # materialize ~240 million full-space determinants here.  Count with
+    # binomials first, as every other enumeration in this module now does.
+    _ndet_un = comb(nbf, full_nelec_un[0]) * comb(nbf, full_nelec_un[1])
+    if _ndet_un > int(options.max_det):
+        raise ValueError(
+            "multi-set CASPT2 full determinant space too large: ndet=%d > "
+            "max_det=%d.  Raise [cas] max_det, or reduce the basis/active "
+            "space; the multi-set construction enumerates the FULL space, not "
+            "just the active one." % (_ndet_un, int(options.max_det)))
     dets_un = _determinants(nbf, full_nelec_un)
     didx_un = {d: i for i, d in enumerate(dets_un)}
 
@@ -1291,7 +1313,8 @@ def native_caspt2_energy(mol, ref_energy=None):
             from oqp.library.qdpt2_direct import direct_qdpt2
             res = direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore,
                                nact, active_nelec, nbf, enuc, [_root],
-                               options, rotate=False)
+                               options, rotate=False,
+                               max_memory=_pt2_memory(options, settings)[0])
             e_casci = float(res["ref_energies"][0])
             e2 = float(res["e2"][0])
             e_caspt2 = e_casci + e2
@@ -1313,7 +1336,8 @@ def native_caspt2_energy(mol, ref_energy=None):
             from oqp.library.qdpt2_direct import direct_qdpt2
             result = direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore,
                                   nact, active_nelec, nbf, enuc, roots, options,
-                                  rotate=(options.variant == "xms"))
+                                  rotate=(options.variant == "xms"),
+                                  max_memory=_pt2_memory(options, settings)[0])
         else:
             result = _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                                  active_nelec, nbf, enuc, roots, options,

@@ -1760,10 +1760,11 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
+    # 18 since H4_CASCI_JSON_ORBITALS.inp added [cas] orbital_source=json;
     # 17 since H4_CASPT2_grad.inp added the PT2 central-difference gradient
     # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
     # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
-    assert len(WF_EXAMPLES) == 17
+    assert len(WF_EXAMPLES) == 18
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()
@@ -1801,6 +1802,16 @@ def test_wf_oqp_twin_lowers_to_its_legacy_inp_configuration(filename):
     assert _atom_table(geometry.read_text(encoding="utf-8")) == _atom_table(
         str(expected["input"].pop("system"))
     )
+    # [cas] orbital_file is the second deliberate difference, for the same
+    # reason as the geometry: the concise twin may be run from anywhere, so the
+    # lowering resolves it against the twin's directory, while the legacy deck
+    # keeps the path relative to itself.  Compare what they point AT.
+    if str(expected.get("cas", {}).get("orbital_file", "")).strip():
+        lowered_orb = Path(str(lowered["cas"].pop("orbital_file")))
+        expected_orb = str(expected["cas"].pop("orbital_file"))
+        assert lowered_orb.is_file()
+        assert lowered_orb.name == Path(expected_orb).name
+
     # charge=0 is the language default: never written in the concise twin, but
     # always restored by the lowering, so it still has to agree.
     assert set(lowered) == set(expected)

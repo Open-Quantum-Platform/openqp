@@ -92,6 +92,15 @@ class CASCI(FCI):
         hcore = _unpack_lower_triangle(np.asarray(self.mol.data["OQP::Hcore"], dtype=float), nbf)
         default_coeff = np.asarray(self.mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
         coeff, source_label = load_cas_mo_coeff(self.mol.config, nbf, default_coeff)
+        # Commit non-RHF orbitals to the handle.  Molecule.save_data() serializes
+        # OQP::VEC_MO_A, so with orbital_source=json and guess.save_mol=true the
+        # saved file carried the OLD RHF coefficients -- and feeding that file
+        # back as the next orbital_file silently ran a different CASCI.  CASSCF
+        # and the PT2 reference already do this; CASCI was the one path left.
+        if source_label != "rhf":
+            _tgt = np.asarray(self.mol.data["OQP::VEC_MO_A"], dtype=float)
+            self.mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
+                np.asarray(coeff, dtype=float).T.reshape(_tgt.shape))
         eri_ao = np.asarray(self.mol.data["OQP::AO_ERI"], dtype=float).reshape(
             (nbf, nbf, nbf, nbf),
             order="F",

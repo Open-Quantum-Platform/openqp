@@ -446,16 +446,25 @@ contains
 
     real(dp) :: dummy(1)
     integer :: solve_nroot, eff_sub, max_sub, ierr, k
-    integer(i8) :: work_bytes
+    integer(i8) :: work_bytes, live_spin_bytes
     integer :: nact
 
     nact = nspin / 2
+    ! gspin is passed in and stays live for the whole solve, so it is part of
+    ! the peak this routine has to fit inside budget_bytes.  Recomputed here
+    ! rather than passed: the caller's spin_bytes is a local of fci_driver.
+    live_spin_bytes = 8_i8 * int(nspin, i8)**4
     solve_nroot = nroot
     do
       eff_sub = 0
       if (subspace > 0) eff_sub = max(subspace, solve_nroot)
       max_sub = subspace_limit(ndet, solve_nroot, eff_sub)
-      work_bytes = 8_i8 * ndet * int(2 * max_sub + 4 * solve_nroot, i8)
+      ! gspin stays live for the whole of ci_davidson, so the workspace cannot
+      ! be weighed on its own: CAS(4,24) at one root is ~40.5 MiB of spin tensor
+      ! and ~27.9 MiB of workspace, each inside a 64 MiB ceiling that their sum
+      ! already breaks.
+      work_bytes = 8_i8 * ndet * int(2 * max_sub + 4 * solve_nroot, i8) &
+                   + live_spin_bytes
       if (work_bytes > budget_bytes) then
         status = FCI_ERR_BUDGET
         return

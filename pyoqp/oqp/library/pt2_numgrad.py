@@ -193,6 +193,16 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     swap_flags = []  # (coord index, sign, min adjacent gap, max state shift)
 
     guess_type_saved = mol.config['guess']['type']
+    # Snapshot the starting orbitals.  `cold` promises every displacement starts
+    # from the same guess, but a file-based guess ([guess] type=json) is loaded
+    # once at runner setup and guess() is then a no-op for RHF -- so each cold
+    # displacement actually started from the PREVIOUS displaced geometry's
+    # PT2-mutated state.  That makes +h and -h able to land in different SCF
+    # basins and the gradient order-dependent, which is exactly what cold is
+    # supposed to rule out.  Restoring this before every displaced evaluation
+    # makes the policy true for any guess type (it is a no-op for hcore/huckel,
+    # which rebuild from scratch anyway).
+    _mo_start = np.array(mol.data['OQP::VEC_MO_A'], dtype=float, copy=True)
     # Whether the displaced-energy loop below is already unwinding.  The
     # restore in `finally` must not mask that failure -- but when nothing is
     # in flight, a failed restore is itself fatal and has to propagate, or
@@ -221,6 +231,8 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
                 x = x0.copy()
                 x[i] += sign * step
                 mol.update_system(x)
+                if guess_mode != 'warm':
+                    mol.data['OQP::VEC_MO_A'][...] = _mo_start
                 # The central point runs SinglePoint.energy() with the
                 # configured [scf] init_scf preconvergence stage; forcing it off
                 # here differentiated a different pipeline from the one the
@@ -273,6 +285,8 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
         mol.config['guess']['type'] = guess_type_saved
         try:
             mol.update_system(x0)
+            if guess_mode != 'warm':
+                mol.data['OQP::VEC_MO_A'][...] = _mo_start
             # Restore through the configured pipeline too.  Forcing init_scf
             # off here left `mol` holding orbitals and energies from a
             # different pipeline than every other evaluation -- and if the

@@ -3059,6 +3059,24 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                     "outside the run for now."),
         )
 
+    # pt2.save_amplitudes / print_amplitudes: no runtime consumer exists for
+    # either flag or for amplitude_threshold, so the opt-in produces nothing at
+    # all.  Same class as the benchmark flags below -- the user asks for an
+    # artifact and the run reports success without it.
+    for _amp in ("save_amplitudes", "print_amplitudes"):
+        if str(_get(config, "pt2", _amp, False)).strip().lower() in _TRUE_BOOL:
+            report.add(
+                "ERROR",
+                f"pt2.{_amp}",
+                f"[pt2] {_amp} is not implemented: no runtime path writes or "
+                "prints PT2 amplitudes, so the requested output would not be "
+                "produced.",
+                value=True,
+                expected=f"pt2.{_amp}=false",
+                action="Remove the flag; the PT2 summary already reports the "
+                       "reference weights and the largest denominators.",
+            )
+
     # pt2.benchmark_required: nothing reads benchmark_reference_file, compares
     # against benchmark_tolerance, or fails on a mismatch, so a run that
     # "requires" the benchmark completes having never performed it.

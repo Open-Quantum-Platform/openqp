@@ -1193,6 +1193,14 @@ class OpenQP:
                basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP CASSCF setup (orbital + CI optimization)."""
         self._require_active_space("CASSCF", active_electrons, active_orbitals)
+        # CASSCF requires root < ci.nroot, so job.casscf(root=1) with the
+        # helper's default nroot=1 generated an input its OWN preflight rejects
+        # -- the natural compact-API call for excited-state CASSCF could not
+        # run without redundantly passing nroot=2.  Solve for enough roots,
+        # exactly as sa_casscf already does for its target roots.  An explicit
+        # larger nroot still wins.
+        if root is not None:
+            nroot = max(int(nroot), int(root) + 1)
         opts = dict(keywords.pop("casscf", None) or {})
         for key, value in (("root", root), ("converger", converger),
                            ("hessian", hessian),
