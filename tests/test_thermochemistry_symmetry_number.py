@@ -335,5 +335,41 @@ class TestGibbsSign(unittest.TestCase):
         self.assertIn('G = H - TS', source)
 
 
+class TestPositionalArgumentsKeepTheirMeaning(unittest.TestCase):
+    """`sigma` was inserted between `linear` and `mult`, re-aiming every
+    positional call: thermal_analysis(..., 298.15, False, 1) meant mult=1 and
+    became sigma=1 with mult=0, so st_el = R*T*ln(0) = -inf."""
+
+    def test_sigma_is_keyword_only(self):
+        import inspect
+        frequency = load_frequency_module()
+        parameters = inspect.signature(frequency.thermal_analysis).parameters
+        self.assertEqual(parameters['sigma'].kind,
+                         inspect.Parameter.KEYWORD_ONLY)
+        positional = [name for name, p in parameters.items()
+                      if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD]
+        self.assertEqual(positional,
+                         ['energy', 'atoms', 'mass', 'freqs', 'inertia',
+                          'temperature', 'linear', 'mult',
+                          'freq_scale_factor', 'freq_cutoff'])
+
+    def test_a_pre_existing_positional_call_still_sets_the_multiplicity(self):
+        frequency = load_frequency_module()
+        atoms, mass, geometry, freqs = WATER
+        coords = np.asarray(geometry, dtype=float) * ANGSTROM_TO_BOHR
+        _, _, inertia = frequency.normal_mode(
+            coords.ravel(), np.asarray(mass, dtype=float),
+            np.zeros((3 * len(atoms), 3 * len(atoms))))
+
+        data = frequency.thermal_analysis(
+            0.0, atoms, np.asarray(mass, dtype=float),
+            np.asarray(freqs, dtype=float), inertia, 298.15, False, 1)
+
+        # mult = 1 -> st_el = R*T*ln(1) = 0. Pre-fix this was -inf.
+        self.assertTrue(np.isfinite(data['st_el']))
+        self.assertEqual(data['st_el'], 0.0)
+        self.assertEqual(data['sigma'], 1)
+
+
 if __name__ == '__main__':
     unittest.main()

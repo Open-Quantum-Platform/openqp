@@ -140,11 +140,19 @@ def thermal_analysis(
         energy, atoms, mass, freqs, inertia,
         temperature=298.15,
         linear=False,
-        sigma=1,
         mult=0,
         freq_scale_factor=1,
         freq_cutoff=100,
+        *,
+        sigma=1,
 ):
+    # `sigma` is appended and keyword-only on purpose. Inserting it between
+    # `linear` and `mult` -- where it first landed -- silently re-aimed every
+    # positional call: thermal_analysis(..., 298.15, False, 1) meant mult=1 and
+    # became sigma=1 with mult=0, so log(mult) gave -inf, and a call supplying
+    # every optional value shifted the scale factor and cutoff as well. The
+    # keyword-only marker means the parameter can never be positionally aliased
+    # again, whatever is added after it.
     # -------- Remove imaginary freqs ---------
     freqs = freqs[freqs > 0]
 
