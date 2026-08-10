@@ -635,10 +635,16 @@ def _every_atom_is_its_own_class(
     itself centers on, so the two agree by construction rather than by
     coincidence.
 
-    Linear geometries are excluded rather than screened: a rotation about the
-    molecular axis fixes every atom without being the identity, so the argument
-    above does not close there. They cost nothing anyway -- the detector's
-    linear branch seeds eight matrices and returns in milliseconds.
+    Linear -- and NEARLY linear -- geometries are excluded rather than screened:
+    a rotation about the molecular axis fixes every atom without being the
+    identity, so the argument above does not close there. Near-linear matters
+    because the match is approximate. A C_n moves an atom by
+    2*sin(pi/n)*d(atom, axis), so for the largest order the survey tries every
+    atom within about 1.3 * tolerance of a line is fixed to within tolerance --
+    a window `_is_linear` at its own threshold reports as nonlinear. The
+    linearity test therefore uses the same widened margin as the radius test.
+    They cost nothing anyway: the detector's linear branch seeds eight matrices
+    and returns in milliseconds.
     """
 
     if charges.size != coords.shape[0] or coords.shape[0] < 2:
@@ -646,18 +652,23 @@ def _every_atom_is_its_own_class(
     total_charge = float(np.sum(charges))
     if not np.isfinite(total_charge) or total_charge == 0.0:
         return False
+
+    # Ten times the matching tolerance, everywhere below: erring towards "this
+    # could be a symmetry" only costs the slow path, while erring the other way
+    # would silently drop a real sigma -- the exact bias this module exists to
+    # remove. A non-finite tolerance would defeat that, so refuse it.
+    if not np.isfinite(tolerance):
+        return False
+    margin = max(10.0 * abs(float(tolerance)), 1.0e-8)
+
     centered = coords - np.einsum('i,ij->j', charges, coords) / total_charge
-    if _is_linear(centered, tolerance) is not None:
+    if _is_linear(centered, margin) is not None:
         return False
 
     radii = np.linalg.norm(centered, axis=1)
     order = np.lexsort((radii, charges))
     charges_sorted = charges[order]
     radii_sorted = radii[order]
-    # Ten times the matching tolerance: erring towards "these two could be
-    # partners" only costs the slow path, while erring the other way would
-    # silently drop a real sigma -- the exact bias this module exists to remove.
-    margin = max(10.0 * abs(float(tolerance)), 1.0e-8)
     neighbours = np.diff(radii_sorted) <= margin
     same_element = charges_sorted[:-1] == charges_sorted[1:]
     return not bool(np.any(neighbours & same_element))

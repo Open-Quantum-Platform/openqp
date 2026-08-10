@@ -365,15 +365,31 @@ class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
         return charges + charges, np.vstack(
             [xyz, xyz * np.array([-1.0, -1.0, 1.0])])
 
+    @staticmethod
+    def spy_on_the_detector(detect):
+        """Count detector calls without suppressing it.
+
+        Raising from the stub would prove nothing: rotational_symmetry_number
+        wraps the call in `except Exception: return 1`, so a stub that raised
+        would give the same answer whether or not the screen fired.
+        """
+        real = detect.enumerate_full_group
+        calls = []
+
+        def spy(*args, **kwargs):
+            calls.append(1)
+            return real(*args, **kwargs)
+
+        detect.enumerate_full_group = spy
+        return calls
+
     def test_a_geometry_with_no_partners_answers_without_the_detector(self):
         detect = load_symmetry_detect_module()
+        calls = self.spy_on_the_detector(detect)
         charges, coords = self.random_geometry(50)
 
-        def explode(*args, **kwargs):
-            raise AssertionError('the detector must not be reached')
-
-        detect.enumerate_full_group = explode
         self.assertEqual(detect.rotational_symmetry_number(charges, coords), 1)
+        self.assertEqual(calls, [])
 
     def test_a_symmetric_geometry_of_the_same_size_still_reaches_it(self):
         """The control: without this, a screen that always fired would pass.
@@ -382,11 +398,44 @@ class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
         its own radius, so the screen must decline and the detector must run.
         """
         detect = load_symmetry_detect_module()
+        calls = self.spy_on_the_detector(detect)
         charges, coords = self.c2_symmetric_geometry(25)
 
         self.assertFalse(detect._every_atom_is_its_own_class(
             np.asarray(charges, dtype=float), coords, 1.0e-5))
         self.assertEqual(detect.rotational_symmetry_number(charges, coords), 2)
+        self.assertEqual(len(calls), 1)
+
+    def test_a_nearly_linear_geometry_is_left_to_the_detector(self):
+        """Reported by chatgpt-codex-connector against the first version.
+
+        The match is approximate, so 'every atom is fixed' does not force the
+        identity for a geometry that is *almost* collinear: a C8 about z moves
+        each of these atoms by at most 2*sin(pi/8)*1.108e-5 = 8.5e-6 bohr, which
+        `_match_permutation` accepts at tolerance 1e-5. Their radii differ by
+        more than half a bohr, so the radius test alone would have screened it,
+        and `_is_linear` at its own threshold calls it nonlinear -- the largest
+        residual is 1.0276 * tolerance. Testing linearity at the widened margin
+        is what closes the window.
+        """
+        detect = load_symmetry_detect_module()
+        tolerance = 1.0e-5
+        charges = np.asarray([1.0, 1.0, 1.0, 1.0])
+        coords = np.array([
+            [0.350000 * tolerance, 0.0, -3.25],
+            [0.175000 * tolerance, 0.0, -1.25],
+            [-1.108333 * tolerance, 0.0, 0.75],
+            [0.583333 * tolerance, 0.0, 3.75],
+        ])
+
+        # The control: at its own threshold the linearity test does NOT catch
+        # this, which is why the screen used to fire on it.
+        centered = coords - np.einsum(
+            'i,ij->j', charges, coords) / float(np.sum(charges))
+        self.assertIsNone(detect._is_linear(centered, tolerance))
+
+        self.assertFalse(
+            detect._every_atom_is_its_own_class(charges, coords, tolerance))
 
     def test_the_screen_declines_on_every_symmetric_molecule_here(self):
         detect = load_symmetry_detect_module()
