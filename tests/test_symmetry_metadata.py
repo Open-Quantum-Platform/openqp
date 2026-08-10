@@ -245,6 +245,11 @@ class TestSymmetryMetadata(unittest.TestCase):
         molecule.put_data({
             'coord': coord,
             'symmetry_metadata': {'point_group': 'c2v',
+                                  # Detection settings must match too, not
+                                  # just the coordinates.
+                                  'tolerance': 1e-5,
+                                  'requested_point_group': 'auto',
+                                  'requested_subgroup': 'auto',
                                   'detection': {'point_group': 'c2v'}},
         })
 
@@ -294,6 +299,9 @@ class TestSymmetryMetadata(unittest.TestCase):
                 'integral_symmetry': {'status': 'active'},
                 'reduction_maps': {'n_operations': 8},
                 'reduction_maps_full': {'n_operations': 24},
+                'tolerance': 1e-5,
+                'requested_point_group': 'auto',
+                'requested_subgroup': 'auto',
                 'detection': {'point_group': 'c2v'},
             },
         })

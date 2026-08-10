@@ -73,6 +73,11 @@ class GuessFileDoesNotOverrideSymmetryConfig(unittest.TestCase):
             'use_response_symmetry': False,
             'tolerance': 1.0e-5,
             'point_group': 'c1',
+            # Real symmetry_metadata always carries these; the merge compares
+            # them because detection resolves a different group under a
+            # different request or tolerance.
+            'requested_point_group': 'auto',
+            'requested_subgroup': 'auto',
         }
         mol._system = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 1.4])
         mol.get_system = lambda: mol._system
@@ -103,9 +108,19 @@ class GuessFileDoesNotOverrideSymmetryConfig(unittest.TestCase):
                              f'{key} describes the producer geometry')
 
     def test_geometry_derived_entries_survive_at_the_same_geometry(self):
+        """Matching coordinates AND matching detection settings.
+
+        The settings are part of the test now because coordinates alone are
+        not enough: a producer running a looser tolerance resolves a different
+        operation list for the same nuclei, and importing it let a reader
+        block its response with operations its own tolerance had rejected.
+        """
         mol = self._molecule(use_integral_symmetry=False)
         restored = {'detection': {'point_group': 'c2v'},
-                    'point_group': 'c2v'}
+                    'point_group': 'c2v',
+                    'tolerance': 1.0e-5,
+                    'requested_point_group': 'auto',
+                    'requested_subgroup': 'auto'}
         merged = mol._merge_restored_symmetry_metadata(
             restored, stored_coord=mol._system)
         self.assertEqual(merged['detection']['point_group'], 'c2v')

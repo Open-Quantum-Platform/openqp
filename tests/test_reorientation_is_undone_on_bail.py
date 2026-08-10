@@ -114,26 +114,38 @@ class FailureExitsRestoreTheGeometry(unittest.TestCase):
         source = (ROOT / 'pyoqp/oqp/library/single_point.py').read_text()
         self.assertIn("meta.pop('_reorient_input_coords', None)", source)
 
-    def test_the_caller_rebuilds_the_integrals_after_restoring(self):
-        """The 1e integrals were built in the rotated frame, so they must be
-        rebuilt -- but only they.
+    def test_the_caller_rebuilds_everything_the_move_invalidated(self):
+        """Everything the moved coordinates invalidate is rebuilt -- the guess
+        included.
 
-        This asserted `self._prep_guess()` until the self-review pointed out
-        that a full guess re-run also discards the orbitals from [scf]
-        init_scf, so a bail-out was silently changing the SCF starting point as
-        well as the frame. Only what the moved coordinates invalidate is
-        rebuilt now.
+        This used to assert the opposite: that `_prep_guess()` was NOT called,
+        on the reasoning that a full guess re-run discards the orbitals from
+        [scf] init_scf and so silently changes the SCF starting point.
+
+        That reasoning was wrong, and the bot review caught it. AO basis
+        functions do not rotate with the molecule -- the p and d components on
+        each atom mix under the frame change -- so a coefficient vector
+        computed in the standard frame describes a DIFFERENT physical density
+        once the atoms are back in the input frame. Keeping those orbitals
+        preserved a wavefunction that no longer meant what it meant, and the
+        SCF then started from a density, Fock and orbital energies belonging to
+        a frame the molecule had left. Regenerating is the honest repair.
+
+        Verified against a real bail-out: water/cc-pVDZ reaches
+        `skipped_basis_mismatch`, the geometry is restored exactly, and the
+        energy matches the symmetry-off run to all printed digits.
         """
         source = (ROOT / 'pyoqp/oqp/library/single_point.py').read_text()
         restore = source.index("meta.pop('_reorient_input_coords', None)")
-        window = source[restore:restore + 1400]
+        # Bound the window by the end of the restore block rather than a fixed
+        # character count, which a longer comment silently walks past.
+        window = source[restore:source.index('scf_flag = self._run_scf()',
+                                             restore)]
         self.assertIn('self.mol.update_system(', window)
-        self.assertIn('oqp.library.set_basis(self.mol)', window)
-        self.assertIn('oqp.library.ints_1e(self.mol)', window)
-        self.assertNotIn('self._prep_guess()', window,
-                         'a full guess re-run would discard init_scf orbitals')
+        self.assertIn('self._prep_guess()', window,
+                      'the guess is frame-dependent and must be regenerated')
         self.assertLess(window.index('self.mol.update_system('),
-                        window.index('oqp.library.ints_1e(self.mol)'))
+                        window.index('self._prep_guess()'))
 
     def test_the_caller_redetects_after_restoring(self):
         """The stored detection describes the frame just moved out of."""

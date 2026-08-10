@@ -2144,6 +2144,34 @@ class Molecule:
         'label_mo', 'label_states', 'label_modes',
         'use_integral_symmetry', 'use_response_symmetry',
         'strict', 'tolerance', 'raw',
+        # Derived from THIS job's request compared against THIS job's
+        # detection, so it is a statement about the reader, not the producer.
+        # Importing it let a guess file flip a strict consistency flag that
+        # the reader had computed correctly for itself.
+        'requested_matches_detected',
+    })
+
+    #: Settings that determine what detection PRODUCES. Geometry-derived
+    #: entries are only comparable between two jobs when these agree: a
+    #: producer running a looser ``tolerance`` (or a different requested group
+    #: or subgroup) resolves a different point group and a different operation
+    #: list for the very same coordinates. Importing that let a reader build
+    #: response blocks from operations its own tolerance had rejected.
+    _SYMMETRY_DETECTION_SETTING_KEYS = ('tolerance', 'requested_point_group',
+                                        'requested_subgroup')
+
+    #: Results derived from a WAVEFUNCTION, not from geometry. Matching
+    #: coordinates say nothing about them: the producer may have used another
+    #: basis, another SCF solution, or a different state count, so the orbital
+    #: count and ordering behind these need not be the reader's at all.
+    #: stage_response_symmetry consumes ``mo_labels`` verbatim whenever it is
+    #: present with status 'ok' -- it only recomputes when it is missing -- so
+    #: an imported set silently sizes the response blocking from the
+    #: producer's orbitals. These are always recomputed instead.
+    _SYMMETRY_WAVEFUNCTION_KEYS = frozenset({
+        'mo_labels', 'state_labels', 'mode_labels', 'sym_pair_irrep',
+        'response_symmetry', 'spherical_order_assumed',
+        'hess_symmetry_unique',
     })
 
     #: Live staging state, never taken from a guess file at all. These have a
@@ -2210,19 +2238,51 @@ class Molecule:
             except Exception:
                 same_geometry = False
 
+        # Matching coordinates are necessary but NOT sufficient. Detection
+        # resolves a point group and an operation list from the geometry *under
+        # the settings in force*, so a producer that ran a looser tolerance, or
+        # asked for a different group or subgroup, describes the same
+        # coordinates with operations this job would not have accepted. Require
+        # those settings to agree before importing anything geometry-derived.
+        #
+        # A missing setting on either side counts as a mismatch: guess files
+        # written by older versions do not record them, and the safe reading of
+        # "unknown" is "not mine".
+        same_detection_settings = same_geometry
+        if same_geometry:
+            for key in self._SYMMETRY_DETECTION_SETTING_KEYS:
+                if key not in restored or key not in local:
+                    same_detection_settings = False
+                    break
+                mine, theirs = local[key], restored[key]
+                try:
+                    equal = (bool(np.isclose(float(mine), float(theirs),
+                                             rtol=0.0, atol=0.0))
+                             if isinstance(mine, (int, float))
+                             and not isinstance(mine, bool)
+                             else str(mine).lower() == str(theirs).lower())
+                except (TypeError, ValueError):
+                    equal = mine == theirs
+                if not equal:
+                    same_detection_settings = False
+                    break
+
         # Start from what this job worked out for itself: its own [symmetry]
         # settings and its own detection of its own geometry. That is always a
         # complete, self-consistent block, so nothing downstream can end up
         # missing a key it used to be able to rely on.
         merged = dict(local)
-        if same_geometry:
-            # Same molecule in the same frame: the producer's block may hold
-            # results this job has not computed yet (labels, AO maps), so take
-            # them -- but never its configuration switches.
+        if same_detection_settings:
+            # Same molecule, same frame, same detection settings: the
+            # producer's block may hold geometry-derived results this job has
+            # not computed yet, so take them -- but never its configuration
+            # switches, never live staging state, and never anything derived
+            # from ITS wavefunction rather than from the geometry.
             merged.update({
                 key: value for key, value in restored.items()
                 if key not in self._SYMMETRY_CONFIG_KEYS
                 and key not in self._SYMMETRY_STAGING_KEYS
+                and key not in self._SYMMETRY_WAVEFUNCTION_KEYS
             })
         return merged
 

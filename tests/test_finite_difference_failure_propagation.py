@@ -9,6 +9,7 @@ that inverted the reorientation-restore guard passed all of them.)
 """
 
 import os
+import types
 import unittest
 
 import numpy as np
@@ -306,3 +307,172 @@ class TheScratchTagCarriesTheSignature(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class GuessMetadataIsOnlyImportedWhenItIsComparable(unittest.TestCase):
+    """Matching coordinates do not by themselves make a producer's symmetry
+    results usable.
+
+    Two further conditions matter. Detection resolves a point group and an
+    operation list from the geometry *under the settings in force*, so a
+    producer running a looser `tolerance` describes the same coordinates with
+    operations the reader would have rejected -- and with
+    `use_response_symmetry=true` the reader then blocks the response with them.
+    And results derived from the producer's WAVEFUNCTION (orbital, state and
+    mode labels) are not geometry-derived at all: `stage_response_symmetry`
+    consumes `mo_labels` verbatim whenever it is present with status 'ok', so an
+    imported set sizes the blocking from the producer's orbital count.
+    """
+
+    COORD = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+
+    def _molecule(self, **over):
+        from oqp.molecule.molecule import Molecule
+        mol = Molecule.__new__(Molecule)
+        mol.tag = []
+        mol.config = {}
+        mol.config_tag = {}
+        mol._state_tracking_fresh = True
+        mol._system = np.array(self.COORD)
+        mol.get_system = lambda: mol._system
+        meta = {
+            'status': 'enabled', 'enabled': True,
+            'use_integral_symmetry': False, 'use_response_symmetry': True,
+            'tolerance': 1.0e-5,
+            'requested_point_group': 'auto', 'requested_subgroup': 'auto',
+            'point_group': 'c1', 'subgroup': 'c1',
+            'requested_matches_detected': True,
+        }
+        meta.update(over)
+        mol.symmetry_metadata = meta
+        return mol
+
+    def _producer(self, **over):
+        block = {
+            'tolerance': 1.0e-5,
+            'requested_point_group': 'auto', 'requested_subgroup': 'auto',
+            'point_group': 'c2v', 'subgroup': 'c2v',
+            'detection': {'point_group': 'c2v', 'operations': [1, 2, 3, 4]},
+            'requested_matches_detected': False,
+            'mo_labels': {'status': 'ok',
+                          'alpha': {'labels': ['a1', 'b2', 'a1']}},
+            'state_labels': {'status': 'ok'},
+        }
+        block.update(over)
+        return block
+
+    def test_matching_settings_still_import_geometry_results(self):
+        """The feature must keep working when the two jobs really do agree."""
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD,
+                      'symmetry_metadata': self._producer()})
+        self.assertEqual(
+            mol.symmetry_metadata['detection']['point_group'], 'c2v')
+
+    def test_a_looser_producer_tolerance_blocks_the_import(self):
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD,
+                      'symmetry_metadata': self._producer(tolerance=1.0e-3)})
+        self.assertNotIn(
+            'detection', mol.symmetry_metadata,
+            'operations found under a tolerance this job rejects must not be '
+            'imported')
+        self.assertEqual(mol.symmetry_metadata['point_group'], 'c1')
+
+    def test_a_different_requested_subgroup_blocks_the_import(self):
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD,
+                      'symmetry_metadata': self._producer(
+                          requested_subgroup='c2')})
+        self.assertNotIn('detection', mol.symmetry_metadata)
+
+    def test_an_older_guess_without_the_settings_blocks_the_import(self):
+        """'unknown' has to read as 'not mine' -- files written before the
+        settings were recorded must not be trusted."""
+        producer = self._producer()
+        del producer['tolerance']
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD, 'symmetry_metadata': producer})
+        self.assertNotIn('detection', mol.symmetry_metadata)
+
+    def test_wavefunction_labels_are_never_imported(self):
+        """Even with the geometry AND every detection setting matching."""
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD,
+                      'symmetry_metadata': self._producer()})
+        for key in ('mo_labels', 'state_labels'):
+            self.assertNotIn(
+                key, mol.symmetry_metadata,
+                f'{key} comes from the producer wavefunction, not its geometry')
+
+    def test_the_readers_own_consistency_flag_survives(self):
+        mol = self._molecule()
+        mol.put_data({'coord': self.COORD,
+                      'symmetry_metadata': self._producer()})
+        self.assertTrue(
+            mol.symmetry_metadata['requested_matches_detected'],
+            'this flag describes the reader, not the producer')
+
+
+class SymmetryUniqueDeclinesOnABrokenElectronicSolution(unittest.TestCase):
+    """The orbit reduction is a statement about the nuclei; the identity it
+    relies on also needs the electronic solution to respect those operations.
+
+    A symmetry-broken unrestricted branch sits at a symmetric geometry with a
+    density that does not transform, so an operation maps the branch being
+    differentiated onto a different one.
+    """
+
+    def _hessian(self, labels):
+        from oqp.library.single_point import Hessian
+
+        hess = Hessian.__new__(Hessian)
+        mol = types.SimpleNamespace()
+        mol.config = {'hess': {'symmetry_unique': True}}
+        mol.symmetry_metadata = {'status': 'enabled', 'tolerance': 1.0e-5}
+        mol.get_atoms = lambda: np.array([8.0, 1.0, 1.0])
+        mol.data = {'nelec_A': np.array([5]), 'nelec_B': np.array([5])}
+        mol.label_molecular_orbitals = lambda: labels
+        mol._parse_bool_like = staticmethod(
+            lambda v: str(v).strip().lower() in ('true', 't', '1', 'yes'))
+        mol._parse_bool_like = lambda v: str(v).strip().lower() in (
+            'true', 't', '1', 'yes')
+        hess.mol = mol
+        hess.state = 0
+        return hess
+
+    GEOM = np.array([0.0, 0.0, -0.0776,
+                     -1.0076, 1.0076, -1.1612,
+                     1.0076, -1.0076, -1.1612])
+
+    def test_a_mixed_occupied_orbital_declines_the_reduction(self):
+        symmetric = {'status': 'ok',
+                     'alpha': {'labels': ['a1'] * 5 + ['b2'] * 8}}
+        broken = {'status': 'ok',
+                  'alpha': {'labels': ['a1', 'a1', 'mixed', 'b1', 'a1']
+                            + ['b2'] * 8}}
+
+        good = self._hessian(symmetric)._symmetry_unique_displacements(
+            self.GEOM, 0.01)
+        self.assertIsNotNone(
+            good[0], 'a symmetric solution must still get the reduction')
+
+        bad = self._hessian(broken)._symmetry_unique_displacements(
+            self.GEOM, 0.01)
+        self.assertEqual(
+            bad, (None, None),
+            'a symmetry-broken reference must fall back to the full 6N set')
+
+    def test_the_decline_reason_is_recorded(self):
+        broken = {'status': 'ok',
+                  'alpha': {'labels': ['a1', 'mixed', 'a1', 'b1', 'a1']}}
+        hess = self._hessian(broken)
+        hess._symmetry_unique_displacements(self.GEOM, 0.01)
+        self.assertEqual(
+            hess.mol.symmetry_metadata['hess_symmetry_unique']['status'],
+            'symmetry_broken_electronic_solution')
+
+    def test_unavailable_labels_decline_rather_than_assume(self):
+        hess = self._hessian({'status': 'skipped_no_basis'})
+        self.assertEqual(
+            hess._symmetry_unique_displacements(self.GEOM, 0.01), (None, None))

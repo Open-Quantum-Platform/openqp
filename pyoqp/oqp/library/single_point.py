@@ -594,12 +594,23 @@ class SinglePoint(Calculator):
                 if (getattr(self.mol, 'symmetry_metadata', None) or {}) \
                         .get('status', 'disabled') != 'disabled':
                     self.mol._detect_symmetry_metadata()
-                # Rebuild only the integrals the moved coordinates invalidate.
-                # A full _prep_guess() would also throw away the orbitals from
-                # [scf] init_scf and re-run the guess, so a bail-out silently
-                # changed the SCF starting point as well as the frame.
-                oqp.library.set_basis(self.mol)
-                oqp.library.ints_1e(self.mol)
+                # Rebuild everything the moved coordinates invalidate --
+                # including the guess.
+                #
+                # An earlier version stopped at the integrals, to keep the
+                # orbitals produced by [scf] init_scf. But AO basis functions
+                # do not rotate with the molecule: the p and d components on
+                # each atom mix under the frame change, so a coefficient vector
+                # computed in the standard frame describes a DIFFERENT physical
+                # density once the atoms are back in the input frame. Keeping
+                # those orbitals preserved a wavefunction that no longer means
+                # what it meant, and _run_scf() then started from an internally
+                # inconsistent guess -- density, Fock and orbital energies all
+                # belonging to a frame the molecule has left. Regenerating is
+                # the honest repair; a stale starting point is not worth
+                # protecting, and the cost lands only on a path that is already
+                # getting no reduction.
+                self._prep_guess()
 
         scf_flag = self._run_scf()
 
@@ -1292,6 +1303,17 @@ class Hessian(Calculator):
             usempi=False,
         )
         runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        # The Runner initialised symmetry from the UNDISPLACED geometry in the
+        # copied config; the displaced coordinates are only installed on the
+        # line above, and nothing re-runs detection. So the child would carry
+        # the reference geometry's point group and operations -- and a
+        # displaced geometry generally has lower symmetry. Turning integral
+        # symmetry off in the child (above) stops the frame moving, but it does
+        # not refresh the detection those labels and any response blocking are
+        # built from.
+        if (getattr(runner.mol, 'symmetry_metadata', None) or {}) \
+                .get('status', 'disabled') != 'disabled':
+            runner.mol._detect_symmetry_metadata()
         runner.run()
 
         dipole = np.zeros(3, dtype=np.float64)
@@ -1563,6 +1585,44 @@ class Hessian(Calculator):
                 filled[perm[a]] = True
         if not filled.all():
             return decline('orbit_coverage_incomplete')
+
+        # Everything above is about the NUCLEI. The reconstruction
+        # H[P(a),P(c)] = M H[a,c] M^T additionally requires the ELECTRONIC
+        # solution to respect those operations, and a symmetric geometry does
+        # not guarantee a symmetric solution: a symmetry-broken unrestricted
+        # branch -- stretched, antiferromagnetic -- sits at a perfectly
+        # symmetric geometry with a density that does not transform. An
+        # operation then maps the branch being differentiated onto a different
+        # degenerate one, the identity fails, and the reconstructed rows plus
+        # the final symmetrisation quietly produce a wrong Hessian. The full
+        # 6N path keeps that asymmetry instead of projecting it away.
+        #
+        # The MO labeller already measures exactly this, in the input frame
+        # (matrix_key='matrix_input_frame'), returning 'mixed' for an orbital
+        # that matches no irrep row within tolerance. Occupied orbitals are
+        # what the density is built from, so a mixed one there means the
+        # reference solution is not the symmetric one. Declining costs only
+        # time; trusting a broken branch costs the answer.
+        try:
+            labels = self.mol.label_molecular_orbitals()
+        except Exception:
+            return decline('mo_labelling_failed')
+        if not labels or labels.get('status') != 'ok':
+            return decline('mo_labelling_unavailable')
+        try:
+            nalpha = int(np.asarray(self.mol.data['nelec_A']).ravel()[0])
+            nbeta = int(np.asarray(self.mol.data['nelec_B']).ravel()[0])
+            occupied = list(labels['alpha']['labels'][:nalpha])
+            beta_labels = labels.get('beta')
+            if beta_labels:
+                occupied += list(beta_labels['labels'][:nbeta])
+        except Exception:
+            return decline('occupied_labels_unavailable')
+        if not occupied:
+            return decline('no_occupied_orbitals_to_check')
+        if 'mixed' in occupied:
+            return decline('symmetry_broken_electronic_solution')
+
         meta['hess_symmetry_unique'] = {
             'status': 'active',
             'unique_atoms': [int(a) for a in uniq],
