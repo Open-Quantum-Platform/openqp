@@ -1279,6 +1279,9 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
     """Run the native (SA-)CASSCF to provide reference orbitals."""
     cfg = mol.config["input"]
     original_method = cfg.get("method")
+    cas_cfg = mol.config.setdefault("casscf", {}) or {}
+    mol.config["casscf"] = cas_cfg
+    original_root = cas_cfg.get("root", None)
     if len(roots) > 1:
         cfg["method"] = "sa-casscf"
         sa = mol.config.setdefault("state_average", {}) or {}
@@ -1289,10 +1292,20 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
         sa.setdefault("weights", ",".join(f"{w:.10f}" for w in weights))
     else:
         cfg["method"] = "casscf"
+        # CASSCF._state_average_plan reads [casscf] root, which is independent
+        # of [pt2] target_roots and defaults to 0.  Without this the reference
+        # optimized GROUND-state orbitals and the (now correctly selected) PT2
+        # root was then corrected on top of them -- a different state-specific
+        # calculation than the input asked for.
+        cas_cfg["root"] = str(int(roots[0]))
     try:
         CASSCF(mol).energy(ref_energy=ref_energy)
     finally:
         cfg["method"] = original_method
+        if original_root is None:
+            cas_cfg.pop("root", None)
+        else:
+            cas_cfg["root"] = original_root
 
 
 def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,

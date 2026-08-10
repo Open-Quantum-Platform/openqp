@@ -2977,6 +2977,51 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
         action="Set [ci] ci_print_threshold to zero or a positive value.",
     )
 
+    # Two opt-ins whose whole point is an assurance that is never delivered, so
+    # a warning is not enough -- a user who sets them is told the run honoured
+    # them.  Reject until they are implemented (see the unimplemented-keyword
+    # list further down for the ones that only warn, where the default value is
+    # the honest behaviour).
+    #
+    # casscf.max_function_evaluations: no optimizer reads it, and _powell_step
+    # is a scaled-gradient fallback with no inner evaluation loop at all -- the
+    # documented "stop Powell after this many objective evaluations" has no
+    # place to be enforced, and SciPy is never called.
+    if method in {"casscf", "sa-casscf", "sacasscf"}:
+        _mfe = _get(config, "casscf", "max_function_evaluations", 0)
+        try:
+            _mfe_i = int(_mfe)
+        except (TypeError, ValueError):
+            _mfe_i = 0
+        if _mfe_i > 0:
+            report.add(
+                "ERROR",
+                "casscf.max_function_evaluations",
+                "The CASSCF evaluation cap is not implemented: no optimizer "
+                "reads this key, so the requested limit would not be applied.",
+                value=_mfe,
+                expected="0",
+                action=("Leave [casscf] max_function_evaluations at 0 and bound "
+                        "the run with [casscf] max_macro_iterations instead."),
+            )
+
+    # pt2.benchmark_required: nothing reads benchmark_reference_file, compares
+    # against benchmark_tolerance, or fails on a mismatch, so a run that
+    # "requires" the benchmark completes having never performed it.
+    if str(_get(config, "pt2", "benchmark_required", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "pt2.benchmark_required",
+            "The PT2 benchmark comparison is not implemented: no runtime path "
+            "reads [pt2] benchmark_reference_file or applies "
+            "benchmark_tolerance, so requiring it would silently pass.",
+            value=True,
+            expected="pt2.benchmark_required=false",
+            action=("Compare the PT2 energies against your reference outside "
+                    "the run for now."),
+        )
+
     # CASCI implements print_ci_vectors / save_ci_vectors / save_rdm through its
     # post-solve artifact methods; CASSCF.energy stores only the final energy
     # array and never prints or writes the final CI vectors or RDMs, so a user

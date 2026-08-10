@@ -498,10 +498,14 @@ They optimize the weighted state-average objective over the requested roots.
       microiteration   bounded native diagnostic/local-step optimizer (default)
       powell           SciPy Powell driver using native OpenQP CI/RDM objective evaluations
 
-- max_function_evaluations // Powell objective evaluation cap
+- max_function_evaluations // reserved; not implemented
 
-      0 use SciPy's default cap
-      >0 stop Powell after this many objective evaluations
+      0 (the only accepted value)
+
+  No optimizer reads this key -- the Powell step is a scaled-gradient fallback
+  with no inner objective loop, and SciPy is not called -- so a positive value
+  is rejected in preflight rather than silently ignored.  Bound a run with
+  max_macro_iterations instead.
 
 - root // 0-based state-specific CASSCF root
 

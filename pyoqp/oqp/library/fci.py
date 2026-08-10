@@ -2416,14 +2416,27 @@ def contiguous_active_space(
     return ncore, nact, tuple(plan.nelec), plan
 
 
-def check_ao_eri_budget(nbf: int, max_memory, section: str) -> None:
-    """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
-    dense_bytes = 8 * int(nbf) ** 4
+def check_ao_eri_budget(nbf: int, max_memory, section: str,
+                        live_tensors: int = 3) -> None:
+    """Guard the dense ERI allocations (nbf**4 doubles each) before building them.
+
+    ``live_tensors`` is how many nbf**4 tensors are simultaneously resident at
+    the peak, not how many are created in total.  Budgeting a single tensor let
+    a job pass and then be OOM-killed anyway: every caller here follows the AO
+    build with ``_transform_integrals``, which holds the AO tensor while
+    allocating the MO tensor, and the native engine allocates its own nbf**4
+    work buffer on top -- three at once.  (Native CASSCF likewise keeps the AO
+    record live while casscf_driver allocates ctx%eri.)
+    """
+    one = 8 * int(nbf) ** 4
+    peak_bytes = one * max(1, int(live_tensors))
     budget_bytes = max(1, int(max_memory)) * 1024 * 1024
-    if dense_bytes > budget_bytes:
+    if peak_bytes > budget_bytes:
         raise ValueError(
-            f"Dense AO ERI for nbf={nbf} needs ~{dense_bytes / 1024 ** 3:.2f} GiB, "
-            f"exceeding the {section} max_memory budget of {int(max_memory)} MiB. "
+            f"Dense ERI handling for nbf={nbf} needs ~{peak_bytes / 1024 ** 3:.2f} GiB "
+            f"({max(1, int(live_tensors))} x {one / 1024 ** 3:.2f} GiB tensors live at "
+            f"once: AO, MO and the transform work buffer), exceeding the {section} "
+            f"max_memory budget of {int(max_memory)} MiB. "
             "Dense FCI is only intended for small basis sets."
         )
 
