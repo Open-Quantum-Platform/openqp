@@ -745,7 +745,8 @@ def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
     return blocks
 
 
-def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector):
+def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
+                     max_memory=None):
     """Strongly contracted NEVPT2 correlation energy.
 
     Parameters
@@ -768,17 +769,29 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector):
     # guards this, but no such key or check exists anywhere in the tree, so the
     # calculation simply exhausts memory.  Refuse up front with a message that
     # names the real number instead.
+    # The ceiling is [cas] max_memory when the caller passes it.  A hard-coded
+    # 2 GiB ignored the configured budget in both directions: CAS(2,10) is 100
+    # determinants with a ~763 MiB dm4, so it cleared a 2 GiB cap while blowing
+    # a max_memory=256 budget.  make_rdms holds dm1..dm4 simultaneously, and
+    # dm3 (nact^6) is the only other one large enough to matter, so both are
+    # counted.
     _dm4_bytes = 8 * int(nact) ** 8
-    _dm4_cap = 2 * 1024 ** 3
-    if _dm4_bytes > _dm4_cap:
+    _dm3_bytes = 8 * int(nact) ** 6
+    _live_bytes = _dm4_bytes + _dm3_bytes
+    _cap = (2 * 1024 ** 3 if max_memory is None
+            else max(1, int(max_memory)) * 1024 ** 2)
+    if _live_bytes > _cap:
         raise ValueError(
             "strongly contracted NEVPT2 needs a dense four-particle RDM of "
-            "nact^8 = %d doubles (~%.1f GiB) for nact=%d, above the %.0f GiB "
-            "ceiling. Reduce [cas] active_orbitals, or use "
-            "[pt2] contraction=none for the uncontracted NEVPT2, which does "
-            "not form dm4."
+            "nact^8 = %d doubles (~%.1f GiB) for nact=%d, and holds the "
+            "three-particle RDM (~%.2f GiB) alongside it -- ~%.1f GiB total, "
+            "above the %.2f GiB ceiling%s. Reduce [cas] active_orbitals, "
+            "raise [cas] max_memory, or use [pt2] contraction=none for the "
+            "uncontracted NEVPT2, which does not form dm4."
             % (int(nact) ** 8, _dm4_bytes / 1024 ** 3, int(nact),
-               _dm4_cap / 1024 ** 3))
+               _dm3_bytes / 1024 ** 3, _live_bytes / 1024 ** 3,
+               _cap / 1024 ** 3,
+               "" if max_memory is None else " ([cas] max_memory)"))
     dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
     B = _blocks(h1e_mo, eri_mo, ncore, nact, eps)
     h1e, h2e = B['h1e'], B['h2e']

@@ -1040,6 +1040,15 @@ class Gradient(Calculator):
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
                 grads = pt2_numerical_gradient(self.mol, self.grads)
                 self.mol.grads = grads
+                # Molecule.get_results() reads the NATIVE data._data.grad
+                # buffer, which only the Fortran gradient kernels ever write.
+                # Handing the finite-difference result back to the optimizer
+                # while leaving that buffer untouched meant guess.save_mol=true
+                # serialized stale (or uninitialized) numbers as the public
+                # "grad" result: right optimization, wrong saved JSON.  Mirror
+                # the selected gradient into it the way the native paths do.
+                if len(grads):
+                    self.mol.set_grad(grads[0])
                 return grads
             raise ValueError(f'Unknown method type {self.method}')
 

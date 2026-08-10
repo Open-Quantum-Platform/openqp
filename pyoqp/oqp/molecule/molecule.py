@@ -1811,6 +1811,26 @@ class Molecule:
 
         return copy.deepcopy(grad)
 
+    def set_grad(self, grad):
+        """Write a gradient (Hartree/Bohr) into the native buffer.
+
+        The Fortran gradient kernels fill ``data._data.grad`` themselves, and
+        ``get_results`` reads it unconditionally.  A gradient produced in
+        Python -- the PT2 central-difference path -- has to mirror itself here,
+        or the saved JSON reports whatever the buffer happened to hold.
+        """
+        natom = self.data['natom']
+        flat = np.ascontiguousarray(np.asarray(grad, dtype=float).reshape(-1))
+        if flat.size != 3 * natom:
+            raise ValueError(
+                f"gradient has {flat.size} components, expected {3 * natom} "
+                f"for {natom} atoms")
+        view = np.frombuffer(
+            oqp.ffi.buffer(self.data._data.grad, 3 * natom * oqp.ffi.sizeof("double"))
+        )
+        view.setflags(write=True)
+        view[:] = flat
+
     def get_nac(self):
         """
         Get the non-adiabatic (phase-corrected derivative) coupling matrix d_ij.

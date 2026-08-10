@@ -1760,9 +1760,10 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
-    # 16 since H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region
-    # converger ([casscf] converger=trah).
-    assert len(WF_EXAMPLES) == 16
+    # 17 since H4_CASPT2_grad.inp added the PT2 central-difference gradient
+    # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
+    # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
+    assert len(WF_EXAMPLES) == 17
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

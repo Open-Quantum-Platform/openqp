@@ -3043,6 +3043,38 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                            "multistate method (ms-caspt2/mcqdpt2) to optimize "
                            "an excited root.",
                 )
+        # The multistate half of the same problem: the single-state guard above
+        # only fires for caspt2/mrmp2, so ms-/xms-caspt2 and MCQDPT accepted
+        # optimize.istate=2 against ci.nroot=2 and only failed after the whole
+        # central PT2 calculation had run, when the optimizer indexed past the
+        # published energies.  Bound it exactly as the properties.grad path
+        # below is bounded.
+        if (PT2_METHOD_ALIASES.get(method) not in PT2_SINGLE_STATE_METHODS
+                and runtype in {"optimize", "ts", "mep", "irc"}):
+            _tr = _as_list(_get(config, "pt2", "target_roots", []))
+            try:
+                _n_out = len(_tr) if _tr else max(
+                    1, int(_get(config, "pt2", "nroot", 0) or 0)
+                    or int(_get(config, "ci", "nroot", 1) or 1))
+            except (TypeError, ValueError):
+                _n_out = 1
+            _istate_m = _get(config, "optimize", "istate", 1)
+            try:
+                _istate_mi = int(_istate_m)
+            except (TypeError, ValueError):
+                _istate_mi = None
+            if _istate_mi is not None and (_istate_mi < 0 or _istate_mi >= _n_out):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    f"This multistate PT2 job publishes {_n_out} state(s), "
+                    f"indices 0..{_n_out - 1}.",
+                    value=_istate_m,
+                    expected=f"0..{_n_out - 1}",
+                    action=("Set [optimize] istate within the published range, "
+                            "or request more roots via [pt2] target_roots / "
+                            "nroot (and [ci] nroot)."),
+                )
         # runtype=grad selects its state through [properties] grad, not
         # optimize.istate, and that selector was unvalidated: a single-state
         # caspt2/mrmp2 job with grad=1 passed preflight and then ran the whole

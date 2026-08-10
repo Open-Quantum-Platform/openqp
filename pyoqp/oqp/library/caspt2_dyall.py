@@ -1308,7 +1308,8 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
                 "or use contraction=none for a shifted NEVPT2."
                 % ", ".join(_unapplied))
         e2, comp = sc_nevpt2_energy(h1e, eri, eps, ncore, nact, active_nelec,
-                                    coeffs[:, root])
+                                    coeffs[:, root],
+                                    max_memory=settings.max_memory)
         e_caspt2 = e_casci + e2
         e_ref_check = e_casci
         min_denom = float("inf")
