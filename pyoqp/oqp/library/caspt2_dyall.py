@@ -128,6 +128,8 @@ class CASPT2Options:
     max_terms: int = 30_000_000      # direct-engine streamed-term guard
     nproc: int = 1                   # direct-engine process parallelism over
                                      # reference-determinant chunks
+    max_memory: int = 0              # [pt2] max_memory in MiB; 0 = inherit
+                                     # [cas] max_memory
 
 
 def _as_bool(value, label):
@@ -256,7 +258,24 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         engine=engine,
         max_terms=int(raw.get("max_terms", 30_000_000)),
         nproc=max(1, int(raw.get("nproc", 1))),
+        # 0 keeps the [cas] budget, so an input that never mentions
+        # [pt2] max_memory behaves exactly as before.
+        max_memory=max(0, int(raw.get("max_memory", 0) or 0)),
     )
+
+
+def _pt2_memory(options, settings) -> tuple:
+    """(budget_MiB, label) for the PT2 allocation guards.
+
+    [pt2] max_memory is a schema key that no guard read: they all used
+    [cas] max_memory, so a job asking for pt2.max_memory=256 was still allowed
+    to allocate against the default cas.max_memory=2048.  0 means "inherit
+    [cas]", so inputs that never mention the PT2 key are unchanged.
+    """
+    pt2_mem = int(getattr(options, "max_memory", 0) or 0)
+    if pt2_mem:
+        return pt2_mem, "[pt2]"
+    return int(settings.max_memory), "[cas]"
 
 
 def _reference_roots(options) -> list:
@@ -1140,7 +1159,8 @@ def native_caspt2_energy(mol, ref_energy=None):
     if options.reference == "casscf":
         _run_casscf_reference(mol, ref_energy, roots, weights)
 
-    check_ao_eri_budget(nbf, settings.max_memory, "[cas]")
+    _mem, _mem_label = _pt2_memory(options, settings)
+    check_ao_eri_budget(nbf, _mem, _mem_label)
     oqp.fci_ao_integrals(mol)
     hcore_ao = _unpack_lower_triangle(np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
     # Honour [cas] orbital_source: the standalone CASCI driver routes through
@@ -1309,7 +1329,7 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
                 % ", ".join(_unapplied))
         e2, comp = sc_nevpt2_energy(h1e, eri, eps, ncore, nact, active_nelec,
                                     coeffs[:, root],
-                                    max_memory=settings.max_memory)
+                                    max_memory=_pt2_memory(options, settings)[0])
         e_caspt2 = e_casci + e2
         e_ref_check = e_casci
         min_denom = float("inf")

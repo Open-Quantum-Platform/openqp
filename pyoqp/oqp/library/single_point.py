@@ -1047,8 +1047,16 @@ class Gradient(Calculator):
                 # serialized stale (or uninitialized) numbers as the public
                 # "grad" result: right optimization, wrong saved JSON.  Mirror
                 # the selected gradient into it the way the native paths do.
-                if len(grads):
-                    self.mol.set_grad(grads[0])
+                #
+                # grads is indexed BY STATE ((nstate, natom, 3)), matching
+                # tddft_grad -- not by position in the request list.  So
+                # grads[0] is always S0: a `[properties] grad=1` run would have
+                # optimized with S1 while publishing the S0 gradient.  Write
+                # the last requested state, which is what the TDDFT path leaves
+                # in the buffer after looping over self.grads in order.
+                _sel = [int(s) for s in np.atleast_1d(self.grads)]
+                if len(grads) and _sel and 0 <= _sel[-1] < len(grads):
+                    self.mol.set_grad(grads[_sel[-1]])
                 return grads
             raise ValueError(f'Unknown method type {self.method}')
 

@@ -2977,6 +2977,26 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
         action="Set [ci] ci_print_threshold to zero or a positive value.",
     )
 
+    # CASCI implements print_ci_vectors / save_ci_vectors / save_rdm through its
+    # post-solve artifact methods; CASSCF.energy stores only the final energy
+    # array and never prints or writes the final CI vectors or RDMs, so a user
+    # switching from casci to casscf silently loses the requested output.
+    # Reject rather than drop it; emitting them from the final CASSCF solve is
+    # a feature.
+    if method in {"casscf", "sa-casscf", "sacasscf"}:
+        for _art in ("print_ci_vectors", "save_ci_vectors", "save_rdm"):
+            if str(_get(config, "ci", _art, False)).strip().lower() in _TRUE_BOOL:
+                report.add(
+                    "ERROR",
+                    f"ci.{_art}",
+                    f"[ci] {_art} is not produced by the CASSCF driver; only "
+                    "CASCI emits the CI artifacts.",
+                    value=True,
+                    expected=f"ci.{_art}=false for method={method}",
+                    action=("Run method=casci to obtain the CI vectors/RDMs "
+                            "for fixed orbitals, or disable this flag."),
+                )
+
     # The PT2 family carries central-difference numerical gradients
     # (pt2_numgrad.py) wired through the Gradient seam, so the gradient-
     # consuming drivers work for it; casci/casscf remain energy-only.
@@ -4113,8 +4133,12 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
     # checker only verified the H0 choice, so such an input passed preflight
     # and died on the first step.  Reject it here instead.
     if canonical_method in (PT2_MS_METHODS | PT2_XMS_METHODS):
+        # Test the shared alias set, not a literal: PT2_STRONG_CONTRACTIONS
+        # also carries "ic" and "internally-contracted", which _caspt2_options
+        # normalizes to "strong" -- so those two spellings slipped past this
+        # gate and died in native_caspt2_energy after the reference SCF.
         _contr = str(_get(config, "pt2", "contraction", "") or "").strip().lower()
-        if _contr in {"strong", "sc", "sc-nevpt2"}:
+        if _contr in PT2_STRONG_CONTRACTIONS:
             report.add(
                 "ERROR",
                 "pt2.contraction",

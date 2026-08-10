@@ -1667,14 +1667,26 @@ def solve_fci(
     # resolve_ci_solve, because the native driver never reaches this code and
     # must stay free to accept a wide active space under a small budget.
     _spin_bytes = 8 * nspin ** 4
-    if _spin_bytes > budget_bytes:
+    # gspin stays LIVE while the dense Hamiltonian is built below, so the two
+    # have to be weighed together, not one at a time: 2 electrons in 50
+    # orbitals clears a ~763 MiB spin tensor and a ~48 MiB Hamiltonian
+    # separately under max_memory=768, while their sum does not.  (50 orbitals
+    # also forces this Python fallback, since the native packed-determinant
+    # driver caps at 31.)
+    _live_bytes = _spin_bytes + (8 * ndet * ndet if solver == "dense" else 0)
+    if _live_bytes > budget_bytes:
+        _extra = ("" if solver != "dense" else
+                  f" plus the {8 * ndet * ndet / 1024 ** 3:.2f} GiB dense "
+                  f"Hamiltonian held alongside it")
         raise ValueError(
-            f"The Python CI solver's spin-orbital integral tensor for "
-            f"norb={norb} needs ~{_spin_bytes / 1024 ** 3:.2f} GiB, exceeding "
+            f"The Python CI solver needs ~{_spin_bytes / 1024 ** 3:.2f} GiB "
+            f"for the spin-orbital integral tensor at norb={norb}{_extra} "
+            f"-- ~{_live_bytes / 1024 ** 3:.2f} GiB live at once, exceeding "
             f"the configured max_memory budget of "
-            f"{budget_bytes / 1024 ** 2:.0f} MiB.  This allocation does not "
+            f"{budget_bytes / 1024 ** 2:.0f} MiB.  The spin tensor does not "
             f"depend on the determinant count, so fewer electrons will not "
-            f"help: reduce active_orbitals, or raise max_memory."
+            f"help: reduce active_orbitals, raise max_memory, or use "
+            f"solver=davidson to drop the dense Hamiltonian."
         )
     hspin, gspin = _spin_orbital_integrals(h1e, eri)
 
