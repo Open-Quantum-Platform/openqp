@@ -403,16 +403,29 @@ class Molecule:
             # A guard that cannot be evaluated must not block labelling.
             return None
 
-    def label_molecular_orbitals(self):
+    def label_molecular_orbitals(self, required=False):
         """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
 
         Stores the result under ``symmetry_metadata['mo_labels']``; never
         changes SCF/integral/response behavior.
+
+        ``required=True`` means an internal consumer needs the irreps to do its
+        job, not that the user asked to see them, and it bypasses
+        ``[symmetry] label_mo``. That flag is a DISPLAY control: it decides
+        whether the MO symmetry table is printed. Letting it also gate
+        computation coupled the Davidson guess coverage to a formatting
+        preference -- with ``label_mo=false`` and symmetry otherwise enabled,
+        the labels were never computed, ``stage_response_symmetry`` bailed with
+        ``skipped_no_mo_labels``, no ``OQP::sym_pair_irrep`` was staged, and
+        ``mrinivec`` fell back to the historical seeds. The unseeded-block
+        defect this PR exists to fix silently came back, and nothing said so.
+        The log dump stays gated on the flag, so the display contract is
+        unchanged.
         """
         meta = self.symmetry_metadata
         if not meta or meta.get('status', 'disabled') == 'disabled':
             return None
-        if not meta.get('label_mo', True):
+        if not required and not meta.get('label_mo', True):
             return None
         detection = meta.get('detection')
         if not detection:
@@ -471,6 +484,9 @@ class Molecule:
             state = self._label_scf_state(result)
             if state is not None:
                 result['scf_state'] = state
+            # Stamp the geometry these labels describe. They are orbital
+            # irreps of ONE structure, and the metadata outlives a step.
+            result['geometry_key'] = self._symmetry_geometry_key()
             meta['mo_labels'] = result
             # Gate A of the reductions plan: shell/AO symmetry maps
             # (metadata only; consumed by future petite-list code).
@@ -480,10 +496,13 @@ class Molecule:
                     shells, detection['operations'])
             except Exception as exc:
                 meta['reduction_maps'] = {'status': 'error', 'error': str(exc)}
-            try:
-                self._dump_mo_labels_log(result)
-            except Exception:
-                pass
+            # Printing stays gated on the user's display flag even when an
+            # internal consumer forced the computation (required=True).
+            if meta.get('label_mo', True):
+                try:
+                    self._dump_mo_labels_log(result)
+                except Exception:
+                    pass
             return result
         except Exception as exc:
             # Labeling must never break the run in the metadata-only phase.
@@ -546,10 +565,22 @@ class Molecule:
         # NEB, ...) must not have the frame rotated under them; the petite
         # reduction is restricted to single-point runtypes for now.
         runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
-        if runtype not in ('energy', 'grad', 'prop', 'properties'):
+        # 'prop' is deliberately NOT here. It is the only admitted runtype that
+        # consumes an EXTERNALLY supplied geometry, expressed in the caller's
+        # frame: load_previous_data writes OQP::xyz_old from it, and
+        # get_basis_overlap then overlaps that against the current -- by then
+        # rotated and translated -- structure. Because the standard frame is
+        # centred on the charge-weighted centroid, the two structures are
+        # physically displaced by a few bohr, so the cross-geometry MO overlap,
+        # the phase/reorder alignment built on it, and NACME are all wrong.
+        # That is PR #319's finite-difference failure mode one level up.
+        # ('properties' was never a run_func key, so it admitted nothing.)
+        if runtype not in ('energy', 'grad'):
             meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
             return False
 
+        input_coords = None
+        rollback = None
         try:
             from oqp.library.symmetry_detect import attach_detection_metadata
 
@@ -580,26 +611,58 @@ class Molecule:
                 total_rotation = rotation @ total_rotation
                 coords = (coords - origin) @ rotation.T
                 self.update_system(coords.ravel())
-            if not converged:
-                meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
-                return False
+            if converged:
+                # OpenQP contract: ALL outputs (geometry, gradients, MOs)
+                # are consistently in the standard orientation. The transform
+                # below maps user input axes to it:
+                #   r_std = (r_input - origin) @ rotation^T
+                # so input-frame vectors are recovered via v_input = v_std @ R.
+                meta['integral_symmetry'] = {
+                    'status': 'reoriented',
+                    'input_to_standard': {
+                        'rotation': total_rotation.tolist(),
+                        'origin': total_origin.tolist(),
+                    },
+                }
+                # Kept for the second phase, and deliberately OUTSIDE the
+                # integral_symmetry block: every bail in
+                # stage_integral_symmetry_maps replaces that block wholesale,
+                # which would take the coordinates with it. The caller pops
+                # this key immediately after staging, so it never reaches
+                # save_data.
+                meta['_reorient_input_coords'] = input_coords.tolist()
+                return True
 
-            # OpenQP contract: ALL outputs (geometry, gradients, MOs)
-            # are consistently in the standard orientation. The transform
-            # below maps user input axes to it:
-            #   r_std = (r_input - origin) @ rotation^T
-            # so input-frame vectors are recovered via v_input = v_std @ R.
-            meta['integral_symmetry'] = {
-                'status': 'reoriented',
-                'input_to_standard': {
-                    'rotation': total_rotation.tolist(),
-                    'origin': total_origin.tolist(),
-                },
-            }
-            return True
+            rollback = {'status': 'skipped_orientation_not_converged'}
         except Exception as exc:
-            meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
-            return False
+            rollback = {'status': 'error', 'error': str(exc)}
+
+        # Rollback -- deliberately OUTSIDE the try/except above.
+        #
+        # `input_coords` is captured just before the first rotation. If the
+        # throw happened earlier it is still None and there is nothing to undo,
+        # because the geometry was never moved; restoring from inside the
+        # handler used to raise NameError in exactly that case.
+        #
+        # Re-detection lives out here for two reasons. The loop rewrote
+        # meta['detection'] once per ROTATED attempt, so it describes a frame
+        # the molecule has just left -- and the caller cannot repair it, since
+        # the caller's restore block keys off '_reorient_input_coords', which
+        # only exists on the success path above. Left alone, the MO/state/mode
+        # labellers (and response blocking, when enabled) run with operations
+        # for a frame the molecule is no longer in.
+        #
+        # Running it here rather than inside the handler also keeps
+        # _detect_symmetry_metadata's strict contract intact: a strict
+        # point-group mismatch stays the fatal error it is meant to be, instead
+        # of being swallowed, or of downgrading a plain non-convergence into
+        # status='error'. The status is recorded first so it survives that
+        # raise.
+        if input_coords is not None:
+            self.update_system(input_coords.ravel())
+        meta['integral_symmetry'] = rollback
+        self._detect_symmetry_metadata()
+        return False
 
     def stage_integral_symmetry_maps(self):
         """Stage petite-list maps for the Fortran SCF (requires the basis).
@@ -611,6 +674,22 @@ class Molecule:
         existed and no output said so.
         """
         meta = self.symmetry_metadata
+        # Invalidate FIRST, before ANY gate below can return.
+        #
+        # Every tag this method stages describes one geometry and one basis,
+        # and the tag store outlives a single step. Clearing them at the point
+        # of a successful re-stage is not enough: the gates that return early
+        # -- no detection, the frame not reoriented, no basis, no shell
+        # purity, an AO-count mismatch, a failed overlap-invariance check --
+        # all leave the PREVIOUS step's maps in place, with
+        # OQP::sym_petite_enable still 1. Fortran then applies a stale petite
+        # list and a stale skeleton symmetrisation to the new geometry, which
+        # is a wrong-integrals bug rather than a missed optimisation.
+        #
+        # Same reasoning as _clear_response_symmetry_tags: make a bail mean
+        # "nothing staged", which every consumer already handles, instead of
+        # "whatever was true last time".
+        self._clear_integral_symmetry_tags(meta)
         if not meta or not meta.get('use_integral_symmetry'):
             return False
         staged = self._stage_integral_symmetry_maps(meta)
@@ -622,6 +701,205 @@ class Molecule:
         except Exception:
             pass
         return staged
+
+    def _symmetry_geometry_key(self):
+        """Fingerprint of the state the MO labels describe, or None.
+
+        Covers the geometry AND the converged orbitals. Coordinates alone are
+        not enough: MO irreps describe the SCF SOLUTION, so the same molecule
+        at identical coordinates can legitimately produce different labels
+        after a different guess, an orbital swap, or a symmetry-broken
+        stability solution. With ``label_mo=false`` suppressing the ordinary
+        post-SCF relabelling, a coordinates-only key would accept those stale
+        labels and stage a pair table for orbitals that no longer exist.
+
+        Hashing the coefficients is O(n_AO^2) against the O(|G| n_AO^3)
+        relabelling it guards, so it is cheap enough to do on every check.
+
+        Returning None means "cannot tell", and the callers then keep the
+        cached labels -- the historical behaviour -- rather than paying that
+        relabelling on every call.
+        """
+        try:
+            import hashlib
+            digest = hashlib.md5()
+            coords = np.ascontiguousarray(
+                np.asarray(self.get_system(), dtype=float).ravel())
+            digest.update(coords.tobytes())
+            seen_orbitals = False
+            for tag in ('OQP::VEC_MO_A', 'OQP::VEC_MO_B'):
+                try:
+                    mo = np.asarray(self.data[tag], dtype=float)
+                except Exception:
+                    continue
+                digest.update(np.ascontiguousarray(mo.ravel()).tobytes())
+                seen_orbitals = True
+            if not seen_orbitals:
+                # Labels are built FROM the orbitals; without them there is
+                # nothing meaningful to key against.
+                return None
+            return digest.hexdigest()
+        except Exception:
+            return None
+
+    def _usable_mo_labels(self, meta):
+        """Cached MO labels for the CURRENT geometry, or None.
+
+        ``stage_response_symmetry`` and ``label_excited_states`` rebuild their
+        tables from these labels, so reusing labels computed at a previous
+        geometry stages a fresh, well-formed table describing the wrong
+        orbitals. That is reachable whenever the ordinary post-SCF relabelling
+        does not run -- most obviously with ``label_mo=false``, where
+        ``label_molecular_orbitals()`` returns early and the step-N labels
+        simply persist into step N+1.
+        """
+        labels = meta.get('mo_labels')
+        if not labels or labels.get('status') != 'ok':
+            return None
+        key = self._symmetry_geometry_key()
+        if key is not None and labels.get('geometry_key') != key:
+            return None
+        return labels
+
+    #: Every tag written by the integral-symmetry staging path. Absence means
+    #: "not staged", which is what each Fortran consumer treats as inactive.
+    _INTEGRAL_SYMMETRY_TAGS = (
+        'OQP::sym_shell_map',
+        'OQP::sym_ao_target',
+        'OQP::sym_ao_sign',
+        'OQP::sym_atom_weight',
+        'OQP::sym_op_blocks',
+        'OQP::sym_petite_enable',
+    )
+
+    def has_staged_integral_symmetry(self):
+        """True when petite-reduction tags are live in the native store.
+
+        Asks the TAG STORE, deliberately, not the metadata. The metadata is
+        the thing that gets replaced: ``load_config()`` ->
+        ``initialize_symmetry_metadata()`` assigns a brand-new dict and erases
+        ``integral_symmetry.status``, while ``apply_config()`` leaves the
+        native tags untouched. Keying "did a previous step stage something?"
+        off the metadata therefore answered False in exactly the case that
+        produces stale tags -- reconfiguring one molecule through the
+        ``OpenQP.set()`` path and turning the reduction off.
+
+        The tags outlive the metadata, so they are what has to be asked.
+        """
+        for tag in self._INTEGRAL_SYMMETRY_TAGS:
+            try:
+                self.data[tag]
+                return True
+            except Exception:
+                continue
+        return False
+
+    def clear_integral_symmetry_state(self):
+        """Public entry point for dropping the staged petite reduction.
+
+        Callers need this BEFORE anything that can consume the maps, not just
+        before re-staging them.
+        """
+        self._clear_integral_symmetry_tags()
+
+    def _clear_integral_symmetry_tags(self, meta=None):
+        """Drop every staged petite-list / skeleton-symmetrisation artefact.
+
+        Deliberately deletes ``OQP::sym_petite_enable`` rather than setting it
+        to 0: absence and 0 are equivalent to the consumers, and deleting
+        cannot leave a half-configured state where the flag says active but
+        the maps are gone.
+        """
+        for tag in self._INTEGRAL_SYMMETRY_TAGS:
+            try:
+                del self.data[tag]
+            except Exception:
+                pass
+        if meta is None:
+            meta = self.symmetry_metadata or {}
+        if meta:
+            meta.pop('reduction_maps', None)
+            meta.pop('reduction_maps_full', None)
+            # The metadata must not outlive the tags either. `status ==
+            # 'active'` is what _petite_is_staged() and symmetrize_gradient()
+            # key off, so leaving it behind means a gradient gets projected
+            # with the previous geometry's operations after the reduction has
+            # been turned off -- metadata and runtime state disagreeing is the
+            # same class of bug as the stale tags themselves.
+            #
+            # Only 'active' is dropped: 'reoriented' is set by
+            # reorient_for_integral_symmetry BEFORE staging runs, and the
+            # staging body requires it, so clearing that would disable the
+            # reduction outright.
+            if meta.get('integral_symmetry', {}).get('status') == 'active':
+                meta.pop('integral_symmetry', None)
+
+    def _clear_full_group_tags(self, meta=None):
+        """Drop any staged non-abelian (full point group) reduction artefacts.
+
+        `OQP::sym_op_blocks` is written only by the full tier, and its mere
+        PRESENCE is what makes the Fortran side take the blocked path. Nothing
+        on the abelian path overwrites it, so it has to be deleted explicitly
+        or a molecule that staged the full group once keeps taking that path
+        after falling back.
+        """
+        try:
+            del self.data['OQP::sym_op_blocks']
+        except Exception:
+            pass
+        if meta is None:
+            meta = self.symmetry_metadata or {}
+        meta.pop('reduction_maps_full', None)
+
+    def _td_multiplicity(self):
+        """Target spin multiplicity of the response calculation, or None.
+
+        The validated schema key is ``[tdhf] multiplicity``
+        (``OQP_CONFIG_SCHEMA``); ``mult`` is an alias that appears in
+        hand-written test configs and is what the Fortran side calls the field
+        (``infos%tddft%mult``). Reading only ``mult``, as the state-label
+        formatter did, meant every production config fell through: ``terms``
+        was never built and the newly visible label line printed a bare irrep
+        (``A1``) instead of the spin-resolved term (``1A1``/``3A1``). Prefer the
+        schema key and keep the alias as a fallback so existing test configs
+        keep working.
+        """
+        tdhf = self.config.get('tdhf', {}) or {}
+        value = tdhf.get('multiplicity', tdhf.get('mult'))
+        if value in (None, ''):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _full_group_decline_reason(self):
+        """Why the non-abelian 'full' integral tier must not be used, or None.
+
+        The full tier and the XC grid reduce over DIFFERENT groups by
+        construction: ``stage_integral_symmetry_maps`` deliberately keeps the
+        atom weights on the abelian sign operations, because Lebedev angular
+        grids are invariant under the axis-aligned octahedral operations but
+        NOT under C3/C6. That mismatch costs nothing for HF, which has no
+        grid. With a functional it is a measured error -- ``benzene_full_dft``
+        is out by 3.14e-04 against the tier's own 5e-7 tolerance
+        (docs/planned/integral-symmetry.md, "Still open").
+
+        The combination used to be unreachable on the bases DFT is normally
+        run in: before per-shell purity was exported, staging bailed with
+        ``skipped_basis_mismatch`` on every cc-pVXZ, def2 and 6-311G input.
+        Widening engagement to spherical bases without this guard would turn a
+        documented, cornered defect into a new way to get a wrong energy. So
+        DFT stays on the exact abelian tier until the non-abelian XC path is
+        understood -- the user still gets the reduction, just the tier that is
+        machine-exact.
+
+        Split out from the staging body so the decision can be tested without
+        a live SCF: it is a pure function of the configuration.
+        """
+        if str(self.config.get('input', {}).get('functional', '')).strip():
+            return 'dft_functional'
+        return None
 
     def _stage_integral_symmetry_maps(self, meta):
         """Body of :meth:`stage_integral_symmetry_maps`; records a status and
@@ -723,58 +1001,24 @@ class Molecule:
             # non-abelian orbit members is still under investigation).
             want_full = str(self.config.get('symmetry', {})
                             .get('use_integral_symmetry', '')).strip().lower() == 'full'
-
-            # The full (non-abelian) tier is incompatible with DFT, and not by
-            # an oversight that can be patched.
-            #
-            # It reduces and projects the two halves of the Fock with DIFFERENT
-            # groups: J/K with the full group, Vxc with the abelian subgroup.
-            # The latter is deliberate -- Lebedev angular grids are invariant
-            # under the axis-aligned octahedral operations but NOT under C3/C6.
-            # So the JK half is forced exactly symmetric under the full group
-            # while the XC half can only ever be abelian-symmetric, and the SCF
-            # converges to a density that satisfies neither.
-            #
-            # Measured on benzene 6-31G* at an exact D6h geometry, |G| = 24,
-            # against the C1 reference:
-            #
-            #     pure HF                            dE = 5.9e-09
-            #     hfscale = 1.0 with a BLYP Vxc      dE = 1.6e-03
-            #     BHHLYP                             dE = 3.1e-04
-            #     BLYP                               dE = 1.9e-03
-            #
-            # The second row is the discriminating one: exchange is treated
-            # bit-identically to the case that works, and merely putting a Vxc
-            # into the Fock costs six orders. So the variable is the presence
-            # of an abelian-projected Vxc beside a full-group-projected JK, not
-            # the exchange fraction.
-            #
-            # All three repairs are closed. Projecting both halves with the
-            # full group is impossible while the grid is not C3/C6 invariant --
-            # and note this is the GRID, not the grid reduction, so withdrawing
-            # the XC atom weights does not help (measured: dE unchanged to
-            # every digit). Projecting both halves with the abelian group is
-            # wrong because the JK skeleton was reduced with 24 operations
-            # (measured: dE = 7.2e+05). Reducing JK with 8 operations IS the
-            # abelian tier, which is already exact (dE = 0 for both a hybrid
-            # and a pure GGA) and already delivers 3.4-3.7x.
-            #
-            # So: fall back to the abelian tier and say so.
-            #
-            # This is not free, and the first version of this comment wrongly
-            # said it was. Measured on benzene HF/cc-pVTZ, whole-job wall
-            # clock: C1 41.6 s, abelian 22.2 s (1.87x), full 11.6 s (3.59x).
-            # The 3.6x quoted for this work is the FULL tier; abelian is 1.9x.
-            # So DFT gives up about a factor of 1.9 here. The decision stands
-            # anyway -- the full tier produces a WRONG DFT energy and a wrong
-            # number is not a tradeoff against speed -- but a maintainer
-            # weighing a symmetry-adapted DFT grid should see the real size of
-            # the prize. Joint finding with @karmachoi.
-            if want_full and str(self.config.get('input', {})
-                                 .get('functional', '')).strip():
-                want_full = False
-                meta['full_group_declined'] = 'dft_grid_not_invariant'
-
+            full_declined = None
+            if want_full:
+                full_declined = self._full_group_decline_reason()
+                if full_declined:
+                    want_full = False
+            # Drop any full-group artefacts from an EARLIER staging before
+            # choosing a tier. The tag store outlives one step, and the
+            # abelian path overwrites OQP::sym_shell_map but never wrote
+            # OQP::sym_op_blocks, so a molecule that staged the full tier once
+            # (HF) and then falls back to abelian (a functional set on a later
+            # step, or the overlap gate rejecting the full group) would leave
+            # the old dense blocks in place. Fortran keys off their presence:
+            # int2 selects the blocked path, then symmetrize_skeleton_fock
+            # returns on the size mismatch -- so the abelian skeleton
+            # symmetrisation is skipped entirely and silently. Clearing on
+            # EVERY entry makes the tier a property of this staging call
+            # rather than of the molecule's history.
+            self._clear_full_group_tags(meta)
             full_group = False
             full_ops = None
             try:
@@ -841,6 +1085,7 @@ class Molecule:
                 'n_operations': (meta['reduction_maps_full']['n_operations']
                                  if full_group else maps['n_operations']),
                 'full_group': full_group,
+                'full_group_declined': full_declined,
                 'reoriented': True,
                 'input_to_standard': input_to_standard,
             }
@@ -865,14 +1110,27 @@ class Molecule:
                 del self.data[tag]
             except Exception:
                 pass
+        # ...and the metadata that describes them. Every bail below sets its own
+        # status, but the ones that return before reaching them would otherwise
+        # leave the PREVIOUS step's 'active'/'pair_table_staged' in the
+        # serialized metadata while no table exists -- Fortran falls back
+        # correctly, but anything reading the metadata is told otherwise.
+        meta = self.symmetry_metadata
+        if meta:
+            meta.pop('response_symmetry', None)
 
     def stage_response_symmetry(self):
         """Stage per-pair irrep indices for response-space blocking.
 
         Builds OQP::sym_pair_irrep (1-based irrep index per excitation
-        pair, occupied index fastest) from the converged MO labels. Only
-        acts when ``use_response_symmetry`` is enabled; bails to the
-        unblocked solver on any 'mixed' orbital or inconsistency.
+        pair, occupied index fastest) from the converged MO labels, and
+        bails to the unblocked solver on any 'mixed' orbital or
+        inconsistency.
+
+        The table itself is staged whenever it can be built, NOT only under
+        ``use_response_symmetry`` -- the Davidson guess needs it for irrep
+        coverage regardless. That flag gates only the separate, experimental
+        residual projection, via OQP::sym_response_project_enable.
         """
         meta = self.symmetry_metadata
         # Invalidate FIRST, before any bail can return. The table is consumed
@@ -902,9 +1160,13 @@ class Molecule:
         try:
             from oqp.library.symmetry import product_irrep
 
-            mo_labels = meta.get('mo_labels')
-            if not mo_labels or mo_labels.get('status') != 'ok':
-                mo_labels = self.label_molecular_orbitals()
+            # required=True: the guess coverage needs the irreps whether or
+            # not the user asked to SEE the MO label table. The geometry check
+            # matters for the same reason -- stale labels stage a well-formed
+            # table for the wrong structure.
+            mo_labels = self._usable_mo_labels(meta)
+            if mo_labels is None:
+                mo_labels = self.label_molecular_orbitals(required=True)
             if not mo_labels or mo_labels.get('status') != 'ok':
                 meta['response_symmetry'] = {'status': 'skipped_no_mo_labels'}
                 return False
@@ -913,7 +1175,28 @@ class Molecule:
             nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
             nbf = len(mo_labels['alpha']['labels'])
 
-            if td_type in ('sf', 'mrsf'):
+            if td_type == 'mrsf' and self._td_multiplicity() == 5:
+                # QUINTET MRSF runs a DIFFERENT response space, and staging the
+                # usual one produced a table of the wrong length that every
+                # consumer then silently discarded.
+                #
+                # tdhf_mrsf_energy dispatches mrst==5 to inivec as
+                #   call inivec(..., noccb, nocca, nvec, infos)
+                # so inside inivec the occupied index runs 1..noccb (BETA
+                # occupied) and the virtual index noccb_param+1..nbf with
+                # noccb_param = nocca (ALPHA virtual): xvec_dim is
+                # noccb*(nbf-nocca), the transpose of the singlet/triplet
+                # nocca*(nbf-noccb). The guards in report_seed_irrep_coverage
+                # and mrinivec both compare size(pair_irrep) against the real
+                # xvec_dim and return when it differs, so every open-shell
+                # quintet fell out of the coverage check without a word --
+                # exactly the silent, state-shifting failure this PR is about.
+                #
+                # Layout is unchanged: ij = (j-nocca-1)*noccb + i, occupied
+                # index fastest within each virtual, same as the loop below.
+                occ_labels = mo_labels.get('beta', mo_labels['alpha'])['labels'][:nb]
+                vir_labels = mo_labels['alpha']['labels'][na:]
+            elif td_type in ('sf', 'mrsf'):
                 occ_labels = mo_labels['alpha']['labels'][:na]
                 vir_labels = mo_labels.get('beta', mo_labels['alpha'])['labels'][nb:]
             else:
@@ -938,32 +1221,51 @@ class Molecule:
                     pair_irrep[idx] = irreps.index(label) + 1
                     idx += 1
 
-            if td_type == 'mrsf' and na - nb >= 2:
-                # The three open-open slots do not carry the plain
-                # Gamma_i (x) Gamma_a label of their (i, a) indices, because
-                # MRSF stores that sector spin-adapted and folded (SI Fig. S2
-                # and Sec. 8 of JCP 149, 104101).  With O1 = na-2, O2 = na-1
-                # (0-based) and the slot convention "annihilate alpha in i,
-                # create beta in a" acting on |O1a O2a>:
-                #   (O1,O1) holds the folded (L -/+ R)/sqrt2, whose two
-                #     determinants are both the open-shell {O1,O2} pair, so it
-                #     transforms as Gamma_O1 (x) Gamma_O2;
-                #   (O2,O1) is G = |O1 O1> and (O1,O2) is D = |O2 O2>, both
-                #     doubly occupied and therefore totally symmetric.
-                # Labelling them by the raw index product puts all three in the
-                # wrong blocks, which defeats the coverage the Davidson guess
-                # and the response projection both rely on.
-                o1, o2 = na - 2, na - 1
-                v_o1, v_o2 = o1 - nb, o2 - nb
-                n_occ = len(occ_labels)
-                if 0 <= v_o1 and v_o2 < len(vir_labels):
-                    oo_label = product_irrep(
-                        [occ_labels[o1], vir_labels[v_o2]], table)
-                    if oo_label != 'mixed':
-                        pair_irrep[o1 + v_o1*n_occ] = irreps.index(oo_label) + 1
-                    # irreps[0] is the totally symmetric representation
-                    pair_irrep[o2 + v_o1*n_occ] = 1
-                    pair_irrep[o1 + v_o2*n_occ] = 1
+            # NO special case for the three MRSF open-open slots. There used to
+            # be one: it relabelled (O1,O1) as Gamma_O1 (x) Gamma_O2 and both
+            # (O2,O1) and (O1,O2) as totally symmetric, on the grounds that the
+            # determinants those slots build are respectively open-shell and
+            # doubly occupied. The reasoning is sound about DETERMINANTS and
+            # wrong about this table.
+            #
+            # Every other entry here is Gamma_i (x) Gamma_a -- the symmetry of
+            # the transition density the amplitude generates, not of the
+            # resulting determinant. The two differ by the constant reference
+            # factor Gamma_ref = Gamma_O1 (x) Gamma_O2, uniformly, open-open
+            # slots included. Both consumers use only the PARTITION (which
+            # pairs share a label): mrinivec counts representatives per label,
+            # sym_response_project zeroes components whose label differs from
+            # the dominant one. A uniform twist by Gamma_ref leaves the
+            # partition alone and is harmless. Twisting three slots and not the
+            # rest is not: it swaps A1 <-> Gamma_ref on exactly those three and
+            # puts them in the wrong blocks. It is invisible when the two SOMOs
+            # share an irrep -- then Gamma_ref = A1 and the override is inert --
+            # and bites whenever they do not.
+            #
+            # The folded slot survives this: (O1,O1) and (O2,O2) both carry raw
+            # Gamma_O1 (x) Gamma_O1 = A1, so folding them is intra-block either
+            # way.
+            #
+            # MEASURED. With the override, use_response_symmetry is not merely
+            # imperfect, it is destructive -- the response is no longer block
+            # diagonal in the staged labelling, so zeroing "out-of-block"
+            # components deletes real ones:
+            #
+            #   deck                  with override            without
+            #   CH2O 6-31G n=3        87 iters, NOT converged  8 iters, exact
+            #                         states 1-2 frozen at
+            #                         their iteration-1 values
+            #   CH2O 6-31G n=6        51 iters, NOT converged  9 iters, exact
+            #   H2O 6-31G* n=3        24 iters, NOT converged  3 iters, exact
+            #   H2O 6-31G* n=6        33 iters, NOT converged  4 iters, exact
+            #                         state 1 = -230.47 eV
+            #
+            # "exact" means bit-identical to the same deck with
+            # use_response_symmetry off, which is what a correct projection
+            # must be: if the labelling really block-diagonalises the response,
+            # unit trial vectors start pure, stay pure, and the projection can
+            # only remove noise. That it changed anything at all was the
+            # evidence the labelling was wrong.
 
             self.data['OQP::sym_pair_irrep'] = pair_irrep
             # The table itself is staged whenever it can be built: the Davidson
@@ -972,10 +1274,19 @@ class Molecule:
             # contributes no roots and every state index shifts.  Confining
             # residuals to a dominant irrep is a separate, experimental
             # behaviour and stays behind use_response_symmetry.
+            projection = bool(meta.get('use_response_symmetry'))
             self.data['OQP::sym_response_project_enable'] = np.array(
-                [1 if meta.get('use_response_symmetry') else 0], dtype=np.int64)
+                [1 if projection else 0], dtype=np.int64)
+            # Report what is actually running. 'active' has always meant the
+            # residual projection, and _dump_symmetry_log prints it as
+            # "response blocking : <status>". Now that the table is staged on
+            # every TD run, saying 'active' there would have every default run
+            # claim a blocking it is not doing -- the projection returns
+            # immediately on proj_flag == 0. The staged table feeds only the
+            # Davidson guess, so it gets its own status.
             meta['response_symmetry'] = {
-                'status': 'active',
+                'status': 'active' if projection else 'pair_table_staged',
+                'projection': projection,
                 'td_type': td_type,
                 'n_pairs': int(pair_irrep.size),
                 'irreps': irreps,
@@ -1017,9 +1328,16 @@ class Molecule:
                 return None
 
             # MO labels provide the SOMO reference product for sf/mrsf.
-            mo_labels = meta.get('mo_labels')
-            if not mo_labels or mo_labels.get('status') != 'ok':
-                mo_labels = self.label_molecular_orbitals()
+            mo_labels = self._usable_mo_labels(meta)
+            if mo_labels is None:
+                # required=True for the same reason as in
+                # stage_response_symmetry: these labels are an INPUT to the
+                # state assignment, not the MO table the user asked to see.
+                # Honouring label_mo here meant a direct call to
+                # label_excited_states() with label_mo=false silently produced
+                # no state labels; the single_point path only hid it because it
+                # stages first.
+                mo_labels = self.label_molecular_orbitals(required=True)
             if not mo_labels or mo_labels.get('status') != 'ok':
                 meta['state_labels'] = {'status': 'skipped_no_mo_labels'}
                 return None
@@ -1028,7 +1346,18 @@ class Molecule:
             nb = int(np.asarray(self.data['nelec_B']).ravel()[0])
 
             c_alpha = self._mo_coefficients('OQP::VEC_MO_A', nbf)
-            if td_type in ('sf', 'mrsf'):
+            if td_type == 'mrsf' and self._td_multiplicity() == 5:
+                # Quintet MRSF transposes the response space -- beta occupied
+                # to alpha virtual, see the matching branch in
+                # stage_response_symmetry. Building the singlet/triplet space
+                # here gives an amplitude matrix of the wrong shape; the
+                # divisibility guard below catches that only when the two sizes
+                # do not happen to divide, so the rest of the time the labels
+                # were quietly computed from a misreading of the buffer.
+                c_beta = self._mo_coefficients('OQP::VEC_MO_B', nbf)
+                occ, vir = c_beta[:, :nb], c_alpha[:, na:]
+                reference_labels = mo_labels['alpha']['labels'][nb:na]
+            elif td_type in ('sf', 'mrsf'):
                 # Spin-flip: occupied alpha -> virtual beta.
                 c_beta = self._mo_coefficients('OQP::VEC_MO_B', nbf)
                 occ, vir = c_alpha[:, :na], c_beta[:, nb:]
@@ -1059,7 +1388,7 @@ class Molecule:
             result = dict(result)
             result['status'] = 'ok'
             result['td_type'] = td_type
-            multiplicity = self.config.get('tdhf', {}).get('mult')
+            multiplicity = self._td_multiplicity()
             if multiplicity:
                 result['terms'] = [
                     f"{int(multiplicity)}{lbl.upper()}" for lbl in result['labels']
@@ -1144,6 +1473,15 @@ class Molecule:
         Stores the result under ``symmetry_metadata['mode_labels']``.
         """
         meta = self.symmetry_metadata
+        # Clear first, on EVERY path. These labels are keyed to a particular
+        # set of modes, and the metadata outlives them: a molecule that
+        # labelled one Hessian and then reads a cached one with detection
+        # unavailable (or label_modes off) would otherwise keep the previous
+        # labels, and the frequency formatter prints them against the new modes
+        # whenever the counts happen to match. Wrong labels are worse than no
+        # column, because nothing marks them as stale.
+        if meta:
+            meta.pop('mode_labels', None)
         if not meta or meta.get('status', 'disabled') == 'disabled':
             return None
         if not meta.get('label_modes', True):
@@ -1215,11 +1553,29 @@ class Molecule:
                                      f" disagrees with the basis ({active.get('nbf')})")
                     elif active.get('error'):
                         lines.append(f"   reason: {active.get('error')}")
+                if active.get('full_group_declined') == 'dft_functional':
+                    # The user asked for 'full' and did not get it; saying so
+                    # is the whole point of the not-silent-fallback rule above.
+                    lines.append('   use_integral_symmetry=full was declined for a DFT'
+                                 ' run and the exact abelian')
+                    lines.append('   tier used instead: the XC grid reduces over the'
+                                 ' abelian operations only,')
+                    lines.append('   and the non-abelian mismatch is a measured'
+                                 ' 3e-04 error (see docs/planned/')
+                    lines.append('   integral-symmetry.md). Remove the [input]'
+                                 ' functional to use the full group.')
                 if active.get('reoriented'):
                     lines.append('   geometry reoriented to the symmetry standard orientation')
             response = meta.get('response_symmetry')
             if response:
                 lines.append(f"   response blocking    : {response.get('status')}")
+                if response.get('status') == 'pair_table_staged':
+                    # Spell out what was and was not done, so the line is not
+                    # read as the experimental projection having run.
+                    lines.append('   (per-pair irrep table staged for Davidson'
+                                 ' guess coverage only; the residual')
+                    lines.append('    projection stays off --'
+                                 ' [symmetry] use_response_symmetry)')
             lines.append('')
             with open(self.log, 'a', encoding='utf-8') as fout:
                 fout.write('\n'.join(lines))
@@ -2327,6 +2683,19 @@ class Molecule:
 
         if guess_geom:
             self.update_system(np.array(data['coord']))
+            # The geometry just changed under the metadata. Without this, the
+            # point group, operations and labels still describe the coordinates
+            # the job was CONSTRUCTED with, not the ones it will run at -- they
+            # are reported in the log and consumed by the MO/state/mode
+            # labellers, all with exit status 0.
+            #
+            # Re-detecting is the right repair rather than letting the guess
+            # file's own block through: that block also carries staging state
+            # whose Fortran side is not restored (see _SYMMETRY_STAGING_KEYS),
+            # so importing it would claim a reduction this process never made.
+            if (self.symmetry_metadata or {}).get('status', 'disabled') \
+                    != 'disabled':
+                self._detect_symmetry_metadata()
 
     def update_config_json(self):
         # Update the configuration from JSON
@@ -2340,6 +2709,156 @@ class Molecule:
         self.config['scf']['init_scf'] = self.config['json']['scf_type']
         self.config['scf']['init_basis'] = self.config['json']['basis']
         self.config['scf']['init_library'] = self.config['json']['library']
+
+    #: Entries owned by this job's own ``[symmetry]`` section. A guess file is
+    #: a wavefunction guess, not a configuration source, so these are never
+    #: taken from it -- see ``_merge_restored_symmetry_metadata``.
+    _SYMMETRY_CONFIG_KEYS = frozenset({
+        'status', 'enabled', 'requested_point_group', 'requested_subgroup',
+        'label_mo', 'label_states', 'label_modes',
+        'use_integral_symmetry', 'use_response_symmetry',
+        'strict', 'tolerance', 'raw',
+        # Derived from THIS job's request compared against THIS job's
+        # detection, so it is a statement about the reader, not the producer.
+        # Importing it let a guess file flip a strict consistency flag that
+        # the reader had computed correctly for itself.
+        'requested_matches_detected',
+    })
+
+    #: Settings that determine what detection PRODUCES. Geometry-derived
+    #: entries are only comparable between two jobs when these agree: a
+    #: producer running a looser ``tolerance`` (or a different requested group
+    #: or subgroup) resolves a different point group and a different operation
+    #: list for the very same coordinates. Importing that let a reader build
+    #: response blocks from operations its own tolerance had rejected.
+    _SYMMETRY_DETECTION_SETTING_KEYS = ('tolerance', 'requested_point_group',
+                                        'requested_subgroup')
+
+    #: Results derived from a WAVEFUNCTION, not from geometry. Matching
+    #: coordinates say nothing about them: the producer may have used another
+    #: basis, another SCF solution, or a different state count, so the orbital
+    #: count and ordering behind these need not be the reader's at all.
+    #: stage_response_symmetry consumes ``mo_labels`` verbatim whenever it is
+    #: present with status 'ok' -- it only recomputes when it is missing -- so
+    #: an imported set silently sizes the response blocking from the
+    #: producer's orbitals. These are always recomputed instead.
+    _SYMMETRY_WAVEFUNCTION_KEYS = frozenset({
+        'mo_labels', 'state_labels', 'mode_labels', 'sym_pair_irrep',
+        'response_symmetry', 'spherical_order_assumed',
+        'hess_symmetry_unique',
+    })
+
+    #: Live staging state, never taken from a guess file at all. These have a
+    #: Fortran-side counterpart (OQP::sym_shell_map, sym_ao_target, sym_ao_sign,
+    #: sym_atom_weight, sym_petite_enable) that put_data does NOT restore, so
+    #: inheriting the Python half alone claims a reduction that is not staged in
+    #: this process: symmetrize_gradient gates on status == 'active' and would
+    #: project a gradient with the producer's operations, and _petite_is_staged
+    #: would let the stability path switch the Fortran flag on with no maps.
+    #: A job that never asked for integral symmetry could pick both up from a
+    #: guess file.
+    _SYMMETRY_STAGING_KEYS = frozenset({
+        'integral_symmetry', 'reduction_maps', 'reduction_maps_full',
+    })
+
+    #: Entries derived from a particular geometry, valid only for it.
+    _SYMMETRY_GEOMETRY_KEYS = frozenset({
+        'point_group', 'subgroup', 'detected_point_group', 'detected_subgroup',
+        'detection', 'integral_symmetry', 'reduction_maps',
+        'mo_labels', 'state_labels', 'mode_labels', 'sym_pair_irrep',
+    })
+
+    def _merge_restored_symmetry_metadata(self, restored, stored_coord=None):
+        """Merge symmetry metadata from a guess file into this job's own.
+
+        Restoring the producer's block wholesale was silently overriding the
+        reader's configuration, which is how a numerical-Hessian child job
+        ended up running with the parent's ``use_integral_symmetry`` even
+        though its own input file said ``false``.  Each child then reoriented
+        into the standard frame of its own displaced geometry while the parent
+        assembled the gradients in the input frame.  Water/6-31G HF numerical
+        frequencies, in cm^-1:
+
+            parent use_integral_symmetry=false   1828.86   3906.50   4001.54
+            parent use_integral_symmetry=true   -2675.60    697.64   2728.85
+
+        -- a spurious imaginary mode, reported with exit status 0.
+
+        Two rules, both following from what the guess file actually is:
+
+        * Configuration switches belong to the job being run, never to the job
+          that produced the guess.
+        * Geometry-derived entries (the detected group, its operations, the
+          standard-frame transform, AO maps, labels) describe the producer's
+          geometry.  A guess is routinely read at a *different* geometry --
+          every optimiser step, every finite-difference displacement -- and a
+          displaced geometry generally has lower symmetry than the reference,
+          so carrying them over asserts symmetry the molecule does not have.
+          They are kept only when the coordinates match, and recomputed from
+          the current geometry otherwise.
+        """
+        local = self.symmetry_metadata
+        if not isinstance(local, dict):
+            local = {}
+
+        same_geometry = False
+        if stored_coord is not None:
+            try:
+                stored = np.asarray(stored_coord, dtype=float).reshape(-1)
+                current = np.asarray(self.get_system(), dtype=float).reshape(-1)
+                same_geometry = (stored.shape == current.shape
+                                 and np.allclose(stored, current,
+                                                 rtol=0.0, atol=1.0e-10))
+            except Exception:
+                same_geometry = False
+
+        # Matching coordinates are necessary but NOT sufficient. Detection
+        # resolves a point group and an operation list from the geometry *under
+        # the settings in force*, so a producer that ran a looser tolerance, or
+        # asked for a different group or subgroup, describes the same
+        # coordinates with operations this job would not have accepted. Require
+        # those settings to agree before importing anything geometry-derived.
+        #
+        # A missing setting on either side counts as a mismatch: guess files
+        # written by older versions do not record them, and the safe reading of
+        # "unknown" is "not mine".
+        same_detection_settings = same_geometry
+        if same_geometry:
+            for key in self._SYMMETRY_DETECTION_SETTING_KEYS:
+                if key not in restored or key not in local:
+                    same_detection_settings = False
+                    break
+                mine, theirs = local[key], restored[key]
+                try:
+                    equal = (bool(np.isclose(float(mine), float(theirs),
+                                             rtol=0.0, atol=0.0))
+                             if isinstance(mine, (int, float))
+                             and not isinstance(mine, bool)
+                             else str(mine).lower() == str(theirs).lower())
+                except (TypeError, ValueError):
+                    equal = mine == theirs
+                if not equal:
+                    same_detection_settings = False
+                    break
+
+        # Start from what this job worked out for itself: its own [symmetry]
+        # settings and its own detection of its own geometry. That is always a
+        # complete, self-consistent block, so nothing downstream can end up
+        # missing a key it used to be able to rely on.
+        merged = dict(local)
+        if same_detection_settings:
+            # Same molecule, same frame, same detection settings: the
+            # producer's block may hold geometry-derived results this job has
+            # not computed yet, so take them -- but never its configuration
+            # switches, never live staging state, and never anything derived
+            # from ITS wavefunction rather than from the geometry.
+            merged.update({
+                key: value for key, value in restored.items()
+                if key not in self._SYMMETRY_CONFIG_KEYS
+                and key not in self._SYMMETRY_STAGING_KEYS
+                and key not in self._SYMMETRY_WAVEFUNCTION_KEYS
+            })
+        return merged
 
     def put_data(self, data):
         # convert list to data
@@ -2360,8 +2879,9 @@ class Molecule:
                     print(f"Warning: Key {key} not found in data")
                 except Exception as e:
                     print(f"Error: {e}")
-        if isinstance(data, dict) and 'symmetry_metadata' in data:
-            self.symmetry_metadata = data['symmetry_metadata']
+        if isinstance(data, dict) and isinstance(data.get('symmetry_metadata'), dict):
+            self.symmetry_metadata = self._merge_restored_symmetry_metadata(
+                data['symmetry_metadata'], data.get('coord'))
 
 
     def read_freqs(self):
@@ -2502,6 +3022,17 @@ class Molecule:
         self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
         self.infrared_mode_dipole_derivatives = infrared_derivatives
         self.raman_mode_polarizability_derivatives = raman_derivatives
+
+        # Re-derive the normal-mode irreps for the cached modes. The frequency
+        # table now carries a Symmetry column, and it is driven by
+        # symmetry_metadata['mode_labels'] -- which nothing above restores, so
+        # a [hess] read=true run would print the table without the column and
+        # look as though symmetry had not been detected. Recomputing is
+        # cheaper and safer than trusting a cached label list: the modes were
+        # just validated against the current geometry and masses, so the
+        # labels follow from data this method has already checked. Non-fatal
+        # by construction (label_normal_modes swallows its own errors).
+        self.label_normal_modes()
 
         return energy, hessian, freqs, modes, inertia
 

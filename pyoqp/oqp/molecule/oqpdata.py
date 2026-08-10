@@ -181,6 +181,15 @@ OQP_CONFIG_SCHEMA = {
         'same_spin_scale': {'type': float, 'default': '1.0'},
         'opposite_spin_scale': {'type': float, 'default': '1.0'},
     },
+    'cc': {
+        'maxit': {'type': int, 'default': '50'},
+        'conv': {'type': float, 'default': '1e-7'},
+        'ndiis': {'type': int, 'default': '8'},
+        'nfzc': {'type': int, 'default': '0'},
+        'cholesky': {'type': string, 'default': 'auto'},
+        'cholesky_tol': {'type': float, 'default': '1e-10'},
+        'cholesky_direct': {'type': string, 'default': 'auto'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -563,6 +572,7 @@ OQP_CONFIG_SCHEMA = {
         'restart': {'type': bool, 'default': 'False'},
         'temperature': {'type': farray, 'default': '298.15'},
         'clean': {'type': bool, 'default': 'False'},
+        'symmetry_unique': {'type': bool, 'default': 'False'},
     },
     'nac': {
         'type': {'type': string, 'default': 'numerical'},
@@ -662,7 +672,7 @@ class OQPData:
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
-    _methods = ('hf', 'tdhf', 'mp2')
+    _methods = ('hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
@@ -686,6 +696,15 @@ class OQPData:
         "mp2": {
             "same_spin_scale": "set_mp2_same_spin_scale",
             "opposite_spin_scale": "set_mp2_opposite_spin_scale",
+        },
+        "cc": {
+            "maxit": "set_cc_maxit",
+            "conv": "set_cc_conv",
+            "ndiis": "set_cc_ndiis",
+            "nfzc": "set_cc_nfzc",
+            "cholesky": "set_cc_cholesky",
+            "cholesky_tol": "set_cc_cholesky_tol",
+            "cholesky_direct": "set_cc_cholesky_direct",
         },
         "scf": {
             "type": "set_scf_type",
@@ -1355,6 +1374,65 @@ class OQPData:
     def set_mp2_opposite_spin_scale(self, scale):
         """Set standalone MP2 opposite-spin scale."""
         self._data.dft.MP2OS_Scale = scale
+
+    def set_cc_maxit(self, maxit):
+        """Set the maximum number of CCSD iterations."""
+        self._data.control.cc_maxit = int(maxit)
+
+    def set_cc_conv(self, conv):
+        """Set the CCSD amplitude/energy convergence threshold."""
+        self._data.control.cc_conv = float(conv)
+
+    def set_cc_ndiis(self, ndiis):
+        """Set the CCSD DIIS subspace size (0 disables DIIS)."""
+        self._data.control.cc_ndiis = int(ndiis)
+
+    def set_cc_nfzc(self, nfzc):
+        """Set the number of frozen core orbitals excluded from CC."""
+        self._data.control.cc_nfzc = int(nfzc)
+
+    _cc_cholesky_modes = {"auto": 2, "true": 1, "false": 0}
+
+    def set_cc_cholesky(self, mode):
+        """Select Cholesky factorisation of the ladder integrals: auto, true, false.
+
+        auto takes it only when the explicit v^4 ladder array would not fit.
+        Rebuilding the ladder integrals from the vectors costs nchol/no^2 times
+        the ladder contraction itself, so for the small occupied spaces where
+        v^4 fits comfortably it is the slower route by a wide margin -- as with
+        cholesky_direct, memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key in ("1", "yes", "on"):
+            key = "true"
+        elif key in ("0", "no", "off"):
+            key = "false"
+        if key not in OQPData._cc_cholesky_modes:
+            raise ValueError(
+                "[cc] cholesky must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky = OQPData._cc_cholesky_modes[key]
+
+    def set_cc_cholesky_tol(self, tol):
+        """Set the Cholesky truncation threshold."""
+        self._data.control.cc_cholesky_tol = float(tol)
+
+    _cc_direct_modes = {"auto": 0, "true": 1, "false": 2}
+
+    def set_cc_cholesky_direct(self, mode):
+        """Select the integral-direct factorisation: auto, true, or false.
+
+        auto takes it only when the packed AO store would not fit -- it is
+        slower wherever both fit, so memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key not in OQPData._cc_direct_modes:
+            raise ValueError(
+                "[cc] cholesky_direct must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky_direct = OQPData._cc_direct_modes[key]
+
+    def set_cc_triples(self, triples):
+        """Enable/disable the perturbative (T) correction."""
+        self._data.control.cc_triples = 1 if triples else 0
 
     def set_dftgrid_rad_type(self, radtype):
         """Set radial grid type in DFT"""

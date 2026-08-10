@@ -47,4 +47,9 @@ fort.6
 *.analytic_hess.pyscf
 .venv-symmetry/
 build_dev/
+openqp_test_tmp_*/
+# Superset glob covering the same scratch families (SOC tester included).
 openqp_*test_tmp_*/
+
+# SOC tester scratch output (accidentally committed once)
+openqp_soc_test_tmp_*/

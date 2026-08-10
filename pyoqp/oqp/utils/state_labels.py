@@ -499,6 +499,10 @@ def public_method_name(config):
     if method == "mp2":
         variant = str(_section(config, "mp2").get("variant", "mp2")).upper()
         return variant
+    if method in ("ccsd", "ccsd(t)"):
+        # Without this these fall through to the empty-functional case below
+        # and a correlated calculation reports itself as plain HF.
+        return method.upper()
     functional = str(inp.get("functional", "")).strip()
     return "DFT" if functional else "HF"
 

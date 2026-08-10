@@ -1,0 +1,40 @@
+# CCSD(T) with the Cholesky vectors built directly from recomputed integrals.
+#
+# The plain Cholesky route (see h2o_ccsd_t_cholesky_sto-3g.inp) factorises the
+# packed AO integral store.  The direct route never builds that store at all:
+# it recomputes the integrals it needs while pivoting, sweeping the shell-pair
+# list once per pivot block.  That costs integral evaluations -- it is slower
+# wherever both fit -- so like everything on this path it is chosen on memory,
+# never on speed, and the reason to force it here is to exercise it.
+#
+# cholesky is deliberately left at its default (auto) here: at this size auto
+# would decline the vectors, and cholesky_direct=true is an order, so the run
+# factorises anyway and says so in the log.  Setting cholesky_direct=true
+# together with cholesky=false is refused as a contradiction.
+#
+# The energy matches the stored-factorisation and explicit-ladder routes to
+# within cholesky_tol.
+#
+# Runs in well under a second.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=sto-3g
+method=ccsd(t)
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+
+[cc]
+nfzc=1
+conv=1.0e-9
+cholesky_direct=true
