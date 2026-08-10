@@ -617,6 +617,52 @@ def enumerate_full_group(
     return operations
 
 
+def _every_atom_is_its_own_class(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    tolerance: float,
+) -> bool:
+    """True when no atom has a partner it could possibly be mapped onto.
+
+    A symmetry operation sends atom i to an atom j of the *same* nuclear
+    charge lying within ``tolerance`` of ``R r_i`` (that is what
+    ``_match_permutation`` accepts), and a rotation or reflection preserves the
+    distance to the center, so ``abs(|r_j| - |r_i|) <= tolerance``. If no two
+    same-Z atoms have radii that close, every operation of the group fixes
+    every atom.
+
+    Radii are measured about the charge-weighted center ``enumerate_full_group``
+    itself centers on, so the two agree by construction rather than by
+    coincidence.
+
+    Linear geometries are excluded rather than screened: a rotation about the
+    molecular axis fixes every atom without being the identity, so the argument
+    above does not close there. They cost nothing anyway -- the detector's
+    linear branch seeds eight matrices and returns in milliseconds.
+    """
+
+    if charges.size != coords.shape[0] or coords.shape[0] < 2:
+        return False
+    total_charge = float(np.sum(charges))
+    if not np.isfinite(total_charge) or total_charge == 0.0:
+        return False
+    centered = coords - np.einsum('i,ij->j', charges, coords) / total_charge
+    if _is_linear(centered, tolerance) is not None:
+        return False
+
+    radii = np.linalg.norm(centered, axis=1)
+    order = np.lexsort((radii, charges))
+    charges_sorted = charges[order]
+    radii_sorted = radii[order]
+    # Ten times the matching tolerance: erring towards "these two could be
+    # partners" only costs the slow path, while erring the other way would
+    # silently drop a real sigma -- the exact bias this module exists to remove.
+    margin = max(10.0 * abs(float(tolerance)), 1.0e-8)
+    neighbours = np.diff(radii_sorted) <= margin
+    same_element = charges_sorted[:-1] == charges_sorted[1:]
+    return not bool(np.any(neighbours & same_element))
+
+
 def rotational_symmetry_number(
     atomic_numbers: Any,
     coordinates: Any,
@@ -667,11 +713,42 @@ def rotational_symmetry_number(
     correct. The gap is a CHIRAL C_n (n > 8) with no mirror and no
     perpendicular C2, where closure has nothing to work with; such a molecule
     gets a divisor of n.
+
+    **Cost.** A same-element/same-radius screen (see
+    ``_every_atom_is_its_own_class``) answers 1 without touching the detector
+    whenever nothing can be permuted, which is the common large-molecule case
+    and keeps the `hess.read` path cheap. A large molecule that really is
+    symmetric still pays the detector's O(N^4) element survey; that cost lives
+    in the shared detector, not here, and reducing it would move the standard
+    orientation and the petite list too.
     """
 
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)
     if coords.shape[0] < 2:
         return 1
+
+    # Cheap exact screen before the detector. This runs on EVERY Hessian
+    # analysis, including the otherwise cheap `hess.read` path, and the element
+    # survey is not cheap for a large molecule: _candidate_directions builds one
+    # direction per atom pair and _dedupe_directions compares each against every
+    # direction kept so far, so a geometry with no symmetry -- where none of
+    # them dedupe away -- costs O(N^4). Measured here before this screen
+    # existed: 1.7 s for a random 50-atom geometry and 7.1 s for a 75-atom one,
+    # both to return sigma = 1.
+    #
+    # The screen is a necessary condition, so it can only skip work, never
+    # change an answer: if no atom has a same-element partner at the same
+    # radius, every operation fixes every atom, and for a nonlinear geometry the
+    # only proper operation that does so is the identity. (A planar molecule
+    # also admits its own mirror plane, but that is improper and sigma counts
+    # proper operations only.)
+    try:
+        charges = np.asarray(atomic_numbers, dtype=float).ravel()
+        if _every_atom_is_its_own_class(charges, coords, tolerance):
+            return 1
+    except Exception:
+        pass  # fall through to the detector rather than invent an answer
+
     try:
         operations = enumerate_full_group(atomic_numbers, coords,
                                           tolerance=tolerance)

@@ -335,6 +335,91 @@ class TestGibbsSign(unittest.TestCase):
         self.assertIn('G = H - TS', source)
 
 
+class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
+    """sigma is computed on every Hessian analysis, including `hess.read`.
+
+    The detector's element survey builds a direction per atom pair and dedupes
+    each against every direction kept so far, so a geometry with no symmetry --
+    where nothing dedupes away -- costs O(N^4): 1.7 s for a random 50-atom
+    geometry and 7.1 s for a 75-atom one, both to return sigma = 1. A
+    same-element/same-radius screen answers those without the detector.
+
+    It is a necessary condition, so it can only skip work: if no atom has a
+    same-element partner at the same radius, every operation fixes every atom,
+    and for a nonlinear geometry the only proper one that does so is identity.
+    """
+
+    @staticmethod
+    def random_geometry(natom):
+        rng = np.random.default_rng(natom)
+        charges = list(rng.integers(1, 9, size=natom))
+        coords = (rng.random((natom, 3)) * 8.0 - 4.0) * ANGSTROM_TO_BOHR
+        return charges, coords
+
+    @staticmethod
+    def c2_symmetric_geometry(half):
+        """`half` random atoms plus their images under C2 about z: sigma = 2."""
+        rng = np.random.default_rng(7)
+        charges = list(rng.integers(1, 9, size=half))
+        xyz = (rng.random((half, 3)) * 8.0 - 4.0) * ANGSTROM_TO_BOHR
+        return charges + charges, np.vstack(
+            [xyz, xyz * np.array([-1.0, -1.0, 1.0])])
+
+    def test_a_geometry_with_no_partners_answers_without_the_detector(self):
+        detect = load_symmetry_detect_module()
+        charges, coords = self.random_geometry(50)
+
+        def explode(*args, **kwargs):
+            raise AssertionError('the detector must not be reached')
+
+        detect.enumerate_full_group = explode
+        self.assertEqual(detect.rotational_symmetry_number(charges, coords), 1)
+
+    def test_a_symmetric_geometry_of_the_same_size_still_reaches_it(self):
+        """The control: without this, a screen that always fired would pass.
+
+        Same atom count as the case above, but every atom now has a partner at
+        its own radius, so the screen must decline and the detector must run.
+        """
+        detect = load_symmetry_detect_module()
+        charges, coords = self.c2_symmetric_geometry(25)
+
+        self.assertFalse(detect._every_atom_is_its_own_class(
+            np.asarray(charges, dtype=float), coords, 1.0e-5))
+        self.assertEqual(detect.rotational_symmetry_number(charges, coords), 2)
+
+    def test_the_screen_declines_on_every_symmetric_molecule_here(self):
+        detect = load_symmetry_detect_module()
+        cases = {
+            'water': ([8, 1, 1], WATER[2]),
+            'carbon dioxide': ([8, 6, 8], CARBON_DIOXIDE[2]),
+            'benzene': ([6] * 6 + [1] * 6,
+                        [[1.39 * np.cos(i * np.pi / 3),
+                          1.39 * np.sin(i * np.pi / 3), 0.0] for i in range(6)]
+                        + [[2.47 * np.cos(i * np.pi / 3),
+                            2.47 * np.sin(i * np.pi / 3), 0.0]
+                           for i in range(6)]),
+        }
+        for name, (charges, geometry) in cases.items():
+            with self.subTest(molecule=name):
+                coords = np.asarray(geometry, dtype=float) * ANGSTROM_TO_BOHR
+                self.assertFalse(detect._every_atom_is_its_own_class(
+                    np.asarray(charges, dtype=float), coords, 1.0e-5))
+
+    def test_carbon_monoxide_is_left_to_the_detector(self):
+        """Linear geometries are excluded from the screen by construction.
+
+        A rotation about the molecular axis fixes every atom without being the
+        identity, so 'nothing can be permuted' does not imply sigma = 1 there.
+        """
+        detect = load_symmetry_detect_module()
+        charges, geometry, _ = (CARBON_MONOXIDE[0], CARBON_MONOXIDE[2],
+                                CARBON_MONOXIDE[3])
+        coords = np.asarray(geometry, dtype=float) * ANGSTROM_TO_BOHR
+        self.assertFalse(detect._every_atom_is_its_own_class(
+            np.asarray(charges, dtype=float), coords, 1.0e-5))
+
+
 class TestPositionalArgumentsKeepTheirMeaning(unittest.TestCase):
     """`sigma` was inserted between `linear` and `mult`, re-aiming every
     positional call: thermal_analysis(..., 298.15, False, 1) meant mult=1 and
