@@ -80,6 +80,24 @@ CHARACTER_TABLES: dict[str, dict[str, list[int]]] = {
 
 _MAX_PROPER_ORDER = 8
 
+# Ceiling on the closed operation set; also the highest rotation order any
+# entry point here can report, since a C_n contributes n operations.
+_MAX_GROUP_ORDER = 120
+
+
+def _require_usable_tolerance(tolerance: Any) -> float:
+    """Reject a tolerance that cannot be matched against.
+
+    `_match_permutation` accepts a partner when `dist[j] > tolerance` is false,
+    and every comparison against NaN is false -- so a NaN tolerance makes every
+    candidate operation pass and the detected group is fiction. `nan <= 0` is
+    false too, which is how it used to slip through the positivity test.
+    """
+    value = float(tolerance)
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError('tolerance must be a positive finite number')
+    return value
+
 
 def _normalize(vec: np.ndarray) -> np.ndarray | None:
     norm = float(np.linalg.norm(vec))
@@ -438,8 +456,7 @@ def detect_point_group(
     tolerance:
         Absolute displacement tolerance for accepting a symmetry operation.
     """
-    if tolerance <= 0:
-        raise ValueError('tolerance must be positive')
+    _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -502,7 +519,7 @@ def enumerate_full_group(
     atomic_numbers: Any,
     coordinates: Any,
     tolerance: float = 1.0e-5,
-    max_order: int = 120,
+    max_order: int = _MAX_GROUP_ORDER,
 ) -> list[dict[str, Any]]:
     """All point-group operations of a geometry (non-abelian included).
 
@@ -512,6 +529,8 @@ def enumerate_full_group(
     operations). Returns operation payloads with dense 3x3 matrices and
     atom permutations, in the frame of the given coordinates.
     """
+
+    _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -638,13 +657,21 @@ def _every_atom_is_its_own_class(
     Linear -- and NEARLY linear -- geometries are excluded rather than screened:
     a rotation about the molecular axis fixes every atom without being the
     identity, so the argument above does not close there. Near-linear matters
-    because the match is approximate. A C_n moves an atom by
-    2*sin(pi/n)*d(atom, axis), so for the largest order the survey tries every
-    atom within about 1.3 * tolerance of a line is fixed to within tolerance --
-    a window `_is_linear` at its own threshold reports as nonlinear. The
-    linearity test therefore uses the same widened margin as the radius test.
-    They cost nothing anyway: the detector's linear branch seeds eight matrices
-    and returns in milliseconds.
+    because the match is approximate. A rotation by theta moves an atom by
+    2*sin(theta/2)*d(atom, axis), and the smallest angle any operation here can
+    carry is 2*pi/_MAX_GROUP_ORDER (closure is capped there, so no higher order
+    survives), hence every atom within tolerance/(2*sin(pi/_MAX_GROUP_ORDER))
+    of some line is fixed to within tolerance by a proper rotation.
+
+    That test is made on the off-axis extent of the geometry rather than with
+    `_is_linear`, which takes its axis from the first atom with a non-negligible
+    position: for a nearly linear geometry whose first atom sits close to the
+    center, that axis can point anywhere and the residuals it reports are
+    meaningless. sqrt(s2^2 + s3^2), from the singular values of the centered
+    coordinates, is the smallest achievable root-sum-square distance to any
+    line through the center and needs no axis estimate. The max distance about
+    the best line is at least that over sqrt(natom), which is where the
+    sqrt(natom) below comes from.
     """
 
     if charges.size != coords.shape[0] or coords.shape[0] < 2:
@@ -653,16 +680,25 @@ def _every_atom_is_its_own_class(
     if not np.isfinite(total_charge) or total_charge == 0.0:
         return False
 
-    # Ten times the matching tolerance, everywhere below: erring towards "this
-    # could be a symmetry" only costs the slow path, while erring the other way
-    # would silently drop a real sigma -- the exact bias this module exists to
-    # remove. A non-finite tolerance would defeat that, so refuse it.
-    if not np.isfinite(tolerance):
-        return False
-    margin = max(10.0 * abs(float(tolerance)), 1.0e-8)
+    # Ten times the matching tolerance for the radius test: erring towards
+    # "these two could be partners" only costs the slow path, while erring the
+    # other way would silently drop a real sigma -- the exact bias this module
+    # exists to remove.
+    margin = max(10.0 * float(tolerance), 1.0e-8)
 
     centered = coords - np.einsum('i,ij->j', charges, coords) / total_charge
-    if _is_linear(centered, margin) is not None:
+
+    # Decline on anything collinear enough that a rotation about that line
+    # could fix every atom to within tolerance -- see the docstring for where
+    # the two factors come from.
+    # svd returns min(natom, 3) values, so a diatomic yields two: pad to three
+    # rather than index off the end.
+    singular = np.linalg.svd(centered, compute_uv=False)
+    singular = np.pad(singular, (0, 3 - singular.size))
+    off_axis = float(np.hypot(singular[1], singular[2]))
+    collinear_limit = (np.sqrt(coords.shape[0]) * float(tolerance)
+                       / (2.0 * np.sin(np.pi / _MAX_GROUP_ORDER)))
+    if off_axis <= collinear_limit:
         return False
 
     radii = np.linalg.norm(centered, axis=1)
@@ -739,14 +775,16 @@ def rotational_symmetry_number(
         return 1
 
     # A tolerance that is not a positive finite number cannot be matched
-    # against. `_match_permutation` accepts a partner when `dist[j] > tolerance`
+    # against: `_match_permutation` accepts a partner when `dist[j] > tolerance`
     # is false, and every comparison against NaN is false, so the detector
-    # accepts geometrically invalid operations: measured on 40 random
-    # asymmetric geometries with tolerance=nan, 12 came back with sigma = 2
-    # instead of 1, i.e. a Gibbs energy wrong by R*T*ln(2) = 0.41 kcal/mol.
-    # The input checker rejects this too, but this function is public and
-    # sigma is silent when wrong, so it refuses the input itself.
-    if not np.isfinite(tolerance) or float(tolerance) <= 0.0:
+    # accepts geometrically invalid operations. Measured on 40 random asymmetric
+    # geometries with tolerance=nan, 12 came back with sigma = 2 instead of 1 --
+    # a Gibbs energy wrong by R*T*ln(2) = 0.41 kcal/mol. The detector entry
+    # points now reject it too, but this one returns 1 instead of raising,
+    # because it is the failure policy the whole function is written to.
+    try:
+        tolerance = _require_usable_tolerance(tolerance)
+    except (TypeError, ValueError):
         return 1
 
     # Cheap exact screen before the detector. This runs on EVERY Hessian

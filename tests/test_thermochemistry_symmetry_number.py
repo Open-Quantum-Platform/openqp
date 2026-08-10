@@ -406,36 +406,51 @@ class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
         self.assertEqual(detect.rotational_symmetry_number(charges, coords), 2)
         self.assertEqual(len(calls), 1)
 
-    def test_a_nearly_linear_geometry_is_left_to_the_detector(self):
-        """Reported by chatgpt-codex-connector against the first version.
+    def test_nearly_linear_geometries_are_left_to_the_detector(self):
+        """Both reported by chatgpt-codex-connector, against successive versions.
 
         The match is approximate, so 'every atom is fixed' does not force the
-        identity for a geometry that is *almost* collinear: a C8 about z moves
-        each of these atoms by at most 2*sin(pi/8)*1.108e-5 = 8.5e-6 bohr, which
-        `_match_permutation` accepts at tolerance 1e-5. Their radii differ by
-        more than half a bohr, so the radius test alone would have screened it,
-        and `_is_linear` at its own threshold calls it nonlinear -- the largest
-        residual is 1.0276 * tolerance. Testing linearity at the widened margin
-        is what closes the window.
+        identity for a geometry that is *almost* collinear: a rotation by theta
+        moves an atom by 2*sin(theta/2)*d(atom, axis), so an atom close enough
+        to the axis is fixed to within tolerance.
+
+        The second case is the one that defeats `_is_linear`: its axis comes
+        from the first atom with a non-negligible position, and here that atom
+        sits 0.1*tolerance from the center, so the axis points along x and every
+        other atom reads as a huge residual -- even though all four are within
+        0.3*tolerance of the z axis. Measuring the off-axis extent instead needs
+        no axis estimate.
         """
         detect = load_symmetry_detect_module()
         tolerance = 1.0e-5
         charges = np.asarray([1.0, 1.0, 1.0, 1.0])
-        coords = np.array([
-            [0.350000 * tolerance, 0.0, -3.25],
-            [0.175000 * tolerance, 0.0, -1.25],
-            [-1.108333 * tolerance, 0.0, 0.75],
-            [0.583333 * tolerance, 0.0, 3.75],
-        ])
+        cases = {
+            # Largest residual 1.0276 * tolerance; a C8 about z moves every
+            # atom by at most 8.5e-6 bohr.
+            'off-axis by about one tolerance': np.array([
+                [0.350000 * tolerance, 0.0, -3.25],
+                [0.175000 * tolerance, 0.0, -1.25],
+                [-1.108333 * tolerance, 0.0, 0.75],
+                [0.583333 * tolerance, 0.0, 3.75],
+            ]),
+            # A C2 about z moves the farthest atom by 0.6 * tolerance.
+            'first atom sits at the center': np.array([
+                [0.1 * tolerance, 0.0, 0.0],
+                [0.3 * tolerance, 0.0, 1.0],
+                [-0.2 * tolerance, 0.0, 2.0],
+                [-0.2 * tolerance, 0.0, -3.0],
+            ]),
+        }
+        for name, coords in cases.items():
+            with self.subTest(geometry=name):
+                # The control: `_is_linear` at its own threshold does NOT catch
+                # these, which is why the screen used to fire on them.
+                centered = coords - np.einsum(
+                    'i,ij->j', charges, coords) / float(np.sum(charges))
+                self.assertIsNone(detect._is_linear(centered, tolerance))
 
-        # The control: at its own threshold the linearity test does NOT catch
-        # this, which is why the screen used to fire on it.
-        centered = coords - np.einsum(
-            'i,ij->j', charges, coords) / float(np.sum(charges))
-        self.assertIsNone(detect._is_linear(centered, tolerance))
-
-        self.assertFalse(
-            detect._every_atom_is_its_own_class(charges, coords, tolerance))
+                self.assertFalse(detect._every_atom_is_its_own_class(
+                    charges, coords, tolerance))
 
     def test_the_screen_declines_on_every_symmetric_molecule_here(self):
         detect = load_symmetry_detect_module()
@@ -485,22 +500,45 @@ class TestAnUnusableToleranceCannotInventSymmetry(unittest.TestCase):
                        [1.41382842, -1.19288346, -1.12792545],
                        [0.86633854, -0.11720132, -0.33911228]])
 
-    def test_the_detector_really_is_fooled_by_it(self):
-        """The control: without this, the guard below could be pinning nothing."""
+    def test_the_detector_really_was_fooled_by_it(self):
+        """The control: without this, the guards below could be pinning nothing.
+
+        Run against the matcher directly, since the detector entry points now
+        refuse the tolerance before they reach it.
+        """
         detect = load_symmetry_detect_module()
-        operations = detect.enumerate_full_group(
-            self.CHARGES, self.COORDS, tolerance=float('nan'))
-        proper = [op for op in operations
-                  if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
-        self.assertGreater(len(proper), 1)
+        charges = np.asarray(self.CHARGES, dtype=float)
+        centered = self.COORDS - np.einsum(
+            'i,ij->j', charges, self.COORDS) / float(np.sum(charges))
+        # A quarter turn about z is not a symmetry operation of this geometry.
+        quarter_turn = detect._rotation_matrix(
+            np.array([0.0, 0.0, 1.0]), np.pi / 2.0)
+        self.assertIsNone(detect._match_permutation(
+            charges, centered, centered @ quarter_turn.T, 1.0e-5))
+        self.assertIsNotNone(detect._match_permutation(
+            charges, centered, centered @ quarter_turn.T, float('nan')))
 
     def test_a_non_finite_or_non_positive_tolerance_returns_one(self):
         detect = load_symmetry_detect_module()
-        for value in (float('nan'), float('inf'), 0.0, -1.0e-5):
+        for value in (float('nan'), float('inf'), 0.0, -1.0e-5, 'loose'):
             with self.subTest(tolerance=value):
                 self.assertEqual(
                     detect.rotational_symmetry_number(
                         self.CHARGES, self.COORDS, tolerance=value), 1)
+
+    def test_the_detector_entry_points_reject_it_rather_than_detect(self):
+        """A strict-symmetry run detects before the input checker runs, so the
+        guard has to live in the detector too or the user gets a misleading
+        point-group mismatch instead of a tolerance diagnostic."""
+        detect = load_symmetry_detect_module()
+        for value in (float('nan'), float('inf'), 0.0):
+            with self.subTest(tolerance=value):
+                with self.assertRaises(ValueError):
+                    detect.detect_point_group(self.CHARGES, self.COORDS,
+                                              tolerance=value)
+                with self.assertRaises(ValueError):
+                    detect.enumerate_full_group(self.CHARGES, self.COORDS,
+                                                tolerance=value)
 
     def test_a_usable_tolerance_is_untouched(self):
         detect = load_symmetry_detect_module()
