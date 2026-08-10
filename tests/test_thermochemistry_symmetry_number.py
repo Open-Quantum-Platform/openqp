@@ -469,6 +469,47 @@ class TestTheCheapScreenNeverChangesSigma(unittest.TestCase):
             np.asarray(charges, dtype=float), coords, 1.0e-5))
 
 
+class TestAnUnusableToleranceCannotInventSymmetry(unittest.TestCase):
+    """Reported by chatgpt-codex-connector on #320.
+
+    `_match_permutation` rejects a partner when `dist[j] > tolerance`, and every
+    comparison against NaN is false, so a NaN tolerance makes the detector
+    accept geometrically invalid operations. Measured on 40 random asymmetric
+    geometries: 12 returned sigma = 2 instead of 1, i.e. G wrong by
+    R*T*ln(2) = 0.41 kcal/mol.
+    """
+
+    # One of the 12, kept verbatim so the scenario is reproducible.
+    CHARGES = [6, 4, 6]
+    COORDS = np.array([[-1.4854231, -1.5451678, 0.61338209],
+                       [1.41382842, -1.19288346, -1.12792545],
+                       [0.86633854, -0.11720132, -0.33911228]])
+
+    def test_the_detector_really_is_fooled_by_it(self):
+        """The control: without this, the guard below could be pinning nothing."""
+        detect = load_symmetry_detect_module()
+        operations = detect.enumerate_full_group(
+            self.CHARGES, self.COORDS, tolerance=float('nan'))
+        proper = [op for op in operations
+                  if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
+        self.assertGreater(len(proper), 1)
+
+    def test_a_non_finite_or_non_positive_tolerance_returns_one(self):
+        detect = load_symmetry_detect_module()
+        for value in (float('nan'), float('inf'), 0.0, -1.0e-5):
+            with self.subTest(tolerance=value):
+                self.assertEqual(
+                    detect.rotational_symmetry_number(
+                        self.CHARGES, self.COORDS, tolerance=value), 1)
+
+    def test_a_usable_tolerance_is_untouched(self):
+        detect = load_symmetry_detect_module()
+        coords = np.asarray(WATER[2], dtype=float) * ANGSTROM_TO_BOHR
+        self.assertEqual(
+            detect.rotational_symmetry_number([8, 1, 1], coords,
+                                              tolerance=1.0e-5), 2)
+
+
 class TestPositionalArgumentsKeepTheirMeaning(unittest.TestCase):
     """`sigma` was inserted between `linear` and `mult`, re-aiming every
     positional call: thermal_analysis(..., 298.15, False, 1) meant mult=1 and

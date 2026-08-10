@@ -463,13 +463,16 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
             action="Set tolerance to a positive float such as 1.0e-5.",
         )
     else:
-        if tolerance <= 0.0:
+        # NaN slips past `<= 0.0` -- every comparison against it is false --
+        # and a NaN tolerance makes the symmetry matcher accept any operation,
+        # so it must be caught here rather than by its consequences.
+        if not math.isfinite(tolerance) or tolerance <= 0.0:
             report.add(
                 "ERROR",
                 "symmetry.tolerance",
-                "symmetry.tolerance must be positive.",
+                "symmetry.tolerance must be a positive finite number.",
                 value=tolerance,
-                expected="> 0.0",
+                expected="> 0.0 and finite",
                 action="Use positive tolerance with stricter or looser default (e.g., 1.0e-5).",
             )
 

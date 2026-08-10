@@ -738,6 +738,17 @@ def rotational_symmetry_number(
     if coords.shape[0] < 2:
         return 1
 
+    # A tolerance that is not a positive finite number cannot be matched
+    # against. `_match_permutation` accepts a partner when `dist[j] > tolerance`
+    # is false, and every comparison against NaN is false, so the detector
+    # accepts geometrically invalid operations: measured on 40 random
+    # asymmetric geometries with tolerance=nan, 12 came back with sigma = 2
+    # instead of 1, i.e. a Gibbs energy wrong by R*T*ln(2) = 0.41 kcal/mol.
+    # The input checker rejects this too, but this function is public and
+    # sigma is silent when wrong, so it refuses the input itself.
+    if not np.isfinite(tolerance) or float(tolerance) <= 0.0:
+        return 1
+
     # Cheap exact screen before the detector. This runs on EVERY Hessian
     # analysis, including the otherwise cheap `hess.read` path, and the element
     # survey is not cheap for a large molecule: _candidate_directions builds one
