@@ -19,12 +19,16 @@ def load_runtime_module():
     return module
 
 
-def make_runtime_root(root, suffix):
+def make_runtime_root(root, suffix, libdir="lib", record_libdir=False):
     (root / "include").mkdir(parents=True)
-    (root / "lib").mkdir()
+    (root / libdir).mkdir(parents=True)
     (root / "share" / "basis_sets").mkdir(parents=True)
     (root / "include" / "oqp.h").write_text("")
-    (root / "lib" / f"liboqp.{suffix}").write_text("")
+    (root / libdir / f"liboqp.{suffix}").write_text("")
+    if record_libdir:
+        metadata = root / "share" / "openqp" / "openqp-runtime-libdir.txt"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(f"{libdir}\n")
 
 
 class RuntimeRootResolutionTests(unittest.TestCase):
@@ -83,6 +87,34 @@ class RuntimeRootResolutionTests(unittest.TestCase):
 
                 self.assertEqual(root, str(env_root.resolve()))
                 self.assertEqual(actual_suffix, suffix)
+
+    def test_python_runtime_honors_configured_multiarch_library_dir(self):
+        runtime = load_runtime_module()
+        suffix = runtime.library_suffix()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "openqp"
+            libdir = "lib/x86_64-linux-gnu"
+            make_runtime_root(root, suffix, libdir=libdir, record_libdir=True)
+
+            resolved_root, actual_suffix = runtime.resolve_oqp_root(package_root=root)
+
+            self.assertEqual(resolved_root, str(root.resolve()))
+            self.assertEqual(actual_suffix, suffix)
+            self.assertEqual(
+                runtime.library_path(resolved_root, actual_suffix),
+                (root / libdir / f"liboqp.{suffix}").resolve(),
+            )
+
+    def test_native_install_destinations_share_gnuinstalldirs_layout(self):
+        source = (ROOT / "source" / "CMakeLists.txt").read_text()
+        pyoqp = (ROOT / "pyoqp" / "CMakeLists.txt").read_text()
+        external = (ROOT / "external" / "CMakeLists.txt").read_text()
+        top_level = (ROOT / "CMakeLists.txt").read_text()
+
+        self.assertIn("install(FILES ${DDX_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})", source)
+        self.assertIn("DESTINATION ${CMAKE_INSTALL_LIBDIR}", pyoqp)
+        self.assertIn("DESTINATION ${CMAKE_INSTALL_LIBDIR}", external)
+        self.assertIn("openqp-runtime-libdir.txt", top_level)
 
     def test_non_rtld_import_resolves_package_root_without_mutating_env(self):
         runtime = load_runtime_module()

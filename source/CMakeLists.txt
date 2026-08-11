@@ -72,7 +72,7 @@ if(ENABLE_DDX)
   # target does not always propagate it, so add it explicitly (harmless if the
   # imported target already carries it).
   target_include_directories(oqp PRIVATE ${DDX_INCLUDE_DIR})
-  install(FILES ${DDX_LIBRARY} DESTINATION lib)
+  install(FILES ${DDX_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 if(ENABLE_MPI)
     target_compile_definitions(oqp PRIVATE ENABLE_MPI)
@@ -143,6 +143,16 @@ else()
     target_link_libraries(oqp
             "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>>"
             "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>>")
+  elseif(NOT APPLE AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))
+    # findLinearAlgebra() linked the system archives before DFT-D4.  Repeat
+    # them after the DFT-D4 rescan group so late multicharge references can
+    # pull symbols from static OpenBLAS/MKL archives.  The repeated public
+    # items also preserve this order for installed liboqp.a consumers.
+    target_link_libraries(oqp
+            "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB}>>"
+            "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib>>"
+            ${LAPACK_LIBRARIES}
+            ${BLAS_LIBRARIES})
   else()
     target_link_libraries(oqp
             "$<BUILD_INTERFACE:${DFTD4_DFTD4_LIB}>"

@@ -373,3 +373,13 @@ install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/oqp.h
     DESTINATION include
 )
+
+# Record the configured native-library layout for the Python runtime.  Wheels
+# force this to "lib" in pyproject.toml, while native distro installs may use
+# GNUInstallDirs values such as lib64 or lib/x86_64-linux-gnu.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/openqp-runtime-libdir.txt"
+     "${CMAKE_INSTALL_LIBDIR}\n")
+install(
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/openqp-runtime-libdir.txt"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/openqp"
+)

@@ -261,6 +261,8 @@ def test_shared_stack_packaging_contract_is_declared():
     assert "if(LIBLAPACK AND NOT APPLE)" in static_branch
     assert "$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>" in static_branch
     assert "$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>" in static_branch
+    assert "elseif(NOT APPLE AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))" in static_branch
+    assert "${LAPACK_LIBRARIES}\n            ${BLAS_LIBRARIES}" in static_branch
     assert 'oqp_dftd4_disp_v2' in header
     assert 'mctc-lib-0.4.2/' in manifest
     assert 'multicharge-0.3.0/' in manifest
