@@ -2,10 +2,10 @@
 
 import os
 from oqp.utils.mpi_utils import MPIManager
-from oqp.runtime import resolve_oqp_root
+from oqp.runtime import library_path, resolve_oqp_root
 MPIManager()
-# DFT-D4 is linked natively into liboqp (source/dftd4_interface.F90); the
-# external `dftd4` Python package is no longer required or imported.
+# DFT-D4 is linked dynamically into liboqp (source/dftd4_interface.F90); the
+# package-local shared libraries replace the external Python `dftd4` package.
 
 
 #: True when OMP_NUM_THREADS carried a usable value before OpenQP was imported,
@@ -47,7 +47,7 @@ if RTLD:
         defs = oqp_header.read().replace("#include", "//#include")
 
     ffi.cdef(defs)
-    lib = ffi.dlopen(f"{oqp_root}/lib/liboqp.{suffix}")
+    lib = ffi.dlopen(str(library_path(oqp_root, suffix)))
 
 else:
     from _oqp import ffi, lib
@@ -63,6 +63,7 @@ for attr_name in dir(lib):
             'oqp_namd_droplet_boundary', 'oqp_namd_com_restraint',
             'oqp_namd_langevin_thermostat',
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
+            'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

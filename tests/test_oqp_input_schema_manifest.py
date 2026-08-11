@@ -156,8 +156,8 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 338,
-        "route_driver": 141,
+        "generic": 344,
+        "route_driver": 142,
         "legacy_only": 20,
         "intentional_forbidden": 1,
     }
@@ -215,13 +215,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    # main's generic keys + the [dftb] open-shell reference/unpaired pair,
-    # + the six sections of the native multiconfigurational stack
-    # ([cas]/[casscf]/[ci]/[fci]/[pt2]/[state_average]),
-    # + the [cc] section that arrived with #302 (including the Cholesky
-    # controls).  Recomputed against the merged schema: neither side's number
-    # was correct after the union.
-    assert len(checked) == 338
+    # This includes the native multiconfigurational sections plus the DFTB,
+    # coupled-cluster, D4, and SCF controls now present on main.
+    assert len(checked) == 344
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

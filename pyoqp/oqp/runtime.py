@@ -5,12 +5,57 @@ import platform
 from pathlib import Path
 
 
+_LIBDIR_METADATA = Path("share") / "openqp" / "openqp-runtime-libdir.txt"
+
+
 def library_suffix():
     if platform.uname()[0] == "Windows":
         return "dll"
     if platform.uname()[0] == "Darwin":
         return "dylib"
     return "so"
+
+
+def library_directories(root):
+    """Return native-library directories for an OpenQP runtime root."""
+    root = Path(root)
+    candidates = []
+
+    metadata = root / _LIBDIR_METADATA
+    if metadata.is_file():
+        configured = metadata.read_text(encoding="utf-8").strip()
+        if configured:
+            configured_path = Path(configured)
+            candidates.append(
+                configured_path if configured_path.is_absolute()
+                else root / configured_path
+            )
+
+    # Source-tree builds and older installs have no metadata.  Keep their
+    # canonical layout, then recognize common GNUInstallDirs alternatives.
+    candidates.extend((root / "lib", root / "lib64"))
+    multiarch_root = root / "lib"
+    if multiarch_root.is_dir():
+        candidates.extend(path for path in sorted(multiarch_root.iterdir()) if path.is_dir())
+
+    seen = set()
+    unique = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved not in seen:
+            unique.append(resolved)
+            seen.add(resolved)
+    return unique
+
+
+def library_path(root, suffix=None):
+    """Locate liboqp in the configured or a compatible legacy libdir."""
+    suffix = suffix or library_suffix()
+    for directory in library_directories(root):
+        candidate = directory / f"liboqp.{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def _is_oqp_root(path, suffix):
@@ -20,7 +65,7 @@ def _is_oqp_root(path, suffix):
     root = Path(path)
     return (
         (root / "include" / "oqp.h").exists()
-        and (root / "lib" / f"liboqp.{suffix}").exists()
+        and library_path(root, suffix) is not None
     )
 
 
@@ -77,14 +122,14 @@ def resolve_oqp_root(package_root=None):
     if env_root:
         raise RuntimeError(
             "OPENQP_ROOT does not contain matching include/oqp.h and "
-            f"lib/liboqp.{suffix}: {env_root}"
+            f"liboqp.{suffix} in its configured library directory: {env_root}"
         )
 
     searched = ", ".join(str(root) for root in _candidate_roots(package_root))
     raise RuntimeError(
         "Cannot locate OpenQP runtime files. Install OpenQP as a package, run "
         "from a built source tree, or set OPENQP_ROOT to a tree containing "
-        f"include/oqp.h and lib/liboqp.{suffix}. Searched: {searched}"
+        f"include/oqp.h and liboqp.{suffix}. Searched: {searched}"
     )
 
 

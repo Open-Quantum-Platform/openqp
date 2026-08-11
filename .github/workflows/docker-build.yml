@@ -1,18 +1,20 @@
-name: Build and Push Multi-Platform Docker Image
+name: Build Multi-Platform Docker Image
 
-on:
-  push:
-    branches:
-      - main
+"on":
+  release:
+    types:
+      - published
   pull_request:
     branches:
       - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
       # Keep in sync with the FROM line in Dockerfile and the openqp-dev repo's
       # buildenv.Dockerfile / publish-buildenv.yml (which publishes this tag).
       BUILDENV_IMAGE: openqp/openqp-buildenv:1
@@ -37,16 +39,37 @@ jobs:
           print(f"docker_tag=v{version}")
           PY
 
+      - name: Verify published release tag and licensing files
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          expected_tag = f"v{project['version']}"
+          if os.environ["RELEASE_TAG"] != expected_tag:
+              raise SystemExit(
+                  f"Published release tag {os.environ['RELEASE_TAG']!r} does not "
+                  f"match package version; expected {expected_tag!r}"
+              )
+          if project.get("license") != "LicenseRef-OpenQP-Research-1.0":
+              raise SystemExit(
+                  "project.license must be LicenseRef-OpenQP-Research-1.0"
+              )
+          for filename in ("LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"):
+              path = Path(filename)
+              if not path.is_file() or not path.read_bytes():
+                  raise SystemExit(f"Required licensing file is missing or empty: {filename}")
+          print(f"Verified published OpenQP release {expected_tag}.")
+          PY
+
       - name: Set up Docker Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
       # The build environment (toolchain, ILP64 OpenBLAS, Python deps) is a
       # prebuilt image, built and published by the
@@ -89,6 +112,12 @@ jobs:
         with:
           context: .
           tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}
+          build-args: |
+            OPENQP_VERSION=${{ steps.version.outputs.version }}
+            OPENQP_REVISION=${{ github.sha }}
+          # Intentionally build-only. Do not publish a binary image until the
+          # third-party static-linking obligations have a separately approved
+          # distribution path.
           load: true
           # BuildKit's GitHub cache keeps source-independent Docker layers.
           # actions/cache + buildkit-cache-dance above keep the pip/OpenQP
@@ -96,9 +125,3 @@ jobs:
           # changes get a new mount-cache key and refresh subsequent builds.
           cache-from: type=gha,scope=openqp-docker
           cache-to: type=gha,mode=max,scope=openqp-docker
-
-      - name: Push image
-        if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
-        # The buildenv image is published by the openqp-dev companion repo, not
-        # here; this repo only publishes the OpenQP application image.
-        run: docker push openqp/openqp:${{ steps.version.outputs.docker_tag }}

@@ -970,15 +970,20 @@ def test_soc_namd_numeric_active_surface_is_not_rewritten_as_mch_state():
     assert "init_state" not in legacy["md"]
 
 
-def test_d4_is_a_no_argument_modifier():
+def test_d4_accepts_complete_explicit_rational_damping():
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() d4()'
     )
     assert legacy["input"]["d4"] == "True"
-    with pytest.raises(OQPInputError, match=r"d4\(\) does not accept"):
-        oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="h2o.xyz" energy() d4(enabled=true)'
-        )
+    _, explicit = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" energy() '
+        'd4(s6=1.0,s8=0.95948085,s9=1.0,a1=0.38574991,a2=4.80688534,alp=16.0)'
+    )
+    assert explicit["input"]["d4"] == "True"
+    assert explicit["d4"] == {
+        "s6": "1.0", "s8": "0.95948085", "s9": "1.0",
+        "a1": "0.38574991", "a2": "4.80688534", "alp": "16.0",
+    }
 
 
 def test_soc_uses_equal_nstate_or_explicit_singlet_triplet_counts():

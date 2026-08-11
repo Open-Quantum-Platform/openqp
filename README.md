@@ -1,6 +1,6 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 and coupled-cluster (CCSD, CCSD(T)) correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a source-available quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) and designed to interoperate with an open-source scientific ecosystem. It combines conventional HF/DFT, MP2 and coupled-cluster (CCSD, CCSD(T)) correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
@@ -139,7 +139,7 @@ cd openqp
 pip install .
 ```
 
-The package install keeps the Python wrapper, native library, headers, and data files together for normal `openqp` command-line use. A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) is also available. Build options (MPI, LibXC/ERI backends, BLAS/LAPACK selection) are documented in the [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/) guide.
+The package install keeps the Python wrapper, native library, headers, and data files together for normal `openqp` command-line use. A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) is also available. The image is a distribution of OpenQP, so the same research/commercial licensing terms apply to its use. Build options (MPI, LibXC/ERI backends, BLAS/LAPACK selection) are documented in the [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/) guide.
 
 ### First Run
 
@@ -214,10 +214,12 @@ Recent MRSF-TDDFT accounts and overview papers:
 
 ### Legal Notice
 
-Current OpenQP versions are source-available under a dual-licensing model:
+OpenQP v1.3.0 and later versions distributed with the current license are
+source-available under a dual-licensing model:
 qualifying academic and nonprofit users may use OpenQP under the free OpenQP
 Research License 1.0, while every use by or for a commercial entity requires a
-separate written commercial license from Open Quantum Inc. Earlier copies
-validly released under GPLv3 retain their historical GPLv3 terms, but those
+separate written commercial license from Open Quantum Inc. OpenQP v1.2.1 and
+earlier release tags remain under the GPLv3 terms that accompanied them, but those
 terms do not extend to current or future versions distributed under the new
-license. See the complete [license](LICENSE) and [licensing guide](LICENSING.md).
+license. See the complete [license](LICENSE), [licensing guide](LICENSING.md),
+and [community and sustainable development statement](SUSTAINABILITY.md).

@@ -19,18 +19,57 @@ from oqp.library.state_tracking import (
     maximum_overlap_assignment,
 )
 
-# DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
-# exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
-# there is no longer a Python <= 3.12 constraint.
+# DFT-D4 is dynamically linked into liboqp (source/dftd4_interface.F90),
+# exposed through oqp.lib. No Python `dftd4` package is needed, so there is no
+# longer a Python <= 3.12 constraint.
 dftd_installed = ('dftd4 (native)'
                   if hasattr(getattr(oqp, 'lib', None), 'oqp_dftd4_disp')
                   else 'not available')
 
 
-def dftd4_native_disp(atoms, coordinates, functional, do_grad):
+_D4_DAMPING_KEYS = ('s6', 's8', 's9', 'a1', 'a2', 'alp')
+
+
+def _dftd4_damping_values(damping_params):
+    """Return ``(mode, values)`` for the native v2 rational-damping ABI."""
+    if damping_params is None:
+        return 0, [0.0] * len(_D4_DAMPING_KEYS)
+
+    if isinstance(damping_params, dict):
+        missing = [key for key in _D4_DAMPING_KEYS if key not in damping_params]
+        if missing:
+            raise ValueError(
+                'explicit D4 damping parameters are missing: ' + ', '.join(missing)
+            )
+        values = [float(damping_params[key]) for key in _D4_DAMPING_KEYS]
+    else:
+        values = [float(value) for value in damping_params]
+        if len(values) != len(_D4_DAMPING_KEYS):
+            raise ValueError(
+                'explicit D4 damping requires [s6, s8, s9, a1, a2, alp]'
+            )
+
+    if not np.all(np.isfinite(values)):
+        raise ValueError('explicit D4 damping parameters must be finite')
+    return 1, values
+
+
+def _dftd4_damping_from_config(config):
+    """Return explicit damping from the schema, or ``None`` for defaults."""
+    section = config.get('d4', {})
+    raw = {key: section.get(key, '') for key in _D4_DAMPING_KEYS}
+    if not any(str(value).strip() for value in raw.values()):
+        return None
+    return {key: float(raw[key]) for key in _D4_DAMPING_KEYS}
+
+
+def dftd4_native_disp(atoms, coordinates, functional, do_grad,
+                       total_charge=0.0, damping_params=None):
     """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
 
-    atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. 'pbe0'.
+    ``atoms`` are atomic numbers and ``coordinates`` are ``(natom, 3)`` in
+    Bohr. ``total_charge`` is passed to DFT-D4's charge model. Optional
+    ``damping_params`` supplies ``s6, s8, s9, a1, a2, alp`` explicitly.
     """
     natom = len(atoms)
     func = ('bhlyp' if functional.lower() in ('bhhlyp',) else functional).encode('ascii')
@@ -39,10 +78,32 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
     energy_ptr = oqp.ffi.new('double*')
     grad_buf = oqp.ffi.new('double[]', natom * 3)
     ier = oqp.ffi.new('int*')
-    oqp.lib.oqp_dftd4_disp(natom, z, xyz, func, len(func), int(do_grad),
-                           energy_ptr, grad_buf, ier)
+    param_mode, damping_values = _dftd4_damping_values(damping_params)
+    damping = oqp.ffi.new('double[]', damping_values)
+
+    if hasattr(oqp.lib, 'oqp_dftd4_disp_v2'):
+        oqp.lib.oqp_dftd4_disp_v2(
+            natom, z, xyz, float(total_charge), func, len(func),
+            param_mode, damping, int(do_grad), energy_ptr, grad_buf, ier
+        )
+    else:
+        # Source and native library can be temporarily mismatched in developer
+        # environments. Neutral functional-name calculations remain compatible;
+        # never silently discard a requested charge or explicit parameters.
+        if float(total_charge) != 0.0 or param_mode != 0:
+            raise RuntimeError(
+                'charge-aware DFT-D4 requires oqp_dftd4_disp_v2; rebuild OpenQP'
+            )
+        oqp.lib.oqp_dftd4_disp(
+            natom, z, xyz, func, len(func), int(do_grad),
+            energy_ptr, grad_buf, ier
+        )
     if ier[0] != 0:
-        raise RuntimeError(f"dftd4: no D4 damping parameters for functional '{functional}'")
+        if ier[0] == 1:
+            raise RuntimeError(
+                f"dftd4: no D4 damping parameters for functional '{functional}'"
+            )
+        raise RuntimeError(f'dftd4: native interface failed with status {ier[0]}')
     energy = energy_ptr[0]
     if do_grad:
         grad = np.frombuffer(oqp.ffi.buffer(grad_buf, natom * 3 * 8),
@@ -211,7 +272,9 @@ class LastStep(Calculator):
 
         self.do_d4 = mol.config['input']['d4']
         self.res = None
-        self.set_param(param)
+        self.set_param(
+            _dftd4_damping_from_config(mol.config) if param is None else param
+        )
         self.natom = 0
 
         dump_log(
@@ -231,7 +294,11 @@ class LastStep(Calculator):
         coordinates = mol.get_system().reshape((-1, 3))  # Bohr
         natom = len(atoms)
         if self.do_d4:
-            energy, grad = dftd4_native_disp(atoms, coordinates, self.functional, do_grad)
+            total_charge = float(mol.config.get('input', {}).get('charge', 0))
+            energy, grad = dftd4_native_disp(
+                atoms, coordinates, self.functional, do_grad,
+                total_charge=total_charge, damping_params=self.d4_param
+            )
         else:
             energy = 0.0
             grad = np.zeros((natom, 3))
@@ -239,8 +306,7 @@ class LastStep(Calculator):
         return energy, grad
 
     def set_param(self, param):
-        # TODO pass user-defined parameters to dftd4
-        pass
+        self.d4_param = param
 
     def compute(self, mol, grad_list=None):
         # do dftd4
@@ -1649,6 +1715,8 @@ class Hessian(Calculator):
             )
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
+        total_charge = float(self.mol.config.get('input', {}).get('charge', 0))
+        damping_params = _dftd4_damping_from_config(self.mol.config)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1656,7 +1724,10 @@ class Hessian(Calculator):
         ncoord = flat.size
 
         def disp_grad(coord_flat):
-            _, grad = dftd4_native_disp(atoms, coord_flat.reshape((-1, 3)), functional, True)
+            _, grad = dftd4_native_disp(
+                atoms, coord_flat.reshape((-1, 3)), functional, True,
+                total_charge=total_charge, damping_params=damping_params
+            )
             return np.asarray(grad, dtype=float).reshape(-1)
 
         hess = np.zeros((ncoord, ncoord))
