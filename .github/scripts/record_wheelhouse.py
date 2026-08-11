@@ -8,7 +8,7 @@ import hashlib
 import json
 import re
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def sha256(path: Path) -> str:
@@ -21,11 +21,23 @@ def sha256(path: Path) -> str:
 
 def wheel_metadata(path: Path) -> tuple[str, str, list[str]]:
     with zipfile.ZipFile(path) as wheel:
+        # Wheel metadata lives in one top-level ``*.dist-info`` directory.
+        # Some distributions (notably setuptools) also bundle vendored wheels'
+        # metadata below package directories; those entries do not describe the
+        # containing wheel and must not make its layout appear ambiguous.
+        def root_metadata(name: str, filename: str) -> bool:
+            parts = PurePosixPath(name).parts
+            return (
+                len(parts) == 2
+                and parts[0].endswith(".dist-info")
+                and parts[1] == filename
+            )
+
         metadata_names = [
-            name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")
+            name for name in wheel.namelist() if root_metadata(name, "METADATA")
         ]
         wheel_names = [
-            name for name in wheel.namelist() if name.endswith(".dist-info/WHEEL")
+            name for name in wheel.namelist() if root_metadata(name, "WHEEL")
         ]
         if len(metadata_names) != 1 or len(wheel_names) != 1:
             raise RuntimeError(f"invalid wheel metadata layout: {path.name}")

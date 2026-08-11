@@ -280,6 +280,25 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         for wheel in [*manifest["wheels"], *manifest["build_wheels"]]:
             self.assertRegex(wheel["sha256"], r"^[0-9a-f]{64}$")
 
+    def test_wheel_metadata_ignores_vendored_dist_info(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            wheel_path = Path(temporary) / "setuptools-84.0.0-py3-none-any.whl"
+            self._write_wheel(wheel_path, "setuptools", "84.0.0")
+            with zipfile.ZipFile(wheel_path, "a") as wheel:
+                wheel.writestr(
+                    "setuptools/_vendor/packaging-26.0.dist-info/METADATA",
+                    "Metadata-Version: 2.2\nName: packaging\nVersion: 26.0\n",
+                )
+                wheel.writestr(
+                    "setuptools/_vendor/packaging-26.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nTag: py3-none-any\n",
+                )
+
+            self.assertEqual(
+                WHEELHOUSE.wheel_metadata(wheel_path),
+                ("setuptools", "84.0.0", ["py3-none-any"]),
+            )
+
     @staticmethod
     def _json_blob(blobs, value, media_type="application/vnd.oci.image.manifest.v1+json"):
         payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
