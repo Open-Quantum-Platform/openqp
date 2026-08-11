@@ -1256,6 +1256,41 @@ class OpenQP:
                   or max([nstate] + [int(r) + 1 for r in (target_roots or ())]),
             state_average=sa, **keywords)
 
+    # Every [pt2] key a compact helper is responsible for.  Patching these one
+    # at a time did not work: h0 and contraction leaked, then edshft, then the
+    # remaining shifts, then [state_average] -- five rounds of the same bug in
+    # different clothes.  A helper call describes a COMPLETE calculation, so it
+    # restores this whole set to its own defaults and then applies what the
+    # call supplied; anything the caller passes still wins.
+    _PT2_OWNED_KEYS = {
+        "h0": "fock",
+        "contraction": "uncontracted",
+        "ipea_shift": "0.0",
+        "imaginary_shift": "0.0",
+        "level_shift": "0.0",
+        "edshft": "0.0",
+    }
+
+    def _pt2_helper_opts(self, keywords, overrides, **helper_defaults):
+        """Build a [pt2] block that does not inherit a previous helper's state.
+
+        `overrides` are this call's explicit values (None = not supplied);
+        `helper_defaults` are the keys that define THIS helper (e.g. h0=dyall
+        for nevpt2).  Also stages [state_average] off unless the call passes a
+        block: the PT2 drivers and the temporary CASSCF reference both read it,
+        so a preceding .sa_casscf(...) otherwise changed the reference or was
+        rejected outright by preflight.
+        """
+        explicit = dict(keywords.pop("pt2", None) or {})
+        opts = dict(self._PT2_OWNED_KEYS)
+        opts.update(helper_defaults)
+        opts.update({k: v for k, v in overrides.items() if v is not None})
+        opts.update(explicit)          # an explicit [pt2] block wins outright
+        _sa = dict(keywords.pop("state_average", None) or {})
+        _sa.setdefault("enabled", "false")
+        keywords["state_average"] = _sa
+        return opts
+
     def caspt2(self, active_electrons=None, active_orbitals=None,
                frozen_core=None, nroot=None, variant=None, h0=None,
                ipea_shift=None, imaginary_shift=None, level_shift=None,
@@ -1274,24 +1309,11 @@ class OpenQP:
             raise ValueError(
                 "CASPT2 variant must be 'caspt2', 'ms-caspt2' or 'xms-caspt2'."
             )
-        opts = dict(keywords.pop("pt2", None) or {})
-        # Reusing one builder must not leak the previous helper's method-defining
-        # keys: job.nevpt2(...) then job.caspt2(...) left [pt2] h0=dyall, so the
-        # CASPT2 call silently ran NEVPT2, and a prior contraction=strong
-        # survived into a later default nevpt2() call.  Restore this helper's
-        # distinguishing defaults unless this call supplies them.
-        opts.setdefault("h0", "fock")
-        opts.setdefault("contraction", "uncontracted")
-        # edshft is the QDPT ISA shift, but the CASPT2 resolvent consumes it
-        # too, so a prior .qdpt2(edshft=...) made this nominally default helper
-        # return a shifted result.  Method-defining keys are not the only ones
-        # that leak -- shifts do as well.
-        opts.setdefault("edshft", "0.0")
-        for key, value in (("h0", h0), ("ipea_shift", ipea_shift),
-                           ("imaginary_shift", imaginary_shift),
-                           ("level_shift", level_shift)):
-            if value is not None:
-                opts[key] = value
+        opts = self._pt2_helper_opts(
+            keywords,
+            {"h0": h0, "ipea_shift": ipea_shift,
+             "imaginary_shift": imaginary_shift, "level_shift": level_shift},
+            h0="fock")
         nroot = self._multistate_nroot(
             nroot, method, {"ms-caspt2", "xms-caspt2"})
         return self._wf_setup(
@@ -1308,15 +1330,8 @@ class OpenQP:
         `method=caspt2` plus `[pt2] h0=dyall`.  `contraction='strong'` gives
         SC-NEVPT2; the default is the uncontracted form."""
         self._require_active_space("NEVPT2", active_electrons, active_orbitals)
-        opts = dict(keywords.pop("pt2", None) or {})
-        opts.setdefault("h0", "dyall")
-        # Same reason as caspt2 above: the documented default of this helper is
-        # the UNCONTRACTED form, which a previous strong-contraction call would
-        # otherwise override.  edshft leaks the same way from a prior qdpt2().
-        opts.setdefault("contraction", "uncontracted")
-        opts.setdefault("edshft", "0.0")
-        if contraction is not None:
-            opts["contraction"] = contraction
+        opts = self._pt2_helper_opts(
+            keywords, {"contraction": contraction}, h0="dyall")
         return self._wf_setup(
             "caspt2", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
@@ -1335,15 +1350,8 @@ class OpenQP:
             raise ValueError(
                 "QDPT2 variant must be 'mrmp2', 'mcqdpt2' or 'xmcqdpt2'."
             )
-        opts = dict(keywords.pop("pt2", None) or {})
-        # Same builder-reuse leak the CASPT2/NEVPT2 helpers already guard: a
-        # preceding .nevpt2() leaves h0=dyall, and QDPT requires the Fock H0, so
-        # the generated input is rejected outright; a preceding strong
-        # contraction leaks the same way.
-        opts.setdefault("h0", "fock")
-        opts.setdefault("contraction", "uncontracted")
-        if edshft is not None:
-            opts["edshft"] = edshft
+        opts = self._pt2_helper_opts(
+            keywords, {"edshft": edshft}, h0="fock")
         nroot = self._multistate_nroot(nroot, method, {"mcqdpt2", "xmcqdpt2"})
         return self._wf_setup(
             method, runtype=runtype, basis=basis, reference=reference,

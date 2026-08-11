@@ -1039,7 +1039,15 @@ class CASSCF:
         # before asking for it; CASSCF did not, so a job with [cas]
         # max_memory=512 still attempted the multi-gigabyte allocation here
         # and only met the budget later, on the CI side.
-        check_ao_eri_budget(nbf, settings.max_memory, "[cas]")
+        # hessian=analytic makes casscf_driver allocate ctx%eri_h(nbf**4) for
+        # the lifetime of the calculation, on top of the AO record, the
+        # transformed ERI and the transform workspace -- a fourth resident
+        # tensor the default three-tensor estimate never saw.
+        _hess_mode = str((mol.config.get("casscf", {}) or {}).get(
+            "hessian", "fd")).strip().lower()
+        _live_eri = 4 if _hess_mode in {"analytic", "exact"} else 3
+        check_ao_eri_budget(nbf, settings.max_memory, "[cas]",
+                            live_tensors=_live_eri)
         oqp.fci_ao_integrals(mol)
         enuc = float(mol.mol_energy.nenergy)
 

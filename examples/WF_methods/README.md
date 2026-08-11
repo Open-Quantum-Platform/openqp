@@ -58,7 +58,8 @@ diagonalization, no `max_det` wall.  Two backends implement the stream, both
 pinned against each other and against `engine=dense` in
 `tests/test_qdpt2_direct.py`:
 
-- **NumPy streaming** (`engine=direct`, and what `auto` uses): vectorized
+- **NumPy streaming** (`engine=direct` forces it; `auto` uses it only when the
+  native kernel is unavailable): vectorized
   class generation + lexsort merge.  Measured on the isolated streaming stage
   (CAS(8,8)-in-24 orbitals, 4900 references, 114.5M streamed terms): **~6 s**.
 - **liboqp OpenMP kernel** (what `auto` prefers when built;

@@ -329,7 +329,12 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
         # full-cap buffers are still alive, so the return itself is part of the
         # peak: 8*n*(1+nstate), bounded by cap.
         _ret_bytes = 8 * int(cap) * (1 + int(nstate))
-        _out_bytes = _out_bytes + _in_bytes + _ret_bytes
+        # qdpt2_kernel.F90 allocates its own wka/wkb/we0/wv of `total` entries
+        # -- 8*total*(3+nstate) -- plus the per-thread permutation and gather
+        # buffers, all live while the Python-side outputs are.  The kernel's
+        # sorting peak was invisible to a guard that counted only this side.
+        _native_ws = 8 * int(cap) * (3 + int(nstate)) + 8 * int(cap)
+        _out_bytes = _out_bytes + _in_bytes + _ret_bytes + _native_ws
         _budget = max(1, int(max_memory)) * 1024 ** 2
         if _out_bytes > _budget:
             raise ValueError(
