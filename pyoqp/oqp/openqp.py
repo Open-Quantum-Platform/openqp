@@ -103,13 +103,6 @@ class _DFTBSectionProxy(_SectionProxy):
         return self._owner._dftb(*args, **kwargs)
 
 
-class _D4SectionProxy(_SectionProxy):
-    """Callable [d4] section proxy preserving schema attribute access."""
-
-    def __call__(self, enabled=True, **damping):
-        return self._owner._d4(enabled=enabled, **damping)
-
-
 class _XTBSectionProxy(_SectionProxy):
     """Callable [xtb] section proxy.
 
@@ -525,13 +518,8 @@ class OpenQP:
             updates[f"input.{option}"] = value
         return self.set(**updates)
 
-    @property
-    def d4(self):
-        """Callable [d4] proxy supporting both helper and attribute syntax."""
-        return _D4SectionProxy(self, "d4")
-
-    def _d4(self, enabled=True, **damping):
-        """Implement the callable DFT-D4 convenience helper."""
+    def d4(self, enabled=True, **damping):
+        """Enable DFT-D4, optionally with all six rational-damping values."""
         self.set(**{"input.d4": enabled})
         if damping:
             self.section("d4", **damping)

@@ -77,6 +77,12 @@ class SCFSimplexLimitTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("scf.maxdiis", report.to_text())
 
+    def test_ml_converger_is_limited_because_it_can_select_ediis(self):
+        report = self.check("cdiis", 14, converger="ml")
+        self.assertFalse(report.ok)
+        self.assertIn("ML-selected DIIS", report.to_text())
+        self.assertTrue(self.check("cdiis", 13, converger="ml").ok)
+
     def test_dormant_diis_settings_do_not_limit_soscf_or_trah(self):
         for converger in ("soscf", "trah"):
             with self.subTest(converger=converger):

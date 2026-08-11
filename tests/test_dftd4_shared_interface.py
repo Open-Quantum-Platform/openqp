@@ -261,6 +261,8 @@ def test_shared_stack_packaging_contract_is_declared():
     assert "if(LIBLAPACK AND NOT APPLE)" in static_branch
     assert "$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>" in static_branch
     assert "$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>" in static_branch
+    assert "elseif(NOT APPLE AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))" in static_branch
+    assert "${LAPACK_LIBRARIES}\n            ${BLAS_LIBRARIES}" in static_branch
     assert 'oqp_dftd4_disp_v2' in header
     assert 'mctc-lib-0.4.2/' in manifest
     assert 'multicharge-0.3.0/' in manifest
@@ -583,11 +585,12 @@ def test_distribution_gates_require_build_info_and_exact_patches():
     container_smoke = (
         ROOT / ".github" / "scripts" / "container_runtime_smoke.py"
     ).read_text(encoding="utf-8")
-    assert "container_runtime_smoke.py" in docker
+    docker_gate = docker + container_smoke
     source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     generator = BUILD_INFO_GENERATOR.read_text(encoding="utf-8")
-    for gate in (wheel, container_smoke, source):
+    assert "container_runtime_smoke.py" in docker
+    for gate in (wheel, docker_gate, source):
         assert "BUILD-INFO.json" in gate
         assert "apply-patch.cmake" in gate
         assert "mctc-lib-0.4.2-disable-tests.patch" in gate or (
@@ -598,8 +601,11 @@ def test_distribution_gates_require_build_info_and_exact_patches():
         )
     assert "json.loads(build_info_text)" in wheel
     assert "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in wheel
-    assert "json.loads(build_info_text)" in container_smoke
-    assert '"sha256": sha256(patch_path)' in container_smoke
+    assert "json.loads(build_info_text)" in docker_gate
+    assert (
+        "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in docker_gate
+        or '"sha256": sha256(patch_path)' in docker_gate
+    )
     assert "recursive-include external/dftd4-corresponding-source *" in manifest
     assert "include(GNUInstallDirs)" in top_cmake
     assert top_cmake.index("include(GNUInstallDirs)") < top_cmake.index(

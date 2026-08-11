@@ -2,9 +2,11 @@
 import os
 import sys
 import oqp
+import json
 import copy
 import time
 import shutil
+import hashlib
 import platform
 import subprocess
 import multiprocessing
@@ -142,6 +144,83 @@ MP2_VARIANT_SCALES = {
     'scs-mi': (1.29, 0.40),
     'scs-mi-mp2': (1.29, 0.40),
 }
+
+
+def _no_integral_symmetry_in_child(config):
+    """Force ``[symmetry] use_integral_symmetry`` off in a child job config.
+
+    Finite-difference drivers (numerical Hessian, IR/Raman properties, NACME)
+    run each displaced geometry as its own job and assemble the results in the
+    PARENT's frame.  Those children carry runtype 'grad'/'energy', which passes
+    the allow-list in ``Molecule.reorient_for_integral_symmetry``, so each one
+    rotates itself into the standard frame of ITS OWN geometry -- and a
+    displaced geometry generally has lower symmetry and therefore a different
+    standard frame than the reference.  Measured on water: a displacement that
+    reduces C2v to Cs picks up a rotation of |R - I| = 1.0, an O(1) reorientation
+    of the returned gradient.
+
+    The parent then files those rotated gradients into Hessian rows as if they
+    were input-frame vectors.  Water/6-31G HF numerical frequencies, in cm^-1:
+
+        use_integral_symmetry=false   1828.86   3906.50   4001.54
+        use_integral_symmetry=true   -2675.60    697.64   2728.85
+
+    -- a spurious imaginary mode and no usable number anywhere, reported with
+    exit status 0.
+
+    Turning the reduction off in the children is the correct scope: it is a
+    per-job speed optimisation, never part of the definition of the result, so
+    disabling it can only cost time.  Making the children instead share one
+    fixed parent frame is the better long-term answer, but it needs the
+    input_to_standard back-transform to actually be applied to the outputs
+    (that transform is currently computed and stored but consumed nowhere), so
+    it is deliberately not attempted here.
+    """
+    symmetry = config.setdefault('symmetry', {})
+    symmetry['use_integral_symmetry'] = 'false'
+    return config
+
+
+def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
+    """Short provenance hash naming WHICH run a scratch gradient belongs to.
+
+    Finite-difference scratch files are matched by name on restart. Keying
+    them on the displaced coordinate and sign alone is not enough to identify
+    a gradient: rerun the same deck at a PERTURBED geometry with
+    ``[hess] restart=true`` and every name is bit-identical to the previous
+    run's, so ``grad_wrapper`` reports all of them 'loaded' -- it never
+    compares coordinates -- and the driver returns the PREVIOUS geometry's
+    Hessian for the new structure.
+
+    Measured on water/6-31G HF, populating the scratch at one geometry and
+    rerunning at another, in cm^-1:
+
+        reused scratch   1798.99   4047.08   4141.15
+        actual answer    1384.73   4886.70   5092.94
+
+    -- reported with exit status 0 and no warning.
+
+    Geometry is not the only axis. ``model_signature`` is
+    ``Molecule._hessian_request_signature``, the repository's own definition of
+    "the same Hamiltonian" -- basis and custom libraries, functional, grids and
+    CAM, PCM, DFTB parameter sets, SCF and response settings, QM/MM embedding,
+    and the target state. Without it, changing only the functional and rerunning
+    in the same directory reuses gradients from the old Hamiltonian, which is
+    the identical defect reached by a different axis. The sidecar Hessian cache
+    already signs on exactly these sections; the scratch now agrees with it.
+
+    Array lengths are folded in explicitly because ``tobytes()`` does not encode
+    shape.
+    """
+    coord = np.asarray(origin_coord, dtype=float).ravel()
+    charges = np.asarray(atoms, dtype=float).ravel()
+    digest = hashlib.sha256()
+    digest.update(repr((int(coord.size), int(charges.size), float(dx))).encode())
+    digest.update(coord.tobytes())
+    digest.update(charges.tobytes())
+    digest.update(json.dumps(model_signature, sort_keys=True,
+                             default=str).encode())
+    return digest.hexdigest()[:12]
 
 
 class Calculator:
@@ -617,6 +696,60 @@ class SinglePoint(Calculator):
         # log), even though its tags were already dropped above.
         if symmetry_on or previously_staged:
             self.mol.stage_integral_symmetry_maps()
+            # Staging can decline for reasons only visible once the basis
+            # exists (shell/AO mismatch, overlap invariance, non-abelian
+            # closure). Those runs were changing frame for no benefit at all:
+            # reorientation had already rotated AND translated the molecule,
+            # and nothing put it back. Undo it, and refresh the guess -- the
+            # 1e integrals were built in the rotated frame, so the coordinates
+            # cannot go back without them. The cost lands only on a path that
+            # is already getting no reduction.
+            meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+            restore = meta.pop('_reorient_input_coords', None)
+            status = (meta.get('integral_symmetry') or {}).get('status')
+            if restore is not None and status != 'active':
+                self.mol.update_system(
+                    np.asarray(restore, dtype=float).ravel())
+                self._set_petite_enabled(False)
+                # The stored detection describes the STANDARD frame the
+                # geometry has just been moved out of. Its operations feed the
+                # MO/state/mode labellers, so leaving it would label the
+                # restored geometry with the wrong frame's operators -- the
+                # same defect the continue_geom path had. Re-detect.
+                if (getattr(self.mol, 'symmetry_metadata', None) or {}) \
+                        .get('status', 'disabled') != 'disabled':
+                    self.mol._detect_symmetry_metadata()
+                # Rebuild everything the moved coordinates invalidate --
+                # including the guess, via the SAME initialisation path this
+                # run was configured to use.
+                #
+                # A bare _prep_guess() here was not enough: it discards
+                # whatever _init_convergence() produced, and swapmo() has
+                # already run by this point, so a job relying on a projected
+                # [scf] init_scf guess or on [guess] swapmo -- a restricted/MOM
+                # core-hole calculation, say -- reached _run_scf() without the
+                # initialisation it asked for, and could converge to a
+                # different solution. Re-run the configured path, then re-apply
+                # the orbital swaps, exactly as the code above does.
+                #
+                # An earlier version stopped at the integrals, to keep the
+                # orbitals produced by [scf] init_scf. But AO basis functions
+                # do not rotate with the molecule: the p and d components on
+                # each atom mix under the frame change, so a coefficient vector
+                # computed in the standard frame describes a DIFFERENT physical
+                # density once the atoms are back in the input frame. Keeping
+                # those orbitals preserved a wavefunction that no longer means
+                # what it meant, and _run_scf() then started from an internally
+                # inconsistent guess -- density, Fock and orbital energies all
+                # belonging to a frame the molecule has left. Regenerating is
+                # the honest repair; a stale starting point is not worth
+                # protecting, and the cost lands only on a path that is already
+                # getting no reduction.
+                if self.init_scf != 'no' and do_init_scf:
+                    self._init_convergence()
+                else:
+                    self._prep_guess()
+                self.swapmo()
 
         scf_flag = self._run_scf()
 
@@ -1221,7 +1354,18 @@ class Hessian(Calculator):
             hessian, flags = self.hess_func()
             if 'failed' in flags:
                 dump_log(self.mol, title='PyOQP: numerical hessian calculations failed')
-                return None
+                # Raise, do not just return None. The failure was detected and
+                # acted on internally -- the scratch directory is deliberately
+                # kept below -- but it never reached the exit status, so a run
+                # in which EVERY displacement failed exited 0 and any CI job,
+                # queue script or geometry scan driving OpenQP by exit code
+                # recorded it as a success. Silent success is worse than a
+                # wrong number: nothing downstream can catch it. Matches how a
+                # non-converged SCF already behaves.
+                nfailed = sum(1 for f in flags if f == 'failed')
+                raise RuntimeError(
+                    'numerical Hessian: %d of %d displacement gradients '
+                    'failed; scratch kept for inspection' % (nfailed, len(flags)))
             else:
                 self.mol.hessian = np.asarray(hessian, dtype=float)
                 if not analysis:
@@ -1293,6 +1437,7 @@ class Hessian(Calculator):
             for section, values in raw_config.items()
         }
         config['input']['runtype'] = 'energy'
+        _no_integral_symmetry_in_child(config)
         if config.get('guess', {}).get('type') == 'json':
             config['guess']['type'] = 'huckel'
         config['guess']['save_mol'] = 'false'
@@ -1305,6 +1450,17 @@ class Hessian(Calculator):
             usempi=False,
         )
         runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        # The Runner initialised symmetry from the UNDISPLACED geometry in the
+        # copied config; the displaced coordinates are only installed on the
+        # line above, and nothing re-runs detection. So the child would carry
+        # the reference geometry's point group and operations -- and a
+        # displaced geometry generally has lower symmetry. Turning integral
+        # symmetry off in the child (above) stops the frame moving, but it does
+        # not refresh the detection those labels and any response blocking are
+        # built from.
+        if (getattr(runner.mol, 'symmetry_metadata', None) or {}) \
+                .get('status', 'disabled') != 'disabled':
+            runner.mol._detect_symmetry_metadata()
         runner.run()
 
         dipole = np.zeros(3, dtype=np.float64)
@@ -1508,6 +1664,168 @@ class Hessian(Calculator):
         # symmetrize (the FD asymmetry is O(dx**2))
         return 0.5 * (hess + hess.T)
 
+    def _symmetry_unique_displacements(self, origin_coord, dx):
+        """Atoms whose displaced gradients determine the whole Hessian.
+
+        Returns (uniq, ops) or (None, None) when the full 6N path must run.
+        Opt-in via [hess] symmetry_unique; the shipped path is untouched
+        otherwise.
+
+        The Hessian of a symmetric molecule obeys
+        H[P(a), P(c)] = M H[a, c] M^T for every operation (M, P), so only one
+        atom per orbit needs displacing; the other rows are images. The orbit
+        list is derived FRESH from the current geometry rather than from
+        symmetry_metadata -- a TS search or IRC hands this function a geometry
+        the stored detection no longer describes.
+
+        Only the abelian D2h-family operations are used. Every one of them is
+        an involution (P[a] = b implies P[b] = a), which is what guarantees
+        that each non-representative atom is the image of a representative
+        under some listed operation. The coverage is still proven from the
+        permutations alone BEFORE any gradient job is launched: if anything
+        were uncovered we run the full path, rather than discovering a hole
+        after the reduced jobs have already been paid for.
+        """
+        meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+        requested = self.mol._parse_bool_like(
+            self.mol.config.get('hess', {}).get('symmetry_unique', False))
+
+        def decline(reason):
+            # A silently ignored request is the failure mode this whole PR
+            # family is about, so say which of the seven exits was taken.
+            if requested:
+                meta['hess_symmetry_unique'] = {'status': reason}
+                print('   PyOQP NOTE: [hess] symmetry_unique requested but '
+                      'declined (%s); using the full 6N displacement set.'
+                      % reason)
+            return None, None
+
+        if not requested:
+            return None, None
+        if meta.get('status', 'disabled') == 'disabled':
+            return decline('symmetry_disabled')
+        tolerance = float(meta.get('tolerance', 1.0e-5))
+        # A detection tolerance looser than the displacement cannot tell a
+        # displaced geometry from the reference, which is exactly when images
+        # must NOT be trusted.
+        if tolerance > dx / 10.0:
+            return decline('tolerance_too_loose_for_dx')
+        try:
+            from oqp.library.symmetry_detect import detect_point_group
+            detection = detect_point_group(
+                self.mol.get_atoms(),
+                np.asarray(origin_coord, dtype=float).reshape(-1, 3),
+                tolerance=tolerance)
+        except Exception:
+            return decline('detection_failed')
+        ops = detection.get('operations') or []
+        if len(ops) < 2:
+            return decline('no_symmetry_at_this_geometry')
+
+        natom = len(np.asarray(origin_coord).ravel()) // 3
+        perms = np.array([op['permutation'] for op in ops], dtype=int)
+        rep = perms.min(axis=0)
+        uniq = sorted(set(rep.tolist()))
+        if len(uniq) >= natom:
+            return decline('every_atom_is_its_own_orbit')
+
+        # Prove coverage from the permutations alone, before spending jobs.
+        filled = np.zeros(natom, dtype=bool)
+        filled[uniq] = True
+        for perm in perms:
+            for a in uniq:
+                filled[perm[a]] = True
+        if not filled.all():
+            return decline('orbit_coverage_incomplete')
+
+        # Everything above is about the NUCLEI. The reconstruction
+        # H[P(a),P(c)] = M H[a,c] M^T additionally requires the ELECTRONIC
+        # solution to respect those operations, and a symmetric geometry does
+        # not guarantee a symmetric solution: a symmetry-broken unrestricted
+        # branch -- stretched, antiferromagnetic -- sits at a perfectly
+        # symmetric geometry with a density that does not transform. An
+        # operation then maps the branch being differentiated onto a different
+        # degenerate one, the identity fails, and the reconstructed rows plus
+        # the final symmetrisation quietly produce a wrong Hessian. The full
+        # 6N path keeps that asymmetry instead of projecting it away.
+        #
+        # The MO labeller already measures exactly this, in the input frame
+        # (matrix_key='matrix_input_frame'), returning 'mixed' for an orbital
+        # that matches no irrep row within tolerance. Occupied orbitals are
+        # what the density is built from, so a mixed one there means the
+        # reference solution is not the symmetric one. Declining costs only
+        # time; trusting a broken branch costs the answer.
+        # The labeller reads meta['detection'] -- the STORED detection -- while
+        # everything above deliberately uses `ops` detected fresh from
+        # origin_coord, because a TS search or IRC hands this routine a
+        # geometry the stored block no longer describes. Labelling against the
+        # stale one would let the guard pass for the wrong reason: stale C1
+        # metadata has a single irrep, so EVERY orbital comes back pure, and
+        # the fresh C2v operations would then be used to reconstruct a
+        # symmetry-broken solution's Hessian. A guard that cannot fail is not a
+        # guard. Require the stored detection to be the one just computed, and
+        # decline otherwise rather than labelling against the wrong group.
+        stored = meta.get('detection') or {}
+        stored_ops = stored.get('operations') or []
+        if str(stored.get('point_group', '')).lower() \
+                != str(detection.get('point_group', '')).lower():
+            return decline('stored_detection_is_stale_for_this_geometry')
+        if len(stored_ops) != len(ops):
+            return decline('stored_detection_is_stale_for_this_geometry')
+        for stored_op, fresh_op in zip(stored_ops, ops):
+            if list(stored_op.get('permutation', [])) \
+                    != list(fresh_op.get('permutation', [])):
+                return decline('stored_detection_is_stale_for_this_geometry')
+
+        try:
+            labels = self.mol.label_molecular_orbitals()
+        except Exception:
+            return decline('mo_labelling_failed')
+        if not labels or labels.get('status') != 'ok':
+            return decline('mo_labelling_unavailable')
+        try:
+            nalpha = int(np.asarray(self.mol.data['nelec_A']).ravel()[0])
+            nbeta = int(np.asarray(self.mol.data['nelec_B']).ravel()[0])
+            occupied = list(labels['alpha']['labels'][:nalpha])
+            beta_labels = labels.get('beta')
+            if beta_labels:
+                occupied += list(beta_labels['labels'][:nbeta])
+        except Exception:
+            return decline('occupied_labels_unavailable')
+        if not occupied:
+            return decline('no_occupied_orbitals_to_check')
+        if 'mixed' in occupied:
+            return decline('symmetry_broken_electronic_solution')
+
+        # A numerical Hessian of an EXCITED state differentiates that root, so
+        # the root has to respect the operations too -- pure occupied SCF
+        # orbitals say nothing about it. A degenerate or symmetry-mixed excited
+        # state breaks the reconstruction identity exactly as a broken ground
+        # state does, and the result would be reconstructed and symmetrised
+        # without complaint.
+        if int(self.state) > 0:
+            try:
+                states = self.mol.label_excited_states()
+            except Exception:
+                return decline('state_labelling_failed')
+            if not states or states.get('status') != 'ok':
+                return decline('state_labelling_unavailable')
+            state_labels = list(states.get('labels') or [])
+            # [hess] state is 1-based over excited roots: state 1 is the first
+            # entry produced by the labeller.
+            index = int(self.state) - 1
+            if index >= len(state_labels):
+                return decline('requested_state_not_labelled')
+            if str(state_labels[index]).lower() == 'mixed':
+                return decline('symmetry_mixed_excited_state')
+
+        meta['hess_symmetry_unique'] = {
+            'status': 'active',
+            'unique_atoms': [int(a) for a in uniq],
+            'n_operations': len(ops),
+        }
+        return uniq, ops
+
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
         nproc = self.mol.config['hess']['nproc']
@@ -1517,20 +1835,41 @@ class Hessian(Calculator):
         # prepare scratch folder
         os.makedirs(dir_hess, exist_ok=True)
 
-        # shift origin 3N coord with 6N displacement
+        # shift origin 3N coord with 6N displacement -- or, when the
+        # symmetry-unique reduction is opted in, displace one atom per orbit
+        # and reconstruct the remaining Hessian rows as images afterwards.
         ncoord = len(origin_coord)
-        shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
+        uniq, sym_ops = self._symmetry_unique_displacements(origin_coord, dx)
+        if uniq is not None:
+            cols = [3 * a + g for a in uniq for g in range(3)]
+            shift = np.zeros((len(cols), ncoord))
+            shift[np.arange(len(cols)), cols] = dx
+        else:
+            cols = list(range(ncoord))
+            shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
         shifted_coord = np.concatenate((origin_coord + shift, origin_coord - shift), axis=0)
         ndim = len(shifted_coord)
+        nred = len(cols)
 
         # prepare grad calculations
         self.mol.save_data()
         self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
+        # Provenance for the scratch tag -- see _displacement_run_signature.
+        run_signature = _displacement_run_signature(
+            origin_coord, atoms, dx,
+            self.mol._hessian_request_signature(self.state))
         variables_wrapper = [
             {
                 'idx': idx,
+                # Scratch files are keyed by the run signature above plus WHICH
+                # coordinate was displaced and in which direction, never by list
+                # position: a restart whose unique-atom list differs
+                # (symmetry_unique toggled, geometry perturbed) then simply
+                # misses and recomputes instead of silently reading a gradient
+                # for a different displacement -- or a different geometry.
+                'tag': f'{run_signature}c{cols[idx % nred]}{"p" if idx < nred else "m"}',
                 'atoms': atoms,
                 'coord': coord,
                 'dir_hess': dir_hess,
@@ -1573,10 +1912,46 @@ class Hessian(Calculator):
         pool.close()
 
         grads = self.mpi_manager.bcast(grads)
+        # `flags` is appended to only inside the rank-0 guard above, and only
+        # the result array was broadcast. Every other rank therefore saw an
+        # empty list, read no 'failed', took the success branch, and walked on
+        # into the analysis and the next collective -- while rank 0 raised and
+        # unwound past main()'s finalize_mpi(). One rank aborting while the
+        # rest block in a collective is a hang, not a failure. The verdict has
+        # to be broadcast alongside the data it describes.
+        flags = self.mpi_manager.bcast(flags)
         # compute hessian
-        forward = np.array(grads[0:ncoord])
-        backward = np.array(grads[ncoord:])
-        hessian = (forward - backward) / (2 * dx)
+        forward = np.array(grads[0:nred])
+        backward = np.array(grads[nred:])
+        rows = (forward - backward) / (2 * dx)
+
+        if uniq is None:
+            hessian = rows
+        else:
+            # Images: H[P(a), P(c)] = M H[a, c] M^T. matrix_input_frame is the
+            # operation expressed in the frame the job actually runs in; the
+            # abelian operations are involutions, so P[a] = b covers b from a.
+            natom = ncoord // 3
+            hessian = np.zeros((ncoord, ncoord))
+            filled = np.zeros(natom, dtype=bool)
+            for k, a in enumerate(uniq):
+                hessian[3 * a:3 * a + 3, :] = rows[3 * k:3 * k + 3, :]
+                filled[a] = True
+            for op in sym_ops:
+                matrix = np.asarray(
+                    op.get('matrix_input_frame', op['matrix']), dtype=float)
+                perm = np.asarray(op['permutation'], dtype=int)
+                for a in uniq:
+                    b = int(perm[a])
+                    if filled[b]:
+                        continue
+                    for c in range(natom):
+                        hessian[3 * b:3 * b + 3, 3 * perm[c]:3 * perm[c] + 3] = \
+                            matrix @ hessian[3 * a:3 * a + 3, 3 * c:3 * c + 3] \
+                            @ matrix.T
+                    filled[b] = True
+            # Guaranteed by the pre-launch coverage proof.
+            assert filled.all()
 
         # symmetrize hessian
         hessian = (hessian + hessian.T) / 2
@@ -1593,11 +1968,20 @@ def _run_oqp_external(inp, env_overrides=None):
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
     # is run from source without a pip install.
-    openqp_exe = shutil.which('openqp')
-    if openqp_exe:
-        cmd = [openqp_exe, inp, '--silent']
-    else:
-        cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
+    # Prefer the running interpreter, NOT whatever `openqp` is first on PATH.
+    # sys.executable is guaranteed consistent with the parent; PATH is not.
+    # Invoking a venv's openqp by absolute path without putting that venv on
+    # PATH -- exactly what a side-by-side comparison of two builds does -- had
+    # the parent running one OpenQP while every displacement child ran another.
+    # Reproduced: with the venv off PATH the children resolved to a different
+    # install and all 12 displacements died on an option that build did not
+    # have; with the venv first on PATH the same input completed.
+    #
+    # Silent in the ordinary case, because parent and child agree whenever
+    # there is one install -- which is every developer machine and CI. It bites
+    # only when two builds coexist, i.e. precisely when someone is comparing
+    # them and most needs the answer to be trustworthy.
+    cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
@@ -1620,11 +2004,15 @@ def grad_wrapper(key_dict):
     state = key_dict['state']
     restart = key_dict['restart']
 
-    # prepare log files
-    inp = f'{dir_hess}/{project_name}.{idx}.tmp.inp'
-    xyz = f'{dir_hess}/{project_name}.{idx}.tmp.xyz'
-    dat = f'{dir_hess}/{project_name}.{idx}.grad_{state}'
-    log = f'{dir_hess}/{project_name}.{idx}.tmp.log'
+    # prepare log files -- all keyed by the coordinate-identity tag, so the
+    # writer (the child's properties.title below) and the reader (dat) can
+    # never disagree, and a restart with a different displacement list misses
+    # cleanly instead of reading a gradient for a different displacement.
+    tag = key_dict.get('tag', str(idx))
+    inp = f'{dir_hess}/{project_name}.{tag}.tmp.inp'
+    xyz = f'{dir_hess}/{project_name}.{tag}.tmp.xyz'
+    dat = f'{dir_hess}/{project_name}.{tag}.grad_{state}'
+    log = f'{dir_hess}/{project_name}.{tag}.tmp.log'
 
     # attempt to read computed data
     if restart and os.path.exists(dat):
@@ -1632,15 +2020,35 @@ def grad_wrapper(key_dict):
     else:
         status = 'computed'
 
+        # Remove any gradient left over from an earlier run BEFORE launching
+        # the child. The failure detection below is `np.loadtxt(dat)` raising,
+        # so a stale file makes a failed child look like a successful one.
+        # Reproduced on this branch: with a previous run's scratch in place, a
+        # numerical Hessian in which every one of the 18 displacements failed
+        # still exited 0 and printed a full set of frequencies -- assembled
+        # entirely from the old gradients. That is exactly the silent success
+        # the raise added in this PR is meant to stop, and the raise never
+        # fired because nothing reported a failure.
+        #
+        # FileNotFoundError is tolerated rather than pre-checked with exists():
+        # two runs sharing one scratch directory can race between the check and
+        # the unlink, and losing that race must not abort the worker -- an
+        # unhandled raise here reaches the pool and strands the other ranks.
+        try:
+            os.remove(dat)
+        except FileNotFoundError:
+            pass
+
         # modify config
         config['input']['runtype'] = 'grad'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
         config['guess']['continue_geom'] = 'false'
         config['properties']['grad'] = config['hess']['state']
         config['properties']['export'] = 'True'
-        config['properties']['title'] = f'{project_name}.{idx}'
+        config['properties']['title'] = f'{project_name}.{tag}'
         config['hess']['temperature'] = ','.join([str(x) for x in config['hess']['temperature']])
         config['tests']['exception'] = 'false'
 
@@ -1674,8 +2082,16 @@ def grad_wrapper(key_dict):
             dump_log(mol, title='', section='end')
     try:
         grad = np.loadtxt(dat).reshape(-1)
+        # A child that died mid-write leaves a short or non-finite file, which
+        # np.loadtxt either parses into the wrong shape or rejects with
+        # ValueError -- neither of which is FileNotFoundError, so the old
+        # handler let it through as a successful displacement or crashed the
+        # worker. The NAC wrapper already validates like this; the Hessian one
+        # did not.
+        if grad.size != np.asarray(coord).size or not np.all(np.isfinite(grad)):
+            raise ValueError('incomplete numerical-Hessian worker output')
 
-    except FileNotFoundError:
+    except (OSError, ValueError):
         grad = np.zeros_like(coord)
         status = 'failed'
 
@@ -2154,7 +2570,12 @@ class NAC(Calculator):
         nacv, dcv, flags = self.nac_func()
         if 'failed' in flags:
             dump_log(self.mol, title='PyOQP: numerical nac calculations failed')
-            return None
+            # Same reasoning as the numerical Hessian above: a detected failure
+            # that does not reach the exit status is a silent success.
+            nfailed = sum(1 for f in flags if f == 'failed')
+            raise RuntimeError(
+                'numerical NAC: %d of %d displacement calculations failed; '
+                'scratch kept for inspection' % (nfailed, len(flags)))
         else:
             self.mol.nac = nacv
 
@@ -2297,6 +2718,9 @@ class NAC(Calculator):
         pool.close()
 
         dcm = self.mpi_manager.bcast(dcm)
+        # Same rank-0-only `flags` hazard as the numerical Hessian above; this
+        # driver has the identical shape, so it needs the identical broadcast.
+        flags = self.mpi_manager.bcast(flags)
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
@@ -2350,8 +2774,19 @@ def nacme_wrapper(key_dict):
     else:
         status = 'computed'
 
+        # Same reasoning as grad_wrapper: the failure signal is the read below
+        # raising, so a coupling left by an earlier run would let a failed
+        # child report success. The cache marker guards the restart='loaded'
+        # path above, but not this one -- an unmarked or rejected file is still
+        # sitting there and still parses.
+        try:
+            os.remove(dat)
+        except FileNotFoundError:
+            pass
+
         # modify config
         config['input']['runtype'] = 'nacme'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
