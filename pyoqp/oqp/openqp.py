@@ -1282,6 +1282,11 @@ class OpenQP:
         # distinguishing defaults unless this call supplies them.
         opts.setdefault("h0", "fock")
         opts.setdefault("contraction", "uncontracted")
+        # edshft is the QDPT ISA shift, but the CASPT2 resolvent consumes it
+        # too, so a prior .qdpt2(edshft=...) made this nominally default helper
+        # return a shifted result.  Method-defining keys are not the only ones
+        # that leak -- shifts do as well.
+        opts.setdefault("edshft", "0.0")
         for key, value in (("h0", h0), ("ipea_shift", ipea_shift),
                            ("imaginary_shift", imaginary_shift),
                            ("level_shift", level_shift)):
@@ -1307,8 +1312,9 @@ class OpenQP:
         opts.setdefault("h0", "dyall")
         # Same reason as caspt2 above: the documented default of this helper is
         # the UNCONTRACTED form, which a previous strong-contraction call would
-        # otherwise override.
+        # otherwise override.  edshft leaks the same way from a prior qdpt2().
         opts.setdefault("contraction", "uncontracted")
+        opts.setdefault("edshft", "0.0")
         if contraction is not None:
             opts["contraction"] = contraction
         return self._wf_setup(

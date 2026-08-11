@@ -492,8 +492,12 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                 # _Stream.arrays() concatenates while the per-batch lists are
                 # still referenced, so the term arrays are transiently resident
                 # TWICE, and lexsort adds its own index buffer on top.
+                # V and RV are (nstate, nuniq) and are built while the stream
+                # arrays are still live; nuniq <= _total, so bound with _total.
+                _pers = 16 * int(nstate) * int(_total)
                 _bytes = (8 * int(_total) * 5 * 2
                           + 8 * int(_total)
+                          + _pers
                           + _int_bytes * (_copies + 1 if _copies > 1 else 1))
                 if _bytes > _pt2_max_memory * 1024 ** 2:
                     raise ValueError(

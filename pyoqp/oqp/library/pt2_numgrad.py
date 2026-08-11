@@ -187,6 +187,22 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
 
     mpi = MPIManager()
     fanout = bool(getattr(mol, 'usempi', True)) and bool(mpi.use_mpi)
+    # Warm restarts chain each displacement onto the previous one's converged
+    # state, which is only well defined in a single sequence.  Split across task
+    # groups, each group walks a DIFFERENT subset -- with two groups one takes
+    # the + displacements and the other the -, where a serial run alternates
+    # them -- so on a system with more than one SCF basin the gradient depends
+    # on the rank layout.  The closure is worse: ranks from different groups
+    # would enter the collective SCF holding different densities.  Cold mode
+    # restores a common snapshot before every point and is unaffected, so only
+    # warm gives up the fan-out.
+    if fanout and guess_mode == 'warm':
+        fanout = False
+        dump_log(mol, title=(
+            'PyOQP: PT2 numerical gradient: [pt2] grad_guess=warm disables the '
+            'MPI displacement fan-out, because chaining restarts across task '
+            'groups makes the result depend on the rank layout. Use '
+            'grad_guess=cold to fan out across groups.'))
 
     e_plus = np.zeros((ncoord, nstate))
     e_minus = np.zeros((ncoord, nstate))
