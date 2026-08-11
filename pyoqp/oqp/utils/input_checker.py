@@ -3089,6 +3089,25 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                     "outside the run for now."),
         )
 
+    # The reciprocal of the multistate check: a single-state correction takes
+    # exactly one target root, and _reference_roots raises for more -- but only
+    # after the reference SCF has run.  Reject the accepted-but-unrunnable
+    # combination up front.
+    if PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS:
+        _tr_ss = [x for x in _as_list(_get(config, "pt2", "target_roots", []))
+                  if str(x).strip()]
+        if len(_tr_ss) > 1:
+            report.add(
+                "ERROR",
+                "pt2.target_roots",
+                f"{method} is single-state and corrects exactly one root; "
+                f"{len(_tr_ss)} were requested.",
+                value=",".join(str(x) for x in _tr_ss),
+                expected="a single root index",
+                action=("Give one root, or select a multistate method "
+                        "(ms-caspt2, xms-caspt2, mcqdpt2, xmcqdpt2)."),
+            )
+
     # [cas] orbital_source=json fixes the coefficients in the AO basis of ONE
     # geometry.  Every displaced point of a numerical gradient changes the AO
     # overlap, so the same matrix is no longer orthonormal there -- the new

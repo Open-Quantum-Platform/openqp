@@ -1007,15 +1007,20 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     # ~145 MiB per matrix.
     _mem_ms, _mem_ms_label = _pt2_memory(options, settings)
     _one_mat = 8 * int(_ndet_un) * int(_ndet_un)
-    _live_ms = _one_mat * (len(roots) + 3)
+    # Live at the iteration peak: the retained per-root Hf_full, plus Hf_f,
+    # H0_f, denom and Uq, plus the two copies _symmetric_eigh makes (the
+    # symmetrized input and the eigenvector output), plus the input/identity/
+    # result triple of `Hf_full + enuc * eye`.  len(roots)+3 was roughly half.
+    _live_ms = _one_mat * (len(roots) + 8)
     if _live_ms > max(1, int(_mem_ms)) * 1024 ** 2:
         raise ValueError(
             "multi-set CASPT2 dense operators need ~%.2f GiB (%d x %d matrices, "
-            "%d live at once: one per root plus H0 and the shift transient), "
+            "%d live at once: one per root, plus Hf_f/H0_f/denom/Uq, the "
+            "eigensolver copies and the shift transient), "
             "exceeding the %s max_memory budget of %d MiB.  Reduce the basis or "
             "the root count, raise %s max_memory, or use method=xms-caspt2, "
             "which is single-set."
-            % (_live_ms / 1024 ** 3, _ndet_un, _ndet_un, len(roots) + 3,
+            % (_live_ms / 1024 ** 3, _ndet_un, _ndet_un, len(roots) + 8,
                _mem_ms_label, int(_mem_ms), _mem_ms_label))
     if _ndet_un > int(options.max_det):
         raise ValueError(

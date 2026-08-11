@@ -325,7 +325,11 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
         # output arrays are not the whole peak.
         _out_bytes = 8 * int(cap) * (3 + int(nstate))
         _in_bytes = h1e_c.nbytes + eri_c.nbytes + eps_c.nbytes + cvec.nbytes
-        _out_bytes = _out_bytes + _in_bytes
+        # _stream_fortran returns copies of out_e0[:n] and out_v[:n].T while the
+        # full-cap buffers are still alive, so the return itself is part of the
+        # peak: 8*n*(1+nstate), bounded by cap.
+        _ret_bytes = 8 * int(cap) * (1 + int(nstate))
+        _out_bytes = _out_bytes + _in_bytes + _ret_bytes
         _budget = max(1, int(max_memory)) * 1024 ** 2
         if _out_bytes > _budget:
             raise ValueError(

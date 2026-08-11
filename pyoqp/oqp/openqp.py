@@ -1182,6 +1182,14 @@ class OpenQP:
               reference="rhf", **keywords):
         """Use a compact OpenQP CASCI setup (fixed reference orbitals)."""
         self._require_active_space("CASCI", active_electrons, active_orbitals)
+        # CASCI consumes [state_average] too, so a preceding .sa_casscf(...) on
+        # the same builder left its weights and roots in place and this helper
+        # published an averaged objective -- or, with the default nroot=1, was
+        # rejected outright by the stale two-state block.  Same reset _casscf
+        # does; an explicit block passed to THIS call still wins.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
         return self._wf_setup(
             "casci", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,

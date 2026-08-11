@@ -1552,7 +1552,15 @@ def resolve_ci_solve(
     budget_bytes = max_memory * 1024 * 1024
     _apply_work_bytes_cap(max_memory)
     if solver == "auto":
-        solver = "dense" if dense_bytes <= budget_bytes else "davidson"
+        # The Python solver holds the (2*norb)^4 spin tensor whichever branch
+        # runs, so choosing dense on the Hamiltonian alone could pick a path the
+        # later guard then refuses -- auto failing a job that explicit
+        # solver=davidson runs comfortably.  Weigh the combined dense working
+        # set here.  This only ever steers auto TOWARD davidson; it is not a
+        # rejection, so the native decline path is unaffected.
+        _auto_spin = 8 * (2 * int(norb)) ** 4
+        solver = ("dense" if dense_bytes + _auto_spin <= budget_bytes
+                  else "davidson")
     if solver == "dense" and dense_bytes > budget_bytes:
         raise ValueError(
             f"FCI dense Hamiltonian for {ndet} determinants needs "

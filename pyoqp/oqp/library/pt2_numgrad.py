@@ -202,7 +202,14 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     # supposed to rule out.  Restoring this before every displaced evaluation
     # makes the policy true for any guess type (it is a no-op for hcore/huckel,
     # which rebuild from scratch anyway).
-    _mo_start = np.array(mol.data['OQP::VEC_MO_A'], dtype=float, copy=True)
+    _restart_tags = ('OQP::VEC_MO_A', 'OQP::VEC_MO_B', 'OQP::DM_A', 'OQP::DM_B',
+                     'OQP::E_MO_A', 'OQP::E_MO_B')
+    _restart_start = {}
+    for _tag in _restart_tags:
+        try:
+            _restart_start[_tag] = np.array(mol.data[_tag], dtype=float, copy=True)
+        except Exception:
+            pass
     # Whether the displaced-energy loop below is already unwinding.  The
     # restore in `finally` must not mask that failure -- but when nothing is
     # in flight, a failed restore is itself fatal and has to propagate, or
@@ -232,7 +239,12 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
                 x[i] += sign * step
                 mol.update_system(x)
                 if guess_mode != 'warm':
-                    mol.data['OQP::VEC_MO_A'][...] = _mo_start
+                    # Restoring the orbitals alone was not enough: the RHF json
+                    # guess is a no-op, so the SCF actually starts from the
+                    # stored DENSITY, which still carried the previous
+                    # displacement.  Restore every restart tag the SCF reads.
+                    for _tag, _val in _restart_start.items():
+                        mol.data[_tag][...] = _val
                 # The central point runs SinglePoint.energy() with the
                 # configured [scf] init_scf preconvergence stage; forcing it off
                 # here differentiated a different pipeline from the one the
@@ -286,7 +298,8 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
         try:
             mol.update_system(x0)
             if guess_mode != 'warm':
-                mol.data['OQP::VEC_MO_A'][...] = _mo_start
+                for _tag, _val in _restart_start.items():
+                    mol.data[_tag][...] = _val
             # Restore through the configured pipeline too.  Forcing init_scf
             # off here left `mol` holding orbitals and energies from a
             # different pipeline than every other evaluation -- and if the
