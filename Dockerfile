@@ -8,6 +8,16 @@
 # docker/buildenv.Dockerfile.
 FROM openqp/openqp-buildenv:1
 
+ARG OPENQP_VERSION=dev
+ARG OPENQP_REVISION=unknown
+LABEL org.opencontainers.image.title="OpenQP" \
+      org.opencontainers.image.description="Open Quantum Platform research software" \
+      org.opencontainers.image.source="https://github.com/Open-Quantum-Platform/openqp" \
+      org.opencontainers.image.documentation="https://open-quantum-platform.github.io/openqp-docs/" \
+      org.opencontainers.image.version="${OPENQP_VERSION}" \
+      org.opencontainers.image.revision="${OPENQP_REVISION}" \
+      org.opencontainers.image.licenses="LicenseRef-OpenQP-Research-1.0"
+
 # Install Python build/runtime dependencies in a source-independent layer.
 # Changes to pyproject.toml invalidate this layer automatically; source-only
 # PRs then reuse it instead of re-downloading scipy, basis_set_exchange, etc.
@@ -42,6 +52,8 @@ PY
 # pip-installed package locates itself, and pointing it at the source tree
 # would be wrong.
 COPY . /opt/openqp
+COPY LICENSE LICENSING.md SUSTAINABILITY.md THIRD_PARTY_NOTICES.md /usr/share/licenses/openqp/
+COPY licenses/third_party/ /usr/share/licenses/openqp/third_party/
 WORKDIR /opt/openqp
 ENV CC=gcc-14 CXX=g++-14 FC=gfortran-14
 ENV CMAKE_ARGS="-DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals"
