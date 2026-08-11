@@ -48,6 +48,12 @@ jobs:
           ).strip()
           if len(revision) != 40:
               raise SystemExit(f"Checkout revision is not a full SHA: {revision!r}")
+          dirty = subprocess.check_output(
+              ["git", "status", "--porcelain", "--untracked-files=normal"],
+              text=True,
+          ).strip()
+          if dirty:
+              raise SystemExit(f"Checkout is not clean:\n{dirty}")
 
           if project.get("license") != "LicenseRef-OpenQP-Research-1.0":
               raise SystemExit(

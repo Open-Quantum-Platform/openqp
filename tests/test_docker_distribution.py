@@ -58,6 +58,8 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
+        self.assertIn("-DOQP_SOURCE_REVISION=${OPENQP_REVISION}", dockerfile)
+        self.assertIn('OPENQP_EXPECTED_REVISION="${OPENQP_REVISION}"', dockerfile)
         self.assertIn("/opt/openqp-build-wheelhouse", dockerfile)
         self.assertIn("--build-wheelhouse=/opt/openqp-build-wheelhouse", dockerfile)
         self.assertIn("--no-index", dockerfile.split("COPY . /opt/openqp", 1)[0])
@@ -104,6 +106,29 @@ class DockerDistributionTests(unittest.TestCase):
                 self.assertTrue(ELF_STACK.clear_executable_stack(library))
                 self.assertEqual(ELF_STACK.gnu_stack_flags(library.read_bytes()), 0x6)
                 self.assertFalse(ELF_STACK.clear_executable_stack(library))
+
+    def test_elf_stack_normalizer_updates_installed_wheel_record(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            purelib = Path(temporary)
+            library = purelib / "oqp/lib/liboqp.so"
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"normalized-openqp-library")
+            dist_info = purelib / "openqp-1.3.0.dist-info"
+            dist_info.mkdir()
+            record = dist_info / "RECORD"
+            record.write_text(
+                "oqp/lib/liboqp.so,sha256=stale,1\n"
+                "openqp-1.3.0.dist-info/RECORD,,\n",
+                encoding="utf-8",
+            )
+
+            ELF_STACK.update_openqp_record([library], purelib)
+
+            updated = record.read_text(encoding="utf-8")
+            expected_hash, expected_size = ELF_STACK._record_hash(library)
+            self.assertIn(
+                f"oqp/lib/liboqp.so,{expected_hash},{expected_size}\n", updated
+            )
 
     def test_container_smoke_reads_direct_elf_needed_entries(self):
         data = bytearray(0x240)
@@ -320,6 +345,13 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 predicate = {
                     "spdxVersion": "SPDX-2.3",
                     "SPDXID": "SPDXRef-DOCUMENT",
+                    "dataLicense": "CC0-1.0",
+                    "name": "OpenQP container SBOM",
+                    "documentNamespace": "https://openqp.dev/spdx/container",
+                    "creationInfo": {
+                        "created": "2026-08-11T00:00:00Z",
+                        "creators": ["Tool: BuildKit"],
+                    },
                 }
             else:
                 predicate = {
@@ -593,6 +625,13 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     "predicate": {
                         "spdxVersion": "SPDX-2.3",
                         "SPDXID": "SPDXRef-DOCUMENT",
+                        "dataLicense": "CC0-1.0",
+                        "name": "Unrelated image SBOM",
+                        "documentNamespace": "https://openqp.dev/spdx/unrelated",
+                        "creationInfo": {
+                            "created": "2026-08-11T00:00:00Z",
+                            "creators": ["Tool: BuildKit"],
+                        },
                     },
                 },
                 "application/vnd.in-toto+json",
@@ -638,7 +677,20 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                         ),
                         "predicate": {},
                     },
-                    "SPDX predicate has no valid spdxVersion",
+                    "unsupported SPDX document version",
+                ),
+                (
+                    "incomplete-spdx",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[0]["digest"])]
+                        ),
+                        "predicate": {
+                            "spdxVersion": "SPDX-2.3",
+                            "SPDXID": "SPDXRef-DOCUMENT",
+                        },
+                    },
+                    "SPDX predicate lacks required document field",
                 ),
                 (
                     "empty-slsa",

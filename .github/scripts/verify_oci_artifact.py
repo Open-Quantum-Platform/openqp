@@ -12,6 +12,7 @@ from typing import Any
 
 
 SPDX_PREDICATE_TYPES = {"https://spdx.dev/Document"}
+SUPPORTED_SPDX_VERSIONS = {"SPDX-2.2", "SPDX-2.3"}
 SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v0.2",
     "https://slsa.dev/provenance/v1",
@@ -64,10 +65,26 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
 
     if predicate_type in SPDX_PREDICATE_TYPES:
         spdx_version = predicate.get("spdxVersion")
-        if not isinstance(spdx_version, str) or not spdx_version.startswith("SPDX-"):
-            raise ValueError("SPDX predicate has no valid spdxVersion")
+        if spdx_version not in SUPPORTED_SPDX_VERSIONS:
+            raise ValueError(f"unsupported SPDX document version: {spdx_version}")
         if predicate.get("SPDXID") != "SPDXRef-DOCUMENT":
             raise ValueError("SPDX predicate is not an SPDX document")
+        for field in ("dataLicense", "name", "documentNamespace"):
+            if not isinstance(predicate.get(field), str) or not predicate[field]:
+                raise ValueError(f"SPDX predicate lacks required document field: {field}")
+        if predicate["dataLicense"] != "CC0-1.0":
+            raise ValueError("SPDX document dataLicense must be CC0-1.0")
+        creation_info = predicate.get("creationInfo")
+        creators = creation_info.get("creators") if isinstance(creation_info, dict) else None
+        if (
+            not isinstance(creation_info, dict)
+            or not isinstance(creation_info.get("created"), str)
+            or not creation_info["created"]
+            or not isinstance(creators, list)
+            or not creators
+            or not all(isinstance(creator, str) and creator for creator in creators)
+        ):
+            raise ValueError("SPDX predicate lacks valid creationInfo")
     elif predicate_type == "https://slsa.dev/provenance/v0.2":
         builder = predicate.get("builder")
         if (

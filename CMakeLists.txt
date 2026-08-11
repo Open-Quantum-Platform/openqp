@@ -89,12 +89,14 @@ option(OQP_REUSE_EXTERNALS
        ON)
 set(OQP_EXTERNALS_ROOT "" CACHE PATH
     "Optional override for the reusable bundled external dependency cache root.")
+set(OQP_SOURCE_REVISION "" CACHE STRING
+    "Verified 40-character Git revision recorded in packaged build metadata.")
 if(DEFINED OQP_EXTERNAL_ROOT AND NOT OQP_EXTERNALS_ROOT)
     set(OQP_EXTERNALS_ROOT "${OQP_EXTERNAL_ROOT}" CACHE PATH
         "Optional override for the reusable bundled external dependency cache root." FORCE)
     message(STATUS "OQP_EXTERNAL_ROOT is accepted as an alias for OQP_EXTERNALS_ROOT.")
 endif()
-mark_as_advanced(OQP_EXTERNALS_ROOT)
+mark_as_advanced(OQP_EXTERNALS_ROOT OQP_SOURCE_REVISION)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)

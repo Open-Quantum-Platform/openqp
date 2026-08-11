@@ -256,8 +256,9 @@ bits. The proposed companion-repository migration is documented in
 `docs/openqp-dev-buildenv-hardening-plan.md`.
 
 The build produces an OCI archive with an embedded SPDX SBOM and max-mode
-provenance, verifies the OCI labels and attestation subjects locally, and then
-lets the ephemeral runner discard it. The workflow has no registry
+provenance, verifies the OCI layout and authenticated descriptors, validates
+the required SPDX/SLSA predicate bodies and image subjects, and then lets the
+ephemeral runner discard it. The workflow has no registry
 credentials, package-write permission, login, push, release attachment,
 retained image artifact, or exported build cache.
 

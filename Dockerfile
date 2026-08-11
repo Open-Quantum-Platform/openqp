@@ -18,7 +18,7 @@ ARG OPENQP_REVISION=unknown
 ENV CC=gcc-14 \
     CXX=g++-14 \
     FC=gfortran-14 \
-    CMAKE_ARGS="-DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DENABLE_MPI=OFF -DENABLE_DDX=OFF -DENABLE_OPENQP_DFTB=OFF -DOQP_ALLOW_REFERENCE_BLAS=OFF -DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals"
+    CMAKE_ARGS="-DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DENABLE_MPI=OFF -DENABLE_DDX=OFF -DENABLE_OPENQP_DFTB=OFF -DOQP_ALLOW_REFERENCE_BLAS=OFF -DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals -DOQP_SOURCE_REVISION=${OPENQP_REVISION}"
 ARG NINJA_JOBS=
 
 WORKDIR /opt/openqp
@@ -134,7 +134,7 @@ RUN --mount=type=bind,from=builder,source=/opt/openqp-wheelhouse,target=/tmp/whe
 # installed OpenQP ELF headers with a read-only, builder-mounted script; no
 # binary-editing utility is retained in the minimal runtime image.
 RUN --mount=type=bind,from=builder,source=/opt/openqp/.github/scripts/normalize_elf_stack.py,target=/tmp/normalize_elf_stack.py,ro \
-    python /tmp/normalize_elf_stack.py --openqp-package
+    python /tmp/normalize_elf_stack.py --openqp-package --update-record
 
 COPY --from=builder /opt/openqp-runtime/openblas/ /opt/openblas/lib/
 COPY --from=builder /opt/openqp-runtime/lib/ /opt/openqp-runtime/lib/
@@ -149,7 +149,8 @@ COPY licenses/third_party/ /usr/share/licenses/openqp/third_party/
 # exact DFT-D4 load paths and removal tests, corresponding source, shared
 # dependency closure, legal files, and absence of build tools/static archives.
 RUN --mount=type=bind,from=builder,source=/opt/openqp/.github/scripts/container_runtime_smoke.py,target=/tmp/container_runtime_smoke.py,ro \
-    python /tmp/container_runtime_smoke.py
+    OPENQP_EXPECTED_REVISION="${OPENQP_REVISION}" \
+      python /tmp/container_runtime_smoke.py
 
 RUN mkdir -p /work/.cache && chown -R 65532:65532 /work
 WORKDIR /work

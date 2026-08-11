@@ -356,6 +356,7 @@ set(CMAKE_Fortran_FLAGS [=[-O2
 -fopenmp]=])
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
 set(PROJECT_VERSION "1.3.0")
+set(OQP_SOURCE_REVISION "dddddddddddddddddddddddddddddddddddddddd")
 set(ENABLE_OPENMP ON)
 set(BUILD_SHARED_LIBS ON)
 set(LINALG_LIB "OpenBLAS")
@@ -416,7 +417,9 @@ oqp_generate_dftd4_build_info("@OUTPUT@")
     assert info["schema"] == "org.open-quantum-platform.dftd4-build-info"
     assert info["schema_version"] == 1
     assert info["openqp"] == {
-        "version": "1.3.0", "source_revision": None, "source_tree_dirty": None
+        "version": "1.3.0",
+        "source_revision": "d" * 40,
+        "source_tree_dirty": False,
     }
     assert info["build"]["build_type"] == "Release"
     assert info["build"]["build_shared_libs"] is True

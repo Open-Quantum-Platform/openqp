@@ -25,6 +25,11 @@ recorded in separate inventory sections of
 copied system shared libraries are installed under
 `/usr/share/licenses/openqp/runtime-packages/`.
 
+The packaged DFT-D4 build metadata records the exact clean Git revision passed
+by the workflow. If an installed ELF header requires executable-stack
+normalization for the minimal runtime, the corresponding wheel `RECORD` hash
+and size are updated and verified in the same image layer.
+
 The DFT-D4 shared-library stack and its patched complete corresponding source
 are installed by the OpenQP wheel under
 `oqp/share/corresponding-source/dftd4-stack`.  The final-stage test verifies

@@ -415,6 +415,20 @@ def main() -> None:
         or build_info.get("canonical_runtime_names") != expected_runtime_names
     ):
         raise AssertionError("DFT-D4 BUILD-INFO schema/runtime names are invalid")
+    expected_revision = os.environ.get("OPENQP_EXPECTED_REVISION", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
+        raise AssertionError(
+            f"container expected revision is not a full Git SHA: {expected_revision!r}"
+        )
+    openqp_build = build_info.get("openqp", {})
+    if (
+        openqp_build.get("source_revision") != expected_revision
+        or openqp_build.get("source_tree_dirty") is not False
+    ):
+        raise AssertionError(
+            "DFT-D4 BUILD-INFO does not identify the exact clean container source: "
+            f"{openqp_build}"
+        )
     expected_components = {
         "mctc-lib": (
             "0.4.2",
