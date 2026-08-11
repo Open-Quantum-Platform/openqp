@@ -1559,10 +1559,10 @@ def resolve_ci_solve(
         # set here.  This only ever steers auto TOWARD davidson; it is not a
         # rejection, so the native decline path is unaffected.
         _auto_spin = 8 * (2 * int(norb)) ** 4
-        # A dense solve keeps the Hamiltonian while the eigensolver allocates a
-        # second ndet x ndet buffer for the eigenvectors, so the dense working
-        # set is two Hamiltonians plus the spin tensor, not one.
-        solver = ("dense" if 2 * dense_bytes + _auto_spin <= budget_bytes
+        # The Python eigensolver keeps the Hamiltonian while it forms a
+        # symmetric copy and then gives LAPACK a writable copy.  All three
+        # ndet x ndet arrays overlap the resident spin tensor at the peak.
+        solver = ("dense" if 3 * dense_bytes + _auto_spin <= budget_bytes
                   else "davidson")
     if solver == "dense" and 2 * dense_bytes > budget_bytes:
         raise ValueError(
@@ -1685,11 +1685,16 @@ def solve_fci(
     # separately under max_memory=768, while their sum does not.  (50 orbitals
     # also forces this Python fallback, since the native packed-determinant
     # driver caps at 31.)
-    _live_bytes = _spin_bytes + (8 * ndet * ndet if solver == "dense" else 0)
+    # _symmetric_eigh retains the Hamiltonian while forming a symmetric copy
+    # and a writable LAPACK buffer.  Counting only the Hamiltonian allowed a
+    # nominally in-budget dense solve to exceed its ceiling by two full
+    # determinant matrices.
+    _dense_peak_bytes = 3 * 8 * ndet * ndet if solver == "dense" else 0
+    _live_bytes = _spin_bytes + _dense_peak_bytes
     if _live_bytes > budget_bytes:
         _extra = ("" if solver != "dense" else
-                  f" plus the {8 * ndet * ndet / 1024 ** 3:.2f} GiB dense "
-                  f"Hamiltonian held alongside it")
+                  f" plus the {_dense_peak_bytes / 1024 ** 3:.2f} GiB dense "
+                  f"matrix working set held alongside it")
         raise ValueError(
             f"The Python CI solver needs ~{_spin_bytes / 1024 ** 3:.2f} GiB "
             f"for the spin-orbital integral tensor at norb={norb}{_extra} "

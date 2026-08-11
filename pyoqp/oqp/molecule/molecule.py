@@ -2085,7 +2085,8 @@ class Molecule:
         # published, so an API consumer had no way to reach the higher roots.
         # Emitted only when there is more than one, leaving single-state
         # payloads byte-identical.
-        _multi = list(getattr(self, 'energies', None) or [])
+        _energies = getattr(self, 'energies', None)
+        _multi = [] if _energies is None else list(_energies)
         if len(_multi) > 1:
             data['energies'] = [float(e) for e in _multi]
 

@@ -77,6 +77,13 @@ _H4_LINEAR = "\nH 0 0 0\nH 0 0 0.740\nH 0 0 1.480\nH 0 0 2.220"
 _H2 = "\nH 0 0 0\nH 0 0 0.740"
 
 
+def test_pt2_nproc_zero_keeps_the_automatic_sentinel():
+    from oqp.library.caspt2_dyall import _caspt2_options
+
+    assert _caspt2_options({"pt2": {"nproc": "0"}}).nproc == 0
+    assert _caspt2_options({"pt2": {"nproc": "-3"}}).nproc == 0
+
+
 def _caspt2_energy(runner):
     return float(np.asarray(runner.mol.data["OQP::CASPT2_ENERGIES"], dtype=float)[0])
 

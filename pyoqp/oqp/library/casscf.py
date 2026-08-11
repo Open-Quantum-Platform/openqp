@@ -138,7 +138,7 @@ def _as_bool(value, label):
 
 def _casscf_options(config: dict) -> CASSCFOptions:
     raw = config.get("casscf", {}) or {}
-    opt = str(raw.get("optimizer", "newton")).strip().lower()
+    opt = str(raw.get("optimizer", "newton")).strip().lower().replace("_", "-")
     if opt in {"newton", "newton-ah", "augmented-hessian", "microiteration"}:
         opt = "newton"
     elif opt in {"powell"}:

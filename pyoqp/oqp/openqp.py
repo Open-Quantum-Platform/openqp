@@ -1105,8 +1105,10 @@ class OpenQP:
         scf_updates = {}
         if reference is not None:
             scf_updates["type"] = reference
-        if multiplicity is not None:
-            scf_updates["multiplicity"] = multiplicity
+        # Every wavefunction helper describes a complete closed-shell request.
+        # A reused builder may still carry multiplicity=3 from a preceding
+        # triplet helper, so reset it unless this call explicitly says otherwise.
+        scf_updates["multiplicity"] = 1 if multiplicity is None else multiplicity
         scf_updates.update(scf_keywords)
         if scf_updates:
             self.scf(**scf_updates)
@@ -1191,6 +1193,11 @@ class OpenQP:
     def _fci(self, nroot=1, frozen_core=None, runtype=None, basis=None,
             reference="rhf", **keywords):
         """Use a compact OpenQP full-CI setup on an RHF reference."""
+        # FCI does not consume a state-averaged objective.  Disable a block
+        # left by sa_casscf on a reused builder unless this call supplies one.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
         return self._wf_setup(
             "fci", runtype=runtype, basis=basis, reference=reference,
             frozen_core=frozen_core, nroot=nroot, **keywords)
@@ -1288,7 +1295,7 @@ class OpenQP:
             # invisible here, so the helper emitted two CI roots while asking
             # for root slot 2 and failed its own preflight.
             nroot=keywords.pop("nroot", None)
-                  or max([nstate]
+                  or max([int(sa.get("nstate", nstate))]
                          + [int(r) + 1
                             for r in (sa.get("target_roots") or ())]),
             state_average=sa, **keywords)

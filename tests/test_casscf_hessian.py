@@ -355,6 +355,13 @@ def test_hessian_fd_explicit_is_default_path(tmp_path):
     assert "orbital hessian:" not in exp_text
 
 
+def test_newton_ah_underscore_alias_is_normalized_at_runtime():
+    from oqp.library.casscf import _casscf_options
+
+    options = _casscf_options({"casscf": {"optimizer": "newton_ah"}})
+    assert options.optimizer == "newton"
+
+
 def test_unknown_hessian_value_raises(tmp_path):
     if not _backend_available():
         pytest.skip("native OQP backend not built; build liboqp to run CASSCF Hessian tests")

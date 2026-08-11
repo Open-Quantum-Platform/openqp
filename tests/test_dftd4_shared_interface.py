@@ -185,6 +185,8 @@ def test_d4_public_result_uses_the_dispersion_corrected_energy():
     )
 
     assert namespace["get_results"](fake)["energy"] == -10.25
+    fake.energies = np.asarray([-10.25, -9.75])
+    assert namespace["get_results"](fake)["energies"] == [-10.25, -9.75]
     fake.config["input"]["d4"] = False
     assert namespace["get_results"](fake)["energy"] == -10.0
 

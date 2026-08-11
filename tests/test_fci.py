@@ -1528,6 +1528,27 @@ def test_auto_solver_crosses_dense_memory_wall():
         solve_fci(h1e, eri, nelec, ecore=ecore, max_det=5000, max_memory=1, solver="dense")
 
 
+def test_dense_solver_counts_all_live_eigensolver_matrices():
+    _use_real_oqp_package()
+    from oqp.library.fci import solve_fci
+
+    # CAS(4e,12o) has 4356 determinants.  Two dense matrices fit below
+    # 300 MiB, but the Hamiltonian, symmetric copy and writable LAPACK copy do
+    # not; reject before allocating the spin tensor or Hamiltonian.
+    h1e = np.zeros((12, 12), dtype=float)
+    eri = np.zeros((12, 12, 12, 12), dtype=float)
+    with pytest.raises(ValueError, match="matrix working set"):
+        solve_fci(
+            h1e,
+            eri,
+            (2, 2),
+            nroot=600,
+            solver="dense",
+            max_det=5000,
+            max_memory=300,
+        )
+
+
 @pytest.mark.parametrize(
     ("override", "bad_path"),
     [

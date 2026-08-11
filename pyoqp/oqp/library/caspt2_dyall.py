@@ -258,7 +258,10 @@ def _caspt2_options(config: dict) -> CASPT2Options:
                 or 12000,
         engine=engine,
         max_terms=int(raw.get("max_terms", 30_000_000)),
-        nproc=max(1, int(raw.get("nproc", 1))),
+        # Zero is the public "automatic" sentinel used by the direct engine.
+        # Preserve it here; coercing it to one silently serialized every input
+        # that relied on the schema default.
+        nproc=max(0, int(raw.get("nproc", 0))),
         # 0 keeps the [cas] budget, so an input that never mentions
         # [pt2] max_memory behaves exactly as before.
         max_memory=max(0, int(raw.get("max_memory", 0) or 0)),

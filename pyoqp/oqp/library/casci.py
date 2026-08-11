@@ -21,10 +21,12 @@ from oqp.library.fci import (
     active_space_plan,
     apply_active_space,
     _integer_vector,
+    _davidson_subspace_limit,
     _real_array,
     _save_npz_artifact,
     _transform_integrals,
     _unpack_lower_triangle,
+    resolve_ci_solve,
     settings_from_casci_config,
 )
 
@@ -77,6 +79,54 @@ class CASCI(FCI):
         self.settings = settings_from_casci_config(mol.config)
         self._native_dependent_state_trial = None
 
+    def _check_combined_ci_memory(self, nbf, plan):
+        """Guard the native CI peak together with tensors retained by CASCI."""
+        spec = resolve_ci_solve(
+            plan.nact,
+            plan.nelec,
+            ecore=0.0,
+            nroot=self.settings.nroot,
+            max_det=self.settings.max_det,
+            max_memory=self.settings.max_memory,
+            eig_tol=self.settings.eig_tol,
+            integral_cutoff=self.settings.integral_cutoff,
+            solver=self.settings.solver,
+            davidson_maxiter=self.settings.davidson_maxiter,
+            davidson_subspace=self.settings.davidson_subspace,
+            target_spin="any",
+            active_section=self.active_section,
+            ci_section=self.ci_section,
+        )
+        nact = int(plan.nact)
+        ndet = int(spec.ndet)
+        nroot = int(spec.nroot)
+        # The AO ERI record, transformed full-MO ERI, dependent-state copy of
+        # that MO ERI, and its active-ERI copy all stay live across the native
+        # call.  The driver then gathers one more active ERI and expands it to
+        # the (2*nact)^4 spin tensor before entering either eigensolver.
+        resident = 3 * 8 * int(nbf) ** 4 + 8 * nact ** 4
+        integral_work = 8 * nact ** 4 + 8 * (2 * nact) ** 4
+        bookkeeping = 8 * ((2 * nact) ** 2 + nact ** 2)
+        bookkeeping += 24 * ndet + 8 * ndet * nroot
+        if spec.solver == "dense":
+            solver_work = 3 * 8 * ndet ** 2
+        else:
+            effective = (max(spec.davidson_subspace, nroot)
+                         if spec.davidson_subspace else 0)
+            max_subspace = _davidson_subspace_limit(ndet, nroot, effective)
+            solver_work = 8 * ndet * (2 * max_subspace + 4 * nroot)
+        peak = resident + integral_work + bookkeeping + solver_work
+        budget = int(self.settings.max_memory) * 1024 ** 2
+        if peak > budget:
+            raise ValueError(
+                "CASCI combined integral and CI working set needs ~%.2f GiB "
+                "while AO/MO integrals remain resident, exceeding the %s "
+                "max_memory budget of %d MiB. Reduce the basis or active "
+                "space, raise %s max_memory, or use a smaller CI root window."
+                % (peak / 1024 ** 3, self.active_section,
+                   int(self.settings.max_memory), self.active_section)
+            )
+
     def energy(self, ref_energy=None):
         energies = super().energy(ref_energy=ref_energy)
         self._store_native_dependent_state_trial_tensors()
@@ -115,6 +165,7 @@ class CASCI(FCI):
         nelec = (int(self.mol.data["nelec_A"]), int(self.mol.data["nelec_B"]))
         ecore = float(self.mol.mol_energy.nenergy)
         plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        self._check_combined_ci_memory(nbf, plan)
         metadata = dict(plan.metadata)
         metadata["orbital_source"] = source_label
         # The CI solve itself takes the FULL MO integrals and does its own

@@ -1560,6 +1560,35 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         # every averaged root has to be solved for
         self.assertEqual(config["ci"]["nroot"], "3")
 
+    def test_sa_casscf_sizes_ci_from_the_merged_state_average_block(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa_explicit")
+                  .sa_casscf(
+                      active_electrons=2,
+                      active_orbitals=2,
+                      nstate=2,
+                      state_average={"nstate": 3},
+                  )
+                  .to_input_dict())
+        self.assertEqual(config["state_average"]["nstate"], "3")
+        self.assertEqual(config["ci"]["nroot"], "3")
+
+    def test_fci_clears_reused_state_average_and_triplet_state(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h2_reused")
+        job.sa_casscf(active_electrons=2, active_orbitals=2, nstate=2)
+        job.scf(multiplicity=3)
+        config = job.fci().to_input_dict()
+        self.assertEqual(config["state_average"]["enabled"], "false")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
+
+        explicit = job.fci(
+            multiplicity=3,
+            state_average={"enabled": "true"},
+        ).to_input_dict()
+        self.assertEqual(explicit["state_average"]["enabled"], "true")
+        self.assertEqual(explicit["scf"]["multiplicity"], "3")
+
     def test_sa_casscf_explicit_weights_turn_off_equal_weighting(self):
         openqp = load_openqp_module()
         config = (self._job(openqp, "lih_sa_w")

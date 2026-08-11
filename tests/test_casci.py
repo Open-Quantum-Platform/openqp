@@ -130,3 +130,27 @@ def test_casci_without_frozen_core_publishes_no_empty_core_tensor(tmp_path):
     # The non-empty companion tensor is still published.
     active = np.asarray(runner.mol.data["OQP::CASCI_TRIAL_ACTIVE_ORBITALS"], dtype=int)
     assert active.size == 2
+
+
+def test_casci_memory_guard_combines_resident_integrals_and_ci_workspace():
+    from oqp.library.casci import CASCI
+    from oqp.library.fci import ActiveSpacePlan, FCISettings
+
+    driver = CASCI.__new__(CASCI)
+    driver.settings = FCISettings(
+        active_electrons=2,
+        active_orbitals=30,
+        max_det=1000,
+        max_memory=110,
+        nroot=1,
+        solver="davidson",
+    )
+    plan = ActiveSpacePlan(
+        norb=30,
+        active=tuple(range(30)),
+        core=(),
+        nelec=(1, 1),
+        metadata={},
+    )
+    with pytest.raises(ValueError, match="combined integral and CI working set"):
+        driver._check_combined_ci_memory(30, plan)
