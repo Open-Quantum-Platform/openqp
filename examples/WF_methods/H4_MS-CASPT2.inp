@@ -1,0 +1,62 @@
+# RHF/STO-3G/MS-CASPT2 of linear H4, 2 singlet roots, CASCI reference.
+# Builds the multistate effective Hamiltonian over the reference roots and
+# diagonalizes it; the diagonal is the (uncontracted Dyall) single-state CASPT2.
+#
+# NOTE (current scope): the reference orbitals are state-averaged (single-set),
+# so the H_eff diagonal differs from OpenMolcas multi-set MS-CASPT2 (per-state
+# orbitals) by the SA-vs-state-specific orbital choice. High-lying roots can show
+# uncontracted intruder states; use [pt2] imaginary_shift to regularize them.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=ms-caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=2
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+
+[pt2]
+reference=casci
+variant=ms-caspt2
+target_roots=0,1
+nroot=2
+ipea_shift=0.0
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true

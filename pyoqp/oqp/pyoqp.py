@@ -257,6 +257,12 @@ def _openqp_build_label():
         return "OpenQP" + (" v%s" % version if version else "") + " (git HEAD unknown)"
 
 
+# The OMP_NUM_THREADS in force before any Runner touched it.  Captured once so a
+# Runner with an explicit [input] omp_threads cannot change what a later default
+# Runner sees.
+_RUNNER_OMP_BASELINE = [os.environ.get("OMP_NUM_THREADS")]
+
+
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -366,10 +372,27 @@ class Runner:
         # subsequent SCF parallel regions; we also export OMP_NUM_THREADS so the
         # input checker / any later BLAS sizing see a consistent value.
         _omp = self.mol.config.get("input", {}).get("omp_threads", 0)
+        if not (_omp and _omp > 0):
+            # A previous Runner in this process may have set an explicit count,
+            # the environment variable and OMP_THREADS_FROM_ENV.  None of that
+            # was ever undone, so a later default job inherited the earlier
+            # job's thread count and _fci_lib_threads treated the stale value as
+            # an explicit request.  Restore the default policy for this Runner.
+            oqp.OMP_THREADS_FROM_ENV = False
+            if getattr(self, "_omp_default_env", None) is None:
+                type(self)._omp_default_env = os.environ.get("OMP_NUM_THREADS")
+            if _RUNNER_OMP_BASELINE[0] is not None:
+                os.environ["OMP_NUM_THREADS"] = _RUNNER_OMP_BASELINE[0]
+                if oqp.lib.oqp_have_openmp():
+                    oqp.lib.oqp_omp_set_num_threads(int(_RUNNER_OMP_BASELINE[0]))
         if _omp and _omp > 0:
             if oqp.lib.oqp_have_openmp():
                 oqp.lib.oqp_omp_set_num_threads(int(_omp))
                 os.environ["OMP_NUM_THREADS"] = str(int(_omp))
+                # The input asked for this count, so the kernels that take an
+                # explicit thread argument must use it rather than their own
+                # default (see oqp.library.fci._fci_lib_threads).
+                oqp.OMP_THREADS_FROM_ENV = True
             elif not self.mol.silent:
                 print(f"PyOQP WARNING: omp_threads={_omp} requested but this "
                       "OpenQP build has no OpenMP support; running serially.")
@@ -554,7 +577,8 @@ def main():
                         help='run tests from a specified folder or:\n'
                              '  all    - Run the standard suite in examples\n'
                              '           (slow/non-self-contained exclusions apply)\n'
-                             '  other  - Run tests in examples/other')
+                             '  other  - Run tests in examples/other\n'
+                             '  WF_methods - Run curated wavefunction examples')
     parser.add_argument('--input-format', '--input_format', '--test-inputs',
                         dest='test_input_format',
                         choices=('auto', 'inp', 'oqp', 'both'),

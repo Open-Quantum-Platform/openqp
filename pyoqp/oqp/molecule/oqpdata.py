@@ -176,10 +176,30 @@ OQP_CONFIG_SCHEMA = {
         # ignores it with a warning.
         'omp_threads': {'type': int, 'default': '0'},
     },
+    # Optional explicit rational-damping parameters for native DFT-D4.  Empty
+    # strings select the functional's published defaults; if one value is
+    # supplied, input validation requires all six.
+    'd4': {
+        's6': {'type': str, 'default': ''},
+        's8': {'type': str, 'default': ''},
+        's9': {'type': str, 'default': ''},
+        'a1': {'type': str, 'default': ''},
+        'a2': {'type': str, 'default': ''},
+        'alp': {'type': str, 'default': ''},
+    },
     'mp2': {
         'variant': {'type': string, 'default': 'mp2'},
         'same_spin_scale': {'type': float, 'default': '1.0'},
         'opposite_spin_scale': {'type': float, 'default': '1.0'},
+    },
+    'cc': {
+        'maxit': {'type': int, 'default': '50'},
+        'conv': {'type': float, 'default': '1e-7'},
+        'ndiis': {'type': int, 'default': '8'},
+        'nfzc': {'type': int, 'default': '0'},
+        'cholesky': {'type': string, 'default': 'auto'},
+        'cholesky_tol': {'type': float, 'default': '1e-10'},
+        'cholesky_direct': {'type': string, 'default': 'auto'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -304,7 +324,7 @@ OQP_CONFIG_SCHEMA = {
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {
-        'enabled': {'type': string, 'default': 'false'},
+        'enabled': {'type': string, 'default': 'true'},
         'point_group': {'type': string, 'default': 'auto'},
         'subgroup': {'type': string, 'default': 'auto'},
         'label_mo': {'type': bool, 'default': 'True'},
@@ -425,6 +445,135 @@ OQP_CONFIG_SCHEMA = {
     'ekt': {
         'ip': {'type': bool, 'default': 'True'},
         'ea': {'type': bool, 'default': 'False'},
+    },
+    'fci': {
+        'nroot': {'type': int, 'default': '1'},
+        'active_electrons': {'type': int, 'default': '0'},
+        'active_orbitals': {'type': int, 'default': '0'},
+        'frozen_core': {'type': int, 'default': '0'},
+        'max_det': {'type': int, 'default': '5000'},
+        'max_memory': {'type': int, 'default': '2048'},
+        'eig_tol': {'type': float, 'default': '1.0e-10'},
+        'integral_backend': {'type': string, 'default': 'native'},
+        'integral_cutoff': {'type': float, 'default': '5.0e-11'},
+        'solver': {'type': string, 'default': 'auto'},
+        'davidson_maxiter': {'type': int, 'default': '100'},
+        'davidson_subspace': {'type': int, 'default': '0'},
+        'print_ci_vectors': {'type': bool, 'default': 'False'},
+        'ci_print_threshold': {'type': float, 'default': '5.0e-2'},
+        'save_ci_vectors': {'type': bool, 'default': 'False'},
+        'save_rdm': {'type': bool, 'default': 'False'},
+        'target_spin': {'type': string, 'default': 'any'},
+    },
+    'cas': {
+        'active_electrons': {'type': int, 'default': '0'},
+        'active_orbitals': {'type': int, 'default': '0'},
+        'frozen_core': {'type': int, 'default': '0'},
+        'active_orbital_indices': {'type': iarray, 'default': ''},
+        'core_orbital_indices': {'type': iarray, 'default': ''},
+        'orbital_source': {'type': string, 'default': 'rhf'},
+        'orbital_file': {'type': str, 'default': ''},
+        'localize': {'type': string, 'default': 'none'},
+        'sort_orbitals': {'type': string, 'default': 'energy'},
+        'max_det': {'type': int, 'default': '5000'},
+        'max_memory': {'type': int, 'default': '2048'},
+    },
+    'ci': {
+        'nroot': {'type': int, 'default': '1'},
+        'solver': {'type': string, 'default': 'auto'},
+        'eig_tol': {'type': float, 'default': '1.0e-10'},
+        'davidson_maxiter': {'type': int, 'default': '100'},
+        'davidson_subspace': {'type': int, 'default': '0'},
+        'integral_backend': {'type': string, 'default': 'native'},
+        'integral_cutoff': {'type': float, 'default': '5.0e-11'},
+        'spin_adapted': {'type': bool, 'default': 'False'},
+        'target_spin': {'type': string, 'default': 'any'},
+        'root_tracking': {'type': string, 'default': 'energy'},
+        'print_ci_vectors': {'type': bool, 'default': 'False'},
+        'ci_print_threshold': {'type': float, 'default': '5.0e-2'},
+        'save_ci_vectors': {'type': bool, 'default': 'False'},
+        'save_rdm': {'type': bool, 'default': 'False'},
+    },
+    'casscf': {
+        'max_macro_iterations': {'type': int, 'default': '20'},
+        'root': {'type': int, 'default': '0'},
+        # orbital-converger framework (casscf_convergers.py):
+        # twophase (default) | ah/trah | diis | auto
+        'converger': {'type': string, 'default': 'trah'},
+        # orbital-Hessian builder for the Newton/AH steps (casscf_hessian.py):
+        # fd (default, finite-difference) | analytic (exact, ~1 CI solve/iter)
+        'hessian': {'type': string, 'default': 'fd'},
+        'ah_start_trust_radius': {'type': float, 'default': '0.2'},
+        'ah_max_trust_radius': {'type': float, 'default': '0.0'},  # <=0: auto
+        'ah_min_trust_radius': {'type': float, 'default': '1.0e-6'},
+        'ah_max_micro': {'type': int, 'default': '32'},
+        'ah_max_rejects': {'type': int, 'default': '6'},
+        'ah_saddle_curv_tol': {'type': float, 'default': '2.5e-2'},
+        'ah_saddle_egain_tol': {'type': float, 'default': '1.0e-3'},
+        'diis_space': {'type': int, 'default': '8'},
+        'diis_start': {'type': int, 'default': '2'},
+        'auto_stagnation': {'type': int, 'default': '3'},
+        'gradient_norm_tol': {'type': float, 'default': '1.0e-6'},
+        'energy_decrease_tol': {'type': float, 'default': '1.0e-10'},
+        'step_norm_tol': {'type': float, 'default': '1.0e-8'},
+        'max_rotation_norm': {'type': float, 'default': '2.0e-1'},
+        'optimizer': {'type': string, 'default': 'newton'},
+        'level_shift': {'type': float, 'default': '1.0e-3'},
+        'canonicalize': {'type': bool, 'default': 'True'},
+        'max_function_evaluations': {'type': int, 'default': '0'},
+        'diagnostic_report': {'type': bool, 'default': 'False'},
+        'diagnostic_report_file': {'type': str, 'default': ''},
+        'diagnostic_root': {'type': int, 'default': '0'},
+        'diagnostic_max_iterations': {'type': int, 'default': '1'},
+        'diagnostic_gradient_norm_tol': {'type': float, 'default': '1.0e-8'},
+        'diagnostic_max_rotation_norm': {'type': float, 'default': '5.0e-2'},
+        'diagnostic_benchmark_reference_file': {'type': str, 'default': ''},
+        'diagnostic_benchmark_tolerance': {'type': float, 'default': '1.0e-5'},
+        'diagnostic_benchmark_required': {'type': bool, 'default': 'False'},
+    },
+    'state_average': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'weights': {'type': farray, 'default': '1.0'},
+        'nstate': {'type': int, 'default': '0'},
+        'target_roots': {'type': iarray, 'default': ''},
+        'equal_weights': {'type': bool, 'default': 'True'},
+        'spin_blocks': {'type': string, 'default': 'diagnostic'},
+        'root_tracking': {'type': string, 'default': 'overlap'},
+    },
+    'pt2': {
+        'variant': {'type': string, 'default': 'auto'},
+        'reference': {'type': string, 'default': 'casscf'},
+        'h0': {'type': string, 'default': 'fock'},
+        'contraction': {'type': string, 'default': 'uncontracted'},
+        'frozen': {'type': string, 'default': 'auto'},
+        'multistate': {'type': string, 'default': 'auto'},
+        'xms': {'type': bool, 'default': 'False'},
+        'ipea_shift': {'type': float, 'default': '0.0'},
+        'imaginary_shift': {'type': float, 'default': '0.0'},
+        'level_shift': {'type': float, 'default': '0.0'},
+        'edshft': {'type': float, 'default': '0.0'},
+        'engine': {'type': string, 'default': 'auto'},
+        'max_terms': {'type': int, 'default': '30000000'},
+        'nproc': {'type': int, 'default': '0'},
+        # numerical-gradient controls (pt2_numgrad.py)
+        'grad_step': {'type': float, 'default': '1.0e-3'},
+        'grad_guess': {'type': string, 'default': 'cold'},
+        'grad_gap_warn': {'type': float, 'default': '1.0e-5'},
+        'grad_ranks_per_group': {'type': int, 'default': '0'},
+        'denominator_cutoff': {'type': float, 'default': '1.0e-10'},
+        'intruder_threshold': {'type': float, 'default': '1.0e-6'},
+        'nroot': {'type': int, 'default': '0'},
+        'target_roots': {'type': iarray, 'default': ''},
+        'max_memory': {'type': int, 'default': '2048'},
+        'semi_canonical': {'type': bool, 'default': 'True'},
+        'save_amplitudes': {'type': bool, 'default': 'False'},
+        'print_amplitudes': {'type': bool, 'default': 'False'},
+        'amplitude_threshold': {'type': float, 'default': '1.0e-2'},
+        'reference_report': {'type': bool, 'default': 'False'},
+        'reference_report_file': {'type': str, 'default': ''},
+        'benchmark_reference_file': {'type': str, 'default': ''},
+        'benchmark_tolerance': {'type': float, 'default': '1.0e-4'},
+        'benchmark_required': {'type': bool, 'default': 'False'},
     },
     'properties': {
         # Opt-in: properties are computed (and regression-tested) only when
@@ -563,6 +712,7 @@ OQP_CONFIG_SCHEMA = {
         'restart': {'type': bool, 'default': 'False'},
         'temperature': {'type': farray, 'default': '298.15'},
         'clean': {'type': bool, 'default': 'False'},
+        'symmetry_unique': {'type': bool, 'default': 'False'},
     },
     'nac': {
         'type': {'type': string, 'default': 'numerical'},
@@ -656,13 +806,31 @@ OQP_CONFIG_SCHEMA = {
 TA_DIMENSIONS_LENGTH = 12
 
 
+class _TagArrayView(np.ndarray):
+    """View into tagarray-owned memory that keeps the owning :class:`OQPData`
+    handle alive.
+
+    ``OQPData.__getitem__`` returns zero-copy views into Fortran-side tagarray
+    storage (callers rely on this for in-place updates such as
+    ``mol.data["OQP::VEC_MO_A"][...] = ...``).  The handle is freed by
+    ``ffi.gc(..., oqp_clean)`` when the ``OQPData`` is garbage-collected, so a
+    view read from a *temporary* Molecule (``Runner(...).mol.data[key]``)
+    previously outlived its storage and read freed memory -- the intermittent
+    "uninitialized readback" artifact (denormal garbage such as 1e-323) seen in
+    multistate CASPT2 tests.  Holding the owner on the returned array (and, via
+    the ndarray base chain, on any view/slice/asarray of it) pins the handle
+    for as long as the data is reachable."""
+    _oqp_owner = None
+
+
 class OQPData:
     """Wrapper for OQP data class"""
 
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
-    _methods = ('hf', 'tdhf', 'mp2')
+    _methods = ('hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
+                'fci', 'casci', 'casscf')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
@@ -686,6 +854,15 @@ class OQPData:
         "mp2": {
             "same_spin_scale": "set_mp2_same_spin_scale",
             "opposite_spin_scale": "set_mp2_opposite_spin_scale",
+        },
+        "cc": {
+            "maxit": "set_cc_maxit",
+            "conv": "set_cc_conv",
+            "ndiis": "set_cc_ndiis",
+            "nfzc": "set_cc_nfzc",
+            "cholesky": "set_cc_cholesky",
+            "cholesky_tol": "set_cc_cholesky_tol",
+            "cholesky_direct": "set_cc_cholesky_direct",
         },
         "scf": {
             "type": "set_scf_type",
@@ -850,14 +1027,18 @@ class OQPData:
                 if data_type == np.dtype('S1'):
                     return val.tobytes().decode()
 
-            val = np.frombuffer(
-                ffi.buffer(data_ptr[0],
-                           elem_size * data_size),
-                dtype=data_type,
-            ).reshape(shape)
-
+            buf = ffi.buffer(data_ptr[0], elem_size * data_size)
             if data_type == np.dtype('S1'):
-                return val.tobytes().decode()
+                return np.frombuffer(buf, dtype=data_type).reshape(shape) \
+                         .tobytes().decode()
+            # Zero-copy view pinned to the handle.  The subclass is constructed
+            # DIRECTLY over the buffer so that it is the ultimate ndarray base:
+            # numpy collapses .base of any derived view/slice/asarray to this
+            # object (not past it, since its own base is the non-ndarray cffi
+            # buffer), so _oqp_owner keeps the handle alive for every view.
+            val = np.ndarray.__new__(_TagArrayView, tuple(int(s) for s in shape),
+                                     dtype=data_type, buffer=buf)
+            val._oqp_owner = self
             return val
 
         raise AttributeError(f"Key `{key}` not found in QOP data")
@@ -1356,6 +1537,65 @@ class OQPData:
         """Set standalone MP2 opposite-spin scale."""
         self._data.dft.MP2OS_Scale = scale
 
+    def set_cc_maxit(self, maxit):
+        """Set the maximum number of CCSD iterations."""
+        self._data.control.cc_maxit = int(maxit)
+
+    def set_cc_conv(self, conv):
+        """Set the CCSD amplitude/energy convergence threshold."""
+        self._data.control.cc_conv = float(conv)
+
+    def set_cc_ndiis(self, ndiis):
+        """Set the CCSD DIIS subspace size (0 disables DIIS)."""
+        self._data.control.cc_ndiis = int(ndiis)
+
+    def set_cc_nfzc(self, nfzc):
+        """Set the number of frozen core orbitals excluded from CC."""
+        self._data.control.cc_nfzc = int(nfzc)
+
+    _cc_cholesky_modes = {"auto": 2, "true": 1, "false": 0}
+
+    def set_cc_cholesky(self, mode):
+        """Select Cholesky factorisation of the ladder integrals: auto, true, false.
+
+        auto takes it only when the explicit v^4 ladder array would not fit.
+        Rebuilding the ladder integrals from the vectors costs nchol/no^2 times
+        the ladder contraction itself, so for the small occupied spaces where
+        v^4 fits comfortably it is the slower route by a wide margin -- as with
+        cholesky_direct, memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key in ("1", "yes", "on"):
+            key = "true"
+        elif key in ("0", "no", "off"):
+            key = "false"
+        if key not in OQPData._cc_cholesky_modes:
+            raise ValueError(
+                "[cc] cholesky must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky = OQPData._cc_cholesky_modes[key]
+
+    def set_cc_cholesky_tol(self, tol):
+        """Set the Cholesky truncation threshold."""
+        self._data.control.cc_cholesky_tol = float(tol)
+
+    _cc_direct_modes = {"auto": 0, "true": 1, "false": 2}
+
+    def set_cc_cholesky_direct(self, mode):
+        """Select the integral-direct factorisation: auto, true, or false.
+
+        auto takes it only when the packed AO store would not fit -- it is
+        slower wherever both fit, so memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key not in OQPData._cc_direct_modes:
+            raise ValueError(
+                "[cc] cholesky_direct must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky_direct = OQPData._cc_direct_modes[key]
+
+    def set_cc_triples(self, triples):
+        """Enable/disable the perturbative (T) correction."""
+        self._data.control.cc_triples = 1 if triples else 0
+
     def set_dftgrid_rad_type(self, radtype):
         """Set radial grid type in DFT"""
         self._data.dft.rad_grid_type = OQPData._rad_grid_types[radtype]
@@ -1506,9 +1746,24 @@ class OQPData:
             alpha = np.frombuffer(ffi.buffer(pex[0], ffi.sizeof('double') * nprim))
             coef = np.frombuffer(ffi.buffer(pcc[0], ffi.sizeof('double') * nprim))
 
+            # Per-shell "stored as spherical harmonics" flag. This cannot be
+            # derived from angs/nbf: the Cartesian and spherical sizes agree
+            # for l <= 1, so the AO total alone cannot say whether s and p are
+            # pure -- and in OpenQP they never are, even in a spherical basis.
+            # The library answers that question directly; anything else is a
+            # guess that fails silently.
+            pspher = ffi.new('int64_t **')
+            pnsh_s = ffi.new('int64_t *')
+            spherical = None
+            if lib.oqp_get_basis_spherical(self._data, pnsh_s, pspher) == 0:
+                spherical = np.copy(np.frombuffer(
+                    ffi.buffer(pspher[0], ffi.sizeof('int64_t') * pnsh_s[0]),
+                    dtype=np.int64))
+
             basis = {
                 'centers': np.copy(centers) - 1,  # make zero-based indexing of atoms
                 'angs': np.copy(angs),
+                'spherical': spherical,
                 'ncontr': np.copy(ncontr),
                 'alpha': np.copy(alpha),
                 'coef': np.copy(coef),

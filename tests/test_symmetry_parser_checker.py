@@ -40,7 +40,13 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
         self.assertIn("'symmetry': {", text)
-        self.assertIn("'enabled': {'type': string, 'default': 'false'}", text)
+        # Detection and labelling are on by default: they only annotate
+        # (point group, MO/state/mode irreps) and are what the MRSF Davidson
+        # guess needs to cover every symmetry block.  The two flags that
+        # actually change the computation -- integral reduction, which also
+        # reorients the molecule, and the experimental response projection --
+        # remain off, which is what "safe defaults" means here.
+        self.assertIn("'enabled': {'type': string, 'default': 'true'}", text)
         self.assertIn("'point_group': {'type': string, 'default': 'auto'}", text)
         self.assertIn("'subgroup': {'type': string, 'default': 'auto'}", text)
         self.assertIn("'label_mo': {'type': bool, 'default': 'True'}", text)

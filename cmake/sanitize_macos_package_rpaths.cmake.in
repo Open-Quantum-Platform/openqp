@@ -1,0 +1,101 @@
+# Final macOS package-tree RPATH normalization.
+#
+# GNU's Darwin linker can inject LC_RPATH entries that CMake does not model.
+# When @loader_path is already present, CMake's generated install_name_tool
+# command may fail while trying to add it again; because all edits are issued
+# in one command, that also cancels the preceding cache-path deletions.  Apply
+# each deletion separately, then require an exclusively loader-relative result.
+
+if(NOT APPLE)
+  return()
+endif()
+
+find_program(_OQP_OTOOL NAMES otool REQUIRED)
+find_program(_OQP_INSTALL_NAME_TOOL NAMES install_name_tool REQUIRED)
+
+set(_oqp_package_libdir
+    "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_LIBDIR@")
+set(_oqp_package_libraries
+    "@CMAKE_SHARED_LIBRARY_PREFIX@oqp@CMAKE_SHARED_LIBRARY_SUFFIX@"
+    "@DFTD4_MCTC_RUNTIME_NAME@"
+    "@DFTD4_MULTICHARGE_RUNTIME_NAME@"
+    "@DFTD4_DFTD4_RUNTIME_NAME@")
+
+function(_oqp_read_macos_rpaths output_var library)
+  execute_process(
+    COMMAND "${_OQP_OTOOL}" -l "${library}"
+    RESULT_VARIABLE _status
+    OUTPUT_VARIABLE _metadata
+    ERROR_VARIABLE _error)
+  if(NOT _status EQUAL 0)
+    message(FATAL_ERROR "Could not inspect ${library}: ${_error}")
+  endif()
+  string(REGEX MATCHALL
+    "[ \t]+path[ \t]+[^ \t\r\n]+[ \t]+\\(offset[ \t]+[0-9]+\\)"
+    _matches "${_metadata}")
+  set(_rpaths "")
+  foreach(_match IN LISTS _matches)
+    string(REGEX REPLACE
+      "^[ \t]+path[ \t]+([^ \t\r\n]+)[ \t]+\\(offset[ \t]+[0-9]+\\)$"
+      "\\1" _rpath "${_match}")
+    list(APPEND _rpaths "${_rpath}")
+  endforeach()
+  set(${output_var} "${_rpaths}" PARENT_SCOPE)
+endfunction()
+
+foreach(_library_name IN LISTS _oqp_package_libraries)
+  set(_library "${_oqp_package_libdir}/${_library_name}")
+  if(NOT EXISTS "${_library}" OR IS_SYMLINK "${_library}")
+    message(FATAL_ERROR
+      "Expected regular packaged shared library is missing: ${_library}")
+  endif()
+
+  _oqp_read_macos_rpaths(_rpaths "${_library}")
+  foreach(_rpath IN LISTS _rpaths)
+    if(NOT _rpath STREQUAL "@loader_path"
+       AND NOT _rpath MATCHES "^@loader_path/")
+      execute_process(
+        COMMAND "${_OQP_INSTALL_NAME_TOOL}" -delete_rpath
+                "${_rpath}" "${_library}"
+        RESULT_VARIABLE _delete_status
+        OUTPUT_VARIABLE _delete_output
+        ERROR_VARIABLE _delete_error)
+      if(NOT _delete_status EQUAL 0)
+        message(FATAL_ERROR
+          "Could not delete nonlocal RPATH '${_rpath}' from ${_library}: "
+          "${_delete_output}${_delete_error}")
+      endif()
+    endif()
+  endforeach()
+
+  _oqp_read_macos_rpaths(_rpaths "${_library}")
+  list(FIND _rpaths "@loader_path" _loader_path_index)
+  if(_loader_path_index EQUAL -1)
+    execute_process(
+      COMMAND "${_OQP_INSTALL_NAME_TOOL}" -add_rpath
+              "@loader_path" "${_library}"
+      RESULT_VARIABLE _add_status
+      OUTPUT_VARIABLE _add_output
+      ERROR_VARIABLE _add_error)
+    if(NOT _add_status EQUAL 0)
+      message(FATAL_ERROR
+        "Could not add @loader_path to ${_library}: "
+        "${_add_output}${_add_error}")
+    endif()
+  endif()
+
+  _oqp_read_macos_rpaths(_final_rpaths "${_library}")
+  if(NOT _final_rpaths)
+    message(FATAL_ERROR "Packaged library has no RPATH: ${_library}")
+  endif()
+  foreach(_rpath IN LISTS _final_rpaths)
+    if(NOT _rpath STREQUAL "@loader_path"
+       AND NOT _rpath MATCHES "^@loader_path/")
+      message(FATAL_ERROR
+        "Nonlocal RPATH survived package normalization: ${_library}: ${_rpath}")
+    endif()
+  endforeach()
+endforeach()
+
+message(STATUS
+  "Normalized packaged macOS RPATHs to @loader_path under ${_oqp_package_libdir}")

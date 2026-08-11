@@ -90,7 +90,7 @@ jobs:
             # SKIPPED. ddX is still built from source; the bundled-externals cache
             # above (keyed on external/CMakeLists.txt) pays that cost once.
             #
-            # External deps (libxc, nlopt, ...) are fetched via ExternalProject and
+            # External deps (libxc, libecpint, ...) are fetched via ExternalProject and
             # the upstream hosts intermittently return HTTP 504. The bundled-
             # externals cache persists across retries, so a re-run only re-fetches
             # whatever failed.
@@ -180,6 +180,10 @@ jobs:
          # MPI leg would re-run identical assertions against the same code.
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
+            # rather than skip, if the extension or its C ABI symbols are absent.
+            OQP_REQUIRE_NATIVE_TESTS: "1"
            run: |
             # --forked is not optional here: 39 test files mutate sys.modules,
             # and tests/test_analytic_hessian.py replaces the whole `oqp`

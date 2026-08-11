@@ -16,6 +16,9 @@ module mp2_lib
 
   private
   public :: mp2_correlation
+  !> Reused by the open-shell coupled-cluster path, which needs the same
+  !> semicanonical basis before its denominators are defined.
+  public :: semicanonicalize
 
   !> Default guard on the number of per-MO-pair Coulomb builds the correlation
   !> assembly performs (nocc*nvir over both spins); overridable at run time via
@@ -346,7 +349,23 @@ contains
 
 !###############################################################################
 
-  subroutine semicanonicalize(nbf, nocc, cmo, fock_packed, cmo_sc, e_sc)
+!> Rotate the occupied and virtual blocks to the semicanonical basis, in which
+!> the Fock matrix is diagonal within each of them.
+!>
+!> @param[in] nfzc  frozen core orbitals, excluded from the occupied rotation.
+!>                  Optional, default 0 (rotate the whole occupied space).
+!>
+!> A frozen core has to be taken out BEFORE the rotation, not after it.  The
+!> occupied-occupied rotation mixes core with valence, so dropping the first
+!> nfzc columns of an already-rotated set discards a different subspace than
+!> the intended core -- and, since alpha and beta are rotated separately, an
+!> ROHF reference ends up freezing a different spatial orbital in each spin.
+!> Restricting the rotation to the active window keeps the correlated space
+!> equal to the span of the reference orbitals nfzc+1..nbf, which is what
+!> every other code means by frozen-core CC.  The correlation energy is
+!> invariant to the choice of basis *within* that space, so the active-window
+!> rotation is free to make the denominators well defined.
+  subroutine semicanonicalize(nbf, nocc, cmo, fock_packed, cmo_sc, e_sc, nfzc)
 
     use mathlib, only: unpack_matrix
     use eigen, only: diag_symm_full
@@ -357,9 +376,14 @@ contains
     real(kind=dp), intent(in) :: fock_packed(:)
     real(kind=dp), intent(out) :: cmo_sc(nbf,nbf)
     real(kind=dp), intent(out) :: e_sc(nbf)
+    integer, intent(in), optional :: nfzc
 
     real(kind=dp), allocatable :: fao(:,:), fmo(:,:), scr(:,:), blk(:,:), eval(:)
-    integer :: nvir, ok
+    integer :: nvir, ok, nfz, nocc_act, i
+
+    nfz = 0
+    if (present(nfzc)) nfz = max(0, min(nfzc, nocc))
+    nocc_act = nocc - nfz
 
     nvir = nbf - nocc
     allocate(fao(nbf,nbf), fmo(nbf,nbf), scr(nbf,nbf), eval(nbf), source=0.0_dp, stat=ok)
@@ -373,16 +397,23 @@ contains
     cmo_sc = cmo
     e_sc = 0.0_dp
 
-    ! --- occupied-occupied block ---
-    if (nocc > 0) then
-      allocate(blk(nocc,nocc), source=0.0_dp, stat=ok)
+    ! Frozen core keeps its reference orbitals; report their diagonal Fock
+    ! elements so e_sc is meaningful over the whole range even though the
+    ! correlated methods never read this part.
+    do i = 1, nfz
+      e_sc(i) = fmo(i,i)
+    end do
+
+    ! --- occupied-occupied block, over the correlated window only ---
+    if (nocc_act > 0) then
+      allocate(blk(nocc_act,nocc_act), source=0.0_dp, stat=ok)
       if (ok /= 0) call show_message('mp2: occ block alloc failed', with_abort)
-      blk = fmo(1:nocc,1:nocc)
-      call diag_symm_full(1, nocc, blk, nocc, eval(1:nocc))
+      blk = fmo(nfz+1:nocc, nfz+1:nocc)
+      call diag_symm_full(1, nocc_act, blk, nocc_act, eval(1:nocc_act))
       ! blk now holds eigenvectors (columns); rotate occupied MOs.
-      call dgemm('n','n', nbf, nocc, nocc, 1.0_dp, cmo(:,1:nocc), nbf, &
-                 blk, nocc, 0.0_dp, cmo_sc(:,1:nocc), nbf)
-      e_sc(1:nocc) = eval(1:nocc)
+      call dgemm('n','n', nbf, nocc_act, nocc_act, 1.0_dp, cmo(:,nfz+1:nocc), nbf, &
+                 blk, nocc_act, 0.0_dp, cmo_sc(:,nfz+1:nocc), nbf)
+      e_sc(nfz+1:nocc) = eval(1:nocc_act)
       deallocate(blk)
     end if
 

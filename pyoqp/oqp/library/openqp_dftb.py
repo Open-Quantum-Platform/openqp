@@ -1510,13 +1510,15 @@ class OpenQPDFTBAdapter:
         # liboqp that the Python package already resolved. Self-locating installs
         # and source-tree runs do not set OPENQP_ROOT, so check the RESOLVED
         # runtime root's lib dir before the OPENQP_ROOT env fallback and PATH.
+        from oqp.runtime import library_directories
+
         lib_dirs = []
         resolved_root = getattr(oqp, "oqp_root", "")
         if resolved_root:
-            lib_dirs.append(Path(resolved_root) / "lib")
+            lib_dirs.extend(library_directories(resolved_root))
         oqp_root = os.environ.get("OPENQP_ROOT", "")
         if oqp_root:
-            lib_dirs.append(Path(oqp_root) / "lib")
+            lib_dirs.extend(library_directories(oqp_root))
         for name in self.LIB_BASENAMES:
             for lib_dir in lib_dirs:
                 staged = lib_dir / name
