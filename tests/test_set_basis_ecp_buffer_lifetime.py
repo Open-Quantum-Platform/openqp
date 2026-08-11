@@ -43,9 +43,9 @@ def test_numpy_requirement_no_longer_caps_modern_numpy():
     legacy_setup = (ROOT / "pyoqp" / "setup.py").read_text()
 
     assert '"numpy>=1.20.0"' in pyproject
-    assert "'numpy>=1.20.0'" in legacy_setup
     assert "numpy>=1.20.0,<2.2" not in pyproject
-    assert "numpy>=1.20.0,<2.2" not in legacy_setup
+    assert "pyoqp/setup.py is retired" in legacy_setup
+    assert "setup(" not in legacy_setup
 
 
 def test_append_ecp_sees_live_no_ecp_zn_buffer(monkeypatch):

@@ -15,6 +15,16 @@ The current Research License is not GPL and is not an open-source license. A
 company cannot rely on access to the public source repository as permission to
 use the current version without a commercial license.
 
+## Community and sustainable development
+
+The research/commercial model is intended to keep qualifying academic research
+available without a license fee while asking organizations that receive
+commercial value from OpenQP to support its continued scientific validation,
+engineering, documentation, and maintenance. The public rationale and project
+commitments are described in
+[SUSTAINABILITY.md](SUSTAINABILITY.md). That statement explains the model but
+does not replace or expand the legal permissions in `LICENSE`.
+
 ## Commercial terms
 
 Commercial scope, fees, support, warranties, indemnities, and other negotiated
@@ -25,10 +35,15 @@ For inquiries, contact Cheol Ho Choi at <cheolho.choi@gmail.com>.
 
 ## Earlier GPL versions
 
-Copies of earlier OpenQP versions that recipients validly obtained under GPLv3
-remain governed by GPLv3. Those historical rights cannot be retroactively
-withdrawn. They do not provide a right to receive or use later OpenQP versions,
-updates, services, or separately licensed material.
+OpenQP v1.3.0 is the first release under the OpenQP Research License 1.0 and the
+separate commercial-licensing model described above. The v1.2.1 release tag and
+earlier release tags remain governed by the GPLv3 terms that accompanied those
+copies.
+
+Those historical rights cannot be retroactively withdrawn. They do not provide
+a right to receive or use later OpenQP versions, updates, services, or
+separately licensed material. Untagged source snapshots are governed by the
+license file distributed with the particular snapshot.
 
 ## Ownership and third-party code
 
