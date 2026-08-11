@@ -356,7 +356,8 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             else:
                 predicate = {
                     "buildDefinition": {
-                        "buildType": "https://mobyproject.org/buildkit@v1"
+                        "buildType": "https://mobyproject.org/buildkit@v1",
+                        "externalParameters": {},
                     },
                     "runDetails": {
                         "builder": {"id": "https://mobyproject.org/buildkit"}
@@ -415,6 +416,43 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 self._write_oci(invalid_layout, index, blobs, layout_version)
                 with self.assertRaisesRegex(ValueError, expected_error):
                     OCI_VERIFY.verify(invalid_layout, "1.3.0", "a" * 40)
+
+            missing_index_schema = Path(temporary) / "missing-index-schema.oci.tar"
+            self._write_oci(
+                missing_index_schema,
+                json.dumps({"manifests": [image, attestation]}).encode(),
+                blobs,
+            )
+            with self.assertRaisesRegex(
+                ValueError, "OCI index schemaVersion must be 2"
+            ):
+                OCI_VERIFY.verify(missing_index_schema, "1.3.0", "a" * 40)
+
+            no_schema_image = self._json_blob(
+                blobs,
+                {"config": config, "layers": [layer]},
+            )
+            no_schema_image["platform"] = {
+                "os": "linux",
+                "architecture": "amd64",
+            }
+            missing_manifest_schema = (
+                Path(temporary) / "missing-manifest-schema.oci.tar"
+            )
+            self._write_oci(
+                missing_manifest_schema,
+                json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [no_schema_image, attestation],
+                    }
+                ).encode(),
+                blobs,
+            )
+            with self.assertRaisesRegex(
+                ValueError, "OCI manifest schemaVersion must be 2"
+            ):
+                OCI_VERIFY.verify(missing_manifest_schema, "1.3.0", "a" * 40)
 
             image_without_platform = dict(image)
             image_without_platform.pop("platform")
@@ -701,6 +739,65 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                         "predicate": {},
                     },
                     "SLSA v1 predicate lacks",
+                ),
+                (
+                    "missing-slsa-parameters",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[1]["digest"])]
+                        ),
+                        "predicate": {
+                            "buildDefinition": {
+                                "buildType": "https://mobyproject.org/buildkit@v1"
+                            },
+                            "runDetails": {
+                                "builder": {
+                                    "id": "https://mobyproject.org/buildkit"
+                                }
+                            },
+                        },
+                    },
+                    "buildDefinition.externalParameters",
+                ),
+                (
+                    "bad-spdx-created",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[0]["digest"])]
+                        ),
+                        "predicate": {
+                            **json.loads(
+                                blobs[
+                                    OCI_VERIFY._blob_path(statements[0]["digest"])
+                                ]
+                            )["predicate"],
+                            "creationInfo": {
+                                "created": "x",
+                                "creators": ["Tool: BuildKit"],
+                            },
+                        },
+                    },
+                    "lacks valid creationInfo",
+                ),
+                (
+                    "bad-spdx-creator",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[0]["digest"])]
+                        ),
+                        "predicate": {
+                            **json.loads(
+                                blobs[
+                                    OCI_VERIFY._blob_path(statements[0]["digest"])
+                                ]
+                            )["predicate"],
+                            "creationInfo": {
+                                "created": "2026-08-11T00:00:00Z",
+                                "creators": ["BuildKit"],
+                            },
+                        },
+                    },
+                    "lacks valid creationInfo",
                 ),
             )
             for name, malformed_statement, expected_error in malformed_statements:

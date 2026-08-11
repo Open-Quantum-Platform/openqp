@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
+import re
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -70,21 +72,33 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
         if predicate.get("SPDXID") != "SPDXRef-DOCUMENT":
             raise ValueError("SPDX predicate is not an SPDX document")
         for field in ("dataLicense", "name", "documentNamespace"):
-            if not isinstance(predicate.get(field), str) or not predicate[field]:
+            if (
+                not isinstance(predicate.get(field), str)
+                or not predicate[field].strip()
+            ):
                 raise ValueError(f"SPDX predicate lacks required document field: {field}")
         if predicate["dataLicense"] != "CC0-1.0":
             raise ValueError("SPDX document dataLicense must be CC0-1.0")
         creation_info = predicate.get("creationInfo")
         creators = creation_info.get("creators") if isinstance(creation_info, dict) else None
+        created = creation_info.get("created") if isinstance(creation_info, dict) else None
         if (
             not isinstance(creation_info, dict)
-            or not isinstance(creation_info.get("created"), str)
-            or not creation_info["created"]
+            or not isinstance(created, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", created)
             or not isinstance(creators, list)
             or not creators
-            or not all(isinstance(creator, str) and creator for creator in creators)
+            or not all(
+                isinstance(creator, str)
+                and re.fullmatch(r"(?:Person|Organization|Tool): .+", creator)
+                for creator in creators
+            )
         ):
             raise ValueError("SPDX predicate lacks valid creationInfo")
+        try:
+            datetime.datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError as exc:
+            raise ValueError("SPDX predicate has an invalid creation timestamp") from exc
     elif predicate_type == "https://slsa.dev/provenance/v0.2":
         builder = predicate.get("builder")
         if (
@@ -99,18 +113,41 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
         build_definition = predicate.get("buildDefinition")
         run_details = predicate.get("runDetails")
         builder = run_details.get("builder") if isinstance(run_details, dict) else None
+        external_parameters = (
+            build_definition.get("externalParameters")
+            if isinstance(build_definition, dict)
+            else None
+        )
         if (
             not isinstance(build_definition, dict)
             or not isinstance(build_definition.get("buildType"), str)
             or not build_definition["buildType"]
+            or not isinstance(external_parameters, dict)
             or not isinstance(builder, dict)
             or not isinstance(builder.get("id"), str)
             or not builder["id"]
         ):
             raise ValueError(
-                "SLSA v1 predicate lacks buildDefinition.buildType or "
+                "SLSA v1 predicate lacks buildDefinition.buildType, "
+                "buildDefinition.externalParameters, or "
                 "runDetails.builder.id"
             )
+        if (
+            "internalParameters" in build_definition
+            and not isinstance(build_definition["internalParameters"], dict)
+        ):
+            raise ValueError(
+                "SLSA v1 buildDefinition.internalParameters must be an object"
+            )
+        if (
+            "resolvedDependencies" in build_definition
+            and not isinstance(build_definition["resolvedDependencies"], list)
+        ):
+            raise ValueError(
+                "SLSA v1 buildDefinition.resolvedDependencies must be a list"
+            )
+        if "metadata" in run_details and not isinstance(run_details["metadata"], dict):
+            raise ValueError("SLSA v1 runDetails.metadata must be an object")
 
     raw_subjects = statement.get("subject")
     if not isinstance(raw_subjects, list) or not raw_subjects:
@@ -134,6 +171,9 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
 def _descriptor_bytes(
     archive: tarfile.TarFile, descriptor: dict[str, Any]
 ) -> bytes:
+    media_type = descriptor.get("mediaType")
+    if not isinstance(media_type, str) or not media_type:
+        raise ValueError("OCI descriptor has no mediaType")
     digest = str(descriptor["digest"])
     member_name = _blob_path(digest)
     member = archive.getmember(member_name)
@@ -143,7 +183,11 @@ def _descriptor_bytes(
     payload = handle.read()
 
     declared_size = descriptor.get("size")
-    if not isinstance(declared_size, int) or declared_size < 0:
+    if (
+        not isinstance(declared_size, int)
+        or isinstance(declared_size, bool)
+        or declared_size < 0
+    ):
         raise ValueError(f"invalid OCI descriptor size for {digest}: {declared_size}")
     if len(payload) != declared_size:
         raise ValueError(
@@ -176,6 +220,11 @@ def _archive_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _require_schema_version(document: dict[str, Any], label: str) -> None:
+    if document.get("schemaVersion") != 2:
+        raise ValueError(f"{label} schemaVersion must be 2")
+
+
 def _leaf_manifests(
     archive: tarfile.TarFile,
     descriptors: Any,
@@ -191,6 +240,7 @@ def _leaf_manifests(
         if not isinstance(descriptor, dict):
             raise ValueError("OCI index manifest descriptor must be an object")
         manifest = _descriptor_json(archive, descriptor)
+        _require_schema_version(manifest, "OCI manifest")
         media_type = descriptor.get("mediaType")
         if media_type in OCI_INDEX_MEDIA_TYPES:
             digest = str(descriptor.get("digest"))
@@ -222,6 +272,7 @@ def verify(
                 f"unsupported OCI image layout version: {layout_version}"
             )
         index = _read_json(archive, "index.json")
+        _require_schema_version(index, "OCI index")
         descriptors = index.get("manifests", [])
         images = []
         attestations = []
