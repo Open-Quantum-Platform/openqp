@@ -215,5 +215,30 @@ for forbidden in (
 print(f"DFT-D4 shared libraries and corresponding source retained under {root}")
 PY
 
+# Verify that the installed native library no longer depends on or exports
+# NLopt symbols. This checks the installed image rather than only CMake inputs.
+RUN python3 - <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+from oqp.runtime import library_path, resolve_oqp_root
+
+root, native_suffix = resolve_oqp_root()
+liboqp = library_path(root, native_suffix)
+if sys.platform == "darwin":
+    commands = [["otool", "-L", str(liboqp)], ["nm", "-gU", str(liboqp)]]
+else:
+    commands = [["readelf", "-d", str(liboqp)], ["nm", "-D", str(liboqp)]]
+metadata = "\n".join(
+    subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    for command in commands
+)
+if re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", metadata):
+    raise SystemExit(f"NLopt dependency or symbol leaked into {liboqp}:\n{metadata}")
+print(f"NLopt dependency and symbols absent from {liboqp}")
+PY
+
 # Set entrypoint if required
 ENTRYPOINT ["bash"]

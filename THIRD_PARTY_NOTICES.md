@@ -14,7 +14,6 @@ configuration.
 
 | Component | Version | How used in the default wheel | License | Upstream source |
 | --- | --- | --- | --- | --- |
-| NLopt | 2.9.1 | Statically linked into `liboqp`; the current build leaves NLopt's `NLOPT_LUKSAN` option enabled | LGPL-2.1-or-later for the combined default NLopt build, together with the additional upstream notices reproduced in `nlopt-notices.txt` | <https://github.com/stevengj/nlopt/tree/v2.9.1> |
 | Libxc | 7.0.0 | Statically linked into `liboqp` | MPL-2.0 | <https://gitlab.com/libxc/libxc/-/tree/7.0.0> |
 | tagarray | 1.0.0 | Statically linked into `liboqp` | MIT; Copyright (c) 2023 Igor S. Gerasimov | <https://github.com/Open-Quantum-Platform/tagarray/tree/v1.0.0> |
 | libecpint | 1.0.7 | Statically linked into `liboqp` | MIT; Copyright (c) 2021 Robert A. Shaw | <https://github.com/robashaw/libecpint/tree/v1.0.7> |
@@ -40,7 +39,6 @@ should also be inspected after repair.
 - GNU LGPL version 2.1: `licenses/third_party/lgpl-2.1.txt`
 - GNU LGPL version 3: `licenses/third_party/lgpl-3.0.txt`
 - Libxc MPL-2.0: `licenses/third_party/libxc-mpl-2.0.txt`
-- NLopt license and copyright notices: `licenses/third_party/nlopt-notices.txt`
 - libecpint MIT license: `licenses/third_party/libecpint-mit.txt`
 - Faddeeva MIT notice: `licenses/third_party/faddeeva-mit.txt`
 - tagarray MIT license: `licenses/third_party/tagarray-mit.txt`
@@ -67,11 +65,13 @@ reproducing these build changes.
 
 Including notices and license texts is necessary but is not, by itself,
 sufficient for distribution of a statically linked LGPL Combined Work. The
-default build currently statically links DFT-D4 and an LGPL-enabled NLopt into
-`liboqp`. A distributor must additionally satisfy the applicable LGPL source,
-installation-information, and relinking requirements, including providing the
-materials needed to relink the application with a modified version of each
-LGPL library where required.
+default build currently statically links DFT-D4 into `liboqp`. A distributor
+must additionally satisfy the applicable LGPL source, installation-information,
+and relinking requirements, including providing the materials needed to relink
+the application with a modified version of the LGPL library where required.
+
+NLopt has been removed from the OpenQP source, build, link, and binary
+distribution paths and is therefore no longer a component of the default wheel.
 
 The current OpenQP wheel build does not generate such a relinking kit. A public
 binary release must therefore either change those dependencies to a compliant

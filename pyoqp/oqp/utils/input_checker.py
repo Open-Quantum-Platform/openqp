@@ -1738,7 +1738,10 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     converger = _as_lower(_get(config, "scf", "converger_type", "diis"))
     init_converger = _as_lower(_get(config, "scf", "init_converger", "diis"))
     diis_type = _as_lower(_get(config, "scf", "diis_type", "cdiis"))
+    maxdiis = _get(config, "scf", "maxdiis", 7)
+    vshift = _get(config, "scf", "vshift", 0.0)
     alternative_scf = _as_lower(_get(config, "scf", "alternative_scf", "trah"))
+    escalation = _as_lower(_get(config, "scf", "escalation", ""))
     init_scf = _as_lower(_get(config, "scf", "init_scf", "no"))
     functional = _get(config, "input", "functional", "")
 
@@ -1804,6 +1807,55 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose one of the implemented DIIS types.",
         )
 
+    # Match init_scf_converger() in source/scf.F90.  A nonzero vshift selects
+    # the C-DIIS/E-DIIS/C-DIIS cascade for every DIIS subtype, while SOSCF and
+    # TRAH never construct the simplex solver.  An explicitly configured
+    # initial SCF is a second active stage and may independently use DIIS.
+    diis_convergers = {"diis", "auto", "ml"}
+    effective_init_converger = (
+        converger if init_converger in {"", "none"} else init_converger
+    )
+    if escalation:
+        fallback_convergers = [
+            stage.strip() for stage in escalation.split(",") if stage.strip()
+        ]
+    else:
+        fallback_convergers = ["soscf"]
+        if alternative_scf:
+            fallback_convergers.append(alternative_scf)
+    active_convergers = [converger, *fallback_convergers]
+    if init_scf != "no":
+        active_convergers.append(effective_init_converger)
+    has_active_diis_stage = any(
+        stage in diis_convergers for stage in active_convergers
+    )
+    # The shipped ML selector can replace the configured subtype with E-DIIS
+    # for anions and highly charged DFT systems.  Input validation runs before
+    # molecular features are resolved, so every active ML stage must be treated
+    # as potentially simplex-based.
+    has_active_ml_stage = "ml" in active_convergers
+    diis_uses_simplex_history = (
+        diis_type in {"ediis", "adiis", "vdiis"}
+        or vshift != 0.0
+        or has_active_ml_stage
+    )
+    uses_simplex_history = has_active_diis_stage and diis_uses_simplex_history
+    if uses_simplex_history and maxdiis > 13:
+        report.add(
+            "ERROR",
+            "scf.maxdiis",
+            "The deterministic E-DIIS/A-DIIS simplex solver supports at most 13 stored states.",
+            value=maxdiis,
+            expected=(
+                "maxdiis <= 13 for an active E-DIIS/A-DIIS/v-DIIS, "
+                "level-shifted DIIS, or ML-selected DIIS stage"
+            ),
+            action=(
+                "Use maxdiis=13 or less, or use an explicit unshifted "
+                "cdiis/SOSCF/TRAH stage for a larger history."
+            ),
+        )
+
     if alternative_scf not in SCF_CONVERGERS:
         report.add(
             "ERROR",
@@ -1817,7 +1869,6 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     # scf.escalation: optional comma-separated ladder overriding the default
     # DIIS -> SOSCF -> TRAH chain. Each stage must be a concrete converger
     # (not the 'auto'/'ml' manager modes).
-    escalation = _as_lower(_get(config, "scf", "escalation", ""))
     escalation_stages = {"diis", "soscf", "trah"}
     for stage in (s.strip() for s in escalation.split(",") if s.strip()):
         if stage not in escalation_stages:

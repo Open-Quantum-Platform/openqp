@@ -546,3 +546,27 @@ print(
     f"wheel smoke test OK: energy {energy} | basis ABI clean | "
     "replaceable DFT-D4 shared stack and corresponding source verified"
 )
+
+# 7. NLopt was replaced by OpenQP's deterministic simplex-QP solver. Inspect
+#    both the native dependency table and dynamic symbols so a stale link or an
+#    accidentally retained call cannot pass the wheel gate.
+if sys.platform == "darwin":
+    nlopt_commands = [
+        ["otool", "-L", str(liboqp_path)],
+        ["nm", "-gU", str(liboqp_path)],
+        ["nm", "-u", str(liboqp_path)],
+    ]
+else:
+    nlopt_commands = [
+        ["readelf", "-d", str(liboqp_path)],
+        ["nm", "-D", str(liboqp_path)],
+    ]
+nlopt_metadata = "\n".join(
+    subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    for command in nlopt_commands
+)
+assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", nlopt_metadata), (
+    f"NLopt dependency or symbol leaked into {liboqp_path}:\n{nlopt_metadata}"
+)
+
+print("NLopt dependency and symbols absent")
