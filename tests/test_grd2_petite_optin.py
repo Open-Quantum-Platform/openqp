@@ -116,6 +116,16 @@ class OnlySymmetricDensitiesOptIn(unittest.TestCase):
 
 
 class PetiteStateIsResetPerReference(unittest.TestCase):
+    def test_density_guard_persists_the_fallback_for_xc_and_gradients(self):
+        """A local JK fallback must also disable later reduced consumers."""
+        source = ROOT.joinpath('source/scf_addons.F90').read_text()
+        guard_start = source.index('if (dasym > dtol) then')
+        guard_end = source.index('call int2_driver%disable_petite()', guard_start)
+        guard = source[guard_start:guard_end]
+        self.assertIn(
+            'call tagarray_get_data(infos%dat, OQP_sym_petite,', guard)
+        self.assertIn('global_petite(1) = 0_8', guard)
+
     def test_reference_starts_from_the_reduction_off(self):
         """The enable flag lives in the tag store and survives across jobs."""
         source = ROOT.joinpath('pyoqp/oqp/library/single_point.py').read_text()

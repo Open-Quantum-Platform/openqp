@@ -162,6 +162,39 @@ def load_molecule_module():
 
 
 class TestSymmetryMetadata(unittest.TestCase):
+    def test_no_move_reduction_still_rejects_geometry_drivers(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'input': {'runtype': 'optimize'},
+            'symmetry': {'move_to_standard_frame': False},
+        }
+        molecule.symmetry_metadata = {
+            'use_integral_symmetry': True,
+            'detection': {'operations': []},
+        }
+
+        self.assertFalse(molecule.reorient_for_integral_symmetry())
+        self.assertEqual(
+            molecule.symmetry_metadata['integral_symmetry']['status'],
+            'skipped_runtype_optimize',
+        )
+
+    def test_active_skeleton_gradient_requires_its_frame_operator(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {
+            'integral_symmetry': {'status': 'active', 'frame': 'input'},
+            'detection': {
+                'operations': [
+                    {'permutation': [0], 'matrix': np.eye(3).tolist()},
+                ],
+            },
+        }
+
+        with self.assertRaisesRegex(RuntimeError, 'matrix_input_frame'):
+            molecule.symmetrize_gradient(np.zeros((1, 3)))
+
     def test_symmetry_metadata_defaults_to_detection_enabled(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)

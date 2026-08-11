@@ -1118,8 +1118,12 @@ contains
         call int2_driver%enable_petite(infos)
         if (int2_driver%petite) then
           block
+            use oqp_tagarray_driver, only: OQP_sym_petite, tagarray_get_data
+            use tagarray, only: TA_OK
             real(kind=dp) :: dasym
             real(kind=dp), parameter :: dtol = 1.0e-6_dp
+            integer(8), contiguous, pointer :: global_petite(:)
+            integer(4) :: ta_status
             call petite_density_asymmetry(infos, basis, d, dasym)
             if (dasym > dtol) then
               ! Do not reduce this build. Loud, because a silent fallback here
@@ -1130,9 +1134,18 @@ contains
                 &"the detected symmetry (residual ",ES10.3," > ",ES10.3,").")') &
                 dasym, dtol
               write(*,'(2X,"The integral reduction is not valid for it and has ", &
-                &"been switched off for this build.")')
+                &"been switched off for this SCF state.")')
               write(*,'(2X,"This is expected for a broken-symmetry solution; ", &
                 &"the result is unaffected, only the speed.",/)')
+              ! This is a property of the converged SCF state, not merely of
+              ! this one JK increment. Persist the fallback in the shared tag
+              ! so the subsequent XC build, reduced gradient drivers, and
+              ! later SCF increments cannot reuse the invalid reduction.
+              call tagarray_get_data(infos%dat, OQP_sym_petite, &
+                                     global_petite, status=ta_status)
+              if (ta_status == TA_OK) then
+                if (size(global_petite) >= 1) global_petite(1) = 0_8
+              end if
               call int2_driver%disable_petite()
             end if
           end block

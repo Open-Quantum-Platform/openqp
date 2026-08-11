@@ -542,6 +542,17 @@ class Molecule:
         if not detection:
             return False
 
+        # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
+        # NEB, ...) cannot reuse maps detected at the initial geometry. Apply
+        # this gate before the no-move return as well: keeping the input frame
+        # avoids a rotation, but it does not make stale atom permutations safe.
+        runtype = str(self.config.get('input', {}).get(
+            'runtype', 'energy')).lower()
+        if runtype not in ('energy', 'grad', 'prop', 'properties'):
+            meta['integral_symmetry'] = {
+                'status': f'skipped_runtype_{runtype}'}
+            return False
+
         # [symmetry] move_to_standard_frame = false: do the reduction where the
         # molecule already is.
         #
@@ -567,14 +578,6 @@ class Molecule:
                     'move_to_standard_frame', True)):
             meta['integral_symmetry'] = {'status': 'input_frame'}
             return True
-
-        # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
-        # NEB, ...) must not have the frame rotated under them; the petite
-        # reduction is restricted to single-point runtypes for now.
-        runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
-        if runtype not in ('energy', 'grad', 'prop', 'properties'):
-            meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
-            return False
 
         try:
             from oqp.library.symmetry_detect import attach_detection_metadata
@@ -1221,11 +1224,13 @@ class Molecule:
                 if meta.get('integral_symmetry', {}).get('frame') != 'input' \
                 else 'matrix_input_frame'
             if any(matrix_key not in op for op in operations):
-                # Refuse rather than project with an operator from the wrong
-                # frame. Returning the skeleton gradient unprojected keeps a
-                # small symmetry-breaking residual; projecting with the wrong
-                # operator deletes whole Cartesian components.
-                return grads
+                # An active petite build contains only representative
+                # quartets. Without the matching frame operator this is a
+                # skeleton, not a complete gradient, so returning it would be
+                # a silent wrong result.
+                raise RuntimeError(
+                    'active integral-symmetry gradient is missing the '
+                    f'{matrix_key} operation payload')
             arr = np.asarray(grads, dtype=float)
             shape = arr.shape
             natom = len(operations[0]['permutation'])
@@ -1239,8 +1244,12 @@ class Molecule:
             result /= len(operations)
             meta.setdefault('integral_symmetry', {})['gradient_symmetrized'] = True
             return result.reshape(shape)
-        except Exception:
-            return grads
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                'failed to reconstruct the active integral-symmetry '
+                'gradient') from exc
 
     def label_normal_modes(self):
         """Assign abelian irrep labels to normal modes (metadata only, non-fatal).
