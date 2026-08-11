@@ -766,7 +766,12 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
         # while building gspin0 and a second dense H0.  Count the pair when the
         # zeroth order cannot be diagonal.
         _pairs = 2 if str(h0).strip().lower() == "dyall" else 1
-        _peak = (_spin_bytes + _ham_bytes) * _pairs
+        # _ZerothOrder._build_eigenbasis extracts a dense H0[external, external]
+        # while both full operators are still live, and the external block
+        # approaches the full space when the active space is small -- bound it
+        # by a full Hamiltonian, plus the symmetrization/eigensolver copies.
+        _ext_bytes = 3 * _ham_bytes if _pairs == 2 else 0
+        _peak = (_spin_bytes + _ham_bytes) * _pairs + _ext_bytes
         if _peak > _budget:
             raise ValueError(
                 "uncontracted PT2 needs ~%.2f GiB for the spin-orbital "

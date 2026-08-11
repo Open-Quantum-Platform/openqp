@@ -1559,12 +1559,16 @@ def resolve_ci_solve(
         # set here.  This only ever steers auto TOWARD davidson; it is not a
         # rejection, so the native decline path is unaffected.
         _auto_spin = 8 * (2 * int(norb)) ** 4
-        solver = ("dense" if dense_bytes + _auto_spin <= budget_bytes
+        # A dense solve keeps the Hamiltonian while the eigensolver allocates a
+        # second ndet x ndet buffer for the eigenvectors, so the dense working
+        # set is two Hamiltonians plus the spin tensor, not one.
+        solver = ("dense" if 2 * dense_bytes + _auto_spin <= budget_bytes
                   else "davidson")
-    if solver == "dense" and dense_bytes > budget_bytes:
+    if solver == "dense" and 2 * dense_bytes > budget_bytes:
         raise ValueError(
             f"FCI dense Hamiltonian for {ndet} determinants needs "
-            f"~{dense_bytes / 1024 ** 3:.2f} GiB, exceeding the {active_section} max_memory budget "
+            f"~{2 * dense_bytes / 1024 ** 3:.2f} GiB (the matrix plus the "
+            f"eigenvector buffer held alongside it), exceeding the {active_section} max_memory budget "
             f"of {max_memory} MiB. Reduce the active space, raise {active_section} max_memory, "
             f"or use the iterative solver ({ci_section} solver=davidson)."
         )
@@ -1776,11 +1780,16 @@ def solve_fci(
                 solve_nroot,
                 effective_subspace,
             )
-            work_bytes = 8 * ndet * (2 * max_subspace + 4 * solve_nroot)
+            # gspin was built above and stays resident through the solve, so
+            # the workspace cannot be weighed against the whole budget -- the
+            # native Davidson guard already adds it.
+            work_bytes = (8 * ndet * (2 * max_subspace + 4 * solve_nroot)
+                          + 8 * nspin ** 4)
             if work_bytes > budget_bytes:
                 raise ValueError(
                     f"FCI Davidson working set for {ndet} determinants needs "
-                    f"~{work_bytes / 1024 ** 3:.2f} GiB, exceeding the {active_section} max_memory "
+                    f"~{work_bytes / 1024 ** 3:.2f} GiB including the resident "
+                    f"spin-orbital tensor, exceeding the {active_section} max_memory "
                     f"budget of {max_memory} MiB. Reduce the active space or raise {active_section} max_memory."
                 )
             eigvals, eigvecs = _davidson(

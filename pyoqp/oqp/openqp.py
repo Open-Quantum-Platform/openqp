@@ -1104,13 +1104,18 @@ class OpenQP:
         if scf_updates:
             self.scf(**scf_updates)
 
-        cas_updates = dict(cas or {})
+        cas_updates = {}
         if active_electrons is not None:
             cas_updates["active_electrons"] = active_electrons
         if active_orbitals is not None:
             cas_updates["active_orbitals"] = active_orbitals
-        if frozen_core is not None:
-            cas_updates["frozen_core"] = frozen_core
+        # frozen_core is helper-owned like root and the [pt2] keys: omitting it
+        # on a reused builder kept the previous call's value, so a nominally
+        # default .casci(...) after .casci(frozen_core=2) silently correlated a
+        # different active electron partition.  Stage the schema default; an
+        # explicit cas={...} block below still overrides it.
+        cas_updates["frozen_core"] = (0 if frozen_core is None else frozen_core)
+        cas_updates.update(dict(cas or {}))
         if cas_updates:
             self.section("cas", **cas_updates)
 

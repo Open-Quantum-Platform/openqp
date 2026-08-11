@@ -333,7 +333,10 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
         # -- 8*total*(3+nstate) -- plus the per-thread permutation and gather
         # buffers, all live while the Python-side outputs are.  The kernel's
         # sorting peak was invisible to a guard that counted only this side.
-        _native_ws = 8 * int(cap) * (3 + int(nstate)) + 8 * int(cap)
+        # wka/wkb/we0/wv, plus gather_slice's tk/td/tv(nstate,cnt) held while
+        # each thread's perm is live -- the per-thread gather aggregates to
+        # another (3+nstate) pass over cap, not a single 8*cap array.
+        _native_ws = 2 * (8 * int(cap) * (3 + int(nstate))) + 8 * int(cap)
         _out_bytes = _out_bytes + _in_bytes + _ret_bytes + _native_ws
         _budget = max(1, int(max_memory)) * 1024 ** 2
         if _out_bytes > _budget:

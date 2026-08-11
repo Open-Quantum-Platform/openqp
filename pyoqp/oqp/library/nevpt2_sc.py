@@ -784,7 +784,11 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     from math import comb as _comb
     _ndet_sc = _comb(int(nact), int(active_nelec[0])) * _comb(int(nact), int(active_nelec[1]))
     _work_bytes = 8 * int(_ndet_sc) * int(nact) ** 4
-    _live_bytes = _dm4_bytes + _dm3_bytes + _work_bytes
+    # After construction the RDMs stay live while _f3ca_f3ac builds two nact^6
+    # tensors and _Sr allocates a16 alongside them, so the post-construction
+    # peak can exceed the construction peak.  Admit on the larger of the two.
+    _post_bytes = _dm4_bytes + _dm3_bytes + 3 * (8 * int(nact) ** 6)
+    _live_bytes = max(_dm4_bytes + _dm3_bytes + _work_bytes, _post_bytes)
     _cap = (2 * 1024 ** 3 if max_memory is None
             else max(1, int(max_memory)) * 1024 ** 2)
     if _live_bytes > _cap:

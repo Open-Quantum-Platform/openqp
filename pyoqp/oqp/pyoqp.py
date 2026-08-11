@@ -257,6 +257,12 @@ def _openqp_build_label():
         return "OpenQP" + (" v%s" % version if version else "") + " (git HEAD unknown)"
 
 
+# The OMP_NUM_THREADS in force before any Runner touched it.  Captured once so a
+# Runner with an explicit [input] omp_threads cannot change what a later default
+# Runner sees.
+_RUNNER_OMP_BASELINE = [os.environ.get("OMP_NUM_THREADS")]
+
+
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -366,6 +372,19 @@ class Runner:
         # subsequent SCF parallel regions; we also export OMP_NUM_THREADS so the
         # input checker / any later BLAS sizing see a consistent value.
         _omp = self.mol.config.get("input", {}).get("omp_threads", 0)
+        if not (_omp and _omp > 0):
+            # A previous Runner in this process may have set an explicit count,
+            # the environment variable and OMP_THREADS_FROM_ENV.  None of that
+            # was ever undone, so a later default job inherited the earlier
+            # job's thread count and _fci_lib_threads treated the stale value as
+            # an explicit request.  Restore the default policy for this Runner.
+            oqp.OMP_THREADS_FROM_ENV = False
+            if getattr(self, "_omp_default_env", None) is None:
+                type(self)._omp_default_env = os.environ.get("OMP_NUM_THREADS")
+            if _RUNNER_OMP_BASELINE[0] is not None:
+                os.environ["OMP_NUM_THREADS"] = _RUNNER_OMP_BASELINE[0]
+                if oqp.lib.oqp_have_openmp():
+                    oqp.lib.oqp_omp_set_num_threads(int(_RUNNER_OMP_BASELINE[0]))
         if _omp and _omp > 0:
             if oqp.lib.oqp_have_openmp():
                 oqp.lib.oqp_omp_set_num_threads(int(_omp))
