@@ -369,7 +369,13 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
 
     def test_oci_verifier_requires_labels_sbom_and_provenance(self):
         blobs = {}
-        layer_payload = b"openqp-rootfs-layer"
+        layer_buffer = io.BytesIO()
+        with tarfile.open(fileobj=layer_buffer, mode="w") as layer_archive:
+            payload = b"openqp-rootfs-layer"
+            member = tarfile.TarInfo("usr/share/openqp/layer-marker")
+            member.size = len(payload)
+            layer_archive.addfile(member, io.BytesIO(payload))
+        layer_payload = layer_buffer.getvalue()
         layer_digest = hashlib.sha256(layer_payload).hexdigest()
         layer = {
             "mediaType": "application/vnd.oci.image.layer.v1.tar",
@@ -537,6 +543,11 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             ):
                 OCI_VERIFY.verify(unsupported_media, "1.3.0", "a" * 40)
 
+            with self.assertRaisesRegex(ValueError, "not a valid tar archive"):
+                OCI_VERIFY._layer_diff_id(
+                    b"not-a-tar", "application/vnd.oci.image.layer.v1.tar"
+                )
+
             bad_rootfs_config = self._json_blob(
                 blobs,
                 {
@@ -694,8 +705,10 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 OCI_VERIFY.verify(tampered, "1.3.0", "a" * 40)
 
             tampered_layer_blobs = dict(blobs)
-            tampered_layer_blobs[OCI_VERIFY._blob_path(layer["digest"])] = (
-                b"tampered-rootfs-lyr"
+            tampered_layer_payload = bytearray(layer_payload)
+            tampered_layer_payload[0] ^= 1
+            tampered_layer_blobs[OCI_VERIFY._blob_path(layer["digest"])] = bytes(
+                tampered_layer_payload
             )
             self.assertEqual(
                 len(tampered_layer_blobs[OCI_VERIFY._blob_path(layer["digest"])]),

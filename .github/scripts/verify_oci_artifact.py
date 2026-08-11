@@ -7,6 +7,7 @@ import argparse
 import datetime
 import gzip
 import hashlib
+import io
 import json
 import re
 import tarfile
@@ -268,6 +269,13 @@ def _layer_diff_id(payload: bytes, media_type: Any) -> str:
             raise ValueError(f"invalid gzip OCI image layer: {media_type}") from exc
     else:
         raise ValueError(f"unsupported OCI image layer media type: {media_type}")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(uncompressed), mode="r:") as layer:
+            # Reading the complete member table validates every tar header and
+            # catches truncated member payloads without extracting anything.
+            layer.getmembers()
+    except (OSError, tarfile.TarError) as exc:
+        raise ValueError(f"OCI image layer is not a valid tar archive: {media_type}") from exc
     return "sha256:" + hashlib.sha256(uncompressed).hexdigest()
 
 
