@@ -1823,16 +1823,21 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
         fallback_convergers = ["soscf"]
         if alternative_scf:
             fallback_convergers.append(alternative_scf)
-    has_active_diis_stage = (
-        converger in diis_convergers
-        or (
-            init_scf != "no"
-            and effective_init_converger in diis_convergers
-        )
-        or any(stage in diis_convergers for stage in fallback_convergers)
+    active_convergers = [converger, *fallback_convergers]
+    if init_scf != "no":
+        active_convergers.append(effective_init_converger)
+    has_active_diis_stage = any(
+        stage in diis_convergers for stage in active_convergers
     )
+    # The shipped ML selector can replace the configured subtype with E-DIIS
+    # for anions and highly charged DFT systems.  Input validation runs before
+    # molecular features are resolved, so every active ML stage must be treated
+    # as potentially simplex-based.
+    has_active_ml_stage = "ml" in active_convergers
     diis_uses_simplex_history = (
-        diis_type in {"ediis", "adiis", "vdiis"} or vshift != 0.0
+        diis_type in {"ediis", "adiis", "vdiis"}
+        or vshift != 0.0
+        or has_active_ml_stage
     )
     uses_simplex_history = has_active_diis_stage and diis_uses_simplex_history
     if uses_simplex_history and maxdiis > 13:
@@ -1842,12 +1847,12 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             "The deterministic E-DIIS/A-DIIS simplex solver supports at most 13 stored states.",
             value=maxdiis,
             expected=(
-                "maxdiis <= 13 for an active E-DIIS/A-DIIS/v-DIIS or "
-                "level-shifted DIIS stage"
+                "maxdiis <= 13 for an active E-DIIS/A-DIIS/v-DIIS, "
+                "level-shifted DIIS, or ML-selected DIIS stage"
             ),
             action=(
-                "Use maxdiis=13 or less, or use unshifted cdiis/SOSCF/TRAH "
-                "for a larger history."
+                "Use maxdiis=13 or less, or use an explicit unshifted "
+                "cdiis/SOSCF/TRAH stage for a larger history."
             ),
         )
 
