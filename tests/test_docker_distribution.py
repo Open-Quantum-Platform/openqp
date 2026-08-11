@@ -60,6 +60,8 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
         self.assertIn("-DOQP_SOURCE_REVISION=${OPENQP_REVISION}", dockerfile)
         self.assertIn('OPENQP_EXPECTED_REVISION="${OPENQP_REVISION}"', dockerfile)
+        self.assertEqual(dockerfile.count("ARG OPENQP_REVISION\n"), 2)
+        self.assertNotIn("OPENQP_REVISION=unknown", dockerfile)
         self.assertIn("/opt/openqp-build-wheelhouse", dockerfile)
         self.assertIn("--build-wheelhouse=/opt/openqp-build-wheelhouse", dockerfile)
         self.assertIn("--no-index", dockerfile.split("COPY . /opt/openqp", 1)[0])
@@ -299,6 +301,48 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 ("setuptools", "84.0.0", ["py3-none-any"]),
             )
 
+    def test_attestation_predicates_reject_incomplete_v02_and_blank_creator(self):
+        subject = [{"name": "image", "digest": {"sha256": "a" * 64}}]
+        v02 = {
+            "_type": "https://in-toto.io/Statement/v0.1",
+            "subject": subject,
+            "predicateType": "https://slsa.dev/provenance/v0.2",
+            "predicate": {
+                "builder": {"id": "https://example.test/builder"},
+                "buildType": "https://example.test/build",
+                "invocation": {},
+                "metadata": {},
+                "materials": [],
+            },
+        }
+        OCI_VERIFY._statement_subjects(v02)
+        for field in ("invocation", "metadata", "materials"):
+            malformed = json.loads(json.dumps(v02))
+            malformed["predicate"].pop(field)
+            with self.subTest(field=field), self.assertRaisesRegex(
+                ValueError, field
+            ):
+                OCI_VERIFY._statement_subjects(malformed)
+
+        spdx = {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": subject,
+            "predicateType": "https://spdx.dev/Document",
+            "predicate": {
+                "spdxVersion": "SPDX-2.3",
+                "SPDXID": "SPDXRef-DOCUMENT",
+                "dataLicense": "CC0-1.0",
+                "name": "SBOM",
+                "documentNamespace": "https://example.test/spdx",
+                "creationInfo": {
+                    "created": "2026-08-11T00:00:00Z",
+                    "creators": ["Tool:  "],
+                },
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "creationInfo"):
+            OCI_VERIFY._statement_subjects(spdx)
+
     @staticmethod
     def _json_blob(blobs, value, media_type="application/vnd.oci.image.manifest.v1+json"):
         payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
@@ -328,7 +372,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         layer_payload = b"openqp-rootfs-layer"
         layer_digest = hashlib.sha256(layer_payload).hexdigest()
         layer = {
-            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "mediaType": "application/vnd.oci.image.layer.v1.tar",
             "digest": f"sha256:{layer_digest}",
             "size": len(layer_payload),
         }
@@ -338,6 +382,10 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             {
                 "architecture": "amd64",
                 "os": "linux",
+                "rootfs": {
+                    "type": "layers",
+                    "diff_ids": [f"sha256:{layer_digest}"],
+                },
                 "config": {
                     "Labels": {
                         "org.opencontainers.image.source": "https://github.com/Open-Quantum-Platform/openqp",
@@ -472,6 +520,51 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 ValueError, "OCI manifest schemaVersion must be 2"
             ):
                 OCI_VERIFY.verify(missing_manifest_schema, "1.3.0", "a" * 40)
+
+            unsupported_image = dict(image)
+            unsupported_image["mediaType"] = "text/plain"
+            unsupported_media_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [unsupported_image, attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            unsupported_media = Path(temporary) / "unsupported-media.oci.tar"
+            self._write_oci(unsupported_media, unsupported_media_index, blobs)
+            with self.assertRaisesRegex(
+                ValueError, "unsupported OCI manifest descriptor media type"
+            ):
+                OCI_VERIFY.verify(unsupported_media, "1.3.0", "a" * 40)
+
+            bad_rootfs_config = self._json_blob(
+                blobs,
+                {
+                    "architecture": "amd64",
+                    "os": "linux",
+                    "rootfs": {"type": "layers", "diff_ids": ["sha256:" + "b" * 64]},
+                    "config": json.loads(
+                        blobs[OCI_VERIFY._blob_path(config["digest"])]
+                    )["config"],
+                },
+                "application/vnd.oci.image.config.v1+json",
+            )
+            bad_rootfs_image = self._json_blob(
+                blobs,
+                {"schemaVersion": 2, "config": bad_rootfs_config, "layers": [layer]},
+            )
+            bad_rootfs_image["platform"] = image["platform"]
+            bad_rootfs_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [bad_rootfs_image, attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            bad_rootfs = Path(temporary) / "bad-rootfs.oci.tar"
+            self._write_oci(bad_rootfs, bad_rootfs_index, blobs)
+            with self.assertRaisesRegex(ValueError, "rootfs diff_ids"):
+                OCI_VERIFY.verify(bad_rootfs, "1.3.0", "a" * 40)
 
             image_without_platform = dict(image)
             image_without_platform.pop("platform")

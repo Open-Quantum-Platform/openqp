@@ -13,7 +13,7 @@
 FROM openqp/openqp-buildenv:1@sha256:83a2ba2108bc2bb1123e7dfac31320833817242681ee41f36e5ee950dfb22a3e AS builder
 
 ARG OPENQP_VERSION=1.3.0
-ARG OPENQP_REVISION=unknown
+ARG OPENQP_REVISION
 
 ENV CC=gcc-14 \
     CXX=g++-14 \
@@ -109,7 +109,7 @@ RUN python3 .github/scripts/collect_docker_runtime.py \
 FROM python:3.12.13-slim-trixie@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS runtime
 
 ARG OPENQP_VERSION=1.3.0
-ARG OPENQP_REVISION=unknown
+ARG OPENQP_REVISION
 LABEL org.opencontainers.image.title="OpenQP" \
       org.opencontainers.image.description="Open Quantum Platform research software" \
       org.opencontainers.image.source="https://github.com/Open-Quantum-Platform/openqp" \

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import gzip
 import hashlib
 import json
 import re
@@ -28,6 +29,21 @@ OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
 OCI_INDEX_MEDIA_TYPES = {
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
+}
+OCI_LEAF_MANIFEST_MEDIA_TYPES = {
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.oci.artifact.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+}
+UNCOMPRESSED_LAYER_MEDIA_TYPES = {
+    "application/vnd.oci.image.layer.v1.tar",
+    "application/vnd.oci.image.layer.nondistributable.v1.tar",
+}
+GZIP_LAYER_MEDIA_TYPES = {
+    "application/vnd.oci.image.layer.v1.tar+gzip",
+    "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip",
+    "application/vnd.docker.image.rootfs.diff.tar.gzip",
+    "application/vnd.docker.image.rootfs.foreign.diff.tar.gzip",
 }
 
 
@@ -82,17 +98,24 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
         creation_info = predicate.get("creationInfo")
         creators = creation_info.get("creators") if isinstance(creation_info, dict) else None
         created = creation_info.get("created") if isinstance(creation_info, dict) else None
+        valid_creators = (
+            isinstance(creators, list)
+            and bool(creators)
+            and all(
+                isinstance(creator, str)
+                and any(
+                    creator.startswith(f"{kind}: ")
+                    and bool(creator.removeprefix(f"{kind}: ").strip())
+                    for kind in ("Person", "Organization", "Tool")
+                )
+                for creator in creators
+            )
+        )
         if (
             not isinstance(creation_info, dict)
             or not isinstance(created, str)
             or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", created)
-            or not isinstance(creators, list)
-            or not creators
-            or not all(
-                isinstance(creator, str)
-                and re.fullmatch(r"(?:Person|Organization|Tool): .+", creator)
-                for creator in creators
-            )
+            or not valid_creators
         ):
             raise ValueError("SPDX predicate lacks valid creationInfo")
         try:
@@ -101,14 +124,24 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
             raise ValueError("SPDX predicate has an invalid creation timestamp") from exc
     elif predicate_type == "https://slsa.dev/provenance/v0.2":
         builder = predicate.get("builder")
+        invocation = predicate.get("invocation")
+        metadata = predicate.get("metadata")
+        materials = predicate.get("materials")
         if (
             not isinstance(builder, dict)
             or not isinstance(builder.get("id"), str)
             or not builder["id"]
             or not isinstance(predicate.get("buildType"), str)
             or not predicate["buildType"]
+            or not isinstance(invocation, dict)
+            or not isinstance(metadata, dict)
+            or not isinstance(materials, list)
+            or not all(isinstance(material, dict) for material in materials)
         ):
-            raise ValueError("SLSA v0.2 predicate lacks builder.id or buildType")
+            raise ValueError(
+                "SLSA v0.2 predicate lacks builder.id, buildType, invocation, "
+                "metadata, or materials"
+            )
     elif predicate_type == "https://slsa.dev/provenance/v1":
         build_definition = predicate.get("buildDefinition")
         run_details = predicate.get("runDetails")
@@ -225,6 +258,19 @@ def _require_schema_version(document: dict[str, Any], label: str) -> None:
         raise ValueError(f"{label} schemaVersion must be 2")
 
 
+def _layer_diff_id(payload: bytes, media_type: Any) -> str:
+    if media_type in UNCOMPRESSED_LAYER_MEDIA_TYPES:
+        uncompressed = payload
+    elif media_type in GZIP_LAYER_MEDIA_TYPES:
+        try:
+            uncompressed = gzip.decompress(payload)
+        except (EOFError, OSError) as exc:
+            raise ValueError(f"invalid gzip OCI image layer: {media_type}") from exc
+    else:
+        raise ValueError(f"unsupported OCI image layer media type: {media_type}")
+    return "sha256:" + hashlib.sha256(uncompressed).hexdigest()
+
+
 def _leaf_manifests(
     archive: tarfile.TarFile,
     descriptors: Any,
@@ -239,9 +285,13 @@ def _leaf_manifests(
     for descriptor in descriptors:
         if not isinstance(descriptor, dict):
             raise ValueError("OCI index manifest descriptor must be an object")
+        media_type = descriptor.get("mediaType")
+        if media_type not in OCI_INDEX_MEDIA_TYPES | OCI_LEAF_MANIFEST_MEDIA_TYPES:
+            raise ValueError(
+                f"unsupported OCI manifest descriptor media type: {media_type}"
+            )
         manifest = _descriptor_json(archive, descriptor)
         _require_schema_version(manifest, "OCI manifest")
-        media_type = descriptor.get("mediaType")
         if media_type in OCI_INDEX_MEDIA_TYPES:
             digest = str(descriptor.get("digest"))
             if digest in seen_indexes:
@@ -335,10 +385,31 @@ def verify(
         layers = image_manifest.get("layers")
         if not isinstance(layers, list):
             raise ValueError("OCI image manifest layers must be a list")
+        rootfs = config.get("rootfs")
+        diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, dict) else None
+        if (
+            not isinstance(rootfs, dict)
+            or rootfs.get("type") != "layers"
+            or not isinstance(diff_ids, list)
+            or len(diff_ids) != len(layers)
+        ):
+            raise ValueError(
+                "OCI image config rootfs must contain one diff_id per manifest layer"
+            )
         for layer in layers:
             if not isinstance(layer, dict):
                 raise ValueError("OCI image layer descriptor must be an object")
-            _descriptor_bytes(archive, layer)
+        actual_diff_ids = [
+            _layer_diff_id(
+                _descriptor_bytes(archive, layer), layer.get("mediaType")
+            )
+            for layer in layers
+        ]
+        if diff_ids != actual_diff_ids:
+            raise ValueError(
+                "OCI image config rootfs diff_ids do not match manifest layers: "
+                f"declared {diff_ids}, actual {actual_diff_ids}"
+            )
         labels = config.get("config", {}).get("Labels", {})
         expected_labels = {
             "org.opencontainers.image.source": (

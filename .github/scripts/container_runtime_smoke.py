@@ -416,15 +416,24 @@ def main() -> None:
     ):
         raise AssertionError("DFT-D4 BUILD-INFO schema/runtime names are invalid")
     expected_revision = os.environ.get("OPENQP_EXPECTED_REVISION", "")
-    if not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
+    if expected_revision and not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
         raise AssertionError(
             f"container expected revision is not a full Git SHA: {expected_revision!r}"
         )
     openqp_build = build_info.get("openqp", {})
-    if (
-        openqp_build.get("source_revision") != expected_revision
-        or openqp_build.get("source_tree_dirty") is not False
-    ):
+    if expected_revision:
+        revision_matches = (
+            openqp_build.get("source_revision") == expected_revision
+            and openqp_build.get("source_tree_dirty") is False
+        )
+    else:
+        # A direct local ``docker build .`` has no Git metadata in its context.
+        # It may omit the revision, but it must not invent a clean source ID.
+        revision_matches = (
+            openqp_build.get("source_revision") is None
+            and openqp_build.get("source_tree_dirty") is None
+        )
+    if not revision_matches:
         raise AssertionError(
             "DFT-D4 BUILD-INFO does not identify the exact clean container source: "
             f"{openqp_build}"
