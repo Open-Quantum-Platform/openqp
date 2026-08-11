@@ -263,15 +263,17 @@ retained image artifact, or exported build cache.
 
 The container remains publication-ineligible for two explicit reasons:
 
-1. dependency wheels are resolved during a candidate build and hashed only
-   afterward; publication requires a reviewed hash lock or reuse of an already
-   verified exact release-run wheelhouse; and
+1. build-system and runtime dependency wheels are resolved during a candidate
+   build and hashed only afterward; publication requires a reviewed hash lock
+   or reuse of already verified exact release-run wheelhouses; and
 2. copied Ubuntu GNU runtime libraries have exact binary/source package
    versions and copyright files recorded, but the matching source archives are
    not yet bundled for components whose terms require corresponding source.
 
 Both `/usr/share/licenses/openqp/wheelhouse-manifest.json` and
 `runtime-library-manifest.json` record `publication_gate.ready: false`. The
+wheelhouse manifest separately inventories the exact build-system wheels used
+to create OpenQP and the runtime wheels available to the final installation.
 final-stage smoke test also rejects NLopt files/dependencies/symbol strings,
 build tools, caches, static archives, alternate DFT-D4 copies, missing
 corresponding source, unresolved dependencies, and legal-file omissions.

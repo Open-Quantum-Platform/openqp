@@ -18,8 +18,9 @@ build and repair against a different reviewed OpenBLAS version.
 The final image is based on the separately digest-pinned Python 3.12 slim
 runtime in the same lock file.  The Python minor version is constrained by the
 current builder; this image does not claim to contain Python 3.11 artifacts.
-Exact dependency-wheel filenames, versions, compatibility tags, sizes, and
-SHA-256 hashes for a candidate build are recorded in
+Exact build-system and runtime dependency-wheel filenames, versions,
+compatibility tags, sizes, and SHA-256 hashes for a candidate build are
+recorded in separate inventory sections of
 `/usr/share/licenses/openqp/wheelhouse-manifest.json`.  Copyright files for
 copied system shared libraries are installed under
 `/usr/share/licenses/openqp/runtime-packages/`.
@@ -40,10 +41,10 @@ to a registry nor retained as a release artifact.
 Two inputs are intentionally recorded but are not yet sufficient for public
 publication:
 
-1. Python dependency wheels are resolved during the candidate build.  Their
-   exact hashes are recorded afterward, but a public release requires either a
-   reviewed checked-in hash lock or reuse of the already verified exact
-   release-run wheelhouse.
+1. Python build-system and runtime dependency wheels are resolved during the
+   candidate build.  Their exact hashes are recorded afterward, but a public
+   release requires either a reviewed checked-in hash lock or reuse of already
+   verified exact release-run wheelhouses.
 2. The Ubuntu binary/source package names and versions for copied GCC/OpenMP/
    Fortran runtime libraries are recorded, but matching source archives are not
    bundled.  Public publication requires retrieving, verifying, and retaining
