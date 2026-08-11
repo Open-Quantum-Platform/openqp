@@ -223,11 +223,21 @@ def verify(
             )
             if annotation_subject:
                 subjects.add(str(annotation_subject))
+            has_layers = "layers" in manifest
             attestation_config = manifest.get("config")
-            if isinstance(attestation_config, dict):
+            if "config" in manifest:
+                if not isinstance(attestation_config, dict):
+                    raise ValueError(
+                        "attestation config descriptor must be an object"
+                    )
                 _descriptor_bytes(archive, attestation_config)
-            payload_descriptors = manifest.get("layers")
-            if payload_descriptors is None:
+            elif has_layers:
+                raise ValueError(
+                    "OCI image-shaped attestation manifest has no config descriptor"
+                )
+            if has_layers:
+                payload_descriptors = manifest.get("layers")
+            else:
                 payload_descriptors = manifest.get("blobs")
             if not isinstance(payload_descriptors, list):
                 raise ValueError("attestation manifest has no layer/blob descriptors")

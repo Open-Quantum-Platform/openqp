@@ -377,6 +377,48 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(unmarked, unmarked_index, blobs)
             OCI_VERIFY.verify(unmarked, "1.3.0", "a" * 40)
 
+            for label, invalid_manifest, expected_error in (
+                (
+                    "missing",
+                    {
+                        "schemaVersion": 2,
+                        "subject": {"digest": image_digest},
+                        "layers": statements,
+                    },
+                    "has no config descriptor",
+                ),
+                (
+                    "malformed",
+                    {
+                        "schemaVersion": 2,
+                        "config": None,
+                        "subject": {"digest": image_digest},
+                        "layers": statements,
+                    },
+                    "config descriptor must be an object",
+                ),
+            ):
+                invalid_attestation = self._json_blob(blobs, invalid_manifest)
+                invalid_attestation["platform"] = {
+                    "os": "unknown",
+                    "architecture": "unknown",
+                }
+                invalid_attestation["annotations"] = {
+                    "vnd.docker.reference.type": "attestation-manifest",
+                    "vnd.docker.reference.digest": image_digest,
+                }
+                invalid_index = json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [image_without_platform, invalid_attestation],
+                    },
+                    sort_keys=True,
+                ).encode()
+                invalid = Path(temporary) / f"candidate-{label}-config.oci.tar"
+                self._write_oci(invalid, invalid_index, blobs)
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    OCI_VERIFY.verify(invalid, "1.3.0", "a" * 40)
+
             nested_index_descriptor = self._json_blob(
                 blobs,
                 {"schemaVersion": 2,
@@ -479,8 +521,12 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             ):
                 forged_attestation = self._json_blob(
                     blobs,
-                    {"schemaVersion": 2, "subject": {"digest": image_digest},
-                     "layers": layers},
+                    {
+                        "schemaVersion": 2,
+                        "config": attestation_config,
+                        "subject": {"digest": image_digest},
+                        "layers": layers,
+                    },
                 )
                 forged_attestation["platform"] = {
                     "os": "unknown", "architecture": "unknown"
@@ -517,6 +563,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 blobs,
                 {
                     "schemaVersion": 2,
+                    "config": attestation_config,
                     "subject": {"digest": image_digest},
                     "layers": [unrelated_spdx, statements[1]],
                 },
