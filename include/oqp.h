@@ -346,10 +346,18 @@ void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
 
 /* Native DFT-D4 dispersion (source/dftd4_interface.F90). Self-contained:
-   takes atomic numbers + coordinates (Bohr), not the oqp handle. */
+   takes atomic numbers + coordinates (Bohr), not the oqp handle.  The legacy
+   entry point preserves its historical neutral-system behavior. */
 void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
                     const char *func, int lfunc, int do_grad,
                     double *energy, double *grad, int *ier);
+
+/* Charge-aware ABI. param_mode=0 selects damping by functional name;
+   param_mode=1 reads damping as [s6, s8, s9, a1, a2, alp]. */
+void oqp_dftd4_disp_v2(int nat, const int *z, const double *xyz,
+                       double total_charge, const char *func, int lfunc,
+                       int param_mode, const double *damping, int do_grad,
+                       double *energy, double *grad, int *ier);
 
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);

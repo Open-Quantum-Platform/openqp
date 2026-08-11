@@ -1700,6 +1700,38 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
         )
 
 
+def _check_d4(config: dict[str, Any], report: CheckReport) -> None:
+    keys = ("s6", "s8", "s9", "a1", "a2", "alp")
+    raw = {key: _get(config, "d4", key, "") for key in keys}
+    present = {key for key, value in raw.items() if str(value).strip()}
+    if not present:
+        return
+    if present != set(keys):
+        missing = sorted(set(keys) - present)
+        report.add(
+            "ERROR",
+            "d4",
+            "Explicit DFT-D4 rational damping requires all six parameters.",
+            value=sorted(present),
+            expected=", ".join(keys),
+            action="Add the missing parameters: " + ", ".join(missing),
+        )
+        return
+    for key in keys:
+        try:
+            value = float(raw[key])
+        except (TypeError, ValueError):
+            value = math.nan
+        if not math.isfinite(value):
+            report.add(
+                "ERROR",
+                f"d4.{key}",
+                "DFT-D4 damping parameters must be finite numbers.",
+                value=raw[key],
+                action=f"Set d4.{key} to a finite number.",
+            )
+
+
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     multiplicity = _get(config, "scf", "multiplicity", 1)
@@ -3697,6 +3729,7 @@ def check_input_values(
     _check_pcm(config, report)
     _check_dftb(config, report)
     _check_xtb(config, report)
+    _check_d4(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

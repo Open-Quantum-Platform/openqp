@@ -26,6 +26,15 @@ SCHEMA = {
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
         "qmmm_flag": {"type": bool, "default": "False"},
+        "d4": {"type": bool, "default": "False"},
+    },
+    "d4": {
+        "s6": {"type": str, "default": ""},
+        "s8": {"type": str, "default": ""},
+        "s9": {"type": str, "default": ""},
+        "a1": {"type": str, "default": ""},
+        "a2": {"type": str, "default": ""},
+        "alp": {"type": str, "default": ""},
     },
     "cc": {
         "maxit": {"type": int, "default": "50"},
@@ -283,6 +292,21 @@ def load_openqp_module():
 
 
 class TestOpenQPNativeAPI(unittest.TestCase):
+    def test_d4_exposes_explicit_damping_and_molecular_charge(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="water_cation_d4")
+            .molecule(geometry="water", basis="6-31g*", charge=1)
+            .d4(s6=1.0, s8=0.95948085, s9=1.0,
+                a1=0.38574991, a2=4.80688534, alp=16.0)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["charge"], "1")
+        self.assertEqual(config["input"]["d4"], "True")
+        self.assertEqual(config["d4"]["s8"], "0.95948085")
+        self.assertEqual(config["d4"]["alp"], "16.0")
+
     def test_odp_section_is_exposed_through_settings_api(self):
         openqp = load_openqp_module()
         job = openqp.OpenQP(project="odp_window")
