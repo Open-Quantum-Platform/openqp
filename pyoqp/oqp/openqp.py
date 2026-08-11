@@ -1217,12 +1217,18 @@ class OpenQP:
         _sa_here = dict(keywords.pop("state_average", None) or {})
         _sa_here.setdefault("enabled", "false")
         keywords["state_average"] = _sa_here
-        opts = dict(keywords.pop("casscf", None) or {})
+        # root is helper-owned: .casscf(root=1) then .casscf() left root=1
+        # against the reset ci.nroot=1 and failed preflight with root >= nroot.
+        # converger/hessian/max_macro_iterations are tuning knobs rather than
+        # part of the requested state, so they are left as the user set them.
+        _explicit = dict(keywords.pop("casscf", None) or {})
+        opts = dict(self._CASSCF_OWNED_KEYS)
         for key, value in (("root", root), ("converger", converger),
                            ("hessian", hessian),
                            ("max_macro_iterations", max_macro_iterations)):
             if value is not None:
                 opts[key] = value
+        opts.update(_explicit)
         return self._wf_setup(
             "casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
@@ -1237,13 +1243,20 @@ class OpenQP:
         since every averaged root has to be solved for."""
         self._require_active_space("SA-CASSCF", active_electrons, active_orbitals)
         sa = dict(keywords.pop("state_average", None) or {})
-        sa.setdefault("enabled", True)
-        sa.setdefault("nstate", nstate)
+        # Same rule: a second .sa_casscf(nstate=2) after one with
+        # weights/target_roots kept the old roots and equal_weights=false, so
+        # the new request was either rejected (a stale root now out of range) or
+        # silently kept the earlier unequal objective.
+        _sa_explicit = dict(sa)
+        sa = dict(self._SA_OWNED_KEYS)
+        sa["enabled"] = True
+        sa["nstate"] = nstate
         if weights is not None:
             sa["weights"] = weights
-            sa.setdefault("equal_weights", False)
+            sa["equal_weights"] = False
         if target_roots is not None:
             sa["target_roots"] = target_roots
+        sa.update(_sa_explicit)
         return self._wf_setup(
             "sa-casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
@@ -1262,6 +1275,12 @@ class OpenQP:
     # different clothes.  A helper call describes a COMPLETE calculation, so it
     # restores this whole set to its own defaults and then applies what the
     # call supplied; anything the caller passes still wins.
+    # The same rule for the CASSCF and state-average sections.  A helper call
+    # is a complete request, so keys it owns and this call omits go back to
+    # their defaults rather than surviving from an earlier call on the builder.
+    _CASSCF_OWNED_KEYS = {"root": "0"}
+    _SA_OWNED_KEYS = {"weights": "", "target_roots": "", "equal_weights": "true"}
+
     _PT2_OWNED_KEYS = {
         "h0": "fock",
         "contraction": "uncontracted",

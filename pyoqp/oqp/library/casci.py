@@ -177,7 +177,17 @@ class CASCI(FCI):
         _rdm_bytes = 8 * _nroot_r * (_nact_r ** 4 + _nact_r ** 2)
         _rdm_peak = 2 * _rdm_bytes          # pair_roots + the stacked copy
         _budget_r = max(1, int(self.settings.max_memory)) * 1024 ** 2
-        if _rdm_peak > _budget_r:
+        # Raise only when the artifacts were actually asked for.  These records
+        # are part of the dependent-state trial payload and are built for every
+        # CASCI, so an unconditional error turned my own guard into a
+        # regression: an energy-only CAS(2,30) at 100 roots fits its CI working
+        # set under 256 MiB and was rejected on a stacking peak it never
+        # requested.  Deferring the tensors entirely would be better still, but
+        # that drops documented OQP::*_TRIAL_RDM* tags from the payload, which
+        # is the author's call rather than a review fix.
+        _rdm_requested = (self.settings.save_rdm
+                          or getattr(self.settings, "state_average_enabled", False))
+        if _rdm_requested and _rdm_peak > _budget_r:
             raise ValueError(
                 "CASCI per-root RDM records for %d root(s) at nact=%d need "
                 "~%.2f GiB (~%.2f GiB at the stacking peak), exceeding the "
