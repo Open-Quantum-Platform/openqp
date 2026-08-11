@@ -518,6 +518,13 @@ class OpenQP:
             updates[f"input.{option}"] = value
         return self.set(**updates)
 
+    def d4(self, enabled=True, **damping):
+        """Enable DFT-D4, optionally with all six rational-damping values."""
+        self.set(**{"input.d4": enabled})
+        if damping:
+            self.section("d4", **damping)
+        return self
+
     def qmmm(self, pdb_file=None, forcefield=None, forcefield_files=None,
              qm_atoms=None, cutoff=None, embedding=None, rigidwater=None,
              frontier_scheme=None, **kwargs):

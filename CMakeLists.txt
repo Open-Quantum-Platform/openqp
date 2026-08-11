@@ -67,6 +67,8 @@ project(Open-Quantum-Package
   VERSION 1.3.0
   LANGUAGES C CXX Fortran)
 
+include(GNUInstallDirs)
+
 set(CMAKE_Fortran_STANDARD 2003)
 
 include(FortranCInterface)
@@ -286,10 +288,12 @@ if(ENABLE_DDX)
   endif()
 endif()
 
-# Fix possible issues with DYLD_LIBRARY_PATH
-if(APPLE)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-endif()
+# Installed wheels must never inherit external build/cache directories from
+# the link search path.  Each packaged shared dependency is either installed
+# beside liboqp and found through a loader-relative RPATH, or linked into
+# liboqp statically.  Keep this disabled globally as well as on the oqp target
+# so helper targets cannot reintroduce machine-local paths into a wheel.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 if(${LINALG_LIB} STREQUAL none)
     message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
@@ -324,6 +328,16 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  if(BUILD_SHARED_LIBS)
+    add_test(NAME oqp_dftd4_dynamic_dependencies
+      COMMAND ${CMAKE_COMMAND}
+        "-DOQP_LIBRARY=$<TARGET_FILE:oqp>"
+        "-DDFTD4_LIBRARY=${DFTD4_DFTD4_RUNTIME_SOURCE}"
+        "-DMULTICHARGE_LIBRARY=${DFTD4_MULTICHARGE_RUNTIME_SOURCE}"
+        "-DMCTC_LIBRARY=${DFTD4_MCTC_RUNTIME_SOURCE}"
+        "-DDFTD4_LIBRARY_DIR=${DFTD4_INSTALL}/lib"
+        -P "${CMAKE_SOURCE_DIR}/cmake/check_dftd4_dynamic.cmake")
+  endif()
   if(ENABLE_DDX)
     add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
     target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
@@ -358,4 +372,14 @@ endif()
 install(
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/oqp.h
     DESTINATION include
+)
+
+# Record the configured native-library layout for the Python runtime.  Wheels
+# force this to "lib" in pyproject.toml, while native distro installs may use
+# GNUInstallDirs values such as lib64 or lib/x86_64-linux-gnu.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/openqp-runtime-libdir.txt"
+     "${CMAKE_INSTALL_LIBDIR}\n")
+install(
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/openqp-runtime-libdir.txt"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/openqp"
 )

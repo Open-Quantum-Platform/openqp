@@ -176,6 +176,17 @@ OQP_CONFIG_SCHEMA = {
         # ignores it with a warning.
         'omp_threads': {'type': int, 'default': '0'},
     },
+    # Optional explicit rational-damping parameters for native DFT-D4.  Empty
+    # strings select the functional's published defaults; if one value is
+    # supplied, input validation requires all six.
+    'd4': {
+        's6': {'type': str, 'default': ''},
+        's8': {'type': str, 'default': ''},
+        's9': {'type': str, 'default': ''},
+        'a1': {'type': str, 'default': ''},
+        'a2': {'type': str, 'default': ''},
+        'alp': {'type': str, 'default': ''},
+    },
     'mp2': {
         'variant': {'type': string, 'default': 'mp2'},
         'same_spin_scale': {'type': float, 'default': '1.0'},
