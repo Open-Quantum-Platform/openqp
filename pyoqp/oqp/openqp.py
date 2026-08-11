@@ -1201,6 +1201,14 @@ class OpenQP:
         # larger nroot still wins.
         if root is not None:
             nroot = max(int(nroot), int(root) + 1)
+        # A preceding .sa_casscf(...) on the same builder leaves
+        # state_average.enabled=true, and CASSCF._state_average_plan treats that
+        # as authoritative regardless of the method -- so this state-SPECIFIC
+        # helper silently optimized and published a state-averaged objective.
+        # Turn it off unless this call passes its own state_average block.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
         opts = dict(keywords.pop("casscf", None) or {})
         for key, value in (("root", root), ("converger", converger),
                            ("hessian", hessian),

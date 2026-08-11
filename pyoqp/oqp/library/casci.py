@@ -11,6 +11,7 @@ dispatches here and is validated against PySCF (H4/STO-3G CAS(2,2) -2.1147334908
 
 from __future__ import annotations
 
+import os
 import numpy as np
 
 import oqp
@@ -93,8 +94,9 @@ class CASCI(FCI):
         default_coeff = np.asarray(self.mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
         _ovl = _unpack_lower_triangle(
             np.asarray(self.mol.data["OQP::SM"], dtype=float), nbf)
-        coeff, source_label = load_cas_mo_coeff(self.mol.config, nbf, default_coeff,
-                                                overlap=_ovl)
+        coeff, source_label = load_cas_mo_coeff(
+            self.mol.config, nbf, default_coeff, overlap=_ovl,
+            input_dir=os.path.dirname(os.path.abspath(self.mol.input_file or '.')))
         # Commit non-RHF orbitals to the handle.  Molecule.save_data() serializes
         # OQP::VEC_MO_A, so with orbital_source=json and guess.save_mol=true the
         # saved file carried the OLD RHF coefficients -- and feeding that file

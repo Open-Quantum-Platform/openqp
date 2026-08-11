@@ -320,7 +320,12 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
     # states.  Weigh them against the configured PT2/CAS ceiling before
     # allocating.
     if max_memory is not None:
+        # h1e/eri/eps stay live for the whole kernel call, and the merged
+        # results are copied out before the buffers are released, so the four
+        # output arrays are not the whole peak.
         _out_bytes = 8 * int(cap) * (3 + int(nstate))
+        _in_bytes = h1e_c.nbytes + eri_c.nbytes + eps_c.nbytes + cvec.nbytes
+        _out_bytes = _out_bytes + _in_bytes
         _budget = max(1, int(max_memory)) * 1024 ** 2
         if _out_bytes > _budget:
             raise ValueError(
@@ -480,7 +485,12 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
             if _pt2_max_memory is not None:
                 _int_bytes = (h1e.nbytes + eri.nbytes + eps.nbytes)
                 _copies = max(1, int(nproc))
-                _bytes = 8 * int(_total) * 5 + _int_bytes * (_copies + 1 if _copies > 1 else 1)
+                # _Stream.arrays() concatenates while the per-batch lists are
+                # still referenced, so the term arrays are transiently resident
+                # TWICE, and lexsort adds its own index buffer on top.
+                _bytes = (8 * int(_total) * 5 * 2
+                          + 8 * int(_total)
+                          + _int_bytes * (_copies + 1 if _copies > 1 else 1))
                 if _bytes > _pt2_max_memory * 1024 ** 2:
                     raise ValueError(
                         "direct QDPT2 NumPy stream needs ~%.2f GiB for %d "

@@ -74,6 +74,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import time
 
+import os
 import numpy as np
 from scipy.linalg import expm
 
@@ -1054,7 +1055,9 @@ class CASSCF:
         _cur = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
         _ovl = _unpack_lower_triangle(
             np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
-        _start, _src = load_cas_mo_coeff(mol.config, nbf, _cur, overlap=_ovl)
+        _start, _src = load_cas_mo_coeff(
+            mol.config, nbf, _cur, overlap=_ovl,
+            input_dir=os.path.dirname(os.path.abspath(mol.input_file or '.')))
         if _src != "rhf":
             _tgt = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
             mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(

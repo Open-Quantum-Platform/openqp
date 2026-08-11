@@ -777,14 +777,22 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     # counted.
     _dm4_bytes = 8 * int(nact) ** 8
     _dm3_bytes = 8 * int(nact) ** 6
-    _live_bytes = _dm4_bytes + _dm3_bytes
+    # nevpt2_make_rdms allocates an e2(ndet, nact^4) workspace while the output
+    # tensors are already live -- at CAS(8,8) that is ~153 MiB against a 128 MiB
+    # dm4, so counting only the finished tensors let a 256 MiB job through and
+    # then blew past the ceiling during construction.
+    from math import comb as _comb
+    _ndet_sc = _comb(int(nact), int(active_nelec[0])) * _comb(int(nact), int(active_nelec[1]))
+    _work_bytes = 8 * int(_ndet_sc) * int(nact) ** 4
+    _live_bytes = _dm4_bytes + _dm3_bytes + _work_bytes
     _cap = (2 * 1024 ** 3 if max_memory is None
             else max(1, int(max_memory)) * 1024 ** 2)
     if _live_bytes > _cap:
         raise ValueError(
             "strongly contracted NEVPT2 needs a dense four-particle RDM of "
             "nact^8 = %d doubles (~%.1f GiB) for nact=%d, and holds the "
-            "three-particle RDM (~%.2f GiB) alongside it -- ~%.1f GiB total, "
+            "three-particle RDM (~%.2f GiB) and the RDM construction "
+            "workspace alongside it -- ~%.1f GiB total, "
             "above the %.2f GiB ceiling%s. Reduce [cas] active_orbitals, "
             "raise [cas] max_memory, or use [pt2] contraction=none for the "
             "uncontracted NEVPT2, which does not form dm4."

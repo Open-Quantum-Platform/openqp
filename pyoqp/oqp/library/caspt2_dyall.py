@@ -68,6 +68,7 @@ from dataclasses import dataclass
 from math import comb
 import time
 
+import os
 import numpy as np
 
 import oqp
@@ -977,6 +978,19 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     from oqp.library.rdm import make_rdm1_spatial
     blocks = [range(ncore), range(ncore, ncore + nact), range(ncore + nact, nbf)]
 
+    # Third IPEA site, after the direct-QDPT engine and SC-NEVPT2: this branch
+    # builds each per-state H0 from the unmodified state-specific Fock and never
+    # reads options.ipea_shift, so the run logged the requested shift and
+    # returned the zero-IPEA answer, while the single-set CASPT2/XMS path
+    # applies it through _h0_integrals.  Refuse rather than approximate.
+    if float(getattr(options, "ipea_shift", 0.0) or 0.0) != 0.0:
+        raise ValueError(
+            "[pt2] ipea_shift is not implemented for the multi-set MS-CASPT2 "
+            "branch: each per-state H0 is built from that state's own Fock "
+            "matrix and the active-diagonal bias is never applied.  Use "
+            "method=xms-caspt2 (single-set, which applies the shift), or set "
+            "ipea_shift=0.0.")
+
     full_nelec_un = (ncore + active_nelec[0], ncore + active_nelec[1])
     # This multi-set path bypasses _build_operators, so it never met the
     # determinant cap that path now checks: a 10-electron/20-orbital system with
@@ -984,6 +998,25 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
     # materialize ~240 million full-space determinants here.  Count with
     # binomials first, as every other enumeration in this module now does.
     _ndet_un = comb(nbf, full_nelec_un[0]) * comb(nbf, full_nelec_un[1])
+    # max_det bounds the determinant COUNT; these dense operators are what the
+    # count costs.  Each ndet x ndet matrix is 8*ndet^2 bytes, and the branch
+    # holds several at once -- Hf_full per root, H0_f, and the transient of
+    # `Hf_f + enucf * np.eye(...)`, which materializes the identity and the
+    # result while the original is still live.  A 4-electron/12-orbital case
+    # with CAS(2,2) is 4356 determinants: inside the default max_det=5000, and
+    # ~145 MiB per matrix.
+    _mem_ms, _mem_ms_label = _pt2_memory(options, settings)
+    _one_mat = 8 * int(_ndet_un) * int(_ndet_un)
+    _live_ms = _one_mat * (len(roots) + 3)
+    if _live_ms > max(1, int(_mem_ms)) * 1024 ** 2:
+        raise ValueError(
+            "multi-set CASPT2 dense operators need ~%.2f GiB (%d x %d matrices, "
+            "%d live at once: one per root plus H0 and the shift transient), "
+            "exceeding the %s max_memory budget of %d MiB.  Reduce the basis or "
+            "the root count, raise %s max_memory, or use method=xms-caspt2, "
+            "which is single-set."
+            % (_live_ms / 1024 ** 3, _ndet_un, _ndet_un, len(roots) + 3,
+               _mem_ms_label, int(_mem_ms), _mem_ms_label))
     if _ndet_un > int(options.max_det):
         raise ValueError(
             "multi-set CASPT2 full determinant space too large: ndet=%d > "
@@ -1234,8 +1267,9 @@ def native_caspt2_energy(mol, ref_energy=None):
         from oqp.library.cas_orbitals import load_cas_mo_coeff
         _ovl = _unpack_lower_triangle(
             np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
-        coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default,
-                                               overlap=_ovl)
+        coeff, _orb_source = load_cas_mo_coeff(
+            mol.config, nbf, _default, overlap=_ovl,
+            input_dir=os.path.dirname(os.path.abspath(mol.input_file or '.')))
         coeff = np.asarray(coeff, dtype=float)
     eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
         (nbf, nbf, nbf, nbf), order="F"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -89,7 +90,8 @@ def check_mo_orthonormality(coeff: np.ndarray, overlap: np.ndarray, *,
 
 
 def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray,
-                      overlap: np.ndarray | None = None) -> tuple[np.ndarray, str]:
+                      overlap: np.ndarray | None = None,
+                      input_dir: str | None = None) -> tuple[np.ndarray, str]:
     """Return the MO coefficient matrix requested by ``[cas] orbital_source``.
 
     ``overlap`` is the current AO overlap; when supplied, imported coefficients
@@ -103,6 +105,14 @@ def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray,
         return np.ascontiguousarray(default_coeff, dtype=np.float64), "rhf"
     if not orbital_file:
         raise ValueError(f"[cas] orbital_source={source} requires orbital_file")
+    # A relative path in a legacy .inp means "beside the input", which is where
+    # the user put it -- resolving against the process CWD instead made
+    # `openqp examples/WF_methods/X.inp` from the repository root fail on a file
+    # sitting next to X.inp.  The concise .oqp lowering already resolves this.
+    if input_dir and not os.path.isabs(orbital_file):
+        _candidate = os.path.join(input_dir, orbital_file)
+        if os.path.isfile(_candidate) or not os.path.isfile(orbital_file):
+            orbital_file = _candidate
     if source == "json":
         loaded = load_mo_coeff_from_json(orbital_file, nbf)
         if overlap is not None:

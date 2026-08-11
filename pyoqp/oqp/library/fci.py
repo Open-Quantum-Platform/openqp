@@ -2880,6 +2880,23 @@ class FCI:
             coeffs = coeffs[:, None]
         if coeffs.ndim != 2 or coeffs.shape[0] != len(determinants):
             raise ValueError("CI vectors must have shape (ndet, nroot)")
+        # Same budget the CASCI path now applies, on the separate FCI code path:
+        # nroot copies of an norb^4 RDM2, with the comprehension's list still
+        # live while np.stack allocates the copy, so the peak is twice the
+        # stack.  FCI CAS(2,30) at nroot=100 clears the ~105 MiB CI allocation
+        # checks and then asks ~618 MiB, over 1.2 GiB at the peak.
+        _nr = int(coeffs.shape[1])
+        _rdm_bytes = 8 * _nr * (int(norb) ** 4 + int(norb) ** 2)
+        _budget = max(1, int(self.settings.max_memory)) * 1024 ** 2
+        if 2 * _rdm_bytes > _budget:
+            raise ValueError(
+                "%s per-root RDM records for %d root(s) at norb=%d need "
+                "~%.2f GiB (~%.2f GiB at the stacking peak), exceeding the "
+                "%s max_memory budget of %d MiB.  Reduce the root count or the "
+                "active space, or raise %s max_memory."
+                % (self.data_prefix, _nr, int(norb), _rdm_bytes / 1024 ** 3,
+                   2 * _rdm_bytes / 1024 ** 3, self.active_section,
+                   int(self.settings.max_memory), self.active_section))
         rdm1_roots = np.stack(
             [
                 make_rdm1_spatial(coeffs[:, root], determinants, norb)
