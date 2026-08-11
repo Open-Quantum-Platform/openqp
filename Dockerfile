@@ -23,9 +23,10 @@ ARG NINJA_JOBS=
 
 WORKDIR /opt/openqp
 
-# Install source-independent build requirements and download the complete
-# runtime dependency wheelhouse.  The final stage has no networked package
-# installation: it installs only these exact builder-resolved wheels.
+# Download exact source-independent build and runtime wheelhouses. Build tools
+# are installed only from the recorded local wheels, so the candidate inventory
+# identifies the exact distributions and hashes that created the OpenQP wheel.
+# The final stage has no networked package installation.
 COPY pyproject.toml /tmp/openqp-pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python3 - <<'PY'
@@ -38,8 +39,29 @@ project = tomllib.loads(Path("/tmp/openqp-pyproject.toml").read_text())
 build_requirements = list(project.get("build-system", {}).get("requires", []))
 runtime_requirements = list(project.get("project", {}).get("dependencies", []))
 
+Path("/opt/openqp-build-wheelhouse").mkdir(parents=True, exist_ok=True)
 subprocess.check_call(
-    [sys.executable, "-m", "pip", "install", *dict.fromkeys(build_requirements)]
+    [
+        sys.executable,
+        "-m",
+        "pip",
+        "download",
+        "--only-binary=:all:",
+        "--dest=/opt/openqp-build-wheelhouse",
+        *dict.fromkeys(build_requirements),
+    ]
+)
+subprocess.check_call(
+    [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--force-reinstall",
+        "--no-index",
+        "--find-links=/opt/openqp-build-wheelhouse",
+        *dict.fromkeys(build_requirements),
+    ]
 )
 Path("/opt/openqp-wheelhouse").mkdir(parents=True, exist_ok=True)
 subprocess.check_call(
@@ -65,6 +87,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
       --wheel-dir=/opt/openqp-wheelhouse .
 
 RUN python3 .github/scripts/record_wheelhouse.py /opt/openqp-wheelhouse \
+      --build-wheelhouse=/opt/openqp-build-wheelhouse \
       --expected-openqp-version="${OPENQP_VERSION}" \
       --output=/opt/openqp-wheelhouse/wheelhouse-manifest.json
 

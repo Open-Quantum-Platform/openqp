@@ -341,6 +341,19 @@ def main() -> None:
     )
     if wheelhouse_manifest.get("publication_gate", {}).get("ready") is not False:
         raise AssertionError("unlocked wheelhouse publication gate is not closed")
+    build_wheels = wheelhouse_manifest.get("build_wheels", [])
+    build_names = {
+        re.sub(r"[-_.]+", "-", str(wheel.get("name", ""))).lower()
+        for wheel in build_wheels
+    }
+    required_build_names = {
+        "scikit-build-core", "cmake", "ninja", "numpy", "cffi", "setuptools"
+    }
+    if not required_build_names.issubset(build_names):
+        raise AssertionError(
+            "build-system wheel inventory is incomplete: "
+            f"{sorted(required_build_names - build_names)}"
+        )
     openqp_wheels = [
         wheel
         for wheel in wheelhouse_manifest.get("wheels", [])
@@ -348,7 +361,7 @@ def main() -> None:
     ]
     if len(openqp_wheels) != 1:
         raise AssertionError(f"invalid recorded OpenQP wheel set: {openqp_wheels}")
-    for wheel in wheelhouse_manifest.get("wheels", []):
+    for wheel in [*wheelhouse_manifest.get("wheels", []), *build_wheels]:
         if not re.fullmatch(r"[0-9a-f]{64}", str(wheel.get("sha256", ""))):
             raise AssertionError(f"wheel input lacks exact SHA-256: {wheel}")
 

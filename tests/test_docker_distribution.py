@@ -58,6 +58,9 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
+        self.assertIn("/opt/openqp-build-wheelhouse", dockerfile)
+        self.assertIn("--build-wheelhouse=/opt/openqp-build-wheelhouse", dockerfile)
+        self.assertIn("--no-index", dockerfile.split("COPY . /opt/openqp", 1)[0])
         self.assertIn(
             "OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH=/opt/openblas/lib",
             dockerfile,
@@ -235,12 +238,21 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
     def test_wheelhouse_manifest_records_exact_hashes_and_stays_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             wheelhouse = Path(temporary)
+            build_wheelhouse = wheelhouse / "build"
+            build_wheelhouse.mkdir()
             self._write_wheel(wheelhouse / "OpenQP-1.3.0-py3-none-any.whl", "OpenQP", "1.3.0")
             self._write_wheel(wheelhouse / "numpy-2.0-py3-none-any.whl", "numpy", "2.0")
-            manifest = WHEELHOUSE.record(wheelhouse, "1.3.0")
+            for name in (
+                "scikit-build-core", "cmake", "ninja", "numpy", "cffi", "setuptools"
+            ):
+                filename = name.replace("-", "_") + "-1.0-py3-none-any.whl"
+                self._write_wheel(build_wheelhouse / filename, name, "1.0")
+            manifest = WHEELHOUSE.record(wheelhouse, "1.3.0", build_wheelhouse)
         self.assertIs(manifest["publication_gate"]["ready"], False)
+        self.assertEqual(manifest["schema_version"], 2)
         self.assertEqual(len(manifest["wheels"]), 2)
-        for wheel in manifest["wheels"]:
+        self.assertEqual(len(manifest["build_wheels"]), 6)
+        for wheel in [*manifest["wheels"], *manifest["build_wheels"]]:
             self.assertRegex(wheel["sha256"], r"^[0-9a-f]{64}$")
 
     @staticmethod
@@ -255,14 +267,14 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         }
 
     @staticmethod
-    def _write_oci(path, index, blobs):
-        layout = b'{"imageLayoutVersion":"1.0.0"}'
+    def _write_oci(path, index, blobs, layout_version="1.0.0"):
+        entries = {"index.json": index, **blobs}
+        if layout_version is not None:
+            entries["oci-layout"] = json.dumps(
+                {"imageLayoutVersion": layout_version}, separators=(",", ":")
+            ).encode()
         with tarfile.open(path, "w") as archive:
-            for name, payload in {
-                "index.json": index,
-                "oci-layout": layout,
-                **blobs,
-            }.items():
+            for name, payload in entries.items():
                 info = tarfile.TarInfo(name)
                 info.size = len(payload)
                 archive.addfile(info, io.BytesIO(payload))
@@ -304,6 +316,20 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             "https://spdx.dev/Document",
             "https://slsa.dev/provenance/v1",
         ):
+            if predicate_type == "https://spdx.dev/Document":
+                predicate = {
+                    "spdxVersion": "SPDX-2.3",
+                    "SPDXID": "SPDXRef-DOCUMENT",
+                }
+            else:
+                predicate = {
+                    "buildDefinition": {
+                        "buildType": "https://mobyproject.org/buildkit@v1"
+                    },
+                    "runDetails": {
+                        "builder": {"id": "https://mobyproject.org/buildkit"}
+                    },
+                }
             statements.append(
                 self._json_blob(
                     blobs,
@@ -316,7 +342,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                             }
                         ],
                         "predicateType": predicate_type,
-                        "predicate": {},
+                        "predicate": predicate,
                     },
                     "application/vnd.in-toto+json",
                 )
@@ -348,6 +374,15 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             artifact = Path(temporary) / "candidate.oci.tar"
             self._write_oci(artifact, index, blobs)
             summary = OCI_VERIFY.verify(artifact, "1.3.0", "a" * 40)
+
+            for layout_version, expected_error in (
+                (None, "missing oci-layout"),
+                ("2.0.0", "unsupported OCI image layout version"),
+            ):
+                invalid_layout = Path(temporary) / f"layout-{layout_version}.oci.tar"
+                self._write_oci(invalid_layout, index, blobs, layout_version)
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    OCI_VERIFY.verify(invalid_layout, "1.3.0", "a" * 40)
 
             image_without_platform = dict(image)
             image_without_platform.pop("platform")
@@ -555,7 +590,10 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                         }
                     ],
                     "predicateType": "https://spdx.dev/Document",
-                    "predicate": {},
+                    "predicate": {
+                        "spdxVersion": "SPDX-2.3",
+                        "SPDXID": "SPDXRef-DOCUMENT",
+                    },
                 },
                 "application/vnd.in-toto+json",
             )
@@ -580,6 +618,66 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(unrelated, unrelated_index, blobs)
             with self.assertRaisesRegex(ValueError, "candidate image has no SPDX SBOM"):
                 OCI_VERIFY.verify(unrelated, "1.3.0", "a" * 40)
+
+            malformed_statements = (
+                (
+                    "wrong-type",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[0]["digest"])]
+                        ),
+                        "_type": "https://example.test/not-in-toto",
+                    },
+                    "unsupported in-toto statement type",
+                ),
+                (
+                    "empty-spdx",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[0]["digest"])]
+                        ),
+                        "predicate": {},
+                    },
+                    "SPDX predicate has no valid spdxVersion",
+                ),
+                (
+                    "empty-slsa",
+                    {
+                        **json.loads(
+                            blobs[OCI_VERIFY._blob_path(statements[1]["digest"])]
+                        ),
+                        "predicate": {},
+                    },
+                    "SLSA v1 predicate lacks",
+                ),
+            )
+            for name, malformed_statement, expected_error in malformed_statements:
+                malformed_layer = self._json_blob(
+                    blobs, malformed_statement, "application/vnd.in-toto+json"
+                )
+                malformed_attestation = self._json_blob(
+                    blobs,
+                    {
+                        "schemaVersion": 2,
+                        "config": attestation_config,
+                        "subject": {"digest": image_digest},
+                        "layers": [malformed_layer, statements[1]],
+                    },
+                )
+                malformed_attestation["platform"] = {
+                    "os": "unknown", "architecture": "unknown"
+                }
+                malformed_attestation["annotations"] = dict(attestation["annotations"])
+                malformed_index = json.dumps(
+                    {"schemaVersion": 2, "manifests": [image, malformed_attestation]},
+                    sort_keys=True,
+                ).encode()
+                malformed_artifact = Path(temporary) / f"{name}.oci.tar"
+                self._write_oci(malformed_artifact, malformed_index, blobs)
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    OCI_VERIFY.verify(
+                        malformed_artifact, "1.3.0", "a" * 40
+                    )
         self.assertEqual(summary["image_digest"], image_digest)
         self.assertEqual(summary["platform"], "linux/amd64")
 

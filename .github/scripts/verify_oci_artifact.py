@@ -16,6 +16,11 @@ SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v0.2",
     "https://slsa.dev/provenance/v1",
 }
+IN_TOTO_STATEMENT_TYPES = {
+    "https://in-toto.io/Statement/v0.1",
+    "https://in-toto.io/Statement/v1",
+}
+OCI_IMAGE_LAYOUT_VERSION = "1.0.0"
 OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
 OCI_INDEX_MEDIA_TYPES = {
     "application/vnd.oci.image.index.v1+json",
@@ -31,11 +36,82 @@ def _blob_path(digest: str) -> str:
 
 
 def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
-    member = archive.getmember(member_name)
+    try:
+        member = archive.getmember(member_name)
+    except KeyError as exc:
+        raise ValueError(f"OCI archive is missing {member_name}") from exc
     handle = archive.extractfile(member)
-    if handle is None:
+    if handle is None or not member.isfile():
         raise ValueError(f"OCI member is not a regular file: {member_name}")
-    return json.load(handle)
+    value = json.load(handle)
+    if not isinstance(value, dict):
+        raise ValueError(f"OCI member does not contain a JSON object: {member_name}")
+    return value
+
+
+def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
+    """Validate an in-toto statement and return its typed SHA-256 subjects."""
+    statement_type = statement.get("_type")
+    if statement_type not in IN_TOTO_STATEMENT_TYPES:
+        raise ValueError(f"unsupported in-toto statement type: {statement_type}")
+
+    predicate_type = statement.get("predicateType")
+    if not isinstance(predicate_type, str) or not predicate_type:
+        raise ValueError("in-toto statement has no predicateType URI")
+    predicate = statement.get("predicate")
+    if not isinstance(predicate, dict):
+        raise ValueError(f"{predicate_type} predicate must be an object")
+
+    if predicate_type in SPDX_PREDICATE_TYPES:
+        spdx_version = predicate.get("spdxVersion")
+        if not isinstance(spdx_version, str) or not spdx_version.startswith("SPDX-"):
+            raise ValueError("SPDX predicate has no valid spdxVersion")
+        if predicate.get("SPDXID") != "SPDXRef-DOCUMENT":
+            raise ValueError("SPDX predicate is not an SPDX document")
+    elif predicate_type == "https://slsa.dev/provenance/v0.2":
+        builder = predicate.get("builder")
+        if (
+            not isinstance(builder, dict)
+            or not isinstance(builder.get("id"), str)
+            or not builder["id"]
+            or not isinstance(predicate.get("buildType"), str)
+            or not predicate["buildType"]
+        ):
+            raise ValueError("SLSA v0.2 predicate lacks builder.id or buildType")
+    elif predicate_type == "https://slsa.dev/provenance/v1":
+        build_definition = predicate.get("buildDefinition")
+        run_details = predicate.get("runDetails")
+        builder = run_details.get("builder") if isinstance(run_details, dict) else None
+        if (
+            not isinstance(build_definition, dict)
+            or not isinstance(build_definition.get("buildType"), str)
+            or not build_definition["buildType"]
+            or not isinstance(builder, dict)
+            or not isinstance(builder.get("id"), str)
+            or not builder["id"]
+        ):
+            raise ValueError(
+                "SLSA v1 predicate lacks buildDefinition.buildType or "
+                "runDetails.builder.id"
+            )
+
+    raw_subjects = statement.get("subject")
+    if not isinstance(raw_subjects, list) or not raw_subjects:
+        raise ValueError("in-toto statement subject must be a non-empty list")
+    subjects: set[str] = set()
+    for subject in raw_subjects:
+        if not isinstance(subject, dict) or not isinstance(subject.get("digest"), dict):
+            raise ValueError("in-toto statement subject lacks a digest object")
+        digest = subject["digest"].get("sha256")
+        if digest is not None:
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError(f"invalid in-toto subject SHA-256: {digest}")
+            subjects.add(f"sha256:{digest}")
+    return predicate_type, subjects
 
 
 def _descriptor_bytes(
@@ -122,6 +198,12 @@ def verify(
     artifact: Path, expected_version: str, expected_revision: str
 ) -> dict[str, Any]:
     with tarfile.open(artifact, mode="r:*") as archive:
+        layout = _read_json(archive, "oci-layout")
+        layout_version = layout.get("imageLayoutVersion")
+        if layout_version != OCI_IMAGE_LAYOUT_VERSION:
+            raise ValueError(
+                f"unsupported OCI image layout version: {layout_version}"
+            )
         index = _read_json(archive, "index.json")
         descriptors = index.get("manifests", [])
         images = []
@@ -245,18 +327,11 @@ def verify(
                 if not isinstance(layer, dict):
                     raise ValueError("attestation payload descriptor must be an object")
                 statement = _descriptor_json(archive, layer)
-                predicate_type = statement.get("predicateType")
-                if predicate_type:
-                    predicate_types.add(str(predicate_type))
-                statement_subjects: set[str] = set()
-                for statement_subject in statement.get("subject", []):
-                    digest = statement_subject.get("digest", {}).get("sha256")
-                    if digest:
-                        subject_digest = f"sha256:{digest}"
-                        statement_subjects.add(subject_digest)
-                        subjects.add(subject_digest)
-                if predicate_type and image_digest in statement_subjects:
-                    image_predicate_types.add(str(predicate_type))
+                predicate_type, statement_subjects = _statement_subjects(statement)
+                predicate_types.add(predicate_type)
+                subjects.update(statement_subjects)
+                if image_digest in statement_subjects:
+                    image_predicate_types.add(predicate_type)
 
         if image_digest not in subjects:
             raise ValueError(
