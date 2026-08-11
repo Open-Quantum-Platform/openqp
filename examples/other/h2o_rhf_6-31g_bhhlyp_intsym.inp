@@ -1,20 +1,29 @@
 # Numerical guard for the XC symmetry reduction.
 #
 # [symmetry] use_integral_symmetry routes the density-driven XC path through
-# get_sym_atom_weight, so the grid is reduced over the abelian atom orbits and
-# the representative slices are scaled. That reduction had no numerical example
-# behind it: the accompanying test inspects source text only and cannot detect a
-# wrong XC energy or matrix.
+# get_sym_atom_weight, so the grid is reduced over the abelian atom orbits: the
+# image atoms are skipped and the representative slices rescaled. That reduction
+# had no numerical example behind it -- the accompanying test inspects source
+# text only and cannot detect a wrong XC energy or matrix.
 #
 # C2v water, so the two hydrogens form one orbit and the reduction genuinely
-# engages (|G| = 4, abelian). The committed reference records both the energy
-# and symmetry_metadata, so this deck fails if the reduced XC energy drifts AND
+# engages (|G| = 4, abelian). The committed reference records the energy AND
+# symmetry_metadata, so this deck fails both if the reduced XC energy drifts and
 # if the reduction silently stops engaging.
+#
+# The geometry is given ALREADY IN THE SYMMETRY STANDARD ORIENTATION, and that
+# is deliberate. Enabling the reduction rewrites the coordinates into the
+# standard frame, and for C2v the choice of which plane holds the molecule is
+# degenerate: an off-axis input reoriented on macOS/Accelerate landed in a
+# different -- equally valid -- frame than on Linux/OpenBLAS, and the example
+# then failed its `coord` check by 2.85 bohr while the energy was fine. Starting
+# in the standard frame makes the reorientation the identity, so the deck tests
+# the XC reduction rather than the platform's eigenvector tie-break.
 [input]
 system=
- 8   0.000000000   0.000000000  -0.041061554
- 1  -0.533194329   0.533194329  -0.614469223
- 1   0.533194329  -0.533194329  -0.614469223
+ 8     0.000000000     0.000000000     0.114681534
+ 1     0.000000000     0.754050654    -0.458726135
+ 1     0.000000000    -0.754050654    -0.458726135
 charge=0
 method=hf
 basis=6-31g
