@@ -1,0 +1,7 @@
+caspt2/6-31g
+guess(type=hcore)
+scf(conv=1e-10,maxit=80,forced_attempt=3)
+cas(active_electrons=4,active_orbitals=4,frozen_core=0,orbital_source=rhf,sort_orbitals=energy,max_det=20000,max_memory=512)
+ci(nroot=1,solver=dense,eig_tol=1e-11,integral_backend=native,target_spin=any)
+pt2(reference=casci,h0=dyall,contraction=none,ipea_shift=0.0,level_shift=0.0,imaginary_shift=0.0,semi_canonical=true)
+geom="../geometries/H4-b9005833d66d.xyz"

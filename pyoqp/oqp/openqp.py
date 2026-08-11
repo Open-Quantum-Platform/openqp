@@ -30,6 +30,21 @@ def dump_strings_from_parser(parser):
 
 
 OPTIMIZER_RUNTYPES = {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}
+# Spellings `theory()` accepts for the CASPT2 family -> the input `method`.
+# Both the hyphenated and the run-together forms, since `[input] method`
+# accepts both.
+_CASPT2_VARIANTS = {
+    "caspt2": "caspt2",
+    "ms-caspt2": "ms-caspt2", "mscaspt2": "ms-caspt2",
+    "xms-caspt2": "xms-caspt2", "xmscaspt2": "xms-caspt2",
+}
+# Every method key `theory()` routes into the wavefunction stack.  All of them
+# require an HF reference, so the dispatcher rejects `functional` for the whole
+# set rather than each branch repeating the check.
+_WF_METHOD_KEYS = frozenset(
+    {"fci", "full-ci", "casci", "cas-ci", "casscf", "sa-casscf", "sacasscf",
+     "nevpt2", "sc-nevpt2", "scnevpt2", "mrmp2", "mcqdpt2", "xmcqdpt2", "qdpt2"}
+) | frozenset(_CASPT2_VARIANTS)
 RUNTYPE_SECTIONS = {
     "grad": "properties",
     "hess": "hess",
@@ -101,6 +116,31 @@ class _DFTBSectionProxy(_SectionProxy):
 
     def __call__(self, *args, **kwargs):
         return self._owner._dftb(*args, **kwargs)
+
+
+class _FCISectionProxy(_SectionProxy):
+    """Callable [fci] section proxy.
+
+    ``job.fci(...)`` runs the FCI helper, while ``job.fci.nroot`` reads and
+    ``job.fci.nroot = 2`` writes the [fci] section through the standard schema
+    interface -- a plain method here would shadow the ``__getattr__`` section
+    proxy and break attribute access for this one section, exactly as it does
+    for [dftb] and [xtb].
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._fci(*args, **kwargs)
+
+
+class _CASSCFSectionProxy(_SectionProxy):
+    """Callable [casscf] section proxy.
+
+    ``job.casscf(...)`` runs the CASSCF helper, while ``job.casscf.hessian``
+    reads and ``job.casscf.hessian = "analytic"`` writes the [casscf] section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._casscf(*args, **kwargs)
 
 
 class _XTBSectionProxy(_SectionProxy):
@@ -736,6 +776,54 @@ class OpenQP:
                 basis=basis,
                 **keywords,
             )
+        # Wavefunction stack.  `nstate` is not forwarded: its default of 3 is
+        # a response-method convention and would silently state-average or
+        # over-solve here.  SA-CASSCF is the one method for which it is
+        # meaningful, and it takes it as the number of averaged states.
+        #
+        # `functional` is a formal argument of THIS dispatcher, so it never
+        # reaches the HF-only rejection inside _wf_setup: job.theory("casscf",
+        # functional="pbe") used to clear it silently and run the HF-reference
+        # method, while the direct job.casscf(functional="pbe") correctly
+        # refuses.  Apply the same rejection here instead of quietly running a
+        # different theory than the caller asked for.
+        if method_key in _WF_METHOD_KEYS and functional not in (None, ""):
+            raise ValueError(
+                f"{method_key} requires an HF reference; do not pass functional.")
+        if method_key in {"fci", "full-ci"}:
+            return self._fci(
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+        if method_key in {"casci", "cas-ci"}:
+            return self.casci(
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+        if method_key == "casscf":
+            return self._casscf(
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+        if method_key in {"sa-casscf", "sacasscf"}:
+            return self.sa_casscf(
+                runtype=runtype, basis=basis, nstate=keywords.pop("nstate", nstate),
+                reference=reference or "rhf", **keywords)
+        if method_key in _CASPT2_VARIANTS:
+            return self.caspt2(
+                variant=keywords.pop("variant", _CASPT2_VARIANTS[method_key]),
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+        if method_key in {"nevpt2", "sc-nevpt2", "scnevpt2"}:
+            if method_key != "nevpt2":
+                keywords.setdefault("contraction", "strong")
+            return self.nevpt2(
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+        if method_key in {"mrmp2", "mcqdpt2", "xmcqdpt2", "qdpt2"}:
+            return self.qdpt2(
+                variant=keywords.pop("variant",
+                                     "mrmp2" if method_key == "qdpt2" else method_key),
+                runtype=runtype, basis=basis,
+                reference=reference or "rhf", **keywords)
+
         if method_key in {"tdhf", "td-hf"}:
             multiplicity = keywords.pop("multiplicity", 1)
             return self._response_theory(
@@ -988,6 +1076,338 @@ class OpenQP:
             self.section("mp2", **mp2_updates)
         return self
 
+    # ------------------------------------------------------------------ wavefunction stack
+    # FCI / CASCI / CASSCF and the PT2 families built on them.  These share
+    # one setup: an RHF reference in [scf], an active space in [cas], a CI
+    # solver in [ci], optionally state averaging in [state_average], and for
+    # the PT2 methods a perturbation in [pt2].  `_wf_setup` does that wiring
+    # once; the public helpers below only choose the method name and the
+    # section defaults that distinguish one from another.
+    def _wf_setup(self, method, runtype=None, basis=None, reference="rhf",
+                  multiplicity=None, active_electrons=None,
+                  active_orbitals=None, frozen_core=None, nroot=None,
+                  cas=None, ci=None, casscf=None, state_average=None,
+                  pt2=None, **scf_keywords):
+        input_updates = {"method": method, "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        if basis is not None:
+            input_updates["basis"] = basis
+        # A functional would silently switch OpenQP to DFT, and the whole
+        # stack requires an HF reference; refuse rather than compute the
+        # wrong thing.
+        if scf_keywords.pop("functional", "") not in ("", None):
+            raise ValueError(
+                f"{method} requires an HF reference; do not pass functional."
+            )
+        self.input(**input_updates)
+
+        scf_updates = {}
+        if reference is not None:
+            scf_updates["type"] = reference
+        # Every wavefunction helper describes a complete closed-shell request.
+        # A reused builder may still carry multiplicity=3 from a preceding
+        # triplet helper, so reset it unless this call explicitly says otherwise.
+        scf_updates["multiplicity"] = 1 if multiplicity is None else multiplicity
+        scf_updates.update(scf_keywords)
+        if scf_updates:
+            self.scf(**scf_updates)
+
+        cas_updates = {}
+        if active_electrons is not None:
+            cas_updates["active_electrons"] = active_electrons
+        if active_orbitals is not None:
+            cas_updates["active_orbitals"] = active_orbitals
+        # frozen_core is helper-owned like root and the [pt2] keys: omitting it
+        # on a reused builder kept the previous call's value, so a nominally
+        # default .casci(...) after .casci(frozen_core=2) silently correlated a
+        # different active electron partition.  Stage the schema default; an
+        # explicit cas={...} block below still overrides it.
+        cas_updates["frozen_core"] = (0 if frozen_core is None else frozen_core)
+        cas_updates.update(dict(cas or {}))
+        if cas_updates:
+            self.section("cas", **cas_updates)
+
+        # method=fci reads its active space and root count from [fci] ONLY
+        # (fci._settings_from_config), while every other method in this stack
+        # reads [cas] + [ci].  Writing the helper's arguments to [ci]/[cas] for
+        # an FCI job therefore passed preflight and silently ran the default
+        # one-root, all-electron calculation.
+        if method == "fci":
+            # The active space is helper-owned like frozen_core: omitting it on
+            # a reused builder left the previous call's values, so a nominal
+            # full-CI .fci() after .fci(active_electrons=2, active_orbitals=2)
+            # stayed active-space limited.
+            fci_updates = dict(cas_updates)
+            fci_updates.setdefault("active_electrons", 0)
+            fci_updates.setdefault("active_orbitals", 0)
+            if nroot is not None:
+                fci_updates["nroot"] = nroot
+            fci_updates.update(ci or {})
+            if fci_updates:
+                self.section("fci", **fci_updates)
+        else:
+            ci_updates = dict(ci or {})
+            if nroot is not None:
+                ci_updates["nroot"] = nroot
+            if ci_updates:
+                self.section("ci", **ci_updates)
+
+        if casscf:
+            self.section("casscf", **casscf)
+        if state_average:
+            self.section("state_average", **state_average)
+        if pt2:
+            self.section("pt2", **pt2)
+        return self
+
+    @staticmethod
+    def _require_active_space(method, active_electrons, active_orbitals):
+        if active_electrons is None or active_orbitals is None:
+            raise ValueError(
+                f"{method} requires active_electrons=... and active_orbitals=..."
+            )
+
+    @staticmethod
+    def _multistate_nroot(nroot, method, multistate):
+        """Root count for a PT2 helper, DERIVED rather than defaulted.
+
+        A multistate PT2 diagonalizes an effective Hamiltonian over the
+        reference states, so one root is not a multistate calculation.  Leaving
+        the helper's `nroot` unset let `[ci] nroot` keep its schema default of
+        1, and the "multistate PT2 needs at least two roots" preflight gate
+        then rejected the helper's own output.  An explicit request always
+        wins; a smaller explicit request for a multistate variant is the user
+        contradicting themselves, and is refused here rather than deeper in.
+        """
+        if nroot is None:
+            return 2 if method in multistate else 1
+        nroot = int(nroot)
+        if method in multistate and nroot < 2:
+            raise ValueError(
+                f"{method} is a multistate method and needs at least two "
+                f"reference roots; got nroot={nroot}."
+            )
+        return nroot
+
+    def _fci(self, nroot=1, frozen_core=None, runtype=None, basis=None,
+            reference="rhf", **keywords):
+        """Use a compact OpenQP full-CI setup on an RHF reference."""
+        # FCI does not consume a state-averaged objective.  Disable a block
+        # left by sa_casscf on a reused builder unless this call supplies one.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
+        return self._wf_setup(
+            "fci", runtype=runtype, basis=basis, reference=reference,
+            frozen_core=frozen_core, nroot=nroot, **keywords)
+
+    def casci(self, active_electrons=None, active_orbitals=None,
+              frozen_core=None, nroot=1, runtype=None, basis=None,
+              reference="rhf", **keywords):
+        """Use a compact OpenQP CASCI setup (fixed reference orbitals)."""
+        self._require_active_space("CASCI", active_electrons, active_orbitals)
+        # CASCI consumes [state_average] too, so a preceding .sa_casscf(...) on
+        # the same builder left its weights and roots in place and this helper
+        # published an averaged objective -- or, with the default nroot=1, was
+        # rejected outright by the stale two-state block.  Same reset _casscf
+        # does; an explicit block passed to THIS call still wins.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
+        return self._wf_setup(
+            "casci", runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core, nroot=nroot, **keywords)
+
+    def _casscf(self, active_electrons=None, active_orbitals=None,
+               frozen_core=None, nroot=1, root=None, converger=None,
+               hessian=None, max_macro_iterations=None, runtype=None,
+               basis=None, reference="rhf", **keywords):
+        """Use a compact OpenQP CASSCF setup (orbital + CI optimization)."""
+        self._require_active_space("CASSCF", active_electrons, active_orbitals)
+        # CASSCF requires root < ci.nroot, so job.casscf(root=1) with the
+        # helper's default nroot=1 generated an input its OWN preflight rejects
+        # -- the natural compact-API call for excited-state CASSCF could not
+        # run without redundantly passing nroot=2.  Solve for enough roots,
+        # exactly as sa_casscf already does for its target roots.  An explicit
+        # larger nroot still wins.
+        if root is not None:
+            nroot = max(int(nroot), int(root) + 1)
+        # A preceding .sa_casscf(...) on the same builder leaves
+        # state_average.enabled=true, and CASSCF._state_average_plan treats that
+        # as authoritative regardless of the method -- so this state-SPECIFIC
+        # helper silently optimized and published a state-averaged objective.
+        # Turn it off unless this call passes its own state_average block.
+        _sa_here = dict(keywords.pop("state_average", None) or {})
+        _sa_here.setdefault("enabled", "false")
+        keywords["state_average"] = _sa_here
+        # root is helper-owned: .casscf(root=1) then .casscf() left root=1
+        # against the reset ci.nroot=1 and failed preflight with root >= nroot.
+        # converger/hessian/max_macro_iterations are tuning knobs rather than
+        # part of the requested state, so they are left as the user set them.
+        _explicit = dict(keywords.pop("casscf", None) or {})
+        opts = dict(self._CASSCF_OWNED_KEYS)
+        for key, value in (("root", root), ("converger", converger),
+                           ("hessian", hessian),
+                           ("max_macro_iterations", max_macro_iterations)):
+            if value is not None:
+                opts[key] = value
+        opts.update(_explicit)
+        return self._wf_setup(
+            "casscf", runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core, nroot=nroot, casscf=opts, **keywords)
+
+    def sa_casscf(self, active_electrons=None, active_orbitals=None,
+                  frozen_core=None, nstate=2, weights=None, target_roots=None,
+                  runtype=None, basis=None, reference="rhf", **keywords):
+        """Use a compact OpenQP state-averaged CASSCF setup.
+
+        `nstate` is the number of averaged states; it also sets [ci] nroot,
+        since every averaged root has to be solved for."""
+        self._require_active_space("SA-CASSCF", active_electrons, active_orbitals)
+        sa = dict(keywords.pop("state_average", None) or {})
+        # Same rule: a second .sa_casscf(nstate=2) after one with
+        # weights/target_roots kept the old roots and equal_weights=false, so
+        # the new request was either rejected (a stale root now out of range) or
+        # silently kept the earlier unequal objective.
+        _sa_explicit = dict(sa)
+        sa = dict(self._SA_OWNED_KEYS)
+        sa["enabled"] = True
+        sa["nstate"] = nstate
+        if weights is not None:
+            sa["weights"] = weights
+            sa["equal_weights"] = False
+        if target_roots is not None:
+            sa["target_roots"] = target_roots
+        sa.update(_sa_explicit)
+        return self._wf_setup(
+            "sa-casscf", runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core,
+            # target_roots may be noncontiguous or not start at zero, e.g.
+            # sa_casscf(nstate=2, target_roots=[1, 2]).  Solving only `nstate`
+            # roots then makes validation reject root 2, so the CI has to be
+            # sized to the highest root actually requested.
+            # Size from the merged block, not the argument: roots supplied
+            # through an explicit state_average={...} were merged into `sa` but
+            # invisible here, so the helper emitted two CI roots while asking
+            # for root slot 2 and failed its own preflight.
+            nroot=keywords.pop("nroot", None)
+                  or max([int(sa.get("nstate", nstate))]
+                         + [int(r) + 1
+                            for r in (sa.get("target_roots") or ())]),
+            state_average=sa, **keywords)
+
+    # Every [pt2] key a compact helper is responsible for.  Patching these one
+    # at a time did not work: h0 and contraction leaked, then edshft, then the
+    # remaining shifts, then [state_average] -- five rounds of the same bug in
+    # different clothes.  A helper call describes a COMPLETE calculation, so it
+    # restores this whole set to its own defaults and then applies what the
+    # call supplied; anything the caller passes still wins.
+    # The same rule for the CASSCF and state-average sections.  A helper call
+    # is a complete request, so keys it owns and this call omits go back to
+    # their defaults rather than surviving from an earlier call on the builder.
+    _CASSCF_OWNED_KEYS = {"root": "0"}
+    _SA_OWNED_KEYS = {"weights": "", "target_roots": "", "equal_weights": "true"}
+
+    _PT2_OWNED_KEYS = {
+        "h0": "fock",
+        "contraction": "uncontracted",
+        "ipea_shift": "0.0",
+        "imaginary_shift": "0.0",
+        "level_shift": "0.0",
+        "edshft": "0.0",
+    }
+
+    def _pt2_helper_opts(self, keywords, overrides, **helper_defaults):
+        """Build a [pt2] block that does not inherit a previous helper's state.
+
+        `overrides` are this call's explicit values (None = not supplied);
+        `helper_defaults` are the keys that define THIS helper (e.g. h0=dyall
+        for nevpt2).  Also stages [state_average] off unless the call passes a
+        block: the PT2 drivers and the temporary CASSCF reference both read it,
+        so a preceding .sa_casscf(...) otherwise changed the reference or was
+        rejected outright by preflight.
+        """
+        explicit = dict(keywords.pop("pt2", None) or {})
+        opts = dict(self._PT2_OWNED_KEYS)
+        opts.update(helper_defaults)
+        opts.update({k: v for k, v in overrides.items() if v is not None})
+        opts.update(explicit)          # an explicit [pt2] block wins outright
+        _sa = dict(keywords.pop("state_average", None) or {})
+        _sa.setdefault("enabled", "false")
+        keywords["state_average"] = _sa
+        return opts
+
+    def caspt2(self, active_electrons=None, active_orbitals=None,
+               frozen_core=None, nroot=None, variant=None, h0=None,
+               ipea_shift=None, imaginary_shift=None, level_shift=None,
+               runtype=None, basis=None, reference="rhf", **keywords):
+        """Use a compact OpenQP CASPT2 setup.
+
+        `variant` selects `caspt2` (single state, the default), `ms-caspt2`
+        or `xms-caspt2`; it is the input `method`, not a [pt2] key."""
+        self._require_active_space("CASPT2", active_electrons, active_orbitals)
+        method = str(variant or "caspt2").lower().replace("_", "-")
+        if method in {"ms", "multistate"}:
+            method = "ms-caspt2"
+        elif method in {"xms", "extended-multistate"}:
+            method = "xms-caspt2"
+        if method not in {"caspt2", "ms-caspt2", "xms-caspt2"}:
+            raise ValueError(
+                "CASPT2 variant must be 'caspt2', 'ms-caspt2' or 'xms-caspt2'."
+            )
+        opts = self._pt2_helper_opts(
+            keywords,
+            {"h0": h0, "ipea_shift": ipea_shift,
+             "imaginary_shift": imaginary_shift, "level_shift": level_shift},
+            h0="fock")
+        nroot = self._multistate_nroot(
+            nroot, method, {"ms-caspt2", "xms-caspt2"})
+        return self._wf_setup(
+            method, runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core, nroot=nroot, pt2=opts or None, **keywords)
+
+    def nevpt2(self, active_electrons=None, active_orbitals=None,
+               frozen_core=None, nroot=1, contraction=None, runtype=None,
+               basis=None, reference="rhf", **keywords):
+        """Use a compact OpenQP NEVPT2 setup.
+
+        NEVPT2 is CASPT2's determinant machinery with the Dyall H0, so it is
+        `method=caspt2` plus `[pt2] h0=dyall`.  `contraction='strong'` gives
+        SC-NEVPT2; the default is the uncontracted form."""
+        self._require_active_space("NEVPT2", active_electrons, active_orbitals)
+        opts = self._pt2_helper_opts(
+            keywords, {"contraction": contraction}, h0="dyall")
+        return self._wf_setup(
+            "caspt2", runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core, nroot=nroot, pt2=opts, **keywords)
+
+    def qdpt2(self, active_electrons=None, active_orbitals=None,
+              frozen_core=None, nroot=None, variant=None, edshft=None,
+              runtype=None, basis=None, reference="rhf", **keywords):
+        """Use a compact OpenQP QDPT2 setup in the GAMESS convention.
+
+        `variant` selects `mrmp2` (single state, the default), `mcqdpt2`
+        (multistate) or `xmcqdpt2` (Granovsky-extended)."""
+        self._require_active_space("QDPT2", active_electrons, active_orbitals)
+        method = str(variant or "mrmp2").lower().replace("-", "").replace("_", "")
+        if method not in {"mrmp2", "mcqdpt2", "xmcqdpt2"}:
+            raise ValueError(
+                "QDPT2 variant must be 'mrmp2', 'mcqdpt2' or 'xmcqdpt2'."
+            )
+        opts = self._pt2_helper_opts(
+            keywords, {"edshft": edshft}, h0="fock")
+        nroot = self._multistate_nroot(nroot, method, {"mcqdpt2", "xmcqdpt2"})
+        return self._wf_setup(
+            method, runtype=runtype, basis=basis, reference=reference,
+            active_electrons=active_electrons, active_orbitals=active_orbitals,
+            frozen_core=frozen_core, nroot=nroot, pt2=opts or None, **keywords)
+
     def _response_theory(self, functional="", basis=None, runtype=None,
                          nstate=3, reference="rhf", multiplicity=1,
                          response_type=None, **tdhf_keywords):
@@ -1070,6 +1490,26 @@ class OpenQP:
         [dftb] section like every other schema section.
         """
         return _DFTBSectionProxy(self, "dftb")
+
+    @property
+    def fci(self):
+        """Callable [fci] section proxy.
+
+        ``job.fci(...)`` runs the FCI helper, while ``job.fci.nroot`` /
+        ``job.fci.nroot = 2`` read and write the [fci] section like every
+        other schema section.
+        """
+        return _FCISectionProxy(self, "fci")
+
+    @property
+    def casscf(self):
+        """Callable [casscf] section proxy.
+
+        ``job.casscf(...)`` runs the CASSCF helper, while
+        ``job.casscf.hessian`` / ``job.casscf.hessian = "analytic"`` read and
+        write the [casscf] section like every other schema section.
+        """
+        return _CASSCFSectionProxy(self, "casscf")
 
     def tddftb(self, **kwargs):
         """Use the conventional singlet TD-DFTB (TDA) response helper."""

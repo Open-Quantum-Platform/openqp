@@ -1,0 +1,8 @@
+casscf/sto-3g
+guess(type=hcore)
+scf(maxit=100,forced_attempt=3,save_molden=false)
+properties(scf_prop="")
+cas(active_electrons=4,active_orbitals=4,frozen_core=3,orbital_source=rhf,sort_orbitals=energy,max_det=5000,max_memory=512)
+casscf(max_macro_iterations=50,converger=ah,hessian=analytic)
+ci(nroot=1,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=any,root_tracking=energy)
+geom="../geometries/H2O-95fa99c614ed.xyz"

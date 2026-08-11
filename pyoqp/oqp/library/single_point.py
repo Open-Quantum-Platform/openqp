@@ -146,6 +146,25 @@ MP2_VARIANT_SCALES = {
 }
 
 
+SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
+    # 'ccsd'/'ccsd(t)' arrive with #302; the two guards were merged into this
+    # one constant so a method cannot be accepted by one and rejected by the
+    # other.
+    'hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
+    'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
+    'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'mrmp2', 'mcqdpt2', 'xmcqdpt2',
+}
+
+
+def _normalized_method_label(method):
+    return str(method).strip().lower()
+
+
+def _raise_unavailable_wavefunction_method(method):
+    raise ValueError(f'Unknown method type {method}')
+
+
 def _no_integral_symmetry_in_child(config):
     """Force ``[symmetry] use_integral_symmetry`` off in a child job config.
 
@@ -355,7 +374,14 @@ class SinglePoint(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config['input']['method']
+        # Normalize once, here, rather than at each comparison.  Preflight
+        # lowercases the method, so `method=MP2`/`TDHF`/`CCSD(T)` reached the
+        # dispatcher in its original spelling: the normalized support guard
+        # accepted it and every `self.method == 'mp2'`-style branch then missed,
+        # so the run fell through to `energies = ref_energy` and reported the HF
+        # result for a correlated or excited-state request.  Fixing the fci and
+        # casci branches individually last round left the rest of the family.
+        self.method = _normalized_method_label(mol.config['input']['method'])
         self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
@@ -582,13 +608,14 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)']:
-            raise ValueError(f'Unknown method type {self.method}')
+        if _normalized_method_label(self.method) not in SUPPORTED_SINGLE_POINT_ENERGY_METHODS:
+            _raise_unavailable_wavefunction_method(self.method)
 
         target_converger = self.mol.config['scf']['converger_type']
         try:
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
+
 
             # ixcore.  The shift overwrites the unselected occupied orbital
             # energies with -100000 so the TD trial vectors leave the requested
@@ -608,12 +635,33 @@ class SinglePoint(Calculator):
                     )
             else:
                 self.ixcore_shift()
-
             # compute excitations
             if self.method == 'tdhf':
+                # ixcore is a TDHF/XAS orbital shift and is not used by FCI.
+                self.ixcore_shift()
                 energies = self.excitation(ref_energy)
             elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
+            elif self.method == 'fci':
+                # Exact comparison here while the CASSCF/PT2 branches below
+                # normalize: preflight lowercases the method, so `method=FCI`
+                # passed validation AND the support guard, then missed this
+                # branch and fell through to `energies = ref_energy` -- the run
+                # reported the RHF energy as its FCI result, silently.
+                from oqp.library.fci import FCI
+                energies = FCI(self.mol).energy(ref_energy)
+            elif self.method == 'casci':
+                from oqp.library.casci import CASCI
+                energies = CASCI(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:
+                from oqp.library.casscf import CASSCF
+                energies = CASSCF(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {
+                'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'mrmp2', 'mcqdpt2', 'xmcqdpt2'
+            }:
+                from oqp.library.caspt2_dyall import native_caspt2_energy
+                energies = native_caspt2_energy(self.mol, ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -1170,7 +1218,7 @@ class Gradient(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config["input"]["method"]
+        self.method = _normalized_method_label(mol.config["input"]["method"])
         self.td = mol.config["tdhf"]["type"]
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]
@@ -1195,6 +1243,32 @@ class Gradient(Calculator):
     def gradient(self):
         # check method
         if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+            # Native PT2 family (energy-only kernels): central-difference
+            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
+            # avoid a circular module dependency.
+            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
+            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                grads = pt2_numerical_gradient(self.mol, self.grads)
+                self.mol.grads = grads
+                # Molecule.get_results() reads the NATIVE data._data.grad
+                # buffer, which only the Fortran gradient kernels ever write.
+                # Handing the finite-difference result back to the optimizer
+                # while leaving that buffer untouched meant guess.save_mol=true
+                # serialized stale (or uninitialized) numbers as the public
+                # "grad" result: right optimization, wrong saved JSON.  Mirror
+                # the selected gradient into it the way the native paths do.
+                #
+                # grads is indexed BY STATE ((nstate, natom, 3)), matching
+                # tddft_grad -- not by position in the request list.  So
+                # grads[0] is always S0: a `[properties] grad=1` run would have
+                # optimized with S1 while publishing the S0 gradient.  Write
+                # the last requested state, which is what the TDDFT path leaves
+                # in the buffer after looping over self.grads in order.
+                _sel = [int(s) for s in np.atleast_1d(self.grads)]
+                if len(grads) and _sel and 0 <= _sel[-1] < len(grads):
+                    self.mol.set_grad(grads[_sel[-1]])
+                return grads
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')

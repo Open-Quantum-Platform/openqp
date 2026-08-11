@@ -8,10 +8,18 @@ MPIManager()
 # package-local shared libraries replace the external Python `dftd4` package.
 
 
+#: True when OMP_NUM_THREADS carried a usable value before OpenQP was imported,
+#: i.e. the thread count is the caller's request rather than the default below.
+#: Kernels that take an explicit thread argument (the native FCI/CASSCF/RDM
+#: entry points, see oqp.library.fci._fci_lib_threads) need to tell the two
+#: apart: a defaulted '1' means "nobody asked", not "run me serially".
+#: pyoqp.Runner sets this to True when it applies `[input] omp_threads`.
+OMP_THREADS_FROM_ENV = True
 try:
     int(os.environ['OMP_NUM_THREADS'])
 except (KeyError, ValueError):
     os.environ['OMP_NUM_THREADS'] = '1'
+    OMP_THREADS_FROM_ENV = False
 
 
 def _oqp_wrapper(func):
@@ -60,3 +68,7 @@ for attr_name in dir(lib):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:
             globals()[attr_name] = attr_value
+
+#: True once the compiled liboqp backend loaded successfully (the import above
+#: fails loudly otherwise). WF/test backend guards probe this flag.
+BACKEND_AVAILABLE = True

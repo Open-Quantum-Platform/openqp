@@ -19,7 +19,12 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-METHODS = {"hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb"}
+METHODS = {
+    "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
+    "fci", "casci", "casscf", "sa-casscf", "sacasscf",
+    "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+    "mrmp2", "mcqdpt2", "xmcqdpt2",
+}
 CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
@@ -142,6 +147,49 @@ DFTB_NATIVE_ONLY_KEYS = (
     "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
     "response_cam_beta", "onsite_ss", "onsite_sp", "onsite_pp",
 )
+
+PLANNED_WAVEFUNCTION_METHODS = set()
+FCI_INTEGRAL_BACKENDS = {"native"}
+FCI_SOLVERS = {"auto", "dense", "davidson"}
+TARGET_SPIN_LABELS = {
+    "singlet",
+    "doublet",
+    "triplet",
+    "quartet",
+    "quintet",
+    "sextet",
+    "septet",
+    "octet",
+    "nonet",
+}
+CAS_ORBITAL_SOURCES = {"rhf", "json"}
+CAS_LOCALIZE_OPTIONS = {"none"}
+CAS_SORT_OPTIONS = {"energy", "none"}
+CI_ROOT_TRACKING_OPTIONS = {"energy"}
+PT2_METHOD_ALIASES = {
+    "caspt2": "caspt2",
+    "ms-caspt2": "ms-caspt2",
+    "mscaspt2": "ms-caspt2",
+    "xms-caspt2": "xms-caspt2",
+    "xmscaspt2": "xms-caspt2",
+    "mrmp2": "mrmp2",
+    "mcqdpt2": "mcqdpt2",
+    "xmcqdpt2": "xmcqdpt2",
+}
+PT2_VARIANTS = {"auto", "caspt2", "ms-caspt2", "xms-caspt2",
+                "mrmp2", "mcqdpt2", "xmcqdpt2"}
+# QDPT (GAMESS-convention) family groupings used by the consistency checks
+PT2_SINGLE_STATE_METHODS = {"caspt2", "mrmp2"}
+PT2_MS_METHODS = {"ms-caspt2", "mcqdpt2"}
+PT2_XMS_METHODS = {"xms-caspt2", "xmcqdpt2"}
+PT2_QDPT_METHODS = {"mrmp2", "mcqdpt2", "xmcqdpt2"}
+PT2_REFERENCES = {"casci", "casscf"}
+PT2_CONTRACTIONS = {"uncontracted", "none", "full", "strong", "sc", "sc-nevpt2",
+                    "ic", "internally-contracted"}
+PT2_STRONG_CONTRACTIONS = {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}
+PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
+STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
+STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -163,7 +211,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, or method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -267,6 +315,231 @@ def _get(config: dict[str, Any], section: str, option: str, default: Any = None)
 
 def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
+
+
+def _check_choice_literal(
+    value: Any,
+    path: str,
+    choices: set[str],
+    report: CheckReport,
+    *,
+    message: str,
+    action: str,
+    fallback: str,
+    default_if_none: bool = False,
+    default_if_blank: bool = False,
+) -> str:
+    if value is None and default_if_none:
+        return fallback
+    if isinstance(value, str):
+        if not value.strip() and default_if_blank:
+            return fallback
+        normalized = value.strip().lower()
+        if normalized in choices:
+            return normalized
+        report_value = normalized
+    else:
+        report_value = value
+
+    report.add(
+        "ERROR",
+        path,
+        message,
+        value=report_value,
+        expected=", ".join(sorted(choices)),
+        action=action,
+    )
+    return fallback
+
+
+def _parse_bool_literal(value: Any) -> tuple[bool, bool]:
+    if isinstance(value, bool):
+        return True, value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y", "on", ".true."}:
+            return True, True
+        if normalized in {"0", "false", "f", "no", "n", "off", ".false.", ""}:
+            return True, False
+        return False, False
+    if isinstance(value, int) and value in (0, 1):
+        return True, bool(value)
+    return False, False
+
+
+def _check_bool_literal(
+    value: Any,
+    path: str,
+    report: CheckReport,
+    *,
+    action: str = "Use true or false.",
+) -> bool:
+    return _validate_bool_literal(value, path, report, action=action)[1]
+
+
+def _validate_bool_literal(
+    value: Any,
+    path: str,
+    report: CheckReport,
+    *,
+    action: str = "Use true or false.",
+) -> tuple[bool, bool]:
+    valid, parsed = _parse_bool_literal(value)
+    if valid:
+        return True, parsed
+    report.add(
+        "ERROR",
+        path,
+        "Boolean option must be true or false.",
+        value=value,
+        expected="true or false",
+        action=action,
+    )
+    return False, False
+
+
+def _parse_int_literal(value: Any) -> tuple[bool, int]:
+    if isinstance(value, bool):
+        return False, 0
+    if isinstance(value, int):
+        return True, int(value)
+    if isinstance(value, float):
+        if math.isfinite(value) and value.is_integer():
+            return True, int(value)
+        return False, 0
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return False, 0
+        try:
+            return True, int(raw, 10)
+        except ValueError:
+            return False, 0
+    return False, 0
+
+
+def _check_int_literal(
+    value: Any,
+    path: str,
+    report: CheckReport,
+    *,
+    minimum: int | None = None,
+    expected: str = "integer",
+    action: str = "Use an integer value.",
+) -> tuple[bool, int]:
+    valid, parsed = _parse_int_literal(value)
+    if not valid:
+        report.add(
+            "ERROR",
+            path,
+            "Integer option must be an exact integer.",
+            value=value,
+            expected=expected,
+            action=action,
+        )
+        return False, 0
+    if minimum is not None and parsed < minimum:
+        report.add(
+            "ERROR",
+            path,
+            "Integer option is below the allowed minimum.",
+            value=value,
+            expected=f">= {minimum}",
+            action=action,
+        )
+        return False, parsed
+    return True, parsed
+
+
+def _check_active_electron_literal(
+    value: Any,
+    path: str,
+    report: CheckReport,
+) -> tuple[bool, int]:
+    expected = "non-negative integer or nalpha,nbeta pair"
+    action = "Use 0 for default inference, a total count, or an alpha,beta pair such as 1,1."
+    if isinstance(value, str) and "," in value:
+        values = _as_list(value)
+    elif isinstance(value, (list, tuple)):
+        values = list(value)
+    else:
+        return _check_int_literal(
+            value,
+            path,
+            report,
+            minimum=0,
+            expected=expected,
+            action=action,
+        )
+
+    if len(values) != 2:
+        report.add(
+            "ERROR",
+            path,
+            "Active electron pair must contain exactly alpha and beta counts.",
+            value=value,
+            expected=expected,
+            action=action,
+        )
+        return False, 0
+
+    total = 0
+    for item in values:
+        valid, parsed = _check_int_literal(
+            item,
+            path,
+            report,
+            minimum=0,
+            expected=expected,
+            action=action,
+        )
+        if not valid:
+            return False, 0
+        total += parsed
+    return True, total
+
+
+def _check_float_literal(
+    value: Any,
+    path: str,
+    report: CheckReport,
+    *,
+    expected: str = "finite number",
+    action: str = "Use a finite numeric value.",
+) -> tuple[bool, float]:
+    if isinstance(value, bool):
+        report.add(
+            "ERROR",
+            path,
+            "Numeric option must be a finite real number, not a boolean.",
+            value=value,
+            expected=expected,
+            action=action,
+        )
+        return False, 0.0
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            path,
+            "Numeric option must be a finite real number.",
+            value=value,
+            expected=expected,
+            action=action,
+        )
+        return False, 0.0
+    if not math.isfinite(numeric):
+        report.add(
+            "ERROR",
+            path,
+            "Numeric option must be finite.",
+            value=value,
+            expected=expected,
+            action=action,
+        )
+        return False, numeric
+    return True, numeric
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -2165,6 +2438,2579 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
+def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "fci":
+        return
+
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    multiplicity = _get(config, "scf", "multiplicity", 1)
+    functional = _get(config, "input", "functional", "")
+    d4_enabled = _get(config, "input", "d4", False)
+    # _check_casci returns early for method=fci, so its PCM rejection never
+    # reaches this method -- the same trap the state-average check fell into.
+    if str(_get(config, "pcm", "enabled", False)).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            "PCM is not incorporated into the FCI driver: the reaction "
+            "potential reaches only the SCF Fock, so the correlated energy "
+            "would be a gas-phase result reported as a solvated one.",
+            value=True,
+            expected="pcm.enabled=false for method=fci",
+            action=("Run the correlated calculation in the gas phase, or use a "
+                    "method whose driver consumes the PCM potential."),
+        )
+
+    # FCI._settings_from_config reads [fci] ONLY -- it never parses the shared
+    # [state_average] section, so every state-average field stays at its
+    # disabled default and the run publishes energies[0] as the scalar instead
+    # of the requested weighted average, with nothing reporting the
+    # discrepancy.  Reject the opt-in rather than accept and ignore it.
+    if str(_get(config, "state_average", "enabled", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "state_average.enabled",
+            "method=fci does not read the [state_average] section, so state "
+            "averaging would be silently ignored and the lowest root reported.",
+            value=True,
+            expected="state_average.enabled=false for method=fci",
+            action=("Use method=sa-casscf for a state-averaged orbital "
+                    "optimization, or method=casci for a fixed-orbital state "
+                    "average; for a plain FCI run set [state_average] "
+                    "enabled=false and choose roots with [fci] nroot."),
+        )
+    nroot = _get(config, "fci", "nroot", 1)
+    active_electrons = _get(config, "fci", "active_electrons", 0)
+    active_orbitals = _get(config, "fci", "active_orbitals", 0)
+    frozen_core = _get(config, "fci", "frozen_core", 0)
+    max_det = _get(config, "fci", "max_det", 5000)
+    max_memory = _get(config, "fci", "max_memory", 2048)
+    eig_tol = _get(config, "fci", "eig_tol", 1.0e-10)
+    integral_backend = _check_choice_literal(
+        _get(config, "fci", "integral_backend", "native"),
+        "fci.integral_backend",
+        FCI_INTEGRAL_BACKENDS,
+        report,
+        message="Unknown FCI integral backend.",
+        action="Use [fci] integral_backend=native.",
+        fallback="native",
+    )
+    integral_cutoff = _get(config, "fci", "integral_cutoff", 5.0e-11)
+    solver = _check_choice_literal(
+        _get(config, "fci", "solver", "auto"),
+        "fci.solver",
+        FCI_SOLVERS,
+        report,
+        message="Unknown FCI solver.",
+        action="Use [fci] solver=auto, dense, or davidson.",
+        fallback="auto",
+    )
+    davidson_maxiter = _get(config, "fci", "davidson_maxiter", 100)
+    davidson_subspace = _get(config, "fci", "davidson_subspace", 0)
+    _validate_bool_literal(
+        _get(config, "fci", "print_ci_vectors", False),
+        "fci.print_ci_vectors",
+        report,
+        action="Set [fci] print_ci_vectors=true or false.",
+    )
+    _validate_bool_literal(
+        _get(config, "fci", "save_ci_vectors", False),
+        "fci.save_ci_vectors",
+        report,
+        action="Set [fci] save_ci_vectors=true or false.",
+    )
+    _validate_bool_literal(
+        _get(config, "fci", "save_rdm", False),
+        "fci.save_rdm",
+        report,
+        action="Set [fci] save_rdm=true or false.",
+    )
+    ci_print_threshold = _get(config, "fci", "ci_print_threshold", 5.0e-2)
+    target_spin = _as_lower(_get(config, "fci", "target_spin", "any"))
+
+    nroot_valid, nroot_int = _check_int_literal(
+        nroot,
+        "fci.nroot",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Set [fci] nroot=1 or higher.",
+    )
+    if not nroot_valid:
+        nroot_int = 1
+
+    active_electrons_valid, active_electrons_total = _check_active_electron_literal(
+        active_electrons,
+        "fci.active_electrons",
+        report,
+    )
+    active_count_values: dict[str, int] = {
+        "active_electrons": active_electrons_total if active_electrons_valid else 0,
+    }
+    for option, value in (
+        ("active_orbitals", active_orbitals),
+        ("frozen_core", frozen_core),
+    ):
+        valid_count, parsed_count = _check_int_literal(
+            value,
+            f"fci.{option}",
+            report,
+            expected="non-negative integer",
+            action="Use 0 for the default full-space setting or a positive count.",
+        )
+        active_count_values[option] = parsed_count if valid_count else 0
+
+    _check_int_literal(
+        max_det,
+        "fci.max_det",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Increase [fci] max_det.",
+    )
+    _check_int_literal(
+        max_memory,
+        "fci.max_memory",
+        report,
+        minimum=1,
+        expected="positive integer MiB",
+        action="Set [fci] max_memory to a positive size in MiB.",
+    )
+    eig_tol_valid, eig_tol_float = _check_float_literal(
+        eig_tol,
+        "fci.eig_tol",
+        report,
+        expected="positive finite number",
+        action="Set [fci] eig_tol to a positive threshold.",
+    )
+    integral_cutoff_valid, integral_cutoff_float = _check_float_literal(
+        integral_cutoff,
+        "fci.integral_cutoff",
+        report,
+        expected="finite non-negative number",
+        action="Set [fci] integral_cutoff to zero or a positive threshold.",
+    )
+    _check_int_literal(
+        davidson_maxiter,
+        "fci.davidson_maxiter",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Set [fci] davidson_maxiter to a positive integer.",
+    )
+    davidson_subspace_valid, davidson_subspace_int = _check_int_literal(
+        davidson_subspace,
+        "fci.davidson_subspace",
+        report,
+        minimum=0,
+        expected="0 or positive integer",
+        action="Use 0 for the internal default.",
+    )
+    ci_print_threshold_valid, ci_print_threshold_float = _check_float_literal(
+        ci_print_threshold,
+        "fci.ci_print_threshold",
+        report,
+        expected="finite non-negative number",
+        action="Set [fci] ci_print_threshold to zero or a positive value.",
+    )
+
+    if runtype != "energy":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "FCI is currently implemented only for energy calculations.",
+            value=runtype,
+            expected="energy",
+            action="Set [input] runtype=energy.",
+        )
+
+    if scf_type != "rhf" or multiplicity != 1:
+        report.add(
+            "ERROR",
+            "scf.type",
+            "FCI MVP requires a closed-shell RHF reference.",
+            value=f"{scf_type}/{multiplicity}",
+            expected="scf.type=rhf and scf.multiplicity=1",
+            action="Use an RHF singlet reference or extend the FCI implementation.",
+        )
+
+    if functional:
+        report.add(
+            "ERROR",
+            "input.functional",
+            "FCI requires HF one- and two-electron integrals.",
+            value=functional,
+            action="Unset [input] functional for method=fci.",
+        )
+
+    if d4_enabled:
+        report.add(
+            "ERROR",
+            "input.d4",
+            "FCI reports the variational electronic energy; D4 dispersion correction is not part of the FCI solver.",
+            value=d4_enabled,
+            expected=False,
+            action="Disable [input] d4 for method=fci.",
+        )
+
+    if min(active_count_values.values()) < 0:
+        report.add(
+            "ERROR",
+            "fci.active_space",
+            "FCI active-space counts cannot be negative.",
+            value={
+                "active_electrons": active_electrons,
+                "active_orbitals": active_orbitals,
+                "frozen_core": frozen_core,
+            },
+            expected="non-negative integers",
+            action="Use 0 for the default full-space setting or a positive count.",
+        )
+
+    if eig_tol_valid and eig_tol_float <= 0:
+        report.add(
+            "ERROR",
+            "fci.eig_tol",
+            "FCI eigensolver tolerance must be positive.",
+            value=eig_tol,
+            expected="> 0",
+            action="Set [fci] eig_tol to a positive threshold.",
+        )
+
+    if integral_cutoff_valid and integral_cutoff_float < 0:
+        report.add(
+            "ERROR",
+            "fci.integral_cutoff",
+            "FCI integral cutoff cannot be negative.",
+            value=integral_cutoff,
+            expected=">= 0",
+            action="Set [fci] integral_cutoff to zero or a positive threshold.",
+        )
+
+    if integral_backend not in FCI_INTEGRAL_BACKENDS:
+        report.add(
+            "ERROR",
+            "fci.integral_backend",
+            "Unknown FCI integral backend.",
+            value=integral_backend,
+            expected=", ".join(sorted(FCI_INTEGRAL_BACKENDS)),
+            action="Use [fci] integral_backend=native.",
+        )
+
+    if solver not in FCI_SOLVERS:
+        report.add(
+            "ERROR",
+            "fci.solver",
+            "Unknown FCI solver.",
+            value=solver,
+            expected=", ".join(sorted(FCI_SOLVERS)),
+            action="Use [fci] solver=auto, dense, or davidson.",
+        )
+
+    if (
+        nroot_valid
+        and davidson_subspace_valid
+        and davidson_subspace_int > 0
+        and davidson_subspace_int < nroot_int
+    ):
+        report.add(
+            "ERROR",
+            "fci.davidson_subspace",
+            "FCI Davidson subspace override must be at least the requested root count.",
+            value=davidson_subspace,
+            expected=f"0 or >= nroot ({nroot_int})",
+            action="Use 0 for the internal default or raise [fci] davidson_subspace.",
+        )
+
+    if ci_print_threshold_valid and ci_print_threshold_float < 0:
+        report.add(
+            "ERROR",
+            "fci.ci_print_threshold",
+            "FCI CI print threshold cannot be negative.",
+            value=ci_print_threshold,
+            expected=">= 0",
+            action="Set [fci] ci_print_threshold to zero or a positive value.",
+        )
+
+    if not _target_spin_is_valid(target_spin):
+        report.add(
+            "ERROR",
+            "fci.target_spin",
+            "Unknown target spin label.",
+            value=target_spin,
+            expected="any, a named spin multiplicity, or a positive integer multiplicity",
+            action="Use [fci] target_spin=any, singlet, doublet, triplet, quartet, or a positive integer multiplicity.",
+        )
+
+
+def _target_spin_is_valid(target_spin: Any) -> bool:
+    if target_spin is None:
+        return True
+    if isinstance(target_spin, str):
+        target = target_spin.strip().lower()
+        if not target or target == "any" or target in TARGET_SPIN_LABELS:
+            return True
+        valid, parsed = _parse_int_literal(target)
+        return valid and parsed >= 1
+    valid, parsed = _parse_int_literal(target_spin)
+    return valid and parsed >= 1
+
+
+def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method not in {
+        "casci", "casscf", "sa-casscf", "sacasscf",
+        "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+        "mrmp2", "mcqdpt2", "xmcqdpt2",
+    }:
+        return
+
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    multiplicity = _get(config, "scf", "multiplicity", 1)
+    functional = _get(config, "input", "functional", "")
+    d4_enabled = _get(config, "input", "d4", False)
+
+    active_electrons = _get(config, "cas", "active_electrons", 0)
+    active_orbitals = _get(config, "cas", "active_orbitals", 0)
+    frozen_core = _get(config, "cas", "frozen_core", 0)
+    active_orbital_indices = _as_list(_get(config, "cas", "active_orbital_indices", []))
+    core_orbital_indices = _as_list(_get(config, "cas", "core_orbital_indices", []))
+    orbital_source = _check_choice_literal(
+        _get(config, "cas", "orbital_source", "rhf"),
+        "cas.orbital_source",
+        CAS_ORBITAL_SOURCES,
+        report,
+        message="CASCI supports converged RHF orbitals or imported OpenQP JSON MO coefficients.",
+        action="Set [cas] orbital_source=rhf or json.",
+        fallback="rhf",
+    )
+    orbital_file_raw = _get(config, "cas", "orbital_file", "")
+    localize = _check_choice_literal(
+        _get(config, "cas", "localize", "none"),
+        "cas.localize",
+        CAS_LOCALIZE_OPTIONS,
+        report,
+        message="Orbital localization is planned but not implemented for CASCI.",
+        action="Set [cas] localize=none.",
+        fallback="none",
+    )
+    sort_orbitals = _check_choice_literal(
+        _get(config, "cas", "sort_orbitals", "energy"),
+        "cas.sort_orbitals",
+        CAS_SORT_OPTIONS,
+        report,
+        message="Only canonical RHF energy ordering is implemented for CASCI.",
+        action="Set [cas] sort_orbitals=energy or none.",
+        fallback="energy",
+    )
+    max_det = _get(config, "cas", "max_det", 5000)
+    max_memory = _get(config, "cas", "max_memory", 2048)
+
+    nroot = _get(config, "ci", "nroot", 1)
+    eig_tol = _get(config, "ci", "eig_tol", 1.0e-10)
+    integral_backend = _check_choice_literal(
+        _get(config, "ci", "integral_backend", "native"),
+        "ci.integral_backend",
+        FCI_INTEGRAL_BACKENDS,
+        report,
+        message="Unknown CASCI integral backend.",
+        action="Use [ci] integral_backend=native.",
+        fallback="native",
+    )
+    integral_cutoff = _get(config, "ci", "integral_cutoff", 5.0e-11)
+    solver = _check_choice_literal(
+        _get(config, "ci", "solver", "auto"),
+        "ci.solver",
+        FCI_SOLVERS,
+        report,
+        message="Unknown CASCI solver.",
+        action="Use [ci] solver=auto, dense, or davidson.",
+        fallback="auto",
+    )
+    davidson_maxiter = _get(config, "ci", "davidson_maxiter", 100)
+    davidson_subspace = _get(config, "ci", "davidson_subspace", 0)
+    _validate_bool_literal(
+        _get(config, "ci", "print_ci_vectors", False),
+        "ci.print_ci_vectors",
+        report,
+        action="Set [ci] print_ci_vectors=true or false.",
+    )
+    _validate_bool_literal(
+        _get(config, "ci", "save_ci_vectors", False),
+        "ci.save_ci_vectors",
+        report,
+        action="Set [ci] save_ci_vectors=true or false.",
+    )
+    _validate_bool_literal(
+        _get(config, "ci", "save_rdm", False),
+        "ci.save_rdm",
+        report,
+        action="Set [ci] save_rdm=true or false.",
+    )
+    _, spin_adapted = _validate_bool_literal(
+        _get(config, "ci", "spin_adapted", False),
+        "ci.spin_adapted",
+        report,
+        action="Set [ci] spin_adapted=false until spin-adapted CI is implemented.",
+    )
+    target_spin = _as_lower(_get(config, "ci", "target_spin", "any"))
+    root_tracking = _check_choice_literal(
+        _get(config, "ci", "root_tracking", "energy"),
+        "ci.root_tracking",
+        CI_ROOT_TRACKING_OPTIONS,
+        report,
+        message="CASCI is a single-shot fixed-orbital calculation; overlap root tracking is reserved for future CASSCF iterations.",
+        action="Set [ci] root_tracking=energy for CASCI.",
+        fallback="energy",
+    )
+    ci_print_threshold = _get(config, "ci", "ci_print_threshold", 5.0e-2)
+    _, state_average_enabled = _validate_bool_literal(
+        _get(config, "state_average", "enabled", False),
+        "state_average.enabled",
+        report,
+        action="Set [state_average] enabled=true or false.",
+    )
+    state_average_weights_raw = _as_list(_get(config, "state_average", "weights", []))
+    state_average_nstate = _get(config, "state_average", "nstate", 0)
+    state_average_target_roots = _as_list(_get(config, "state_average", "target_roots", []))
+    state_average_equal_weights_valid, state_average_equal_weights = _validate_bool_literal(
+        _get(config, "state_average", "equal_weights", True),
+        "state_average.equal_weights",
+        report,
+        action="Set [state_average] equal_weights=true or false.",
+    )
+    _check_choice_literal(
+        _get(config, "state_average", "spin_blocks", "diagnostic"),
+        "state_average.spin_blocks",
+        STATE_AVERAGE_SPIN_BLOCKS,
+        report,
+        message="State-average spin-block controls are diagnostic-only in this branch.",
+        action="Set [state_average] spin_blocks=diagnostic.",
+        fallback="diagnostic",
+    )
+    _check_choice_literal(
+        _get(config, "state_average", "root_tracking", "overlap"),
+        "state_average.root_tracking",
+        STATE_AVERAGE_ROOT_TRACKING,
+        report,
+        message="State-average root tracking uses conservative RDM-overlap guards across SA-CASSCF orbital iterations.",
+        action="Set [state_average] root_tracking=overlap.",
+        fallback="overlap",
+    )
+    # ...but the validated value is then DISCARDED: root_tracking is not a
+    # FCISettings field, and neither CASSCF path performs any overlap matching
+    # between macroiterations.  Each fresh CI solve is consumed in current
+    # energy order, so an orbital step that reorders nearby roots can move
+    # unequal weights -- or a noncontiguous target_roots subset -- onto
+    # different physical states and optimize a discontinuous objective.
+    #
+    # This cannot go in the "differs from its default" dead-key list below: the
+    # DEFAULT here is `overlap`, i.e. the value that does not exist, so a
+    # differs-from-default test would never fire on the case that matters.
+    # Warn whenever state-averaging is actually active over several roots,
+    # which is exactly when energy ordering can be insufficient.
+    _sa_enabled = str(_get(config, "state_average", "enabled", False)
+                      ).strip().lower() in _TRUE_BOOL
+    if _sa_enabled or _as_lower(_get(config, "input", "method", "")) in {
+            "sa-casscf", "sacasscf"}:
+        try:
+            _sa_n = int(_get(config, "state_average", "nstate", 0) or 0)
+        except (TypeError, ValueError):
+            _sa_n = 0
+        if not _sa_n:
+            try:
+                _sa_n = int(_get(config, "ci", "nroot", 1) or 1)
+            except (TypeError, ValueError):
+                _sa_n = 1
+        _sa_targets = _as_list(_get(config, "state_average", "target_roots", []))
+        # Unequal weights or a noncontiguous subset are the cases where a root
+        # flip changes WHICH physical states carry the weight, so an
+        # energy-ordered solve can converge a discontinuous objective.  Equal
+        # weights over a contiguous 0..n-1 block are invariant under a swap
+        # within the block, so those stay a warning.
+        _uneq = str(_get(config, "state_average", "equal_weights", True)
+                    ).strip().lower() not in _TRUE_BOOL
+        try:
+            _tr_ints = [int(x) for x in _sa_targets]
+        except (TypeError, ValueError):
+            _tr_ints = []
+        _noncontig = bool(_tr_ints) and sorted(_tr_ints) != list(range(len(_tr_ints)))
+        if (_sa_n > 1 or len(_sa_targets) > 1) and (_uneq or _noncontig):
+            report.add(
+                "ERROR",
+                "state_average.root_tracking",
+                "State-average roots are followed by energy order only, and "
+                "this configuration is not invariant under a root flip: "
+                + ("unequal weights" if _uneq else "")
+                + (" and " if _uneq and _noncontig else "")
+                + ("a noncontiguous target_roots subset" if _noncontig else "")
+                + ".  [state_average] root_tracking is validated but not "
+                "applied, so a reordering between macroiterations would move "
+                "the weights onto different physical states.",
+                value=_get(config, "state_average", "root_tracking", "overlap"),
+                expected="equal weights over a contiguous root block",
+                action=("Use equal_weights=true over target_roots=0..n-1, or "
+                        "run the states separately, until overlap-based "
+                        "tracking is implemented."),
+            )
+        elif _sa_n > 1 or len(_sa_targets) > 1:
+            report.add(
+                "WARNING",
+                "state_average.root_tracking",
+                "State-average roots are followed by energy order only: "
+                "[state_average] root_tracking is validated but not applied, "
+                "and no overlap matching is performed between SA-CASSCF "
+                "macroiterations.",
+                value=_get(config, "state_average", "root_tracking", "overlap"),
+                expected="an implemented tracking scheme",
+                action=("Check the per-iteration state energies for root "
+                        "flips, especially with unequal weights or a "
+                        "noncontiguous target_roots subset."),
+            )
+
+    if orbital_file_raw is None:
+        orbital_file = ""
+    elif isinstance(orbital_file_raw, bool) or not isinstance(orbital_file_raw, str):
+        report.add(
+            "ERROR",
+            "cas.orbital_file",
+            "CAS orbital file must be a string path.",
+            value=orbital_file_raw,
+            expected="string path or empty string",
+            action="Set [cas] orbital_file to an OpenQP JSON restart file or leave it empty.",
+        )
+        orbital_file = ""
+    else:
+        orbital_file = orbital_file_raw.strip()
+
+    active_electrons_valid, active_electrons_total = _check_active_electron_literal(
+        active_electrons,
+        "cas.active_electrons",
+        report,
+    )
+    active_count_values: dict[str, int] = {
+        "active_electrons": active_electrons_total if active_electrons_valid else 0,
+    }
+    for option, value in (
+        ("active_orbitals", active_orbitals),
+        ("frozen_core", frozen_core),
+    ):
+        valid_count, parsed_count = _check_int_literal(
+            value,
+            f"cas.{option}",
+            report,
+            expected="non-negative integer",
+            action="Use 0 for default inference or positive active-space counts.",
+        )
+        active_count_values[option] = parsed_count if valid_count else 0
+    active_orbitals_int = active_count_values["active_orbitals"]
+
+    parsed_active_orbital_indices: list[int] = []
+    active_orbital_indices_valid = True
+    for idx in active_orbital_indices:
+        valid_index, parsed_index = _check_int_literal(
+            idx,
+            "cas.active_orbital_indices",
+            report,
+            minimum=1,
+            expected="positive 1-based MO index",
+            action="Use 1-based MO labels, e.g. 2,3.",
+        )
+        if valid_index:
+            parsed_active_orbital_indices.append(parsed_index)
+        else:
+            active_orbital_indices_valid = False
+
+    parsed_core_orbital_indices: list[int] = []
+    core_orbital_indices_valid = True
+    for idx in core_orbital_indices:
+        valid_index, parsed_index = _check_int_literal(
+            idx,
+            "cas.core_orbital_indices",
+            report,
+            minimum=1,
+            expected="positive 1-based MO index",
+            action="Use 1-based MO labels.",
+        )
+        if valid_index:
+            parsed_core_orbital_indices.append(parsed_index)
+        else:
+            core_orbital_indices_valid = False
+
+    _check_int_literal(
+        max_det,
+        "cas.max_det",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Increase [cas] max_det.",
+    )
+    _check_int_literal(
+        max_memory,
+        "cas.max_memory",
+        report,
+        minimum=1,
+        expected="positive integer MiB",
+        action="Set [cas] max_memory to a positive size in MiB.",
+    )
+    nroot_valid, nroot_int = _check_int_literal(
+        nroot,
+        "ci.nroot",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Set [ci] nroot=1 or higher.",
+    )
+    if not nroot_valid:
+        nroot_int = 1
+    eig_tol_valid, eig_tol_float = _check_float_literal(
+        eig_tol,
+        "ci.eig_tol",
+        report,
+        expected="positive finite number",
+        action="Set [ci] eig_tol to a positive threshold.",
+    )
+    integral_cutoff_valid, integral_cutoff_float = _check_float_literal(
+        integral_cutoff,
+        "ci.integral_cutoff",
+        report,
+        expected="finite non-negative number",
+        action="Set [ci] integral_cutoff to zero or a positive threshold.",
+    )
+    _check_int_literal(
+        davidson_maxiter,
+        "ci.davidson_maxiter",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Set [ci] davidson_maxiter to a positive integer.",
+    )
+    davidson_subspace_valid, davidson_subspace_int = _check_int_literal(
+        davidson_subspace,
+        "ci.davidson_subspace",
+        report,
+        minimum=0,
+        expected="0 or positive integer",
+        action="Use 0 for the internal default.",
+    )
+    ci_print_threshold_valid, ci_print_threshold_float = _check_float_literal(
+        ci_print_threshold,
+        "ci.ci_print_threshold",
+        report,
+        expected="finite non-negative number",
+        action="Set [ci] ci_print_threshold to zero or a positive value.",
+    )
+
+    # CASSCF and the PT2 drivers build their orbital blocks as range(ncore) then
+    # range(ncore, ncore+nact), so contiguous_active_space() rejects a scattered
+    # explicit selection -- but only at runtime, after the reference SCF (and
+    # after a whole CASSCF optimization for a PT2 casscf reference).  The input
+    # is deterministically wrong, so say so here.  CASCI keeps arbitrary
+    # selections; it supports them.
+    if method in ({"casscf", "sa-casscf", "sacasscf"} | set(PT2_METHOD_ALIASES)):
+        _act = [str(x).strip() for x in _as_list(
+            _get(config, "cas", "active_orbital_indices", [])) if str(x).strip()]
+        _cor = [str(x).strip() for x in _as_list(
+            _get(config, "cas", "core_orbital_indices", [])) if str(x).strip()]
+        if _act:
+            try:
+                _a = [int(x) for x in _act]
+                _c = [int(x) for x in _cor]
+            except (TypeError, ValueError):
+                _a = _c = None
+            if _a is not None:
+                _ok = (sorted(_c) == list(range(1, len(_c) + 1))
+                       and sorted(_a) == list(range(len(_c) + 1,
+                                                    len(_c) + len(_a) + 1)))
+                if not _ok:
+                    report.add(
+                        "ERROR",
+                        "cas.active_orbital_indices",
+                        f"{method} requires a contiguous core/active orbital "
+                        "partition; this selection is scattered.",
+                        value=",".join(_act),
+                        expected="core 1..nc then active nc+1..nc+na",
+                        action=("Reorder the orbitals ([cas] sort_orbitals or "
+                                "an orbital file) so the active space is "
+                                "contiguous, or use method=casci, which "
+                                "supports arbitrary selections."),
+                    )
+
+    # Two opt-ins whose whole point is an assurance that is never delivered, so
+    # a warning is not enough -- a user who sets them is told the run honoured
+    # them.  Reject until they are implemented (see the unimplemented-keyword
+    # list further down for the ones that only warn, where the default value is
+    # the honest behaviour).
+    #
+    # casscf.max_function_evaluations: no optimizer reads it, and _powell_step
+    # is a scaled-gradient fallback with no inner evaluation loop at all -- the
+    # documented "stop Powell after this many objective evaluations" has no
+    # place to be enforced, and SciPy is never called.
+    if method in {"casscf", "sa-casscf", "sacasscf"}:
+        _mfe = _get(config, "casscf", "max_function_evaluations", 0)
+        try:
+            _mfe_i = int(_mfe)
+        except (TypeError, ValueError):
+            _mfe_i = 0
+        if _mfe_i > 0:
+            report.add(
+                "ERROR",
+                "casscf.max_function_evaluations",
+                "The CASSCF evaluation cap is not implemented: no optimizer "
+                "reads this key, so the requested limit would not be applied.",
+                value=_mfe,
+                expected="0",
+                action=("Leave [casscf] max_function_evaluations at 0 and bound "
+                        "the run with [casscf] max_macro_iterations instead."),
+            )
+
+    # casscf.diagnostic_benchmark_required: same shape -- no runtime path writes
+    # the diagnostic report, reads the reference, applies the tolerance, or
+    # fails on a mismatch, so an explicitly REQUIRED benchmark is never
+    # performed and the run reports success anyway.
+    if str(_get(config, "casscf", "diagnostic_benchmark_required", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_benchmark_required",
+            "The CASSCF diagnostic benchmark is not implemented: no runtime "
+            "path writes the diagnostic report or compares it against "
+            "[casscf] diagnostic_benchmark_reference_file, so requiring it "
+            "would silently pass.",
+            value=True,
+            expected="casscf.diagnostic_benchmark_required=false",
+            action=("Compare the CASSCF diagnostics against your reference "
+                    "outside the run for now."),
+        )
+
+    # PCM adds its reaction potential to the ITERATIVE SCF Fock and records
+    # e_pcm separately.  The correlated drivers then transform the unmodified
+    # OQP::Hcore, take only the nuclear repulsion as ecore, and overwrite the
+    # total energy -- so a solvated request returned a gas-phase correlated
+    # result with no indication that the solvent had been dropped.
+    if (method in ({"casci", "casscf", "sa-casscf", "sacasscf"}
+                   | set(PT2_METHOD_ALIASES))
+            and str(_get(config, "pcm", "enabled", False)
+                    ).strip().lower() in _TRUE_BOOL):
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            f"PCM is not incorporated into the {method} driver: the reaction "
+            "potential reaches only the SCF Fock, so the correlated energy "
+            "would be a gas-phase result reported as a solvated one.",
+            value=True,
+            expected="pcm.enabled=false for the wavefunction methods",
+            action=("Run the correlated calculation in the gas phase, or use a "
+                    "method whose driver consumes the PCM potential."),
+        )
+
+    # The reciprocal of the multistate check: a single-state correction takes
+    # exactly one target root, and _reference_roots raises for more -- but only
+    # after the reference SCF has run.  Reject the accepted-but-unrunnable
+    # combination up front.
+    if PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS:
+        _tr_ss = [x for x in _as_list(_get(config, "pt2", "target_roots", []))
+                  if str(x).strip()]
+        if len(_tr_ss) > 1:
+            report.add(
+                "ERROR",
+                "pt2.target_roots",
+                f"{method} is single-state and corrects exactly one root; "
+                f"{len(_tr_ss)} were requested.",
+                value=",".join(str(x) for x in _tr_ss),
+                expected="a single root index",
+                action=("Give one root, or select a multistate method "
+                        "(ms-caspt2, xms-caspt2, mcqdpt2, xmcqdpt2)."),
+            )
+
+    # [cas] orbital_source=json fixes the coefficients in the AO basis of ONE
+    # geometry.  Every displaced point of a numerical gradient changes the AO
+    # overlap, so the same matrix is no longer orthonormal there -- the new
+    # C^T S C guard rejects it at the first displacement, and without that guard
+    # it silently correlated a non-orthonormal set.  Projecting into each
+    # displaced metric is a modelling choice (which orbitals ARE "the same" at a
+    # displaced geometry is exactly what a cold restart re-solves), so refuse
+    # the combination rather than invent one.
+    if (method in PT2_METHOD_ALIASES
+            and runtype in {"grad", "optimize", "ts", "mep", "irc"}
+            and _as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"):
+        report.add(
+            "ERROR",
+            "cas.orbital_source",
+            "JSON-sourced CAS orbitals cannot drive a PT2 numerical gradient: "
+            "the coefficients are fixed in the AO basis of the central "
+            "geometry and are not orthonormal in the displaced ones.",
+            value="json",
+            expected="rhf",
+            action=("Use [cas] orbital_source=rhf for gradient-driven PT2 "
+                    "runtypes, or compute single-point energies with the "
+                    "imported orbitals."),
+        )
+
+    # [cas] sort_orbitals is choice-validated and never consumed.  For RHF
+    # orbitals "energy" is vacuously satisfied (they arrive energy-ordered), but
+    # a JSON file carries the column order its author chose -- so an accepted
+    # sort_orbitals=energy silently left it unsorted, and the sequential active
+    # space then correlated different orbitals than requested.
+    if (_as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"
+            and _as_lower(_get(config, "cas", "sort_orbitals", "energy")) == "energy"):
+        report.add(
+            "ERROR",
+            "cas.sort_orbitals",
+            "[cas] sort_orbitals=energy is not applied to JSON-sourced "
+            "orbitals: the loader preserves the file's column order and no "
+            "runtime path reorders it.",
+            value="energy",
+            expected="none",
+            action=("Set [cas] sort_orbitals=none and order the columns in the "
+                    "file, which is the point of supplying them, or use "
+                    "orbital_source=rhf."),
+        )
+
+    # pt2.reference_report / casscf.diagnostic_report: the flag asks for a JSON
+    # artifact that no runtime path writes, so the run reports success having
+    # produced nothing.  Same class as the *_required flags already rejected.
+    for _sec, _key in (("pt2", "reference_report"),
+                       ("casscf", "diagnostic_report")):
+        if str(_get(config, _sec, _key, False)).strip().lower() in _TRUE_BOOL:
+            report.add(
+                "ERROR",
+                f"{_sec}.{_key}",
+                f"[{_sec}] {_key} is not implemented: no runtime path writes "
+                "the report, so the requested file would never appear.",
+                value=True,
+                expected=f"{_sec}.{_key}=false",
+                action="Read the values from the run log for now.",
+            )
+
+    # pt2.denominator_cutoff is accepted and never consulted: no dense or direct
+    # resolvent reads it, and the kernels divide against a hard-coded 1e-300
+    # floor instead.  A user lowering or raising it gets no change in behaviour,
+    # which for a numerical-stability knob is worse than not offering it.
+    _dc = _get(config, "pt2", "denominator_cutoff", 1.0e-10)
+    try:
+        _dc_f = float(_dc)
+    except (TypeError, ValueError):
+        _dc_f = 1.0e-10
+    if _dc_f != 1.0e-10:
+        report.add(
+            "ERROR",
+            "pt2.denominator_cutoff",
+            "[pt2] denominator_cutoff is not implemented: no PT2 resolvent "
+            "reads it, so a nondefault threshold would have no effect on the "
+            "intruder handling it appears to control.",
+            value=_dc,
+            expected="1.0e-10 (the inert default)",
+            action=("Use [pt2] imaginary_shift or level_shift to regularize "
+                    "small denominators."),
+        )
+
+    # pt2.save_amplitudes / print_amplitudes: no runtime consumer exists for
+    # either flag or for amplitude_threshold, so the opt-in produces nothing at
+    # all.  Same class as the benchmark flags below -- the user asks for an
+    # artifact and the run reports success without it.
+    for _amp in ("save_amplitudes", "print_amplitudes"):
+        if str(_get(config, "pt2", _amp, False)).strip().lower() in _TRUE_BOOL:
+            report.add(
+                "ERROR",
+                f"pt2.{_amp}",
+                f"[pt2] {_amp} is not implemented: no runtime path writes or "
+                "prints PT2 amplitudes, so the requested output would not be "
+                "produced.",
+                value=True,
+                expected=f"pt2.{_amp}=false",
+                action="Remove the flag; the PT2 summary already reports the "
+                       "reference weights and the largest denominators.",
+            )
+
+    # pt2.benchmark_required: nothing reads benchmark_reference_file, compares
+    # against benchmark_tolerance, or fails on a mismatch, so a run that
+    # "requires" the benchmark completes having never performed it.
+    if str(_get(config, "pt2", "benchmark_required", False)
+           ).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "pt2.benchmark_required",
+            "The PT2 benchmark comparison is not implemented: no runtime path "
+            "reads [pt2] benchmark_reference_file or applies "
+            "benchmark_tolerance, so requiring it would silently pass.",
+            value=True,
+            expected="pt2.benchmark_required=false",
+            action=("Compare the PT2 energies against your reference outside "
+                    "the run for now."),
+        )
+
+    # CASCI implements print_ci_vectors / save_ci_vectors / save_rdm through its
+    # post-solve artifact methods; CASSCF.energy stores only the final energy
+    # array and never prints or writes the final CI vectors or RDMs, so a user
+    # switching from casci to casscf silently loses the requested output.
+    # Reject rather than drop it; emitting them from the final CASSCF solve is
+    # a feature.
+    if method in {"casscf", "sa-casscf", "sacasscf"}:
+        for _art in ("print_ci_vectors", "save_ci_vectors", "save_rdm"):
+            if str(_get(config, "ci", _art, False)).strip().lower() in _TRUE_BOOL:
+                report.add(
+                    "ERROR",
+                    f"ci.{_art}",
+                    f"[ci] {_art} is not produced by the CASSCF driver; only "
+                    "CASCI emits the CI artifacts.",
+                    value=True,
+                    expected=f"ci.{_art}=false for method={method}",
+                    action=("Run method=casci to obtain the CI vectors/RDMs "
+                            "for fixed orbitals, or disable this flag."),
+                )
+
+    # The PT2 family carries central-difference numerical gradients
+    # (pt2_numgrad.py) wired through the Gradient seam, so the gradient-
+    # consuming drivers work for it; casci/casscf remain energy-only.
+    #
+    # meci/mecp/neb are deliberately NOT here.  Listing them made this gate
+    # advertise workflows that either cannot pass preflight or are broken:
+    #   - meci is rejected a few thousand lines down by "MECI optimization
+    #     requires an excited-state method" (tdhf/dftb/xtb only), and its
+    #     BaekA selector treats root 0 as the internal reference while PT2
+    #     roots are 0-based -- so the two gates contradict each other.
+    #   - neb is likewise rejected by "NEB currently supports HF/DFT and
+    #     TDHF/MRSF state-specific surfaces".
+    #   - mecp is WORSE: it passes preflight, but MECPOpt.one_step evaluates
+    #     both surfaces through sp.reference()/sp.excitation(), bypassing the
+    #     PT2 energy dispatch entirely, while its Gradient.gradient() call does
+    #     dispatch PT2 -- so the optimizer mixes TDHF energies with PT2
+    #     gradients.  It also needs two different multiplicities, and PT2 here
+    #     is restricted to a closed-shell singlet.
+    # Each is rejected explicitly below with its own reason, so the user gets
+    # one clear message instead of a self-contradicting pair or a silent
+    # mismatch.  Wiring these up properly is a feature, not a checker fix.
+    pt2_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    _pt2_unsupported_runtypes = {
+        "meci": ("MECI requires an excited-state response method; the PT2 "
+                 "numerical-gradient path does not provide the state pair "
+                 "MECIOpt needs."),
+        "mecp": ("MECP crosses two different spin multiplicities and evaluates "
+                 "both surfaces outside the PT2 energy dispatch; PT2 here is "
+                 "restricted to a closed-shell singlet reference."),
+        "neb": ("NEB currently supports HF/DFT and TDHF/MRSF state-specific "
+                "surfaces only."),
+    }
+    if method in PT2_METHOD_ALIASES and runtype in _pt2_unsupported_runtypes:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            f"{runtype.upper()} is not implemented for the PT2 methods. "
+            + _pt2_unsupported_runtypes[runtype],
+            value=f"{method}/{runtype}",
+            expected="energy, grad, optimize, ts, mep, or irc",
+            action=("Use a PT2 runtype that is wired to the numerical-gradient "
+                    "path, or run this workflow with method=tdhf."),
+        )
+    if method in PT2_METHOD_ALIASES:
+        # Single-state PT2 returns a one-element mol.energies, so the
+        # state-specific optimizer's energies[istate] is out of range for the
+        # schema's default optimize.istate=1 -- an otherwise default input
+        # failed on its first step.
+        if (PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS
+                and runtype in {"optimize", "ts", "mep", "irc"}):
+            _istate = _get(config, "optimize", "istate", 1)
+            try:
+                _istate_i = int(_istate)
+            except (TypeError, ValueError):
+                _istate_i = 1
+            if _istate_i != 0:
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "Single-state PT2 exposes only one energy (index 0).",
+                    value=_istate,
+                    expected="0",
+                    action="Set [optimize] istate=0 for caspt2/mrmp2, or use a "
+                           "multistate method (ms-caspt2/mcqdpt2) to optimize "
+                           "an excited root.",
+                )
+        # The multistate half of the same problem: the single-state guard above
+        # only fires for caspt2/mrmp2, so ms-/xms-caspt2 and MCQDPT accepted
+        # optimize.istate=2 against ci.nroot=2 and only failed after the whole
+        # central PT2 calculation had run, when the optimizer indexed past the
+        # published energies.  Bound it exactly as the properties.grad path
+        # below is bounded.
+        if (PT2_METHOD_ALIASES.get(method) not in PT2_SINGLE_STATE_METHODS
+                and runtype in {"optimize", "ts", "mep", "irc"}):
+            _tr = _as_list(_get(config, "pt2", "target_roots", []))
+            try:
+                _n_out = len(_tr) if _tr else max(
+                    1, int(_get(config, "pt2", "nroot", 0) or 0)
+                    or int(_get(config, "ci", "nroot", 1) or 1))
+            except (TypeError, ValueError):
+                _n_out = 1
+            _istate_m = _get(config, "optimize", "istate", 1)
+            try:
+                _istate_mi = int(_istate_m)
+            except (TypeError, ValueError):
+                _istate_mi = None
+            if _istate_mi is not None and (_istate_mi < 0 or _istate_mi >= _n_out):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    f"This multistate PT2 job publishes {_n_out} state(s), "
+                    f"indices 0..{_n_out - 1}.",
+                    value=_istate_m,
+                    expected=f"0..{_n_out - 1}",
+                    action=("Set [optimize] istate within the published range, "
+                            "or request more roots via [pt2] target_roots / "
+                            "nroot (and [ci] nroot)."),
+                )
+        # runtype=grad selects its state through [properties] grad, not
+        # optimize.istate, and that selector was unvalidated: a single-state
+        # caspt2/mrmp2 job with grad=1 passed preflight and then ran the whole
+        # central PT2 calculation before pt2_numerical_gradient raised for an
+        # out-of-range state.  Bound it here, against the number of PT2
+        # energies the method actually publishes.
+        if runtype == "grad":
+            _single = PT2_METHOD_ALIASES.get(method) in PT2_SINGLE_STATE_METHODS
+            if _single:
+                _nstates = 1
+            else:
+                _tr = _as_list(_get(config, "pt2", "target_roots", []))
+                try:
+                    _nstates = len(_tr) if _tr else max(
+                        1, int(_get(config, "pt2", "nroot", 0) or 0)
+                        or int(_get(config, "ci", "nroot", 1) or 1))
+                except (TypeError, ValueError):
+                    _nstates = 1
+            for _g in _as_list(_get(config, "properties", "grad", [])):
+                try:
+                    _gi = int(_g)
+                except (TypeError, ValueError):
+                    continue
+                if _gi < 0 or _gi >= _nstates:
+                    report.add(
+                        "ERROR",
+                        "properties.grad",
+                        ("Single-state PT2 exposes only one energy (index 0)."
+                         if _single else
+                         f"This PT2 job publishes {_nstates} state(s), "
+                         f"indices 0..{_nstates - 1}."),
+                        value=_g,
+                        expected="0" if _single else f"0..{_nstates - 1}",
+                        action=("Set [properties] grad=0 for caspt2/mrmp2, or "
+                                "use a multistate method (ms-caspt2/mcqdpt2) "
+                                "and request more roots via [pt2] target_roots "
+                                "/ nroot."),
+                    )
+        if runtype not in pt2_grad_runtypes:
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "This PT2 runtype is not wired (energies + numerical-gradient "
+                "drivers only).",
+                value=runtype,
+                expected=", ".join(sorted(pt2_grad_runtypes)),
+                action="Use energy, grad, or a gradient-driven optimizer runtype "
+                       "(optimize/meci/mecp/ts/mep/neb/irc).",
+            )
+        grad_step = _get(config, "pt2", "grad_step", 1.0e-3)
+        valid_gs, gs = _check_float_literal(grad_step, "pt2.grad_step", report)
+        if valid_gs and gs <= 0.0:
+            report.add(
+                "ERROR",
+                "pt2.grad_step",
+                "The numerical-gradient displacement must be positive.",
+                value=grad_step,
+                expected="> 0 (Bohr)",
+                action="Set [pt2] grad_step to a positive displacement (default 1e-3).",
+            )
+        grad_guess = str(_get(config, "pt2", "grad_guess", "cold") or "cold").strip().lower()
+        if grad_guess not in {"cold", "warm"}:
+            report.add(
+                "ERROR",
+                "pt2.grad_guess",
+                "Unknown displaced-point guess policy.",
+                value=grad_guess,
+                expected="cold or warm",
+                action="Use grad_guess=cold (fresh guess, bit-reproducible) or warm "
+                       "(reuse in-memory MOs).",
+            )
+        _check_float_literal(_get(config, "pt2", "grad_gap_warn", 1.0e-5),
+                             "pt2.grad_gap_warn", report)
+        rpg = _get(config, "pt2", "grad_ranks_per_group", 0)
+        try:
+            rpg_val = int(str(rpg).strip() or 0)
+        except (TypeError, ValueError):
+            rpg_val = -1
+        if rpg_val < 0:
+            report.add(
+                "ERROR",
+                "pt2.grad_ranks_per_group",
+                "The MPI rank-group size for displaced energies must be a "
+                "non-negative integer.",
+                value=rpg,
+                expected=">= 0 (0 = one rank group per displacement)",
+                action="Leave [pt2] grad_ranks_per_group at 0 for automatic "
+                       "fan-out, or set the number of ranks that should "
+                       "cooperate on one displaced energy.",
+            )
+    elif runtype != "energy":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "CASCI is currently implemented only for energy calculations.",
+            value=runtype,
+            expected="energy",
+            action="Set [input] runtype=energy.",
+        )
+
+    if scf_type != "rhf" or multiplicity != 1:
+        report.add(
+            "ERROR",
+            "scf.type",
+            "CASCI MVP requires a closed-shell RHF reference.",
+            value=f"{scf_type}/{multiplicity}",
+            expected="scf.type=rhf and scf.multiplicity=1",
+            action="Use an RHF singlet reference for method=casci.",
+        )
+
+    if functional:
+        report.add(
+            "ERROR",
+            "input.functional",
+            "CASCI requires HF one- and two-electron integrals.",
+            value=functional,
+            action="Unset [input] functional for method=casci.",
+        )
+
+    if d4_enabled:
+        report.add(
+            "ERROR",
+            "input.d4",
+            "CASCI reports the variational electronic energy; D4 dispersion correction is not part of the CI solver.",
+            value=d4_enabled,
+            expected=False,
+            action="Disable [input] d4 for method=casci.",
+        )
+
+    if min(active_count_values.values()) < 0:
+        report.add(
+            "ERROR",
+            "cas.active_space",
+            "CAS active-space counts cannot be negative.",
+            value={
+                "active_electrons": active_electrons,
+                "active_orbitals": active_orbitals,
+                "frozen_core": frozen_core,
+            },
+            expected="non-negative integers",
+            action="Use 0 for default inference or positive active-space counts.",
+        )
+
+    if active_orbital_indices_valid and parsed_active_orbital_indices:
+        if len(set(parsed_active_orbital_indices)) != len(parsed_active_orbital_indices):
+            report.add("ERROR", "cas.active_orbital_indices", "Active orbital indices must be unique.", value=active_orbital_indices, action="Remove duplicate MO indices.")
+        if active_orbitals_int and active_orbitals_int != len(parsed_active_orbital_indices):
+            report.add("ERROR", "cas.active_orbitals", "active_orbitals must match the length of active_orbital_indices.", value={"active_orbitals": active_orbitals, "indices": active_orbital_indices}, action="Set active_orbitals to the list length or omit it.")
+
+    if core_orbital_indices_valid and parsed_core_orbital_indices:
+        if len(set(parsed_core_orbital_indices)) != len(parsed_core_orbital_indices):
+            report.add("ERROR", "cas.core_orbital_indices", "Core orbital indices must be unique.", value=core_orbital_indices, action="Remove duplicate MO indices.")
+        if parsed_core_orbital_indices and not parsed_active_orbital_indices:
+            report.add("ERROR", "cas.active_orbital_indices", "Explicit core_orbital_indices require active_orbital_indices.", value={"active": active_orbital_indices, "core": core_orbital_indices}, action="Provide explicit active orbital indices or use frozen_core for sequential selection.")
+        if parsed_active_orbital_indices and set(parsed_active_orbital_indices) & set(parsed_core_orbital_indices):
+            report.add("ERROR", "cas.core_orbital_indices", "Core and active orbital index lists must not overlap.", value={"active": active_orbital_indices, "core": core_orbital_indices}, action="Choose disjoint core and active orbital lists.")
+
+    if orbital_source not in CAS_ORBITAL_SOURCES:
+        report.add(
+            "ERROR",
+            "cas.orbital_source",
+            "CASCI supports converged RHF orbitals or imported OpenQP JSON MO coefficients.",
+            value=orbital_source,
+            expected=", ".join(sorted(CAS_ORBITAL_SOURCES)),
+            action="Set [cas] orbital_source=rhf or json.",
+        )
+    elif orbital_source == "json" and not orbital_file:
+        report.add("ERROR", "cas.orbital_file", f"orbital_source={orbital_source} requires an orbital_file path.", value=orbital_file, action="Set [cas] orbital_file to an OpenQP JSON restart file.")
+
+    if localize not in CAS_LOCALIZE_OPTIONS:
+        report.add(
+            "ERROR",
+            "cas.localize",
+            "Orbital localization is planned but not implemented for CASCI.",
+            value=localize,
+            expected=", ".join(sorted(CAS_LOCALIZE_OPTIONS)),
+            action="Set [cas] localize=none.",
+        )
+
+    if sort_orbitals not in CAS_SORT_OPTIONS:
+        report.add(
+            "ERROR",
+            "cas.sort_orbitals",
+            "Only canonical RHF energy ordering is implemented for CASCI.",
+            value=sort_orbitals,
+            expected=", ".join(sorted(CAS_SORT_OPTIONS)),
+            action="Set [cas] sort_orbitals=energy or none.",
+        )
+
+    if eig_tol_valid and eig_tol_float <= 0:
+        report.add(
+            "ERROR",
+            "ci.eig_tol",
+            "CASCI eigensolver tolerance must be positive.",
+            value=eig_tol,
+            expected="> 0",
+            action="Set [ci] eig_tol to a positive threshold.",
+        )
+
+    if integral_cutoff_valid and integral_cutoff_float < 0:
+        report.add(
+            "ERROR",
+            "ci.integral_cutoff",
+            "CASCI integral cutoff cannot be negative.",
+            value=integral_cutoff,
+            expected=">= 0",
+            action="Set [ci] integral_cutoff to zero or a positive threshold.",
+        )
+
+    if integral_backend not in FCI_INTEGRAL_BACKENDS:
+        report.add(
+            "ERROR",
+            "ci.integral_backend",
+            "Unknown CASCI integral backend.",
+            value=integral_backend,
+            expected=", ".join(sorted(FCI_INTEGRAL_BACKENDS)),
+            action="Use [ci] integral_backend=native.",
+        )
+
+    if solver not in FCI_SOLVERS:
+        report.add(
+            "ERROR",
+            "ci.solver",
+            "Unknown CASCI solver.",
+            value=solver,
+            expected=", ".join(sorted(FCI_SOLVERS)),
+            action="Use [ci] solver=auto, dense, or davidson.",
+        )
+
+    if (
+        nroot_valid
+        and davidson_subspace_valid
+        and davidson_subspace_int > 0
+        and davidson_subspace_int < nroot_int
+    ):
+        report.add(
+            "ERROR",
+            "ci.davidson_subspace",
+            "CASCI Davidson subspace override must be at least the requested root count.",
+            value=davidson_subspace,
+            expected=f"0 or >= nroot ({nroot_int})",
+            action="Use 0 for the internal default or raise [ci] davidson_subspace.",
+        )
+
+    if spin_adapted:
+        report.add(
+            "ERROR",
+            "ci.spin_adapted",
+            "Spin-adapted CI is not implemented; the current solver uses alpha/beta determinants with spin diagnostics.",
+            value=spin_adapted,
+            expected=False,
+            action="Set [ci] spin_adapted=false.",
+        )
+
+    if not _target_spin_is_valid(target_spin):
+        report.add(
+            "ERROR",
+            "ci.target_spin",
+            "Unknown target spin label.",
+            value=target_spin,
+            expected="any, a named spin multiplicity, or a positive integer multiplicity",
+            action="Use [ci] target_spin=any, singlet, doublet, triplet, quartet, or a positive integer multiplicity.",
+        )
+
+    if ci_print_threshold_valid and ci_print_threshold_float < 0:
+        report.add(
+            "ERROR",
+            "ci.ci_print_threshold",
+            "CI print threshold cannot be negative.",
+            value=ci_print_threshold,
+            expected=">= 0",
+            action="Set [ci] ci_print_threshold to zero or a positive value.",
+        )
+
+    if state_average_enabled:
+        state_average_nstate_valid, state_average_nstate_int = _check_int_literal(
+            state_average_nstate,
+            "state_average.nstate",
+            report,
+            minimum=0,
+            expected="0 or a positive integer",
+            action="Set [state_average] nstate to 0 for ci.nroot or to the number of averaged roots.",
+        )
+        if not state_average_nstate_valid:
+            state_average_nstate_int = 0
+
+        parsed_target_roots = []
+        target_roots_valid = True
+        for root in state_average_target_roots:
+            valid_root, parsed_root = _check_int_literal(
+                root,
+                "state_average.target_roots",
+                report,
+                minimum=0,
+                expected="0-based CI root slots",
+                action="Use values such as 0,1 for the first two solved CI roots.",
+            )
+            if not valid_root:
+                target_roots_valid = False
+                break
+            parsed_target_roots.append(parsed_root)
+
+        if target_roots_valid and len(set(parsed_target_roots)) != len(parsed_target_roots):
+            report.add(
+                "ERROR",
+                "state_average.target_roots",
+                "State-average target roots must be unique.",
+                value=state_average_target_roots,
+                action="Remove duplicate root slots.",
+            )
+        if target_roots_valid and parsed_target_roots and max(parsed_target_roots) >= nroot_int:
+            report.add(
+                "ERROR",
+                "state_average.target_roots",
+                "State-average target roots must refer to solved CI root slots.",
+                value=state_average_target_roots,
+                expected=f"all roots < ci.nroot ({nroot_int})",
+                action="Increase [ci] nroot or lower [state_average] target_roots.",
+            )
+        if (
+            target_roots_valid
+            and parsed_target_roots
+            and state_average_nstate_int not in (0, len(parsed_target_roots))
+        ):
+            report.add(
+                "ERROR",
+                "state_average.nstate",
+                "State-average nstate must match target_roots when explicit target roots are provided.",
+                value={
+                    "nstate": state_average_nstate,
+                    "target_roots": state_average_target_roots,
+                },
+                expected=f"0 or {len(parsed_target_roots)}",
+                action="Set nstate to the number of target roots or leave it as 0.",
+            )
+
+        averaged_root_count = (
+            len(parsed_target_roots)
+            if target_roots_valid and parsed_target_roots
+            else int(state_average_nstate_int or nroot_int)
+        )
+        if averaged_root_count < 1:
+            report.add(
+                "ERROR",
+                "state_average.nstate",
+                "State averaging requires at least one root.",
+                value=averaged_root_count,
+                expected=">= 1",
+                action="Request at least one CI root and average at least one state.",
+            )
+        if nroot_valid and averaged_root_count > nroot_int:
+            report.add(
+                "ERROR",
+                "state_average.nstate",
+                "State-average root count cannot exceed ci.nroot.",
+                value=averaged_root_count,
+                expected=f"<= ci.nroot ({nroot_int})",
+                action="Increase [ci] nroot or lower [state_average] nstate.",
+            )
+
+        if state_average_equal_weights_valid and not state_average_equal_weights:
+            parsed_weights = []
+            weights_valid = True
+            for weight in state_average_weights_raw:
+                valid_weight, parsed_weight = _check_float_literal(
+                    weight,
+                    "state_average.weights",
+                    report,
+                    expected="finite non-negative number",
+                    action="Use non-negative numeric weights.",
+                )
+                if not valid_weight:
+                    weights_valid = False
+                    break
+                parsed_weights.append(parsed_weight)
+
+            if not weights_valid:
+                pass
+            elif len(parsed_weights) != averaged_root_count:
+                report.add(
+                    "ERROR",
+                    "state_average.weights",
+                    "State-average weights must match the averaged root count.",
+                    value=state_average_weights_raw,
+                    expected=f"{averaged_root_count} weights",
+                    action="Provide one weight for each averaged root or set equal_weights=true.",
+                )
+            elif not all(math.isfinite(weight) for weight in parsed_weights):
+                report.add(
+                    "ERROR",
+                    "state_average.weights",
+                    "State-average weights must be finite.",
+                    value=state_average_weights_raw,
+                    action="Use finite non-negative weights.",
+                )
+            elif any(weight < 0.0 for weight in parsed_weights):
+                report.add(
+                    "ERROR",
+                    "state_average.weights",
+                    "State-average weights cannot be negative.",
+                    value=state_average_weights_raw,
+                    action="Use non-negative weights.",
+                )
+            elif sum(parsed_weights) <= 0.0:
+                report.add(
+                    "ERROR",
+                    "state_average.weights",
+                    "State-average weights must have positive total weight.",
+                    value=state_average_weights_raw,
+                    action="Set at least one positive weight.",
+                )
+
+
+def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method not in {"casscf", "sa-casscf", "sacasscf"}:
+        return
+    is_sa_alias = method in {"sa-casscf", "sacasscf"}
+
+    casscf_section = config.get("casscf", {})
+    raw_max_macro_iterations = _get(config, "casscf", "max_macro_iterations", 20)
+    if isinstance(raw_max_macro_iterations, bool):
+        report.add(
+            "ERROR",
+            "casscf.max_macro_iterations",
+            "CASSCF macro-iteration count must be an integer, not a boolean.",
+            value=raw_max_macro_iterations,
+            expected="non-negative integer",
+            action="Set [casscf] max_macro_iterations to 0 for the fixed-orbital scaffold or a positive macroiteration budget.",
+            wiki=WIKI_HELP["input.method"],
+        )
+        return
+
+    try:
+        max_macro_iterations = int(raw_max_macro_iterations)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            "casscf.max_macro_iterations",
+            "CASSCF macro-iteration count must be an integer.",
+            value=raw_max_macro_iterations,
+            expected="non-negative integer",
+            action="Set [casscf] max_macro_iterations to 0 for the fixed-orbital scaffold or a positive macroiteration budget.",
+            wiki=WIKI_HELP["input.method"],
+        )
+        return
+
+    if max_macro_iterations < 0:
+        report.add(
+            "ERROR",
+            "casscf.max_macro_iterations",
+            "CASSCF macro-iteration count must be non-negative.",
+            value=max_macro_iterations,
+            expected=">= 0",
+            action="Use 0 for the fixed-orbital scaffold or a positive value for native CASSCF orbital optimization.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif max_macro_iterations == 0:
+        report.add(
+            "WARNING",
+            "input.method",
+            "method=casscf with max_macro_iterations=0 runs the fixed-orbital native CASCI path; no orbital optimization is performed.",
+            value=method,
+            action="Use method=casci for ordinary fixed-orbital active-space CI, or keep this explicit scaffold setting for compatibility tests.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    converger = str(_get(config, "casscf", "converger", "trah") or "trah").strip().lower()
+    if converger not in {"twophase", "two-phase", "default", "", "ah", "trah",
+                         "augmented-hessian", "diis", "auto"}:
+        report.add(
+            "ERROR",
+            "casscf.converger",
+            "Unknown CASSCF orbital converger.",
+            value=converger,
+            expected="trah, twophase, ah, diis, or auto",
+            action="Use converger=twophase (default), ah for the trust-region "
+                   "augmented Hessian over an assembled orbital Hessian, trah "
+                   "for the matrix-free trust-region solver (no Hessian is "
+                   "built), diis for orbital-gradient DIIS, or auto for ah "
+                   "with a two-phase fallback.",
+        )
+    hessian_mode = str(_get(config, "casscf", "hessian", "fd") or "fd").strip().lower()
+    # "analytical" is deliberately NOT here: _hessian_provider implements only
+    # analytic/exact and owns that rejection (see
+    # test_native_dispatch_declines_unknown_spellings).  Accepting the spelling
+    # at preflight only moved the failure to execution time, so reject it here
+    # where the user can act on it.
+    if hessian_mode not in {"fd", "finite-difference", "finite_difference",
+                            "analytic", "exact"}:
+        report.add(
+            "ERROR",
+            "casscf.hessian",
+            "Unknown CASSCF orbital-Hessian builder.",
+            value=hessian_mode,
+            expected="fd or analytic",
+            action="Use hessian=fd (default finite-difference) or "
+                   "hessian=analytic (exact orbital Hessian; ~1 CI solve per "
+                   "macroiteration instead of 2*n_par+1).",
+        )
+    for key, default, minimum in (
+        ("ah_start_trust_radius", 0.2, 0.0),
+        ("ah_max_trust_radius", 0.0, None),   # <= 0 means auto (max_rotation_norm)
+        ("ah_min_trust_radius", 1.0e-6, 0.0),
+        ("ah_saddle_curv_tol", 2.5e-2, 0.0),
+        ("ah_saddle_egain_tol", 1.0e-3, 0.0),
+    ):
+        valid_f, numeric = _check_float_literal(
+            _get(config, "casscf", key, default), f"casscf.{key}", report)
+        if valid_f and minimum is not None and numeric <= minimum:
+            report.add(
+                "ERROR",
+                f"casscf.{key}",
+                "CASSCF AH converger tolerance must be positive.",
+                value=numeric,
+                expected="> 0",
+                action=f"Set [casscf] {key} to a positive value.",
+            )
+    for key, default in (("ah_max_micro", 32), ("ah_max_rejects", 6),
+                         ("diis_space", 8), ("diis_start", 2),
+                         ("auto_stagnation", 3)):
+        _check_int_literal(
+            _get(config, "casscf", key, default), f"casscf.{key}", report,
+            minimum=1, expected="positive integer",
+            action=f"Set [casscf] {key} to a positive integer.",
+        )
+
+    root_valid, casscf_root = _check_int_literal(
+        _get(config, "casscf", "root", 0),
+        "casscf.root",
+        report,
+        minimum=0,
+        expected="0-based non-negative integer root index",
+        action="Use 0 for the ground-state CASSCF root.",
+    )
+    nroot_valid, nroot_int = _parse_int_literal(_get(config, "ci", "nroot", 1))
+    if root_valid and nroot_valid and casscf_root >= nroot_int:
+        report.add(
+            "ERROR",
+            "casscf.root",
+            "CASSCF root must be smaller than ci.nroot.",
+            value=casscf_root,
+            expected=f"0 <= root < {nroot_int}",
+            action="Increase [ci] nroot or choose a lower CASSCF root.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    optimizer = _as_lower(_get(config, "casscf", "optimizer", "newton")).replace("_", "-")
+    # Exactly the set oqp.library.casscf._casscf_options implements; anything
+    # else used to pass validation and then die with a bare ValueError at run
+    # time.  Underscore spellings are folded above, so newton_ah reaches here
+    # as newton-ah.
+    if optimizer not in {"newton", "newton-ah", "augmented-hessian",
+                         "microiteration", "powell"}:
+        report.add(
+            "ERROR",
+            "casscf.optimizer",
+            "CASSCF orbital optimizer is not recognized.",
+            value=optimizer,
+            expected="newton or powell",
+            action="Use optimizer=newton for the native Newton orbital optimizer (default) or optimizer=powell for the gradient-only fallback.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    _check_int_literal(
+        _get(config, "casscf", "max_function_evaluations", 0),
+        "casscf.max_function_evaluations",
+        report,
+        minimum=0,
+        expected="non-negative integer",
+        action="Use 0 for SciPy's default function-evaluation budget, or a positive cap.",
+    )
+
+    macro_gradient_valid, macro_gradient_tol = _check_float_literal(
+        _get(config, "casscf", "gradient_norm_tol", 1.0e-6),
+        "casscf.gradient_norm_tol",
+        report,
+        expected="positive finite number",
+        action="Set a positive finite CASSCF orbital-gradient tolerance.",
+    )
+    if macro_gradient_valid and macro_gradient_tol <= 0.0:
+        report.add(
+            "ERROR",
+            "casscf.gradient_norm_tol",
+            "CASSCF orbital-gradient tolerance must be positive.",
+            value=macro_gradient_tol,
+            expected="positive finite number",
+            action="Set gradient_norm_tol to a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    macro_energy_valid, macro_energy_tol = _check_float_literal(
+        _get(config, "casscf", "energy_decrease_tol", 1.0e-10),
+        "casscf.energy_decrease_tol",
+        report,
+        expected="finite non-negative number",
+        action="Set a non-negative finite CASSCF energy-decrease tolerance.",
+    )
+    if macro_energy_valid and macro_energy_tol < 0.0:
+        report.add(
+            "ERROR",
+            "casscf.energy_decrease_tol",
+            "CASSCF energy-decrease tolerance must be non-negative.",
+            value=macro_energy_tol,
+            expected="finite non-negative number",
+            action="Set energy_decrease_tol to zero or a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    macro_step_valid, macro_step_tol = _check_float_literal(
+        _get(config, "casscf", "step_norm_tol", 1.0e-8),
+        "casscf.step_norm_tol",
+        report,
+        expected="finite non-negative number",
+        action="Set a non-negative finite CASSCF step-norm tolerance.",
+    )
+    if macro_step_valid and macro_step_tol < 0.0:
+        report.add(
+            "ERROR",
+            "casscf.step_norm_tol",
+            "CASSCF step-norm tolerance must be non-negative.",
+            value=macro_step_tol,
+            expected="finite non-negative number",
+            action="Set step_norm_tol to zero or a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    macro_rotation_valid, macro_rotation_norm = _check_float_literal(
+        _get(config, "casscf", "max_rotation_norm", 5.0e-2),
+        "casscf.max_rotation_norm",
+        report,
+        expected="positive finite number",
+        action="Set a positive finite CASSCF maximum orbital-rotation norm.",
+    )
+    if macro_rotation_valid and macro_rotation_norm <= 0.0:
+        report.add(
+            "ERROR",
+            "casscf.max_rotation_norm",
+            "CASSCF maximum orbital-rotation norm must be positive.",
+            value=macro_rotation_norm,
+            expected="positive finite number",
+            action="Set max_rotation_norm to a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    diagnostic_report = _check_bool_literal(
+        _get(config, "casscf", "diagnostic_report", False),
+        "casscf.diagnostic_report",
+        report,
+        action="Use true to write a diagnostic-only CASSCF JSON report, or false to disable it.",
+    )
+    diagnostic_report_file = _get(config, "casscf", "diagnostic_report_file", "")
+    if isinstance(diagnostic_report_file, bool) or not isinstance(diagnostic_report_file, str):
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_report_file",
+            "CASSCF diagnostic report file must be a filesystem path string.",
+            value=diagnostic_report_file,
+            expected="string path or blank for the default run-log sidecar",
+            action="Set [casscf] diagnostic_report_file to a .json path, or leave it blank.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif (
+        diagnostic_report
+        and diagnostic_report_file.strip()
+        and not diagnostic_report_file.strip().lower().endswith(".json")
+    ):
+        report.add(
+            "WARNING",
+            "casscf.diagnostic_report_file",
+            "CASSCF diagnostic report files should use a .json suffix.",
+            value=diagnostic_report_file,
+            action="Use a .json file name for portable diagnostic artifacts.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    benchmark_reference_file = _get(config, "casscf", "diagnostic_benchmark_reference_file", "")
+    if isinstance(benchmark_reference_file, bool) or not isinstance(benchmark_reference_file, str):
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_benchmark_reference_file",
+            "CASSCF diagnostic benchmark reference file must be a filesystem path string.",
+            value=benchmark_reference_file,
+            expected="string path or blank when no diagnostic benchmark is configured",
+            action="Set [casscf] diagnostic_benchmark_reference_file to a .json path, or leave it blank.",
+            wiki=WIKI_HELP["input.method"],
+        )
+        benchmark_reference_path = ""
+    else:
+        benchmark_reference_path = benchmark_reference_file.strip()
+        if benchmark_reference_path and not benchmark_reference_path.lower().endswith(".json"):
+            report.add(
+                "WARNING",
+                "casscf.diagnostic_benchmark_reference_file",
+                "CASSCF diagnostic benchmark reference files should use a .json suffix.",
+                value=benchmark_reference_file,
+                action="Use a .json file name for portable benchmark artifacts.",
+                wiki=WIKI_HELP["input.method"],
+            )
+
+    benchmark_required = _check_bool_literal(
+        _get(config, "casscf", "diagnostic_benchmark_required", False),
+        "casscf.diagnostic_benchmark_required",
+        report,
+        action="Use true only when a diagnostic benchmark reference file is configured.",
+    )
+    benchmark_tol_valid, benchmark_tol = _check_float_literal(
+        _get(config, "casscf", "diagnostic_benchmark_tolerance", 1.0e-5),
+        "casscf.diagnostic_benchmark_tolerance",
+        report,
+        expected="finite non-negative number",
+        action="Set a non-negative finite diagnostic benchmark tolerance.",
+    )
+    if benchmark_tol_valid and benchmark_tol < 0.0:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_benchmark_tolerance",
+            "CASSCF diagnostic benchmark tolerance must be non-negative.",
+            value=benchmark_tol,
+            expected="finite non-negative number",
+            action="Set diagnostic_benchmark_tolerance to zero or a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    if benchmark_required and not benchmark_reference_path:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_benchmark_reference_file",
+            "Required CASSCF diagnostic benchmarks need a reference file.",
+            value=benchmark_reference_file,
+            expected="path to a CASSCF diagnostic benchmark reference JSON",
+            action="Set diagnostic_benchmark_reference_file or disable diagnostic_benchmark_required.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    if (benchmark_required or benchmark_reference_path) and not diagnostic_report:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_report",
+            "CASSCF diagnostic benchmark comparison requires diagnostic_report=true.",
+            value=diagnostic_report,
+            expected=True,
+            action="Enable [casscf] diagnostic_report=true or remove the diagnostic benchmark options.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    root_valid, diagnostic_root = _check_int_literal(
+        _get(config, "casscf", "diagnostic_root", 0),
+        "casscf.diagnostic_root",
+        report,
+        minimum=0,
+        expected="0-based non-negative integer root index",
+        action="Use 0 for the ground-state diagnostic root.",
+    )
+    nroot_valid, nroot_int = _parse_int_literal(_get(config, "ci", "nroot", 1))
+    if root_valid and nroot_valid and diagnostic_root >= nroot_int:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_root",
+            "CASSCF diagnostic root must be smaller than ci.nroot.",
+            value=diagnostic_root,
+            expected=f"0 <= diagnostic_root < {nroot_int}",
+            action="Increase [ci] nroot or choose a lower diagnostic_root.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    _check_int_literal(
+        _get(config, "casscf", "diagnostic_max_iterations", 1),
+        "casscf.diagnostic_max_iterations",
+        report,
+        minimum=1,
+        expected="positive integer",
+        action="Use a small positive diagnostic iteration count.",
+    )
+    gradient_valid, gradient_tol = _check_float_literal(
+        _get(config, "casscf", "diagnostic_gradient_norm_tol", 1.0e-8),
+        "casscf.diagnostic_gradient_norm_tol",
+        report,
+        expected="positive finite number",
+        action="Set a positive finite diagnostic gradient-norm tolerance.",
+    )
+    if gradient_valid and gradient_tol <= 0.0:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_gradient_norm_tol",
+            "CASSCF diagnostic gradient-norm tolerance must be positive.",
+            value=gradient_tol,
+            expected="positive finite number",
+            action="Set diagnostic_gradient_norm_tol to a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    rotation_valid, rotation_norm = _check_float_literal(
+        _get(config, "casscf", "diagnostic_max_rotation_norm", 5.0e-2),
+        "casscf.diagnostic_max_rotation_norm",
+        report,
+        expected="positive finite number",
+        action="Set a positive finite diagnostic maximum rotation norm.",
+    )
+    if rotation_valid and rotation_norm <= 0.0:
+        report.add(
+            "ERROR",
+            "casscf.diagnostic_max_rotation_norm",
+            "CASSCF diagnostic maximum rotation norm must be positive.",
+            value=rotation_norm,
+            expected="positive finite number",
+            action="Set diagnostic_max_rotation_norm to a positive finite value.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    if diagnostic_report and not casscf_section:
+        report.add(
+            "ERROR",
+            "casscf",
+            "CASSCF diagnostic reporting requires an explicit [casscf] section.",
+            value=casscf_section,
+            expected="[casscf] with diagnostic_report=true",
+            action="Add an explicit [casscf] section when requesting a diagnostic report.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    _, state_average_enabled = _parse_bool_literal(
+        _get(config, "state_average", "enabled", False)
+    )
+    if is_sa_alias and not state_average_enabled:
+        report.add(
+            "ERROR",
+            "state_average.enabled",
+            "method=sa-casscf requires state averaging to be enabled.",
+            value=state_average_enabled,
+            expected=True,
+            action="Add [state_average] enabled=true with nstate/target_roots/weights for SA-CASSCF.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif state_average_enabled and max_macro_iterations > 0:
+        report.add(
+            "INFO",
+            "state_average.enabled",
+            "Native SA-CASSCF orbital optimization is enabled; macroiterations use the weighted state-average CI/RDM objective.",
+            value=state_average_enabled,
+            action="Keep [state_average] target_roots/weights consistent with the solved CI roots.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif state_average_enabled:
+        report.add(
+            "WARNING",
+            "state_average.enabled",
+            "State-average bookkeeping is enabled with max_macro_iterations=0; no orbital optimization is performed.",
+            value=state_average_enabled,
+            action="Use a positive max_macro_iterations value for SA-CASSCF orbital optimization, or method=casci for fixed-orbital state averaging.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+
+def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    pt2 = config.get("pt2", {})
+    reference_report = _check_bool_literal(
+        _get(config, "pt2", "reference_report", False),
+        "pt2.reference_report",
+        report,
+        action="Use true to write a diagnostic-only CASPT2 reference preflight report, or false to disable it.",
+    )
+    canonical_method = PT2_METHOD_ALIASES.get(method)
+    if canonical_method is None:
+        if not reference_report:
+            return
+        if method not in {"casci", "casscf"}:
+            report.add(
+                "ERROR",
+                "pt2.reference_report",
+                "CASPT2 reference preflight reports require method=casci or method=casscf.",
+                value=method,
+                expected="casci or casscf",
+                action="Use method=casci for a CASCI reference preflight, or method=casscf for a CASSCF reference preflight.",
+                wiki=WIKI_HELP["input.method"],
+            )
+            return
+        raw_variant = _get(config, "pt2", "variant", "auto")
+        if isinstance(raw_variant, str) and raw_variant.strip().lower() in {"", "auto"}:
+            canonical_method = "caspt2"
+        elif isinstance(raw_variant, str) and raw_variant.strip().lower() in PT2_METHOD_ALIASES:
+            canonical_method = PT2_METHOD_ALIASES[raw_variant.strip().lower()]
+        else:
+            canonical_method = "caspt2"
+
+    ci_nroot = _get(config, "ci", "nroot", 1)
+    variant = _check_choice_literal(
+        _get(config, "pt2", "variant", "auto"),
+        "pt2.variant",
+        PT2_VARIANTS,
+        report,
+        message="Unknown CASPT2-family variant.",
+        action="Use auto, caspt2, ms-caspt2, xms-caspt2, mrmp2, mcqdpt2, or xmcqdpt2.",
+        fallback="auto",
+        default_if_none=True,
+        default_if_blank=True,
+    )
+    reference = _check_choice_literal(
+        _get(config, "pt2", "reference", "casscf"),
+        "pt2.reference",
+        PT2_REFERENCES,
+        report,
+        message="Unknown PT2 reference type.",
+        action="Use reference=casci for fixed-orbital CI or reference=casscf after native CASSCF exists.",
+        fallback="casscf",
+    )
+    contraction = _check_choice_literal(
+        _get(config, "pt2", "contraction", "uncontracted"),
+        "pt2.contraction",
+        PT2_CONTRACTIONS,
+        report,
+        message="Unknown PT2 contraction mode.",
+        action="Use contraction=uncontracted (determinant-space CASPT2/NEVPT2) or "
+               "contraction=strong (RDM-based SC-NEVPT2; requires h0=dyall).",
+        fallback="uncontracted",
+    )
+    multistate = _check_choice_literal(
+        _get(config, "pt2", "multistate", "auto"),
+        "pt2.multistate",
+        PT2_MULTISTATE_MODES,
+        report,
+        message="Unknown PT2 multistate mode.",
+        action="Use auto, none, ms, or xms.",
+        fallback="auto",
+        default_if_none=True,
+        default_if_blank=True,
+    )
+    xms_requested = _check_bool_literal(
+        _get(config, "pt2", "xms", False),
+        "pt2.xms",
+        report,
+        action="Set [pt2] xms=true only for XMS-CASPT2, otherwise false.",
+    )
+    ipea_shift = _get(config, "pt2", "ipea_shift", 0.0)
+    imaginary_shift = _get(config, "pt2", "imaginary_shift", 0.0)
+    level_shift = _get(config, "pt2", "level_shift", 0.0)
+    edshft = _get(config, "pt2", "edshft", 0.0)
+    denominator_cutoff = _get(config, "pt2", "denominator_cutoff", 1.0e-10)
+    intruder_threshold = _get(config, "pt2", "intruder_threshold", 1.0e-6)
+    nroot = _get(config, "pt2", "nroot", 0)
+    target_roots = _as_list(_get(config, "pt2", "target_roots", []))
+    max_memory = _get(config, "pt2", "max_memory", 2048)
+    semi_canonical = _check_bool_literal(
+        _get(config, "pt2", "semi_canonical", True),
+        "pt2.semi_canonical",
+        report,
+        action="Keep [pt2] semi_canonical=true until noncanonical PT2 is implemented.",
+    )
+    save_amplitudes = _check_bool_literal(
+        _get(config, "pt2", "save_amplitudes", False),
+        "pt2.save_amplitudes",
+        report,
+        action="Set [pt2] save_amplitudes=true or false.",
+    )
+    print_amplitudes = _check_bool_literal(
+        _get(config, "pt2", "print_amplitudes", False),
+        "pt2.print_amplitudes",
+        report,
+        action="Set [pt2] print_amplitudes=true or false.",
+    )
+    amplitude_threshold = _get(config, "pt2", "amplitude_threshold", 1.0e-2)
+    benchmark_reference_file_raw = _get(config, "pt2", "benchmark_reference_file", "")
+    benchmark_tolerance = _get(config, "pt2", "benchmark_tolerance", 1.0e-4)
+    benchmark_required = _check_bool_literal(
+        _get(config, "pt2", "benchmark_required", False),
+        "pt2.benchmark_required",
+        report,
+        action="Set [pt2] benchmark_required=true only when benchmark_reference_file is configured.",
+    )
+    reference_report_file_raw = _get(config, "pt2", "reference_report_file", "")
+    if isinstance(reference_report_file_raw, bool) or not isinstance(reference_report_file_raw, str):
+        report.add(
+            "ERROR",
+            "pt2.reference_report_file",
+            "CASPT2 reference preflight report file must be a filesystem path string.",
+            value=reference_report_file_raw,
+            expected="string path or blank for the default run-log sidecar",
+            action="Set [pt2] reference_report_file to a .json path, or leave it blank.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif (
+        reference_report
+        and reference_report_file_raw.strip()
+        and not reference_report_file_raw.strip().lower().endswith(".json")
+    ):
+        report.add(
+            "WARNING",
+            "pt2.reference_report_file",
+            "CASPT2 reference preflight report files should use a .json suffix.",
+            value=reference_report_file_raw,
+            action="Use a .json file name for portable diagnostic artifacts.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if variant not in PT2_VARIANTS:
+        report.add(
+            "ERROR",
+            "pt2.variant",
+            "Unknown CASPT2-family variant.",
+            value=variant,
+            expected=", ".join(sorted(PT2_VARIANTS)),
+            action="Use auto, caspt2, ms-caspt2, xms-caspt2, mrmp2, mcqdpt2, or xmcqdpt2.",
+        )
+        normalized_variant = canonical_method
+    elif variant == "auto":
+        normalized_variant = canonical_method
+    else:
+        normalized_variant = variant
+
+    if variant not in {"auto", canonical_method}:
+        report.add(
+            "ERROR",
+            "pt2.variant",
+            "PT2 variant must agree with the requested method label.",
+            value={"method": canonical_method, "variant": variant},
+            expected=f"auto or {canonical_method}",
+            action="Make [pt2] variant match [input] method.",
+        )
+
+    # The CASPT2 family accepts h0 too, and only Fock/CASPT2 and Dyall/NEVPT2
+    # aliases are implemented -- but the choice-set check below sits inside the
+    # QDPT branch, so `[pt2] h0=invalid` on a plain caspt2 input passed preflight
+    # and then raised inside _caspt2_options.  Check the spelling for every PT2
+    # method first; the QDPT branch below still narrows it further.
+    if canonical_method in PT2_VARIANTS or canonical_method in PT2_QDPT_METHODS:
+        _h0_any = str(_get(config, "pt2", "h0", "") or "").strip().lower()
+        if _h0_any and _h0_any not in {"fock", "caspt2", "dyall", "nevpt2"}:
+            report.add(
+                "ERROR",
+                "pt2.h0",
+                "Unknown PT2 zeroth-order Hamiltonian.",
+                value=_h0_any,
+                expected="fock (CASPT2) or dyall (NEVPT2)",
+                action="Use [pt2] h0=fock for CASPT2/MRMP2-style H0, or h0=dyall for NEVPT2.",
+            )
+
+    # Strong contraction is single-state only -- native_caspt2_energy raises
+    # NotImplementedError immediately for the multistate methods -- but the
+    # checker only verified the H0 choice, so such an input passed preflight
+    # and died on the first step.  Reject it here instead.
+    if canonical_method in (PT2_MS_METHODS | PT2_XMS_METHODS):
+        # Test the shared alias set, not a literal: PT2_STRONG_CONTRACTIONS
+        # also carries "ic" and "internally-contracted", which _caspt2_options
+        # normalizes to "strong" -- so those two spellings slipped past this
+        # gate and died in native_caspt2_energy after the reference SCF.
+        _contr = str(_get(config, "pt2", "contraction", "") or "").strip().lower()
+        if _contr in PT2_STRONG_CONTRACTIONS:
+            report.add(
+                "ERROR",
+                "pt2.contraction",
+                "Strongly contracted NEVPT2 is single-state only.",
+                value=_contr,
+                expected="none/uncontracted for MS/XMS methods",
+                action="Use method=caspt2 with contraction=strong for SC-NEVPT2, "
+                       "or drop contraction for the multistate methods.",
+            )
+
+    if canonical_method in PT2_QDPT_METHODS:
+        h0_mode = str(_get(config, "pt2", "h0", "fock") or "fock").strip().lower()
+        if h0_mode not in {"fock", "caspt2", ""}:
+            report.add(
+                "ERROR",
+                "pt2.h0",
+                "MRMP2/MCQDPT2/XMCQDPT2 use the diagonal-Fock (MP-like) zeroth order only.",
+                value=h0_mode,
+                expected="fock (or leave unset)",
+                action="Drop [pt2] h0 for QDPT-family methods, or use the caspt2 methods for h0=dyall.",
+            )
+
+    engine_mode = str(_get(config, "pt2", "engine", "auto") or "auto").strip().lower()
+    if engine_mode not in {"auto", "direct", "python", "fortran", "dense"}:
+        report.add(
+            "ERROR",
+            "pt2.engine",
+            "Unknown PT2 engine.",
+            value=engine_mode,
+            expected="auto, fortran, direct (python), or dense",
+            action="Use engine=auto (matrix-free NumPy streaming), fortran "
+                   "(liboqp hash kernel, explicit opt-in), direct, or dense.",
+        )
+    elif engine_mode in {"direct", "python", "fortran"} \
+            and canonical_method not in PT2_QDPT_METHODS:
+        report.add(
+            "ERROR",
+            "pt2.engine",
+            "The matrix-free direct engine requires a diagonal H0 (QDPT family).",
+            value={"method": canonical_method, "engine": engine_mode},
+            expected="method=mrmp2/mcqdpt2/xmcqdpt2 for engine=direct/fortran",
+            action="Use the QDPT-family methods, or engine=dense for CASPT2/NEVPT2.",
+        )
+    _check_int_literal(
+        _get(config, "pt2", "max_terms", 30000000),
+        "pt2.max_terms",
+        report,
+        minimum=1,
+        expected="positive streamed-term guard",
+        action="Set [pt2] max_terms to a positive integer.",
+    )
+    _check_int_literal(
+        _get(config, "pt2", "nproc", 1),
+        "pt2.nproc",
+        report,
+        minimum=0,
+        expected="0 (automatic) or a positive worker count",
+        action=("Set [pt2] nproc to 0 for automatic threading, 1 for serial, "
+                "or the number of worker processes."),
+    )
+
+    if reference not in PT2_REFERENCES:
+        report.add(
+            "ERROR",
+            "pt2.reference",
+            "Unknown PT2 reference type.",
+            value=reference,
+            expected=", ".join(sorted(PT2_REFERENCES)),
+            action="Use reference=casci for fixed-orbital CI or reference=casscf after native CASSCF exists.",
+        )
+    elif reference_report and method in {"casci", "casscf"} and reference != method:
+        report.add(
+            "ERROR",
+            "pt2.reference",
+            "CASPT2 reference preflight source must match the native reference method.",
+            value={"method": method, "reference": reference},
+            expected=method,
+            action=f"Set [pt2] reference={method} for this reference preflight.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if contraction not in PT2_CONTRACTIONS:
+        report.add(
+            "ERROR",
+            "pt2.contraction",
+            "Unknown PT2 contraction mode.",
+            value=contraction,
+            expected=", ".join(sorted(PT2_CONTRACTIONS)),
+            action="Use contraction=uncontracted; internally contracted CASPT2 is not implemented in this native helper.",
+        )
+
+    if contraction in PT2_STRONG_CONTRACTIONS:
+        h0_mode = str(_get(config, "pt2", "h0", "fock") or "fock").strip().lower()
+        if h0_mode not in {"dyall", "nevpt2", "nevpt"}:
+            report.add(
+                "ERROR",
+                "pt2.contraction",
+                "Strong contraction (SC-NEVPT2) is defined for Dyall's H0 only.",
+                value=f"contraction={contraction}, h0={h0_mode}",
+                expected="h0=dyall",
+                action="Set [pt2] h0=dyall together with contraction=strong.",
+            )
+
+    if multistate not in PT2_MULTISTATE_MODES:
+        report.add(
+            "ERROR",
+            "pt2.multistate",
+            "Unknown PT2 multistate mode.",
+            value=multistate,
+            expected=", ".join(sorted(PT2_MULTISTATE_MODES)),
+            action="Use auto, none, ms, or xms.",
+        )
+        normalized_multistate = "auto"
+    elif multistate == "auto":
+        if normalized_variant in PT2_SINGLE_STATE_METHODS:
+            normalized_multistate = "none"
+        elif normalized_variant in PT2_MS_METHODS:
+            normalized_multistate = "ms"
+        else:
+            normalized_multistate = "xms"
+    else:
+        normalized_multistate = multistate
+    xms = normalized_variant in PT2_XMS_METHODS or xms_requested
+
+    if normalized_variant in PT2_SINGLE_STATE_METHODS and normalized_multistate != "none":
+        report.add(
+            "ERROR",
+            "pt2.multistate",
+            "Single-state PT2 (caspt2/mrmp2) cannot request an MS/XMS multistate mode.",
+            value=multistate,
+            expected="auto or none",
+            action="Use method=ms-caspt2/mcqdpt2 or xms-caspt2/xmcqdpt2 for multistate PT2.",
+        )
+    if normalized_variant in PT2_MS_METHODS and normalized_multistate != "ms":
+        report.add(
+            "ERROR",
+            "pt2.multistate",
+            "MS-CASPT2/MCQDPT2 require multistate=ms.",
+            value=multistate,
+            expected="auto or ms",
+            action="Use method=caspt2/mrmp2 for single-state PT2 or method=xms-caspt2/xmcqdpt2 for the extended variants.",
+        )
+    if normalized_variant in PT2_XMS_METHODS:
+        if normalized_multistate != "xms":
+            report.add(
+                "ERROR",
+                "pt2.multistate",
+                "XMS-CASPT2/XMCQDPT2 require multistate=xms.",
+                value=multistate,
+                expected="auto or xms",
+                action="Use method=ms-caspt2/mcqdpt2 for the non-extended multistate variants.",
+            )
+    elif xms_requested:
+        report.add(
+            "ERROR",
+            "pt2.xms",
+            "xms=true is only consistent with method=xms-caspt2 or xmcqdpt2.",
+            value=xms,
+            expected=False,
+            action="Use method=xms-caspt2 or xmcqdpt2 for the extended multistate variants.",
+        )
+
+    nroot_valid, nroot_int = _check_int_literal(
+        nroot,
+        "pt2.nroot",
+        report,
+        minimum=0,
+        expected="0 or a positive integer",
+        action="Use 0 to inherit ci.nroot or set a positive PT2 root count.",
+    )
+    if not nroot_valid:
+        nroot_int = 0
+
+    try:
+        ci_nroot_int = int(ci_nroot)
+    except (TypeError, ValueError):
+        ci_nroot_int = 1
+    retained_roots = nroot_int or ci_nroot_int
+    if retained_roots < 1:
+        report.add(
+            "ERROR",
+            "pt2.nroot",
+            "PT2 requires at least one retained reference root.",
+            value=retained_roots,
+            expected=">= 1",
+            action="Increase [ci] nroot or [pt2] nroot.",
+        )
+    if normalized_variant in (PT2_MS_METHODS | PT2_XMS_METHODS) and retained_roots < 2:
+        report.add(
+            "ERROR",
+            "pt2.nroot",
+            "Multistate PT2 requires at least two retained reference roots.",
+            value=retained_roots,
+            expected=">= 2",
+            action="Set [ci] nroot=2 or higher, or set [pt2] nroot=2 or higher.",
+        )
+
+    parsed_target_roots = []
+    for root in target_roots:
+        valid_root, parsed_root = _check_int_literal(
+            root,
+            "pt2.target_roots",
+            report,
+            minimum=0,
+            expected="0-based PT2 root slots",
+            action="Use values such as 0,1 for the first two retained roots.",
+        )
+        if not valid_root:
+            parsed_target_roots = []
+            break
+        parsed_target_roots.append(parsed_root)
+    if len(set(parsed_target_roots)) != len(parsed_target_roots):
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "PT2 target roots must be unique.",
+            value=target_roots,
+            action="Remove duplicate PT2 root slots.",
+        )
+    # A one-element explicit list passes the count/bounds checks below, and
+    # _reference_roots then honours it -- so the runtime diagonalises a 1x1
+    # effective Hamiltonian and still reports an MS/XMS result.
+    if (parsed_target_roots and len(parsed_target_roots) < 2
+            and canonical_method in (PT2_MS_METHODS | PT2_XMS_METHODS)):
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "Multistate PT2 needs at least two target roots.",
+            value=target_roots,
+            expected="two or more root slots",
+            action="List two or more roots, or use the single-state method "
+                   "(caspt2/mrmp2) for one root.",
+        )
+    if parsed_target_roots and max(parsed_target_roots) >= retained_roots:
+        report.add(
+            "ERROR",
+            "pt2.target_roots",
+            "PT2 target roots must refer to retained PT2 root slots.",
+            value=target_roots,
+            expected=f"all roots < pt2.nroot ({retained_roots})",
+            action="Increase [pt2] nroot or lower [pt2] target_roots.",
+        )
+
+    scalar_nonnegative = {
+        "pt2.ipea_shift": ipea_shift,
+        "pt2.imaginary_shift": imaginary_shift,
+        "pt2.level_shift": level_shift,
+        "pt2.edshft": edshft,
+        "pt2.intruder_threshold": intruder_threshold,
+        "pt2.amplitude_threshold": amplitude_threshold,
+    }
+    parsed_scalars = {}
+    for path, value in scalar_nonnegative.items():
+        valid_numeric, numeric = _check_float_literal(value, path, report)
+        if not valid_numeric:
+            continue
+        parsed_scalars[path] = numeric
+        if numeric < 0.0:
+            report.add(
+                "ERROR",
+                path,
+                "PT2 scalar option cannot be negative.",
+                value=value,
+                expected=">= 0",
+                action="Use zero or a positive value.",
+            )
+    if parsed_scalars.get("pt2.edshft", 0.0) and (
+        parsed_scalars.get("pt2.level_shift", 0.0)
+        or parsed_scalars.get("pt2.imaginary_shift", 0.0)
+    ):
+        report.add(
+            "ERROR",
+            "pt2.edshft",
+            "The ISA denominator shift (edshft, GAMESS EDSHFT) is mutually exclusive "
+            "with the real/imaginary level shifts.",
+            value={"edshft": edshft, "level_shift": level_shift,
+                   "imaginary_shift": imaginary_shift},
+            expected="only one regularization scheme",
+            action="Use either [pt2] edshft OR level_shift/imaginary_shift, not both.",
+        )
+
+    # Also accepted and read by nothing: the PT2 report/benchmark controls and
+    # the CI-artifact options on the CASSCF path (parsed into FCISettings but
+    # never consulted after the final CASSCF CI solve).  regression.py exempts
+    # several of these from feature-coverage as though the I/O existed.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.reference_report", _get(config, "pt2", "reference_report", False), False),
+            ("pt2.benchmark_required", _get(config, "pt2", "benchmark_required", False), False),
+            ("ci.root_tracking", _get(config, "ci", "root_tracking", "energy"), "energy"),
+            ("casscf.diagnostic_report",
+             _get(config, "casscf", "diagnostic_report", False), False),
+            ("casscf.diagnostic_benchmark_required",
+             _get(config, "casscf", "diagnostic_benchmark_required", False), False)):
+        try:
+            _differs = str(_dead_val).strip().lower() not in {
+                "", "false", "0", str(_dead_default).strip().lower()}
+        except Exception:
+            _differs = False
+        if _differs:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
+
+    # Same class as the two below: accepted, documented, and read by nothing.
+    #   pt2.print_amplitudes / save_amplitudes -- no PT2 engine reads either
+    #   casscf.max_function_evaluations       -- no optimizer reads it
+    # regression.py exempts several of these from the feature-coverage gate as
+    # though the I/O existed, so nothing else would tell the user.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.print_amplitudes", _get(config, "pt2", "print_amplitudes", False), False),
+            ("pt2.save_amplitudes", _get(config, "pt2", "save_amplitudes", False), False),
+            ("casscf.max_function_evaluations",
+             _get(config, "casscf", "max_function_evaluations", 0), 0)):
+        _differs = False
+        try:
+            _differs = float(_dead_val) != float(_dead_default)
+        except (TypeError, ValueError):
+            _differs = str(_dead_val).strip().lower() not in {
+                "", "false", "0", str(_dead_default).strip().lower()}
+        if _differs:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
+
+    # `[pt2] frozen` was never parsed here, so `frozen=banana` reached
+    # _caspt2_options and died on a bare int().  Documented values are `auto`,
+    # `-1` (same as auto) and a non-negative count.
+    _frozen_raw = _get(config, "pt2", "frozen", "auto")
+    _frozen_txt = str(_frozen_raw).strip().lower()
+    if _frozen_txt not in {"", "auto", "-1"}:
+        _frozen_ok = False
+        try:
+            _frozen_ok = int(_frozen_txt) >= 0
+        except (TypeError, ValueError):
+            _frozen_ok = False
+        if not _frozen_ok:
+            report.add(
+                "ERROR",
+                "pt2.frozen",
+                "PT2 frozen-core selector must be auto, -1, or a non-negative count.",
+                value=_frozen_raw,
+                expected="auto | -1 | a non-negative integer",
+                action="Use [pt2] frozen=auto for the standard deep cores, or "
+                       "an explicit non-negative number of frozen orbitals.",
+            )
+
+    # Both of these are validated and then reach nothing: no PT2 kernel reads
+    # either value, so a user who sets them silently gets the built-in
+    # behaviour.  Say so rather than accepting the input and ignoring it --
+    # a wrong number that is obeyed and a wrong number that is discarded look
+    # identical in the output otherwise.
+    for _dead_key, _dead_val, _dead_default in (
+            ("pt2.denominator_cutoff", denominator_cutoff, 1.0e-10),
+            ("pt2.intruder_threshold", intruder_threshold, 1.0e-6)):
+        try:
+            _set_explicitly = float(_dead_val) != float(_dead_default)
+        except (TypeError, ValueError):
+            _set_explicitly = True
+        if _set_explicitly:
+            report.add(
+                "WARNING",
+                _dead_key,
+                "accepted by the schema but not applied by any PT2 kernel yet.",
+                value=_dead_val,
+                expected="the built-in behaviour regardless of this value",
+                action="Remove the key, or track its implementation before "
+                       "relying on it; the run below ignores it.",
+            )
+
+    valid_cutoff, denominator_cutoff_float = _check_float_literal(
+        denominator_cutoff,
+        "pt2.denominator_cutoff",
+        report,
+        expected="positive finite number",
+        action="Use a small positive threshold.",
+    )
+    if not valid_cutoff:
+        denominator_cutoff_float = 1.0
+    if valid_cutoff and denominator_cutoff_float <= 0.0:
+        report.add(
+            "ERROR",
+            "pt2.denominator_cutoff",
+            "PT2 denominator cutoff must be positive and finite.",
+            value=denominator_cutoff,
+            expected="> 0",
+            action="Use a small positive threshold.",
+        )
+
+    _check_int_literal(
+        max_memory,
+        "pt2.max_memory",
+        report,
+        minimum=1,
+        expected="positive integer MiB",
+        action="Set [pt2] max_memory to a positive MiB value.",
+    )
+
+    if not semi_canonical:
+        report.add(
+            "ERROR",
+            "pt2.semi_canonical",
+            "Native CASPT2 requires semi-canonical inactive/active/virtual orbitals.",
+            value=semi_canonical,
+            expected=True,
+            action="Keep [pt2] semi_canonical=true until noncanonical PT2 is implemented.",
+        )
+
+    if isinstance(benchmark_reference_file_raw, bool) or not isinstance(benchmark_reference_file_raw, str):
+        report.add(
+            "ERROR",
+            "pt2.benchmark_reference_file",
+            "PT2 benchmark reference file must be a string path to a same-setup JSON report.",
+            value=benchmark_reference_file_raw,
+            expected="string path or empty string",
+            action="Use a JSON reference report path generated from the same CASPT2 setup.",
+        )
+        benchmark_reference_file = ""
+    else:
+        benchmark_reference_file = benchmark_reference_file_raw.strip()
+
+    valid_benchmark_tolerance, benchmark_tolerance_float = _check_float_literal(
+        benchmark_tolerance,
+        "pt2.benchmark_tolerance",
+        report,
+        expected="finite non-negative number",
+        action="Use an absolute energy tolerance such as 1.0e-4.",
+    )
+    if valid_benchmark_tolerance and benchmark_tolerance_float < 0.0:
+        report.add(
+            "ERROR",
+            "pt2.benchmark_tolerance",
+            "PT2 benchmark tolerance cannot be negative.",
+            value=benchmark_tolerance,
+            expected=">= 0",
+            action="Use zero for exact matching or a positive absolute energy tolerance.",
+        )
+
+    if benchmark_required and not benchmark_reference_file:
+        report.add(
+            "ERROR",
+            "pt2.benchmark_reference_file",
+            "PT2 benchmark_required needs an explicit same-setup reference report.",
+            value=benchmark_reference_file_raw,
+            expected="non-empty JSON reference report path",
+            action="Set [pt2] benchmark_reference_file or disable benchmark_required.",
+        )
+
+    if pt2:
+        report.add(
+            "INFO",
+            "pt2",
+            (
+                "XMS-CASPT2 options were parsed and validated for native determinant-space extended multistate PT2 dispatch."
+                if canonical_method == "xms-caspt2"
+                else (
+                    "MS-CASPT2 options were parsed and validated for native determinant-space multistate PT2 dispatch."
+                    if canonical_method == "ms-caspt2"
+                    else "CASPT2 options were parsed and validated for native determinant-space PT2 dispatch."
+                )
+            ),
+            value=pt2,
+            action=(
+                "Use method=xms-caspt2 for native XMS state rotation plus determinant-space multistate PT2."
+                if canonical_method == "xms-caspt2"
+                else (
+                    "Use method=ms-caspt2 for native multistate PT2."
+                    if canonical_method == "ms-caspt2"
+                    else "Use method=caspt2 for diagonal state-specific native PT2."
+                )
+            ),
+        )
+
+
+def _check_planned_wavefunction_methods(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method not in PLANNED_WAVEFUNCTION_METHODS:
+        return
+
+    canonical = {
+        "sacasscf": "sa-casscf",
+        "mscaspt2": "ms-caspt2",
+        "xmscaspt2": "xms-caspt2",
+    }.get(method, method)
+    report.add(
+        "ERROR",
+        "input.method",
+        f"method={canonical} is recognized but not implemented in this milestone.",
+        value=method,
+        expected="casci, fci, casscf, sa-casscf, caspt2, ms-caspt2, or xms-caspt2",
+        action="Use method=caspt2, method=ms-caspt2, or method=xms-caspt2 for native determinant-space PT2.",
+        wiki=WIKI_HELP["input.method"],
+    )
+
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -2184,6 +5030,19 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 expected=", ".join(sorted(SCF_PROPS)),
                 action="Remove the keyword or confirm that downstream code can ignore it.",
             )
+
+    if method in {
+        "fci", "casci", "casscf", "sa-casscf", "sacasscf",
+        "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+    } and scf_prop:
+        method_label = method.upper()
+        report.add(
+            "WARNING",
+            "properties.scf_prop",
+            f"SCF properties requested with method={method} are RHF reference-density properties, not {method_label}-density properties.",
+            value=scf_prop,
+            action=f"Set [properties] scf_prop empty for a pure {method_label} energy job, or interpret these as RHF-reference diagnostics only.",
+        )
 
     if "nmr" in scf_prop:
         if nmr_gauge not in NMR_GAUGES:
@@ -3716,7 +6575,7 @@ def check_input_values(
     expand_dftb_method_alias(config)
     method = _as_lower(_get(config, "input", "method", "hf"))
 
-    if method not in METHODS:
+    if method not in METHODS and method not in PLANNED_WAVEFUNCTION_METHODS:
         report.add(
             "ERROR",
             "input.method",
@@ -3724,7 +6583,9 @@ def check_input_values(
             value=method,
             expected=", ".join(sorted(METHODS)),
             action="Choose hf, tdhf, mp2, dftb, or xtb (or the DFTB shortcuts "
-                   "mrsf-tddftb, sf-tddftb, tddftb).",
+                   "mrsf-tddftb, sf-tddftb, tddftb), or a wavefunction method: "
+                   "fci, casci, casscf, sa-casscf, caspt2, ms-caspt2, xms-caspt2, "
+                   "mrmp2, mcqdpt2, xmcqdpt2.",
             wiki=WIKI_HELP["input.method"],
         )
 
@@ -3740,6 +6601,11 @@ def check_input_values(
     _check_tdhf(config, report)
     _check_mp2(config, report)
     _check_cc(config, report)
+    _check_fci(config, report)
+    _check_casci(config, report)
+    _check_casscf(config, report)
+    _check_pt2(config, report)
+    _check_planned_wavefunction_methods(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
     _check_runtype(config, report, input_dir)

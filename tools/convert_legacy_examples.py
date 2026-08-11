@@ -298,6 +298,16 @@ def _infer_model(
         if dftb_type not in mapping:
             raise ConversionError("unsupported DFTB type %r" % dftb_type)
         return mapping[dftb_type]
+    if method in oqp_input.WF_MODELS:
+        # The multiconfigurational route name is the legacy method verbatim.
+        return method
+    if method in {"sacasscf", "mscaspt2", "xmscaspt2"}:
+        # Legacy spellings accepted by input_checker.METHODS; the concise route
+        # keeps the single hyphenated canonical name.
+        return {
+            "sacasscf": "sa-casscf", "mscaspt2": "ms-caspt2",
+            "xmscaspt2": "xms-caspt2",
+        }[method]
     if method == "tdhf":
         if tdhf_type == "mrsf":
             return "mrsf" if functional else "mrsf-hf"
@@ -556,6 +566,7 @@ def _driver_and_sections(
     generic_sections = (
         "mp2", "guess", "pcm", "dftb", "symmetry", "scf", "dftgrid",
         "tdhf", "properties", "qmmm", "json", "tests",
+        "cas", "casscf", "ci", "fci", "pt2", "state_average",
     )
     for section in generic_sections:
         values = consumer.take(section)

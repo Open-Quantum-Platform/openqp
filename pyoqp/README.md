@@ -228,6 +228,7 @@ input section handle the basic information of molecular system
       
       hf         time-independent calculations, HF, DFT (default)
       tdhf       timd-dependent calculation, TDDFT, MRSF-TDDFT
+      fci        full configuration interaction energy (small closed-shell RHF systems)
 
 - runtype // choose the type of oqp calculation
        
@@ -275,6 +276,9 @@ guess section handle the guess orbitals
       model      read orbital from molden
       json       load data from json
       auto       load json if the requested file exists; otherwise use huckel
+
+      PySCF-backed guess modes are disabled in the native-only FCI branch. MOKIT is not
+      required for these initial guesses.
 
 - file // set the guess orbital or data file
 
@@ -409,6 +413,123 @@ tdhf section handle the time-dependent calculations
 - nvdav // set the dimension of the Davidson subspace
 
       50 (default)
+
+### [fci]
+
+fci section handles small dense full configuration interaction (FCI) energy
+calculations on top of a closed-shell RHF reference. This is an MVP intended for
+small active spaces only; see examples/WF_methods for usage and current limitations.
+Each FCI root is reported with `<S^2>` and an inferred spin multiplicity; these
+diagnostics are stored as `OQP::FCI_S2` and `OQP::FCI_MULTIPLICITY`, and
+multi-root jobs note when roots span multiple multiplicities. In exactly
+degenerate manifolds, the non-spin-adapted alpha/beta determinant eigenvectors
+can mix spin characters; non-integer `<S^2>` values diagnose that mixing.
+`method=fci` rejects D4 (`input.d4=True`) and only provides variational
+electronic FCI/CASCI energies. Requested `scf_prop` values are RHF
+reference-density diagnostics, not FCI-density properties.
+
+- nroot // number of CI roots (states) to return
+
+      1 (default)
+
+- active_electrons // number of electrons in the active space
+
+      0 (default; 0 uses all electrons)
+
+- active_orbitals // number of spatial orbitals in the active space
+
+      0 (default; 0 uses all orbitals after the frozen core)
+
+- frozen_core // number of doubly-occupied orbitals frozen into the core
+
+      0 (default)
+
+- max_det // hard cap on the number of determinants for the dense solver
+
+      5000 (default)
+
+- max_memory // memory budget in MiB for the dense Hamiltonian and AO integrals
+
+      2048 (default)
+
+- eig_tol // residual tolerance for the dense eigensolver sanity check
+
+      1.0e-10 (default)
+
+- integral_backend // source of the one- and two-electron integrals
+
+      native (default; the only supported value)
+
+- integral_cutoff // magnitude below which integral contributions are skipped
+
+      5.0e-11 (default)
+
+- solver // CI eigensolver
+
+      auto       dense for small spaces, Davidson once the dense matrix would exceed max_memory (default)
+      dense      build the explicit ndet x ndet Hamiltonian and diagonalize with numpy.linalg.eigh
+      davidson   build a sparse Hamiltonian and run a block Davidson iteration (avoids ndet^2 storage)
+
+- davidson_maxiter // maximum Davidson iterations
+
+      100 (default)
+
+### [casscf]
+
+`method=casscf` runs the native active-space CI/RDM machinery configured by
+`[cas]` and `[ci]`. With `max_macro_iterations=0`, it keeps the legacy
+fixed-orbital CASCI-backed scaffold path. With a positive macro-iteration
+budget, it performs native CASSCF orbital optimization for closed-shell RHF
+references and commits accepted orbital rotations before recomputing the final
+active-space state.
+
+`method=sa-casscf` and `method=sacasscf` require `[state_average] enabled=true`.
+They optimize the weighted state-average objective over the requested roots.
+
+- max_macro_iterations // CASSCF orbital macro-iteration budget
+
+      20 (default)
+       0 run the fixed-orbital CASCI scaffold
+      >0 run native CASSCF orbital optimization
+
+- optimizer // CASSCF orbital optimizer
+
+      newton           damped (level-shifted) Newton step (default)
+      microiteration   accepted alias, normalized to the same Newton implementation
+      powell           scaled-gradient fallback step, capped by max_rotation_norm
+
+  `powell` does NOT call SciPy: `_powell_step` takes a norm-limited step along
+  the negative gradient with no curvature information.  It is a robust but slow
+  fallback, not a Powell line search.
+
+- max_function_evaluations // reserved; not implemented
+
+      0 (the only accepted value)
+
+  No optimizer reads this key -- the Powell step is a scaled-gradient fallback
+  with no inner objective loop, and SciPy is not called -- so a positive value
+  is rejected in preflight rather than silently ignored.  Bound a run with
+  max_macro_iterations instead.
+
+- root // 0-based state-specific CASSCF root
+
+      0 (default)
+
+- gradient_norm_tol // convergence threshold for the packed orbital gradient
+
+      1.0e-6 (default)
+
+- energy_decrease_tol // optimizer energy-change tolerance
+
+      1.0e-10 (default)
+
+- step_norm_tol // optimizer step-size tolerance
+
+      1.0e-8 (default)
+
+- max_rotation_norm // local-step rotation norm limit for `optimizer=microiteration`
+
+      5.0e-2 (default)
 
 ### [properties]
 

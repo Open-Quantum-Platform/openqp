@@ -339,6 +339,25 @@ def validate_examples(examples_dir):
 
 # section.option -> reason. Not a distinct testable capability.
 EXEMPT_FLAGS = {
+    # --- native wavefunction stack (CASCI/CASSCF, FCI, CASPT2/NEVPT2/QDPT2).
+    # Audited individually against their use in the code, same as the entries
+    # below: each is an IO toggle, a validation guard, an alternate spelling of
+    # a capability an example already covers, or an unimplemented placeholder.
+    # None is an untested capability -- those belong in KNOWN_UNCOVERED.
+    'ci.print_ci_vectors': 'prints already-computed CI vectors (pure IO toggle)',
+    'ci.save_ci_vectors': 'writes already-computed CI vectors to disk (pure IO toggle)',
+    'ci.save_rdm': 'writes already-computed RDMs to disk (pure IO toggle)',
+    'fci.print_ci_vectors': 'prints already-computed CI vectors (pure IO toggle)',
+    'fci.save_ci_vectors': 'writes already-computed CI vectors to disk (pure IO toggle)',
+    'fci.save_rdm': 'writes already-computed RDMs to disk (pure IO toggle)',
+    'pt2.print_amplitudes': 'prints already-computed first-order amplitudes (pure IO toggle)',
+    'pt2.save_amplitudes': 'writes already-computed amplitudes to disk (pure IO toggle)',
+    'casscf.diagnostic_report': 'writes a diagnostic-only JSON report of an already-converged run (pure IO toggle)',
+    'pt2.reference_report': 'writes a diagnostic-only JSON reference report (pure IO toggle)',
+    'casscf.diagnostic_benchmark_required': 'validation guard: fails the run when no benchmark reference file is configured, not a capability',
+    'pt2.benchmark_required': 'validation guard: fails the run when no benchmark reference file is configured, not a capability',
+    'pt2.xms': 'alternate spelling of the XMS variant that method=xms-caspt2 / xmcqdpt2 select; the capability itself is covered by examples/WF_methods/H4_XMS-CASPT2.inp and H4_XMCQDPT2.inp',
+    'ci.spin_adapted': 'unimplemented placeholder; setting it true raises "not implemented" by design',
     'guess.continue_geom': 'JSON-restart geometry-selection IO convenience',
     'symmetry.strict': 'validation guard (mismatch -> fatal error), not a capability',
     'scf.trh_ls': 'TRAH line-search numerical sub-knob',
