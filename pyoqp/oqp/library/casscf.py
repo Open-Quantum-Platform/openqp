@@ -1052,7 +1052,9 @@ class CASSCF:
         # orbital_source=rhf (every committed example) byte-identical.
         from oqp.library.cas_orbitals import load_cas_mo_coeff
         _cur = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
-        _start, _src = load_cas_mo_coeff(mol.config, nbf, _cur)
+        _ovl = _unpack_lower_triangle(
+            np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
+        _start, _src = load_cas_mo_coeff(mol.config, nbf, _cur, overlap=_ovl)
         if _src != "rhf":
             _tgt = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
             mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(

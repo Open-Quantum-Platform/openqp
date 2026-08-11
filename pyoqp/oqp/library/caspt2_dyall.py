@@ -1232,7 +1232,10 @@ def native_caspt2_energy(mol, ref_energy=None):
         coeff = _default
     else:
         from oqp.library.cas_orbitals import load_cas_mo_coeff
-        coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default)
+        _ovl = _unpack_lower_triangle(
+            np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
+        coeff, _orb_source = load_cas_mo_coeff(mol.config, nbf, _default,
+                                               overlap=_ovl)
         coeff = np.asarray(coeff, dtype=float)
     eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
         (nbf, nbf, nbf, nbf), order="F"
@@ -1401,9 +1404,13 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
         # are built inside it.  Accepting a shift and returning the unshifted
         # energy -- while the PT2 summary prints the shift back to the user --
         # is worse than refusing, so refuse.
+        # ipea_shift belongs here too: sc_nevpt2_energy receives neither the
+        # option nor shifted orbital energies, so a nonzero shift was printed
+        # in the summary and returned the zero-shift answer.
         _unapplied = [name for name, value in (
             ("level_shift", options.level_shift),
             ("imaginary_shift", options.imaginary_shift),
+            ("ipea_shift", options.ipea_shift),
             ("edshft", options.edshft)) if value]
         if _unapplied:
             raise ValueError(

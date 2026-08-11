@@ -472,16 +472,26 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                     f"direct QDPT2 stream would produce {_total} terms > [pt2] "
                     f"max_terms={max_terms}; raise the guard or shrink the space")
             # Same byte check as the kernel path: the NumPy fallback builds
-            # ka/kb/val/e0/src of _total entries plus the merge buffers.
+            # ka/kb/val/e0/src of _total entries plus the merge buffers -- and
+            # with nproc > 1 every spawned worker receives a COMPLETE copy of
+            # h1e/eri/eps in its payload while the parent keeps its own, so the
+            # integrals are resident nproc+1 times.  Four workers on a ~70 MiB
+            # ERI add ~280 MiB that the stream-buffer count alone never saw.
             if _pt2_max_memory is not None:
-                _bytes = 8 * int(_total) * 5
+                _int_bytes = (h1e.nbytes + eri.nbytes + eps.nbytes)
+                _copies = max(1, int(nproc))
+                _bytes = 8 * int(_total) * 5 + _int_bytes * (_copies + 1 if _copies > 1 else 1)
                 if _bytes > _pt2_max_memory * 1024 ** 2:
                     raise ValueError(
                         "direct QDPT2 NumPy stream needs ~%.2f GiB for %d "
-                        "terms, exceeding the configured max_memory budget of "
-                        "%d MiB.  Lower [pt2] max_terms, reduce the reference "
-                        "space, or raise [cas] max_memory."
-                        % (_bytes / 1024 ** 3, int(_total), _pt2_max_memory))
+                        "terms%s, exceeding the configured max_memory budget "
+                        "of %d MiB.  Lower [pt2] max_terms or [pt2] nproc, "
+                        "reduce the reference space, or raise "
+                        "[cas] max_memory."
+                        % (_bytes / 1024 ** 3, int(_total),
+                           (" plus %d resident integral copies for %d workers"
+                            % (_copies + 1, _copies)) if _copies > 1 else "",
+                           _pt2_max_memory))
         ka, kb, val, e0, src = _stream_all(h1e, eri, eps, norb, ncore, nact,
                                            sup_a, sup_b, nproc)
 

@@ -2829,7 +2829,37 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             except (TypeError, ValueError):
                 _sa_n = 1
         _sa_targets = _as_list(_get(config, "state_average", "target_roots", []))
-        if _sa_n > 1 or len(_sa_targets) > 1:
+        # Unequal weights or a noncontiguous subset are the cases where a root
+        # flip changes WHICH physical states carry the weight, so an
+        # energy-ordered solve can converge a discontinuous objective.  Equal
+        # weights over a contiguous 0..n-1 block are invariant under a swap
+        # within the block, so those stay a warning.
+        _uneq = str(_get(config, "state_average", "equal_weights", True)
+                    ).strip().lower() not in _TRUE_BOOL
+        try:
+            _tr_ints = [int(x) for x in _sa_targets]
+        except (TypeError, ValueError):
+            _tr_ints = []
+        _noncontig = bool(_tr_ints) and sorted(_tr_ints) != list(range(len(_tr_ints)))
+        if (_sa_n > 1 or len(_sa_targets) > 1) and (_uneq or _noncontig):
+            report.add(
+                "ERROR",
+                "state_average.root_tracking",
+                "State-average roots are followed by energy order only, and "
+                "this configuration is not invariant under a root flip: "
+                + ("unequal weights" if _uneq else "")
+                + (" and " if _uneq and _noncontig else "")
+                + ("a noncontiguous target_roots subset" if _noncontig else "")
+                + ".  [state_average] root_tracking is validated but not "
+                "applied, so a reordering between macroiterations would move "
+                "the weights onto different physical states.",
+                value=_get(config, "state_average", "root_tracking", "overlap"),
+                expected="equal weights over a contiguous root block",
+                action=("Use equal_weights=true over target_roots=0..n-1, or "
+                        "run the states separately, until overlap-based "
+                        "tracking is implemented."),
+            )
+        elif _sa_n > 1 or len(_sa_targets) > 1:
             report.add(
                 "WARNING",
                 "state_average.root_tracking",
@@ -3057,6 +3087,44 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             expected="casscf.diagnostic_benchmark_required=false",
             action=("Compare the CASSCF diagnostics against your reference "
                     "outside the run for now."),
+        )
+
+    # pt2.reference_report / casscf.diagnostic_report: the flag asks for a JSON
+    # artifact that no runtime path writes, so the run reports success having
+    # produced nothing.  Same class as the *_required flags already rejected.
+    for _sec, _key in (("pt2", "reference_report"),
+                       ("casscf", "diagnostic_report")):
+        if str(_get(config, _sec, _key, False)).strip().lower() in _TRUE_BOOL:
+            report.add(
+                "ERROR",
+                f"{_sec}.{_key}",
+                f"[{_sec}] {_key} is not implemented: no runtime path writes "
+                "the report, so the requested file would never appear.",
+                value=True,
+                expected=f"{_sec}.{_key}=false",
+                action="Read the values from the run log for now.",
+            )
+
+    # pt2.denominator_cutoff is accepted and never consulted: no dense or direct
+    # resolvent reads it, and the kernels divide against a hard-coded 1e-300
+    # floor instead.  A user lowering or raising it gets no change in behaviour,
+    # which for a numerical-stability knob is worse than not offering it.
+    _dc = _get(config, "pt2", "denominator_cutoff", 1.0e-10)
+    try:
+        _dc_f = float(_dc)
+    except (TypeError, ValueError):
+        _dc_f = 1.0e-10
+    if _dc_f != 1.0e-10:
+        report.add(
+            "ERROR",
+            "pt2.denominator_cutoff",
+            "[pt2] denominator_cutoff is not implemented: no PT2 resolvent "
+            "reads it, so a nondefault threshold would have no effect on the "
+            "intruder handling it appears to control.",
+            value=_dc,
+            expected="1.0e-10 (the inert default)",
+            action=("Use [pt2] imaginary_shift or level_shift to regularize "
+                    "small denominators."),
         )
 
     # pt2.save_amplitudes / print_amplitudes: no runtime consumer exists for

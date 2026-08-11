@@ -59,8 +59,42 @@ def load_mo_coeff_from_json(filename: str | Path, nbf: int, *, spin: str = "alph
     raise ValueError(f"No MO coefficient key found in {filename}; tried {', '.join(keys)}")
 
 
-def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray) -> tuple[np.ndarray, str]:
-    """Return the MO coefficient matrix requested by ``[cas] orbital_source``."""
+def check_mo_orthonormality(coeff: np.ndarray, overlap: np.ndarray, *,
+                            label: str, tol: float = 1.0e-6) -> None:
+    """Verify C^T S C = I for imported orbitals.
+
+    Every consumer -- the integral transform, the determinant Hamiltonians, the
+    CASSCF gradient -- assumes the coefficients are orthonormal in the CURRENT
+    AO metric.  Shape agreement does not imply that: a restart from a different
+    geometry or basis with the same nbf, a malformed matrix, or a transposed
+    one all pass a shape check and then produce nonvariational nonsense with no
+    diagnostic.  This is not hypothetical -- a transposed orbital file turned an
+    H4/STO-3G CASCI into -3.7105, below that system's RHF energy, and nothing
+    complained.
+    """
+    c = np.asarray(coeff, dtype=float)
+    s_ao = np.asarray(overlap, dtype=float)
+    if s_ao.shape != c.shape:
+        return
+    gram = c.T @ s_ao @ c
+    dev = float(np.abs(gram - np.eye(gram.shape[0])).max())
+    if not np.isfinite(dev) or dev > tol:
+        raise ValueError(
+            "orbitals loaded from %s are not orthonormal in the current AO "
+            "basis: max |C^T S C - I| = %.3e (tolerance %.1e).  They are "
+            "probably from a different geometry or basis, transposed, or "
+            "otherwise malformed -- every CAS consumer assumes orthonormality, "
+            "so continuing would give nonvariational energies with no other "
+            "symptom." % (label, dev, tol))
+
+
+def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray,
+                      overlap: np.ndarray | None = None) -> tuple[np.ndarray, str]:
+    """Return the MO coefficient matrix requested by ``[cas] orbital_source``.
+
+    ``overlap`` is the current AO overlap; when supplied, imported coefficients
+    are checked against it before any consumer sees them.
+    """
 
     cas = config.get("cas", {})
     source = str(cas.get("orbital_source", "rhf")).lower()
@@ -70,7 +104,10 @@ def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray) -> tupl
     if not orbital_file:
         raise ValueError(f"[cas] orbital_source={source} requires orbital_file")
     if source == "json":
-        return load_mo_coeff_from_json(orbital_file, nbf), f"json:{orbital_file}"
+        loaded = load_mo_coeff_from_json(orbital_file, nbf)
+        if overlap is not None:
+            check_mo_orthonormality(loaded, overlap, label=orbital_file)
+        return loaded, f"json:{orbital_file}"
     raise ValueError(f"Unknown [cas] orbital_source={source}")
 
 
