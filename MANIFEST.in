@@ -1,3 +1,4 @@
-include README.md LICENSE
+include README.md CONTRIBUTING.md LICENSE LICENSING.md SUSTAINABILITY.md THIRD_PARTY_NOTICES.md
+recursive-include licenses/third_party *
 recursive-include basis_sets *
 recursive-include examples *

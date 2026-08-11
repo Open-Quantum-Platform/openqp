@@ -17,7 +17,7 @@
 - python >= 3.8
 - numpy >= 1.20.0
 - scipy >= 1.10.0
-- dftd4 >= 3.5.0   Optional, check `setup.py`
+- dftd4 >= 3.5.0   Optional for source-level Python development
 
 ## Installation
 
@@ -40,9 +40,8 @@ locates its own native library and data files, so do not set `OPENQP_ROOT`.
 The manual cmake/ninja development flow ("Detailed Compile" in the main
 README) is also detected when PyOQP is imported directly from the source
 checkout with the native library installed into that tree. Keep `OPENQP_ROOT`
-only as a compatibility fallback for custom layouts where Python is separated
-from the OpenQP runtime tree, such as a separate `cd pyoqp && pip install .`
-development install.
+only as a compatibility fallback for a custom root build; the retired
+standalone `pyoqp/setup.py` entry point is not an installation path.
 
 ## Usage
 
