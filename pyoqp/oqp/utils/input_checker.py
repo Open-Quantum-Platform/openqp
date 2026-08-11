@@ -3089,6 +3089,50 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                     "outside the run for now."),
         )
 
+    # [cas] orbital_source=json fixes the coefficients in the AO basis of ONE
+    # geometry.  Every displaced point of a numerical gradient changes the AO
+    # overlap, so the same matrix is no longer orthonormal there -- the new
+    # C^T S C guard rejects it at the first displacement, and without that guard
+    # it silently correlated a non-orthonormal set.  Projecting into each
+    # displaced metric is a modelling choice (which orbitals ARE "the same" at a
+    # displaced geometry is exactly what a cold restart re-solves), so refuse
+    # the combination rather than invent one.
+    if (method in PT2_METHOD_ALIASES
+            and runtype in {"grad", "optimize", "ts", "mep", "irc"}
+            and _as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"):
+        report.add(
+            "ERROR",
+            "cas.orbital_source",
+            "JSON-sourced CAS orbitals cannot drive a PT2 numerical gradient: "
+            "the coefficients are fixed in the AO basis of the central "
+            "geometry and are not orthonormal in the displaced ones.",
+            value="json",
+            expected="rhf",
+            action=("Use [cas] orbital_source=rhf for gradient-driven PT2 "
+                    "runtypes, or compute single-point energies with the "
+                    "imported orbitals."),
+        )
+
+    # [cas] sort_orbitals is choice-validated and never consumed.  For RHF
+    # orbitals "energy" is vacuously satisfied (they arrive energy-ordered), but
+    # a JSON file carries the column order its author chose -- so an accepted
+    # sort_orbitals=energy silently left it unsorted, and the sequential active
+    # space then correlated different orbitals than requested.
+    if (_as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"
+            and _as_lower(_get(config, "cas", "sort_orbitals", "energy")) == "energy"):
+        report.add(
+            "ERROR",
+            "cas.sort_orbitals",
+            "[cas] sort_orbitals=energy is not applied to JSON-sourced "
+            "orbitals: the loader preserves the file's column order and no "
+            "runtime path reorders it.",
+            value="energy",
+            expected="none",
+            action=("Set [cas] sort_orbitals=none and order the columns in the "
+                    "file, which is the point of supplying them, or use "
+                    "orbital_source=rhf."),
+        )
+
     # pt2.reference_report / casscf.diagnostic_report: the flag asks for a JSON
     # artifact that no runtime path writes, so the run reports success having
     # produced nothing.  Same class as the *_required flags already rejected.

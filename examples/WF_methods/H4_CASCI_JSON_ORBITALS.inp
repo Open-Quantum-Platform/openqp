@@ -44,7 +44,7 @@ active_orbitals=2
 frozen_core=1
 orbital_source=json
 orbital_file=h4_cas22_rotated_orbitals.json
-sort_orbitals=energy
+sort_orbitals=none
 max_det=5000
 max_memory=512
 

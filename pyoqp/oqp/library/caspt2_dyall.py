@@ -1357,6 +1357,13 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
     cas_cfg = mol.config.setdefault("casscf", {}) or {}
     mol.config["casscf"] = cas_cfg
     original_root = cas_cfg.get("root", None)
+    # The multistate branch below rewrites [state_average] to drive the
+    # temporary SA-CASSCF reference.  Only the method and casscf.root were
+    # restored, so those edits outlived the PT2 run: reusing the same molecule
+    # for a later SA-CASSCF (or a state-averaged CASCI) silently inherited the
+    # PT2 reference roots instead of the caller's own configuration.
+    _sa_original = dict(mol.config.get("state_average", {}) or {})
+    _sa_existed = "state_average" in mol.config
     if len(roots) > 1:
         cfg["method"] = "sa-casscf"
         sa = mol.config.setdefault("state_average", {}) or {}
@@ -1381,6 +1388,10 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
             cas_cfg.pop("root", None)
         else:
             cas_cfg["root"] = original_root
+        if _sa_existed:
+            mol.config["state_average"] = _sa_original
+        else:
+            mol.config.pop("state_average", None)
 
 
 def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,

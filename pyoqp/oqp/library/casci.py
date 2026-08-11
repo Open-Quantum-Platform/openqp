@@ -164,6 +164,26 @@ class CASCI(FCI):
         # Bulk per-root record storage: the string-factorized engine (round-off
         # equivalent, orders of magnitude faster at wide active spaces) with
         # the bit-pinned builders as the fallback for non-product lists.
+        # These per-root records are built unconditionally, outside [cas]
+        # max_memory: nroot copies of an nact^4 RDM2, and np.stack duplicates
+        # them while pair_roots still holds the originals, so the transient peak
+        # is twice the stack.  CAS(2,30) at nroot=100 clears the ~105 MiB native
+        # CI guard and then asks for ~618 MiB of RDM2 and over 1.2 GiB at the
+        # peak.  Weigh the peak before building any of it.
+        _nact_r = int(active_h1e.shape[0])
+        _nroot_r = int(ci_vectors.shape[1])
+        _rdm_bytes = 8 * _nroot_r * (_nact_r ** 4 + _nact_r ** 2)
+        _rdm_peak = 2 * _rdm_bytes          # pair_roots + the stacked copy
+        _budget_r = max(1, int(self.settings.max_memory)) * 1024 ** 2
+        if _rdm_peak > _budget_r:
+            raise ValueError(
+                "CASCI per-root RDM records for %d root(s) at nact=%d need "
+                "~%.2f GiB (~%.2f GiB at the stacking peak), exceeding the "
+                "%s max_memory budget of %d MiB.  Reduce [ci] nroot or the "
+                "active space, or raise %s max_memory."
+                % (_nroot_r, _nact_r, _rdm_bytes / 1024 ** 3,
+                   _rdm_peak / 1024 ** 3, self.active_section,
+                   int(self.settings.max_memory), self.active_section))
         pair_roots = [
             make_rdm12_spatial_strings(
                 ci_vectors[:, root], determinants, active_h1e.shape[0])

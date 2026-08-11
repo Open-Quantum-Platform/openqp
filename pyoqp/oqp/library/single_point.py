@@ -569,10 +569,15 @@ class SinglePoint(Calculator):
                 energies = self.excitation(ref_energy)
             elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
-            elif self.method == 'fci':
+            elif _normalized_method_label(self.method) == 'fci':
+                # Exact comparison here while the CASSCF/PT2 branches below
+                # normalize: preflight lowercases the method, so `method=FCI`
+                # passed validation AND the support guard, then missed this
+                # branch and fell through to `energies = ref_energy` -- the run
+                # reported the RHF energy as its FCI result, silently.
                 from oqp.library.fci import FCI
                 energies = FCI(self.mol).energy(ref_energy)
-            elif self.method == 'casci':
+            elif _normalized_method_label(self.method) == 'casci':
                 from oqp.library.casci import CASCI
                 energies = CASCI(self.mol).energy(ref_energy)
             elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:

@@ -1314,6 +1314,12 @@ class OpenQP:
                 "QDPT2 variant must be 'mrmp2', 'mcqdpt2' or 'xmcqdpt2'."
             )
         opts = dict(keywords.pop("pt2", None) or {})
+        # Same builder-reuse leak the CASPT2/NEVPT2 helpers already guard: a
+        # preceding .nevpt2() leaves h0=dyall, and QDPT requires the Fock H0, so
+        # the generated input is rejected outright; a preceding strong
+        # contraction leaks the same way.
+        opts.setdefault("h0", "fock")
+        opts.setdefault("contraction", "uncontracted")
         if edshft is not None:
             opts["edshft"] = edshft
         nroot = self._multistate_nroot(nroot, method, {"mcqdpt2", "xmcqdpt2"})
