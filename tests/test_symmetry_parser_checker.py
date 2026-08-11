@@ -89,6 +89,30 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("symmetry.tolerance", "\n".join(item.path for item in report.errors))
 
+    def test_symmetry_tolerance_must_be_finite(self):
+        """NaN slips past `<= 0.0`, and the matcher then accepts anything.
+
+        Every comparison against NaN is false, including the `dist > tolerance`
+        rejection in _match_permutation, so a NaN tolerance makes geometrically
+        invalid operations pass -- measured on 40 random asymmetric geometries,
+        12 came back with sigma = 2 instead of 1.
+        """
+        for value in (float("nan"), float("inf")):
+            with self.subTest(tolerance=value):
+                report = self.input_checker.CheckReport()
+                config = {"symmetry": {"enabled": "auto", "label_mo": True,
+                                       "label_states": True,
+                                       "label_modes": True, "tolerance": value,
+                                       "use_integral_symmetry": False,
+                                       "use_response_symmetry": False,
+                                       "strict": False}}
+
+                self.input_checker._check_symmetry(config, report)
+
+                self.assertFalse(report.ok)
+                self.assertIn("symmetry.tolerance",
+                              "\n".join(item.path for item in report.errors))
+
     def test_symmetry_reduction_flags_stay_off_in_metadata_gate(self):
         report = self.input_checker.CheckReport()
         config = {

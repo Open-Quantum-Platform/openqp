@@ -143,7 +143,16 @@ def thermal_analysis(
         mult=0,
         freq_scale_factor=1,
         freq_cutoff=100,
+        *,
+        sigma=1,
 ):
+    # `sigma` is appended and keyword-only on purpose. Inserting it between
+    # `linear` and `mult` -- where it first landed -- silently re-aimed every
+    # positional call: thermal_analysis(..., 298.15, False, 1) meant mult=1 and
+    # became sigma=1 with mult=0, so log(mult) gave -inf, and a call supplying
+    # every optional value shifted the scale factor and cutoff as well. The
+    # keyword-only marker means the parameter can never be positionally aliased
+    # again, whatever is added after it.
     # -------- Remove imaginary freqs ---------
     freqs = freqs[freqs > 0]
 
@@ -196,21 +205,46 @@ def thermal_analysis(
     st_trans = GAS_CONSTANT * (2.5 + np.log(r ** 3 / den)) * temperature * J_TO_AU
 
     # rotational entropy, 0 (atomic) ; R(Ln(q)+1) * T (linear); R(Ln(q)+3/2) * T (non-linear) in Hartree
-    rc = PLANCK_CONSTANT / (8 * np.pi ** 2 * inertia * AMU_to_KG * BOHR ** 2)
+    # A linear rotor has a vanishing principal moment, so this legitimately
+    # produces a meaningless rotational constant; both consumers below select
+    # against it explicitly. Silence the divide warning rather than let it
+    # reach the user.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        rc = PLANCK_CONSTANT / (8 * np.pi ** 2 * inertia * AMU_to_KG * BOHR ** 2)
     rt = rc * PLANCK_CONSTANT / BOLTZMANN_CONSTANT
+
+    # Select the physically meaningful moments on the INERTIA, at the same
+    # threshold normal_mode uses to decide `linear` -- not on rc/rt.
+    #
+    # eigh returns the vanishing moment as exactly 0.0 only when the molecular
+    # axis happens to lie along a coordinate axis. Tilt it and you get a tiny
+    # value of either sign, and testing rc/rt instead lets it through:
+    # CO2 along (1,1,1) gives -5.4e-31, whose huge negative rotational constant
+    # makes S_vib NaN; CO2 tilted in the xy plane gives +5.3e-15, which passes
+    # an isfinite-and-positive test and drives S_rot to -62.26 cal/mol/K
+    # instead of +13.07.
+    significant = np.asarray(inertia, dtype=float) > 1.0e-8
+
+    # sigma is the rotational symmetry number: the rotational partition function
+    # counts each indistinguishable orientation once, so q_rot carries a 1/sigma
+    # that was missing here. Omitting it inflates S_rot by R*ln(sigma) -- 1.38
+    # cal/mol/K for water, 4.94 for benzene -- and every S and G derived from it.
+    sigma = max(1, int(sigma))
 
     if len(atoms) == 1:
         st_rot = 0.0
+    elif linear:
+        # A linear rotor has one vanishing principal moment, so rt holds one
+        # infinity; the old code indexed rt[0], which numpy sorts ascending and
+        # is therefore exactly that infinity -- every diatomic printed -inf.
+        # Use the doubly degenerate finite rotational temperature instead.
+        rot_temps = rt[significant]
+        theta = float(rot_temps[0]) if rot_temps.size else np.nan
+        qr = temperature / (sigma * theta)
+        st_rot = GAS_CONSTANT * (np.log(qr) + 1) * temperature * J_TO_AU
     else:
-        if len(atoms) == 2:
-            qr = temperature / rt[0]
-        else:
-            qr = (np.pi * temperature ** 3 / (rt[0] * rt[1] * rt[2])) ** 0.5
-
-        if linear:
-            st_rot = GAS_CONSTANT * (np.log(qr) + 1) * temperature * J_TO_AU
-        else:
-            st_rot = GAS_CONSTANT * (np.log(qr) + 1.5) * temperature * J_TO_AU
+        qr = (np.pi * temperature ** 3 / (rt[0] * rt[1] * rt[2])) ** 0.5 / sigma
+        st_rot = GAS_CONSTANT * (np.log(qr) + 1.5) * temperature * J_TO_AU
 
     # vibrational entropy,
     # quasi-harmonic model, Grimme, S. (2012), Chem. Eur. J., 18: 9955-9964. DOI.org/10.1002/chem.201200497
@@ -219,7 +253,14 @@ def thermal_analysis(
     st_rrho_vib = s_rrho_vib * GAS_CONSTANT * temperature * J_TO_AU
 
     # free-rotor Sv = R(1/2 + 1/2ln((8π^3u'kT/h^2)) * T in Hartree
-    av_rc = sum(rc) / len(rc)  # s-1
+    # Grimme's free-rotor term needs an average rotational constant. For a
+    # linear rotor the vanishing principal moment contributes a meaningless
+    # one -- infinite when the moment is exactly zero, enormous and possibly
+    # negative when it is not -- and averaging it in gives bav ~ 0, hence
+    # log(0) and st_vib = -inf or NaN. That is why linear molecules printed
+    # -inf for the TOTAL entropy even once st_rot was fixed.
+    rot_consts = np.asarray(rc, dtype=float)[significant]
+    av_rc = float(np.sum(rot_consts) / rot_consts.size) if rot_consts.size else np.inf  # s-1
     bav = PLANCK_CONSTANT / av_rc  # kg m^2
     mu = PLANCK_CONSTANT / (8 * np.pi ** 2 * freqs * SPEED_OF_LIGHT * freq_scale_factor)
     mu_p = bav / (mu + bav)
@@ -244,6 +285,15 @@ def thermal_analysis(
         'st_trans': st_trans,
         'st_rot': st_rot,
         'st_vib': st_vib,
+        'sigma': int(sigma),
+        'linear': bool(linear),
+        # The printer must mark the SAME moments the entropy code selected
+        # against, or the two disagree about which rotational constant is
+        # meaningful. Testing isfinite() there is not equivalent: a tilted
+        # linear rotor's vanishing moment comes back as a tiny finite number,
+        # which is exactly the case this PR exists to handle.
+        'rot_significant': [bool(x) for x in significant],
+        'monatomic': len(atoms) == 1,
     }
 
     return thermo_data

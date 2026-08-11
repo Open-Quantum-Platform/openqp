@@ -19,18 +19,57 @@ from oqp.library.state_tracking import (
     maximum_overlap_assignment,
 )
 
-# DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
-# exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
-# there is no longer a Python <= 3.12 constraint.
+# DFT-D4 is dynamically linked into liboqp (source/dftd4_interface.F90),
+# exposed through oqp.lib. No Python `dftd4` package is needed, so there is no
+# longer a Python <= 3.12 constraint.
 dftd_installed = ('dftd4 (native)'
                   if hasattr(getattr(oqp, 'lib', None), 'oqp_dftd4_disp')
                   else 'not available')
 
 
-def dftd4_native_disp(atoms, coordinates, functional, do_grad):
+_D4_DAMPING_KEYS = ('s6', 's8', 's9', 'a1', 'a2', 'alp')
+
+
+def _dftd4_damping_values(damping_params):
+    """Return ``(mode, values)`` for the native v2 rational-damping ABI."""
+    if damping_params is None:
+        return 0, [0.0] * len(_D4_DAMPING_KEYS)
+
+    if isinstance(damping_params, dict):
+        missing = [key for key in _D4_DAMPING_KEYS if key not in damping_params]
+        if missing:
+            raise ValueError(
+                'explicit D4 damping parameters are missing: ' + ', '.join(missing)
+            )
+        values = [float(damping_params[key]) for key in _D4_DAMPING_KEYS]
+    else:
+        values = [float(value) for value in damping_params]
+        if len(values) != len(_D4_DAMPING_KEYS):
+            raise ValueError(
+                'explicit D4 damping requires [s6, s8, s9, a1, a2, alp]'
+            )
+
+    if not np.all(np.isfinite(values)):
+        raise ValueError('explicit D4 damping parameters must be finite')
+    return 1, values
+
+
+def _dftd4_damping_from_config(config):
+    """Return explicit damping from the schema, or ``None`` for defaults."""
+    section = config.get('d4', {})
+    raw = {key: section.get(key, '') for key in _D4_DAMPING_KEYS}
+    if not any(str(value).strip() for value in raw.values()):
+        return None
+    return {key: float(raw[key]) for key in _D4_DAMPING_KEYS}
+
+
+def dftd4_native_disp(atoms, coordinates, functional, do_grad,
+                       total_charge=0.0, damping_params=None):
     """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
 
-    atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. 'pbe0'.
+    ``atoms`` are atomic numbers and ``coordinates`` are ``(natom, 3)`` in
+    Bohr. ``total_charge`` is passed to DFT-D4's charge model. Optional
+    ``damping_params`` supplies ``s6, s8, s9, a1, a2, alp`` explicitly.
     """
     natom = len(atoms)
     func = ('bhlyp' if functional.lower() in ('bhhlyp',) else functional).encode('ascii')
@@ -39,10 +78,32 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
     energy_ptr = oqp.ffi.new('double*')
     grad_buf = oqp.ffi.new('double[]', natom * 3)
     ier = oqp.ffi.new('int*')
-    oqp.lib.oqp_dftd4_disp(natom, z, xyz, func, len(func), int(do_grad),
-                           energy_ptr, grad_buf, ier)
+    param_mode, damping_values = _dftd4_damping_values(damping_params)
+    damping = oqp.ffi.new('double[]', damping_values)
+
+    if hasattr(oqp.lib, 'oqp_dftd4_disp_v2'):
+        oqp.lib.oqp_dftd4_disp_v2(
+            natom, z, xyz, float(total_charge), func, len(func),
+            param_mode, damping, int(do_grad), energy_ptr, grad_buf, ier
+        )
+    else:
+        # Source and native library can be temporarily mismatched in developer
+        # environments. Neutral functional-name calculations remain compatible;
+        # never silently discard a requested charge or explicit parameters.
+        if float(total_charge) != 0.0 or param_mode != 0:
+            raise RuntimeError(
+                'charge-aware DFT-D4 requires oqp_dftd4_disp_v2; rebuild OpenQP'
+            )
+        oqp.lib.oqp_dftd4_disp(
+            natom, z, xyz, func, len(func), int(do_grad),
+            energy_ptr, grad_buf, ier
+        )
     if ier[0] != 0:
-        raise RuntimeError(f"dftd4: no D4 damping parameters for functional '{functional}'")
+        if ier[0] == 1:
+            raise RuntimeError(
+                f"dftd4: no D4 damping parameters for functional '{functional}'"
+            )
+        raise RuntimeError(f'dftd4: native interface failed with status {ier[0]}')
     energy = energy_ptr[0]
     if do_grad:
         grad = np.frombuffer(oqp.ffi.buffer(grad_buf, natom * 3 * 8),
@@ -83,6 +144,25 @@ MP2_VARIANT_SCALES = {
     'scs-mi': (1.29, 0.40),
     'scs-mi-mp2': (1.29, 0.40),
 }
+
+
+SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
+    # 'ccsd'/'ccsd(t)' arrive with #302; the two guards were merged into this
+    # one constant so a method cannot be accepted by one and rejected by the
+    # other.
+    'hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
+    'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
+    'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'mrmp2', 'mcqdpt2', 'xmcqdpt2',
+}
+
+
+def _normalized_method_label(method):
+    return str(method).strip().lower()
+
+
+def _raise_unavailable_wavefunction_method(method):
+    raise ValueError(f'Unknown method type {method}')
 
 
 def _no_integral_symmetry_in_child(config):
@@ -192,7 +272,9 @@ class LastStep(Calculator):
 
         self.do_d4 = mol.config['input']['d4']
         self.res = None
-        self.set_param(param)
+        self.set_param(
+            _dftd4_damping_from_config(mol.config) if param is None else param
+        )
         self.natom = 0
 
         dump_log(
@@ -212,7 +294,11 @@ class LastStep(Calculator):
         coordinates = mol.get_system().reshape((-1, 3))  # Bohr
         natom = len(atoms)
         if self.do_d4:
-            energy, grad = dftd4_native_disp(atoms, coordinates, self.functional, do_grad)
+            total_charge = float(mol.config.get('input', {}).get('charge', 0))
+            energy, grad = dftd4_native_disp(
+                atoms, coordinates, self.functional, do_grad,
+                total_charge=total_charge, damping_params=self.d4_param
+            )
         else:
             energy = 0.0
             grad = np.zeros((natom, 3))
@@ -220,8 +306,7 @@ class LastStep(Calculator):
         return energy, grad
 
     def set_param(self, param):
-        # TODO pass user-defined parameters to dftd4
-        pass
+        self.d4_param = param
 
     def compute(self, mol, grad_list=None):
         # do dftd4
@@ -289,7 +374,14 @@ class SinglePoint(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config['input']['method']
+        # Normalize once, here, rather than at each comparison.  Preflight
+        # lowercases the method, so `method=MP2`/`TDHF`/`CCSD(T)` reached the
+        # dispatcher in its original spelling: the normalized support guard
+        # accepted it and every `self.method == 'mp2'`-style branch then missed,
+        # so the run fell through to `energies = ref_energy` and reported the HF
+        # result for a correlated or excited-state request.  Fixing the fci and
+        # casci branches individually last round left the rest of the family.
+        self.method = _normalized_method_label(mol.config['input']['method'])
         self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
@@ -516,13 +608,14 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)']:
-            raise ValueError(f'Unknown method type {self.method}')
+        if _normalized_method_label(self.method) not in SUPPORTED_SINGLE_POINT_ENERGY_METHODS:
+            _raise_unavailable_wavefunction_method(self.method)
 
         target_converger = self.mol.config['scf']['converger_type']
         try:
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
+
 
             # ixcore.  The shift overwrites the unselected occupied orbital
             # energies with -100000 so the TD trial vectors leave the requested
@@ -542,12 +635,33 @@ class SinglePoint(Calculator):
                     )
             else:
                 self.ixcore_shift()
-
             # compute excitations
             if self.method == 'tdhf':
+                # ixcore is a TDHF/XAS orbital shift and is not used by FCI.
+                self.ixcore_shift()
                 energies = self.excitation(ref_energy)
             elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
+            elif self.method == 'fci':
+                # Exact comparison here while the CASSCF/PT2 branches below
+                # normalize: preflight lowercases the method, so `method=FCI`
+                # passed validation AND the support guard, then missed this
+                # branch and fell through to `energies = ref_energy` -- the run
+                # reported the RHF energy as its FCI result, silently.
+                from oqp.library.fci import FCI
+                energies = FCI(self.mol).energy(ref_energy)
+            elif self.method == 'casci':
+                from oqp.library.casci import CASCI
+                energies = CASCI(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:
+                from oqp.library.casscf import CASSCF
+                energies = CASSCF(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {
+                'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'mrmp2', 'mcqdpt2', 'xmcqdpt2'
+            }:
+                from oqp.library.caspt2_dyall import native_caspt2_energy
+                energies = native_caspt2_energy(self.mol, ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -1104,7 +1218,7 @@ class Gradient(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config["input"]["method"]
+        self.method = _normalized_method_label(mol.config["input"]["method"])
         self.td = mol.config["tdhf"]["type"]
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]
@@ -1129,6 +1243,32 @@ class Gradient(Calculator):
     def gradient(self):
         # check method
         if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+            # Native PT2 family (energy-only kernels): central-difference
+            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
+            # avoid a circular module dependency.
+            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
+            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                grads = pt2_numerical_gradient(self.mol, self.grads)
+                self.mol.grads = grads
+                # Molecule.get_results() reads the NATIVE data._data.grad
+                # buffer, which only the Fortran gradient kernels ever write.
+                # Handing the finite-difference result back to the optimizer
+                # while leaving that buffer untouched meant guess.save_mol=true
+                # serialized stale (or uninitialized) numbers as the public
+                # "grad" result: right optimization, wrong saved JSON.  Mirror
+                # the selected gradient into it the way the native paths do.
+                #
+                # grads is indexed BY STATE ((nstate, natom, 3)), matching
+                # tddft_grad -- not by position in the request list.  So
+                # grads[0] is always S0: a `[properties] grad=1` run would have
+                # optimized with S1 while publishing the S0 gradient.  Write
+                # the last requested state, which is what the TDDFT path leaves
+                # in the buffer after looping over self.grads in order.
+                _sel = [int(s) for s in np.atleast_1d(self.grads)]
+                if len(grads) and _sel and 0 <= _sel[-1] < len(grads):
+                    self.mol.set_grad(grads[_sel[-1]])
+                return grads
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -1334,14 +1474,34 @@ class Hessian(Calculator):
             info=(self.mol.get_atoms(), freqs, modes),
         )
 
+        # Rigid-rotor inputs that do not depend on temperature. Both are derived
+        # here rather than read from symmetry_metadata: that block is forced to
+        # C1 whenever [symmetry] is off, so a metadata-sourced sigma would be 1
+        # on a default run. `linear` comes from the principal moments so the
+        # cached-Hessian (hess.read) path works without a cache-format change.
+        # Imported here rather than at module scope: symmetry_detect is needed
+        # only on this path, and a top-level import breaks the stub-based module
+        # loading several tests use. molecule.py imports it the same way.
+        from oqp.library.symmetry_detect import rotational_symmetry_number
+
+        thermo_atoms = self.mol.get_atoms()
+        thermo_linear = (len(thermo_atoms) > 1 and int(np.count_nonzero(
+            np.asarray(inertia, dtype=float) > 1.0e-8)) < 3)
+        thermo_sigma = rotational_symmetry_number(
+            thermo_atoms, self.mol.get_system(),
+            tolerance=float((getattr(self.mol, 'symmetry_metadata', None)
+                             or {}).get('tolerance', 1.0e-5)))
+
         for t in self.temperature:
             thermal_data = thermal_analysis(
                 energy=energy,
-                atoms=self.mol.get_atoms(),
+                atoms=thermo_atoms,
                 mass=self.mol.get_mass(),
                 freqs=freqs,
                 inertia=inertia,
                 temperature=t,
+                linear=thermo_linear,
+                sigma=thermo_sigma,
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
@@ -1575,6 +1735,8 @@ class Hessian(Calculator):
             )
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
+        total_charge = float(self.mol.config.get('input', {}).get('charge', 0))
+        damping_params = _dftd4_damping_from_config(self.mol.config)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1582,7 +1744,10 @@ class Hessian(Calculator):
         ncoord = flat.size
 
         def disp_grad(coord_flat):
-            _, grad = dftd4_native_disp(atoms, coord_flat.reshape((-1, 3)), functional, True)
+            _, grad = dftd4_native_disp(
+                atoms, coord_flat.reshape((-1, 3)), functional, True,
+                total_charge=total_charge, damping_params=damping_params
+            )
             return np.asarray(grad, dtype=float).reshape(-1)
 
         hess = np.zeros((ncoord, ncoord))

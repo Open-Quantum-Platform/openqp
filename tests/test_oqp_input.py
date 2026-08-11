@@ -970,15 +970,20 @@ def test_soc_namd_numeric_active_surface_is_not_rewritten_as_mch_state():
     assert "init_state" not in legacy["md"]
 
 
-def test_d4_is_a_no_argument_modifier():
+def test_d4_accepts_complete_explicit_rational_damping():
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() d4()'
     )
     assert legacy["input"]["d4"] == "True"
-    with pytest.raises(OQPInputError, match=r"d4\(\) does not accept"):
-        oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="h2o.xyz" energy() d4(enabled=true)'
-        )
+    _, explicit = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" energy() '
+        'd4(s6=1.0,s8=0.95948085,s9=1.0,a1=0.38574991,a2=4.80688534,alp=16.0)'
+    )
+    assert explicit["input"]["d4"] == "True"
+    assert explicit["d4"] == {
+        "s6": "1.0", "s8": "0.95948085", "s9": "1.0",
+        "a1": "0.38574991", "a2": "4.80688534", "alp": "16.0",
+    }
 
 
 def test_soc_uses_equal_nstate_or_explicit_singlet_triplet_counts():
@@ -1703,6 +1708,226 @@ def test_common_input_mistakes_get_actionable_corrections():
         )
 
 
+# --- native multiconfigurational wavefunction stack -------------------------
+
+WF_EXAMPLE_DIR = ROOT / "examples" / "WF_methods"
+WF_EXAMPLES = sorted(path.name for path in WF_EXAMPLE_DIR.glob("*.inp"))
+
+
+def _normalized_config_value(value):
+    """Compare legacy values by meaning, not by spelling.
+
+    ``[ci] eig_tol=1.0e-10`` and ``ci(eig_tol=1e-10)`` reach the schema as the
+    same float; a textual comparison would only pin the renderer's formatting.
+    """
+
+    text = str(value).strip()
+    lowered = text.lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    try:
+        return float(text)
+    except ValueError:
+        # Comma-separated integer/float arrays (target_roots, weights).
+        parts = [item.strip() for item in text.split(",")]
+        if len(parts) > 1:
+            try:
+                return tuple(float(item) for item in parts)
+            except ValueError:
+                pass
+        return text
+
+
+def _legacy_sections(path):
+    parser = configparser.ConfigParser()
+    parser.read_string(path.read_text(encoding="utf-8"))
+    return {
+        section: {
+            key: _normalized_config_value(value)
+            for key, value in parser.items(section)
+        }
+        for section in parser.sections()
+    }
+
+
+def _atom_table(text):
+    atoms = []
+    for line in text.splitlines():
+        tokens = line.split()
+        if len(tokens) == 4:
+            try:
+                atoms.append(
+                    (tokens[0].capitalize(), *(round(float(x), 8) for x in tokens[1:]))
+                )
+            except ValueError:
+                continue
+    return atoms
+
+
+def test_every_wf_methods_example_has_a_committed_oqp_twin():
+    # 18 since H4_CASCI_JSON_ORBITALS.inp added [cas] orbital_source=json;
+    # 17 since H4_CASPT2_grad.inp added the PT2 central-difference gradient
+    # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
+    # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
+    assert len(WF_EXAMPLES) == 18
+    missing = [
+        name for name in WF_EXAMPLES
+        if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()
+    ]
+    assert not missing
+
+
+@pytest.mark.parametrize("filename", WF_EXAMPLES)
+def test_wf_oqp_twin_lowers_to_its_legacy_inp_configuration(filename):
+    """The concise twin must be the same request, key for key.
+
+    This is the fast unit-level pin behind the example-level energy
+    comparison: a lowering slip (a dropped ``[pt2]`` key, a method grouped into
+    ``tdhf``) shows up here immediately instead of hiding inside converged
+    digits.
+    """
+
+    legacy_path = WF_EXAMPLE_DIR / filename
+    concise_path = legacy_path.with_suffix(".oqp")
+    expected = _legacy_sections(legacy_path)
+    spec = oqp_input.parse_canonical_oqp(concise_path.read_text(encoding="utf-8"))
+    lowered = {
+        section: {
+            key: _normalized_config_value(value) for key, value in values.items()
+        }
+        for section, values in oqp_input.lower_to_legacy(
+            spec, source_dir=WF_EXAMPLE_DIR
+        ).items()
+    }
+
+    # The geometry is the one deliberate difference: the concise twin points at
+    # the shared Cartesian catalog instead of repeating an inline atom table.
+    geometry = Path(lowered["input"].pop("system"))
+    assert geometry.is_file()
+    assert _atom_table(geometry.read_text(encoding="utf-8")) == _atom_table(
+        str(expected["input"].pop("system"))
+    )
+    # [cas] orbital_file is the second deliberate difference, for the same
+    # reason as the geometry: the concise twin may be run from anywhere, so the
+    # lowering resolves it against the twin's directory, while the legacy deck
+    # keeps the path relative to itself.  Compare what they point AT.
+    if str(expected.get("cas", {}).get("orbital_file", "")).strip():
+        lowered_orb = Path(str(lowered["cas"].pop("orbital_file")))
+        expected_orb = str(expected["cas"].pop("orbital_file"))
+        assert lowered_orb.is_file()
+        assert lowered_orb.name == Path(expected_orb).name
+
+    # charge=0 is the language default: never written in the concise twin, but
+    # always restored by the lowering, so it still has to agree.
+    assert set(lowered) == set(expected)
+    for section in sorted(expected):
+        assert lowered[section] == expected[section], section
+
+
+@pytest.mark.parametrize(
+    "filename,expected_model",
+    [
+        ("H2_FCI.oqp", "fci"),
+        ("H2_CASCI.oqp", "casci"),
+        ("LiH_CASSCF.oqp", "casscf"),
+        ("LiH_SA-CASSCF.oqp", "sa-casscf"),
+        ("H4_CASPT2.oqp", "caspt2"),
+        ("H4_MS-CASPT2.oqp", "ms-caspt2"),
+        ("H4_XMS-CASPT2.oqp", "xms-caspt2"),
+        ("H4_MRMP2.oqp", "mrmp2"),
+        ("H4_MCQDPT2.oqp", "mcqdpt2"),
+        ("H4_XMCQDPT2.oqp", "xmcqdpt2"),
+        ("C2H4_XMCQDPT2_CCPVDZ.oqp", "xmcqdpt2"),
+    ],
+)
+def test_wf_route_name_is_the_lowered_input_method(filename, expected_model):
+    text = (WF_EXAMPLE_DIR / filename).read_text(encoding="utf-8")
+    spec = oqp_input.parse_canonical_oqp(text)
+    legacy = oqp_input.lower_to_legacy(spec, source_dir=WF_EXAMPLE_DIR)
+
+    assert spec.model == expected_model
+    # Unlike HF/DFT, MP2, DFTB and the response family, these are not grouped:
+    # the route name is the method.
+    assert legacy["input"]["method"] == expected_model
+    assert legacy["input"]["runtype"] == "energy"
+    assert legacy["scf"]["type"] == "rhf"
+    assert legacy["scf"]["multiplicity"] == "1"
+
+
+@pytest.mark.parametrize(
+    "alias,expected",
+    [
+        ("sacasscf", "sa-casscf"), ("sa_casscf", "sa-casscf"),
+        ("mscaspt2", "ms-caspt2"), ("xmscaspt2", "xms-caspt2"),
+        ("full-ci", "fci"), ("cas-ci", "casci"), ("cas-scf", "casscf"),
+        ("mcqdpt", "mcqdpt2"), ("xmcqdpt", "xmcqdpt2"), ("mr-mp2", "mrmp2"),
+    ],
+)
+def test_natural_wf_spellings_lower_to_checker_accepted_methods(alias, expected):
+    _, legacy = _parse('%s/sto-3g geom="h2o.xyz" energy' % alias)
+
+    assert legacy["input"]["method"] == expected
+
+
+def test_nevpt2_is_a_caspt2_zeroth_order_hamiltonian_not_a_route():
+    """NEVPT2 has no ``input.method``; it is ``caspt2`` plus Dyall's H0.
+
+    Both NEVPT2 examples set ``method=caspt2``, so accepting a ``nevpt2``
+    route would have to silently inject ``[pt2] h0=dyall`` behind the user's
+    back.  The concise form keeps the selector visible instead.
+    """
+
+    with pytest.raises(OQPInputError, match="Unknown electronic-structure model"):
+        oqp_input.parse_canonical_oqp('nevpt2/6-31g geom="h4.xyz" energy')
+
+    _, legacy = _parse(
+        'caspt2/6-31g geom="h4.xyz" energy pt2(h0=dyall,contraction=strong)'
+    )
+    assert legacy["input"]["method"] == "caspt2"
+    assert legacy["pt2"]["h0"] == "dyall"
+    assert legacy["pt2"]["contraction"] == "strong"
+
+
+def test_wf_routes_take_a_basis_and_never_a_functional():
+    with pytest.raises(OQPInputError, match="does not take a functional"):
+        oqp_input.parse_canonical_oqp(
+            'casscf/pbe0/sto-3g geom="h2o.xyz" energy'
+        )
+    spec = oqp_input.parse_canonical_oqp('casscf/sto-3g geom="h2o.xyz" energy')
+    assert (spec.basis, spec.functional) == ("sto-3g", "")
+
+
+def test_wf_section_options_are_not_route_options():
+    with pytest.raises(OQPInputError, match="use the exact section call cas"):
+        oqp_input.parse_canonical_oqp(
+            'casscf(active_electrons=4)/sto-3g geom="h2o.xyz" energy'
+        )
+    with pytest.raises(OQPInputError, match="Unknown option 'ci.nroots'"):
+        oqp_input.parse_canonical_oqp(
+            'casci/sto-3g geom="h2o.xyz" energy ci(nroots=2)'
+        )
+
+
+def test_wf_sections_survive_a_canonical_render_round_trip():
+    text = (WF_EXAMPLE_DIR / "LiH_SA-CASSCF.oqp").read_text(encoding="utf-8")
+    spec = oqp_input.parse_canonical_oqp(text)
+
+    assert oqp_input.render_canonical_oqp(spec) == text
+    legacy = oqp_input.lower_to_legacy(spec, source_dir=WF_EXAMPLE_DIR)
+    assert legacy["state_average"]["enabled"] == "True"
+    assert legacy["state_average"]["weights"] == "0.5,0.5"
+    assert legacy["state_average"]["target_roots"] == "0,1"
+
+
+def test_cas_orbital_file_resolves_from_the_oqp_directory(tmp_path):
+    (tmp_path / "start.json").write_text("{}", encoding="utf-8")
+    _, legacy = _parse(
+        'casci/sto-3g geom="h2.xyz" energy '
+        'cas(orbital_source=json,orbital_file="start.json")',
+        source_dir=tmp_path,
+    )
+
+    assert legacy["cas"]["orbital_file"] == str(tmp_path / "start.json")
 def test_coupled_cluster_route_selects_method_and_lowers_cc_section(tmp_path):
     """ccsd/ccsd_t are models in their own right, not tdhf variants."""
     spec, legacy = _parse(
@@ -1844,8 +2069,6 @@ def test_natural_cc_support_matches_the_established_mp2_spelling(tmp_path):
             form % label, source_path=tmp_path / "probe.oqp"
         )
         assert res.legacy_config["input"]["method"] == expected, label
-
-
 def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
     text = (
         'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '

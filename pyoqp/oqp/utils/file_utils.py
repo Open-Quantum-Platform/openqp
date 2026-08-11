@@ -86,8 +86,25 @@ def how_long(start, end):
 def _to_yes_no(value):
     return 'yes' if bool(value) else 'no'
 @mpi_dump
+def print_module_banner(mol, title, info=""):
+    """Print a native-style module banner identical to the Fortran
+    ``print_module_info`` (source/printing.F90): a 40-wide ``+`` rule, the
+    centred ``MODULE: <title>`` line, an optional one-line description, and a
+    closing rule.  Used so the Python wavefunction methods announce themselves
+    in the log exactly like the compiled backend modules."""
+    logpath = getattr(mol, "log", None)
+    if not logpath:
+        return
+    bar = " " * 20 + "+" * 40
+    with open(logpath, "a") as handle:
+        handle.write("\n" + bar + "\n")
+        handle.write(" " * 23 + "MODULE: " + str(title) + "\n")
+        if info:
+            handle.write(" " * 23 + str(info) + "\n")
+        handle.write(bar + "\n")
 
 
+@mpi_dump
 def dump_log(mol, title=None, section=None, info=None, must_print=False):
     # function to write information to main log
     logfile = mol.log
@@ -332,6 +349,118 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 """ % (method_display, functional, td_type, td_maxit, td_maxit_zv,
          td_mult_label + ':', td_mult_display,
          td_conv, td_nstate, td_zvconv, td_nvdav)
+
+    if section == 'fci':
+        method_label = info.get('method', 'fci')
+        ci_label = info.get('ci_label', 'FCI')
+        loginfo += """
+   PyOQP method:                       %s
+   PyOQP reference:                    closed-shell RHF
+   PyOQP active electrons:             %14s
+   PyOQP active orbitals:              %14s
+   PyOQP frozen core orbitals:         %14s
+   PyOQP determinant count:            %14s
+   PyOQP orbital source:               %s
+   PyOQP orbital selection:            %s
+   PyOQP active orbital indices:       %s
+   PyOQP core orbital indices:         %s
+""" % (
+            method_label,
+            info['active_electrons'],
+            info['active_orbitals'],
+            info['frozen_core'],
+            info['determinants'],
+            info.get('orbital_source', 'rhf'),
+            info.get('orbital_selection', 'sequential'),
+            info.get('active_orbital_indices', ''),
+            info.get('core_orbital_indices', ''),
+        )
+        if info.get('hf_energy') is not None:
+            loginfo += f"   PyOQP RHF reference energy:          {info['hf_energy']:<16.10f}\n"
+        loginfo += f"\n   PyOQP {ci_label} energies\n"
+        s2 = info.get('s2')
+        multiplicity = info.get('multiplicity')
+        for n, energy in enumerate(info['energies']):
+            if s2 is not None and multiplicity is not None:
+                loginfo += (
+                    f"   PyOQP state {n:<6} {energy:<16.10f} "
+                    f"<S^2> {s2[n]:<10.6f} multiplicity {multiplicity[n]:<4}\n"
+                )
+            else:
+                loginfo += f"   PyOQP state {n:<6} {energy:<16.10f}\n"
+        if multiplicity is not None and len(set(multiplicity)) > 1:
+            loginfo += f"   PyOQP note: {ci_label} roots span multiple spin multiplicities\n"
+        state_average = info.get('state_average')
+        if state_average is not None:
+            roots = tuple(state_average.get('roots', ()))
+            root_indices = tuple(state_average.get('root_indices', roots))
+            weights = tuple(state_average.get('weights', ()))
+            root_text = ", ".join(str(root) for root in roots)
+            root_index_text = ", ".join(str(root) for root in root_indices)
+            weight_text = ", ".join(f"{weight:.8f}" for weight in weights)
+            loginfo += (
+                f"\n   PyOQP {ci_label} fixed-orbital state average\n"
+                f"   PyOQP state-average roots:          {root_text}\n"
+                f"   PyOQP state-average root indices:   {root_index_text}\n"
+                f"   PyOQP state-average weights:        {weight_text}\n"
+                f"   PyOQP state-average energy:         {state_average['energy']:<16.10f}\n"
+            )
+        ci_vector_log = info.get('ci_vector_log')
+        if ci_vector_log is not None:
+            threshold = ci_vector_log.get('threshold', 0.0)
+            root_indices = tuple(ci_vector_log.get('root_indices', ()))
+            entries = tuple(ci_vector_log.get('entries', ()))
+            root_header = " ".join(f"root {root:>4}" for root in root_indices)
+            loginfo += (
+                f"\n   PyOQP {ci_label} CI vectors "
+                f"(abs coeff >= {threshold:.6g})\n"
+                f"   PyOQP {'det':>6} {'alpha occ':<18} {'beta occ':<18} {root_header}\n"
+            )
+            if not entries:
+                loginfo += "   PyOQP no CI coefficients exceed the print threshold\n"
+            for entry in entries:
+                coeffs = " ".join(f"{value:>10.6f}" for value in entry.get('coefficients', ()))
+                loginfo += (
+                    f"   PyOQP {entry.get('index', 0):6d} "
+                    f"{entry.get('alpha', '-'):<18} "
+                    f"{entry.get('beta', '-'):<18} {coeffs}\n"
+                )
+        loginfo += "\n"
+
+    if section == 'casscf_macroiteration':
+        info = info or {}
+
+        def _format_bool(value):
+            return "yes" if bool(value) else "no"
+
+        def _format_float(value, precision=10):
+            if value is None:
+                return "n/a"
+            return f"{float(value):.{precision}f}"
+
+        final_state_energy = info.get('final_state_energy')
+        loginfo += (
+            f"   PyOQP CASSCF mode:                  {info.get('mode', 'state-specific')}\n"
+            f"   PyOQP CASSCF optimizer:             {info.get('optimizer', '')}\n"
+            f"   PyOQP CASSCF target root:           {info.get('root', 0)}\n"
+            f"   PyOQP CASSCF macro iterations:      "
+            f"{info.get('n_iterations', 0)} / {info.get('max_macro_iterations', 0)}\n"
+            f"   PyOQP CASSCF accepted steps:        {info.get('n_accepted', 0)}\n"
+            f"   PyOQP CASSCF converged:             {_format_bool(info.get('converged', False))}\n"
+            f"   PyOQP CASSCF orbitals updated:      {_format_bool(info.get('orbitals_mutated', False))}\n"
+            f"   PyOQP CASSCF stop reason:           {info.get('stop_reason', '')}\n"
+            f"   PyOQP CASSCF loop stop reason:      {info.get('loop_stop_reason', '')}\n"
+            f"   PyOQP CASSCF root ambiguous:        {_format_bool(info.get('root_ambiguous', False))}\n"
+            f"   PyOQP CASSCF root swapped:          {_format_bool(info.get('root_swapped', False))}\n"
+            f"   PyOQP CASSCF initial energy:        {_format_float(info.get('energy_initial'))}\n"
+            f"   PyOQP CASSCF final macro energy:    {_format_float(info.get('energy_final'))}\n"
+            f"   PyOQP CASSCF energy decrease:       {_format_float(info.get('energy_decrease'))}\n"
+            f"   PyOQP CASSCF initial grad norm:     {_format_float(info.get('gradient_norm_initial'), 8)}\n"
+            f"   PyOQP CASSCF final grad norm:       {_format_float(info.get('gradient_norm_final'), 8)}\n"
+        )
+        if final_state_energy is not None:
+            loginfo += f"   PyOQP CASSCF final state energy:    {_format_float(final_state_energy)}\n"
+        loginfo += "\n"
 
     if section == 'dftd':
         loginfo += """
@@ -733,21 +862,46 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         st_trans = info['st_trans']
         st_rot = info['st_rot']
         st_vib = info['st_vib']
+        sigma = int(info.get('sigma', 1))
+        linear = bool(info.get('linear', False))
 
         u_el = u_trans + u_rot + u_vib + zpe
         u = u_el + el
         h_el = u_el + pv
         h = h_el + el
         st = st_el + st_trans + st_rot + st_vib
-        g_el = h_el + st
+        # G = H - TS, as printed below. This read `h_el + st`, which made the
+        # reported Gibbs correction wrong by 2*TS (H2O: +0.046369 instead of
+        # +0.002234 Ha) ever since the release commit.
+        g_el = h_el - st
         g = g_el + el
+
+        # A linear rotor has a vanishing principal moment, so one rotational
+        # constant/temperature is meaningless; print it as a dash. Use the mask
+        # the entropy code actually selected with (1e-8 on the INERTIA) rather
+        # than testing isfinite here -- a tilted linear rotor's vanishing
+        # moment comes back as a tiny finite number, so isfinite would print a
+        # spurious enormous constant next to a correct entropy.
+        significant = info.get('rot_significant')
+        if significant is None or len(significant) != len(np.asarray(rc).ravel()):
+            significant = [bool(np.isfinite(x)) for x in np.asarray(rc).ravel()]
+
+        def _rot_entry(value, keep):
+            return '%12.4f' % value if keep else '         ---'
+
+        rc_text = ''.join(_rot_entry(x, k) for x, k in zip(rc, significant))
+        rt_text = ''.join(_rot_entry(x, k) for x, k in zip(rt, significant))
+        top_text = ('atom' if info.get('monatomic')
+                    else ('linear' if linear else 'nonlinear'))
 
         loginfo += """
    temperature K:                    %16.2f
    pressure atm:                     %16.2f
    total mass amu:                   %16.2f
-   rotational constant cm-1:   %12.4f %12.4f %12.4f 
-   rotational temperature K:   %12.4f %12.4f %12.4f 
+   rotational constant cm-1:   %s
+   rotational temperature K:   %s
+   rotor type:                       %16s
+   rotational symmetry number:       %16d
 
    ====================================================
    summary of internal energy (U)
@@ -801,8 +955,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
 """ % (
             temp, 1.0, mass,
-            rc[0], rc[1], rc[2],
-            rt[0], rt[1], rt[2],
+            rc_text,
+            rt_text,
+            top_text, sigma,
             el, u_trans, u_rot, u_vib, zpe,
             u_el, u,
             el, u_el, pv,

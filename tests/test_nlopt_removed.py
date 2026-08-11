@@ -1,0 +1,99 @@
+"""Dependency-light guards for the complete removal of NLopt."""
+
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class NLoptRemovalTests(unittest.TestCase):
+    def test_source_module_and_scf_calls_are_absent(self):
+        self.assertFalse((ROOT / "source" / "nlopt.F90").exists())
+        scf = (ROOT / "source" / "scf_converger.F90").read_text()
+        scf_lower = scf.lower()
+        self.assertNotIn("use nlopt", scf_lower)
+        self.assertNotIn("nlo_", scf_lower)
+        self.assertNotIn("nlopt_", scf_lower)
+        self.assertIn("use simplex_qp, only: solve_simplex_qp", scf_lower)
+        self.assertIn("hqp = -0.5_dp*", scf_lower)
+        self.assertIn("gqp = 2.0_dp*self%b(1:na)", scf_lower)
+        self.assertIn("self%nlog", scf_lower)
+        self.assertIn("self%solution_current", scf_lower)
+
+    def test_cmake_does_not_fetch_include_or_link_nlopt(self):
+        source_cmake = (ROOT / "source" / "CMakeLists.txt").read_text()
+        self.assertNotIn("NLOPT_BUILD_DIR", source_cmake)
+        self.assertNotIn("NLOPT_LIBRARY", source_cmake)
+
+        external = (ROOT / "external" / "CMakeLists.txt").read_text()
+        self.assertNotRegex(
+            external, r"ExternalProject_Add\s*\(\s*nlopt", msg=external
+        )
+        self.assertNotRegex(
+            external, r"oqp_reuse_or_build\s*\(\s*nlopt", msg=external
+        )
+        self.assertNotIn("_OQP_NLOPT_VERSION", external)
+        self.assertNotRegex(external, r"\bNLOPT_(?!LEGACY)")
+
+    def test_legacy_cache_token_preserves_the_existing_namespace(self):
+        external = (ROOT / "external" / "CMakeLists.txt").read_text()
+        self.assertIn(
+            'set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")', external
+        )
+        self.assertIn(
+            "-libint${_OQP_LIBINT2_VERSION}-"
+            "${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc",
+            external,
+        )
+
+    def test_distribution_notice_for_removed_component_is_absent(self):
+        self.assertFalse(
+            (ROOT / "licenses" / "third_party" / "nlopt-notices.txt").exists()
+        )
+        notices_path = ROOT / "THIRD_PARTY_NOTICES.md"
+        if notices_path.exists():
+            notices = notices_path.read_text().lower()
+            self.assertNotIn("nlopt-notices.txt", notices)
+            self.assertIn("nlopt", notices)
+            self.assertIn("removed", notices)
+
+    def test_binary_artifact_guards_are_present(self):
+        wheel = (ROOT / ".github" / "scripts" / "wheel_smoke_test.py").read_text()
+        self.assertRegex(wheel, r"nlopt\|nlo_")
+
+        docker = (ROOT / "Dockerfile").read_text()
+        self.assertIn("readelf", docker)
+        self.assertIn("nm", docker)
+        self.assertRegex(docker, r"nlopt\|nlo_")
+
+    def test_simplex_qp_failures_use_explicit_latest_state_fallback(self):
+        solver = (ROOT / "source" / "simplex_qp.F90").read_text()
+        self.assertIn("SIMPLEX_QP_EXACT_MAX_N = 13", solver)
+        self.assertIn("SIMPLEX_QP_DIMENSION_LIMIT = 1", solver)
+        self.assertIn("SIMPLEX_QP_NO_ALLOWED_CANDIDATE = 5", solver)
+        self.assertNotIn("projected_fallback", solver)
+
+        scf = (ROOT / "source" / "scf_converger.F90").read_text()
+        self.assertIn("xmin(na) = 1.0_dp", scf)
+        self.assertIn("using latest SCF state without interpolation", scf)
+
+        checker = (ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py").read_text()
+        self.assertIn('diis_type in {"ediis", "adiis", "vdiis"}', checker)
+        self.assertIn("maxdiis > 13", checker)
+
+    def test_post_build_ci_requires_native_simplex_tests(self):
+        ci = (ROOT / ".github" / "workflows" / "CI.yml").read_text()
+        self.assertIn('OQP_REQUIRE_NATIVE_TESTS: "1"', ci)
+        for filename in (
+            "test_simplex_qp.py",
+            "test_ediis_adiis_regression.py",
+        ):
+            test_source = (ROOT / "tests" / filename).read_text()
+            self.assertIn("OQP_REQUIRE_NATIVE_TESTS", test_source)
+            self.assertIn("runtime is required", test_source)
+
+
+if __name__ == "__main__":
+    unittest.main()

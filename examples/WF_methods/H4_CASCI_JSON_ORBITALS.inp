@@ -1,0 +1,56 @@
+# RHF/STO-3G/CASCI(2,2) of linear H4 started from EXTERNAL orbitals.
+#
+# [cas] orbital_source=json + orbital_file is the only way to run CAS on
+# orbitals OpenQP did not just converge (localized, from another code, or from
+# an earlier run).  Nothing else in examples/ exercises it.
+#
+# The committed orbital file is this system's RHF solution with the two active
+# orbitals rotated into each other by 30 degrees.  A rotation WITHIN the active
+# space leaves the CASCI energy exactly invariant, so this example has an
+# independently predicted reference: it must reproduce the orbital_source=rhf
+# CASCI energy of H4_CASCI-equivalent input to machine precision.  A loader that
+# silently fell back to the RHF orbitals would also pass that test, so the
+# example is paired with the unit coverage in tests/test_cas_orbitals.py; what
+# it pins here is that the whole file->transform->solve path runs and stays
+# invariant.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=casci
+
+[guess]
+type=hcore
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=json
+orbital_file=h4_cas22_rotated_orbitals.json
+sort_orbitals=none
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any

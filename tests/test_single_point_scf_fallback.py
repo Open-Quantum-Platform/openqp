@@ -191,6 +191,89 @@ class TestSinglePointScfFallback(unittest.TestCase):
         calc.scf = scf
         return calc
 
+    def test_energy_dispatches_native_caspt2_after_reference(self):
+        caspt2 = types.ModuleType("oqp.library.caspt2_dyall")
+        calls = []
+
+        def fake_native_caspt2_energy(mol, ref_energy):
+            calls.append((mol, ref_energy))
+            return ["caspt2"]
+
+        setattr(caspt2, "native_caspt2_energy", fake_native_caspt2_energy)
+        sys.modules["oqp.library.caspt2_dyall"] = caspt2
+
+        calc = self.make_calculator()
+        calc.method = "caspt2"
+        calc.reference = lambda *args, **kwargs: [-2.0]
+
+        self.assertEqual(calc.energy(), ["caspt2"])
+        self.assertEqual(calls, [(calc.mol, [-2.0])])
+
+    def test_energy_dispatches_native_ms_caspt2_after_reference(self):
+        caspt2 = types.ModuleType("oqp.library.caspt2_dyall")
+        calls = []
+
+        def fake_native_caspt2_energy(mol, ref_energy):
+            calls.append((mol, ref_energy))
+            return ["ms-caspt2"]
+
+        setattr(caspt2, "native_caspt2_energy", fake_native_caspt2_energy)
+        sys.modules["oqp.library.caspt2_dyall"] = caspt2
+
+        calc = self.make_calculator()
+        calc.method = "mscaspt2"
+        calc.reference = lambda *args, **kwargs: [-2.0]
+
+        self.assertEqual(calc.energy(), ["ms-caspt2"])
+        self.assertEqual(calls, [(calc.mol, [-2.0])])
+
+    def test_energy_dispatches_native_xms_caspt2_after_reference(self):
+        caspt2 = types.ModuleType("oqp.library.caspt2_dyall")
+        calls = []
+
+        def fake_native_caspt2_energy(mol, ref_energy):
+            calls.append((mol, ref_energy))
+            return ["xms-caspt2"]
+
+        setattr(caspt2, "native_caspt2_energy", fake_native_caspt2_energy)
+        sys.modules["oqp.library.caspt2_dyall"] = caspt2
+
+        calc = self.make_calculator()
+        calc.method = "xmscaspt2"
+        calc.reference = lambda *args, **kwargs: [-2.0]
+
+        self.assertEqual(calc.energy(), ["xms-caspt2"])
+        self.assertEqual(calls, [(calc.mol, [-2.0])])
+
+    def test_energy_dispatches_sa_casscf_after_reference(self):
+        casscf = types.ModuleType("oqp.library.casscf")
+        calls = []
+
+        class FakeCASSCF:
+            def __init__(self, mol):
+                calls.append(("init", mol))
+
+            def energy(self, ref_energy):
+                calls.append(("energy", ref_energy))
+                return ["sa-casscf"]
+
+        setattr(casscf, "CASSCF", FakeCASSCF)
+        sys.modules["oqp.library.casscf"] = casscf
+
+        calc = self.make_calculator()
+        calc.method = "sacasscf"
+        calc.reference = lambda *args, **kwargs: [-3.0]
+
+        self.assertEqual(calc.energy(), ["sa-casscf"])
+        self.assertEqual(calls, [("init", calc.mol), ("energy", [-3.0])])
+
+    def test_energy_still_rejects_unknown_methods(self):
+        calc = self.make_calculator()
+        calc.method = "definitely-not-a-method"
+
+        with self.assertRaisesRegex(ValueError, "Unknown method type"):
+            calc.energy()
+
     def test_energy_restores_fallback_converger_after_successful_recovery(self):
         calc = self.make_calculator()
 
