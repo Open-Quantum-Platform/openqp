@@ -543,7 +543,7 @@ OQP_CONFIG_SCHEMA = {
         'edshft': {'type': float, 'default': '0.0'},
         'engine': {'type': string, 'default': 'auto'},
         'max_terms': {'type': int, 'default': '30000000'},
-        'nproc': {'type': int, 'default': '1'},
+        'nproc': {'type': int, 'default': '0'},
         # numerical-gradient controls (pt2_numgrad.py)
         'grad_step': {'type': float, 'default': '1.0e-3'},
         'grad_guess': {'type': string, 'default': 'cold'},

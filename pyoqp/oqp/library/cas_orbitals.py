@@ -110,9 +110,11 @@ def load_cas_mo_coeff(config: dict, nbf: int, default_coeff: np.ndarray,
     # `openqp examples/WF_methods/X.inp` from the repository root fail on a file
     # sitting next to X.inp.  The concise .oqp lowering already resolves this.
     if input_dir and not os.path.isabs(orbital_file):
-        _candidate = os.path.join(input_dir, orbital_file)
-        if os.path.isfile(_candidate) or not os.path.isfile(orbital_file):
-            orbital_file = _candidate
+        # Unconditionally, not "unless the CWD happens to have a file of the
+        # same name": my first version made which file gets loaded depend on an
+        # unrelated collision in the working directory.  A relative path in a
+        # legacy deck means "beside the deck".
+        orbital_file = os.path.join(input_dir, orbital_file)
     if source == "json":
         loaded = load_mo_coeff_from_json(orbital_file, nbf)
         if overlap is not None:

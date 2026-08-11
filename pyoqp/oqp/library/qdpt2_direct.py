@@ -453,7 +453,7 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     # multi-thread default ([pt2] nproc overrides); 'direct' forces the NumPy
     # path; both are equivalence-pinned.  The serial T-way merge still caps
     # thread scaling at ~2.4x -- a key-range-parallel merge is the follow-up.
-    nproc = int(getattr(options, "nproc", 1))
+    nproc = int(getattr(options, "nproc", 0))
     max_terms = int(getattr(options, "max_terms", 30_000_000))
     # The caller passes the RESOLVED ceiling (min of [cas] and [pt2]); falling
     # back to options.max_memory alone would use the looser of the two.
@@ -463,7 +463,14 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     merged = None
     if engine in {"auto", "fortran"}:
         import os
-        kernel_threads = nproc if nproc > 1 else max(1, min(8, os.cpu_count() or 1))
+        # nproc=1 is an explicit SERIAL request, and it used to be collapsed
+        # into the automatic default -- so [pt2] nproc=1 still ran multithreaded
+        # and test_fortran_kernel_threads_match_serial compared two threaded
+        # runs.  1 could not be distinguished from "unset" while the schema
+        # default was also 1, so the default is now 0 = automatic and any
+        # explicit count, including 1, is passed through.
+        kernel_threads = (nproc if nproc >= 1
+                          else max(1, min(8, os.cpu_count() or 1)))
         merged = _stream_fortran(h1e, eri, eps, norb, ncore, nact,
                                  sup_a, sup_b, C, max_terms, kernel_threads,
                                  max_memory=_pt2_max_memory)

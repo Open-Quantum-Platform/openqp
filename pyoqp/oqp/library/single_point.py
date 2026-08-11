@@ -308,7 +308,14 @@ class SinglePoint(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config['input']['method']
+        # Normalize once, here, rather than at each comparison.  Preflight
+        # lowercases the method, so `method=MP2`/`TDHF`/`CCSD(T)` reached the
+        # dispatcher in its original spelling: the normalized support guard
+        # accepted it and every `self.method == 'mp2'`-style branch then missed,
+        # so the run fell through to `energies = ref_energy` and reported the HF
+        # result for a correlated or excited-state request.  Fixing the fci and
+        # casci branches individually last round left the rest of the family.
+        self.method = _normalized_method_label(mol.config['input']['method'])
         self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
@@ -569,7 +576,7 @@ class SinglePoint(Calculator):
                 energies = self.excitation(ref_energy)
             elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
-            elif _normalized_method_label(self.method) == 'fci':
+            elif self.method == 'fci':
                 # Exact comparison here while the CASSCF/PT2 branches below
                 # normalize: preflight lowercases the method, so `method=FCI`
                 # passed validation AND the support guard, then missed this
@@ -577,7 +584,7 @@ class SinglePoint(Calculator):
                 # reported the RHF energy as its FCI result, silently.
                 from oqp.library.fci import FCI
                 energies = FCI(self.mol).energy(ref_energy)
-            elif _normalized_method_label(self.method) == 'casci':
+            elif self.method == 'casci':
                 from oqp.library.casci import CASCI
                 energies = CASCI(self.mol).energy(ref_energy)
             elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:
@@ -1145,7 +1152,7 @@ class Gradient(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config["input"]["method"]
+        self.method = _normalized_method_label(mol.config["input"]["method"])
         self.td = mol.config["tdhf"]["type"]
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]

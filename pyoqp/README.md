@@ -495,8 +495,13 @@ They optimize the weighted state-average objective over the requested roots.
 
 - optimizer // CASSCF orbital optimizer
 
-      microiteration   bounded native diagnostic/local-step optimizer (default)
-      powell           SciPy Powell driver using native OpenQP CI/RDM objective evaluations
+      newton           damped (level-shifted) Newton step (default)
+      microiteration   accepted alias, normalized to the same Newton implementation
+      powell           scaled-gradient fallback step, capped by max_rotation_norm
+
+  `powell` does NOT call SciPy: `_powell_step` takes a norm-limited step along
+  the negative gradient with no curvature information.  It is a robust but slow
+  fallback, not a Powell line search.
 
 - max_function_evaluations // reserved; not implemented
 

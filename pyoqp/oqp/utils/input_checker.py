@@ -2365,6 +2365,21 @@ def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
     multiplicity = _get(config, "scf", "multiplicity", 1)
     functional = _get(config, "input", "functional", "")
     d4_enabled = _get(config, "input", "d4", False)
+    # _check_casci returns early for method=fci, so its PCM rejection never
+    # reaches this method -- the same trap the state-average check fell into.
+    if str(_get(config, "pcm", "enabled", False)).strip().lower() in _TRUE_BOOL:
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            "PCM is not incorporated into the FCI driver: the reaction "
+            "potential reaches only the SCF Fock, so the correlated energy "
+            "would be a gas-phase result reported as a solvated one.",
+            value=True,
+            expected="pcm.enabled=false for method=fci",
+            action=("Run the correlated calculation in the gas phase, or use a "
+                    "method whose driver consumes the PCM potential."),
+        )
+
     # FCI._settings_from_config reads [fci] ONLY -- it never parses the shared
     # [state_average] section, so every state-average field stays at its
     # disabled default and the run publishes energies[0] as the scalar instead
@@ -3087,6 +3102,27 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             expected="casscf.diagnostic_benchmark_required=false",
             action=("Compare the CASSCF diagnostics against your reference "
                     "outside the run for now."),
+        )
+
+    # PCM adds its reaction potential to the ITERATIVE SCF Fock and records
+    # e_pcm separately.  The correlated drivers then transform the unmodified
+    # OQP::Hcore, take only the nuclear repulsion as ecore, and overwrite the
+    # total energy -- so a solvated request returned a gas-phase correlated
+    # result with no indication that the solvent had been dropped.
+    if (method in ({"casci", "casscf", "sa-casscf", "sacasscf"}
+                   | set(PT2_METHOD_ALIASES))
+            and str(_get(config, "pcm", "enabled", False)
+                    ).strip().lower() in _TRUE_BOOL):
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            f"PCM is not incorporated into the {method} driver: the reaction "
+            "potential reaches only the SCF Fock, so the correlated energy "
+            "would be a gas-phase result reported as a solvated one.",
+            value=True,
+            expected="pcm.enabled=false for the wavefunction methods",
+            action=("Run the correlated calculation in the gas phase, or use a "
+                    "method whose driver consumes the PCM potential."),
         )
 
     # The reciprocal of the multistate check: a single-state correction takes
@@ -4442,9 +4478,10 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         _get(config, "pt2", "nproc", 1),
         "pt2.nproc",
         report,
-        minimum=1,
-        expected="positive worker count",
-        action="Set [pt2] nproc to 1 (serial) or the number of worker processes.",
+        minimum=0,
+        expected="0 (automatic) or a positive worker count",
+        action=("Set [pt2] nproc to 0 for automatic threading, 1 for serial, "
+                "or the number of worker processes."),
     )
 
     if reference not in PT2_REFERENCES:

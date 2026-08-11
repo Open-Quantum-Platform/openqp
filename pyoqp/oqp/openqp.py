@@ -1125,7 +1125,13 @@ class OpenQP:
         # an FCI job therefore passed preflight and silently ran the default
         # one-root, all-electron calculation.
         if method == "fci":
+            # The active space is helper-owned like frozen_core: omitting it on
+            # a reused builder left the previous call's values, so a nominal
+            # full-CI .fci() after .fci(active_electrons=2, active_orbitals=2)
+            # stayed active-space limited.
             fci_updates = dict(cas_updates)
+            fci_updates.setdefault("active_electrons", 0)
+            fci_updates.setdefault("active_orbitals", 0)
             if nroot is not None:
                 fci_updates["nroot"] = nroot
             fci_updates.update(ci or {})
@@ -1270,8 +1276,14 @@ class OpenQP:
             # sa_casscf(nstate=2, target_roots=[1, 2]).  Solving only `nstate`
             # roots then makes validation reject root 2, so the CI has to be
             # sized to the highest root actually requested.
+            # Size from the merged block, not the argument: roots supplied
+            # through an explicit state_average={...} were merged into `sa` but
+            # invisible here, so the helper emitted two CI roots while asking
+            # for root slot 2 and failed its own preflight.
             nroot=keywords.pop("nroot", None)
-                  or max([nstate] + [int(r) + 1 for r in (target_roots or ())]),
+                  or max([nstate]
+                         + [int(r) + 1
+                            for r in (sa.get("target_roots") or ())]),
             state_average=sa, **keywords)
 
     # Every [pt2] key a compact helper is responsible for.  Patching these one

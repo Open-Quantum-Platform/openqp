@@ -2072,6 +2072,14 @@ class Molecule:
             'symmetry_metadata': self.symmetry_metadata,
         }
 
+        # A multistate run computes several states and only the scalar was
+        # published, so an API consumer had no way to reach the higher roots.
+        # Emitted only when there is more than one, leaving single-state
+        # payloads byte-identical.
+        _multi = list(getattr(self, 'energies', None) or [])
+        if len(_multi) > 1:
+            data['energies'] = [float(e) for e in _multi]
+
         # save td energies if available
         try:
             data['td_energies'] = np.array(self.data['OQP::td_energies']
