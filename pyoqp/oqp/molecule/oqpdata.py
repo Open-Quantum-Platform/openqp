@@ -331,6 +331,11 @@ OQP_CONFIG_SCHEMA = {
         'label_states': {'type': bool, 'default': 'True'},
         'label_modes': {'type': bool, 'default': 'True'},
         'use_integral_symmetry': {'type': string, 'default': 'False'},
+        # The move exists only to make the AO operator a signed permutation,
+        # and every problem that kept the reduction opt-in came from it. Set
+        # false to reduce the integral list where the molecule already is.
+        # Default stays true until the reduction itself is on by default.
+        'move_to_standard_frame': {'type': bool, 'default': 'True'},
         'use_response_symmetry': {'type': bool, 'default': 'False'},
         'tolerance': {'type': float, 'default': '1.0e-5'},
         'strict': {'type': bool, 'default': 'False'},

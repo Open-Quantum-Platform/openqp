@@ -753,6 +753,7 @@ def build_reduction_maps(
 def build_full_group_blocks(
     shells: Iterable[Any],
     operations: Iterable[Mapping[str, Any]],
+    matrix_key: str = "matrix",
 ) -> dict[str, Any]:
     """Shell map and dense per-shell operation blocks for the full group.
 
@@ -761,6 +762,13 @@ def build_full_group_blocks(
     dense (size x size) component-mixing block per shell, flattened
     column-major (Fortran order), concatenated shell-by-shell then
     op-by-op.
+
+    ``matrix_key`` selects which operation matrix to use. The default
+    ``'matrix'`` is the standard-orientation form. Passing
+    ``'matrix_input_frame'`` builds the same blocks for a molecule that has NOT
+    been reoriented -- the only requirement here is orthogonality, which both
+    forms satisfy, unlike ``build_reduction_maps`` which additionally demands a
+    sign-diagonal matrix and therefore the standard frame.
     """
 
     shell_list = _normalize_shells(shells)
@@ -783,7 +791,7 @@ def build_full_group_blocks(
     shell_perm = np.zeros((len(op_list), nshell), dtype=int)
     block_chunks: list[np.ndarray] = []
     for iop, op in enumerate(op_list):
-        matrix = _to_float_array(op['matrix'])
+        matrix = _to_float_array(op[matrix_key])
         if matrix.shape != (3, 3) or not np.allclose(
                 matrix @ matrix.T, np.eye(3), atol=1.0e-10):
             raise ValueError("operation matrices must be orthogonal 3x3 arrays")

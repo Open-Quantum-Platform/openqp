@@ -1099,6 +1099,42 @@ contains
     if (present(scale_coul)) scale_c = scale_coul
     is_dft = (infos%control%hamilton == 20)
 
+    ! Validate the staged reduction before any provider can return.  Route-C
+    ! supplies a complete JK matrix, but a surviving global petite flag would
+    ! still let the following XC build and later gradient drivers reduce an
+    ! asymmetric density.
+    if (present(petite)) then
+      if (petite) then
+        block
+          use oqp_tagarray_driver, only: OQP_sym_petite, tagarray_get_data
+          use tagarray, only: TA_OK
+          real(kind=dp) :: dasym
+          real(kind=dp), parameter :: dtol = 1.0e-6_dp
+          integer(8), contiguous, pointer :: global_petite(:)
+          integer(4) :: ta_status
+          call tagarray_get_data(infos%dat, OQP_sym_petite, &
+                                 global_petite, status=ta_status)
+          if (ta_status == TA_OK) then
+            if (size(global_petite) >= 1) then
+              if (global_petite(1) /= 0_8) then
+                call petite_density_asymmetry(infos, basis, d, dasym)
+                if (dasym > dtol) then
+                  write(*,'(/,2X,"WARNING: the SCF density is not invariant under ", &
+                    &"the detected symmetry (residual ",ES10.3," > ",ES10.3,").")') &
+                    dasym, dtol
+                  write(*,'(2X,"The integral reduction is not valid for it and has ", &
+                    &"been switched off for this SCF state.")')
+                  write(*,'(2X,"This is expected for a broken-symmetry solution; ", &
+                    &"the result is unaffected, only the speed.",/)')
+                  global_petite(1) = 0_8
+                end if
+              end if
+            end if
+          end if
+        end block
+      end if
+    end if
+
     ! Route-C external DF-JK (inert unless $OQP_ROUTEC_LIB is set).
     ! Not taken for CAM (needs short-range K) or incremental builds
     ! (difference densities; run with scf incremental=False).
@@ -1112,8 +1148,6 @@ contains
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
     if (present(petite)) then
-      ! Petite-list reduction: only valid for totally symmetric densities
-      ! (SCF Fock); the skeleton matrix is symmetrized below.
       if (petite) call int2_driver%enable_petite(infos)
     end if
     call int2_driver%set_screening()
@@ -1138,10 +1172,6 @@ contains
     if (present(nschwz)) nschwz = int2_driver%skipped
 
     ! Scaling (everything except diagonal is halved)
-    if (present(f_old)) then
-      int2_data%f(:,:,1) = int2_data%f(:,:,1) + f_old
-      f_old = int2_data%f(:,:,1)
-    end if
     f =  0.5 * int2_data%f(:,:,1)
     do nf = 1, ubound(f,2)
       ii = 0
@@ -1153,7 +1183,28 @@ contains
 
     ! Petite-list runs produce a skeleton matrix; project onto the
     ! totally symmetric component: F <- (1/|G|) sum_op T_op F T_op^T.
+    !
+    ! Project the INCREMENT, before it is accumulated, and accumulate in this
+    ! (proper packed) representation.  Projection is linear, so per-increment
+    ! and once-at-the-end agree as long as EVERY increment is a skeleton -- and
+    ! that is exactly what cannot be assumed: the density guard above switches
+    ! the reduction off for any build whose density is not invariant, so f_old
+    ! would otherwise hold a mix of skeleton and already-complete increments,
+    ! and projecting that sum wrecks the complete part.
+    !
+    ! Measured: TRAH rebuilds its Fock from trial orbital rotations whose
+    ! densities are not invariant, so the guard fires mid-run (41 times on
+    ! H2O/6-31G*/BHHLYP) and the accumulator ends up mixed.  Accumulating the
+    ! raw skeleton gave -104.1346575310 Ha against -76.3679552116 from the same
+    ! deck with DIIS, which is not a convergence failure -- it is below the true
+    ! energy, so the operator itself was wrong.  Projecting per increment keeps
+    ! f_old complete at every step and costs nothing.
     if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis, f)
+
+    if (present(f_old)) then
+      f = f + f_old
+      f_old = f
+    end if
 
     call int2_driver%clean()
 
@@ -1166,6 +1217,95 @@ contains
 !>   signed AO permutation of each abelian symmetry operation (standard
 !>   orientation), using the maps written by pyoqp. No-op if the maps are
 !>   missing.
+  !> @brief How far the density is from totally symmetric, relative to its own size
+  !> @detail The petite reduction is exact only for a density that is invariant
+  !>         under the staged group. Nothing has ever checked that. A
+  !>         broken-symmetry SCF -- Jahn-Teller, pseudo-JT, an explicitly broken
+  !>         guess, a restart whose orbitals predate a reorientation -- converges
+  !>         to a density that is not, and the reduced Fock is then not the
+  !>         symmetry-constrained Fock either: it is that plus an artifact that
+  !>         has been measured at 117% of the Fock's own magnitude. The run is
+  !>         then solving no variational problem at all, and the energy it
+  !>         prints is bounded by nothing.
+  !>
+  !>         The test applies the SAME projector the reduction relies on to the
+  !>         density itself: for an invariant density P[D] = D exactly, so the
+  !>         residual is precisely the symmetry breaking. Using the actual
+  !>         projector rather than an independent one means the check cannot
+  !>         disagree with the thing it is guarding.
+  !>
+  !>         Costs one projector pass -- the same loop the code already runs
+  !>         once per Fock build -- against a quartet loop that is four orders
+  !>         larger.
+  !>
+  !>         What it does NOT catch: an SCF that never leaves the symmetric
+  !>         manifold and converges to a symmetric but unstable stationary
+  !>         point. There D really is symmetric, so no density test can see it;
+  !>         that needs stability analysis. This guard covers every density the
+  !>         reduction is actually handed, which is a different and answerable
+  !>         question.
+  subroutine petite_density_asymmetry(infos, basis, d, residual)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: d(:,:)
+    real(kind=dp), intent(out) :: residual
+
+    real(kind=dp), allocatable :: probe(:,:)
+    real(kind=dp) :: scale
+
+    residual = 0.0_dp
+    scale = maxval(abs(d))
+    if (scale <= 0.0_dp) return
+
+    allocate(probe, source=d)
+    call symmetrize_petite_density(infos, basis, probe)
+    residual = maxval(abs(probe - d))/scale
+    deallocate(probe)
+
+  end subroutine petite_density_asymmetry
+
+!-------------------------------------------------------------------------------
+
+!> @brief Project a packed AO density onto the totally symmetric component.
+!> @detail A covariant AO operator and a contravariant AO density have
+!>   different actions when the AO representation is not Euclidean-orthogonal.
+!>   The skeleton Fock projector uses T^T F T; the density guard must instead
+!>   use D <- T D T^T.  In the standard-frame abelian path every staged
+!>   signed-permutation operation is an involution, so the existing signed
+!>   group average is the same projector in either direction.
+  subroutine symmetrize_petite_density(infos, basis, d)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: d(:,:)
+
+    real(kind=dp), contiguous, pointer :: blocks(:)
+    integer(4) :: status
+
+    call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+    if (status == TA_OK) then
+      call symmetrize_density_blocked(infos, basis, d, blocks)
+    else
+      call symmetrize_skeleton_signed(infos, basis%nbf, d)
+    end if
+
+  end subroutine symmetrize_petite_density
+
+!-------------------------------------------------------------------------------
+
   subroutine symmetrize_skeleton_fock(infos, basis, f)
     use precision, only: dp
     use types, only: information
@@ -1305,6 +1445,114 @@ contains
     end function shell_size
 
   end subroutine symmetrize_skeleton_blocked
+
+!--------------------------------------------------------------------------------
+
+!> @brief Full-group AO-density symmetrization with dense per-shell blocks.
+!> @detail D <- (1/|G|) sum_op T_op D T_op^T.  This is intentionally distinct
+!>   from the covariant Fock action T_op^T F T_op above.
+  subroutine symmetrize_density_blocked(infos, basis, d, blocks)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: d(:,:)
+    real(kind=dp), contiguous, intent(in) :: blocks(:)
+
+    integer(8), contiguous, pointer :: shell_map(:)
+    integer(4) :: status
+    integer :: nbf, nshell, nops, iop, nf, k, j, s, off_k, off_j
+    integer :: mu, nu, idx, blk0, blk_per_op
+    real(kind=dp), allocatable :: dsq(:,:), y(:,:), acc(:,:)
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, shell_map, status=status)
+    if (status /= TA_OK) return
+
+    nbf = basis%nbf
+    nshell = basis%nshell
+    if (mod(size(shell_map), nshell) /= 0) return
+    nops = int(size(shell_map)/nshell)
+    if (nops < 2) return
+
+    blk_per_op = 0
+    do k = 1, nshell
+      s = shell_size(basis, k, nbf)
+      blk_per_op = blk_per_op + s*s
+    end do
+    if (size(blocks) /= nops*blk_per_op) return
+
+    allocate(dsq(nbf, nbf), y(nbf, nbf), acc(nbf, nbf))
+
+    do nf = 1, ubound(d, 2)
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          dsq(mu, nu) = d(idx, nf)
+          dsq(nu, mu) = d(idx, nf)
+        end do
+      end do
+
+      acc = 0.0_dp
+      do iop = 1, nops
+        ! Y = T D: rows of target shell j get B_k @ rows of source shell k.
+        y = 0.0_dp
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            y(off_j+1:off_j+s, :) = matmul(b, dsq(off_k+1:off_k+s, :))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+        ! acc += Y T^T: target columns j get source columns k times B_k^T.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            acc(:, off_j+1:off_j+s) = acc(:, off_j+1:off_j+s) &
+                + matmul(y(:, off_k+1:off_k+s), transpose(b))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+      end do
+
+      acc = acc/real(nops, dp)
+
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          d(idx, nf) = acc(mu, nu)
+        end do
+      end do
+    end do
+
+  contains
+
+    integer function shell_size(basis, k, nbf) result(s)
+      type(basis_set), intent(in) :: basis
+      integer, intent(in) :: k, nbf
+      if (k < basis%nshell) then
+        s = basis%ao_offset(k+1) - basis%ao_offset(k)
+      else
+        s = nbf - basis%ao_offset(k) + 1
+      end if
+    end function shell_size
+
+  end subroutine symmetrize_density_blocked
 
 !--------------------------------------------------------------------------------
 

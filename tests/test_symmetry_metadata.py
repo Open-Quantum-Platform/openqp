@@ -128,6 +128,7 @@ def load_molecule_module():
                 'label_states': {'type': bool, 'default': 'True'},
                 'label_modes': {'type': bool, 'default': 'True'},
                 'use_integral_symmetry': {'type': bool, 'default': 'False'},
+                'move_to_standard_frame': {'type': bool, 'default': 'True'},
                 'use_response_symmetry': {'type': bool, 'default': 'False'},
                 'tolerance': {'type': float, 'default': '1.0e-5'},
                 'strict': {'type': bool, 'default': 'False'},
@@ -162,6 +163,98 @@ def load_molecule_module():
 
 
 class TestSymmetryMetadata(unittest.TestCase):
+    def test_full_integral_tier_rejects_input_frame_staging(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'symmetry': {
+                'use_integral_symmetry': 'full',
+                'move_to_standard_frame': False,
+            },
+        }
+        meta = {
+            'detection': {'operations': []},
+            'integral_symmetry': {'status': 'input_frame'},
+        }
+
+        with self.assertRaisesRegex(ValueError, 'requires move_to_standard_frame=true'):
+            molecule._stage_integral_symmetry_maps(meta)
+
+        self.assertEqual(
+            meta['integral_symmetry']['status'],
+            'rejected_full_requires_standard_frame',
+        )
+
+    def test_no_move_reduction_still_rejects_geometry_drivers(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'input': {'runtype': 'optimize'},
+            'symmetry': {'move_to_standard_frame': False},
+        }
+        molecule.symmetry_metadata = {
+            'use_integral_symmetry': True,
+            'detection': {'operations': []},
+        }
+
+        self.assertFalse(molecule.reorient_for_integral_symmetry())
+        self.assertEqual(
+            molecule.symmetry_metadata['integral_symmetry']['status'],
+            'skipped_runtype_optimize',
+        )
+
+    def test_active_skeleton_gradient_requires_its_frame_operator(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {
+            'integral_symmetry': {'status': 'active', 'frame': 'input'},
+            'detection': {
+                'operations': [
+                    {'permutation': [0], 'matrix': np.eye(3).tolist()},
+                ],
+            },
+        }
+        molecule.data = {
+            'OQP::sym_petite_enable': np.array([1], dtype=np.int64),
+        }
+
+        with self.assertRaisesRegex(RuntimeError, 'matrix_input_frame'):
+            molecule.symmetrize_gradient(np.zeros((1, 3)))
+
+    def test_native_fallback_prevents_python_gradient_projection(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {
+            'integral_symmetry': {'status': 'active', 'frame': 'input'},
+            'detection': {
+                'operations': [
+                    {'permutation': [0], 'matrix': np.eye(3).tolist()},
+                ],
+            },
+        }
+        molecule.data = {
+            'OQP::sym_petite_enable': np.array([0], dtype=np.int64),
+        }
+        gradient = np.array([[1.0, 2.0, 3.0]])
+
+        result = molecule.symmetrize_gradient(gradient)
+
+        np.testing.assert_array_equal(result, gradient)
+        self.assertNotIn(
+            'gradient_symmetrized',
+            molecule.symmetry_metadata['integral_symmetry'],
+        )
+
+    def test_input_frame_overlap_gate_precedes_native_enable(self):
+        source = (ROOT / 'pyoqp/oqp/molecule/molecule.py').read_text()
+        start = source.index('if input_frame:')
+        end = source.index("self.data['OQP::sym_petite_enable']", start)
+        staging = source[start:end]
+
+        self.assertIn("matrix_key='matrix_input_frame'", staging)
+        self.assertIn('transform.T @ smat @ transform - smat', staging)
+        self.assertIn("'status': 'skipped_overlap_invariance'", staging)
+
     def test_symmetry_metadata_defaults_to_detection_enabled(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)

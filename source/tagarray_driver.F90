@@ -128,6 +128,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
   character(len=*), parameter, public :: OQP_sym_resp_proj = OQP_prefix // "sym_response_project_enable"
   character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
+  character(len=*), parameter, public :: OQP_sym_nonabelian = OQP_prefix // "sym_nonabelian"
   ! Per-MO abelian irrep index (1-based; 0 = not classifiable). Written by
   ! pyoqp whenever MO labels exist, so any correlated method can block its
   ! amplitudes, CI vectors or integral blocks by irrep. Unlike the petite

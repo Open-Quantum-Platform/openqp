@@ -293,7 +293,8 @@ GENERIC_SCHEMA_KEYS = {
     """),
     "symmetry": _keys("""
         enabled point_group subgroup label_mo label_states label_modes
-        use_integral_symmetry use_response_symmetry tolerance strict
+        use_integral_symmetry move_to_standard_frame use_response_symmetry
+        tolerance strict
     """),
     "scf": _keys("""
         maxit forced_attempt maxdiis diis_reset_mod diis_reset_conv diis_type

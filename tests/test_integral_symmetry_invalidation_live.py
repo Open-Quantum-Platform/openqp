@@ -30,6 +30,7 @@ TAGS = (
     'OQP::sym_ao_sign',
     'OQP::sym_atom_weight',
     'OQP::sym_op_blocks',
+    'OQP::sym_nonabelian',
     'OQP::sym_petite_enable',
 )
 

@@ -134,6 +134,48 @@ class PetiteStateIsResetPerReference(unittest.TestCase):
     indifferent to which mechanism enforces it.
     """
 
+    def test_density_guard_persists_the_fallback_for_xc_and_gradients(self):
+        """A local JK fallback must also disable later reduced consumers."""
+        source = ROOT.joinpath('source/scf_addons.F90').read_text()
+        fock_start = source.index('subroutine fock_jk(')
+        routec = source.index('routec_try_fock_jk(', fock_start)
+        guard_start = source.index('if (present(petite)) then', fock_start)
+        guard = source[guard_start:routec]
+        self.assertLess(guard_start, routec,
+                        'density guard must run before Route-C can return')
+        self.assertIn(
+            'call tagarray_get_data(infos%dat, OQP_sym_petite,', guard)
+        self.assertIn('global_petite(1) = 0_8', guard)
+
+    def test_dense_input_frame_operators_keep_conservative_screening(self):
+        source = ROOT.joinpath('source/integrals/int2.F90').read_text()
+        self.assertIn('logical :: sym_dense = .false.', source)
+        self.assertIn(
+            'if (status == TA_OK) this%sym_dense = size(blocks) > 0',
+            source,
+        )
+        self.assertIn(
+            'if (this%petite .and. this%sym_dense) '
+            'test = test*real(this%sym_nops, dp)',
+            source,
+        )
+        self.assertIn('eri_data%weighted_cutoff = this%sym_dense', source)
+
+    def test_dense_density_guard_uses_the_contravariant_action(self):
+        source = ROOT.joinpath('source/scf_addons.F90').read_text()
+        guard_start = source.index('subroutine petite_density_asymmetry')
+        guard_end = source.index('end subroutine petite_density_asymmetry', guard_start)
+        guard = source[guard_start:guard_end]
+        density_start = source.index('subroutine symmetrize_density_blocked')
+        density_end = source.index('end subroutine symmetrize_density_blocked', density_start)
+        density_projector = source[density_start:density_end]
+
+        self.assertIn('call symmetrize_petite_density', guard)
+        self.assertNotIn('call symmetrize_skeleton_fock', guard)
+        self.assertIn('matmul(b, dsq(off_k+1:off_k+s, :))', density_projector)
+        self.assertIn('matmul(y(:, off_k+1:off_k+s), transpose(b))',
+                      density_projector)
+
     class _Stop(Exception):
         pass
 

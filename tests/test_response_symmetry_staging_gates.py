@@ -205,10 +205,14 @@ class FullGroupTagsAreClearedTests(unittest.TestCase):
 
     def test_clearing_removes_both_the_tag_and_the_metadata(self):
         meta = {'reduction_maps_full': {'n_operations': 24}}
-        data = FakeData({'OQP::sym_op_blocks': np.zeros(4)})
+        data = FakeData({
+            'OQP::sym_op_blocks': np.zeros(4),
+            'OQP::sym_nonabelian': np.ones(1, dtype=np.int64),
+        })
         mol = _molecule({}, meta, data)
         mol._clear_full_group_tags(meta)
         self.assertNotIn('OQP::sym_op_blocks', mol.data)
+        self.assertNotIn('OQP::sym_nonabelian', mol.data)
         self.assertNotIn('reduction_maps_full', meta)
 
     def test_clearing_is_safe_when_nothing_was_staged(self):
@@ -229,7 +233,8 @@ class StaleIntegralStagingTests(unittest.TestCase):
 
     ALL_TAGS = (
         'OQP::sym_shell_map', 'OQP::sym_ao_target', 'OQP::sym_ao_sign',
-        'OQP::sym_atom_weight', 'OQP::sym_op_blocks', 'OQP::sym_petite_enable',
+        'OQP::sym_atom_weight', 'OQP::sym_op_blocks', 'OQP::sym_nonabelian',
+        'OQP::sym_petite_enable',
     )
 
     def _staged(self):

@@ -1082,11 +1082,22 @@ class SinglePoint(Calculator):
     )
 
     def _petite_is_staged(self):
-        """True when the petite-list reduction maps are staged and active."""
+        """True when both metadata and the live native flag are active.
+
+        The Fortran density guard can withdraw the reduction after staging by
+        zeroing ``OQP::sym_petite_enable``.  Metadata alone is therefore not a
+        sufficient statement about the converged SCF state.
+        """
         meta = getattr(self.mol, 'symmetry_metadata', None)
-        if not meta:
+        if (not meta or
+                meta.get('integral_symmetry', {}).get('status') != 'active'):
             return False
-        return meta.get('integral_symmetry', {}).get('status') == 'active'
+        try:
+            flag = np.asarray(
+                self.mol.data['OQP::sym_petite_enable']).ravel()
+            return bool(flag.size and int(flag[0]) != 0)
+        except Exception:
+            return False
 
     def _set_petite_enabled(self, enabled):
         import numpy as np
@@ -1291,6 +1302,28 @@ class Gradient(Calculator):
         # onto the totally symmetric component (exact for 1-dim irreps; all
         # abelian irreps are 1-dim). No-op unless the reduction is active.
         grads = self.mol.symmetrize_gradient(grads)
+
+        # Push the projected gradient back into the library buffer. get_grad()
+        # reads that buffer, so without this the projection reaches
+        # self.mol.grads (printed output, optimiser) while get_data()['grad']
+        # and the QM/MM driver still see the unprojected skeleton -- the log
+        # shows the right gradient and the stored result is wrong.
+        #
+        # Which row the buffer holds is NOT simply the last row of the array.
+        # tddft_grad allocates np.zeros((nstate + 1, natom, 3)) and fills only
+        # the REQUESTED states, so with nstate=6 and grad=3 rows 4..6 are still
+        # zero. Writing arr[-1] there stores a zero gradient -- an error that
+        # hides well, because max|0 - g_ref| happens to equal max|g_ref| just
+        # as the unprojected skeleton's largest deviation did.
+        buffer_row = None
+        if self.method == 'hf':
+            buffer_row = 0                       # scf_grad returns one row
+        elif self.method == 'tdhf' and len(self.grads):
+            buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
+        if buffer_row is not None:
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            if 0 <= buffer_row < arr.shape[0]:
+                self.mol.set_grad(arr[buffer_row])
 
         self.mol.grads = grads
 

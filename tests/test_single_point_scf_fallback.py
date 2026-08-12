@@ -191,6 +191,17 @@ class TestSinglePointScfFallback(unittest.TestCase):
         calc.scf = scf
         return calc
 
+    def test_petite_state_requires_the_live_native_enable_flag(self):
+        calc = self.make_calculator()
+        calc.mol.symmetry_metadata = {
+            'integral_symmetry': {'status': 'active'},
+        }
+        calc.mol.data['OQP::sym_petite_enable'] = [0]
+        self.assertFalse(calc._petite_is_staged())
+
+        calc.mol.data['OQP::sym_petite_enable'] = [1]
+        self.assertTrue(calc._petite_is_staged())
+
     def test_energy_dispatches_native_caspt2_after_reference(self):
         caspt2 = types.ModuleType("oqp.library.caspt2_dyall")
         calls = []

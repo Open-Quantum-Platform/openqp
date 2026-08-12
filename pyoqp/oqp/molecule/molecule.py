@@ -562,22 +562,44 @@ class Molecule:
             return False
 
         # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
-        # NEB, ...) must not have the frame rotated under them; the petite
-        # reduction is restricted to single-point runtypes for now.
-        runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
-        # 'prop' is deliberately NOT here. It is the only admitted runtype that
-        # consumes an EXTERNALLY supplied geometry, expressed in the caller's
-        # frame: load_previous_data writes OQP::xyz_old from it, and
-        # get_basis_overlap then overlaps that against the current -- by then
-        # rotated and translated -- structure. Because the standard frame is
-        # centred on the charge-weighted centroid, the two structures are
-        # physically displaced by a few bohr, so the cross-geometry MO overlap,
-        # the phase/reorder alignment built on it, and NACME are all wrong.
-        # That is PR #319's finite-difference failure mode one level up.
-        # ('properties' was never a run_func key, so it admitted nothing.)
+        # NEB, ...) cannot reuse maps detected at the initial geometry. Apply
+        # this gate before the no-move return as well: keeping the input frame
+        # avoids a rotation, but it does not make stale atom permutations safe.
+        runtype = str(self.config.get('input', {}).get(
+            'runtype', 'energy')).lower()
+        # 'prop' is deliberately NOT here. It consumes an externally supplied
+        # geometry expressed in the caller's frame; reusing maps or moving the
+        # current geometry would invalidate its cross-geometry overlap data.
         if runtype not in ('energy', 'grad'):
-            meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
+            meta['integral_symmetry'] = {
+                'status': f'skipped_runtype_{runtype}'}
             return False
+
+        # [symmetry] move_to_standard_frame = false: do the reduction where the
+        # molecule already is.
+        #
+        # The move exists to make the AO-level operator a SIGNED PERMUTATION.
+        # In the standard frame each symmetry operation sends an AO to plus or
+        # minus one other AO, which is a cheap scatter; in a tilted frame the
+        # same operation mixes components within a shell and the operator is a
+        # dense block. That is a performance choice, not a correctness
+        # requirement -- and it is the reason build_reduction_maps refuses a
+        # dense matrix outright.
+        #
+        # What the reduction actually needs is the SHELL PERMUTATION, and that
+        # is frame-independent: which shell maps to which is a property of the
+        # atom permutation. petite_quartet_weight reads nothing else.
+        #
+        # So the no-move path keeps the same shell map and stages dense
+        # input-frame operator blocks for the projection instead of signed
+        # permutations. Everything specific to the frame move goes away with
+        # it: no back-transform of outputs and no needless translation of a C1
+        # molecule that will not obtain a reduction.
+        if not self._parse_bool_like(
+                self.config.get('symmetry', {}).get(
+                    'move_to_standard_frame', True)):
+            meta['integral_symmetry'] = {'status': 'input_frame'}
+            return True
 
         input_coords = None
         rollback = None
@@ -769,6 +791,7 @@ class Molecule:
         'OQP::sym_ao_sign',
         'OQP::sym_atom_weight',
         'OQP::sym_op_blocks',
+        'OQP::sym_nonabelian',
         'OQP::sym_petite_enable',
     )
 
@@ -843,10 +866,11 @@ class Molecule:
         or a molecule that staged the full group once keeps taking that path
         after falling back.
         """
-        try:
-            del self.data['OQP::sym_op_blocks']
-        except Exception:
-            pass
+        for tag in ('OQP::sym_op_blocks', 'OQP::sym_nonabelian'):
+            try:
+                del self.data[tag]
+            except Exception:
+                pass
         if meta is None:
             meta = self.symmetry_metadata or {}
         meta.pop('reduction_maps_full', None)
@@ -910,8 +934,23 @@ class Molecule:
             return False
         # reorient_for_integral_symmetry records its own reason (a runtype the
         # allow-list rejects, a frame that would not converge, ...); keep it.
-        if meta.get('integral_symmetry', {}).get('status') != 'reoriented':
+        frame_status = meta.get('integral_symmetry', {}).get('status')
+        if frame_status not in ('reoriented', 'input_frame'):
             return False
+        # No move: the AO-level operator is dense, so the signed-permutation
+        # maps cannot be built. The shell map is the same either way.
+        input_frame = frame_status == 'input_frame'
+        requested_tier = str(
+            self.config.get('symmetry', {}).get('use_integral_symmetry', '')
+        ).strip().lower()
+        if input_frame and requested_tier == 'full':
+            meta['integral_symmetry'] = {
+                'status': 'rejected_full_requires_standard_frame',
+            }
+            raise ValueError(
+                '[symmetry] use_integral_symmetry=full requires '
+                'move_to_standard_frame=true'
+            )
 
         try:
             from oqp.library.symmetry import build_reduction_maps
@@ -937,6 +976,69 @@ class Molecule:
                 return False
             shells = [(int(at), int(l), bool(p)) for at, l, p
                       in zip(basis['centers'], basis['angs'], spherical)]
+            if input_frame:
+                # Same shell permutation, dense input-frame blocks in place of
+                # the signed AO maps. symmetrize_skeleton_fock already prefers
+                # the blocked projector whenever OQP::sym_op_blocks is staged,
+                # so nothing downstream changes.
+                from oqp.library.symmetry import (
+                    _ao_operator_matrix,
+                    build_full_group_blocks,
+                )
+                dense = build_full_group_blocks(
+                    shells, detection['operations'],
+                    matrix_key='matrix_input_frame')
+                if int(dense['n_ao']) != int(basis['nbf']):
+                    meta['integral_symmetry'] = {
+                        'status': 'skipped_basis_mismatch',
+                        'n_ao': int(dense['n_ao']),
+                        'nbf': int(basis['nbf']),
+                    }
+                    return False
+                # A geometry accepted within the detection tolerance is not
+                # necessarily exact enough to discard integral orbit members.
+                # Verify the actual AO operators against the actual overlap
+                # before exposing any native enable tag.
+                smat = self._overlap_square(int(basis['nbf']))
+                if smat is not None:
+                    for iop, op in enumerate(detection['operations']):
+                        transform = _ao_operator_matrix(
+                            shells, op, matrix_key='matrix_input_frame')
+                        deviation = float(np.max(np.abs(
+                            transform.T @ smat @ transform - smat)))
+                        if deviation > 1.0e-8:
+                            meta['integral_symmetry'] = {
+                                'status': 'skipped_overlap_invariance',
+                                'operation': str(op.get('name', iop)),
+                                'deviation': deviation,
+                            }
+                            return False
+                self.data['OQP::sym_shell_map'] = \
+                    (np.asarray(dense['shell_permutation'], dtype=np.int64) + 1).ravel()
+                self.data['OQP::sym_op_blocks'] = \
+                    np.asarray(dense['blocks'], dtype=np.float64)
+                # Dense operator, abelian group: screen as the standard-frame
+                # abelian path does, not as the non-abelian tier.
+                self.data['OQP::sym_nonabelian'] = np.array([0], dtype=np.int64)
+                self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
+                meta['reduction_maps'] = {
+                    'n_operations': int(dense['n_operations']),
+                    'n_ao': int(dense['n_ao']),
+                }
+                meta['integral_symmetry'] = {
+                    'status': 'active',
+                    'group': meta.get('subgroup'),
+                    'n_operations': int(dense['n_operations']),
+                    'full_group': False,
+                    'reoriented': False,
+                    'frame': 'input',
+                }
+                try:
+                    self._dump_symmetry_log()
+                except Exception:
+                    pass
+                return True
+
             maps = build_reduction_maps(shells, detection['operations'])
             if maps['n_ao'] != int(basis['nbf']):
                 meta['integral_symmetry'] = {
@@ -1067,6 +1169,8 @@ class Molecule:
                         # octahedral operations but NOT under C3/C6
                         # rotations, so full-group grid reduction would be
                         # inexact.
+                        self.data['OQP::sym_nonabelian'] = \
+                            np.array([1], dtype=np.int64)
                         full_group = True
                         meta['reduction_maps_full'] = {
                             'n_operations': full['n_operations'],
@@ -1525,12 +1629,39 @@ class Molecule:
     def symmetrize_gradient(self, grads):
         """Project gradients onto the totally symmetric component.
 
-        Valid in the standard orientation when the petite reduction is
-        active: g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}. Exact for the
-        skeleton two-electron gradient and a noise-cleaner for the rest.
+        g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}, exact for the skeleton
+        two-electron gradient and a noise-cleaner for the rest.
+
+        The operator MUST be expressed in the frame the gradient lives in.
+        ``op['matrix']`` is the sign-diagonal operation in the standard
+        orientation; ``op['matrix_input_frame']`` is the same operation
+        conjugated back to the input frame. Both are orthogonal 3x3 Cartesian
+        matrices, so the formula is unchanged -- only the frame differs, and
+        picking the wrong one is silent.
+
+        This used ``op['matrix']`` unconditionally, which was correct while the
+        reduction always reoriented the molecule and became wrong the moment
+        ``move_to_standard_frame=false`` existed. On the shipped
+        ``h2o_rhf_6-31g_hf`` deck -- C2v water lying on a diagonal -- the
+        standard-frame operator zeroes the x component of every gradient it
+        touches: |g_H| came out 0.00989131 against a reference 0.01314967, a
+        25% shortfall. Not a rotation: the norm itself is wrong. Energies were
+        unaffected, which is why an energy-only verification missed it, and an
+        already-aligned test molecule cannot detect it at all because the two
+        frames coincide there.
         """
         meta = self.symmetry_metadata
         if not meta or meta.get('integral_symmetry', {}).get('status') != 'active':
+            return grads
+        # The native density-invariance guard may withdraw petite reduction
+        # after Python staged the maps.  In that case grd2 produced a complete
+        # gradient and projecting it as a skeleton would erase legitimate
+        # broken-symmetry force components.
+        try:
+            flag = np.asarray(self.data['OQP::sym_petite_enable']).ravel()
+            if not flag.size or int(flag[0]) == 0:
+                return grads
+        except Exception:
             return grads
         detection = meta.get('detection')
         if not detection:
@@ -1541,21 +1672,40 @@ class Molecule:
             full = meta.get('reduction_maps_full')
             if meta.get('integral_symmetry', {}).get('full_group') and full:
                 operations = full['operations']
+            # Which frame is the staged reduction operating in? The staging
+            # records 'input' only on the no-move path; everything else moved
+            # the molecule first. reduction_maps_full is built exclusively on
+            # the standard-frame branch, so the two never combine.
+            matrix_key = 'matrix' \
+                if meta.get('integral_symmetry', {}).get('frame') != 'input' \
+                else 'matrix_input_frame'
+            if any(matrix_key not in op for op in operations):
+                # An active petite build contains only representative
+                # quartets. Without the matching frame operator this is a
+                # skeleton, not a complete gradient, so returning it would be
+                # a silent wrong result.
+                raise RuntimeError(
+                    'active integral-symmetry gradient is missing the '
+                    f'{matrix_key} operation payload')
             arr = np.asarray(grads, dtype=float)
             shape = arr.shape
             natom = len(operations[0]['permutation'])
             flat = arr.reshape(-1, natom, 3)
             result = np.zeros_like(flat)
             for op in operations:
-                matrix = np.asarray(op['matrix'], dtype=float)
+                matrix = np.asarray(op[matrix_key], dtype=float)
                 permutation = list(op['permutation'])
                 # g_{perm(a)} = M g_a  =>  contribution (M^T g)[perm[a]]
                 result += np.einsum('kj,sak->saj', matrix, flat[:, permutation, :])
             result /= len(operations)
             meta.setdefault('integral_symmetry', {})['gradient_symmetrized'] = True
             return result.reshape(shape)
-        except Exception:
-            return grads
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                'failed to reconstruct the active integral-symmetry '
+                'gradient') from exc
 
     def label_normal_modes(self):
         """Assign abelian irrep labels to normal modes (metadata only, non-fatal).
@@ -1859,9 +2009,10 @@ class Molecule:
         """Write a gradient (Hartree/Bohr) into the native buffer.
 
         The Fortran gradient kernels fill ``data._data.grad`` themselves, and
-        ``get_results`` reads it unconditionally.  A gradient produced in
-        Python -- the PT2 central-difference path -- has to mirror itself here,
-        or the saved JSON reports whatever the buffer happened to hold.
+        ``get_results`` reads it unconditionally. A gradient produced or
+        projected in Python -- including PT2 central differences and integral-
+        symmetry reconstruction -- has to mirror itself here, or saved results
+        and QM/MM consumers see the stale native buffer.
         """
         natom = self.data['natom']
         flat = np.ascontiguousarray(np.asarray(grad, dtype=float).reshape(-1))
