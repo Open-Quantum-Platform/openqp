@@ -153,13 +153,26 @@ class OQPEngine:
         self.follow_mode = int(follow_mode)
         self.logger = logger
 
-        self.coords = build_coordinates(self.atoms, self.x, coordsys=coordsys)
+        requested_coordsys = (coordsys or "auto").lower()
+        # DLC intentionally removes whole-system translations and rotations.
+        # Those modes are redundant for an isolated molecule, but they are
+        # physical when a standalone engine represents a fixed embedding or a
+        # lab-frame external field.  Keep ``auto`` full-rank in that case;
+        # explicit DLC remains available to callers that know their objective
+        # is invariant.
+        effective_coordsys = requested_coordsys
+        if (requested_coordsys == "auto"
+                and not self.project_global_rigid_modes):
+            effective_coordsys = "tric"
+        self.coords = build_coordinates(
+            self.atoms, self.x, coordsys=effective_coordsys
+        )
         # Report the requested coordinate system by name (TRIC and RIC are both
         # RedundantInternalCoordinates objects, so the class name is ambiguous),
         # and flag when it fell back to Cartesians (e.g. for a linear molecule).
-        requested = (coordsys or "tric").lower()
+        requested = effective_coordsys
         if requested in ("auto",):
-            requested = "tric"
+            requested = "dlc"
         label = {"cart": "CART", "cartesian": "CART"}.get(requested, requested.upper())
         if (type(self.coords).__name__ == "CartesianCoordinates"
                 and requested not in ("cart", "cartesian")):
