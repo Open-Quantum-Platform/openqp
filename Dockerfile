@@ -129,9 +129,9 @@ RUN --mount=type=bind,from=builder,source=/opt/openqp-wheelhouse,target=/tmp/whe
     python -m pip install --no-cache-dir --no-index \
       --find-links=/tmp/wheelhouse "OpenQP==${OPENQP_VERSION}"
 
-# MRSF MINRES callbacks are module procedures, so packaged OpenQP libraries do
-# not require stack trampolines. Verify the installed wheel without rewriting
-# its ELF headers or wheel RECORD.
+# MRSF iterative-solver callbacks are module procedures, so packaged OpenQP
+# libraries do not require stack trampolines. Verify the installed wheel
+# without rewriting its ELF headers or wheel RECORD.
 RUN --mount=type=bind,from=builder,source=/opt/openqp/.github/scripts/normalize_elf_stack.py,target=/tmp/normalize_elf_stack.py,ro \
     python /tmp/normalize_elf_stack.py --openqp-package
 

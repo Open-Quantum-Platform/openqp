@@ -99,9 +99,9 @@ module tdhf_mrsf_z_vector_mod
   logical, save :: zv_warm_have_mo = .false.
   integer, save :: zv_warm_nbf = 0
 
-  ! Active MRSF MINRES callback context. The production callbacks are module
-  ! procedures, not internal procedures, so GNU Fortran does not create stack
-  ! trampolines when their addresses are passed to the generic MINRES solver.
+  ! Active MRSF iterative-solver callback context. The production MINRES and
+  ! GMRES callbacks are module procedures, not internal procedures, so GNU
+  ! Fortran does not create stack trampolines when their addresses are passed.
   ! The surrounding MRSF response implementation already owns module-level
   ! work arrays and is not reentrant.
   logical, save :: minres_context_active = .false.
@@ -1148,6 +1148,17 @@ contains
     call apply_z_precond(x, y, minres_xminv_ctx)
   end subroutine mrsf_minres_apply_pc
 
+  subroutine mrsf_gmres_apply_pc(x_in, x_out)
+    real(kind=dp), intent(in) :: x_in(:)
+    real(kind=dp), intent(out) :: x_out(:)
+
+    if (.not. minres_context_active) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      return
+    end if
+    call apply_z_precond(x_in, x_out, minres_xminv_ctx)
+  end subroutine mrsf_gmres_apply_pc
+
   subroutine tdhf_mrsf_z_vector_C(c_handle) bind(C, name="tdhf_mrsf_z_vector")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -1581,9 +1592,12 @@ contains
     ! auto driver can detect failure uniformly across solvers.
     subroutine run_mrsf_gmres_zvector()
       call zv_warm_seed()
+      call set_mrsf_minres_context(infos, basis, molGrid, int2_driver, &
+                                   nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                                   fa, fb, scale_exch, dft, xminv)
       call gmres_solve( &
           apply_operator = apply_z_operator, &
-          apply_precond = lambda_precond, &
+          apply_precond = mrsf_gmres_apply_pc, &
           b = rhs, &
           x = xk, &
           n = lzdim, &
@@ -1596,6 +1610,7 @@ contains
           mo_a = mo_a, mo_b = mo_b, mo_energy_a = mo_energy_a, &
           fa = fa, fb = fb, scale_exch = scale_exch, dft = dft, &
           error_out = error, iter_out = gmres_iter, iw = iw)
+      call clear_mrsf_minres_context()
       if (.not. ieee_is_finite(error) .or. error > cnvtol) then
         if (.not. ieee_is_finite(error)) mrsf_zvector_breakdown = .true.
       end if
@@ -1919,13 +1934,6 @@ contains
       ! screened one. (On convergence the last step is already pinned tight.)
       if (zv_prog_on) call int2_driver%set_cutoff(zv_rc_save)
           end subroutine run_mrsf_cg_zvector
-
-    ! Lambda wrapper for preconditioner
-    subroutine lambda_precond(x_in, x_out)
-      real(kind=dp), intent(in) :: x_in(:)
-      real(kind=dp), intent(out) :: x_out(:)
-      call apply_z_precond(x_in, x_out, xminv)
-    end subroutine lambda_precond
 
     ! Seed xk for the solver: zero (cold), the raw previous solution, or — when
     ! the MOs have rotated between steps — the previous solution PROJECTED into
