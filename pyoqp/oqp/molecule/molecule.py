@@ -970,7 +970,10 @@ class Molecule:
                 # the signed AO maps. symmetrize_skeleton_fock already prefers
                 # the blocked projector whenever OQP::sym_op_blocks is staged,
                 # so nothing downstream changes.
-                from oqp.library.symmetry import build_full_group_blocks
+                from oqp.library.symmetry import (
+                    _ao_operator_matrix,
+                    build_full_group_blocks,
+                )
                 dense = build_full_group_blocks(
                     shells, detection['operations'],
                     matrix_key='matrix_input_frame')
@@ -981,6 +984,24 @@ class Molecule:
                         'nbf': int(basis['nbf']),
                     }
                     return False
+                # A geometry accepted within the detection tolerance is not
+                # necessarily exact enough to discard integral orbit members.
+                # Verify the actual AO operators against the actual overlap
+                # before exposing any native enable tag.
+                smat = self._overlap_square(int(basis['nbf']))
+                if smat is not None:
+                    for iop, op in enumerate(detection['operations']):
+                        transform = _ao_operator_matrix(
+                            shells, op, matrix_key='matrix_input_frame')
+                        deviation = float(np.max(np.abs(
+                            transform.T @ smat @ transform - smat)))
+                        if deviation > 1.0e-8:
+                            meta['integral_symmetry'] = {
+                                'status': 'skipped_overlap_invariance',
+                                'operation': str(op.get('name', iop)),
+                                'deviation': deviation,
+                            }
+                            return False
                 self.data['OQP::sym_shell_map'] = \
                     (np.asarray(dense['shell_permutation'], dtype=np.int64) + 1).ravel()
                 self.data['OQP::sym_op_blocks'] = \
@@ -1620,6 +1641,16 @@ class Molecule:
         """
         meta = self.symmetry_metadata
         if not meta or meta.get('integral_symmetry', {}).get('status') != 'active':
+            return grads
+        # The native density-invariance guard may withdraw petite reduction
+        # after Python staged the maps.  In that case grd2 produced a complete
+        # gradient and projecting it as a skeleton would erase legitimate
+        # broken-symmetry force components.
+        try:
+            flag = np.asarray(self.data['OQP::sym_petite_enable']).ravel()
+            if not flag.size or int(flag[0]) == 0:
+                return grads
+        except Exception:
             return grads
         detection = meta.get('detection')
         if not detection:

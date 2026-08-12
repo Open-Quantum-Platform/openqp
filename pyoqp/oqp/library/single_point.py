@@ -1082,11 +1082,22 @@ class SinglePoint(Calculator):
     )
 
     def _petite_is_staged(self):
-        """True when the petite-list reduction maps are staged and active."""
+        """True when both metadata and the live native flag are active.
+
+        The Fortran density guard can withdraw the reduction after staging by
+        zeroing ``OQP::sym_petite_enable``.  Metadata alone is therefore not a
+        sufficient statement about the converged SCF state.
+        """
         meta = getattr(self.mol, 'symmetry_metadata', None)
-        if not meta:
+        if (not meta or
+                meta.get('integral_symmetry', {}).get('status') != 'active'):
             return False
-        return meta.get('integral_symmetry', {}).get('status') == 'active'
+        try:
+            flag = np.asarray(
+                self.mol.data['OQP::sym_petite_enable']).ravel()
+            return bool(flag.size and int(flag[0]) != 0)
+        except Exception:
+            return False
 
     def _set_petite_enabled(self, enabled):
         import numpy as np

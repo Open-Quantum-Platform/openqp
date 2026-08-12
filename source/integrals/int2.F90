@@ -162,6 +162,9 @@ module int2_compute
     ! shell index fastest: map(shell, op) = sym_shell_map((op-1)*nshell+shell).
     logical :: petite = .false.
     logical :: sym_full = .false.
+    ! Dense AO component operators need conservative weighted screening even
+    ! when their abstract point group is abelian (the input-frame route).
+    logical :: sym_dense = .false.
     integer :: sym_nops = 0
     integer(8), contiguous, pointer :: sym_shell_map(:) => null()
 
@@ -279,6 +282,8 @@ contains
     ! explicitly via enable_petite(); response/CPHF builders must not.
     this%petite = .false.
     this%sym_nops = 0
+    this%sym_full = .false.
+    this%sym_dense = .false.
     this%sym_shell_map => null()
 
   end subroutine int2_compute_t_init
@@ -299,6 +304,7 @@ contains
     this%sym_shell_map => null()
     this%sym_nops = 0
     this%sym_full = .false.
+    this%sym_dense = .false.
   end subroutine int2_compute_t_disable_petite
 
 !###############################################################################
@@ -336,17 +342,17 @@ contains
 
     block
       real(kind=dp), contiguous, pointer :: blocks(:)
-      ! sym_full means the NON-ABELIAN tier, which is what line ~707 keys on to
-      ! loosen the Schwarz test by a factor nops. Dense operator blocks are no
-      ! longer sufficient evidence for that: the no-reorient path stages them
-      ! for an ABELIAN group, because there the operator is dense while the
-      ! group, the shell map and the orbit weights are the standard-frame
-      ! abelian ones -- so it must screen exactly as that path does.
+      ! sym_full records the abstract non-abelian tier.  Dense operator blocks
+      ! are tracked separately by sym_dense: the no-reorient path stages dense
+      ! blocks for an ABELIAN group, and component mixing still requires the
+      ! conservative weighted screening below.
       !
       ! Reading block presence as "full tier" loosened screening eightfold on
       ! the no-move path and cost more than the reduction saved: benzene
       ! cc-pVTZ went 14.1 s -> 23.5 s at an identical 12 iterations.
       call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+      this%sym_dense = .false.
+      if (status == TA_OK) this%sym_dense = size(blocks) > 0
       block
         integer(8), contiguous, pointer :: nonab(:)
         integer(4) :: st_na
@@ -756,11 +762,10 @@ contains
 
         if (this%schwarz) then
           test = int2_consumer%screen_ij(this%schwarz_ints, i, j)
-          ! With the petite list active the surviving representative carries
-          ! up to |G| weight, so the pair-level skip must be conservative by
-          ! the same factor (orbit members of non-abelian operations live in
-          ! different shell pairs with different bounds).
-          if (this%petite .and. this%sym_full) test = test*real(this%sym_nops, dp)
+          ! With dense AO component mixing, per-shell maximum density bounds
+          ! are not invariant across an orbit.  A surviving representative
+          ! carries up to |G| weight, so loosen the pair-level skip likewise.
+          if (this%petite .and. this%sym_dense) test = test*real(this%sym_nops, dp)
           if (test < this%cutoffs%integral_cutoff) then
             nschwz = nschwz + i*(i-1)/2+j
             cycle
@@ -782,7 +787,7 @@ contains
                                          nshell, i, j, k, l)
               if (q4 == 0) cycle
               eri_data%weight = real(q4, dp)
-              eri_data%weighted_cutoff = this%sym_full
+              eri_data%weighted_cutoff = this%sym_dense
             else
               eri_data%weight = 1.0d0
               eri_data%weighted_cutoff = .false.
@@ -790,9 +795,8 @@ contains
 
             if (this%schwarz) then
               test = int2_consumer%screen_ijkl(this%schwarz_ints, i, j, k, l)
-              ! Screen the weighted contribution: non-abelian orbit members
-              ! have unequal element magnitudes, so the unweighted threshold
-              ! would leak a systematic cutoff-level error into the skeleton.
+              ! Screen the weighted contribution whenever dense component
+              ! mixing can make orbit members have unequal element bounds.
               if (eri_data%weighted_cutoff) test = test*eri_data%weight
               if (test < this%cutoffs%integral_cutoff) then
                 nschwz = nschwz+1

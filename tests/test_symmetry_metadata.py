@@ -191,9 +191,46 @@ class TestSymmetryMetadata(unittest.TestCase):
                 ],
             },
         }
+        molecule.data = {
+            'OQP::sym_petite_enable': np.array([1], dtype=np.int64),
+        }
 
         with self.assertRaisesRegex(RuntimeError, 'matrix_input_frame'):
             molecule.symmetrize_gradient(np.zeros((1, 3)))
+
+    def test_native_fallback_prevents_python_gradient_projection(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {
+            'integral_symmetry': {'status': 'active', 'frame': 'input'},
+            'detection': {
+                'operations': [
+                    {'permutation': [0], 'matrix': np.eye(3).tolist()},
+                ],
+            },
+        }
+        molecule.data = {
+            'OQP::sym_petite_enable': np.array([0], dtype=np.int64),
+        }
+        gradient = np.array([[1.0, 2.0, 3.0]])
+
+        result = molecule.symmetrize_gradient(gradient)
+
+        np.testing.assert_array_equal(result, gradient)
+        self.assertNotIn(
+            'gradient_symmetrized',
+            molecule.symmetry_metadata['integral_symmetry'],
+        )
+
+    def test_input_frame_overlap_gate_precedes_native_enable(self):
+        source = (ROOT / 'pyoqp/oqp/molecule/molecule.py').read_text()
+        start = source.index('if input_frame:')
+        end = source.index("self.data['OQP::sym_petite_enable']", start)
+        staging = source[start:end]
+
+        self.assertIn("matrix_key='matrix_input_frame'", staging)
+        self.assertIn('transform.T @ smat @ transform - smat', staging)
+        self.assertIn("'status': 'skipped_overlap_invariance'", staging)
 
     def test_symmetry_metadata_defaults_to_detection_enabled(self):
         molecule_module = load_molecule_module()

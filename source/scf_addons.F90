@@ -1099,6 +1099,42 @@ contains
     if (present(scale_coul)) scale_c = scale_coul
     is_dft = (infos%control%hamilton == 20)
 
+    ! Validate the staged reduction before any provider can return.  Route-C
+    ! supplies a complete JK matrix, but a surviving global petite flag would
+    ! still let the following XC build and later gradient drivers reduce an
+    ! asymmetric density.
+    if (present(petite)) then
+      if (petite) then
+        block
+          use oqp_tagarray_driver, only: OQP_sym_petite, tagarray_get_data
+          use tagarray, only: TA_OK
+          real(kind=dp) :: dasym
+          real(kind=dp), parameter :: dtol = 1.0e-6_dp
+          integer(8), contiguous, pointer :: global_petite(:)
+          integer(4) :: ta_status
+          call tagarray_get_data(infos%dat, OQP_sym_petite, &
+                                 global_petite, status=ta_status)
+          if (ta_status == TA_OK) then
+            if (size(global_petite) >= 1) then
+              if (global_petite(1) /= 0_8) then
+                call petite_density_asymmetry(infos, basis, d, dasym)
+                if (dasym > dtol) then
+                  write(*,'(/,2X,"WARNING: the SCF density is not invariant under ", &
+                    &"the detected symmetry (residual ",ES10.3," > ",ES10.3,").")') &
+                    dasym, dtol
+                  write(*,'(2X,"The integral reduction is not valid for it and has ", &
+                    &"been switched off for this SCF state.")')
+                  write(*,'(2X,"This is expected for a broken-symmetry solution; ", &
+                    &"the result is unaffected, only the speed.",/)')
+                  global_petite(1) = 0_8
+                end if
+              end if
+            end if
+          end if
+        end block
+      end if
+    end if
+
     ! Route-C external DF-JK (inert unless $OQP_ROUTEC_LIB is set).
     ! Not taken for CAM (needs short-range K) or incremental builds
     ! (difference densities; run with scf incremental=False).
@@ -1112,45 +1148,7 @@ contains
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
     if (present(petite)) then
-      ! Petite-list reduction: only valid for a density invariant under the
-      ! staged group. Verify that on the density in hand rather than assume it.
-      if (petite) then
-        call int2_driver%enable_petite(infos)
-        if (int2_driver%petite) then
-          block
-            use oqp_tagarray_driver, only: OQP_sym_petite, tagarray_get_data
-            use tagarray, only: TA_OK
-            real(kind=dp) :: dasym
-            real(kind=dp), parameter :: dtol = 1.0e-6_dp
-            integer(8), contiguous, pointer :: global_petite(:)
-            integer(4) :: ta_status
-            call petite_density_asymmetry(infos, basis, d, dasym)
-            if (dasym > dtol) then
-              ! Do not reduce this build. Loud, because a silent fallback here
-              ! is indistinguishable from a correct run: the C1 path gives the
-              ! right answer, just slower, and the user would never learn that
-              ! their system is symmetry-broken.
-              write(*,'(/,2X,"WARNING: the SCF density is not invariant under ", &
-                &"the detected symmetry (residual ",ES10.3," > ",ES10.3,").")') &
-                dasym, dtol
-              write(*,'(2X,"The integral reduction is not valid for it and has ", &
-                &"been switched off for this SCF state.")')
-              write(*,'(2X,"This is expected for a broken-symmetry solution; ", &
-                &"the result is unaffected, only the speed.",/)')
-              ! This is a property of the converged SCF state, not merely of
-              ! this one JK increment. Persist the fallback in the shared tag
-              ! so the subsequent XC build, reduced gradient drivers, and
-              ! later SCF increments cannot reuse the invalid reduction.
-              call tagarray_get_data(infos%dat, OQP_sym_petite, &
-                                     global_petite, status=ta_status)
-              if (ta_status == TA_OK) then
-                if (size(global_petite) >= 1) global_petite(1) = 0_8
-              end if
-              call int2_driver%disable_petite()
-            end if
-          end block
-        end if
-      end if
+      if (petite) call int2_driver%enable_petite(infos)
     end if
     call int2_driver%set_screening()
 
