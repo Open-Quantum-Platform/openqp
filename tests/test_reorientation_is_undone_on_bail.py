@@ -53,7 +53,10 @@ class FailureExitsRestoreTheGeometry(unittest.TestCase):
 
         mol = Molecule.__new__(Molecule)
         mol._system = coord.copy()
-        mol.config = {'input': {'runtype': 'grad'}}
+        mol.config = {
+            'input': {'runtype': 'grad'},
+            'symmetry': {'move_to_standard_frame': True},
+        }
         mol.get_system = lambda: mol._system
         mol.get_atoms = lambda: np.array(atoms)
         mol.update_system = lambda x: setattr(
