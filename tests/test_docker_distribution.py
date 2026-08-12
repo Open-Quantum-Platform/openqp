@@ -741,6 +741,30 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             ):
                 OCI_VERIFY.verify(unsupported_media, "1.3.0", "a" * 40)
 
+            artifact_typed_image = dict(image)
+            artifact_typed_image["mediaType"] = (
+                "application/vnd.oci.artifact.manifest.v1+json"
+            )
+            artifact_typed_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [artifact_typed_image, attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            artifact_typed_candidate = (
+                Path(temporary) / "artifact-typed-image.oci.tar"
+            )
+            self._write_oci(
+                artifact_typed_candidate, artifact_typed_index, blobs
+            )
+            with self.assertRaisesRegex(
+                ValueError, "unrecognized OCI index manifest structure"
+            ):
+                OCI_VERIFY.verify(
+                    artifact_typed_candidate, "1.3.0", "a" * 40
+                )
+
             with self.assertRaisesRegex(ValueError, "not a valid tar archive"):
                 OCI_VERIFY._layer_diff_id(
                     b"not-a-tar", "application/vnd.oci.image.layer.v1.tar"

@@ -37,10 +37,12 @@ OCI_INDEX_MEDIA_TYPES = {
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
 }
-OCI_LEAF_MANIFEST_MEDIA_TYPES = {
+OCI_IMAGE_MANIFEST_MEDIA_TYPES = {
     "application/vnd.oci.image.manifest.v1+json",
-    "application/vnd.oci.artifact.manifest.v1+json",
     "application/vnd.docker.distribution.manifest.v2+json",
+}
+OCI_LEAF_MANIFEST_MEDIA_TYPES = OCI_IMAGE_MANIFEST_MEDIA_TYPES | {
+    "application/vnd.oci.artifact.manifest.v1+json",
 }
 UNCOMPRESSED_LAYER_MEDIA_TYPES = {
     "application/vnd.oci.image.layer.v1.tar",
@@ -408,7 +410,8 @@ def verify(
             )
             config_descriptor = manifest.get("config")
             is_image = (
-                isinstance(config_descriptor, dict)
+                descriptor.get("mediaType") in OCI_IMAGE_MANIFEST_MEDIA_TYPES
+                and isinstance(config_descriptor, dict)
                 and config_descriptor.get("mediaType")
                 == OCI_IMAGE_CONFIG_MEDIA_TYPE
                 and isinstance(manifest.get("layers"), list)
