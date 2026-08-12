@@ -311,10 +311,11 @@ def get_optimizer(mol):
         # The schema default targets the first response state.  Lightweight
         # scripting configurations do not pass through schema normalization,
         # whose validator treats an omitted selector as the ground state for a
-        # ground-state HF/DFT optimization.  Preserve that public behaviour
+        # ground-state HF/DFT optimization.  Single-state CASPT2/MRMP2 likewise
+        # publish only energy index zero.  Preserve those public behaviours
         # when materializing the remaining native defaults here.
         method = str(mol.config.get('input', {}).get('method', 'hf')).lower()
-        if istate_omitted and method == 'hf':
+        if istate_omitted and method in {'hf', 'caspt2', 'mrmp2'}:
             optimize_config['istate'] = 0
     lib = str(optimize_config['lib']).strip().lower()
 

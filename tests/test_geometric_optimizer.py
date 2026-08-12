@@ -389,16 +389,18 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "pyoqp/oqp/library/runfunc.py",
         )
         native_class = sys.modules["oqp.library.liboqp"].OQPOpt
-        mol = types.SimpleNamespace(
-            config={"input": {"runtype": "optimize"}}
-        )
-
-        optimizer = runfunc.get_optimizer(mol)
-
-        self.assertIsInstance(optimizer, native_class)
         expected = dict(defaults)
         expected["istate"] = 0
-        self.assertEqual(mol.config["optimize"], expected)
+        for method in ("hf", "caspt2", "mrmp2"):
+            with self.subTest(method=method):
+                mol = types.SimpleNamespace(config={
+                    "input": {"runtype": "optimize", "method": method},
+                })
+
+                optimizer = runfunc.get_optimizer(mol)
+
+                self.assertIsInstance(optimizer, native_class)
+                self.assertEqual(mol.config["optimize"], expected)
 
     def test_get_optimizer_preserves_explicit_excited_state_in_partial_config(self):
         install_runfunc_stubs()
