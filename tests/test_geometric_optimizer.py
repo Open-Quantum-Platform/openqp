@@ -396,7 +396,35 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         optimizer = runfunc.get_optimizer(mol)
 
         self.assertIsInstance(optimizer, native_class)
-        self.assertEqual(mol.config["optimize"], defaults)
+        expected = dict(defaults)
+        expected["istate"] = 0
+        self.assertEqual(mol.config["optimize"], expected)
+
+    def test_get_optimizer_preserves_explicit_excited_state_in_partial_config(self):
+        install_runfunc_stubs()
+        molecule = types.ModuleType("oqp.molecule")
+        molecule.__path__ = []
+        oqpdata = types.ModuleType("oqp.molecule.oqpdata")
+        oqpdata.OQP_CONFIG_SCHEMA = {"optimize": {}}
+        input_parser = types.ModuleType("oqp.utils.input_parser")
+        defaults = {"lib": "oqp", "istate": 1, "meci_search": "auto"}
+        input_parser.schema_section_defaults = lambda _schema, _section: defaults
+        sys.modules["oqp.molecule"] = molecule
+        sys.modules["oqp.molecule.oqpdata"] = oqpdata
+        sys.modules["oqp.utils.input_parser"] = input_parser
+
+        runfunc = load_module(
+            "runfunc_native_explicit_state_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+        mol = types.SimpleNamespace(config={
+            "input": {"runtype": "optimize", "method": "hf"},
+            "optimize": {"istate": 2},
+        })
+
+        runfunc.get_optimizer(mol)
+
+        self.assertEqual(mol.config["optimize"]["istate"], 2)
 
     def test_get_optimizer_dispatches_geometric_meci(self):
         _, GeometricMECIOpt, _, _, _ = install_runfunc_stubs()

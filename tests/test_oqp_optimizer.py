@@ -12,6 +12,7 @@ import types
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -829,9 +830,23 @@ class TestTRICandDLC(unittest.TestCase):
             self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
             self.assertEqual(len(ic.q(self.WATER_X)), 3)
 
-        engine = NE.OQPEngine(self.WATER_AT, self.WATER_X)
+        engine = NE.OQPEngine(
+            self.WATER_AT, self.WATER_X,
+            project_global_rigid_modes=True,
+        )
         self.assertIsInstance(engine.coords, NC.DelocalizedInternalCoordinates)
         self.assertEqual(engine.coordsys, "DLC")
+
+    def test_standalone_auto_preserves_physical_global_modes(self):
+        engine = NE.OQPEngine(self.WATER_AT, self.WATER_X)
+        self.assertIsInstance(engine.coords, NC.RedundantInternalCoordinates)
+        self.assertEqual(engine.coordsys, "TRIC")
+
+        # A uniform lab-frame force is a pure translation.  It must remain an
+        # active optimization direction when rigid modes are not projected.
+        gradient = np.tile([1.0, 0.0, 0.0], len(self.WATER_AT))
+        gradient_q = engine.coords.grad_to_q(engine.x, gradient)
+        self.assertGreater(np.linalg.norm(gradient_q), 0.5)
 
     def test_water_dimer_dlc_spans_all_twelve_vibrational_modes(self):
         second = self.WATER_X + np.array([0.25, 0.10, 5.50])
@@ -881,6 +896,30 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertGreater(len(conditioned), len(primitives))
         self.assertEqual(rank_after, 12)
         self.assertGreater(quality_after, quality_before)
+
+    def test_interfragment_conditioning_has_total_trial_budget(self):
+        fragments = [list(range(10)), list(range(10, 20))]
+        geometry = np.zeros((20, 3))
+        geometry[:, 0] = np.arange(20, dtype=float)
+        primitives = []
+        target = 3 * len(geometry) - 6
+        calls = 0
+
+        def slowly_improving(_primitives, _natom, _x):
+            nonlocal calls
+            calls += 1
+            return target, 1.0e-8 * calls
+
+        with mock.patch.object(
+                NC, "_primitive_metric_quality",
+                side_effect=slowly_improving):
+            NC._augment_interfragment_distances(
+                primitives, fragments, geometry, len(geometry),
+                quality_tol=1.0, candidate_window=48, max_trials=10,
+            )
+
+        # One initial metric plus at most max_trials candidate metrics.
+        self.assertLessEqual(calls, 11)
 
     def test_dlc_linear_algebra_is_warning_free(self):
         """Coordinate products must not leak handled Accelerate FP flags."""

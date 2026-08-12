@@ -302,11 +302,20 @@ def get_optimizer(mol):
     # [optimize] and optimize.lib must still select oqp.
     optimize_config = mol.config.setdefault('optimize', {})
     if 'lib' not in optimize_config:
+        istate_omitted = 'istate' not in optimize_config
         from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
         from oqp.utils.input_parser import schema_section_defaults
         defaults = schema_section_defaults(OQP_CONFIG_SCHEMA, 'optimize')
         for key, value in defaults.items():
             optimize_config.setdefault(key, value)
+        # The schema default targets the first response state.  Lightweight
+        # scripting configurations do not pass through schema normalization,
+        # whose validator treats an omitted selector as the ground state for a
+        # ground-state HF/DFT optimization.  Preserve that public behaviour
+        # when materializing the remaining native defaults here.
+        method = str(mol.config.get('input', {}).get('method', 'hf')).lower()
+        if istate_omitted and method == 'hf':
+            optimize_config['istate'] = 0
     lib = str(optimize_config['lib']).strip().lower()
 
     # BaekA generalizes the adjacent-gap adaptive penalty from two to N states.

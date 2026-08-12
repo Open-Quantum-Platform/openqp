@@ -806,7 +806,8 @@ def _primitive_metric_quality(primitives, natom, x, eig_tol=1.0e-6):
 
 def _augment_interfragment_distances(primitives, fragments, x, natom,
                                      quality_tol=1.0e-4,
-                                     candidate_window=48):
+                                     candidate_window=48,
+                                     max_trials=96):
     """Condition a multi-fragment internal span with direct distances.
 
     For ``F`` disconnected non-linear fragments, intrafragment coordinates are
@@ -815,7 +816,10 @@ def _augment_interfragment_distances(primitives, fragments, x, natom,
     associated angles/torsions.  If that span is numerically weak, greedily add
     inter-fragment distances that improve the smallest retained Wilson-metric
     eigenvalue.  The search is bounded so large clusters do not turn coordinate
-    construction into a cubic scan over every atom pair.
+    construction into a cubic scan over every atom pair.  ``max_trials`` is a
+    total eigendecomposition budget, rather than a per-iteration limit, so a
+    large cluster with full rank but marginal conditioning has bounded setup
+    cost.
     """
     if len(fragments) < 2:
         return primitives
@@ -843,12 +847,16 @@ def _augment_interfragment_distances(primitives, fragments, x, natom,
                         candidates.append((distance, pair))
     candidates.sort()
 
-    while candidates and (rank < target or quality < quality_tol):
+    trials = 0
+    while (candidates and trials < max_trials
+           and (rank < target or quality < quality_tol)):
         best = None
-        for index, (_, pair) in enumerate(candidates[:candidate_window]):
+        window = min(candidate_window, max_trials - trials)
+        for index, (_, pair) in enumerate(candidates[:window]):
             trial = current + [Bond(*pair)]
             trial_rank, trial_quality = _primitive_metric_quality(
                 trial, natom, x)
+            trials += 1
             score = (min(trial_rank, target), trial_quality)
             if best is None or score > best[0]:
                 best = (score, index, pair, trial_rank, trial_quality)
