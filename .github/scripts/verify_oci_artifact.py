@@ -21,6 +21,11 @@ SLSA_PROVENANCE_PREDICATE_TYPES = {
     "https://slsa.dev/provenance/v0.2",
     "https://slsa.dev/provenance/v1",
 }
+OPENQP_REVISION_KEYS = {
+    "build-arg:OPENQP_REVISION",
+    "OPENQP_REVISION",
+    "vcs:revision",
+}
 IN_TOTO_STATEMENT_TYPES = {
     "https://in-toto.io/Statement/v0.1",
     "https://in-toto.io/Statement/v1",
@@ -84,7 +89,35 @@ def _reject_duplicate_oci_members(archive: tarfile.TarFile) -> None:
         seen.add(name)
 
 
-def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
+def _require_provenance_revision(
+    predicate: dict[str, Any], expected_revision: str
+) -> None:
+    """Bind BuildKit provenance to the source revision being verified."""
+    revisions: list[Any] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in OPENQP_REVISION_KEYS:
+                    revisions.append(child)
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(predicate)
+    if not revisions:
+        raise ValueError("SLSA provenance does not identify the OpenQP revision")
+    if any(revision != expected_revision for revision in revisions):
+        raise ValueError(
+            "SLSA provenance revision does not match verified source: "
+            f"{revisions} != {expected_revision}"
+        )
+
+
+def _statement_subjects(
+    statement: dict[str, Any], expected_revision: str | None = None
+) -> tuple[str, set[str]]:
     """Validate an in-toto statement and return its typed SHA-256 subjects."""
     statement_type = statement.get("_type")
     if statement_type not in IN_TOTO_STATEMENT_TYPES:
@@ -197,6 +230,12 @@ def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
             )
         if "metadata" in run_details and not isinstance(run_details["metadata"], dict):
             raise ValueError("SLSA v1 runDetails.metadata must be an object")
+
+    if (
+        expected_revision is not None
+        and predicate_type in SLSA_PROVENANCE_PREDICATE_TYPES
+    ):
+        _require_provenance_revision(predicate, expected_revision)
 
     raw_subjects = statement.get("subject")
     if not isinstance(raw_subjects, list) or not raw_subjects:
@@ -337,6 +376,8 @@ def _leaf_manifests(
 def verify(
     artifact: Path, expected_version: str, expected_revision: str
 ) -> dict[str, Any]:
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
+        raise ValueError(f"expected revision is not a full Git SHA: {expected_revision}")
     with tarfile.open(artifact, mode="r:*") as archive:
         _reject_duplicate_oci_members(archive)
         layout = _read_json(archive, "oci-layout")
@@ -491,7 +532,17 @@ def verify(
                     raise ValueError(
                         "attestation config descriptor must be an object"
                     )
-                _descriptor_bytes(archive, attestation_config)
+                if has_layers:
+                    if (
+                        attestation_config.get("mediaType")
+                        != OCI_IMAGE_CONFIG_MEDIA_TYPE
+                    ):
+                        raise ValueError(
+                            "image-shaped attestation config has an invalid media type"
+                        )
+                    _descriptor_json(archive, attestation_config)
+                else:
+                    _descriptor_bytes(archive, attestation_config)
             elif has_layers:
                 raise ValueError(
                     "OCI image-shaped attestation manifest has no config descriptor"
@@ -511,7 +562,9 @@ def verify(
                         f"{layer.get('mediaType')}"
                     )
                 statement = _descriptor_json(archive, layer)
-                predicate_type, statement_subjects = _statement_subjects(statement)
+                predicate_type, statement_subjects = _statement_subjects(
+                    statement, expected_revision
+                )
                 predicate_types.add(predicate_type)
                 subjects.update(statement_subjects)
                 if image_digest in statement_subjects:

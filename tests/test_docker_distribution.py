@@ -448,7 +448,11 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 predicate = {
                     "buildDefinition": {
                         "buildType": "https://mobyproject.org/buildkit@v1",
-                        "externalParameters": {},
+                        "externalParameters": {
+                            "args": {
+                                "build-arg:OPENQP_REVISION": "a" * 40,
+                            }
+                        },
                     },
                     "runDetails": {
                         "builder": {"id": "https://mobyproject.org/buildkit"}
@@ -768,6 +772,19 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     },
                     "config descriptor must be an object",
                 ),
+                (
+                    "wrong-media",
+                    {
+                        "schemaVersion": 2,
+                        "config": {
+                            **attestation_config,
+                            "mediaType": "text/plain",
+                        },
+                        "subject": dict(image_subject),
+                        "layers": statements,
+                    },
+                    "config has an invalid media type",
+                ),
             ):
                 invalid_attestation = self._json_blob(blobs, invalid_manifest)
                 invalid_attestation["platform"] = {
@@ -789,6 +806,106 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 self._write_oci(invalid, invalid_index, blobs)
                 with self.assertRaisesRegex(ValueError, expected_error):
                     OCI_VERIFY.verify(invalid, "1.3.0", "a" * 40)
+
+            non_json_config_payload = b"not-json"
+            non_json_config_digest = hashlib.sha256(
+                non_json_config_payload
+            ).hexdigest()
+            non_json_config = {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "digest": f"sha256:{non_json_config_digest}",
+                "size": len(non_json_config_payload),
+            }
+            blobs[f"blobs/sha256/{non_json_config_digest}"] = (
+                non_json_config_payload
+            )
+            non_json_attestation = self._json_blob(
+                blobs,
+                {
+                    "schemaVersion": 2,
+                    "config": non_json_config,
+                    "subject": dict(image_subject),
+                    "layers": statements,
+                },
+            )
+            non_json_attestation["platform"] = {
+                "os": "unknown",
+                "architecture": "unknown",
+            }
+            non_json_attestation["annotations"] = dict(
+                attestation["annotations"]
+            )
+            non_json_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [image_without_platform, non_json_attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            non_json_artifact = Path(temporary) / "non-json-config.oci.tar"
+            self._write_oci(non_json_artifact, non_json_index, blobs)
+            with self.assertRaises(ValueError):
+                OCI_VERIFY.verify(non_json_artifact, "1.3.0", "a" * 40)
+
+            for label, revision_value in (
+                ("missing", None),
+                ("mismatched", "b" * 40),
+            ):
+                provenance_statement = json.loads(
+                    blobs[OCI_VERIFY._blob_path(statements[1]["digest"])]
+                )
+                external_parameters = provenance_statement["predicate"][
+                    "buildDefinition"
+                ]["externalParameters"]
+                if revision_value is None:
+                    external_parameters.clear()
+                else:
+                    external_parameters["args"][
+                        "build-arg:OPENQP_REVISION"
+                    ] = revision_value
+                invalid_provenance = self._json_blob(
+                    blobs,
+                    provenance_statement,
+                    "application/vnd.in-toto+json",
+                )
+                invalid_provenance_attestation = self._json_blob(
+                    blobs,
+                    {
+                        "schemaVersion": 2,
+                        "config": attestation_config,
+                        "subject": dict(image_subject),
+                        "layers": [statements[0], invalid_provenance],
+                    },
+                )
+                invalid_provenance_attestation["platform"] = {
+                    "os": "unknown",
+                    "architecture": "unknown",
+                }
+                invalid_provenance_attestation["annotations"] = dict(
+                    attestation["annotations"]
+                )
+                invalid_provenance_index = json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [
+                            image_without_platform,
+                            invalid_provenance_attestation,
+                        ],
+                    },
+                    sort_keys=True,
+                ).encode()
+                invalid_provenance_artifact = (
+                    Path(temporary) / f"{label}-provenance-revision.oci.tar"
+                )
+                self._write_oci(
+                    invalid_provenance_artifact,
+                    invalid_provenance_index,
+                    blobs,
+                )
+                with self.assertRaisesRegex(ValueError, "provenance.*revision"):
+                    OCI_VERIFY.verify(
+                        invalid_provenance_artifact, "1.3.0", "a" * 40
+                    )
 
             nested_index_descriptor = self._json_blob(
                 blobs,
