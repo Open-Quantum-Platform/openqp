@@ -1,0 +1,7 @@
+casci/sto-3g
+guess(type=hcore)
+scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
+properties(scf_prop="")
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,orbital_source=json,orbital_file="h4_cas22_rotated_orbitals.json",sort_orbitals=none,max_det=5000,max_memory=512)
+ci(nroot=1,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=any)
+geom="../geometries/H4-b9005833d66d.xyz"

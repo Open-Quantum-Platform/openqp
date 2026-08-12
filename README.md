@@ -1,8 +1,10 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a source-available quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) and designed to interoperate with an open-source scientific ecosystem. It combines conventional HF/DFT, MP2 and coupled-cluster (CCSD, CCSD(T)) correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
+
+**New — a native multireference-wavefunction stack.** Determinant CI (FCI, CASCI), CASSCF and SA-CASSCF, and the second-order perturbation theories built on them: CASPT2 (single-state, MS, XMS), NEVPT2 (uncontracted and strongly contracted), and QDPT2 in the GAMESS convention (MRMP2, MCQDPT2, XMCQDPT2). These run entirely inside OpenQP with no external wavefunction backend. The PT2 methods additionally feed the gradient-driven runtypes — `grad`, `optimize`, `ts`, `mep`, `irc` — through central-difference gradients; FCI, CASCI, CASSCF and SA-CASSCF are energy-only, and `meci`/`mecp`/`neb` are not wired for this stack. See the table below and [`examples/WF_methods`](examples/WF_methods).
 
 ### Functionality
 
@@ -13,11 +15,24 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
 | MP2 | RHF, UHF, and ROHF references; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Energy-only post-SCF correlation with spin-component-scaled variants |
+| Coupled cluster | `method=ccsd` and `method=ccsd(t)` on RHF, UHF, and ROHF references; frozen core via `[cc] nfzc` | Energy-only. Closed-shell path is spin-adapted with DGEMM contractions, OpenMP and MPI; open-shell uses a spin-orbital solver sized for small systems. Integrals are in-core by default; the closed-shell path also offers a Cholesky-factorised route and an integral-direct one (`[cc] cholesky`, `[cc] cholesky_direct`) that skips the packed AO store entirely |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
 | **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
+| Determinant CI | `method=fci`, `method=casci` | Full CI and fixed-orbital active-space CI on an RHF reference; dense or Davidson solver |
+| CASSCF | `method=casscf`, `method=sa-casscf` | Orbital + CI optimization; converger framework (`[casscf] converger = trah` (default) `\| twophase \| ah \| diis \| auto`) and an exact analytic orbital Hessian (`[casscf] hessian=analytic`). The default `trah` is the shared trust-region augmented-Hessian core (`source/trah_core.F90`) that also backs SCF `converger_type=trah`, and never assembles the orbital Hessian. State-averaged via `[state_average] enabled=true` |
+| CASPT2 | `method=caspt2`, `ms-caspt2`, `xms-caspt2` | Determinant-space PT2 on a CASCI/CASSCF reference; Fock or Dyall H0, IPEA/imaginary/level shifts. Multi-set MS-CASPT2 matches OpenMolcas to µEh |
+| NEVPT2 | `[pt2] h0=dyall` (uncontracted) and `contraction=strong` (SC-NEVPT2) | Strongly contracted NEVPT2 reproduces PySCF/ORCA to nEh |
+| QDPT2 (GAMESS convention) | `method=mrmp2`, `mcqdpt2`, `xmcqdpt2` | Single-state / multistate / Granovsky-extended QDPT with the ISA denominator shift (`[pt2] edshft`), on a matrix-free direct engine |
+
+The PT2 methods above (CASPT2/NEVPT2/QDPT2) supply gradients for the
+gradient-driven runtypes through central differences (`grad`, `optimize`,
+`ts`, `mep`, `irc`); `meci`, `mecp` and `neb` are rejected in preflight, and
+FCI/CASCI/CASSCF/SA-CASSCF are energy-only. Scope is validation-grade: RHF
+singlet references and small active spaces; see
+`examples/WF_methods/README.md`.
 
 **Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
 
@@ -124,7 +139,7 @@ cd openqp
 pip install .
 ```
 
-The package install keeps the Python wrapper, native library, headers, and data files together for normal `openqp` command-line use. A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) is also available. Build options (MPI, LibXC/ERI backends, BLAS/LAPACK selection) are documented in the [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/) guide.
+The package install keeps the Python wrapper, native library, headers, and data files together for normal `openqp` command-line use. A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) is also available. The image is a distribution of OpenQP, so the same research/commercial licensing terms apply to its use. Build options (MPI, LibXC/ERI backends, BLAS/LAPACK selection) are documented in the [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/) guide.
 
 ### First Run
 
@@ -199,10 +214,12 @@ Recent MRSF-TDDFT accounts and overview papers:
 
 ### Legal Notice
 
-Current OpenQP versions are source-available under a dual-licensing model:
+OpenQP v1.3.0 and later versions distributed with the current license are
+source-available under a dual-licensing model:
 qualifying academic and nonprofit users may use OpenQP under the free OpenQP
 Research License 1.0, while every use by or for a commercial entity requires a
-separate written commercial license from Open Quantum Inc. Earlier copies
-validly released under GPLv3 retain their historical GPLv3 terms, but those
+separate written commercial license from Open Quantum Inc. OpenQP v1.2.1 and
+earlier release tags remain under the GPLv3 terms that accompanied them, but those
 terms do not extend to current or future versions distributed under the new
-license. See the complete [license](LICENSE) and [licensing guide](LICENSING.md).
+license. See the complete [license](LICENSE), [licensing guide](LICENSING.md),
+and [community and sustainable development statement](SUSTAINABILITY.md).

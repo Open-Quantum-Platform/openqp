@@ -80,6 +80,24 @@ CHARACTER_TABLES: dict[str, dict[str, list[int]]] = {
 
 _MAX_PROPER_ORDER = 8
 
+# Ceiling on the closed operation set; also the highest rotation order any
+# entry point here can report, since a C_n contributes n operations.
+_MAX_GROUP_ORDER = 120
+
+
+def _require_usable_tolerance(tolerance: Any) -> float:
+    """Reject a tolerance that cannot be matched against.
+
+    `_match_permutation` accepts a partner when `dist[j] > tolerance` is false,
+    and every comparison against NaN is false -- so a NaN tolerance makes every
+    candidate operation pass and the detected group is fiction. `nan <= 0` is
+    false too, which is how it used to slip through the positivity test.
+    """
+    value = float(tolerance)
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError('tolerance must be a positive finite number')
+    return value
+
 
 def _normalize(vec: np.ndarray) -> np.ndarray | None:
     norm = float(np.linalg.norm(vec))
@@ -438,8 +456,7 @@ def detect_point_group(
     tolerance:
         Absolute displacement tolerance for accepting a symmetry operation.
     """
-    if tolerance <= 0:
-        raise ValueError('tolerance must be positive')
+    tolerance = _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -502,7 +519,7 @@ def enumerate_full_group(
     atomic_numbers: Any,
     coordinates: Any,
     tolerance: float = 1.0e-5,
-    max_order: int = 120,
+    max_order: int = _MAX_GROUP_ORDER,
 ) -> list[dict[str, Any]]:
     """All point-group operations of a geometry (non-abelian included).
 
@@ -512,6 +529,8 @@ def enumerate_full_group(
     operations). Returns operation payloads with dense 3x3 matrices and
     atom permutations, in the frame of the given coordinates.
     """
+
+    tolerance = _require_usable_tolerance(tolerance)
 
     charges = np.asarray(atomic_numbers, dtype=float).ravel()
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
@@ -615,6 +634,222 @@ def enumerate_full_group(
     operations.sort(key=lambda op: (op['name'] != 'E',
                                     tuple(np.round(op['matrix'], 6).ravel())))
     return operations
+
+
+def _every_atom_is_its_own_class(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    tolerance: float,
+) -> bool:
+    """True when no atom has a partner it could possibly be mapped onto.
+
+    A symmetry operation sends atom i to an atom j of the *same* nuclear
+    charge lying within ``tolerance`` of ``R r_i`` (that is what
+    ``_match_permutation`` accepts), and a rotation or reflection preserves the
+    distance to the center, so ``abs(|r_j| - |r_i|) <= tolerance``. If no two
+    same-Z atoms have radii that close, every operation of the group fixes
+    every atom.
+
+    Radii are measured about the charge-weighted center ``enumerate_full_group``
+    itself centers on, so the two agree by construction rather than by
+    coincidence.
+
+    Linear -- and NEARLY linear -- geometries are excluded rather than screened:
+    a rotation about the molecular axis fixes every atom without being the
+    identity, so the argument above does not close there. Near-linear matters
+    because the match is approximate. A rotation by theta moves an atom by
+    2*sin(theta/2)*d(atom, axis), so every atom within
+    tolerance/(2*sin(theta/2)) of some line is fixed to within tolerance by
+    that rotation. The smallest angle worth guarding against is
+    2*pi/_MAX_GROUP_ORDER: seeds carry order 8 at most, and closure keeps at
+    most _MAX_GROUP_ORDER elements before bailing back to the seeds, so a
+    closed group returned at the default cap has no element of higher order.
+    (A caller passing a larger ``max_order`` to ``enumerate_full_group`` could
+    exceed it; ``rotational_symmetry_number`` never does.)
+
+    That test is made on the off-axis extent of the geometry rather than with
+    `_is_linear`, which takes its axis from the first atom with a non-negligible
+    position: for a nearly linear geometry whose first atom sits close to the
+    center, that axis can point anywhere and the residuals it reports are
+    meaningless. sqrt(s2^2 + s3^2), from the singular values of the centered
+    coordinates, is the smallest achievable root-sum-square distance to any
+    line through the center and needs no axis estimate. The max distance about
+    the best line is at least that over sqrt(natom), which is where the
+    sqrt(natom) below comes from.
+    """
+
+    if charges.size != coords.shape[0] or coords.shape[0] < 2:
+        return False
+    total_charge = float(np.sum(charges))
+    if not np.isfinite(total_charge) or total_charge == 0.0:
+        return False
+
+    # Ten times the matching tolerance for the radius test: erring towards
+    # "these two could be partners" only costs the slow path, while erring the
+    # other way would silently drop a real sigma -- the exact bias this module
+    # exists to remove.
+    margin = max(10.0 * float(tolerance), 1.0e-8)
+
+    centered = coords - np.einsum('i,ij->j', charges, coords) / total_charge
+
+    # Decline on anything collinear enough that a rotation about that line
+    # could fix every atom to within tolerance -- see the docstring for where
+    # the two factors come from.
+    # svd returns min(natom, 3) values, so a diatomic yields two: pad to three
+    # rather than index off the end.
+    singular = np.linalg.svd(centered, compute_uv=False)
+    singular = np.pad(singular, (0, 3 - singular.size))
+    off_axis = float(np.hypot(singular[1], singular[2]))
+    collinear_limit = (np.sqrt(coords.shape[0]) * float(tolerance)
+                       / (2.0 * np.sin(np.pi / _MAX_GROUP_ORDER)))
+    if not np.isfinite(off_axis) or off_axis <= collinear_limit:
+        return False
+
+    radii = np.linalg.norm(centered, axis=1)
+    # Coordinates large enough to overflow the norm make every subsequent
+    # comparison false, which would read as "no atom has a partner" and screen
+    # a symmetric molecule down to sigma = 1. Decline instead.
+    if not bool(np.all(np.isfinite(radii))):
+        return False
+    order = np.lexsort((radii, charges))
+    charges_sorted = charges[order]
+    radii_sorted = radii[order]
+    neighbours = np.diff(radii_sorted) <= margin
+    same_element = charges_sorted[:-1] == charges_sorted[1:]
+    return not bool(np.any(neighbours & same_element))
+
+
+def rotational_symmetry_number(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+) -> int:
+    """Rotational symmetry number sigma for rigid-rotor thermochemistry.
+
+    sigma is the order of the *rotational* subgroup -- the number of proper
+    operations (det = +1) -- and it divides the rotational partition function.
+    Omitting it inflates S_rot by R*ln(sigma): 1.38 cal/mol/K for water,
+    4.94 for benzene or methane.
+
+    Deliberately computed from the geometry here rather than read out of
+    ``symmetry_metadata``: that block is forced to C1 whenever ``[symmetry]``
+    is not enabled, and detection is skipped entirely, so a metadata-sourced
+    sigma would silently be 1 on a default run -- reproducing the bug this
+    exists to fix. Thermochemistry needs no reorientation and no petite maps,
+    so it has no reason to inherit that gate.
+
+    Linear molecules need no special case: the seed set collapses to the two
+    permutation classes a linear geometry admits, giving 2 proper operations
+    for D-inf-h and 1 for C-inf-v.
+
+    On failure returns 1, which reproduces today's (over-counted) entropy
+    rather than inventing symmetry. Because that failure is silent and biases
+    G, callers are expected to *print* the value they got.
+
+    Two documented limits, both of which under-count sigma (i.e. fall back
+    towards today's behaviour) rather than inventing symmetry:
+
+    **Isotopes.** Atom equivalence is keyed on nuclear charge, so this is exact
+    only while every same-Z atom carries the same mass. An isotopologue such as
+    HDO would be given the parent molecule's sigma. Unreachable today -- both
+    geometry readers compute mass as a pure Z-indexed table lookup and there is
+    no isotope symbol or per-atom mass input -- but the Fortran ABI already
+    accepts per-atom masses, so adding such an input must revisit this
+    function. The repair is small: enumerate_full_group already returns a
+    permutation per operation, so skip any operation that does not preserve
+    the mass vector (use a tolerance near 1e-3 amu, not equality -- the QM/MM
+    path mixes link-atom H at 1.00782503223 with force-field H at 1.007947).
+
+    **Proper axes above order 8.** The element survey only tries orders 2..8,
+    so a C10 axis is recorded as C5 and a C11 as C1. In practice group closure
+    recovers them: two perpendicular C2 axes, or two mirror planes, separated
+    by pi/n multiply to C_n, so any molecule with a C_n axis and any second
+    element regenerates the whole C_n. Measured -- a D10h decagon returns
+    sigma = 20, ferrocene 10, and D9h/D11h/D12h/D16h rings 18/22/24/32, all
+    correct. The gap is a CHIRAL C_n (n > 8) with no mirror and no
+    perpendicular C2, where closure has nothing to work with; such a molecule
+    gets a divisor of n.
+
+    **Cost.** A same-element/same-radius screen (see
+    ``_every_atom_is_its_own_class``) answers 1 without touching the detector
+    whenever nothing can be permuted, which is the common large-molecule case
+    and keeps the `hess.read` path cheap. A large molecule that really is
+    symmetric still pays the detector's O(N^4) element survey; that cost lives
+    in the shared detector, not here, and reducing it would move the standard
+    orientation and the petite list too.
+    """
+
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)
+    if coords.shape[0] < 2:
+        return 1
+
+    # A tolerance that is not a positive finite number cannot be matched
+    # against: `_match_permutation` accepts a partner when `dist[j] > tolerance`
+    # is false, and every comparison against NaN is false, so the detector
+    # accepts geometrically invalid operations. Measured on 40 random asymmetric
+    # geometries with tolerance=nan, 12 came back with sigma = 2 instead of 1 --
+    # a Gibbs energy wrong by R*T*ln(2) = 0.41 kcal/mol. The detector entry
+    # points now reject it too, but this one returns 1 instead of raising,
+    # because it is the failure policy the whole function is written to.
+    try:
+        tolerance = _require_usable_tolerance(tolerance)
+    except (TypeError, ValueError):
+        return 1
+
+    # Cheap exact screen before the detector. This runs on EVERY Hessian
+    # analysis, including the otherwise cheap `hess.read` path, and the element
+    # survey is not cheap for a large molecule: _candidate_directions builds one
+    # direction per atom pair and _dedupe_directions compares each against every
+    # direction kept so far, so a geometry with no symmetry -- where none of
+    # them dedupe away -- costs O(N^4). Measured here before this screen
+    # existed: 1.7 s for a random 50-atom geometry and 7.1 s for a 75-atom one,
+    # both to return sigma = 1.
+    #
+    # The screen is a necessary condition, so it can only skip work, never
+    # change an answer: if no atom has a same-element partner at the same
+    # radius, every operation fixes every atom, and for a nonlinear geometry the
+    # only proper operation that does so is the identity. (A planar molecule
+    # also admits its own mirror plane, but that is improper and sigma counts
+    # proper operations only.)
+    try:
+        charges = np.asarray(atomic_numbers, dtype=float).ravel()
+        if _every_atom_is_its_own_class(charges, coords, tolerance):
+            return 1
+    except Exception:
+        pass  # fall through to the detector rather than invent an answer
+
+    try:
+        operations = enumerate_full_group(atomic_numbers, coords,
+                                          tolerance=tolerance)
+    except Exception:
+        return 1
+    rotations = [np.asarray(op['matrix'], dtype=float) for op in operations
+                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
+    if not rotations:
+        return 1
+
+    # sigma is the ORDER OF A GROUP, so the set it is counted from has to be
+    # one. enumerate_full_group does not always return a closed set: when
+    # closure runs past max_order -- tolerance artifacts can make it run away --
+    # it falls back to the unclosed seed list. Counting that gives a number
+    # that is not a group order at all, and sigma appears in G as R*T*ln(sigma),
+    # so a wrong one is a wrong free energy rather than a caught error.
+    #
+    # Verify closure of the proper subset directly. Rotations are closed under
+    # multiplication among themselves (det is multiplicative), so the product
+    # of any two must already be present.
+    stack = np.asarray(rotations)
+    for a in rotations:
+        products = np.einsum('ij,kjl->kil', a, stack)
+        # Nearest stored element, per product. Compared with a tolerance, not
+        # by exact keys: the elements are built by different multiplication
+        # orders, so a genuinely closed group still differs in the last bits.
+        gaps = np.max(np.abs(products[:, None, :, :] - stack[None, :, :, :]),
+                      axis=(2, 3))
+        if float(np.max(np.min(gaps, axis=1))) > 1.0e-6:
+            return 1
+
+    return max(1, len(rotations))
 
 
 def attach_detection_metadata(

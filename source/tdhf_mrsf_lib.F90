@@ -556,16 +556,34 @@ contains
     ! low-lying vectors that drive convergence are never displaced.  Without the
     ! table -- C1, mixed orbitals, detection disabled -- this is inert and the
     ! trial-set dimension chosen by the caller is the weaker mitigation.
-    block
+    seed_coverage: block
       use oqp_tagarray_driver
       use tagarray, only: TA_OK
       integer(8), contiguous, pointer :: pair_irrep(:)
       integer(4) :: ta_status
-      integer :: nirr, ir, kk, best_idx, kpos, nadd, nper, ncur, nmiss
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
       integer :: nstates_req
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
                              status=ta_status)
+      ! IXCORE runs are excluded outright.
+      !
+      ! SinglePoint.ixcore_shift moves every NON-requested occupied orbital to
+      ! about -100000 Ha precisely so its pairs cannot enter the low-energy
+      ! trial set. Those pairs are therefore live and finite here -- xm is
+      ! around +1e5, nowhere near the 1.0d90 mask the victim scan below
+      ! rejects -- so a block with no requested-core pair would happily seed
+      ! itself from a shifted non-core pair, and the substitution could then
+      ! displace a genuine core seed to make room for it. Since the number of
+      ! seeds per block is what decides which roots are reachable, that omits
+      ! or renumbers exactly the core-excited states the run asked for.
+      !
+      ! Declining is the conservative repair: an XAS run keeps the seeding it
+      ! had before block coverage existed. Selecting only among requested-core
+      ! pairs would be the richer fix, but it needs the core index list plumbed
+      ! down here and a reference XAS spectrum to check it against, so it is
+      ! deliberately not attempted blind.
+      if (infos%tddft%ixcore_len /= 0) exit seed_coverage
       if (ta_status == TA_OK) then
         if (size(pair_irrep) == xvec_dim) then
           nirr = int(maxval(pair_irrep))
@@ -609,7 +627,45 @@ contains
                 end if
               end do
               if (best_idx == 0) cycle           ! irrep has no live pair
-              ! pick a victim whose irrep keeps a representative without it
+              ! Pick a victim: the HIGHEST-lying seed whose irrep still has
+              ! another representative.  One rule, deliberately, and the scan
+              ! covers all of 1..nvec rather than only the slack beyond the
+              ! requested states.
+              !
+              ! Read tdhf_mrsf_energy's claim that coverage "is confined to
+              ! whatever room already exists beyond the requested states" as
+              ! describing an intent that measurement did not support.  A guard
+              ! enforcing it was added (908496c0) on the strength of one deck --
+              ! CH3Br-BHHLYP-SOC nstate=6, where a substitution was seen to move
+              ! the 6th singlet 0.191632 -> 0.191978 Ha -- then dropped, then
+              ! restored in review, then measured properly on both sides:
+              !
+              !   CH3Br-BHHLYP-SOC   unconfined, reproduces its shipped
+              !                      td_singlet_energies to 9.8e-10
+              !   H2O_BHHLYP_SOC     unconfined, 1.6e-13
+              !   CH2O 6-31G nstate=6  unconfined gives all six states including
+              !                      5.788160 eV; CONFINED loses that state
+              !                      entirely and reports 6.803920 in its place
+              !
+              ! So the harm the guard was built to prevent no longer occurs on
+              ! the deck that motivated it -- both SOC anchors now detect Cs,
+              ! where two irreps and six seeds leave nothing to repair -- while
+              ! the guard's own cost is reproducible and is exactly the failure
+              ! this whole mechanism exists to stop.  Since nvec =
+              ! min(max(nstates,6), mxvec), confinement disables the repair
+              ! outright for every nstate >= 6, which is where blocks go
+              ! unseeded in the first place.
+              !
+              ! What actually protects the requested roots is the choice of
+              ! victim, not a range restriction: taking the highest-lying seed
+              ! of an over-represented irrep spends the vector least likely to
+              ! be some root's true starting point, and refusing to take the
+              ! last representative of an irrep means the substitution can only
+              ! ever add block coverage, never remove it.
+              !
+              ! If a future deck does show a requested root lost to substitution,
+              ! the fix is a sharper victim rule, not a range guard -- a range
+              ! guard trades a rare regression for a systematic one.
               kpos = 0
               do k = 1, nvec
                 if (itmp(k) < 1 .or. itmp(k) > xvec_dim) cycle
@@ -660,7 +716,7 @@ contains
           end if
         end if
       end if
-    end block
+    end block seed_coverage
 
     ! Get initial vectors: bvec(xvec_dim, nvec)
     bvec_mo = 0.0_dp

@@ -2,9 +2,11 @@
 import os
 import sys
 import oqp
+import json
 import copy
 import time
 import shutil
+import hashlib
 import platform
 import subprocess
 import multiprocessing
@@ -17,18 +19,57 @@ from oqp.library.state_tracking import (
     maximum_overlap_assignment,
 )
 
-# DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
-# exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
-# there is no longer a Python <= 3.12 constraint.
+# DFT-D4 is dynamically linked into liboqp (source/dftd4_interface.F90),
+# exposed through oqp.lib. No Python `dftd4` package is needed, so there is no
+# longer a Python <= 3.12 constraint.
 dftd_installed = ('dftd4 (native)'
                   if hasattr(getattr(oqp, 'lib', None), 'oqp_dftd4_disp')
                   else 'not available')
 
 
-def dftd4_native_disp(atoms, coordinates, functional, do_grad):
+_D4_DAMPING_KEYS = ('s6', 's8', 's9', 'a1', 'a2', 'alp')
+
+
+def _dftd4_damping_values(damping_params):
+    """Return ``(mode, values)`` for the native v2 rational-damping ABI."""
+    if damping_params is None:
+        return 0, [0.0] * len(_D4_DAMPING_KEYS)
+
+    if isinstance(damping_params, dict):
+        missing = [key for key in _D4_DAMPING_KEYS if key not in damping_params]
+        if missing:
+            raise ValueError(
+                'explicit D4 damping parameters are missing: ' + ', '.join(missing)
+            )
+        values = [float(damping_params[key]) for key in _D4_DAMPING_KEYS]
+    else:
+        values = [float(value) for value in damping_params]
+        if len(values) != len(_D4_DAMPING_KEYS):
+            raise ValueError(
+                'explicit D4 damping requires [s6, s8, s9, a1, a2, alp]'
+            )
+
+    if not np.all(np.isfinite(values)):
+        raise ValueError('explicit D4 damping parameters must be finite')
+    return 1, values
+
+
+def _dftd4_damping_from_config(config):
+    """Return explicit damping from the schema, or ``None`` for defaults."""
+    section = config.get('d4', {})
+    raw = {key: section.get(key, '') for key in _D4_DAMPING_KEYS}
+    if not any(str(value).strip() for value in raw.values()):
+        return None
+    return {key: float(raw[key]) for key in _D4_DAMPING_KEYS}
+
+
+def dftd4_native_disp(atoms, coordinates, functional, do_grad,
+                       total_charge=0.0, damping_params=None):
     """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
 
-    atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. 'pbe0'.
+    ``atoms`` are atomic numbers and ``coordinates`` are ``(natom, 3)`` in
+    Bohr. ``total_charge`` is passed to DFT-D4's charge model. Optional
+    ``damping_params`` supplies ``s6, s8, s9, a1, a2, alp`` explicitly.
     """
     natom = len(atoms)
     func = ('bhlyp' if functional.lower() in ('bhhlyp',) else functional).encode('ascii')
@@ -37,10 +78,32 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
     energy_ptr = oqp.ffi.new('double*')
     grad_buf = oqp.ffi.new('double[]', natom * 3)
     ier = oqp.ffi.new('int*')
-    oqp.lib.oqp_dftd4_disp(natom, z, xyz, func, len(func), int(do_grad),
-                           energy_ptr, grad_buf, ier)
+    param_mode, damping_values = _dftd4_damping_values(damping_params)
+    damping = oqp.ffi.new('double[]', damping_values)
+
+    if hasattr(oqp.lib, 'oqp_dftd4_disp_v2'):
+        oqp.lib.oqp_dftd4_disp_v2(
+            natom, z, xyz, float(total_charge), func, len(func),
+            param_mode, damping, int(do_grad), energy_ptr, grad_buf, ier
+        )
+    else:
+        # Source and native library can be temporarily mismatched in developer
+        # environments. Neutral functional-name calculations remain compatible;
+        # never silently discard a requested charge or explicit parameters.
+        if float(total_charge) != 0.0 or param_mode != 0:
+            raise RuntimeError(
+                'charge-aware DFT-D4 requires oqp_dftd4_disp_v2; rebuild OpenQP'
+            )
+        oqp.lib.oqp_dftd4_disp(
+            natom, z, xyz, func, len(func), int(do_grad),
+            energy_ptr, grad_buf, ier
+        )
     if ier[0] != 0:
-        raise RuntimeError(f"dftd4: no D4 damping parameters for functional '{functional}'")
+        if ier[0] == 1:
+            raise RuntimeError(
+                f"dftd4: no D4 damping parameters for functional '{functional}'"
+            )
+        raise RuntimeError(f'dftd4: native interface failed with status {ier[0]}')
     energy = energy_ptr[0]
     if do_grad:
         grad = np.frombuffer(oqp.ffi.buffer(grad_buf, natom * 3 * 8),
@@ -83,6 +146,102 @@ MP2_VARIANT_SCALES = {
 }
 
 
+SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
+    # 'ccsd'/'ccsd(t)' arrive with #302; the two guards were merged into this
+    # one constant so a method cannot be accepted by one and rejected by the
+    # other.
+    'hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
+    'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
+    'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'mrmp2', 'mcqdpt2', 'xmcqdpt2',
+}
+
+
+def _normalized_method_label(method):
+    return str(method).strip().lower()
+
+
+def _raise_unavailable_wavefunction_method(method):
+    raise ValueError(f'Unknown method type {method}')
+
+
+def _no_integral_symmetry_in_child(config):
+    """Force ``[symmetry] use_integral_symmetry`` off in a child job config.
+
+    Finite-difference drivers (numerical Hessian, IR/Raman properties, NACME)
+    run each displaced geometry as its own job and assemble the results in the
+    PARENT's frame.  Those children carry runtype 'grad'/'energy', which passes
+    the allow-list in ``Molecule.reorient_for_integral_symmetry``, so each one
+    rotates itself into the standard frame of ITS OWN geometry -- and a
+    displaced geometry generally has lower symmetry and therefore a different
+    standard frame than the reference.  Measured on water: a displacement that
+    reduces C2v to Cs picks up a rotation of |R - I| = 1.0, an O(1) reorientation
+    of the returned gradient.
+
+    The parent then files those rotated gradients into Hessian rows as if they
+    were input-frame vectors.  Water/6-31G HF numerical frequencies, in cm^-1:
+
+        use_integral_symmetry=false   1828.86   3906.50   4001.54
+        use_integral_symmetry=true   -2675.60    697.64   2728.85
+
+    -- a spurious imaginary mode and no usable number anywhere, reported with
+    exit status 0.
+
+    Turning the reduction off in the children is the correct scope: it is a
+    per-job speed optimisation, never part of the definition of the result, so
+    disabling it can only cost time.  Making the children instead share one
+    fixed parent frame is the better long-term answer, but it needs the
+    input_to_standard back-transform to actually be applied to the outputs
+    (that transform is currently computed and stored but consumed nowhere), so
+    it is deliberately not attempted here.
+    """
+    symmetry = config.setdefault('symmetry', {})
+    symmetry['use_integral_symmetry'] = 'false'
+    return config
+
+
+def _displacement_run_signature(origin_coord, atoms, dx, model_signature):
+    """Short provenance hash naming WHICH run a scratch gradient belongs to.
+
+    Finite-difference scratch files are matched by name on restart. Keying
+    them on the displaced coordinate and sign alone is not enough to identify
+    a gradient: rerun the same deck at a PERTURBED geometry with
+    ``[hess] restart=true`` and every name is bit-identical to the previous
+    run's, so ``grad_wrapper`` reports all of them 'loaded' -- it never
+    compares coordinates -- and the driver returns the PREVIOUS geometry's
+    Hessian for the new structure.
+
+    Measured on water/6-31G HF, populating the scratch at one geometry and
+    rerunning at another, in cm^-1:
+
+        reused scratch   1798.99   4047.08   4141.15
+        actual answer    1384.73   4886.70   5092.94
+
+    -- reported with exit status 0 and no warning.
+
+    Geometry is not the only axis. ``model_signature`` is
+    ``Molecule._hessian_request_signature``, the repository's own definition of
+    "the same Hamiltonian" -- basis and custom libraries, functional, grids and
+    CAM, PCM, DFTB parameter sets, SCF and response settings, QM/MM embedding,
+    and the target state. Without it, changing only the functional and rerunning
+    in the same directory reuses gradients from the old Hamiltonian, which is
+    the identical defect reached by a different axis. The sidecar Hessian cache
+    already signs on exactly these sections; the scratch now agrees with it.
+
+    Array lengths are folded in explicitly because ``tobytes()`` does not encode
+    shape.
+    """
+    coord = np.asarray(origin_coord, dtype=float).ravel()
+    charges = np.asarray(atoms, dtype=float).ravel()
+    digest = hashlib.sha256()
+    digest.update(repr((int(coord.size), int(charges.size), float(dx))).encode())
+    digest.update(coord.tobytes())
+    digest.update(charges.tobytes())
+    digest.update(json.dumps(model_signature, sort_keys=True,
+                             default=str).encode())
+    return digest.hexdigest()[:12]
+
+
 class Calculator:
     """
     OQP calculator base class
@@ -113,7 +272,9 @@ class LastStep(Calculator):
 
         self.do_d4 = mol.config['input']['d4']
         self.res = None
-        self.set_param(param)
+        self.set_param(
+            _dftd4_damping_from_config(mol.config) if param is None else param
+        )
         self.natom = 0
 
         dump_log(
@@ -133,7 +294,11 @@ class LastStep(Calculator):
         coordinates = mol.get_system().reshape((-1, 3))  # Bohr
         natom = len(atoms)
         if self.do_d4:
-            energy, grad = dftd4_native_disp(atoms, coordinates, self.functional, do_grad)
+            total_charge = float(mol.config.get('input', {}).get('charge', 0))
+            energy, grad = dftd4_native_disp(
+                atoms, coordinates, self.functional, do_grad,
+                total_charge=total_charge, damping_params=self.d4_param
+            )
         else:
             energy = 0.0
             grad = np.zeros((natom, 3))
@@ -141,8 +306,7 @@ class LastStep(Calculator):
         return energy, grad
 
     def set_param(self, param):
-        # TODO pass user-defined parameters to dftd4
-        pass
+        self.d4_param = param
 
     def compute(self, mol, grad_list=None):
         # do dftd4
@@ -210,7 +374,14 @@ class SinglePoint(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config['input']['method']
+        # Normalize once, here, rather than at each comparison.  Preflight
+        # lowercases the method, so `method=MP2`/`TDHF`/`CCSD(T)` reached the
+        # dispatcher in its original spelling: the normalized support guard
+        # accepted it and every `self.method == 'mp2'`-style branch then missed,
+        # so the run fell through to `energies = ref_energy` and reported the HF
+        # result for a correlated or excited-state request.  Fixing the fci and
+        # casci branches individually last round left the rest of the family.
+        self.method = _normalized_method_label(mol.config['input']['method'])
         self.runtype = mol.config['input']['runtype']
         self.functional = mol.config['input']['functional']
         self.basis = mol.config['input']['basis']
@@ -232,6 +403,7 @@ class SinglePoint(Calculator):
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
         self._configure_mp2()
+        self._configure_cc()
         self.energy_func = {
             'hf': oqp.hf_energy,
             'rpa': oqp.tdhf_energy,
@@ -242,10 +414,26 @@ class SinglePoint(Calculator):
             'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
             'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
             'mp2': oqp.mp2_energy,
+            'ccsd': oqp.ccsd_t_energy,
+            'ccsd(t)': oqp.ccsd_t_energy,
         }
 
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
+
+    def _configure_cc(self):
+        """Validate the reference and select whether (T) is evaluated."""
+        if self.method not in ('ccsd', 'ccsd(t)'):
+            return
+        if self.functional:
+            raise ValueError(
+                f'method={self.method} requires an HF reference; '
+                'remove [input] functional.')
+        if self.mol.config['scf']['type'] not in ('rhf', 'uhf', 'rohf'):
+            raise ValueError(
+                f'method={self.method} needs an RHF, UHF or ROHF reference '
+                f"(got [scf] type={self.mol.config['scf']['type']}).")
+        self.mol.data.set_cc_triples(self.method == 'ccsd(t)')
 
     def _configure_mp2(self):
         if self.method != 'mp2':
@@ -420,22 +608,60 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2']:
-            raise ValueError(f'Unknown method type {self.method}')
+        if _normalized_method_label(self.method) not in SUPPORTED_SINGLE_POINT_ENERGY_METHODS:
+            _raise_unavailable_wavefunction_method(self.method)
 
         target_converger = self.mol.config['scf']['converger_type']
         try:
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
 
-            # ixcore
-            self.ixcore_shift()
 
+            # ixcore.  The shift overwrites the unselected occupied orbital
+            # energies with -100000 so the TD trial vectors leave the requested
+            # core available.  Coupled cluster reads those same energies as its
+            # amplitude denominators, so applying it there would not restrict
+            # anything -- it would silently return a meaningless correlation
+            # energy.  Skip it, and say so rather than ignoring the keyword
+            # quietly.
+            if self.method in ('ccsd', 'ccsd(t)'):
+                if str(self.mol.config['tdhf']['ixcore']) != '-1':
+                    dump_log(
+                        self.mol,
+                        title='PyOQP: ignoring [tdhf] ixcore for %s; it shifts '
+                              'the orbital energies the CC denominators are '
+                              'built from' % self.method,
+                        section='input',
+                    )
+            else:
+                self.ixcore_shift()
             # compute excitations
             if self.method == 'tdhf':
+                # ixcore is a TDHF/XAS orbital shift and is not used by FCI.
+                self.ixcore_shift()
                 energies = self.excitation(ref_energy)
-            elif self.method == 'mp2':
+            elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
+            elif self.method == 'fci':
+                # Exact comparison here while the CASSCF/PT2 branches below
+                # normalize: preflight lowercases the method, so `method=FCI`
+                # passed validation AND the support guard, then missed this
+                # branch and fell through to `energies = ref_energy` -- the run
+                # reported the RHF energy as its FCI result, silently.
+                from oqp.library.fci import FCI
+                energies = FCI(self.mol).energy(ref_energy)
+            elif self.method == 'casci':
+                from oqp.library.casci import CASCI
+                energies = CASCI(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:
+                from oqp.library.casscf import CASSCF
+                energies = CASSCF(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {
+                'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'mrmp2', 'mcqdpt2', 'xmcqdpt2'
+            }:
+                from oqp.library.caspt2_dyall import native_caspt2_energy
+                energies = native_caspt2_energy(self.mol, ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -445,10 +671,11 @@ class SinglePoint(Calculator):
         return energies
 
     def correlation(self, ref_energy):
-        # ground-state post-SCF correlation (MP2): the Fortran driver updates
-        # mol_energy.energy in place to the correlated total.
-        dump_log(self.mol, title='PyOQP: MP2 correlation steps', section='')
-        self.energy_func['mp2'](self.mol)
+        # Ground-state post-SCF correlation (MP2 / CCSD / CCSD(T)): the Fortran
+        # driver updates mol_energy.energy in place to the correlated total.
+        label = self.method.upper()
+        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='')
+        self.energy_func[self.method](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
 
@@ -479,13 +706,27 @@ class SinglePoint(Calculator):
         # guess/basis stage; stage the maps once the basis exists.
         symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
                            self.mol.symmetry_metadata.get('use_integral_symmetry'))
-        # Start every reference from the reduction OFF. The enable flag lives in
-        # the tag store, which survives across jobs sharing a Molecule, so a run
-        # that reoriented once could otherwise leave it set for a later job whose
-        # maps were never staged -- petite quartet weights against a shell map
-        # for a different geometry. stage_integral_symmetry_maps turns it back
-        # on when, and only when, the reduction is genuinely active.
-        self._set_petite_enabled(False)
+
+        # Invalidate any PREVIOUSLY staged reduction here, at the very top,
+        # before anything can consume it.
+        #
+        # Staging happens further down, once the basis exists, and clearing
+        # only there is too late: with init_scf != 'no', _init_convergence()
+        # below runs a full two-electron SCF first, and it may do so in a
+        # DIFFERENT basis (`init_basis`). A reused molecule whose geometry or
+        # basis has changed would hand that initial SCF the previous run's
+        # maps with sym_petite_enable=1 -- a corrupted starting solution, and
+        # potentially a target SCF converged into a different basin.
+        #
+        # Asks the TAG STORE, not the metadata: load_config() replaces the
+        # metadata dict wholesale, so a status-based check answers False in
+        # exactly the case that strands tags. getattr keeps the lightweight
+        # stand-in molecules used across the test suite working.
+        previously_staged = getattr(
+            self.mol, 'has_staged_integral_symmetry', lambda: False)()
+        if previously_staged:
+            self.mol.clear_integral_symmetry_state()
+
         if symmetry_on:
             self.mol.reorient_for_integral_symmetry()
 
@@ -497,8 +738,66 @@ class SinglePoint(Calculator):
 
         self.swapmo()
 
-        if symmetry_on:
+        # Stage fresh maps now that the basis exists. `previously_staged` is
+        # still consulted so that a molecule which HAD a reduction and has now
+        # turned it off still reaches the method's own bookkeeping (status and
+        # log), even though its tags were already dropped above.
+        if symmetry_on or previously_staged:
             self.mol.stage_integral_symmetry_maps()
+            # Staging can decline for reasons only visible once the basis
+            # exists (shell/AO mismatch, overlap invariance, non-abelian
+            # closure). Those runs were changing frame for no benefit at all:
+            # reorientation had already rotated AND translated the molecule,
+            # and nothing put it back. Undo it, and refresh the guess -- the
+            # 1e integrals were built in the rotated frame, so the coordinates
+            # cannot go back without them. The cost lands only on a path that
+            # is already getting no reduction.
+            meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+            restore = meta.pop('_reorient_input_coords', None)
+            status = (meta.get('integral_symmetry') or {}).get('status')
+            if restore is not None and status != 'active':
+                self.mol.update_system(
+                    np.asarray(restore, dtype=float).ravel())
+                self._set_petite_enabled(False)
+                # The stored detection describes the STANDARD frame the
+                # geometry has just been moved out of. Its operations feed the
+                # MO/state/mode labellers, so leaving it would label the
+                # restored geometry with the wrong frame's operators -- the
+                # same defect the continue_geom path had. Re-detect.
+                if (getattr(self.mol, 'symmetry_metadata', None) or {}) \
+                        .get('status', 'disabled') != 'disabled':
+                    self.mol._detect_symmetry_metadata()
+                # Rebuild everything the moved coordinates invalidate --
+                # including the guess, via the SAME initialisation path this
+                # run was configured to use.
+                #
+                # A bare _prep_guess() here was not enough: it discards
+                # whatever _init_convergence() produced, and swapmo() has
+                # already run by this point, so a job relying on a projected
+                # [scf] init_scf guess or on [guess] swapmo -- a restricted/MOM
+                # core-hole calculation, say -- reached _run_scf() without the
+                # initialisation it asked for, and could converge to a
+                # different solution. Re-run the configured path, then re-apply
+                # the orbital swaps, exactly as the code above does.
+                #
+                # An earlier version stopped at the integrals, to keep the
+                # orbitals produced by [scf] init_scf. But AO basis functions
+                # do not rotate with the molecule: the p and d components on
+                # each atom mix under the frame change, so a coefficient vector
+                # computed in the standard frame describes a DIFFERENT physical
+                # density once the atoms are back in the input frame. Keeping
+                # those orbitals preserved a wavefunction that no longer means
+                # what it meant, and _run_scf() then started from an internally
+                # inconsistent guess -- density, Fock and orbital energies all
+                # belonging to a frame the molecule has left. Regenerating is
+                # the honest repair; a stale starting point is not worth
+                # protecting, and the cost lands only on a path that is already
+                # getting no reduction.
+                if self.init_scf != 'no' and do_init_scf:
+                    self._init_convergence()
+                else:
+                    self._prep_guess()
+                self.swapmo()
 
         scf_flag = self._run_scf()
 
@@ -695,8 +994,14 @@ class SinglePoint(Calculator):
 
         # --- Stage 3: stability safeguard ---
         # Applied only when the user opts in with [scf] stability=true.  Covers
-        # ground-state targets (method='hf') and spin-flip excited-state
-        # reference SCFs (method='tdhf' with type sf/mrsf/umrsf).  A
+        # ground-state targets (method='hf', and the coupled-cluster methods
+        # that build on the same ground-state determinant) and spin-flip
+        # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
+        # CCSD and CCSD(T) belong with 'hf' here: they correlate the converged
+        # reference, so an unstable UHF/ROHF determinant is exactly as wrong a
+        # starting point for them as it is for the HF energy itself, and
+        # silently ignoring the option the user asked for is the worst of the
+        # available behaviours.  A
         # DIIS-converged but *unstable* open-shell solution is just as wrong a
         # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
         # building MRSF on it makes the reference (and the excited states)
@@ -707,8 +1012,9 @@ class SinglePoint(Calculator):
         # is reverted below by restoring the snapshot.
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
+        ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
         if (converged and stability and not rstctmo and primary != 'trah'
-                and (self.method == 'hf' or spin_flip_reference)):
+                and (ground_state_target or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
@@ -912,7 +1218,7 @@ class Gradient(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.method = mol.config["input"]["method"]
+        self.method = _normalized_method_label(mol.config["input"]["method"])
         self.td = mol.config["tdhf"]["type"]
         self.grads = mol.config["properties"]["grad"]
         self.natom = mol.data["natom"]
@@ -937,6 +1243,32 @@ class Gradient(Calculator):
     def gradient(self):
         # check method
         if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+            # Native PT2 family (energy-only kernels): central-difference
+            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
+            # avoid a circular module dependency.
+            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
+            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                grads = pt2_numerical_gradient(self.mol, self.grads)
+                self.mol.grads = grads
+                # Molecule.get_results() reads the NATIVE data._data.grad
+                # buffer, which only the Fortran gradient kernels ever write.
+                # Handing the finite-difference result back to the optimizer
+                # while leaving that buffer untouched meant guess.save_mol=true
+                # serialized stale (or uninitialized) numbers as the public
+                # "grad" result: right optimization, wrong saved JSON.  Mirror
+                # the selected gradient into it the way the native paths do.
+                #
+                # grads is indexed BY STATE ((nstate, natom, 3)), matching
+                # tddft_grad -- not by position in the request list.  So
+                # grads[0] is always S0: a `[properties] grad=1` run would have
+                # optimized with S1 while publishing the S0 gradient.  Write
+                # the last requested state, which is what the TDDFT path leaves
+                # in the buffer after looping over self.grads in order.
+                _sel = [int(s) for s in np.atleast_1d(self.grads)]
+                if len(grads) and _sel and 0 <= _sel[-1] < len(grads):
+                    self.mol.set_grad(grads[_sel[-1]])
+                return grads
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -1118,7 +1450,18 @@ class Hessian(Calculator):
             hessian, flags = self.hess_func()
             if 'failed' in flags:
                 dump_log(self.mol, title='PyOQP: numerical hessian calculations failed')
-                return None
+                # Raise, do not just return None. The failure was detected and
+                # acted on internally -- the scratch directory is deliberately
+                # kept below -- but it never reached the exit status, so a run
+                # in which EVERY displacement failed exited 0 and any CI job,
+                # queue script or geometry scan driving OpenQP by exit code
+                # recorded it as a success. Silent success is worse than a
+                # wrong number: nothing downstream can catch it. Matches how a
+                # non-converged SCF already behaves.
+                nfailed = sum(1 for f in flags if f == 'failed')
+                raise RuntimeError(
+                    'numerical Hessian: %d of %d displacement gradients '
+                    'failed; scratch kept for inspection' % (nfailed, len(flags)))
             else:
                 self.mol.hessian = np.asarray(hessian, dtype=float)
                 if not analysis:
@@ -1153,14 +1496,34 @@ class Hessian(Calculator):
             info=(self.mol.get_atoms(), freqs, modes),
         )
 
+        # Rigid-rotor inputs that do not depend on temperature. Both are derived
+        # here rather than read from symmetry_metadata: that block is forced to
+        # C1 whenever [symmetry] is off, so a metadata-sourced sigma would be 1
+        # on a default run. `linear` comes from the principal moments so the
+        # cached-Hessian (hess.read) path works without a cache-format change.
+        # Imported here rather than at module scope: symmetry_detect is needed
+        # only on this path, and a top-level import breaks the stub-based module
+        # loading several tests use. molecule.py imports it the same way.
+        from oqp.library.symmetry_detect import rotational_symmetry_number
+
+        thermo_atoms = self.mol.get_atoms()
+        thermo_linear = (len(thermo_atoms) > 1 and int(np.count_nonzero(
+            np.asarray(inertia, dtype=float) > 1.0e-8)) < 3)
+        thermo_sigma = rotational_symmetry_number(
+            thermo_atoms, self.mol.get_system(),
+            tolerance=float((getattr(self.mol, 'symmetry_metadata', None)
+                             or {}).get('tolerance', 1.0e-5)))
+
         for t in self.temperature:
             thermal_data = thermal_analysis(
                 energy=energy,
-                atoms=self.mol.get_atoms(),
+                atoms=thermo_atoms,
                 mass=self.mol.get_mass(),
                 freqs=freqs,
                 inertia=inertia,
                 temperature=t,
+                linear=thermo_linear,
+                sigma=thermo_sigma,
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
@@ -1190,6 +1553,7 @@ class Hessian(Calculator):
             for section, values in raw_config.items()
         }
         config['input']['runtype'] = 'energy'
+        _no_integral_symmetry_in_child(config)
         if config.get('guess', {}).get('type') == 'json':
             config['guess']['type'] = 'huckel'
         config['guess']['save_mol'] = 'false'
@@ -1202,6 +1566,17 @@ class Hessian(Calculator):
             usempi=False,
         )
         runner.mol.update_system(np.asarray(coord_bohr, dtype=float).reshape((-1, 3)))
+        # The Runner initialised symmetry from the UNDISPLACED geometry in the
+        # copied config; the displaced coordinates are only installed on the
+        # line above, and nothing re-runs detection. So the child would carry
+        # the reference geometry's point group and operations -- and a
+        # displaced geometry generally has lower symmetry. Turning integral
+        # symmetry off in the child (above) stops the frame moving, but it does
+        # not refresh the detection those labels and any response blocking are
+        # built from.
+        if (getattr(runner.mol, 'symmetry_metadata', None) or {}) \
+                .get('status', 'disabled') != 'disabled':
+            runner.mol._detect_symmetry_metadata()
         runner.run()
 
         dipole = np.zeros(3, dtype=np.float64)
@@ -1382,6 +1757,8 @@ class Hessian(Calculator):
             )
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
+        total_charge = float(self.mol.config.get('input', {}).get('charge', 0))
+        damping_params = _dftd4_damping_from_config(self.mol.config)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1389,7 +1766,10 @@ class Hessian(Calculator):
         ncoord = flat.size
 
         def disp_grad(coord_flat):
-            _, grad = dftd4_native_disp(atoms, coord_flat.reshape((-1, 3)), functional, True)
+            _, grad = dftd4_native_disp(
+                atoms, coord_flat.reshape((-1, 3)), functional, True,
+                total_charge=total_charge, damping_params=damping_params
+            )
             return np.asarray(grad, dtype=float).reshape(-1)
 
         hess = np.zeros((ncoord, ncoord))
@@ -1400,6 +1780,168 @@ class Hessian(Calculator):
         # symmetrize (the FD asymmetry is O(dx**2))
         return 0.5 * (hess + hess.T)
 
+    def _symmetry_unique_displacements(self, origin_coord, dx):
+        """Atoms whose displaced gradients determine the whole Hessian.
+
+        Returns (uniq, ops) or (None, None) when the full 6N path must run.
+        Opt-in via [hess] symmetry_unique; the shipped path is untouched
+        otherwise.
+
+        The Hessian of a symmetric molecule obeys
+        H[P(a), P(c)] = M H[a, c] M^T for every operation (M, P), so only one
+        atom per orbit needs displacing; the other rows are images. The orbit
+        list is derived FRESH from the current geometry rather than from
+        symmetry_metadata -- a TS search or IRC hands this function a geometry
+        the stored detection no longer describes.
+
+        Only the abelian D2h-family operations are used. Every one of them is
+        an involution (P[a] = b implies P[b] = a), which is what guarantees
+        that each non-representative atom is the image of a representative
+        under some listed operation. The coverage is still proven from the
+        permutations alone BEFORE any gradient job is launched: if anything
+        were uncovered we run the full path, rather than discovering a hole
+        after the reduced jobs have already been paid for.
+        """
+        meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+        requested = self.mol._parse_bool_like(
+            self.mol.config.get('hess', {}).get('symmetry_unique', False))
+
+        def decline(reason):
+            # A silently ignored request is the failure mode this whole PR
+            # family is about, so say which of the seven exits was taken.
+            if requested:
+                meta['hess_symmetry_unique'] = {'status': reason}
+                print('   PyOQP NOTE: [hess] symmetry_unique requested but '
+                      'declined (%s); using the full 6N displacement set.'
+                      % reason)
+            return None, None
+
+        if not requested:
+            return None, None
+        if meta.get('status', 'disabled') == 'disabled':
+            return decline('symmetry_disabled')
+        tolerance = float(meta.get('tolerance', 1.0e-5))
+        # A detection tolerance looser than the displacement cannot tell a
+        # displaced geometry from the reference, which is exactly when images
+        # must NOT be trusted.
+        if tolerance > dx / 10.0:
+            return decline('tolerance_too_loose_for_dx')
+        try:
+            from oqp.library.symmetry_detect import detect_point_group
+            detection = detect_point_group(
+                self.mol.get_atoms(),
+                np.asarray(origin_coord, dtype=float).reshape(-1, 3),
+                tolerance=tolerance)
+        except Exception:
+            return decline('detection_failed')
+        ops = detection.get('operations') or []
+        if len(ops) < 2:
+            return decline('no_symmetry_at_this_geometry')
+
+        natom = len(np.asarray(origin_coord).ravel()) // 3
+        perms = np.array([op['permutation'] for op in ops], dtype=int)
+        rep = perms.min(axis=0)
+        uniq = sorted(set(rep.tolist()))
+        if len(uniq) >= natom:
+            return decline('every_atom_is_its_own_orbit')
+
+        # Prove coverage from the permutations alone, before spending jobs.
+        filled = np.zeros(natom, dtype=bool)
+        filled[uniq] = True
+        for perm in perms:
+            for a in uniq:
+                filled[perm[a]] = True
+        if not filled.all():
+            return decline('orbit_coverage_incomplete')
+
+        # Everything above is about the NUCLEI. The reconstruction
+        # H[P(a),P(c)] = M H[a,c] M^T additionally requires the ELECTRONIC
+        # solution to respect those operations, and a symmetric geometry does
+        # not guarantee a symmetric solution: a symmetry-broken unrestricted
+        # branch -- stretched, antiferromagnetic -- sits at a perfectly
+        # symmetric geometry with a density that does not transform. An
+        # operation then maps the branch being differentiated onto a different
+        # degenerate one, the identity fails, and the reconstructed rows plus
+        # the final symmetrisation quietly produce a wrong Hessian. The full
+        # 6N path keeps that asymmetry instead of projecting it away.
+        #
+        # The MO labeller already measures exactly this, in the input frame
+        # (matrix_key='matrix_input_frame'), returning 'mixed' for an orbital
+        # that matches no irrep row within tolerance. Occupied orbitals are
+        # what the density is built from, so a mixed one there means the
+        # reference solution is not the symmetric one. Declining costs only
+        # time; trusting a broken branch costs the answer.
+        # The labeller reads meta['detection'] -- the STORED detection -- while
+        # everything above deliberately uses `ops` detected fresh from
+        # origin_coord, because a TS search or IRC hands this routine a
+        # geometry the stored block no longer describes. Labelling against the
+        # stale one would let the guard pass for the wrong reason: stale C1
+        # metadata has a single irrep, so EVERY orbital comes back pure, and
+        # the fresh C2v operations would then be used to reconstruct a
+        # symmetry-broken solution's Hessian. A guard that cannot fail is not a
+        # guard. Require the stored detection to be the one just computed, and
+        # decline otherwise rather than labelling against the wrong group.
+        stored = meta.get('detection') or {}
+        stored_ops = stored.get('operations') or []
+        if str(stored.get('point_group', '')).lower() \
+                != str(detection.get('point_group', '')).lower():
+            return decline('stored_detection_is_stale_for_this_geometry')
+        if len(stored_ops) != len(ops):
+            return decline('stored_detection_is_stale_for_this_geometry')
+        for stored_op, fresh_op in zip(stored_ops, ops):
+            if list(stored_op.get('permutation', [])) \
+                    != list(fresh_op.get('permutation', [])):
+                return decline('stored_detection_is_stale_for_this_geometry')
+
+        try:
+            labels = self.mol.label_molecular_orbitals()
+        except Exception:
+            return decline('mo_labelling_failed')
+        if not labels or labels.get('status') != 'ok':
+            return decline('mo_labelling_unavailable')
+        try:
+            nalpha = int(np.asarray(self.mol.data['nelec_A']).ravel()[0])
+            nbeta = int(np.asarray(self.mol.data['nelec_B']).ravel()[0])
+            occupied = list(labels['alpha']['labels'][:nalpha])
+            beta_labels = labels.get('beta')
+            if beta_labels:
+                occupied += list(beta_labels['labels'][:nbeta])
+        except Exception:
+            return decline('occupied_labels_unavailable')
+        if not occupied:
+            return decline('no_occupied_orbitals_to_check')
+        if 'mixed' in occupied:
+            return decline('symmetry_broken_electronic_solution')
+
+        # A numerical Hessian of an EXCITED state differentiates that root, so
+        # the root has to respect the operations too -- pure occupied SCF
+        # orbitals say nothing about it. A degenerate or symmetry-mixed excited
+        # state breaks the reconstruction identity exactly as a broken ground
+        # state does, and the result would be reconstructed and symmetrised
+        # without complaint.
+        if int(self.state) > 0:
+            try:
+                states = self.mol.label_excited_states()
+            except Exception:
+                return decline('state_labelling_failed')
+            if not states or states.get('status') != 'ok':
+                return decline('state_labelling_unavailable')
+            state_labels = list(states.get('labels') or [])
+            # [hess] state is 1-based over excited roots: state 1 is the first
+            # entry produced by the labeller.
+            index = int(self.state) - 1
+            if index >= len(state_labels):
+                return decline('requested_state_not_labelled')
+            if str(state_labels[index]).lower() == 'mixed':
+                return decline('symmetry_mixed_excited_state')
+
+        meta['hess_symmetry_unique'] = {
+            'status': 'active',
+            'unique_atoms': [int(a) for a in uniq],
+            'n_operations': len(ops),
+        }
+        return uniq, ops
+
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
         nproc = self.mol.config['hess']['nproc']
@@ -1409,20 +1951,41 @@ class Hessian(Calculator):
         # prepare scratch folder
         os.makedirs(dir_hess, exist_ok=True)
 
-        # shift origin 3N coord with 6N displacement
+        # shift origin 3N coord with 6N displacement -- or, when the
+        # symmetry-unique reduction is opted in, displace one atom per orbit
+        # and reconstruct the remaining Hessian rows as images afterwards.
         ncoord = len(origin_coord)
-        shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
+        uniq, sym_ops = self._symmetry_unique_displacements(origin_coord, dx)
+        if uniq is not None:
+            cols = [3 * a + g for a in uniq for g in range(3)]
+            shift = np.zeros((len(cols), ncoord))
+            shift[np.arange(len(cols)), cols] = dx
+        else:
+            cols = list(range(ncoord))
+            shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
         shifted_coord = np.concatenate((origin_coord + shift, origin_coord - shift), axis=0)
         ndim = len(shifted_coord)
+        nred = len(cols)
 
         # prepare grad calculations
         self.mol.save_data()
         self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
+        # Provenance for the scratch tag -- see _displacement_run_signature.
+        run_signature = _displacement_run_signature(
+            origin_coord, atoms, dx,
+            self.mol._hessian_request_signature(self.state))
         variables_wrapper = [
             {
                 'idx': idx,
+                # Scratch files are keyed by the run signature above plus WHICH
+                # coordinate was displaced and in which direction, never by list
+                # position: a restart whose unique-atom list differs
+                # (symmetry_unique toggled, geometry perturbed) then simply
+                # misses and recomputes instead of silently reading a gradient
+                # for a different displacement -- or a different geometry.
+                'tag': f'{run_signature}c{cols[idx % nred]}{"p" if idx < nred else "m"}',
                 'atoms': atoms,
                 'coord': coord,
                 'dir_hess': dir_hess,
@@ -1465,10 +2028,46 @@ class Hessian(Calculator):
         pool.close()
 
         grads = self.mpi_manager.bcast(grads)
+        # `flags` is appended to only inside the rank-0 guard above, and only
+        # the result array was broadcast. Every other rank therefore saw an
+        # empty list, read no 'failed', took the success branch, and walked on
+        # into the analysis and the next collective -- while rank 0 raised and
+        # unwound past main()'s finalize_mpi(). One rank aborting while the
+        # rest block in a collective is a hang, not a failure. The verdict has
+        # to be broadcast alongside the data it describes.
+        flags = self.mpi_manager.bcast(flags)
         # compute hessian
-        forward = np.array(grads[0:ncoord])
-        backward = np.array(grads[ncoord:])
-        hessian = (forward - backward) / (2 * dx)
+        forward = np.array(grads[0:nred])
+        backward = np.array(grads[nred:])
+        rows = (forward - backward) / (2 * dx)
+
+        if uniq is None:
+            hessian = rows
+        else:
+            # Images: H[P(a), P(c)] = M H[a, c] M^T. matrix_input_frame is the
+            # operation expressed in the frame the job actually runs in; the
+            # abelian operations are involutions, so P[a] = b covers b from a.
+            natom = ncoord // 3
+            hessian = np.zeros((ncoord, ncoord))
+            filled = np.zeros(natom, dtype=bool)
+            for k, a in enumerate(uniq):
+                hessian[3 * a:3 * a + 3, :] = rows[3 * k:3 * k + 3, :]
+                filled[a] = True
+            for op in sym_ops:
+                matrix = np.asarray(
+                    op.get('matrix_input_frame', op['matrix']), dtype=float)
+                perm = np.asarray(op['permutation'], dtype=int)
+                for a in uniq:
+                    b = int(perm[a])
+                    if filled[b]:
+                        continue
+                    for c in range(natom):
+                        hessian[3 * b:3 * b + 3, 3 * perm[c]:3 * perm[c] + 3] = \
+                            matrix @ hessian[3 * a:3 * a + 3, 3 * c:3 * c + 3] \
+                            @ matrix.T
+                    filled[b] = True
+            # Guaranteed by the pre-launch coverage proof.
+            assert filled.all()
 
         # symmetrize hessian
         hessian = (hessian + hessian.T) / 2
@@ -1485,11 +2084,20 @@ def _run_oqp_external(inp, env_overrides=None):
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
     # is run from source without a pip install.
-    openqp_exe = shutil.which('openqp')
-    if openqp_exe:
-        cmd = [openqp_exe, inp, '--silent']
-    else:
-        cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
+    # Prefer the running interpreter, NOT whatever `openqp` is first on PATH.
+    # sys.executable is guaranteed consistent with the parent; PATH is not.
+    # Invoking a venv's openqp by absolute path without putting that venv on
+    # PATH -- exactly what a side-by-side comparison of two builds does -- had
+    # the parent running one OpenQP while every displacement child ran another.
+    # Reproduced: with the venv off PATH the children resolved to a different
+    # install and all 12 displacements died on an option that build did not
+    # have; with the venv first on PATH the same input completed.
+    #
+    # Silent in the ordinary case, because parent and child agree whenever
+    # there is one install -- which is every developer machine and CI. It bites
+    # only when two builds coexist, i.e. precisely when someone is comparing
+    # them and most needs the answer to be trustworthy.
+    cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
@@ -1512,11 +2120,15 @@ def grad_wrapper(key_dict):
     state = key_dict['state']
     restart = key_dict['restart']
 
-    # prepare log files
-    inp = f'{dir_hess}/{project_name}.{idx}.tmp.inp'
-    xyz = f'{dir_hess}/{project_name}.{idx}.tmp.xyz'
-    dat = f'{dir_hess}/{project_name}.{idx}.grad_{state}'
-    log = f'{dir_hess}/{project_name}.{idx}.tmp.log'
+    # prepare log files -- all keyed by the coordinate-identity tag, so the
+    # writer (the child's properties.title below) and the reader (dat) can
+    # never disagree, and a restart with a different displacement list misses
+    # cleanly instead of reading a gradient for a different displacement.
+    tag = key_dict.get('tag', str(idx))
+    inp = f'{dir_hess}/{project_name}.{tag}.tmp.inp'
+    xyz = f'{dir_hess}/{project_name}.{tag}.tmp.xyz'
+    dat = f'{dir_hess}/{project_name}.{tag}.grad_{state}'
+    log = f'{dir_hess}/{project_name}.{tag}.tmp.log'
 
     # attempt to read computed data
     if restart and os.path.exists(dat):
@@ -1524,15 +2136,35 @@ def grad_wrapper(key_dict):
     else:
         status = 'computed'
 
+        # Remove any gradient left over from an earlier run BEFORE launching
+        # the child. The failure detection below is `np.loadtxt(dat)` raising,
+        # so a stale file makes a failed child look like a successful one.
+        # Reproduced on this branch: with a previous run's scratch in place, a
+        # numerical Hessian in which every one of the 18 displacements failed
+        # still exited 0 and printed a full set of frequencies -- assembled
+        # entirely from the old gradients. That is exactly the silent success
+        # the raise added in this PR is meant to stop, and the raise never
+        # fired because nothing reported a failure.
+        #
+        # FileNotFoundError is tolerated rather than pre-checked with exists():
+        # two runs sharing one scratch directory can race between the check and
+        # the unlink, and losing that race must not abort the worker -- an
+        # unhandled raise here reaches the pool and strands the other ranks.
+        try:
+            os.remove(dat)
+        except FileNotFoundError:
+            pass
+
         # modify config
         config['input']['runtype'] = 'grad'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
         config['guess']['continue_geom'] = 'false'
         config['properties']['grad'] = config['hess']['state']
         config['properties']['export'] = 'True'
-        config['properties']['title'] = f'{project_name}.{idx}'
+        config['properties']['title'] = f'{project_name}.{tag}'
         config['hess']['temperature'] = ','.join([str(x) for x in config['hess']['temperature']])
         config['tests']['exception'] = 'false'
 
@@ -1566,8 +2198,16 @@ def grad_wrapper(key_dict):
             dump_log(mol, title='', section='end')
     try:
         grad = np.loadtxt(dat).reshape(-1)
+        # A child that died mid-write leaves a short or non-finite file, which
+        # np.loadtxt either parses into the wrong shape or rejects with
+        # ValueError -- neither of which is FileNotFoundError, so the old
+        # handler let it through as a successful displacement or crashed the
+        # worker. The NAC wrapper already validates like this; the Hessian one
+        # did not.
+        if grad.size != np.asarray(coord).size or not np.all(np.isfinite(grad)):
+            raise ValueError('incomplete numerical-Hessian worker output')
 
-    except FileNotFoundError:
+    except (OSError, ValueError):
         grad = np.zeros_like(coord)
         status = 'failed'
 
@@ -2046,7 +2686,12 @@ class NAC(Calculator):
         nacv, dcv, flags = self.nac_func()
         if 'failed' in flags:
             dump_log(self.mol, title='PyOQP: numerical nac calculations failed')
-            return None
+            # Same reasoning as the numerical Hessian above: a detected failure
+            # that does not reach the exit status is a silent success.
+            nfailed = sum(1 for f in flags if f == 'failed')
+            raise RuntimeError(
+                'numerical NAC: %d of %d displacement calculations failed; '
+                'scratch kept for inspection' % (nfailed, len(flags)))
         else:
             self.mol.nac = nacv
 
@@ -2189,6 +2834,9 @@ class NAC(Calculator):
         pool.close()
 
         dcm = self.mpi_manager.bcast(dcm)
+        # Same rank-0-only `flags` hazard as the numerical Hessian above; this
+        # driver has the identical shape, so it needs the identical broadcast.
+        flags = self.mpi_manager.bcast(flags)
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
@@ -2242,8 +2890,19 @@ def nacme_wrapper(key_dict):
     else:
         status = 'computed'
 
+        # Same reasoning as grad_wrapper: the failure signal is the read below
+        # raising, so a coupling left by an earlier run would let a failed
+        # child report success. The cache marker guards the restart='loaded'
+        # path above, but not this one -- an unmarked or rejected file is still
+        # sitting there and still parses.
+        try:
+            os.remove(dat)
+        except FileNotFoundError:
+            pass
+
         # modify config
         config['input']['runtype'] = 'nacme'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file

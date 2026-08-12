@@ -1,0 +1,52 @@
+# RHF/STO-3G/CASSCF/ENERGY of H2O in a CAS(4e,4o) active space.
+# Native Newton orbital optimizer; reference PySCF CASSCF = -75.0085688625.
+[input]
+system=
+   O   0.000000000   0.000000000   0.117300000
+   H   0.000000000   0.757200000  -0.469200000
+   H   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=energy
+basis=sto-3g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=3
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=50
+optimizer=newton
+root=0
+gradient_norm_tol=1.0e-7
+energy_decrease_tol=1.0e-10
+step_norm_tol=1.0e-8
+max_rotation_norm=2.0e-1
+level_shift=1.0e-3
+canonicalize=true

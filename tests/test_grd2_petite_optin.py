@@ -116,6 +116,24 @@ class OnlySymmetricDensitiesOptIn(unittest.TestCase):
 
 
 class PetiteStateIsResetPerReference(unittest.TestCase):
+    """A staged reduction must not survive into the next job on the same
+    Molecule: the enable flag and the maps live in the tag store, which
+    outlives one `reference()` call.
+
+    This asserted the literal text ``self._set_petite_enabled(False)`` followed
+    by ``if symmetry_on:``, and its position relative to the reorientation
+    call. That went red the moment the invalidation was strengthened -- main
+    replaced the flag reset with ``clear_integral_symmetry_state()``, which
+    DELETES ``OQP::sym_petite_enable`` along with the maps instead of zeroing
+    it, so absence and 0 cannot disagree. The stronger implementation failed a
+    test written for the weaker one, which is a statement about source text
+    rather than about the invariant.
+
+    It now drives the real `reference()` with the collaborators stubbed and
+    records the call order, so it tracks the invariant it is named for and is
+    indifferent to which mechanism enforces it.
+    """
+
     def test_density_guard_persists_the_fallback_for_xc_and_gradients(self):
         """A local JK fallback must also disable later reduced consumers."""
         source = ROOT.joinpath('source/scf_addons.F90').read_text()
@@ -126,15 +144,64 @@ class PetiteStateIsResetPerReference(unittest.TestCase):
             'call tagarray_get_data(infos%dat, OQP_sym_petite,', guard)
         self.assertIn('global_petite(1) = 0_8', guard)
 
-    def test_reference_starts_from_the_reduction_off(self):
-        """The enable flag lives in the tag store and survives across jobs."""
-        source = ROOT.joinpath('pyoqp/oqp/library/single_point.py').read_text()
-        reset = source.index('self._set_petite_enabled(False)\n        if symmetry_on:')
-        reorient = source.index('self.mol.reorient_for_integral_symmetry()')
-        self.assertLess(reset, reorient,
-                        'the reset must precede reorientation, so a stale '
-                        'enable cannot survive into a job whose maps are '
-                        'never staged')
+    class _Stop(Exception):
+        pass
+
+    def test_the_stale_reduction_is_dropped_before_anything_can_consume_it(self):
+        import types
+
+        from oqp.library import single_point as sp
+
+        calls = []
+        obj = sp.SinglePoint.__new__(sp.SinglePoint)
+        obj.method = 'hf'
+        obj.init_scf = 'no'
+        obj._init_convergence = lambda: calls.append('init_convergence')
+        obj._prep_guess = lambda: calls.append('prep_guess')
+        obj.swapmo = lambda: calls.append('swapmo')
+        obj._set_petite_enabled = lambda flag: calls.append(f'petite_enabled({flag})')
+
+        def run_scf():
+            calls.append('run_scf')
+            raise self._Stop()
+
+        obj._run_scf = run_scf
+
+        mol = types.SimpleNamespace()
+        # A molecule carrying a reduction staged by a PREVIOUS job.
+        mol.symmetry_metadata = {'status': 'enabled',
+                                 'use_integral_symmetry': True}
+        mol.has_staged_integral_symmetry = lambda: True
+        mol.clear_integral_symmetry_state = lambda: calls.append('clear_staged')
+        mol.reorient_for_integral_symmetry = lambda: calls.append('reorient')
+        mol.stage_integral_symmetry_maps = lambda: calls.append('stage')
+        mol.update_system = lambda x: calls.append('restore_geometry')
+        mol._detect_symmetry_metadata = lambda: calls.append('redetect')
+        obj.mol = mol
+
+        original = sp.dump_log
+        sp.dump_log = lambda *a, **k: None
+        try:
+            obj.reference()
+        except self._Stop:
+            pass
+        finally:
+            sp.dump_log = original
+
+        # Whichever mechanism is used, the previous job's staged state has to
+        # be dropped, and dropped before reorientation -- otherwise a job whose
+        # maps are never staged runs with a stale enable against a shell map
+        # built for another geometry.
+        dropped = [c for c in calls
+                   if c == 'clear_staged' or c == 'petite_enabled(False)']
+        self.assertTrue(dropped,
+                        f'nothing invalidated the staged reduction: {calls}')
+        self.assertLess(
+            calls.index(dropped[0]), calls.index('reorient'),
+            f'invalidation must precede reorientation, got {calls}')
+        self.assertLess(
+            calls.index(dropped[0]), calls.index('prep_guess'),
+            f'invalidation must precede the guess/basis stage, got {calls}')
 
 
 if __name__ == '__main__':

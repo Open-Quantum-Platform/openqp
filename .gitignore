@@ -10,15 +10,20 @@ __pycache__/
 *.sw?
 *.un~
 *.log
+*.casscf_diagnostic.json
+*.caspt2_reference_preflight.json
 *.pyc
 __pycache__/
 .pytest_cache/
+.cache/
 _build/
 build/
 openqp_*test_tmp_*/
 f90deps.mk
 objdir*
 external/*
+!external/dftd4-corresponding-source/
+!external/dftd4-corresponding-source/README.md
 basis_sets/*
 bin/*
 lib/*
@@ -47,4 +52,10 @@ fort.6
 *.analytic_hess.pyscf
 .venv-symmetry/
 build_dev/
+openqp_test_tmp_*/
+# Superset glob covering the same scratch families (SOC tester included).
 openqp_*test_tmp_*/
+
+# SOC tester scratch output: regression runs write timestamped scratch trees
+# into the repo root (accidentally committed once)
+openqp_soc_test_tmp_*/

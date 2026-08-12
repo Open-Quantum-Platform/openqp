@@ -294,6 +294,16 @@ contains
 !>   confidently WRONG signs, while tagging none pure (the previous state of
 !>   the symmetry staging code) miscounts the AOs and silently disables the
 !>   reduction on every spherical basis. Export the answer, not the ingredients.
+!>
+!> @warning LIFETIME AND THREADING. The returned address is that of the
+!>   module-level `basis_spherical_i64`, which is SHARED across handles and
+!>   reallocated on every call -- the same contract as `oqp_get_basis`'s
+!>   `basis_am_i64` / `basis_origin_i64` / `basis_ncontr_i64` above, kept
+!>   deliberately so the C API stays uniform. The caller must COPY the data
+!>   before the next basis query and must not call this concurrently from two
+!>   threads. pyoqp honours this: `oqpdata.py` copies into a fresh numpy array
+!>   at the point of the call. A per-handle buffer would be the fix if
+!>   concurrent C callers ever need supporting.
 !> @param[out] nsh        number of shells
 !> @param[out] spherical  address of an nsh-long int64 array, 1 = spherical
 !> @return 0 on success, -1 if the handle or the basis is not usable

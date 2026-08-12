@@ -619,6 +619,7 @@ contains
     type(eri_data_t), allocatable :: eri_data
     integer :: ok
     integer(c_int64_t) :: nBlasThreads
+    integer :: nOmpThreads
 
     nshell = this%basis%nshell
     npairs = nshell*(nshell+1)/2
@@ -635,6 +636,29 @@ contains
     ! thread count is restored on exit, so diagonalisation and other BLAS-heavy
     ! phases outside this routine keep their full threading.  No-op (-1) for
     ! reference BLAS / Apple Accelerate where no setter is exported.
+    !
+    ! ON AN OpenMP BUILD OF OpenBLAS THAT SETTER IS omp_set_num_threads.
+    ! libopenblaso64's openblas_set_num_threads is goto_set_num_threads, which
+    ! for USE_OPENMP is implemented as omp_set_num_threads -- so "pin BLAS to
+    ! one thread" also pinned OpenMP to one thread, and the parallel region
+    ! below, the very region the pin exists to protect, ran SERIAL.  Confirmed
+    ! on a 2 x 38-core Xeon 8368 with an LD_PRELOAD interposer on
+    ! omp_set_num_threads: through a whole H2O/cc-pVTZ CASSCF run the only
+    ! call is omp_set_num_threads(1), from goto_set_num_threads <- int2_twoei
+    ! <- fock_jk.  The count is put back afterwards, so nothing leaked out of
+    ! this routine; the cost was entirely inside it, on every SCF path in the
+    ! program.  It is invisible with a pthreads OpenBLAS or a serial one,
+    ! where the two setters really are different functions and the pin is both
+    ! correct and worth having -- which is why it survived this long.
+    !
+    ! The width of the region is therefore DECLARED, with num_threads, from a
+    ! count taken before the pin (after it, omp_get_max_threads already reads
+    ! 1).  A declared width cannot be undone by a global setter, whichever
+    ! library owns it.  Re-asserting omp_set_num_threads after the pin would
+    ! also work, but it leaves two global mutations racing, which is how this
+    ! happened.
+    nOmpThreads = 1
+!$  nOmpThreads = omp_get_max_threads()
     nBlasThreads = -1
     nBlasThreads = blas_thread_count()
     if (nBlasThreads > 0) call blas_thread_set(1_c_int64_t)
@@ -665,6 +689,7 @@ contains
     if (oflag) write(*,dbgfmt1)
 
 !$omp parallel &
+!$omp   num_threads(nOmpThreads) &
 !$omp   private( &
 !$omp   i, j, k, l, ij_pair, jork, q4, &
 !$omp   tim0, tim1, tim2, tim3, tim4, ithread,   &
@@ -819,6 +844,11 @@ contains
 !$omp end parallel
     ! restore BLAS threading for diagonalisation / other BLAS-heavy phases
     if (nBlasThreads > 0) call blas_thread_set(nBlasThreads)
+    ! ...and put the OpenMP count back to exactly what this routine found.
+    ! On an OpenMP OpenBLAS the line above has just moved it to the BLAS
+    ! count, which is the same number only as long as nobody sets
+    ! OPENBLAS_NUM_THREADS and OMP_NUM_THREADS to different values.
+!$  call omp_set_num_threads(nOmpThreads)
     deallocate(pair_i, pair_j)
     call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()

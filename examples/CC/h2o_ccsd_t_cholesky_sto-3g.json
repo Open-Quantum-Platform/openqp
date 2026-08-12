@@ -1,0 +1,74 @@
+{
+  "atoms": [
+    8,
+    1,
+    1
+  ],
+  "coord": [
+    0.0,
+    0.0,
+    -0.07759509131153179,
+    -1.007591253013608,
+    1.007591253013608,
+    -1.1611785434815982,
+    1.007591253013608,
+    -1.007591253013608,
+    -1.1611785434815982
+  ],
+  "energy": -75.00886685852358,
+  "symmetry_metadata": {
+    "status": "disabled",
+    "enabled": false,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "c1",
+    "subgroup": "c1",
+    "detected_point_group": "c1",
+    "detected_subgroup": "c1",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": false,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "false",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "false",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    }
+  },
+  "td_energies": [
+    0
+  ],
+  "grad": [
+    8.718199e-317,
+    0.0,
+    6.9418938868802e-310,
+    6.94189377183643e-310,
+    6.94189388720906e-310,
+    6.9418938879553e-310,
+    6.9418938879553e-310,
+    6.94189388780985e-310,
+    6.94189388780036e-310
+  ],
+  "nac": [],
+  "soc": [],
+  "hess": [],
+  "json": {
+    "scf_type": "rhf",
+    "basis": "sto-3g",
+    "library": "",
+    "ispher": "auto",
+    "nbf": 7,
+    "nbf_cartesian": 7,
+    "spherical_harmonics": false
+  }
+}

@@ -1,0 +1,1 @@
+ccsd_t(reference=rohf)/sto-3g oh.xyz mult=2 energy() cc(nfzc=1)

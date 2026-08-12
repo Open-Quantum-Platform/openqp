@@ -1,0 +1,84 @@
+# RHF/STO-3G/CASPT2 central-difference GRADIENT of linear H4.
+#
+# The PT2 family has no analytic gradient: oqp.library.pt2_numgrad differentiates
+# the PT2 energy by central differences, and that is what every gradient-driven
+# runtype (grad, optimize, ts, mep, irc) consumes.  This example pins that path
+# and the [pt2] grad_* controls; the energy at this geometry is the one checked
+# by H4_CASPT2.inp.
+#
+# 2 * 3 * natom = 24 displaced PT2 energies at grad_step = 1e-3 Bohr.
+#
+# The SCF is converged to 1e-10 for the same reason as the energy example, and
+# it matters more here: a central difference divides by 2*step, so a 1e-6
+# wobble in the reference orbitals would be amplified into the third digit of
+# the gradient.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+# Single-state CASPT2 publishes one energy, so the only valid
+# gradient selector is 0.
+grad=0
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+
+[pt2]
+# reference: casci (matches OpenMolcas CIonly) or casscf (optimized orbitals)
+reference=casci
+variant=caspt2
+# h0=fock = CASPT2 (default); h0=dyall = NEVPT2 (see H4_NEVPT2.inp).
+h0=fock
+# PT2 frozen core: auto (default) = freeze the standard deep 1s cores (matches
+# OpenMolcas); 0 = correlate all; N = freeze N.  (H4 has no deep core -> auto=0.)
+frozen=auto
+# IPEA shift (Ghigo-Roos-Malmqvist): applied as a 1e diagonal bias on the active
+# H0 diagonal; default 0.0 = standard CASPT2 (no shift).
+ipea_shift=0.0
+# real and imaginary denominator shifts (intruder-state regularization)
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true
+# --- central-difference gradient controls (pt2_numgrad) ---
+# Step in Bohr.  1e-3 balances truncation error against the 1e-10 SCF floor.
+grad_step=1.0e-3
+# cold = re-run the configured SCF/CASCI pipeline at each displaced geometry
+# (reproducible); warm re-uses the previous MOs as the guess.
+grad_guess=cold
