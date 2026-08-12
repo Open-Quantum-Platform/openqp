@@ -703,8 +703,9 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
     _parse_bool_like(section.get("label_mo", True), "symmetry.label_mo", report)
     _parse_bool_like(section.get("label_states", True), "symmetry.label_states", report)
     _parse_bool_like(section.get("label_modes", True), "symmetry.label_modes", report)
+    integral_setting = section.get("use_integral_symmetry", "False")
     _parse_bool_like(
-        section.get("use_integral_symmetry", "False"),
+        integral_setting,
         "symmetry.use_integral_symmetry",
         report,
         allow_true=True,
@@ -713,6 +714,27 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
             "is reoriented to the symmetry standard orientation at load time."
         ),
     )
+    move_to_standard_frame = _parse_bool_like(
+        section.get("move_to_standard_frame", True),
+        "symmetry.move_to_standard_frame",
+        report,
+    )
+    if (
+        isinstance(integral_setting, str)
+        and integral_setting.strip().lower() == "full"
+        and move_to_standard_frame is False
+    ):
+        report.add(
+            "ERROR",
+            "symmetry.move_to_standard_frame",
+            "Full-group integral symmetry requires the standard molecular frame.",
+            value=section.get("move_to_standard_frame"),
+            expected="true when use_integral_symmetry=full",
+            action=(
+                "Set move_to_standard_frame=true, or select the abelian "
+                "integral-symmetry tier for input-frame calculations."
+            ),
+        )
     _parse_bool_like(
         section.get("use_response_symmetry", "False"),
         "symmetry.use_response_symmetry",

@@ -161,6 +161,39 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertIn("symmetry.use_integral_symmetry", warnings)
         self.assertIn("symmetry.use_response_symmetry", warnings)
 
+    def test_full_integral_tier_requires_standard_frame(self):
+        report = self.input_checker.CheckReport()
+        config = {
+            "symmetry": {
+                "use_integral_symmetry": "full",
+                "move_to_standard_frame": False,
+            }
+        }
+
+        self.input_checker._check_symmetry(config, report)
+
+        self.assertFalse(report.ok)
+        self.assertIn(
+            "symmetry.move_to_standard_frame",
+            "\n".join(item.path for item in report.errors),
+        )
+
+    def test_full_integral_tier_accepts_standard_frame(self):
+        report = self.input_checker.CheckReport()
+        config = {
+            "symmetry": {
+                "use_integral_symmetry": "full",
+                "move_to_standard_frame": True,
+            }
+        }
+
+        self.input_checker._check_symmetry(config, report)
+
+        self.assertNotIn(
+            "symmetry.move_to_standard_frame",
+            "\n".join(item.path for item in report.errors),
+        )
+
     def test_symmetry_metadata_files_stay_backend_free(self):
         root = ROOT
         targets = [

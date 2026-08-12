@@ -940,6 +940,17 @@ class Molecule:
         # No move: the AO-level operator is dense, so the signed-permutation
         # maps cannot be built. The shell map is the same either way.
         input_frame = frame_status == 'input_frame'
+        requested_tier = str(
+            self.config.get('symmetry', {}).get('use_integral_symmetry', '')
+        ).strip().lower()
+        if input_frame and requested_tier == 'full':
+            meta['integral_symmetry'] = {
+                'status': 'rejected_full_requires_standard_frame',
+            }
+            raise ValueError(
+                '[symmetry] use_integral_symmetry=full requires '
+                'move_to_standard_frame=true'
+            )
 
         try:
             from oqp.library.symmetry import build_reduction_maps

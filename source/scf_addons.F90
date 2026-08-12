@@ -1264,11 +1264,45 @@ contains
     if (scale <= 0.0_dp) return
 
     allocate(probe, source=d)
-    call symmetrize_skeleton_fock(infos, basis, probe)
+    call symmetrize_petite_density(infos, basis, probe)
     residual = maxval(abs(probe - d))/scale
     deallocate(probe)
 
   end subroutine petite_density_asymmetry
+
+!-------------------------------------------------------------------------------
+
+!> @brief Project a packed AO density onto the totally symmetric component.
+!> @detail A covariant AO operator and a contravariant AO density have
+!>   different actions when the AO representation is not Euclidean-orthogonal.
+!>   The skeleton Fock projector uses T^T F T; the density guard must instead
+!>   use D <- T D T^T.  In the standard-frame abelian path every staged
+!>   signed-permutation operation is an involution, so the existing signed
+!>   group average is the same projector in either direction.
+  subroutine symmetrize_petite_density(infos, basis, d)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: d(:,:)
+
+    real(kind=dp), contiguous, pointer :: blocks(:)
+    integer(4) :: status
+
+    call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+    if (status == TA_OK) then
+      call symmetrize_density_blocked(infos, basis, d, blocks)
+    else
+      call symmetrize_skeleton_signed(infos, basis%nbf, d)
+    end if
+
+  end subroutine symmetrize_petite_density
 
 !-------------------------------------------------------------------------------
 
@@ -1411,6 +1445,114 @@ contains
     end function shell_size
 
   end subroutine symmetrize_skeleton_blocked
+
+!--------------------------------------------------------------------------------
+
+!> @brief Full-group AO-density symmetrization with dense per-shell blocks.
+!> @detail D <- (1/|G|) sum_op T_op D T_op^T.  This is intentionally distinct
+!>   from the covariant Fock action T_op^T F T_op above.
+  subroutine symmetrize_density_blocked(infos, basis, d, blocks)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: d(:,:)
+    real(kind=dp), contiguous, intent(in) :: blocks(:)
+
+    integer(8), contiguous, pointer :: shell_map(:)
+    integer(4) :: status
+    integer :: nbf, nshell, nops, iop, nf, k, j, s, off_k, off_j
+    integer :: mu, nu, idx, blk0, blk_per_op
+    real(kind=dp), allocatable :: dsq(:,:), y(:,:), acc(:,:)
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, shell_map, status=status)
+    if (status /= TA_OK) return
+
+    nbf = basis%nbf
+    nshell = basis%nshell
+    if (mod(size(shell_map), nshell) /= 0) return
+    nops = int(size(shell_map)/nshell)
+    if (nops < 2) return
+
+    blk_per_op = 0
+    do k = 1, nshell
+      s = shell_size(basis, k, nbf)
+      blk_per_op = blk_per_op + s*s
+    end do
+    if (size(blocks) /= nops*blk_per_op) return
+
+    allocate(dsq(nbf, nbf), y(nbf, nbf), acc(nbf, nbf))
+
+    do nf = 1, ubound(d, 2)
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          dsq(mu, nu) = d(idx, nf)
+          dsq(nu, mu) = d(idx, nf)
+        end do
+      end do
+
+      acc = 0.0_dp
+      do iop = 1, nops
+        ! Y = T D: rows of target shell j get B_k @ rows of source shell k.
+        y = 0.0_dp
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            y(off_j+1:off_j+s, :) = matmul(b, dsq(off_k+1:off_k+s, :))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+        ! acc += Y T^T: target columns j get source columns k times B_k^T.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            acc(:, off_j+1:off_j+s) = acc(:, off_j+1:off_j+s) &
+                + matmul(y(:, off_k+1:off_k+s), transpose(b))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+      end do
+
+      acc = acc/real(nops, dp)
+
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          d(idx, nf) = acc(mu, nu)
+        end do
+      end do
+    end do
+
+  contains
+
+    integer function shell_size(basis, k, nbf) result(s)
+      type(basis_set), intent(in) :: basis
+      integer, intent(in) :: k, nbf
+      if (k < basis%nshell) then
+        s = basis%ao_offset(k+1) - basis%ao_offset(k)
+      else
+        s = nbf - basis%ao_offset(k) + 1
+      end if
+    end function shell_size
+
+  end subroutine symmetrize_density_blocked
 
 !--------------------------------------------------------------------------------
 

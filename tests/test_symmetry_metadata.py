@@ -128,6 +128,7 @@ def load_molecule_module():
                 'label_states': {'type': bool, 'default': 'True'},
                 'label_modes': {'type': bool, 'default': 'True'},
                 'use_integral_symmetry': {'type': bool, 'default': 'False'},
+                'move_to_standard_frame': {'type': bool, 'default': 'True'},
                 'use_response_symmetry': {'type': bool, 'default': 'False'},
                 'tolerance': {'type': float, 'default': '1.0e-5'},
                 'strict': {'type': bool, 'default': 'False'},
@@ -162,6 +163,28 @@ def load_molecule_module():
 
 
 class TestSymmetryMetadata(unittest.TestCase):
+    def test_full_integral_tier_rejects_input_frame_staging(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'symmetry': {
+                'use_integral_symmetry': 'full',
+                'move_to_standard_frame': False,
+            },
+        }
+        meta = {
+            'detection': {'operations': []},
+            'integral_symmetry': {'status': 'input_frame'},
+        }
+
+        with self.assertRaisesRegex(ValueError, 'requires move_to_standard_frame=true'):
+            molecule._stage_integral_symmetry_maps(meta)
+
+        self.assertEqual(
+            meta['integral_symmetry']['status'],
+            'rejected_full_requires_standard_frame',
+        )
+
     def test_no_move_reduction_still_rejects_geometry_drivers(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)

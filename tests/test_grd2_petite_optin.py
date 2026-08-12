@@ -161,6 +161,21 @@ class PetiteStateIsResetPerReference(unittest.TestCase):
         )
         self.assertIn('eri_data%weighted_cutoff = this%sym_dense', source)
 
+    def test_dense_density_guard_uses_the_contravariant_action(self):
+        source = ROOT.joinpath('source/scf_addons.F90').read_text()
+        guard_start = source.index('subroutine petite_density_asymmetry')
+        guard_end = source.index('end subroutine petite_density_asymmetry', guard_start)
+        guard = source[guard_start:guard_end]
+        density_start = source.index('subroutine symmetrize_density_blocked')
+        density_end = source.index('end subroutine symmetrize_density_blocked', density_start)
+        density_projector = source[density_start:density_end]
+
+        self.assertIn('call symmetrize_petite_density', guard)
+        self.assertNotIn('call symmetrize_skeleton_fock', guard)
+        self.assertIn('matmul(b, dsq(off_k+1:off_k+s, :))', density_projector)
+        self.assertIn('matmul(y(:, off_k+1:off_k+s), transpose(b))',
+                      density_projector)
+
     class _Stop(Exception):
         pass
 
