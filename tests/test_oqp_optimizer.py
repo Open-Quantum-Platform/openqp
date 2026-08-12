@@ -5,6 +5,7 @@ tested directly.  The dispatcher/validator wiring is checked with lightweight
 stubs so the compiled OQP backend is not required, mirroring
 ``test_geometric_optimizer.py``.
 """
+import ast
 import importlib.util
 import sys
 import tempfile
@@ -1501,6 +1502,21 @@ class TestDispatchAndValidation(unittest.TestCase):
             ic._check_optimize(cfg3, rep)
             lib_errs = [d for d in rep.errors if d.path == "optimize.lib"]
             self.assertEqual(lib_errs, [], f"oqp/{rt} should be allowed")
+
+    def test_runtime_engines_explicitly_choose_global_mode_semantics(self):
+        source = (LIB / "liboqp.py").read_text()
+        tree = ast.parse(source)
+        calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "OQPEngine"
+        ]
+        self.assertTrue(calls)
+        for call in calls:
+            keywords = {keyword.arg for keyword in call.keywords}
+            self.assertIn("project_global_rigid_modes", keywords)
+            self.assertIn("masses", keywords)
 
     def test_neb_product_resolves_relative_to_input_dir(self):
         utils = sys.modules.setdefault("oqp.utils",

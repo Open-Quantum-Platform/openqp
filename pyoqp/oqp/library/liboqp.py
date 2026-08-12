@@ -1282,7 +1282,15 @@ class OQPNEBOpt(StateSpecificOpt):
     def _relax_endpoint(self, x0, label):
         """Minimize an endpoint to a nearby minimum with the oqp engine."""
         atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
-        engine = OQPEngine(atoms, x0, mode="min", maxiter=self.maxit)
+        masses = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        isolated = not bool(
+            self.mol.config.get("input", {}).get("qmmm_flag", False)
+        )
+        engine = OQPEngine(
+            atoms, x0, mode="min", maxiter=self.maxit,
+            masses=masses,
+            project_global_rigid_modes=isolated,
+        )
         last = {
             "x": np.asarray(x0, dtype=float).reshape(-1).copy(),
             "g": None,
