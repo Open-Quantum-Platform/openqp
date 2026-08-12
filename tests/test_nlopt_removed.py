@@ -64,9 +64,13 @@ class NLoptRemovalTests(unittest.TestCase):
         self.assertRegex(wheel, r"nlopt\|nlo_")
 
         docker = (ROOT / "Dockerfile").read_text()
-        self.assertIn("readelf", docker)
-        self.assertIn("nm", docker)
-        self.assertRegex(docker, r"nlopt\|nlo_")
+        container_smoke = (
+            ROOT / ".github" / "scripts" / "container_runtime_smoke.py"
+        ).read_text()
+        self.assertIn("container_runtime_smoke.py", docker)
+        self.assertIn("elf_needed", container_smoke)
+        self.assertIn('b"nlopt_"', container_smoke)
+        self.assertIn('b"libnlopt"', container_smoke)
 
     def test_simplex_qp_failures_use_explicit_latest_state_fallback(self):
         solver = (ROOT / "source" / "simplex_qp.F90").read_text()

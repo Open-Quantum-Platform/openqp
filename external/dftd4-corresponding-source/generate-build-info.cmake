@@ -150,8 +150,21 @@ function(oqp_generate_dftd4_build_info output_file)
 
   set(_revision_json null)
   set(_dirty_json null)
-  find_package(Git QUIET)
-  if(Git_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  if(DEFINED OQP_SOURCE_REVISION AND NOT OQP_SOURCE_REVISION STREQUAL "")
+    string(LENGTH "${OQP_SOURCE_REVISION}" _explicit_revision_length)
+    if(NOT OQP_SOURCE_REVISION MATCHES "^[0-9a-fA-F]+$"
+       OR NOT _explicit_revision_length EQUAL 40)
+      message(FATAL_ERROR
+        "OQP_SOURCE_REVISION must be a full 40-character Git SHA")
+    endif()
+    string(TOLOWER "${OQP_SOURCE_REVISION}" _explicit_revision)
+    _oqp_d4_json_quote(_revision_json "${_explicit_revision}")
+    set(_dirty_json false)
+  else()
+    find_package(Git QUIET)
+  endif()
+  if(_revision_json STREQUAL "null"
+     AND Git_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     execute_process(
       COMMAND "${GIT_EXECUTABLE}" rev-parse --verify HEAD
       WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

@@ -92,8 +92,8 @@ Before approving either wheel, Docker-image, or other binary publication:
 1. Confirm that every bundled LGPL library remains a separately replaceable
    shared library, including the DFT-D4 stack, and inspect the repaired wheel or
    image rather than relying only on CMake options.
-2. Confirm that NLopt is absent from the binary, or document and validate a
-   compliant replaceable-library route.
+2. Confirm from both the dependency table and dynamic symbols that NLopt is
+   absent and the native deterministic simplex-QP implementation is in use.
 3. Confirm that license texts, copyright notices, modification notices, source
    locations, and any required written offer or corresponding source are
    shipped with the exact artifact.
@@ -234,6 +234,47 @@ The published image must:
 5. publish an SBOM and build-provenance attestation together with the immutable
    image digest.
 
-The current `docker-build.yml` is deliberately build-only while those artifact
-checks are being implemented. Re-enable registry publication only through the
-manual protected path described above.
+The current `docker-build.yml` is deliberately build-only while final compliance
+and release authorization remain pending. Re-enable registry publication only
+through the manual protected path described above.
+
+### Current container candidate implementation
+
+The candidate Dockerfile uses two digest-pinned inputs recorded in
+`docker/base-images.lock.json`. The `openqp-buildenv:1` image is a builder stage
+only; OpenQP is built as a wheel, installed from an offline wheelhouse, and
+exercised with the full numerical/ABI/DFT-D4 wheel smoke test. The final stage
+starts from a pinned Python slim runtime and receives only the installed wheel,
+its required shared-library closure, legal materials, and runtime manifests.
+It does not inherit the compiler, source checkout, external cache, or static
+archives from the build environment.
+
+The current pinned builder is Linux/amd64 with Python 3.12, so the candidate
+runtime is also Python 3.12. A Python 3.11 container requires a new matching
+builder; do not describe the current image as Python 3.11-compatible exact
+bits. The proposed companion-repository migration is documented in
+`docs/openqp-dev-buildenv-hardening-plan.md`.
+
+The build produces an OCI archive with an embedded SPDX SBOM and max-mode
+provenance, verifies the OCI layout and authenticated descriptors, validates
+the required SPDX/SLSA predicate bodies and image subjects, and then lets the
+ephemeral runner discard it. The workflow has no registry
+credentials, package-write permission, login, push, release attachment,
+retained image artifact, or exported build cache.
+
+The container remains publication-ineligible for two explicit reasons:
+
+1. build-system and runtime dependency wheels are resolved during a candidate
+   build and hashed only afterward; publication requires a reviewed hash lock
+   or reuse of already verified exact release-run wheelhouses; and
+2. copied Ubuntu GNU runtime libraries have exact binary/source package
+   versions and copyright files recorded, but the matching source archives are
+   not yet bundled for components whose terms require corresponding source.
+
+Both `/usr/share/licenses/openqp/wheelhouse-manifest.json` and
+`runtime-library-manifest.json` record `publication_gate.ready: false`. The
+wheelhouse manifest separately inventories the exact build-system wheels used
+to create OpenQP and the runtime wheels available to the final installation.
+final-stage smoke test also rejects NLopt files/dependencies/symbol strings,
+build tools, caches, static archives, alternate DFT-D4 copies, missing
+corresponding source, unresolved dependencies, and legal-file omissions.
