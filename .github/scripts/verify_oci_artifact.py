@@ -61,6 +61,10 @@ def _blob_path(digest: str) -> str:
     return f"blobs/{algorithm}/{value}"
 
 
+def _reject_non_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON numeric constant: {value}")
+
+
 def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
     try:
         member = archive.getmember(member_name)
@@ -69,7 +73,7 @@ def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
     handle = archive.extractfile(member)
     if handle is None or not member.isfile():
         raise ValueError(f"OCI member is not a regular file: {member_name}")
-    value = json.load(handle)
+    value = json.load(handle, parse_constant=_reject_non_json_constant)
     if not isinstance(value, dict):
         raise ValueError(f"OCI member does not contain a JSON object: {member_name}")
     return value
@@ -294,7 +298,10 @@ def _descriptor_json(
     archive: tarfile.TarFile, descriptor: dict[str, Any]
 ) -> dict[str, Any]:
     digest = str(descriptor["digest"])
-    value = json.loads(_descriptor_bytes(archive, descriptor))
+    value = json.loads(
+        _descriptor_bytes(archive, descriptor),
+        parse_constant=_reject_non_json_constant,
+    )
     if not isinstance(value, dict):
         raise ValueError(f"OCI descriptor does not contain a JSON object: {digest}")
     return value

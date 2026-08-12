@@ -503,6 +503,57 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(artifact, index, blobs)
             summary = OCI_VERIFY.verify(artifact, "1.3.0", "a" * 40)
 
+            nonfinite_index = (
+                b'{"schemaVersion":2,"invalid":NaN,"manifests":'
+                + json.dumps([image, attestation], sort_keys=True).encode()
+                + b"}"
+            )
+            nonfinite_root = Path(temporary) / "nonfinite-index.oci.tar"
+            self._write_oci(nonfinite_root, nonfinite_index, blobs)
+            with self.assertRaisesRegex(
+                ValueError, "non-standard JSON numeric constant"
+            ):
+                OCI_VERIFY.verify(nonfinite_root, "1.3.0", "a" * 40)
+
+            config_payload = blobs[OCI_VERIFY._blob_path(config["digest"])]
+            nonfinite_config_payload = config_payload[:-1] + b',"invalid":Infinity}'
+            nonfinite_config_digest = hashlib.sha256(
+                nonfinite_config_payload
+            ).hexdigest()
+            nonfinite_config = {
+                **config,
+                "digest": f"sha256:{nonfinite_config_digest}",
+                "size": len(nonfinite_config_payload),
+            }
+            blobs[f"blobs/sha256/{nonfinite_config_digest}"] = (
+                nonfinite_config_payload
+            )
+            nonfinite_image = self._json_blob(
+                blobs,
+                {
+                    "schemaVersion": 2,
+                    "config": nonfinite_config,
+                    "layers": [layer],
+                },
+            )
+            nonfinite_image["platform"] = image["platform"]
+            nonfinite_descriptor = Path(temporary) / "nonfinite-config.oci.tar"
+            self._write_oci(
+                nonfinite_descriptor,
+                json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [nonfinite_image, attestation],
+                    },
+                    sort_keys=True,
+                ).encode(),
+                blobs,
+            )
+            with self.assertRaisesRegex(
+                ValueError, "non-standard JSON numeric constant"
+            ):
+                OCI_VERIFY.verify(nonfinite_descriptor, "1.3.0", "a" * 40)
+
             duplicate_payloads = (
                 ("index.json", index),
                 (
