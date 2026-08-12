@@ -382,6 +382,10 @@ EXEMPT_FLAGS = {
 # section.option -> reason. Real capability, tracked gap (needs an example).
 KNOWN_UNCOVERED = {
     'input.d4': 'native DFT-D4 dispersion (PR #235); add a d4=true example',
+    'symmetry.move_to_standard_frame': (
+        'standard-frame coordinate execution for the experimental full '
+        'symmetry tier; covered by focused parser, metadata, and transform '
+        'tests, but still needs an end-to-end full-tier example'),
     'symmetry.use_response_symmetry': 'irrep-blocked Davidson TDDFT response solver',
     'scf.trh_stab': 'TRAH SCF stability-following (escape unstable solutions)',
     'optimize.init_scf': 'fresh initial-guess SCF each optimization step',
