@@ -1,6 +1,11 @@
 module tdhf_mrsf_z_vector_mod
 
   use precision, only: dp
+  use iso_c_binding, only: c_ptr
+  use types, only: information
+  use basis_tools, only: basis_set
+  use int2_compute, only: int2_compute_t
+  use mod_dft_molgrid, only: dft_grid_t
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
   use zvector_common, only: sanitize_zvector_preconditioner
   implicit none
@@ -93,6 +98,28 @@ module tdhf_mrsf_z_vector_mod
   real(kind=dp), allocatable, save :: zv_warm_moa(:,:), zv_warm_mob(:,:)
   logical, save :: zv_warm_have_mo = .false.
   integer, save :: zv_warm_nbf = 0
+
+  ! Active MRSF MINRES callback context. The production callbacks are module
+  ! procedures, not internal procedures, so GNU Fortran does not create stack
+  ! trampolines when their addresses are passed to the generic MINRES solver.
+  ! The surrounding MRSF response implementation already owns module-level
+  ! work arrays and is not reentrant.
+  logical, save :: minres_context_active = .false.
+  type(information), pointer, save :: minres_infos_ctx => null()
+  type(basis_set), pointer, save :: minres_basis_ctx => null()
+  type(dft_grid_t), pointer, save :: minres_grid_ctx => null()
+  type(int2_compute_t), pointer, save :: minres_int2_ctx => null()
+  real(kind=dp), pointer, save :: minres_mo_a_ctx(:,:) => null()
+  real(kind=dp), pointer, save :: minres_mo_b_ctx(:,:) => null()
+  real(kind=dp), pointer, save :: minres_mo_energy_a_ctx(:) => null()
+  real(kind=dp), pointer, save :: minres_fa_ctx(:,:) => null()
+  real(kind=dp), pointer, save :: minres_fb_ctx(:,:) => null()
+  real(kind=dp), pointer, save :: minres_xminv_ctx(:) => null()
+  real(kind=dp), save :: minres_scale_exch_ctx = 0.0_dp
+  integer, save :: minres_nocca_ctx = 0
+  integer, save :: minres_noccb_ctx = 0
+  integer, save :: minres_nbf_ctx = 0
+  logical, save :: minres_dft_ctx = .false.
 
 contains
 
@@ -1048,6 +1075,79 @@ contains
 
   end subroutine apply_z_precond
 
+  subroutine set_mrsf_minres_context(infos, basis, molGrid, int2_driver, &
+                                     nocca, noccb, nbf, mo_a, mo_b, &
+                                     mo_energy_a, fa, fb, scale_exch, dft, xminv)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer, intent(in) :: basis
+    type(dft_grid_t), target, intent(inout) :: molGrid
+    type(int2_compute_t), target, intent(inout) :: int2_driver
+    integer, intent(in) :: nocca, noccb, nbf
+    real(kind=dp), target, intent(in) :: mo_a(:,:), mo_b(:,:), mo_energy_a(:)
+    real(kind=dp), target, intent(in) :: fa(:,:), fb(:,:), xminv(:)
+    real(kind=dp), intent(in) :: scale_exch
+    logical, intent(in) :: dft
+
+    call clear_mrsf_minres_context()
+    minres_infos_ctx => infos
+    minres_basis_ctx => basis
+    minres_grid_ctx => molGrid
+    minres_int2_ctx => int2_driver
+    minres_mo_a_ctx => mo_a
+    minres_mo_b_ctx => mo_b
+    minres_mo_energy_a_ctx => mo_energy_a
+    minres_fa_ctx => fa
+    minres_fb_ctx => fb
+    minres_xminv_ctx => xminv
+    minres_scale_exch_ctx = scale_exch
+    minres_nocca_ctx = nocca
+    minres_noccb_ctx = noccb
+    minres_nbf_ctx = nbf
+    minres_dft_ctx = dft
+    minres_context_active = .true.
+  end subroutine set_mrsf_minres_context
+
+  subroutine clear_mrsf_minres_context()
+    minres_context_active = .false.
+    nullify(minres_infos_ctx, minres_basis_ctx, minres_grid_ctx, minres_int2_ctx)
+    nullify(minres_mo_a_ctx, minres_mo_b_ctx, minres_mo_energy_a_ctx)
+    nullify(minres_fa_ctx, minres_fb_ctx, minres_xminv_ctx)
+    minres_scale_exch_ctx = 0.0_dp
+    minres_nocca_ctx = 0
+    minres_noccb_ctx = 0
+    minres_nbf_ctx = 0
+    minres_dft_ctx = .false.
+  end subroutine clear_mrsf_minres_context
+
+  subroutine mrsf_minres_apply_op(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+
+    if (.not. minres_context_active) then
+      y = ieee_value(0.0_dp, ieee_quiet_nan)
+      return
+    end if
+    call apply_z_operator(x, y, minres_infos_ctx, minres_basis_ctx, &
+                          minres_grid_ctx, minres_int2_ctx, &
+                          minres_nocca_ctx, minres_noccb_ctx, minres_nbf_ctx, &
+                          minres_mo_a_ctx, minres_mo_b_ctx, &
+                          minres_mo_energy_a_ctx, minres_fa_ctx, minres_fb_ctx, &
+                          minres_scale_exch_ctx, minres_dft_ctx)
+  end subroutine mrsf_minres_apply_op
+
+  subroutine mrsf_minres_apply_pc(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+
+    if (.not. minres_context_active) then
+      y = ieee_value(0.0_dp, ieee_quiet_nan)
+      return
+    end if
+    call apply_z_precond(x, y, minres_xminv_ctx)
+  end subroutine mrsf_minres_apply_pc
+
   subroutine tdhf_mrsf_z_vector_C(c_handle) bind(C, name="tdhf_mrsf_z_vector")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -1106,7 +1206,7 @@ contains
     real(kind=dp), allocatable :: ab1_mo_b(:,:)
     real(kind=dp), allocatable :: xm(:)
     real(kind=dp), pointer :: ab1(:,:,:)
-    real(kind=dp), allocatable :: fa(:,:), fb(:,:)
+    real(kind=dp), allocatable, target :: fa(:,:), fb(:,:)
     real(kind=dp), pointer :: bvec(:,:,:)
     real(kind=dp), pointer :: wmo(:,:)
     real(kind=dp), allocatable :: bvec_mo_d(:,:)
@@ -1124,11 +1224,11 @@ contains
     logical :: roref = .false.
     integer :: mrst
 
-    type(int2_compute_t) :: int2_driver
+    type(int2_compute_t), target :: int2_driver
     type(int2_mrsf_data_t), allocatable, target :: int2_data_st
     type(int2_td_data_t), allocatable, target :: int2_data_q
     class(int2_td_data_t), allocatable, target :: int2_data
-    type(dft_grid_t) :: molGrid
+    type(dft_grid_t), target :: molGrid
 
   ! scr data
     real(kind=dp), allocatable, target :: wrk1(:,:), wrk2(:,:), wrk3(:,:)
@@ -1136,9 +1236,9 @@ contains
 
   ! SF-TD Gradient data
     real(kind=dp), allocatable :: &
-      rhs(:), lhs(:), xminv(:), xk(:), pk(:), errv(:), &
+      rhs(:), lhs(:), xk(:), pk(:), errv(:), &
       hxa(:,:), hxb(:,:), tij(:,:), ppija(:,:), ppijb(:,:), tab(:,:)
-    real(kind=dp), allocatable, target :: pa(:,:,:)
+    real(kind=dp), allocatable, target :: pa(:,:,:), xminv(:)
     integer :: nsocc, lzdim, xvec_dim
 
   ! General data
@@ -1515,7 +1615,11 @@ contains
       ! (mr%init seeds from rhs), so warm-start has no effect here; seeding is a
       ! no-op kept for uniformity. Warm-start benefits CG (default) and GMRES.
       call zv_warm_seed()
-      call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
+      call set_mrsf_minres_context(infos, basis, molGrid, int2_driver, &
+                                   nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                                   fa, fb, scale_exch, dft, xminv)
+      call mr%init(b=rhs, update=mrsf_minres_apply_op, &
+                   precond=mrsf_minres_apply_pc, &
                    dat=minres_dummy, tol=cnvtol)
       minres_iter = 0
       if (mr%errcode == MINRES_OK) then
@@ -1534,6 +1638,7 @@ contains
         error = huge(1.0_dp)
       end if
       call mr%clean()
+      call clear_mrsf_minres_context()
       write(iw,'(/," Final Summary:")')
       write(iw,'(" MINRES total iterations: ", I4)') minres_iter
       write(iw,'(" Final error norm       : ", 1p,e13.6)') error
@@ -1899,27 +2004,6 @@ contains
         end if
       end if
     end subroutine zv_warm_seed
-
-    ! minres_matvec(y, x, dat) wrappers: y is the output, x the input, dat is
-    ! unused (the solver context is reached by host association).
-    subroutine minres_apply_op(y, x, dat)
-      use iso_c_binding, only: c_ptr
-      real(kind=dp) :: x(:)
-      real(kind=dp) :: y(:)
-      type(c_ptr) :: dat
-      call apply_z_operator(x, y, infos, basis, molGrid, int2_driver, &
-                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
-                            fa, fb, scale_exch, dft)
-    end subroutine minres_apply_op
-
-    subroutine minres_apply_pc(y, x, dat)
-      use iso_c_binding, only: c_ptr
-      real(kind=dp) :: x(:)
-      real(kind=dp) :: y(:)
-      type(c_ptr) :: dat
-      call apply_z_precond(x, y, xminv)
-    end subroutine minres_apply_pc
-
 
     ! Build the relaxed (z-vector) density (-> td_p) and energy-weighted
     ! density W (-> wao) from the converged z-vector xk.  Host association

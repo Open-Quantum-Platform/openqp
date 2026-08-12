@@ -60,9 +60,7 @@ class DockerDistributionTests(unittest.TestCase):
             ROOT / ".github/scripts/normalize_elf_stack.py"
         ).read_text()
         self.assertNotIn("write_bytes", stack_gate)
-        cmake = (ROOT / "CMakeLists.txt").read_text()
-        self.assertIn("-ftrampoline-impl=heap", cmake)
-        self.assertIn("OQP_FORTRAN_HEAP_TRAMPOLINES", cmake)
+        self.assertNotIn("-ftrampoline-impl=heap", (ROOT / "CMakeLists.txt").read_text())
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)

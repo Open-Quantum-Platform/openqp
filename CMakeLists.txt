@@ -193,22 +193,9 @@ else()
 endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
-  include(CheckFortranCompilerFlag)
-  check_fortran_compiler_flag(
-    "-ftrampoline-impl=heap"
-    OQP_FORTRAN_HEAP_TRAMPOLINES
-  )
   add_compile_options(
   $<$<COMPILE_LANGUAGE:Fortran>:-ffree-line-length-none>
   )
-  if(OQP_FORTRAN_HEAP_TRAMPOLINES)
-    # Internal Fortran callbacks (including the MRSF MINRES operator) need a
-    # trampoline. Keep it off the process stack so packaged ELF libraries do
-    # not require PT_GNU_STACK execute permission.
-    add_compile_options(
-      $<$<COMPILE_LANGUAGE:Fortran>:-ftrampoline-impl=heap>
-    )
-  endif()
   if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fallow-argument-mismatch>)
   endif()
