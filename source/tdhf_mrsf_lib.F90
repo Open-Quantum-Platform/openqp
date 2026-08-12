@@ -556,7 +556,7 @@ contains
     ! low-lying vectors that drive convergence are never displaced.  Without the
     ! table -- C1, mixed orbitals, detection disabled -- this is inert and the
     ! trial-set dimension chosen by the caller is the weaker mitigation.
-    block
+    seed_coverage: block
       use oqp_tagarray_driver
       use tagarray, only: TA_OK
       integer(8), contiguous, pointer :: pair_irrep(:)
@@ -566,6 +566,24 @@ contains
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
                              status=ta_status)
+      ! IXCORE runs are excluded outright.
+      !
+      ! SinglePoint.ixcore_shift moves every NON-requested occupied orbital to
+      ! about -100000 Ha precisely so its pairs cannot enter the low-energy
+      ! trial set. Those pairs are therefore live and finite here -- xm is
+      ! around +1e5, nowhere near the 1.0d90 mask the victim scan below
+      ! rejects -- so a block with no requested-core pair would happily seed
+      ! itself from a shifted non-core pair, and the substitution could then
+      ! displace a genuine core seed to make room for it. Since the number of
+      ! seeds per block is what decides which roots are reachable, that omits
+      ! or renumbers exactly the core-excited states the run asked for.
+      !
+      ! Declining is the conservative repair: an XAS run keeps the seeding it
+      ! had before block coverage existed. Selecting only among requested-core
+      ! pairs would be the richer fix, but it needs the core index list plumbed
+      ! down here and a reference XAS spectrum to check it against, so it is
+      ! deliberately not attempted blind.
+      if (infos%tddft%ixcore_len /= 0) exit seed_coverage
       if (ta_status == TA_OK) then
         if (size(pair_irrep) == xvec_dim) then
           nirr = int(maxval(pair_irrep))
@@ -698,7 +716,7 @@ contains
           end if
         end if
       end if
-    end block
+    end block seed_coverage
 
     ! Get initial vectors: bvec(xvec_dim, nvec)
     bvec_mo = 0.0_dp

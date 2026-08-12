@@ -75,7 +75,7 @@ contains
 
 !> @brief The driver for the two electron gradient
   subroutine grd2_driver(infos, basis, de, gcomp, &
-                         cam, alpha, beta, mu)
+                         cam, alpha, beta, mu, petite)
 
     use types, only: information
     use basis_tools, only: basis_set
@@ -88,6 +88,11 @@ contains
     class(grd2_compute_data_t), intent(inout) :: gcomp
     logical, optional, intent(in) :: cam
     real(kind=dp), optional, intent(in) :: alpha, beta, mu
+!<  Opt in to the symmetry petite list. Valid ONLY when the density this
+!<  gradient is contracted against is totally symmetric AND the skeleton
+!<  result is symmetrized afterwards. Absent means off, so a caller that has
+!<  not thought about it cannot silently inherit the reduction.
+    logical, optional, intent(in) :: petite
 
     real(kind=dp), allocatable :: de_internal(:,:)
 
@@ -107,7 +112,7 @@ contains
       gcomp%hfscale = infos%dft%cam_alpha
       gcomp%hfscale2 = infos%tddft%cam_alpha
       if (present(alpha)) gcomp%hfscale2 = alpha
-      call grd2_driver_gen(infos, basis, de_internal, gcomp)
+      call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
 
       gcomp%cur_pass = 2
@@ -120,7 +125,7 @@ contains
       if (present(beta)) gcomp%hfscale2 = beta
       gcomp%mu = infos%dft%cam_mu
       if (present(mu)) gcomp%mu = mu
-      call grd2_driver_gen(infos, basis, de_internal, gcomp)
+      call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
     else
       ! Only adopt the DFT hybrid mixing here for actual DFT calculations
@@ -131,13 +136,13 @@ contains
         gcomp%hfscale = infos%dft%hfscale
         gcomp%hfscale2 = infos%tddft%hfscale
       end if
-      call grd2_driver_gen(infos, basis, de, gcomp)
+      call grd2_driver_gen(infos, basis, de, gcomp, petite=petite)
     end if
 
   end subroutine
 
 !> @brief The driver for the two electron gradient
-  subroutine grd2_driver_gen(infos, basis, de, gcomp)
+  subroutine grd2_driver_gen(infos, basis, de, gcomp, petite)
 
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
@@ -156,6 +161,8 @@ contains
     type(basis_set), intent(in) :: basis
     class(grd2_compute_data_t), intent(inout) :: gcomp
     real(kind=dp), intent(inout) :: de(:,:)
+!<  See grd2_driver: absent means the petite reduction stays off.
+    logical, optional, intent(in) :: petite
 
     real(dp), dimension(:), allocatable :: dab
     real(dp), allocatable :: schwarz_ints(:,:)
@@ -248,9 +255,24 @@ contains
     skip2 = 0
     numint = 0
 
-!   Optional symmetry petite list (valid: the gradient is linear in the
-!   quartets and the SCF density is totally symmetric).
-    call load_petite_shell_map(infos, basis%nshell, sym_map, sym_nops)
+!   Optional symmetry petite list, per caller.
+!
+!   int2 has always required an explicit per-instance opt-in for exactly this
+!   reason; grd2 loaded the map unconditionally, so every grd2_driver caller
+!   inherited the reduction from the global tag alone. That is only valid when
+!   the contracted density is totally symmetric. It is not for the CPHF probe
+!   densities routed through fock_deriv_contract (a single occupied-virtual
+!   outer product), nor for the ROHF resp_grad finite-difference gradient,
+!   which additionally runs at a displaced geometry while the staged shell map
+!   describes the reference frame.
+!
+!   Absent = off: a caller that has not reasoned about its density cannot
+!   silently opt in. The cost of a mistake is lost speed, never a wrong number.
+    sym_map => null()
+    sym_nops = 0
+    if (present(petite)) then
+      if (petite) call load_petite_shell_map(infos, basis%nshell, sym_map, sym_nops)
+    end if
 
 !   Check maximum angular momentum
     if (basis%mxam>BAS_MXANG) then
