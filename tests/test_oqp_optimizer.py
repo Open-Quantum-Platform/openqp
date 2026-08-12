@@ -5,6 +5,7 @@ tested directly.  The dispatcher/validator wiring is checked with lightweight
 stubs so the compiled OQP backend is not required, mirroring
 ``test_geometric_optimizer.py``.
 """
+import ast
 import importlib.util
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import types
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -756,7 +758,7 @@ class TestInternalCoordinates(unittest.TestCase):
         ]
         for atoms, x in cases:
             ic = NC.build_coordinates(atoms, x)
-            self.assertIsInstance(ic, NC.RedundantInternalCoordinates)
+            self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
             B = ic.b_matrix(x)
             h = 1.0e-6
             Bn = np.zeros_like(B)
@@ -822,6 +824,104 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
 
+    def test_auto_and_omitted_coordsys_select_dlc(self):
+        for coordsys in (None, "auto"):
+            ic = NC.build_coordinates(
+                self.WATER_AT, self.WATER_X, coordsys=coordsys)
+            self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
+            self.assertEqual(len(ic.q(self.WATER_X)), 3)
+
+        engine = NE.OQPEngine(
+            self.WATER_AT, self.WATER_X,
+            project_global_rigid_modes=True,
+        )
+        self.assertIsInstance(engine.coords, NC.DelocalizedInternalCoordinates)
+        self.assertEqual(engine.coordsys, "DLC")
+
+    def test_standalone_auto_preserves_physical_global_modes(self):
+        engine = NE.OQPEngine(self.WATER_AT, self.WATER_X)
+        self.assertIsInstance(engine.coords, NC.RedundantInternalCoordinates)
+        self.assertEqual(engine.coordsys, "TRIC")
+
+        # A uniform lab-frame force is a pure translation.  It must remain an
+        # active optimization direction when rigid modes are not projected.
+        gradient = np.tile([1.0, 0.0, 0.0], len(self.WATER_AT))
+        gradient_q = engine.coords.grad_to_q(engine.x, gradient)
+        self.assertGreater(np.linalg.norm(gradient_q), 0.5)
+
+    def test_water_dimer_dlc_spans_all_twelve_vibrational_modes(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+
+        _, _, fragments = NC._covalent_graph(atoms, geometry)
+        self.assertEqual(len(fragments), 2)
+
+        ic = NC.build_coordinates(atoms, geometry)
+        self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
+        self.assertEqual(len(ic.q(geometry)), 12)
+        _, rank = ic._g_inverse(ic.b_matrix(geometry))
+        self.assertEqual(rank, 12)
+
+    def test_rank_deficient_dimer_primitives_are_not_silently_accepted(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+        bonds, neighbours, fragments = NC._covalent_graph(atoms, geometry)
+        self.assertEqual(len(fragments), 2)
+        intrafragment = NC.RedundantInternalCoordinates(
+            NC._make_internals(bonds, neighbours, geometry), len(atoms))
+
+        with self.assertRaisesRegex(ValueError, "rank-deficient DLC basis"):
+            NC.DelocalizedInternalCoordinates.from_ric(
+                intrafragment, geometry)
+
+    def test_ill_conditioned_dimer_gets_direct_interfragment_distance(self):
+        second = self.WATER_X + np.array([0.25, 0.10, 5.50])
+        geometry = np.vstack([self.WATER_X, second])
+        atoms = self.WATER_AT + self.WATER_AT
+        bonds, neighbours, fragments = NC._covalent_graph(atoms, geometry)
+        bonds = NC._connect_fragments(
+            bonds, neighbours, geometry, len(atoms))
+        bonds, neighbours = NC._augment_internals(
+            atoms, geometry, bonds, neighbours, len(atoms))
+        primitives = NC._make_internals(bonds, neighbours, geometry)
+        _, quality_before = NC._primitive_metric_quality(
+            primitives, len(atoms), geometry)
+
+        conditioned = NC._augment_interfragment_distances(
+            primitives, fragments, geometry, len(atoms), quality_tol=0.03)
+        rank_after, quality_after = NC._primitive_metric_quality(
+            conditioned, len(atoms), geometry)
+
+        self.assertGreater(len(conditioned), len(primitives))
+        self.assertEqual(rank_after, 12)
+        self.assertGreater(quality_after, quality_before)
+
+    def test_interfragment_conditioning_has_total_trial_budget(self):
+        fragments = [list(range(10)), list(range(10, 20))]
+        geometry = np.zeros((20, 3))
+        geometry[:, 0] = np.arange(20, dtype=float)
+        primitives = []
+        target = 3 * len(geometry) - 6
+        calls = 0
+
+        def slowly_improving(_primitives, _natom, _x):
+            nonlocal calls
+            calls += 1
+            return target, 1.0e-8 * calls
+
+        with mock.patch.object(
+                NC, "_primitive_metric_quality",
+                side_effect=slowly_improving):
+            NC._augment_interfragment_distances(
+                primitives, fragments, geometry, len(geometry),
+                quality_tol=1.0, candidate_window=48, max_trials=10,
+            )
+
+        # One initial metric plus at most max_trials candidate metrics.
+        self.assertLessEqual(calls, 11)
+
     def test_dlc_linear_algebra_is_warning_free(self):
         """Coordinate products must not leak handled Accelerate FP flags."""
         ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
@@ -863,6 +963,17 @@ class TestTRICandDLC(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("error", RuntimeWarning)
             gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        self.assertTrue(np.all(np.isnan(gradient)))
+
+    def test_dlc_partial_rank_gradient_requests_recovery(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        ncoord = len(ic.q(self.WATER_X))
+        original_inverse = ic._g_inverse
+        try:
+            ic._g_inverse = lambda _b: (np.eye(ncoord), ncoord - 1)
+            gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        finally:
+            ic._g_inverse = original_inverse
         self.assertTrue(np.all(np.isnan(gradient)))
 
     def test_safe_matmul_suppresses_handled_overflow(self):
@@ -1350,6 +1461,31 @@ class TestDispatchAndValidation(unittest.TestCase):
         self.assertEqual(report.errors, [],
                          "oqp/optimize should validate clean")
 
+        # Omit optimize.lib entirely: every workflow implemented by the native
+        # backend must inherit oqp rather than requiring boilerplate input.
+        for runtype in ("optimize", "ts", "meci", "mecp", "tci",
+                        "neb", "irc", "mep"):
+            native_default = ic.CheckReport()
+            method = "tdhf" if runtype in {"meci", "mecp", "tci"} else "hf"
+            config = {
+                "input": {"runtype": runtype, "method": method},
+                "optimize": {
+                    "istate": 1 if method == "tdhf" else 0,
+                    "jstate": 2,
+                    "kstate": 3,
+                    "imult": 1,
+                    "jmult": 3,
+                },
+            }
+            ic._check_optimize(config, native_default)
+            lib_errors = [
+                diagnostic for diagnostic in native_default.errors
+                if diagnostic.path == "optimize.lib"
+            ]
+            self.assertEqual(
+                lib_errors, [],
+                f"omitted optimize.lib should select oqp for {runtype}")
+
         # mep/meci are supported on oqp; a non-optimization runtype is not.
         report2 = ic.CheckReport()
         cfg2 = {"input": {"runtype": "energy", "method": "hf"},
@@ -1366,6 +1502,21 @@ class TestDispatchAndValidation(unittest.TestCase):
             ic._check_optimize(cfg3, rep)
             lib_errs = [d for d in rep.errors if d.path == "optimize.lib"]
             self.assertEqual(lib_errs, [], f"oqp/{rt} should be allowed")
+
+    def test_runtime_engines_explicitly_choose_global_mode_semantics(self):
+        source = (LIB / "liboqp.py").read_text()
+        tree = ast.parse(source)
+        calls = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "OQPEngine"
+        ]
+        self.assertTrue(calls)
+        for call in calls:
+            keywords = {keyword.arg for keyword in call.keywords}
+            self.assertIn("project_global_rigid_modes", keywords)
+            self.assertIn("masses", keywords)
 
     def test_neb_product_resolves_relative_to_input_dir(self):
         utils = sys.modules.setdefault("oqp.utils",

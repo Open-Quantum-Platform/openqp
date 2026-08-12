@@ -163,6 +163,24 @@ def load_molecule_module():
 
 
 class TestSymmetryMetadata(unittest.TestCase):
+    def test_default_integral_reduction_keeps_the_input_frame(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'input': {'runtype': 'energy'},
+            'symmetry': {},
+        }
+        molecule.symmetry_metadata = {
+            'use_integral_symmetry': True,
+            'detection': {'operations': []},
+        }
+
+        self.assertTrue(molecule.reorient_for_integral_symmetry())
+        self.assertEqual(
+            molecule.symmetry_metadata['integral_symmetry']['status'],
+            'input_frame',
+        )
+
     def test_full_integral_tier_rejects_input_frame_staging(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
@@ -265,16 +283,34 @@ class TestSymmetryMetadata(unittest.TestCase):
 
         # Detection is on by default and the point group is resolved from the
         # geometry later; with no geometry supplied here it stays at the c1
-        # placeholder.  What matters is that the status is no longer 'disabled'
-        # and that neither reduction flag has been switched on with it.
+        # placeholder.  The guarded abelian integral reduction is on and stays
+        # in the input frame by default; response projection remains off.
         self.assertEqual(metadata['point_group'], 'c1')
         self.assertEqual(metadata['subgroup'], 'c1')
         self.assertNotEqual(metadata['status'], 'disabled')
-        self.assertFalse(metadata['use_integral_symmetry'])
+        self.assertTrue(metadata['use_integral_symmetry'])
         self.assertFalse(metadata['use_response_symmetry'])
         self.assertEqual(metadata['label_mo'], True)
         self.assertEqual(metadata['label_states'], True)
         self.assertEqual(metadata['label_modes'], True)
+
+    def test_rohf_pfon_keeps_the_c1_integral_path(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'input': {'runtype': 'energy'},
+            'scf': {'type': 'ROHF', 'pfon': 'true'},
+        }
+        molecule.symmetry_metadata = {
+            'use_integral_symmetry': True,
+            'detection': {'point_group': 'c2v'},
+        }
+
+        self.assertFalse(molecule.reorient_for_integral_symmetry())
+        self.assertEqual(
+            molecule.symmetry_metadata['integral_symmetry']['status'],
+            'skipped_rohf_pfon',
+        )
 
     def test_symmetry_metadata_can_request_auto_c2v(self):
         molecule_module = load_molecule_module()

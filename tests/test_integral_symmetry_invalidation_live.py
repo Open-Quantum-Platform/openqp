@@ -1,9 +1,10 @@
 """Turning the petite reduction OFF must actually turn it off.
 
-The staging path writes `OQP::sym_shell_map`, `sym_ao_target`, `sym_ao_sign`,
-`sym_atom_weight` and sets `sym_petite_enable` to 1. Those tags live in a store
-that outlives one step, and nothing on the abelian path or in the Fortran layer
-removes them. So a reused molecule that ran once with
+The staging path writes `OQP::sym_shell_map`, a frame-specific AO operator
+(`sym_op_blocks` in the default input-frame route, or `sym_ao_target` and
+`sym_ao_sign` in the standard frame), and sets `sym_petite_enable` to 1. Those
+tags live in a store that outlives one step, and nothing on the abelian path or
+in the Fortran layer removes them. So a reused molecule that ran once with
 `use_integral_symmetry=true` and then runs again with it false would keep
 applying the previous geometry's petite list and skeleton symmetrisation --
 wrong integrals, silently, because the reduction is energy-identical when it IS
@@ -110,8 +111,8 @@ class IntegralSymmetryInvalidationTests(unittest.TestCase):
         self.assertEqual(
             mol.symmetry_metadata.get('integral_symmetry', {}).get('status'),
             'active')
-        for tag in ('OQP::sym_shell_map', 'OQP::sym_ao_target',
-                    'OQP::sym_ao_sign', 'OQP::sym_petite_enable'):
+        for tag in ('OQP::sym_shell_map', 'OQP::sym_op_blocks',
+                    'OQP::sym_nonabelian', 'OQP::sym_petite_enable'):
             self.assertTrue(_has(mol, tag), f'{tag} was not staged when enabled')
 
     def test_no_tags_survive_a_run_with_the_reduction_disabled(self):

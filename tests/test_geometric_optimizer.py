@@ -24,13 +24,18 @@ def load_module(name, relative_path):
 def install_minimal_oqp_stubs():
     oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
     oqp_utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp_utils.__path__ = []
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+    tb_backends = types.ModuleType("oqp.utils.tb_backends")
+    tb_backends.is_tb_method = lambda _method: False
+    tb_backends.tb_section_name = lambda _method: None
 
     class MPIManager:
         pass
 
     mpi_utils.MPIManager = MPIManager
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+    sys.modules["oqp.utils.tb_backends"] = tb_backends
     return oqp, oqp_utils
 
 
@@ -91,9 +96,13 @@ def install_runfunc_stubs():
 
     # runfunc also imports the oqp optimizer backend; stub it too.
     liboqp = types.ModuleType("oqp.library.liboqp")
+    class NativeOptimizer:
+        def __init__(self, mol):
+            self.mol = mol
+
     for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
                  "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
-        setattr(liboqp, _cls, type(_cls, (), {}))
+        setattr(liboqp, _cls, type(_cls, (NativeOptimizer,), {}))
 
     class OQPAutoMECIOpt:
         def __init__(self, mol):
@@ -196,6 +205,25 @@ class TestOptimizationExampleCaps(unittest.TestCase):
 
 
 class TestGeometricOptimizerConfig(unittest.TestCase):
+    def test_schema_section_defaults_uses_parser_conversions(self):
+        input_parser = load_module(
+            "input_parser_section_defaults_under_test",
+            "pyoqp/oqp/utils/input_parser.py",
+        )
+        schema = {
+            "optimize": {
+                "lib": {"type": str, "default": "oqp"},
+                "maxit": {"type": int, "default": "30"},
+                "init_scf": {"type": bool, "default": "False"},
+            }
+        }
+
+        defaults = input_parser.schema_section_defaults(schema, "optimize")
+
+        self.assertEqual(
+            defaults, {"lib": "oqp", "maxit": 30, "init_scf": False}
+        )
+
     def setUp(self):
         install_minimal_oqp_stubs()
 
@@ -334,6 +362,71 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertIsInstance(optimizer, GeometricOpt)
         self.assertIs(optimizer.mol, mol)
+
+    def test_get_optimizer_materializes_native_defaults_when_lib_is_omitted(self):
+        install_runfunc_stubs()
+        molecule = types.ModuleType("oqp.molecule")
+        molecule.__path__ = []
+        oqpdata = types.ModuleType("oqp.molecule.oqpdata")
+        oqpdata.OQP_CONFIG_SCHEMA = {"optimize": {}}
+        input_parser = types.ModuleType("oqp.utils.input_parser")
+        defaults = {
+            "lib": "oqp", "optimizer": "bfgs", "step_size": 0.1,
+            "step_tol": 1.0e-2, "maxit": 30, "mep_maxit": 10,
+            "rmsd_grad": 1.0e-4, "rmsd_step": 1.0e-3,
+            "max_grad": 3.0e-4, "max_step": 2.0e-3,
+            "istate": 1, "jstate": 2, "kstate": 3,
+            "imult": 1, "jmult": 3, "energy_shift": 1.0e-6,
+            "energy_gap": 1.0e-5, "init_scf": False,
+        }
+        input_parser.schema_section_defaults = lambda _schema, _section: defaults
+        sys.modules["oqp.molecule"] = molecule
+        sys.modules["oqp.molecule.oqpdata"] = oqpdata
+        sys.modules["oqp.utils.input_parser"] = input_parser
+
+        runfunc = load_module(
+            "runfunc_native_defaults_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+        native_class = sys.modules["oqp.library.liboqp"].OQPOpt
+        expected = dict(defaults)
+        expected["istate"] = 0
+        for method in ("hf", "caspt2", "mrmp2"):
+            with self.subTest(method=method):
+                mol = types.SimpleNamespace(config={
+                    "input": {"runtype": "optimize", "method": method},
+                })
+
+                optimizer = runfunc.get_optimizer(mol)
+
+                self.assertIsInstance(optimizer, native_class)
+                self.assertEqual(mol.config["optimize"], expected)
+
+    def test_get_optimizer_preserves_explicit_excited_state_in_partial_config(self):
+        install_runfunc_stubs()
+        molecule = types.ModuleType("oqp.molecule")
+        molecule.__path__ = []
+        oqpdata = types.ModuleType("oqp.molecule.oqpdata")
+        oqpdata.OQP_CONFIG_SCHEMA = {"optimize": {}}
+        input_parser = types.ModuleType("oqp.utils.input_parser")
+        defaults = {"lib": "oqp", "istate": 1, "meci_search": "auto"}
+        input_parser.schema_section_defaults = lambda _schema, _section: defaults
+        sys.modules["oqp.molecule"] = molecule
+        sys.modules["oqp.molecule.oqpdata"] = oqpdata
+        sys.modules["oqp.utils.input_parser"] = input_parser
+
+        runfunc = load_module(
+            "runfunc_native_explicit_state_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+        mol = types.SimpleNamespace(config={
+            "input": {"runtype": "optimize", "method": "hf"},
+            "optimize": {"istate": 2},
+        })
+
+        runfunc.get_optimizer(mol)
+
+        self.assertEqual(mol.config["optimize"]["istate"], 2)
 
     def test_get_optimizer_dispatches_geometric_meci(self):
         _, GeometricMECIOpt, _, _, _ = install_runfunc_stubs()

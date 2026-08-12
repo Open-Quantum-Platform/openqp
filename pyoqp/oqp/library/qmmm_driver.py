@@ -360,11 +360,13 @@ class OpenQpQMMM:
             # --- Gradients: pure QM + ESPF contribution -----------------------
             gradient = Gradient(self.op.mol)
             if gradient.method == 'hf':
-                oqp.hf_gradient(self.op.mol)
-                grad = self.op.mol.get_grad()
-                gqm = np.array(grad.copy()).reshape(
-                    (1, self.op.mol.get_atoms2("natom"), 3)
-                )
+                # Use the common wrapper: an active petite-list build leaves a
+                # skeleton in the native buffer, and Gradient.gradient()
+                # reconstructs it in the correct frame before returning and
+                # writing the projected result back. Reading get_grad()
+                # directly here used to bypass both operations.
+                gqm = np.asarray(gradient.gradient(), dtype=float).reshape(
+                    (1, self.op.mol.get_atoms2("natom"), 3))
                 oqp.grad_esp_qmmm(self.op.mol)
                 # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
                 # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
@@ -403,6 +405,14 @@ class OpenQpQMMM:
 
                     gradient.grad_func[gradient.td](gradient.mol)
                     gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
+                    # This state-by-state QM/MM path cannot call the common
+                    # wrapper as a batch because ESPF_GRAD is state-specific.
+                    # Apply the same reconstruction here before the force is
+                    # assembled, and keep the public native buffer consistent.
+                    gqm = np.asarray(
+                        gradient.mol.symmetrize_gradient(gqm), dtype=float
+                    ).reshape((gradient.natom, 3))
+                    gradient.mol.set_grad(gqm)
                     oqp.grad_esp_qmmm_excited(self.op.mol)
                     # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
                     gqm += np.asarray(

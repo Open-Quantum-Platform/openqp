@@ -114,7 +114,10 @@ class ReorientationRollbackLeavesADetectionThatDescribesUs(unittest.TestCase):
         from oqp.molecule.molecule import Molecule
         mol = Molecule.__new__(Molecule)
         mol._system = self.COORD.copy()
-        mol.config = {'input': {'runtype': 'grad'}}
+        mol.config = {
+            'input': {'runtype': 'grad'},
+            'symmetry': {'move_to_standard_frame': True},
+        }
         mol.get_system = lambda: mol._system
         mol.get_atoms = lambda: np.array(self.ATOMS)
         mol.update_system = lambda x: setattr(

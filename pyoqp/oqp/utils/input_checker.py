@@ -665,7 +665,7 @@ def _parse_bool_like(value: Any, path: str, report: CheckReport, *, allow_true: 
 
 
 def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
-    """Validate the new symmetry metadata block without enabling reductions by default."""
+    """Validate symmetry metadata and reduction policy."""
     section = config.get("symmetry")
     if not section:
         return
@@ -703,19 +703,22 @@ def _check_symmetry(config: dict[str, Any], report: CheckReport) -> None:
     _parse_bool_like(section.get("label_mo", True), "symmetry.label_mo", report)
     _parse_bool_like(section.get("label_states", True), "symmetry.label_states", report)
     _parse_bool_like(section.get("label_modes", True), "symmetry.label_modes", report)
-    integral_setting = section.get("use_integral_symmetry", "False")
+    integral_setting = section.get("use_integral_symmetry", "True")
+    integral_warning = None
+    if isinstance(integral_setting, str) and integral_setting.strip().lower() == "full":
+        integral_warning = (
+            "Experimental: non-abelian full-group integral symmetry. The molecule "
+            "is reoriented to the symmetry standard orientation at load time."
+        )
     _parse_bool_like(
         integral_setting,
         "symmetry.use_integral_symmetry",
         report,
         allow_true=True,
-        experimental_warning=(
-            "Experimental: petite-list/skeleton-Fock reduction. The molecule "
-            "is reoriented to the symmetry standard orientation at load time."
-        ),
+        experimental_warning=integral_warning,
     )
     move_to_standard_frame = _parse_bool_like(
-        section.get("move_to_standard_frame", True),
+        section.get("move_to_standard_frame", False),
         "symmetry.move_to_standard_frame",
         report,
     )

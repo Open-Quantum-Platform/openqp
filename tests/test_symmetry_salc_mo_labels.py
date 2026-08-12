@@ -199,7 +199,7 @@ class TestMoleculeDetectionWiring(unittest.TestCase):
         self.assertEqual(metadata["detected_subgroup"], "c2v")
         self.assertEqual(metadata["point_group"], "c2v")
         self.assertNotIn("detection_error", metadata)
-        self.assertFalse(metadata["use_integral_symmetry"])
+        self.assertTrue(metadata["use_integral_symmetry"])
         self.assertFalse(metadata["use_response_symmetry"])
 
     def test_strict_mismatch_raises(self):

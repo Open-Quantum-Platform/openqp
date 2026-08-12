@@ -296,13 +296,34 @@ def compute_data(mol):
 
 def get_optimizer(mol):
     runtype = mol.config['input']['runtype']
-    lib = mol.config['optimize']['lib']
+    # Normal parsed inputs receive the schema default, but scripting callers
+    # and lightweight embedding APIs may provide a partial configuration.
+    # Keep the native backend genuinely optional in user input: omitting both
+    # [optimize] and optimize.lib must still select oqp.
+    optimize_config = mol.config.setdefault('optimize', {})
+    if 'lib' not in optimize_config:
+        istate_omitted = 'istate' not in optimize_config
+        from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+        from oqp.utils.input_parser import schema_section_defaults
+        defaults = schema_section_defaults(OQP_CONFIG_SCHEMA, 'optimize')
+        for key, value in defaults.items():
+            optimize_config.setdefault(key, value)
+        # The schema default targets the first response state.  Lightweight
+        # scripting configurations do not pass through schema normalization,
+        # whose validator treats an omitted selector as the ground state for a
+        # ground-state HF/DFT optimization.  Single-state CASPT2/MRMP2 likewise
+        # publish only energy index zero.  Preserve those public behaviours
+        # when materializing the remaining native defaults here.
+        method = str(mol.config.get('input', {}).get('method', 'hf')).lower()
+        if istate_omitted and method in {'hf', 'caspt2', 'mrmp2'}:
+            optimize_config['istate'] = 0
+    lib = str(optimize_config['lib']).strip().lower()
 
     # BaekA generalizes the adjacent-gap adaptive penalty from two to N states.
     # It is selected as a MECI search algorithm rather than as a separate
     # backend; the historical three-state ``tci`` spelling remains below.
     meci_search = str(
-        mol.config['optimize'].get('meci_search', 'auto')
+        optimize_config.get('meci_search', 'auto')
     ).strip().lower()
     if lib == 'oqp' and runtype == 'meci' and meci_search == 'auto':
         # Lazy import preserves compatibility with lightweight dispatcher test
@@ -310,7 +331,7 @@ def get_optimizer(mol):
         from oqp.library.liboqp import OQPAutoMECIOpt
         return OQPAutoMECIOpt(mol)
     if lib == 'oqp' and runtype == 'mecp' and \
-            str(mol.config['optimize'].get('mecp_search', 'auto')).strip().lower() in ('auto', 'sqp'):
+            str(optimize_config.get('mecp_search', 'auto')).strip().lower() in ('auto', 'sqp'):
         # SQP supplies its own KKT step control instead of an objective for the
         # native engine, so it is dispatched like BaekA rather than through
         # OQPMECPOpt.
