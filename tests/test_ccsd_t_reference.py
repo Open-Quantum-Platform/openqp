@@ -59,10 +59,10 @@ def _write_input(path, case, triples=True, symmetry=False):
         "[input]\nsystem=\n%s\ncharge=0\nruntype=energy\nbasis=%s\nmethod=%s\n\n"
         "[guess]\ntype=huckel\n\n"
         "[scf]\nmultiplicity=%d\ntype=%s\nconv=1.0e-11\n\n"
-        "[cc]\nnfzc=%d\nconv=1e-9\n"
+        "[cc]\nnfzc=%d\nconv=1e-9\n\n"
         % (atoms, case["basis"], method, mult, scf_type, case["nfzc"])
-        + ("\n[symmetry]\nenabled=true\nuse_integral_symmetry=true\n"
-           if symmetry else "")
+        + "[symmetry]\nenabled=true\nuse_integral_symmetry=%s\n"
+        % ("true" if symmetry else "false")
     )
 
 

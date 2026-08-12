@@ -882,6 +882,18 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("if (int(p1) in qm_set) or (int(p2) in qm_set):", src)
         self.assertNotIn("if (p1 not in qm_atoms) or (p2 not in qm_atoms):", src)
 
+    def test_native_qmmm_reconstructs_petite_gradients_before_force_assembly(self):
+        src = QMMM_DRIVER.read_text()
+
+        self.assertIn("gqm = np.asarray(gradient.gradient(), dtype=float)", src)
+        self.assertIn("gradient.mol.symmetrize_gradient(gqm)", src)
+        self.assertIn("gradient.mol.set_grad(gqm)", src)
+
+        native_start = src.index("# --- Gradients: pure QM + ESPF contribution")
+        native_end = src.index("self.op.mol.save_data()", native_start)
+        native_path = src[native_start:native_end]
+        self.assertNotIn("oqp.hf_gradient(self.op.mol)", native_path)
+
     def test_trivial_crossing_active_state_updates_are_applied(self):
         src = NAMD.read_text()
 

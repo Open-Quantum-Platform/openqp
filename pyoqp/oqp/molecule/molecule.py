@@ -225,7 +225,7 @@ class Molecule:
             'label_mo': self._parse_bool_like(symmetry.get('label_mo', True)),
             'label_states': self._parse_bool_like(symmetry.get('label_states', True)),
             'label_modes': self._parse_bool_like(symmetry.get('label_modes', True)),
-            'use_integral_symmetry': self._parse_bool_like(symmetry.get('use_integral_symmetry', 'False')),
+            'use_integral_symmetry': self._parse_bool_like(symmetry.get('use_integral_symmetry', 'True')),
             'use_response_symmetry': self._parse_bool_like(symmetry.get('use_response_symmetry', 'False')),
             'strict': self._parse_bool_like(symmetry.get('strict', False)),
             'tolerance': float(symmetry.get('tolerance', 1.0e-5)),
@@ -236,7 +236,7 @@ class Molecule:
                 'label_mo': symmetry.get('label_mo', True),
                 'label_states': symmetry.get('label_states', True),
                 'label_modes': symmetry.get('label_modes', True),
-                'use_integral_symmetry': symmetry.get('use_integral_symmetry', 'False'),
+                'use_integral_symmetry': symmetry.get('use_integral_symmetry', 'True'),
                 'use_response_symmetry': symmetry.get('use_response_symmetry', 'False'),
                 'strict': symmetry.get('strict', False),
                 'tolerance': symmetry.get('tolerance', 1.0e-5),
@@ -561,6 +561,21 @@ class Molecule:
         if not detection:
             return False
 
+        # ROHF+pFON is deliberately kept on the C1 integral path.  Although
+        # the petite build is exact for an invariant density, the temporary
+        # fractional occupations make this SCF accelerator sensitive to the
+        # small change in summation order.  On Apple Silicon the guarded
+        # reduction drove the shipped H2O/ROHF/PBE pFON regression to a
+        # different stationary solution (1.70e-4 Eh), while the RHF and UHF
+        # pFON cases were unchanged.  Fall back before any maps are staged;
+        # this changes only performance and preserves the established SCF
+        # solution across supported platforms.
+        scf = self.config.get('scf', {})
+        if (str(scf.get('type', '')).strip().lower() == 'rohf'
+                and self._parse_bool_like(scf.get('pfon', False))):
+            meta['integral_symmetry'] = {'status': 'skipped_rohf_pfon'}
+            return False
+
         # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
         # NEB, ...) cannot reuse maps detected at the initial geometry. Apply
         # this gate before the no-move return as well: keeping the input frame
@@ -597,7 +612,7 @@ class Molecule:
         # molecule that will not obtain a reduction.
         if not self._parse_bool_like(
                 self.config.get('symmetry', {}).get(
-                    'move_to_standard_frame', True)):
+                    'move_to_standard_frame', False)):
             meta['integral_symmetry'] = {'status': 'input_frame'}
             return True
 

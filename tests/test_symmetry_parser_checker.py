@@ -40,19 +40,17 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
         self.assertIn("'symmetry': {", text)
-        # Detection and labelling are on by default: they only annotate
-        # (point group, MO/state/mode irreps) and are what the MRSF Davidson
-        # guess needs to cover every symmetry block.  The two flags that
-        # actually change the computation -- integral reduction, which also
-        # reorients the molecule, and the experimental response projection --
-        # remain off, which is what "safe defaults" means here.
+        # Detection, labelling, and the guarded abelian integral reduction are
+        # on by default.  The reduction stays in the input frame; the
+        # experimental response projection remains off.
         self.assertIn("'enabled': {'type': string, 'default': 'true'}", text)
         self.assertIn("'point_group': {'type': string, 'default': 'auto'}", text)
         self.assertIn("'subgroup': {'type': string, 'default': 'auto'}", text)
         self.assertIn("'label_mo': {'type': bool, 'default': 'True'}", text)
         self.assertIn("'label_states': {'type': bool, 'default': 'True'}", text)
         self.assertIn("'label_modes': {'type': bool, 'default': 'True'}", text)
-        self.assertIn("'use_integral_symmetry': {'type': string, 'default': 'False'}", text)
+        self.assertIn("'use_integral_symmetry': {'type': string, 'default': 'True'}", text)
+        self.assertIn("'move_to_standard_frame': {'type': bool, 'default': 'False'}", text)
         self.assertIn("'use_response_symmetry': {'type': bool, 'default': 'False'}", text)
         self.assertIn("'tolerance': {'type': float, 'default': '1.0e-5'}", text)
         self.assertIn("'strict': {'type': bool, 'default': 'False'}", text)
@@ -137,7 +135,7 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertNotIn("symmetry.use_response_symmetry", "\n".join(item.path for item in report.errors))
 
     def test_reduction_flag_policy(self):
-        """Both reduction flags are experimental opt-ins (warn, not error)."""
+        """The default abelian tier is quiet; response projection still warns."""
         report = self.input_checker.CheckReport()
         config = {
             "symmetry": {
@@ -158,8 +156,25 @@ class TestSymmetryParserAndMetadataGates(unittest.TestCase):
         self.assertNotIn("symmetry.use_integral_symmetry", errors)
         self.assertNotIn("symmetry.use_response_symmetry", errors)
         warnings = "\n".join(item.path for item in report.warnings)
-        self.assertIn("symmetry.use_integral_symmetry", warnings)
+        self.assertNotIn("symmetry.use_integral_symmetry", warnings)
         self.assertIn("symmetry.use_response_symmetry", warnings)
+
+    def test_full_integral_tier_remains_experimental(self):
+        report = self.input_checker.CheckReport()
+        config = {
+            "symmetry": {
+                "use_integral_symmetry": "full",
+                "move_to_standard_frame": True,
+            }
+        }
+
+        self.input_checker._check_symmetry(config, report)
+
+        self.assertTrue(report.ok, report.to_text())
+        self.assertIn(
+            "symmetry.use_integral_symmetry",
+            "\n".join(item.path for item in report.warnings),
+        )
 
     def test_full_integral_tier_requires_standard_frame(self):
         report = self.input_checker.CheckReport()
