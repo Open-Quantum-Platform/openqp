@@ -61,6 +61,11 @@ class DockerDistributionTests(unittest.TestCase):
         ).read_text()
         self.assertNotIn("write_bytes", stack_gate)
         self.assertNotIn("-ftrampoline-impl=heap", (ROOT / "CMakeLists.txt").read_text())
+        runtime_notice = (ROOT / "docker/THIRD_PARTY_RUNTIME.md").read_text()
+        self.assertIn("rejects any installed OpenQP ELF library", runtime_notice)
+        self.assertIn("fail-closed", runtime_notice)
+        self.assertIn("wheel `RECORD` metadata", runtime_notice)
+        self.assertNotIn("executable-stack\nnormalization", runtime_notice)
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
@@ -120,6 +125,27 @@ class DockerDistributionTests(unittest.TestCase):
                 library.write_bytes(data)
                 ELF_STACK.require_non_executable_stack(library)
                 self.assertEqual(ELF_STACK.gnu_stack_flags(library.read_bytes()), 0x6)
+
+    def test_mrsf_container_smoke_requires_convergence_and_reference_gradient(self):
+        reference = [0.0, 0.0, -0.18, 0.08, -0.08, 0.09, -0.08, 0.08, 0.09]
+        gradient = """Z-Vector converged
+PyOQP dispersion corrected gradients
+PyOQP S2
+O  0.0  0.0 -0.18
+H  0.08 -0.08 0.09
+H -0.08  0.08 0.09
+"""
+        CONTAINER_SMOKE.require_mrsf_minres_result(gradient, reference)
+        with self.assertRaisesRegex(AssertionError, "did not converge"):
+            CONTAINER_SMOKE.require_mrsf_minres_result(
+                gradient.replace("Z-Vector converged", "Z-Vector not converged"),
+                reference,
+            )
+        with self.assertRaisesRegex(AssertionError, "does not match"):
+            CONTAINER_SMOKE.require_mrsf_minres_result(
+                gradient,
+                [*reference[:-1], 1.0],
+            )
 
     def test_container_smoke_reads_direct_elf_needed_entries(self):
         data = bytearray(0x240)
@@ -524,6 +550,29 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             ):
                 OCI_VERIFY.verify(
                     bad_payload_artifact, "1.3.0", "a" * 40
+                )
+
+            wrong_reference_attestation = dict(attestation)
+            wrong_reference_attestation["annotations"] = {
+                **attestation["annotations"],
+                "vnd.docker.reference.digest": "sha256:" + "b" * 64,
+            }
+            wrong_reference_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [image, wrong_reference_attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            wrong_reference_artifact = (
+                Path(temporary) / "wrong-attestation-reference.oci.tar"
+            )
+            self._write_oci(wrong_reference_artifact, wrong_reference_index, blobs)
+            with self.assertRaisesRegex(
+                ValueError, "reference digest does not match candidate image"
+            ):
+                OCI_VERIFY.verify(
+                    wrong_reference_artifact, "1.3.0", "a" * 40
                 )
 
             invalid_subjects = (

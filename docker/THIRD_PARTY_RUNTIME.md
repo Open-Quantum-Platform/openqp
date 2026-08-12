@@ -26,9 +26,9 @@ copied system shared libraries are installed under
 `/usr/share/licenses/openqp/runtime-packages/`.
 
 The packaged DFT-D4 build metadata records the exact clean Git revision passed
-by the workflow. If an installed ELF header requires executable-stack
-normalization for the minimal runtime, the corresponding wheel `RECORD` hash
-and size are updated and verified in the same image layer.
+by the workflow. The runtime build rejects any installed OpenQP ELF library
+that requests an executable process stack. This check is fail-closed and does
+not modify the installed library or its wheel `RECORD` metadata.
 
 The DFT-D4 shared-library stack and its patched complete corresponding source
 are installed by the OpenQP wheel under

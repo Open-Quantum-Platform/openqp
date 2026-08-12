@@ -472,11 +472,18 @@ def verify(
                             f"{subject.get(field)} != {image_descriptor.get(field)}"
                         )
                 subjects.add(str(subject["digest"]))
-            annotation_subject = descriptor.get("annotations", {}).get(
-                "vnd.docker.reference.digest"
-            )
-            if annotation_subject:
-                subjects.add(str(annotation_subject))
+            annotations = descriptor.get("annotations", {})
+            if not isinstance(annotations, dict):
+                raise ValueError("attestation descriptor annotations must be an object")
+            reference_digest_key = "vnd.docker.reference.digest"
+            if reference_digest_key in annotations:
+                annotation_subject = annotations[reference_digest_key]
+                if annotation_subject != image_digest:
+                    raise ValueError(
+                        "attestation reference digest does not match candidate image: "
+                        f"{annotation_subject} != {image_digest}"
+                    )
+                subjects.add(annotation_subject)
             has_layers = "layers" in manifest
             attestation_config = manifest.get("config")
             if "config" in manifest:

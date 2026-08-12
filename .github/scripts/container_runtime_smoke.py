@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -18,12 +19,39 @@ from pathlib import Path
 ENERGY_REFERENCE = -1.1167593075
 D4_ENERGY_REFERENCE = -0.00019542038860006095
 D4_CHILD_MARKER = "OQP_D4_CONTAINER_RESULT="
+MRSF_GRADIENT_TOLERANCE = 1.0e-5
 PT_LOAD = 1
 PT_DYNAMIC = 2
 DT_NULL = 0
 DT_NEEDED = 1
 DT_STRTAB = 5
 DT_STRSZ = 10
+
+
+def require_mrsf_minres_result(output: str, reference: list[float]) -> None:
+    """Require a converged, finite MRSF MINRES reference gradient."""
+    if not re.search(r"\bZ-Vector converged\b", output):
+        raise AssertionError("MRSF MINRES z-vector did not converge")
+    marker = "PyOQP dispersion corrected gradients"
+    if marker not in output:
+        raise AssertionError("MRSF MINRES smoke produced no final gradient")
+    number = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
+    rows = re.findall(
+        rf"^\s*[A-Za-z]{{1,3}}\s+({number})\s+({number})\s+({number})\s*$",
+        output.rsplit(marker, 1)[1],
+        flags=re.MULTILINE,
+    )
+    observed = [float(value) for row in rows[:3] for value in row]
+    if len(reference) != 9 or len(observed) != len(reference):
+        raise AssertionError("MRSF MINRES smoke produced an incomplete gradient")
+    if not all(math.isfinite(value) for value in observed):
+        raise AssertionError("MRSF MINRES smoke produced a non-finite gradient")
+    difference = max(abs(actual - expected) for actual, expected in zip(observed, reference))
+    if difference >= MRSF_GRADIENT_TOLERANCE:
+        raise AssertionError(
+            "MRSF MINRES gradient does not match the packaged reference: "
+            f"max difference {difference:.3e}"
+        )
 
 
 def sha256(path: Path) -> str:
@@ -556,15 +584,23 @@ def main() -> None:
         if not match or abs(float(match.group(1)) - ENERGY_REFERENCE) >= 1.0e-6:
             raise AssertionError(f"unexpected container RHF result: {log[-4000:]}")
 
-    # Exercise the GNU Fortran internal-procedure callback used by the MRSF
-    # MINRES z-vector path. This catches an invalid executable-stack rewrite
-    # that a basic RHF or DFT-D4 smoke calculation cannot reach.
+    # Exercise the module-procedure callbacks used by the MRSF MINRES z-vector
+    # path. A basic RHF or DFT-D4 smoke calculation cannot reach this code.
     mrsf_source = (
         root
         / "share/examples/MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp"
     )
     if not mrsf_source.is_file():
         raise AssertionError(f"packaged MRSF smoke input missing: {mrsf_source}")
+    mrsf_reference_path = mrsf_source.with_suffix(".json")
+    if not mrsf_reference_path.is_file():
+        raise AssertionError(
+            f"packaged MRSF smoke reference missing: {mrsf_reference_path}"
+        )
+    mrsf_reference = json.loads(mrsf_reference_path.read_text(encoding="utf-8"))
+    reference_gradient = mrsf_reference.get("grad")
+    if not isinstance(reference_gradient, list):
+        raise AssertionError("packaged MRSF smoke reference has no gradient")
     with tempfile.TemporaryDirectory(prefix="openqp-mrsf-minres-smoke-") as temporary:
         temporary_path = Path(temporary)
         input_path = temporary_path / "mrsf-minres.inp"
@@ -594,6 +630,10 @@ def main() -> None:
             raise AssertionError(f"MRSF smoke did not select MINRES: {log[-4000:]}")
         if "MINRES total iterations" not in log:
             raise AssertionError(f"MRSF MINRES callback did not run: {log[-4000:]}")
+        require_mrsf_minres_result(
+            "\n".join((result.stdout, result.stderr, log)),
+            reference_gradient,
+        )
 
     expected_d4_paths = {path.resolve() for path in d4_paths.values()}
     require_d4_child(expected_d4_paths)
