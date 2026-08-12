@@ -96,10 +96,29 @@ def _reject_duplicate_oci_members(archive: tarfile.TarFile) -> None:
 
 
 def _require_provenance_revision(
-    predicate: dict[str, Any], expected_revision: str
+    predicate_type: str,
+    predicate: dict[str, Any],
+    expected_revision: str,
 ) -> None:
     """Bind BuildKit provenance to the source revision being verified."""
     revisions: list[Any] = []
+
+    if predicate_type == "https://slsa.dev/provenance/v0.2":
+        invocation = predicate.get("invocation")
+        parameter_roots = (
+            [invocation.get("parameters")]
+            if isinstance(invocation, dict)
+            else []
+        )
+    elif predicate_type == "https://slsa.dev/provenance/v1":
+        build_definition = predicate.get("buildDefinition")
+        parameter_roots = (
+            [build_definition.get("externalParameters")]
+            if isinstance(build_definition, dict)
+            else []
+        )
+    else:
+        parameter_roots = []
 
     def visit(value: Any) -> None:
         if isinstance(value, dict):
@@ -111,7 +130,11 @@ def _require_provenance_revision(
             for child in value:
                 visit(child)
 
-    visit(predicate)
+    # Only BuildKit's version-defined invocation/external-parameter trees are
+    # authoritative for build arguments. A matching key in run metadata or an
+    # unrelated predicate object must not impersonate the source revision.
+    for root in parameter_roots:
+        visit(root)
     if not revisions:
         raise ValueError("SLSA provenance does not identify the OpenQP revision")
     if any(revision != expected_revision for revision in revisions):
@@ -241,7 +264,9 @@ def _statement_subjects(
         expected_revision is not None
         and predicate_type in SLSA_PROVENANCE_PREDICATE_TYPES
     ):
-        _require_provenance_revision(predicate, expected_revision)
+        _require_provenance_revision(
+            predicate_type, predicate, expected_revision
+        )
 
     raw_subjects = statement.get("subject")
     if not isinstance(raw_subjects, list) or not raw_subjects:

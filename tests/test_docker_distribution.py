@@ -934,6 +934,9 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 ]["externalParameters"]
                 if revision_value is None:
                     external_parameters.clear()
+                    provenance_statement["predicate"]["runDetails"][
+                        "metadata"
+                    ] = {"OPENQP_REVISION": "a" * 40}
                 else:
                     external_parameters["args"][
                         "build-arg:OPENQP_REVISION"
