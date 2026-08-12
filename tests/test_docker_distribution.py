@@ -55,6 +55,14 @@ class DockerDistributionTests(unittest.TestCase):
         self.assertIn("runtime-library-manifest.json", runtime)
         self.assertIn("normalize_elf_stack.py", runtime)
         self.assertIn("--openqp-package", runtime)
+        self.assertNotIn("--update-record", runtime)
+        stack_gate = (
+            ROOT / ".github/scripts/normalize_elf_stack.py"
+        ).read_text()
+        self.assertNotIn("write_bytes", stack_gate)
+        cmake = (ROOT / "CMakeLists.txt").read_text()
+        self.assertIn("-ftrampoline-impl=heap", cmake)
+        self.assertIn("OQP_FORTRAN_HEAP_TRAMPOLINES", cmake)
         self.assertIn("-DUSE_LIBINT=OFF", dockerfile)
         self.assertIn("-DENABLE_OPENMP=ON", dockerfile)
         self.assertIn("--base-lock=docker/base-images.lock.json", dockerfile)
@@ -84,7 +92,7 @@ class DockerDistributionTests(unittest.TestCase):
             },
         )
 
-    def test_elf_stack_normalizer_clears_only_execute_permission(self):
+    def test_elf_stack_gate_rejects_execute_permission_without_mutation(self):
         for elf_class, header_size, phentsize, flags_offset in (
             (1, 52, 32, 24),
             (2, 64, 56, 4),
@@ -105,32 +113,15 @@ class DockerDistributionTests(unittest.TestCase):
             with self.subTest(elf_class=elf_class), tempfile.TemporaryDirectory() as temporary:
                 library = Path(temporary) / "liboqp.so"
                 library.write_bytes(data)
-                self.assertTrue(ELF_STACK.clear_executable_stack(library))
+                original = library.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, "executable stack"):
+                    ELF_STACK.require_non_executable_stack(library)
+                self.assertEqual(library.read_bytes(), original)
+
+                struct.pack_into("<I", data, header_size + flags_offset, 0x6)
+                library.write_bytes(data)
+                ELF_STACK.require_non_executable_stack(library)
                 self.assertEqual(ELF_STACK.gnu_stack_flags(library.read_bytes()), 0x6)
-                self.assertFalse(ELF_STACK.clear_executable_stack(library))
-
-    def test_elf_stack_normalizer_updates_installed_wheel_record(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            purelib = Path(temporary)
-            library = purelib / "oqp/lib/liboqp.so"
-            library.parent.mkdir(parents=True)
-            library.write_bytes(b"normalized-openqp-library")
-            dist_info = purelib / "openqp-1.3.0.dist-info"
-            dist_info.mkdir()
-            record = dist_info / "RECORD"
-            record.write_text(
-                "oqp/lib/liboqp.so,sha256=stale,1\n"
-                "openqp-1.3.0.dist-info/RECORD,,\n",
-                encoding="utf-8",
-            )
-
-            ELF_STACK.update_openqp_record([library], purelib)
-
-            updated = record.read_text(encoding="utf-8")
-            expected_hash, expected_size = ELF_STACK._record_hash(library)
-            self.assertIn(
-                f"oqp/lib/liboqp.so,{expected_hash},{expected_size}\n", updated
-            )
 
     def test_container_smoke_reads_direct_elf_needed_entries(self):
         data = bytearray(0x240)
@@ -409,6 +400,9 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
         )
         image["platform"] = {"os": "linux", "architecture": "amd64"}
         image_digest = image["digest"]
+        image_subject = {
+            field: image[field] for field in ("mediaType", "digest", "size")
+        }
         statements = []
         for predicate_type in (
             "https://spdx.dev/Document",
@@ -463,7 +457,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             {
                 "schemaVersion": 2,
                 "config": attestation_config,
-                "subject": {"digest": image_digest},
+                "subject": dict(image_subject),
                 "layers": statements,
             },
         )
@@ -480,6 +474,108 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             artifact = Path(temporary) / "candidate.oci.tar"
             self._write_oci(artifact, index, blobs)
             summary = OCI_VERIFY.verify(artifact, "1.3.0", "a" * 40)
+
+            duplicate_payloads = (
+                ("index.json", index),
+                (
+                    OCI_VERIFY._blob_path(image["digest"]),
+                    blobs[OCI_VERIFY._blob_path(image["digest"])],
+                ),
+            )
+            for duplicate_name, duplicate_payload in duplicate_payloads:
+                duplicate = Path(temporary) / (
+                    "duplicate-" + duplicate_name.replace("/", "-") + ".oci.tar"
+                )
+                self._write_oci(duplicate, index, blobs)
+                with tarfile.open(duplicate, "a") as archive:
+                    info = tarfile.TarInfo(duplicate_name)
+                    info.size = len(duplicate_payload)
+                    archive.addfile(info, io.BytesIO(duplicate_payload))
+                with self.assertRaisesRegex(ValueError, "duplicate member path"):
+                    OCI_VERIFY.verify(duplicate, "1.3.0", "a" * 40)
+
+            bad_payload = dict(statements[0])
+            bad_payload["mediaType"] = "text/plain"
+            bad_payload_attestation = self._json_blob(
+                blobs,
+                {
+                    "schemaVersion": 2,
+                    "config": attestation_config,
+                    "subject": dict(image_subject),
+                    "layers": [bad_payload, statements[1]],
+                },
+            )
+            bad_payload_attestation["platform"] = {
+                "os": "unknown",
+                "architecture": "unknown",
+            }
+            bad_payload_attestation["annotations"] = dict(
+                attestation["annotations"]
+            )
+            bad_payload_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [image, bad_payload_attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            bad_payload_artifact = Path(temporary) / "bad-payload-media.oci.tar"
+            self._write_oci(bad_payload_artifact, bad_payload_index, blobs)
+            with self.assertRaisesRegex(
+                ValueError, "unsupported attestation payload media type"
+            ):
+                OCI_VERIFY.verify(
+                    bad_payload_artifact, "1.3.0", "a" * 40
+                )
+
+            invalid_subjects = (
+                (
+                    "missing-media",
+                    {
+                        key: value
+                        for key, value in image_subject.items()
+                        if key != "mediaType"
+                    },
+                ),
+                ("wrong-size", {**image_subject, "size": image_subject["size"] + 1}),
+                ("wrong-media", {**image_subject, "mediaType": "text/plain"}),
+            )
+            for label, invalid_subject in invalid_subjects:
+                invalid_subject_attestation = self._json_blob(
+                    blobs,
+                    {
+                        "schemaVersion": 2,
+                        "config": attestation_config,
+                        "subject": invalid_subject,
+                        "layers": statements,
+                    },
+                )
+                invalid_subject_attestation["platform"] = {
+                    "os": "unknown",
+                    "architecture": "unknown",
+                }
+                invalid_subject_attestation["annotations"] = dict(
+                    attestation["annotations"]
+                )
+                invalid_subject_index = json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [image, invalid_subject_attestation],
+                    },
+                    sort_keys=True,
+                ).encode()
+                invalid_subject_artifact = (
+                    Path(temporary) / f"invalid-subject-{label}.oci.tar"
+                )
+                self._write_oci(
+                    invalid_subject_artifact, invalid_subject_index, blobs
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "subject descriptor does not match candidate image"
+                ):
+                    OCI_VERIFY.verify(
+                        invalid_subject_artifact, "1.3.0", "a" * 40
+                    )
 
             for layout_version, expected_error in (
                 (None, "missing oci-layout"),
@@ -590,7 +686,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
 
             unmarked_attestation_manifest = self._json_blob(
                 blobs,
-                {"schemaVersion": 2, "subject": {"digest": image_digest},
+                {"schemaVersion": 2, "subject": dict(image_subject),
                  "blobs": statements},
                 "application/vnd.oci.artifact.manifest.v1+json",
             )
@@ -610,7 +706,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     "missing",
                     {
                         "schemaVersion": 2,
-                        "subject": {"digest": image_digest},
+                        "subject": dict(image_subject),
                         "layers": statements,
                     },
                     "has no config descriptor",
@@ -620,7 +716,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     {
                         "schemaVersion": 2,
                         "config": None,
-                        "subject": {"digest": image_digest},
+                        "subject": dict(image_subject),
                         "layers": statements,
                     },
                     "config descriptor must be an object",
@@ -754,7 +850,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     {
                         "schemaVersion": 2,
                         "config": attestation_config,
-                        "subject": {"digest": image_digest},
+                        "subject": dict(image_subject),
                         "layers": layers,
                     },
                 )
@@ -804,7 +900,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                 {
                     "schemaVersion": 2,
                     "config": attestation_config,
-                    "subject": {"digest": image_digest},
+                    "subject": dict(image_subject),
                     "layers": [unrelated_spdx, statements[1]],
                 },
             )
@@ -934,7 +1030,7 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
                     {
                         "schemaVersion": 2,
                         "config": attestation_config,
-                        "subject": {"digest": image_digest},
+                        "subject": dict(image_subject),
                         "layers": [malformed_layer, statements[1]],
                     },
                 )

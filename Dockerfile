@@ -129,12 +129,11 @@ RUN --mount=type=bind,from=builder,source=/opt/openqp-wheelhouse,target=/tmp/whe
     python -m pip install --no-cache-dir --no-index \
       --find-links=/tmp/wheelhouse "OpenQP==${OPENQP_VERSION}"
 
-# GCC/Fortran objects in the wheel can conservatively mark PT_GNU_STACK as
-# executable. Debian Trixie rejects loading such a library. Normalize only the
-# installed OpenQP ELF headers with a read-only, builder-mounted script; no
-# binary-editing utility is retained in the minimal runtime image.
+# GCC/Fortran internal callbacks use heap trampolines, so no packaged OpenQP
+# library may request an executable process stack. Verify the installed wheel
+# without rewriting its ELF headers or wheel RECORD.
 RUN --mount=type=bind,from=builder,source=/opt/openqp/.github/scripts/normalize_elf_stack.py,target=/tmp/normalize_elf_stack.py,ro \
-    python /tmp/normalize_elf_stack.py --openqp-package --update-record
+    python /tmp/normalize_elf_stack.py --openqp-package
 
 COPY --from=builder /opt/openqp-runtime/openblas/ /opt/openblas/lib/
 COPY --from=builder /opt/openqp-runtime/lib/ /opt/openqp-runtime/lib/

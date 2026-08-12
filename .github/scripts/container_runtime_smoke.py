@@ -556,6 +556,45 @@ def main() -> None:
         if not match or abs(float(match.group(1)) - ENERGY_REFERENCE) >= 1.0e-6:
             raise AssertionError(f"unexpected container RHF result: {log[-4000:]}")
 
+    # Exercise the GNU Fortran internal-procedure callback used by the MRSF
+    # MINRES z-vector path. This catches an invalid executable-stack rewrite
+    # that a basic RHF or DFT-D4 smoke calculation cannot reach.
+    mrsf_source = (
+        root
+        / "share/examples/MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp"
+    )
+    if not mrsf_source.is_file():
+        raise AssertionError(f"packaged MRSF smoke input missing: {mrsf_source}")
+    with tempfile.TemporaryDirectory(prefix="openqp-mrsf-minres-smoke-") as temporary:
+        temporary_path = Path(temporary)
+        input_path = temporary_path / "mrsf-minres.inp"
+        input_text = mrsf_source.read_text(encoding="utf-8")
+        section = "[tdhf]\ntype=mrsf\n"
+        if input_text.count(section) != 1:
+            raise AssertionError("packaged MRSF input has an unexpected [tdhf] section")
+        input_path.write_text(
+            input_text.replace(section, section + "z_solver=2\n"),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["openqp", input_path.name],
+            cwd=temporary_path,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        log_path = temporary_path / "mrsf-minres.log"
+        log = log_path.read_text() if log_path.is_file() else ""
+        if result.returncode != 0:
+            raise AssertionError(
+                f"container MRSF MINRES smoke failed:\n{result.stdout}\n"
+                f"{result.stderr}\n{log[-4000:]}"
+            )
+        if not re.search(r"Solver method\s+is\s+MINRES", log):
+            raise AssertionError(f"MRSF smoke did not select MINRES: {log[-4000:]}")
+        if "MINRES total iterations" not in log:
+            raise AssertionError(f"MRSF MINRES callback did not run: {log[-4000:]}")
+
     expected_d4_paths = {path.resolve() for path in d4_paths.values()}
     require_d4_child(expected_d4_paths)
     for name, path in d4_paths.items():

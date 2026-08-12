@@ -25,6 +25,7 @@ IN_TOTO_STATEMENT_TYPES = {
     "https://in-toto.io/Statement/v0.1",
     "https://in-toto.io/Statement/v1",
 }
+IN_TOTO_PAYLOAD_MEDIA_TYPES = {"application/vnd.in-toto+json"}
 OCI_IMAGE_LAYOUT_VERSION = "1.0.0"
 OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
 OCI_INDEX_MEDIA_TYPES = {
@@ -67,6 +68,20 @@ def _read_json(archive: tarfile.TarFile, member_name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"OCI member does not contain a JSON object: {member_name}")
     return value
+
+
+def _reject_duplicate_oci_members(archive: tarfile.TarFile) -> None:
+    """Reject ambiguous duplicate root documents or content-addressed blobs."""
+    seen: set[str] = set()
+    for member in archive.getmembers():
+        name = member.name
+        if name not in {"index.json", "oci-layout"} and not name.startswith(
+            "blobs/"
+        ):
+            continue
+        if name in seen:
+            raise ValueError(f"OCI archive contains duplicate member path: {name}")
+        seen.add(name)
 
 
 def _statement_subjects(statement: dict[str, Any]) -> tuple[str, set[str]]:
@@ -323,6 +338,7 @@ def verify(
     artifact: Path, expected_version: str, expected_revision: str
 ) -> dict[str, Any]:
     with tarfile.open(artifact, mode="r:*") as archive:
+        _reject_duplicate_oci_members(archive)
         layout = _read_json(archive, "oci-layout")
         layout_version = layout.get("imageLayoutVersion")
         if layout_version != OCI_IMAGE_LAYOUT_VERSION:
@@ -445,7 +461,16 @@ def verify(
             raise ValueError("OCI archive contains no attestation manifest")
         for descriptor, manifest in attestations:
             subject = manifest.get("subject")
-            if isinstance(subject, dict) and subject.get("digest"):
+            if "subject" in manifest:
+                if not isinstance(subject, dict):
+                    raise ValueError("attestation subject descriptor must be an object")
+                for field in ("mediaType", "digest", "size"):
+                    if subject.get(field) != image_descriptor.get(field):
+                        raise ValueError(
+                            "attestation subject descriptor does not match "
+                            f"candidate image field {field}: "
+                            f"{subject.get(field)} != {image_descriptor.get(field)}"
+                        )
                 subjects.add(str(subject["digest"]))
             annotation_subject = descriptor.get("annotations", {}).get(
                 "vnd.docker.reference.digest"
@@ -473,6 +498,11 @@ def verify(
             for layer in payload_descriptors:
                 if not isinstance(layer, dict):
                     raise ValueError("attestation payload descriptor must be an object")
+                if layer.get("mediaType") not in IN_TOTO_PAYLOAD_MEDIA_TYPES:
+                    raise ValueError(
+                        "unsupported attestation payload media type: "
+                        f"{layer.get('mediaType')}"
+                    )
                 statement = _descriptor_json(archive, layer)
                 predicate_type, statement_subjects = _statement_subjects(statement)
                 predicate_types.add(predicate_type)

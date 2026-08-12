@@ -90,7 +90,7 @@ affected material with independently documented code.
 Before approving either wheel, Docker-image, or other binary publication:
 
 1. Confirm that every bundled LGPL library remains a separately replaceable
-   shared library, including the DFT-D4 stack, and inspect the repaired wheel or
+   shared library, including the DFT-D4 stack, and inspect the installed wheel or
    image rather than relying only on CMake options.
 2. Confirm from both the dependency table and dynamic symbols that NLopt is
    absent and the native deterministic simplex-QP implementation is in use.
