@@ -501,8 +501,20 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
                     "run_mrsf_gmres_zvector", "run_mrsf_zvector_auto"):
             self.assertRegex(src, r"subroutine\s+" + sub + r"\(\)")
 
-        # MINRES is driven through the shared apply_z_operator / apply_z_precond.
-        self.assertIn("call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc", src)
+        # MINRES is driven through module callbacks that use the shared
+        # apply_z_operator / apply_z_precond without stack trampolines.
+        self.assertIn("update=mrsf_minres_apply_op", src)
+        self.assertIn("precond=mrsf_minres_apply_pc", src)
+        self.assertIn("apply_precond = mrsf_gmres_apply_pc", src)
+        self.assertIn("call set_mrsf_minres_context", src)
+        self.assertIn("call clear_mrsf_minres_context()", src)
+        main_start = src.index("subroutine tdhf_mrsf_z_vector(infos)")
+        self.assertLess(src.index("subroutine mrsf_minres_apply_op"), main_start)
+        self.assertLess(src.index("subroutine mrsf_minres_apply_pc"), main_start)
+        self.assertLess(src.index("subroutine mrsf_gmres_apply_pc"), main_start)
+        self.assertNotIn("subroutine minres_apply_op", src)
+        self.assertNotIn("subroutine minres_apply_pc", src)
+        self.assertNotIn("subroutine lambda_precond", src)
         self.assertIn("call mr%step()", src)
         self.assertIn("call mr%clean()", src)
         self.assertRegex(src, r"mrsf_zvector_breakdown\s*=\s*\.true\.")

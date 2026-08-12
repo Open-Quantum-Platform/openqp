@@ -220,12 +220,34 @@ dependency_graph = {
     d4_paths["multicharge"]: {"mctc"},
     d4_paths["mctc"]: set(),
 }
+oqp_deps = ""
 for owner, required_edges in dependency_graph.items():
     metadata = native_metadata(owner, inspect_command)
+    if owner == liboqp_path:
+        oqp_deps = metadata
     dependencies = parse_dynamic_dependencies(metadata, sys.platform)
     assert_canonical_dependency_graph(
         owner, dependencies, required_edges, d4_names, sys.platform
     )
+
+# NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
+# the native dependency table and defined/undefined dynamic symbols so a stale
+# link or an accidentally retained call cannot pass the wheel gate.
+assert "nlopt" not in oqp_deps.lower(), (
+    f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
+)
+if sys.platform == "darwin":
+    symbol_commands = [
+        ["nm", "-gU", str(liboqp_path)],
+        ["nm", "-u", str(liboqp_path)],
+    ]
+else:
+    symbol_commands = [["nm", "-D", str(liboqp_path)]]
+symbol_text = "\n".join(
+    subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    for command in symbol_commands
+)
+assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
 
 for path in (liboqp_path, *d4_paths.values()):
     rpath_metadata = native_metadata(path, rpath_command)
@@ -315,11 +337,33 @@ print("OQP_D4_CHILD_RESULT=" + json.dumps({
 
 def run_d4_child():
     child_env = os.environ.copy()
+    external_runtime_path = child_env.pop(
+        "OQP_WHEEL_SMOKE_EXTERNAL_RUNTIME_PATH", ""
+    )
     for variable in (
         "PYTHONPATH", "OPENQP_ROOT", "LD_LIBRARY_PATH",
         "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
     ):
         child_env.pop(variable, None)
+    if external_runtime_path:
+        runtime_directories = [
+            Path(entry) for entry in external_runtime_path.split(os.pathsep)
+            if entry
+        ]
+        assert runtime_directories, "external runtime path is empty"
+        for directory in runtime_directories:
+            assert directory.is_absolute() and directory.is_dir(), (
+                f"invalid external runtime directory: {directory}"
+            )
+            assert not any(
+                candidate.name.startswith(
+                    ("libdftd4", "libmulticharge", "libmctc-lib")
+                )
+                for candidate in directory.iterdir()
+            ), f"external runtime directory contains a DFT-D4 library: {directory}"
+        child_env["LD_LIBRARY_PATH"] = os.pathsep.join(
+            str(directory) for directory in runtime_directories
+        )
     return subprocess.run(
         [sys.executable, "-c", D4_CHILD_SCRIPT],
         cwd=tmp,
@@ -546,27 +590,3 @@ print(
     f"wheel smoke test OK: energy {energy} | basis ABI clean | "
     "replaceable DFT-D4 shared stack and corresponding source verified"
 )
-
-# 7. NLopt was replaced by OpenQP's deterministic simplex-QP solver. Inspect
-#    both the native dependency table and dynamic symbols so a stale link or an
-#    accidentally retained call cannot pass the wheel gate.
-if sys.platform == "darwin":
-    nlopt_commands = [
-        ["otool", "-L", str(liboqp_path)],
-        ["nm", "-gU", str(liboqp_path)],
-        ["nm", "-u", str(liboqp_path)],
-    ]
-else:
-    nlopt_commands = [
-        ["readelf", "-d", str(liboqp_path)],
-        ["nm", "-D", str(liboqp_path)],
-    ]
-nlopt_metadata = "\n".join(
-    subprocess.run(command, check=True, capture_output=True, text=True).stdout
-    for command in nlopt_commands
-)
-assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", nlopt_metadata), (
-    f"NLopt dependency or symbol leaked into {liboqp_path}:\n{nlopt_metadata}"
-)
-
-print("NLopt dependency and symbols absent")

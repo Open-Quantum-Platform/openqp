@@ -358,6 +358,7 @@ set(CMAKE_Fortran_FLAGS [=[-O2
 -fopenmp]=])
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
 set(PROJECT_VERSION "1.3.0")
+set(OQP_SOURCE_REVISION "dddddddddddddddddddddddddddddddddddddddd")
 set(ENABLE_OPENMP ON)
 set(BUILD_SHARED_LIBS ON)
 set(LINALG_LIB "OpenBLAS")
@@ -418,7 +419,9 @@ oqp_generate_dftd4_build_info("@OUTPUT@")
     assert info["schema"] == "org.open-quantum-platform.dftd4-build-info"
     assert info["schema_version"] == 1
     assert info["openqp"] == {
-        "version": "1.3.0", "source_revision": None, "source_tree_dirty": None
+        "version": "1.3.0",
+        "source_revision": "d" * 40,
+        "source_tree_dirty": False,
     }
     assert info["build"]["build_type"] == "Release"
     assert info["build"]["build_shared_libs"] is True
@@ -584,10 +587,15 @@ def test_distribution_gates_require_build_info_and_exact_patches():
     top_cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     wheel = WHEEL_SMOKE.read_text(encoding="utf-8")
     docker = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    container_smoke = (
+        ROOT / ".github" / "scripts" / "container_runtime_smoke.py"
+    ).read_text(encoding="utf-8")
+    docker_gate = docker + container_smoke
     source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     generator = BUILD_INFO_GENERATOR.read_text(encoding="utf-8")
-    for gate in (wheel, docker, source):
+    assert "container_runtime_smoke.py" in docker
+    for gate in (wheel, docker_gate, source):
         assert "BUILD-INFO.json" in gate
         assert "apply-patch.cmake" in gate
         assert "mctc-lib-0.4.2-disable-tests.patch" in gate or (
@@ -598,8 +606,11 @@ def test_distribution_gates_require_build_info_and_exact_patches():
         )
     assert "json.loads(build_info_text)" in wheel
     assert "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in wheel
-    assert "json.loads(build_info_text)" in docker
-    assert "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in docker
+    assert "json.loads(build_info_text)" in docker_gate
+    assert (
+        "hashlib.sha256(patch_path.read_bytes()).hexdigest()" in docker_gate
+        or '"sha256": sha256(patch_path)' in docker_gate
+    )
     assert "recursive-include external/dftd4-corresponding-source *" in manifest
     assert "include(GNUInstallDirs)" in top_cmake
     assert top_cmake.index("include(GNUInstallDirs)") < top_cmake.index(
