@@ -294,6 +294,24 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertEqual(metadata['label_states'], True)
         self.assertEqual(metadata['label_modes'], True)
 
+    def test_rohf_pfon_keeps_the_c1_integral_path(self):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.config = {
+            'input': {'runtype': 'energy'},
+            'scf': {'type': 'ROHF', 'pfon': 'true'},
+        }
+        molecule.symmetry_metadata = {
+            'use_integral_symmetry': True,
+            'detection': {'point_group': 'c2v'},
+        }
+
+        self.assertFalse(molecule.reorient_for_integral_symmetry())
+        self.assertEqual(
+            molecule.symmetry_metadata['integral_symmetry']['status'],
+            'skipped_rohf_pfon',
+        )
+
     def test_symmetry_metadata_can_request_auto_c2v(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)

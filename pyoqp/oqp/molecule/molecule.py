@@ -561,6 +561,21 @@ class Molecule:
         if not detection:
             return False
 
+        # ROHF+pFON is deliberately kept on the C1 integral path.  Although
+        # the petite build is exact for an invariant density, the temporary
+        # fractional occupations make this SCF accelerator sensitive to the
+        # small change in summation order.  On Apple Silicon the guarded
+        # reduction drove the shipped H2O/ROHF/PBE pFON regression to a
+        # different stationary solution (1.70e-4 Eh), while the RHF and UHF
+        # pFON cases were unchanged.  Fall back before any maps are staged;
+        # this changes only performance and preserves the established SCF
+        # solution across supported platforms.
+        scf = self.config.get('scf', {})
+        if (str(scf.get('type', '')).strip().lower() == 'rohf'
+                and self._parse_bool_like(scf.get('pfon', False))):
+            meta['integral_symmetry'] = {'status': 'skipped_rohf_pfon'}
+            return False
+
         # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
         # NEB, ...) cannot reuse maps detected at the initial geometry. Apply
         # this gate before the no-move return as well: keeping the input frame
