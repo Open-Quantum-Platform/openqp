@@ -1546,17 +1546,21 @@ contains
         ga = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
         gap_out = ga
       end if
-      if (nelec_b > 0 .and. present(mo_e_b) .and. nelec_b < size(mo_e_b)) then
-        gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
-        if (gap_out < 0.0_dp) then
-          gap_out = gb
-        else
-          gap_out = min(gap_out, gb)
+      if (nelec_b > 0 .and. present(mo_e_b)) then
+        if (nelec_b < size(mo_e_b)) then
+          gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
+          if (gap_out < 0.0_dp) then
+            gap_out = gb
+          else
+            gap_out = min(gap_out, gb)
+          end if
         end if
       end if
 
     case (scf_rohf) !ROHF
-      gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+      if (nelec_a > 0 .and. nelec_a < size(mo_e_a)) then
+        gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+      end if
     end select
 
     if (gap_out >= 0.0_dp .and. gap_out < gap_crit .and. vshift > 0.0_dp) then
