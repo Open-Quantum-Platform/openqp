@@ -96,8 +96,13 @@ contains
   !
   !  Calculate Hcore MO
     call Get_ab_initio_orbital(Hcore, MO_A, MO_Energy_A, QMat)
-  !  For ROHF/UHF
-    if (INFOS%control%scftype >= 2) MO_B = MO_A
+  !  For ROHF/UHF, both spin channels start from the same one-electron
+  !  eigenvectors and eigenvalues.  Keep the beta spectrum defined even when
+  !  the beta occupation is empty.
+    if (INFOS%control%scftype >= 2) then
+      MO_B = MO_A
+      MO_Energy_B = MO_Energy_A
+    end if
   !
   ! Calculate Density Matrix
   ! RHF

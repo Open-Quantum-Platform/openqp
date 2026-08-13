@@ -1538,12 +1538,29 @@ contains
       gap_out = mo_e_a(nocc+1) - mo_e_a(nocc)
 
     case (scf_uhf) !UHF
-      ga = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
-      gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
-      gap_out = min(ga, gb)
+      ! An empty spin channel has no HOMO and therefore contributes no
+      ! occupied-virtual gap.  Use whichever occupied spin channels have a
+      ! well-defined HOMO/LUMO pair instead of indexing orbital zero when
+      ! nelec_b == 0 (the fully spin-polarized UHF case).
+      if (nelec_a > 0 .and. nelec_a < size(mo_e_a)) then
+        ga = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+        gap_out = ga
+      end if
+      if (nelec_b > 0 .and. present(mo_e_b)) then
+        if (nelec_b < size(mo_e_b)) then
+          gb = mo_e_b(nelec_b+1) - mo_e_b(nelec_b)
+          if (gap_out < 0.0_dp) then
+            gap_out = gb
+          else
+            gap_out = min(gap_out, gb)
+          end if
+        end if
+      end if
 
     case (scf_rohf) !ROHF
-      gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+      if (nelec_a > 0 .and. nelec_a < size(mo_e_a)) then
+        gap_out = mo_e_a(nelec_a+1) - mo_e_a(nelec_a)
+      end if
     end select
 
     if (gap_out >= 0.0_dp .and. gap_out < gap_crit .and. vshift > 0.0_dp) then

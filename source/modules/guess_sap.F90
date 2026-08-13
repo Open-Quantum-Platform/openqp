@@ -138,7 +138,10 @@ contains
   ! Solve F C = eps S C
     call get_qmat_cached(infos, smat, qmat, nbf)
     call get_ab_initio_orbital(fock, MO_A, MO_Energy_A, QMat)
-    if (infos%control%scftype >= 2) MO_B = MO_A
+    if (infos%control%scftype >= 2) then
+      MO_B = MO_A
+      MO_Energy_B = MO_Energy_A
+    end if
 
   ! Density matrix
     if (infos%control%scftype == 1) then
