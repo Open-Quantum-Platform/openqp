@@ -50,8 +50,11 @@ subroutine get_ab_initio_density(alpha_density,alpha_orbital,beta_density,beta_o
    call orb_to_dens(alpha_density,alpha_orbital,occno,na2,nbasis,nbasis)
 
    if (nb == 0) then
-     beta_density = 0
-     if (scftype == 2) beta_orbital = 0
+     ! A fully spin-polarized reference has an empty beta density, but it still
+     ! needs a complete beta orbital basis.  In particular, the Hückel driver
+     ! has already copied its projected alpha orbitals to beta for UHF/ROHF.
+     ! Preserve those orbitals and zero only the unoccupied-spin density.
+     if (present(beta_density)) beta_density = 0.0_dp
 
    else
      select case (scftype)
