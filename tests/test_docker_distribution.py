@@ -503,6 +503,86 @@ libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x1234)
             self._write_oci(artifact, index, blobs)
             summary = OCI_VERIFY.verify(artifact, "1.3.0", "a" * 40)
 
+            empty_attestation_config = self._json_blob(
+                blobs,
+                {},
+                "application/vnd.oci.empty.v1+json",
+            )
+            artifact_attestation_manifest = json.loads(
+                blobs[OCI_VERIFY._blob_path(attestation["digest"])]
+            )
+            artifact_attestation_manifest.update(
+                {
+                    "artifactType": (
+                        "application/vnd.docker.attestation.manifest.v1+json"
+                    ),
+                    "config": empty_attestation_config,
+                }
+            )
+            artifact_attestation = self._json_blob(
+                blobs, artifact_attestation_manifest
+            )
+            artifact_attestation["platform"] = dict(attestation["platform"])
+            artifact_attestation["annotations"] = dict(
+                attestation["annotations"]
+            )
+            artifact_attestation_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [image, artifact_attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            artifact_attestation_candidate = (
+                Path(temporary) / "candidate-artifact-attestation.oci.tar"
+            )
+            self._write_oci(
+                artifact_attestation_candidate,
+                artifact_attestation_index,
+                blobs,
+            )
+            OCI_VERIFY.verify(
+                artifact_attestation_candidate, "1.3.0", "a" * 40
+            )
+
+            nonempty_attestation_config = self._json_blob(
+                blobs,
+                {"unexpected": True},
+                "application/vnd.oci.empty.v1+json",
+            )
+            nonempty_attestation_manifest = {
+                **artifact_attestation_manifest,
+                "config": nonempty_attestation_config,
+            }
+            nonempty_attestation = self._json_blob(
+                blobs, nonempty_attestation_manifest
+            )
+            nonempty_attestation["platform"] = dict(attestation["platform"])
+            nonempty_attestation["annotations"] = dict(
+                attestation["annotations"]
+            )
+            nonempty_attestation_index = json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [image, nonempty_attestation],
+                },
+                sort_keys=True,
+            ).encode()
+            nonempty_attestation_candidate = (
+                Path(temporary) / "candidate-nonempty-attestation.oci.tar"
+            )
+            self._write_oci(
+                nonempty_attestation_candidate,
+                nonempty_attestation_index,
+                blobs,
+            )
+            with self.assertRaisesRegex(
+                ValueError, "attestation config is not empty"
+            ):
+                OCI_VERIFY.verify(
+                    nonempty_attestation_candidate, "1.3.0", "a" * 40
+                )
+
             nonfinite_index = (
                 b'{"schemaVersion":2,"invalid":NaN,"manifests":'
                 + json.dumps([image, attestation], sort_keys=True).encode()

@@ -33,6 +33,10 @@ IN_TOTO_STATEMENT_TYPES = {
 IN_TOTO_PAYLOAD_MEDIA_TYPES = {"application/vnd.in-toto+json"}
 OCI_IMAGE_LAYOUT_VERSION = "1.0.0"
 OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
+OCI_EMPTY_CONFIG_MEDIA_TYPE = "application/vnd.oci.empty.v1+json"
+BUILDKIT_ATTESTATION_ARTIFACT_TYPE = (
+    "application/vnd.docker.attestation.manifest.v1+json"
+)
 OCI_INDEX_MEDIA_TYPES = {
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -568,14 +572,28 @@ def verify(
                         "attestation config descriptor must be an object"
                     )
                 if has_layers:
-                    if (
-                        attestation_config.get("mediaType")
-                        != OCI_IMAGE_CONFIG_MEDIA_TYPE
-                    ):
+                    config_media_type = attestation_config.get("mediaType")
+                    if config_media_type not in {
+                        OCI_IMAGE_CONFIG_MEDIA_TYPE,
+                        OCI_EMPTY_CONFIG_MEDIA_TYPE,
+                    }:
                         raise ValueError(
-                            "image-shaped attestation config has an invalid media type"
+                            "image-shaped attestation config has an invalid media type: "
+                            f"{config_media_type}"
                         )
-                    _descriptor_json(archive, attestation_config)
+                    config_payload = _descriptor_json(archive, attestation_config)
+                    if config_media_type == OCI_EMPTY_CONFIG_MEDIA_TYPE:
+                        if (
+                            manifest.get("artifactType")
+                            != BUILDKIT_ATTESTATION_ARTIFACT_TYPE
+                        ):
+                            raise ValueError(
+                                "OCI artifact attestation has an invalid artifactType"
+                            )
+                        if config_payload:
+                            raise ValueError(
+                                "OCI artifact attestation config is not empty"
+                            )
                 else:
                     _descriptor_bytes(archive, attestation_config)
             elif has_layers:
