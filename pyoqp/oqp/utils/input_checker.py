@@ -3458,9 +3458,11 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                             "for fixed orbitals, or disable this flag."),
                 )
 
-    # State-specific CASSCF carries an analytic nuclear gradient; SA-CASSCF and
-    # the PT2 family use central differences through wf_numgrad.py.  CASCI
-    # remains energy-only.  MECI, MECP, and NEB are deliberately excluded:
+    # State-specific CASSCF and the dedicated SA-CASSCF method carry analytic
+    # nuclear gradients. The legacy `method=casscf` plus an enabled
+    # [state_average] section remains an explicit numerical-gradient route.
+    # The PT2 family also uses central differences through wf_numgrad.py.
+    # CASCI remains energy-only. MECI, MECP, and NEB are deliberately excluded:
     # their energy/state conventions do not yet use the multireference
     # wavefunction dispatch consistently.
     #
@@ -3482,6 +3484,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # one clear message instead of a self-contradicting pair or a silent
     # mismatch.  Wiring these up properly is a feature, not a checker fix.
     wf_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    casscf_grad_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
     _pt2_unsupported_runtypes = {
         "meci": ("MECI requires an excited-state response method; the PT2 "
                  "numerical-gradient path does not provide the state pair "
@@ -3658,18 +3661,20 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             )
         _check_numgrad_options("pt2")
     elif method in CASSCF_METHOD_ALIASES:
-        is_sa = (
-            method in {"sa-casscf", "sacasscf"}
-            or str(_get(config, "state_average", "enabled", False)
-                   ).strip().lower() in _TRUE_BOOL
+        is_analytic_sa = method in {"sa-casscf", "sacasscf"}
+        is_legacy_sa = (
+            method == "casscf"
+            and str(_get(config, "state_average", "enabled", False)
+                    ).strip().lower() in _TRUE_BOOL
         )
+        is_sa = is_analytic_sa or is_legacy_sa
         unsupported = {
             "meci": ("CASSCF MECI needs a state-pair optimizer that addresses "
                      "CASSCF roots directly."),
             "mecp": ("MECP requires two spin multiplicities, whereas the "
                      "current CASSCF implementation is a closed-shell singlet."),
             "neb": ("NEB does not yet evaluate its images through the CASSCF "
-                    "energy and numerical-gradient path."),
+                    "energy and nuclear-gradient calculations."),
         }
         if runtype in unsupported:
             report.add(
@@ -3693,10 +3698,10 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 action=("Use energy, grad, optimize, ts, mep, or irc."),
             )
 
-        # `method=casscf` plus state_average.enabled is intentionally routed
-        # to the numerical SA-CASSCF derivative added on main.  It must never
-        # reach the state-specific analytic expression, which is variational
-        # only for the optimized single-root objective.
+        # The dedicated SA-CASSCF method reaches the analytic weighted-
+        # objective or individual-state derivative. The legacy spelling
+        # `method=casscf` plus state_average.enabled remains numerical and
+        # must never reach the state-specific analytic expression.
         if is_sa:
             targets = _as_list(
                 _get(config, "state_average", "target_roots", []))
@@ -3741,7 +3746,8 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                             f"{selector_path.split('.')[1]}=0; select the "
                             "physical state with [casscf] root."),
                 )
-            elif is_sa and (selected_int < 0 or selected_int >= nstates):
+            elif (is_legacy_sa
+                  and (selected_int < 0 or selected_int >= nstates)):
                 report.add(
                     "ERROR",
                     selector_path,
@@ -3753,7 +3759,127 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                             "and the state-average root selection."),
                 )
 
-        if is_sa:
+        if is_analytic_sa and runtype in casscf_grad_runtypes:
+            roots = [int(root) for root in _as_list(
+                _get(config, "state_average", "target_roots", []))]
+            if not roots:
+                try:
+                    nstate = int(
+                        _get(config, "state_average", "nstate", 0) or 0)
+                except (TypeError, ValueError):
+                    nstate = 0
+                if not nstate:
+                    try:
+                        nstate = int(_get(config, "ci", "nroot", 1) or 1)
+                    except (TypeError, ValueError):
+                        nstate = 1
+                roots = list(range(max(1, nstate)))
+
+            raw_target = _get(
+                config, "casscf", "gradient_state", "averaged")
+            target_text = str(raw_target).strip().lower()
+            target = None
+            objective_names = {
+                "", "averaged", "average", "sa", "weighted", "objective"
+            }
+            if target_text not in objective_names:
+                try:
+                    target = int(target_text)
+                except (TypeError, ValueError):
+                    report.add(
+                        "ERROR",
+                        "casscf.gradient_state",
+                        "The SA-CASSCF derivative must be the optimized "
+                        "weighted objective or one of the averaged roots.",
+                        value=raw_target,
+                        expected=("averaged, or one of "
+                                  + ", ".join(str(root) for root in roots)),
+                        action=("Set [casscf] gradient_state=averaged or name "
+                                "one root included in the state average."),
+                    )
+                    target = "invalid"
+                else:
+                    if target not in roots:
+                        report.add(
+                            "ERROR",
+                            "casscf.gradient_state",
+                            "An individual-state derivative is defined here "
+                            "only for a root included in the state average.",
+                            value=raw_target,
+                            expected=", ".join(str(root) for root in roots),
+                            action=("Add the root to [state_average] "
+                                    "target_roots or select an averaged root."),
+                        )
+                        target = "invalid"
+
+            if target != "invalid" and runtype == "grad":
+                for selected in _as_list(
+                        _get(config, "properties", "grad", [])):
+                    try:
+                        selected_int = int(selected)
+                    except (TypeError, ValueError):
+                        continue
+                    if target is None and selected_int != 0:
+                        report.add(
+                            "ERROR",
+                            "properties.grad",
+                            "The weighted objective is not an individual "
+                            "electronic state and is published in gradient "
+                            "slot zero.",
+                            value=selected,
+                            expected="0",
+                            action=("Set [properties] grad=0; select an "
+                                    "individual root with [casscf] "
+                                    "gradient_state."),
+                        )
+                    elif target is not None and selected_int not in (0, target):
+                        report.add(
+                            "ERROR",
+                            "properties.grad",
+                            "The differentiated root is fixed by [casscf] "
+                            f"gradient_state={target}.",
+                            value=selected,
+                            expected=f"0 or {target}",
+                            action=(f"Set [casscf] gradient_state={selected_int} "
+                                    "instead."),
+                        )
+
+            if (target != "invalid"
+                    and runtype in {"optimize", "ts", "mep", "irc"}):
+                if target is None:
+                    report.add(
+                        "ERROR",
+                        "casscf.gradient_state",
+                        "A gradient-driven optimizer requires an individual "
+                        "state energy and its derivative; the weighted "
+                        "objective is not one of the reported state energies.",
+                        value=raw_target,
+                        expected="one of " + ", ".join(
+                            str(root) for root in roots),
+                        action=("Select the root to optimize with [casscf] "
+                                "gradient_state, or use runtype=grad for the "
+                                "weighted-objective derivative."),
+                    )
+                else:
+                    position = roots.index(target)
+                    try:
+                        optimizer_state = int(
+                            _get(config, "optimize", "istate", 1) or 0)
+                    except (TypeError, ValueError):
+                        optimizer_state = -1
+                    if optimizer_state != position:
+                        report.add(
+                            "ERROR",
+                            "optimize.istate",
+                            "SA-CASSCF state energies and derivatives are "
+                            "indexed by position in target_roots.",
+                            value=_get(config, "optimize", "istate", 1),
+                            expected=str(position),
+                            action=(f"Set [optimize] istate={position} for "
+                                    f"[casscf] gradient_state={target}."),
+                        )
+
+        if is_legacy_sa:
             _check_numgrad_options("casscf")
     elif runtype != "energy":
         report.add(
@@ -4255,6 +4381,33 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
             action="Set gradient_norm_tol to a positive finite value.",
             wiki=WIKI_HELP["input.method"],
         )
+
+    # Z-vector conditioning (casscf_sa_gradient.py).  Both are fail-closed
+    # thresholds: zvector_tol decides which curvatures of the state-averaged
+    # orbital Hessian are numerically zero -- and therefore whether the
+    # individual-state response exists at all -- and zvector_degeneracy_tol
+    # decides when a root gap is a crossing.  A non-positive value would turn
+    # a refusal into a silent division by a near-zero denominator.
+    for _zkey, _zdef in (("zvector_tol", 1.0e-8),
+                         ("zvector_degeneracy_tol", 1.0e-8)):
+        _zvalid, _zval = _check_float_literal(
+            _get(config, "casscf", _zkey, _zdef),
+            f"casscf.{_zkey}",
+            report,
+            expected="positive finite number",
+            action=f"Set [casscf] {_zkey} to a positive finite value.",
+        )
+        if _zvalid and _zval <= 0.0:
+            report.add(
+                "ERROR",
+                f"casscf.{_zkey}",
+                "The SA-CASSCF Z-vector tolerances must be positive: they are "
+                "the thresholds that refuse an undefined response rather than "
+                "returning a number for it.",
+                value=_zval,
+                expected="positive finite number",
+                action=f"Set [casscf] {_zkey} to a positive finite value.",
+            )
 
     macro_energy_valid, macro_energy_tol = _check_float_literal(
         _get(config, "casscf", "energy_decrease_tol", 1.0e-10),

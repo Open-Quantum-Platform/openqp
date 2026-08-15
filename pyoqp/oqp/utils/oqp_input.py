@@ -343,6 +343,7 @@ GENERIC_SCHEMA_KEYS = {
         ah_max_trust_radius ah_min_trust_radius ah_max_micro ah_max_rejects
         ah_saddle_curv_tol ah_saddle_egain_tol diis_space diis_start
         auto_stagnation gradient_norm_tol energy_decrease_tol step_norm_tol
+        gradient_state zvector_tol zvector_degeneracy_tol
         max_rotation_norm optimizer level_shift canonicalize
         max_function_evaluations grad_step grad_guess grad_gap_warn
         grad_ranks_per_group diagnostic_report diagnostic_report_file
