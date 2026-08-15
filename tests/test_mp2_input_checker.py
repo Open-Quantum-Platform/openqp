@@ -48,17 +48,29 @@ class TestMP2InputChecker(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("input.functional", report.to_text())
 
-    def test_mp2_rejects_derivative_runtype(self):
+    def test_mp2_accepts_rhf_analytic_gradient_runtypes(self):
         input_checker = load_input_checker("input_checker_mp2_runtype_under_test")
+        for runtype in ("grad", "optimize", "ts", "mep", "irc"):
+            with self.subTest(runtype=runtype):
+                config = {
+                    "input": {"method": "mp2", "runtype": runtype},
+                    "scf": {"type": "rhf"},
+                }
+                report = input_checker.CheckReport()
+                input_checker._check_mp2(config, report)
+                input_checker._check_runtype(config, report)
+                self.assertTrue(report.ok, report.to_text())
+
+    def test_mp2_rejects_open_shell_analytic_gradient(self):
+        input_checker = load_input_checker("input_checker_mp2_open_grad_under_test")
         config = {
-            "input": {"method": "mp2", "runtype": "optimize"},
+            "input": {"method": "mp2", "runtype": "grad"},
+            "scf": {"type": "uhf"},
         }
-
         report = input_checker.CheckReport()
-        input_checker._check_runtype(config, report)
-
+        input_checker._check_mp2(config, report)
         self.assertFalse(report.ok)
-        self.assertIn("energy-only", report.to_text())
+        self.assertIn("require an RHF reference", report.to_text())
 
     def test_mp2_accepts_named_and_custom_variants(self):
         input_checker = load_input_checker("input_checker_mp2_variants_under_test")

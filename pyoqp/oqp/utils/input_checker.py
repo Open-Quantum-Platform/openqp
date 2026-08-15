@@ -2308,6 +2308,8 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
     variant = _as_lower(_get(config, "mp2", "variant", "mp2"))
     ss_scale = _get(config, "mp2", "same_spin_scale", 1.0)
     os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    reference = _as_lower(_get(config, "scf", "type", "rhf"))
 
     if functional:
         report.add(
@@ -2317,6 +2319,17 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
             value=functional,
             expected="empty functional",
             action="Remove [input] functional for method=mp2.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if runtype in {"grad", "optimize", "ts", "mep", "irc"} and reference != "rhf":
+        report.add(
+            "ERROR",
+            "scf.type",
+            "MP2 analytic gradients currently require an RHF reference.",
+            value=reference,
+            expected="rhf",
+            action="Use scf.type=rhf, or run UHF/ROHF MP2 as an energy calculation.",
             wiki=WIKI_HELP["input.method"],
         )
 
@@ -5275,14 +5288,14 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         )
         return
 
-    if method == "mp2" and runtype != "energy":
+    if method == "mp2" and runtype not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
         report.add(
             "ERROR",
             "input.runtype",
-            "MP2 currently supports energy-only calculations.",
+            "This MP2 runtype is not implemented.",
             value=runtype,
-            expected="energy",
-            action="Use runtype=energy until MP2 gradients and derivative workflows are implemented.",
+            expected="energy, grad, optimize, ts, mep, or irc",
+            action="Use an MP2 energy or analytic-gradient-driven runtype.",
             wiki=WIKI_HELP["input.method"],
         )
         return

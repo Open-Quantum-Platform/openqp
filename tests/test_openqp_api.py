@@ -583,11 +583,18 @@ $$$$
         self.assertEqual(config["mp2"]["same_spin_scale"], "0.5")
         self.assertEqual(config["mp2"]["opposite_spin_scale"], "1.1")
 
-    def test_mp2_helper_rejects_non_energy_and_functional(self):
+    def test_mp2_helper_accepts_rhf_gradient_and_rejects_open_shell_gradient(self):
         openqp = load_openqp_module()
 
-        with self.assertRaisesRegex(ValueError, "runtype='energy'"):
-            openqp.OpenQP(project="bad_mp2_runtype").mp2(runtype="grad")
+        job = openqp.OpenQP(project="h2o_mp2_grad").mp2(runtype="grad")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+        with self.assertRaisesRegex(ValueError, "require reference='rhf'"):
+            openqp.OpenQP(project="bad_mp2_grad").mp2(
+                reference="uhf", runtype="grad"
+            )
 
         with self.assertRaisesRegex(ValueError, "do not pass functional"):
             openqp.OpenQP(project="bad_mp2_functional").theory("mp2", functional="pbe")

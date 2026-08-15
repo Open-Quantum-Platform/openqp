@@ -1034,11 +1034,15 @@ class OpenQP:
     def mp2(self, reference="rhf", runtype=None, multiplicity=None,
             basis=None, variant=None, same_spin_scale=None,
             opposite_spin_scale=None, **scf_keywords):
-        """Use a compact OpenQP MP2 setup for energy-only post-SCF jobs."""
+        """Use a compact OpenQP MP2 setup for energy or analytic-gradient jobs."""
         if runtype is None:
             runtype = "energy"
-        elif str(runtype).lower() != "energy":
-            raise ValueError("MP2 currently supports runtype='energy' only.")
+        elif str(runtype).lower() not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
+            raise ValueError(
+                "MP2 supports energy, grad, optimize, ts, mep, and irc runtypes."
+            )
+        if str(runtype).lower() != "energy" and str(reference).lower() != "rhf":
+            raise ValueError("MP2 analytic gradients currently require reference='rhf'.")
         if "functional" in scf_keywords:
             functional = scf_keywords.pop("functional")
             if functional:

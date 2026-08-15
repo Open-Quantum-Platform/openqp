@@ -1245,6 +1245,7 @@ class Gradient(Calculator):
 
         self.grad_func = {
             'hf': oqp.hf_gradient,
+            'mp2': oqp.mp2_gradient,
             'rpa': oqp.tdhf_gradient,
             'tda': oqp.tdhf_gradient,
             'sf': oqp.tdhf_sf_gradient,
@@ -1253,7 +1254,7 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+        if self.method not in ['hf', 'mp2', 'tdhf'] and not is_tb_method(self.method):
             # Native PT2 family (energy-only kernels): central-difference
             # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
             # avoid a circular module dependency.
@@ -1293,6 +1294,8 @@ class Gradient(Calculator):
         grads = []
         if self.method == 'hf':
             grads = self.scf_grad()
+        elif self.method == 'mp2':
+            grads = self.mp2_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
         elif is_tb_method(self.method):
@@ -1316,7 +1319,7 @@ class Gradient(Calculator):
         # hides well, because max|0 - g_ref| happens to equal max|g_ref| just
         # as the unprojected skeleton's largest deviation did.
         buffer_row = None
-        if self.method == 'hf':
+        if self.method in {'hf', 'mp2'}:
             buffer_row = 0                       # scf_grad returns one row
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
@@ -1339,6 +1342,18 @@ class Gradient(Calculator):
         grads = np.array([grad.copy()]).reshape((1, self.natom, 3))
 
         return grads
+
+    def mp2_grad(self):
+        """Analytic ground-state RHF-MP2 nuclear gradient."""
+        if str(self.mol.config['scf']['type']).lower() != 'rhf':
+            raise NotImplementedError(
+                'MP2 analytic gradients currently support RHF references only; '
+                'UHF and ROHF energy calculations remain available.'
+            )
+        dump_log(self.mol, title='PyOQP: Analytic MP2 Gradient of Root 0')
+        self.grad_func['mp2'](self.mol)
+        grad = self.mol.get_grad()
+        return np.array([grad.copy()]).reshape((1, self.natom, 3))
 
     def tddft_grad(self):
         if self.td == 'umrsf':
