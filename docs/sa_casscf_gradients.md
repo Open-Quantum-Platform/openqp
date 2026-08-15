@@ -396,6 +396,30 @@ smooth: a state average has many stationary points and a displaced run can land
 on a different one, which is not a gradient defect and must not be reported as
 one.
 
+On LiH/STO-3G CAS(2,2) averaged over the two lowest singlets, the run reports
+
+```
+SA orbital gradient |g_SA|      1.968e-09     converged
+state orbital gradient |g_J|    2.063e-01     root 1 is NOT stationary
+Z-vector norm                   1.250e-01     Z-vector residual  2.2e-16
+Hessian null directions         0             null-space leakage 0.0
+CI relaxation |zeta|            5.216e-03
+effective Fock asymmetry        4.980e-11
+2-particle factorization check  4.441e-16
+```
+
+`|g_J| = 0.21` against `|g_SA| = 2e-9` is the whole justification for this page
+in one pair of numbers: the averaged objective is stationary and the individual
+root is not, by eight orders of magnitude. The two examples differentiate the
+same geometry to `-9.78e-4` (objective) and `+1.54e-2` (root 1).
+
+Unequal weights are implemented and are covered by the abstract protocol, but a
+molecular input cannot currently request them: the SA-CASSCF preflight refuses
+unequal weights because the averaged roots are followed by energy order and
+overlap tracking is not implemented, so a root flip between macroiterations
+would move the weights onto different physical states. That is a pre-existing
+constraint on the energy path, not a limitation of the response.
+
 ## 7. Cost
 
 Path A is the cost of the state-specific gradient.
