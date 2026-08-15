@@ -526,6 +526,13 @@ OQP_CONFIG_SCHEMA = {
         'level_shift': {'type': float, 'default': '1.0e-3'},
         'canonicalize': {'type': bool, 'default': 'True'},
         'max_function_evaluations': {'type': int, 'default': '0'},
+        # Central-difference nuclear-gradient controls (wf_numgrad.py).  These
+        # are distinct from gradient_norm_tol, which controls convergence of
+        # the CASSCF orbital-rotation gradient.
+        'grad_step': {'type': float, 'default': '1.0e-3'},
+        'grad_guess': {'type': string, 'default': 'cold'},
+        'grad_gap_warn': {'type': float, 'default': '1.0e-5'},
+        'grad_ranks_per_group': {'type': int, 'default': '0'},
         'diagnostic_report': {'type': bool, 'default': 'False'},
         'diagnostic_report_file': {'type': str, 'default': ''},
         'diagnostic_root': {'type': int, 'default': '0'},
@@ -560,7 +567,7 @@ OQP_CONFIG_SCHEMA = {
         'engine': {'type': string, 'default': 'auto'},
         'max_terms': {'type': int, 'default': '30000000'},
         'nproc': {'type': int, 'default': '0'},
-        # numerical-gradient controls (pt2_numgrad.py)
+        # Central-difference nuclear-gradient controls (wf_numgrad.py)
         'grad_step': {'type': float, 'default': '1.0e-3'},
         'grad_guess': {'type': string, 'default': 'cold'},
         'grad_gap_warn': {'type': float, 'default': '1.0e-5'},

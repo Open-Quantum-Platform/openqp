@@ -4,8 +4,6 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
-**New — a native multireference-wavefunction stack.** Determinant CI (FCI, CASCI), CASSCF and SA-CASSCF, and the second-order perturbation theories built on them: CASPT2 (single-state, MS, XMS), NEVPT2 (uncontracted and strongly contracted), and QDPT2 in the GAMESS convention (MRMP2, MCQDPT2, XMCQDPT2). These run entirely inside OpenQP with no external wavefunction backend. The PT2 methods additionally feed the gradient-driven runtypes — `grad`, `optimize`, `ts`, `mep`, `irc` — through central-difference gradients; FCI, CASCI, CASSCF and SA-CASSCF are energy-only, and `meci`/`mecp`/`neb` are not wired for this stack. See the table below and [`examples/WF_methods`](examples/WF_methods).
-
 ### Functionality
 
 #### Electronic-Structure Methods
@@ -21,18 +19,8 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
-| Determinant CI | `method=fci`, `method=casci` | Full CI and fixed-orbital active-space CI on an RHF reference; dense or Davidson solver |
-| CASSCF | `method=casscf`, `method=sa-casscf` | Orbital + CI optimization; converger framework (`[casscf] converger = trah` (default) `\| twophase \| ah \| diis \| auto`) and an exact analytic orbital Hessian (`[casscf] hessian=analytic`). The default `trah` is the shared trust-region augmented-Hessian core (`source/trah_core.F90`) that also backs SCF `converger_type=trah`, and never assembles the orbital Hessian. State-averaged via `[state_average] enabled=true` |
-| CASPT2 | `method=caspt2`, `ms-caspt2`, `xms-caspt2` | Determinant-space PT2 on a CASCI/CASSCF reference; Fock or Dyall H0, IPEA/imaginary/level shifts. Multi-set MS-CASPT2 matches OpenMolcas to µEh |
-| NEVPT2 | `[pt2] h0=dyall` (uncontracted) and `contraction=strong` (SC-NEVPT2) | Strongly contracted NEVPT2 reproduces PySCF/ORCA to nEh |
-| QDPT2 (GAMESS convention) | `method=mrmp2`, `mcqdpt2`, `xmcqdpt2` | Single-state / multistate / Granovsky-extended QDPT with the ISA denominator shift (`[pt2] edshft`), on a matrix-free direct engine |
-
-The PT2 methods above (CASPT2/NEVPT2/QDPT2) supply gradients for the
-gradient-driven runtypes through central differences (`grad`, `optimize`,
-`ts`, `mep`, `irc`); `meci`, `mecp` and `neb` are rejected in preflight, and
-FCI/CASCI/CASSCF/SA-CASSCF are energy-only. Scope is validation-grade: RHF
-singlet references and small active spaces; see
-`examples/WF_methods/README.md`.
+| CI and CASSCF | FCI, CASCI, CASSCF, SA-CASSCF | Native determinant CI and orbital optimization; CASSCF/SA-CASSCF have central-difference nuclear gradients |
+| Multireference PT2 | CASPT2 (SS/MS/XMS), NEVPT2 (uncontracted/strongly contracted), QDPT2 (MRMP2/MCQDPT2/XMCQDPT2) | Native energy and central-difference nuclear-gradient calculations; see [`examples/WF_methods`](examples/WF_methods) for variants, controls, and present limits |
 
 **Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
 
@@ -41,6 +29,7 @@ singlet references and small active spaces; see
 | Capability | Scope | Notes |
 | --- | --- | --- |
 | Analytic gradients | HF, DFT, TDDFT, SF/MRSF-TDDFT | State-specific gradients for optimization and dynamics |
+| Numerical gradients | CASSCF, SA-CASSCF, CASPT2, NEVPT2, QDPT2 | Central differences of converged multireference energies for `grad`, `optimize`, `ts`, `mep`, and `irc` |
 | Hessians | Native **analytic** HF/DFT Hessians + numerical Hessians | Covers UHF/ROHF references, ECPs, and CAM/LRC functionals |
 | Vibrational analysis | Frequencies, normal modes, thermochemistry, **IR and Raman intensities** | Native dipole / CPHF-polarizability kernels |
 | **NMR shieldings** | CGO and GIAO (London-orbital) gauges | HF and DFT, closed- and open-shell |

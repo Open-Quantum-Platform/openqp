@@ -1254,13 +1254,15 @@ class Gradient(Calculator):
     def gradient(self):
         # check method
         if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
-            # Native PT2 family (energy-only kernels): central-difference
-            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
-            # avoid a circular module dependency.
-            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
-            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+            # Multireference wavefunction methods currently use Cartesian
+            # central differences of their converged total energies.  The
+            # import stays local to avoid a circular module dependency.
+            from oqp.library.wf_numgrad import (
+                WF_NUMGRAD_METHODS, wavefunction_numerical_gradient,
+            )
+            if _normalized_method_label(self.method) in WF_NUMGRAD_METHODS:
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
-                grads = pt2_numerical_gradient(self.mol, self.grads)
+                grads = wavefunction_numerical_gradient(self.mol, self.grads)
                 self.mol.grads = grads
                 # Molecule.get_results() reads the NATIVE data._data.grad
                 # buffer, which only the Fortran gradient kernels ever write.

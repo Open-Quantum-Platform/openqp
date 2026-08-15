@@ -344,7 +344,8 @@ GENERIC_SCHEMA_KEYS = {
         ah_saddle_curv_tol ah_saddle_egain_tol diis_space diis_start
         auto_stagnation gradient_norm_tol energy_decrease_tol step_norm_tol
         max_rotation_norm optimizer level_shift canonicalize
-        max_function_evaluations diagnostic_report diagnostic_report_file
+        max_function_evaluations grad_step grad_guess grad_gap_warn
+        grad_ranks_per_group diagnostic_report diagnostic_report_file
         diagnostic_root diagnostic_max_iterations diagnostic_gradient_norm_tol
         diagnostic_max_rotation_norm diagnostic_benchmark_reference_file
         diagnostic_benchmark_tolerance diagnostic_benchmark_required
