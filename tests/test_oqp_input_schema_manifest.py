@@ -155,8 +155,10 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         assert set(owners) == set(keys)
         owner_counts.update(owners.values())
 
+    # 348 generic keys since the SA-CASSCF gradients added [casscf]
+    # gradient_state, zvector_tol and zvector_degeneracy_tol.
     assert owner_counts == {
-        "generic": 345,
+        "generic": 348,
         "route_driver": 142,
         "legacy_only": 20,
         "intentional_forbidden": 1,
