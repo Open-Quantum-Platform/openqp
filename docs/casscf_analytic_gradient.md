@@ -139,9 +139,14 @@ with at most `nact(nact+1)/2` nonzero terms — the symmetrization annihilates
 the antisymmetric half of the composite space. Each `A^k` is a symmetric AO
 matrix, so it goes through the same `bfnrm` folding and spherical-to-Cartesian
 expansion (`build_cart_density`) the density does, and each term is manifestly
-eight-fold symmetric. Storage is `nact(nact+1)/2 x nbf_cart^2` instead of
-`nbf_cart^4`. The rank actually used is reported in the log as
-`Active 2-RDM correction vectors`.
+eight-fold symmetric. Storage is `O(nact(nact+1)/2 x nbf_cart^2)` instead of
+`nbf_cart^4` — two arrays of that size, `A^k` and the pre-scaled `lambda_k A^k`
+the per-quartet contraction loop reads. The rank actually used is reported in
+the log as `Active 2-RDM correction vectors`.
+
+Against the `nbf^4` MO-integral buffer the CASSCF driver already holds, that
+footprint is not observable: over the benchmark set below the whole gradient
+adds 1–21 MB to the peak resident set of the corresponding energy run.
 
 ## Scope and what is refused
 

@@ -117,7 +117,9 @@
 !> ordinary symmetric AO matrix, so it goes through the same bfnrm folding and
 !> spherical->Cartesian expansion (`build_cart_density`) the density does, and
 !> each term is manifestly eight-fold symmetric.  Storage is
-!> nact(nact+1)/2 x nbf_cart^2 instead of nbf_cart^4.
+!> O(nact(nact+1)/2 x nbf_cart^2) instead of nbf_cart^4 -- two arrays of that
+!> size, `A^k` and the pre-scaled `lambda_k A^k` the contraction loop reads
+!> (see `grd2_cas_compute_data_t`).
 module casscf_gradient_mod
 
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
@@ -165,12 +167,22 @@ module casscf_gradient_mod
   !> header.  The `_cart` copies are the bfnrm-folded, Cartesian-expanded
   !> versions the derivative kernels contract under HARMONIC_ACTIVE, built by
   !> `init` exactly as the Hartree-Fock path builds its own.
+  !> `lav` is `lam(k) * av(k,:,:)`, the SAME product the inner loop of
+  !> `get_density` used to form per contracted element.  Forming it once here
+  !> is exact -- the original evaluated `lam(v)*av(v,i1,j1)*av(v,k1,l1)`
+  !> left to right, so `(lam(v)*av(v,i1,j1))` is the identical first product --
+  !> and takes one multiply and one load out of the hot loop.  It is built from
+  !> the SCALED-and-EXPANDED `av_cart`, not scaled before the expansion, because
+  !> floating-point multiplication does not associate: `lam*(bfnrm*a)` is the
+  !> original operand order and `(lam*a)*bfnrm` is not.
   type, extends(grd2_compute_data_t) :: grd2_cas_compute_data_t
     real(kind=dp), allocatable :: d2(:,:)
     real(kind=dp), allocatable :: av(:,:,:)
+    real(kind=dp), allocatable :: lav(:,:,:)
     real(kind=dp), allocatable :: lam(:)
     real(kind=dp), allocatable :: d2_cart(:,:)
     real(kind=dp), allocatable :: av_cart(:,:,:)
+    real(kind=dp), allocatable :: lav_cart(:,:,:)
     integer, allocatable :: cart_off(:)
     integer :: nbf = 0
     integer :: nbf_cart = 0
@@ -526,6 +538,7 @@ contains
     gcomp%nbf = n
     gcomp%nvec = nkeep
     allocate(gcomp%lam(max(nkeep, 1)), gcomp%av(max(nkeep, 1), n, n), &
+             gcomp%lav(max(nkeep, 1), n, n), &
              cact(n, na), vmat(na, na), tmpa(n, na), amat(n, n), stat=ierr)
     if (ierr /= 0) then
       status = CASG_ERR_ALLOC
@@ -553,6 +566,7 @@ contains
       call dgemm('N', 'N', n, na, na, 1.0_dp, cact, n, vmat, na, 0.0_dp, tmpa, n)
       call dgemm('N', 'T', n, n, na, 1.0_dp, tmpa, n, cact, n, 0.0_dp, amat, n)
       gcomp%av(idx, :, :) = amat
+      gcomp%lav(idx, :, :) = eval(k) * amat
     end do
 
     deallocate(m2, eval, cact, vmat, tmpa, amat)
@@ -666,12 +680,17 @@ contains
                             this%nbf_cart)
 
     if (this%nvec > 0) then
-      allocate(this%av_cart(this%nvec, this%nbf_cart, this%nbf_cart))
+      allocate(this%av_cart(this%nvec, this%nbf_cart, this%nbf_cart), &
+               this%lav_cart(this%nvec, this%nbf_cart, this%nbf_cart))
       do k = 1, this%nvec
         tmp = this%av(k, :, :)
         call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
         call build_cart_density(basis, tmp, expanded, dummy_off, nc_tmp)
         this%av_cart(k, :, :) = expanded
+        ! Scaled AFTER the norm folding and the Cartesian expansion, so the
+        ! factor multiplied by `lam` is bit-for-bit the one the hot loop used
+        ! to read (see the type declaration).
+        this%lav_cart(k, :, :) = this%lam(k) * expanded
         deallocate(expanded, dummy_off)
       end do
     end if
@@ -681,9 +700,11 @@ contains
     class(grd2_cas_compute_data_t), target, intent(inout) :: this
     if (allocated(this%d2)) deallocate(this%d2)
     if (allocated(this%av)) deallocate(this%av)
+    if (allocated(this%lav)) deallocate(this%lav)
     if (allocated(this%lam)) deallocate(this%lam)
     if (allocated(this%d2_cart)) deallocate(this%d2_cart)
     if (allocated(this%av_cart)) deallocate(this%av_cart)
+    if (allocated(this%lav_cart)) deallocate(this%lav_cart)
     if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine grd2_cas_clean
 
@@ -697,6 +718,16 @@ contains
   !> all-active correction is added as `4 sum_k lambda_k A^k_{ij} A^k_{kl}`
   !> before the normalization factor, because both pieces are four-index
   !> products of AO-basis objects and take the same `bfnrm` weight.
+  !>
+  !> This is the one routine of this module that is on a hot path: `grd2`
+  !> calls it once per shell quartet that survives the coarse Schwarz screen,
+  !> BEFORE the fine screen, so it runs even for quartets whose derivative
+  !> integrals are then skipped.  Everything invariant over an inner loop is
+  !> therefore lifted out of it, and `lam(v)*A^v_{i1 j1}` is taken from the
+  !> precomputed `lav` rather than re-formed per contracted element.  Every
+  !> such lift preserves the original operand order, so the block this writes
+  !> and the `dabmax` it reports are bit-for-bit what the direct expression
+  !> above produces.
   subroutine grd2_cas_get_density(this, basis, id, dab, dabmax)
 
     class(grd2_cas_compute_data_t), target, intent(inout) :: this
@@ -705,17 +736,22 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1, corr, bfn
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, corr, cdij, dik, djk
     logical :: do_exchange, usecart
-    integer :: i, j, k, l, v
+    integer :: i, j, k, l, v, nv
     integer :: loc(4), nbf(4)
     integer :: i1, j1, k1, l1
     real(kind=dp), pointer :: ab(:,:,:,:)
-    real(kind=dp), pointer :: d2(:,:), av(:,:,:)
+    real(kind=dp), contiguous, pointer :: d2(:,:), av(:,:,:)
+    real(kind=dp), contiguous, pointer :: lavij(:), avkl(:)
 
     coulfact = 4 * this%coulscale
     xcfact = this%hfscale
     do_exchange = xcfact /= 0.0_dp
+    ! Local copy: `this` is polymorphic and has the TARGET attribute, so a
+    ! component reference inside the loop nest cannot be assumed loop-invariant
+    ! by the compiler.
+    nv = this%nvec
 
     usecart = HARMONIC_ACTIVE
     if (usecart) then
@@ -728,7 +764,7 @@ contains
       nbf = basis%naos(id)
     end if
     av => null()
-    if (this%nvec > 0) then
+    if (nv > 0) then
       if (usecart) then
         av => this%av_cart
       else
@@ -744,31 +780,44 @@ contains
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
+        cdij = coulfact*d2(i1,j1)
+        if (nv > 0) then
+          if (usecart) then
+            lavij => this%lav_cart(:,i1,j1)
+          else
+            lavij => this%lav(:,i1,j1)
+          end if
+        end if
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
+          dik = d2(i1,k1)
+          djk = d2(j1,k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*d2(i1,j1)*d2(k1,l1)
+            df1 = cdij*d2(k1,l1)
             if (do_exchange) then
-              dq1 = d2(i1,k1)*d2(j1,l1) &
-                  + d2(i1,l1)*d2(j1,k1)
+              dq1 = dik*d2(j1,l1) &
+                  + d2(i1,l1)*djk
               df1 = df1-xcfact*dq1
             end if
-            if (this%nvec > 0) then
+            if (nv > 0) then
               corr = 0.0_dp
-              ! `av` is stored with the factor index FIRST so this inner loop
-              ! walks two contiguous runs; it is the hot loop of the build.
-              do v = 1, this%nvec
-                corr = corr + this%lam(v)*av(v,i1,j1)*av(v,k1,l1)
+              ! Both factors are stored with the vector index FIRST, so this
+              ! inner loop walks two contiguous runs.
+              avkl => av(:,k1,l1)
+              do v = 1, nv
+                corr = corr + lavij(v)*avkl(v)
               end do
               df1 = df1 + 4*corr
             end if
             dabmax = max(dabmax, abs(df1))
-            bfn = 1.0_dp
-            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
-            ab(l,k,j,i) = df1*bfn
+            if (usecart) then
+              ab(l,k,j,i) = df1
+            else
+              ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            end if
           end do
         end do
       end do
