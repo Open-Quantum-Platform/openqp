@@ -73,7 +73,7 @@ contains
     use constants, only: tol_int
     use mathlib, only: unpack_matrix, pack_matrix
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, &
-                                   OQP_E_MO_A, OQP_SM, OQP_AO_ERI
+                                   OQP_E_MO_A, OQP_AO_ERI
     use fci_integrals_mod, only: fci_ao_integrals
     use mo_transform_mod, only: mo_transform_eri
     use cphf_mod, only: cphf_solve
@@ -83,15 +83,15 @@ contains
     type(basis_set), pointer :: basis
     type(grd2_mp2_compute_data_t) :: gcomp
 
-    real(dp), contiguous, pointer :: mo(:,:), eps(:), dm0p(:), smp(:), erip(:)
-    real(dp), allocatable :: eri_mo(:), t2(:,:,:,:), l2(:,:,:,:), g2mo(:,:,:,:)
+    real(dp), contiguous, pointer :: mo(:,:), eps(:), dm0p(:), erip(:)
+    real(dp), allocatable :: mo_c(:,:), eri_mo(:), t2(:,:,:,:), l2(:,:,:,:), g2mo(:,:,:,:)
     real(dp), allocatable :: doo(:,:), dvv(:,:), dm1mo(:,:), imat(:,:)
     real(dp), allocatable :: dm0(:,:), dc(:,:), vmat(:,:), xvo(:,:), rhs(:,:), u(:,:)
     real(dp), allocatable :: zeta(:,:), imao(:,:), wao(:,:), pocc(:,:), tmp(:,:)
     real(dp), allocatable :: dtotal(:,:), wpack(:), dpack(:), de2(:,:)
-    integer :: n, no, nv, i, j, a, b, p, q, r, s, ia, ierr, max_nbf, ln
+    integer :: n, no, nv, i, j, a, b, p, q, ia, ierr, max_nbf, ln
     integer(c_int64_t) :: trc
-    real(dp) :: den, os_scale, ss_scale, tol
+    real(dp) :: den, os_scale, ss_scale, tol, e_dense, e_expected, energy_tol
     character(len=32) :: env
 
     if (infos%control%scftype /= 1) then
@@ -120,8 +120,6 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, eps)
     call tagarray_get_data(infos%dat, OQP_DM_A, dm0p)
-    call tagarray_get_data(infos%dat, OQP_SM, smp)
-
     ! The full AO ERI tensor is intentionally guarded above.  Keeping this
     ! first implementation dense makes every index convention independently
     ! auditable against the Lagrangian equations; a streamed/factorized path
@@ -129,7 +127,7 @@ contains
     call fci_ao_integrals(infos)
     call tagarray_get_data(infos%dat, OQP_AO_ERI, erip)
 
-    allocate(eri_mo(n**4), t2(no,no,nv,nv), l2(no,no,nv,nv), &
+    allocate(mo_c(0:n-1,0:n-1), eri_mo(n**4), t2(no,no,nv,nv), l2(no,no,nv,nv), &
              g2mo(n,n,n,n), doo(no,no), dvv(nv,nv), dm1mo(n,n), imat(n,n), &
              dm0(n,n), dc(n,n), vmat(n,n), xvo(nv,no), rhs(no*nv,1), &
              u(no*nv,1), zeta(n,n), imao(n,n), wao(n,n), pocc(n,n), &
@@ -137,7 +135,11 @@ contains
              source=0.0_dp, stat=ierr)
     if (ierr /= 0) call show_message('MP2 analytic gradient allocation failed', with_abort)
 
-    trc = mo_transform_eri(int(n, c_int32_t), erip, mo, eri_mo)
+    ! mo_transform_eri is a C-binding whose coefficient buffer is laid out as
+    ! coeff[AO][MO].  The native tagarray view is the Fortran matrix mo(AO,MO),
+    ! so its bytes must be transposed rather than merely reinterpreted.
+    mo_c = transpose(mo)
+    trc = mo_transform_eri(int(n, c_int32_t), erip, mo_c, eri_mo)
     if (trc /= 0_c_int64_t) &
       call show_message('MP2 analytic gradient AO-to-MO ERI transformation failed', with_abort)
 
@@ -151,22 +153,34 @@ contains
         do a = 1, nv
           do b = 1, nv
             den = eps(i) + eps(j) - eps(no+a) - eps(no+b)
-            if (abs(den) < 1.0e-12_dp) cycle
+            if (abs(den) < 1.0e-10_dp) cycle
             t2(i,j,a,b) = eri4(eri_mo, n, i, no+a, j, no+b) / den
           end do
         end do
       end do
     end do
+    e_dense = 0.0_dp
     do i = 1, no
       do j = 1, no
         do a = 1, nv
           do b = 1, nv
             l2(i,j,a,b) = (os_scale + ss_scale)*t2(i,j,a,b) &
                          - ss_scale*t2(i,j,b,a)
+            e_dense = e_dense + l2(i,j,a,b) &
+                                * eri4(eri_mo, n, i, no+a, j, no+b)
           end do
         end do
       end do
     end do
+    e_expected = infos%mol_energy%energy - (infos%mol_energy%ehf1 &
+                                            + infos%mol_energy%vee &
+                                            + infos%mol_energy%nenergy)
+    energy_tol = max(1.0e-8_dp, 1.0e-7_dp*abs(e_expected))
+    if (abs(e_dense - e_expected) > energy_tol) then
+      call show_message('(A,ES24.15)', 'MP2 energy from dense transformed integrals = ', e_dense)
+      call show_message('(A,ES24.15)', 'MP2 energy from the production energy kernel = ', e_expected)
+      call show_message('MP2 analytic gradient integral transformation failed its energy check', with_abort)
+    end if
 
     ! Unrelaxed MP2 1-RDM blocks.  The real canonical amplitudes make these
     ! blocks symmetric up to roundoff; explicit symmetrization below removes
@@ -262,11 +276,16 @@ contains
     end do
     call mo2ao_matrix(n, mo, zeta, wao)
     call mo2ao_matrix(n, mo, imat, imao)
-    call dense_rhf_response(n, erip, 2.0_dp*dc, vmat)
+    ! get_veff(dm1 + dm1^T) = 2J[dc] - K[dc] because dc is symmetric.
+    call dense_rhf_response(n, erip, dc, vmat)
     pocc = matmul(mo(:,1:no), transpose(mo(:,1:no)))
     tmp = matmul(pocc, vmat)
     vmat = matmul(tmp, pocc)
-    wao = 0.5_dp*(imao + transpose(imao)) - wao - 2.0_dp*vmat
+    ! grad_ee_overlap already forms the two equivalent bra/ket-center terms.
+    ! The occupied-projected response potential therefore enters W once;
+    ! inserting the explicit factor of two from a one-center formulation here
+    ! would count that contribution twice.
+    wao = 0.5_dp*(imao + transpose(imao)) - wao - vmat
 
     call unpack_matrix(dm0p, dm0, 'U')
     dtotal = dm0 + dc
@@ -405,12 +424,12 @@ contains
 !###############################################################################
 
   subroutine grd2_mp2_init(this)
-    class(grd2_mp2_compute_data_t), intent(inout) :: this
+    class(grd2_mp2_compute_data_t), target, intent(inout) :: this
     this%nbf_cart = 0
   end subroutine grd2_mp2_init
 
   subroutine grd2_mp2_clean(this)
-    class(grd2_mp2_compute_data_t), intent(inout) :: this
+    class(grd2_mp2_compute_data_t), target, intent(inout) :: this
     if (allocated(this%d0)) deallocate(this%d0)
     if (allocated(this%dc)) deallocate(this%dc)
     if (allocated(this%g2c)) deallocate(this%g2c)
