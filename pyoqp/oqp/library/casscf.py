@@ -489,45 +489,21 @@ def _converger_trace(converger, hessian, framework, nevals, stats):
     return lines
 
 
-def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
-                       enuc, weights, roots, cfg=None, converger=0, hessian=0):
-    """A complete CASSCF run inside liboqp, or ``None`` to use the Python path.
+def _cas_wavefunction_arrays(settings, options, nbf, ncore, nact, active_nelec,
+                             enuc, roots, hessian=0):
+    """``(iopt, dopt, spec)`` with the WAVEFUNCTION half of the option schema
+    filled, or ``None`` when the native driver must decline.
 
-    One boundary crossing replaces the entire orchestration loop: the
-    macroiteration loop, its backtracking line search, the 2*n_par
-    finite-difference orbital Hessian (the dominant cost -- 2*n_par CI solves
-    per macroiteration, each of which was itself six crossings), the
-    level-shifted Newton step, the curvature-gated saddle escape,
-    canonicalization, the commit of the optimized orbitals and the final CI
-    with its spin diagnostics all happen without returning here.
+    Shared by the energy driver and the analytic-gradient entry point so a
+    gradient is taken on exactly the active space, CI solver and tolerances the
+    energy was converged with.  Only the optimizer-specific entries
+    (macroiteration cap, converger, trust region, ...) are left to the caller;
+    the gradient has no use for them and leaves them at their defaults.
 
-    Everything that is not on the compute path stays here: option parsing, the
-    validation that produces the user-facing messages (``resolve_ci_solve`` is
-    still called, and still raises them), the state-average plan and the log.
-    The driver returns the macroiteration table so ``_write_log`` formats it
-    unchanged.
-
-    The ``ah`` / ``diis`` / ``auto`` convergers and ``hessian = analytic`` run
-    inside the driver too; ``cfg`` is the ``[casscf]`` block and the options
-    those convergers read are parsed here, with the same helpers and therefore
-    the same error messages the Python framework would raise -- and only for
-    the converger that actually reads them, so an unused bad value keeps being
-    ignored exactly as it is today.
-
-    Returns ``(energies, s2, multiplicity, history, converged, niter, nevals,
-    stats)`` or ``None`` -- a missing symbol, an unsupported option
-    combination, or any negative driver status -- in which case the caller runs
-    the Python optimizer, which remains the numerical pin.  Two of those
-    negative statuses are refusals rather than fallbacks (a root degeneracy
-    with live coupling, and an excitation stack past the memory guard); the
-    Python path re-raises their messages, which is why they come back as
-    ``None`` like everything else."""
-    backend = _casscf_energy_backend()
-    if backend is None:
-        return None
-    lib, ffi = backend
-    if options.optimizer not in _CAS_OPTIMIZER_CODE:
-        return None
+    Declining rather than raising is deliberate and matches the established
+    ``_gfock_backend()`` pattern: every user-facing message comes from the
+    Python path, and ``resolve_ci_solve`` below is the same call that path
+    makes, so its validation errors are still raised from here."""
     if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
         return None
     if nbf - ncore - nact < 0:
@@ -578,13 +554,6 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     ):
         return None      # make_hessian_provider raises for this; let it
 
-    maxmacro = max(0, int(options.max_macro_iterations))
-    # Upper bound on the rows an optimization can append: one seed row plus one
-    # per macroiteration, and one full re-convergence per accepted escape --
-    # doubled because `auto` runs an AH optimization with its escape phase and
-    # then a two-phase one with its own.
-    maxhist = maxmacro * (2 + 2 * _CAS_MAX_ESCAPES) + 2 * _CAS_MAX_ESCAPES + 4
-
     iopt = np.zeros(len(_CAS_IOPT), dtype=np.int32)
     iopt[_CAS_IOPT_INDEX["ncore"]] = ncore
     iopt[_CAS_IOPT_INDEX["nact"]] = nact
@@ -608,6 +577,69 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     # Python path, so give them the declared budget here too.
     _apply_work_bytes_cap(spec.max_memory)
     iopt[_CAS_IOPT_INDEX["nthreads"]] = _fci_lib_threads()
+
+    dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
+    dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
+    dopt[_CAS_DOPT_INDEX["eig_tol"]] = spec.eig_tol
+    dopt[_CAS_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+
+    return iopt, dopt, spec
+
+
+def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
+                       enuc, weights, roots, cfg=None, converger=0, hessian=0):
+    """A complete CASSCF run inside liboqp, or ``None`` to use the Python path.
+
+    One boundary crossing replaces the entire orchestration loop: the
+    macroiteration loop, its backtracking line search, the 2*n_par
+    finite-difference orbital Hessian (the dominant cost -- 2*n_par CI solves
+    per macroiteration, each of which was itself six crossings), the
+    level-shifted Newton step, the curvature-gated saddle escape,
+    canonicalization, the commit of the optimized orbitals and the final CI
+    with its spin diagnostics all happen without returning here.
+
+    Everything that is not on the compute path stays here: option parsing, the
+    validation that produces the user-facing messages (``resolve_ci_solve`` is
+    still called, and still raises them), the state-average plan and the log.
+    The driver returns the macroiteration table so ``_write_log`` formats it
+    unchanged.
+
+    The ``ah`` / ``diis`` / ``auto`` convergers and ``hessian = analytic`` run
+    inside the driver too; ``cfg`` is the ``[casscf]`` block and the options
+    those convergers read are parsed here, with the same helpers and therefore
+    the same error messages the Python framework would raise -- and only for
+    the converger that actually reads them, so an unused bad value keeps being
+    ignored exactly as it is today.
+
+    Returns ``(energies, s2, multiplicity, history, converged, niter, nevals,
+    stats)`` or ``None`` -- a missing symbol, an unsupported option
+    combination, or any negative driver status -- in which case the caller runs
+    the Python optimizer, which remains the numerical pin.  Two of those
+    negative statuses are refusals rather than fallbacks (a root degeneracy
+    with live coupling, and an excitation stack past the memory guard); the
+    Python path re-raises their messages, which is why they come back as
+    ``None`` like everything else."""
+    backend = _casscf_energy_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if options.optimizer not in _CAS_OPTIMIZER_CODE:
+        return None
+
+    packed = _cas_wavefunction_arrays(settings, options, nbf, ncore, nact,
+                                      active_nelec, enuc, roots,
+                                      hessian=hessian)
+    if packed is None:
+        return None
+    iopt, dopt, spec = packed
+
+    maxmacro = max(0, int(options.max_macro_iterations))
+    # Upper bound on the rows an optimization can append: one seed row plus one
+    # per macroiteration, and one full re-convergence per accepted escape --
+    # doubled because `auto` runs an AH optimization with its escape phase and
+    # then a two-phase one with its own.
+    maxhist = maxmacro * (2 + 2 * _CAS_MAX_ESCAPES) + 2 * _CAS_MAX_ESCAPES + 4
+
     iopt[_CAS_IOPT_INDEX["maxmacro"]] = maxmacro
     iopt[_CAS_IOPT_INDEX["optimizer"]] = _CAS_OPTIMIZER_CODE[options.optimizer]
     iopt[_CAS_IOPT_INDEX["canonical"]] = 1 if options.canonicalize else 0
@@ -616,10 +648,6 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     iopt[_CAS_IOPT_INDEX["converger"]] = converger
     iopt[_CAS_IOPT_INDEX["hessian"]] = hessian
 
-    dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
-    dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
-    dopt[_CAS_DOPT_INDEX["eig_tol"]] = spec.eig_tol
-    dopt[_CAS_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
     dopt[_CAS_DOPT_INDEX["grad_tol"]] = options.gradient_norm_tol
     dopt[_CAS_DOPT_INDEX["ener_tol"]] = options.energy_decrease_tol
     dopt[_CAS_DOPT_INDEX["step_tol"]] = options.step_norm_tol

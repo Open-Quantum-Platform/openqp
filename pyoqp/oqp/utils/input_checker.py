@@ -3414,6 +3414,13 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # one clear message instead of a self-contradicting pair or a silent
     # mismatch.  Wiring these up properly is a feature, not a checker fix.
     pt2_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    # State-specific CASSCF has an analytic nuclear gradient, so it reaches the
+    # same gradient-consuming drivers.  meci/mecp/neb are excluded for the same
+    # reasons spelled out above for PT2 -- each is rejected by its own gate
+    # further down, and mecp would silently mix surfaces.  sa-casscf is NOT
+    # here: the individual-state gradient of a state-averaged objective needs a
+    # Lagrangian/Z-vector response that is not implemented.
+    casscf_grad_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
     _pt2_unsupported_runtypes = {
         "meci": ("MECI requires an excited-state response method; the PT2 "
                  "numerical-gradient path does not provide the state pair "
@@ -3580,15 +3587,72 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                        "fan-out, or set the number of ranks that should "
                        "cooperate on one displaced energy.",
             )
+    elif method == "casscf" and runtype in casscf_grad_runtypes:
+        # State-specific CASSCF has an ANALYTIC nuclear gradient
+        # (source/modules/casscf_gradient.F90), so the gradient-consuming
+        # drivers work for it.  The gradient selector is a state selector
+        # everywhere else in OpenQP, and state-specific CASSCF publishes
+        # exactly one state -- the optimized [casscf] root -- so bound it here
+        # rather than letting the run reach the gradient and raise.
+        _root = 0
+        try:
+            _root = int(_get(config, "casscf", "root", 0) or 0)
+        except (TypeError, ValueError):
+            _root = 0
+        for _g in _as_list(_get(config, "properties", "grad", [])):
+            try:
+                _gi = int(_g)
+            except (TypeError, ValueError):
+                continue
+            if _gi not in (0, _root):
+                report.add(
+                    "ERROR",
+                    "properties.grad",
+                    "State-specific CASSCF publishes one state, the optimized "
+                    f"[casscf] root {_root}.",
+                    value=_g,
+                    expected=f"0 or {_root}",
+                    action="Set [properties] grad=0. Gradients of other states "
+                           "need a state-averaged run with a Z-vector "
+                           "response, which is not implemented.",
+                )
     elif runtype != "energy":
-        report.add(
-            "ERROR",
-            "input.runtype",
-            "CASCI is currently implemented only for energy calculations.",
-            value=runtype,
-            expected="energy",
-            action="Set [input] runtype=energy.",
-        )
+        if method in {"sa-casscf", "sacasscf"}:
+            # Distinguished from the state-specific case on purpose: the reason
+            # is not "not wired yet" but a missing response solve, and the fix
+            # is a different method, not a different runtype.
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "Analytic gradients are implemented for state-specific CASSCF "
+                "only. A state-averaged run optimizes sum_I w_I E_I, whose "
+                "individual state gradients require a Lagrangian/Z-vector "
+                "response that is not implemented.",
+                value=runtype,
+                expected="energy",
+                action="Use method=casscf with [casscf] root for the "
+                       "state-specific gradient, or set [input] runtype=energy.",
+            )
+        elif method == "casscf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "This CASSCF runtype is not wired (energies + the analytic "
+                "state-specific gradient drivers only).",
+                value=runtype,
+                expected=", ".join(sorted(casscf_grad_runtypes)),
+                action="Use energy, grad, or a gradient-driven optimizer "
+                       "runtype (optimize/ts/mep/irc).",
+            )
+        else:
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "CASCI is currently implemented only for energy calculations.",
+                value=runtype,
+                expected="energy",
+                action="Set [input] runtype=energy.",
+            )
 
     if scf_type != "rhf" or multiplicity != 1:
         report.add(

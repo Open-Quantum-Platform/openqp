@@ -1253,7 +1253,18 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+        if self.method in ('sa-casscf', 'sacasscf'):
+            # Reachable only through this branch: the state-averaged objective
+            # is a different derivative, and an individual averaged state needs
+            # a Lagrangian/Z-vector response. Say so, rather than letting the
+            # method fall through to the generic "unknown method" message.
+            raise ValueError(
+                'Analytic gradients are implemented for state-specific CASSCF '
+                'only. A state-averaged run optimizes sum_I w_I E_I, whose '
+                'individual state gradients require a Lagrangian/Z-vector '
+                'response that is not implemented; run method=casscf with '
+                '[casscf] root for the state-specific gradient.')
+        if self.method not in ['hf', 'tdhf', 'casscf'] and not is_tb_method(self.method):
             # Native PT2 family (energy-only kernels): central-difference
             # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
             # avoid a circular module dependency.
@@ -1295,6 +1306,8 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+        elif self.method == 'casscf':
+            grads = self.casscf_grad()
         elif is_tb_method(self.method):
             grads = make_tb_adapter(self.mol).gradient(self.grads)
 
@@ -1318,6 +1331,8 @@ class Gradient(Calculator):
         buffer_row = None
         if self.method == 'hf':
             buffer_row = 0                       # scf_grad returns one row
+        elif self.method == 'casscf':
+            buffer_row = 0                       # casscf_grad returns one row
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
         if buffer_row is not None:
@@ -1337,6 +1352,35 @@ class Gradient(Calculator):
         self.grad_func['hf'](self.mol)
         grad = self.mol.get_grad()
         grads = np.array([grad.copy()]).reshape((1, self.natom, 3))
+
+        return grads
+
+    def casscf_grad(self):
+        """Analytic state-specific CASSCF gradient of the [casscf] root.
+
+        Only that one root is produced, so the returned array has a single row
+        -- unlike tddft_grad, which is indexed by state. A [properties] grad
+        selector naming any other state is rejected here rather than silently
+        answered with the root the orbitals were actually optimized for.
+        """
+        from oqp.library.casscf import _casscf_options
+        from oqp.library.casscf_gradient import casscf_analytic_gradient
+
+        root = int(_casscf_options(self.mol.config).root)
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        # The gradient list is a STATE selector everywhere else in OpenQP, and
+        # for state-specific CASSCF the only state that exists is the optimized
+        # root. Accept the conventional "0" (the sole published state) and the
+        # root's own index; anything else is a request this path cannot answer.
+        for state in requested:
+            if state not in (0, root):
+                raise ValueError(
+                    f'Analytic CASSCF gradients are state-specific: only the '
+                    f'optimized root {root} is available, but [properties] '
+                    f'grad requested state {state}.')
+
+        dump_log(self.mol, title='PyOQP: Gradient of Root %s' % root)
+        grads = casscf_analytic_gradient(self.mol)
 
         return grads
 
