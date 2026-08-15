@@ -12,17 +12,20 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _load_input_checker():
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+def _load_input_checker(monkeypatch):
+    oqp = sys.modules.get("oqp", types.ModuleType("oqp"))
+    utils = sys.modules.get("oqp.utils", types.ModuleType("oqp.utils"))
+    monkeypatch.setitem(sys.modules, "oqp", oqp)
+    monkeypatch.setitem(sys.modules, "oqp.utils", utils)
+    monkeypatch.setattr(oqp, "utils", utils, raising=False)
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
     mpi_utils.MPIManager = type("MPIManager", (), {"use_mpi": False, "size": 1})
-    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+    monkeypatch.setitem(sys.modules, "oqp.utils.mpi_utils", mpi_utils)
     name = "input_checker_casscf_numgrad_under_test"
     spec = importlib.util.spec_from_file_location(
         name, ROOT / "pyoqp/oqp/utils/input_checker.py")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
+    monkeypatch.setitem(sys.modules, name, module)
     spec.loader.exec_module(module)
     return module
 
@@ -45,41 +48,64 @@ def _casscf_config(method="casscf", runtype="grad"):
     return config
 
 
-def _check(config):
-    checker = _load_input_checker()
+def _check(config, monkeypatch):
+    checker = _load_input_checker(monkeypatch)
     report = checker.CheckReport()
     checker._check_casci(config, report)
     return report
 
 
-def test_checker_accepts_casscf_and_sa_casscf_gradient_driven_runtypes():
+def test_checker_accepts_casscf_and_sa_casscf_gradient_driven_runtypes(
+        monkeypatch):
     for method in ("casscf", "sa-casscf"):
         for runtype in ("grad", "optimize", "ts", "mep", "irc"):
             config = _casscf_config(method, runtype)
             if method == "sa-casscf" and runtype != "grad":
                 config["optimize"]["istate"] = 1
-            report = _check(config)
+            report = _check(config, monkeypatch)
             assert report.ok, report.to_text()
 
 
-def test_checker_rejects_nonstationary_root_for_state_specific_casscf():
+def test_checker_rejects_nonstationary_root_for_state_specific_casscf(
+        monkeypatch):
     config = _casscf_config()
     config["ci"]["nroot"] = 2
     config["properties"]["grad"] = [1]
-    report = _check(config)
+    report = _check(config, monkeypatch)
     assert not report.ok
     assert "must use the root whose orbitals are optimized" in report.to_text()
 
 
-def test_checker_rejects_unwired_casscf_workflows_and_bad_displacement():
+def test_checker_accepts_enabled_state_average_with_casscf_method(monkeypatch):
+    config = _casscf_config()
+    config["ci"]["nroot"] = 2
+    config["state_average"] = {
+        "enabled": True, "nstate": 2, "target_roots": [0, 1],
+    }
+    config["properties"]["grad"] = [1]
+    report = _check(config, monkeypatch)
+    assert report.ok, report.to_text()
+
+
+def test_checker_rejects_json_orbitals_for_casscf_numgrad(monkeypatch):
+    config = _casscf_config()
+    config["cas"]["orbital_source"] = "json"
+    config["cas"]["sort_orbitals"] = "none"
+    report = _check(config, monkeypatch)
+    assert not report.ok
+    assert "cannot drive a casscf numerical gradient" in report.to_text()
+
+
+def test_checker_rejects_unwired_casscf_workflows_and_bad_displacement(
+        monkeypatch):
     for runtype in ("meci", "mecp", "neb", "hess"):
-        report = _check(_casscf_config(runtype=runtype))
+        report = _check(_casscf_config(runtype=runtype), monkeypatch)
         assert not report.ok
         assert "input.runtype" in report.to_text()
 
     config = _casscf_config()
     config["casscf"]["grad_step"] = 0.0
-    report = _check(config)
+    report = _check(config, monkeypatch)
     assert not report.ok
     assert "casscf.grad_step" in report.to_text()
 
@@ -113,12 +139,15 @@ class _MPIManager:
         return None
 
 
-def _load_wf_numgrad():
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
-    library = sys.modules.setdefault("oqp.library", types.ModuleType("oqp.library"))
-    oqp.utils = utils
-    oqp.library = library
+def _load_wf_numgrad(monkeypatch):
+    oqp = sys.modules.get("oqp", types.ModuleType("oqp"))
+    utils = sys.modules.get("oqp.utils", types.ModuleType("oqp.utils"))
+    library = sys.modules.get("oqp.library", types.ModuleType("oqp.library"))
+    monkeypatch.setitem(sys.modules, "oqp", oqp)
+    monkeypatch.setitem(sys.modules, "oqp.utils", utils)
+    monkeypatch.setitem(sys.modules, "oqp.library", library)
+    monkeypatch.setattr(oqp, "utils", utils, raising=False)
+    monkeypatch.setattr(oqp, "library", library, raising=False)
 
     file_utils = types.ModuleType("oqp.utils.file_utils")
     file_utils.dump_log = lambda *_args, **_kwargs: None
@@ -126,15 +155,15 @@ def _load_wf_numgrad():
     mpi_utils.MPIManager = _MPIManager
     single_point = types.ModuleType("oqp.library.single_point")
     single_point.SinglePoint = object
-    sys.modules["oqp.utils.file_utils"] = file_utils
-    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
-    sys.modules["oqp.library.single_point"] = single_point
+    monkeypatch.setitem(sys.modules, "oqp.utils.file_utils", file_utils)
+    monkeypatch.setitem(sys.modules, "oqp.utils.mpi_utils", mpi_utils)
+    monkeypatch.setitem(sys.modules, "oqp.library.single_point", single_point)
 
     name = "wf_numgrad_casscf_under_test"
     spec = importlib.util.spec_from_file_location(
         name, ROOT / "pyoqp/oqp/library/wf_numgrad.py")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
+    monkeypatch.setitem(sys.modules, name, module)
     spec.loader.exec_module(module)
     return module
 
@@ -171,8 +200,9 @@ class _FakeSinglePoint:
         return self.mol.energies
 
 
-def test_casscf_driver_differentiates_energy_and_restores_central_geometry():
-    numgrad = _load_wf_numgrad()
+def test_casscf_driver_differentiates_energy_and_restores_central_geometry(
+        monkeypatch):
+    numgrad = _load_wf_numgrad(monkeypatch)
     mol = _FakeMolecule()
     x0 = mol.get_system()
     gradients = numgrad.wavefunction_numerical_gradient(

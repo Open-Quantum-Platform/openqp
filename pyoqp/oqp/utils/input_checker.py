@@ -3264,18 +3264,20 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # displaced metric is a modelling choice (which orbitals ARE "the same" at a
     # displaced geometry is exactly what a cold restart re-solves), so refuse
     # the combination rather than invent one.
-    if (method in PT2_METHOD_ALIASES
+    if (method in (set(PT2_METHOD_ALIASES) | CASSCF_METHOD_ALIASES)
             and runtype in {"grad", "optimize", "ts", "mep", "irc"}
             and _as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"):
         report.add(
             "ERROR",
             "cas.orbital_source",
-            "JSON-sourced CAS orbitals cannot drive a PT2 numerical gradient: "
+            f"JSON-sourced CAS orbitals cannot drive a {method} numerical "
+            "gradient: "
             "the coefficients are fixed in the AO basis of the central "
             "geometry and are not orthonormal in the displaced ones.",
             value="json",
             expected="rhf",
-            action=("Use [cas] orbital_source=rhf for gradient-driven PT2 "
+            action=("Use [cas] orbital_source=rhf for gradient-driven "
+                    "multireference "
                     "runtypes, or compute single-point energies with the "
                     "imported orbitals."),
         )
@@ -3622,7 +3624,11 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 action=("Use energy, grad, optimize, ts, mep, or irc."),
             )
 
-        is_sa = method in {"sa-casscf", "sacasscf"}
+        is_sa = (
+            method in {"sa-casscf", "sacasscf"}
+            or str(_get(config, "state_average", "enabled", False)
+                   ).strip().lower() in _TRUE_BOOL
+        )
         if is_sa:
             targets = _as_list(
                 _get(config, "state_average", "target_roots", []))
