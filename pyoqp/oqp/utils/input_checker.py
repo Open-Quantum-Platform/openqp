@@ -3415,7 +3415,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # Each is rejected explicitly below with its own reason, so the user gets
     # one clear message instead of a self-contradicting pair or a silent
     # mismatch.  Wiring these up properly is a feature, not a checker fix.
-    pt2_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    wf_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
     _pt2_unsupported_runtypes = {
         "meci": ("MECI requires an excited-state response method; the PT2 "
                  "numerical-gradient path does not provide the state pair "
@@ -3579,16 +3579,16 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                                 "and request more roots via [pt2] target_roots "
                                 "/ nroot."),
                     )
-        if runtype not in pt2_grad_runtypes:
+        if runtype not in wf_grad_runtypes:
             report.add(
                 "ERROR",
                 "input.runtype",
                 "This PT2 runtype is not wired (energies + numerical-gradient "
                 "drivers only).",
                 value=runtype,
-                expected=", ".join(sorted(pt2_grad_runtypes)),
+                expected=", ".join(sorted(wf_grad_runtypes)),
                 action="Use energy, grad, or a gradient-driven optimizer runtype "
-                       "(optimize/meci/mecp/ts/mep/neb/irc).",
+                       "(optimize/ts/mep/irc).",
             )
         _check_numgrad_options("pt2")
     elif method in CASSCF_METHOD_ALIASES:
@@ -3611,14 +3611,14 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 action=("Use a supported CASSCF gradient-driven runtype, or "
                         "use method=tdhf for this crossing/path workflow."),
             )
-        elif runtype not in pt2_grad_runtypes:
+        elif runtype not in wf_grad_runtypes:
             report.add(
                 "ERROR",
                 "input.runtype",
                 "This CASSCF runtype is not connected to the energy and "
                 "central-difference nuclear-gradient calculations.",
                 value=runtype,
-                expected=", ".join(sorted(pt2_grad_runtypes)),
+                expected=", ".join(sorted(wf_grad_runtypes)),
                 action=("Use energy, grad, optimize, ts, mep, or irc."),
             )
 

@@ -156,10 +156,10 @@ def wavefunction_numerical_gradient(mol, grad_list, sp=None):
     # dealt out to individual ranks of COMM_WORLD: OpenQP runs MPI *inside* a
     # single energy evaluation, so a rank given its own geometry sits in a
     # collective the rest of the world never enters (an earlier attempt at
-    # that returned a silently ZERO gradient on 4 ranks).  MPIManager.
-    # task_groups splits COMM_WORLD into per-displacement groups and installs
-    # the sub-communicator both here and in liboqp, so the SCF decomposes
-    # WITHIN a group.  See the MPI section of the module docstring.
+    # that returned a silently ZERO gradient on 4 ranks).
+    # MPIManager.task_groups splits COMM_WORLD into per-displacement groups
+    # and installs the sub-communicator both here and in liboqp, so the SCF
+    # decomposes WITHIN a group.  See the MPI section of the module docstring.
     tasks = [(i, sign) for i in range(ncoord) for sign in (1.0, -1.0)]
 
     mpi = MPIManager()

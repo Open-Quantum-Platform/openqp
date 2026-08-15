@@ -217,7 +217,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
 
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main.
-    assert len(checked) == 345
+    assert len(checked) == 349
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():
