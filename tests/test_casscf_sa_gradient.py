@@ -414,7 +414,7 @@ _H4 = ("\nH 0.0  0.041 0.0"
 
 
 def _sa_config(system, cas, nroot, roots, weights=None, gradient_state="averaged",
-               runtype="grad", basis="sto-3g"):
+               runtype="grad", basis="sto-3g", grad=None):
     sa = {"enabled": "true", "nstate": str(len(roots)),
           "target_roots": ",".join(str(r) for r in roots)}
     if weights is None:
@@ -428,7 +428,9 @@ def _sa_config(system, cas, nroot, roots, weights=None, gradient_state="averaged
         "guess": {"type": "hcore"},
         "scf": {"type": "rhf", "multiplicity": "1", "conv": "1.0e-10",
                 "maxit": "80", "forced_attempt": "3", "save_molden": "False"},
-        "properties": {"grad": "0"},
+        "properties": {"grad": str(grad if grad is not None
+                                   else (0 if str(gradient_state) == "averaged"
+                                         else gradient_state))},
         "cas": cas,
         "ci": {"nroot": str(nroot), "solver": "dense", "eig_tol": "1.0e-10",
                "integral_backend": "native", "target_spin": "singlet",
@@ -518,15 +520,24 @@ def _sa_gradient(mol, target):
     return sa_casscf_gradient(mol)
 
 
-@pytest.mark.parametrize("weights,ids", [(None, "equal"), ([0.7, 0.3], "uneq")])
-def test_sa_casscf_gradients_match_finite_difference(tmp_path, weights, ids):
-    """Both paths on LiH/STO-3G CAS(2,2), against an O(h^4) difference."""
+@pytest.mark.parametrize("system,ids", [(_LIH, "lih"), (_H4, "h4")])
+def test_sa_casscf_gradients_match_finite_difference(tmp_path, system, ids):
+    """Both paths on STO-3G CAS(2,2), against an O(h^4) difference.
+
+    Equal weights, because the SA-CASSCF preflight refuses unequal ones -- the
+    roots are followed by energy order and overlap tracking is not implemented,
+    so a flip between macroiterations would move the weights onto different
+    physical states.  That is a pre-existing constraint on the energy path, not
+    a limitation of the response: the unequal-weight case is implemented and is
+    covered by the abstract protocol above, which does not run the input
+    checker.  Equal weights still exercise the response fully -- |z| and the CI
+    relaxation are both far from zero here."""
     if not _ao_gradient_available():
         pytest.skip("liboqp has no casscf_ao_gradient; rebuild to run this test")
 
     from oqp.library.single_point import SinglePoint
 
-    config = _sa_config(_LIH, _CAS22, 2, [0, 1], weights=weights)
+    config = _sa_config(system, _CAS22, 2, [0, 1])
     runner = _runner(tmp_path, f"sagrad_{ids}", config)
     mol = runner.mol
     sp = SinglePoint(mol)
@@ -563,14 +574,14 @@ def test_sa_casscf_weighted_sum_rule_molecular(tmp_path):
 
     from oqp.library.single_point import SinglePoint
 
-    config = _sa_config(_LIH, _CAS22, 2, [0, 1], weights=[0.7, 0.3])
+    config = _sa_config(_LIH, _CAS22, 2, [0, 1])
     runner = _runner(tmp_path, "sagrad_sumrule", config)
     mol = runner.mol
     SinglePoint(mol).energy()
 
     avg = _sa_gradient(mol, None)[0]
     parts = [_sa_gradient(mol, r)[0] for r in (0, 1)]
-    combined = 0.7 * parts[0] + 0.3 * parts[1]
+    combined = 0.5 * parts[0] + 0.5 * parts[1]
     assert np.max(np.abs(avg - combined)) < 1.0e-9
 
 
@@ -686,18 +697,32 @@ def test_one_state_average_reproduces_the_state_specific_gradient(tmp_path):
 
 
 def test_sa_response_term_is_not_negligible_molecular(tmp_path):
-    """Negative control on a molecule: remove the response, break the answer.
+    """Negative control on a molecule, in two forms.
 
-    The comparison is against the finite difference of the SA-CASSCF energy
-    itself, so this states that the Z-vector is not a small correction to the
-    published number but the difference between right and wrong."""
+    First: asking for the gradient with the response removed does not return a
+    slightly wrong number, it is REFUSED -- the effective generalized Fock comes
+    out asymmetric, because its active-active block is annihilated by the CI
+    stationarity of the Lagrangian and by nothing else.  That the guard fires on
+    a real molecule, with no reference value of any kind, is the point.
+
+    Second, to say how wrong the refused number would have been: the densities
+    are rebuilt without the response and contracted directly, bypassing the
+    guard.  The gap to the finite difference is what the Z-vector is worth.
+    """
     if not _ao_gradient_available():
         pytest.skip("liboqp has no casscf_ao_gradient; rebuild to run this test")
 
-    from oqp.library.casscf_sa_gradient import sa_casscf_gradient
+    from oqp.library.casscf import (_nonredundant_pairs, _solve_active_rdms,
+                                    _unpack_lower_triangle)
+    from oqp.library.casscf_sa_gradient import (_run_ao_gradient,
+                                                relaxed_state_densities,
+                                                sa_casscf_gradient,
+                                                state_average_plan)
+    from oqp.library.fci import (_transform_integrals, contiguous_active_space,
+                                 settings_from_casci_config)
     from oqp.library.single_point import SinglePoint
 
-    config = _sa_config(_LIH, _CAS22, 2, [0, 1], weights=[0.7, 0.3])
+    config = _sa_config(_LIH, _CAS22, 2, [0, 1])
     runner = _runner(tmp_path, "sagrad_neg", config)
     mol = runner.mol
     sp = SinglePoint(mol)
@@ -706,8 +731,45 @@ def test_sa_response_term_is_not_negligible_molecular(tmp_path):
 
     mol.config["casscf"]["gradient_state"] = "1"
     full = np.asarray(sa_casscf_gradient(mol)[0], dtype=float).reshape(-1)
-    bare = np.asarray(sa_casscf_gradient(mol, response="none")[0],
-                      dtype=float).reshape(-1)
+
+    # form 1: the guard refuses the response-free request outright
+    with pytest.raises(ValueError, match="not symmetric"):
+        sa_casscf_gradient(mol, response="none")
+
+    # form 2: how wrong it would have been.  Rebuild and contract by hand.
+    settings = settings_from_casci_config(mol.config)
+    nbf = int(mol.data.get_basis()["nbf"])
+    enuc = float(mol.mol_energy.nenergy)
+    nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
+    ncore, nact, active_nelec, _p = contiguous_active_space(
+        nbf, nelec, settings, "SA-CASSCF")
+    weights, roots = state_average_plan(settings)
+    hcore_ao = _unpack_lower_triangle(
+        np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
+    eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
+        (nbf, nbf, nbf, nbf), order="F")
+    coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape(
+        (nbf, nbf)).T
+    h1e, eri = _transform_integrals(hcore_ao, eri_ao, coeff)
+    _e, ci, dets, _d, _g, gammas, gammas2 = _solve_active_rdms(
+        h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots,
+        with_g=False)
+    built = relaxed_state_densities(
+        h1e, eri, ncore, nact, active_nelec,
+        _nonredundant_pairs(ncore, nact, nbf), weights, roots, 1, ci, dets,
+        gammas, gammas2, response="none")
+    fock = np.asarray(built["fock"], dtype=float)
+    bare = _run_ao_gradient(
+        mol, nbf, coeff @ built["d_eff"] @ coeff.T,
+        coeff @ (0.5 * (fock + fock.T)) @ coeff.T,
+        [(c, coeff @ m @ coeff.T) for c, m in built["sep_terms"]],
+        [(c, coeff @ m @ coeff.T) for c, m in built["low_terms"]])
+    bare = np.asarray(bare, dtype=float).reshape(-1)
+
+    # the handle's gradient buffer now holds the response-free number; put the
+    # correct one back so nothing downstream reads the negative control
+    mol.config["casscf"]["gradient_state"] = "1"
+    sa_casscf_gradient(mol)
 
     e0 = _sa_energy(mol, 1, [0, 1])
     k = int(np.argmax(np.abs(full)))
@@ -756,8 +818,10 @@ def _check(config):
     return check_input_values(config, raise_error=False, emit=False)
 
 
-def _preflight_config(runtype="grad", gradient_state="averaged", grad="0",
+def _preflight_config(runtype="grad", gradient_state="averaged", grad=None,
                       istate=None, roots="0,1"):
+    if grad is None:
+        grad = "0" if gradient_state == "averaged" else str(gradient_state)
     cfg = {
         "input": {"method": "sa-casscf", "runtype": runtype, "system": _LIH,
                   "basis": "sto-3g", "charge": 0},
@@ -802,11 +866,11 @@ def test_preflight_rejects_a_properties_grad_that_contradicts_the_selector():
         pytest.skip("native OQP backend not built; build liboqp to run this test")
     # the objective is not a state, so no state index is consistent with it
     assert not _check(_preflight_config(gradient_state="averaged", grad="1")).ok
-    # naming a different root than the one being differentiated
-    assert not _check(_preflight_config(gradient_state="1", grad="0,2")).ok
-    # the conventional 0 and the differentiated root itself are both accepted
-    assert _check(_preflight_config(gradient_state="1", grad="0,1")).ok
+    # only the differentiated row is filled; any other row would report zeros
+    assert not _check(_preflight_config(gradient_state="1", grad="0")).ok
+    assert not _check(_preflight_config(gradient_state="0", grad="1")).ok
     assert _check(_preflight_config(gradient_state="1", grad="1")).ok
+    assert _check(_preflight_config(gradient_state="averaged", grad="0")).ok
 
 
 def test_preflight_refuses_the_objective_for_optimizer_runtypes():
@@ -831,3 +895,11 @@ def test_preflight_refuses_the_objective_for_optimizer_runtypes():
                                    istate=0))
     assert not bad.ok
     assert _errors(bad, "optimize.istate")
+
+    # energies are reported by position and gradients by CI root; a
+    # non-contiguous average makes the optimizer's single index ambiguous
+    noncontig = _check(_preflight_config(runtype="optimize",
+                                         gradient_state="2", istate=2,
+                                         roots="0,2"))
+    assert not noncontig.ok
+    assert _errors(noncontig, "state_average.target_roots")

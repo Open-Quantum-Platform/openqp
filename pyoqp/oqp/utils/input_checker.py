@@ -3832,16 +3832,17 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                                     "individual root with [casscf] "
                                     "gradient_state."),
                         )
-                    elif target is not None and selected_int not in (0, target):
+                    elif target is not None and selected_int != target:
                         report.add(
                             "ERROR",
                             "properties.grad",
-                            "The differentiated root is fixed by [casscf] "
-                            f"gradient_state={target}.",
+                            "[properties] grad names the reported gradient "
+                            f"row, and only CI root {target} is filled.",
                             value=selected,
-                            expected=f"0 or {target}",
-                            action=(f"Set [casscf] gradient_state={selected_int} "
-                                    "instead."),
+                            expected=str(target),
+                            action=(f"Set [properties] grad={target}, or select "
+                                    f"another root with [casscf] "
+                                    "gradient_state."),
                         )
 
             if (target != "invalid"
@@ -3861,21 +3862,36 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                                 "weighted-objective derivative."),
                     )
                 else:
-                    position = roots.index(target)
+                    # State energies are indexed by position in target_roots,
+                    # whereas this analytic gradient is indexed by CI root.
+                    # One optimizer index addresses the same state only for
+                    # the contiguous sequence 0, 1, ..., n-1.
+                    if roots != list(range(len(roots))):
+                        report.add(
+                            "ERROR",
+                            "state_average.target_roots",
+                            "A gradient-driven optimizer requires state-energy "
+                            "positions and CI-root gradient rows to coincide.",
+                            value=_get(
+                                config, "state_average", "target_roots", []),
+                            expected="0.." + str(len(roots) - 1),
+                            action=("Use a contiguous root sequence beginning "
+                                    "at zero, or use runtype=grad."),
+                        )
                     try:
                         optimizer_state = int(
                             _get(config, "optimize", "istate", 1) or 0)
                     except (TypeError, ValueError):
                         optimizer_state = -1
-                    if optimizer_state != position:
+                    if optimizer_state != target:
                         report.add(
                             "ERROR",
                             "optimize.istate",
-                            "SA-CASSCF state energies and derivatives are "
-                            "indexed by position in target_roots.",
+                            "The optimizer must use the state whose analytic "
+                            "derivative is published.",
                             value=_get(config, "optimize", "istate", 1),
-                            expected=str(position),
-                            action=(f"Set [optimize] istate={position} for "
+                            expected=str(target),
+                            action=(f"Set [optimize] istate={target} for "
                                     f"[casscf] gradient_state={target}."),
                         )
 

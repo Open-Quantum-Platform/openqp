@@ -1374,15 +1374,17 @@ class OpenQP:
                          + [root + 1 for root in roots]),
             casscf=casscf, state_average=sa, **keywords)
         derivative = str(casscf.get("gradient_state", "averaged")).strip().lower()
+        objective_names = {
+            "", "averaged", "average", "sa", "weighted", "objective"
+        }
         if str(runtype or "").strip().lower() == "grad":
-            # The derivative is selected by [casscf] gradient_state.  The
-            # conventional public gradient selector remains slot zero.
-            self._select_wavefunction_gradient_state(runtype, 0)
-        elif derivative not in {
-                "", "averaged", "average", "sa", "weighted", "objective"
-                }:
+            # Individual-state arrays are indexed by CI root; the weighted
+            # objective, which is not an electronic state, uses row zero.
+            selector = 0 if derivative in objective_names else int(derivative)
+            self._select_wavefunction_gradient_state(runtype, selector)
+        elif derivative not in objective_names:
             self._select_wavefunction_gradient_state(
-                runtype, roots.index(int(derivative)))
+                runtype, int(derivative))
         return self
 
     def _select_wavefunction_gradient_state(self, runtype, state):

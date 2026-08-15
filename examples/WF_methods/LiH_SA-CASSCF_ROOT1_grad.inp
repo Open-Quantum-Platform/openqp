@@ -45,7 +45,7 @@ save_molden=false
 
 [properties]
 scf_prop=
-grad=0
+grad=1
 
 [cas]
 active_electrons=2

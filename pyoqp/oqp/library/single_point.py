@@ -1358,9 +1358,9 @@ class Gradient(Calculator):
             buffer_row = 0                       # casscf_grad returns one row
         elif self.method in ('sa-casscf', 'sacasscf'):
             # Not always 0: an individual-root gradient is placed in that
-            # root's own row so [optimize] istate pairs it with the matching
-            # energy, and the rest of the array is zero.  Writing row 0 there
-            # would store a zero gradient -- an error that hides well.
+            # root's own row so both the report and [optimize] istate address
+            # it, and the rest of the array is zero.  Writing row 0 there would
+            # store a zero gradient -- an error that hides well.
             buffer_row = int(getattr(self, '_sa_buffer_row', 0))
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
@@ -1434,15 +1434,18 @@ class Gradient(Calculator):
         consistency -- it may name the differentiated root, or the conventional
         0 -- and never silently redirects the calculation.
 
-        The returned array is indexed the way the geometry-optimizer drivers
-        index it, which is by POSITION IN THE AVERAGED ROOT LIST, because those
-        drivers pair `energies[istate]` with `grads[istate]` and `mol.energies`
-        for a state average is that same per-position list. An individual-root
-        gradient therefore lands in its own row with the others left zero (the
-        `tddft_grad` convention), so `[optimize] istate` selects a matched
-        (energy, gradient) pair rather than an accidental one. The weighted
-        objective has no row of its own: it is not in `mol.energies` at all,
-        which is exactly why the preflight refuses it for optimizer runtypes.
+        The returned array is indexed BY CI ROOT, the way `tddft_grad` is
+        indexed by state, with only the differentiated row filled. Two consumers
+        depend on that: the final-gradient report and `dump_data` iterate
+        `[properties] grad`, and a geometry optimizer pairs `energies[istate]`
+        with `grads[istate]`. So `[properties] grad` must name the state being
+        differentiated -- it is a reporting index here, not a second selector,
+        and preflight requires the two to agree rather than letting a run print
+        an all-zero row for a state it never differentiated.
+
+        The weighted objective has no root of its own: it is not a state and is
+        not in `mol.energies`, so it is published as a single row 0, which is
+        also why preflight refuses it for optimizer runtypes.
         """
         from oqp.library.casscf_sa_gradient import (
             resolve_gradient_state,
@@ -1460,18 +1463,19 @@ class Gradient(Calculator):
 
         requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
         for state in requested:
-            if target is None:
-                if state != 0:
-                    raise ValueError(
-                        f'[casscf] gradient_state=averaged differentiates the '
-                        f'weighted objective, which is not a state; '
-                        f'[properties] grad requested state {state}. Set '
-                        f'[casscf] gradient_state={state} for that root.')
-            elif state not in (0, target):
+            if target is None and state != 0:
+                raise ValueError(
+                    f'[casscf] gradient_state=averaged differentiates the '
+                    f'weighted objective, which is not a state; [properties] '
+                    f'grad requested state {state}. Set [casscf] '
+                    f'gradient_state={state} for that root, or [properties] '
+                    f'grad=0 for the objective.')
+            if target is not None and state != target:
                 raise ValueError(
                     f'[casscf] gradient_state={target} is being differentiated, '
-                    f'but [properties] grad requested state {state}. Set '
-                    f'[casscf] gradient_state={state} instead.')
+                    f'but [properties] grad requested state {state}. The two '
+                    f'must agree: [properties] grad is the row this run '
+                    f'reports, and only row {target} is filled.')
 
         label = 'Weighted Objective' if target is None else 'Root %s' % target
         dump_log(self.mol, title='PyOQP: SA-CASSCF Gradient of %s' % label)
@@ -1480,10 +1484,9 @@ class Gradient(Calculator):
         if target is None:
             self._sa_buffer_row = 0
             return grads
-        row = roots.index(int(target))
-        self._sa_buffer_row = row
-        placed = np.zeros((len(roots), self.natom, 3))
-        placed[row] = np.asarray(grads, dtype=float).reshape(self.natom, 3)
+        self._sa_buffer_row = target
+        placed = np.zeros((max(max(roots), target) + 1, self.natom, 3))
+        placed[target] = np.asarray(grads, dtype=float).reshape(self.natom, 3)
         return placed
 
     def tddft_grad(self):

@@ -1,5 +1,5 @@
 sa-casscf/sto-3g
-grad
+grad(S1)
 guess(type=hcore)
 scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
 properties(scf_prop="")
