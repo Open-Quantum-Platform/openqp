@@ -142,6 +142,13 @@ module casscf_driver_mod
   integer, parameter :: dp = c_double
 
   public :: casscf_energy
+  !> Shared with the analytic nuclear-gradient entry point
+  !> (`source/modules/casscf_gradient.F90`), which needs the SAME evaluation
+  !> context this driver optimizes in -- same active space, same CI options,
+  !> same non-redundant pair ordering, same RDM and generalized-Fock
+  !> conventions.  Exporting the three pieces it needs is what keeps the
+  !> gradient from re-deriving any of that and drifting from the energy.
+  public :: cas_ctx_t, cas_context_init, cas_evaluate
 
   ! ------------------------------------------------------------------ schema
   ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
@@ -437,8 +444,7 @@ contains
   function casscf_energy(infos, iopt, dopt, weights, roots, energies, s2, &
                          history, stats) result(status)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_Hcore, OQP_AO_ERI, &
-                                   OQP_VEC_MO_A
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     type(information), target, intent(inout) :: infos
     integer(c_int32_t), intent(in) :: iopt(0:*)
     real(dp), intent(in) :: dopt(0:*)
@@ -449,13 +455,11 @@ contains
     integer(i8) :: status
 
     type(cas_ctx_t), target :: ctx
-    real(dp), contiguous, pointer :: hcore_p(:) => null()
-    real(dp), contiguous, pointer :: eri_p(:) => null()
     real(dp), contiguous, pointer :: mo_p(:,:) => null()
     real(dp), allocatable :: cbuf(:,:), curv_w(:), curv_u(:,:)
     integer :: n, nc, na, nstate, nroot, maxmacro, optimizer, canonical
-    integer :: maxescape, maxhist, ierr, k, i, j, nhist, niter, nvirt
-    integer :: idx, p, q, ndet_ok, converger, hessmode
+    integer :: maxescape, maxhist, ierr, k, i, j, nhist, niter
+    integer :: ndet_ok, converger, hessmode
     logical :: converged, have_curv, stagnated
     real(dp) :: gradtol, enertol, steptol, maxrot, shift, fdstep
     real(dp) :: saddle_c, saddle_e, objective
@@ -472,11 +476,15 @@ contains
     auto_it = 0
     stagnated = .false.
 
-    n  = infos%basis%nbf
-    nc = int(iopt(CAS_I_NCORE))
-    na = int(iopt(CAS_I_NACT))
-    nstate    = int(iopt(CAS_I_NSTATE))
-    nroot     = int(iopt(CAS_I_NROOT))
+    ! ---- active space, CI options, handle records, working orbital buffer
+    call cas_context_init(infos, iopt, dopt, weights, roots, ctx, cbuf, status)
+    if (status < 0_i8) return
+
+    n  = ctx%n
+    nc = ctx%nc
+    na = ctx%na
+    nstate    = ctx%nstate
+    nroot     = ctx%nroot
     maxmacro  = int(iopt(CAS_I_MAXMACRO))
     optimizer = int(iopt(CAS_I_OPTIMIZER))
     canonical = int(iopt(CAS_I_CANONICAL))
@@ -502,15 +510,9 @@ contains
     saddle_c = dopt(CAS_D_SADDLE_C)
     saddle_e = dopt(CAS_D_SADDLE_E)
 
-    if (n <= 0 .or. na <= 0 .or. nc < 0 .or. nc + na > n) then
-      status = CAS_ERR_INPUT
-      return
-    end if
-    if (2 * na > FCI_MAX_NSPIN) then
-      status = CAS_ERR_INPUT
-      return
-    end if
-    if (nstate < 1 .or. nroot < 1 .or. maxhist < 2 .or. fdstep <= 0.0_dp) then
+    ! Optimizer-only validation; the wavefunction half (sizes, active space,
+    ! root indices, determinant count) is done by `cas_context_init` above.
+    if (maxhist < 2 .or. fdstep <= 0.0_dp) then
       status = CAS_ERR_INPUT
       return
     end if
@@ -524,6 +526,186 @@ contains
         status = CAS_ERR_INPUT
         return
       end if
+    end if
+
+    ! ---- orbital-Hessian backend (`[casscf] hessian = fd | analytic`)
+    ctx%hessmode = hessmode
+    if (hessmode == 1) then
+      allocate(ctx%civ_ref(0:ctx%ndet*int(nroot, i8) - 1_i8), &
+               ctx%h1e_h(0:int(n, i8)**2 - 1_i8), &
+               ctx%eri_h(0:int(n, i8)**4 - 1_i8), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_ALLOC
+        return
+      end if
+      status = cas_anhess_init(ctx%ah, n, nc, na, int(iopt(CAS_I_NALPHA)), &
+                               int(iopt(CAS_I_NBETA)), ctx%npar, nstate, &
+                               ctx%nthreads, ctx%ndet, ctx%dets)
+      if (status < 0_i8) then
+        ! The 2 GiB excitation-stack guard and the encoding limit are refusals,
+        ! not fallbacks: hand them back so Python raises its own message.
+        if (status == CAS_HESS_ERR_STACK) status = CAS_ERR_STACK
+        return
+      end if
+    end if
+
+    ! ============================================== orbital-optimization phase
+    nhist = 0
+    select case (converger)
+    case (1)          ! ah: trust-region augmented Hessian + curvature escape
+      call ah_converge(ctx, cbuf, maxmacro, gradtol, enertol, steptol, &
+                       fdstep, ahpar, 0, maxescape, history, maxhist, nhist, &
+                       converged, niter, objective, stagnated, status)
+      if (status < 0_i8) return
+
+    case (2)          ! diis: Pulay acceleration over the production step
+      call diis_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                         maxescape, int(iopt(CAS_I_DIIS_SPACE)), &
+                         int(iopt(CAS_I_DIIS_START)), history, maxhist, nhist, &
+                         converged, niter, objective, n_used, n_extrap, status)
+      if (status < 0_i8) return
+
+    case (3)          ! auto: ah with a two-phase fallback on stagnation
+      call auto_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                         maxescape, ahpar, max(1, int(iopt(CAS_I_AUTO_STAG))), &
+                         history, maxhist, nhist, converged, niter, objective, &
+                         auto_code, auto_it, stagnated, status)
+      if (status < 0_i8) return
+
+    case (4)          ! trah: matrix-free trust-region augmented Hessian
+      call trah_optimize(ctx, cbuf, maxmacro, gradtol, fdstep, ahpar, hessmode, &
+                         history, maxhist, nhist, converged, niter, objective, &
+                         status)
+      if (status < 0_i8) return
+
+    case default      ! twophase: damped Newton, then the saddle escape
+      call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                       steptol, maxrot, shift, fdstep, history, maxhist, &
+                       nhist, .true., converged, niter, curv_w, curv_u, &
+                       have_curv, objective, status)
+      if (status < 0_i8) return
+
+      if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
+        call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                            steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                            maxescape, history, maxhist, nhist, niter, &
+                            curv_w, curv_u, objective, status)
+        if (status < 0_i8) return
+        converged = .true.
+      end if
+    end select
+
+    ! ==================================================== canonicalization
+    if (canonical /= 0) then
+      call canonicalize(ctx, cbuf, status)
+      if (status < 0_i8) return
+    end if
+
+    ! ---- commit the optimized orbitals (the Fortran core reads this buffer).
+    ! `cas_context_init` validated the record; re-fetch the pointer here rather
+    ! than carrying it across the whole optimization.
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_p)
+    do i = 0, n - 1
+      do j = 0, n - 1
+        mo_p(i + 1, j + 1) = cbuf(j, i)
+      end do
+    end do
+
+    ! ================================ final CI on the optimized orbitals
+    call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
+    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
+      status = CAS_ERR_TRANSFORM
+      return
+    end if
+    ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
+    ctx%iopt_ci(FCI_I_WANT_S2) = 1_c_int32_t
+    ndet_ok = int(fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, &
+                            ctx%h1e, ctx%eri, ctx%enci, ctx%civ, ctx%s2w))
+    ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
+    if (ndet_ok < 0) then
+      status = CAS_ERR_CI
+      return
+    end if
+    do k = 0, nroot - 1
+      energies(k) = ctx%enci(k)
+      s2(k) = ctx%s2w(k)
+    end do
+
+    stats(0) = int(nhist, c_int32_t)
+    stats(1) = int(niter, c_int32_t)
+    stats(2) = merge(1_c_int32_t, 0_c_int32_t, converged)
+    stats(3) = int(ctx%ncall, c_int32_t)
+    stats(4) = int(ctx%nhess, c_int32_t)
+    stats(5) = int(n_used, c_int32_t)
+    stats(6) = int(n_extrap, c_int32_t)
+    stats(7) = merge(1_c_int32_t, 0_c_int32_t, stagnated)
+    stats(8) = int(auto_code, c_int32_t)
+    stats(9) = int(auto_it, c_int32_t)
+    ! `ctx` is a local, so its allocatable components -- including the
+    ! excitation stack inside `ctx%ah` -- are released on return, on the error
+    ! paths as well as this one.
+  end function casscf_energy
+
+  !> Validate the wavefunction half of the option block, read the handle
+  !> records and build the evaluation context plus the working orbital buffer.
+  !>
+  !> Split out of `casscf_energy` so the analytic nuclear-gradient entry point
+  !> (`source/modules/casscf_gradient.F90`) enters the SAME context the
+  !> optimizer converged in: same inactive/active/virtual partition, same CI
+  !> option block, same non-redundant pair ordering, same `cas_evaluate`.  A
+  !> gradient that rebuilt any of that separately could silently differ from
+  !> the energy it is supposed to differentiate.
+  !>
+  !> Validated here: orbital/active-space sizes, the spin-orbital encoding
+  !> limit, the requested roots, the rotation space and the determinant count,
+  !> plus the presence and size of `OQP::Hcore`, `OQP::AO_ERI` and
+  !> `OQP::VEC_MO_A`.  The optimizer-only options (converger, orbital-Hessian
+  !> mode, trust region, history depth, finite-difference step) are validated
+  !> by whichever caller reads them.
+  subroutine cas_context_init(infos, iopt, dopt, weights, roots, ctx, cbuf, &
+                              status, allow_zero_rotations)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_Hcore, OQP_AO_ERI, &
+                                   OQP_VEC_MO_A
+    type(information), target, intent(inout) :: infos
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    real(dp), intent(in) :: weights(0:*)
+    integer(c_int32_t), intent(in) :: roots(0:*)
+    type(cas_ctx_t), intent(out) :: ctx
+    real(dp), allocatable, intent(out) :: cbuf(:,:)
+    integer(i8), intent(out) :: status
+    logical, intent(in), optional :: allow_zero_rotations
+
+    real(dp), contiguous, pointer :: hcore_p(:) => null()
+    real(dp), contiguous, pointer :: eri_p(:) => null()
+    real(dp), contiguous, pointer :: mo_p(:,:) => null()
+    integer :: n, nc, na, nstate, nroot, nvirt, ierr, idx, i, j, k, p, q
+    logical :: zero_rotations_ok
+
+    status = 0_i8
+    zero_rotations_ok = .false.
+    if (present(allow_zero_rotations)) zero_rotations_ok = allow_zero_rotations
+
+    n  = infos%basis%nbf
+    nc = int(iopt(CAS_I_NCORE))
+    na = int(iopt(CAS_I_NACT))
+    nstate = int(iopt(CAS_I_NSTATE))
+    nroot  = int(iopt(CAS_I_NROOT))
+
+    if (n <= 0 .or. na <= 0 .or. nc < 0 .or. nc + na > n) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    if (2 * na > FCI_MAX_NSPIN) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    if (nstate < 1 .or. nroot < 1) then
+      status = CAS_ERR_INPUT
+      return
     end if
     do k = 0, nstate - 1
       if (roots(k) < 0 .or. int(roots(k)) >= nroot) then
@@ -556,7 +738,7 @@ contains
     ctx%nthreads = max(1, int(iopt(CAS_I_NTHREADS)))
     nvirt = n - nc - na
     ctx%npar = na * nc + nvirt * nc + nvirt * na
-    if (ctx%npar <= 0) then
+    if (ctx%npar < 0 .or. (ctx%npar == 0 .and. .not. zero_rotations_ok)) then
       status = CAS_ERR_INPUT
       return
     end if
@@ -567,7 +749,7 @@ contains
     ! inactive/active/virtual blocks (`_nonredundant_pairs`, `_full_rdm1`), so
     ! the driver only ever sees the sequential plan; Python declines otherwise.
     allocate(ctx%active(0:na-1), ctx%core(0:max(nc, 1)-1), &
-             ctx%pairs(0:2*ctx%npar-1), ctx%weights(0:nstate-1), &
+             ctx%pairs(0:max(2*ctx%npar, 1)-1), ctx%weights(0:nstate-1), &
              ctx%roots(0:nstate-1), stat=ierr)
     if (ierr /= 0) then
       status = CAS_ERR_ALLOC
@@ -669,123 +851,7 @@ contains
         cbuf(j, i) = mo_p(i + 1, j + 1)
       end do
     end do
-
-    ! ---- orbital-Hessian backend (`[casscf] hessian = fd | analytic`)
-    ctx%hessmode = hessmode
-    if (hessmode == 1) then
-      allocate(ctx%civ_ref(0:ctx%ndet*int(nroot, i8) - 1_i8), &
-               ctx%h1e_h(0:int(n, i8)**2 - 1_i8), &
-               ctx%eri_h(0:int(n, i8)**4 - 1_i8), stat=ierr)
-      if (ierr /= 0) then
-        status = CAS_ERR_ALLOC
-        return
-      end if
-      status = cas_anhess_init(ctx%ah, n, nc, na, int(iopt(CAS_I_NALPHA)), &
-                               int(iopt(CAS_I_NBETA)), ctx%npar, nstate, &
-                               ctx%nthreads, ctx%ndet, ctx%dets)
-      if (status < 0_i8) then
-        ! The 2 GiB excitation-stack guard and the encoding limit are refusals,
-        ! not fallbacks: hand them back so Python raises its own message.
-        if (status == CAS_HESS_ERR_STACK) status = CAS_ERR_STACK
-        return
-      end if
-    end if
-
-    ! ============================================== orbital-optimization phase
-    nhist = 0
-    select case (converger)
-    case (1)          ! ah: trust-region augmented Hessian + curvature escape
-      call ah_converge(ctx, cbuf, maxmacro, gradtol, enertol, steptol, &
-                       fdstep, ahpar, 0, maxescape, history, maxhist, nhist, &
-                       converged, niter, objective, stagnated, status)
-      if (status < 0_i8) return
-
-    case (2)          ! diis: Pulay acceleration over the production step
-      call diis_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
-                         maxescape, int(iopt(CAS_I_DIIS_SPACE)), &
-                         int(iopt(CAS_I_DIIS_START)), history, maxhist, nhist, &
-                         converged, niter, objective, n_used, n_extrap, status)
-      if (status < 0_i8) return
-
-    case (3)          ! auto: ah with a two-phase fallback on stagnation
-      call auto_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
-                         maxescape, ahpar, max(1, int(iopt(CAS_I_AUTO_STAG))), &
-                         history, maxhist, nhist, converged, niter, objective, &
-                         auto_code, auto_it, stagnated, status)
-      if (status < 0_i8) return
-
-    case (4)          ! trah: matrix-free trust-region augmented Hessian
-      call trah_optimize(ctx, cbuf, maxmacro, gradtol, fdstep, ahpar, hessmode, &
-                         history, maxhist, nhist, converged, niter, objective, &
-                         status)
-      if (status < 0_i8) return
-
-    case default      ! twophase: damped Newton, then the saddle escape
-      call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                       steptol, maxrot, shift, fdstep, history, maxhist, &
-                       nhist, .true., converged, niter, curv_w, curv_u, &
-                       have_curv, objective, status)
-      if (status < 0_i8) return
-
-      if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
-        call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                            steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
-                            maxescape, history, maxhist, nhist, niter, &
-                            curv_w, curv_u, objective, status)
-        if (status < 0_i8) return
-        converged = .true.
-      end if
-    end select
-
-    ! ==================================================== canonicalization
-    if (canonical /= 0) then
-      call canonicalize(ctx, cbuf, status)
-      if (status < 0_i8) return
-    end if
-
-    ! ---- commit the optimized orbitals (the Fortran core reads this buffer)
-    do i = 0, n - 1
-      do j = 0, n - 1
-        mo_p(i + 1, j + 1) = cbuf(j, i)
-      end do
-    end do
-
-    ! ================================ final CI on the optimized orbitals
-    call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
-    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
-      status = CAS_ERR_TRANSFORM
-      return
-    end if
-    ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
-    ctx%iopt_ci(FCI_I_WANT_S2) = 1_c_int32_t
-    ndet_ok = int(fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, &
-                            ctx%h1e, ctx%eri, ctx%enci, ctx%civ, ctx%s2w))
-    ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
-    if (ndet_ok < 0) then
-      status = CAS_ERR_CI
-      return
-    end if
-    do k = 0, nroot - 1
-      energies(k) = ctx%enci(k)
-      s2(k) = ctx%s2w(k)
-    end do
-
-    stats(0) = int(nhist, c_int32_t)
-    stats(1) = int(niter, c_int32_t)
-    stats(2) = merge(1_c_int32_t, 0_c_int32_t, converged)
-    stats(3) = int(ctx%ncall, c_int32_t)
-    stats(4) = int(ctx%nhess, c_int32_t)
-    stats(5) = int(n_used, c_int32_t)
-    stats(6) = int(n_extrap, c_int32_t)
-    stats(7) = merge(1_c_int32_t, 0_c_int32_t, stagnated)
-    stats(8) = int(auto_code, c_int32_t)
-    stats(9) = int(auto_it, c_int32_t)
-    ! `ctx` is a local, so its allocatable components -- including the
-    ! excitation stack inside `ctx%ah` -- are released on return, on the error
-    ! paths as well as this one.
-  end function casscf_energy
+  end subroutine cas_context_init
 
   ! =================================================================== work
   subroutine cas_alloc(ctx, ierr)
