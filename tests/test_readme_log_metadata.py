@@ -23,6 +23,15 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         self.assertIn("Vladimir Makhnev", banner)
         self.assertIn("Alireza Lashkaripour", banner)
 
+    def test_package_metadata_lists_alireza_without_invented_contact_data(self):
+        metadata = (ROOT / "pyproject.toml").read_text()
+
+        self.assertIn('{ name = "Alireza Lashkaripour" }', metadata)
+        self.assertNotRegex(
+            metadata,
+            r'Alireza Lashkaripour"\s*,\s*email\s*=',
+        )
+
     def test_first_log_section_prints_git_head(self):
         runner = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
         file_utils = (ROOT / "pyoqp" / "oqp" / "utils" / "file_utils.py").read_text()

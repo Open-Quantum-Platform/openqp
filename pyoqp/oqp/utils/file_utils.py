@@ -15,6 +15,16 @@ from oqp.utils.dftb_trace import (
     final_energy_header,
     final_energy_label,
 )
+from oqp.utils.log_format import (
+    RUN,
+    TERMINATION,
+    format_energy,
+    format_log_fields,
+    format_log_section,
+    format_module_banner,
+    format_unit,
+    section_category,
+)
 from oqp.utils.state_labels import (
     format_calculation_request,
     format_dftb_settings,
@@ -95,13 +105,8 @@ def print_module_banner(mol, title, info=""):
     logpath = getattr(mol, "log", None)
     if not logpath:
         return
-    bar = " " * 20 + "+" * 40
     with open(logpath, "a") as handle:
-        handle.write("\n" + bar + "\n")
-        handle.write(" " * 23 + "MODULE: " + str(title) + "\n")
-        if info:
-            handle.write(" " * 23 + str(info) + "\n")
-        handle.write(bar + "\n")
+        handle.write(format_module_banner(title, info))
 
 
 @mpi_dump
@@ -139,26 +144,23 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     scftypes = {1: "rhf", 2: "uhf", 3: "rohf"}
 
     mode = 'a'
-    loginfo = """
-   ==============================================
-   %s
-   ==============================================
-""" % title
+    loginfo = format_log_section(title, section_category(section))
 
     if section == 'start':
         mode = 'w'
         build = ''
         if info and info.get('build'):
             build = '   PyOQP build: %s\n' % info['build']
-        loginfo = """
-   PyOQP started at %s
-%s
-""" % (what_is_time(), build)
+        loginfo = format_log_section('OpenQP calculation', RUN)
+        loginfo += '   PyOQP started at %s\n%s\n' % (what_is_time(), build)
 
     if section == 'end':
         start = mol.start_time
         end = time.time()
-        loginfo = '\n   %s\n   PyOQP terminated at %s in %s\n' % (title, what_is_time(), how_long(start, end))
+        elapsed = how_long(start, end)
+        loginfo = format_log_section(title or 'OpenQP calculation', TERMINATION)
+        loginfo += '   PyOQP elapsed wall time:            %s\n' % elapsed
+        loginfo += '   PyOQP terminated at %s in %s\n' % (what_is_time(), elapsed)
 
     if section == 'guess':
         loginfo += """
@@ -301,32 +303,21 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                           else 'scf multiplicity')
         scf_mult_display = ('%s (%s)' % (scf_mult, spin_name(scf_mult))
                             if mrsf_request else scf_mult)
-        loginfo += """
-   PyOQP method:                       %s
-   PyOQP hf/functional:                %s
-   PyOQP basis:                        %s
-   PyOQP %-30s %s
-   PyOQP scf maxit:                    %s
-   PyOQP scf forced attempt:           %s
-   PyOQP %-30s %s
-   PyOQP scf convergence:              %s
-   PyOQP scf incremental:              %s
-   PyOQP diis type:                    %s
-   PyOQP cdiis switch:                 %s
-   PyOQP vdiis/vshift switch:          %s
-   PyOQP vshift:                       %s
-
-""" % (
-            method_display, functional, basis,
-            scf_type_label + ':', scftypes[scf_type],
-            scf_maxit, scf_forced_attempt,
-            scf_mult_label + ':', scf_mult_display,
-            scf_conv, scf_incre,
-            diis_type,
-            cdiis_switch,
-            vdiis_vshift_switch,
-            vshift
-        )
+        loginfo += format_log_fields((
+            ('method', method_display),
+            ('hf/functional', functional),
+            ('basis', basis),
+            (scf_type_label, scftypes[scf_type]),
+            ('scf maxit', scf_maxit),
+            ('scf forced attempt', scf_forced_attempt),
+            (scf_mult_label, scf_mult_display),
+            ('scf convergence', scf_conv),
+            ('scf incremental', scf_incre),
+            ('diis type', diis_type),
+            ('cdiis switch', cdiis_switch),
+            ('vdiis/vshift switch', vdiis_vshift_switch),
+            ('vshift', vshift),
+        )) + '\n\n'
 
     if section == 'tdhf':
         mrsf_request = is_mrsf(mol.config)
@@ -334,21 +325,18 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         td_mult_label = ('target spin' if mrsf_request else 'td multiplicity')
         td_mult_display = ('%s (multiplicity %s)' % (spin_name(td_mult), td_mult)
                            if mrsf_request else td_mult)
-        loginfo += """
-   PyOQP method:                       %s
-   PyOQP functional:                   %s
-   PyOQP td type:                      %s
-   PyOQP td maxit:                     %s
-   PyOQP td maxit z-vector:            %s
-   PyOQP %-30s %s
-   PyOQP td convergence:               %s
-   PyOQP td number of states:          %s
-   PyOQP td z-vector of convergence:   %s
-   PyOQP td dimension of Davidson:     %s
-    
-""" % (method_display, functional, td_type, td_maxit, td_maxit_zv,
-         td_mult_label + ':', td_mult_display,
-         td_conv, td_nstate, td_zvconv, td_nvdav)
+        loginfo += format_log_fields((
+            ('method', method_display),
+            ('functional', functional),
+            ('td type', td_type),
+            ('td maxit', td_maxit),
+            ('td maxit z-vector', td_maxit_zv),
+            (td_mult_label, td_mult_display),
+            ('td convergence', td_conv),
+            ('td number of states', td_nstate),
+            ('td z-vector of convergence', td_zvconv),
+            ('td dimension of Davidson', td_nvdav),
+        )) + '\n\n'
 
     if section == 'fci':
         method_label = info.get('method', 'fci')
@@ -471,6 +459,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 """ % (info['d4'], info['type'], functional)
 
     if section == 'energy':
+        loginfo += format_unit('Energy', 'Hartree') + '\n'
         loginfo += '   PyOQP electronic energies\n'
         # Standalone SOC evaluates singlets first and triplets second; the
         # legacy ``mol.energies`` array intentionally remains the last (triplet)
@@ -499,23 +488,24 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
         for n, energy in enumerate(info['el']):
             annotation = final_energy_annotation(dftb_summary, n)
-            loginfo += (f'   PyOQP {energy_label(n):<34} {energy:<16.8f}'
+            loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
                         f'{annotation}\n')
 
         d4 = float(info['d4'])
-        loginfo += f'\n   PyOQP dftd correction {d4:<16.8f}\n\n'
+        loginfo += f'\n   PyOQP dftd correction {format_energy(d4)}\n\n'
         loginfo += '   PyOQP dispersion corrected energies\n'
         if header:
             loginfo += (f'   PyOQP {"State":<34} {"Total (Hartree)":<16}'
                         f'{header}\n')
         for n, energy in enumerate(mol.energies):
             annotation = final_energy_annotation(dftb_summary, n)
-            loginfo += (f'   PyOQP {energy_label(n):<34} {energy:<16.8f}'
+            loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
                         f'{annotation}\n')
 
     if section == 'grad':
         if not mol.config['input']['qmmm_flag']:
            atoms = mol.get_atoms()
+           loginfo += format_unit('Gradient', 'Hartree/Bohr') + '\n'
            loginfo += '   PyOQP electronic gradients\n'
            for n in info['grad_list']:
                grad = write_grad(atoms, info['el'][n])
@@ -703,7 +693,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                         if is_mrsf(mol.config) else info['istate'])
         loginfo += """
    PyOQP MEP follow state:             %14s
-   PyOPQ MEP opt steps:                %14s
+   PyOQP MEP opt steps:                %14s
    PyOQP MEP opt status:               %14s
    PyOQP MEP radius:                   %14.6f
    PyOQP MEP energy:                   %14.6f
@@ -797,6 +787,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
+        loginfo += format_unit('Frequency', 'cm^-1') + '\n'
         ir = np.asarray(getattr(mol, 'infrared_intensities', []), dtype=float)
         raman = np.asarray(getattr(mol, 'raman_activities', []), dtype=float)
         # Normal-mode irrep labels, when symmetry detection produced them.

@@ -1,8 +1,22 @@
-## Open Quantum Platform: OpenQP
+# OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a source-available quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) and designed to interoperate with an open-source scientific ecosystem. It combines conventional HF/DFT, MP2 and coupled-cluster (CCSD, CCSD(T)) correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117))
+is a source-available quantum chemistry program centered on
+[mixed-reference spin-flip TDDFT (MRSF-TDDFT)](https://doi.org/10.1021/acs.jpclett.3c02296).
+It provides HF and DFT references, correlated wavefunction methods, linear-response
+excited states, nuclear derivatives, reaction-path calculations, nonadiabatic
+dynamics, and QM/MM calculations in one program.
 
-MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
+MRSF-TDDFT retains the linear-response structure of TDDFT while removing the spin
+contamination that limits conventional spin-flip TDDFT. This permits consistent
+descriptions of multiconfigurational ground and excited states, including
+diradicals, bond breaking, conical intersections, photochemical processes, and
+spin-orbit coupling.
+
+Use the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)**
+for methods, input keywords, and build options, and the
+**[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)**
+for runnable examples.
 
 ### Functionality
 
@@ -12,11 +26,11 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | --- | --- | --- |
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
-| MP2 | RHF, UHF, and ROHF energies; analytic RHF gradients for MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Post-SCF correlation; RHF gradients drive optimization, transition-state, MEP, and IRC calculations, while UHF/ROHF derivatives remain unavailable |
-| Coupled cluster | `method=ccsd` and `method=ccsd(t)` on RHF, UHF, and ROHF references; frozen core via `[cc] nfzc` | Energy-only. Closed-shell path is spin-adapted with DGEMM contractions, OpenMP and MPI; open-shell uses a spin-orbital solver sized for small systems. Integrals are in-core by default; the closed-shell path also offers a Cholesky-factorised route and an integral-direct one (`[cc] cholesky`, `[cc] cholesky_direct`) that skips the packed AO store entirely |
+| MP2 | RHF, UHF, and ROHF energies; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Analytic nuclear gradients for RHF references; UHF/ROHF nuclear derivatives are not yet available |
+| Coupled cluster | CCSD and CCSD(T) with RHF, UHF, and ROHF references | Energy-only; frozen-core, in-core, Cholesky-factorized, and integral-direct options are available as appropriate to the reference |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
-| **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
+| **MRSF-TDDFT** | [Mixed-reference spin-flip](https://doi.org/10.1021/acs.jpclett.3c02296) with [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Spin-adapted multiconfigurational ground and excited states within linear response |
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 | CI and CASSCF | FCI, CASCI, CASSCF, SA-CASSCF | Native determinant CI and orbital optimization; CASSCF/SA-CASSCF have central-difference nuclear gradients |
@@ -28,7 +42,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 | Capability | Scope | Notes |
 | --- | --- | --- |
-| Analytic gradients | HF, DFT, TDDFT, SF/MRSF-TDDFT | State-specific gradients for optimization and dynamics |
+| Analytic gradients | HF, DFT, RHF-based MP2 variants, TDDFT, SF/MRSF-TDDFT | State-specific gradients for optimization and dynamics |
 | Numerical gradients | CASSCF, SA-CASSCF, CASPT2, NEVPT2, QDPT2 | Central differences of converged multireference energies for `grad`, `optimize`, `ts`, `mep`, and `irc` |
 | Hessians | Native **analytic** HF/DFT Hessians + numerical Hessians | Covers UHF/ROHF references, ECPs, and CAM/LRC functionals |
 | Vibrational analysis | Frequencies, normal modes, thermochemistry, **IR and Raman intensities** | Native dipole / CPHF-polarizability kernels |
@@ -152,6 +166,19 @@ so paired optimization artifacts cannot overwrite one another.
 
 Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_threads=16`.
 
+### Log Output
+
+OpenQP text logs use the same ordered structure for every calculation path:
+run information, input and reference, convergence and iterations, energies and
+states, gradients and properties when requested, and timing and termination.
+Method-specific information remains within the corresponding section.
+
+The established `PyOQP ...` fields and native solver iteration markers remain
+stable for existing analysis scripts. New parsers should use these markers and
+the documented units instead of relying on separator characters or whitespace.
+See [the log-format specification](docs/logging.md) for the section grammar,
+units, precision, method coverage, and compatibility policy.
+
 ### Documentation
 
 - [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/) (reference docs; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs))
@@ -200,6 +227,8 @@ Recent MRSF-TDDFT accounts and overview papers:
 - **Igor Gerasimov**, [i.s.ger@yandex.ru](mailto:i.s.ger@yandex.ru)
 - **Hiroya Nakata**, Fukui Institute for Fundamental Chemistry, Japan, [nakata.hiro07@gmail.com](mailto:nakata.hiro07@gmail.com)
 - **Mohsen Mazaherifar**, Kyungpook National University, South Korea, [moh.mazaheri@gmail.com](mailto:moh.mazaheri@gmail.com)
+- **Vladimir Makhnev** ([VladimirMakhnev](https://github.com/VladimirMakhnev))
+- **[Alireza Lashkaripour](https://github.com/Alireza-Lashkaripour)**
 
 ### Legal Notice
 
