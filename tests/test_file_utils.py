@@ -110,6 +110,40 @@ def load_file_utils():
                 sys.modules[name] = module
 
 
+def minimal_log_mol(log):
+    native = types.SimpleNamespace(
+        mol_prop=types.SimpleNamespace(natom=2, charge=0, mult=1),
+        control=types.SimpleNamespace(scftype=1, maxit=50),
+        tddft=types.SimpleNamespace(mult=1),
+    )
+    return types.SimpleNamespace(
+        log=str(log),
+        silent=True,
+        config={
+            "input": {
+                "method": "hf", "basis": "sto-3g", "functional": "",
+                "qmmm_flag": False, "runtype": "grad",
+            },
+            "scf": {
+                "forced_attempt": 0, "conv": 1.0e-8,
+                "incremental": False, "diis_type": "cdiis",
+                "cdiis_switch": 0.0, "vdiis_vshift_switch": 0.0,
+                "vshift": 0.0,
+            },
+            "tdhf": {
+                "type": "tda", "maxit": 50, "maxit_zv": 50,
+                "conv": 1.0e-6, "nstate": 1,
+                "zvconv": 1.0e-8, "nvdav": 20,
+            },
+        },
+        data=types.SimpleNamespace(_data=native),
+        energies=[-1.0],
+        grads=np.zeros((1, 2, 3)),
+        get_atoms=lambda: np.array([1, 1]),
+        get_system=lambda: np.zeros(6),
+    )
+
+
 class TestWriteXYZ(unittest.TestCase):
     def test_accepts_numpy_2d_atomic_number_arrays(self):
         file_utils = load_file_utils()
@@ -146,38 +180,8 @@ class TestWriteXYZ(unittest.TestCase):
 
             with TemporaryDirectory() as folder:
                 log = Path(folder) / "representative.log"
-                native = types.SimpleNamespace(
-                    mol_prop=types.SimpleNamespace(natom=2, charge=0, mult=1),
-                    control=types.SimpleNamespace(scftype=1, maxit=50),
-                    tddft=types.SimpleNamespace(mult=1),
-                )
-                mol = types.SimpleNamespace(
-                    log=str(log),
-                    silent=True,
-                    start_time=time.time() - 1.0,
-                    config={
-                        "input": {
-                            "method": "hf", "basis": "sto-3g", "functional": "",
-                            "qmmm_flag": False, "runtype": "grad",
-                        },
-                        "scf": {
-                            "forced_attempt": 0, "conv": 1.0e-8,
-                            "incremental": False, "diis_type": "cdiis",
-                            "cdiis_switch": 0.0, "vdiis_vshift_switch": 0.0,
-                            "vshift": 0.0,
-                        },
-                        "tdhf": {
-                            "type": "tda", "maxit": 50, "maxit_zv": 50,
-                            "conv": 1.0e-6, "nstate": 1,
-                            "zvconv": 1.0e-8, "nvdav": 20,
-                        },
-                    },
-                    data=types.SimpleNamespace(_data=native),
-                    energies=[-1.0],
-                    grads=np.zeros((1, 2, 3)),
-                    get_atoms=lambda: np.array([1, 1]),
-                    get_system=lambda: np.zeros(6),
-                )
+                mol = minimal_log_mol(log)
+                mol.start_time = time.time() - 1.0
 
                 file_utils.dump_log(mol, section="start", info={"build": "git HEAD abc123"})
                 file_utils.print_module_banner(mol, "HF", "Hartree-Fock reference")
@@ -215,6 +219,98 @@ class TestWriteXYZ(unittest.TestCase):
         self.assertIn("PyOQP Gradient unit:               Hartree/Bohr", text)
         self.assertIn("PyOQP electronic gradients", text)
         self.assertIn("PyOQP terminated at", text)
+
+    def test_post_scf_correlation_never_returns_to_input_category(self):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as folder:
+            log = Path(folder) / "post-scf.log"
+            mol = minimal_log_mol(log)
+            file_utils.dump_log(
+                mol, title="PyOQP: Calculation request", section="calculation")
+            file_utils.dump_log(
+                mol, title="PyOQP: Normal SCF steps", section="scf")
+            for method in ("MP2", "CCSD", "CCSD(T)"):
+                file_utils.dump_log(
+                    mol, title=f"PyOQP: {method} correlation steps",
+                    section="correlation",
+                )
+            text = log.read_text()
+
+        input_heading = "PyOQP LOG | INPUT AND REFERENCE"
+        convergence_heading = "PyOQP LOG | CONVERGENCE AND ITERATIONS"
+        self.assertEqual(text.count(input_heading), 1)
+        self.assertEqual(text.count(convergence_heading), 4)
+        self.assertLess(text.index(input_heading), text.index(convergence_heading))
+        self.assertNotIn(input_heading, text[text.index(convergence_heading):])
+        for method in ("MP2", "CCSD", "CCSD(T)"):
+            self.assertIn(f"PyOQP: {method} correlation steps", text)
+
+    def test_numerical_sections_preserve_category_heading_and_payload(self):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        cases = (
+            ("num_hess", [0, 6, 0.005, False, 6, 2, 4],
+             "PyOQP hessian type"),
+            ("hess_worker", [1, 2, "completed", (0.0, 2.0, 0, 4, "node0")],
+             "displacement: 2"),
+            ("num_nacv", [6, 0.005, False, 6, 2, 4],
+             "PyOQP nac type"),
+            ("nacv_worker", [1, 3, "completed", (0.0, 3.0, 0, 4, "node0")],
+             "displacement: 3"),
+            ("read_hess", None, "PyOQP read hessian file"),
+        )
+        with TemporaryDirectory() as folder:
+            for section, info, payload in cases:
+                with self.subTest(section=section):
+                    log = Path(folder) / f"{section}.log"
+                    mol = minimal_log_mol(log)
+                    file_utils.dump_log(
+                        mol, title=f"PyOQP: {section}", section=section, info=info)
+                    text = log.read_text()
+                    self.assertIn(
+                        "PyOQP LOG | " + (
+                            "GRADIENTS AND PROPERTIES"
+                            if section == "read_hess"
+                            else "CONVERGENCE AND ITERATIONS"
+                        ),
+                        text,
+                    )
+                    self.assertIn(payload, text)
+
+    def test_qmmm_optimization_metrics_use_convergence_category(self):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        metrics = {
+            "istate": 0,
+            "de": 0.001,
+            "energy_shift": 0.0001,
+            "rmsd_step": 0.01,
+            "target_rmsd_step": 0.001,
+            "max_step": 0.02,
+            "target_max_step": 0.002,
+            "rmsd_grad": 0.003,
+            "target_rmsd_grad": 0.0003,
+            "max_grad": 0.004,
+            "target_max_grad": 0.0004,
+        }
+        with TemporaryDirectory() as folder:
+            log = Path(folder) / "qmmm-opt.log"
+            mol = minimal_log_mol(log)
+            file_utils.dump_log(
+                mol,
+                title="Geometry Optimization Convergence 1",
+                section="QM/MM",
+                info=metrics,
+            )
+            text = log.read_text()
+
+        self.assertIn("PyOQP LOG | CONVERGENCE AND ITERATIONS", text)
+        self.assertIn("PyOQP energy shift:", text)
+        self.assertIn("PyOQP rmsd grad:", text)
 
 
 if __name__ == "__main__":

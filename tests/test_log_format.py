@@ -115,6 +115,13 @@ def test_every_literal_dump_log_section_is_classified():
     assert not unclassified, sorted(unclassified)
 
 
+def test_stage_specific_sections_use_forward_log_categories():
+    assert LOG.section_category("correlation") == LOG.CONVERGENCE
+    assert LOG.section_category("QM/MM") == LOG.CONVERGENCE
+    assert LOG.section_category("text") == LOG.CONVERGENCE
+    assert LOG.section_category("dftb_state_summary") == LOG.ENERGIES
+
+
 def test_native_banner_is_appended_after_log_initialization():
     source = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
     start = source.index("dump_log(self.mol, title='', section='start'")

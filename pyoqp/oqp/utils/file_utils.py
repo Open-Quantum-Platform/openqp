@@ -521,7 +521,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                label = public_state_label(mol.config, n) if is_mrsf(mol.config) else f'state {n}'
                loginfo += f'   PyOQP {label:<34}\n{grad}\n'
 
-    if section == 'opt':
+    if section in ('opt', 'QM/MM'):
         follow_state = (public_state_label(mol.config, info['istate'])
                         if is_mrsf(mol.config) else info['istate'])
         loginfo += """
@@ -703,7 +703,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'num_nacv':
         ndim, dx, restart, jobs, nproc, threads = info
-        loginfo = """
+        loginfo += """
    PyOQP nac type                  %14s
    PyOQP number of displacements       %14s
    PyOQP size of displacements         %14s
@@ -717,7 +717,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     if section == 'nacv_worker':
         order, idx, flag, timing = info
         start, end, rank, threads, host = timing
-        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
+        loginfo += f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'nacv':
@@ -761,14 +761,14 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'read_hess':
         hess_file = mol.log.replace('.log', 'hess.json')
-        loginfo = """
+        loginfo += """
    PyOQP read hessian file            %14s
 """ % hess_file
 
     if section == 'num_hess':
         state, ndim, dx, restart, jobs, nproc, threads = info
         state = public_state_label(mol.config, state) if is_mrsf(mol.config) else state
-        loginfo = """
+        loginfo += """
    PyOQP hessian type                  %14s
    PyOQP hessian follow state          %14s
    PyOQP number of displacements       %14s
@@ -783,7 +783,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     if section == 'hess_worker':
         order, idx, flag, timing = info
         start, end, rank, threads, host = timing
-        loginfo = f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
+        loginfo += f'   PyOQP step: {order:<8} displacement: {idx:<8} {flag:<10} in {end - start:<16.0f} sec' \
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
