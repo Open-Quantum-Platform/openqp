@@ -1253,10 +1253,20 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+        state_average_enabled = str(
+            self.mol.config.get('state_average', {}).get('enabled', False)
+        ).strip().lower() in ('true', '1', 'yes', 'on')
+        numerical_casscf = (
+            self.method in ('sa-casscf', 'sacasscf')
+            or (self.method == 'casscf' and state_average_enabled)
+        )
+        if (self.method not in ['hf', 'tdhf', 'casscf']
+                and not is_tb_method(self.method)) or numerical_casscf:
             # Multireference wavefunction methods currently use Cartesian
-            # central differences of their converged total energies.  The
-            # import stays local to avoid a circular module dependency.
+            # central differences of their converged total energies.  This is
+            # the SA-CASSCF/PT2 path; state-specific CASSCF continues below to
+            # the analytic derivative.  The import stays local to avoid a
+            # circular module dependency.
             from oqp.library.wf_numgrad import (
                 WF_NUMGRAD_METHODS, wavefunction_numerical_gradient,
             )
@@ -1297,13 +1307,19 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+        elif self.method == 'casscf':
+            grads = self.casscf_grad()
         elif is_tb_method(self.method):
             grads = make_tb_adapter(self.mol).gradient(self.grads)
 
         # Petite-list runs produce a skeleton two-electron gradient; project
         # onto the totally symmetric component (exact for 1-dim irreps; all
-        # abelian irreps are 1-dim). No-op unless the reduction is active.
-        grads = self.mol.symmetrize_gradient(grads)
+        # abelian irreps are 1-dim).  The CASSCF kernel deliberately computes
+        # the full two-electron gradient because an arbitrary state-specific
+        # root need not have a totally symmetric density.  Projecting that
+        # already-complete result would erase legitimate components.
+        if self.method != 'casscf':
+            grads = self.mol.symmetrize_gradient(grads)
 
         # Push the projected gradient back into the library buffer. get_grad()
         # reads that buffer, so without this the projection reaches
@@ -1320,6 +1336,8 @@ class Gradient(Calculator):
         buffer_row = None
         if self.method == 'hf':
             buffer_row = 0                       # scf_grad returns one row
+        elif self.method == 'casscf':
+            buffer_row = 0                       # casscf_grad returns one row
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
         if buffer_row is not None:
@@ -1339,6 +1357,34 @@ class Gradient(Calculator):
         self.grad_func['hf'](self.mol)
         grad = self.mol.get_grad()
         grads = np.array([grad.copy()]).reshape((1, self.natom, 3))
+
+        return grads
+
+    def casscf_grad(self):
+        """Analytic state-specific CASSCF gradient of the [casscf] root.
+
+        Only that one root is produced, so the returned array has a single row
+        -- unlike tddft_grad, which is indexed by state. A [properties] grad
+        selector naming any other state is rejected here rather than silently
+        answered with the root the orbitals were actually optimized for.
+        """
+        from oqp.library.casscf import _casscf_options
+        from oqp.library.casscf_gradient import casscf_analytic_gradient
+
+        root = int(_casscf_options(self.mol.config).root)
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        # State-specific CASSCF publishes exactly one array row.  Its public
+        # index is therefore always zero; [casscf] root selects which physical
+        # CI root occupies that slot.
+        for state in requested:
+            if state != 0:
+                raise ValueError(
+                    f'Analytic CASSCF gradients are state-specific: only the '
+                    f'optimized root {root} is available in public slot 0, '
+                    f'but [properties] grad requested slot {state}.')
+
+        dump_log(self.mol, title='PyOQP: Gradient of Root %s' % root)
+        grads = casscf_analytic_gradient(self.mol)
 
         return grads
 

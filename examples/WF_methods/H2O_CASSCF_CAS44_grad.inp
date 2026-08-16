@@ -1,0 +1,80 @@
+# RHF/STO-3G/CASSCF ANALYTIC nuclear GRADIENT of H2O in a CAS(4e,4o) space.
+#
+# This is the analytic state-specific CASSCF gradient
+# (source/modules/casscf_gradient.F90), NOT a finite difference: one CI solve
+# at the converged orbitals plus one pass of derivative integrals, independent
+# of the number of nuclei.
+#
+# It is a different object from casscf_gfock_grad, which is the derivative with
+# respect to the ORBITAL ROTATION parameters and is what the optimizer drives
+# to zero.  That gradient vanishing is the PRECONDITION for this one: at a
+# converged state-specific solution the CASSCF energy is stationary against
+# every wavefunction parameter, so there is no orbital-response (Z-vector)
+# term and
+#
+#   dE/dx = sum D h^x + 1/2 sum Gamma (..|..)^x - sum X S^x + dV_NN/dx.
+#
+# The energy at this geometry is the one checked by H2O_CASSCF_CAS44.inp
+# (reference PySCF CASSCF = -75.0085688625).
+#
+# The orbital optimization is converged to 1e-7 in |g_orb| because the nuclear
+# gradient error from a non-stationary point is FIRST order in that norm; the
+# driver reports |g_orb| and the generalized-Fock asymmetry so a loosely
+# converged run cannot quietly produce a plausible-looking gradient.
+[input]
+system=
+   O   0.000000000   0.000000000   0.117300000
+   H   0.000000000   0.757200000  -0.469200000
+   H   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=grad
+basis=sto-3g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the CASSCF orbitals start from these, and the gradient is taken at
+# the CASSCF stationary point rather than differenced, so run-to-run noise in
+# the reference orbitals shows up directly in the reported |g_orb|.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+# State-specific CASSCF publishes one array row, so the only valid gradient
+# selector is 0; [casscf] root independently selects the physical CI root.
+grad=0
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=3
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=50
+optimizer=newton
+root=0
+gradient_norm_tol=1.0e-7
+energy_decrease_tol=1.0e-10
+step_norm_tol=1.0e-8
+max_rotation_norm=2.0e-1
+level_shift=1.0e-3
+canonicalize=true

@@ -19,7 +19,8 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H2_FCI.inp` | `fci` | — | full configuration interaction |
 | `H2_CASCI.inp` | `casci` | — | active-space CI at fixed RHF orbitals |
 | `LiH_CASSCF.inp` | `casscf` | — | state-specific CASSCF (orbital + CI optimization) |
-| `LiH_CASSCF_grad.inp` | `casscf` | — | central-difference nuclear gradient of the state-specific CASSCF root |
+| `LiH_CASSCF_grad.inp` | `casscf` | — | analytic nuclear gradient of the state-specific CASSCF root |
+| `LiH_CASSCF_optimize.inp` | `casscf` | — | geometry optimization with the analytic state-specific CASSCF gradient |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
 | `LiH_SA-CASSCF_grad.inp` | `sa-casscf` | — | central-difference gradient of a state on common SA-CASSCF orbitals |
@@ -39,7 +40,9 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 - `[cas]` — `active_electrons`, `active_orbitals`, `frozen_core`, `orbital_source`.
 - `[ci]` — `nroot`, `solver` (dense/davidson), `target_spin`.
 - `[casscf]` — orbital optimization and convergence; `grad_step`, `grad_guess`,
-  `grad_gap_warn`, and `grad_ranks_per_group` control central-difference nuclear gradients.
+  `grad_gap_warn`, and `grad_ranks_per_group` control the SA-CASSCF
+  central-difference nuclear gradient. State-specific CASSCF uses the analytic
+  derivative.
 - `[state_average]` — `enabled`, `target_roots`, weights.
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,

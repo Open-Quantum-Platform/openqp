@@ -1519,14 +1519,42 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         self.assertEqual(config["casscf"]["converger"], "trah")
         self.assertEqual(config["casscf"]["hessian"], "analytic")
 
-    def test_casscf_helpers_select_numerical_gradient_state_and_controls(self):
+    def test_casscf_helper_selects_the_analytic_gradient_runtype(self):
+        """`job.casscf(runtype="grad")` reaches the analytic state-specific
+        CASSCF nuclear gradient, and `root` selects which state it
+        differentiates."""
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_casscf_grad")
+                  .casscf(active_electrons=4, active_orbitals=4, frozen_core=3,
+                          runtype="grad")
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["casscf"]["root"], "0")
+
+        # An excited root is still a stationary point, so the state-specific
+        # gradient applies to it unchanged; the helper widens [ci] nroot itself.
+        excited = (self._job(openqp, "h2o_casscf_grad_root1")
+                   .casscf(active_electrons=4, active_orbitals=4, frozen_core=3,
+                           root=1, runtype="grad")
+                   .to_input_dict())
+        self.assertEqual(excited["input"]["runtype"], "grad")
+        self.assertEqual(excited["casscf"]["root"], "1")
+        self.assertEqual(excited["ci"]["nroot"], "2")
+        self.assertEqual(excited["properties"]["grad"], "0")
+
+    def test_casscf_helpers_select_gradient_state_and_controls(self):
         openqp = load_openqp_module()
         casscf = (self._job(openqp, "h2o_casscf_grad")
                   .casscf(active_electrons=4, active_orbitals=4, nroot=2,
                           root=1, runtype="optimize", grad_step=2.0e-3,
                           grad_guess="warm")
                   .to_input_dict())
-        self.assertEqual(casscf["optimize"]["istate"], "1")
+        # State-specific analytic CASSCF publishes one gradient row.  Root 1
+        # is the physical state in that row; the optimizer must index slot 0.
+        self.assertEqual(casscf["casscf"]["root"], "1")
+        self.assertEqual(casscf["optimize"]["istate"], "0")
         self.assertEqual(casscf["casscf"]["grad_step"], "0.002")
         self.assertEqual(casscf["casscf"]["grad_guess"], "warm")
 

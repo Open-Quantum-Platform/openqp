@@ -1264,7 +1264,9 @@ class OpenQP:
             "casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
             frozen_core=frozen_core, nroot=nroot, casscf=opts, **keywords)
-        self._select_wavefunction_gradient_state(runtype, int(opts["root"]))
+        # The physical state is chosen by [casscf] root, while the analytic
+        # state-specific gradient is published as the sole array row (slot 0).
+        self._select_wavefunction_gradient_state(runtype, 0)
         return self
 
     def sa_casscf(self, active_electrons=None, active_orbitals=None,

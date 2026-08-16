@@ -3257,23 +3257,30 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     # [cas] orbital_source=json fixes the coefficients in the AO basis of ONE
-    # geometry.  Every displaced point of a numerical gradient changes the AO
-    # overlap, so the same matrix is no longer orthonormal there -- the new
-    # C^T S C guard rejects it at the first displacement, and without that guard
-    # it silently correlated a non-orthonormal set.  Projecting into each
-    # displaced metric is a modelling choice (which orbitals ARE "the same" at a
-    # displaced geometry is exactly what a cold restart re-solves), so refuse
-    # the combination rather than invent one.
+    # geometry.  A numerical gradient displaces that geometry, and a moving
+    # analytic-CASSCF workflow reaches a new geometry on its next step.  In
+    # either case the same matrix is no longer orthonormal in the new AO
+    # metric.  Direct state-specific analytic `runtype=grad` is safe because it
+    # evaluates only the supplied geometry; every numerical or moving use is
+    # refused until an explicit orbital-transport convention exists.
+    _state_specific_analytic_casscf = (
+        method == "casscf" and not bool(state_average_enabled)
+    )
+    _cas_json_moves = (
+        runtype in {"optimize", "ts", "mep", "irc"}
+        if _state_specific_analytic_casscf
+        else runtype in {"grad", "optimize", "ts", "mep", "irc"}
+    )
     if (method in (set(PT2_METHOD_ALIASES) | CASSCF_METHOD_ALIASES)
-            and runtype in {"grad", "optimize", "ts", "mep", "irc"}
+            and _cas_json_moves
             and _as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"):
         report.add(
             "ERROR",
             "cas.orbital_source",
-            f"JSON-sourced CAS orbitals cannot drive a {method} numerical "
-            "gradient: "
-            "the coefficients are fixed in the AO basis of the central "
-            "geometry and are not orthonormal in the displaced ones.",
+            f"JSON-sourced CAS orbitals cannot drive this moving {method} "
+            "nuclear-gradient workflow: the coefficients are fixed in the AO "
+            "basis of the central geometry and are not orthonormal at a new "
+            "geometry.",
             value="json",
             expected="rhf",
             action=("Use [cas] orbital_source=rhf for gradient-driven "
@@ -3395,10 +3402,11 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                             "for fixed orbitals, or disable this flag."),
                 )
 
-    # CASSCF and the PT2 family carry central-difference nuclear gradients
-    # through wf_numgrad.py.  CASCI remains energy-only.  MECI, MECP, and NEB
-    # are deliberately excluded: their energy/state conventions do not yet
-    # use the multireference wavefunction dispatch consistently.
+    # State-specific CASSCF carries an analytic nuclear gradient; SA-CASSCF and
+    # the PT2 family use central differences through wf_numgrad.py.  CASCI
+    # remains energy-only.  MECI, MECP, and NEB are deliberately excluded:
+    # their energy/state conventions do not yet use the multireference
+    # wavefunction dispatch consistently.
     #
     # meci/mecp/neb are deliberately NOT here.  Listing them made this gate
     # advertise workflows that either cannot pass preflight or are broken:
@@ -3594,6 +3602,11 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             )
         _check_numgrad_options("pt2")
     elif method in CASSCF_METHOD_ALIASES:
+        is_sa = (
+            method in {"sa-casscf", "sacasscf"}
+            or str(_get(config, "state_average", "enabled", False)
+                   ).strip().lower() in _TRUE_BOOL
+        )
         unsupported = {
             "meci": ("CASSCF MECI needs a state-pair optimizer that addresses "
                      "CASSCF roots directly."),
@@ -3618,17 +3631,16 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 "ERROR",
                 "input.runtype",
                 "This CASSCF runtype is not connected to the energy and "
-                "central-difference nuclear-gradient calculations.",
+                "nuclear-gradient calculations.",
                 value=runtype,
                 expected=", ".join(sorted(wf_grad_runtypes)),
                 action=("Use energy, grad, optimize, ts, mep, or irc."),
             )
 
-        is_sa = (
-            method in {"sa-casscf", "sacasscf"}
-            or str(_get(config, "state_average", "enabled", False)
-                   ).strip().lower() in _TRUE_BOOL
-        )
+        # `method=casscf` plus state_average.enabled is intentionally routed
+        # to the numerical SA-CASSCF derivative added on main.  It must never
+        # reach the state-specific analytic expression, which is variational
+        # only for the optimized single-root objective.
         if is_sa:
             targets = _as_list(
                 _get(config, "state_average", "target_roots", []))
@@ -3640,14 +3652,8 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 )
             except (TypeError, ValueError):
                 nstates = 1
-            required_state = None
         else:
-            try:
-                nstates = max(1, int(_get(config, "ci", "nroot", 1) or 1))
-                required_state = int(_get(config, "casscf", "root", 0) or 0)
-            except (TypeError, ValueError):
-                nstates = 1
-                required_state = 0
+            nstates = 1
 
         selectors = []
         selector_path = None
@@ -3663,7 +3669,23 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 selected_int = int(selected)
             except (TypeError, ValueError):
                 continue
-            if selected_int < 0 or selected_int >= nstates:
+            if not is_sa and selected_int != 0:
+                try:
+                    root = int(_get(config, "casscf", "root", 0) or 0)
+                except (TypeError, ValueError):
+                    root = 0
+                report.add(
+                    "ERROR",
+                    selector_path,
+                    "State-specific CASSCF publishes the optimized physical "
+                    f"root {root} in public gradient slot 0.",
+                    value=selected,
+                    expected="0",
+                    action=(f"Set [{selector_path.split('.')[0]}] "
+                            f"{selector_path.split('.')[1]}=0; select the "
+                            "physical state with [casscf] root."),
+                )
+            elif is_sa and (selected_int < 0 or selected_int >= nstates):
                 report.add(
                     "ERROR",
                     selector_path,
@@ -3674,20 +3696,9 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                     action=("Select a published state or increase [ci] nroot "
                             "and the state-average root selection."),
                 )
-            elif required_state is not None and selected_int != required_state:
-                report.add(
-                    "ERROR",
-                    selector_path,
-                    "A state-specific CASSCF nuclear gradient must use the "
-                    "root whose orbitals are optimized by [casscf] root.",
-                    value=selected,
-                    expected=str(required_state),
-                    action=(f"Set [{selector_path.split('.')[0]}] "
-                            f"{selector_path.split('.')[1]}={required_state}, "
-                            "or set [casscf] root to the desired state."),
-                )
 
-        _check_numgrad_options("casscf")
+        if is_sa:
+            _check_numgrad_options("casscf")
     elif runtype != "energy":
         report.add(
             "ERROR",
