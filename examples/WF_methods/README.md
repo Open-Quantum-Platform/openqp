@@ -19,8 +19,10 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H2_FCI.inp` | `fci` | — | full configuration interaction |
 | `H2_CASCI.inp` | `casci` | — | active-space CI at fixed RHF orbitals |
 | `LiH_CASSCF.inp` | `casscf` | — | state-specific CASSCF (orbital + CI optimization) |
+| `LiH_CASSCF_grad.inp` | `casscf` | — | central-difference nuclear gradient of the state-specific CASSCF root |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
+| `LiH_SA-CASSCF_grad.inp` | `sa-casscf` | — | central-difference gradient of a state on common SA-CASSCF orbitals |
 | `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (17 vs 335 CI solves, both at 15 macroiterations) |
 | `H2O_CASSCF_CAS44_TRAH.inp` | `casscf` | `[casscf] converger=trah` | matrix-free trust-region converger: the Hessian is never assembled (303 vs 1963 CI evaluations against `converger=ah` on the default FD Hessian, 13 vs 19 macroiterations, same energy to 1e-13) |
 | `H4_CASPT2.inp` | `caspt2` | `h0=fock` | single-state CASPT2 (Fock H0) |
@@ -36,7 +38,8 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 
 - `[cas]` — `active_electrons`, `active_orbitals`, `frozen_core`, `orbital_source`.
 - `[ci]` — `nroot`, `solver` (dense/davidson), `target_spin`.
-- `[casscf]` — `optimizer=newton`, macro-iteration tolerances.
+- `[casscf]` — orbital optimization and convergence; `grad_step`, `grad_guess`,
+  `grad_gap_warn`, and `grad_ranks_per_group` control central-difference nuclear gradients.
 - `[state_average]` — `enabled`, `target_roots`, weights.
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,

@@ -166,6 +166,7 @@ CAS_ORBITAL_SOURCES = {"rhf", "json"}
 CAS_LOCALIZE_OPTIONS = {"none"}
 CAS_SORT_OPTIONS = {"energy", "none"}
 CI_ROOT_TRACKING_OPTIONS = {"energy"}
+CASSCF_METHOD_ALIASES = {"casscf", "sa-casscf", "sacasscf"}
 PT2_METHOD_ALIASES = {
     "caspt2": "caspt2",
     "ms-caspt2": "ms-caspt2",
@@ -3263,18 +3264,20 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # displaced metric is a modelling choice (which orbitals ARE "the same" at a
     # displaced geometry is exactly what a cold restart re-solves), so refuse
     # the combination rather than invent one.
-    if (method in PT2_METHOD_ALIASES
+    if (method in (set(PT2_METHOD_ALIASES) | CASSCF_METHOD_ALIASES)
             and runtype in {"grad", "optimize", "ts", "mep", "irc"}
             and _as_lower(_get(config, "cas", "orbital_source", "rhf")) == "json"):
         report.add(
             "ERROR",
             "cas.orbital_source",
-            "JSON-sourced CAS orbitals cannot drive a PT2 numerical gradient: "
+            f"JSON-sourced CAS orbitals cannot drive a {method} numerical "
+            "gradient: "
             "the coefficients are fixed in the AO basis of the central "
             "geometry and are not orthonormal in the displaced ones.",
             value="json",
             expected="rhf",
-            action=("Use [cas] orbital_source=rhf for gradient-driven PT2 "
+            action=("Use [cas] orbital_source=rhf for gradient-driven "
+                    "multireference "
                     "runtypes, or compute single-point energies with the "
                     "imported orbitals."),
         )
@@ -3392,9 +3395,10 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                             "for fixed orbitals, or disable this flag."),
                 )
 
-    # The PT2 family carries central-difference numerical gradients
-    # (pt2_numgrad.py) wired through the Gradient seam, so the gradient-
-    # consuming drivers work for it; casci/casscf remain energy-only.
+    # CASSCF and the PT2 family carry central-difference nuclear gradients
+    # through wf_numgrad.py.  CASCI remains energy-only.  MECI, MECP, and NEB
+    # are deliberately excluded: their energy/state conventions do not yet
+    # use the multireference wavefunction dispatch consistently.
     #
     # meci/mecp/neb are deliberately NOT here.  Listing them made this gate
     # advertise workflows that either cannot pass preflight or are broken:
@@ -3413,7 +3417,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     # Each is rejected explicitly below with its own reason, so the user gets
     # one clear message instead of a self-contradicting pair or a silent
     # mismatch.  Wiring these up properly is a feature, not a checker fix.
-    pt2_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
+    wf_grad_runtypes = {"energy", "grad", "optimize", "ts", "mep", "irc"}
     _pt2_unsupported_runtypes = {
         "meci": ("MECI requires an excited-state response method; the PT2 "
                  "numerical-gradient path does not provide the state pair "
@@ -3435,6 +3439,55 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             action=("Use a PT2 runtype that is wired to the numerical-gradient "
                     "path, or run this workflow with method=tdhf."),
         )
+    def _check_numgrad_options(section):
+        grad_step = _get(config, section, "grad_step", 1.0e-3)
+        valid_gs, gs = _check_float_literal(
+            grad_step, f"{section}.grad_step", report)
+        if valid_gs and gs <= 0.0:
+            report.add(
+                "ERROR",
+                f"{section}.grad_step",
+                "The central-difference displacement must be positive.",
+                value=grad_step,
+                expected="> 0 (Bohr)",
+                action=(f"Set [{section}] grad_step to a positive "
+                        "displacement (default 1e-3)."),
+            )
+        grad_guess = str(
+            _get(config, section, "grad_guess", "cold") or "cold"
+        ).strip().lower()
+        if grad_guess not in {"cold", "warm"}:
+            report.add(
+                "ERROR",
+                f"{section}.grad_guess",
+                "Unknown displaced-geometry guess policy.",
+                value=grad_guess,
+                expected="cold or warm",
+                action=("Use grad_guess=cold (same starting data at every "
+                        "geometry) or warm (continue from the preceding "
+                        "solution)."),
+            )
+        _check_float_literal(
+            _get(config, section, "grad_gap_warn", 1.0e-5),
+            f"{section}.grad_gap_warn", report)
+        rpg = _get(config, section, "grad_ranks_per_group", 0)
+        try:
+            rpg_val = int(str(rpg).strip() or 0)
+        except (TypeError, ValueError):
+            rpg_val = -1
+        if rpg_val < 0:
+            report.add(
+                "ERROR",
+                f"{section}.grad_ranks_per_group",
+                "The MPI rank-group size for displaced energies must be a "
+                "non-negative integer.",
+                value=rpg,
+                expected=">= 0 (0 = one rank group per displacement)",
+                action=(f"Leave [{section}] grad_ranks_per_group at 0 for "
+                        "automatic distribution, or set the number of ranks "
+                        "that should cooperate on one displaced energy."),
+            )
+
     if method in PT2_METHOD_ALIASES:
         # Single-state PT2 returns a one-element mol.energies, so the
         # state-specific optimizer's energies[istate] is out of range for the
@@ -3528,58 +3581,113 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                                 "and request more roots via [pt2] target_roots "
                                 "/ nroot."),
                     )
-        if runtype not in pt2_grad_runtypes:
+        if runtype not in wf_grad_runtypes:
             report.add(
                 "ERROR",
                 "input.runtype",
                 "This PT2 runtype is not wired (energies + numerical-gradient "
                 "drivers only).",
                 value=runtype,
-                expected=", ".join(sorted(pt2_grad_runtypes)),
+                expected=", ".join(sorted(wf_grad_runtypes)),
                 action="Use energy, grad, or a gradient-driven optimizer runtype "
-                       "(optimize/meci/mecp/ts/mep/neb/irc).",
+                       "(optimize/ts/mep/irc).",
             )
-        grad_step = _get(config, "pt2", "grad_step", 1.0e-3)
-        valid_gs, gs = _check_float_literal(grad_step, "pt2.grad_step", report)
-        if valid_gs and gs <= 0.0:
+        _check_numgrad_options("pt2")
+    elif method in CASSCF_METHOD_ALIASES:
+        unsupported = {
+            "meci": ("CASSCF MECI needs a state-pair optimizer that addresses "
+                     "CASSCF roots directly."),
+            "mecp": ("MECP requires two spin multiplicities, whereas the "
+                     "current CASSCF implementation is a closed-shell singlet."),
+            "neb": ("NEB does not yet evaluate its images through the CASSCF "
+                    "energy and numerical-gradient path."),
+        }
+        if runtype in unsupported:
             report.add(
                 "ERROR",
-                "pt2.grad_step",
-                "The numerical-gradient displacement must be positive.",
-                value=grad_step,
-                expected="> 0 (Bohr)",
-                action="Set [pt2] grad_step to a positive displacement (default 1e-3).",
+                "input.runtype",
+                f"{runtype.upper()} is not implemented for CASSCF. "
+                + unsupported[runtype],
+                value=f"{method}/{runtype}",
+                expected="energy, grad, optimize, ts, mep, or irc",
+                action=("Use a supported CASSCF gradient-driven runtype, or "
+                        "use method=tdhf for this crossing/path workflow."),
             )
-        grad_guess = str(_get(config, "pt2", "grad_guess", "cold") or "cold").strip().lower()
-        if grad_guess not in {"cold", "warm"}:
+        elif runtype not in wf_grad_runtypes:
             report.add(
                 "ERROR",
-                "pt2.grad_guess",
-                "Unknown displaced-point guess policy.",
-                value=grad_guess,
-                expected="cold or warm",
-                action="Use grad_guess=cold (fresh guess, bit-reproducible) or warm "
-                       "(reuse in-memory MOs).",
+                "input.runtype",
+                "This CASSCF runtype is not connected to the energy and "
+                "central-difference nuclear-gradient calculations.",
+                value=runtype,
+                expected=", ".join(sorted(wf_grad_runtypes)),
+                action=("Use energy, grad, optimize, ts, mep, or irc."),
             )
-        _check_float_literal(_get(config, "pt2", "grad_gap_warn", 1.0e-5),
-                             "pt2.grad_gap_warn", report)
-        rpg = _get(config, "pt2", "grad_ranks_per_group", 0)
-        try:
-            rpg_val = int(str(rpg).strip() or 0)
-        except (TypeError, ValueError):
-            rpg_val = -1
-        if rpg_val < 0:
-            report.add(
-                "ERROR",
-                "pt2.grad_ranks_per_group",
-                "The MPI rank-group size for displaced energies must be a "
-                "non-negative integer.",
-                value=rpg,
-                expected=">= 0 (0 = one rank group per displacement)",
-                action="Leave [pt2] grad_ranks_per_group at 0 for automatic "
-                       "fan-out, or set the number of ranks that should "
-                       "cooperate on one displaced energy.",
-            )
+
+        is_sa = (
+            method in {"sa-casscf", "sacasscf"}
+            or str(_get(config, "state_average", "enabled", False)
+                   ).strip().lower() in _TRUE_BOOL
+        )
+        if is_sa:
+            targets = _as_list(
+                _get(config, "state_average", "target_roots", []))
+            try:
+                nstates = len(targets) if targets else max(
+                    1,
+                    int(_get(config, "state_average", "nstate", 0) or 0)
+                    or int(_get(config, "ci", "nroot", 1) or 1),
+                )
+            except (TypeError, ValueError):
+                nstates = 1
+            required_state = None
+        else:
+            try:
+                nstates = max(1, int(_get(config, "ci", "nroot", 1) or 1))
+                required_state = int(_get(config, "casscf", "root", 0) or 0)
+            except (TypeError, ValueError):
+                nstates = 1
+                required_state = 0
+
+        selectors = []
+        selector_path = None
+        if runtype == "grad":
+            selectors = _as_list(_get(config, "properties", "grad", []))
+            selector_path = "properties.grad"
+        elif runtype in {"optimize", "ts", "mep", "irc"}:
+            selectors = [_get(config, "optimize", "istate", 1)]
+            selector_path = "optimize.istate"
+
+        for selected in selectors:
+            try:
+                selected_int = int(selected)
+            except (TypeError, ValueError):
+                continue
+            if selected_int < 0 or selected_int >= nstates:
+                report.add(
+                    "ERROR",
+                    selector_path,
+                    f"This CASSCF calculation publishes {nstates} state(s), "
+                    f"with indices 0..{nstates - 1}.",
+                    value=selected,
+                    expected=f"0..{nstates - 1}",
+                    action=("Select a published state or increase [ci] nroot "
+                            "and the state-average root selection."),
+                )
+            elif required_state is not None and selected_int != required_state:
+                report.add(
+                    "ERROR",
+                    selector_path,
+                    "A state-specific CASSCF nuclear gradient must use the "
+                    "root whose orbitals are optimized by [casscf] root.",
+                    value=selected,
+                    expected=str(required_state),
+                    action=(f"Set [{selector_path.split('.')[0]}] "
+                            f"{selector_path.split('.')[1]}={required_state}, "
+                            "or set [casscf] root to the desired state."),
+                )
+
+        _check_numgrad_options("casscf")
     elif runtype != "energy":
         report.add(
             "ERROR",
