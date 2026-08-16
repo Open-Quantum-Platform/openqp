@@ -325,6 +325,11 @@ contains
     gcomp%hfscale = 1.0_dp
     call gcomp%init()
     call gcomp%build_cart(basis)
+    ! Opt in to the petite reduction: the stationary ground-state MP2
+    ! Lagrangian densities contracted here are totally symmetric, and the
+    ! resulting skeleton gradient is projected afterwards by
+    ! Molecule.symmetrize_gradient.  Orbital-response probe densities remain
+    ! outside this call and deliberately do not use the reduction.
     call grd2_driver(infos, basis, de2, gcomp, petite=.true.)
     infos%atoms%grad = infos%atoms%grad + de2
     call print_gradient(infos)
