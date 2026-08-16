@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # afterwards by Molecule.symmetrize_gradient.
 OPTED_IN = (
     'source/modules/hf_gradient.F90',
+    'source/modules/mp2_gradient.F90',
     'source/modules/tdhf_gradient.F90',
     'source/modules/tdhf_sf_gradient.F90',
     'source/modules/tdhf_mrsf_gradient.F90',
@@ -87,7 +88,7 @@ class Grd2RequiresAnOptIn(unittest.TestCase):
 
 
 class OnlySymmetricDensitiesOptIn(unittest.TestCase):
-    def test_the_four_gradient_sites_opt_in(self):
+    def test_the_gradient_sites_with_totally_symmetric_densities_opt_in(self):
         for path in OPTED_IN:
             with self.subTest(path=path):
                 calls = call_arguments(path, 'grd2_driver')

@@ -1661,10 +1661,11 @@ def test_primary_call_rejects_unknown_convenience_option_with_section_hint():
 
 
 def test_method_driver_capability_errors_are_early_and_actionable():
-    with pytest.raises(OQPInputError, match=r"MP2 currently supports energy\(\) only"):
-        oqp_input.parse_canonical_oqp(
-            'mp2/cc-pvdz geom="h2o.xyz" grad(S0)'
-        )
+    _, mp2_grad = _parse(
+        'mp2/cc-pvdz geom="h2o.xyz" grad(S0)'
+    )
+    assert mp2_grad["input"]["runtype"] == "grad"
+    assert mp2_grad["properties"]["grad"] == "0"
     with pytest.raises(OQPInputError, match=r"UMRSF currently supports energy\(\) only"):
         oqp_input.parse_canonical_oqp(
             'umrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" opt(S0)'

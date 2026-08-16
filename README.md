@@ -12,7 +12,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | --- | --- | --- |
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
-| MP2 | RHF, UHF, and ROHF references; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Energy-only post-SCF correlation with spin-component-scaled variants |
+| MP2 | RHF, UHF, and ROHF energies; analytic RHF gradients for MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Post-SCF correlation; RHF gradients drive optimization, transition-state, MEP, and IRC calculations, while UHF/ROHF derivatives remain unavailable |
 | Coupled cluster | `method=ccsd` and `method=ccsd(t)` on RHF, UHF, and ROHF references; frozen core via `[cc] nfzc` | Energy-only. Closed-shell path is spin-adapted with DGEMM contractions, OpenMP and MPI; open-shell uses a spin-orbital solver sized for small systems. Integrals are in-core by default; the closed-shell path also offers a Cholesky-factorised route and an integral-direct one (`[cc] cholesky`, `[cc] cholesky_direct`) that skips the packed AO store entirely |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
