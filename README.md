@@ -166,19 +166,6 @@ so paired optimization artifacts cannot overwrite one another.
 
 Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_threads=16`.
 
-### Log Output
-
-OpenQP text logs use the same ordered structure for every calculation path:
-run information, input and reference, convergence and iterations, energies and
-states, gradients and properties when requested, and timing and termination.
-Method-specific information remains within the corresponding section.
-
-The established `PyOQP ...` fields and native solver iteration markers remain
-stable for existing analysis scripts. New parsers should use these markers and
-the documented units instead of relying on separator characters or whitespace.
-See [the log-format specification](docs/logging.md) for the section grammar,
-units, precision, method coverage, and compatibility policy.
-
 ### Documentation
 
 - [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/) (reference docs; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs))
