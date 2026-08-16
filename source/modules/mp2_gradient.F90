@@ -93,6 +93,7 @@ contains
     integer(c_int64_t) :: trc
     real(dp) :: den, os_scale, ss_scale, tol, e_dense, e_expected, energy_tol
     character(len=32) :: env
+    logical :: cphf_converged
 
     if (infos%control%scftype /= 1) then
       call show_message('MP2 analytic gradient currently supports RHF references only', with_abort)
@@ -250,7 +251,12 @@ contains
         rhs(ia,1) = -xvo(a,i)
       end do
     end do
-    call cphf_solve(infos, 1, rhs, u, tol=1.0e-10_dp, maxit=max(100,no*nv+10))
+    open(unit=iw, file=infos%log_filename, position='append')
+    call cphf_solve(infos, 1, rhs, u, tol=1.0e-10_dp, &
+                    maxit=max(100,no*nv+10), converged=cphf_converged)
+    if (.not. cphf_converged) then
+      call show_message('MP2 analytic gradient CPHF response did not converge', with_abort)
+    end if
     do a = 1, nv
       do i = 1, no
         ia = (a-1)*no + i
@@ -302,7 +308,6 @@ contains
     gcomp%dc = dc
     gcomp%nbf = n
 
-    open(unit=iw, file=infos%log_filename, position='append')
     call print_module_info('MP2_Gradient', 'Analytic RHF-MP2 Nuclear Gradient')
     write(iw,'(3X,A,F10.6)') 'same-spin scale     = ', ss_scale
     write(iw,'(3X,A,F10.6)') 'opposite-spin scale = ', os_scale

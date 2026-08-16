@@ -72,6 +72,58 @@ class TestMP2InputChecker(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("require an RHF reference", report.to_text())
 
+    def test_mp2_rejects_non_ground_state_derivative_targets(self):
+        input_checker = load_input_checker("input_checker_mp2_state_under_test")
+
+        report = input_checker.CheckReport()
+        input_checker._check_mp2(
+            {
+                "input": {"method": "mp2", "runtype": "grad"},
+                "properties": {"grad": "1"},
+            },
+            report,
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("properties.grad", report.to_text())
+
+        for runtype in ("optimize", "ts", "mep", "irc"):
+            with self.subTest(runtype=runtype):
+                report = input_checker.CheckReport()
+                input_checker._check_mp2(
+                    {
+                        "input": {"method": "mp2", "runtype": runtype},
+                        "optimize": {"istate": 1},
+                    },
+                    report,
+                )
+                self.assertFalse(report.ok)
+                self.assertIn("optimize.istate", report.to_text())
+
+    def test_mp2_rejects_qmmm_derivative_workflows(self):
+        input_checker = load_input_checker("input_checker_mp2_qmmm_under_test")
+        for runtype in ("grad", "optimize", "ts", "mep", "irc"):
+            with self.subTest(runtype=runtype):
+                report = input_checker.CheckReport()
+                input_checker._check_mp2(
+                    {
+                        "input": {
+                            "method": "mp2",
+                            "runtype": runtype,
+                            "qmmm_flag": True,
+                        },
+                    },
+                    report,
+                )
+                self.assertFalse(report.ok)
+                self.assertIn("QM/MM force backend", report.to_text())
+
+        report = input_checker.CheckReport()
+        input_checker._check_mp2(
+            {"input": {"method": "mp2", "runtype": "energy", "qmmm_flag": True}},
+            report,
+        )
+        self.assertTrue(report.ok, report.to_text())
+
     def test_mp2_accepts_named_and_custom_variants(self):
         input_checker = load_input_checker("input_checker_mp2_variants_under_test")
         for variant in ("mp2", "scs-mp2", "sos-mp2", "os-mp2", "ss-mp2", "scs-mi-mp2"):

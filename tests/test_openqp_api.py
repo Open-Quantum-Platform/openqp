@@ -590,6 +590,17 @@ $$$$
         config = job.to_input_dict()
         self.assertEqual(config["input"]["runtype"], "grad")
         self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["properties"]["grad"], "0")
+
+        for runtype in ("optimize", "ts", "mep", "irc"):
+            with self.subTest(runtype=runtype):
+                optimize_job = (
+                    openqp.OpenQP(project=f"reuse_as_mp2_{runtype}")
+                    .workflow.optimize(istate=2)
+                    .mp2(runtype=runtype)
+                )
+                optimize_config = optimize_job.to_input_dict()
+                self.assertEqual(optimize_config["optimize"]["istate"], "0")
 
         with self.assertRaisesRegex(ValueError, "require reference='rhf'"):
             openqp.OpenQP(project="bad_mp2_grad").mp2(

@@ -2310,6 +2310,7 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
     os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     reference = _as_lower(_get(config, "scf", "type", "rhf"))
+    derivative_runtypes = {"grad", "optimize", "ts", "mep", "irc"}
 
     if functional:
         report.add(
@@ -2322,7 +2323,7 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
-    if runtype in {"grad", "optimize", "ts", "mep", "irc"} and reference != "rhf":
+    if runtype in derivative_runtypes and reference != "rhf":
         report.add(
             "ERROR",
             "scf.type",
@@ -2331,6 +2332,48 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
             expected="rhf",
             action="Use scf.type=rhf, or run UHF/ROHF MP2 as an energy calculation.",
             wiki=WIKI_HELP["input.method"],
+        )
+
+    if runtype == "grad":
+        grad_states = _as_list(_get(config, "properties", "grad", [0]))
+        try:
+            non_ground_states = [state for state in grad_states if int(state) != 0]
+        except (TypeError, ValueError):
+            non_ground_states = []  # _check_properties reports malformed indices.
+        if non_ground_states:
+            report.add(
+                "ERROR",
+                "properties.grad",
+                "MP2 publishes only the ground-state analytic gradient.",
+                value=grad_states,
+                expected="0",
+                action="Set [properties] grad=0 for an MP2 gradient.",
+            )
+
+    if runtype in {"optimize", "ts", "mep", "irc"}:
+        istate = _get(config, "optimize", "istate", 0)
+        try:
+            non_ground_state = int(istate) != 0
+        except (TypeError, ValueError):
+            non_ground_state = False  # _check_optimize reports malformed indices.
+        if non_ground_state:
+            report.add(
+                "ERROR",
+                "optimize.istate",
+                "MP2 publishes only one energy and gradient (state index 0).",
+                value=istate,
+                expected="0",
+                action="Set [optimize] istate=0 for an MP2 derivative workflow.",
+            )
+
+    if runtype in derivative_runtypes and bool(_get(config, "input", "qmmm_flag", False)):
+        report.add(
+            "ERROR",
+            "input.qmmm_flag",
+            "MP2 analytic gradients are not connected to the QM/MM force backend.",
+            value=f"qmmm_flag=true/runtype={runtype}",
+            expected="qmmm_flag=false",
+            action="Disable qmmm_flag for MP2 derivative workflows.",
         )
 
     if variant not in MP2_VARIANTS:

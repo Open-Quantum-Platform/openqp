@@ -619,18 +619,18 @@ class SinglePoint(Calculator):
 
             # ixcore.  The shift overwrites the unselected occupied orbital
             # energies with -100000 so the TD trial vectors leave the requested
-            # core available.  Coupled cluster reads those same energies as its
-            # amplitude denominators, so applying it there would not restrict
-            # anything -- it would silently return a meaningless correlation
-            # energy.  Skip it, and say so rather than ignoring the keyword
-            # quietly.
-            if self.method in ('ccsd', 'ccsd(t)'):
+            # core available.  MP2 and coupled cluster read those same energies
+            # when constructing their correlation terms, so applying the shift
+            # would not select a core excitation -- it would change the
+            # correlation calculation.  Skip it, and say so rather than
+            # ignoring the keyword quietly.
+            if self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 if str(self.mol.config['tdhf']['ixcore']) != '-1':
                     dump_log(
                         self.mol,
                         title='PyOQP: ignoring [tdhf] ixcore for %s; it shifts '
-                              'the orbital energies the CC denominators are '
-                              'built from' % self.method,
+                              'orbital energies used by the correlation '
+                              'calculation' % self.method,
                         section='input',
                     )
             else:

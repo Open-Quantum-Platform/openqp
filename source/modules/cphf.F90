@@ -125,7 +125,8 @@ contains
 !> @param[out]   uvec    (nocc*nvir, nrhs) solutions
 !> @param[in]    tol     CG tolerance (optional)
 !> @param[in]    maxit   max CG iterations (optional)
-  subroutine cphf_solve(infos, nrhs, bvec, uvec, tol, maxit)
+!> @param[out]   converged true only when every right-hand side converged (optional)
+  subroutine cphf_solve(infos, nrhs, bvec, uvec, tol, maxit, converged)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_E_MO_A, OQP_VEC_MO_A
     use dft, only: dft_initialize
     real(kind=dp), parameter :: default_tol = 1.0d-9
@@ -135,6 +136,7 @@ contains
     real(kind=dp), intent(out) :: uvec(:,:)
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
+    logical, intent(out), optional :: converged
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
@@ -148,7 +150,7 @@ contains
     real(kind=dp), pointer :: pxm(:,:)
     integer :: nbf, nocc, nvir, lexc, i, j, irhs, iter, mxit
     integer :: clock_rate, clock_start, clock_stop, rhs_clock_start, rhs_clock_stop
-    logical :: dft
+    logical :: dft, all_converged, rhs_converged
     real(kind=dp) :: cnv, scale_exch
     real(kind=dp) :: cpu_start, cpu_stop, rhs_cpu_start, rhs_cpu_stop, rhs_wall
 
@@ -162,6 +164,7 @@ contains
     cnv = default_tol; if (present(tol)) cnv = tol
     mxit = 100; if (present(maxit)) mxit = maxit
     if (mxit < lexc + 5) mxit = lexc + 5
+    all_converged = .true.
 
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
@@ -233,13 +236,25 @@ contains
       call system_clock(rhs_clock_stop)
       call cpu_time(rhs_cpu_stop)
       rhs_wall = real(rhs_clock_stop - rhs_clock_start, kind=dp) / real(clock_rate, kind=dp)
+      rhs_converged = pcg%errcode == PCG_CONVERGED
+      all_converged = all_converged .and. rhs_converged
       write(iw,'(" CPHF RHS",I5," completed in",I5," iterations;",' // &
                '" CPU time =",F10.3," s; wall time =",F10.3," s")') &
               irhs, iter - 1, rhs_cpu_stop - rhs_cpu_start, rhs_wall
+      if (.not. rhs_converged) then
+        write(iw,'(" CPHF RHS",I5," did not converge; PCG status =",I4)') &
+              irhs, pcg%errcode
+      end if
       call flush(iw)
-      uvec(:,irhs) = pcg%x
+      if (allocated(pcg%x)) then
+        uvec(:,irhs) = pcg%x
+      else
+        uvec(:,irhs) = 0.0_dp
+      end if
       call pcg%clean()
     end do
+
+    if (present(converged)) converged = all_converged
 
     call system_clock(clock_stop)
     call cpu_time(cpu_stop)

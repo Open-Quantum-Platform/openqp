@@ -1055,6 +1055,7 @@ class OpenQP:
             elif str(variant).lower() != "custom":
                 raise ValueError("Custom MP2 scale factors require variant='custom'.")
 
+        runtype_key = str(runtype).lower()
         input_updates = {"method": "mp2", "functional": "", "runtype": runtype}
         if basis is not None:
             input_updates["basis"] = basis
@@ -1068,6 +1069,14 @@ class OpenQP:
         scf_updates.update(scf_keywords)
         if scf_updates:
             self.scf(**scf_updates)
+
+        # MP2 publishes one ground-state energy and one ground-state gradient.
+        # Reset selectors left by a previously configured excited-state job so
+        # the optimizer never indexes beyond those one-element results.
+        if runtype_key == "grad":
+            self._set_gradient_options(state=0)
+        elif runtype_key in {"optimize", "ts", "mep", "irc"}:
+            self._set_optimize_options(istate=0)
 
         mp2_updates = {}
         if variant is not None:

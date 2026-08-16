@@ -220,6 +220,19 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertEqual(calc.energy(), ["caspt2"])
         self.assertEqual(calls, [(calc.mol, [-2.0])])
 
+    def test_mp2_ignores_tdhf_ixcore_before_correlation(self):
+        calc = self.make_calculator()
+        calc.method = "mp2"
+        calc.mol.config["tdhf"] = {"ixcore": "1"}
+        calc.reference = lambda *args, **kwargs: [-2.0]
+        calc.correlation = lambda ref_energy: [ref_energy[0] - 0.1]
+        calc.ixcore_shift = lambda: self.fail("MP2 must not apply the TD ixcore shift")
+        logs = []
+        self.single_point.dump_log = lambda *args, **kwargs: logs.append(kwargs)
+
+        self.assertEqual(calc.energy(), [-2.1])
+        self.assertTrue(any("ignoring [tdhf] ixcore for mp2" in item["title"] for item in logs))
+
     def test_energy_dispatches_native_ms_caspt2_after_reference(self):
         caspt2 = types.ModuleType("oqp.library.caspt2_dyall")
         calls = []
