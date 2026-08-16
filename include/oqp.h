@@ -668,6 +668,7 @@ void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
+void mp2_gradient(struct oqp_handle_t *inf);
 void ccsd_t_energy(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);

@@ -1314,8 +1314,10 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         raise OQPInputError("rks requires mult=1; use roks or uks for open-shell DFT")
     if model == "roks" and spec.options.get("mult", 1) < 2:
         raise OQPInputError("roks requires an open-shell mult value such as mult=2 or mult=3")
-    if model == "mp2" and driver.name != "energy":
-        raise OQPInputError("MP2 currently supports energy() only")
+    if model == "mp2" and driver.name not in {"energy", "grad", "optimize", "ts", "mep", "irc"}:
+        raise OQPInputError(
+            "MP2 supports energy, grad, opt, ts, mep, and irc drivers"
+        )
     if model in CC_MODELS and driver.name != "energy":
         raise OQPInputError("Coupled cluster currently supports energy() only")
     if model in CC_MODELS and "reference" in spec.model_options:

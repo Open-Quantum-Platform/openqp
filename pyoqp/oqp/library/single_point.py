@@ -619,18 +619,18 @@ class SinglePoint(Calculator):
 
             # ixcore.  The shift overwrites the unselected occupied orbital
             # energies with -100000 so the TD trial vectors leave the requested
-            # core available.  Coupled cluster reads those same energies as its
-            # amplitude denominators, so applying it there would not restrict
-            # anything -- it would silently return a meaningless correlation
-            # energy.  Skip it, and say so rather than ignoring the keyword
-            # quietly.
-            if self.method in ('ccsd', 'ccsd(t)'):
+            # core available.  MP2 and coupled cluster read those same energies
+            # when constructing their correlation terms, so applying the shift
+            # would not select a core excitation -- it would change the
+            # correlation calculation.  Skip it, and say so rather than
+            # ignoring the keyword quietly.
+            if self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 if str(self.mol.config['tdhf']['ixcore']) != '-1':
                     dump_log(
                         self.mol,
                         title='PyOQP: ignoring [tdhf] ixcore for %s; it shifts '
-                              'the orbital energies the CC denominators are '
-                              'built from' % self.method,
+                              'orbital energies used by the correlation '
+                              'calculation' % self.method,
                         section='input',
                     )
             else:
@@ -1245,6 +1245,7 @@ class Gradient(Calculator):
 
         self.grad_func = {
             'hf': oqp.hf_gradient,
+            'mp2': oqp.mp2_gradient,
             'rpa': oqp.tdhf_gradient,
             'tda': oqp.tdhf_gradient,
             'sf': oqp.tdhf_sf_gradient,
@@ -1253,6 +1254,18 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
+        # MP2 has an analytic ground-state nuclear gradient.  Complete it
+        # before the numerical-wavefunction dispatch below so that block
+        # remains the shared SA-CASSCF/PT2 path.
+        if self.method == 'mp2':
+            dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+            grads = self.mol.symmetrize_gradient(self.mp2_grad())
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            if arr.shape[0]:
+                self.mol.set_grad(arr[0])
+            self.mol.grads = grads
+            return grads
+
         state_average_enabled = str(
             self.mol.config.get('state_average', {}).get('enabled', False)
         ).strip().lower() in ('true', '1', 'yes', 'on')
@@ -1387,6 +1400,18 @@ class Gradient(Calculator):
         grads = casscf_analytic_gradient(self.mol)
 
         return grads
+
+    def mp2_grad(self):
+        """Analytic ground-state RHF-MP2 nuclear gradient."""
+        if str(self.mol.config['scf']['type']).lower() != 'rhf':
+            raise NotImplementedError(
+                'MP2 analytic gradients currently support RHF references only; '
+                'UHF and ROHF energy calculations remain available.'
+            )
+        dump_log(self.mol, title='PyOQP: Analytic MP2 Gradient of Root 0')
+        self.grad_func['mp2'](self.mol)
+        grad = self.mol.get_grad()
+        return np.array([grad.copy()]).reshape((1, self.natom, 3))
 
     def tddft_grad(self):
         if self.td == 'umrsf':
