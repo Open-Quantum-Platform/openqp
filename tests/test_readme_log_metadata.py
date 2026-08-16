@@ -32,6 +32,26 @@ class ReadmeLogMetadataTests(unittest.TestCase):
             r'Alireza Lashkaripour"\s*,\s*email\s*=',
         )
 
+    def test_mrsf_methods_are_presented_first(self):
+        readme = (ROOT / "README.md").read_text()
+        methods = readme.split("#### Electronic-Structure Methods", 1)[1]
+        methods = methods.split("#### Properties & Spectroscopy", 1)[0]
+        method_rows = [
+            line.split("|", 2)[1].strip()
+            for line in methods.splitlines()
+            if line.startswith("|") and not line.startswith("| ---")
+        ]
+
+        self.assertEqual(
+            method_rows[1:4],
+            ["**MRSF-TDDFT**", "UMRSF-TDDFT", "MRSF-EKT"],
+        )
+        tutorials = next(
+            line for line in methods.splitlines()
+            if line.startswith("**Tutorials:**")
+        )
+        self.assertTrue(tutorials.startswith("**Tutorials:** [MRSF-TDDFT]"))
+
     def test_first_log_section_prints_git_head(self):
         runner = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
         file_utils = (ROOT / "pyoqp" / "oqp" / "utils" / "file_utils.py").read_text()

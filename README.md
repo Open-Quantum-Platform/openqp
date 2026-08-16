@@ -24,19 +24,19 @@ for runnable examples.
 
 | Method | References / variants | Notes |
 | --- | --- | --- |
+| **MRSF-TDDFT** | [Mixed-reference spin-flip](https://doi.org/10.1021/acs.jpclett.3c02296) with [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Spin-adapted multiconfigurational ground and excited states within linear response |
+| UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
+| MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
 | MP2 | RHF, UHF, and ROHF energies; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Analytic nuclear gradients for RHF references; UHF/ROHF nuclear derivatives are not yet available |
 | Coupled cluster | CCSD and CCSD(T) with RHF, UHF, and ROHF references | Energy-only; frozen-core, in-core, Cholesky-factorized, and integral-direct options are available as appropriate to the reference |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
-| **MRSF-TDDFT** | [Mixed-reference spin-flip](https://doi.org/10.1021/acs.jpclett.3c02296) with [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Spin-adapted multiconfigurational ground and excited states within linear response |
-| UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
-| MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 | CI and CASSCF | FCI, CASCI, CASSCF, SA-CASSCF | Native determinant CI and orbital optimization; CASSCF/SA-CASSCF have central-difference nuclear gradients |
 | Multireference PT2 | CASPT2 (SS/MS/XMS), NEVPT2 (uncontracted/strongly contracted), QDPT2 (MRMP2/MCQDPT2/XMCQDPT2) | Native energy and central-difference nuclear-gradient calculations; see [`examples/WF_methods`](examples/WF_methods) for variants, controls, and present limits |
 
-**Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
+**Tutorials:** [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/)
 
 #### Properties & Spectroscopy
 
