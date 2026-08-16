@@ -115,7 +115,8 @@ def _analytic_gradient(tmp_path, project, config):
     sp = SinglePoint(mol)
     sp.energy()
     root = int(config["casscf"]["root"])
-    energy = float(mol.energies[root])
+    energy = float(np.asarray(
+        mol.data["OQP::CASSCF_ENERGIES"], dtype=float).reshape(-1)[root])
     grad = np.asarray(Gradient(mol).gradient(), dtype=float).reshape(-1, 3)
     return grad, energy, mol, sp
 
@@ -144,7 +145,8 @@ def _fd_along(mol, sp, root, k, x0, e0, step):
                 pass
         mol.update_system(x)
         sp.energy()
-        energies[m] = float(mol.energies[root])
+        energies[m] = float(np.asarray(
+            mol.data["OQP::CASSCF_ENERGIES"], dtype=float).reshape(-1)[root])
 
     for tag, val in snap.items():
         try:
@@ -359,6 +361,46 @@ def test_state_specific_gradient_selectors_are_public_slot_zero():
         config, raise_error=False, emit=False)
     assert not bad_opt.ok
     assert "public gradient slot 0" in bad_opt.to_text()
+
+
+def test_excited_root_optimizer_uses_matching_energy_and_gradient_slot(tmp_path):
+    """The selected physical root occupies public energy and gradient slot 0."""
+    if not _backend_available():
+        pytest.skip("OpenQP backend not built; build liboqp to run this test")
+
+    config = _config(_H4, _CAS22, _ci(2), _casscf_opts(1))
+    runner = _runner(tmp_path, "casgrad_root1_opt", config)
+    # Runner fills the optimizer defaults.  Select the derivative run type
+    # after parsing so this focused one-step test does not need to duplicate
+    # the complete [optimize] input section.
+    runner.mol.config["input"]["runtype"] = "optimize"
+    runner.mol.config["optimize"]["istate"] = 0
+
+    from oqp.library.libscipy import StateSpecificOpt
+    optimizer = StateSpecificOpt(runner.mol)
+    energy, gradient = optimizer.one_step(
+        np.asarray(runner.mol.get_system(), dtype=float).reshape(-1).copy())
+
+    physical = np.asarray(
+        runner.mol.data["OQP::CASSCF_ENERGIES"], dtype=float).reshape(-1)
+    assert len(physical) >= 2
+    assert len(runner.mol.energies) == 1
+    assert energy == pytest.approx(physical[1], abs=1.0e-10)
+    assert runner.mol.energies[0] == pytest.approx(physical[1], abs=1.0e-10)
+    assert np.asarray(gradient).reshape(-1) == pytest.approx(
+        np.asarray(runner.mol.grads[0]).reshape(-1), abs=1.0e-12)
+
+
+def test_casscf_gradient_rejects_generalized_fock_asymmetry():
+    """CI non-stationarity is rejected even when |g_orb| is zero."""
+    from oqp.library.casscf_gradient import (
+        _FOCK_ASYMMETRY_LIMIT, _enforce_stationarity,
+    )
+
+    _enforce_stationarity(0.0, 0.5 * _FOCK_ASYMMETRY_LIMIT, 1.0e-7)
+    for bad in (2.0 * _FOCK_ASYMMETRY_LIMIT, np.inf, np.nan):
+        with pytest.raises(ValueError, match="generalized Fock asymmetry"):
+            _enforce_stationarity(0.0, bad, 1.0e-7)
 
 
 def test_casscf_gradient_reports_stationarity_diagnostics(tmp_path):

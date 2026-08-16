@@ -1188,15 +1188,15 @@ class CASSCF:
         if sa_enabled:
             sa_energy = float(np.dot(weights, energies[roots]))
             report_energies = [float(energies[r]) for r in roots]
-        mol.energies = report_energies
         # For a state average the optimised quantity is the weighted objective,
         # not root 0.  Publishing report_energies[0] as the scalar total energy
         # meant generated .json references and every consumer of
         # mol_energy.energy recorded state 0 while the run had optimised
         # something else; the state-averaged CASCI path already publishes the
-        # weighted value.  The per-root list stays in mol.energies.
+        # weighted value.
         if sa_enabled:
             _scalar = sa_energy
+            public_energies = report_energies
         else:
             # State-specific: `report_energies` is ordered from root 0, so
             # publishing [0] for casscf.root=1 handed back the ground root
@@ -1204,6 +1204,17 @@ class CASSCF:
             _root = int(getattr(options, "root", 0) or 0)
             _scalar = (energies[_root] if _root < len(energies)
                        else report_energies[0])
+            # The analytic derivative has one public row: slot 0 contains the
+            # state selected by [casscf] root.  Gradient-driven calculations
+            # must use the same one-row convention for the energy or an
+            # excited-root calculation would pair E(root 0) with dE(root)/dx.
+            # Retain every physical-root energy in OQP::CASSCF_ENERGIES.
+            runtype = str(mol.config["input"].get("runtype", "energy")).lower()
+            if runtype in {"grad", "optimize", "ts", "mep", "irc"}:
+                public_energies = [float(_scalar)]
+            else:
+                public_energies = report_energies
+        mol.energies = public_energies
         mol.mol_energy.energy = float(_scalar)
         mol.data["OQP::CASSCF_ENERGIES"] = _as_f64c(report_energies)
 

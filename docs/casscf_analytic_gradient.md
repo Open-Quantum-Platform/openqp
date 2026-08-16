@@ -91,11 +91,13 @@ energy-weighted density. As a check on the convention: for a closed-shell RHF
 reference `F_ij = 2 eps_i delta_ij`, and the Pulay term reduces to the familiar
 `-2 sum_i eps_i S^x_ii` that `grd1::eijden` builds for HF.
 
-Because condition 2 is the only one that is *numerical*, the driver reports
-`|g_orb|` and `max |F_pq - F_qp|` with every gradient, and PyOQP refuses to
-publish a gradient whose `|g_orb|` exceeds `max(1e-4, 100 x [casscf]
-gradient_norm_tol)`. The gradient error from a non-stationary point is first
-order in `|g_orb|`.
+Because orbital and CI stationarity are numerical conditions, the driver
+reports `|g_orb|` and `max |F_pq - F_qp|` with every gradient. PyOQP refuses a
+gradient when `|g_orb|` exceeds `max(1e-4, 100 x [casscf]
+gradient_norm_tol)`, or when the generalized-Fock asymmetry is nonfinite or
+exceeds `1e-6` Hartree. The second condition also applies to a full active
+space, where the absence of non-redundant orbital rotations makes `|g_orb|`
+identically zero but does not by itself establish CI stationarity.
 
 ## The two-particle density in the AO basis
 
@@ -167,10 +169,13 @@ Refused, with a message rather than a silently wrong number:
   to the explicit central-difference SA-CASSCF driver instead.
 - **A non-Hartree-Fock Hamiltonian.** The energy expression above has no
   exchange-correlation term; CASSCF already requires `[input] functional` unset.
-- **A non-stationary starting point**, per the `|g_orb|` acceptance limit above.
+- **A non-stationary starting point**, according to either the `|g_orb|` or
+  generalized-Fock-asymmetry condition above.
 - **A `[properties] grad` selector other than `0`.** State-specific CASSCF
   publishes one array row; `[casscf] root` selects which physical root occupies
-  that public slot.
+  that public slot. Gradient-driven calculations place both the selected-root
+  energy and its gradient in slot 0; the complete physical-root energy list
+  remains available as `OQP::CASSCF_ENERGIES`.
 
 `method=casci` is not covered: CASCI orbitals are not optimized, so its
 gradient needs the orbital-response term this derivation drops.

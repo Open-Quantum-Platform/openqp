@@ -38,8 +38,8 @@ term that is missing.
 
 Non-stationary starting points are refused for the same reason: the expression
 above is only the derivative of the CASSCF energy when the orbital-rotation
-gradient is zero, so ``|g_orb|`` is checked against the convergence threshold
-the run itself declared rather than assumed.
+gradient is zero and the CI vector is stationary.  Both ``|g_orb|`` and the
+generalized-Fock asymmetry are checked before a gradient is returned.
 """
 from __future__ import annotations
 
@@ -88,6 +88,11 @@ _STATIONARITY_FLOOR = 1.0e-4
 #: Multiple of the run's own declared threshold above which the point is
 #: reported as loosely converged (but still differentiated).
 _STATIONARITY_WARN = 1.0e2
+#: Maximum accepted ``max |F_pq - F_qp|`` in Hartree.  This independently
+#: verifies CI and redundant active-active stationarity, including a full
+#: active space where there are no non-redundant orbital rotations and
+#: therefore ``|g_orb|`` is identically zero.
+_FOCK_ASYMMETRY_LIMIT = 1.0e-6
 
 
 def _casscf_gradient_backend():
@@ -105,6 +110,30 @@ def _state_average_requested(mol, settings):
     method = str(mol.config["input"]["method"]).strip().lower().replace("_", "-")
     return (method in {"sa-casscf", "sacasscf"}
             or bool(getattr(settings, "state_average_enabled", False)))
+
+
+def _enforce_stationarity(gnorm, fasym, declared):
+    """Require orbital and CI stationarity for the response-free derivative."""
+    limit = max(_STATIONARITY_FLOOR, _STATIONARITY_WARN * declared)
+    if not np.isfinite(gnorm) or gnorm > limit:
+        raise ValueError(
+            "Analytic CASSCF gradient refused: the orbital-rotation gradient "
+            f"at the reported orbitals is {gnorm:.3e}, above the acceptance "
+            f"limit {limit:.3e}. The state-specific gradient expression has no "
+            "orbital-response term and is only the energy derivative at a "
+            "stationary point. Converge the orbital optimization (tighten "
+            "[casscf] gradient_norm_tol or raise max_macro_iterations)."
+        )
+    if not np.isfinite(fasym) or fasym > _FOCK_ASYMMETRY_LIMIT:
+        raise ValueError(
+            "Analytic CASSCF gradient refused: the generalized Fock asymmetry "
+            f"max|F_pq-F_qp| is {fasym:.3e}, above the acceptance limit "
+            f"{_FOCK_ASYMMETRY_LIMIT:.3e} Hartree. The response-free "
+            "state-specific expression requires a stationary CI vector and "
+            "active-active orbital block. Tighten [ci] eig_tol or improve the "
+            "CI eigensolver convergence."
+        )
+    return limit
 
 
 def casscf_analytic_gradient(mol):
@@ -182,17 +211,9 @@ def casscf_analytic_gradient(mol):
         raise ValueError(f"Analytic CASSCF gradient failed: {reason}.")
 
     gnorm = float(info[_CAS_G_GNORM])
+    fasym = float(info[_CAS_G_FASYM])
     declared = float(options.gradient_norm_tol)
-    limit = max(_STATIONARITY_FLOOR, _STATIONARITY_WARN * declared)
-    if not np.isfinite(gnorm) or gnorm > limit:
-        raise ValueError(
-            "Analytic CASSCF gradient refused: the orbital-rotation gradient "
-            f"at the reported orbitals is {gnorm:.3e}, above the acceptance "
-            f"limit {limit:.3e}. The state-specific gradient expression has no "
-            "orbital-response term and is only the energy derivative at a "
-            "stationary point. Converge the orbital optimization (tighten "
-            "[casscf] gradient_norm_tol or raise max_macro_iterations)."
-        )
+    _enforce_stationarity(gnorm, fasym, declared)
 
     _log(mol, "")
     _log(mol, "   ==============================================")
@@ -202,7 +223,7 @@ def casscf_analytic_gradient(mol):
     _log(mol, f"   {'energy of that root':<34}{info[_CAS_G_ENERGY]:>20.10f}")
     _log(mol, f"   {'orbital gradient norm |g_orb|':<34}{gnorm:>20.3e}")
     _log(mol, f"   {'generalized Fock asymmetry':<34}"
-              f"{float(info[_CAS_G_FASYM]):>20.3e}")
+              f"{fasym:>20.3e}")
     _log(mol, f"   {'active 2-RDM correction rank':<34}"
               f"{int(round(float(info[_CAS_G_NVEC]))):>20d}")
     if gnorm > _STATIONARITY_WARN * declared:
