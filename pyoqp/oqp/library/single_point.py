@@ -1254,14 +1254,28 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'mp2', 'tdhf'] and not is_tb_method(self.method):
-            # Native PT2 family (energy-only kernels): central-difference
-            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
-            # avoid a circular module dependency.
-            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
-            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+        # MP2 has a native ground-state gradient.  Complete it before the
+        # numerical-wavefunction dispatch below so that block remains the
+        # shared CASSCF/PT2 path from upstream main.
+        if self.method == 'mp2':
+            dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+            grads = self.mol.symmetrize_gradient(self.mp2_grad())
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            if arr.shape[0]:
+                self.mol.set_grad(arr[0])
+            self.mol.grads = grads
+            return grads
+
+        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+            # Multireference wavefunction methods currently use Cartesian
+            # central differences of their converged total energies.  The
+            # import stays local to avoid a circular module dependency.
+            from oqp.library.wf_numgrad import (
+                WF_NUMGRAD_METHODS, wavefunction_numerical_gradient,
+            )
+            if _normalized_method_label(self.method) in WF_NUMGRAD_METHODS:
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
-                grads = pt2_numerical_gradient(self.mol, self.grads)
+                grads = wavefunction_numerical_gradient(self.mol, self.grads)
                 self.mol.grads = grads
                 # Molecule.get_results() reads the NATIVE data._data.grad
                 # buffer, which only the Fortran gradient kernels ever write.
@@ -1294,8 +1308,6 @@ class Gradient(Calculator):
         grads = []
         if self.method == 'hf':
             grads = self.scf_grad()
-        elif self.method == 'mp2':
-            grads = self.mp2_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
         elif is_tb_method(self.method):
@@ -1319,7 +1331,7 @@ class Gradient(Calculator):
         # hides well, because max|0 - g_ref| happens to equal max|g_ref| just
         # as the unprojected skeleton's largest deviation did.
         buffer_row = None
-        if self.method in {'hf', 'mp2'}:
+        if self.method == 'hf':
             buffer_row = 0                       # scf_grad returns one row
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration

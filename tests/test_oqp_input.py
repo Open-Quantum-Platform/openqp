@@ -1766,11 +1766,12 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
+    # 20 since the CASSCF and SA-CASSCF nuclear-gradient examples were added;
     # 18 since H4_CASCI_JSON_ORBITALS.inp added [cas] orbital_source=json;
     # 17 since H4_CASPT2_grad.inp added the PT2 central-difference gradient
     # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
     # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
-    assert len(WF_EXAMPLES) == 18
+    assert len(WF_EXAMPLES) == 20
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

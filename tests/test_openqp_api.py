@@ -218,6 +218,10 @@ SCHEMA = {
         "converger": {"type": _string, "default": "twophase"},
         "hessian": {"type": _string, "default": "fd"},
         "gradient_norm_tol": {"type": float, "default": "1.0e-6"},
+        "grad_step": {"type": float, "default": "1.0e-3"},
+        "grad_guess": {"type": _string, "default": "cold"},
+        "grad_gap_warn": {"type": float, "default": "1.0e-5"},
+        "grad_ranks_per_group": {"type": int, "default": "0"},
     },
     "state_average": {
         "enabled": {"type": bool, "default": "False"},
@@ -1532,6 +1536,24 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         self.assertEqual(config["ci"]["nroot"], "1")
         self.assertEqual(config["casscf"]["converger"], "trah")
         self.assertEqual(config["casscf"]["hessian"], "analytic")
+
+    def test_casscf_helpers_select_numerical_gradient_state_and_controls(self):
+        openqp = load_openqp_module()
+        casscf = (self._job(openqp, "h2o_casscf_grad")
+                  .casscf(active_electrons=4, active_orbitals=4, nroot=2,
+                          root=1, runtype="optimize", grad_step=2.0e-3,
+                          grad_guess="warm")
+                  .to_input_dict())
+        self.assertEqual(casscf["optimize"]["istate"], "1")
+        self.assertEqual(casscf["casscf"]["grad_step"], "0.002")
+        self.assertEqual(casscf["casscf"]["grad_guess"], "warm")
+
+        sa = (self._job(openqp, "h2o_sa_casscf_grad")
+              .sa_casscf(active_electrons=4, active_orbitals=4, nstate=2,
+                         state=1, runtype="grad", grad_ranks_per_group=2)
+              .to_input_dict())
+        self.assertEqual(sa["properties"]["grad"], "1")
+        self.assertEqual(sa["casscf"]["grad_ranks_per_group"], "2")
 
     def test_theory_dispatches_the_wavefunction_methods(self):
         openqp = load_openqp_module()

@@ -1235,7 +1235,9 @@ class OpenQP:
 
     def _casscf(self, active_electrons=None, active_orbitals=None,
                frozen_core=None, nroot=1, root=None, converger=None,
-               hessian=None, max_macro_iterations=None, runtype=None,
+               hessian=None, max_macro_iterations=None, grad_step=None,
+               grad_guess=None, grad_gap_warn=None,
+               grad_ranks_per_group=None, runtype=None,
                basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP CASSCF setup (orbital + CI optimization)."""
         self._require_active_space("CASSCF", active_electrons, active_orbitals)
@@ -1263,18 +1265,26 @@ class OpenQP:
         opts = dict(self._CASSCF_OWNED_KEYS)
         for key, value in (("root", root), ("converger", converger),
                            ("hessian", hessian),
-                           ("max_macro_iterations", max_macro_iterations)):
+                           ("max_macro_iterations", max_macro_iterations),
+                           ("grad_step", grad_step),
+                           ("grad_guess", grad_guess),
+                           ("grad_gap_warn", grad_gap_warn),
+                           ("grad_ranks_per_group", grad_ranks_per_group)):
             if value is not None:
                 opts[key] = value
         opts.update(_explicit)
-        return self._wf_setup(
+        self._wf_setup(
             "casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
             frozen_core=frozen_core, nroot=nroot, casscf=opts, **keywords)
+        self._select_wavefunction_gradient_state(runtype, int(opts["root"]))
+        return self
 
     def sa_casscf(self, active_electrons=None, active_orbitals=None,
                   frozen_core=None, nstate=2, weights=None, target_roots=None,
-                  runtype=None, basis=None, reference="rhf", **keywords):
+                  state=0, grad_step=None, grad_guess=None, grad_gap_warn=None,
+                  grad_ranks_per_group=None, runtype=None, basis=None,
+                  reference="rhf", **keywords):
         """Use a compact OpenQP state-averaged CASSCF setup.
 
         `nstate` is the number of averaged states; it also sets [ci] nroot,
@@ -1295,7 +1305,16 @@ class OpenQP:
         if target_roots is not None:
             sa["target_roots"] = target_roots
         sa.update(_sa_explicit)
-        return self._wf_setup(
+        casscf = dict(self._CASSCF_OWNED_KEYS)
+        casscf.pop("root", None)
+        casscf.update(dict(keywords.pop("casscf", None) or {}))
+        for key, value in (("grad_step", grad_step),
+                           ("grad_guess", grad_guess),
+                           ("grad_gap_warn", grad_gap_warn),
+                           ("grad_ranks_per_group", grad_ranks_per_group)):
+            if value is not None:
+                casscf[key] = value
+        self._wf_setup(
             "sa-casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
             frozen_core=frozen_core,
@@ -1311,7 +1330,17 @@ class OpenQP:
                   or max([int(sa.get("nstate", nstate))]
                          + [int(r) + 1
                             for r in (sa.get("target_roots") or ())]),
-            state_average=sa, **keywords)
+            casscf=casscf, state_average=sa, **keywords)
+        self._select_wavefunction_gradient_state(runtype, int(state))
+        return self
+
+    def _select_wavefunction_gradient_state(self, runtype, state):
+        """Select the published state used by a compact gradient workflow."""
+        runtype = str(runtype or "").strip().lower()
+        if runtype == "grad":
+            self.section("properties", grad=state)
+        elif runtype in {"optimize", "ts", "mep", "irc"}:
+            self.section("optimize", istate=state)
 
     # Every [pt2] key a compact helper is responsible for.  Patching these one
     # at a time did not work: h0 and contraction leaked, then edshft, then the
@@ -1322,7 +1351,13 @@ class OpenQP:
     # The same rule for the CASSCF and state-average sections.  A helper call
     # is a complete request, so keys it owns and this call omits go back to
     # their defaults rather than surviving from an earlier call on the builder.
-    _CASSCF_OWNED_KEYS = {"root": "0"}
+    _CASSCF_OWNED_KEYS = {
+        "root": "0",
+        "grad_step": "1.0e-3",
+        "grad_guess": "cold",
+        "grad_gap_warn": "1.0e-5",
+        "grad_ranks_per_group": "0",
+    }
     _SA_OWNED_KEYS = {"weights": "", "target_roots": "", "equal_weights": "true"}
 
     _PT2_OWNED_KEYS = {
