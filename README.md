@@ -20,7 +20,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 | CI and CASSCF | FCI, CASCI, CASSCF, SA-CASSCF | Native determinant CI and orbital optimization; CASSCF/SA-CASSCF have central-difference nuclear gradients |
-| Multireference PT2 | CASPT2 (SS/MS/XMS), NEVPT2 (uncontracted/strongly contracted), QDPT2 (MRMP2/MCQDPT2/XMCQDPT2) | Native energy and central-difference nuclear-gradient calculations; see [`examples/WF_methods`](examples/WF_methods) for variants, controls, and present limits |
+| Multireference PT2 | CASPT2 (SS/MS/XMS), NEVPT2 (uncontracted/strongly contracted), QDPT2 (MRMP2/MCQDPT2/XMCQDPT2) | Native energies for every variant; strongly contracted NEVPT2 on a state-specific CASSCF reference has an **analytic** nuclear gradient, the rest use central differences; see [`examples/WF_methods`](examples/WF_methods) for variants, controls, and present limits |
 
 **Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
 
@@ -28,8 +28,8 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 | Capability | Scope | Notes |
 | --- | --- | --- |
-| Analytic gradients | HF, DFT, TDDFT, SF/MRSF-TDDFT | State-specific gradients for optimization and dynamics |
-| Numerical gradients | CASSCF, SA-CASSCF, CASPT2, NEVPT2, QDPT2 | Central differences of converged multireference energies for `grad`, `optimize`, `ts`, `mep`, and `irc` |
+| Analytic gradients | HF, DFT, MP2, TDDFT, SF/MRSF-TDDFT, CASSCF, **SC-NEVPT2** | State-specific gradients for optimization and dynamics. SC-NEVPT2 solves the coupled CASSCF orbital/CI response and the semicanonical-basis response, at a cost independent of the number of nuclei |
+| Numerical gradients | SA-CASSCF, CASPT2, uncontracted NEVPT2, QDPT2 | Central differences of converged multireference energies for `grad`, `optimize`, `ts`, `mep`, and `irc`; also the fallback whenever the analytic SC-NEVPT2 route does not apply |
 | Hessians | Native **analytic** HF/DFT Hessians + numerical Hessians | Covers UHF/ROHF references, ECPs, and CAM/LRC functionals |
 | Vibrational analysis | Frequencies, normal modes, thermochemistry, **IR and Raman intensities** | Native dipole / CPHF-polarizability kernels |
 | **NMR shieldings** | CGO and GIAO (London-orbital) gauges | HF and DFT, closed- and open-shell |

@@ -567,6 +567,13 @@ OQP_CONFIG_SCHEMA = {
         'engine': {'type': string, 'default': 'auto'},
         'max_terms': {'type': int, 'default': '30000000'},
         'nproc': {'type': int, 'default': '0'},
+        # Nuclear-gradient route.  `auto` (default) takes the analytic
+        # SC-NEVPT2 derivative (nevpt2_gradient.py) when the calculation is
+        # exactly the variant it is the derivative of -- strongly contracted,
+        # state specific, on a state-specific CASSCF reference -- and central
+        # differences otherwise.  `analytic` demands it and reports why if the
+        # calculation is out of scope; `numerical` forces central differences.
+        'gradient': {'type': string, 'default': 'auto'},
         # Central-difference nuclear-gradient controls (wf_numgrad.py)
         'grad_step': {'type': float, 'default': '1.0e-3'},
         'grad_guess': {'type': string, 'default': 'cold'},

@@ -364,7 +364,8 @@ GENERIC_SCHEMA_KEYS = {
     """),
     "pt2": _keys("""
         variant reference h0 contraction frozen multistate xms ipea_shift
-        imaginary_shift level_shift edshft engine max_terms nproc grad_step
+        imaginary_shift level_shift edshft engine max_terms nproc gradient
+        grad_step
         grad_guess grad_gap_warn grad_ranks_per_group denominator_cutoff
         intruder_threshold nroot
         target_roots max_memory semi_canonical save_amplitudes

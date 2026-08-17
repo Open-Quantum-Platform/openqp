@@ -29,6 +29,8 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H4_CASPT2.inp` | `caspt2` | `h0=fock` | single-state CASPT2 (Fock H0) |
 | `H4_NEVPT2.inp` | `caspt2` | `h0=dyall` | NEVPT2 (Dyall H0), uncontracted |
 | `H4_SC-NEVPT2.inp` | `caspt2` | `h0=dyall, contraction=strong` | strongly-contracted NEVPT2 (vs PySCF, nEh) |
+| `H4_SC-NEVPT2_grad.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | **analytic** SC-NEVPT2 nuclear gradient (vs 5-point central differences, 5.9e-10 Eh/Bohr) |
+| `H4_SC-NEVPT2_optimize.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | geometry optimization driven by the analytic SC-NEVPT2 gradient (26 steps, no displaced energies) |
 | `H4_MS-CASPT2.inp` | `ms-caspt2` | `h0=fock` | multi-set MS-CASPT2 (state-specific Fock) |
 | `H4_XMS-CASPT2.inp` | `xms-caspt2` | — | extended multistate CASPT2 |
 | `H4_MRMP2.inp` | `mrmp2` | — | single-state MRMP2 (Hirao; == caspt2 h0=fock) |
@@ -47,7 +49,21 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,
   `level_shift`, `imaginary_shift`, `edshft` (GAMESS ISA `d -> d + edshft/d`,
-  QDPT-style intruder handling; exclusive with the level shifts).
+  QDPT-style intruder handling; exclusive with the level shifts), and
+  `gradient` (see below).
+- `[pt2] gradient` — the nuclear-gradient route. `auto` (default) takes the
+  **analytic SC-NEVPT2 derivative** when the calculation is exactly the variant
+  it is the derivative of (strongly contracted, state specific, on a
+  state-specific CASSCF reference, `runtype` in grad/optimize/ts/mep/irc), and
+  central differences otherwise; `analytic` demands it and reports why if the
+  run is out of scope; `numerical` forces central differences. The analytic
+  path costs one CASSCF, one second-order pass, one coupled orbital/CI response
+  solve and one set of derivative integrals — independent of the number of
+  nuclei, against `6*natom` displaced energies for the numerical alternative.
+  Its error is FIRST order in the residual CASSCF orbital-rotation gradient, so
+  `[casscf] gradient_norm_tol` controls how many digits it is worth; the run
+  reports `|g_orb|`, the response residual and the Lagrangian asymmetry so the
+  size of every approximation is visible rather than assumed.
 
 The native scope is determinant-space active-space CI and determinant-space
 CASPT2/NEVPT2, plus RDM-based strongly-contracted NEVPT2 (`contraction=strong`)

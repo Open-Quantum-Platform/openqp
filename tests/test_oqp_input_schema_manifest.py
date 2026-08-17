@@ -216,8 +216,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
             checked.append((section, key))
 
     # This includes the native multiconfigurational sections plus the DFTB,
-    # coupled-cluster, D4, and SCF controls now present on main.
-    assert len(checked) == 349
+    # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
+    # gradient (the analytic SC-NEVPT2 nuclear-gradient route selector).
+    assert len(checked) == 350
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

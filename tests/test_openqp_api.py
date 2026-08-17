@@ -234,6 +234,7 @@ SCHEMA = {
         "variant": {"type": _string, "default": "auto"},
         "h0": {"type": _string, "default": "fock"},
         "contraction": {"type": _string, "default": "uncontracted"},
+        "gradient": {"type": _string, "default": "auto"},
         "ipea_shift": {"type": float, "default": "0.0"},
         "imaginary_shift": {"type": float, "default": "0.0"},
         "level_shift": {"type": float, "default": "0.0"},
@@ -1683,6 +1684,46 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         self.assertEqual(config["input"]["method"], "caspt2")
         self.assertEqual(config["pt2"]["h0"], "dyall")
         self.assertEqual(config["pt2"]["contraction"], "strong")
+
+    def test_nevpt2_gradient_route_defaults_to_auto_and_is_selectable(self):
+        """`gradient` picks the SC-NEVPT2 nuclear-gradient route.
+
+        `auto` takes the analytic derivative where it applies and central
+        differences otherwise, so it is the safe default for every NEVPT2
+        flavour; `analytic` and `numerical` pin the choice.
+        """
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_scnevpt2_grad")
+                  .nevpt2(active_electrons=4, active_orbitals=4,
+                          contraction="strong")
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["gradient"], "auto")
+
+        for route in ("analytic", "numerical"):
+            config = (self._job(openqp, f"h4_scnevpt2_{route}")
+                      .nevpt2(active_electrons=4, active_orbitals=4,
+                              contraction="strong", gradient=route,
+                              runtype="grad")
+                      .to_input_dict())
+            self.assertEqual(config["pt2"]["gradient"], route)
+            self.assertEqual(config["input"]["runtype"], "grad")
+
+    def test_nevpt2_helper_resets_the_gradient_route_it_owns(self):
+        """A helper call is a COMPLETE request, so it must not inherit a route.
+
+        Leaving `gradient=analytic` behind from an earlier call would silently
+        demand the analytic derivative of a later uncontracted NEVPT2 job,
+        which is a different first-order space and therefore a different
+        derivative.
+        """
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_reset")
+        job.nevpt2(active_electrons=4, active_orbitals=4,
+                   contraction="strong", gradient="analytic")
+        config = job.nevpt2(active_electrons=4, active_orbitals=4
+                            ).to_input_dict()
+        self.assertEqual(config["pt2"]["gradient"], "auto")
+        self.assertEqual(config["pt2"]["contraction"], "uncontracted")
 
     def test_multistate_helpers_derive_at_least_two_ci_roots(self):
         """A default multistate PT2 helper call must produce an input its own
