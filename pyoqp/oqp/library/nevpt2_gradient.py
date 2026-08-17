@@ -225,9 +225,8 @@ def _apply_dm_bar(bar, order, stack, W1, W2):
     ``n`` sparse operators: ``W2[a, b] = E_a E_b |c>`` is built once and reused
     by every order.
     """
-    nact = stack.shape[0]
     ndet = stack.shape[2]
-    A = nact * nact
+    A = stack.shape[0] * stack.shape[1]
     S = stack.reshape(A, ndet, ndet)
     if order == 1:
         return np.einsum("A,Aa->a", bar.reshape(A), W1, optimize=True)
@@ -338,7 +337,6 @@ def _response_blocks(h1e, eri, D, G, ncore, nact, pairs, stack, dets, ci):
     the complement of ``c`` by the caller.
     """
     npar = len(pairs)
-    nbf = h1e.shape[0]
     B = np.empty((npar, npar))
     f_der = np.empty((npar, nact, nact))
     g_der = np.empty((npar, nact, nact, nact, nact))
@@ -370,7 +368,6 @@ def _solve_response(H_oo, sigma, hact, e_ci, ci, rhs_orb, rhs_ci):
     complement.  That also removes the exact null vector the unprojected
     CI-CI block would otherwise carry.
     """
-    ndet = ci.size
     npar = H_oo.shape[0]
     _u, _s, vt = np.linalg.svd(ci.reshape(1, -1))
     Q = vt[1:].T                                   # (ndet, ndet-1), orthonormal
@@ -688,10 +685,10 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
                 "orbital(s) available.")
         nfrozen = max(0, nfrozen)
     if nfrozen:
-        h1e_f, eri_f, eps_f, _D_f, ncore_f, nbf_f, _enuc_f = _freeze_core(
+        h1e_f, eri_f, eps_f, _D_f, ncore_f, _nbf_f, _enuc_f = _freeze_core(
             h1e, eri, eps, D_sa, ncore, nbf, enuc, nfrozen)
     else:
-        h1e_f, eri_f, eps_f, ncore_f, nbf_f = h1e, eri, eps, ncore, nbf
+        h1e_f, eri_f, eps_f, ncore_f = h1e, eri, eps, ncore
 
     # ---- second order: energy and its exact derivatives
     dms = make_rdms(ci, nact, active_nelec, upto=4)

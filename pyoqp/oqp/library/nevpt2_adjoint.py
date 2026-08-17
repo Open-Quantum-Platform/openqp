@@ -208,7 +208,6 @@ def _f3ca_f3ac_bar(h2e, dm4, ca_bar, ac_bar, bar):
         f3ca  = ein('kbij,rpqjkiac->pqrabc', h2e, dm4ca).transpose(argsort(1,4,0,2,5,3))
         f3ac  = ein('ijka,rpqbjcik->pqrabc', h2e, dm4  ).transpose(argsort(1,2,0,4,3,5))
     """
-    n = h2e.shape[0]
     dm4ca = dm4.transpose(0, 1, 4, 5, 6, 7, 2, 3)
 
     # undo the trailing transposes: X.transpose(argsort(p)) has adjoint
@@ -348,7 +347,6 @@ def _a17_bar(h1e, h2e, dm2, dm3, out_bar, bar):
     Forward dresses the one-electron matrix first, ``h = h1e - ein('mjjn->mn', h2e)``,
     so the dressed matrix's adjoint has to be pushed back through that step.
     """
-    n = h1e.shape[0]
     hd = h1e - _ein('mjjn->mn', h2e)
     hd_bar = np.zeros_like(h1e)
 

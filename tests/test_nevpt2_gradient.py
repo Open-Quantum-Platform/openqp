@@ -23,7 +23,7 @@ import pytest
 def _backend_available() -> bool:
     try:
         import oqp
-        from oqp.utils import file_utils  # noqa: F401
+        from oqp.utils import file_utils  # noqa: F401  probe the utils shadow
     except Exception:
         return False
     return bool(getattr(oqp, "BACKEND_AVAILABLE", False)) and hasattr(
@@ -569,8 +569,6 @@ def test_gradient_is_continuous_along_a_bond_scan(tmp_path):
     gradient reproduces a local five-point difference to ~1e-10 on each smooth
     branch either side of the crossing.
     """
-    from oqp.library.single_point import SinglePoint
-
     base = _runner(tmp_path, "scnevpt2_scan0", system=_H4, basis="sto-3g",
                    cas=_H4_CAS22, pt2=dict(_SC_NEVPT2))
     x0 = np.asarray(base.mol.get_system(), dtype=float).reshape(-1).copy()
