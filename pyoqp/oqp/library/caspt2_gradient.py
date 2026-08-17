@@ -1147,12 +1147,15 @@ def _orbital_pair_sets(state):
 
     ``reference=casscf`` -- the CASSCF solution fixes only the non-redundant
     (inter-block) rotations; rotations inside the inactive, active and virtual
-    blocks are redundant for the CASSCF energy AND for the PT2 energy (the block
-    SPANS are all the PT2 depends on -- including the frozen core, whose orbitals
-    are the lowest eigenvectors of the closed+active Fock restricted to the
-    inactive span, which a within-inactive rotation leaves unchanged).  They also
+    blocks are redundant for the CASSCF energy AND for the PT2 energy, whose only
+    dependence on the reference orbitals is through the block SPANS.  They also
     leave ``g_orb`` on the inter-block pairs at zero, so they are a true gauge
     freedom and are excluded from both sets.
+
+    The frozen core is the one thing a within-inactive rotation does NOT leave
+    alone, but it is not handled here: the frozen space follows the inactive-block
+    Fock eigenproblem rather than a constraint, so its response is eliminated
+    directly in :func:`_frozen_split_weight`.
 
     ``reference=casci`` -- the ACTIVE-ACTIVE rotations are additionally
     constrained, and they are not optional.  The RHF occupied space is the first
