@@ -135,6 +135,12 @@ class _Bar:
     """
 
     def __init__(self, nact, nbf):
+        #: Smallest |denominator| met while differentiating, over every Dyall
+        #: subspace.  The strongly contracted energy admits no level shift, so
+        #: a near-vanishing denominator is an intruder state: the energy is
+        #: already large there and the DERIVATIVE goes as its square, which is
+        #: exactly the case a caller must be told about rather than handed.
+        self.min_denominator = float("inf")
         self.h1e = np.zeros((nact, nact))            # core-dressed active 1e
         self.h2e = np.zeros((nact,) * 4)             # physicist active 2e
         self.dm1 = np.zeros((nact,) * 2)
@@ -156,7 +162,7 @@ class _Bar:
 
 
 # ------------------------------------------------------- denominator adjoints
-def _norm_to_energy_bar(norm, h, diff, ener_bar):
+def _norm_to_energy_bar(norm, h, diff, ener_bar, bar=None):
     """Adjoint of ``nevpt2_sc._norm_to_energy``'s energy return.
 
     Forward (over the retained entries ``|norm| > NUMERICAL_ZERO``):
@@ -187,6 +193,9 @@ def _norm_to_energy_bar(norm, h, diff, ener_bar):
     nb[keep] = ener_bar * (-inv - h_k * inv2 / n_k)
     hb[keep] = ener_bar * inv2
     db[keep] = ener_bar * n_k * inv2
+    if bar is not None and d_k.size:
+        bar.min_denominator = min(bar.min_denominator,
+                                  float(np.min(np.abs(d_k))))
     return nb, hb, db
 
 
@@ -576,7 +585,7 @@ def _Sr_bar(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v, e_virt, f3, bar):
     norm = (_ein('ipqr,rpqbac,iabc->i', h2e_v, dm3, h2e_v)
             + _ein('ipqr,rpqa,ia->i', h2e_v, dm2, h1e_v) * 2.0
             + _ein('ip,pa,ia->i', h1e_v, dm1, h1e_v))
-    nb, hb, db = _norm_to_energy_bar(norm, ener, e_virt, 1.0)
+    nb, hb, db = _norm_to_energy_bar(norm, ener, e_virt, 1.0, bar)
 
     v_bar = np.zeros_like(h2e_v)
     h1v_bar = np.zeros_like(h1e_v)
@@ -635,7 +644,7 @@ def _Si_bar(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v, e_core, f3, bar):
     norm = (_ein('qpir,rpqbac,baic->i', h2e_v, dm3_h, h2e_v)
             + _ein('qpir,rpqa,ai->i', h2e_v, dm2_h, h1e_v) * 2.0
             + _ein('pi,pa,ai->i', h1e_v, dm1_h, h1e_v))
-    nb, hb, db = _norm_to_energy_bar(norm, ener, -np.asarray(e_core), 1.0)
+    nb, hb, db = _norm_to_energy_bar(norm, ener, -np.asarray(e_core), 1.0, bar)
 
     v_bar = np.zeros_like(h2e_v)
     h1v_bar = np.zeros_like(h1e_v)
@@ -685,7 +694,7 @@ def _Si_bar(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v, e_core, f3, bar):
     return v_bar, h1v_bar, -db
 
 
-def _Sijrs_bar(e_core, e_virt, g_cvcv):
+def _Sijrs_bar(e_core, e_virt, g_cvcv, bar=None):
     """Adjoint of ``nevpt2_sc._Sijrs`` (the MP2-like fully-external subspace).
 
     Forward, per occupied ``i``:
@@ -708,6 +717,9 @@ def _Sijrs_bar(e_core, e_virt, g_cvcv):
         d = (eia.reshape(-1, 1) + eia[i].reshape(1, -1)).ravel().reshape(
             ncore, nvirt, nvirt)
         t2i = gi / d
+        if bar is not None and d.size:
+            bar.min_denominator = min(bar.min_denominator,
+                                      float(np.min(np.abs(d))))
         theta = gi * 2 - gi.transpose(0, 2, 1)
         # e = sum(t2i * theta)
         t2_bar = theta
@@ -750,7 +762,7 @@ def _Sijr_bar(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt, bar):
     diff = e_virt[:, None, None] - e_core[None, :, None] - e_core[None, None, :]
     sel = (slice(None), ci_triu[0], ci_triu[1])
     nb_p, hb_p, db_p = _norm_to_energy_bar(
-        norm_full[sel], h_full[sel], diff[sel], 1.0)
+        norm_full[sel], h_full[sel], diff[sel], 1.0, bar)
 
     def _unpack(packed_bar):
         full = np.zeros_like(norm_full)
@@ -808,7 +820,7 @@ def _Srsi_bar(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt, bar):
     h_full = _pack(k27)
     diff = e_virt[:, None, None] + e_virt[None, :, None] - e_core[None, None, :]
     nb_p, hb_p, db_p = _norm_to_energy_bar(
-        norm_full[vi_triu], h_full[vi_triu], diff[vi_triu], 1.0)
+        norm_full[vi_triu], h_full[vi_triu], diff[vi_triu], 1.0, bar)
 
     def _unpack(packed_bar):
         full = np.zeros_like(norm_full)
@@ -854,7 +866,7 @@ def _Srs_bar(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt, bar):
     norm = 0.5 * _ein('rsqp,rsba,pqba->rs', h2e_v, h2e_v, rm2)
     h = 0.5 * _ein('rsqp,rsba,pqab->rs', h2e_v, h2e_v, a7)
     diff = e_virt[:, None] + e_virt[None, :]
-    nb, hb, db = _norm_to_energy_bar(norm, h, diff, 1.0)
+    nb, hb, db = _norm_to_energy_bar(norm, h, diff, 1.0, bar)
     ev_bar += db.sum(axis=1) + db.sum(axis=0)
 
     rm2_bar = np.zeros_like(rm2)
@@ -886,7 +898,7 @@ def _Sij_bar(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core, bar):
     norm = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, hdm2)
     h = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, a9)
     diff = e_core[:, None] + e_core[None, :]
-    nb, hb, db = _norm_to_energy_bar(norm, h, -diff, 1.0)
+    nb, hb, db = _norm_to_energy_bar(norm, h, -diff, 1.0, bar)
     ec_bar -= db.sum(axis=1) + db.sum(axis=0)
 
     hdm2_bar = np.zeros_like(hdm2)
@@ -940,7 +952,7 @@ def _Sir_bar(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt, bar
     )
     h = sum(sign * _ein(sub, *ops) for sub, ops, sign in h_terms)
     diff = e_core[:, None] - e_virt[None, :]
-    nb, hb, db = _norm_to_energy_bar(norm, h, -diff, 1.0)
+    nb, hb, db = _norm_to_energy_bar(norm, h, -diff, 1.0, bar)
     ec_bar -= db.sum(axis=1)
     ev_bar += db.sum(axis=0)
 
@@ -1040,9 +1052,12 @@ def sc_nevpt2_energy_adjoints(h1e_mo, eri_mo, eps, ncore, nact, active_nelec,
                               ci_vector, dms=None):
     """Exact derivatives of the SC-NEVPT2 correlation energy.
 
-    Returns ``(e2, comp, hbar, gbar, epsbar, dmbars)`` where ``dmbars`` is the
-    tuple ``(dm1bar, dm2bar, dm3bar, dm4bar)`` of derivatives with respect to
-    the active spin-free density matrices.  The caller converts ``dmbars`` into
+    Returns ``(e2, comp, hbar, gbar, epsbar, dmbars, min_denominator)`` where
+    ``dmbars`` is the tuple ``(dm1bar, dm2bar, dm3bar, dm4bar)`` of derivatives
+    with respect to the active spin-free density matrices, and
+    ``min_denominator`` is the smallest Dyall denominator met on the way -- the
+    intruder-state probe, reported because the strongly contracted energy
+    accepts no level shift to regularize one.  The caller converts ``dmbars`` into
     a CI-coefficient derivative, because that conversion needs the determinant
     basis the density matrices were built from.
 
@@ -1083,7 +1098,7 @@ def sc_nevpt2_energy_adjoints(h1e_mo, eri_mo, eps, ncore, nact, active_nelec,
     epsbar[:ncore] += ecb
 
     comp['Sijrs'] = _Sijrs(ec, ev, B['Sijrs'])[1]
-    gb, ecb, evb = _Sijrs_bar(ec, ev, B['Sijrs'])
+    gb, ecb, evb = _Sijrs_bar(ec, ev, B['Sijrs'], bar)
     block_bars['Sijrs'] = gb
     epsbar[:ncore] += ecb
     epsbar[nocc:] += evb
@@ -1123,4 +1138,5 @@ def sc_nevpt2_energy_adjoints(h1e_mo, eri_mo, eps, ncore, nact, active_nelec,
     hbar, gbar = _blocks_bar(h1e_mo, eri_mo, ncore, nact, block_bars, bar)
 
     e2 = float(sum(comp.values()))
-    return e2, comp, hbar, gbar, epsbar, (bar.dm1, bar.dm2, bar.dm3, bar.dm4)
+    return (e2, comp, hbar, gbar, epsbar,
+            (bar.dm1, bar.dm2, bar.dm3, bar.dm4), bar.min_denominator)

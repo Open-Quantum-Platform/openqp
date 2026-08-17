@@ -178,8 +178,8 @@ def test_energy_adjoints_match_directional_derivatives(target):
     from oqp.library.nevpt2_adjoint import sc_nevpt2_energy_adjoints
 
     h, g, eps, ncore, nact, nelec, ci, rng = _random_case()
-    e2, _comp, hbar, gbar, epsbar, _dmbars = sc_nevpt2_energy_adjoints(
-        h, g, eps, ncore, nact, nelec, ci)
+    (e2, _comp, hbar, gbar, epsbar, _dmbars,
+     _min_denom) = sc_nevpt2_energy_adjoints(h, g, eps, ncore, nact, nelec, ci)
     assert e2 == pytest.approx(
         sc_nevpt2_energy(h, g, eps, ncore, nact, nelec, ci,
                          max_memory=8192)[0], abs=0.0)
@@ -222,8 +222,8 @@ def test_ci_derivative_matches_finite_differences():
     from oqp.library.casscf_hessian import _excitation_matrices
 
     h, g, eps, ncore, nact, nelec, ci, rng = _random_case()
-    _e2, _comp, _hb, _gb, _eb, dmbars = sc_nevpt2_energy_adjoints(
-        h, g, eps, ncore, nact, nelec, ci)
+    (_e2, _comp, _hb, _gb, _eb, dmbars,
+     _min_denom) = sc_nevpt2_energy_adjoints(h, g, eps, ncore, nact, nelec, ci)
     _dets, stack = _excitation_matrices(nact, nelec[0], nelec[1])
     ci_bar = _ci_bar_from_dm_bars(dmbars, stack, ci)
 
@@ -406,6 +406,63 @@ def test_analytic_gradient_matches_five_point_finite_differences(tmp_path):
             num = (vals[-2] - 8 * vals[-1] + 8 * vals[1] - vals[2]) / (12 * step)
             assert ana[i] == pytest.approx(num, abs=5.0e-8), (
                 f"coordinate {i} at step {step}")
+
+
+@needs_native_gradient
+def test_excited_root_gradient_matches_finite_differences(tmp_path):
+    """``[pt2] target_roots=1``: the derivative of an EXCITED root's energy.
+
+    A stationary point need not be a minimum, and nothing in the Lagrangian
+    assumes it is -- but the CASSCF reference, the CI eigenvector and the
+    response system are all a different problem for an excited root, so it is
+    checked rather than inferred from the ground-state result.
+    """
+    from oqp.library.single_point import SinglePoint
+    from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+    pt2 = dict(_SC_NEVPT2, target_roots="1", nroot="2")
+    extra = {"ci": {"nroot": "2"}}
+    runner = _runner(tmp_path, "scnevpt2_root1", system=_H4, basis="sto-3g",
+                     cas=_H4_CAS22, pt2=pt2, extra=extra)
+    SinglePoint(runner.mol).energy()
+    x0 = np.asarray(runner.mol.get_system(), dtype=float).reshape(-1).copy()
+    ana = np.asarray(sc_nevpt2_analytic_gradient(runner.mol),
+                     dtype=float).reshape(-1)
+
+    step = 1.0e-3
+    for i in (2, 11):
+        vals = {}
+        for k in (-2, -1, 1, 2):
+            x = x0.copy()
+            x[i] += k * step
+            disp = _runner(tmp_path, "scnevpt2_root1_disp", system=_H4,
+                           basis="sto-3g", cas=_H4_CAS22, pt2=pt2,
+                           coords=x, extra=extra)
+            vals[k] = float(SinglePoint(disp.mol).energy()[0])
+        num = (vals[-2] - 8 * vals[-1] + 8 * vals[1] - vals[2]) / (12 * step)
+        assert ana[i] == pytest.approx(num, abs=5.0e-8), f"coordinate {i}"
+
+
+@needs_native_gradient
+def test_smallest_dyall_denominator_is_reported(tmp_path):
+    """The intruder probe is published, because no shift can regularize one.
+
+    ``[pt2] level_shift`` / ``imaginary_shift`` do not reach the strongly
+    contracted denominators (the energy refuses them outright), so a caller
+    near an intruder has no knob -- only the number, which therefore has to be
+    in the output.
+    """
+    runner, _ana = _analytic_gradient(tmp_path, "scnevpt2_denom", system=_H4,
+                                      basis="6-31g", cas=_H4_CAS44)
+    log = open(runner.mol.log).read()
+    line = [ln for ln in log.splitlines()
+            if "smallest Dyall denominator" in ln]
+    assert line, "the intruder probe was not reported"
+    value = float(line[-1].split()[-1])
+    assert np.isfinite(value) and value > 0.0
+    # This well-behaved reference is nowhere near an intruder, so the warning
+    # must be absent -- a probe that always warns carries no information.
+    assert "likely intruder" not in line[-1]
 
 
 @needs_native_gradient

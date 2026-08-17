@@ -152,6 +152,10 @@ _LAGRANGIAN_ASYMMETRY_LIMIT = 1.0e-6
 _DEGENERACY_TOL = 1.0e-6
 #: Accepted relative residual of the coupled response solve.
 _RESPONSE_RESIDUAL_TOL = 1.0e-8
+#: Dyall denominators below this are reported as a likely intruder state.  The
+#: same threshold ``caspt2_dyall`` uses for the uncontracted path, so the two
+#: report the same physics with the same number.
+_INTRUDER_DENOMINATOR = 0.1
 
 
 # --------------------------------------------------------------- small helpers
@@ -691,7 +695,8 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
 
     # ---- second order: energy and its exact derivatives
     dms = make_rdms(ci, nact, active_nelec, upto=4)
-    e2, comp, hbar_f, gbar_f, epsbar_f, dmbars = sc_nevpt2_energy_adjoints(
+    (e2, comp, hbar_f, gbar_f, epsbar_f, dmbars,
+     min_denominator) = sc_nevpt2_energy_adjoints(
         h1e_f, eri_f, eps_f, ncore_f, nact, active_nelec, ci, dms=dms)
     e_total = e_casci + e2
 
@@ -816,6 +821,17 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
     if np.isfinite(smallest_gap):
         _log(mol, f"   {'smallest semicanonical gap':<38}"
                   f"{smallest_gap:>20.3e}")
+    intruder = ("" if min_denominator >= _INTRUDER_DENOMINATOR
+                else "   <-- WARNING: likely intruder state")
+    _log(mol, f"   {'smallest Dyall denominator':<38}"
+              f"{min_denominator:>20.3e}{intruder}")
+    if min_denominator < _INTRUDER_DENOMINATOR:
+        _log(mol, "   NOTE: the strongly contracted energy admits no level "
+                  "shift, so an intruder")
+        _log(mol, "         cannot be regularized here; the derivative goes "
+                  "as the denominator")
+        _log(mol, "         SQUARED, so it degrades faster than the energy "
+                  "does.")
     _log(mol, f"   {'response solve relative residual':<38}{resid:>20.3e}")
     _log(mol, f"   {'Lagrangian asymmetry max|X-X^T|':<38}{asym:>20.3e}")
     _log(mol, f"   {'orbital multiplier norm |z|':<38}"
