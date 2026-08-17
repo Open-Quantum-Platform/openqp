@@ -1,7 +1,8 @@
 # OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117))
-is a source-available quantum chemistry program centered on
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117);
+abbreviated **OQP** and pronounced “oh-coop”) is a source-available quantum
+chemistry program centered on
 [mixed-reference spin-flip TDDFT (MRSF-TDDFT)](https://doi.org/10.1021/acs.jpclett.3c02296)
 that combines HF and DFT references, correlated wavefunction methods,
 linear-response excited states, nuclear derivatives, reaction paths,
