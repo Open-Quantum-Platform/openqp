@@ -69,11 +69,19 @@ both carry multipliers:
 
 * CI -- one projected linear solve per reference root,
   ``(H_model - E_r) v_r = -(1 - c_r c_r^T) g_r``;
-* orbitals -- ``[pt2] reference=casscf`` uses the (state-averaged) CASSCF
-  orbital-rotation gradient as the constraint, ``reference=casci`` with RHF
-  orbitals uses ``F^RHF_pq = 0`` for every ``p != q`` (stationarity *and*
-  canonicality: the active window is defined by RHF orbital-energy ordering, so
-  the occ-occ and virt-virt conditions are load-bearing).
+* orbitals -- a Z-vector against whatever actually fixes the reference orbitals:
+  ``[pt2] reference=casscf`` uses the (state-averaged) CASSCF orbital-rotation
+  gradient, ``reference=casci`` with RHF orbitals uses ``F^RHF_pq = 0``.
+
+Both are expressed in the REFERENCE orbitals, not the semicanonical ones: for
+``reference=casci`` the RHF occupied space is the first ``nocc`` reference
+orbitals, and there is no way to say that in a basis whose active block has been
+rotated.  Which rotations are parameters follows from the same fact and is set
+out in :func:`_orbital_pair_sets`; briefly, the PT2 energy depends on the
+reference orbitals only through the SPANS of the orbital blocks, so within-block
+rotations are redundant for the energy -- but for ``reference=casci`` the
+active-active ones are still constrained, because the active block straddles the
+RHF occupied/virtual boundary and such a rotation changes ``D^RHF``.
 
 Both Jacobians are closed-form.  With ``kappa_A`` an antisymmetric generator and
 the rotation-derivative rule ``dM = [M, kappa]`` on every tensor index,
@@ -90,10 +98,18 @@ XMS
 ---
 For ``xms-caspt2``/``xmcqdpt2`` the references are pre-rotated by the eigenvectors
 ``R`` of the model-space state-averaged Fock.  ``R`` depends on the geometry, so
-its response is included through the constraint ``(R^T F_model R)_{i != j} = 0``.
-The *effective-Hamiltonian* eigenvectors need no response (Hellmann-Feynman for an
-eigenvalue), but the differentiated root is tracked by mixing-vector overlap
-rather than by position in a sorted list.
+its response is included -- eliminated directly with first-order eigenvector
+perturbation theory rather than carried as a constrained parameter, which turns
+the whole rotation response into one extra weight matrix on the Fock operator
+plus one extra term in the reference-vector gradient (:func:`_xms_elimination`).
+A near-degenerate model-space Fock makes ``dR/dx`` undefined and is refused.
+
+The *effective-Hamiltonian* eigenvectors need no response (Hellmann-Feynman for
+an eigenvalue).  Which published state the derivative belongs to is pinned by
+requiring this module's own reconstruction of the spectrum to reproduce the
+reported ``OQP::CASPT2_ENERGIES`` (:func:`_check_reported_energies`), and the gap
+to the neighbouring root is checked before differentiating, because a degenerate
+root has no well-defined mixing vector.
 
 Scope
 -----
