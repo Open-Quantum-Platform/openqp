@@ -84,10 +84,15 @@ refused with a specific reason under `analytic`):
 | `reference=casci` (RHF orbitals) and `reference=casscf` (state-specific or state-averaged) | `[cas] orbital_source` reading orbitals from a file — imported orbitals are not a differentiable function of the geometry |
 | the PT2 frozen core (`[pt2] frozen`) | |
 
-The gradient is refused, rather than approximated, when the reference itself
-cannot support it: an unconverged CASSCF, orbitals that are not semicanonical,
-a degenerate effective-Hamiltonian root, or a reconstruction that does not
-reproduce the reported energy. Each writes the offending number into the log.
+The derivation also has preconditions that hold almost everywhere and can fail
+at a particular geometry: canonical (`casci`) or stationary (`casscf`) reference
+orbitals, semicanonical PT2 orbitals, a nonsingular orbital response,
+non-degenerate effective-Hamiltonian roots, and a reconstruction that reproduces
+the reported energy. These are preconditions of the **route**, not of the
+energy, so `auto` treats a failed one exactly like an out-of-scope variant — it
+falls back to central differences and writes the offending number into the log —
+and `analytic` refuses. A penalty-function MECI search walks into the degenerate
+case by construction; the fallback is what keeps it running.
 
 ## QDPT engines
 

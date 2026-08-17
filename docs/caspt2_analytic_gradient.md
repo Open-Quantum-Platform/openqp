@@ -245,11 +245,36 @@ the first-order amplitudes correlate inactive, active and virtual space at once.
 | `reference=casci` (RHF orbitals), `reference=casscf` (state-specific or state-averaged) | `[cas] orbital_source` reading orbitals from a file |
 | the PT2 frozen core (`[pt2] frozen`) | |
 
-Beyond the variant scope, the gradient is refused rather than approximated when
-the reference cannot support it: an unconverged CASSCF, orbitals that are not
-semicanonical, a singular orbital-response system, a degenerate
-effective-Hamiltonian root, or a reconstruction that does not reproduce the
-reported energy.  Each writes the offending number into the log.
+Beyond the variant scope, the derivation rests on conditions that hold almost
+everywhere and can fail at a particular geometry.  The reference orbitals
+diagonalize the RHF Fock (`reference=casci`) or make `g_orb` vanish
+(`reference=casscf`); the PT2 orbitals are semicanonical; the orbital-response
+system is nonsingular; no two effective-Hamiltonian roots and no two XMS
+model-space Fock eigenvalues are degenerate; the dense reconstruction reproduces
+the reported energy.  When one of them fails the gradient is
+`CASPT2GradientPreconditionFailed`, with the offending number in the message.
+
+These are preconditions of the **route**, not of the energy, so `[pt2] gradient`
+treats them exactly like an out-of-scope variant:
+
+| `[pt2] gradient` | out-of-scope variant | failed precondition |
+| --- | --- | --- |
+| `auto` (default) | central differences, logged | central differences, logged |
+| `analytic` | refuse | refuse |
+| `numerical` | central differences | central differences |
+
+The fallback is deliberate.  A central difference of the energy PyOQP actually
+evaluates is still a gradient of that function even where this route's algebra
+does not close -- slower, and near a crossing a difference of *sorted* energies
+rather than of one state, which the log says.  A penalty-function MECI search
+walks into the degenerate case by construction, and turning a precondition of
+one route into a failure of the whole run would break searches that ran before
+this gradient existed.
+
+Three things are **not** routed and propagate on every route: no PT2 energy on
+the molecule, a `liboqp` without the `caspt2_gradient` entry point, and a
+nonzero status out of the kernel.  Those are about the caller or the build, and
+central-differencing repairs none of them.
 
 ## Validation
 

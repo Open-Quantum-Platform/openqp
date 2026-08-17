@@ -1427,21 +1427,32 @@ class Gradient(Calculator):
         ``[pt2] gradient`` selects the route:
 
         ``auto`` (default)
-            take the analytic derivative when the requested PT2 variant is in
-            :mod:`oqp.library.caspt2_gradient`'s scope, otherwise fall back to
-            central differences and say so in the log.  A variant that IS in
-            scope but whose reference is not usable (an unconverged CASSCF, a
-            non-semicanonical point, a degenerate effective-Hamiltonian root)
-            is an error, not a silent fallback: the numerical gradient would
-            answer a different question about a reference the analytic
-            derivative just rejected.
+            take the analytic derivative when it applies, otherwise fall back to
+            central differences and say in the log why.  Two things make it not
+            apply, and neither is a verdict on the user's calculation: the
+            VARIANT is outside the derivative's scope, or this POINT does not
+            satisfy a precondition of the derivation (non-canonical reference
+            orbitals, a non-stationary CASSCF, degenerate effective-Hamiltonian
+            roots, a singular orbital response).
+
+            The fallback is deliberate for the second kind.  Those conditions
+            are preconditions of the ANALYTIC ROUTE, not of the energy, and a
+            central difference of the energy PyOQP actually evaluates is still a
+            gradient of that function.  A penalty-function MECI drives into the
+            degenerate case by construction; turning that into a hard failure
+            would break searches that ran before this gradient existed.
         ``analytic``
-            refuse rather than fall back.
+            refuse rather than fall back, for either kind, naming the condition.
         ``numerical``
             always central differences.
+
+        A missing PT2 energy, a liboqp without the ``caspt2_gradient`` entry
+        point, or a nonzero status out of the kernel are not routed: they are
+        errors about the caller or the build and propagate on every route.
         """
         from oqp.library.caspt2_gradient import (
-            CASPT2GradientNotImplemented, caspt2_analytic_gradient,
+            CASPT2GradientNotImplemented, CASPT2GradientPreconditionFailed,
+            caspt2_analytic_gradient,
         )
         from oqp.library.wf_numgrad import wavefunction_numerical_gradient
 
@@ -1464,6 +1475,13 @@ class Gradient(Calculator):
                 dump_log(self.mol, title=(
                     'PyOQP: no analytic CASPT2 gradient for this variant '
                     '(%s); using central differences' % exc))
+            except CASPT2GradientPreconditionFailed as exc:
+                if mode == 'analytic':
+                    raise
+                dump_log(self.mol, title=(
+                    'PyOQP: the analytic CASPT2 gradient does not apply at this '
+                    'geometry (%s); using central differences, which near a '
+                    'crossing differences the SORTED energies' % exc))
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
         return wavefunction_numerical_gradient(self.mol, self.grads)

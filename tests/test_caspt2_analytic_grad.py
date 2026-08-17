@@ -42,6 +42,17 @@ H4_BOHR = np.array([0.0, 0.0, 0.0,
                     0.18, 0.0, 2.80,
                     0.0, 0.12, 4.20])
 
+#: Evenly spaced linear H4 in Bohr -- 0.740 A steps, the geometry
+#: ``tests/test_pt2_grad.py`` starts its MECI smoke test from.  The MECI test
+#: below is the same search on the other route, so it starts from the same
+#: place: on the off-symmetry ``H4_BOHR`` the penalty search runs for tens of
+#: line-search evaluations before it stops, which says nothing extra about the
+#: gradient and costs minutes.
+H4_LINEAR_BOHR = np.array([0.0, 0.0, 0.000,
+                           0.0, 0.0, 1.398,
+                           0.0, 0.0, 2.797,
+                           0.0, 0.0, 4.195])
+
 
 def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
                  method="caspt2", reference="casci", nroot=1,
@@ -299,6 +310,143 @@ def test_lagrangian_is_stationary_in_every_constrained_parameter(tmp_path):
         relaxed = cg.relaxed_densities(state, target)
         assert relaxed.stationarity < 1.0e-9
         assert relaxed.orbital_residual < 1.0e-8
+
+
+@needs_backend
+def test_a_gradient_driven_runtype_uses_the_analytic_route(tmp_path):
+    """A gradient-driven runtype beyond plain ``grad``, on the analytic route.
+
+    ``tests/test_pt2_grad.py`` covers the geometry optimizer on the
+    CENTRAL-DIFFERENCE route, which it now pins explicitly.  This is the same
+    ground on the route ``[pt2] gradient=auto`` actually selects: an optimizer
+    driving CASPT2 that never reaches the numerical driver, with the analytic
+    gradient consumed by a caller that was written against the numerical one.
+    """
+    from oqp.library import wf_numgrad
+
+    # Records rather than raises: raising here would abort the optimizer from
+    # inside its own line search, and the traceback would say less than the
+    # assertion below.
+    called = {}
+
+    def _sentinel(mol, grad_list, sp=None):          # pragma: no cover
+        called["yes"] = True
+        return np.zeros((max(len(np.atleast_1d(grad_list)), 1), 4, 3))
+
+    runner = _make_runner(tmp_path, "opt", H4_BOHR)
+    runner.mol.config["input"]["runtype"] = "optimize"
+    runner.mol.config["optimize"]["istate"] = 0
+    runner.mol.config["optimize"]["maxit"] = 2
+    saved = wf_numgrad.wavefunction_numerical_gradient
+    wf_numgrad.wavefunction_numerical_gradient = _sentinel
+    try:
+        runner.run(test_mod=True)
+    finally:
+        wf_numgrad.wavefunction_numerical_gradient = saved
+
+    assert not called, "the optimizer fell back to central differences"
+    energies = np.asarray(runner.mol.energies, dtype=float)
+    assert np.all(np.isfinite(energies))
+    log_text = open(runner.mol.log, encoding="utf-8", errors="replace").read()
+    assert "analytic CASPT2 nuclear gradient" in log_text
+    assert "Geometry Optimization Step 1" in log_text
+    # The optimizer moved: a route that returned a constant or a zero vector
+    # would also "run".
+    moved = np.asarray(runner.mol.get_system(), float).reshape(-1, 3) - \
+        np.asarray(H4_BOHR, float).reshape(-1, 3)
+    assert np.max(np.abs(moved)) > 1.0e-4
+
+
+@needs_backend
+def test_a_meci_search_stays_alive_where_the_analytic_route_stops_applying(
+        tmp_path):
+    """A penalty MECI runs to its iteration limit even though the route changes.
+
+    This is the workflow that walks off the analytic derivative's preconditions
+    by construction: the penalty drives the two effective-Hamiltonian roots
+    together until ``_check_state_gap`` can no longer resolve which state the
+    gradient belongs to.  (The off-symmetry ``H4_BOHR`` search finds a second
+    one further out -- the reference orbitals at some displaced geometry stop
+    diagonalizing the RHF Fock.)  Both are preconditions of the DERIVATION, not
+    of the energy, so under the default ``gradient=auto`` the search keeps going
+    on central differences rather than aborting a workflow that ran before this
+    gradient existed.
+
+    Measured here: 98 analytic gradients, 5 fallbacks at gaps of 7e-7 to 9e-7
+    Eh, 54 optimizer steps, search completes.  What is pinned is weaker and
+    stable -- the search finishes, and whichever route each step took is on the
+    record, either the analytic banner or a fallback note naming the condition.
+    """
+    runner = _make_runner(tmp_path, "meci", H4_LINEAR_BOHR, method="mcqdpt2",
+                          nroot=2, target_roots=(0, 1), grad=("0", "1"))
+    runner.mol.config["input"]["runtype"] = "meci"
+    runner.mol.config["optimize"]["istate"] = 0
+    runner.mol.config["optimize"]["jstate"] = 1
+    runner.mol.config["optimize"]["maxit"] = 2
+    runner.run(test_mod=True)
+
+    energies = np.asarray(runner.mol.energies, dtype=float)
+    assert energies.shape == (2,)
+    assert np.all(np.isfinite(energies))
+    assert energies[1] >= energies[0]
+    log_text = open(runner.mol.log, encoding="utf-8", errors="replace").read()
+    assert "Geometry Optimization Step 1" in log_text
+    assert "Entering Analytic CASPT2 Gradient" in log_text
+    took_analytic = "analytic CASPT2 nuclear gradient" in log_text
+    fell_back = "does not apply at this geometry" in log_text
+    assert took_analytic or fell_back
+    if fell_back:
+        assert "PT2 numerical gradient" in log_text
+
+
+@needs_backend
+def test_a_failed_precondition_degrades_under_auto_and_refuses_under_analytic(
+        tmp_path, monkeypatch):
+    """The second refusal kind, with its own message but the same routing.
+
+    An out-of-scope VARIANT and a failed POINT precondition are not the same
+    statement -- one says the derivative was never written, the other that its
+    algebra does not close here -- so they are separate exceptions with separate
+    log lines.  Both fall back under ``auto`` and both refuse under
+    ``analytic``.
+
+    The gap threshold is raised rather than hunting for a geometry that happens
+    to be degenerate -- the gate is under test, not H4's spectrum.
+    """
+    from oqp.library import wf_numgrad
+    from oqp.library import caspt2_gradient as cg
+    from oqp.library.single_point import Gradient
+
+    called = {}
+
+    def _sentinel(mol, grad_list, sp=None):
+        called["yes"] = True
+        return np.zeros((1, 4, 3))
+
+    monkeypatch.setattr(wf_numgrad, "wavefunction_numerical_gradient", _sentinel)
+    monkeypatch.setattr(cg, "STATE_GAP_TOL", 1.0e3)
+
+    runner = _make_runner(tmp_path, "gapauto", H4_BOHR, method="mcqdpt2",
+                          nroot=2, target_roots=(0, 1), grad=("0",),
+                          pt2_extra={"gradient": "auto"})
+    runner.run(test_mod=True)
+    with pytest.raises(cg.CASPT2GradientPreconditionFailed) as excinfo:
+        cg.caspt2_analytic_gradient(runner.mol, [0])
+    assert "not well defined" in str(excinfo.value)
+
+    grads = np.asarray(Gradient(runner.mol).gradient(), dtype=float)
+    assert called.get("yes"), "a failed precondition did not fall back"
+    assert grads.shape[-2:] == (4, 3)
+    log_text = open(runner.mol.log, encoding="utf-8", errors="replace").read()
+    assert "does not apply at this geometry" in log_text
+    assert "SORTED energies" in log_text
+
+    runner2 = _make_runner(tmp_path, "gapstrict", H4_BOHR, method="mcqdpt2",
+                           nroot=2, target_roots=(0, 1), grad=("0",),
+                           pt2_extra={"gradient": "analytic"})
+    runner2.run(test_mod=True)
+    with pytest.raises(cg.CASPT2GradientPreconditionFailed):
+        Gradient(runner2.mol).gradient()
 
 
 # --------------------------------------------------------------------- scope

@@ -117,6 +117,21 @@ See ``_gate_variant``: single-state CASPT2/MRMP2, MCQDPT2 and XMS-CASPT2/XMCQDPT
 are differentiated; the multi-set MS-CASPT2 construction, Dyall H0 (NEVPT2),
 strong contraction, a nonzero IPEA shift and imported (non-RHF, non-CASSCF)
 orbitals are refused with a specific message.
+
+Refusals come in two kinds, and both are recoverable.
+``CASPT2GradientNotImplemented`` is a scope decision -- the derivative was never
+written for this variant.  ``CASPT2GradientPreconditionFailed`` is about this
+POINT: the derivation's algebra does not close here (non-canonical reference
+orbitals, a non-stationary CASSCF, non-semicanonical PT2 orbitals, degenerate
+roots, a degenerate model-space Fock, a singular orbital response, a
+reconstruction that disagrees with the reported energy).  ``[pt2]
+gradient=auto`` falls back to central differences for both and logs which
+condition failed; ``gradient=analytic`` refuses for both.
+
+What stays a plain error on every route is the small set that says the CALLER
+or the BUILD is wrong rather than the geometry: no PT2 energy on the molecule,
+no ``caspt2_gradient`` entry point in liboqp, a nonzero status out of the
+kernel.  Central-differencing would not repair any of those.
 """
 from __future__ import annotations
 
@@ -170,6 +185,33 @@ MAX_ORBITAL_PAIRS = 4000
 
 class CASPT2GradientNotImplemented(NotImplementedError):
     """A PT2 option combination outside the analytic gradient's scope."""
+
+
+class CASPT2GradientPreconditionFailed(RuntimeError):
+    """This particular POINT does not satisfy a precondition of the derivation.
+
+    Not a statement about the user's calculation, which may be perfectly well
+    converged -- a statement about this route.  The Lagrangian below is built on
+    conditions that hold almost everywhere and can fail at a specific geometry:
+    the reference orbitals diagonalize the RHF Fock (``reference=casci``) or make
+    ``g_orb`` vanish (``reference=casscf``), the PT2 orbitals are semicanonical,
+    the orbital-response system is nonsingular, no two effective-Hamiltonian
+    roots are degenerate, no two XMS model-space Fock eigenvalues are, and the
+    dense reconstruction reproduces the reported energy.
+
+    Each of those is a precondition of the DERIVATIVE, not of the ENERGY, so
+    ``[pt2] gradient=auto`` falls back to central differences and names the
+    condition that failed.  Central differences of the energy PyOQP actually
+    evaluates remain a valid gradient of that function even where this route's
+    algebra does not close -- slower, and near a crossing a difference of
+    *sorted* energies rather than of one state, but not wrong about what it is.
+    Turning a precondition of one route into a failure of the whole run would
+    break workflows -- a penalty-function MECI drives into the degenerate case
+    by construction -- that worked before this gradient existed.
+
+    ``gradient=analytic`` refuses instead: someone who asked for the derivative
+    by name should hear which condition failed, with the offending number.
+    """
 
 
 # --------------------------------------------------------------------- helpers
@@ -563,7 +605,7 @@ def _build_state(mol, ref_energy=None) -> CASPT2GradientState:
     h0mat = _invariant_h0(fock, ncore, nact, norb)
     offdiag = float(np.max(np.abs(h0mat - np.diag(np.diag(h0mat))))) if norb else 0.0
     if offdiag > SEMICANONICAL_TOL:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the CASPT2 orbitals are not semicanonical to %.1e (largest "
             "within-block Fock off-diagonal %.3e).  The energy path used "
             "H0 = diag(eps); the analytic gradient differentiates the "
@@ -571,7 +613,7 @@ def _build_state(mol, ref_energy=None) -> CASPT2GradientState:
             "semicanonical point.  Raise the semicanonicalization quality or "
             "keep the numerical gradient." % (SEMICANONICAL_TOL, offdiag))
     if abs(float(np.max(np.abs(np.diag(h0mat) - np.asarray(eps))))) > SEMICANONICAL_TOL:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the invariant H0 diagonal does not reproduce the orbital energies "
             "the energy path used; refusing to differentiate a different "
             "operator.")
@@ -604,7 +646,7 @@ def _check_block_rotation(u_sc, ncore, nact, nbf):
         mask[lo:hi, lo:hi] = False
     leak = float(np.max(np.abs(u_sc[mask]))) if mask.any() else 0.0
     if leak > 1.0e-8:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the semicanonical orbitals are not a within-block rotation of the "
             "reference orbitals (largest inter-block element %.3e).  The "
             "analytic gradient relies on that to make the rotation redundant."
@@ -876,14 +918,14 @@ def _xms_elimination(state, pieces):
         # eigh is deterministic, but a degenerate model-space Fock leaves the
         # eigenvectors arbitrary and the two calls can disagree.  That also makes
         # dR/dx undefined, so refuse rather than differentiate a random basis.
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the XMS model-space Fock rotation could not be reproduced "
             "deterministically; its eigenvectors are not well defined (near "
             "degeneracy in the state-averaged Fock), so dR/dx does not exist.")
     gap = np.min(np.abs(lam[:, None] - lam[None, :]
                         + np.eye(nstate) * 1.0e30)) if nstate > 1 else np.inf
     if gap < STATE_GAP_TOL:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the XMS model-space Fock has two eigenvalues within %.1e (%.3e); "
             "the state rotation and therefore its response are ill-conditioned."
             % (STATE_GAP_TOL, gap))
@@ -975,7 +1017,7 @@ def _frozen_split_weight(state, gmat_sc):
             gap = lam[q] - lam[p]
             if abs(gap) < FROZEN_SPLIT_GAP_TOL:
                 if abs(float(gmat_sc[p, q])) > 1.0e-10:
-                    raise RuntimeError(
+                    raise CASPT2GradientPreconditionFailed(
                         "inactive orbitals %d and %d are degenerate to %.3e in "
                         "the closed+active Fock, and the PT2 frozen core splits "
                         "them: the frozen space is not determined, so neither is "
@@ -1423,7 +1465,7 @@ def _solve_orbital_response(amat, rhs):
         return np.zeros(0)
     cond = float(np.linalg.cond(amat))
     if not np.isfinite(cond) or cond > MAX_RESPONSE_CONDITION:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the CASPT2 orbital-response system is singular (condition number "
             "%.3e).  Two reference orbitals are degenerate under the reference "
             "condition, so the orbital multipliers -- and the gradient -- are "
@@ -1439,7 +1481,7 @@ def _check_orbital_constraints(state, kind, fock_c, pairs):
     if kind == "rhf":
         res = max(abs(float(fock_c[p, q])) for (p, q) in pairs)
         if res > RHF_CANONICAL_TOL:
-            raise RuntimeError(
+            raise CASPT2GradientPreconditionFailed(
                 "the CASCI reference orbitals do not diagonalize the RHF Fock "
                 "(largest off-diagonal element %.3e > %.1e).  The analytic "
                 "gradient's orbital constraint is exactly that condition; "
@@ -1448,7 +1490,7 @@ def _check_orbital_constraints(state, kind, fock_c, pairs):
         res = max(abs(2.0 * (float(fock_c[q, p]) - float(fock_c[p, q])))
                   for (p, q) in pairs)
         if res > CASSCF_STATIONARITY_TOL:
-            raise RuntimeError(
+            raise CASPT2GradientPreconditionFailed(
                 "the CASSCF reference is not stationary (largest "
                 "orbital-rotation gradient %.3e > %.1e).  The analytic CASPT2 "
                 "gradient's orbital constraint is g_orb = 0; tighten "
@@ -1660,7 +1702,7 @@ def _check_reported_energies(state):
             "calculation." % (mine.size, published.size))
     worst = float(np.max(np.abs(mine - published)))
     if worst > ENERGY_MATCH_TOL:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the analytic gradient's own reconstruction of the CASPT2 energy "
             "differs from the reported one by %.3e Eh (limit %.1e).  The "
             "gradient would not belong to the printed energy; this usually "
@@ -1678,7 +1720,7 @@ def _check_state_gap(state, index):
     others = np.delete(energies, index)
     gap = float(np.min(np.abs(others - energies[index])))
     if gap < STATE_GAP_TOL:
-        raise RuntimeError(
+        raise CASPT2GradientPreconditionFailed(
             "the requested effective-Hamiltonian root is degenerate with a "
             "neighbour to %.3e Eh (limit %.1e): the mixing vector, and with it "
             "the state the gradient belongs to, is not well defined."
