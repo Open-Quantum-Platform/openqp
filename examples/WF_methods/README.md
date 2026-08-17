@@ -30,7 +30,7 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H4_NEVPT2.inp` | `caspt2` | `h0=dyall` | NEVPT2 (Dyall H0), uncontracted |
 | `H4_SC-NEVPT2.inp` | `caspt2` | `h0=dyall, contraction=strong` | strongly-contracted NEVPT2 (vs PySCF, nEh) |
 | `H4_SC-NEVPT2_grad.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | **analytic** SC-NEVPT2 nuclear gradient (vs 5-point central differences, 5.9e-10 Eh/Bohr) |
-| `H4_SC-NEVPT2_optimize.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | geometry optimization driven by the analytic SC-NEVPT2 gradient (26 steps, no displaced energies) |
+| `LiH_SC-NEVPT2_optimize.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | geometry optimization driven by the analytic SC-NEVPT2 gradient; also covers a PT2 frozen core and exactly degenerate (2p-pi) virtuals |
 | `H4_MS-CASPT2.inp` | `ms-caspt2` | `h0=fock` | multi-set MS-CASPT2 (state-specific Fock) |
 | `H4_XMS-CASPT2.inp` | `xms-caspt2` | — | extended multistate CASPT2 |
 | `H4_MRMP2.inp` | `mrmp2` | — | single-state MRMP2 (Hirao; == caspt2 h0=fock) |

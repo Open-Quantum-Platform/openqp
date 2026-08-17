@@ -82,11 +82,20 @@ available, and it is enforced below.
 
 Denominator edge cases
 ----------------------
-``Lambda`` divides by ``eps_i - eps_j`` inside one block.  Exactly degenerate
-inactive or virtual orbitals leave the semicanonical basis undetermined, and
-with it this multiplier; a near-degenerate pair makes it ill-conditioned.  Both
-are detected and refused with the offending pair named, rather than returning a
-large, plausible-looking number.
+``Lambda`` divides by ``eps_i - eps_j`` inside one block, and the two ways that
+can go wrong are genuinely different.
+
+An EXACT (symmetry) degeneracy -- any linear molecule's pi pair, any atom -- is
+a free gauge: a rotation inside the degenerate set preserves the Fock block's
+diagonality, so the energy does not depend on it and the numerator vanishes with
+the denominator.  The 0/0 limit is zero.  That is verified rather than assumed
+(the numerator is measured against the Lagrangian's own scale) and it is what
+makes the method usable on symmetric molecules at all.
+
+A NEAR degeneracy is not rescued by any invariance: the ratio is a large finite
+number formed from a difference of nearly equal quantities.  That case is
+refused with the offending pair named, rather than returning a
+plausible-looking number.
 """
 from __future__ import annotations
 
@@ -147,9 +156,19 @@ _STATIONARITY_WARN = 1.0e2
 #: Largest accepted asymmetry of the total orbital Lagrangian, in Hartree.  A
 #: violation means a multiplier is wrong, not that the answer is imprecise.
 _LAGRANGIAN_ASYMMETRY_LIMIT = 1.0e-6
-#: Inactive/virtual orbital-energy gaps below this leave the semicanonical
-#: basis -- and hence the semicanonical multiplier -- undetermined.
+#: Inactive/virtual orbital-energy gaps below this make the semicanonical
+#: multiplier ill-conditioned; between this and _EXACT_DEGENERACY_TOL the run is
+#: refused rather than guessed.
 _DEGENERACY_TOL = 1.0e-6
+#: Gaps below this are a symmetry degeneracy, i.e. exactly degenerate at working
+#: precision.  A rotation inside such a set preserves the Fock block's
+#: diagonality, so it is a free gauge and the multiplier's 0/0 limit is zero.
+_EXACT_DEGENERACY_TOL = 1.0e-10
+#: Largest residual energy dependence, relative to the Lagrangian's own scale,
+#: still accepted as "this rotation is a free gauge".  Measured at 1.1e-20 on
+#: LiH/STO-3G's exactly degenerate 2p-pi virtuals, so this is orders of
+#: magnitude of headroom over the case it is meant to admit.
+_FREE_GAUGE_COUPLING = 1.0e-10
 #: Accepted relative residual of the coupled response solve.
 _RESPONSE_RESIDUAL_TOL = 1.0e-8
 #: Dyall denominators below this are reported as a likely intruder state.  The
@@ -299,11 +318,34 @@ def _semicanonical_multipliers(F0, eps, ncore, nact, nbf):
 
     See the module docstring: invariance of the exact (non-diagonal-denominator)
     functional under an intra-block rotation fixes these multipliers without any
-    per-subspace derivation.
+    per-subspace derivation,
+
+        Lambda_ij = (F_ij - F_ji) / (eps_i - eps_j).
+
+    Degeneracy splits into two genuinely different cases, and they get different
+    answers rather than one blanket refusal.
+
+    **Exactly degenerate** (a symmetry degeneracy: any linear molecule's pi
+    pair, any atom).  A rotation inside such a set preserves the diagonality of
+    the Fock block, so the energy is invariant along it -- the direction is a
+    free gauge, and the NUMERATOR vanishes with the denominator.  The limit of a
+    genuine 0/0 along a direction the energy does not depend on is zero.  That
+    is not assumed: the numerator is measured, and only a numerator small on the
+    scale of the Lagrangian itself is accepted as the free-gauge case.  Verified
+    on LiH/STO-3G, whose 2p-pi virtuals are exactly degenerate -- the numerator
+    comes out at 1.1e-20 and the resulting gradient reproduces five-point
+    central differences to 3.4e-11 Eh/Bohr.
+
+    **Near degenerate** but not exactly so.  Here the ratio is a large finite
+    number computed as a difference of nearly equal quantities, i.e.
+    ill-conditioned, and no invariance rescues it.  This is refused with the
+    offending pair named, rather than returning a plausible-looking number.
     """
     nocc = ncore + nact
     Lam = np.zeros((nbf, nbf))
     smallest_gap = float("inf")
+    scale = max(float(np.max(np.abs(F0))) if F0.size else 1.0, 1.0)
+    degenerate_pairs = 0
     for lo, hi in ((0, ncore), (nocc, nbf)):
         for i in range(lo, hi):
             for j in range(lo, hi):
@@ -311,20 +353,37 @@ def _semicanonical_multipliers(F0, eps, ncore, nact, nbf):
                     continue
                 gap = float(eps[i] - eps[j])
                 smallest_gap = min(smallest_gap, abs(gap))
+                coupling = float(F0[i, j] - F0[j, i])
+                if abs(gap) < _EXACT_DEGENERACY_TOL:
+                    if abs(coupling) > _FREE_GAUGE_COUPLING * scale:
+                        raise ValueError(
+                            "Analytic SC-NEVPT2 gradient refused: "
+                            f"semicanonical orbitals {i} and {j} are degenerate "
+                            f"to {abs(gap):.3e} Hartree, but the rotation "
+                            "between them is NOT a free gauge -- the energy "
+                            f"still depends on it at {abs(coupling):.3e} "
+                            "Hartree. The semicanonical multiplier is a 0/0 "
+                            "with a non-vanishing numerator and is genuinely "
+                            "undetermined here. Break the degeneracy, or use a "
+                            "numerical gradient.")
+                    degenerate_pairs += 1
+                    continue                       # free gauge: Lambda_ij = 0
                 if abs(gap) < _DEGENERACY_TOL:
                     raise ValueError(
                         "Analytic SC-NEVPT2 gradient refused: semicanonical "
-                        f"orbitals {i} and {j} are degenerate to "
+                        f"orbitals {i} and {j} are separated by only "
                         f"{abs(gap):.3e} Hartree (limit "
                         f"{_DEGENERACY_TOL:.1e}). The strongly contracted "
                         "denominators are diagonal only in the semicanonical "
-                        "basis, and a degenerate inactive/virtual pair leaves "
-                        "that basis -- and the response of the rotation that "
-                        "produces it -- undetermined. Break the degeneracy "
+                        "basis, and the response of the rotation that produces "
+                        "that basis is ill-conditioned at a near-degeneracy "
+                        "this small -- neither zero (the pair is not exactly "
+                        "degenerate, so the rotation is not a free gauge) nor "
+                        "reliably computable. Break the degeneracy "
                         "(symmetry-distinct geometry or a different active "
                         "space), or use a numerical gradient.")
-                Lam[i, j] = (F0[i, j] - F0[j, i]) / gap
-    return Lam, smallest_gap
+                Lam[i, j] = coupling / gap
+    return Lam, smallest_gap, degenerate_pairs
 
 
 # ------------------------------------------------------------- response solve
@@ -712,7 +771,8 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
 
     # ---- semicanonical closure (module docstring, point 2)
     _P0, _G0, F0 = _orbital_lagrangian(hbar0, gbar0, h1e, eri)
-    Lam, smallest_gap = _semicanonical_multipliers(F0, eps, ncore, nact, nbf)
+    Lam, smallest_gap, degenerate_pairs = _semicanonical_multipliers(
+        F0, eps, ncore, nact, nbf)
     Fbar = np.diag(epsbar) + Lam
     hbar = hbar0 + Fbar
     gbar = (gbar0
@@ -818,6 +878,9 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
     if np.isfinite(smallest_gap):
         _log(mol, f"   {'smallest semicanonical gap':<38}"
                   f"{smallest_gap:>20.3e}")
+    if degenerate_pairs:
+        _log(mol, f"   {'exactly degenerate pairs (free gauge)':<38}"
+                  f"{degenerate_pairs:>20d}")
     intruder = ("" if min_denominator >= _INTRUDER_DENOMINATOR
                 else "   <-- WARNING: likely intruder state")
     _log(mol, f"   {'smallest Dyall denominator':<38}"

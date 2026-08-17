@@ -444,6 +444,53 @@ def test_excited_root_gradient_matches_finite_differences(tmp_path):
 
 
 @needs_native_gradient
+def test_symmetry_degenerate_virtuals_give_the_right_gradient(tmp_path):
+    """LiH: exactly degenerate 2p-pi virtuals, and the gradient is still exact.
+
+    This is the case the free-gauge treatment of the semicanonical multiplier
+    exists for.  Every linear molecule has such a pair, so treating it as an
+    undetermined 0/0 and refusing would have excluded most of chemistry; the
+    energy does not depend on a rotation inside an exactly degenerate set, so
+    the limit is zero -- and this measures that it is.
+
+    LiH/STO-3G also carries a PT2 frozen core (`frozen=auto` freezes the Li 1s),
+    so the frozen-core folding is on the differentiated path here too.
+    """
+    from oqp.library.single_point import SinglePoint
+    from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+    lih = "\n   Li  0.0 0.0 0.0\n   H   0.0 0.0 1.6"
+    cas = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1",
+           "max_det": "5000", "max_memory": "4096", "orbital_source": "rhf"}
+    pt2 = dict(_SC_NEVPT2, frozen="auto")
+    extra = {"ci": {"target_spin": "singlet"}}
+
+    runner = _runner(tmp_path, "lih_degen", system=lih, basis="sto-3g",
+                     cas=cas, pt2=pt2, extra=extra)
+    SinglePoint(runner.mol).energy()
+    x0 = np.asarray(runner.mol.get_system(), dtype=float).reshape(-1).copy()
+    ana = np.asarray(sc_nevpt2_analytic_gradient(runner.mol),
+                     dtype=float).reshape(-1)
+
+    log = open(runner.mol.log).read()
+    assert "exactly degenerate pairs (free gauge)" in log, (
+        "the degenerate pi pair was not recognized as a free gauge")
+
+    step = 1.0e-3
+    for i in (2, 5):
+        vals = {}
+        for k in (-2, -1, 1, 2):
+            x = x0.copy()
+            x[i] += k * step
+            disp = _runner(tmp_path, "lih_degen_disp", system=lih,
+                           basis="sto-3g", cas=cas, pt2=pt2, coords=x,
+                           extra=extra)
+            vals[k] = float(SinglePoint(disp.mol).energy()[0])
+        num = (vals[-2] - 8 * vals[-1] + 8 * vals[1] - vals[2]) / (12 * step)
+        assert ana[i] == pytest.approx(num, abs=5.0e-8), f"coordinate {i}"
+
+
+@needs_native_gradient
 def test_smallest_dyall_denominator_is_reported(tmp_path):
     """The intruder probe is published, because no shift can regularize one.
 
@@ -670,20 +717,57 @@ def test_state_averaged_reference_is_refused(tmp_path):
 
 
 @needs_backend
-def test_degenerate_semicanonical_orbitals_are_refused():
-    """The semicanonical multiplier divides by an intra-block orbital-energy gap.
+def test_exactly_degenerate_orbitals_are_a_free_gauge():
+    """A symmetry degeneracy makes the intra-block rotation a FREE gauge.
 
-    Exactly degenerate inactive or virtual orbitals leave the semicanonical
-    basis -- and therefore the response of the rotation that produces it --
-    undetermined.  Refusing names the offending pair instead of returning a
-    large, plausible-looking number.
+    Such a rotation preserves the Fock block's diagonality, so the energy does
+    not depend on it: the multiplier's numerator vanishes with its denominator
+    and the 0/0 limit is zero.  Refusing this case instead would rule out every
+    linear molecule's pi pair and every atom.
     """
     from oqp.library.nevpt2_gradient import _semicanonical_multipliers
 
     nbf, ncore, nact = 8, 2, 4
     eps = np.array([-1.0, -1.0, 0.1, 0.2, 0.3, 0.4, 1.0, 2.0])   # core pair tied
+    F0 = np.eye(nbf) * 0.5                        # symmetric -> zero numerator
+    Lam, gap, ndegen = _semicanonical_multipliers(F0, eps, ncore, nact, nbf)
+    assert ndegen == 2                            # the (0,1) and (1,0) entries
+    assert gap == pytest.approx(0.0, abs=1e-14)
+    assert np.allclose(Lam[:ncore, :ncore], 0.0)
+
+
+@needs_backend
+def test_exact_degeneracy_with_a_real_coupling_is_refused():
+    """A 0/0 whose numerator does NOT vanish is genuinely undetermined.
+
+    The free-gauge conclusion is earned by the numerator vanishing, so it is
+    measured rather than assumed; an exact degeneracy the energy still depends
+    on has to be refused instead.
+    """
+    from oqp.library.nevpt2_gradient import _semicanonical_multipliers
+
+    nbf, ncore, nact = 8, 2, 4
+    eps = np.array([-1.0, -1.0, 0.1, 0.2, 0.3, 0.4, 1.0, 2.0])
     F0 = np.eye(nbf) * 0.5
-    with pytest.raises(ValueError, match="degenerate"):
+    F0[0, 1] = 0.25                               # antisymmetric part survives
+    with pytest.raises(ValueError, match="NOT a free gauge"):
+        _semicanonical_multipliers(F0, eps, ncore, nact, nbf)
+
+
+@needs_backend
+def test_near_degenerate_semicanonical_orbitals_are_refused():
+    """A NEAR degeneracy is ill-conditioned and no invariance rescues it.
+
+    The ratio is a large finite number formed from a difference of nearly equal
+    quantities, so it is refused with the offending pair named rather than
+    returned as a plausible-looking value.
+    """
+    from oqp.library.nevpt2_gradient import _semicanonical_multipliers
+
+    nbf, ncore, nact = 8, 2, 4
+    eps = np.array([-1.0, -1.0 + 1.0e-8, 0.1, 0.2, 0.3, 0.4, 1.0, 2.0])
+    F0 = np.eye(nbf) * 0.5
+    with pytest.raises(ValueError, match="separated by only"):
         _semicanonical_multipliers(F0, eps, ncore, nact, nbf)
 
 
