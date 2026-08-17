@@ -242,6 +242,7 @@ five-point stencil of independently computed total energies at three step sizes.
 | `xms-caspt2`, 2 roots | 5e-11 / 2e-10 |
 | `caspt2`, 6-31G | 1e-9 |
 | `caspt2`, LiH with the default frozen core | 1e-11 |
+| `mrmp2` / `mcqdpt2` / `xmcqdpt2` on their default DIRECT engine | 7e-11 / 2e-10 |
 
 The CASSCF-reference row is looser because the finite-difference side inherits
 the CASSCF convergence of every displaced point; its residual falls from 3.5e-6
@@ -252,6 +253,11 @@ Translational invariance `|sum_A g_A|` and rotational invariance
 `|sum_A r_A x g_A|` hold to 1e-15 and 1e-13.  The numbers above were reproduced
 independently on macOS/arm64 with Accelerate ILP64 and on Linux/x86-64 with
 OpenBLAS ILP64, agreeing to the quoted digit.
+
+The QDPT row matters separately: those methods default to the matrix-free
+direct engine, while the gradient always reconstructs on the dense path.  The
+agreement therefore also exercises the cross-check that refuses when the
+reconstruction and the reported energy disagree.
 
 `tests/test_caspt2_analytic_grad.py` carries the same checks in a form the CI
 can run, together with the scope refusals and an internal consistency test that

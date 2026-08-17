@@ -147,6 +147,32 @@ def test_xms_caspt2_state_gradients_match_finite_differences(tmp_path):
 
 
 @needs_backend
+@pytest.mark.parametrize("method,states", [
+    ("mrmp2", (0,)),
+    ("mcqdpt2", (0, 1)),
+    ("xmcqdpt2", (0, 1)),
+])
+def test_qdpt_family_on_its_default_engine(tmp_path, method, states):
+    """The GAMESS-convention QDPT labels, on the DIRECT engine they default to.
+
+    The gradient is always reconstructed on the dense path, so this also
+    exercises the cross-check that refuses when the reconstruction and the
+    reported energy disagree -- the direct and dense engines are different
+    reductions of the same quantity.
+    """
+    kw = {}
+    if len(states) > 1:
+        kw = dict(nroot=len(states), target_roots=states,
+                  grad=tuple(str(s) for s in states))
+    grads, _mol = _analytic(tmp_path, f"q_{method}", H4_BOHR, states=states,
+                            method=method, **kw)
+    for state in states:
+        fd = _five_point(tmp_path, H4_BOHR, state, method=method,
+                         **{k: v for k, v in kw.items() if k != "grad"})
+        assert np.max(np.abs(grads[state] - fd)) < 1.0e-7
+
+
+@needs_backend
 def test_casscf_reference_gradient_matches_finite_differences(tmp_path):
     """A CASSCF reference brings in the CASSCF orbital Hessian and the
     orbital-CI coupling, which an RHF-orbital CASCI reference does not.
