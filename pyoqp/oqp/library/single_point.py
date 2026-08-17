@@ -1274,8 +1274,18 @@ class Gradient(Calculator):
         if self.method == 'caspt2':
             from oqp.library.caspt2_dyall import _caspt2_options
             from oqp.library.nevpt2_gradient import (
-                SCNEVPT2NotApplicable, sc_nevpt2_gradient_route,
+                SCNEVPT2NotApplicable,
+                consume_sc_nevpt2_gradient,
+                sc_nevpt2_gradient_route,
             )
+            cached = consume_sc_nevpt2_gradient(self.mol)
+            if cached is not None:
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                arr = np.asarray(cached, dtype=float).reshape(-1, self.natom, 3)
+                if arr.shape[0]:
+                    self.mol.set_grad(arr[0])
+                self.mol.grads = cached
+                return cached
             route, reason = sc_nevpt2_gradient_route(self.mol)
             if route == 'analytic':
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')

@@ -1253,6 +1253,14 @@ def native_caspt2_energy(mol, ref_energy=None):
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
 
+    # Public gradient-driven calculations ask for an energy followed by its
+    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
+    # supplies both, so use it as the energy pass and retain its complete
+    # gradient for the immediately following public gradient request.
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
+        return mol.energies
+
     nbf = int(mol.data.get_basis()["nbf"])
     # Same shared planner CASCI/CASSCF use: deriving the active electron count
     # from frozen_core alone ignored [cas] active_electrons, so an explicit

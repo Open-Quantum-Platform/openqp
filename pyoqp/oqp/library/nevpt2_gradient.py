@@ -143,12 +143,21 @@ from oqp.library.rdm import make_rdm1_spatial, make_rdm2_spatial
 class SCNEVPT2NotApplicable(ValueError):
     """This calculation is outside the analytic SC-NEVPT2 derivative's scope.
 
-    Distinct from a plain ``ValueError`` so ``[pt2] gradient=auto`` can degrade
-    to central differences on an applicability refusal while still propagating a
+    Distinct from a plain ``ValueError`` so ``[pt2] gradient=auto`` can select
+    central differences on an applicability refusal while still propagating a
     genuine implementation failure (an asymmetric Lagrangian, a native driver
     error).  Subclasses ``ValueError`` so existing callers and tests that catch
     that keep working.
     """
+
+
+# Gradient-driven public calculations request an energy followed by its
+# derivative at the same coordinates.  The energy call performs the combined
+# analytic evaluation and leaves the complete gradient in this one-use cache,
+# avoiding a second CASSCF/semicanonical/PT2 evaluation at that geometry.
+_GRADIENT_DRIVEN_RUNTYPES = frozenset({"grad", "optimize", "ts", "mep", "irc"})
+_GRADIENT_CACHE_ATTR = "_sc_nevpt2_energy_gradient_cache"
+_RUNTIME_FALLBACK_ATTR = "_sc_nevpt2_runtime_fallback_reason"
 
 
 #: Default ceiling on the basis size.  The gradient holds several dense nbf^4
@@ -597,8 +606,19 @@ def cartesian_basis_size(basis):
     return int(np.sum((angs + 1) * (angs + 2) // 2))
 
 
+def _basis_dimensions(mol):
+    """Return native and Cartesian AO dimensions and the harmonic-basis gate."""
+    basis = mol.data.get_basis()
+    nbf = int(basis["nbf"])
+    nbf_cart = cartesian_basis_size(basis)
+    nbf_cart = max(nbf, int(nbf_cart if nbf_cart is not None else nbf))
+    ispher = str(mol.config.get("input", {}).get("ispher", "auto")).lower()
+    harmonic_active = ispher not in {"false", "0", "no", "off", "cartesian"}
+    return nbf, nbf_cart, harmonic_active
+
+
 def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
-                nbf_cart=None):
+                nbf_cart=None, harmonic_active=True):
     """Refuse a system whose dense intermediates exceed the configured budget.
 
     The energy already guards its own ``nact^8`` four-particle RDM; the gradient
@@ -619,10 +639,16 @@ def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
     nact6 = 8 * int(nact) ** 6
     work = 8 * int(ndet or 0) * int(nact) ** 4
     # nevpt2_gradient.F90: g2(nbf^4) always, plus pair12(nbf_cart^2 nbf^2) and
-    # g2_cart(nbf_cart^4) when the basis is stored as spherical harmonics.
-    cart = int(nbf_cart or nbf)
-    native = 8 * (int(nbf) ** 4
-                  + (cart ** 2 * int(nbf) ** 2 + cart ** 4 if cart != nbf else 0))
+    # g2_cart(nbf_cart^4) whenever the native harmonic gate is active.  The
+    # latter two are allocated even when an s/p-only basis has nbf_cart == nbf.
+    cart = max(int(nbf), int(nbf_cart if nbf_cart is not None else nbf))
+    native = 8 * int(nbf) ** 4
+    native_detail = "gcomp%g2(nbf^4)"
+    if harmonic_active:
+        native += 8 * (cart ** 2 * int(nbf) ** 2 + cart ** 4)
+        native_detail += (
+            f", pair12(nbf_cart^2*nbf^2), and g2_cart(nbf_cart^4) "
+            f"at nbf_cart={cart}")
     live = (_LIVE_NBF4_TENSORS * nbf4
             + _LIVE_NACT8_TENSORS * nact8
             + 4 * nact6
@@ -633,13 +659,12 @@ def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
         raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient needs ~%.2f GiB of dense "
             "intermediates (%d x nbf^4 at nbf=%d, the four-particle RDM and "
-            "its adjoint at nact=%d, the CI-derivative workspace, and ~%.2f GiB "
-            "of Cartesian-effective two-particle density in the native "
-            "derivative-integral driver at nbf_cart=%d), above the %s "
+            "its adjoint at nact=%d, the CI-derivative workspace, and ~%.2f "
+            "GiB in the native derivative-integral arrays %s), above the %s "
             "max_memory budget of %d MiB. Reduce the basis or the active "
             "space, raise %s max_memory, or use a numerical gradient."
             % (live / 1024 ** 3, _LIVE_NBF4_TENSORS, nbf, nact,
-               native / 1024 ** 3, cart, budget_label or "[cas]",
+               native / 1024 ** 3, native_detail, budget_label or "[cas]",
                int(budget_mib), budget_label or "[cas]"))
 
 
@@ -655,18 +680,22 @@ def sc_nevpt2_gradient_route(mol):
     options = _caspt2_options(mol.config)
     if options.gradient == "numerical":
         return "numerical", "[pt2] gradient=numerical"
+    runtime_reason = getattr(mol, _RUNTIME_FALLBACK_ATTR, "")
+    if runtime_reason:
+        if options.gradient == "analytic":
+            raise SCNEVPT2NotApplicable(runtime_reason)
+        return "numerical", runtime_reason
     settings = settings_from_casci_config(mol.config)
     try:
         _validate(mol, options, settings)
-        basis = mol.data.get_basis()
-        nbf = int(basis["nbf"])
+        nbf, nbf_cart, harmonic_active = _basis_dimensions(mol)
         nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
         _ncore, nact, active_nelec, _plan = contiguous_active_space(
             nbf, nelec, settings, "SC-NEVPT2 gradient")
         mem, mem_label = _pt2_memory(options, settings)
         _check_size(nbf, nact,
                     comb(nact, active_nelec[0]) * comb(nact, active_nelec[1]),
-                    mem, mem_label, cartesian_basis_size(basis))
+                    mem, mem_label, nbf_cart, harmonic_active)
         if _gradient_backend() is None:
             raise ValueError(
                 "the compiled OpenQP library has no nevpt2_gradient entry "
@@ -676,6 +705,54 @@ def sc_nevpt2_gradient_route(mol):
             raise
         return "numerical", str(exc)
     return "analytic", ""
+
+
+def prepare_sc_nevpt2_energy_gradient(mol, ref_energy=None):
+    """Perform one analytic energy/gradient evaluation for a public workflow.
+
+    Returns ``True`` when the analytic evaluation supplied both quantities.  A
+    declared run-time applicability refusal under ``gradient=auto`` records its
+    reason and returns ``False`` so the ordinary energy and numerical-gradient
+    route can continue.  Plain ``ValueError`` and native failures are not
+    converted to a different method.
+    """
+    runtype = str(mol.config.get("input", {}).get("runtype", "energy")).lower()
+    if runtype not in _GRADIENT_DRIVEN_RUNTYPES:
+        return False
+    route, _reason = sc_nevpt2_gradient_route(mol)
+    if route != "analytic":
+        return False
+
+    options = _caspt2_options(mol.config)
+    try:
+        grads = sc_nevpt2_analytic_gradient(mol, ref_energy=ref_energy)
+    except SCNEVPT2NotApplicable as exc:
+        if options.gradient == "analytic":
+            raise
+        setattr(mol, _RUNTIME_FALLBACK_ATTR, str(exc))
+        if hasattr(mol, _GRADIENT_CACHE_ATTR):
+            delattr(mol, _GRADIENT_CACHE_ATTR)
+        return False
+
+    setattr(mol, _GRADIENT_CACHE_ATTR, {
+        "coord": np.asarray(mol.get_system(), dtype=float).reshape(-1).copy(),
+        "grads": np.asarray(grads, dtype=float).copy(),
+    })
+    return True
+
+
+def consume_sc_nevpt2_gradient(mol):
+    """Return and remove the complete gradient cached at these coordinates."""
+    cache = getattr(mol, _GRADIENT_CACHE_ATTR, None)
+    if not isinstance(cache, dict):
+        return None
+    delattr(mol, _GRADIENT_CACHE_ATTR)
+    cached_coord = np.asarray(cache.get("coord", []), dtype=float).reshape(-1)
+    current_coord = np.asarray(mol.get_system(), dtype=float).reshape(-1)
+    if cached_coord.shape != current_coord.shape \
+            or not np.array_equal(cached_coord, current_coord):
+        return None
+    return np.asarray(cache["grads"], dtype=float).copy()
 
 
 def _gradient_backend():
@@ -718,15 +795,14 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
             "rebuild liboqp to use analytic SC-NEVPT2 gradients.")
     lib, ffi = backend
 
-    basis = mol.data.get_basis()
-    nbf = int(basis["nbf"])
+    nbf, nbf_cart, harmonic_active = _basis_dimensions(mol)
     nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
     ncore, nact, active_nelec, _plan = contiguous_active_space(
         nbf, nelec, settings, "SC-NEVPT2 gradient")
     mem, mem_label = _pt2_memory(options, settings)
     _check_size(nbf, nact,
                 comb(nact, active_nelec[0]) * comb(nact, active_nelec[1]),
-                mem, mem_label, cartesian_basis_size(basis))
+                mem, mem_label, nbf_cart, harmonic_active)
     roots = _reference_roots(options)
     root = int(roots[0])
     weights = np.array([1.0])

@@ -782,22 +782,20 @@ def test_auto_falls_back_when_the_refusal_only_appears_at_run_time(tmp_path,
     exists -- and those refusals arrive from inside the analytic call.  Under
     ``auto`` they must reroute to central differences rather than abort the run.
     """
-    import oqp.library.single_point as sp_mod
+    from oqp.library import nevpt2_gradient
     from oqp.library.single_point import SinglePoint, Gradient
-    from oqp.library.nevpt2_gradient import SCNEVPT2NotApplicable
 
     pt2 = dict(_SC_NEVPT2, gradient="auto", grad_step="1.0e-3")
     runner = _runner(tmp_path, "scnevpt2_runtime_fallback", system=_H4,
                      basis="sto-3g", cas=_H4_CAS22, pt2=pt2, runtype="grad")
+
+    def _refuse(_mol, ref_energy=None):
+        raise nevpt2_gradient.SCNEVPT2NotApplicable(
+            "synthetic runtime applicability refusal")
+
+    monkeypatch.setattr(nevpt2_gradient, "sc_nevpt2_analytic_gradient", _refuse)
     SinglePoint(runner.mol).energy()
-
-    grad = Gradient(runner.mol)
-
-    def _refuse():
-        raise SCNEVPT2NotApplicable("synthetic runtime applicability refusal")
-
-    monkeypatch.setattr(grad, "sc_nevpt2_grad", _refuse)
-    grads = np.asarray(grad.gradient(), dtype=float).reshape(-1)
+    grads = np.asarray(Gradient(runner.mol).gradient(), dtype=float).reshape(-1)
     assert np.isfinite(grads).all()
     log = open(runner.mol.log).read()
     assert "synthetic runtime applicability refusal" in log
@@ -808,21 +806,36 @@ def test_auto_falls_back_when_the_refusal_only_appears_at_run_time(tmp_path,
 def test_analytic_demand_propagates_a_runtime_refusal(tmp_path, monkeypatch):
     """``gradient=analytic`` asked for the derivative; it gets the reason, not
     a quietly different quantity."""
-    from oqp.library.single_point import SinglePoint, Gradient
-    from oqp.library.nevpt2_gradient import SCNEVPT2NotApplicable
+    from oqp.library import nevpt2_gradient
+    from oqp.library.single_point import SinglePoint
 
     pt2 = dict(_SC_NEVPT2, gradient="analytic")
     runner = _runner(tmp_path, "scnevpt2_demand", system=_H4, basis="sto-3g",
                      cas=_H4_CAS22, pt2=pt2, runtype="grad")
-    SinglePoint(runner.mol).energy()
-    grad = Gradient(runner.mol)
+    def _refuse(_mol, ref_energy=None):
+        raise nevpt2_gradient.SCNEVPT2NotApplicable(
+            "synthetic runtime applicability refusal")
 
-    def _refuse():
-        raise SCNEVPT2NotApplicable("synthetic runtime applicability refusal")
+    monkeypatch.setattr(nevpt2_gradient, "sc_nevpt2_analytic_gradient", _refuse)
+    with pytest.raises(nevpt2_gradient.SCNEVPT2NotApplicable, match="synthetic"):
+        SinglePoint(runner.mol).energy()
 
-    monkeypatch.setattr(grad, "sc_nevpt2_grad", _refuse)
-    with pytest.raises(SCNEVPT2NotApplicable, match="synthetic"):
-        grad.gradient()
+
+@needs_native_gradient
+def test_auto_does_not_mask_an_implementation_failure(tmp_path, monkeypatch):
+    """Only a declared applicability refusal may select central differences."""
+    from oqp.library import nevpt2_gradient
+    from oqp.library.single_point import SinglePoint
+
+    def _fail(_mol, ref_energy=None):
+        raise ValueError("synthetic implementation failure")
+
+    monkeypatch.setattr(nevpt2_gradient, "sc_nevpt2_analytic_gradient", _fail)
+    runner = _runner(tmp_path, "scnevpt2_runtime_failure", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22,
+                     pt2=dict(_SC_NEVPT2, gradient="auto"), runtype="grad")
+    with pytest.raises(ValueError, match="synthetic implementation failure"):
+        SinglePoint(runner.mol).energy()
 
 
 @needs_native_gradient
@@ -883,6 +896,52 @@ def test_a_stationary_reference_is_reused_rather_than_reoptimized(tmp_path):
     log = open(runner.mol.log).read()
     assert "reused (already stationary)" in log, (
         "the gradient re-optimized a reference the energy had already converged")
+
+
+@needs_native_gradient
+def test_public_gradient_combines_the_reference_and_pt2_pass(tmp_path,
+                                                              monkeypatch):
+    """Energy followed by gradient performs one CASSCF and one PT2 adjoint."""
+    from oqp.library import caspt2_dyall, nevpt2_gradient
+    from oqp.library.single_point import Gradient, SinglePoint
+
+    calls = {"reference": 0, "adjoint": 0}
+    original_reference = caspt2_dyall._run_casscf_reference
+    original_adjoint = nevpt2_gradient.sc_nevpt2_energy_adjoints
+
+    def _reference(*args, **kwargs):
+        calls["reference"] += 1
+        return original_reference(*args, **kwargs)
+
+    def _adjoint(*args, **kwargs):
+        calls["adjoint"] += 1
+        return original_adjoint(*args, **kwargs)
+
+    monkeypatch.setattr(caspt2_dyall, "_run_casscf_reference", _reference)
+    monkeypatch.setattr(nevpt2_gradient, "_run_casscf_reference", _reference)
+    monkeypatch.setattr(nevpt2_gradient, "sc_nevpt2_energy_adjoints", _adjoint)
+
+    runner = _runner(tmp_path, "scnevpt2_combined", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22,
+                     pt2=dict(_SC_NEVPT2, gradient="analytic"), runtype="grad")
+    energy = SinglePoint(runner.mol).energy()
+    gradient = Gradient(runner.mol).gradient()
+
+    assert np.all(np.isfinite(energy))
+    assert np.all(np.isfinite(gradient))
+    assert calls == {"reference": 1, "adjoint": 1}
+    assert not hasattr(runner.mol, nevpt2_gradient._GRADIENT_CACHE_ATTR)
+
+
+@needs_backend
+def test_memory_guard_counts_all_native_cartesian_density_arrays():
+    """The native copy and both harmonic-basis expansions are preflighted."""
+    from oqp.library.nevpt2_gradient import _check_size
+
+    _check_size(30, 2, 4, 64, "[pt2]", 30, True)
+    _check_size(30, 2, 4, 64, "[pt2]", 45, False)
+    with pytest.raises(ValueError, match="pair12"):
+        _check_size(30, 2, 4, 64, "[pt2]", 45, True)
 
 
 # --------------------------------------------------------------------------
