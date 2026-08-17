@@ -1334,9 +1334,11 @@ class Gradient(Calculator):
         # onto the totally symmetric component (exact for 1-dim irreps; all
         # abelian irreps are 1-dim).  The CASSCF kernel deliberately computes
         # the full two-electron gradient because an arbitrary state-specific
-        # root need not have a totally symmetric density.  Projecting that
-        # already-complete result would erase legitimate components.
-        if self.method != 'casscf':
+        # root need not have a totally symmetric density.  The same is true
+        # for the weighted and individual-root SA-CASSCF density matrices.
+        # Projecting either already-complete result would erase legitimate
+        # components.
+        if self.method not in ('casscf', 'sa-casscf', 'sacasscf'):
             grads = self.mol.symmetrize_gradient(grads)
 
         # Push the projected gradient back into the library buffer. get_grad()

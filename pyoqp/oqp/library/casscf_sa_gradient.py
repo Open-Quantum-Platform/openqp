@@ -390,6 +390,34 @@ def _ci_response_vectors(resp, weights, roots, zvec, ci, degen_tol):
     return zetas
 
 
+def _individual_root_gap(resp, k_target):
+    """Smallest gap that can make one selected root non-differentiable.
+
+    The response spectrum spans the complete fixed-Ms determinant space, while
+    the CI columns supplied by _solve_active_rdms have already been filtered to
+    the requested target spin.  A partner is singular only when its unweighted
+    orbital coupling is nonzero; this is the same spin and symmetry selection
+    rule used by the Hessian and CI-response denominators.  The test is applied
+    before the state-average weights: two equal-weight averaged roots can
+    cancel from the SA Hessian while retaining a live individual-root coupling.
+    """
+    eps = np.asarray(resp["eps"], dtype=float)
+    ovl = np.asarray(resp["ovl"], dtype=float)
+    amp = np.asarray(resp["amp"][int(k_target)], dtype=float)
+    noise = float(resp["coupling_noise"])
+
+    is_target = ovl[int(k_target)] > 0.5
+    if amp.shape[0]:
+        is_coupled = np.max(np.abs(amp), axis=0) >= noise
+    else:
+        is_coupled = np.zeros(eps.shape, dtype=bool)
+    candidates = ~is_target & is_coupled
+    if not np.any(candidates):
+        return float("inf")
+    e_target = float(resp["e_avg"][int(k_target)])
+    return float(np.min(np.abs(eps[candidates] - e_target)))
+
+
 # ------------------------------------------------------------------ liboqp call
 def _ao_gradient_backend():
     backend = _lib_backend()
@@ -549,14 +577,11 @@ def relaxed_state_densities(h1e, eri, ncore, nact, active_nelec, pairs, weights,
         h1e, eri, ncore, nact, active_nelec, pairs, weights, roots, ci,
         degeneracy_tol=degen_tol, return_response=True)
 
-    # ---- the target root must be resolved from every other CI root.  At an
-    # exact crossing the individual adiabatic energy is not differentiable,
-    # whatever the weights, and no response formulation repairs that; the
-    # averaged objective stays well defined there and is the honest answer.
-    e_target = float(resp["e_avg"][k_target])
-    others = np.abs(resp["eps"] - e_target)
-    others[int(np.argmin(others))] = np.inf          # the root itself
-    root_gap = float(np.min(others))
+    # ---- the target root must be resolved from every other root in its
+    # selected manifold and from every externally coupled root.  The complete
+    # fixed-Ms spectrum also contains spin- or symmetry-forbidden partners;
+    # those have zero orbital coupling and do not make this response singular.
+    root_gap = _individual_root_gap(resp, k_target)
     if root_gap < degen_tol:
         raise ValueError(
             f"SA-CASSCF individual-state gradient refused: root {target} is "
@@ -653,15 +678,16 @@ def relaxed_state_densities(h1e, eri, ncore, nact, active_nelec, pairs, weights,
     }
 
 
-def check_densities(d_mo, g_mo, fock_mo, sep_terms, low_terms, eri):
+def check_densities(d_mo, g_mo, fock_mo, sep_terms, low_terms, eri, *,
+                    optimized_pairs=(), orbital_gradient_limit=0.0):
     """Two silent-failure guards, run before any derivative integral is touched.
 
     * ``max |F - F^T|`` -- the Pulay term is ``-sum (C sym(F) C^T) S^x`` only
-      because the antisymmetric part of ``F`` is annihilated by the
-      stationarity of the Lagrangian in every *redundant* rotation.  In the
-      active-active block that holds only if the CI multipliers were solved
-      (see the docs), so a residual asymmetry is a defect in the response
-      solution, not a tolerance to widen.
+      because the antisymmetric part of ``F`` is annihilated by stationarity.
+      The weighted objective admits the declared optimizer residual in its
+      nonredundant rotation pairs, while redundant blocks stay strict.  For an
+      individual root, the active-active block is annihilated only when the CI
+      multipliers were solved (see the docs), so every block stays strict.
     * the two-particle energy from the dense density against the same quantity
       from the factorized one.  These are independent assemblies of a single
       tensor and only the factorized one is contracted, so agreement is what
@@ -671,15 +697,35 @@ def check_densities(d_mo, g_mo, fock_mo, sep_terms, low_terms, eri):
     """
     fock_mo = np.asarray(fock_mo, dtype=float)
     scale = max(float(np.max(np.abs(fock_mo))), 1.0)
-    asym = float(np.max(np.abs(fock_mo - fock_mo.T)))
-    if asym > _FOCK_ASYM_TOL * scale:
+    asym_matrix = np.abs(fock_mo - fock_mo.T)
+    asym = float(np.max(asym_matrix))
+    allowed = np.full(asym_matrix.shape, _FOCK_ASYM_TOL * scale)
+    # For the weighted objective, the nonredundant pairs are the orbital
+    # variables optimized by CASSCF and g_pq = 2 (F_qp - F_pq).  A point
+    # admitted by the stationarity gate must therefore be admitted here as
+    # well.  Redundant blocks retain the strict internal-consistency threshold;
+    # the individual-root response passes no relaxed pairs.
+    pair_limit = 0.5 * float(orbital_gradient_limit)
+    if pair_limit > 0.0:
+        for p, q in optimized_pairs:
+            allowed[int(p), int(q)] = max(
+                allowed[int(p), int(q)], pair_limit)
+            allowed[int(q), int(p)] = max(
+                allowed[int(q), int(p)], pair_limit)
+    ratio = np.divide(asym_matrix, allowed, out=np.zeros_like(asym_matrix),
+                      where=allowed > 0.0)
+    if float(np.max(ratio)) > 1.0:
+        worst = np.unravel_index(int(np.argmax(ratio)), ratio.shape)
+        worst_asym = float(asym_matrix[worst])
+        worst_limit = float(allowed[worst])
         raise ValueError(
             "SA-CASSCF gradient refused: the effective generalized Fock is not "
-            f"symmetric (max |F - F^T| = {asym:.3e}, scale {scale:.3e}). The "
+            f"symmetric (|F - F^T| = {worst_asym:.3e} at {worst}, accepted "
+            f"limit {worst_limit:.3e}, scale {scale:.3e}). The "
             "Pulay term is only the energy-weighted density when the "
             "Lagrangian is stationary against every redundant orbital "
-            "rotation, so this is a defect in the response solution, not a "
-            "tolerance to widen.")
+            "rotation. Tighten the orbital convergence if this is an optimized "
+            "pair; otherwise this is a defect in the response solution.")
 
     e2_dense = 0.5 * float(np.einsum("pqrs,pqrs->", g_mo, eri, optimize=True))
     e2_factor = _two_particle_energy_factorized(sep_terms, low_terms, eri)
@@ -780,7 +826,9 @@ def sa_casscf_gradient(mol, *, response="full"):
 
     diagnostics.update(check_densities(
         built["d_eff"], built["g_eff"], built["fock"], built["sep_terms"],
-        built["low_terms"], eri))
+        built["low_terms"], eri,
+        optimized_pairs=pairs if target is None else (),
+        orbital_gradient_limit=limit if target is None else 0.0))
     diagnostics["n_sep_factors"] = len(built["sep_terms"])
     diagnostics["n_low_factors"] = len(built["low_terms"])
     diagnostics["label"] = label

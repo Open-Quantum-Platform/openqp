@@ -3760,8 +3760,20 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                 )
 
         if is_analytic_sa and runtype in casscf_grad_runtypes:
-            roots = [int(root) for root in _as_list(
-                _get(config, "state_average", "target_roots", []))]
+            roots = []
+            roots_valid = True
+            for raw_root in _as_list(
+                    _get(config, "state_average", "target_roots", [])):
+                try:
+                    roots.append(int(raw_root))
+                except (TypeError, ValueError):
+                    # _check_casci reports the structured
+                    # state_average.target_roots diagnostic. Keep this
+                    # derivative-specific cross-check from turning ordinary
+                    # invalid input into an uncaught ValueError first.
+                    roots_valid = False
+                    roots = []
+                    break
             if not roots:
                 try:
                     nstate = int(
@@ -3782,7 +3794,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             objective_names = {
                 "", "averaged", "average", "sa", "weighted", "objective"
             }
-            if target_text not in objective_names:
+            if roots_valid and target_text not in objective_names:
                 try:
                     target = int(target_text)
                 except (TypeError, ValueError):
@@ -3812,7 +3824,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                         )
                         target = "invalid"
 
-            if target != "invalid" and runtype == "grad":
+            if roots_valid and target != "invalid" and runtype == "grad":
                 for selected in _as_list(
                         _get(config, "properties", "grad", [])):
                     try:
@@ -3845,7 +3857,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
                                     "gradient_state."),
                         )
 
-            if (target != "invalid"
+            if (roots_valid and target != "invalid"
                     and runtype in {"optimize", "ts", "mep", "irc"}):
                 if target is None:
                     report.add(

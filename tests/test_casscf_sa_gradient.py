@@ -308,6 +308,30 @@ def test_abstract_response_term_is_not_negligible():
                             built["sep_terms"], built["low_terms"], sol["eri"])
 
 
+def test_fock_check_respects_the_accepted_orbital_gradient():
+    """Optimizer residuals are allowed only in the optimized pair blocks."""
+    from oqp.library.casscf_sa_gradient import check_densities
+
+    dmat = np.zeros((3, 3))
+    rdm2 = np.zeros((3, 3, 3, 3))
+    eri = np.zeros_like(rdm2)
+    fock = np.zeros((3, 3))
+    fock[2, 0] = 3.0e-7
+
+    diag = check_densities(
+        dmat, rdm2, fock, [], [], eri,
+        optimized_pairs=[(0, 2)], orbital_gradient_limit=1.0e-6)
+    assert diag["fock_asymmetry"] == pytest.approx(3.0e-7)
+
+    # The same residual in a redundant block remains an internal error.
+    fock[2, 0] = 0.0
+    fock[1, 0] = 3.0e-7
+    with pytest.raises(ValueError, match="not symmetric"):
+        check_densities(
+            dmat, rdm2, fock, [], [], eri,
+            optimized_pairs=[(0, 2)], orbital_gradient_limit=1.0e-6)
+
+
 def test_abstract_near_degenerate_roots():
     """Unequal weights with the two averaged roots close together.
 
@@ -358,13 +382,12 @@ def test_abstract_near_degenerate_roots():
                             1, sol["coeff"], step=min(2.0e-3, 0.05 * gap))
     assert parts[1] == pytest.approx(num, abs=max(1.0e-7, 1.0e-5 * abs(num)))
 
-    # With EQUAL weights the averaged-pair coupling cancels, so the SA orbital
-    # Hessian is perfectly well defined at the same near-crossing and says
-    # nothing about it.  The individual state is still not differentiable at a
-    # crossing, and only the gradient's own root-gap guard catches that -- which
-    # is why the guard exists as a separate layer.  Here the nearest CI root to
-    # the target IS the other averaged root, so a tolerance just above their gap
-    # reaches that branch without disturbing the external couplings.
+    # With equal weights the averaged-pair contribution cancels from the SA
+    # Hessian.  In this fixed-Ms model the nearby partner also has zero
+    # unweighted orbital coupling, so it is a spin- or symmetry-forbidden
+    # crossing and must remain admissible even when the nominal degeneracy
+    # tolerance exceeds the energy gap.  The explicit helper test below
+    # separately proves that a partner with nonzero coupling is refused.
     from oqp.library.casscf_sa_gradient import relaxed_state_densities
     equal = np.array([0.5, 0.5])
     sol_eq = _optimize(model, x_star, ncore, nact, nelec, equal, roots,
@@ -373,9 +396,8 @@ def test_abstract_near_degenerate_roots():
     common = (sol_eq["h1e"], sol_eq["eri"], ncore, nact, nelec, sol_eq["pairs"],
               equal, roots, 1, sol_eq["ci"], sol_eq["dets"], sol_eq["gammas"],
               sol_eq["gammas2"])
-    relaxed_state_densities(*common, degen_tol=0.1 * gap_eq)    # admitted
-    with pytest.raises(ValueError, match="degenerate with another CI root"):
-        relaxed_state_densities(*common, degen_tol=2.0 * gap_eq)
+    relaxed_state_densities(*common, degen_tol=0.1 * gap_eq)
+    relaxed_state_densities(*common, degen_tol=2.0 * gap_eq)
 
 
 def test_abstract_degenerate_roots_are_refused():
@@ -403,6 +425,34 @@ def test_abstract_degenerate_roots_are_refused():
             sol["h1e"], sol["eri"], ncore, nact, nelec, sol["pairs"], weights,
             roots, 1, sol["ci"], sol["dets"], sol["gammas"], sol["gammas2"],
             degen_tol=10.0)
+
+
+def test_individual_root_gap_ignores_uncoupled_external_spin_states():
+    """A fixed-Ms triplet is not a singular partner of a singlet response."""
+    from oqp.library.casscf_sa_gradient import _individual_root_gap
+
+    noise = 1.0e-8
+    resp = {
+        "eps": np.array([0.0, 1.0e-12, 0.1, 0.2]),
+        "e_avg": np.array([0.0, 0.2]),
+        "ovl": np.array([[1.0, 0.0, 0.0, 0.0],
+                         [0.0, 0.0, 0.0, 1.0]]),
+        "amp": [np.zeros((2, 4)), np.zeros((2, 4))],
+        "coupling_noise": noise,
+    }
+    resp["amp"][0][0, 3] = 2.0 * noise
+    assert _individual_root_gap(resp, 0) == pytest.approx(0.2)
+
+    # The same external near-degeneracy becomes singular when an orbital
+    # perturbation couples it to the selected root.
+    resp["amp"][0][0, 1] = 2.0 * noise
+    assert _individual_root_gap(resp, 0) == pytest.approx(1.0e-12)
+
+    # Another averaged root remains a candidate: equal weights cancel its
+    # Hessian coefficient, not this unweighted orbital coupling.
+    resp["amp"][0][0, 1] = 0.0
+    resp["eps"][3] = 2.0e-12
+    assert _individual_root_gap(resp, 0) == pytest.approx(2.0e-12)
 
 
 # ================================================================== the molecule
@@ -452,6 +502,38 @@ def _sa_config(system, cas, nroot, roots, weights=None, gradient_state="averaged
 
 _CAS22 = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1",
           "max_det": "5000", "orbital_source": "rhf", "sort_orbitals": "energy"}
+
+
+@pytest.mark.parametrize("method", ["sa-casscf", "sacasscf"])
+def test_native_sa_gradient_bypasses_petite_projection(monkeypatch, method):
+    """The native SA kernel returns a complete gradient, not a skeleton."""
+    import types
+
+    from oqp.library import single_point
+
+    calc = single_point.Gradient.__new__(single_point.Gradient)
+    calc.method = method
+    calc.grads = [1]
+    calc.natom = 1
+    calc._sa_buffer_row = 1
+    raw = np.zeros((2, 1, 3))
+    raw[1, 0] = [0.1, -0.2, 0.3]
+    calc.sa_casscf_grad = lambda: raw.copy()
+
+    projected = []
+    stored = []
+    mol = types.SimpleNamespace(
+        config={"state_average": {"enabled": True}},
+        symmetrize_gradient=lambda grad: projected.append(grad),
+        set_grad=lambda grad: stored.append(np.array(grad, copy=True)),
+    )
+    calc.mol = mol
+    monkeypatch.setattr(single_point, "dump_log", lambda *args, **kwargs: None)
+
+    result = calc.gradient()
+    assert projected == []
+    assert np.array_equal(result, raw)
+    assert np.array_equal(stored[0], raw[1])
 
 
 def _runner(tmp_path, project, config):
@@ -936,6 +1018,13 @@ def test_preflight_rejects_a_gradient_state_outside_the_average():
     report = _check(_preflight_config(gradient_state="2"))
     assert not report.ok
     assert _errors(report, "casscf.gradient_state")
+
+
+def test_preflight_reports_malformed_target_roots_without_crashing():
+    """Bad root text must reach the structured input diagnostic."""
+    report = _check(_preflight_config(roots="0,foo"))
+    assert not report.ok
+    assert _errors(report, "state_average.target_roots")
 
 
 def test_preflight_rejects_a_properties_grad_that_contradicts_the_selector():
