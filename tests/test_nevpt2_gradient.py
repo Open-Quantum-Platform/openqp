@@ -771,6 +771,120 @@ def test_near_degenerate_semicanonical_orbitals_are_refused():
         _semicanonical_multipliers(F0, eps, ncore, nact, nbf)
 
 
+@needs_native_gradient
+def test_auto_falls_back_when_the_refusal_only_appears_at_run_time(tmp_path,
+                                                                   monkeypatch):
+    """``auto`` promises a fallback, so a RUNTIME refusal must take it.
+
+    The route preflight can only test the configuration.  Whether the CASSCF
+    reference is stationary, whether the semicanonical orbitals are degenerate
+    and whether the response system solves are only knowable once the reference
+    exists -- and those refusals arrive from inside the analytic call.  Under
+    ``auto`` they must reroute to central differences rather than abort the run.
+    """
+    import oqp.library.single_point as sp_mod
+    from oqp.library.single_point import SinglePoint, Gradient
+    from oqp.library.nevpt2_gradient import SCNEVPT2NotApplicable
+
+    pt2 = dict(_SC_NEVPT2, gradient="auto", grad_step="1.0e-3")
+    runner = _runner(tmp_path, "scnevpt2_runtime_fallback", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22, pt2=pt2, runtype="grad")
+    SinglePoint(runner.mol).energy()
+
+    grad = Gradient(runner.mol)
+
+    def _refuse():
+        raise SCNEVPT2NotApplicable("synthetic runtime applicability refusal")
+
+    monkeypatch.setattr(grad, "sc_nevpt2_grad", _refuse)
+    grads = np.asarray(grad.gradient(), dtype=float).reshape(-1)
+    assert np.isfinite(grads).all()
+    log = open(runner.mol.log).read()
+    assert "synthetic runtime applicability refusal" in log
+    assert "central differences" in log
+
+
+@needs_native_gradient
+def test_analytic_demand_propagates_a_runtime_refusal(tmp_path, monkeypatch):
+    """``gradient=analytic`` asked for the derivative; it gets the reason, not
+    a quietly different quantity."""
+    from oqp.library.single_point import SinglePoint, Gradient
+    from oqp.library.nevpt2_gradient import SCNEVPT2NotApplicable
+
+    pt2 = dict(_SC_NEVPT2, gradient="analytic")
+    runner = _runner(tmp_path, "scnevpt2_demand", system=_H4, basis="sto-3g",
+                     cas=_H4_CAS22, pt2=pt2, runtype="grad")
+    SinglePoint(runner.mol).energy()
+    grad = Gradient(runner.mol)
+
+    def _refuse():
+        raise SCNEVPT2NotApplicable("synthetic runtime applicability refusal")
+
+    monkeypatch.setattr(grad, "sc_nevpt2_grad", _refuse)
+    with pytest.raises(SCNEVPT2NotApplicable, match="synthetic"):
+        grad.gradient()
+
+
+@needs_native_gradient
+def test_dispatch_does_not_project_the_complete_gradient(tmp_path):
+    """The published gradient is the complete one, not a symmetry projection.
+
+    ``nevpt2_gradient.F90`` deliberately declines grd2's petite reduction, so
+    what it returns is already complete; the relaxed density of an arbitrary
+    state-specific root need not be totally symmetric, and projecting it would
+    erase legitimate components.  The analytic CASSCF path makes the same
+    choice for the same reason.
+    """
+    from oqp.library.single_point import SinglePoint, Gradient
+
+    pt2 = dict(_SC_NEVPT2, gradient="analytic")
+    runner = _runner(tmp_path, "scnevpt2_noproj", system=_H2O, basis="sto-3g",
+                     cas={"active_electrons": "4", "active_orbitals": "4",
+                          "frozen_core": "3", "max_det": "20000",
+                          "max_memory": "4096", "orbital_source": "rhf",
+                          "sort_orbitals": "energy"},
+                     pt2=pt2, runtype="grad")
+    SinglePoint(runner.mol).energy()
+
+    # A value comparison cannot see this: a totally symmetric root's gradient is
+    # unchanged by the projection, and the case where it WOULD differ (a
+    # spatially degenerate root in an abelian subgroup) is not one to build a
+    # regression test on.  Assert the contract directly instead.
+    calls = []
+    original = runner.mol.symmetrize_gradient
+    runner.mol.symmetrize_gradient = lambda g: (calls.append(1) or original(g))
+    try:
+        grads = np.asarray(Gradient(runner.mol).gradient(), dtype=float)
+    finally:
+        runner.mol.symmetrize_gradient = original
+    assert not calls, (
+        "the analytic SC-NEVPT2 gradient was projected onto the totally "
+        "symmetric component; nevpt2_gradient.F90 already returns the complete "
+        "gradient, so the projection can only remove legitimate components")
+    assert np.isfinite(grads).all()
+
+
+@needs_native_gradient
+def test_a_stationary_reference_is_reused_rather_than_reoptimized(tmp_path):
+    """The CASSCF is not run twice per geometry.
+
+    ``Gradient.gradient()`` runs after ``SinglePoint.energy()``, which already
+    optimized and semicanonicalized the orbitals.  Re-optimizing would double
+    the CASSCF cost of every gradient and of every optimizer step, so the
+    orbitals in hand are tested and reused when they pass.
+    """
+    from oqp.library.single_point import SinglePoint
+    from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+    runner = _runner(tmp_path, "scnevpt2_reuse", system=_H4, basis="6-31g",
+                     cas=_H4_CAS44, pt2=dict(_SC_NEVPT2))
+    SinglePoint(runner.mol).energy()
+    sc_nevpt2_analytic_gradient(runner.mol)
+    log = open(runner.mol.log).read()
+    assert "reused (already stationary)" in log, (
+        "the gradient re-optimized a reference the energy had already converged")
+
+
 # --------------------------------------------------------------------------
 # 5. the native derivative-integral contraction
 # --------------------------------------------------------------------------
@@ -917,6 +1031,7 @@ def test_native_contraction_rejects_an_unsymmetric_two_particle_density(tmp_path
 # --------------------------------------------------------------------------
 # 6. input plumbing
 # --------------------------------------------------------------------------
+@needs_backend
 def test_pt2_gradient_option_parses_its_documented_spellings():
     from oqp.library.caspt2_dyall import _caspt2_options
 
@@ -929,6 +1044,7 @@ def test_pt2_gradient_option_parses_its_documented_spellings():
         _caspt2_options({"pt2": {"gradient": "sometimes"}})
 
 
+@needs_backend
 def test_pt2_gradient_is_a_recognized_input_keyword():
     """A [pt2] key the parser rejects cannot be set from an input file."""
     from oqp.utils import oqp_input

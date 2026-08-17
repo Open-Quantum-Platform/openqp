@@ -1272,16 +1272,38 @@ class Gradient(Calculator):
         # for every PT2 flavour that has no analytic derivative.  The import
         # stays local to avoid a circular module dependency.
         if self.method == 'caspt2':
-            from oqp.library.nevpt2_gradient import sc_nevpt2_gradient_route
+            from oqp.library.caspt2_dyall import _caspt2_options
+            from oqp.library.nevpt2_gradient import (
+                SCNEVPT2NotApplicable, sc_nevpt2_gradient_route,
+            )
             route, reason = sc_nevpt2_gradient_route(self.mol)
             if route == 'analytic':
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
-                grads = self.mol.symmetrize_gradient(self.sc_nevpt2_grad())
-                arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
-                if arr.shape[0]:
-                    self.mol.set_grad(arr[0])
-                self.mol.grads = grads
-                return grads
+                try:
+                    grads = self.sc_nevpt2_grad()
+                except SCNEVPT2NotApplicable as exc:
+                    # The route preflight can only test the CONFIGURATION; the
+                    # remaining applicability conditions -- a stationary CASSCF
+                    # reference, non-degenerate semicanonical orbitals, a
+                    # solvable response system -- are only knowable once the
+                    # reference exists. `analytic` demanded the derivative and
+                    # gets the reason; `auto` promised a fallback and takes it.
+                    if _caspt2_options(self.mol.config).gradient == 'analytic':
+                        raise
+                    route, reason = 'numerical', str(exc)
+                else:
+                    # NOT symmetrized, for the same reason the analytic CASSCF
+                    # path is not: nevpt2_gradient.F90 deliberately declines the
+                    # petite reduction and returns the complete two-electron
+                    # gradient, and the relaxed density of an arbitrary
+                    # state-specific root need not be totally symmetric.
+                    # Projecting an already-complete gradient would erase
+                    # legitimate components.
+                    arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+                    if arr.shape[0]:
+                        self.mol.set_grad(arr[0])
+                    self.mol.grads = grads
+                    return grads
             dump_log(self.mol, title=(
                 'PyOQP: PT2 nuclear gradient by central differences '
                 '(analytic SC-NEVPT2 derivative not applicable: %s)' % reason))

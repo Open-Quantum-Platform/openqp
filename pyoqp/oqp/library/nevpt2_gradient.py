@@ -140,6 +140,17 @@ from oqp.library.nevpt2_adjoint import sc_nevpt2_energy_adjoints
 from oqp.library.nevpt2_sc import make_rdms
 from oqp.library.rdm import make_rdm1_spatial, make_rdm2_spatial
 
+class SCNEVPT2NotApplicable(ValueError):
+    """This calculation is outside the analytic SC-NEVPT2 derivative's scope.
+
+    Distinct from a plain ``ValueError`` so ``[pt2] gradient=auto`` can degrade
+    to central differences on an applicability refusal while still propagating a
+    genuine implementation failure (an asymmetric Lagrangian, a native driver
+    error).  Subclasses ``ValueError`` so existing callers and tests that catch
+    that keep working.
+    """
+
+
 #: Default ceiling on the basis size.  The gradient holds several dense nbf^4
 #: tensors (the second-order two-particle density, its AO transform and the
 #: derivative-integral buffer), so the guard is tighter than the energy's.
@@ -356,7 +367,7 @@ def _semicanonical_multipliers(F0, eps, ncore, nact, nbf):
                 coupling = float(F0[i, j] - F0[j, i])
                 if abs(gap) < _EXACT_DEGENERACY_TOL:
                     if abs(coupling) > _FREE_GAUGE_COUPLING * scale:
-                        raise ValueError(
+                        raise SCNEVPT2NotApplicable(
                             "Analytic SC-NEVPT2 gradient refused: "
                             f"semicanonical orbitals {i} and {j} are degenerate "
                             f"to {abs(gap):.3e} Hartree, but the rotation "
@@ -369,7 +380,7 @@ def _semicanonical_multipliers(F0, eps, ncore, nact, nbf):
                     degenerate_pairs += 1
                     continue                       # free gauge: Lambda_ij = 0
                 if abs(gap) < _DEGENERACY_TOL:
-                    raise ValueError(
+                    raise SCNEVPT2NotApplicable(
                         "Analytic SC-NEVPT2 gradient refused: semicanonical "
                         f"orbitals {i} and {j} are separated by only "
                         f"{abs(gap):.3e} Hartree (limit "
@@ -445,7 +456,7 @@ def _solve_response(H_oo, sigma, hact, e_ci, ci, rhs_orb, rhs_ci):
     resid = float(np.linalg.norm(A @ x - b))
     scale = max(float(np.linalg.norm(b)), 1.0)
     if resid > _RESPONSE_RESIDUAL_TOL * scale:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "Analytic SC-NEVPT2 gradient refused: the coupled CASSCF response "
             f"system did not solve (relative residual {resid / scale:.3e}). "
             "The reference is at (or extremely near) a point where the CASSCF "
@@ -498,7 +509,7 @@ def _relaxed_densities(hbar, gbar, D_cas, G_cas, K, gamma_ci, Gamma_ci,
 def _validate(mol, options, settings):
     """Refuse every configuration this derivative is not the derivative of."""
     if options.contraction != "strong" or options.h0 != "dyall":
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic NEVPT2 gradient implements the STRONGLY CONTRACTED "
             "variant ([pt2] h0=dyall, contraction=strong). The uncontracted "
             "Dyall-H0 path ([pt2] contraction=none) expands a different "
@@ -507,17 +518,17 @@ def _validate(mol, options, settings):
             "[pt2] h0=dyall and contraction=strong, or use a numerical "
             "gradient.")
     if options.variant != "caspt2":
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient is state specific. Multistate "
             "(MS/XMS) strong contraction is not implemented for the energy "
             "either; drop [pt2] variant.")
     if options.family != "caspt2":
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient does not apply to the QDPT2 "
             "family (mrmp2/mcqdpt2/xmcqdpt2), which uses a diagonal-Fock "
             "zeroth order.")
     if options.reference != "casscf":
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient requires a CASSCF reference "
             "([pt2] reference=casscf). With reference=casci the orbitals are "
             "not stationary for the CASSCF energy, so the orbital multiplier "
@@ -529,29 +540,30 @@ def _validate(mol, options, settings):
         ("ipea_shift", options.ipea_shift),
         ("edshft", options.edshft)) if value]
     if unapplied:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "[pt2] %s does not reach the strongly contracted denominators, so "
             "the SC-NEVPT2 energy already refuses it; the gradient does too."
             % ", ".join(unapplied))
     if settings.integral_backend != "native":
-        raise ValueError("SC-NEVPT2 gradient integral_backend must be native")
+        raise SCNEVPT2NotApplicable(
+            "SC-NEVPT2 gradient integral_backend must be native")
     if mol.config["input"]["functional"]:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient requires Hartree-Fock integrals; "
             "unset input.functional.")
     if mol.config["scf"]["type"] != "rhf":
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient supports a closed-shell RHF "
             "reference only.")
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient supports closed-shell singlets "
             "only.")
     method = str(mol.config["input"]["method"]).strip().lower().replace("_", "-")
     if method in {"sa-casscf", "sacasscf"} or str(
             mol.config.get("state_average", {}).get("enabled", False)
     ).strip().lower() in ("true", "1", "yes", "on"):
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient is built on a STATE-SPECIFIC "
             "CASSCF reference. A state-averaged reference optimizes "
             "sum_I w_I E_I, whose orbital multiplier solves a different "
@@ -569,16 +581,34 @@ _LIVE_NBF4_TENSORS = 6
 _LIVE_NACT8_TENSORS = 2
 
 
-def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label=""):
+def cartesian_basis_size(basis):
+    """Number of CARTESIAN basis functions behind a (possibly spherical) basis.
+
+    ``nevpt2_gradient.F90`` expands the two-particle density to the
+    Cartesian-effective basis the derivative kernels iterate, so under a pure
+    (spherical) basis it allocates arrays sized by this count and not by
+    ``nbf``.  For pure d/f/g shells the two differ -- 6 vs 5, 10 vs 7, 15 vs 9 --
+    and ignoring that lets a calculation clear the configured budget and then
+    exceed it inside the native driver.
+    """
+    angs = np.asarray(basis.get("angs", []), dtype=int).ravel()
+    if angs.size == 0:
+        return None
+    return int(np.sum((angs + 1) * (angs + 2) // 2))
+
+
+def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
+                nbf_cart=None):
     """Refuse a system whose dense intermediates exceed the configured budget.
 
     The energy already guards its own ``nact^8`` four-particle RDM; the gradient
-    holds that RDM's ADJOINT alongside it, plus several ``nbf^4`` tensors the
-    energy never forms, so it needs its own accounting rather than inheriting
-    the energy's.
+    holds that RDM's ADJOINT alongside it, several ``nbf^4`` tensors the energy
+    never forms, and -- inside the native derivative-integral driver -- a
+    Cartesian-effective copy of the two-particle density, which is larger still
+    under a pure basis.  All three are counted here.
     """
     if nbf > DEFAULT_MAX_NBF:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             f"The analytic SC-NEVPT2 gradient holds dense nbf^4 tensors and is "
             f"guarded at nbf <= {DEFAULT_MAX_NBF}; this basis has nbf={nbf}. "
             "Reduce the basis, or use a numerical gradient.")
@@ -588,21 +618,29 @@ def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label=""):
     nact8 = 8 * int(nact) ** 8
     nact6 = 8 * int(nact) ** 6
     work = 8 * int(ndet or 0) * int(nact) ** 4
+    # nevpt2_gradient.F90: g2(nbf^4) always, plus pair12(nbf_cart^2 nbf^2) and
+    # g2_cart(nbf_cart^4) when the basis is stored as spherical harmonics.
+    cart = int(nbf_cart or nbf)
+    native = 8 * (int(nbf) ** 4
+                  + (cart ** 2 * int(nbf) ** 2 + cart ** 4 if cart != nbf else 0))
     live = (_LIVE_NBF4_TENSORS * nbf4
             + _LIVE_NACT8_TENSORS * nact8
             + 4 * nact6
-            + 2 * work)
+            + 2 * work
+            + native)
     cap = max(1, int(budget_mib)) * 1024 ** 2
     if live > cap:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The analytic SC-NEVPT2 gradient needs ~%.2f GiB of dense "
             "intermediates (%d x nbf^4 at nbf=%d, the four-particle RDM and "
-            "its adjoint at nact=%d, and the CI-derivative workspace), above "
-            "the %s max_memory budget of %d MiB. Reduce the basis or the "
-            "active space, raise %s max_memory, or use a numerical gradient."
+            "its adjoint at nact=%d, the CI-derivative workspace, and ~%.2f GiB "
+            "of Cartesian-effective two-particle density in the native "
+            "derivative-integral driver at nbf_cart=%d), above the %s "
+            "max_memory budget of %d MiB. Reduce the basis or the active "
+            "space, raise %s max_memory, or use a numerical gradient."
             % (live / 1024 ** 3, _LIVE_NBF4_TENSORS, nbf, nact,
-               budget_label or "[cas]", int(budget_mib),
-               budget_label or "[cas]"))
+               native / 1024 ** 3, cart, budget_label or "[cas]",
+               int(budget_mib), budget_label or "[cas]"))
 
 
 def sc_nevpt2_gradient_route(mol):
@@ -620,14 +658,15 @@ def sc_nevpt2_gradient_route(mol):
     settings = settings_from_casci_config(mol.config)
     try:
         _validate(mol, options, settings)
-        nbf = int(mol.data.get_basis()["nbf"])
+        basis = mol.data.get_basis()
+        nbf = int(basis["nbf"])
         nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
         _ncore, nact, active_nelec, _plan = contiguous_active_space(
             nbf, nelec, settings, "SC-NEVPT2 gradient")
         mem, mem_label = _pt2_memory(options, settings)
         _check_size(nbf, nact,
                     comb(nact, active_nelec[0]) * comb(nact, active_nelec[1]),
-                    mem, mem_label)
+                    mem, mem_label, cartesian_basis_size(basis))
         if _gradient_backend() is None:
             raise ValueError(
                 "the compiled OpenQP library has no nevpt2_gradient entry "
@@ -674,64 +713,86 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
 
     backend = _gradient_backend()
     if backend is None:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "The compiled OpenQP library has no nevpt2_gradient entry point; "
             "rebuild liboqp to use analytic SC-NEVPT2 gradients.")
     lib, ffi = backend
 
-    nbf = int(mol.data.get_basis()["nbf"])
+    basis = mol.data.get_basis()
+    nbf = int(basis["nbf"])
     nelec = (int(mol.data["nelec_A"]), int(mol.data["nelec_B"]))
     ncore, nact, active_nelec, _plan = contiguous_active_space(
         nbf, nelec, settings, "SC-NEVPT2 gradient")
     mem, mem_label = _pt2_memory(options, settings)
     _check_size(nbf, nact,
                 comb(nact, active_nelec[0]) * comb(nact, active_nelec[1]),
-                mem, mem_label)
+                mem, mem_label, cartesian_basis_size(basis))
     roots = _reference_roots(options)
     root = int(roots[0])
     weights = np.array([1.0])
 
-    # ---- reference: the same state-specific CASSCF the energy driver runs
-    _run_casscf_reference(mol, ref_energy, roots, weights)
+    # ---- reference.  The gradient needs a STATIONARY state-specific CASSCF,
+    # and on the production path it already has one: `Gradient.gradient()` runs
+    # after `SinglePoint.energy()`, which optimized those orbitals and left them
+    # semicanonical in the handle.  Re-optimizing here would double the CASSCF
+    # cost of every gradient and every optimizer step, so the orbitals in hand
+    # are tested first and the optimization runs only when they fail the test
+    # (a standalone call on RHF orbitals, or a reference that did not converge).
     check_ao_eri_budget(nbf, mem, mem_label)
-    oqp.fci_ao_integrals(mol)
-    hcore_ao = _unpack_lower_triangle(
-        np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
-    eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
-        (nbf, nbf, nbf, nbf), order="F")
-    coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape(
-        (nbf, nbf)).T
-    enuc = float(mol.mol_energy.nenergy)
-
-    coeff_sc, h1e, eri, coeffs, energies, dets, eps, D_sa = _semicanonicalize(
-        hcore_ao, eri_ao, coeff, ncore, nact, active_nelec, enuc, settings,
-        roots, weights)
-    target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
-    mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
-        coeff_sc.T.reshape(target.shape))
-    ci = np.asarray(coeffs[:, root], dtype=float)
-    ci = ci / np.linalg.norm(ci)
-    e_casci = float(energies[root])
-
-    # ---- CASSCF densities and the stationarity precondition
-    gamma = make_rdm1_spatial(ci, dets, nact)
-    Gamma_act = make_rdm2_spatial(ci, dets, nact)
-    D_cas, G_cas = _full_rdms(gamma, Gamma_act, ncore, nact, nbf)
-    pairs = _nonredundant_pairs(ncore, nact, nbf)
-    F_cas = _generalized_fock(D_cas, G_cas, h1e, eri)
-    g_orb = np.array([2.0 * (F_cas[q, p] - F_cas[p, q]) for (p, q) in pairs])
-    gnorm = float(np.linalg.norm(g_orb)) if g_orb.size else 0.0
     declared = float(mol.config.get("casscf", {}).get("gradient_norm_tol", 1e-6)
                      or 1e-6)
     limit = max(_STATIONARITY_FLOOR, _STATIONARITY_WARN * declared)
+    enuc = float(mol.mol_energy.nenergy)
+    pairs = _nonredundant_pairs(ncore, nact, nbf)
+
+    def _reference_at_current_orbitals():
+        oqp.fci_ao_integrals(mol)
+        hcore = _unpack_lower_triangle(
+            np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
+        eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
+            (nbf, nbf, nbf, nbf), order="F")
+        coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape(
+            (nbf, nbf)).T
+        out = _semicanonicalize(hcore, eri_ao, coeff, ncore, nact,
+                                active_nelec, enuc, settings, roots, weights)
+        coeff_sc, h1e, eri, coeffs, energies, dets, eps, D_sa = out
+        ci = np.asarray(coeffs[:, root], dtype=float)
+        ci = ci / np.linalg.norm(ci)
+        gamma = make_rdm1_spatial(ci, dets, nact)
+        Gamma_act = make_rdm2_spatial(ci, dets, nact)
+        D_cas, G_cas = _full_rdms(gamma, Gamma_act, ncore, nact, nbf)
+        F_cas = _generalized_fock(D_cas, G_cas, h1e, eri)
+        g_orb = np.array([2.0 * (F_cas[q, p] - F_cas[p, q]) for (p, q) in pairs])
+        gnorm = float(np.linalg.norm(g_orb)) if g_orb.size else 0.0
+        return dict(coeff_sc=coeff_sc, h1e=h1e, eri=eri, dets=dets, eps=eps,
+                    D_sa=D_sa, ci=ci, e_casci=float(energies[root]),
+                    D_cas=D_cas, G_cas=G_cas, gnorm=gnorm)
+
+    ref = _reference_at_current_orbitals()
+    reused_reference = np.isfinite(ref["gnorm"]) and ref["gnorm"] <= limit
+    if not reused_reference:
+        _run_casscf_reference(mol, ref_energy, roots, weights)
+        ref = _reference_at_current_orbitals()
+    gnorm = ref["gnorm"]
     if not np.isfinite(gnorm) or gnorm > limit:
-        raise ValueError(
+        raise SCNEVPT2NotApplicable(
             "Analytic SC-NEVPT2 gradient refused: the CASSCF orbital-rotation "
             f"gradient at the reference is {gnorm:.3e}, above the acceptance "
             f"limit {limit:.3e}. The Lagrangian assumes a stationary CASSCF "
             "reference and its error is first order in this norm. Converge "
             "the orbital optimization ([casscf] gradient_norm_tol / "
             "max_macro_iterations).")
+
+    coeff_sc = ref["coeff_sc"]
+    h1e, eri, dets, eps, D_sa = (ref["h1e"], ref["eri"], ref["dets"],
+                                 ref["eps"], ref["D_sa"])
+    ci, e_casci = ref["ci"], ref["e_casci"]
+    D_cas, G_cas = ref["D_cas"], ref["G_cas"]
+    # Commit the semicanonical orbitals, as the energy driver does: the
+    # rotation leaves the reference energy invariant.
+    target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
+    mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
+        coeff_sc.T.reshape(target.shape))
 
     # ---- PT2 frozen core: the second order is evaluated in the reduced space
     if options.frozen < 0:
@@ -875,6 +936,8 @@ def sc_nevpt2_analytic_gradient(mol, ref_energy=None):
     _log(mol, f"   {'E(SC-NEVPT2) total':<38}{e_total:>20.10f}")
     _log(mol, f"   {'PT2 frozen-core orbitals':<38}{nfrozen:>20d}")
     _log(mol, f"   {'CASSCF orbital gradient |g_orb|':<38}{gnorm:>20.3e}")
+    _log(mol, f"   {'CASSCF reference':<38}"
+              f"{'reused (already stationary)' if reused_reference else 're-optimized':>20s}")
     if np.isfinite(smallest_gap):
         _log(mol, f"   {'smallest semicanonical gap':<38}"
                   f"{smallest_gap:>20.3e}")
