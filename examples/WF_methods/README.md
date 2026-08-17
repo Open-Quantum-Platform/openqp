@@ -23,7 +23,7 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `LiH_CASSCF_optimize.inp` | `casscf` | — | geometry optimization with the analytic state-specific CASSCF gradient |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
-| `LiH_SA-CASSCF_grad.inp` | `sa-casscf` | — | central-difference gradient of a state on common SA-CASSCF orbitals |
+| `LiH_SA-CASSCF_grad.inp` | `casscf` + state average | — | compatibility central-difference gradient of a state on common SA-CASSCF orbitals |
 | `LiH_SA-CASSCF_ANALYTIC_grad.inp` | `sa-casscf` | — | analytic gradient of the weighted SA-CASSCF objective |
 | `LiH_SA-CASSCF_ROOT1_grad.inp` | `sa-casscf` | — | analytic individual-state gradient with the coupled orbital/CI Z-vector |
 | `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (17 vs 335 CI solves, both at 15 macroiterations) |

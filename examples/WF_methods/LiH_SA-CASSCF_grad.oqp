@@ -1,4 +1,4 @@
-sa-casscf/sto-3g
+casscf/sto-3g
 grad(S1)
 guess(type=hcore)
 scf(maxit=80,forced_attempt=3,save_molden=false)
