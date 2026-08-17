@@ -243,6 +243,7 @@ five-point stencil of independently computed total energies at three step sizes.
 | `caspt2`, 6-31G | 1e-9 |
 | `caspt2`, LiH with the default frozen core | 1e-11 |
 | `mrmp2` / `mcqdpt2` / `xmcqdpt2` on their default DIRECT engine | 7e-11 / 2e-10 |
+| `caspt2`, LiH/cc-pVDZ (first case with `d` shells) | 2e-9 |
 
 The CASSCF-reference row is looser because the finite-difference side inherits
 the CASSCF convergence of every displaced point; its residual falls from 3.5e-6
@@ -257,7 +258,12 @@ OpenBLAS ILP64, agreeing to the quoted digit.
 The QDPT row matters separately: those methods default to the matrix-free
 direct engine, while the gradient always reconstructs on the dense path.  The
 agreement therefore also exercises the cross-check that refuses when the
-reconstruction and the reported energy disagree.
+reconstruction and the reported energy disagree.  The cc-pVDZ row matters for a
+different reason: every other case is `s`/`p` only, where the spherical and
+Cartesian shells have the same size and the expansion in the derivative-ERI
+compute type is an identity.  A `d` shell is 5 spherical against 6 Cartesian, so
+that row is what actually tests the expansion on the factorized two-particle
+density.
 
 `tests/test_caspt2_analytic_grad.py` carries the same checks in a form the CI
 can run, together with the scope refusals and an internal consistency test that

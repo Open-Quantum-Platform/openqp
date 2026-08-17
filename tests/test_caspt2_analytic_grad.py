@@ -46,7 +46,7 @@ H4_BOHR = np.array([0.0, 0.0, 0.0,
 def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
                  method="caspt2", reference="casci", nroot=1,
                  target_roots=None, pt2_extra=None, runtype="energy",
-                 grad=("0",)):
+                 grad=("0",), basis="sto-3g"):
     from oqp.pyoqp import Runner
     lines = []
     for sym, xyz in zip(atoms, np.asarray(coords_bohr, float).reshape(-1, 3)):
@@ -61,7 +61,7 @@ def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
         project=project, input_file=None, log=str(tmp_path / f"{project}.log"),
         input_dict={
             "input": {"system": "\n" + "\n".join(lines), "charge": "0",
-                      "basis": "sto-3g", "method": method, "runtype": runtype},
+                      "basis": basis, "method": method, "runtype": runtype},
             "guess": {"type": "hcore"},
             "scf": {"type": "rhf", "multiplicity": "1", "maxit": "120",
                     "conv": "1.0e-11", "save_molden": "False"},
@@ -209,6 +209,24 @@ def test_frozen_core_is_unfolded_exactly(tmp_path):
     from oqp.library import caspt2_gradient as cg
     state = cg._build_state(mol)
     assert state.nfrozen == 1
+    fd = _five_point(tmp_path, coords, 0, **kw)
+    assert np.max(np.abs(grads[0] - fd)) < 1.0e-7
+    assert np.max(np.abs(grads[0].sum(axis=0))) < 1.0e-10
+
+
+@needs_backend
+def test_d_shell_basis_exercises_the_cartesian_expansion(tmp_path):
+    """LiH/cc-pVDZ: the first case with `d` functions.
+
+    Every other case here is `s`/`p` only, where the spherical and Cartesian
+    shells have the same size and the expansion in the derivative-ERI compute
+    type is an identity. A `d` shell is 5 spherical against 6 Cartesian, so this
+    is what actually tests `build_cart_density` on the factorized two-particle
+    density.
+    """
+    coords = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 3.0])
+    kw = dict(atoms=("Li", "H"), basis="cc-pvdz")
+    grads, _mol = _analytic(tmp_path, "dsh", coords, **kw)
     fd = _five_point(tmp_path, coords, 0, **kw)
     assert np.max(np.abs(grads[0] - fd)) < 1.0e-7
     assert np.max(np.abs(grads[0].sum(axis=0))) < 1.0e-10
