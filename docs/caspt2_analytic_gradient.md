@@ -139,10 +139,8 @@ difference appears anywhere in the implementation.**
 ### Which rotations are parameters
 
 The PT2 energy depends on the reference orbitals only through the **spans** of
-the three orbital blocks -- including the frozen core, whose orbitals are the
-lowest eigenvectors of the closed+active Fock restricted to the inactive span,
-which a within-inactive rotation leaves unchanged.  Rotations inside a block are
-therefore redundant *for the energy*.
+the three orbital blocks.  Rotations inside a block are therefore redundant *for
+the energy*, with one exception treated separately below (the frozen core).
 
 They are not automatically redundant for the *constraint*, and the distinction
 matters:
@@ -159,6 +157,34 @@ matters:
   occupied and virtual spaces, leave `D^RHF` untouched, and are excluded -- their
   Jacobian columns are identically zero, which would make the system singular
   for a symmetry-degenerate pair such as the 2p shell of Li.
+
+### The frozen core is not free
+
+The PT2 frozen core takes the `nfrozen` LOWEST eigenvectors of the closed+active
+Fock restricted to the inactive span.  At fixed `f` a within-inactive rotation
+leaves that space alone -- which is why the inactive block is redundant for
+everything else -- but `f` moves with the geometry, so the split moves with it,
+and the energy is *not* invariant under the resulting rotation.
+
+Whenever `0 < nfrozen < ncore` this is a real term.  It is eliminated the same
+way the XMS rotation is: in the semicanonical basis `f` is already diagonal on
+the inactive block, so first-order eigenvector perturbation theory gives the
+induced rotation directly and the whole response collapses to one symmetric
+weight on `f`,
+
+```
+W_pq = (1/2) (dL/dt_pq) / (lam_q - lam_p)
+```
+
+which then propagates through `f = h + J(D_sa) - 1/2 K(D_sa)` exactly like the
+H0 weight.  Its driving gradient is taken before the CI and orbital multipliers,
+which is legitimate and not circular: a within-inactive rotation leaves the
+inactive span, hence the core dressing, hence the active Hamiltonian and its
+eigenvectors untouched.
+
+Leaving this out costs about `1e-4` in the gradient and breaks rotational
+invariance at `2e-8` -- and is invisible whenever `nfrozen` is `0` or equals
+`ncore`, which is the case for every hydrogen-only or single-heavy-atom test.
 
 The whole orbital response is assembled and solved densely.  That is
 proportionate: the module is validation-grade in the same sense the CASPT2
@@ -243,6 +269,7 @@ five-point stencil of independently computed total energies at three step sizes.
 | `xms-caspt2`, 2 roots | 5e-11 / 2e-10 |
 | `caspt2`, 6-31G | 1e-9 |
 | `caspt2`, LiH with the default frozen core | 1e-11 |
+| `caspt2`, BeH2/6-31G, frozen core SPLITTING the inactive block (CASCI / CASSCF ref) | 2e-10 / 1e-9 |
 | `mrmp2` / `mcqdpt2` / `xmcqdpt2` on their default DIRECT engine | 7e-11 / 2e-10 |
 | `caspt2`, LiH/cc-pVDZ (first case with `d` shells) | 2e-9 |
 

@@ -46,7 +46,8 @@ H4_BOHR = np.array([0.0, 0.0, 0.0,
 def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
                  method="caspt2", reference="casci", nroot=1,
                  target_roots=None, pt2_extra=None, runtype="energy",
-                 grad=("0",), basis="sto-3g"):
+                 grad=("0",), basis="sto-3g", active_electrons="2",
+                 active_orbitals="2", frozen_core="1"):
     from oqp.pyoqp import Runner
     lines = []
     for sym, xyz in zip(atoms, np.asarray(coords_bohr, float).reshape(-1, 3)):
@@ -65,8 +66,9 @@ def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
             "guess": {"type": "hcore"},
             "scf": {"type": "rhf", "multiplicity": "1", "maxit": "120",
                     "conv": "1.0e-11", "save_molden": "False"},
-            "cas": {"active_electrons": "2", "active_orbitals": "2",
-                    "frozen_core": "1", "orbital_source": "rhf",
+            "cas": {"active_electrons": active_electrons,
+                    "active_orbitals": active_orbitals,
+                    "frozen_core": frozen_core, "orbital_source": "rhf",
                     "sort_orbitals": "energy", "max_det": "5000",
                     "max_memory": "512"},
             "ci": {"nroot": str(max(nroot, 1)), "solver": "dense",
@@ -249,6 +251,38 @@ def test_d_shell_basis_exercises_the_cartesian_expansion(tmp_path):
     fd = _five_point(tmp_path, coords, 0, **kw)
     assert np.max(np.abs(grads[0] - fd)) < 1.0e-7
     assert np.max(np.abs(grads[0].sum(axis=0))) < 1.0e-10
+
+
+@needs_backend
+@pytest.mark.parametrize("reference", ["casci", "casscf"])
+def test_split_frozen_core_carries_its_own_response(tmp_path, reference):
+    """BeH2: two inactive orbitals, of which the PT2 frozen core takes one.
+
+    That split is not free.  The frozen orbitals are the LOWEST eigenvectors of
+    the closed+active Fock restricted to the inactive span; the span is fixed by
+    the inter-block constraints, but the Fock moves with the geometry, so the
+    split moves with it and the energy is not invariant under the resulting
+    within-inactive rotation.  Leaving that response out costs 8.5e-5 in the
+    gradient and breaks rotational invariance at 2e-8 -- both invisible whenever
+    nfrozen is 0 or equals ncore, which is every other case in this file.
+    """
+    beh2 = np.array([0.0, 0.0, 0.0,
+                     0.0, 0.10, 2.55,
+                     0.08, 0.0, -2.48])
+    kw = dict(atoms=("Be", "H", "H"), basis="6-31g", reference=reference)
+    grads, mol = _analytic(tmp_path, f"beh2_{reference}", beh2,
+                           active_electrons="2", frozen_core="2", **kw)
+    from oqp.library import caspt2_gradient as cg
+    state = cg._build_state(mol)
+    assert 0 < state.nfrozen < state.setup.ncore, "case does not split the core"
+
+    fd = _five_point(tmp_path, beh2, 0, h=1.0e-3,
+                     active_electrons="2", frozen_core="2", **kw)
+    assert np.max(np.abs(grads[0] - fd)) < 1.0e-7
+    xyz = beh2.reshape(-1, 3)
+    com = xyz.mean(axis=0)
+    assert np.max(np.abs(grads[0].sum(axis=0))) < 1.0e-10
+    assert np.max(np.abs(np.cross(xyz - com, grads[0]).sum(axis=0))) < 1.0e-9
 
 
 @needs_backend

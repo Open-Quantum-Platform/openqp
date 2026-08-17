@@ -920,6 +920,73 @@ def _xms_elimination(state, pieces):
     return 0.5 * (yfock + yfock.T), base_grad, base
 
 
+#: Smallest accepted inactive orbital-energy gap across the frozen/correlated
+#: boundary.  Below it the frozen SPACE is not determined by the closed+active
+#: Fock, so neither is its response.
+FROZEN_SPLIT_GAP_TOL = 1.0e-6
+
+
+def _frozen_split_weight(state, gmat_sc):
+    """Response of the frozen/correlated inactive split, as a Fock weight.
+
+    The PT2 frozen core takes the ``nfrozen`` LOWEST eigenvectors of the
+    closed+active Fock restricted to the inactive span.  That space is invariant
+    under a within-inactive rotation at fixed ``f`` -- which is why the inactive
+    block is redundant for everything else -- but ``f`` itself moves with the
+    geometry, so the split moves with it, and ``L`` is not invariant under the
+    resulting rotation.  With ``0 < nfrozen < ncore`` this is a real term:
+    leaving it out costs about 1e-4 in the gradient and breaks rotational
+    invariance.
+
+    It is eliminated the same way the XMS rotation is.  In the semicanonical
+    basis ``f`` is already diagonal on the inactive block, so first-order
+    eigenvector perturbation theory gives the induced rotation directly,
+    ``Theta_pq = df_pq / (lam_q - lam_p)``, and
+
+        dL = sum_{p>q} (dL/dt_pq) Theta_pq = sum_pq W_pq df_pq ,
+        W_pq = (1/2) (dL/dt_pq) / (lam_q - lam_p)
+
+    so the whole response is one symmetric weight on ``f``, which then
+    propagates through ``f = h + J(D_sa) - 1/2 K(D_sa)`` exactly like the H0
+    weight does.  ``W`` is symmetric because ``dL/dt`` and ``lam_q - lam_p`` are
+    both antisymmetric.
+
+    ``gmat_sc`` is ``dL/dt`` in the SEMICANONICAL basis, taken before the orbital
+    multipliers and without the CI response: a within-inactive rotation leaves
+    the inactive span, hence the core dressing, hence the active Hamiltonian and
+    its eigenvectors untouched, so the CI contributes nothing here and there is
+    no circularity.
+
+    Within-frozen and within-correlated pairs come out with a vanishing weight on
+    their own -- ``L`` really is invariant under those -- so they need no special
+    case.
+    """
+    setup = state.setup
+    ncore = setup.ncore
+    nbf = state.nbf
+    w = np.zeros((nbf, nbf))
+    if state.nfrozen <= 0 or state.nfrozen >= ncore or ncore < 2:
+        return w
+    lam = np.asarray(state.eps_full[:ncore], dtype=float)
+    for p in range(ncore):
+        for q in range(ncore):
+            if p == q:
+                continue
+            gap = lam[q] - lam[p]
+            if abs(gap) < FROZEN_SPLIT_GAP_TOL:
+                if abs(float(gmat_sc[p, q])) > 1.0e-10:
+                    raise RuntimeError(
+                        "inactive orbitals %d and %d are degenerate to %.3e in "
+                        "the closed+active Fock, and the PT2 frozen core splits "
+                        "them: the frozen space is not determined, so neither is "
+                        "its response.  Change [pt2] frozen so the split does "
+                        "not fall inside a degenerate shell."
+                        % (p, q, abs(gap)))
+                continue
+            w[p, q] = 0.5 * float(gmat_sc[p, q]) / gap
+    return 0.5 * (w + w.T)
+
+
 # -------------------------------------------------------------------- CI response
 def _active_one_electron_operator(state, mat_act):
     """Dense active-space one-electron operator in the CAS determinant basis."""
@@ -933,21 +1000,32 @@ def _active_one_electron_operator(state, mat_act):
                                     2 * nact, 0.0)
 
 
-def _ci_gradients(state, pieces, yfock_total, base_grad):
+def _ci_gradients(state, pieces, yfock_total, base_grad, yfock_full=None):
     """``dL/dc_r`` in the active CI space, for each reference root.
 
     Two channels reach the CI vectors: the model-space projection of
     ``dL/dPsi_k``, and the state-averaged density ``D_sa`` that defines the Fock
-    operator inside ``H0`` (and, for XMS, inside the model-space rotation).  The
-    second is ``dL/dD_sa = J(Y) - 1/2 K(Y)`` contracted with ``dD_sa/dc``, which
-    for a weight-averaged CAS density is ``2 w_r <I| O |c_r>``.
+    operator inside ``H0`` (and, for XMS, inside the model-space rotation, and
+    for a split frozen core inside the inactive-block eigenproblem).  The second
+    is ``dL/dD_sa = J(Y) - 1/2 K(Y)`` contracted with ``dD_sa/dc``, which for a
+    weight-averaged CAS density is ``2 w_r <I| O |c_r>``.
+
+    ``yfock_total`` lives in the frozen-core-reduced space (H0 and the XMS
+    rotation are both built there); ``yfock_full`` is the frozen-split weight,
+    which lives in the full space because the inactive-block eigenproblem does.
+    The active orbitals are the same either way, so the two active blocks add.
     """
     setup = state.setup
     nact = setup.nact
     internal = state.internal
     smat = _jk_operator(yfock_total, state.eri)
     act = slice(state.ncore, state.ncore + nact)
-    sop = _active_one_electron_operator(state, 0.5 * (smat + smat.T)[act, act])
+    smat_act = 0.5 * (smat + smat.T)[act, act]
+    if yfock_full is not None and np.any(yfock_full):
+        full = _jk_operator(yfock_full, state.eri_full)
+        act_full = slice(setup.ncore, setup.ncore + nact)
+        smat_act = smat_act + 0.5 * (full + full.T)[act_full, act_full]
+    sop = _active_one_electron_operator(state, smat_act)
     out = []
     for k in range(state.nstate):
         g = np.asarray(base_grad[k])[internal].copy()
@@ -1395,7 +1473,18 @@ def relaxed_densities(state, target_index) -> RelaxedDensities:
         d2_red += x2
     yfock_total = pieces.ymat + yfock_xms
 
-    ci_grad0 = _ci_gradients(state, pieces, yfock_total, base_grad)
+    # The frozen/correlated inactive split responds through the inactive-block
+    # Fock eigenproblem.  Its driving gradient is taken in the SEMICANONICAL
+    # basis, before the CI and orbital multipliers: a within-inactive rotation
+    # leaves the CI vectors untouched, so nothing here is circular.
+    d1_pre, d2_pre = _unfold_frozen(d1_red, d2_red, state.nfrozen, nbf,
+                                    state.eri_full)
+    fock_pre = _generalized_fock(0.5 * (d1_pre + d1_pre.T), _sym8(d2_pre),
+                                 state.h1e_full, state.eri_full)
+    wfrozen = _frozen_split_weight(state, _orbital_gradient_matrix(fock_pre))
+
+    ci_grad0 = _ci_gradients(state, pieces, yfock_total, base_grad,
+                             yfock_full=wfrozen)
     ymul0 = _ci_multipliers(state, ci_grad0)
 
     pairs = _orbital_pair_sets(state)
@@ -1409,6 +1498,11 @@ def relaxed_densities(state, target_index) -> RelaxedDensities:
         base2 = d2_red + c2 if with_constant else c2
         f1, f2 = _unfold_frozen(base1, base2, state.nfrozen, nbf,
                                 state.eri_full)
+        if with_constant and np.any(wfrozen):
+            w1, w2 = _fock_like_densities(wfrozen, state.dsa_full,
+                                          state.eri_full)
+            f1 = f1 + w1
+            f2 = f2 + w2
         if state.nfrozen and not with_constant:
             # _unfold_frozen adds the constant frozen-shell density, which is
             # not part of a linear response column; subtract it.
