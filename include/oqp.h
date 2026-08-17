@@ -657,7 +657,10 @@ int64_t casscf_gradient(struct oqp_handle_t *inf, const int32_t *iopt,
  *
  * Writes infos%atoms%grad.  Returns 0, or a negative status: -21 a
  * non-Hartree-Fock Hamiltonian, -22 allocation failure, -25 inconsistent
- * nbf/nvec. */
+ * nbf/nvec.  `nbf` MUST equal the handle's basis size: it sizes the packed
+ * densities and the factorization vectors while the basis routines size
+ * themselves from the handle, so a mismatch would index one against the other.
+ * That is checked, not assumed. */
 enum {
   PT2_G_NVEC  = 0,  /* factorization rank actually contracted     */
   PT2_G_TRACE = 1,  /* trace of the relaxed AO density            */

@@ -399,6 +399,31 @@ def test_imported_orbitals_are_refused(tmp_path):
     assert "orbital_source" in str(excinfo.value)
 
 
+@needs_backend
+def test_native_kernel_rejects_a_basis_size_mismatch(tmp_path):
+    """The C entry point's `nbf` sizes the caller's arrays while the basis
+    routines size themselves from the handle, so a mismatch has to be refused
+    rather than indexed."""
+    from oqp.library import caspt2_gradient as cg
+
+    runner = _make_runner(tmp_path, "sizeguard", H4_BOHR)
+    runner.run(test_mod=True)
+    nbf = int(runner.mol.data.get_basis()["nbf"])
+    packed = np.zeros(nbf * (nbf + 1) // 2)
+    avec = np.zeros((nbf, nbf, 1))
+    lam = np.zeros(1)
+    with pytest.raises(RuntimeError) as excinfo:
+        cg._call_native_gradient(runner.mol, nbf + 1, packed, packed, lam, avec)
+    assert "-25" in str(excinfo.value) or "status" in str(excinfo.value)
+
+
+def test_gradient_route_is_rejected_by_the_input_checker():
+    """A misspelled route must fail the input check, not survive until after the
+    PT2 energy (and, with reference=casscf, a whole CASSCF) has been computed."""
+    from oqp.utils.input_checker import PT2_GRADIENT_ROUTES
+    assert PT2_GRADIENT_ROUTES == {"auto", "analytic", "numerical"}
+
+
 def test_gradient_route_option_is_validated():
     """A misspelled route is an error, not a silent default."""
     from oqp.library.single_point import PT2_GRAD_METHODS

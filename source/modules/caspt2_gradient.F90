@@ -154,7 +154,16 @@ contains
       info(k) = 0.0_dp
     end do
 
+    ! The caller's `nbf` sizes the packed densities and the factorization
+    ! vectors, while every basis routine and shell-index loop below sizes
+    ! itself from the handle.  If the two disagree the arrays are allocated
+    ! against one and indexed against the other, so this is a bounds check, not
+    ! a formality.
     if (nbf <= 0 .or. nvec < 0) then
+      status = PT2G_ERR_SIZE
+      return
+    end if
+    if (nbf /= infos%basis%nbf) then
       status = PT2G_ERR_SIZE
       return
     end if
