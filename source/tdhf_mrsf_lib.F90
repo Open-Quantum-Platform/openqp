@@ -428,6 +428,17 @@ contains
 !###############################################################################
 !###############################################################################
 
+!> Choose the initial Davidson trial vectors and build the diagonal estimate xm.
+!>
+!> ea/eb are the hole-side and particle-side orbital energies.  They are NOT
+!> required to be the alpha and beta Fock diagonals: what xm has to approximate
+!> is the diagonal of the full response operator, and on the ROHF path the
+!> caller deliberately supplies the Guest-Saunders spin average for both,
+!> because 0.5*(fa+fb) absorbs a large part of the spin-flip exchange
+!> -c_H*(ij|ji) that this one-electron form omits.  Measured on H2O/6-31G, the
+!> spin-averaged input is closer to the exact operator diagonal than the
+!> alpha/beta Fock diagonals on 45 of 45 amplitudes.  See the long comment at
+!> the call site in tdhf_mrsf_energy.F90 and issue #328 before changing this.
   subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec)
 
     use precision, only: dp

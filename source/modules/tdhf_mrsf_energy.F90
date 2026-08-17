@@ -491,35 +491,77 @@ contains
 
   ! Construct TD trial vector
     !
-    ! KNOWN DEFECT, left in place deliberately -- do not "fix" this in one line.
-    ! On the ROHF path the SAME array goes in as both ea and eb, and it holds
-    ! the ROHF canonical eigenvalues, i.e. the Guest-Saunders 0.5/0.5 average
-    ! 0.5*(fa(p,p)+fb(p,p)) -- not the alpha and beta Fock diagonals the sigma
-    ! actually uses. UMRSF above does it correctly from fa(i,i)/fb(i,i).
-    ! So mrinivec's xm, which orders the seeds and preconditions the residuals,
-    ! is not the diagonal of the operator being solved. The clearest symptom:
-    ! with ea == eb the open-open entry xm = 0.5*(eb(lr1)-ea(lr1)
-    ! +eb(lr2)-ea(lr2)) is IDENTICALLY ZERO for every ROHF MRSF run, while the
-    ! true one-electron value is not. Instrumented on CH2O 6-31G: the folded
-    ! open-open seed came out at exactly 0.00000000 and its two partners at
-    ! -0.19359070 / +0.19359070, perfectly antisymmetric, which is what ea == eb
-    ! forces. (xm also omits the two-electron part of the sigma entirely, on
-    ! every path -- that part is a preconditioner approximation, not a bug.)
+    ! PASSING THE SAME ARRAY AS BOTH ea AND eb ON THE ROHF PATH IS DELIBERATE
+    ! AND IS THE BETTER CHOICE.  Issue #328 proposed replacing it with the
+    ! alpha/beta Fock diagonals, as the UMRSF branch above does; measurement
+    ! rejects that.  Do not apply it.  What follows is the measurement.
     !
-    ! Correcting it MEASURABLY HELPS AND MEASURABLY HURTS. Filling both arrays
-    ! from fa/fb on the ROHF path makes H2O_BHHLYP_SOC at nstate=12 return
-    ! 0.60340877 as its 11th singlet -- a genuine root, stable at nstate=20 and
-    ! 30, that the shipped reference skips (already noted in 908496c0). The same
-    ! change also breaks six shipped tests, including SOC couplings by 9694 on
-    ! that very deck, numerical frequencies by 0.133, and it makes triplet MRSF
-    ! fail to converge outright on h2o_rohf_mrsf-t with bhhlyp and cam-b3lyp.
+    ! xm both orders the seeds and preconditions the Davidson residuals, so
+    ! what it has to approximate is the DIAGONAL OF THE OPERATOR, A(ij,ij) --
+    ! not the one-electron part of it.  The two candidates are
     !
-    ! So a real repair has to come with the reference regeneration and the
-    ! triplet convergence failure understood, not as a swap of two arguments.
+    !   xm_1e(i,j) = fb(j,j) - fa(i,i)                    [exact 1e diagonal]
+    !   xm_rohf    = eps(j) - eps(i)
+    !              = xm_1e - 0.5*[ (fb-fa)(i,i) + (fb-fa)(j,j) ]
+    !
+    ! because the ROHF canonical eigenvalues ARE the Guest-Saunders average,
+    ! eps(p) = 0.5*(fa(p,p) + fb(p,p)); fitting eps(j)-eps(i) to an additive
+    ! a(i)+b(j) form over all 53 (H2O) and 134 (CH2O) non-open-open amplitudes
+    ! reproduces it to 1e-10.
+    !
+    ! xm_1e really is the exact one-electron diagonal of mrsfesum: contraction
+    ! 1 there contributes fb(j,j)*X(i,j), contraction 2 contributes
+    ! -fa(i,i)*X(i,j), and the folded open-open branch contributes
+    ! 0.5*[(fb-fa)(O1,O1) + (fb-fa)(O2,O2)]*X(O1,O1) -- exactly mrinivec's two
+    ! formulas.  But the full diagonal also carries the spin-flip exchange
+    ! -c_H*(ij|ji) (JCP 149, 104101 Eq. 2.25), which xm omits on every path,
+    ! and that omitted term is NOT a small correction: hole and particle both
+    ! sit on or next to the two SOMOs, and at the folded open-open slot they
+    ! are the SAME spatial orbital, making it the SOMO self-repulsion, O(1 Eh).
+    !
+    ! The Guest-Saunders subtraction is a surrogate for precisely that omitted
+    ! exchange -- (fb-fa)(p,p) = c_H*[K(p,O1) + K(p,O2)] + dVxc(p,p) -- and a
+    ! good one.  Applying the production sigma to unit vectors gives the exact
+    ! A(ij,ij) (sigma = A e_ij on iteration 1); over 45 of the 54 amplitudes of
+    ! H2O/6-31G, triplet ROHF reference, triplet target:
+    !
+    !                    |xm_rohf - A_diag|        |xm_1e - A_diag|
+    !     MRSF-TDHF      MAE 0.315  max 0.685     MAE 0.542  max 1.133
+    !     MRSF/BHHLYP    MAE 0.142  max 0.311     MAE 0.272  max 0.567
+    !
+    ! and xm_rohf is closer on 45 amplitudes out of 45, in both.  At the folded
+    ! open-open slot it is not merely closer, it is EXACT for pure HF: the
+    ! one-electron part c_H*[0.5*(K11+K22) + K12] is cancelled term by term by
+    ! the response exchange, leaving 0.5*[dVxc(O1,O1) + dVxc(O2,O2)], which is
+    ! identically zero without a functional.  Measured A(OO,OO) = 0.0000000000
+    ! (HF) and 0.0317175663 (BHHLYP), against xm_rohf = 0 and xm_1e = 0.609 /
+    ! 0.337.  The "identically zero" open-open entry is the right answer, not
+    ! an artefact of ea == eb.
+    !
+    ! Measured consequences of substituting xm_1e:
+    !   - examples/MRSF-TDDFT/CH2O_MRSFTDDFT_SYMMETRY_BLOCK_COVERAGE LOSES its
+    !     2.039974 eV triplet.  The reordered xm drops the seed that reaches
+    !     that block and T1 is reported as 4.782 eV -- converged, silent, wrong.
+    !   - h2o_rohf_mrsf-t_6-31g_{bhhlyp,cam-b3lyp} stop converging.  Not a
+    !     divergence: the residual reaches 5.9e-08 / 8.5e-08 against a 1e-08
+    !     threshold and the run exits on "nvec = mxvec".  Both decks have
+    !     xvec_dim = 54, so mxvec = xvec_dim-3 = 51 caps the subspace and the
+    !     auto-restart above cannot rescue it -- the degraded preconditioner
+    !     needs more expansion vectors than the whole space has.
+    !
+    ! The other observation in #328 is real but belongs to a different
+    ! mechanism: H2O_BHHLYP_SOC at nstate=12 is missing the physical root at
+    ! 0.60340875 Eh (1A'', dark).  That is a trial-set COVERAGE limit, not a
+    ! diagonal one -- the shipped diagonal finds that root, unchanged, at
+    ! nstate=20 and nstate=30 (energies equal to 4.6e-14, eigenvector overlap
+    ! 1 - 7.2e-10 at conv=1e-10).  See the seed-coverage block in mrinivec.
     if (mrst==1 .or. mrst==3) then
       if (.not. umrsf) then
+        ! ROHF: mo_energy_work_a holds the Guest-Saunders spin average and goes
+        ! in as BOTH ea and eb on purpose -- see the measurement above.
         call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
       else
+        ! UHF reference: genuine alpha/beta eigenvalues, no spin average to undo.
         call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
       end if
 
