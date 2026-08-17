@@ -236,6 +236,35 @@ def test_ci_derivative_matches_finite_differences():
     assert analytic == pytest.approx(numeric, rel=1.0e-7, abs=1.0e-8)
 
 
+@needs_backend
+def test_transition_densities_reproduce_the_active_hamiltonian_element():
+    """``<y|H_act|c>`` from the transition densities the CI multiplier enters as.
+
+    The CI multiplier reaches the nuclear gradient only through these two
+    densities, so if they did not reproduce the matrix element they are the
+    densities of, the CI-response contribution would be silently wrong -- and
+    it is the one contribution no invariance argument constrains.
+    """
+    from oqp.library.casscf_hessian import (
+        _active_hamiltonian, _excitation_matrices, _fold_active)
+    from oqp.library.nevpt2_gradient import _transition_densities
+
+    h, g, _eps, ncore, nact, nelec, ci, rng = _random_case()
+    dets, stack = _excitation_matrices(nact, nelec[0], nelec[1])
+    y = rng.normal(size=ci.shape)
+    y -= float(ci @ y) * ci                     # the multiplier is c-orthogonal
+
+    f0, g0 = _fold_active(h, g, ncore, nact)
+    hact = _active_hamiltonian(f0, g0, stack, dets, nact)
+    expected = float(y @ (hact @ ci))
+
+    gamma, Gamma = _transition_densities(stack, y, ci)
+    produced = (float(np.einsum("tu,tu->", f0, gamma, optimize=True))
+                + 0.5 * float(np.einsum("tuvw,tuvw->", g0, Gamma,
+                                        optimize=True)))
+    assert produced == pytest.approx(expected, rel=1.0e-11, abs=1.0e-11)
+
+
 # --------------------------------------------------------------------------
 # 2. structure: the invariance facts the Lagrangian is built on
 # --------------------------------------------------------------------------
