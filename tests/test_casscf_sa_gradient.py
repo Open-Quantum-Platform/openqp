@@ -412,6 +412,10 @@ _H4 = ("\nH 0.0  0.041 0.0"
        "\nH -0.023 0.062 1.523"
        "\nH 0.009 -0.031 2.310")
 
+_H2O = ("\nO 0.000000 0.000000 0.000000"
+        "\nH 0.000000 0.757160 0.586260"
+        "\nH 0.000000 -0.757160 0.586260")
+
 
 def _sa_config(system, cas, nroot, roots, weights=None, gradient_state="averaged",
                runtype="grad", basis="sto-3g", grad=None):
@@ -607,6 +611,43 @@ def test_sa_casscf_gradients_are_translationally_invariant(tmp_path):
         assert np.max(np.abs(grad.sum(axis=0))) < 1.0e-9, f"target={target}"
 
 
+def test_sa_casscf_pure_shell_gradients_match_finite_difference(tmp_path):
+    """Both SA derivatives retain the spherical-shell AO convention.
+
+    Water/cc-pVDZ contains a pure d shell.  This exercises the spherical AO
+    staging in the derivative-integral contraction, which the STO-3G cases do
+    not reach, for both the weighted objective and an individual-state
+    Z-vector gradient.
+    """
+    if not _ao_gradient_available():
+        pytest.skip("liboqp has no casscf_ao_gradient; rebuild to run this test")
+
+    from oqp.library.single_point import SinglePoint
+
+    cas22 = dict(_CAS22, frozen_core="4")
+    config = _sa_config(_H2O, cas22, 2, [0, 1], basis="cc-pvdz")
+    runner = _runner(tmp_path, "sagrad_pure", config)
+    mol = runner.mol
+    sp = SinglePoint(mol)
+    sp.energy()
+    spherical = np.asarray(mol.data.get_basis().get("spherical"))
+    angs = np.asarray(mol.data.get_basis()["angs"])
+    assert np.any(spherical[angs >= 2] == 1), "cc-pVDZ must contain a pure d shell"
+    x0 = np.asarray(mol.get_system(), dtype=float).reshape(-1).copy()
+
+    for target in (None, 1):
+        grad, diag = _sa_gradient(mol, target)
+        assert diag["gnorm_sa"] < 1.0e-7
+        grad = np.asarray(grad, dtype=float)
+        assert np.max(np.abs(grad.sum(axis=0))) < 1.0e-8
+        flat = grad.reshape(-1)
+        k = int(np.argmax(np.abs(flat)))
+        e0 = _sa_energy(mol, target, [0, 1])
+        deriv, smooth = _fd_along(mol, sp, target, [0, 1], k, x0, e0, 1.0e-3)
+        assert smooth < 2.0e-8
+        assert flat[k] == pytest.approx(deriv, abs=1.0e-6)
+
+
 def test_sa_casscf_individual_roots_differ(tmp_path):
     """Root selection is real: the two averaged roots have different gradients.
 
@@ -781,6 +822,31 @@ def test_sa_response_term_is_not_negligible_molecular(tmp_path):
         "computed but not applied")
 
 
+def test_sa_casscf_individual_root_optimizer_pairs_energy_and_gradient(tmp_path):
+    """The optimizer consumes the selected physical root in the same row."""
+    if not _ao_gradient_available():
+        pytest.skip("liboqp has no casscf_ao_gradient; rebuild to run this test")
+
+    config = _sa_config(_LIH, _CAS22, 2, [0, 1], gradient_state="1",
+                        runtype="optimize", grad=1)
+    config["optimize"] = {"lib": "scipy", "istate": "1", "maxit": "1"}
+    runner = _runner(tmp_path, "sagrad_root1_opt", config)
+
+    from oqp.library.libscipy import StateSpecificOpt
+
+    optimizer = StateSpecificOpt(runner.mol)
+    energy, gradient = optimizer.one_step(
+        np.asarray(runner.mol.get_system(), dtype=float).reshape(-1).copy())
+
+    physical = np.asarray(
+        runner.mol.data["OQP::CASSCF_ENERGIES"], dtype=float).reshape(-1)
+    assert len(runner.mol.energies) == 2
+    assert energy == pytest.approx(physical[1], abs=1.0e-10)
+    assert runner.mol.energies[1] == pytest.approx(physical[1], abs=1.0e-10)
+    assert np.asarray(gradient).reshape(-1) == pytest.approx(
+        np.asarray(runner.mol.grads[1]).reshape(-1), abs=1.0e-12)
+
+
 # ==================================================================== selection
 def test_gradient_state_selector_rejects_unaveraged_root():
     """A root the objective never averaged over has no Z-vector to build."""
@@ -849,6 +915,18 @@ def test_preflight_admits_both_sa_gradient_paths():
     for state in ("averaged", "0", "1"):
         report = _check(_preflight_config(gradient_state=state))
         assert report.ok, report.to_text()
+
+
+@pytest.mark.parametrize("reference", ["uhf", "rohf"])
+def test_preflight_refuses_open_shell_sa_gradients(reference):
+    """The RHF-only derivation must not be entered through UHF or ROHF."""
+    if not _backend_available():
+        pytest.skip("native OQP backend not built; build liboqp to run this test")
+    config = _preflight_config(gradient_state="1", grad="1")
+    config["scf"].update({"type": reference, "multiplicity": 3})
+    report = _check(config)
+    assert not report.ok
+    assert _errors(report, "scf.type") or _errors(report, "scf.multiplicity")
 
 
 def test_preflight_rejects_a_gradient_state_outside_the_average():

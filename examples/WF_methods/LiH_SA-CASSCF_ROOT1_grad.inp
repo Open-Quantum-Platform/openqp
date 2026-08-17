@@ -1,6 +1,6 @@
 # SA-CASSCF/STO-3G analytic nuclear gradient of ONE AVERAGED ROOT.
 #
-# Same LiH CAS(2,2) two-state average as LiH_SA-CASSCF_grad.inp, but
+# Same LiH CAS(2,2) two-state average as LiH_SA-CASSCF_ANALYTIC_grad.inp, but
 # [casscf] gradient_state=1 asks for the derivative of E_1 itself.  This is
 # Path B of docs/sa_casscf_gradients.md, and it is a genuinely different
 # calculation, not a relabelling:

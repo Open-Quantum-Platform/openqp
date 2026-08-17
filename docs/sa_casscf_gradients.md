@@ -87,8 +87,10 @@ exactly, and Path A is the existing state-specific machinery fed
 weight-averaged RDMs -- same `nact(nact+1)/2` factorization of the active
 correction, same `grd2` contraction, no `nbf^4` AO tensor.
 
-Path A is what a *state-averaged geometry optimization* should follow. It is
-not the gradient of any physical state.
+Path A is the derivative a future *state-averaged geometry optimization*
+should follow. It is not the gradient of any physical state. The current
+optimizer API exposes only state-indexed energies, so it refuses Path A rather
+than pairing this objective gradient with an individual-state energy.
 
 ## 3. Path B -- gradient of one averaged root
 
@@ -420,6 +422,16 @@ overlap tracking is not implemented, so a root flip between macroiterations
 would move the weights onto different physical states. That is a pre-existing
 constraint on the energy path, not a limitation of the response.
 
+Water/cc-pVDZ supplies a spherical d shell and therefore exercises the
+spherical-basis derivative transformation absent from the STO-3G cases. Both
+Path A and the root-1 Path B gradient
+agree with five-point energy differences within `1e-6` Eh/bohr and satisfy
+translational invariance within `1e-8` Eh/bohr. An optimizer integration test
+also checks that the root-1 energy and gradient are selected from matching
+state-array entries. UHF and ROHF requests are rejected by input validation
+because this derivation and its AO contraction are restricted to a closed-shell
+RHF reference.
+
 ## 7. Cost
 
 Path A is the cost of the state-specific gradient.
@@ -455,7 +467,7 @@ job.sa_casscf(active_electrons=2, active_orbitals=2, frozen_core=1,
               nstate=2, gradient_state=1, runtype="grad")
 ```
 
-Examples: `examples/WF_methods/LiH_SA-CASSCF_grad.inp` (Path A) and
+Examples: `examples/WF_methods/LiH_SA-CASSCF_ANALYTIC_grad.inp` (Path A) and
 `examples/WF_methods/LiH_SA-CASSCF_ROOT1_grad.inp` (Path B). Implementation:
 `pyoqp/oqp/library/casscf_sa_gradient.py` and the derivative-integral
 contraction `source/modules/casscf_ao_gradient.F90`.
