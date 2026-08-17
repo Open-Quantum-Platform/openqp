@@ -64,6 +64,27 @@ def _literal_dump_log_sections():
     return sections
 
 
+def _implicit_progress_dump_log_paths():
+    paths = set()
+    for path in (ROOT / "pyoqp" / "oqp").rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Name) or node.func.id != "dump_log":
+                continue
+            section = next(
+                (keyword.value for keyword in node.keywords
+                 if keyword.arg == "section"),
+                None,
+            )
+            if section is None or (
+                isinstance(section, ast.Constant) and section.value in (None, "")
+            ):
+                paths.add(path.relative_to(ROOT / "pyoqp" / "oqp").as_posix())
+    return paths
+
+
 def test_section_heading_snapshot():
     assert LOG.format_log_section(
         "PyOQP: Calculation request", LOG.INPUT_REFERENCE
@@ -104,6 +125,7 @@ def test_every_supported_and_dispatched_runtype_has_an_ordered_log_profile():
         assert indices == sorted(indices), runtype
         assert categories[0] == LOG.INPUT_REFERENCE
         assert categories[-1] == LOG.TERMINATION
+        assert LOG.PROGRESS in categories
 
 
 def test_every_literal_dump_log_section_is_classified():
@@ -115,11 +137,28 @@ def test_every_literal_dump_log_section_is_classified():
     assert not unclassified, sorted(unclassified)
 
 
+def test_implicit_progress_sections_are_declared_across_calculation_flows():
+    assert LOG.PROGRESS in LOG.LOG_SECTION_ORDER
+    assert LOG.section_category(None) == LOG.PROGRESS
+    assert LOG.section_category("") == LOG.PROGRESS
+
+    paths = _implicit_progress_dump_log_paths()
+    expected = {
+        "library/single_point.py",  # gradients and derivative properties
+        "library/libscipy.py",      # optimizations and reaction paths
+        "library/liboqp.py",        # native optimizations, NEB, IRC, and MEP
+        "library/namd.py",          # molecular dynamics
+    }
+    assert expected <= paths, sorted(expected - paths)
+
+
 def test_stage_specific_sections_use_forward_log_categories():
     assert LOG.section_category("correlation") == LOG.CONVERGENCE
     assert LOG.section_category("QM/MM") == LOG.CONVERGENCE
     assert LOG.section_category("text") == LOG.CONVERGENCE
     assert LOG.section_category("dftb_state_summary") == LOG.ENERGIES
+    assert LOG.section_category("dftd") == LOG.INPUT_REFERENCE
+    assert LOG.section_category("fci") == LOG.ENERGIES
 
 
 def test_native_banner_is_appended_after_log_initialization():
@@ -130,8 +169,27 @@ def test_native_banner_is_appended_after_log_initialization():
     assert start < banner < calculation
 
 
+def test_mpi_banner_collective_precedes_single_root_write():
+    source = (ROOT / "source" / "modules" / "oqp_banner.F90").read_text()
+    collective = source.index("call pe%get_hostnames(hostnames)")
+    root_guard = source.index("if (pe%rank == 0) then", collective)
+    opened = source.index("open (newunit=iw", root_guard)
+    banner = source.index("OpenQP: Open Quantum Platform", opened)
+    closed = source.index("close (iw)", banner)
+    root_end = source.index("endif", closed)
+
+    assert collective < root_guard < opened < banner < closed < root_end
+    assert source.count("open (newunit=iw") == 1
+    assert source.count("OpenQP: Open Quantum Platform") == 1
+    assert source.count("close (iw)") == 1
+    root_block = source[root_guard:root_end]
+    assert root_block.count("write(iw") == source.count("write(iw")
+
+
 def test_compatibility_document_names_stable_markers_and_units():
     text = (ROOT / "docs" / "logging.md").read_text()
+    for category in LOG.LOG_SECTION_ORDER:
+        assert f"`{category}`" in text
     for marker in (
         "PyOQP started at",
         "PyOQP method:",

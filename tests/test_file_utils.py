@@ -187,6 +187,7 @@ class TestWriteXYZ(unittest.TestCase):
                 file_utils.print_module_banner(mol, "HF", "Hartree-Fock reference")
                 file_utils.dump_log(mol, title="PyOQP: Calculation request",
                                     section="calculation")
+                file_utils.dump_log(mol, title="PyOQP: Entering Gradient Calculation")
                 file_utils.dump_log(mol, title="PyOQP: Normal SCF steps", section="scf")
                 file_utils.dump_log(
                     mol, title="PyOQP: Final energy", section="energy",
@@ -204,6 +205,7 @@ class TestWriteXYZ(unittest.TestCase):
         headings = [
             "PyOQP LOG | RUN",
             "PyOQP LOG | INPUT AND REFERENCE",
+            "PyOQP LOG | CALCULATION PROGRESS",
             "PyOQP LOG | CONVERGENCE AND ITERATIONS",
             "PyOQP LOG | ENERGIES AND STATES",
             "PyOQP LOG | GRADIENTS AND PROPERTIES",
@@ -246,6 +248,112 @@ class TestWriteXYZ(unittest.TestCase):
         self.assertNotIn(input_heading, text[text.index(convergence_heading):])
         for method in ("MP2", "CCSD", "CCSD(T)"):
             self.assertIn(f"PyOQP: {method} correlation steps", text)
+
+    def test_dftd_optimization_settings_precede_method_stages(self):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as folder:
+            log = Path(folder) / "dftd-optimization.log"
+            mol = minimal_log_mol(log)
+            mol.config["input"]["functional"] = "pbe"
+            file_utils.dump_log(
+                mol, title="PyOQP: Calculation request", section="calculation")
+            file_utils.dump_log(
+                mol,
+                title="PyOQP: Dispersion Correction",
+                section="dftd",
+                info={"type": "dftd4", "d4": True},
+            )
+            file_utils.dump_log(
+                mol, title="PyOQP: Entering Geometry Optimization")
+            file_utils.dump_log(
+                mol, title="PyOQP: Normal SCF steps", section="scf")
+            file_utils.dump_log(
+                mol,
+                title="PyOQP: Final Energy",
+                section="energy",
+                info={"el": [-1.0], "d4": 0.0},
+            )
+            text = log.read_text()
+
+        categories = [
+            line.split("| ", 1)[1]
+            for line in text.splitlines()
+            if "PyOQP LOG | " in line
+        ]
+        self.assertEqual(
+            categories,
+            [
+                "INPUT AND REFERENCE",
+                "INPUT AND REFERENCE",
+                "CALCULATION PROGRESS",
+                "CONVERGENCE AND ITERATIONS",
+                "ENERGIES AND STATES",
+            ],
+        )
+        self.assertIn("PyOQP dftd correction:", text)
+        self.assertIn("PyOQP dftd method:", text)
+        self.assertIn("PyOQP dftd functional:", text)
+
+    def test_fci_results_use_energy_state_category_and_keep_markers(self):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as folder:
+            log = Path(folder) / "fci-results.log"
+            mol = minimal_log_mol(log)
+            file_utils.dump_log(
+                mol,
+                title="PyOQP: Complete Active Space Configuration Interaction",
+                section="fci",
+                info={
+                    "method": "casci",
+                    "ci_label": "CASCI",
+                    "active_electrons": 2,
+                    "active_orbitals": 2,
+                    "frozen_core": 0,
+                    "determinants": 4,
+                    "orbital_source": "rhf",
+                    "orbital_selection": "sequential",
+                    "active_orbital_indices": "1,2",
+                    "core_orbital_indices": "",
+                    "energies": [-1.0, -0.8],
+                    "s2": [0.0, 2.0],
+                    "multiplicity": [1, 3],
+                    "state_average": {
+                        "energy": -0.9,
+                        "weights": [0.5, 0.5],
+                        "roots": [0, 1],
+                        "root_indices": [0, 1],
+                    },
+                    "ci_vector_log": {
+                        "threshold": 0.05,
+                        "root_indices": (0,),
+                        "entries": [
+                            {
+                                "index": 0,
+                                "alpha": "1",
+                                "beta": "1",
+                                "coefficients": [0.95],
+                            },
+                        ],
+                    },
+                },
+            )
+            text = log.read_text()
+
+        self.assertIn("PyOQP LOG | ENERGIES AND STATES", text)
+        for marker in (
+            "PyOQP CASCI energies",
+            "<S^2>",
+            "multiplicity",
+            "PyOQP state-average roots:",
+            "PyOQP state-average weights:",
+            "PyOQP state-average energy:",
+            "PyOQP CASCI CI vectors",
+        ):
+            self.assertIn(marker, text)
 
     def test_numerical_sections_preserve_category_heading_and_payload(self):
         file_utils = load_file_utils()

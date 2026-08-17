@@ -6,15 +6,22 @@ state numbering, and stable markers therefore form a compatibility contract.
 
 ## Section order
 
-Every top-level calculation uses the following order. Sections that do not
-apply to a requested observable are omitted.
+Every top-level calculation uses the following categories. Scientific stage
+categories retain the listed order, and sections that do not apply to a
+requested observable are omitted.
 
 1. `RUN`
 2. `INPUT AND REFERENCE`
-3. `CONVERGENCE AND ITERATIONS`
-4. `ENERGIES AND STATES`
-5. `GRADIENTS AND PROPERTIES`
-6. `TIMING AND TERMINATION`
+3. `CALCULATION PROGRESS`
+4. `CONVERGENCE AND ITERATIONS`
+5. `ENERGIES AND STATES`
+6. `GRADIENTS AND PROPERTIES`
+7. `TIMING AND TERMINATION`
+
+`CALCULATION PROGRESS` contains phase transitions and status messages such as
+entering a gradient, geometry step, path point, or dynamics step. It may recur
+between method-stage records; it does not contain final scientific results or
+replace the convergence, energy/state, or gradient/property categories.
 
 The heading grammar is:
 
