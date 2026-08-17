@@ -237,7 +237,8 @@ five-point stencil of independently computed total energies at three step sizes.
 | + `level_shift=0.15` | 7e-11 |
 | + `imaginary_shift=0.20` | 7e-11 |
 | + `edshft=0.05` | 6e-11 |
-| `caspt2`, CASSCF reference | 5e-8 |
+| `caspt2`, state-specific CASSCF reference | 4e-9 |
+| `xms-caspt2`, SA-CASSCF reference, 2 roots | 3e-10 / 2e-10 |
 | `mcqdpt2`, 2 roots | 6e-11 / 2e-10 |
 | `xms-caspt2`, 2 roots | 5e-11 / 2e-10 |
 | `caspt2`, 6-31G | 1e-9 |
@@ -245,10 +246,12 @@ five-point stencil of independently computed total energies at three step sizes.
 | `mrmp2` / `mcqdpt2` / `xmcqdpt2` on their default DIRECT engine | 7e-11 / 2e-10 |
 | `caspt2`, LiH/cc-pVDZ (first case with `d` shells) | 2e-9 |
 
-The CASSCF-reference row is looser because the finite-difference side inherits
-the CASSCF convergence of every displaced point; its residual falls from 3.5e-6
-at `h = 4e-3` to 5e-8 at `h = 1e-3`, which is the behaviour of the reference,
-not of the quantity being tested.
+The CASSCF rows were measured with the reference converged to
+`[casscf] gradient_norm_tol = 1e-9`.  That matters: at the default `1e-6` the
+same rows read 5e-8 and 5e-7, and tightening the reference alone moves them to
+4e-9 and 3e-10 without touching the gradient.  The residual there is the
+finite-difference side inheriting the CASSCF convergence of every displaced
+point, not the analytic derivative.
 
 Translational invariance `|sum_A g_A|` and rotational invariance
 `|sum_A r_A x g_A|` hold to 1e-15 and 1e-13.  The numbers above were reproduced

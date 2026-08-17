@@ -72,6 +72,13 @@ def _make_runner(tmp_path, project, coords_bohr, atoms=("H", "H", "H", "H"), *,
             "ci": {"nroot": str(max(nroot, 1)), "solver": "dense",
                    "eig_tol": "1.0e-12", "integral_backend": "native",
                    "target_spin": "any"},
+            # A loosely converged CASSCF reference puts its own convergence into
+            # every displaced point, and the finite-difference side -- not the
+            # analytic gradient -- then sets the floor: at the default
+            # gradient_norm_tol the residual is 5e-7, at 1e-9 it is 2e-10.
+            "casscf": {"gradient_norm_tol": "1.0e-9",
+                       "energy_decrease_tol": "1.0e-12",
+                       "max_macro_iterations": "200"},
             "pt2": pt2,
             "properties": {"scf_prop": "", "grad": ",".join(grad)},
             "symmetry": {"enabled": "False"},
@@ -174,18 +181,30 @@ def test_qdpt_family_on_its_default_engine(tmp_path, method, states):
 
 @needs_backend
 def test_casscf_reference_gradient_matches_finite_differences(tmp_path):
-    """A CASSCF reference brings in the CASSCF orbital Hessian and the
-    orbital-CI coupling, which an RHF-orbital CASCI reference does not.
-
-    The tolerance is looser than the CASCI cases because the finite-difference
-    side inherits the CASSCF convergence of every displaced point, not because
-    the analytic derivative is less exact: its residual falls from 3.5e-6 at
-    h=4e-3 to 5e-8 at h=1e-3, which is the behaviour of the REFERENCE, not of
-    the quantity being tested.
-    """
+    """A state-specific CASSCF reference brings in the CASSCF orbital Hessian
+    and the orbital-CI coupling, which an RHF-orbital CASCI reference does not."""
     grads, _mol = _analytic(tmp_path, "cas_an", H4_BOHR, reference="casscf")
     fd = _five_point(tmp_path, H4_BOHR, 0, h=1.0e-3, reference="casscf")
-    assert np.max(np.abs(grads[0] - fd)) < 1.0e-6
+    assert np.max(np.abs(grads[0] - fd)) < 1.0e-7
+
+
+@needs_backend
+def test_state_averaged_casscf_reference_gradient(tmp_path):
+    """A STATE-AVERAGED CASSCF reference: the constraint is the SA orbital
+    gradient and the orbital-CI coupling runs over every averaged root.
+
+    This is the combination with the most response machinery live at once --
+    SA-CASSCF orbital relaxation, per-root CI relaxation, the XMS state rotation
+    and the effective-Hamiltonian mixing vector.
+    """
+    grads, _mol = _analytic(tmp_path, "sa_an", H4_BOHR, states=(0, 1),
+                            method="xms-caspt2", reference="casscf", nroot=2,
+                            target_roots=(0, 1), grad=("0", "1"))
+    for state in (0, 1):
+        fd = _five_point(tmp_path, H4_BOHR, state, h=1.0e-3,
+                         method="xms-caspt2", reference="casscf", nroot=2,
+                         target_roots=(0, 1))
+        assert np.max(np.abs(grads[state] - fd)) < 1.0e-7
 
 
 @needs_backend
