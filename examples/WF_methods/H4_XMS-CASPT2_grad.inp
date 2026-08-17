@@ -1,0 +1,76 @@
+# RHF/STO-3G/XMS-CASPT2 ANALYTIC nuclear GRADIENT of linear H4, 2 singlet roots.
+#
+# The multistate half of the analytic CASPT2 gradient.  Three things happen here
+# that the single-state example (H4_CASPT2_grad.inp) does not exercise:
+#
+#   * the differentiated energy is an EIGENVALUE of the effective Hamiltonian, so
+#     the mixing vector enters by Hellmann-Feynman and the gap to the neighbouring
+#     root is checked before the derivative is taken;
+#   * each reference state's first-order amplitudes carry their own multiplier
+#     (lambda_I = -u_I G(D_I)^-1 sum_J u_J V_J), which no longer coincides with
+#     the amplitudes themselves as it does for a single state;
+#   * the XMS pre-rotation R -- the eigenvectors of the state-averaged Fock in the
+#     model space -- depends on the geometry, so its response is included.
+#
+# [properties] grad selects which published PT2 state is differentiated; the
+# state indices address the diagonalized effective Hamiltonian, ascending.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=xms-caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+# Differentiate the lower XMS-CASPT2 state.  Both are available; index 1 is the
+# upper one.
+grad=0
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=2
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+
+[pt2]
+reference=casci
+variant=xms-caspt2
+target_roots=0,1
+nroot=2
+ipea_shift=0.0
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true
+# --- nuclear-gradient route ---
+# analytic = the Lagrangian derivative, refusing rather than falling back
+gradient=analytic

@@ -124,6 +124,15 @@ from oqp.library.nac_utils import (
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.state_labels import is_mrsf, public_state_label
+
+#: PT2-family method labels whose nuclear gradient is dispatched through
+#: Gradient.caspt2_grad (analytic where the variant has one, central
+#: differences otherwise).  Kept in step with wf_numgrad.PT2_NUMGRAD_METHODS,
+#: which is the numerical half of the same set.
+PT2_GRAD_METHODS = frozenset({
+    'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'mrmp2', 'mcqdpt2', 'xmcqdpt2',
+})
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {
@@ -1266,6 +1275,17 @@ class Gradient(Calculator):
             self.mol.grads = grads
             return grads
 
+        # The CASPT2 family has an analytic nuclear gradient for the variants
+        # oqp.library.caspt2_gradient covers; [pt2] gradient selects the route.
+        if _normalized_method_label(self.method) in PT2_GRAD_METHODS:
+            grads = self.caspt2_grad()
+            self.mol.grads = grads
+            arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+            _sel = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+            if arr.shape[0] and _sel and 0 <= _sel[-1] < arr.shape[0]:
+                self.mol.set_grad(arr[_sel[-1]])
+            return grads
+
         state_average_enabled = str(
             self.mol.config.get('state_average', {}).get('enabled', False)
         ).strip().lower() in ('true', '1', 'yes', 'on')
@@ -1400,6 +1420,53 @@ class Gradient(Calculator):
         grads = casscf_analytic_gradient(self.mol)
 
         return grads
+
+    def caspt2_grad(self):
+        """CASPT2-family nuclear gradient, analytic where the variant has one.
+
+        ``[pt2] gradient`` selects the route:
+
+        ``auto`` (default)
+            take the analytic derivative when the requested PT2 variant is in
+            :mod:`oqp.library.caspt2_gradient`'s scope, otherwise fall back to
+            central differences and say so in the log.  A variant that IS in
+            scope but whose reference is not usable (an unconverged CASSCF, a
+            non-semicanonical point, a degenerate effective-Hamiltonian root)
+            is an error, not a silent fallback: the numerical gradient would
+            answer a different question about a reference the analytic
+            derivative just rejected.
+        ``analytic``
+            refuse rather than fall back.
+        ``numerical``
+            always central differences.
+        """
+        from oqp.library.caspt2_gradient import (
+            CASPT2GradientNotImplemented, caspt2_analytic_gradient,
+        )
+        from oqp.library.wf_numgrad import wavefunction_numerical_gradient
+
+        mode = str(self.mol.config.get('pt2', {}).get('gradient', 'auto')
+                   ).strip().lower() or 'auto'
+        if mode not in ('auto', 'analytic', 'numerical'):
+            raise ValueError(
+                f"[pt2] gradient must be auto, analytic or numerical, got '{mode}'")
+
+        requested = ([int(s) for s in np.atleast_1d(self.grads)]
+                     if len(self.grads) else [0])
+        if mode != 'numerical':
+            try:
+                dump_log(self.mol,
+                         title='PyOQP: Entering Analytic CASPT2 Gradient')
+                return caspt2_analytic_gradient(self.mol, requested)
+            except CASPT2GradientNotImplemented as exc:
+                if mode == 'analytic':
+                    raise
+                dump_log(self.mol, title=(
+                    'PyOQP: no analytic CASPT2 gradient for this variant '
+                    '(%s); using central differences' % exc))
+
+        dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+        return wavefunction_numerical_gradient(self.mol, self.grads)
 
     def mp2_grad(self):
         """Analytic ground-state RHF-MP2 nuclear gradient."""

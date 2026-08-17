@@ -34,6 +34,9 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H4_MRMP2.inp` | `mrmp2` | — | single-state MRMP2 (Hirao; == caspt2 h0=fock) |
 | `H4_MCQDPT2.inp` | `mcqdpt2` | `edshft=0.02` | GAMESS-convention multistate QDPT (Nakano, single-set) + ISA |
 | `H4_XMCQDPT2.inp` | `xmcqdpt2` | — | Granovsky's extended QDPT (XZERO; invariant) |
+| `H4_CASPT2_grad.inp` | `caspt2` | `gradient=analytic` | **analytic** CASPT2 nuclear gradient (Lagrangian: amplitude, CI and orbital response) |
+| `H4_CASPT2_numgrad.inp` | `caspt2` | `gradient=numerical` | the central-difference route the out-of-scope variants still use |
+| `H4_XMS-CASPT2_grad.inp` | `xms-caspt2` | `gradient=analytic` | analytic gradient of an XMS-CASPT2 root (state-rotation response, `H_eff` eigenvalue) |
 
 ## Method controls
 
@@ -47,12 +50,44 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,
   `level_shift`, `imaginary_shift`, `edshft` (GAMESS ISA `d -> d + edshft/d`,
-  QDPT-style intruder handling; exclusive with the level shifts).
+  QDPT-style intruder handling; exclusive with the level shifts); `gradient`
+  selects the nuclear-gradient route (see below).
 
 The native scope is determinant-space active-space CI and determinant-space
 CASPT2/NEVPT2, plus RDM-based strongly-contracted NEVPT2 (`contraction=strong`)
 and the GAMESS-convention QDPT family (`mrmp2` / `mcqdpt2` / `xmcqdpt2` =
 single-set diagonal-Fock MRPT2, Granovsky extended H0 via `xmcqdpt2`).
+
+## PT2 nuclear gradients
+
+`[pt2] gradient` selects the route:
+
+| value | behaviour |
+| --- | --- |
+| `auto` (default) | analytic where the variant has one, central differences otherwise |
+| `analytic` | refuse rather than fall back |
+| `numerical` | always central differences |
+
+The analytic derivative is one PT2 evaluation plus one pass of derivative
+integrals, independent of the number of nuclei; the central-difference route
+costs `2 * 3 * natom` displaced PT2 energies.
+
+Scope of the analytic route (everything else falls back under `auto`, and is
+refused with a specific reason under `analytic`):
+
+| supported | not supported |
+| --- | --- |
+| `caspt2`, `mrmp2` (single state) | `ms-caspt2` — the **multi-set** construction (per-state orbitals, per-state full-Fock-matrix H0, inter-state Löwdin-minor rotations); use `xms-caspt2` |
+| `mcqdpt2` (single-set multistate) | `h0=dyall` (NEVPT2) |
+| `xms-caspt2`, `xmcqdpt2` | `contraction=strong` (SC-NEVPT2) |
+| `level_shift`, `imaginary_shift`, `edshft` — carried exactly | `ipea_shift != 0` — the active-diagonal bias is not invariant under rotations inside the active block |
+| `reference=casci` (RHF orbitals) and `reference=casscf` (state-specific or state-averaged) | `[cas] orbital_source` reading orbitals from a file — imported orbitals are not a differentiable function of the geometry |
+| the PT2 frozen core (`[pt2] frozen`) | |
+
+The gradient is refused, rather than approximated, when the reference itself
+cannot support it: an unconverged CASSCF, orbitals that are not semicanonical,
+a degenerate effective-Hamiltonian root, or a reconstruction that does not
+reproduce the reported energy. Each writes the offending number into the log.
 
 ## QDPT engines
 

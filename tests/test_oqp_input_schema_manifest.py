@@ -217,7 +217,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
 
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main.
-    assert len(checked) == 349
+    # 350 since [pt2] gradient selected the CASPT2 nuclear-gradient route
+    # (analytic derivative vs central differences).
+    assert len(checked) == 350
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

@@ -1369,6 +1369,7 @@ class OpenQP:
         "imaginary_shift": "0.0",
         "level_shift": "0.0",
         "edshft": "0.0",
+        "gradient": "auto",
     }
 
     def _pt2_helper_opts(self, keywords, overrides, **helper_defaults):
@@ -1394,11 +1395,17 @@ class OpenQP:
     def caspt2(self, active_electrons=None, active_orbitals=None,
                frozen_core=None, nroot=None, variant=None, h0=None,
                ipea_shift=None, imaginary_shift=None, level_shift=None,
-               runtype=None, basis=None, reference="rhf", **keywords):
+               gradient=None, runtype=None, basis=None, reference="rhf",
+               **keywords):
         """Use a compact OpenQP CASPT2 setup.
 
         `variant` selects `caspt2` (single state, the default), `ms-caspt2`
-        or `xms-caspt2`; it is the input `method`, not a [pt2] key."""
+        or `xms-caspt2`; it is the input `method`, not a [pt2] key.
+
+        `gradient` selects the nuclear-gradient route for the gradient-driven
+        runtypes: `auto` (the default -- analytic where the variant has one,
+        central differences otherwise), `analytic` (refuse rather than fall
+        back) or `numerical`."""
         self._require_active_space("CASPT2", active_electrons, active_orbitals)
         method = str(variant or "caspt2").lower().replace("_", "-")
         if method in {"ms", "multistate"}:
@@ -1412,7 +1419,8 @@ class OpenQP:
         opts = self._pt2_helper_opts(
             keywords,
             {"h0": h0, "ipea_shift": ipea_shift,
-             "imaginary_shift": imaginary_shift, "level_shift": level_shift},
+             "imaginary_shift": imaginary_shift, "level_shift": level_shift,
+             "gradient": gradient},
             h0="fock")
         nroot = self._multistate_nroot(
             nroot, method, {"ms-caspt2", "xms-caspt2"})
