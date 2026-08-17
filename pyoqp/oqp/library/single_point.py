@@ -1431,8 +1431,9 @@ class Gradient(Calculator):
         `[properties] grad`: the two derivatives are different objects, and the
         state selector cannot express "the weighted objective", which is not a
         state at all. `[properties] grad` is therefore only checked for
-        consistency -- it may name the differentiated root, or the conventional
-        0 -- and never silently redirects the calculation.
+        consistency -- it must name the differentiated root, while the
+        weighted objective uses the conventional row 0 -- and never silently
+        redirects the calculation.
 
         The returned array is indexed BY CI ROOT, the way `tddft_grad` is
         indexed by state, with only the differentiated row filled. Two consumers
