@@ -519,6 +519,47 @@ They optimize the weighted state-average objective over the requested roots.
 
       1.0e-6 (default)
 
+- gradient_state // which derivative a STATE-AVERAGED run publishes
+
+      averaged (default)   d/dx sum_I w_I E_I, the optimized objective
+      <root index>         that averaged root's own gradient
+
+  A state-averaged run has two different nuclear gradients and neither is the
+  other's approximation.  `averaged` differentiates the weighted objective,
+  which is stationary in every wavefunction parameter and therefore needs no
+  response term; it is what a state-averaged geometry optimization should
+  follow, and it is not the gradient of any physical state.  An integer selects
+  one averaged root, whose energy is NOT stationary against orbital rotation
+  (only the weighted sum is) and which therefore goes through a coupled
+  orbital+CI Z-vector response.  A root that is not in `[state_average]
+  target_roots` is rejected: there is no response to build for it.
+
+  This is deliberately not `[properties] grad`, which names states -- the
+  weighted objective is not a state.  A `[properties] grad` entry that
+  disagrees with `gradient_state` is an error rather than a silent redirect.
+  Ignored by a state-specific run, which publishes one state.
+  See `docs/sa_casscf_gradients.md`.
+
+- zvector_tol // conditioning of the individual-state Z-vector solve
+
+      1.0e-8 (default)
+
+  Relative cutoff separating the numerical null space of the state-averaged
+  orbital Hessian from its live directions, and the tolerance on the
+  null-space leakage and the solved residual.  A right-hand side with a
+  component in that null space means the individual-state gradient does not
+  exist -- the averaged objective is flat along a rotation the individual state
+  is not -- and the run is refused rather than regularized.
+
+- zvector_degeneracy_tol // root gap below which a crossing is refused
+
+      1.0e-8 (default, Hartree)
+
+  The adiabatic energy of an individual state is not differentiable at a
+  crossing, and with unequal weights the CI response denominator is the gap
+  itself.  The gap is reported with every individual-state gradient so a
+  near-degenerate but resolved case can be told apart from a real crossing.
+
 - energy_decrease_tol // optimizer energy-change tolerance
 
       1.0e-10 (default)

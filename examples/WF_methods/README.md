@@ -23,7 +23,9 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `LiH_CASSCF_optimize.inp` | `casscf` | — | geometry optimization with the analytic state-specific CASSCF gradient |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
-| `LiH_SA-CASSCF_grad.inp` | `sa-casscf` | — | central-difference gradient of a state on common SA-CASSCF orbitals |
+| `LiH_SA-CASSCF_grad.inp` | `casscf` + state average | — | compatibility central-difference gradient of a state on common SA-CASSCF orbitals |
+| `LiH_SA-CASSCF_ANALYTIC_grad.inp` | `sa-casscf` | — | analytic gradient of the weighted SA-CASSCF objective |
+| `LiH_SA-CASSCF_ROOT1_grad.inp` | `sa-casscf` | — | analytic individual-state gradient with the coupled orbital/CI Z-vector |
 | `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (17 vs 335 CI solves, both at 15 macroiterations) |
 | `H2O_CASSCF_CAS44_TRAH.inp` | `casscf` | `[casscf] converger=trah` | matrix-free trust-region converger: the Hessian is never assembled (303 vs 1963 CI evaluations against `converger=ah` on the default FD Hessian, 13 vs 19 macroiterations, same energy to 1e-13) |
 | `H4_CASPT2.inp` | `caspt2` | `h0=fock` | single-state CASPT2 (Fock H0) |
@@ -41,9 +43,13 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 
 - `[cas]` — `active_electrons`, `active_orbitals`, `frozen_core`, `orbital_source`.
 - `[ci]` — `nroot`, `solver` (dense/davidson), `target_spin`.
-- `[casscf]` — orbital optimization and convergence; `grad_step`, `grad_guess`,
-  `grad_gap_warn`, and `grad_ranks_per_group` control the SA-CASSCF
-  central-difference nuclear gradient. State-specific CASSCF uses the analytic
+- `[casscf]` — orbital optimization and convergence. For the dedicated
+  `method=sa-casscf` analytic derivative, `gradient_state=averaged` selects the
+  weighted objective and an integer selects an averaged root; `zvector_tol`
+  and `zvector_degeneracy_tol` govern the individual-state response solve. The
+  legacy `method=casscf` plus `[state_average] enabled=true` spelling retains
+  its central-difference controls (`grad_step`, `grad_guess`, `grad_gap_warn`,
+  and `grad_ranks_per_group`). State-specific CASSCF also uses an analytic
   derivative.
 - `[state_average]` — `enabled`, `target_roots`, weights.
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),

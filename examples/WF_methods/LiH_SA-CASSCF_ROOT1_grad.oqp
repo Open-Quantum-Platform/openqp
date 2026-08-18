@@ -1,0 +1,10 @@
+sa-casscf/sto-3g
+grad(S1)
+guess(type=hcore)
+scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
+properties(scf_prop="")
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,orbital_source=rhf,sort_orbitals=energy,max_det=5000,max_memory=512)
+casscf(max_macro_iterations=100,optimizer=newton,gradient_norm_tol=1e-08,energy_decrease_tol=1e-11,step_norm_tol=1e-09,max_rotation_norm=0.2,level_shift=0.001,canonicalize=true,gradient_state=1,zvector_tol=1e-08,zvector_degeneracy_tol=1e-08)
+ci(nroot=2,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=singlet,root_tracking=energy)
+state_average(enabled=true,nstate=2,target_roots="0,1",equal_weights=true)
+geom="../geometries/HLi-14ffe169c3ad.xyz"
