@@ -579,10 +579,12 @@ OQP_CONFIG_SCHEMA = {
         'engine': {'type': string, 'default': 'auto'},
         'max_terms': {'type': int, 'default': '30000000'},
         'nproc': {'type': int, 'default': '0'},
-        # Nuclear-gradient route.  'auto' takes the analytic derivative
-        # (caspt2_gradient.py) for the variants that have one and falls back to
-        # central differences for the rest; 'analytic' refuses instead of
-        # falling back; 'numerical' always central-differences.
+        # Nuclear-gradient route for the PT2 family.  `auto` (the default)
+        # takes the analytic derivative when the calculation is exactly a
+        # variant one of the analytic PT2 gradient modules is the derivative
+        # of, and central differences otherwise; `analytic` demands it and
+        # reports why the run is out of scope instead of falling back;
+        # `numerical` always central-differences.
         'gradient': {'type': string, 'default': 'auto'},
         # Central-difference nuclear-gradient controls (wf_numgrad.py)
         'grad_step': {'type': float, 'default': '1.0e-3'},
