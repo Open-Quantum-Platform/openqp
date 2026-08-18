@@ -109,15 +109,25 @@ class ReadmeLogMetadataTests(unittest.TestCase):
     def test_readme_reports_current_multireference_gradients(self):
         readme = (ROOT / "README.md").read_text()
 
-        self.assertIn("analytic state-specific CASSCF gradients", readme)
-        self.assertIn("central-difference SA-CASSCF gradients", readme)
-        # The numerical row is scoped by what has no analytic derivative, not
-        # by method family: CASPT2 and XMS-CASPT2 on a state-specific CASSCF
-        # reference now have one, so naming the whole PT2 family here would
-        # report a capability the code no longer lacks.
+        # SA-CASSCF is an ANALYTIC route: #348 added the weighted-objective
+        # and individual-root derivatives, and only the legacy
+        # `method=casscf` plus `[state_average]` spelling still takes central
+        # differences.  Pinning the old wording here is what let the README
+        # keep advertising a limitation the code no longer has.
         self.assertIn(
-            "SA-CASSCF and the CASPT2/NEVPT2/QDPT2 variants without an "
-            "analytic derivative", readme)
+            "Energies and analytic nuclear gradients: state specific, the "
+            "weighted SA-CASSCF objective, and an individual averaged root",
+            readme)
+        self.assertNotIn("central-difference SA-CASSCF gradients", readme)
+        # Likewise the numerical row is scoped by what has no analytic
+        # derivative, not by method family.
+        self.assertIn(
+            "The legacy `method=casscf` plus `[state_average]` spelling, and "
+            "the CASPT2/NEVPT2/QDPT2 variants without an analytic derivative",
+            readme)
+        self.assertIn(
+            "state-specific CASSCF and SA-CASSCF, and CASPT2/XMS-CASPT2",
+            readme)
         self.assertIn(
             "CASPT2 and XMS-CASPT2 on a state-specific CASSCF reference have "
             "**analytic** nuclear gradients", readme)
