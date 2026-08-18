@@ -7,7 +7,9 @@ system=
 charge=0
 runtype=grad
 basis=sto-3g
-method=sa-casscf
+# Compatibility spelling retained for the central-difference path.  The
+# dedicated method=sa-casscf spelling selects the analytic derivatives.
+method=casscf
 
 [guess]
 type=hcore

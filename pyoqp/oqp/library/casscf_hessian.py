@@ -528,7 +528,8 @@ def _lib_hess_amp(stack, f_der, g_der, wmat, vecs):
 # ----------------------------------------------------------------- main assembly
 def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
                              weights, roots, ci_coeffs, *,
-                             degeneracy_tol=_DEGENERACY_TOL):
+                             degeneracy_tol=_DEGENERACY_TOL,
+                             return_response=False):
     """Exact orbital-rotation Hessian of the (SA-)CASSCF energy.
 
     Parameters mirror the ``casscf._optimize`` context: MO-basis ``h1e`` /
@@ -542,6 +543,16 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
     ``casscf._fd_orbital_hessian`` limit.  Raises for degenerate roots with
     genuine coupling (non-smooth objective) and for active spaces beyond the
     dense-spectrum memory guard.
+
+    ``return_response=True`` additionally returns the intermediates the
+    SA-CASSCF individual-state Z-vector needs (``casscf_sa_gradient.py``): the
+    active-Hamiltonian spectrum, the averaged-root overlaps that identify which
+    eigenstate is which averaged root, and the per-root coupling amplitudes
+    ``amp[i_avg][k, j] = <j| dHeff/dkappa_k |c_I>``.  These are exactly the
+    arrays this function already builds to assemble the CI-relaxation term --
+    the Hessian *is* the Schur complement of the coupled (orbital, CI) Hessian,
+    so its ingredients and the Z-vector's are the same ingredients.  They are
+    not recomputed anywhere.
     """
     h1e = np.asarray(h1e, dtype=float)
     eri = np.asarray(eri, dtype=float)
@@ -603,6 +614,8 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
     hact = _active_hamiltonian(f0, g0, stack, dets, nact)
     eps, vecs = _symmetric_eigh(hact)
     ovl = (ci[:, roots].T @ vecs) ** 2  # (n_avg, ndet) averaged-root overlaps
+    amps = [] if return_response else None
+    e_avg = [] if return_response else None
 
     for i_avg, (w_i, r) in enumerate(zip(weights, roots)):
         c = np.array(ci[:, r], dtype=float, copy=True)
@@ -619,6 +632,9 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
             amp = np.empty((npar, ndet))
             for k in range(npar):
                 amp[k] = _apply_active_operator(f_der[k], g_der[k], stack, wmat) @ vecs
+        if return_response:
+            amps.append(np.array(amp, dtype=float, copy=True))
+            e_avg.append(e_i)
 
         if not _lib_hess_relax(npar, ndet, i_avg, ovl, weights, eps, e_i,
                                amp, hess, degeneracy_tol):
@@ -648,6 +664,20 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
             if np.any(nz):
                 hess += (amp[:, nz] * factors[nz]) @ amp[:, nz].T
 
+    if return_response:
+        return hess, {
+            "eps": eps,
+            "vecs": vecs,
+            "ovl": ovl,
+            "amp": amps,
+            "e_avg": np.asarray(e_avg, dtype=float),
+            "dets": dets,
+            "hact": hact,
+            "D_sa": D,
+            "G_sa": G,
+            "degeneracy_tol": float(degeneracy_tol),
+            "coupling_noise": _COUPLING_NOISE,
+        }
     return hess
 
 

@@ -24,17 +24,17 @@ the central-difference alternative costs 6*natom full CASSCF runs.
 What it does NOT cover
 ----------------------
 A state-averaged run optimizes ``sum_I w_I E_I``, and the two things one might
-want from it are separate extensions:
+want from it are different objects that live in
+:mod:`oqp.library.casscf_sa_gradient`:
 
 * the gradient of the AVERAGED objective, which needs the weight-averaged RDMs
   in the same expression -- a small change, but a different quantity;
 * the gradient of an INDIVIDUAL averaged state, which is NOT variational: only
   the weighted sum is stationary against orbital rotation, so an individual
-  state needs a Lagrangian / Z-vector response solve.
+  state needs a coupled orbital+CI Z-vector response solve.
 
-Neither is implemented.  A state-averaged run is refused rather than handed the
-state-specific formula, which would be silently wrong by exactly the response
-term that is missing.
+A state-averaged run is refused *here* rather than handed the state-specific
+formula, which would be silently wrong by exactly the response term it omits.
 
 Non-stationary starting points are refused for the same reason: the expression
 above is only the derivative of the CASSCF energy when the orbital-rotation
@@ -154,10 +154,12 @@ def casscf_analytic_gradient(mol):
 
     if _state_average_requested(mol, settings):
         raise ValueError(
-            "Analytic CASSCF gradients are state-specific. A state-averaged "
-            "run optimizes sum_I w_I E_I, whose individual state gradients "
-            "need a Lagrangian/Z-vector response that is not implemented; run "
-            "method=casscf with [casscf] root, or use a numerical gradient."
+            "This entry point is the state-specific CASSCF gradient and the "
+            "run is state-averaged. A state-averaged objective has two "
+            "different derivatives -- the weighted objective and an individual "
+            "root -- and neither is this formula; use "
+            "oqp.library.casscf_sa_gradient (selected by [casscf] "
+            "gradient_state) or run method=casscf with [casscf] root."
         )
 
     backend = _casscf_gradient_backend()

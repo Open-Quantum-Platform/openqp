@@ -61,6 +61,7 @@ def test_checker_accepts_casscf_and_sa_casscf_gradient_driven_runtypes(
         for runtype in ("grad", "optimize", "ts", "mep", "irc"):
             config = _casscf_config(method, runtype)
             if method == "sa-casscf" and runtype != "grad":
+                config["casscf"]["gradient_state"] = 1
                 config["optimize"]["istate"] = 1
             report = _check(config, monkeypatch)
             assert report.ok, report.to_text()
@@ -104,7 +105,13 @@ def test_checker_rejects_unwired_casscf_workflows_and_bad_displacement(
         assert not report.ok
         assert "input.runtype" in report.to_text()
 
-    config = _casscf_config(method="sa-casscf")
+    # Numerical-gradient controls belong to the compatibility spelling.  The
+    # dedicated method=sa-casscf route is analytic and does not use grad_step.
+    config = _casscf_config(method="casscf")
+    config["ci"]["nroot"] = 2
+    config["state_average"] = {
+        "enabled": True, "nstate": 2, "target_roots": [0, 1],
+    }
     config["casscf"]["grad_step"] = 0.0
     report = _check(config, monkeypatch)
     assert not report.ok
