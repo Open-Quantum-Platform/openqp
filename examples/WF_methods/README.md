@@ -55,26 +55,32 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,
   `level_shift`, `imaginary_shift`, `edshft` (GAMESS ISA `d -> d + edshft/d`,
-  QDPT-style intruder handling; exclusive with the level shifts), and
-  `gradient` (see below).
-- `[pt2] gradient` — the nuclear-gradient route. `auto` (default) takes the
-  **analytic SC-NEVPT2 derivative** when the calculation is exactly the variant
-  it is the derivative of (strongly contracted, state specific, on a
-  state-specific CASSCF reference, `runtype` in grad/optimize/ts/mep/irc), and
-  central differences otherwise; `analytic` demands it and reports why if the
-  run is out of scope; `numerical` forces central differences. The analytic
-  path costs one CASSCF, one second-order pass, one coupled orbital/CI response
-  solve and one set of derivative integrals — independent of the number of
-  nuclei, against `6*natom` displaced energies for the numerical alternative.
-  Its error is FIRST order in the residual CASSCF orbital-rotation gradient, so
-  `[casscf] gradient_norm_tol` controls how many digits it is worth; the run
-  reports `|g_orb|`, the response residual and the Lagrangian asymmetry so the
-  size of every approximation is visible rather than assumed.
+  QDPT-style intruder handling; exclusive with the level shifts); `gradient`
+  selects the nuclear-gradient route (see below).
 
 The native scope is determinant-space active-space CI and determinant-space
 CASPT2/NEVPT2, plus RDM-based strongly-contracted NEVPT2 (`contraction=strong`)
 and the GAMESS-convention QDPT family (`mrmp2` / `mcqdpt2` / `xmcqdpt2` =
 single-set diagonal-Fock MRPT2, Granovsky extended H0 via `xmcqdpt2`).
+
+## PT2 nuclear gradients
+
+`[pt2] gradient` selects the route. `auto` (the default) takes the analytic
+derivative when the calculation is exactly a variant one of the analytic PT2
+gradient modules is the derivative of, and central differences otherwise;
+`analytic` demands it and reports why the run is out of scope instead of
+falling back; `numerical` always central-differences.
+
+**Strongly contracted NEVPT2** has an analytic derivative when the run is
+strongly contracted, state specific, on a state-specific CASSCF reference,
+with `runtype` in grad/optimize/ts/mep/irc. It costs one CASSCF, one
+second-order pass, one coupled orbital/CI response solve and one set of
+derivative integrals — independent of the number of nuclei, against
+`6*natom` displaced energies for the numerical alternative. Its error is
+FIRST order in the residual CASSCF orbital-rotation gradient, so
+`[casscf] gradient_norm_tol` controls how many digits it is worth; the run
+reports `|g_orb|`, the response residual and the Lagrangian asymmetry so the
+size of every approximation is visible rather than assumed.
 
 ## QDPT engines
 

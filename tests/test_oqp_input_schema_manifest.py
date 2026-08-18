@@ -219,7 +219,8 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
 
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
-    # gradient (the analytic SC-NEVPT2 nuclear-gradient route selector).
+    # gradient (the PT2 nuclear-gradient route selector: analytic derivative
+    # vs central differences).
     assert len(checked) == 353
 
 
