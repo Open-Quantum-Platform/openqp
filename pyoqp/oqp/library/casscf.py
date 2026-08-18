@@ -489,6 +489,125 @@ def _converger_trace(converger, hessian, framework, nevals, stats):
     return lines
 
 
+def _pack_cas_wavefunction_arrays(settings, options, nbf, ncore, nact,
+                                  active_nelec, enuc, roots, hessian=0,
+                                  *, energy_driver):
+    """``(iopt, dopt, spec)`` with the WAVEFUNCTION half of the option schema
+    filled, or ``None`` when the native driver must decline.
+
+    The common packer keeps energy and analytic-gradient CI conventions
+    identical while making their eligibility decisions explicit.  The native
+    energy driver declines cases its orbital optimizer or canonicalizer cannot
+    represent; the gradient re-evaluates the already-converged wavefunction and
+    therefore does not inherit those optimizer-only restrictions.
+
+    Declining rather than raising is deliberate and matches the established
+    ``_gfock_backend()`` pattern: every user-facing message comes from the
+    Python path, and ``resolve_ci_solve`` below is the same call that path
+    makes, so its validation errors are still raised from here."""
+    if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
+        return None
+    if nbf - ncore - nact < 0:
+        return None
+
+    # The optimizer is written around contiguous inactive/active/virtual
+    # blocks (`_nonredundant_pairs`, `_full_rdm1`), so an explicit
+    # `[cas] active_orbital_indices` selection is not something the driver can
+    # represent; decline and let the Python path deal with it.
+    plan = active_space_plan(
+        nbf, (ncore + active_nelec[0], ncore + active_nelec[1]), settings)
+    if (tuple(plan.active) != tuple(range(ncore, ncore + nact))
+            or tuple(plan.core) != tuple(range(ncore))
+            or tuple(plan.nelec) != tuple(active_nelec)
+            or int(plan.norb) != nbf):
+        return None
+
+    nroot_ci = max(1, int(max(roots)) + 1)
+    # Same call `solve_active_ci` makes, so the CI options the driver runs with
+    # are the ones the Python path would have used -- and so the established
+    # error messages (max_det, max_memory, nroot vs ndet) still come from here.
+    spec = resolve_ci_solve(
+        plan.nact, plan.nelec,
+        ecore=enuc, nroot=nroot_ci,
+        max_det=settings.max_det, max_memory=settings.max_memory,
+        eig_tol=settings.eig_tol, integral_cutoff=0.0,
+        solver=settings.solver, davidson_maxiter=settings.davidson_maxiter,
+        davidson_subspace=(max(settings.davidson_subspace, nroot_ci)
+                           if settings.davidson_subspace else 0),
+        target_spin=settings.target_spin,
+        active_section="[cas]", ci_section="[ci]",
+    )
+    # Canonicalization re-solves the CI for one root only; the driver carries a
+    # single Davidson subspace cap, so an explicit cap would apply the
+    # nroot-widened value to that solve too.  Only reachable with an explicit
+    # `[ci] davidson_subspace` on an iterative multi-root solve.
+    if (energy_driver and spec.solver == "davidson"
+            and settings.davidson_subspace and nroot_ci > 1):
+        return None
+
+    npar = nact * ncore + (nbf - ncore - nact) * (ncore + nact)
+    if energy_driver and npar <= 0:
+        return None
+
+    if energy_driver and hessian == 1 and (
+        tuple(getattr(settings, "active_orbital_indices", ()) or ())
+        or tuple(getattr(settings, "core_orbital_indices", ()) or ())
+    ):
+        return None      # make_hessian_provider raises for this; let it
+
+    iopt = np.zeros(len(_CAS_IOPT), dtype=np.int32)
+    iopt[_CAS_IOPT_INDEX["ncore"]] = ncore
+    iopt[_CAS_IOPT_INDEX["nact"]] = nact
+    iopt[_CAS_IOPT_INDEX["nalpha"]] = spec.nalpha
+    iopt[_CAS_IOPT_INDEX["nbeta"]] = spec.nbeta
+    iopt[_CAS_IOPT_INDEX["nstate"]] = len(roots)
+    iopt[_CAS_IOPT_INDEX["nroot"]] = spec.nroot
+    # The RAW user choice, not spec.solver: resolve_ci_solve collapses "auto"
+    # to a concrete solver up front (its budget validation still applies), but
+    # the driver wants to see "auto" itself -- fci_solve resolves it with the
+    # identical rule for cold solves, and inside the orbital loop the driver
+    # upgrades auto to a warm-started Davidson seeded from the previous point's
+    # CI vectors, which an already-collapsed "dense" would veto.
+    iopt[_CAS_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[
+        str(settings.solver).strip().lower()]
+    iopt[_CAS_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
+    iopt[_CAS_IOPT_INDEX["subspace"]] = spec.davidson_subspace
+    iopt[_CAS_IOPT_INDEX["mult"]] = spec.target_multiplicity or 0
+    iopt[_CAS_IOPT_INDEX["maxmemory"]] = spec.max_memory
+    # The one-call driver reaches the same string-driven sigma and RDM as the
+    # Python path, so give them the declared budget here too.
+    _apply_work_bytes_cap(spec.max_memory)
+    iopt[_CAS_IOPT_INDEX["nthreads"]] = _fci_lib_threads()
+
+    dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
+    dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
+    dopt[_CAS_DOPT_INDEX["eig_tol"]] = spec.eig_tol
+    dopt[_CAS_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+
+    return iopt, dopt, spec
+
+
+def _cas_wavefunction_arrays(settings, options, nbf, ncore, nact,
+                             active_nelec, enuc, roots, hessian=0):
+    """Native-energy option arrays, or ``None`` for the Python fallback."""
+    return _pack_cas_wavefunction_arrays(
+        settings, options, nbf, ncore, nact, active_nelec, enuc, roots,
+        hessian=hessian, energy_driver=True)
+
+
+def _cas_gradient_wavefunction_arrays(settings, options, nbf, ncore, nact,
+                                      active_nelec, enuc, roots):
+    """Option arrays for an analytic gradient of converged CASSCF orbitals.
+
+    Unlike the energy wrapper, this accepts a zero-dimensional orbital-rotation
+    space and an explicit multi-root Davidson subspace: neither invokes the
+    native orbital optimizer or its final canonicalization solve.
+    """
+    return _pack_cas_wavefunction_arrays(
+        settings, options, nbf, ncore, nact, active_nelec, enuc, roots,
+        energy_driver=False)
+
+
 def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
                        enuc, weights, roots, cfg=None, converger=0, hessian=0):
     """A complete CASSCF run inside liboqp, or ``None`` to use the Python path.
@@ -528,55 +647,13 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     lib, ffi = backend
     if options.optimizer not in _CAS_OPTIMIZER_CODE:
         return None
-    if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
-        return None
-    if nbf - ncore - nact < 0:
-        return None
 
-    # The optimizer is written around contiguous inactive/active/virtual
-    # blocks (`_nonredundant_pairs`, `_full_rdm1`), so an explicit
-    # `[cas] active_orbital_indices` selection is not something the driver can
-    # represent; decline and let the Python path deal with it.
-    plan = active_space_plan(
-        nbf, (ncore + active_nelec[0], ncore + active_nelec[1]), settings)
-    if (tuple(plan.active) != tuple(range(ncore, ncore + nact))
-            or tuple(plan.core) != tuple(range(ncore))
-            or tuple(plan.nelec) != tuple(active_nelec)
-            or int(plan.norb) != nbf):
+    packed = _cas_wavefunction_arrays(settings, options, nbf, ncore, nact,
+                                      active_nelec, enuc, roots,
+                                      hessian=hessian)
+    if packed is None:
         return None
-
-    nroot_ci = max(1, int(max(roots)) + 1)
-    # Same call `solve_active_ci` makes, so the CI options the driver runs with
-    # are the ones the Python path would have used -- and so the established
-    # error messages (max_det, max_memory, nroot vs ndet) still come from here.
-    spec = resolve_ci_solve(
-        plan.nact, plan.nelec,
-        ecore=enuc, nroot=nroot_ci,
-        max_det=settings.max_det, max_memory=settings.max_memory,
-        eig_tol=settings.eig_tol, integral_cutoff=0.0,
-        solver=settings.solver, davidson_maxiter=settings.davidson_maxiter,
-        davidson_subspace=(max(settings.davidson_subspace, nroot_ci)
-                           if settings.davidson_subspace else 0),
-        target_spin=settings.target_spin,
-        active_section="[cas]", ci_section="[ci]",
-    )
-    # Canonicalization re-solves the CI for one root only; the driver carries a
-    # single Davidson subspace cap, so an explicit cap would apply the
-    # nroot-widened value to that solve too.  Only reachable with an explicit
-    # `[ci] davidson_subspace` on an iterative multi-root solve.
-    if (spec.solver == "davidson" and settings.davidson_subspace
-            and nroot_ci > 1):
-        return None
-
-    npar = nact * ncore + (nbf - ncore - nact) * (ncore + nact)
-    if npar <= 0:
-        return None
-
-    if hessian == 1 and (
-        tuple(getattr(settings, "active_orbital_indices", ()) or ())
-        or tuple(getattr(settings, "core_orbital_indices", ()) or ())
-    ):
-        return None      # make_hessian_provider raises for this; let it
+    iopt, dopt, spec = packed
 
     maxmacro = max(0, int(options.max_macro_iterations))
     # Upper bound on the rows an optimization can append: one seed row plus one
@@ -585,29 +662,6 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     # then a two-phase one with its own.
     maxhist = maxmacro * (2 + 2 * _CAS_MAX_ESCAPES) + 2 * _CAS_MAX_ESCAPES + 4
 
-    iopt = np.zeros(len(_CAS_IOPT), dtype=np.int32)
-    iopt[_CAS_IOPT_INDEX["ncore"]] = ncore
-    iopt[_CAS_IOPT_INDEX["nact"]] = nact
-    iopt[_CAS_IOPT_INDEX["nalpha"]] = spec.nalpha
-    iopt[_CAS_IOPT_INDEX["nbeta"]] = spec.nbeta
-    iopt[_CAS_IOPT_INDEX["nstate"]] = len(roots)
-    iopt[_CAS_IOPT_INDEX["nroot"]] = spec.nroot
-    # The RAW user choice, not spec.solver: resolve_ci_solve collapses "auto"
-    # to a concrete solver up front (its budget validation still applies), but
-    # the driver wants to see "auto" itself -- fci_solve resolves it with the
-    # identical rule for cold solves, and inside the orbital loop the driver
-    # upgrades auto to a warm-started Davidson seeded from the previous point's
-    # CI vectors, which an already-collapsed "dense" would veto.
-    iopt[_CAS_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[
-        str(settings.solver).strip().lower()]
-    iopt[_CAS_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
-    iopt[_CAS_IOPT_INDEX["subspace"]] = spec.davidson_subspace
-    iopt[_CAS_IOPT_INDEX["mult"]] = spec.target_multiplicity or 0
-    iopt[_CAS_IOPT_INDEX["maxmemory"]] = spec.max_memory
-    # The one-call driver reaches the same string-driven sigma and RDM as the
-    # Python path, so give them the declared budget here too.
-    _apply_work_bytes_cap(spec.max_memory)
-    iopt[_CAS_IOPT_INDEX["nthreads"]] = _fci_lib_threads()
     iopt[_CAS_IOPT_INDEX["maxmacro"]] = maxmacro
     iopt[_CAS_IOPT_INDEX["optimizer"]] = _CAS_OPTIMIZER_CODE[options.optimizer]
     iopt[_CAS_IOPT_INDEX["canonical"]] = 1 if options.canonicalize else 0
@@ -616,10 +670,6 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     iopt[_CAS_IOPT_INDEX["converger"]] = converger
     iopt[_CAS_IOPT_INDEX["hessian"]] = hessian
 
-    dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
-    dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
-    dopt[_CAS_DOPT_INDEX["eig_tol"]] = spec.eig_tol
-    dopt[_CAS_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
     dopt[_CAS_DOPT_INDEX["grad_tol"]] = options.gradient_norm_tol
     dopt[_CAS_DOPT_INDEX["ener_tol"]] = options.energy_decrease_tol
     dopt[_CAS_DOPT_INDEX["step_tol"]] = options.step_norm_tol
@@ -1138,15 +1188,15 @@ class CASSCF:
         if sa_enabled:
             sa_energy = float(np.dot(weights, energies[roots]))
             report_energies = [float(energies[r]) for r in roots]
-        mol.energies = report_energies
         # For a state average the optimised quantity is the weighted objective,
         # not root 0.  Publishing report_energies[0] as the scalar total energy
         # meant generated .json references and every consumer of
         # mol_energy.energy recorded state 0 while the run had optimised
         # something else; the state-averaged CASCI path already publishes the
-        # weighted value.  The per-root list stays in mol.energies.
+        # weighted value.
         if sa_enabled:
             _scalar = sa_energy
+            public_energies = report_energies
         else:
             # State-specific: `report_energies` is ordered from root 0, so
             # publishing [0] for casscf.root=1 handed back the ground root
@@ -1154,6 +1204,17 @@ class CASSCF:
             _root = int(getattr(options, "root", 0) or 0)
             _scalar = (energies[_root] if _root < len(energies)
                        else report_energies[0])
+            # The analytic derivative has one public row: slot 0 contains the
+            # state selected by [casscf] root.  Gradient-driven calculations
+            # must use the same one-row convention for the energy or an
+            # excited-root calculation would pair E(root 0) with dE(root)/dx.
+            # Retain every physical-root energy in OQP::CASSCF_ENERGIES.
+            runtype = str(mol.config["input"].get("runtype", "energy")).lower()
+            if runtype in {"grad", "optimize", "ts", "mep", "irc"}:
+                public_energies = [float(_scalar)]
+            else:
+                public_energies = report_energies
+        mol.energies = public_energies
         mol.mol_energy.energy = float(_scalar)
         mol.data["OQP::CASSCF_ENERGIES"] = _as_f64c(report_energies)
 

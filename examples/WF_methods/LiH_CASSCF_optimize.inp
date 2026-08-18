@@ -1,12 +1,15 @@
-# RHF/STO-3G/CASSCF analytic state-specific nuclear gradient of LiH.
-# [casscf] root selects the physical root; [properties] grad selects its sole
-# public array row and must therefore be zero.
+# RHF/STO-3G/CASSCF geometry optimization of LiH with the analytic
+# state-specific nuclear gradient.
+#
+# [casscf] root=0 selects the physical CASSCF state.  The analytic gradient is
+# published as one array row, so every state-specific geometry driver must use
+# [optimize] istate=0 even when a higher physical root is selected.
 [input]
 system=
    Li  0.000000000   0.000000000   0.000000000
    H   0.000000000   0.000000000   1.600000000
 charge=0
-runtype=grad
+runtype=optimize
 basis=sto-3g
 method=casscf
 
@@ -16,13 +19,10 @@ type=hcore
 [scf]
 multiplicity=1
 type=rhf
+conv=1.0e-10
 maxit=80
 forced_attempt=3
 save_molden=false
-
-[properties]
-grad=0
-scf_prop=
 
 [cas]
 active_electrons=2
@@ -43,8 +43,16 @@ target_spin=singlet
 max_macro_iterations=50
 root=0
 converger=trah
-gradient_norm_tol=1.0e-10
-energy_decrease_tol=1.0e-12
-step_norm_tol=1.0e-10
+gradient_norm_tol=1.0e-8
+energy_decrease_tol=1.0e-10
+step_norm_tol=1.0e-8
 max_rotation_norm=2.0e-1
 canonicalize=true
+
+[optimize]
+lib=oqp
+istate=0
+
+[oqp]
+coordsys=tric
+trust=0.2

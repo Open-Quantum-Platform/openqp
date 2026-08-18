@@ -593,6 +593,45 @@ enum {
 int64_t casscf_energy(struct oqp_handle_t *inf, const int32_t *iopt,
     const double *dopt, const double *weights, const int32_t *roots,
     double *energies, double *s2, double *history, int32_t *stats);
+/* ------------------------------------------------------------------------
+ * Analytic state-specific CASSCF NUCLEAR gradient (casscf_gradient.F90).
+ *
+ * Not to be confused with casscf_gfock_grad above, which is the derivative
+ * with respect to the ORBITAL ROTATION parameters.  That gradient vanishing is
+ * a precondition for this one: the expression implemented here is the fully
+ * variational
+ *
+ *   dE/dx = sum D h^x + 1/2 sum Gamma (..|..)^x - sum X S^x + dV_NN/dx
+ *
+ * with no orbital-response or CI-response (Z-vector) term, which is valid only
+ * at a converged state-specific solution.
+ *
+ * Takes the SAME iopt/dopt schema as casscf_energy, so a gradient is requested
+ * with the arrays that configured the energy it differentiates; the
+ * optimizer-only entries are ignored.  `weights` must be the single entry 1.0
+ * and `roots` the single 0-based root the orbitals were optimized for
+ * ([casscf] root): a state-averaged run is REFUSED (status -20) rather than
+ * given the state-specific formula.  Individual SA state gradients need a
+ * Lagrangian/Z-vector response that is not implemented.
+ *
+ * Reads OQP::Hcore, OQP::AO_ERI and OQP::VEC_MO_A; writes infos%atoms%grad.
+ *
+ * `info` receives CAS_G_NINFO diagnostics, of which the first two let the
+ * caller reject a gradient taken at a non-stationary point.
+ *
+ * Returns 0, or a negative status: -1..-9 are the casscf_energy codes,
+ * -20 state-averaged run, -21 non-Hartree-Fock Hamiltonian, -22 allocation,
+ * -23 eigensolver failure, -24 the CI / generalized-Fock evaluation failed. */
+enum {
+  CAS_G_GNORM  = 0,  /* |g_orb|, the orbital-rotation gradient norm      */
+  CAS_G_ENERGY = 1,  /* energy of the differentiated root                */
+  CAS_G_FASYM  = 2,  /* max |F_pq - F_qp|, stationarity probe            */
+  CAS_G_NVEC   = 3,  /* rank of the factorized active 2-RDM correction   */
+  CAS_G_NINFO  = 4
+};
+int64_t casscf_gradient(struct oqp_handle_t *inf, const int32_t *iopt,
+    const double *dopt, const double *weights, const int32_t *roots,
+    double *info);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

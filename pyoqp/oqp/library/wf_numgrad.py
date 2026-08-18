@@ -1,16 +1,17 @@
 """Central-difference nuclear gradients for multireference wavefunctions.
 
-OpenQP currently has no analytic CASSCF or PT2 nuclear-gradient kernel.  This
-module differentiates the converged total energies returned by
-``SinglePoint.energy`` over Cartesian displacements.  It supports state-
-specific CASSCF, SA-CASSCF, and the CASPT2/NEVPT2/QDPT2 families.  The gradient
-driver is used by ``grad``, ``optimize``, ``ts``, ``mep``, and ``irc``.
+OpenQP uses the analytic kernel for state-specific CASSCF.  This module
+differentiates the converged total energies returned by ``SinglePoint.energy``
+over Cartesian displacements for SA-CASSCF and the CASPT2/NEVPT2/QDPT2
+families.  It can also be called explicitly for a state-specific CASSCF
+finite-difference reference, but the production gradient dispatch does not use
+that as a substitute for the analytic derivative.  The numerical driver is
+used by ``grad``, ``optimize``, ``ts``, ``mep``, and ``irc``.
 
-For state-specific CASSCF, only the root selected by ``[casscf] root`` is a
-stationary CASSCF energy and may be requested.  SA-CASSCF publishes the roots
-selected by ``[state_average]``; their indices in ``[properties] grad`` and
-``[optimize] istate`` address that published list.  PT2 indices similarly
-address the energies selected by ``[pt2] target_roots``/``nroot``.
+SA-CASSCF publishes the roots selected by ``[state_average]``; their indices in
+``[properties] grad`` and ``[optimize] istate`` address that published list.
+PT2 indices similarly address the energies selected by ``[pt2]
+target_roots``/``nroot``.
 
 The controls ``grad_step``, ``grad_guess``, ``grad_gap_warn``, and
 ``grad_ranks_per_group`` are read from ``[casscf]`` for CASSCF/SA-CASSCF and
