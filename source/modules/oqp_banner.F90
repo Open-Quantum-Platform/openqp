@@ -50,9 +50,16 @@ contains
        infos%log_filename(i:i) = log_filename(i)
     end do
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    call fdate(cdate)
+    call pe%get_hostnames(hostnames)
+    CPU_core = 1
+  !$  CPU_core = omp_get_max_threads()
 
+    ! All ranks participate in hostname collection above.  Only the
+    ! communicator root may append to the shared text log.
+    if (pe%rank == 0) then
 
-    open (newunit=iw, file=infos%log_filename, position="append")
+      open (newunit=iw, file=infos%log_filename, position="append")
 
     write(iw, '(/,10x, "***********************************************************")')
     write(iw, '(10x,   "*                                                         *")')
@@ -80,19 +87,15 @@ contains
     write(iw, '(10x,   "*                                                         *")')
     write(iw, '(10x,   "***********************************************************")')
 
-    call fdate(cdate)
-    call pe%get_hostnames(hostnames)
-    CPU_core = 1
-  !$  CPU_core = omp_get_max_threads()
-
-    if (pe%use_mpi) then
+      if (pe%use_mpi) then
         write(iw, '(/20x,A,"Job Details:",/,22x,"Start Time: ",A,/,22x,"Host List: ",A,/,22x,"Resources Allocated:",/,24x,"OpenMP Threads: ",I4,/,24x,"MPI Processors: ",I4)') &
                   ' ', cdate, hostnames, CPU_core, pe%size
-    else
+      else
         write(iw, '(/20x,A,"Job Details:",/,22x,"Start Time: ",A,/,22x,"Host: ",A,/,22x,"Resources Allocated:",/,24x,"OpenMP Threads: ",I4)') &
                   ' ', cdate, hostnames, CPU_core
+      endif
+      close (iw)
     endif
-    close (iw)
 
   end subroutine oqp_banner
 

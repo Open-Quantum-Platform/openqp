@@ -108,6 +108,34 @@ jobs:
               echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
               sleep 30
             done
+         - name: Check MPI banner single-writer ordering
+           if: ${{ matrix.MPI == 'ON' }}
+           run: |
+            pip install mpi4py
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            if [ -z "$ddx_lib" ]; then
+              echo "::error::libddx.so not found under ~/.cache/openqp; MPI runtime cannot load"
+              exit 1
+            fi
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            test_dir="$(mktemp -d)"
+            cp examples/QUANTUM/h2.inp "$test_dir/banner.inp"
+            mpiexec --oversubscribe -n 2 openqp "$test_dir/banner.inp" --silent
+
+            log="$test_dir/banner.log"
+            count="$(grep -c 'OpenQP: Open Quantum Platform' "$log")"
+            if [ "$count" -ne 1 ]; then
+              echo "::error::expected exactly one MPI banner, found $count"
+              exit 1
+            fi
+            run_line="$(grep -n -m1 'PyOQP LOG | RUN' "$log" | cut -d: -f1)"
+            banner_line="$(grep -n -m1 'OpenQP: Open Quantum Platform' "$log" | cut -d: -f1)"
+            input_line="$(grep -n -m1 'PyOQP LOG | INPUT AND REFERENCE' "$log" | cut -d: -f1)"
+            if [ -z "$run_line" ] || [ -z "$banner_line" ] || [ -z "$input_line" ] \
+               || [ "$run_line" -ge "$banner_line" ] || [ "$banner_line" -ge "$input_line" ]; then
+              echo "::error::MPI banner ordering is corrupt (RUN=$run_line banner=$banner_line INPUT=$input_line)"
+              exit 1
+            fi
          # Run the full example/reference regression suite. Each test runs in its
          # own subprocess, so a hard failure in one example cannot abort the rest
          # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI

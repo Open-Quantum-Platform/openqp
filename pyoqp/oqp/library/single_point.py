@@ -683,7 +683,7 @@ class SinglePoint(Calculator):
         # Ground-state post-SCF correlation (MP2 / CCSD / CCSD(T)): the Fortran
         # driver updates mol_energy.energy in place to the correlated total.
         label = self.method.upper()
-        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='')
+        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='correlation')
         self.energy_func[self.method](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
