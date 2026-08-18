@@ -119,6 +119,28 @@ def test_adapter_logs_one_settings_block_for_all_states(monkeypatch):
     assert calls[0][1]["info"]["capabilities"] == 7
 
 
+def test_excited_state_summary_uses_energy_category(monkeypatch):
+    calls = []
+    module = _load_adapter(monkeypatch, calls)
+    adapter = _adapter_without_native_runtime(module)
+    summary = {"states": "representative"}
+    monkeypatch.setattr(adapter, "_excited_state_summary", lambda _base: summary)
+    monkeypatch.setattr(adapter, "_resolved_method", lambda: "mrsf")
+    monkeypatch.setattr(
+        adapter, "_cache_key", lambda *_args, **_kwargs: ("summary",))
+    monkeypatch.setattr(
+        module.dftb_trace, "format_excited_state_summary",
+        lambda value: "state summary" if value is summary else "unexpected",
+    )
+    monkeypatch.setattr(module, "dftb_method_name", lambda _config: "MRSF-TDDFTB")
+
+    adapter._dump_excited_state_summary(types.SimpleNamespace(state=0))
+
+    assert len(calls) == 1
+    assert calls[0][1]["section"] == "dftb_state_summary"
+    assert calls[0][1]["info"]["text"] == "state summary"
+
+
 def test_native_diagnostics_capture_fd_and_restore_environment(monkeypatch):
     calls = []
     module = _load_adapter(monkeypatch, calls)

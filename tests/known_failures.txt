@@ -19,7 +19,6 @@ tests/test_excited_toolkit.py::test_integration_keystone_qcschema_fcidump  # Mod
 tests/test_int2_openmp_workshare.py::Int2OpenMPWorkshareTests::test_precomputed_shell_pair_map_preserves_descending_i_then_ascending_j_order  # 'ij_pair = 0' no longer in the int2 source
 tests/test_opentrustregion_linalg_config.py::OpenTrustRegionLinalgConfigTests::test_external_projects_receive_make_program_when_set  # 'string(MD5 _oqp_external_make_program_hash ...)' no longer in external/CMakeLists.txt
 tests/test_opentrustregion_linalg_config.py::OpenTrustRegionLinalgConfigTests::test_libtagarray_accepts_default_integer_reserve_sizes  # libtagarray-v0.0.6-default-integer-shapes.patch no longer referenced
-tests/test_readme_log_metadata.py::ReadmeLogMetadataTests::test_requested_contributors_are_listed  # README no longer lists VladimirMakhnev
 tests/test_scf_iteration_log_format.py::test_formatters_fall_back_to_same_width_scientific_notation  # '(f17.10)' no longer in the scf source
 tests/test_symmetry_parser_checker.py::TestSymmetryParserAndMetadataGates::test_schema_does_not_wire_symmetry_handlers_by_default  # '"symmetry": {' no longer in oqpdata.py
 
