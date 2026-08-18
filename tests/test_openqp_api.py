@@ -222,6 +222,11 @@ SCHEMA = {
         "grad_guess": {"type": _string, "default": "cold"},
         "grad_gap_warn": {"type": float, "default": "1.0e-5"},
         "grad_ranks_per_group": {"type": int, "default": "0"},
+        # Which derivative a state-averaged run publishes; the sa_casscf helper
+        # owns it, so the stub schema has to carry it.
+        "gradient_state": {"type": _string, "default": "averaged"},
+        "zvector_tol": {"type": float, "default": "1.0e-8"},
+        "zvector_degeneracy_tol": {"type": float, "default": "1.0e-8"},
     },
     "state_average": {
         "enabled": {"type": bool, "default": "False"},
