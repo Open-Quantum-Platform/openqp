@@ -111,7 +111,16 @@ class ReadmeLogMetadataTests(unittest.TestCase):
 
         self.assertIn("analytic state-specific CASSCF gradients", readme)
         self.assertIn("central-difference SA-CASSCF gradients", readme)
-        self.assertIn("SA-CASSCF and CASPT2/NEVPT2/QDPT2 families", readme)
+        # The numerical row is scoped by what has no analytic derivative, not
+        # by method family: strongly contracted NEVPT2 on a state-specific
+        # CASSCF reference now has one, so naming the whole PT2 family here
+        # would report a capability the code no longer lacks.
+        self.assertIn(
+            "SA-CASSCF and the CASPT2/NEVPT2/QDPT2 variants without an "
+            "analytic derivative", readme)
+        self.assertIn(
+            "strongly contracted NEVPT2 on a state-specific CASSCF reference "
+            "has an **analytic** nuclear gradient", readme)
 
     def test_capabilities_include_learning_resources_and_geometry_workflows(self):
         readme = (ROOT / "README.md").read_text()
