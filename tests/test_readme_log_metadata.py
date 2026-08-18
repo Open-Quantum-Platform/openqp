@@ -121,6 +121,14 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         self.assertIn(
             "state-specific CASSCF and SA-CASSCF", readme)
         self.assertNotIn("central-difference SA-CASSCF gradients", readme)
+        # `runtype=namd` is MRSF-TDDFT only (input_checker.py: "NAMD
+        # (surface hopping) currently supports only MRSF-TDDFT"), and the
+        # CASSCF/SA-CASSCF gate admits only grad/optimize/ts/mep/irc.  The
+        # analytic-gradient row must not offer dynamics to every method it
+        # lists.
+        self.assertNotIn(
+            "optimization, reaction paths, and dynamics", readme)
+        self.assertIn("`runtype=namd` dynamics is MRSF-TDDFT only", readme)
         self.assertIn(
             "The legacy `method=casscf` plus `[state_average]` spelling, and "
             "the CASPT2/NEVPT2/QDPT2 families", readme)
