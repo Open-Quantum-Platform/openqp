@@ -1,0 +1,68 @@
+# SA-CASSCF/STO-3G analytic nuclear gradient of the weighted objective.
+#
+# LiH CAS(2,2) averaged over the two lowest singlets with equal weights. This
+# is Path A of docs/sa_casscf_gradients.md: the optimized objective
+#
+#     L = sum_I w_I E_I
+#
+# is stationary with respect to every wavefunction parameter, so its gradient
+# is the Hellmann-Feynman-plus-Pulay expression evaluated with the
+# weight-averaged RDMs; no response term is required. It is not the gradient
+# of an individual electronic state.
+[input]
+system=
+   Li  0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   1.600000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=sa-casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+grad=0
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=2
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=100
+optimizer=newton
+gradient_norm_tol=1.0e-8
+energy_decrease_tol=1.0e-11
+step_norm_tol=1.0e-9
+max_rotation_norm=2.0e-1
+level_shift=1.0e-3
+canonicalize=true
+gradient_state=averaged
+
+[state_average]
+enabled=true
+nstate=2
+target_roots=0,1
+equal_weights=true

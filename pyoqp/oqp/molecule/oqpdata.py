@@ -519,6 +519,18 @@ OQP_CONFIG_SCHEMA = {
         'diis_start': {'type': int, 'default': '2'},
         'auto_stagnation': {'type': int, 'default': '3'},
         'gradient_norm_tol': {'type': float, 'default': '1.0e-6'},
+        # Which derivative a STATE-AVERAGED run publishes (casscf_sa_gradient.py):
+        # averaged (default) = d/dx sum_I w_I E_I, the optimized objective and
+        # the only variational one; an integer = that averaged root's own
+        # gradient, through the coupled orbital+CI Z-vector.  Ignored by a
+        # state-specific run, which has only one state.
+        'gradient_state': {'type': string, 'default': 'averaged'},
+        # Z-vector conditioning: relative cutoff for the null space of the SA
+        # orbital Hessian, and for the null-space leakage and residual checks.
+        'zvector_tol': {'type': float, 'default': '1.0e-8'},
+        # Root gap below which the CI response is singular / the adiabatic
+        # energy is not differentiable, and the run is refused.
+        'zvector_degeneracy_tol': {'type': float, 'default': '1.0e-8'},
         'energy_decrease_tol': {'type': float, 'default': '1.0e-10'},
         'step_norm_tol': {'type': float, 'default': '1.0e-8'},
         'max_rotation_norm': {'type': float, 'default': '2.0e-1'},

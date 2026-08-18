@@ -1,0 +1,86 @@
+# SA-CASSCF/STO-3G analytic nuclear gradient of ONE AVERAGED ROOT.
+#
+# Same LiH CAS(2,2) two-state average as LiH_SA-CASSCF_ANALYTIC_grad.inp, but
+# [casscf] gradient_state=1 asks for the derivative of E_1 itself.  This is
+# Path B of docs/sa_casscf_gradients.md, and it is a genuinely different
+# calculation, not a relabelling:
+#
+#   * E_1 is stationary against CI variation (its vector is an eigenvector of
+#     the active Hamiltonian) but NOT against orbital rotation -- only the
+#     weighted sum is.  The missing term is first order, not small.
+#   * Repairing it needs a Lagrangian whose orbital multipliers drag the CI in,
+#     because the state-averaged orbital gradient depends on the CI vectors.
+#     The coupled equations reduce to  H~ z = -g^1  with H~ the SA orbital
+#     Hessian INCLUDING CI relaxation -- the matrix casscf_hessian.py already
+#     assembles, because that Hessian is the Schur complement of the coupled
+#     (orbital, CI) Hessian.
+#   * The CI multipliers come back as one relaxation vector per averaged root
+#     and enter the gradient as transition densities.  Dropping them does not
+#     merely lose accuracy: it breaks the symmetry of the effective generalized
+#     Fock in the active-active block, and the Pulay term is then undefined.
+#     The run reports that asymmetry and refuses on it.
+#
+# Unequal weights, near-degenerate roots, root ordering and the null space of
+# H~ are all exercised by tests/test_casscf_sa_gradient.py against high-order
+# finite differences; this example is the smallest input that runs the path.
+[input]
+system=
+   Li  0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   1.600000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=sa-casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+grad=1
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=2
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=100
+optimizer=newton
+gradient_norm_tol=1.0e-8
+energy_decrease_tol=1.0e-11
+step_norm_tol=1.0e-9
+max_rotation_norm=2.0e-1
+level_shift=1.0e-3
+canonicalize=true
+# Path B: differentiate averaged root 1 through the coupled orbital+CI
+# Z-vector response.
+gradient_state=1
+zvector_tol=1.0e-8
+zvector_degeneracy_tol=1.0e-8
+
+[state_average]
+enabled=true
+nstate=2
+target_roots=0,1
+equal_weights=true

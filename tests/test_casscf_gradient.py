@@ -266,7 +266,7 @@ def test_casscf_gradient_accepts_excited_root_davidson_subspace(tmp_path):
     assert np.all(np.isfinite(grad))
 
 
-def _preflight(method, runtype, root=0, state_average=None):
+def _preflight(method, runtype, root=0, state_average=None, casscf=None):
     """Typed config for the input checker (it reads native types, not strings)."""
     from oqp.utils import input_checker
     config = {
@@ -283,51 +283,55 @@ def _preflight(method, runtype, root=0, state_average=None):
     }
     if state_average is not None:
         config["state_average"] = state_average
+    if casscf is not None:
+        config["casscf"].update(casscf)
     return input_checker.check_input_values(config, raise_error=False, emit=False)
 
 
 def test_state_specific_casscf_gradient_runtypes_pass_preflight():
-    """runtype=grad and the gradient-driven optimizers are accepted for casscf."""
+    """Gradient-driven runtypes are accepted for state-specific CASSCF."""
     for runtype in ("energy", "grad", "optimize", "ts", "mep", "irc"):
         report = _preflight("casscf", runtype)
         assert report.ok, f"runtype={runtype} rejected: {report.to_text()}"
 
 
-def test_state_averaged_casscf_gradient_uses_the_numerical_path():
-    """SA-CASSCF passes preflight for the numerical derivative on main."""
-    sa = {"enabled": True, "nstate": 2}
-    report = _preflight("sa-casscf", "grad", state_average=sa)
-    assert report.ok, report.to_text()
-
-    # The spelling method=casscf plus an enabled state average must take the
-    # same numerical path, never the state-specific analytic expression.
-    assert _preflight("casscf", "grad", state_average=sa).ok
+def test_state_averaged_casscf_gradient_reaches_the_selected_path():
+    """The dedicated method is analytic; the legacy spelling stays numerical."""
+    sa = {"enabled": True, "nstate": 2, "target_roots": "0,1",
+          "equal_weights": True}
+    assert _preflight("sa-casscf", "grad", state_average=sa).ok
     assert _preflight("sa-casscf", "energy", state_average=sa).ok
 
+    # Preserve the numerical-gradient spelling already released by PR #343.
+    assert _preflight("casscf", "grad", state_average=sa).ok
 
-def test_state_averaged_casscf_is_refused_by_the_analytic_library(tmp_path):
-    """The analytic entry point refuses an SA wavefunction when called directly.
+    bad = _preflight("sa-casscf", "grad", state_average=sa,
+                     casscf={"gradient_state": "3"})
+    assert not bad.ok
+    assert "gradient_state" in bad.to_text()
 
-    The public ``Gradient`` dispatcher sends this calculation to the numerical
-    SA-CASSCF derivative; the analytic kernel still fails closed for a caller
-    that bypasses that dispatch.
-    """
+
+def test_state_specific_entry_point_refuses_a_state_average(tmp_path):
+    """The state-specific formula is never reused for an averaged objective."""
     if not _backend_available():
         pytest.skip("native OQP backend not built; build liboqp to run this test")
 
     from oqp.library.casscf_gradient import casscf_analytic_gradient
-    from oqp.library.single_point import SinglePoint
+    from oqp.library.single_point import SinglePoint, Gradient
 
-    # runtype=energy so preflight accepts it; the gradient is then requested
-    # programmatically, the way a driver would.
     config = _config(_H4, _CAS22, _ci(2), _casscf_opts(0), runtype="energy")
     config["input"]["method"] = "sa-casscf"
-    config["state_average"] = {"enabled": "true", "nstate": "2"}
+    config["state_average"] = {"enabled": "true", "nstate": "2",
+                               "target_roots": "0,1", "equal_weights": "true"}
     runner = _runner(tmp_path, "casgrad_sa", config)
     SinglePoint(runner.mol).energy()
 
     with pytest.raises(ValueError, match="state-specific"):
         casscf_analytic_gradient(runner.mol)
+
+    grad = np.asarray(Gradient(runner.mol).gradient(), dtype=float)
+    assert np.all(np.isfinite(grad))
+    assert np.max(np.abs(grad)) > 0.0
 
 
 def test_state_specific_gradient_selectors_are_public_slot_zero():
@@ -335,7 +339,6 @@ def test_state_specific_gradient_selectors_are_public_slot_zero():
     direct = _preflight("casscf", "grad", root=1)
     assert direct.ok, direct.to_text()
 
-    # Rebuild the small configuration explicitly so only the selector changes.
     from oqp.utils import input_checker
     config = {
         "input": {"method": "casscf", "runtype": "grad", "basis": "sto-3g",
@@ -370,9 +373,6 @@ def test_excited_root_optimizer_uses_matching_energy_and_gradient_slot(tmp_path)
 
     config = _config(_H4, _CAS22, _ci(2), _casscf_opts(1))
     runner = _runner(tmp_path, "casgrad_root1_opt", config)
-    # Runner fills the optimizer defaults.  Select the derivative run type
-    # after parsing so this focused one-step test does not need to duplicate
-    # the complete [optimize] input section.
     runner.mol.config["input"]["runtype"] = "optimize"
     runner.mol.config["optimize"]["istate"] = 0
 
