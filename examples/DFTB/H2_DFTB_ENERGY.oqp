@@ -1,1 +1,0 @@
-dftb geom="../geometries/H2-069e977a383f.xyz" energy() dftb(backend=native,parameter_path="")
