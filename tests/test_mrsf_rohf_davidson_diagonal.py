@@ -405,6 +405,39 @@ class MrsfRohfDavidsonDiagonalTests(unittest.TestCase):
                 "no longer be told apart" % (call.start, call.umrsf),
             )
 
+    def test_layouts_that_hide_the_branch_are_rejected(self):
+        """What the walk cannot pin down must be reported, not accepted.
+
+        These are the ways a future restructuring could stop the two calls from
+        being distinguishable; each has to fail loudly rather than pass by
+        default.
+        """
+        cases = {
+            "call outside any umrsf branch": (
+                "    call mrinivec(infos, ea, ea, bvec_mo, xm, nvec)\n"
+                "    if (umrsf) then\n"
+                "      call mrinivec(infos, ea, eb, bvec_mo, xm, nvec)\n"
+                "    end if\n"
+            ),
+            "umrsf hidden in a compound predicate": (
+                "    if ((mrst==1 .or. mrst==3) .and. .not. umrsf) then\n"
+                "      call mrinivec(infos, ea, ea, bvec_mo, xm, nvec)\n"
+                "    else\n"
+                "      call mrinivec(infos, ea, eb, bvec_mo, xm, nvec)\n"
+                "    end if\n"
+            ),
+            "unbalanced if construct": (
+                "    if (.not. umrsf) then\n"
+                "      call mrinivec(infos, ea, ea, bvec_mo, xm, nvec)\n"
+            ),
+        }
+        for name, source in cases.items():
+            with self.subTest(layout=name):
+                self.assertTrue(
+                    diagnose(source),
+                    "%s was accepted; the guard must fail closed" % name,
+                )
+
     def test_shipped_source_has_no_layout_problems(self):
         """The whole guard, run over the shipped file, must be silent."""
         self.assertEqual(diagnose(self.energy), [])
