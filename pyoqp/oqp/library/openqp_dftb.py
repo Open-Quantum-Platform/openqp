@@ -1244,7 +1244,7 @@ class OpenQPDFTBAdapter:
         dump_log(
             self.mol,
             title="PyOQP: %s Excited States" % dftb_method_name(self.config),
-            section="text",
+            section="dftb_state_summary",
             info={"text": dftb_trace.format_excited_state_summary(summary)},
         )
 
