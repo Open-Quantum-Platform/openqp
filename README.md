@@ -37,7 +37,6 @@ for method, keyword, and build references.
 | Configuration interaction | FCI and CASCI in determinant active spaces | State energies and CI vectors at fixed molecular orbitals | [Examples](examples/WF_methods) |
 | CASSCF | State-specific CASSCF and state-averaged SA-CASSCF | Energies, analytic state-specific CASSCF gradients, and central-difference SA-CASSCF gradients | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/casscf-gradient/) |
 | Multireference PT2 | SS/MS/XMS-CASPT2, uncontracted/strongly contracted NEVPT2, and MRMP2/MCQDPT2/XMCQDPT2 | Correlated energies and central-difference nuclear gradients for supported geometry workflows | [Examples](examples/WF_methods) |
-| Tight binding | DFTB and xTB references with TD, SF, and MRSF response variants | Ground- and excited-state energies, available analytic gradients, optimization, dynamics, and QM/MM | [DFTB examples](examples/DFTB) · [xTB examples](examples/XTB) |
 
 #### Capabilities
 
@@ -57,7 +56,7 @@ for method, keyword, and build references.
 | Conical intersections | MECI, MECP, and three-state intersection searches | Crossing structures through `runtype=meci`, `mecp`, and `tci` | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/conical-intersections/) |
 | Reaction paths | IRC, MEP, and climbing-image NEB calculations | Intrinsic reaction coordinates, minimum-energy paths, and endpoint-connected paths | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/optimization/) |
 | Nonadiabatic dynamics | MRSF-TDDFT fewest-switches surface hopping with state tracking and decoherence | Internal-conversion trajectories through `runtype=namd` | [Examples](examples/ODP) |
-| QM/MM and SOC-NAMD-QMMM | ESPF electrostatic embedding through OpenMM with MRSF-TDDFT, DFTB, or xTB | Embedded energies and forces, QM/MM dynamics, and spin-orbit-coupled surface hopping | [QM/MM tutorial](https://open-quantum-platform.github.io/openqp-tutorials/qmmm-embedding/) · [Dynamics tutorial](https://open-quantum-platform.github.io/openqp-tutorials/soc-namd-qmmm/) |
+| QM/MM and SOC-NAMD-QMMM | ESPF electrostatic embedding through OpenMM with MRSF-TDDFT | Embedded energies and forces, QM/MM dynamics, and spin-orbit-coupled surface hopping | [QM/MM tutorial](https://open-quantum-platform.github.io/openqp-tutorials/qmmm-embedding/) · [Dynamics tutorial](https://open-quantum-platform.github.io/openqp-tutorials/soc-namd-qmmm/) |
 
 #### Ecosystem & Integrations
 
@@ -70,7 +69,6 @@ for method, keyword, and build references.
 | [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) | Machine-learning-assisted nonadiabatic molecular dynamics |
 | [Molden](https://www.theochem.ru.nl/molden/) format | Standards-oriented geometry, basis, SCF/Dyson orbitals, and optional frequency sections for common graphics tools |
 | [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) | Browser-based inspection of log, JSON, Molden, cube, and XYZ outputs |
-| Optional [DFTB+](https://dftbplus.org/) backend | Ground-state energy, gradient, and geometry optimization |
 | Optional [MOKIT](https://github.com/1234zou/MOKIT) | Broader external wavefunction conversion workflows |
 
 ### Install
