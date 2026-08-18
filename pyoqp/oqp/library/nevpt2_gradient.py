@@ -157,7 +157,45 @@ class SCNEVPT2NotApplicable(ValueError):
 # avoiding a second CASSCF/semicanonical/PT2 evaluation at that geometry.
 _GRADIENT_DRIVEN_RUNTYPES = frozenset({"grad", "optimize", "ts", "mep", "irc"})
 _GRADIENT_CACHE_ATTR = "_sc_nevpt2_energy_gradient_cache"
+# A run-time applicability refusal (a near-degenerate reference, a singular
+# response) that only appears once the reference exists.  It is recorded so the
+# immediately following gradient request does not repeat the failing analytic
+# attempt, and it is scoped to the coordinates that produced it -- a
+# ``{"coord", "reason"}`` record -- so a later optimizer/TS/MEP/IRC geometry
+# re-evaluates applicability instead of inheriting one step's fallback.
 _RUNTIME_FALLBACK_ATTR = "_sc_nevpt2_runtime_fallback_reason"
+
+
+def _coord_vector(mol):
+    """Flattened nuclear coordinates identifying the current geometry."""
+    return np.asarray(mol.get_system(), dtype=float).reshape(-1)
+
+
+def _current_runtime_fallback(mol):
+    """Return a run-time applicability refusal recorded AT THE CURRENT geometry.
+
+    The energy pass of a gradient-driven workflow records a transient refusal so
+    the immediately following gradient request does not repeat the failing
+    analytic attempt.  The record is scoped to the coordinates that produced it:
+    a later geometry clears the stale record and returns ``""`` so the route
+    re-evaluates applicability from scratch, and one near-degenerate, loosely
+    converged, or singular step cannot pin the remainder of an optimization to
+    central differences after the analytic route is valid again.
+    """
+    record = getattr(mol, _RUNTIME_FALLBACK_ATTR, None)
+    if not record:
+        return ""
+    if isinstance(record, dict):
+        cached_coord = np.asarray(
+            record.get("coord", []), dtype=float).reshape(-1)
+        current_coord = _coord_vector(mol)
+        if cached_coord.shape == current_coord.shape \
+                and np.array_equal(cached_coord, current_coord):
+            return str(record.get("reason", ""))
+    # A different geometry (or a legacy bare-string record) is stale: clear it
+    # so this geometry re-evaluates the analytic route.
+    delattr(mol, _RUNTIME_FALLBACK_ATTR)
+    return ""
 
 
 #: Default ceiling on the basis size.  The gradient holds several dense nbf^4
@@ -680,7 +718,7 @@ def sc_nevpt2_gradient_route(mol):
     options = _caspt2_options(mol.config)
     if options.gradient == "numerical":
         return "numerical", "[pt2] gradient=numerical"
-    runtime_reason = getattr(mol, _RUNTIME_FALLBACK_ATTR, "")
+    runtime_reason = _current_runtime_fallback(mol)
     if runtime_reason:
         if options.gradient == "analytic":
             raise SCNEVPT2NotApplicable(runtime_reason)
@@ -729,13 +767,16 @@ def prepare_sc_nevpt2_energy_gradient(mol, ref_energy=None):
     except SCNEVPT2NotApplicable as exc:
         if options.gradient == "analytic":
             raise
-        setattr(mol, _RUNTIME_FALLBACK_ATTR, str(exc))
+        setattr(mol, _RUNTIME_FALLBACK_ATTR, {
+            "coord": _coord_vector(mol).copy(),
+            "reason": str(exc),
+        })
         if hasattr(mol, _GRADIENT_CACHE_ATTR):
             delattr(mol, _GRADIENT_CACHE_ATTR)
         return False
 
     setattr(mol, _GRADIENT_CACHE_ATTR, {
-        "coord": np.asarray(mol.get_system(), dtype=float).reshape(-1).copy(),
+        "coord": _coord_vector(mol).copy(),
         "grads": np.asarray(grads, dtype=float).copy(),
     })
     return True
@@ -748,7 +789,7 @@ def consume_sc_nevpt2_gradient(mol):
         return None
     delattr(mol, _GRADIENT_CACHE_ATTR)
     cached_coord = np.asarray(cache.get("coord", []), dtype=float).reshape(-1)
-    current_coord = np.asarray(mol.get_system(), dtype=float).reshape(-1)
+    current_coord = _coord_vector(mol)
     if cached_coord.shape != current_coord.shape \
             or not np.array_equal(cached_coord, current_coord):
         return None

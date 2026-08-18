@@ -1280,6 +1280,11 @@ class Gradient(Calculator):
             )
             cached = consume_sc_nevpt2_gradient(self.mol)
             if cached is not None:
+                # A fused energy-pass gradient is published through the same
+                # public slot-0 selector check as sc_nevpt2_grad, so a
+                # `[properties] grad=1` run cannot receive the corrected root's
+                # slot-0 gradient labeled as a different requested state.
+                self._require_scnevpt2_slot0()
                 dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
                 arr = np.asarray(cached, dtype=float).reshape(-1, self.natom, 3)
                 if arr.shape[0]:
@@ -1453,16 +1458,17 @@ class Gradient(Calculator):
 
         return grads
 
-    def sc_nevpt2_grad(self):
-        """Analytic strongly contracted NEVPT2 gradient of the [pt2] root.
+    def _require_scnevpt2_slot0(self):
+        """Reject any [properties] grad selector other than public slot 0.
 
-        Single-state SC-NEVPT2 publishes exactly one energy, so the only valid
-        [properties] grad selector is 0; [pt2] target_roots picks which physical
-        root occupies that slot.  Rejecting any other selector here is what
-        keeps a run from being answered with a root it did not ask for.
+        Single-state SC-NEVPT2 publishes exactly one energy, so slot 0 is the
+        only valid selector; [pt2] target_roots picks which physical root
+        occupies it.  The direct analytic gradient and the fused energy-pass
+        cache both publish through this one check, so neither can hand back the
+        corrected root's slot-0 gradient labeled as a different requested state.
+        Returns the corrected root for the gradient log line.
         """
         from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
-        from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
 
         root = int(_reference_roots(_caspt2_options(self.mol.config))[0])
         requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
@@ -1472,7 +1478,19 @@ class Gradient(Calculator):
                     f'Analytic SC-NEVPT2 gradients are state-specific: only '
                     f'the corrected root {root} is available in public slot 0, '
                     f'but [properties] grad requested slot {state}.')
+        return root
 
+    def sc_nevpt2_grad(self):
+        """Analytic strongly contracted NEVPT2 gradient of the [pt2] root.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so the only valid
+        [properties] grad selector is 0; [pt2] target_roots picks which physical
+        root occupies that slot.  Rejecting any other selector here is what
+        keeps a run from being answered with a root it did not ask for.
+        """
+        from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+        root = self._require_scnevpt2_slot0()
         dump_log(self.mol, title='PyOQP: Analytic SC-NEVPT2 Gradient of Root %s' % root)
         return sc_nevpt2_analytic_gradient(self.mol)
 

@@ -839,6 +839,55 @@ def test_auto_does_not_mask_an_implementation_failure(tmp_path, monkeypatch):
 
 
 @needs_native_gradient
+def test_a_runtime_refusal_is_scoped_to_its_geometry(tmp_path, monkeypatch):
+    """A transient refusal at one geometry must not pin later steps to numerics.
+
+    Under ``gradient=auto`` a run-time applicability refusal (a near-degeneracy,
+    a singular response) is recorded so that geometry's gradient takes central
+    differences without repeating the failed analytic attempt.  The record is
+    scoped to the coordinates that produced it: the next optimizer/TS/MEP/IRC
+    geometry re-evaluates applicability and routes analytic again, rather than
+    inheriting one bad step's fallback for the rest of the workflow.
+    """
+    from oqp.library import nevpt2_gradient
+    from oqp.library.nevpt2_gradient import (
+        SCNEVPT2NotApplicable, prepare_sc_nevpt2_energy_gradient,
+        sc_nevpt2_gradient_route, _RUNTIME_FALLBACK_ATTR,
+    )
+
+    runner = _runner(tmp_path, "scnevpt2_fallback_scope", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22,
+                     pt2=dict(_SC_NEVPT2, gradient="auto"), runtype="grad")
+    mol = runner.mol
+
+    # Geometry 1: force the analytic attempt to refuse at run time.  The energy
+    # pass records the reason; this geometry's gradient falls back to numerics.
+    def _refuse(_mol, ref_energy=None):
+        raise SCNEVPT2NotApplicable("transient near-degeneracy at step 1")
+    monkeypatch.setattr(nevpt2_gradient, "sc_nevpt2_analytic_gradient", _refuse)
+
+    assert prepare_sc_nevpt2_energy_gradient(mol) is False
+    route1, reason1 = sc_nevpt2_gradient_route(mol)
+    assert route1 == "numerical"
+    assert "transient near-degeneracy" in reason1
+    assert hasattr(mol, _RUNTIME_FALLBACK_ATTR)
+
+    # Geometry 2: a later, eligible step.  The route re-evaluates applicability
+    # from the configuration and the compiled backend -- it never consults the
+    # patched analytic function -- so the stale reason must not survive here.
+    displaced = np.asarray(mol.get_system(), dtype=float).copy()
+    displaced.reshape(-1)[2] += 0.05
+    mol.update_system(displaced)
+
+    route2, reason2 = sc_nevpt2_gradient_route(mol)
+    assert "transient near-degeneracy" not in reason2, (
+        "a refusal recorded at the previous geometry pinned this one to "
+        "central differences")
+    assert route2 == "analytic"
+    assert not hasattr(mol, _RUNTIME_FALLBACK_ATTR)
+
+
+@needs_native_gradient
 def test_dispatch_does_not_project_the_complete_gradient(tmp_path):
     """The published gradient is the complete one, not a symmetry projection.
 
@@ -931,6 +980,36 @@ def test_public_gradient_combines_the_reference_and_pt2_pass(tmp_path,
     assert np.all(np.isfinite(gradient))
     assert calls == {"reference": 1, "adjoint": 1}
     assert not hasattr(runner.mol, nevpt2_gradient._GRADIENT_CACHE_ATTR)
+
+
+@needs_backend
+def test_cached_public_gradient_still_validates_the_selector(tmp_path):
+    """The fused energy-pass cache is published only through the slot-0 check.
+
+    The energy pass caches the corrected root's single-state gradient in public
+    slot 0.  A ``[properties] grad=1`` run must be rejected exactly as the direct
+    analytic path rejects it -- never handed slot-0 data relabeled as the
+    requested state on the strength of a cache hit.
+    """
+    from oqp.library import nevpt2_gradient
+    from oqp.library.single_point import Gradient
+
+    runner = _runner(tmp_path, "scnevpt2_cached_selector", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22,
+                     pt2=dict(_SC_NEVPT2, gradient="analytic"), runtype="grad",
+                     extra={"properties": {"grad": "1"}})
+    mol = runner.mol
+
+    # Seed the one-use cache the energy pass leaves at these coordinates: a
+    # complete single-state gradient occupying public slot 0.
+    natom = int(mol.data["natom"])
+    setattr(mol, nevpt2_gradient._GRADIENT_CACHE_ATTR, {
+        "coord": np.asarray(mol.get_system(), dtype=float).reshape(-1).copy(),
+        "grads": np.zeros((1, natom, 3)),
+    })
+
+    with pytest.raises(ValueError, match="public slot 0"):
+        Gradient(mol).gradient()
 
 
 @needs_backend
