@@ -114,6 +114,11 @@ jobs:
             '--collect-data basis_set_exchange --collect-submodules basis_set_exchange',
             '--collect-data geometric --collect-submodules geometric',
             '--collect-submodules scipy --collect-submodules numpy',
+            # basis_set_exchange asks importlib.metadata for its own version at
+            # import time, which needs the .dist-info that --collect-data does
+            # not carry.  Recursive so its dependencies are covered too.
+            '--recursive-copy-metadata basis_set_exchange',
+            '--copy-metadata OpenQP --copy-metadata geometric',
             ($addBin -join ' '),
             "`"$entry`""
           ) -join ' '
