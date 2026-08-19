@@ -54,8 +54,26 @@ def library_path(root, suffix=None):
     for directory in library_directories(root):
         candidate = directory / f"liboqp.{suffix}"
         if candidate.is_file():
+            _register_dll_directory(directory)
             return candidate
     return None
+
+
+def _register_dll_directory(directory):
+    """On Windows, make liboqp's own directory and the directories on PATH
+    searchable for liboqp's dependent DLLs (the bundled DFT-D4 libraries next
+    to it, and the MKL / Intel runtime DLLs the user put on PATH).  Python 3.8+
+    no longer consults PATH for dependencies of a dlopen()ed DLL."""
+    if platform.uname()[0] != "Windows" or not hasattr(os, "add_dll_directory"):
+        return
+    seen = set()
+    for entry in [str(directory)] + os.environ.get("PATH", "").split(os.pathsep):
+        if entry and entry not in seen and os.path.isdir(entry):
+            seen.add(entry)
+            try:
+                os.add_dll_directory(entry)
+            except OSError:
+                pass
 
 
 def _is_oqp_root(path, suffix):

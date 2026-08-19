@@ -33,6 +33,18 @@ message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
+if(WIN32)
+  # The Python runtime (pyoqp/oqp/runtime.py) loads "liboqp.<suffix>" from the
+  # configured libdir on every platform.  On Windows CMake would otherwise
+  # produce "oqp.dll" and install it to bin/.  Symbols are not exported from a
+  # DLL by default; export them all so cffi's dlopen finds the C API.
+  set_target_properties(oqp PROPERTIES
+    PREFIX "lib"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_LIBDIR})
+else()
+  set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 add_dependencies(oqp libxc libtagarray libecpint)
 target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
 if(ENABLE_OPENTRAH)
@@ -198,7 +210,7 @@ set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90
 
 install(TARGETS oqp
 EXPORT "${PROJECT_NAME}Targets"
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  RUNTIME DESTINATION ${_OQP_RUNTIME_DESTINATION}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

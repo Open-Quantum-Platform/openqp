@@ -374,7 +374,11 @@ if(USE_LIBINT)
     FortranCInterface_VERIFY(CXX)
 endif()
 
-if(ENABLE_PYTHON)
+# The compiled cffi extension (_oqp) is an optional API-mode binding; the
+# default runtime (OQP_RTLD=1) dlopen()s liboqp in ABI mode and does not need
+# it.  Its build needs an import library and the MSVC toolchain on Windows, so
+# skip it there.
+if(ENABLE_PYTHON AND NOT WIN32)
     add_subdirectory(pyoqp)
 endif()
 
