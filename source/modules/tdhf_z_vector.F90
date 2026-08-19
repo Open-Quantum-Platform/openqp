@@ -67,7 +67,7 @@ contains
     use tdhf_sf_lib, only: sfrorhs, &
       sfromcal, sfrogen, sfrolhs, &
       pcgb, sfropcal, sfrowcal
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: tddft_fxc
     use mod_dft_gridint_gxc, only: tddft_gxc
     use mathlib, only: symmetrize_matrix, orthogonal_transform
@@ -232,11 +232,12 @@ contains
     ! RHS, not the relaxation operator. Forcing tamm_dancoff here would build
     ! the A matrix into %amb (which compute_apbx never reads), leaving the
     ! operator without its two-electron part for TDA.
-    int2_data = int2_td_data_t(d2=pa, &
+    if (allocated(int2_data)) deallocate(int2_data)
+    allocate(int2_data, source=int2_td_data_t(d2=pa, &
             int_apb=.true., &
             int_amb=.false., &
             tamm_dancoff=.false., &
-            scale_exchange=scale_exch)
+            scale_exchange=scale_exch))
 
     pxm(1:nocc, 1:nvir) => xm(1:)
     do i = 1, nvir
@@ -336,13 +337,14 @@ contains
 
     ! Compute H+[P]
     ppa(1:nbf,1:nbf, 1:1, 1:1) => pa
-    int2_data = int2_rpagrd_data_t(&
+    if (allocated(int2_data)) deallocate(int2_data)
+    allocate(int2_data, source=int2_rpagrd_data_t(&
             xpy=null(), &
             xmy=null(), &
             t=ppa, &
             nspin = 1, &
             tamm_dancoff=tda, &
-            scale_exchange=scale_exch)
+            scale_exchange=scale_exch))
 
     call int2_driver%run(int2_data, &
             cam=dft.and.infos%dft%cam_flag, &

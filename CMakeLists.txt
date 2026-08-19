@@ -238,6 +238,19 @@ if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
 elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
+    # Intel Fortran represents .TRUE. as -1 (all bits set) by default.  OpenQP
+    # exports logical(c_bool) fields through the C API (include/oqp.h) and the
+    # Python layer reads them as C _Bool, which only admits 0 or 1.
+    # -fpscomp logicals selects the 1/0 representation that the Fortran
+    # standard requires for C interoperability.
+    add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fpscomp logicals>")
+    # ifx places automatic arrays and array temporaries on the stack, gfortran
+    # on the heap.  liboqp runs inside a Python process with the default 8 MB
+    # main-thread stack (and smaller OpenMP worker stacks), so large automatic
+    # arrays (e.g. in the MRSF-TDDFT response driver) segfault with ifx unless
+    # the user raises ulimit -s.  -heap-arrays gives ifx the gfortran
+    # behaviour: arrays larger than 64 KB (or of run-time size) go on the heap.
+    add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-heap-arrays 64>")
 endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the

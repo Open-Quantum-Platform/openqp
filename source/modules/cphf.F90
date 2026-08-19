@@ -128,7 +128,7 @@ contains
 !> @param[out]   converged true only when every right-hand side converged (optional)
   subroutine cphf_solve(infos, nrhs, bvec, uvec, tol, maxit, converged)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_E_MO_A, OQP_VEC_MO_A
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -457,7 +457,7 @@ contains
   subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_E_MO_A, OQP_VEC_MO_A, OQP_E_MO_B, OQP_VEC_MO_B
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -837,7 +837,7 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs

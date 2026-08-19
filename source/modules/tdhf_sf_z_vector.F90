@@ -36,7 +36,7 @@ contains
     use tdhf_sf_lib, only: sfrorhs, &
       sfromcal, sfrogen, sfrolhs, pcgrbpini, &
       pcgb, sfropcal, sfrowcal, sfdmat
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: utddft_fxc
     use mathlib, only: symmetrize_matrix, orthogonal_transform_sym, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
@@ -248,11 +248,13 @@ contains
        scale_exch2 = infos%tddft%HFscale !> Response HF exchange
     end if
 
-    int2_data = int2_tdgrd_data_t(d2=pa, &
+    if (allocated(int2_data)) deallocate(int2_data)
+
+    allocate(int2_data, source=int2_tdgrd_data_t(d2=pa, &
             int_apb=.true., &
             int_amb=.false., &
             tamm_dancoff=.false., &
-            scale_exchange=scale_exch)
+            scale_exchange=scale_exch))
 
     call int2_driver%run(int2_data, &
             cam=dft.and.infos%dft%cam_flag, &
@@ -284,11 +286,11 @@ contains
   ! Initialize ERI calculations
     call int2_data%clean()
     deallocate(int2_data)
-    int2_data = int2_td_data_t(d2=bvec, &
+    allocate(int2_data, source=int2_td_data_t(d2=bvec, &
             int_apb=.false., &
             int_amb=.false., &
             tamm_dancoff=.true., &
-            scale_exchange=scale_exch2)
+            scale_exchange=scale_exch2))
 
     call int2_driver%run(int2_data, &
             cam=dft.and.infos%dft%cam_flag, &
@@ -373,9 +375,9 @@ contains
 
     call int2_data%clean()
     deallocate(int2_data)
-    int2_data = int2_tdgrd_data_t(d2=pa, &
+    allocate(int2_data, source=int2_tdgrd_data_t(d2=pa, &
             int_apb=.true., int_amb=.false., tamm_dancoff=.false., &
-            scale_exchange=scale_exch)
+            scale_exchange=scale_exch))
 
     call int2_driver%run(int2_data, &
             cam=dft.and.infos%dft%cam_flag, &
@@ -485,11 +487,11 @@ contains
   !     (A+B)*PK
         call int2_data%clean()
         deallocate(int2_data)
-        int2_data = int2_tdgrd_data_t(d2=pa, &
+        allocate(int2_data, source=int2_tdgrd_data_t(d2=pa, &
                 int_apb=.true., &
                 int_amb=.false., &
                 tamm_dancoff=.false., &
-                scale_exchange=scale_exch)
+                scale_exchange=scale_exch))
 
         call int2_driver%run(int2_data, &
               cam=dft.and.infos%dft%cam_flag, &

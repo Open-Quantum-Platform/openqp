@@ -59,7 +59,7 @@ contains
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
       rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
       tdhf_unrelaxed_density
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: tddft_fxc
     use util, only: measure_time
     use mathlib, only: symmetrize_matrix, orthogonal_transform

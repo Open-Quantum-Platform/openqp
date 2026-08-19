@@ -72,7 +72,7 @@ contains
   subroutine hf_gradient(infos)
     use io_constants, only: iw
     use grd1, only: print_gradient
-    use dft, only: dft_initialize, dftclean, dftder
+    use mod_dft, only: dft_initialize, dftclean, dftder
     use strings, only: Cstring, fstring
     use mod_dft_molgrid, only: dft_grid_t
     use util, only: measure_time

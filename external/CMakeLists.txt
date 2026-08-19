@@ -373,6 +373,7 @@ ExternalProject_Add(libtagarray
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
                    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                    "-DCMAKE_Fortran_FLAGS=${_TAGARRAY_Fortran_FLAGS}"

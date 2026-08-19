@@ -24,7 +24,7 @@ contains
     use basis_tools, only: basis_set
     use messages, only: show_message
     use scf, only: scf_driver
-    use dft, only: dft_initialize, dftclean, dft_setup_descent_grid
+    use mod_dft, only: dft_initialize, dftclean, dft_setup_descent_grid
     use types, only: information
     use oqp_tagarray_driver
     use strings, only: Cstring, fstring

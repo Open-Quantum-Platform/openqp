@@ -111,10 +111,15 @@ contains
     real(dp) :: rwork(1)
     integer, external :: ilaenv
 
+    ! ipvt must be allocated before the workspace query: passing an
+    ! unallocated allocatable as an actual argument is invalid Fortran
+    ! (ifx -check pointers traps it), even though DSYSV does not touch
+    ! IPIV during the query.
+    allocate(ipvt(n))
     call dsysv('U', n, nrhs, a, lda, ipvt, b, n, rwork, -1, ierr)
     lwork = int(rwork(1))
 
-    allocate(work(lwork), ipvt(n))
+    allocate(work(lwork))
     call dsysv('U', n, nrhs, a, lda, ipvt, b, n, work, lwork, ierr)
     deallocate(work, ipvt)
 

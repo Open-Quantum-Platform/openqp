@@ -71,7 +71,7 @@ contains
     use util, only: measure_time
     use tdhf_lib, only: &
       iatogen, mntoia
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient

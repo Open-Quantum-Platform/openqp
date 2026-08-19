@@ -37,7 +37,7 @@ contains
     use printing, only: print_module_info
     use tdhf_mrsf_energy_mod, only: tdhf_mrsf_energy
     use tdhf_mrsf_z_vector_mod, only: tdhf_mrsf_z_vector
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     use mod_dft_molgrid, only: dft_grid_t
     use scf_addons, only: calc_fock, scf_energy_t
 

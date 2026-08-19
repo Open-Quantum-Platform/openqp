@@ -1,4 +1,4 @@
-module dft
+module mod_dft
 ! A Module for grid based DFT
   use messages,  only: show_message, WITH_ABORT
   use precision, only: dp
@@ -1508,4 +1508,4 @@ contains
 
   end function bragg_slater_radius
 
-end module dft
+end module mod_dft

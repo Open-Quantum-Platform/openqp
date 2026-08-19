@@ -55,7 +55,7 @@ contains
       sfrorhs, &
       sfromcal, sfrogen, sfrolhs, &
       pcgb, sfropcal, sfrowcal
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient

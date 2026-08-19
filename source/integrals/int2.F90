@@ -852,7 +852,7 @@ contains
     ! On an OpenMP OpenBLAS the line above has just moved it to the BLAS
     ! count, which is the same number only as long as nobody sets
     ! OPENBLAS_NUM_THREADS and OMP_NUM_THREADS to different values.
-!$  call omp_set_num_threads(nOmpThreads)
+!$  call omp_set_num_threads(int(nOmpThreads, kind=c_int))
     deallocate(pair_i, pair_j)
     call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()
