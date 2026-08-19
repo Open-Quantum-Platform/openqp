@@ -53,7 +53,15 @@ else:
     from _oqp import ffi, lib
 
 for attr_name in dir(lib):
-    attr_value = getattr(lib, attr_name)
+    try:
+        attr_value = getattr(lib, attr_name)
+    except AttributeError:
+        # include/oqp.h declares every C entry point, but a build may leave an
+        # optional backend out (e.g. ENABLE_DFTD4=OFF, the default on Windows,
+        # drops oqp_dftd4_disp/_v2).  In cffi's ABI mode the declaration exists
+        # while the symbol does not, so skip it rather than failing the import;
+        # callers already probe with hasattr(oqp.lib, ...).
+        continue
     if callable(attr_value):
         if attr_name not in (
             'oqp_init', 'oqp_clean', 'oqp_set_atoms',
