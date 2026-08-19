@@ -158,15 +158,15 @@ inactive/active/virtual partition the native CASSCF driver runs on.
 
 Refused, with a message rather than a silently wrong number:
 
-- **The analytic path for `method=sa-casscf` / `[state_average]
-  enabled=true`.** A state-averaged run
-  optimizes `sum_I w_I E_I`. Two separate extensions live here: the gradient of
-  the *averaged objective* needs the weight-averaged RDMs in the same
-  expression, and the gradient of an *individual averaged state* is not
-  variational at all — only the weighted sum is stationary against orbital
-  rotation, so an individual state requires a Lagrangian / Z-vector response
-  solve. Neither analytic derivative is implemented. OpenQP routes these jobs
-  to the explicit central-difference SA-CASSCF driver instead.
+- **`method=sa-casscf` / `[state_average] enabled=true`.** A state-averaged run
+  optimizes `sum_I w_I E_I`, and neither of its two derivatives is this
+  formula: the *averaged objective* needs the weight-averaged RDMs, and an
+  *individual averaged state* is not variational at all — only the weighted sum
+  is stationary against orbital rotation, so it requires a coupled orbital+CI
+  Z-vector response. Both live in `docs/sa_casscf_gradients.md` and
+  `pyoqp/oqp/library/casscf_sa_gradient.py`, selected by `[casscf]
+  gradient_state`; this entry point refuses rather than reusing its own
+  expression on averaged quantities.
 - **A non-Hartree-Fock Hamiltonian.** The energy expression above has no
   exchange-correlation term; CASSCF already requires `[input] functional` unset.
 - **A non-stationary starting point**, according to either the `|g_orb|` or

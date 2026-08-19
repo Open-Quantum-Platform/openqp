@@ -1284,13 +1284,28 @@ class OpenQP:
 
     def sa_casscf(self, active_electrons=None, active_orbitals=None,
                   frozen_core=None, nstate=2, weights=None, target_roots=None,
-                  state=0, grad_step=None, grad_guess=None, grad_gap_warn=None,
+                  state=None, gradient_state=None, grad_step=None,
+                  grad_guess=None, grad_gap_warn=None,
                   grad_ranks_per_group=None, runtype=None, basis=None,
                   reference="rhf", **keywords):
         """Use a compact OpenQP state-averaged CASSCF setup.
 
         `nstate` is the number of averaged states; it also sets [ci] nroot,
-        since every averaged root has to be solved for."""
+        since every averaged root has to be solved for.
+
+        `gradient_state` selects WHICH derivative a gradient-driven runtype
+        takes, and there is no default that covers both: "averaged" (the
+        default) differentiates the optimized weighted objective, an integer
+        differentiates that averaged root through the coupled orbital+CI
+        Z-vector response.  They are different physical quantities, so the
+        selector is part of the request rather than something inferred from
+        [properties] grad -- the weighted objective is not a state and cannot
+        be named there at all.
+
+        The legacy ``state`` argument is retained as a positional-state alias:
+        ``state=1`` differentiates the second root in ``target_roots``.  New
+        code should name the physical CI root with ``gradient_state``.
+        """
         self._require_active_space("SA-CASSCF", active_electrons, active_orbitals)
         sa = dict(keywords.pop("state_average", None) or {})
         # Same rule: a second .sa_casscf(nstate=2) after one with
@@ -1307,15 +1322,41 @@ class OpenQP:
         if target_roots is not None:
             sa["target_roots"] = target_roots
         sa.update(_sa_explicit)
+        raw_roots = sa.get("target_roots") or ()
+        if isinstance(raw_roots, str):
+            roots = [int(item.strip()) for item in raw_roots.split(",")
+                     if item.strip()]
+        else:
+            roots = [int(item) for item in raw_roots]
+        if not roots:
+            roots = list(range(max(1, int(sa.get("nstate", nstate)))))
+
+        if state is not None:
+            state_pos = int(state)
+            if state_pos < 0 or state_pos >= len(roots):
+                raise ValueError(
+                    f"SA-CASSCF state position {state_pos} is outside the "
+                    f"averaged-root list of length {len(roots)}")
+            legacy_target = roots[state_pos]
+            if (gradient_state is not None
+                    and str(gradient_state).strip().lower()
+                    not in {str(legacy_target), ""}):
+                raise ValueError(
+                    "state and gradient_state select different SA-CASSCF roots")
+            gradient_state = legacy_target
+
         casscf = dict(self._CASSCF_OWNED_KEYS)
         casscf.pop("root", None)
-        casscf.update(dict(keywords.pop("casscf", None) or {}))
+        casscf.update(self._SA_CASSCF_OWNED_KEYS)
         for key, value in (("grad_step", grad_step),
                            ("grad_guess", grad_guess),
                            ("grad_gap_warn", grad_gap_warn),
                            ("grad_ranks_per_group", grad_ranks_per_group)):
             if value is not None:
                 casscf[key] = value
+        if gradient_state is not None:
+            casscf["gradient_state"] = gradient_state
+        casscf.update(dict(keywords.pop("casscf", None) or {}))
         self._wf_setup(
             "sa-casscf", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
@@ -1330,10 +1371,20 @@ class OpenQP:
             # for root slot 2 and failed its own preflight.
             nroot=keywords.pop("nroot", None)
                   or max([int(sa.get("nstate", nstate))]
-                         + [int(r) + 1
-                            for r in (sa.get("target_roots") or ())]),
+                         + [root + 1 for root in roots]),
             casscf=casscf, state_average=sa, **keywords)
-        self._select_wavefunction_gradient_state(runtype, int(state))
+        derivative = str(casscf.get("gradient_state", "averaged")).strip().lower()
+        objective_names = {
+            "", "averaged", "average", "sa", "weighted", "objective"
+        }
+        if str(runtype or "").strip().lower() == "grad":
+            # Individual-state arrays are indexed by CI root; the weighted
+            # objective, which is not an electronic state, uses row zero.
+            selector = 0 if derivative in objective_names else int(derivative)
+            self._select_wavefunction_gradient_state(runtype, selector)
+        elif derivative not in objective_names:
+            self._select_wavefunction_gradient_state(
+                runtype, int(derivative))
         return self
 
     def _select_wavefunction_gradient_state(self, runtype, state):
@@ -1361,10 +1412,12 @@ class OpenQP:
         "grad_ranks_per_group": "0",
     }
     _SA_OWNED_KEYS = {"weights": "", "target_roots": "", "equal_weights": "true"}
+    _SA_CASSCF_OWNED_KEYS = {"gradient_state": "averaged"}
 
     _PT2_OWNED_KEYS = {
         "h0": "fock",
         "contraction": "uncontracted",
+        "gradient": "auto",
         "ipea_shift": "0.0",
         "imaginary_shift": "0.0",
         "level_shift": "0.0",
@@ -1422,16 +1475,24 @@ class OpenQP:
             frozen_core=frozen_core, nroot=nroot, pt2=opts or None, **keywords)
 
     def nevpt2(self, active_electrons=None, active_orbitals=None,
-               frozen_core=None, nroot=1, contraction=None, runtype=None,
-               basis=None, reference="rhf", **keywords):
+               frozen_core=None, nroot=1, contraction=None, gradient=None,
+               runtype=None, basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP NEVPT2 setup.
 
         NEVPT2 is CASPT2's determinant machinery with the Dyall H0, so it is
         `method=caspt2` plus `[pt2] h0=dyall`.  `contraction='strong'` gives
-        SC-NEVPT2; the default is the uncontracted form."""
+        SC-NEVPT2; the default is the uncontracted form.
+
+        `gradient` selects the nuclear-gradient route: `auto` (the default)
+        takes the analytic SC-NEVPT2 derivative when the calculation is
+        strongly contracted, state specific and on a state-specific CASSCF
+        reference, and central differences otherwise; `analytic` demands it
+        and reports why if the run is out of scope; `numerical` forces central
+        differences."""
         self._require_active_space("NEVPT2", active_electrons, active_orbitals)
         opts = self._pt2_helper_opts(
-            keywords, {"contraction": contraction}, h0="dyall")
+            keywords, {"contraction": contraction, "gradient": gradient},
+            h0="dyall")
         return self._wf_setup(
             "caspt2", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,

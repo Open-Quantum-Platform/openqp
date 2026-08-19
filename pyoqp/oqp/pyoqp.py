@@ -408,11 +408,12 @@ class Runner:
 
         # Attach the starting time to mol
         self.mol.start_time = start_time
-        # Set up banner
-        oqp.oqp_banner(self.mol)
-
+        # Initialize the log before the native banner appends to it.  The old
+        # order wrote the banner first and immediately truncated it in the
+        # ``start`` section, hiding the contributor and resource information.
         dump_log(self.mol, title='', section='start',
                  info={"build": _openqp_build_label()})
+        oqp.oqp_banner(self.mol)
         dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
         dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
         self._log_perf_settings()

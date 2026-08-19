@@ -7,6 +7,26 @@ one place so input summaries and progress logs can consistently say ``S0`` or
 ``S1`` while still identifying the internal ROHF/UHF reference when relevant.
 """
 
+try:
+    from oqp.utils.log_format import format_log_fields
+except ModuleNotFoundError as exc:
+    # Several source-only tests load this file directly, without importing the
+    # OpenQP package or compiled library.  Load the pure formatting sibling in
+    # that narrow case; do not hide unrelated missing dependencies.
+    if exc.name not in {"oqp", "oqp.utils", "oqp.utils.log_format"}:
+        raise
+    import importlib.util
+    from pathlib import Path
+
+    _format_path = Path(__file__).with_name("log_format.py")
+    _format_spec = importlib.util.spec_from_file_location(
+        "oqp_log_format_for_state_labels", _format_path)
+    if _format_spec is None or _format_spec.loader is None:
+        raise
+    _format_module = importlib.util.module_from_spec(_format_spec)
+    _format_spec.loader.exec_module(_format_module)
+    format_log_fields = _format_module.format_log_fields
+
 
 _SPIN_NAMES = {
     1: ("singlet", "S"),
@@ -448,10 +468,8 @@ def format_dftb_settings(
     blocks = []
     for group, rows in groups:
         lines = ["   %s" % titles.get(group, group.capitalize())]
-        lines.extend(
-            "     %-29s %s" % (label + ":", value)
-            for label, value in rows
-        )
+        lines.append(format_log_fields(
+            rows, prefix=None, label_width=29, indent=5))
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -691,6 +709,5 @@ def calculation_request_lines(config, source=None, resolved=None):
 
 def format_calculation_request(config, source=None, resolved=None):
     """Format :func:`calculation_request_lines` as a log-ready text block."""
-    return "\n".join("   PyOQP %-28s %s" % (label + ":", value)
-                     for label, value in calculation_request_lines(
-                         config, source=source, resolved=resolved))
+    return format_log_fields(calculation_request_lines(
+        config, source=source, resolved=resolved))

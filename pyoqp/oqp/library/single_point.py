@@ -674,7 +674,7 @@ class SinglePoint(Calculator):
         # Ground-state post-SCF correlation (MP2 / CCSD / CCSD(T)): the Fortran
         # driver updates mol_energy.energy in place to the correlated total.
         label = self.method.upper()
-        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='')
+        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='correlation')
         self.energy_func[self.method](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
@@ -1266,14 +1266,74 @@ class Gradient(Calculator):
             self.mol.grads = grads
             return grads
 
+        # Strongly contracted NEVPT2 on a state-specific CASSCF reference has
+        # an analytic nuclear gradient.  Route it before the numerical-
+        # wavefunction block below, which stays the shared SA-CASSCF/PT2 path
+        # for every PT2 flavour that has no analytic derivative.  The import
+        # stays local to avoid a circular module dependency.
+        if self.method == 'caspt2':
+            from oqp.library.caspt2_dyall import _caspt2_options
+            from oqp.library.nevpt2_gradient import (
+                SCNEVPT2NotApplicable,
+                consume_sc_nevpt2_gradient,
+                sc_nevpt2_gradient_route,
+            )
+            cached = consume_sc_nevpt2_gradient(self.mol)
+            if cached is not None:
+                # A fused energy-pass gradient is published through the same
+                # public slot-0 selector check as sc_nevpt2_grad, so a
+                # `[properties] grad=1` run cannot receive the corrected root's
+                # slot-0 gradient labeled as a different requested state.
+                self._require_scnevpt2_slot0()
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                arr = np.asarray(cached, dtype=float).reshape(-1, self.natom, 3)
+                if arr.shape[0]:
+                    self.mol.set_grad(arr[0])
+                self.mol.grads = cached
+                return cached
+            route, reason = sc_nevpt2_gradient_route(self.mol)
+            if route == 'analytic':
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                try:
+                    grads = self.sc_nevpt2_grad()
+                except SCNEVPT2NotApplicable as exc:
+                    # The route preflight can only test the CONFIGURATION; the
+                    # remaining applicability conditions -- a stationary CASSCF
+                    # reference, non-degenerate semicanonical orbitals, a
+                    # solvable response system -- are only knowable once the
+                    # reference exists. `analytic` demanded the derivative and
+                    # gets the reason; `auto` promised a fallback and takes it.
+                    if _caspt2_options(self.mol.config).gradient == 'analytic':
+                        raise
+                    route, reason = 'numerical', str(exc)
+                else:
+                    # NOT symmetrized, for the same reason the analytic CASSCF
+                    # path is not: nevpt2_gradient.F90 deliberately declines the
+                    # petite reduction and returns the complete two-electron
+                    # gradient, and the relaxed density of an arbitrary
+                    # state-specific root need not be totally symmetric.
+                    # Projecting an already-complete gradient would erase
+                    # legitimate components.
+                    arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+                    if arr.shape[0]:
+                        self.mol.set_grad(arr[0])
+                    self.mol.grads = grads
+                    return grads
+            dump_log(self.mol, title=(
+                'PyOQP: PT2 nuclear gradient by central differences '
+                '(analytic SC-NEVPT2 derivative not applicable: %s)' % reason))
+
         state_average_enabled = str(
             self.mol.config.get('state_average', {}).get('enabled', False)
         ).strip().lower() in ('true', '1', 'yes', 'on')
-        numerical_casscf = (
-            self.method in ('sa-casscf', 'sacasscf')
-            or (self.method == 'casscf' and state_average_enabled)
-        )
-        if (self.method not in ['hf', 'tdhf', 'casscf']
+        # Preserve the legacy spelling `method=casscf` plus
+        # `[state_average] enabled=true` as the explicit numerical
+        # SA-CASSCF route.  The dedicated `method=sa-casscf` spelling reaches
+        # the analytic weighted-objective or individual-state derivative.
+        numerical_casscf = self.method == 'casscf' and state_average_enabled
+        if (self.method not in [
+                'hf', 'tdhf', 'casscf', 'sa-casscf', 'sacasscf'
+                ]
                 and not is_tb_method(self.method)) or numerical_casscf:
             # Multireference wavefunction methods currently use Cartesian
             # central differences of their converged total energies.  This is
@@ -1322,6 +1382,8 @@ class Gradient(Calculator):
             grads = self.tddft_grad()
         elif self.method == 'casscf':
             grads = self.casscf_grad()
+        elif self.method in ('sa-casscf', 'sacasscf'):
+            grads = self.sa_casscf_grad()
         elif is_tb_method(self.method):
             grads = make_tb_adapter(self.mol).gradient(self.grads)
 
@@ -1329,9 +1391,11 @@ class Gradient(Calculator):
         # onto the totally symmetric component (exact for 1-dim irreps; all
         # abelian irreps are 1-dim).  The CASSCF kernel deliberately computes
         # the full two-electron gradient because an arbitrary state-specific
-        # root need not have a totally symmetric density.  Projecting that
-        # already-complete result would erase legitimate components.
-        if self.method != 'casscf':
+        # root need not have a totally symmetric density.  The same is true
+        # for the weighted and individual-root SA-CASSCF density matrices.
+        # Projecting either already-complete result would erase legitimate
+        # components.
+        if self.method not in ('casscf', 'sa-casscf', 'sacasscf'):
             grads = self.mol.symmetrize_gradient(grads)
 
         # Push the projected gradient back into the library buffer. get_grad()
@@ -1351,6 +1415,12 @@ class Gradient(Calculator):
             buffer_row = 0                       # scf_grad returns one row
         elif self.method == 'casscf':
             buffer_row = 0                       # casscf_grad returns one row
+        elif self.method in ('sa-casscf', 'sacasscf'):
+            # Not always 0: an individual-root gradient is placed in that
+            # root's own row so both the report and [optimize] istate address
+            # it, and the rest of the array is zero.  Writing row 0 there would
+            # store a zero gradient -- an error that hides well.
+            buffer_row = int(getattr(self, '_sa_buffer_row', 0))
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
         if buffer_row is not None:
@@ -1401,6 +1471,42 @@ class Gradient(Calculator):
 
         return grads
 
+    def _require_scnevpt2_slot0(self):
+        """Reject any [properties] grad selector other than public slot 0.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so slot 0 is the
+        only valid selector; [pt2] target_roots picks which physical root
+        occupies it.  The direct analytic gradient and the fused energy-pass
+        cache both publish through this one check, so neither can hand back the
+        corrected root's slot-0 gradient labeled as a different requested state.
+        Returns the corrected root for the gradient log line.
+        """
+        from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+
+        root = int(_reference_roots(_caspt2_options(self.mol.config))[0])
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        for state in requested:
+            if state != 0:
+                raise ValueError(
+                    f'Analytic SC-NEVPT2 gradients are state-specific: only '
+                    f'the corrected root {root} is available in public slot 0, '
+                    f'but [properties] grad requested slot {state}.')
+        return root
+
+    def sc_nevpt2_grad(self):
+        """Analytic strongly contracted NEVPT2 gradient of the [pt2] root.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so the only valid
+        [properties] grad selector is 0; [pt2] target_roots picks which physical
+        root occupies that slot.  Rejecting any other selector here is what
+        keeps a run from being answered with a root it did not ask for.
+        """
+        from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+        root = self._require_scnevpt2_slot0()
+        dump_log(self.mol, title='PyOQP: Analytic SC-NEVPT2 Gradient of Root %s' % root)
+        return sc_nevpt2_analytic_gradient(self.mol)
+
     def mp2_grad(self):
         """Analytic ground-state RHF-MP2 nuclear gradient."""
         if str(self.mol.config['scf']['type']).lower() != 'rhf':
@@ -1412,6 +1518,72 @@ class Gradient(Calculator):
         self.grad_func['mp2'](self.mol)
         grad = self.mol.get_grad()
         return np.array([grad.copy()]).reshape((1, self.natom, 3))
+
+    def sa_casscf_grad(self):
+        """Analytic SA-CASSCF gradient: weighted objective or one averaged root.
+
+        Which of the two is a property of `[casscf] gradient_state`, not of
+        `[properties] grad`: the two derivatives are different objects, and the
+        state selector cannot express "the weighted objective", which is not a
+        state at all. `[properties] grad` is therefore only checked for
+        consistency -- it must name the differentiated root, while the
+        weighted objective uses the conventional row 0 -- and never silently
+        redirects the calculation.
+
+        The returned array is indexed BY CI ROOT, the way `tddft_grad` is
+        indexed by state, with only the differentiated row filled. Two consumers
+        depend on that: the final-gradient report and `dump_data` iterate
+        `[properties] grad`, and a geometry optimizer pairs `energies[istate]`
+        with `grads[istate]`. So `[properties] grad` must name the state being
+        differentiated -- it is a reporting index here, not a second selector,
+        and preflight requires the two to agree rather than letting a run print
+        an all-zero row for a state it never differentiated.
+
+        The weighted objective has no root of its own: it is not a state and is
+        not in `mol.energies`, so it is published as a single row 0, which is
+        also why preflight refuses it for optimizer runtypes.
+        """
+        from oqp.library.casscf_sa_gradient import (
+            resolve_gradient_state,
+            sa_casscf_analytic_gradient,
+        )
+        from oqp.library.fci import settings_from_casci_config
+
+        settings = settings_from_casci_config(self.mol.config)
+        roots = list(getattr(settings, 'state_average_target_roots', ()) or ())
+        if not roots:
+            nstate = int(getattr(settings, 'state_average_nstate', 0) or 0)
+            roots = list(range(max(1, nstate or int(settings.nroot))))
+        roots = [int(r) for r in roots]
+        target = resolve_gradient_state(self.mol.config, roots)
+
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        for state in requested:
+            if target is None and state != 0:
+                raise ValueError(
+                    f'[casscf] gradient_state=averaged differentiates the '
+                    f'weighted objective, which is not a state; [properties] '
+                    f'grad requested state {state}. Set [casscf] '
+                    f'gradient_state={state} for that root, or [properties] '
+                    f'grad=0 for the objective.')
+            if target is not None and state != target:
+                raise ValueError(
+                    f'[casscf] gradient_state={target} is being differentiated, '
+                    f'but [properties] grad requested state {state}. The two '
+                    f'must agree: [properties] grad is the row this run '
+                    f'reports, and only row {target} is filled.')
+
+        label = 'Weighted Objective' if target is None else 'Root %s' % target
+        dump_log(self.mol, title='PyOQP: SA-CASSCF Gradient of %s' % label)
+        grads = sa_casscf_analytic_gradient(self.mol)
+
+        if target is None:
+            self._sa_buffer_row = 0
+            return grads
+        self._sa_buffer_row = target
+        placed = np.zeros((max(max(roots), target) + 1, self.natom, 3))
+        placed[target] = np.asarray(grads, dtype=float).reshape(self.natom, 3)
+        return placed
 
     def tddft_grad(self):
         if self.td == 'umrsf':

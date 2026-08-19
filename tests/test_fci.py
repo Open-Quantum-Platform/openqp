@@ -451,6 +451,7 @@ def test_dump_log_renders_fci_ci_vector_rows(tmp_path):
     )
 
     log_text = log_file.read_text(encoding="utf-8")
+    assert "PyOQP LOG | ENERGIES AND STATES" in log_text
     assert "PyOQP CASCI CI vectors (abs coeff >= 0.05)" in log_text
     assert "PyOQP CASCI fixed-orbital state average" in log_text
     assert "PyOQP state-average energy:" in log_text

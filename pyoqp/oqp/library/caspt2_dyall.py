@@ -114,6 +114,8 @@ class CASPT2Options:
     h0: str = "fock"                 # fock (=CASPT2, default) | dyall (=NEVPT2)
     contraction: str = "none"        # none (uncontracted determinant space) |
                                      # strong (RDM-based SC-NEVPT2; dyall H0 only)
+    gradient: str = "auto"           # auto (analytic where it applies, else
+                                     # central differences) | analytic | numerical
     root: int = 0                    # single-state reference root
     target_roots: tuple = ()         # multistate roots (defaults to range(nroot))
     nroot: int = 1                   # multistate root count when target_roots empty
@@ -208,6 +210,15 @@ def _caspt2_options(config: dict) -> CASPT2Options:
     if family == "qdpt" and contraction != "none":
         raise ValueError("MRMP2/MCQDPT2/XMCQDPT2 are uncontracted; "
                          "drop [pt2] contraction.")
+    gradient_raw = str(raw.get("gradient", "auto")).strip().lower() or "auto"
+    if gradient_raw in {"auto", ""}:
+        gradient = "auto"
+    elif gradient_raw in {"analytic", "analytical", "exact"}:
+        gradient = "analytic"
+    elif gradient_raw in {"numerical", "numeric", "fd", "central-difference"}:
+        gradient = "numerical"
+    else:
+        raise ValueError("pt2.gradient must be 'auto', 'analytic' or 'numerical'")
     edshft = float(raw.get("edshft", 0.0))
     if edshft < 0.0:
         raise ValueError("pt2.edshft (ISA denominator shift) must be >= 0")
@@ -233,6 +244,7 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         family=family,
         h0=h0,
         contraction=contraction,
+        gradient=gradient,
         root=int(raw.get("root", raw.get("state", 0))),
         target_roots=_as_int_tuple(raw.get("target_roots", ())),
         # 0 is the documented default meaning "follow the CI"; taking it
@@ -1240,6 +1252,14 @@ def native_caspt2_energy(mol, ref_energy=None):
         raise ValueError("CASPT2 currently supports a closed-shell RHF reference")
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
+
+    # Public gradient-driven calculations ask for an energy followed by its
+    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
+    # supplies both, so use it as the energy pass and retain its complete
+    # gradient for the immediately following public gradient request.
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
+        return mol.energies
 
     nbf = int(mol.data.get_basis()["nbf"])
     # Same shared planner CASCI/CASSCF use: deriving the active electron count

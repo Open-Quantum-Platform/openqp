@@ -632,6 +632,43 @@ enum {
 int64_t casscf_gradient(struct oqp_handle_t *inf, const int32_t *iopt,
     const double *dopt, const double *weights, const int32_t *roots,
     double *info);
+/* ------------------------------------------------------------------------
+ * Nuclear gradient from a FACTORIZED AO two-particle density
+ * (casscf_ao_gradient.F90).
+ *
+ *   dE/dx = sum D h^x + 1/2 sum Gamma (..|..)^x - sum X S^x + dV_NN/dx
+ *
+ * with X the energy-weighted density of the term as written (the sign the
+ * overlap-derivative kernel wants is applied inside), and
+ *
+ *   Gamma_{mu nu la si} =
+ *       sum_t sepc[t] [ P^t_{mu nu} P^t_{la si}
+ *                       - 1/4 (P^t_{mu la} P^t_{nu si}
+ *                            + P^t_{nu la} P^t_{mu si}) ]
+ *     + sum_k lam[k] A^k_{mu nu} A^k_{la si}.
+ *
+ * The first family is the Hartree-Fock separable form at an arbitrary
+ * symmetric matrix and carries every separable and BILINEAR piece by
+ * polarization; the second is the Coulomb-type product an all-active
+ * eigendecomposition produces.  Both are eight-fold symmetric and expand to
+ * the Cartesian-effective basis matrix by matrix, which a dense nbf^4 AO
+ * tensor does not.
+ *
+ * `dmat`, `xmat`, `sepm` and `avm` are C-order [nbf,nbf] (or [n,nbf,nbf])
+ * buffers; every matrix must be symmetric, and is symmetrized on entry.
+ * `nsep >= 1` is required.  Writes infos%atoms%grad.
+ *
+ * Returns 0, or -30 (sizes disagree with the handle) / -31 (allocation). */
+enum {
+  CAS_AG_NSEP  = 0,  /* separable two-particle factors contracted        */
+  CAS_AG_NVEC  = 1,  /* low-rank two-particle factors contracted         */
+  CAS_AG_NINFO = 2
+};
+int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
+    const double *dmat, const double *xmat,
+    int32_t nsep, const double *sepc, const double *sepm,
+    int32_t nvec, const double *lam, const double *avm,
+    double *info);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
@@ -670,6 +707,30 @@ void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
 void ccsd_t_energy(struct oqp_handle_t *inf);
+
+/* Derivative-integral contraction for the analytic SC-NEVPT2 nuclear gradient
+ * (nevpt2_gradient.F90).  The SC-NEVPT2 Lagrangian, its orbital/CI response
+ * equations and the relaxed densities live in
+ * pyoqp/oqp/library/nevpt2_gradient.py; this entry point only contracts the
+ * result with the derivative integrals and writes infos%atoms%grad.
+ *
+ *   dm_ao : relaxed 1-particle density, nbf x nbf, symmetric, C order.
+ *   x_ao  : energy-weighted density (orthonormality multiplier), nbf x nbf,
+ *           symmetric; enters the gradient as -sum X S^x.
+ *   g2_ao : relaxed 2-particle density, nbf^4, eight-fold symmetric, in the
+ *           E = 1/2 sum Gamma (mu nu|la si) convention.  Eight-fold symmetry
+ *           makes the tensor invariant under complete index reversal, so a
+ *           C-ordered buffer is read directly.
+ *
+ * Returns 0 on success; negative values are the NEVPT2_G_* codes below. */
+enum {
+  NEVPT2_G_OK        =  0,
+  NEVPT2_G_ERR_NBF   = -1, /* nbf disagrees with the handle's basis        */
+  NEVPT2_G_ERR_ALLOC = -2, /* working-array allocation failed              */
+  NEVPT2_G_ERR_SYMM  = -3  /* g2_ao is not eight-fold permutation symmetric */
+};
+int64_t nevpt2_gradient(struct oqp_handle_t *inf, int32_t nbf,
+    const double *dm_ao, const double *x_ao, const double *g2_ao);
 
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);

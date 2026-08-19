@@ -23,12 +23,16 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `LiH_CASSCF_optimize.inp` | `casscf` | — | geometry optimization with the analytic state-specific CASSCF gradient |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
-| `LiH_SA-CASSCF_grad.inp` | `sa-casscf` | — | central-difference gradient of a state on common SA-CASSCF orbitals |
+| `LiH_SA-CASSCF_grad.inp` | `casscf` + state average | — | compatibility central-difference gradient of a state on common SA-CASSCF orbitals |
+| `LiH_SA-CASSCF_ANALYTIC_grad.inp` | `sa-casscf` | — | analytic gradient of the weighted SA-CASSCF objective |
+| `LiH_SA-CASSCF_ROOT1_grad.inp` | `sa-casscf` | — | analytic individual-state gradient with the coupled orbital/CI Z-vector |
 | `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (17 vs 335 CI solves, both at 15 macroiterations) |
 | `H2O_CASSCF_CAS44_TRAH.inp` | `casscf` | `[casscf] converger=trah` | matrix-free trust-region converger: the Hessian is never assembled (303 vs 1963 CI evaluations against `converger=ah` on the default FD Hessian, 13 vs 19 macroiterations, same energy to 1e-13) |
 | `H4_CASPT2.inp` | `caspt2` | `h0=fock` | single-state CASPT2 (Fock H0) |
 | `H4_NEVPT2.inp` | `caspt2` | `h0=dyall` | NEVPT2 (Dyall H0), uncontracted |
 | `H4_SC-NEVPT2.inp` | `caspt2` | `h0=dyall, contraction=strong` | strongly-contracted NEVPT2 (vs PySCF, nEh) |
+| `H4_SC-NEVPT2_grad.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | **analytic** SC-NEVPT2 nuclear gradient (vs 5-point central differences, 5.9e-10 Eh/Bohr) |
+| `LiH_SC-NEVPT2_optimize.inp` | `caspt2` | `h0=dyall, contraction=strong, gradient=analytic` | geometry optimization driven by the analytic SC-NEVPT2 gradient; also covers a PT2 frozen core and exactly degenerate (2p-pi) virtuals |
 | `H4_MS-CASPT2.inp` | `ms-caspt2` | `h0=fock` | multi-set MS-CASPT2 (state-specific Fock) |
 | `H4_XMS-CASPT2.inp` | `xms-caspt2` | — | extended multistate CASPT2 |
 | `H4_MRMP2.inp` | `mrmp2` | — | single-state MRMP2 (Hirao; == caspt2 h0=fock) |
@@ -39,20 +43,44 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 
 - `[cas]` — `active_electrons`, `active_orbitals`, `frozen_core`, `orbital_source`.
 - `[ci]` — `nroot`, `solver` (dense/davidson), `target_spin`.
-- `[casscf]` — orbital optimization and convergence; `grad_step`, `grad_guess`,
-  `grad_gap_warn`, and `grad_ranks_per_group` control the SA-CASSCF
-  central-difference nuclear gradient. State-specific CASSCF uses the analytic
+- `[casscf]` — orbital optimization and convergence. For the dedicated
+  `method=sa-casscf` analytic derivative, `gradient_state=averaged` selects the
+  weighted objective and an integer selects an averaged root; `zvector_tol`
+  and `zvector_degeneracy_tol` govern the individual-state response solve. The
+  legacy `method=casscf` plus `[state_average] enabled=true` spelling retains
+  its central-difference controls (`grad_step`, `grad_guess`, `grad_gap_warn`,
+  and `grad_ranks_per_group`). State-specific CASSCF also uses an analytic
   derivative.
 - `[state_average]` — `enabled`, `target_roots`, weights.
 - `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,
   `level_shift`, `imaginary_shift`, `edshft` (GAMESS ISA `d -> d + edshft/d`,
-  QDPT-style intruder handling; exclusive with the level shifts).
+  QDPT-style intruder handling; exclusive with the level shifts); `gradient`
+  selects the nuclear-gradient route (see below).
 
 The native scope is determinant-space active-space CI and determinant-space
 CASPT2/NEVPT2, plus RDM-based strongly-contracted NEVPT2 (`contraction=strong`)
 and the GAMESS-convention QDPT family (`mrmp2` / `mcqdpt2` / `xmcqdpt2` =
 single-set diagonal-Fock MRPT2, Granovsky extended H0 via `xmcqdpt2`).
+
+## PT2 nuclear gradients
+
+`[pt2] gradient` selects the route. `auto` (the default) takes the analytic
+derivative when the calculation is exactly a variant one of the analytic PT2
+gradient modules is the derivative of, and central differences otherwise;
+`analytic` demands it and reports why the run is out of scope instead of
+falling back; `numerical` always central-differences.
+
+**Strongly contracted NEVPT2** has an analytic derivative when the run is
+strongly contracted, state specific, on a state-specific CASSCF reference,
+with `runtype` in grad/optimize/ts/mep/irc. It costs one CASSCF, one
+second-order pass, one coupled orbital/CI response solve and one set of
+derivative integrals — independent of the number of nuclei, against
+`6*natom` displaced energies for the numerical alternative. Its error is
+FIRST order in the residual CASSCF orbital-rotation gradient, so
+`[casscf] gradient_norm_tol` controls how many digits it is worth; the run
+reports `|g_orb|`, the response residual and the Lagrangian asymmetry so the
+size of every approximation is visible rather than assumed.
 
 ## QDPT engines
 
