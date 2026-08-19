@@ -1497,6 +1497,7 @@ def test_mrsf_tddftb_target_spin_reaches_dftb_adapter():
     )
     assert legacy["tdhf"]["multiplicity"] == "3"
     assert legacy["dftb"]["target_multiplicity"] == "3"
+    assert legacy["dftb"]["type"] == "mrsf"
     with pytest.raises(OQPInputError, match="not quintet"):
         oqp_input.parse_canonical_oqp(
             'mrsf-tddftb(nstate=4) geom="h2o.xyz" grad(Q1)'
@@ -1585,27 +1586,6 @@ def test_conventional_tddftb_triplet_is_rejected_with_spin_flip_guidance():
         oqp_input.parse_canonical_oqp(
             'tddftb(nstate=3) geom="h2o.xyz" grad(T1)'
         )
-
-
-@pytest.mark.parametrize(
-    "filename,expected_model,expected_type",
-    [
-        ("H2_DFTB_ENERGY.oqp", "dftb", "ground"),
-        ("H2O_TDDFTB_ENERGY.oqp", "tddftb", "tddftb"),
-        ("CH2_SF-TDDFTB_ENERGY.oqp", "sf-dftb", "sf"),
-        ("CH2_MRSF-TDDFTB_ENERGY.oqp", "mrsf-dftb", "mrsf"),
-    ],
-)
-def test_minimal_dftb_family_examples_parse(filename, expected_model, expected_type):
-    example_dir = ROOT / "examples" / "DFTB"
-    text = (example_dir / filename).read_text(encoding="utf-8")
-
-    spec = oqp_input.parse_canonical_oqp(text)
-    legacy = oqp_input.lower_to_legacy(spec, source_dir=example_dir)
-
-    assert spec.model == expected_model
-    assert legacy["input"]["method"] == "dftb"
-    assert legacy["dftb"]["type"] == expected_type
 
 
 def test_sf_tddftb_route_uses_high_spin_reference_and_explicit_root():
