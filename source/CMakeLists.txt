@@ -272,6 +272,7 @@ endif()
 # or on an upstream URL remaining available. BUILD-INFO.json records resolved
 # build settings; the checked-in unified patches record the two build-file-only
 # modifications exactly.
+if(ENABLE_DFTD4)
 set(_OQP_DFTD4_SOURCE_DESTINATION
     "${CMAKE_INSTALL_DATADIR}/corresponding-source/dftd4-stack")
 install(DIRECTORY "${DFTD4_MCTC_SOURCE_DIR}/"
@@ -293,3 +294,4 @@ install(FILES
 install(FILES "${CMAKE_SOURCE_DIR}/external/CMakeLists.txt"
         DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}"
         RENAME "openqp-external-build.cmake")
+endif()  # ENABLE_DFTD4

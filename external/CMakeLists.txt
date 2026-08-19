@@ -30,6 +30,7 @@ set(_OQP_DFTD4_SHA256
     "f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c")
 set(_OQP_DFTD4_COMPLIANCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/dftd4-corresponding-source")
+if(ENABLE_DFTD4)
 find_program(OQP_DFTD4_PATCH_EXECUTABLE NAMES patch)
 if(NOT OQP_DFTD4_PATCH_EXECUTABLE
    OR NOT EXISTS "${OQP_DFTD4_PATCH_EXECUTABLE}")
@@ -51,6 +52,7 @@ foreach(_oqp_d4_patch IN ITEMS "${DFTD4_MCTC_PATCH}" "${DFTD4_DFTD4_PATCH}")
         "Required DFT-D4 corresponding-source patch is missing: ${_oqp_d4_patch}")
   endif()
 endforeach()
+endif()  # ENABLE_DFTD4 (source-transformation prerequisites)
 file(SHA256 "${DFTD4_MCTC_PATCH}" DFTD4_MCTC_PATCH_SHA256)
 file(SHA256 "${DFTD4_DFTD4_PATCH}" DFTD4_DFTD4_PATCH_SHA256)
 set(DFTD4_MCTC_PATCH_SHA256 "${DFTD4_MCTC_PATCH_SHA256}"
