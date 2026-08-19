@@ -6,11 +6,16 @@ on:
     branches: [feat/windows-intel-build]
   workflow_dispatch:
 
+env:
+  # Unified oneAPI 2026.1 offline installer (same URL oneapi-src/oneapi-ci uses).
+  ONEAPI_URL: https://registrationcenter-download.intel.com/akdlm/IRC_NAS/4144bec3-82ce-4672-bd71-5c93a79cd5e7/intel-oneapi-toolkit-2026.1.0.191_offline.exe
+  ONEAPI_COMPONENTS: intel.oneapi.win.ifort-compiler:intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel
+
 jobs:
   windows-intel:
     name: Windows ifx + icx + MKL ILP64
     runs-on: windows-2025
-    timeout-minutes: 180
+    timeout-minutes: 240
     defaults:
       run:
         shell: pwsh
@@ -21,28 +26,40 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Setup Intel oneAPI (ifx + icx)
-        uses: fortran-lang/setup-fortran@v1
-        id: toolchain
+      - name: Cache oneAPI install
+        id: oneapi-cache
+        uses: actions/cache@v4
         with:
-          compiler: intel
-          version: '2026.1'
-      - name: Install MKL (pip mkl-devel) and build tools
+          path: C:\Program Files (x86)\Intel\oneAPI
+          key: oneapi-win-${{ env.ONEAPI_URL }}-${{ env.ONEAPI_COMPONENTS }}-v1
+      - name: Install Intel oneAPI (ifx + icx + MKL)
+        if: steps.oneapi-cache.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          curl.exe -sSL --retry 5 --retry-delay 5 --output %RUNNER_TEMP%\oneapi.exe %ONEAPI_URL%
+          start /b /wait %RUNNER_TEMP%\oneapi.exe -s -x -f %RUNNER_TEMP%\oneapi_ex --log %RUNNER_TEMP%\extract.log
+          %RUNNER_TEMP%\oneapi_ex\bootstrapper.exe -s --action install --components=%ONEAPI_COMPONENTS% --eula=accept -p=NEED_VS2017_INTEGRATION=0 -p=NEED_VS2019_INTEGRATION=0 -p=NEED_VS2022_INTEGRATION=0 --log-dir=%RUNNER_TEMP%\oneapi_log
+          set rc=%ERRORLEVEL%
+          rd /s /q %RUNNER_TEMP%\oneapi_ex
+          dir "C:\Program Files (x86)\Intel\oneAPI"
+          exit /b %rc%
+      - name: Export oneAPI + MSVC environment
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
+          set >> %GITHUB_ENV%
+      - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install mkl-devel intel-openmp cmake ninja numpy cffi scikit-build-core
-          $prefix = python -c "import sys; print(sys.prefix)"
-          echo "MKLROOT=$prefix\Library" >> $env:GITHUB_ENV
-          echo "$prefix\Library\bin" >> $env:GITHUB_PATH
-          Get-ChildItem "$prefix\Library\lib" | Where-Object { $_.Name -like 'mkl_*' -or $_.Name -like 'libiomp*' } | Select-Object -ExpandProperty Name
+          python -m pip install cmake ninja numpy cffi scikit-build-core
       - name: Show toolchain
         run: |
           ifx --version
           icx --version
           cmake --version
           ninja --version
-          echo "FC=$env:FC CC=$env:CC CXX=$env:CXX"
           echo "MKLROOT=$env:MKLROOT"
+          Get-ChildItem "$env:MKLROOT\lib" | Where-Object { $_.Name -like 'mkl_intel_ilp64*' -or $_.Name -like 'mkl_core*' -or $_.Name -like 'mkl_intel_thread*' } | Select-Object -ExpandProperty Name
       - name: Build & install OpenQP
         env:
           CC: icx
@@ -61,8 +78,7 @@ jobs:
       - name: Inspect installed package
         if: always()
         run: |
-          $pkg = python -c "import os, oqp.runtime as r; print(os.path.dirname(r.__file__))" 2>$null
-          if (-not $pkg) { $pkg = python -c "import sysconfig; print(sysconfig.get_paths()['purelib'] + '\oqp')" }
+          $pkg = python -c "import sysconfig; print(sysconfig.get_paths()['purelib'] + '\oqp')"
           echo "package dir: $pkg"
           Get-ChildItem -Recurse "$pkg\lib" -ErrorAction SilentlyContinue | Select-Object FullName, Length
       - name: Import and run H2O RHF
