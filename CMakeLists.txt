@@ -240,6 +240,18 @@ endif()
 set(BLA_SIZEOF_INTEGER 8)
 set(OTR_SUFFIX "_64")
 set(OTR_DEFS "-DUSE_ILP64")
+if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
+              OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM"))
+  # Intel Fortran on Windows links the STATIC Fortran runtime by default, so
+  # liboqp.dll and each DFT-D4 DLL would carry their own runtime state and
+  # their own heap.  An allocatable allocated in one and released in another
+  # then corrupts the heap (STATUS_HEAP_CORRUPTION, 0xC0000374).  Select the
+  # shared runtime for every Fortran object in the process.  Set through
+  # CMAKE_Fortran_FLAGS rather than add_compile_options() so that
+  # external/CMakeLists.txt forwards it to the DFT-D4 subprojects too.
+  string(APPEND CMAKE_Fortran_FLAGS " /libs:dll /threads")
+endif()
+
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
 elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
