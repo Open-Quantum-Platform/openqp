@@ -622,8 +622,12 @@ def test_method_caspt2_is_routed_by_h0_and_contraction(
     # not executed.  `energy` is deliberately NOT a gradient-driven runtype, so
     # the energy pass leaves no fused SC-NEVPT2 result behind and the dispatch
     # below consults the route for real instead of consuming a cache.
+    # reference=casscf because SC-NEVPT2 requires a stationary CASSCF
+    # reference; with the _make_runner default (casci) that route declines for
+    # a reason unrelated to h0/contraction and the test would pass for
+    # CASPT2 and be vacuous for SC-NEVPT2.
     runner = _make_runner(tmp_path, "pt2_route", H4_BOHR, runtype="energy",
-                          pt2_extra=dict(pt2_extra))
+                          reference="casscf", pt2_extra=dict(pt2_extra))
     runner.run(test_mod=True)
     calc = Gradient(runner.mol)
     called = []
@@ -660,8 +664,14 @@ def test_building_the_setup_never_runs_the_scnevpt2_energy_pass(tmp_path):
 
     runner = _make_runner(
         tmp_path, "pt2_setup_type", H4_BOHR, runtype="energy",
-        pt2_extra={"h0": "dyall", "contraction": "strong"})
+        reference="casscf", pt2_extra={"h0": "dyall", "contraction": "strong"})
     runner.run(test_mod=True)
+    # Now make it a gradient-driven SC-NEVPT2 run, which is exactly the
+    # configuration the short-circuit fires for.  Building the setup must
+    # still hand back a setup: with the short-circuit inside _caspt2_setup
+    # this returned mol.energies and the analytic CASPT2 gradient -- the other
+    # caller -- got a list.
+    runner.mol.config["input"]["runtype"] = "grad"
     setup = _caspt2_setup(runner.mol, run_reference=False)
 
     assert isinstance(setup, CASPT2Setup), type(setup)
