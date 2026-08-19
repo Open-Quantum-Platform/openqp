@@ -109,9 +109,29 @@ class ReadmeLogMetadataTests(unittest.TestCase):
     def test_readme_reports_current_multireference_gradients(self):
         readme = (ROOT / "README.md").read_text()
 
-        self.assertIn("analytic state-specific CASSCF gradients", readme)
-        self.assertIn("central-difference SA-CASSCF gradients", readme)
-        self.assertIn("SA-CASSCF and CASPT2/NEVPT2/QDPT2 families", readme)
+        # SA-CASSCF is an ANALYTIC route: #348 added the weighted-objective
+        # and individual-root derivatives, and only the legacy
+        # `method=casscf` plus `[state_average]` spelling still takes central
+        # differences.  Pinning the old wording here is what let the README
+        # keep advertising a limitation the code no longer has.
+        self.assertIn(
+            "Energies and analytic nuclear gradients: state specific, the "
+            "weighted SA-CASSCF objective, and an individual averaged root",
+            readme)
+        self.assertIn(
+            "state-specific CASSCF and SA-CASSCF", readme)
+        self.assertNotIn("central-difference SA-CASSCF gradients", readme)
+        # `runtype=namd` is MRSF-TDDFT only (input_checker.py: "NAMD
+        # (surface hopping) currently supports only MRSF-TDDFT"), and the
+        # CASSCF/SA-CASSCF gate admits only grad/optimize/ts/mep/irc.  The
+        # analytic-gradient row must not offer dynamics to every method it
+        # lists.
+        self.assertNotIn(
+            "optimization, reaction paths, and dynamics", readme)
+        self.assertIn("`runtype=namd` dynamics is MRSF-TDDFT only", readme)
+        self.assertIn(
+            "The legacy `method=casscf` plus `[state_average]` spelling, and "
+            "the CASPT2/NEVPT2/QDPT2 families", readme)
 
     def test_capabilities_include_learning_resources_and_geometry_workflows(self):
         readme = (ROOT / "README.md").read_text()
