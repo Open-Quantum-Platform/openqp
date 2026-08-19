@@ -1,3 +1,2 @@
-rks/bhhlyp/6-31g*
-opt(maxit=10,coordsys=tric,trust=0.2)
+rks/bhhlyp/6-31g* opt(maxit=10,coordsys=tric)
 geom="../geometries/H2O-781cba5cd72b.xyz"

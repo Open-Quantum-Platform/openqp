@@ -206,7 +206,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 section, key, _value_text(default, converter)
             )
             first = oqp_input.parse_canonical_oqp(text)
-            canonical = oqp_input.render_canonical_oqp(first)
+            # This checks representability, so keep default-valued keywords
+            # instead of letting the canonical renderer drop them.
+            canonical = oqp_input.render_canonical_oqp(first, strip_defaults=False)
             reparsed = oqp_input.parse_canonical_oqp(canonical)
             lowered = oqp_input.lower_to_legacy(reparsed)
             if (section, key) in concise_dftb_defaults:

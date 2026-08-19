@@ -1,3 +1,2 @@
-rks/bhhlyp/6-31g*
-opt(maxit=1,auto_recovery=false)
+rks/bhhlyp/6-31g* opt(maxit=1,auto_recovery=false)
 geom="../geometries/H2O-781cba5cd72b.xyz"

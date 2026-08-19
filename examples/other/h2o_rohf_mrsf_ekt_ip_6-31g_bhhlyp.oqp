@@ -1,8 +1,3 @@
-mrsf(nstate=10)/bhhlyp/6-31g
-d4=false
-ekt(ip=true,ea=false)
-guess(type=huckel,save_mol=true)
-scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=true)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+mrsf(nstate=10)/bhhlyp/6-31g ekt guess(save_mol=true) scf(maxdiis=5,conv=1e-08) dftgrid(pruned=none)
 tdhf(maxit=30,conv=1e-08,zvconv=1e-08)
 geom="../geometries/H2O-0381125c86f2.xyz"

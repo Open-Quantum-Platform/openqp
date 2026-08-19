@@ -1,6 +1,3 @@
-fci/sto-3g
-guess(type=hcore)
-scf(maxit=60,forced_attempt=3,save_molden=false)
-properties(scf_prop="")
-fci(nroot=3,active_electrons=0,active_orbitals=0,frozen_core=0,max_det=1000,max_memory=256,eig_tol=1e-10,integral_backend=native,integral_cutoff=5e-11,solver=davidson,davidson_maxiter=100,davidson_subspace=6,target_spin=any,print_ci_vectors=false,ci_print_threshold=0.05,save_ci_vectors=false,save_rdm=false)
+fci/sto-3g guess(type=hcore) scf(maxit=60,forced_attempt=3,save_molden=false)
+fci(nroot=3,max_det=1000,max_memory=256,solver=davidson,davidson_subspace=6)
 geom="../geometries/H2-069e977a383f.xyz"

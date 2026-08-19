@@ -149,9 +149,21 @@ class OQPResolution:
     resolved_path: Optional[Path] = None
 
 
+# Spellings of "no pruned grid" for ``dftgrid(pruned=...)``.  The legacy
+# keyword uses an empty string; ``none`` is the readable canonical spelling.
+UNPRUNED_GRID_SPELLINGS = {"", "none", "off", "false", "no"}
+
+
 def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
     """Remove concise section options whose runtime defaults say the same thing."""
 
+    if call.name == "dftgrid" and "pruned" in call.kwargs:
+        value = call.kwargs["pruned"]
+        if value is None or str(value).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+            kwargs = dict(call.kwargs)
+            kwargs["pruned"] = "none"
+            return CallSpec(call.name, call.args, kwargs, call.explicit)
+        return call
     if call.name != "dftb":
         return call
     kwargs = dict(call.kwargs)
@@ -238,6 +250,11 @@ PRIMARY_ALIASES = {
 # ``nmr`` and ``pcm`` just as we accept ``opt`` and ``soc``; rendering still
 # has one deterministic spelling for every accepted form.
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
+
+# Modifiers that lower to no configuration at all: Hessian workflows always
+# compute IR and Raman intensities, so ``ir``/``raman`` only record the user's
+# intent.  Canonical rendering keeps them verbatim.
+INTENT_ONLY_MODIFIERS = {"ir", "raman"}
 
 SECTION_NAMES = {
     "input", "d4", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
@@ -2789,15 +2806,258 @@ def _render_call(call: CallSpec) -> str:
     return "%s(%s)" % (display_name, ",".join(args))
 
 
-def render_canonical_oqp(spec: CalculationSpec) -> str:
-    """Render stable, readable canonical input that reparses identically.
+_SCHEMA_DEFAULTS_CACHE: Dict[str, Any] = {}
 
-    The route, options, driver, and modifiers are written as separate logical
-    lines. Geometry is deliberately last; inline coordinates use a
-    triple-quoted block with one atom per source line. The parser also accepts
-    the equivalent single-line spelling.
+
+def _load_schema_defaults() -> Optional[Dict[str, Dict[str, Tuple[str, Any]]]]:
+    """Read the runtime keyword defaults without initializing liboqp.
+
+    ``oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA`` is the single source of truth
+    for legacy-section defaults, but importing it loads the native library.
+    This module must stay loadable without it, so the schema literal is read
+    from the source file with :mod:`ast` and reduced to
+    ``{section: {key: (type_name, default_text)}}``.  ``None`` means the
+    schema could not be located; callers then keep every explicit option.
     """
 
+    if "schema" in _SCHEMA_DEFAULTS_CACHE:
+        return _SCHEMA_DEFAULTS_CACHE["schema"]
+    path = Path(__file__).resolve().parent.parent / "molecule" / "oqpdata.py"
+    schema: Optional[Dict[str, Dict[str, Tuple[str, Any]]]] = None
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError):
+        tree = None
+    if tree is not None:
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "OQP_CONFIG_SCHEMA"
+                and isinstance(node.value, ast.Dict)
+            ):
+                schema = {}
+                for sec_key, sec_val in zip(node.value.keys, node.value.values):
+                    if not isinstance(sec_key, ast.Constant) or not isinstance(sec_val, ast.Dict):
+                        continue
+                    entries: Dict[str, Tuple[str, Any]] = {}
+                    for opt_key, opt_val in zip(sec_val.keys, sec_val.values):
+                        if not isinstance(opt_key, ast.Constant) or not isinstance(opt_val, ast.Dict):
+                            continue
+                        type_name = ""
+                        default: Any = None
+                        have_default = False
+                        for k, v in zip(opt_val.keys, opt_val.values):
+                            if not isinstance(k, ast.Constant):
+                                continue
+                            if k.value == "type":
+                                if isinstance(v, ast.Name):
+                                    type_name = v.id
+                                elif isinstance(v, ast.Attribute):
+                                    type_name = v.attr
+                            elif k.value == "default":
+                                try:
+                                    default = ast.literal_eval(v)
+                                    have_default = True
+                                except ValueError:
+                                    have_default = False
+                        if have_default:
+                            entries[str(opt_key.value)] = (type_name, default)
+                    schema[str(sec_key.value)] = entries
+                break
+    _SCHEMA_DEFAULTS_CACHE["schema"] = schema
+    return schema
+
+
+def _normalize_typed_value(type_name: str, value: Any) -> Any:
+    """Normalize a config string the way the runtime converter would."""
+
+    text = "" if value is None else str(value).strip()
+    try:
+        if type_name == "int":
+            return int(text)
+        if type_name == "float":
+            return float(text.lower().replace("d", "e"))
+        if type_name == "bool":
+            low = text.lower()
+            if low in {"1", "yes", "true", "on", "y", "t", ".true."}:
+                return True
+            if low in {"0", "no", "false", "off", "n", "f", ".false."}:
+                return False
+            return low
+        if type_name in {"iarray", "farray", "barray"}:
+            parts = [p for p in re.split(r"[,\s]+", text) if p]
+            return tuple(_normalize_typed_value(
+                {"iarray": "int", "farray": "float", "barray": "bool"}[type_name], p
+            ) for p in parts)
+    except ValueError:
+        return text.lower()
+    if type_name == "str" or type_name == "path":
+        return text
+    return text.lower()
+
+
+def _effective_config(
+    config: Mapping[str, Mapping[str, str]],
+    schema: Mapping[str, Mapping[str, Tuple[str, Any]]],
+) -> Dict[Tuple[str, str], Any]:
+    """Overlay runtime defaults on a lowered config and normalize types."""
+
+    effective: Dict[Tuple[str, str], Any] = {}
+    for section, entries in schema.items():
+        values = config.get(section, {})
+        for key, (type_name, default) in entries.items():
+            raw = values[key] if key in values else default
+            if (section, key) == ("dftgrid", "pruned") and str(raw).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+                raw = "none"
+            effective[(section, key)] = _normalize_typed_value(type_name, raw)
+    for section, values in config.items():
+        for key, raw in values.items():
+            if section not in schema or key not in schema[section]:
+                effective[(section, key)] = ("explicit", str(raw))
+    return effective
+
+
+def strip_default_options(spec: CalculationSpec) -> CalculationSpec:
+    """Drop explicit options that only restate the runtime defaults.
+
+    Every candidate (model option, top-level option, driver option, modifier
+    call or modifier option) is removed tentatively; the removal is kept only
+    when the request still validates and lowers to the same *effective*
+    legacy configuration, i.e. the same values after the runtime has filled in
+    its keyword defaults.  Geometry and state selectors are never touched.
+    The comparison uses the lowering code itself, so this cannot change what a
+    calculation does; it only removes noise such as ``guess(type=huckel)`` or
+    ``scf(maxit=30)`` from rendered input.
+    """
+
+    schema = _load_schema_defaults()
+    if schema is None:
+        return spec
+
+    def effective(candidate: CalculationSpec) -> Optional[Dict[Tuple[str, str], Any]]:
+        try:
+            _validate_semantics(candidate)
+            return _effective_config(lower_to_legacy(candidate), schema)
+        except (OQPInputError, KeyError, ValueError, TypeError):
+            return None
+
+    reference = effective(spec)
+    if reference is None:
+        return spec
+
+    def accept(candidate: CalculationSpec) -> bool:
+        return effective(candidate) == reference
+
+    current = spec
+
+    # Top-level options (never geometry, basis/functional live in the route).
+    for key in list(current.options):
+        if key in {"geom", "geom2"}:
+            continue
+        options = dict(current.options)
+        options.pop(key)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            options, current.driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Route options such as mrsf(nstate=...).
+    for key in list(current.model_options):
+        model_options = dict(current.model_options)
+        model_options.pop(key)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, model_options,
+            current.options, current.driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Driver options; positional state labels and state keywords stay.
+    state_keys = set(current.driver.kwargs) - set(_driver_options(current.driver))
+    for key in list(current.driver.kwargs):
+        if key in state_keys:
+            continue
+        kwargs = dict(current.driver.kwargs)
+        kwargs.pop(key)
+        driver = CallSpec(current.driver.name, current.driver.args, kwargs, current.driver.explicit)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            current.options, driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Modifier calls: first the whole call, then each keyword.  Intent-only
+    # modifiers lower to nothing on purpose and are kept to document the
+    # requested analysis, so they are never candidates for removal.
+    index = 0
+    while index < len(current.modifiers):
+        call = current.modifiers[index]
+        if call.name in INTENT_ONLY_MODIFIERS:
+            index += 1
+            continue
+        without = current.modifiers[:index] + current.modifiers[index + 1:]
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            current.options, current.driver, without, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+            continue
+        for key in list(call.kwargs):
+            kwargs = dict(call.kwargs)
+            kwargs.pop(key)
+            trimmed = CallSpec(call.name, call.args, kwargs, call.explicit)
+            modifiers = current.modifiers[:index] + (trimmed,) + current.modifiers[index + 1:]
+            candidate = CalculationSpec(
+                current.model, current.functional, current.basis, current.model_options,
+                current.options, current.driver, modifiers, current.source_text,
+            )
+            if accept(candidate):
+                current = candidate
+                call = trimmed
+        index += 1
+    return current
+
+
+# Rendered lines are filled greedily up to this width before wrapping; the
+# geometry always ends the file on its own line.
+RENDER_LINE_WIDTH = 100
+
+
+def _pack_tokens(tokens: Sequence[str], width: int = RENDER_LINE_WIDTH) -> List[str]:
+    lines: List[str] = []
+    current = ""
+    for token in tokens:
+        if not current:
+            current = token
+        elif len(current) + 1 + len(token) <= width:
+            current += " " + token
+        else:
+            lines.append(current)
+            current = token
+    if current:
+        lines.append(current)
+    return lines
+
+
+def render_canonical_oqp(spec: CalculationSpec, *, strip_defaults: bool = True) -> str:
+    """Render stable, readable canonical input that reparses identically.
+
+    The route, top-level options, driver, and modifiers are packed onto one
+    line (wrapping only past :data:`RENDER_LINE_WIDTH`), so a typical job reads
+    ``dft/pbe0/def2-svp opt``.  Geometry is deliberately last on its own line;
+    inline coordinates use a triple-quoted block with one atom per source
+    line.  Options that merely restate runtime defaults are dropped first (see
+    :func:`strip_default_options`).  The parser accepts any line layout.
+    """
+
+    if strip_defaults:
+        spec = strip_default_options(spec)
     model_args = ",".join(
         "%s=%s" % (key, _render_value(value)) for key, value in spec.model_options.items()
     )
@@ -2862,7 +3122,8 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         for key in ("geom", "geom2")
         if key in spec.options
     ]
-    return "\n".join([route] + option_parts + calls + geometry_parts) + "\n"
+    lines = _pack_tokens([route] + option_parts + calls)
+    return "\n".join(lines + geometry_parts) + "\n"
 
 
 def _natural_model(text: str) -> Optional[str]:

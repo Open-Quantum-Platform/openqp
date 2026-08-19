@@ -105,7 +105,7 @@ def test_mult_is_canonical_and_long_spelling_is_only_an_input_alias():
         'hf/6-31g* geom="radical.xyz" multiplicity=2 energy()'
     )
     assert short.options == long.options == {"geom": "radical.xyz", "mult": 2}
-    assert "\nmult=2\n" in oqp_input.render_canonical_oqp(long)
+    assert " mult=2\n" in oqp_input.render_canonical_oqp(long)
     assert "multiplicity=" not in oqp_input.render_canonical_oqp(long)
     with pytest.raises(OQPInputError, match="not a route option"):
         oqp_input.parse_canonical_oqp(
@@ -256,12 +256,43 @@ def test_explicit_bare_energy_renders_as_the_same_implicit_default():
     )
 
 
+def test_intent_only_ir_raman_modifiers_survive_canonical_rendering():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="h2o.xyz" hess(S0,type=analytical) ir raman'
+    )
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert rendered == (
+        "dft/pbe0/def2-svp hess(S0,type=analytical) ir raman\n"
+        'geom="h2o.xyz"\n'
+    )
+    assert oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp(rendered)
+    ) == rendered
+
+
+@pytest.mark.parametrize("spelling", ['""', "none", "off", "false", "no"])
+def test_unpruned_dft_grid_has_one_readable_canonical_spelling(spelling):
+    spec = oqp_input.parse_canonical_oqp(
+        'rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=%s)' % spelling
+    )
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert rendered == 'rks/pbe/6-31g dftgrid(pruned=none)\ngeom="h2o.xyz"\n'
+    assert oqp_input.lower_to_legacy(spec)["dftgrid"]["pruned"] == "none"
+    # SG2 is the default and disappears; other presets are kept as written.
+    assert "dftgrid" not in oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp('rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=SG2)')
+    )
+    assert "dftgrid(pruned=sg1)" in oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp('rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=sg1)')
+    )
+
+
 def test_energy_state_selector_is_not_dropped():
     spec, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" energy(T0)'
     )
     assert legacy["tdhf"]["multiplicity"] == "3"
-    assert "\nenergy(T0)\n" in oqp_input.render_canonical_oqp(spec)
+    assert " energy(T0)\n" in oqp_input.render_canonical_oqp(spec)
 
 
 @pytest.mark.parametrize("driver", ["opt", "opt()"])
@@ -359,9 +390,7 @@ geom="h2o.xyz"
     assert multiline.modifiers == single.modifiers
     assert oqp_input.lower_to_legacy(multiline) == oqp_input.lower_to_legacy(single)
     assert oqp_input.render_canonical_oqp(multiline) == (
-        "dft/pbe0/6-31g\n"
-        "opt\n"
-        "scf(conv=1e-08)\n"
+        "dft/pbe0/6-31g opt scf(conv=1e-08)\n"
         'geom="h2o.xyz"\n'
     )
 
@@ -409,9 +438,7 @@ def test_harmless_whitespace_and_bare_calls_normalize_to_compact_input():
     assert legacy["optimize"]["maxit"] == "100"
     assert legacy["scf"]["conv"] == "1e-08"
     assert oqp_input.render_canonical_oqp(spec) == (
-        "mrsf(nstate=3)/bhhlyp/6-31g*\n"
-        "opt(S0,maxit=100)\n"
-        "scf(conv=1e-08)\n"
+        "mrsf(nstate=3)/bhhlyp/6-31g* opt(S0,maxit=100) scf(conv=1e-08)\n"
         'geom="h2o.xyz"\n'
     )
 
@@ -443,10 +470,7 @@ def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses()
     )
     rendered = oqp_input.render_canonical_oqp(spec)
     assert rendered == (
-        "dft/pbe0/def2-svp\n"
-        "pcm\n"
-        "nmr\n"
-        "d4\n"
+        "dft/pbe0/def2-svp pcm nmr d4\n"
         'geom="h2o.xyz"\n'
     )
     assert oqp_input.render_canonical_oqp(
@@ -458,7 +482,7 @@ def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses()
     mrsf = oqp_input.parse_canonical_oqp(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" opt()'
     )
-    assert "\nopt\n" in oqp_input.render_canonical_oqp(mrsf)
+    assert " opt\n" in oqp_input.render_canonical_oqp(mrsf)
 
 
 @pytest.mark.parametrize("geometry", ["h2o.xyz", '"water molecule.pdb"'])
@@ -470,8 +494,7 @@ def test_geometry_file_may_follow_the_route_positionally(geometry):
     assert spec.options["geom"] == expected
     assert legacy["input"]["system"] == expected
     assert oqp_input.render_canonical_oqp(spec) == (
-        "mrsf(nstate=3)/bhhlyp/6-31g*\n"
-        "opt\n"
+        "mrsf(nstate=3)/bhhlyp/6-31g* opt\n"
         "geom=%s\n" % oqp_input._render_value(expected)
     )
 
@@ -767,9 +790,7 @@ def test_natural_korean_request_writes_and_reparses_resolved_file(tmp_path):
     assert result.resolved_path == tmp_path / "water.resolved.oqp"
     assert result.resolved_path.read_text(encoding="utf-8") == result.canonical_text
     assert result.canonical_text == (
-        "mrsf(nstate=5)/bhhlyp/6-31g*\n"
-        "opt(S1,maxit=100)\n"
-        "scf(conv=1e-08)\n"
+        "mrsf(nstate=5)/bhhlyp/6-31g* opt(S1,maxit=100) scf(conv=1e-08)\n"
         'geom="h2o.xyz"\n'
     )
     assert result.legacy_config["input"]["system"] == str((tmp_path / "h2o.xyz").resolve())
@@ -1236,7 +1257,7 @@ geom="c60.xyz"
     assert native["oqp"]["recovery_maxit"] == "40"
     assert native["oqp"]["recovery_trust"] == "0.02"
     rendered_native = oqp_input.render_canonical_oqp(native_spec)
-    assert "\nopt(S0,lib=oqp," in rendered_native
+    assert " opt(S0,maxit=100,recovery_maxit=40)" in rendered_native
     assert rendered_native.rstrip().endswith('geom="c60.xyz"')
 
     geometric_text = """
@@ -1258,7 +1279,15 @@ geom="c60.xyz"
     reparsed_geometric = oqp_input.parse_canonical_oqp(
         oqp_input.render_canonical_oqp(geometric_spec)
     )
-    assert reparsed_geometric.driver == geometric_spec.driver
+    # convergence_set=GAU and hessian=never restate geomeTRIC defaults, so
+    # the canonical rendering omits them without changing the request.
+    assert set(reparsed_geometric.driver.kwargs) == {
+        "lib", "maxit", "coordsys", "trust", "tmax"
+    }
+    schema = oqp_input._load_schema_defaults()
+    assert oqp_input._effective_config(
+        oqp_input.lower_to_legacy(reparsed_geometric), schema
+    ) == oqp_input._effective_config(geometric, schema)
     assert reparsed_geometric.modifiers == geometric_spec.modifiers
     assert reparsed_geometric.options == geometric_spec.options
 
@@ -1334,7 +1363,13 @@ def test_baeka_is_a_variadic_meci_algorithm_with_safe_defaults():
     assert four["optimize"]["pen_delta"] == "0.1"
     assert four["optimize"]["pen_jump"] == "5,10"
     assert four["optimize"]["energy_gap"] == "0.0002"
-    assert "algorithm=baeka" in oqp_input.render_canonical_oqp(spec)
+    # More than two states already select BaekA, so the canonical rendering
+    # drops the explicit algorithm and still lowers to the same request.
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert "algorithm=" not in rendered
+    assert oqp_input.lower_to_legacy(
+        oqp_input.parse_canonical_oqp(rendered)
+    )["optimize"]["meci_search"] == "baeka"
 
     _, inferred_three = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
@@ -1554,7 +1589,7 @@ def test_dftb0_route_and_alias_lower_to_non_scc_ground_state():
 
     assert spec.model == "dftb0"
     assert spec.physical_method == "DFTB0"
-    assert oqp_input.render_canonical_oqp(spec).startswith("dftb0\n")
+    assert oqp_input.render_canonical_oqp(spec).startswith("dftb0 ")
     assert legacy["input"]["method"] == "dftb"
     assert legacy["dftb"]["type"] == "ground_noscc"
     assert legacy["properties"]["grad"] == "0"
@@ -1568,7 +1603,7 @@ def test_tda_tddftb_route_is_canonical_tda_singlet_response():
 
     assert spec.model == "tda-dftb"
     assert spec.physical_method == "TD-DFTB (TDA)"
-    assert oqp_input.render_canonical_oqp(spec).startswith("tda-tddftb(nstate=3)\n")
+    assert oqp_input.render_canonical_oqp(spec).startswith("tda-tddftb(nstate=3) ")
     assert legacy["tdhf"]["type"] == "tda"
     assert legacy["tdhf"]["multiplicity"] == "1"
     assert legacy["dftb"]["type"] == "tddftb"
@@ -1598,7 +1633,7 @@ def test_sf_tddftb_route_uses_high_spin_reference_and_explicit_root():
     assert spec.physical_method == "SF-TDDFTB"
     assert spec.reference_method == "ROHF"
     assert spec.reference_multiplicity == 3
-    assert oqp_input.render_canonical_oqp(spec).startswith("sf-tddftb(nstate=3)\n")
+    assert oqp_input.render_canonical_oqp(spec).startswith("sf-tddftb(nstate=3) ")
     assert legacy["scf"] == {"type": "rohf", "multiplicity": "3"}
     assert legacy["tdhf"]["type"] == "sf"
     assert legacy["tdhf"]["multiplicity"] == "1"
@@ -1719,6 +1754,14 @@ def _normalized_config_value(value):
         return text
 
 
+def _raw_legacy_sections(path):
+    parser = configparser.ConfigParser()
+    parser.read_string(path.read_text(encoding="utf-8"))
+    return {
+        section: dict(parser.items(section)) for section in parser.sections()
+    }
+
+
 def _legacy_sections(path):
     parser = configparser.ConfigParser()
     parser.read_string(path.read_text(encoding="utf-8"))
@@ -1776,7 +1819,7 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
 
 @pytest.mark.parametrize("filename", WF_EXAMPLES)
 def test_wf_oqp_twin_lowers_to_its_legacy_inp_configuration(filename):
-    """The concise twin must be the same request, key for key.
+    """The concise twin must be the same request, keyword for keyword.
 
     This is the fast unit-level pin behind the example-level energy
     comparison: a lowering slip (a dropped ``[pt2]`` key, a method grouped into
@@ -1788,13 +1831,12 @@ def test_wf_oqp_twin_lowers_to_its_legacy_inp_configuration(filename):
     concise_path = legacy_path.with_suffix(".oqp")
     expected = _legacy_sections(legacy_path)
     spec = oqp_input.parse_canonical_oqp(concise_path.read_text(encoding="utf-8"))
+    raw_lowered = oqp_input.lower_to_legacy(spec, source_dir=WF_EXAMPLE_DIR)
     lowered = {
         section: {
             key: _normalized_config_value(value) for key, value in values.items()
         }
-        for section, values in oqp_input.lower_to_legacy(
-            spec, source_dir=WF_EXAMPLE_DIR
-        ).items()
+        for section, values in raw_lowered.items()
     }
 
     # The geometry is the one deliberate difference: the concise twin points at
@@ -1814,11 +1856,21 @@ def test_wf_oqp_twin_lowers_to_its_legacy_inp_configuration(filename):
         assert lowered_orb.is_file()
         assert lowered_orb.name == Path(expected_orb).name
 
-    # charge=0 is the language default: never written in the concise twin, but
-    # always restored by the lowering, so it still has to agree.
-    assert set(lowered) == set(expected)
-    for section in sorted(expected):
-        assert lowered[section] == expected[section], section
+    # The concise twin omits every keyword that only restates a runtime
+    # default (charge=0, guess type, converger defaults, ...).  Compare the two
+    # requests after the runtime defaults are filled in, which is what the
+    # calculation actually sees.
+    schema = oqp_input._load_schema_defaults()
+    assert schema is not None
+    raw_expected = _raw_legacy_sections(legacy_path)
+    for section, values in ((("input", "system"), ("cas", "orbital_file"))):
+        raw_lowered.get(section, {}).pop(values, None)
+        raw_expected.get(section, {}).pop(values, None)
+    lowered_effective = oqp_input._effective_config(raw_lowered, schema)
+    expected_effective = oqp_input._effective_config(raw_expected, schema)
+    assert set(lowered) <= set(expected)
+    for key in sorted(set(lowered_effective) | set(expected_effective)):
+        assert lowered_effective.get(key) == expected_effective.get(key), key
 
 
 @pytest.mark.parametrize(

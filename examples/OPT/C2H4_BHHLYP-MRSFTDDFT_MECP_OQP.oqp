@@ -1,5 +1,4 @@
 mrsf(nstate=5)/bhhlyp/6-31g*
 mecp(S0,T0,maxit=2,energy_shift=1,energy_gap=0.0001,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1,coordsys=tric,trust=0.1,trust_max=0.3,auto_recovery=false)
-scf(maxit=30)
 tdhf(maxit=30)
 geom="../geometries/C2H4-41911fceceb6.xyz"

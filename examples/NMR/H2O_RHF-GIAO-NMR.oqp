@@ -1,4 +1,2 @@
-rhf/sto-3g
-guess(type=huckel)
-properties(scf_prop=nmr,nmr_gauge=giao)
+rhf/sto-3g properties(scf_prop=nmr,nmr_gauge=giao)
 geom="../geometries/H2O-0381125c86f2.xyz"

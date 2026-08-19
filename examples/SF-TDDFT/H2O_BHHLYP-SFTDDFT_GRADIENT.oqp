@@ -1,4 +1,2 @@
-sf(nstate=3)/bhhlyp/6-31g*
-grad(root=3)
-guess(type=huckel)
+sf/bhhlyp/6-31g* grad(root=3)
 geom="../geometries/H2O-0381125c86f2.xyz"

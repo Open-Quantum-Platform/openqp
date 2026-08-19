@@ -1,1 +1,2 @@
-ccsd/sto-3g h2o.xyz energy() cc(nfzc=1)
+ccsd/sto-3g cc(nfzc=1)
+geom="h2o.xyz"

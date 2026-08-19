@@ -1,5 +1,2 @@
-mp2(reference=rohf)/cc-pvdz
-mult=2
-guess(type=huckel,save_mol=false)
-scf(maxit=50,conv=1e-10,save_molden=false)
+mp2(reference=rohf)/cc-pvdz mult=2 scf(maxit=50,conv=1e-10,save_molden=false)
 geom="../geometries/HO-0e90d87efea2.xyz"
