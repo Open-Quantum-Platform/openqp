@@ -88,6 +88,18 @@ jobs:
             --config-settings=cmake.define.USE_LIBINT=OFF `
             --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
             --config-settings=cmake.define.BUILD_TESTING=OFF
+      - name: Check the DFT-D4 stack shipped
+        run: |
+          $pkg = python -c "import sysconfig; print(sysconfig.get_paths()['purelib'] + '\oqp')"
+          $missing = @()
+          foreach ($dll in 'liboqp.dll','dftd4.dll','multicharge.dll','mctc-lib.dll') {
+            if (-not (Test-Path "$pkg\lib\$dll")) { $missing += $dll }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error "missing from the installed package: $($missing -join ', ')"
+            exit 1
+          }
+          python -c "import oqp; print('oqp_dftd4_disp exported:', hasattr(oqp.lib, 'oqp_dftd4_disp'))"
       - name: Inspect installed package
         if: always()
         run: |

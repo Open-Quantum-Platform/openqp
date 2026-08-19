@@ -95,6 +95,15 @@ endif()
 if(ENABLE_DFTD4)
 set(_OQP_DFTD4_CACHE_KEY
     "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
+if(WIN32)
+  # Windows caps a full object-file path at 250 characters
+  # (CMAKE_OBJECT_PATH_MAX).  The descriptive key above pushes the nested
+  # ExternalProject scratch directories past it, and CMake then fails even to
+  # identify the Fortran compiler.  Hash it, as the outer externals key is.
+  string(MD5 _OQP_DFTD4_CACHE_KEY_HASH "${_OQP_DFTD4_CACHE_KEY}")
+  string(SUBSTRING "${_OQP_DFTD4_CACHE_KEY_HASH}" 0 12 _OQP_DFTD4_CACHE_KEY_HASH)
+  set(_OQP_DFTD4_CACHE_KEY "d4-${_OQP_DFTD4_CACHE_KEY_HASH}")
+endif()
 endif()  # ENABLE_DFTD4
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
@@ -807,14 +816,19 @@ if(APPLE)
 elseif(UNIX)
     set(DFTD4_ORIGIN_RPATH "$ORIGIN")
 else()
-    message(FATAL_ERROR
-        "The replaceable DFT-D4 shared-library stack is currently supported "
-        "only on Linux and macOS.")
+    # Windows: no RPATH.  The three DLLs are installed next to liboqp.dll and
+    # found through the DLL search path (pyoqp/oqp/runtime.py registers that
+    # directory with os.add_dll_directory), so there is nothing to embed.
+    set(DFTD4_ORIGIN_RPATH "")
 endif()
 set(DFTD4_COMMON_ARGS
         -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
         -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
         -DCMAKE_INSTALL_LIBDIR=lib
+        # Windows installs a shared library's DLL under BINDIR and only its
+        # import library under LIBDIR.  Point both at lib/ so the DLLs land
+        # beside the .lib files and every DFTD4_*_LIB path stays valid.
+        -DCMAKE_INSTALL_BINDIR=lib
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DWITH_TESTS=OFF
@@ -885,7 +899,11 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
-if(BUILD_SHARED_LIBS)
+if(BUILD_SHARED_LIBS AND WIN32)
+    # What liboqp LINKS against on Windows is the import library, not the DLL.
+    set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_IMPORT_LIBRARY_PREFIX}")
+    set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+elseif(BUILD_SHARED_LIBS)
     set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}")
     set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_SHARED_LIBRARY_SUFFIX}")
 else()
@@ -925,6 +943,27 @@ if(NOT BUILD_SHARED_LIBS)
         CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_NAME" FORCE)
     set(DFTD4_DFTD4_RUNTIME_NAME
         "${CMAKE_STATIC_LIBRARY_PREFIX}dftd4${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
+elseif(WIN32)
+    # A Windows DLL has no version suffix and no SONAME; build artifact and
+    # runtime name are the same file.
+    set(DFTD4_MCTC_RUNTIME_SOURCE
+        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
+        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_DFTD4_RUNTIME_SOURCE
+        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+    set(DFTD4_MCTC_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_NAME" FORCE)
+    set(DFTD4_MULTICHARGE_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_NAME" FORCE)
+    set(DFTD4_DFTD4_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 elseif(APPLE)
     set(DFTD4_MCTC_RUNTIME_SOURCE
