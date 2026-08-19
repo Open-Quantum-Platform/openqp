@@ -1,0 +1,156 @@
+name: Windows standalone bundle
+# Builds a self-contained Windows distribution: unzip and run openqp.exe.
+# No Python, no oneAPI, no MKL install on the user's machine -- the bundle
+# carries the interpreter, liboqp.dll, the DFT-D4 DLLs, the Intel Fortran/OpenMP
+# redistributables, MKL, and the basis-set data.
+#
+# MKL (not OpenBLAS) on purpose: the PyPI wheels must use OpenBLAS because
+# libmkl_core exceeds PyPI's per-file size limit, but a zip release has no such
+# limit and MKL is the faster backend on the Intel hardware these users have.
+on:
+  push:
+    branches: [feat/windows-intel-build]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+
+jobs:
+  bundle:
+    name: openqp-windows-x86_64 (standalone)
+    runs-on: windows-2025
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Intel oneAPI
+        uses: ./.github/actions/setup-oneapi-windows
+
+      - name: Build and install OpenQP
+        env:
+          CC: icx
+          CXX: icx
+          FC: ifx
+          CMAKE_GENERATOR: Ninja
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+          OQP_EXTERNALS_ROOT: C:\oqpx
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\oqpx, C:\oqpb | Out-Null
+          python -m pip install --upgrade pip
+          python -m pip install cmake ninja numpy cffi scikit-build-core pyinstaller
+          python -m pip install -v . --no-build-isolation `
+            --config-settings=build-dir=C:\oqpb `
+            --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
+            --config-settings=cmake.define.ENABLE_MPI=OFF `
+            --config-settings=cmake.define.ENABLE_OPENMP=ON `
+            --config-settings=cmake.define.USE_LIBINT=OFF `
+            --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
+            --config-settings=cmake.define.BUILD_TESTING=OFF
+          python -m pip install scipy "numpy<2.2" basis_set_exchange geometric
+
+      - name: Freeze into a standalone directory
+        run: |
+          $pkg = python -c "import os, oqp; print(os.path.dirname(oqp.__file__))"
+          $intelBin = "$env:CMPLR_ROOT\bin"
+          $mklBin = "$env:MKLROOT\bin"
+          Write-Host "package: $pkg"
+          Write-Host "intel:   $intelBin"
+          Write-Host "mkl:     $mklBin"
+          # PyInstaller collects the Python side; the native DLLs are added
+          # explicitly because they are loaded through cffi at run time and are
+          # therefore invisible to static analysis.
+          $addBin = @()
+          foreach ($d in (Get-ChildItem "$pkg\lib\*.dll")) { $addBin += "--add-binary=`"$($d.FullName);oqp/lib`"" }
+          foreach ($name in 'libifcoremd.dll','libifportmd.dll','libmmd.dll','libiomp5md.dll','svml_dispmd.dll','libintlc.dll','libirngmd.dll') {
+            $p = Join-Path $intelBin $name
+            if (Test-Path $p) { $addBin += "--add-binary=`"$p;oqp/lib`"" } else { Write-Warning "not found: $name" }
+          }
+          foreach ($name in 'mkl_rt.2.dll','mkl_core.2.dll','mkl_intel_thread.2.dll','mkl_def.2.dll','mkl_avx2.2.dll','mkl_avx512.2.dll','mkl_vml_def.2.dll','mkl_vml_avx2.2.dll','mkl_vml_avx512.2.dll') {
+            $p = Join-Path $mklBin $name
+            if (Test-Path $p) { $addBin += "--add-binary=`"$p;oqp/lib`"" } else { Write-Warning "not found: $name" }
+          }
+          $cmd = @(
+            'python -m PyInstaller --noconfirm --clean --onedir --name openqp',
+            '--distpath C:\oqpdist --workpath C:\oqpwork --specpath C:\oqpwork',
+            "--collect-data oqp --collect-submodules oqp",
+            "--collect-data basis_set_exchange --collect-submodules basis_set_exchange",
+            "--collect-submodules geometric --collect-data geometric",
+            ($addBin -join ' '),
+            "`"$pkg\..\..\Scripts\openqp-script.py`""
+          ) -join ' '
+          Write-Host $cmd
+          Invoke-Expression $cmd
+
+      - name: Add the data tree and a README
+        run: |
+          $root = "C:\oqpdist\openqp"
+          $pkg = python -c "import os, oqp; print(os.path.dirname(oqp.__file__))"
+          # basis sets / examples ship next to the executable so a user can point
+          # at them without hunting inside _internal.
+          Copy-Item -Recurse -Force "$pkg\share" "$root\share"
+          Copy-Item -Recurse -Force "examples" "$root\examples"
+          $readme = @(
+            'OpenQP for Windows -- standalone build'
+            '======================================'
+            ''
+            'Nothing to install.  Unzip anywhere and run, for example:'
+            ''
+            '    openqp.exe examples\HF\H2O_RHF-HF_ENERGY.inp'
+            ''
+            'Results are written next to the input file (.log, .json).'
+            ''
+            'Threads: set OMP_NUM_THREADS to the number of physical cores, e.g.'
+            ''
+            '    set OMP_NUM_THREADS=8'
+            '    openqp.exe myjob.inp'
+            ''
+            'This bundle carries its own Python, Intel Fortran runtime, Intel MKL'
+            'and the DFT-D4 libraries.  It neither reads nor needs any system'
+            'installation of them.'
+            ''
+            'Built with Intel oneAPI ifx/icx 2026.1 and Intel MKL (ILP64).'
+          )
+          $readme | Set-Content -Encoding UTF8 "$root\README.txt"
+
+      - name: Smoke test the bundle in a clean shell
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"   # no Python, no oneAPI
+          New-Item -ItemType Directory -Force -Path C:\oqpsmoke | Out-Null
+          Copy-Item examples\HF\H2O_RHF-HF_ENERGY.inp C:\oqpsmoke\hf.inp
+          Set-Location C:\oqpsmoke
+          $env:OMP_NUM_THREADS = "2"
+          & C:\oqpdist\openqp\openqp.exe hf.inp --nompi
+          if ($LASTEXITCODE -ne 0) { throw "openqp.exe exited $LASTEXITCODE" }
+          $hit = Select-String -Path hf.log -Pattern "TOTAL energy"
+          if (-not $hit) { throw "no TOTAL energy in hf.log" }
+          $hit
+          # -76.0107465151 is the reference this example carries.
+          if (-not (Select-String -Path hf.log -Pattern "-76\.01074651")) {
+            throw "energy does not match the reference"
+          }
+
+      - name: Zip the bundle
+        run: |
+          $ver = python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
+          $zip = "openqp-$ver-windows-x86_64.zip"
+          Compress-Archive -Path C:\oqpdist\openqp\* -DestinationPath $zip -CompressionLevel Optimal
+          "BUNDLE_ZIP=$zip" >> $env:GITHUB_ENV
+          Get-Item $zip | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-windows-standalone
+          path: ${{ env.BUNDLE_ZIP }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload ${{ github.event.release.tag_name }} $env:BUNDLE_ZIP --clobber

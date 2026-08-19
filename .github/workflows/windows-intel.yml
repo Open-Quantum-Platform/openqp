@@ -6,10 +6,6 @@ on:
     branches: [feat/windows-intel-build]
   workflow_dispatch:
 
-env:
-  # Unified oneAPI 2026.1 offline installer (same URL oneapi-src/oneapi-ci uses).
-  ONEAPI_URL: https://registrationcenter-download.intel.com/akdlm/IRC_NAS/4144bec3-82ce-4672-bd71-5c93a79cd5e7/intel-oneapi-toolkit-2026.1.0.191_offline.exe
-  ONEAPI_COMPONENTS: intel.oneapi.win.ifort-compiler:intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel
 
 jobs:
   windows-intel:
@@ -26,36 +22,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Restore oneAPI install from cache
-        id: oneapi-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: C:\Program Files (x86)\Intel\oneAPI
-          key: oneapi-win-${{ env.ONEAPI_URL }}-${{ env.ONEAPI_COMPONENTS }}-v1
-      - name: Install Intel oneAPI (ifx + icx + MKL)
-        if: steps.oneapi-cache.outputs.cache-hit != 'true'
-        shell: cmd
-        run: |
-          curl.exe -sSL --retry 5 --retry-delay 5 --output %RUNNER_TEMP%\oneapi.exe %ONEAPI_URL%
-          start /b /wait %RUNNER_TEMP%\oneapi.exe -s -x -f %RUNNER_TEMP%\oneapi_ex --log %RUNNER_TEMP%\extract.log
-          %RUNNER_TEMP%\oneapi_ex\bootstrapper.exe -s --action install --components=%ONEAPI_COMPONENTS% --eula=accept -p=NEED_VS2017_INTEGRATION=0 -p=NEED_VS2019_INTEGRATION=0 -p=NEED_VS2022_INTEGRATION=0 --log-dir=%RUNNER_TEMP%\oneapi_log
-          set rc=%ERRORLEVEL%
-          rd /s /q %RUNNER_TEMP%\oneapi_ex
-          dir "C:\Program Files (x86)\Intel\oneAPI"
-          exit /b %rc%
-      - name: Save oneAPI install to cache
-        # Save right after a successful install, regardless of how the build
-        # goes later, so the next run never re-downloads the toolkit.
-        if: steps.oneapi-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: C:\Program Files (x86)\Intel\oneAPI
-          key: oneapi-win-${{ env.ONEAPI_URL }}-${{ env.ONEAPI_COMPONENTS }}-v1
-      - name: Export oneAPI + MSVC environment
-        shell: cmd
-        run: |
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
-          set >> %GITHUB_ENV%
+      - name: Set up Intel oneAPI
+        uses: ./.github/actions/setup-oneapi-windows
+
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
