@@ -1275,10 +1275,21 @@ class Gradient(Calculator):
             self.mol.grads = grads
             return grads
 
-        # The CASPT2 family has an analytic nuclear gradient for the variants
-        # oqp.library.caspt2_gradient covers; [pt2] gradient selects the route.
+        # ONE selector, two analytic derivatives.  `[pt2] gradient` is a
+        # single schema key, and both analytic PT2 gradient modules read it, so
+        # the dispatch has to pick the route rather than let one method's
+        # module claim `method=caspt2` for itself.
+        #
+        # SC-NEVPT2 is tried first because it is the derivative of exactly what
+        # caspt2_gradient is explicitly NOT the derivative of -- h0=dyall with
+        # contraction=strong -- so the two scopes are disjoint and the order
+        # only decides which module gets to explain a refusal.  Whatever
+        # SC-NEVPT2 declines falls through to caspt2_grad(), which covers the
+        # rest of the family and owns the shared central-difference fallback.
         if _normalized_method_label(self.method) in PT2_GRAD_METHODS:
-            grads = self.caspt2_grad()
+            grads = self._sc_nevpt2_grad_or_none()
+            if grads is None:
+                grads = self.caspt2_grad()
             self.mol.grads = grads
             arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
             _sel = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
@@ -1433,6 +1444,99 @@ class Gradient(Calculator):
         grads = casscf_analytic_gradient(self.mol)
 
         return grads
+
+    def _sc_nevpt2_grad_or_none(self):
+        """The analytic SC-NEVPT2 gradient, or None if that route declines.
+
+        SC-NEVPT2 is `method=caspt2` with `[pt2] h0=dyall` and
+        `contraction=strong`; every other PT2 spelling belongs to the CASPT2
+        route, so this returns None immediately for them rather than probing.
+
+        Returning None -- not falling back here -- is what keeps ONE
+        central-difference fallback in the code: caspt2_grad() already owns it,
+        and duplicating it would give the PT2 family two numerical paths that
+        could drift apart.  The exception is `[pt2] gradient=analytic`, which
+        asked for the derivative and gets the reason instead of a fallback.
+
+        The import stays local to avoid a circular module dependency.
+        """
+        if self.method != 'caspt2':
+            return None
+
+        from oqp.library.caspt2_dyall import _caspt2_options
+        from oqp.library.nevpt2_gradient import (
+            SCNEVPT2NotApplicable,
+            consume_sc_nevpt2_gradient,
+            sc_nevpt2_gradient_route,
+        )
+
+        cached = consume_sc_nevpt2_gradient(self.mol)
+        if cached is not None:
+            # A fused energy-pass gradient is published through the same
+            # public slot-0 selector check as sc_nevpt2_grad, so a
+            # `[properties] grad=1` run cannot receive the corrected root's
+            # slot-0 gradient labeled as a different requested state.
+            self._require_scnevpt2_slot0()
+            dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+            return cached
+
+        route, reason = sc_nevpt2_gradient_route(self.mol)
+        if route != 'analytic':
+            return None
+
+        dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+        try:
+            return self.sc_nevpt2_grad()
+        except SCNEVPT2NotApplicable as exc:
+            # The route preflight can only test the CONFIGURATION; the
+            # remaining applicability conditions -- a stationary CASSCF
+            # reference, non-degenerate semicanonical orbitals, a solvable
+            # response system -- are only knowable once the reference exists.
+            # `analytic` demanded the derivative and gets the reason; `auto`
+            # promised a fallback and hands the run to caspt2_grad(), which
+            # declines h0=dyall in turn and central-differences it.
+            if _caspt2_options(self.mol.config).gradient == 'analytic':
+                raise
+            dump_log(self.mol, title=(
+                'PyOQP: PT2 nuclear gradient by central differences '
+                '(analytic SC-NEVPT2 derivative not applicable: %s)' % exc))
+            return None
+
+    def _require_scnevpt2_slot0(self):
+        """Reject any [properties] grad selector other than public slot 0.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so slot 0 is the
+        only valid selector; [pt2] target_roots picks which physical root
+        occupies it.  The direct analytic gradient and the fused energy-pass
+        cache both publish through this one check, so neither can hand back the
+        corrected root's slot-0 gradient labeled as a different requested state.
+        Returns the corrected root for the gradient log line.
+        """
+        from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+
+        root = int(_reference_roots(_caspt2_options(self.mol.config))[0])
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        for state in requested:
+            if state != 0:
+                raise ValueError(
+                    f'Analytic SC-NEVPT2 gradients are state-specific: only '
+                    f'the corrected root {root} is available in public slot 0, '
+                    f'but [properties] grad requested slot {state}.')
+        return root
+
+    def sc_nevpt2_grad(self):
+        """Analytic strongly contracted NEVPT2 gradient of the [pt2] root.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so the only valid
+        [properties] grad selector is 0; [pt2] target_roots picks which physical
+        root occupies that slot.  Rejecting any other selector here is what
+        keeps a run from being answered with a root it did not ask for.
+        """
+        from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+        root = self._require_scnevpt2_slot0()
+        dump_log(self.mol, title='PyOQP: Analytic SC-NEVPT2 Gradient of Root %s' % root)
+        return sc_nevpt2_analytic_gradient(self.mol)
 
     def caspt2_grad(self):
         """CASPT2-family nuclear gradient, analytic where the variant has one.

@@ -579,3 +579,52 @@ def test_gradient_route_option_is_validated():
     # The analytic dispatch set and the numerical one describe the same family;
     # a method reaching only one of them would silently lose its gradient.
     assert PT2_GRAD_METHODS == PT2_NUMGRAD_METHODS
+
+
+# --------------------------------------------------------------------------
+# dispatch: ONE selector, two analytic derivatives
+# --------------------------------------------------------------------------
+@needs_backend
+@pytest.mark.parametrize("pt2_extra,expected", [
+    ({"h0": "fock", "contraction": "none"}, "caspt2"),
+    ({"h0": "dyall", "contraction": "strong"}, "sc_nevpt2"),
+    # Uncontracted NEVPT2 is the derivative of NEITHER module, so it must reach
+    # the CASPT2 route and be declined there -- not be claimed by SC-NEVPT2
+    # merely because it spells h0=dyall.
+    ({"h0": "dyall", "contraction": "none"}, "caspt2"),
+])
+def test_method_caspt2_is_routed_by_h0_and_contraction(
+        tmp_path, monkeypatch, pt2_extra, expected):
+    """`method=caspt2` names a family, not one module's calculation.
+
+    Two analytic PT2 derivatives read the same `[pt2] gradient` key, and both
+    are reached through `method=caspt2`.  Which one runs is decided by `[pt2]
+    h0` and `contraction`, so this asserts the ROUTE rather than a number: a
+    dispatch that let one module claim the method would still return a
+    perfectly good gradient -- of the wrong functional -- and no comparison of
+    gradient values would reveal it.
+    """
+    from oqp.library.single_point import Gradient
+
+    if expected == "sc_nevpt2" and not hasattr(
+            getattr(__import__("oqp"), "lib", None), "nevpt2_gradient"):
+        pytest.skip("liboqp has no nevpt2_gradient entry point; rebuild liboqp")
+
+    runner = _make_runner(tmp_path, "pt2_route", H4_BOHR, runtype="grad",
+                          pt2_extra=dict(pt2_extra))
+    calc = Gradient(runner.mol)
+    called = []
+
+    def _fake_sc(self=None):
+        called.append("sc_nevpt2")
+        return np.zeros((1, calc.natom, 3))
+
+    def _fake_caspt2(self=None):
+        called.append("caspt2")
+        return np.zeros((1, calc.natom, 3))
+
+    monkeypatch.setattr(type(calc), "sc_nevpt2_grad", lambda s: _fake_sc())
+    monkeypatch.setattr(type(calc), "caspt2_grad", lambda s: _fake_caspt2())
+    calc.gradient()
+
+    assert called == [expected], (pt2_extra, called)

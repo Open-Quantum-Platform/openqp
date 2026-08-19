@@ -1,1 +1,0 @@
-tddftb(nstate=3) geom="../geometries/H2O-1bdadad53a3a.xyz" energy() dftb(backend=native,parameter_path="")

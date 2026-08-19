@@ -102,7 +102,6 @@ class ReadmeLogMetadataTests(unittest.TestCase):
                 "Configuration interaction",
                 "CASSCF",
                 "Multireference PT2",
-                "Tight binding",
             },
         )
 

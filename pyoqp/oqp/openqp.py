@@ -1417,6 +1417,7 @@ class OpenQP:
     _PT2_OWNED_KEYS = {
         "h0": "fock",
         "contraction": "uncontracted",
+        "gradient": "auto",
         "ipea_shift": "0.0",
         "imaginary_shift": "0.0",
         "level_shift": "0.0",
@@ -1482,16 +1483,24 @@ class OpenQP:
             frozen_core=frozen_core, nroot=nroot, pt2=opts or None, **keywords)
 
     def nevpt2(self, active_electrons=None, active_orbitals=None,
-               frozen_core=None, nroot=1, contraction=None, runtype=None,
-               basis=None, reference="rhf", **keywords):
+               frozen_core=None, nroot=1, contraction=None, gradient=None,
+               runtype=None, basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP NEVPT2 setup.
 
         NEVPT2 is CASPT2's determinant machinery with the Dyall H0, so it is
         `method=caspt2` plus `[pt2] h0=dyall`.  `contraction='strong'` gives
-        SC-NEVPT2; the default is the uncontracted form."""
+        SC-NEVPT2; the default is the uncontracted form.
+
+        `gradient` selects the nuclear-gradient route: `auto` (the default)
+        takes the analytic SC-NEVPT2 derivative when the calculation is
+        strongly contracted, state specific and on a state-specific CASSCF
+        reference, and central differences otherwise; `analytic` demands it
+        and reports why if the run is out of scope; `numerical` forces central
+        differences."""
         self._require_active_space("NEVPT2", active_electrons, active_orbitals)
         opts = self._pt2_helper_opts(
-            keywords, {"contraction": contraction}, h0="dyall")
+            keywords, {"contraction": contraction, "gradient": gradient},
+            h0="dyall")
         return self._wf_setup(
             "caspt2", runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,

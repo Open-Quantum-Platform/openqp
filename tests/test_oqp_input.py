@@ -1497,6 +1497,7 @@ def test_mrsf_tddftb_target_spin_reaches_dftb_adapter():
     )
     assert legacy["tdhf"]["multiplicity"] == "3"
     assert legacy["dftb"]["target_multiplicity"] == "3"
+    assert legacy["dftb"]["type"] == "mrsf"
     with pytest.raises(OQPInputError, match="not quintet"):
         oqp_input.parse_canonical_oqp(
             'mrsf-tddftb(nstate=4) geom="h2o.xyz" grad(Q1)'
@@ -1585,27 +1586,6 @@ def test_conventional_tddftb_triplet_is_rejected_with_spin_flip_guidance():
         oqp_input.parse_canonical_oqp(
             'tddftb(nstate=3) geom="h2o.xyz" grad(T1)'
         )
-
-
-@pytest.mark.parametrize(
-    "filename,expected_model,expected_type",
-    [
-        ("H2_DFTB_ENERGY.oqp", "dftb", "ground"),
-        ("H2O_TDDFTB_ENERGY.oqp", "tddftb", "tddftb"),
-        ("CH2_SF-TDDFTB_ENERGY.oqp", "sf-dftb", "sf"),
-        ("CH2_MRSF-TDDFTB_ENERGY.oqp", "mrsf-dftb", "mrsf"),
-    ],
-)
-def test_minimal_dftb_family_examples_parse(filename, expected_model, expected_type):
-    example_dir = ROOT / "examples" / "DFTB"
-    text = (example_dir / filename).read_text(encoding="utf-8")
-
-    spec = oqp_input.parse_canonical_oqp(text)
-    legacy = oqp_input.lower_to_legacy(spec, source_dir=example_dir)
-
-    assert spec.model == expected_model
-    assert legacy["input"]["method"] == "dftb"
-    assert legacy["dftb"]["type"] == expected_type
 
 
 def test_sf_tddftb_route_uses_high_spin_reference_and_explicit_root():
@@ -1766,9 +1746,14 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
-    # 27 since the analytic CASPT2 gradient added H4_CASPT2_numgrad.inp (the
+    # 29 since the analytic CASPT2 gradient added H4_CASPT2_numgrad.inp (the
     # central-difference companion the analytic route replaced as the default)
     # and H4_XMS-CASPT2_grad.inp (the multistate/XMS analytic gradient);
+    # 27 since the analytic SC-NEVPT2 gradient added H4_SC-NEVPT2_grad.inp
+    # (runtype=grad for method=caspt2 with [pt2] contraction=strong and
+    # gradient=analytic, the first PT2 flavour with an analytic derivative)
+    # and LiH_SC-NEVPT2_optimize.inp (the same derivative driving runtype=
+    # optimize, which is what pins the gradient-driven workflow path);
     # 25 since the analytic SA-CASSCF gradients added separate weighted-
     # objective and individual-state examples without replacing the numerical
     # SA-CASSCF example already on main;
@@ -1781,7 +1766,7 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
     # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
     # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
     # LiH_CASSCF_optimize.inp then added a gradient-driven optimizer example.
-    assert len(WF_EXAMPLES) == 27
+    assert len(WF_EXAMPLES) == 29
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

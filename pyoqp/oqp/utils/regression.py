@@ -377,6 +377,14 @@ EXEMPT_FLAGS = {
     'dftb.response_global_hybrid': 'DTCAM development diagnostic (decoupled full-range response '
                                    'gamma); production operator selection goes through [dftb] '
                                    'model presets and is covered by the openqp-dftb golden suite',
+    # The tight-binding routes run entirely inside the openqp-dftb / openqp-xtb
+    # backends, which are not distributed with OpenQP, so this repository cannot
+    # carry an example that exercises them; their coverage lives in those
+    # backends' own suites (same rationale as response_global_hybrid above).
+    'dftb.lc_ground_state': 'long-range-corrected DFTB ground state; runs inside the '
+                            'non-distributed openqp-dftb backend and is covered by its suite',
+    'xtb.lc_ground_state': 'long-range-corrected xTB ground state; runs inside the '
+                           'non-distributed openqp-xtb backend and is covered by its suite',
 }
 
 # section.option -> reason. Real capability, tracked gap (needs an example).

@@ -745,6 +745,30 @@ void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
 void ccsd_t_energy(struct oqp_handle_t *inf);
 
+/* Derivative-integral contraction for the analytic SC-NEVPT2 nuclear gradient
+ * (nevpt2_gradient.F90).  The SC-NEVPT2 Lagrangian, its orbital/CI response
+ * equations and the relaxed densities live in
+ * pyoqp/oqp/library/nevpt2_gradient.py; this entry point only contracts the
+ * result with the derivative integrals and writes infos%atoms%grad.
+ *
+ *   dm_ao : relaxed 1-particle density, nbf x nbf, symmetric, C order.
+ *   x_ao  : energy-weighted density (orthonormality multiplier), nbf x nbf,
+ *           symmetric; enters the gradient as -sum X S^x.
+ *   g2_ao : relaxed 2-particle density, nbf^4, eight-fold symmetric, in the
+ *           E = 1/2 sum Gamma (mu nu|la si) convention.  Eight-fold symmetry
+ *           makes the tensor invariant under complete index reversal, so a
+ *           C-ordered buffer is read directly.
+ *
+ * Returns 0 on success; negative values are the NEVPT2_G_* codes below. */
+enum {
+  NEVPT2_G_OK        =  0,
+  NEVPT2_G_ERR_NBF   = -1, /* nbf disagrees with the handle's basis        */
+  NEVPT2_G_ERR_ALLOC = -2, /* working-array allocation failed              */
+  NEVPT2_G_ERR_SYMM  = -3  /* g2_ao is not eight-fold permutation symmetric */
+};
+int64_t nevpt2_gradient(struct oqp_handle_t *inf, int32_t nbf,
+    const double *dm_ao, const double *x_ao, const double *g2_ao);
+
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
