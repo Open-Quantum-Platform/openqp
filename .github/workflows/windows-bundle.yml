@@ -59,34 +59,53 @@ jobs:
           # `import oqp` prints "Failed to import mpi4py" to stdout on a non-MPI
           # build, so take only the last line -- the path.
           $pkg = (python -c "import os, oqp; print(os.path.dirname(oqp.__file__))") | Select-Object -Last 1
-          $intelBin = "$env:CMPLR_ROOT\bin"
-          $mklBin = "$env:MKLROOT\bin"
           Write-Host "package: $pkg"
-          Write-Host "intel:   $intelBin"
-          Write-Host "mkl:     $mklBin"
-          # PyInstaller collects the Python side; the native DLLs are added
-          # explicitly because they are loaded through cffi at run time and are
-          # therefore invisible to static analysis.
-          $addBin = @()
-          foreach ($d in (Get-ChildItem "$pkg\lib\*.dll")) { $addBin += "--add-binary=`"$($d.FullName);oqp/lib`"" }
-          foreach ($name in 'libifcoremd.dll','libifportmd.dll','libmmd.dll','libiomp5md.dll','svml_dispmd.dll','libintlc.dll','libirngmd.dll') {
-            $p = Join-Path $intelBin $name
-            if (Test-Path $p) { $addBin += "--add-binary=`"$p;oqp/lib`"" } else { Write-Warning "not found: $name" }
+
+          # pip installs a launcher .exe, not a -script.py, so give PyInstaller
+          # its own entry point.
+          $entry = "C:\oqpwork\openqp_entry.py"
+          New-Item -ItemType Directory -Force -Path C:\oqpwork | Out-Null
+          @(
+            'import sys'
+            'from oqp.pyoqp import main'
+            'if __name__ == "__main__":'
+            '    sys.exit(main())'
+          ) | Set-Content -Encoding UTF8 $entry
+
+          # The native DLLs are loaded through cffi at run time and are
+          # therefore invisible to PyInstaller's static analysis; add them by
+          # name.  Discover them rather than assuming a layout: the Intel
+          # redistributables and the MKL kernels are versioned differently
+          # between oneAPI releases.
+          $dlls = @()
+          $dlls += Get-ChildItem "$pkg\lib\*.dll" -ErrorAction SilentlyContinue
+          foreach ($pat in 'libifcoremd*.dll','libifportmd*.dll','libmmd*.dll',
+                           'libiomp5md*.dll','svml_dispmd*.dll','libirngmd*.dll',
+                           'libintlc*.dll','libimalloc*.dll') {
+            $dlls += Get-ChildItem -Path "$env:CMPLR_ROOT" -Filter $pat -Recurse -ErrorAction SilentlyContinue
           }
-          foreach ($name in 'mkl_rt.2.dll','mkl_core.2.dll','mkl_intel_thread.2.dll','mkl_def.2.dll','mkl_avx2.2.dll','mkl_avx512.2.dll','mkl_vml_def.2.dll','mkl_vml_avx2.2.dll','mkl_vml_avx512.2.dll') {
-            $p = Join-Path $mklBin $name
-            if (Test-Path $p) { $addBin += "--add-binary=`"$p;oqp/lib`"" } else { Write-Warning "not found: $name" }
+          # Every MKL runtime DLL: the interface/threading/core trio plus the
+          # per-ISA kernels MKL dispatches to at run time.
+          $dlls += Get-ChildItem -Path "$env:MKLROOT" -Filter "mkl_*.dll" -Recurse -ErrorAction SilentlyContinue
+          $dlls = $dlls | Sort-Object FullName -Unique
+          if (-not $dlls) { throw "no runtime DLLs discovered" }
+          Write-Host ("discovered {0} DLLs, {1:N0} MB" -f $dlls.Count, (($dlls | Measure-Object Length -Sum).Sum/1MB))
+          $dlls | ForEach-Object { Write-Host "  $($_.Name)" }
+          foreach ($n in 'liboqp.dll','dftd4.dll','mkl_core.2.dll') {
+            if (-not ($dlls.Name -contains $n)) { throw "required DLL missing from the bundle: $n" }
           }
+
+          $addBin = $dlls | ForEach-Object { "--add-binary=`"$($_.FullName);oqp/lib`"" }
           $cmd = @(
             'python -m PyInstaller --noconfirm --clean --onedir --name openqp',
             '--distpath C:\oqpdist --workpath C:\oqpwork --specpath C:\oqpwork',
-            "--collect-data oqp --collect-submodules oqp",
-            "--collect-data basis_set_exchange --collect-submodules basis_set_exchange",
-            "--collect-submodules geometric --collect-data geometric",
+            '--collect-data oqp --collect-submodules oqp',
+            '--collect-data basis_set_exchange --collect-submodules basis_set_exchange',
+            '--collect-data geometric --collect-submodules geometric',
+            '--collect-submodules scipy --collect-submodules numpy',
             ($addBin -join ' '),
-            "`"$pkg\..\..\Scripts\openqp-script.py`""
+            "`"$entry`""
           ) -join ' '
-          Write-Host $cmd
           Invoke-Expression $cmd
 
       - name: Add the data tree and a README
