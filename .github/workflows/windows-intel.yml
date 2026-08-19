@@ -104,3 +104,19 @@ jobs:
           $env:OMP_NUM_THREADS = "2"
           openqp hf.inp --nompi
           Select-String -Path hf.log -Pattern "TOTAL energy"
+      - name: Run example test suite
+        # Informational for now: this is the first Windows build, so record how
+        # far the suite gets instead of gating the job on it.
+        continue-on-error: true
+        env:
+          OQP_TEST_OMP_THREADS: 1
+        run: |
+          openqp --run_tests all 2>&1 | Tee-Object -FilePath run_tests.out
+          Select-String -Path run_tests.out -Pattern "^Total tests|^Passed|^Failed|^Errors|^Skipped"
+      - name: Upload suite log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-run-tests-log
+          path: run_tests.out
+          if-no-files-found: ignore
