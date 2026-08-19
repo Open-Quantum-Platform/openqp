@@ -690,7 +690,10 @@ def test_another_routes_calculation_is_declined_not_refused(
         OTHER_ROUTE, sc_nevpt2_gradient_route,
     )
 
-    pt2 = dict(_SC_NEVPT2, gradient="auto", **pt2_override)
+    # update(), not dict(**override): two of these cases override `gradient`
+    # itself, which is the whole point of them.
+    pt2 = dict(_SC_NEVPT2, gradient="auto")
+    pt2.update(pt2_override)
     runner = _runner(tmp_path, "scnevpt2_other_route", system=_H4,
                      basis="sto-3g", cas=_H4_CAS22, pt2=pt2)
     route, reason = sc_nevpt2_gradient_route(runner.mol)
