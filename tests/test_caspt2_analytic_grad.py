@@ -592,6 +592,13 @@ def test_gradient_route_option_is_validated():
     # the CASPT2 route and be declined there -- not be claimed by SC-NEVPT2
     # merely because it spells h0=dyall.
     ({"h0": "dyall", "contraction": "none"}, "caspt2"),
+    # `gradient=analytic` asks for AN analytic derivative, not specifically
+    # SC-NEVPT2's.  The SC-NEVPT2 route RAISES rather than reporting under
+    # this setting, so a dispatch that probes it for an h0=fock run kills
+    # every analytic CASPT2 calculation with an SC-NEVPT2 refusal.
+    ({"h0": "fock", "contraction": "none", "gradient": "analytic"}, "caspt2"),
+    ({"h0": "dyall", "contraction": "strong", "gradient": "analytic"},
+     "sc_nevpt2"),
 ])
 def test_method_caspt2_is_routed_by_h0_and_contraction(
         tmp_path, monkeypatch, pt2_extra, expected):
@@ -628,3 +635,27 @@ def test_method_caspt2_is_routed_by_h0_and_contraction(
     calc.gradient()
 
     assert called == [expected], (pt2_extra, called)
+
+
+@needs_backend
+def test_building_the_setup_never_runs_the_scnevpt2_energy_pass(tmp_path):
+    """``_caspt2_setup`` is a setup builder, and only that.
+
+    The energy driver short-circuits an SC-NEVPT2 gradient-driven run into the
+    analytic adjoint, which supplies energy and gradient together.  That
+    short-circuit returns ``mol.energies`` -- a list -- and belongs to the
+    ENERGY driver.  Placed inside ``_caspt2_setup`` it also fired for the
+    analytic CASPT2 gradient, which rebuilds its state from the same setup:
+    that caller got a list where it expected a ``CASPT2Setup`` (`'list' object
+    has no attribute 'options'`), and merely BUILDING the setup ran a whole
+    SC-NEVPT2 evaluation as a side effect.
+    """
+    from oqp.library.caspt2_dyall import CASPT2Setup, _caspt2_setup
+
+    runner = _make_runner(
+        tmp_path, "pt2_setup_type", H4_BOHR, runtype="grad",
+        pt2_extra={"h0": "dyall", "contraction": "strong"})
+    setup = _caspt2_setup(runner.mol, run_reference=False)
+
+    assert isinstance(setup, CASPT2Setup), type(setup)
+    assert setup.options.h0 == "dyall"

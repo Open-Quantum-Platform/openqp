@@ -1455,8 +1455,9 @@ class Gradient(Calculator):
         Returning None -- not falling back here -- is what keeps ONE
         central-difference fallback in the code: caspt2_grad() already owns it,
         and duplicating it would give the PT2 family two numerical paths that
-        could drift apart.  The exception is `[pt2] gradient=analytic`, which
-        asked for the derivative and gets the reason instead of a fallback.
+        could drift apart.  Once SC-NEVPT2 IS the selected route, though,
+        `[pt2] gradient=analytic` raises rather than handing the run on: it
+        asked for that derivative and gets that route's reason.
 
         The import stays local to avoid a circular module dependency.
         """
@@ -1469,6 +1470,17 @@ class Gradient(Calculator):
             consume_sc_nevpt2_gradient,
             sc_nevpt2_gradient_route,
         )
+
+        options = _caspt2_options(self.mol.config)
+        # Decline by CONFIGURATION before consulting the route, because
+        # sc_nevpt2_gradient_route() RAISES under `[pt2] gradient=analytic`
+        # instead of reporting.  That is the right behaviour for a run that
+        # selected SC-NEVPT2, and the wrong one for a run that selected
+        # CASPT2: `analytic` asks for AN analytic derivative, and the CASPT2
+        # route may well have one.  Probing here would kill every
+        # `h0=fock` + `gradient=analytic` run with an SC-NEVPT2 refusal.
+        if options.h0 != 'dyall' or options.contraction != 'strong':
+            return None
 
         cached = consume_sc_nevpt2_gradient(self.mol)
         if cached is not None:
@@ -1495,7 +1507,7 @@ class Gradient(Calculator):
             # `analytic` demanded the derivative and gets the reason; `auto`
             # promised a fallback and hands the run to caspt2_grad(), which
             # declines h0=dyall in turn and central-differences it.
-            if _caspt2_options(self.mol.config).gradient == 'analytic':
+            if options.gradient == 'analytic':
                 raise
             dump_log(self.mol, title=(
                 'PyOQP: PT2 nuclear gradient by central differences '

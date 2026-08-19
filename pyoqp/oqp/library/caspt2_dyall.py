@@ -1279,14 +1279,6 @@ def _caspt2_setup(mol, ref_energy=None, run_reference=True) -> CASPT2Setup:
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
 
-    # Public gradient-driven calculations ask for an energy followed by its
-    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
-    # supplies both, so use it as the energy pass and retain its complete
-    # gradient for the immediately following public gradient request.
-    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
-    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
-        return mol.energies
-
     nbf = int(mol.data.get_basis()["nbf"])
     # Same shared planner CASCI/CASSCF use: deriving the active electron count
     # from frozen_core alone ignored [cas] active_electrons, so an explicit
@@ -1364,6 +1356,21 @@ def _pt2_frozen_count(mol, options, ncore):
 def native_caspt2_energy(mol, ref_energy=None):
     """CASPT2 / MS-CASPT2 / XMS-CASPT2 energy (uncontracted Dyall H0)."""
     t0 = time.time()
+    # Public gradient-driven calculations ask for an energy followed by its
+    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
+    # supplies both, so use it as the energy pass and retain its complete
+    # gradient for the immediately following public gradient request.
+    #
+    # This belongs to the ENERGY driver, not to _caspt2_setup.  _caspt2_setup
+    # is declared `-> CASPT2Setup` and is also the setup builder the analytic
+    # CASPT2 gradient reconstructs its state from; returning mol.energies (a
+    # list) from there gave that caller `'list' object has no attribute
+    # 'options'`, and made merely BUILDING the setup run a whole SC-NEVPT2
+    # evaluation as a side effect.
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
+        return mol.energies
+
     setup = _caspt2_setup(mol, ref_energy)
     options = setup.options
     settings = setup.settings
