@@ -244,6 +244,7 @@ SCHEMA = {
         "imaginary_shift": {"type": float, "default": "0.0"},
         "level_shift": {"type": float, "default": "0.0"},
         "edshft": {"type": float, "default": "0.0"},
+        "gradient": {"type": _string, "default": "auto"},
     },
 }
 
@@ -1773,6 +1774,23 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
                   .to_input_dict())
         self.assertEqual(config["pt2"]["ipea_shift"], "0.25")
         self.assertEqual(config["pt2"]["imaginary_shift"], "0.1")
+
+    def test_caspt2_gradient_route_reaches_the_pt2_section(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_caspt2_grad")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          gradient="analytic", runtype="grad")
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["gradient"], "analytic")
+        self.assertEqual(config["input"]["runtype"], "grad")
+
+    def test_caspt2_gradient_route_defaults_to_auto_and_does_not_leak(self):
+        """A later helper call must not inherit the previous one's route."""
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_caspt2_leak")
+        job.caspt2(active_electrons=4, active_orbitals=4, gradient="numerical")
+        config = job.caspt2(active_electrons=4, active_orbitals=4).to_input_dict()
+        self.assertEqual(config["pt2"]["gradient"], "auto")
 
     def test_qdpt2_variant_and_isa_shift(self):
         openqp = load_openqp_module()

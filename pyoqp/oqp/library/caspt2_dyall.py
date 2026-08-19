@@ -1230,9 +1230,35 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     }
 
 
-# --------------------------------------------------------------------------- driver
-def native_caspt2_energy(mol, ref_energy=None):
-    """CASPT2 / MS-CASPT2 / XMS-CASPT2 energy (uncontracted Dyall H0)."""
+# --------------------------------------------------------------------------- shared setup
+@dataclass
+class CASPT2Setup:
+    """Everything the CASPT2 energy and the CASPT2 gradient need before the
+    perturbation itself starts.
+
+    Extracted from :func:`native_caspt2_energy` so the analytic gradient
+    (:mod:`oqp.library.caspt2_gradient`) differentiates the state the energy
+    path actually produced rather than a re-derivation of it: one place resolves
+    the options, the active space, the reference orbitals and the AO integrals,
+    and both consumers read the same object.
+    """
+    options: CASPT2Options
+    settings: object
+    nbf: int
+    ncore: int
+    nact: int
+    active_nelec: tuple
+    roots: list
+    weights: np.ndarray
+    hcore_ao: np.ndarray
+    eri_ao: np.ndarray
+    coeff: np.ndarray            # reference orbitals, BEFORE semicanonicalization
+    orbital_source: str          # 'casscf', 'rhf', or 'json:<path>' etc.
+    enuc: float
+
+
+def _caspt2_setup(mol, ref_energy=None, run_reference=True) -> CASPT2Setup:
+    """Validate the run, resolve the active space and load the AO integrals."""
     options = _caspt2_options(mol.config)
     settings = settings_from_casci_config(mol.config)
 
@@ -1253,14 +1279,6 @@ def native_caspt2_energy(mol, ref_energy=None):
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
 
-    # Public gradient-driven calculations ask for an energy followed by its
-    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
-    # supplies both, so use it as the energy pass and retain its complete
-    # gradient for the immediately following public gradient request.
-    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
-    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
-        return mol.energies
-
     nbf = int(mol.data.get_basis()["nbf"])
     # Same shared planner CASCI/CASSCF use: deriving the active electron count
     # from frozen_core alone ignored [cas] active_electrons, so an explicit
@@ -1273,10 +1291,9 @@ def native_caspt2_energy(mol, ref_energy=None):
     roots = _reference_roots(options)
     weights = np.full(len(roots), 1.0 / len(roots))
 
-    t0 = time.time()
     # Reference orbitals: optimize for a CASSCF reference (state-averaged when
     # several roots are requested), else use the supplied RHF orbitals.
-    if options.reference == "casscf":
+    if options.reference == "casscf" and run_reference:
         _run_casscf_reference(mol, ref_energy, roots, weights)
 
     _mem, _mem_label = _pt2_memory(options, settings)
@@ -1296,11 +1313,12 @@ def native_caspt2_energy(mol, ref_energy=None):
         # the file here would throw that optimisation away and leave PT2
         # correlating the UNoptimised file orbitals.
         coeff = _default
+        orb_source = "casscf"
     else:
         from oqp.library.cas_orbitals import load_cas_mo_coeff
         _ovl = _unpack_lower_triangle(
             np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
-        coeff, _orb_source = load_cas_mo_coeff(
+        coeff, orb_source = load_cas_mo_coeff(
             mol.config, nbf, _default, overlap=_ovl,
             input_dir=os.path.dirname(os.path.abspath(mol.input_file or '.')))
         coeff = np.asarray(coeff, dtype=float)
@@ -1308,6 +1326,73 @@ def native_caspt2_energy(mol, ref_energy=None):
         (nbf, nbf, nbf, nbf), order="F"
     )
     enuc = float(mol.mol_energy.nenergy)
+    return CASPT2Setup(options=options, settings=settings, nbf=nbf, ncore=ncore,
+                       nact=nact, active_nelec=active_nelec, roots=roots,
+                       weights=weights, hcore_ao=hcore_ao, eri_ao=eri_ao,
+                       coeff=coeff, orbital_source=orb_source, enuc=enuc)
+
+
+def _pt2_frozen_count(mol, options, ncore):
+    """Resolve ``[pt2] frozen`` against the available inactive orbitals."""
+    if options.frozen < 0:
+        # Automatic atomic-core choice: clamping is correct here, the count is
+        # derived rather than requested.
+        return max(0, min(_standard_core_count(mol), ncore))
+    # An EXPLICIT count is documented as "freeze exactly N".  Silently
+    # clamping an impossible request changed the correlated-electron space
+    # out from under a comparison that depended on it.
+    nfrozen = int(options.frozen)
+    if nfrozen > ncore:
+        raise ValueError(
+            "[pt2] frozen=%d exceeds the %d inactive orbital(s) available "
+            "([cas] frozen_core=%d): only inactive orbitals can be frozen "
+            "out of the first-order space.  Lower [pt2] frozen, raise "
+            "[cas] frozen_core, or use frozen=auto for the standard deep "
+            "cores." % (nfrozen, ncore, ncore))
+    return max(0, nfrozen)
+
+
+# --------------------------------------------------------------------------- driver
+def native_caspt2_energy(mol, ref_energy=None):
+    """CASPT2 / MS-CASPT2 / XMS-CASPT2 energy (uncontracted Dyall H0)."""
+    t0 = time.time()
+    # Public gradient-driven calculations ask for an energy followed by its
+    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
+    # supplies both, so use it as the energy pass and retain its complete
+    # gradient for the immediately following public gradient request.
+    #
+    # This belongs to the ENERGY driver, not to _caspt2_setup.  _caspt2_setup
+    # is declared `-> CASPT2Setup` and is also the setup builder the analytic
+    # CASPT2 gradient reconstructs its state from; returning mol.energies (a
+    # list) from there gave that caller `'list' object has no attribute
+    # 'options'`, and made merely BUILDING the setup run a whole SC-NEVPT2
+    # evaluation as a side effect.
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
+        return mol.energies
+
+    setup = _caspt2_setup(mol, ref_energy)
+    options = setup.options
+    settings = setup.settings
+    nbf = setup.nbf
+    ncore = setup.ncore
+    nact = setup.nact
+    active_nelec = setup.active_nelec
+    roots = setup.roots
+    weights = setup.weights
+    hcore_ao = setup.hcore_ao
+    eri_ao = setup.eri_ao
+    coeff = setup.coeff
+    enuc = setup.enuc
+
+    # Publish the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
+    # solution) before the semicanonicalization overwrites OQP::VEC_MO_A with a
+    # within-block rotation of them.  The analytic gradient
+    # (oqp.library.caspt2_gradient) needs them: its orbital constraint --
+    # RHF canonicality or CASSCF stationarity -- holds for THESE orbitals, not
+    # for the semicanonical set, and there is no way to recover them afterwards.
+    mol.data["OQP::CASPT2_REFERENCE_MO"] = np.ascontiguousarray(
+        np.asarray(coeff, dtype=np.float64))
 
     # MS-CASPT2 with the Fock H0 uses the MULTI-SET construction (per-state
     # orbitals = the OpenMolcas state-specific Fock): each root's first-order
@@ -1343,23 +1428,7 @@ def native_caspt2_energy(mol, ref_energy=None):
     # PT2 frozen core: fold the deepest atomic cores out of the first-order space.
     # Default (frozen<0) = the standard deep cores, matching OpenMolcas and removing the
     # spurious deep-core over-correlation; frozen=0 correlates all; frozen=N freezes N.
-    if options.frozen < 0:
-        # Automatic atomic-core choice: clamping is correct here, the count is
-        # derived rather than requested.
-        nfrozen = max(0, min(_standard_core_count(mol), ncore))
-    else:
-        # An EXPLICIT count is documented as "freeze exactly N".  Silently
-        # clamping an impossible request changed the correlated-electron space
-        # out from under a comparison that depended on it.
-        nfrozen = int(options.frozen)
-        if nfrozen > ncore:
-            raise ValueError(
-                "[pt2] frozen=%d exceeds the %d inactive orbital(s) available "
-                "([cas] frozen_core=%d): only inactive orbitals can be frozen "
-                "out of the first-order space.  Lower [pt2] frozen, raise "
-                "[cas] frozen_core, or use frozen=auto for the standard deep "
-                "cores." % (nfrozen, ncore, ncore))
-        nfrozen = max(0, nfrozen)
+    nfrozen = _pt2_frozen_count(mol, options, ncore)
     options._pt2_nfrozen = nfrozen
     if nfrozen:
         h1e, eri, eps, D_sa, ncore, nbf, enuc = _freeze_core(

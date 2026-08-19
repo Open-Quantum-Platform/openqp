@@ -1746,6 +1746,9 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
+    # 29 since the analytic CASPT2 gradient added H4_CASPT2_numgrad.inp (the
+    # central-difference companion the analytic route replaced as the default)
+    # and H4_XMS-CASPT2_grad.inp (the multistate/XMS analytic gradient);
     # 27 since the analytic SC-NEVPT2 gradient added H4_SC-NEVPT2_grad.inp
     # (runtype=grad for method=caspt2 with [pt2] contraction=strong and
     # gradient=analytic, the first PT2 flavour with an analytic derivative)
@@ -1763,7 +1766,7 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
     # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
     # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
     # LiH_CASSCF_optimize.inp then added a gradient-driven optimizer example.
-    assert len(WF_EXAMPLES) == 27
+    assert len(WF_EXAMPLES) == 29
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

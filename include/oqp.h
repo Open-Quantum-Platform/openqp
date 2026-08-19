@@ -633,6 +633,43 @@ int64_t casscf_gradient(struct oqp_handle_t *inf, const int32_t *iopt,
     const double *dopt, const double *weights, const int32_t *roots,
     double *info);
 /* ------------------------------------------------------------------------
+ * Analytic CASPT2 / XMS-CASPT2 NUCLEAR gradient, derivative-integral half
+ * (caspt2_gradient.F90).
+ *
+ * The theory half lives in oqp.library.caspt2_gradient, which rebuilds the
+ * CASPT2 state, solves the amplitude, CI, XMS-rotation and orbital-response
+ * equations, and reduces the whole Lagrangian to three AO-basis objects.  This
+ * entry point contracts them with the derivative integrals:
+ *
+ *   dE/dx = sum D^AO h^x + 1/2 sum Gamma^AO (..|..)^x - sum X^AO S^x + dV_NN/dx
+ *
+ * `dm_packed` is the relaxed one-particle density and `wm_packed` is MINUS the
+ * energy-weighted density, both as packed triangles of length nbf*(nbf+1)/2
+ * (the overlap-derivative kernel adds its argument, so the caller negates).
+ * The two-particle density arrives factorized,
+ *
+ *   Gamma^AO_{mu nu la si} = sum_k lam[k] A^k_{mu nu} A^k_{la si},
+ *
+ * with `avec` the C-order tensor [nbf][nbf][nvec] holding A^k_{mu nu} and
+ * `lam` the nvec eigenvalues.  The factorization is exact (it is the
+ * eigendecomposition of the eight-fold-symmetrized Gamma over the composite
+ * index), so this is a change of storage, not an approximation.
+ *
+ * Writes infos%atoms%grad.  Returns 0, or a negative status: -21 a
+ * non-Hartree-Fock Hamiltonian, -22 allocation failure, -25 inconsistent
+ * nbf/nvec.  `nbf` MUST equal the handle's basis size: it sizes the packed
+ * densities and the factorization vectors while the basis routines size
+ * themselves from the handle, so a mismatch would index one against the other.
+ * That is checked, not assumed. */
+enum {
+  PT2_G_NVEC  = 0,  /* factorization rank actually contracted     */
+  PT2_G_TRACE = 1,  /* trace of the relaxed AO density            */
+  PT2_G_NINFO = 2
+};
+int64_t caspt2_gradient(struct oqp_handle_t *inf, int32_t nbf,
+    const double *dm_packed, const double *wm_packed, int32_t nvec,
+    const double *avec, const double *lam, double *info);
+/* ------------------------------------------------------------------------
  * Nuclear gradient from a FACTORIZED AO two-particle density
  * (casscf_ao_gradient.F90).
  *

@@ -38,6 +38,9 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `H4_MRMP2.inp` | `mrmp2` | — | single-state MRMP2 (Hirao; == caspt2 h0=fock) |
 | `H4_MCQDPT2.inp` | `mcqdpt2` | `edshft=0.02` | GAMESS-convention multistate QDPT (Nakano, single-set) + ISA |
 | `H4_XMCQDPT2.inp` | `xmcqdpt2` | — | Granovsky's extended QDPT (XZERO; invariant) |
+| `H4_CASPT2_grad.inp` | `caspt2` | `gradient=analytic` | **analytic** CASPT2 nuclear gradient (Lagrangian: amplitude, CI and orbital response) |
+| `H4_CASPT2_numgrad.inp` | `caspt2` | `gradient=numerical` | the central-difference route the out-of-scope variants still use |
+| `H4_XMS-CASPT2_grad.inp` | `xms-caspt2` | `gradient=analytic` | analytic gradient of an XMS-CASPT2 root (state-rotation response, `H_eff` eigenvalue) |
 
 ## Method controls
 
@@ -65,22 +68,58 @@ single-set diagonal-Fock MRPT2, Granovsky extended H0 via `xmcqdpt2`).
 
 ## PT2 nuclear gradients
 
-`[pt2] gradient` selects the route. `auto` (the default) takes the analytic
-derivative when the calculation is exactly a variant one of the analytic PT2
-gradient modules is the derivative of, and central differences otherwise;
-`analytic` demands it and reports why the run is out of scope instead of
-falling back; `numerical` always central-differences.
+`[pt2] gradient` selects the route:
 
-**Strongly contracted NEVPT2** has an analytic derivative when the run is
-strongly contracted, state specific, on a state-specific CASSCF reference,
-with `runtype` in grad/optimize/ts/mep/irc. It costs one CASSCF, one
-second-order pass, one coupled orbital/CI response solve and one set of
-derivative integrals — independent of the number of nuclei, against
-`6*natom` displaced energies for the numerical alternative. Its error is
-FIRST order in the residual CASSCF orbital-rotation gradient, so
-`[casscf] gradient_norm_tol` controls how many digits it is worth; the run
-reports `|g_orb|`, the response residual and the Lagrangian asymmetry so the
-size of every approximation is visible rather than assumed.
+| value | behaviour |
+| --- | --- |
+| `auto` (default) | analytic where the variant has one, central differences otherwise |
+| `analytic` | refuse rather than fall back |
+| `numerical` | always central differences |
+
+Two independent analytic derivatives sit behind that one selector, and the
+route picks between them from `[pt2] h0` and `contraction`. Both cost one PT2
+evaluation plus one pass of derivative integrals, independent of the number of
+nuclei; the central-difference alternative costs `2 * 3 * natom` displaced PT2
+energies.
+
+### CASPT2 family (`h0=fock`)
+
+Scope of the analytic route (everything else falls back under `auto`, and is
+refused with a specific reason under `analytic`):
+
+| supported | not supported |
+| --- | --- |
+| `caspt2`, `mrmp2` (single state) | `ms-caspt2` — the **multi-set** construction (per-state orbitals, per-state full-Fock-matrix H0, inter-state Lowdin-minor rotations); use `xms-caspt2` |
+| `mcqdpt2` (single-set multistate) | `ipea_shift != 0` — the active-diagonal bias is not invariant under rotations inside the active block |
+| `xms-caspt2`, `xmcqdpt2` | `[cas] orbital_source` reading orbitals from a file — imported orbitals are not a differentiable function of the geometry |
+| `level_shift`, `imaginary_shift`, `edshft` — carried exactly | |
+| `reference=casci` (RHF orbitals) and `reference=casscf` (state-specific or state-averaged) | |
+| the PT2 frozen core (`[pt2] frozen`) | |
+
+`h0=dyall` with `contraction=strong` is NOT out of scope: it is the other
+route, below. `h0=dyall` with `contraction=none` (uncontracted NEVPT2) has no
+analytic derivative on either route and falls back.
+
+The derivation also has preconditions that hold almost everywhere and can fail
+at a particular geometry: canonical (`casci`) or stationary (`casscf`) reference
+orbitals, semicanonical PT2 orbitals, a nonsingular orbital response,
+non-degenerate effective-Hamiltonian roots, and a reconstruction that reproduces
+the reported energy. These are preconditions of the **route**, not of the
+energy, so `auto` treats a failed one exactly like an out-of-scope variant — it
+falls back to central differences and writes the offending number into the log —
+and `analytic` refuses. A penalty-function MECI search walks into the degenerate
+case by construction; the fallback is what keeps it running.
+
+### Strongly contracted NEVPT2 (`h0=dyall`, `contraction=strong`)
+
+Analytic when the run is strongly contracted, state specific, on a
+state-specific CASSCF reference, with `runtype` in grad/optimize/ts/mep/irc. It
+costs one CASSCF, one second-order pass, one coupled orbital/CI response solve
+and one set of derivative integrals. Its error is FIRST order in the residual
+CASSCF orbital-rotation gradient, so `[casscf] gradient_norm_tol` controls how
+many digits it is worth; the run reports `|g_orb|`, the response residual and
+the Lagrangian asymmetry so the size of every approximation is visible rather
+than assumed.
 
 ## QDPT engines
 

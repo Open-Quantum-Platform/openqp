@@ -188,6 +188,11 @@ PT2_REFERENCES = {"casci", "casscf"}
 PT2_CONTRACTIONS = {"uncontracted", "none", "full", "strong", "sc", "sc-nevpt2",
                     "ic", "internally-contracted"}
 PT2_STRONG_CONTRACTIONS = {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}
+
+#: [pt2] gradient -- the nuclear-gradient route.  Checked here rather than only
+#: at dispatch: a misspelling would otherwise be discovered after the PT2 energy
+#: (and, with reference=casscf, a whole CASSCF) had already been computed.
+PT2_GRADIENT_ROUTES = {"auto", "analytic", "numerical"}
 PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
 STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
 STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
@@ -4775,6 +4780,19 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         "pt2.xms",
         report,
         action="Set [pt2] xms=true only for XMS-CASPT2, otherwise false.",
+    )
+    _check_choice_literal(
+        _get(config, "pt2", "gradient", "auto"),
+        "pt2.gradient",
+        PT2_GRADIENT_ROUTES,
+        report,
+        message="Unknown PT2 nuclear-gradient route.",
+        action="Use gradient=auto (analytic where the variant has one, central "
+               "differences otherwise), gradient=analytic (refuse rather than "
+               "fall back), or gradient=numerical.",
+        fallback="auto",
+        default_if_none=True,
+        default_if_blank=True,
     )
     ipea_shift = _get(config, "pt2", "ipea_shift", 0.0)
     imaginary_shift = _get(config, "pt2", "imaginary_shift", 0.0)

@@ -14,6 +14,10 @@ must NOT be installed in the venv that runs this suite under
 ``pytest --forked`` (a forked child with a live MPI_COMM_WORLD dies inside
 the native calls), so on a normal developer machine that test is expected to
 skip and the fan-out is validated by an explicit mpirun run instead.
+
+The route is pinned with ``[pt2] gradient=numerical`` throughout: the default
+``auto`` now sends these methods to the analytic CASPT2 derivative, which has no
+task-group split to test.
 """
 import json
 import os
@@ -228,7 +232,7 @@ def test_serial_pt2_gradient_does_not_enter_the_split(tmp_path):
                     "frozen_core": "0", "max_det": "2000"},
             "ci": {"nroot": "1", "solver": "dense", "eig_tol": "1.0e-10",
                    "integral_backend": "native", "integral_cutoff": "5.0e-11"},
-            "pt2": {"reference": "casci"},
+            "pt2": {"reference": "casci", "gradient": "numerical"},
             "tests": {"exception": "True"},
         },
         silent=1,
@@ -291,7 +295,7 @@ _MPI_DRIVER = textwrap.dedent('''
             "ci": {"nroot": "1", "solver": "dense", "eig_tol": "1.0e-10",
                    "integral_backend": "native",
                    "integral_cutoff": "5.0e-11"},
-            "pt2": {"reference": "casci",
+            "pt2": {"reference": "casci", "gradient": "numerical",
                     "grad_ranks_per_group": str(rpg)},
             "tests": {"exception": "True"},
         },

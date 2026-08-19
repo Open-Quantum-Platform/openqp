@@ -706,6 +706,21 @@ def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
                int(budget_mib), budget_label or "[cas]"))
 
 
+def is_sc_nevpt2_configuration(config):
+    """Does this configuration select the SC-NEVPT2 route at all?
+
+    `[pt2] gradient` is shared with the analytic CASPT2 derivative, and
+    `sc_nevpt2_gradient_route()` RAISES rather than reporting under
+    ``gradient=analytic``.  That is right for a run that selected SC-NEVPT2 and
+    wrong for one that selected CASPT2: ``analytic`` asks for AN analytic
+    derivative, and the other route may have one.  So every caller that might
+    be looking at a CASPT2 run has to decline by CONFIGURATION here, before
+    consulting the route.
+    """
+    options = _caspt2_options(config)
+    return options.h0 == "dyall" and options.contraction == "strong"
+
+
 def sc_nevpt2_gradient_route(mol):
     """Which nuclear-gradient route a configured PT2 calculation should take.
 
@@ -756,6 +771,12 @@ def prepare_sc_nevpt2_energy_gradient(mol, ref_energy=None):
     """
     runtype = str(mol.config.get("input", {}).get("runtype", "energy")).lower()
     if runtype not in _GRADIENT_DRIVEN_RUNTYPES:
+        return False
+    # A CASPT2 run is not this route's to adjudicate: consulting the route
+    # below would raise its refusal at an h0=fock calculation that asked for
+    # the OTHER analytic derivative, killing it during the energy pass before
+    # its own gradient dispatch is ever reached.
+    if not is_sc_nevpt2_configuration(mol.config):
         return False
     route, _reason = sc_nevpt2_gradient_route(mol)
     if route != "analytic":
