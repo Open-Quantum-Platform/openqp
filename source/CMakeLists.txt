@@ -124,7 +124,7 @@ target_include_directories(oqp PRIVATE
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-if(BUILD_SHARED_LIBS)
+if(OQP_DFTD4_SHARED)
   # Link liboqp only to the shared libraries whose APIs the shim calls
   # directly. dftd4 records its canonical multicharge and mctc-lib SOVERSION
   # dependencies, so adding multicharge here would create a redundant edge.
@@ -148,11 +148,13 @@ else()
   # linked earlier, before multicharge introduced its LAPACK references; put
   # the complete cycle in a GNU-ld rescan group so those late references are
   # resolved for both in-tree executables and downstream static consumers.
-  if(LIBLAPACK AND NOT APPLE)
+  # LINK_GROUP:RESCAN is a GNU-ld feature; the MSVC linker (Windows) resolves
+  # static-archive order itself, so Windows takes the plain branch below.
+  if(LIBLAPACK AND NOT APPLE AND NOT WIN32)
     target_link_libraries(oqp
             "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>>"
             "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>>")
-  elseif(NOT APPLE AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))
+  elseif(NOT APPLE AND NOT WIN32 AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))
     # findLinearAlgebra() linked the system archives before DFT-D4.  Repeat
     # them after the DFT-D4 rescan group so late multicharge references can
     # pull symbols from static OpenBLAS/MKL archives.  The repeated public
@@ -174,7 +176,7 @@ else()
   target_link_directories(oqp PUBLIC
           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>")
 endif()
-if(BUILD_SHARED_LIBS AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+if(OQP_DFTD4_SHARED AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # The DFT-D4 stack is linked in separate ExternalProjects.  Fail the OpenQP
   # build if either BLAS-using dylib retained a classic LP64 Accelerate symbol
   # despite declaring WITH_ILP64=ON.
@@ -195,7 +197,7 @@ if(APPLE)
 else()
   set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
-if(BUILD_SHARED_LIBS)
+if(OQP_DFTD4_SHARED)
   set_target_properties(oqp PROPERTIES
           BUILD_RPATH "${DFTD4_INSTALL}/lib"
           INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
@@ -219,7 +221,7 @@ EXPORT "${PROJECT_NAME}Targets"
 # runtime SONAME/install-name that liboqp and the DFT-D4 libraries reference.
 # Replacing one of these files with an ABI-compatible build therefore changes
 # the implementation used at the next process start.
-if(BUILD_SHARED_LIBS)
+if(OQP_DFTD4_SHARED)
   install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
           DESTINATION ${CMAKE_INSTALL_LIBDIR}
           RENAME "${DFTD4_MCTC_RUNTIME_NAME}")

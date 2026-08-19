@@ -97,6 +97,16 @@ endif()
 
 option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 
+# The replaceable DFT-D4 shared-library stack depends on a loader-relative
+# RPATH ($ORIGIN / @loader_path).  Windows has no equivalent, so there the
+# three DFT-D4 libraries are built as static archives and linked into
+# liboqp.dll instead.  Linux/macOS keep the shared stack.
+if(BUILD_SHARED_LIBS AND NOT WIN32)
+  set(OQP_DFTD4_SHARED ON)
+else()
+  set(OQP_DFTD4_SHARED OFF)
+endif()
+
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 
 option(USE_LIBINT        "Use Libint two-electron code"      ON)
@@ -337,7 +347,7 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
-  if(BUILD_SHARED_LIBS)
+  if(OQP_DFTD4_SHARED)
     add_test(NAME oqp_dftd4_dynamic_dependencies
       COMMAND ${CMAKE_COMMAND}
         "-DOQP_LIBRARY=$<TARGET_FILE:oqp>"
