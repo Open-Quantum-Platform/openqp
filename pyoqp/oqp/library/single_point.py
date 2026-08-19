@@ -1468,19 +1468,16 @@ class Gradient(Calculator):
         from oqp.library.nevpt2_gradient import (
             SCNEVPT2NotApplicable,
             consume_sc_nevpt2_gradient,
+            is_sc_nevpt2_configuration,
             sc_nevpt2_gradient_route,
         )
 
-        options = _caspt2_options(self.mol.config)
-        # Decline by CONFIGURATION before consulting the route, because
-        # sc_nevpt2_gradient_route() RAISES under `[pt2] gradient=analytic`
-        # instead of reporting.  That is the right behaviour for a run that
-        # selected SC-NEVPT2, and the wrong one for a run that selected
-        # CASPT2: `analytic` asks for AN analytic derivative, and the CASPT2
-        # route may well have one.  Probing here would kill every
+        # Decline by CONFIGURATION before consulting the route; see
+        # is_sc_nevpt2_configuration() for why probing it would kill every
         # `h0=fock` + `gradient=analytic` run with an SC-NEVPT2 refusal.
-        if options.h0 != 'dyall' or options.contraction != 'strong':
+        if not is_sc_nevpt2_configuration(self.mol.config):
             return None
+        options = _caspt2_options(self.mol.config)
 
         cached = consume_sc_nevpt2_gradient(self.mol)
         if cached is not None:

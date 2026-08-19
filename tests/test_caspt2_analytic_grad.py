@@ -659,3 +659,26 @@ def test_building_the_setup_never_runs_the_scnevpt2_energy_pass(tmp_path):
 
     assert isinstance(setup, CASPT2Setup), type(setup)
     assert setup.options.h0 == "dyall"
+
+
+@needs_backend
+@pytest.mark.parametrize("pt2_extra", [
+    {"h0": "fock", "contraction": "none", "gradient": "analytic"},
+    {"h0": "dyall", "contraction": "none", "gradient": "analytic"},
+])
+def test_the_energy_pass_does_not_adjudicate_a_caspt2_run(tmp_path, pt2_extra):
+    """The SC-NEVPT2 energy hook must decline, not refuse, for another route.
+
+    A gradient-driven run reaches `prepare_sc_nevpt2_energy_gradient` during
+    the ENERGY pass, before any gradient dispatch.  That hook consults
+    `sc_nevpt2_gradient_route`, which RAISES under `[pt2] gradient=analytic`
+    rather than reporting -- so an `h0=fock` calculation that asked for the
+    analytic CASPT2 derivative was killed by an SC-NEVPT2 refusal before its
+    own route was ever consulted.  Scoping the gradient dispatch alone does
+    not fix that: the abort happens one phase earlier.
+    """
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+
+    runner = _make_runner(tmp_path, "pt2_energy_hook", H4_BOHR, runtype="grad",
+                          pt2_extra=dict(pt2_extra))
+    assert prepare_sc_nevpt2_energy_gradient(runner.mol) is False
