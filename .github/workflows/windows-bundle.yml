@@ -56,7 +56,9 @@ jobs:
 
       - name: Freeze into a standalone directory
         run: |
-          $pkg = python -c "import os, oqp; print(os.path.dirname(oqp.__file__))"
+          # `import oqp` prints "Failed to import mpi4py" to stdout on a non-MPI
+          # build, so take only the last line -- the path.
+          $pkg = (python -c "import os, oqp; print(os.path.dirname(oqp.__file__))") | Select-Object -Last 1
           $intelBin = "$env:CMPLR_ROOT\bin"
           $mklBin = "$env:MKLROOT\bin"
           Write-Host "package: $pkg"
@@ -90,7 +92,9 @@ jobs:
       - name: Add the data tree and a README
         run: |
           $root = "C:\oqpdist\openqp"
-          $pkg = python -c "import os, oqp; print(os.path.dirname(oqp.__file__))"
+          # `import oqp` prints "Failed to import mpi4py" to stdout on a non-MPI
+          # build, so take only the last line -- the path.
+          $pkg = (python -c "import os, oqp; print(os.path.dirname(oqp.__file__))") | Select-Object -Last 1
           # basis sets / examples ship next to the executable so a user can point
           # at them without hunting inside _internal.
           Copy-Item -Recurse -Force "$pkg\share" "$root\share"
