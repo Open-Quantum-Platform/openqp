@@ -1,0 +1,108 @@
+# RHF/STO-3G/SC-NEVPT2 geometry optimization of LiH driven by the ANALYTIC
+# strongly contracted NEVPT2 nuclear gradient.
+#
+# This is the workflow check behind H4_SC-NEVPT2_grad.inp: an optimizer cannot
+# converge on a gradient that is not the derivative of the energy it is
+# minimizing, so reaching the convergence thresholds below is an end-to-end
+# statement about the Lagrangian, the coupled orbital/CI response and the
+# semicanonical response together -- not just about one number at one geometry.
+#
+# LiH rather than H4, because this example has to pin a reproducible GEOMETRY
+# and not merely a reproducible energy.  Linear H4/STO-3G CAS(2,2) dissociates
+# into two H2 units about 7.4 Bohr apart, and their relative translation along
+# the chain is nearly free: two runs from different starting bond lengths reach
+# the same energy to twelve digits and geometries 0.067 Bohr apart.  That is a
+# property of the surface, not of the gradient, but it makes H4 a bad
+# optimization reference.  LiH has one bound, stiff coordinate and no such mode.
+#
+# LiH also covers a case H4 cannot: [pt2] frozen=auto freezes the Li 1s, so the
+# frozen-core folding is on the differentiated path here.
+#
+# Measured: converged in 6 steps, 6 analytic gradients and no displaced
+# energies at all, against 6*natom = 12 SC-NEVPT2 energies per step for the
+# central-difference route.
+#
+#   E(SC-NEVPT2) at the optimized geometry = -7.8819849582
+#   r(Li-H)                                =  2.9270761417 Bohr
+#
+# Reproducibility: repeating this input reproduces the geometry to 3e-13 Bohr,
+# and starting from r = 1.75 A instead lands within 2.5e-7 Bohr of it, which is
+# what the tightened thresholds below buy.
+#
+# LiH's 2p-pi virtuals are EXACTLY degenerate, so this example is also the
+# working demonstration that a symmetry degeneracy is handled as a free gauge
+# rather than refused: the run reports "exactly degenerate pairs (free gauge)".
+#
+# Single-state SC-NEVPT2 publishes one energy, so [optimize] istate=0 is the
+# only valid selector; [pt2] target_roots picks which physical root fills it.
+[input]
+system=
+   Li  0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   1.600000000
+charge=0
+runtype=optimize
+basis=sto-3g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-11
+maxit=100
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[casscf]
+# The Lagrangian assumes a stationary CASSCF reference and its error is FIRST
+# order in the residual orbital-rotation gradient, so this is what keeps the
+# optimizer's search direction clean near the minimum.
+gradient_norm_tol=1.0e-10
+max_macro_iterations=300
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+max_det=5000
+max_memory=2048
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-12
+integral_backend=native
+target_spin=singlet
+
+[optimize]
+lib=oqp
+istate=0
+# Tight thresholds so the OPTIMIZED GEOMETRY, not just the energy, is pinned:
+# the committed reference compares coordinates, and a minimum located only to
+# the default 3e-4 Hartree/Bohr force is not reproducible to that precision.
+# The analytic gradient is exact to ~1e-10 here, so this costs a few extra
+# steps and nothing else.
+rmsd_grad=1.0e-7
+max_grad=1.0e-7
+rmsd_step=1.0e-6
+max_step=1.0e-6
+energy_shift=1.0e-11
+
+[oqp]
+coordsys=tric
+trust=0.2
+
+[pt2]
+reference=casscf
+variant=caspt2
+h0=dyall
+contraction=strong
+gradient=analytic
+frozen=auto
+semi_canonical=true

@@ -1,0 +1,102 @@
+# RHF/6-31G/SC-NEVPT2 ANALYTIC nuclear gradient of linear H4, CAS(4,4).
+#
+# Strongly contracted NEVPT2 ([pt2] h0=dyall, contraction=strong) on a
+# state-specific CASSCF reference is the one PT2 flavour in OpenQP with an
+# analytic derivative (oqp.library.nevpt2_gradient + nevpt2_gradient.F90).
+# [pt2] gradient=auto -- the default -- takes it whenever the calculation is
+# exactly that variant and falls back to central differences otherwise;
+# gradient=analytic demands it and reports why if the run is out of scope.
+#
+# Cost: one CASSCF, one second-order pass, one coupled response solve and one
+# set of derivative integrals, independent of the number of nuclei, against
+# 6*natom = 24 displaced SC-NEVPT2 energies for the numerical alternative.
+#
+# Validated against multi-step 5-point central differences of the SC-NEVPT2
+# total energy at this geometry (steps 4e-3, 2e-3, 1e-3 Bohr):
+#     max |analytic - finite difference| = 7.8e-10 / 5.9e-10 / 5.9e-10 Eh/Bohr.
+# The residual stops shrinking with the step, so it is the finite-difference
+# noise floor set by the converged SCF/CASSCF digits, not a truncation error.
+#
+#   E(CASSCF)     = -2.1840347927
+#   E(2)          = -0.0101861515
+#   E(SC-NEVPT2)  = -2.1942209442
+#   dE/dz         = (+0.0437762292, +0.1529115308, -0.1529115308, -0.0437762292)
+#
+# The gradient is exactly antisymmetric about the centre of the chain, as the
+# D(inf)h symmetry of this equally spaced geometry requires -- an independent
+# check that costs nothing to read.
+#
+# [casscf] gradient_norm_tol matters here.  The Lagrangian assumes a stationary
+# CASSCF reference, so the gradient error is FIRST order in the residual
+# orbital-rotation gradient: measured on this system, |g_orb| = 6e-7 (the
+# default tolerance) leaves ~4e-6 Hartree/Bohr, while |g_orb| < 1e-10 leaves
+# ~1e-10.  The value below buys the tight digits quoted above; the default is
+# still far inside any geometry-optimization threshold.  The run reports
+# |g_orb| so the size of this term is never a guess.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=grad
+basis=6-31g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: a central-difference cross-check divides by 2*step, and the
+# analytic path inherits the same orbital set, so both are pinned here.
+conv=1.0e-11
+maxit=100
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+# Single-state SC-NEVPT2 publishes one energy, so slot 0 is the only selector.
+grad=0
+
+[casscf]
+# See the header: the analytic gradient's error is first order in |g_orb|.
+gradient_norm_tol=1.0e-10
+max_macro_iterations=300
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=0
+orbital_source=rhf
+sort_orbitals=energy
+max_det=20000
+max_memory=4096
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-12
+integral_backend=native
+target_spin=any
+
+[pt2]
+# The analytic derivative is built on a STATIONARY CASSCF reference; with
+# reference=casci the orbitals are not stationary and the run falls back to
+# central differences (gradient=analytic would report that instead).
+reference=casscf
+variant=caspt2
+h0=dyall
+# strong = RDM-based strongly contracted NEVPT2 (8 Dyall subspaces, 1-4 RDMs).
+contraction=strong
+# auto (default) = analytic where it applies, central differences otherwise;
+# analytic = demand it; numerical = force central differences.
+gradient=analytic
+frozen=auto
+ipea_shift=0.0
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true

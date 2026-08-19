@@ -1266,6 +1266,63 @@ class Gradient(Calculator):
             self.mol.grads = grads
             return grads
 
+        # Strongly contracted NEVPT2 on a state-specific CASSCF reference has
+        # an analytic nuclear gradient.  Route it before the numerical-
+        # wavefunction block below, which stays the shared SA-CASSCF/PT2 path
+        # for every PT2 flavour that has no analytic derivative.  The import
+        # stays local to avoid a circular module dependency.
+        if self.method == 'caspt2':
+            from oqp.library.caspt2_dyall import _caspt2_options
+            from oqp.library.nevpt2_gradient import (
+                SCNEVPT2NotApplicable,
+                consume_sc_nevpt2_gradient,
+                sc_nevpt2_gradient_route,
+            )
+            cached = consume_sc_nevpt2_gradient(self.mol)
+            if cached is not None:
+                # A fused energy-pass gradient is published through the same
+                # public slot-0 selector check as sc_nevpt2_grad, so a
+                # `[properties] grad=1` run cannot receive the corrected root's
+                # slot-0 gradient labeled as a different requested state.
+                self._require_scnevpt2_slot0()
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                arr = np.asarray(cached, dtype=float).reshape(-1, self.natom, 3)
+                if arr.shape[0]:
+                    self.mol.set_grad(arr[0])
+                self.mol.grads = cached
+                return cached
+            route, reason = sc_nevpt2_gradient_route(self.mol)
+            if route == 'analytic':
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                try:
+                    grads = self.sc_nevpt2_grad()
+                except SCNEVPT2NotApplicable as exc:
+                    # The route preflight can only test the CONFIGURATION; the
+                    # remaining applicability conditions -- a stationary CASSCF
+                    # reference, non-degenerate semicanonical orbitals, a
+                    # solvable response system -- are only knowable once the
+                    # reference exists. `analytic` demanded the derivative and
+                    # gets the reason; `auto` promised a fallback and takes it.
+                    if _caspt2_options(self.mol.config).gradient == 'analytic':
+                        raise
+                    route, reason = 'numerical', str(exc)
+                else:
+                    # NOT symmetrized, for the same reason the analytic CASSCF
+                    # path is not: nevpt2_gradient.F90 deliberately declines the
+                    # petite reduction and returns the complete two-electron
+                    # gradient, and the relaxed density of an arbitrary
+                    # state-specific root need not be totally symmetric.
+                    # Projecting an already-complete gradient would erase
+                    # legitimate components.
+                    arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
+                    if arr.shape[0]:
+                        self.mol.set_grad(arr[0])
+                    self.mol.grads = grads
+                    return grads
+            dump_log(self.mol, title=(
+                'PyOQP: PT2 nuclear gradient by central differences '
+                '(analytic SC-NEVPT2 derivative not applicable: %s)' % reason))
+
         state_average_enabled = str(
             self.mol.config.get('state_average', {}).get('enabled', False)
         ).strip().lower() in ('true', '1', 'yes', 'on')
@@ -1413,6 +1470,42 @@ class Gradient(Calculator):
         grads = casscf_analytic_gradient(self.mol)
 
         return grads
+
+    def _require_scnevpt2_slot0(self):
+        """Reject any [properties] grad selector other than public slot 0.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so slot 0 is the
+        only valid selector; [pt2] target_roots picks which physical root
+        occupies it.  The direct analytic gradient and the fused energy-pass
+        cache both publish through this one check, so neither can hand back the
+        corrected root's slot-0 gradient labeled as a different requested state.
+        Returns the corrected root for the gradient log line.
+        """
+        from oqp.library.caspt2_dyall import _caspt2_options, _reference_roots
+
+        root = int(_reference_roots(_caspt2_options(self.mol.config))[0])
+        requested = [int(s) for s in np.atleast_1d(self.grads)] if len(self.grads) else [0]
+        for state in requested:
+            if state != 0:
+                raise ValueError(
+                    f'Analytic SC-NEVPT2 gradients are state-specific: only '
+                    f'the corrected root {root} is available in public slot 0, '
+                    f'but [properties] grad requested slot {state}.')
+        return root
+
+    def sc_nevpt2_grad(self):
+        """Analytic strongly contracted NEVPT2 gradient of the [pt2] root.
+
+        Single-state SC-NEVPT2 publishes exactly one energy, so the only valid
+        [properties] grad selector is 0; [pt2] target_roots picks which physical
+        root occupies that slot.  Rejecting any other selector here is what
+        keeps a run from being answered with a root it did not ask for.
+        """
+        from oqp.library.nevpt2_gradient import sc_nevpt2_analytic_gradient
+
+        root = self._require_scnevpt2_slot0()
+        dump_log(self.mol, title='PyOQP: Analytic SC-NEVPT2 Gradient of Root %s' % root)
+        return sc_nevpt2_analytic_gradient(self.mol)
 
     def mp2_grad(self):
         """Analytic ground-state RHF-MP2 nuclear gradient."""

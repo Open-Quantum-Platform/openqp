@@ -1,0 +1,11 @@
+caspt2/sto-3g
+guess(type=hcore)
+scf(conv=1e-11,maxit=100,forced_attempt=3,save_molden=false)
+properties(scf_prop="")
+casscf(gradient_norm_tol=1e-10,max_macro_iterations=300)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,orbital_source=rhf,max_det=5000,max_memory=2048)
+ci(nroot=1,solver=dense,eig_tol=1e-12,integral_backend=native,target_spin=singlet)
+pt2(reference=casscf,variant=caspt2,h0=dyall,contraction=strong,gradient=analytic,frozen=auto,semi_canonical=true)
+opt(S0,lib=oqp,rmsd_grad=1e-7,max_grad=1e-7,rmsd_step=1e-6,max_step=1e-6,energy_shift=1e-11)
+oqp(coordsys=tric,trust=0.2)
+geom="../geometries/HLi-14ffe169c3ad.xyz"
