@@ -329,10 +329,11 @@ contains
     write(*, '(16x,"|", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
        infos%tddft%HFscale, infos%tddft%HFscale, infos%tddft%HFscale
 
-    gcomp =  grd2_sf_compute_data_t( d2 = d &
+    if (allocated(gcomp)) deallocate(gcomp)
+    allocate(gcomp, source=grd2_sf_compute_data_t( d2 = d &
                                    , p2 = p &
                                    , v2 = v &
-                                   , nbf = basis%nbf )
+                                   , nbf = basis%nbf ))
 
     call gcomp%init()
 

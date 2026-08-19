@@ -2163,7 +2163,6 @@ contains
       end if
 
       if (allocated(int2_data)) deallocate(int2_data)
-
       allocate(int2_data, source=int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &

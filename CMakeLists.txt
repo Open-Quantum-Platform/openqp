@@ -251,6 +251,9 @@ elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPI
     # the user raises ulimit -s.  -heap-arrays gives ifx the gfortran
     # behaviour: arrays larger than 64 KB (or of run-time size) go on the heap.
     add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-heap-arrays 64>")
+    # Symbolic tracebacks on Fortran runtime errors (negligible cost; the
+    # runtime prints routine/line instead of a bare "forrtl: severe").
+    add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-traceback>)
 endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the

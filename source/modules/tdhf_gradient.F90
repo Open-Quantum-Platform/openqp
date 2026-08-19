@@ -316,13 +316,14 @@ contains
 
     if(ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
 
-    gcomp =  grd2_tdhf_compute_data_t( d2 = d &
+    if (allocated(gcomp)) deallocate(gcomp)
+    allocate(gcomp, source=grd2_tdhf_compute_data_t( d2 = d &
                                      , p2 = p &
                                      , xpy2 = xpy &
                                      , xmy2 = xmy &
                                      , hfscale = hfscale &
                                      , nbf = basis%nbf &
-      )
+      ))
 
     call gcomp%init()
 
