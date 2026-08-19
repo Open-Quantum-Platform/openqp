@@ -709,27 +709,50 @@ def _check_size(nbf, nact=None, ndet=None, budget_mib=None, budget_label="",
 def is_sc_nevpt2_configuration(config):
     """Does this configuration select the SC-NEVPT2 route at all?
 
-    `[pt2] gradient` is shared with the analytic CASPT2 derivative, and
-    `sc_nevpt2_gradient_route()` RAISES rather than reporting under
-    ``gradient=analytic``.  That is right for a run that selected SC-NEVPT2 and
-    wrong for one that selected CASPT2: ``analytic`` asks for AN analytic
-    derivative, and the other route may have one.  So every caller that might
-    be looking at a CASPT2 run has to decline by CONFIGURATION here, before
-    consulting the route.
+    Route OWNERSHIP, which is a different question from whether the route can
+    differentiate the calculation.  ``sc_nevpt2_gradient_route`` asks this
+    first and answers ``OTHER_ROUTE`` when it is false, so callers never have
+    to gate themselves -- see that function for why gating at the call sites
+    was the wrong place for it.
     """
     options = _caspt2_options(config)
     return options.h0 == "dyall" and options.contraction == "strong"
 
 
+#: ``sc_nevpt2_gradient_route`` verdict for a calculation that belongs to a
+#: different analytic PT2 derivative.  Distinct from ``"numerical"``: that one
+#: means "this route owns the calculation and declines it", and is what
+#: ``[pt2] gradient=analytic`` turns into a refusal.
+OTHER_ROUTE = "other-route"
+
+
 def sc_nevpt2_gradient_route(mol):
     """Which nuclear-gradient route a configured PT2 calculation should take.
 
-    Returns ``("analytic", "")`` when the calculation is exactly the one this
-    module differentiates, and ``("numerical", reason)`` otherwise.  With
-    ``[pt2] gradient=analytic`` an out-of-scope calculation raises instead of
-    falling back, so a run that asked for the analytic derivative never
-    silently receives central differences.
+    Three verdicts, and the distinction between the last two is the whole
+    point of this function:
+
+    ``("analytic", "")``
+        the calculation is exactly the one this module differentiates.
+    ``("numerical", reason)``
+        this route OWNS the calculation -- `[pt2] h0=dyall` with
+        `contraction=strong` -- and declines it, for a reason.  Under
+        ``[pt2] gradient=analytic`` that decline is raised instead, so a run
+        that asked for this derivative never silently receives central
+        differences.
+    ``(OTHER_ROUTE, "")``
+        the calculation belongs to a different analytic PT2 derivative.  This
+        is not a refusal and never raises, whatever ``[pt2] gradient`` says.
+
+    That third verdict exists because ``[pt2] gradient`` is ONE key shared with
+    the analytic CASPT2 derivative, so ``analytic`` means "AN analytic
+    derivative", not this one.  Raising here for an ``h0=fock`` run aborted
+    every analytic CASPT2 calculation before its own route was consulted.
+    Deciding it inside the function -- rather than asking each caller to gate
+    first -- is what keeps a future third caller from reintroducing that.
     """
+    if not is_sc_nevpt2_configuration(mol.config):
+        return OTHER_ROUTE, ""
     options = _caspt2_options(mol.config)
     if options.gradient == "numerical":
         return "numerical", "[pt2] gradient=numerical"
@@ -771,12 +794,6 @@ def prepare_sc_nevpt2_energy_gradient(mol, ref_energy=None):
     """
     runtype = str(mol.config.get("input", {}).get("runtype", "energy")).lower()
     if runtype not in _GRADIENT_DRIVEN_RUNTYPES:
-        return False
-    # A CASPT2 run is not this route's to adjudicate: consulting the route
-    # below would raise its refusal at an h0=fock calculation that asked for
-    # the OTHER analytic derivative, killing it during the energy pass before
-    # its own gradient dispatch is ever reached.
-    if not is_sc_nevpt2_configuration(mol.config):
         return False
     route, _reason = sc_nevpt2_gradient_route(mol)
     if route != "analytic":

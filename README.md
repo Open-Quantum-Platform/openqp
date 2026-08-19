@@ -36,7 +36,7 @@ for method, keyword, and build references.
 | Coupled cluster | RHF-, ROHF-, and UHF-based CCSD and CCSD(T) | Correlation energies with reference-appropriate frozen-core, Cholesky, in-core, or direct algorithms | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/coupled-cluster/) |
 | Configuration interaction | FCI and CASCI in determinant active spaces | State energies and CI vectors at fixed molecular orbitals | [Examples](examples/WF_methods) |
 | CASSCF | State-specific CASSCF and state-averaged SA-CASSCF | Energies and analytic nuclear gradients: state specific, the weighted SA-CASSCF objective, and an individual averaged root through the coupled orbital/CI Z-vector; the legacy `method=casscf` plus `[state_average]` spelling stays on central differences | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/casscf-gradient/) |
-| Multireference PT2 | SS/MS/XMS-CASPT2, uncontracted/strongly contracted NEVPT2, and MRMP2/MCQDPT2/XMCQDPT2 | Correlated energies and central-difference nuclear gradients for supported geometry workflows | [Examples](examples/WF_methods) |
+| Multireference PT2 | SS/MS/XMS-CASPT2, `nevpt2` / `sc-nevpt2`, and MRMP2/MCQDPT2/XMCQDPT2 | Correlated energies and central-difference nuclear gradients for supported geometry workflows | [Examples](examples/WF_methods) |
 
 #### Capabilities
 
