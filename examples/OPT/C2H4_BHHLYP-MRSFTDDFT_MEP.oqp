@@ -1,5 +1,2 @@
-mrsf(nstate=5)/bhhlyp/6-31g*
-mep(S1,maxit=2,step=0.1,gtol=0.003)
-scf(maxit=30)
-tdhf(maxit=30)
+mrsf(nstate=5)/bhhlyp/6-31g* mep(S1,maxit=2,gtol=0.003) tdhf(maxit=30)
 geom="../geometries/C2H4-5ec6cdbfac9d.xyz"

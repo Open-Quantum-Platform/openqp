@@ -1,1 +1,2 @@
-mrsf/bhhlyp/6-31g* h2o.xyz opt(maxit=1)
+mrsf/bhhlyp/6-31g* opt(maxit=1)
+geom="h2o.xyz"
