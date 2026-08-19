@@ -952,16 +952,11 @@ if(NOT BUILD_SHARED_LIBS)
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 elseif(WIN32)
     # A Windows DLL has no version suffix and no SONAME; build artifact and
-    # runtime name are the same file.
-    set(DFTD4_MCTC_RUNTIME_SOURCE
-        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
-    set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
-        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
-    set(DFTD4_DFTD4_RUNTIME_SOURCE
-        "${DFTD4_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+    # runtime name are the same file.  mctc-lib, multicharge and dftd4 all
+    # install(TARGETS) with only ARCHIVE/LIBRARY destinations, so on Windows
+    # CMake installs their import libraries and NOT the DLLs -- take the DLLs
+    # from the build tree instead.  (Set after the ExternalProjects below have
+    # published *_BUILD_DIR; see oqp_windows_dftd4_runtime_paths().)
     set(DFTD4_MCTC_RUNTIME_NAME
         "${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
         CACHE INTERNAL "DFTD4_MCTC_RUNTIME_NAME" FORCE)
@@ -1137,6 +1132,20 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         add_dependencies(dftd4 LAPACK)
     endif()
 endif()
+
+if(WIN32 AND BUILD_SHARED_LIBS)
+  # The DLLs live at the top of each ExternalProject build directory.
+  set(DFTD4_MCTC_RUNTIME_SOURCE
+      "${DFTD4_MCTC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
+      "${DFTD4_MC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_DFTD4_RUNTIME_SOURCE
+      "${DFTD4_D4_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+endif()
+
 endif()  # ENABLE_DFTD4
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
