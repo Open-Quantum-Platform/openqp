@@ -1,3 +1,3 @@
-mrsf/bhhlyp/cc-pvtz ispher=true grad(S2) scf(conv=1e-08) dftgrid(pruned="")
+mrsf/bhhlyp/cc-pvtz ispher=true grad(S2) scf(conv=1e-08) dftgrid(pruned=none)
 tdhf(conv=1e-08,zvconv=1e-08)
 geom="../geometries/H2O-0381125c86f2.xyz"

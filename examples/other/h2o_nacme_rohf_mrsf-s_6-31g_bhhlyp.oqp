@@ -1,4 +1,4 @@
 mrsf(nstate=10)/bhhlyp/6-31g nacme(S0,S1) scf(maxdiis=5,conv=1e-08,save_molden=false)
-dftgrid(pruned="") tdhf(maxit=30,conv=1e-08,zvconv=1e-08)
+dftgrid(pruned=none) tdhf(maxit=30,conv=1e-08,zvconv=1e-08)
 geom="../geometries/H2O-0381125c86f2.xyz"
 geom2="../geometries/H2O-1bdadad53a3a.xyz"

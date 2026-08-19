@@ -1658,7 +1658,8 @@ class OQPData:
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
         pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
-        if pruned != "":
+        # "", none, off, false, no: use the unpruned (rad_npts x ang_npts) grid.
+        if pruned.strip().lower() not in ("", "none", "off", "false", "no"):
             pruned = pruned.upper()
             if pruned in pruned_list:
                 self._data.dft.grid_pruned = True

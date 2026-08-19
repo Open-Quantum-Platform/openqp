@@ -1,2 +1,2 @@
-rks/bhhlyp/6-31g* grad guess(save_mol=true) scf(converger_type=trah,conv=1e-08) dftgrid(pruned="")
+rks/bhhlyp/6-31g* grad guess(save_mol=true) scf(converger_type=trah,conv=1e-08) dftgrid(pruned=none)
 geom="../geometries/H2O-7c17dce6a2e9.xyz"

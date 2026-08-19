@@ -1,2 +1,2 @@
-uks/slater/6-31g grad scf(maxdiis=5,conv=1e-08,save_molden=false) dftgrid(pruned="")
+uks/slater/6-31g grad scf(maxdiis=5,conv=1e-08,save_molden=false) dftgrid(pruned=none)
 geom="../geometries/H2O-0381125c86f2.xyz"

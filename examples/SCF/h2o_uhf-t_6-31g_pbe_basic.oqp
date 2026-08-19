@@ -1,2 +1,2 @@
-uks/pbe/6-31g mult=3 guess(save_mol=true) dftgrid(pruned="")
+uks/pbe/6-31g mult=3 guess(save_mol=true) dftgrid(pruned=none)
 geom="../geometries/H2O-0381125c86f2.xyz"

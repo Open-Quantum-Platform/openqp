@@ -1,4 +1,4 @@
 mrsf(nstate=10)/bhhlyp/6-31g grad(S2) scf(maxdiis=5,conv=1e-08,save_molden=false)
-dftgrid(pruned="",hfscale=0.45)
+dftgrid(pruned=none,hfscale=0.45)
 tdhf(maxit=30,conv=1e-08,zvconv=1e-08,hfscale=0.75,spc_coco=0.2,spc_ovov=0.3,spc_coov=0.4)
 geom="../geometries/H2O-0381125c86f2.xyz"

@@ -270,6 +270,23 @@ def test_intent_only_ir_raman_modifiers_survive_canonical_rendering():
     ) == rendered
 
 
+@pytest.mark.parametrize("spelling", ['""', "none", "off", "false", "no"])
+def test_unpruned_dft_grid_has_one_readable_canonical_spelling(spelling):
+    spec = oqp_input.parse_canonical_oqp(
+        'rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=%s)' % spelling
+    )
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert rendered == 'rks/pbe/6-31g dftgrid(pruned=none)\ngeom="h2o.xyz"\n'
+    assert oqp_input.lower_to_legacy(spec)["dftgrid"]["pruned"] == "none"
+    # SG2 is the default and disappears; other presets are kept as written.
+    assert "dftgrid" not in oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp('rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=SG2)')
+    )
+    assert "dftgrid(pruned=sg1)" in oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp('rks/pbe/6-31g geom="h2o.xyz" dftgrid(pruned=sg1)')
+    )
+
+
 def test_energy_state_selector_is_not_dropped():
     spec, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" energy(T0)'

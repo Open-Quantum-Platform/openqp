@@ -1,2 +1,2 @@
-rks/bhhlyp/lanl2dz ispher=true grad scf(conv=1e-08) dftgrid(pruned="")
+rks/bhhlyp/lanl2dz ispher=true grad scf(conv=1e-08) dftgrid(pruned=none)
 geom="../geometries/BrH-a6a9d6f6a6f3.xyz"

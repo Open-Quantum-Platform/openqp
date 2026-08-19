@@ -149,9 +149,21 @@ class OQPResolution:
     resolved_path: Optional[Path] = None
 
 
+# Spellings of "no pruned grid" for ``dftgrid(pruned=...)``.  The legacy
+# keyword uses an empty string; ``none`` is the readable canonical spelling.
+UNPRUNED_GRID_SPELLINGS = {"", "none", "off", "false", "no"}
+
+
 def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
     """Remove concise section options whose runtime defaults say the same thing."""
 
+    if call.name == "dftgrid" and "pruned" in call.kwargs:
+        value = call.kwargs["pruned"]
+        if value is None or str(value).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+            kwargs = dict(call.kwargs)
+            kwargs["pruned"] = "none"
+            return CallSpec(call.name, call.args, kwargs, call.explicit)
+        return call
     if call.name != "dftb":
         return call
     kwargs = dict(call.kwargs)
@@ -2897,6 +2909,8 @@ def _effective_config(
         values = config.get(section, {})
         for key, (type_name, default) in entries.items():
             raw = values[key] if key in values else default
+            if (section, key) == ("dftgrid", "pruned") and str(raw).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+                raw = "none"
             effective[(section, key)] = _normalize_typed_value(type_name, raw)
     for section, values in config.items():
         for key, raw in values.items():

@@ -1,2 +1,2 @@
-rks/bhhlyp/lanl2dz grad dftgrid(pruned="")
+rks/bhhlyp/lanl2dz grad dftgrid(pruned=none)
 geom="../geometries/BrH-a6a9d6f6a6f3.xyz"

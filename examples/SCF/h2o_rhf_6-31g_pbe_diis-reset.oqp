@@ -1,2 +1,2 @@
-rks/pbe/6-31g guess(save_mol=true) scf(diis_reset_mod=5) dftgrid(pruned="")
+rks/pbe/6-31g guess(save_mol=true) scf(diis_reset_mod=5) dftgrid(pruned=none)
 geom="../geometries/H2O-0381125c86f2.xyz"
