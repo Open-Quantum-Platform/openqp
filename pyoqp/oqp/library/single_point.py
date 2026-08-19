@@ -1466,16 +1466,17 @@ class Gradient(Calculator):
 
         from oqp.library.caspt2_dyall import _caspt2_options
         from oqp.library.nevpt2_gradient import (
+            OTHER_ROUTE,
             SCNEVPT2NotApplicable,
             consume_sc_nevpt2_gradient,
-            is_sc_nevpt2_configuration,
             sc_nevpt2_gradient_route,
         )
 
-        # Decline by CONFIGURATION before consulting the route; see
-        # is_sc_nevpt2_configuration() for why probing it would kill every
-        # `h0=fock` + `gradient=analytic` run with an SC-NEVPT2 refusal.
-        if not is_sc_nevpt2_configuration(self.mol.config):
+        route, reason = sc_nevpt2_gradient_route(self.mol)
+        if route == OTHER_ROUTE:
+            # Another PT2 derivative's calculation.  Silent: this is not a
+            # refusal, and announcing one would put an SC-NEVPT2 message in
+            # the log of every analytic CASPT2 run.
             return None
         options = _caspt2_options(self.mol.config)
 
@@ -1489,7 +1490,6 @@ class Gradient(Calculator):
             dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
             return cached
 
-        route, reason = sc_nevpt2_gradient_route(self.mol)
         if route != 'analytic':
             # Say WHY before handing the run on.  The reason is often the only
             # record that an analytic derivative was attempted and declined --

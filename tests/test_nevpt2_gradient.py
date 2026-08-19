@@ -653,10 +653,11 @@ def test_gradient_is_continuous_along_a_bond_scan(tmp_path):
 # --------------------------------------------------------------------------
 @needs_backend
 @pytest.mark.parametrize("pt2_override,needle", [
-    ({"contraction": "none"}, "STRONGLY CONTRACTED"),
+    # These are dyall+strong runs -- calculations this route OWNS -- that it
+    # cannot differentiate.  `gradient=analytic` asked for THIS derivative, so
+    # it gets the reason rather than a quietly different quantity.
     ({"reference": "casci"}, "CASSCF reference"),
     ({"level_shift": "0.1"}, "level_shift"),
-    ({"h0": "fock", "contraction": "none"}, "STRONGLY CONTRACTED"),
 ])
 def test_out_of_scope_calculations_are_refused_not_approximated(
         tmp_path, pt2_override, needle):
@@ -672,7 +673,33 @@ def test_out_of_scope_calculations_are_refused_not_approximated(
 
 @needs_backend
 @pytest.mark.parametrize("pt2_override", [
+    # A different h0/contraction is a different analytic PT2 derivative's
+    # calculation, not a refusal: `[pt2] gradient` is one key shared with the
+    # CASPT2 route, so `analytic` means "AN analytic derivative".  Raising
+    # here aborted every analytic CASPT2 run before its own route was
+    # consulted, so the verdict must be OTHER_ROUTE whatever gradient says.
     {"contraction": "none"},
+    {"h0": "fock", "contraction": "none"},
+    {"contraction": "none", "gradient": "analytic"},
+    {"h0": "fock", "contraction": "none", "gradient": "analytic"},
+])
+def test_another_routes_calculation_is_declined_not_refused(
+        tmp_path, pt2_override):
+    """OTHER_ROUTE never raises, whatever ``[pt2] gradient`` demands."""
+    from oqp.library.nevpt2_gradient import (
+        OTHER_ROUTE, sc_nevpt2_gradient_route,
+    )
+
+    pt2 = dict(_SC_NEVPT2, gradient="auto", **pt2_override)
+    runner = _runner(tmp_path, "scnevpt2_other_route", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22, pt2=pt2)
+    route, reason = sc_nevpt2_gradient_route(runner.mol)
+    assert route == OTHER_ROUTE
+    assert reason == ""
+
+
+@needs_backend
+@pytest.mark.parametrize("pt2_override", [
     {"reference": "casci"},
 ])
 def test_auto_falls_back_to_central_differences_out_of_scope(
