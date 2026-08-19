@@ -1491,6 +1491,14 @@ class Gradient(Calculator):
 
         route, reason = sc_nevpt2_gradient_route(self.mol)
         if route != 'analytic':
+            # Say WHY before handing the run on.  The reason is often the only
+            # record that an analytic derivative was attempted and declined --
+            # a run-time refusal recorded during the energy pass arrives here,
+            # not as an exception -- and dropping it makes a central-difference
+            # result indistinguishable from one that was never eligible.
+            dump_log(self.mol, title=(
+                'PyOQP: PT2 nuclear gradient by central differences '
+                '(analytic SC-NEVPT2 derivative not applicable: %s)' % reason))
             return None
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')

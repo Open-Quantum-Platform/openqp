@@ -617,8 +617,14 @@ def test_method_caspt2_is_routed_by_h0_and_contraction(
             getattr(__import__("oqp"), "lib", None), "nevpt2_gradient"):
         pytest.skip("liboqp has no nevpt2_gradient entry point; rebuild liboqp")
 
-    runner = _make_runner(tmp_path, "pt2_route", H4_BOHR, runtype="grad",
+    # runtype=energy, then run: the route inspects the basis, the active space
+    # and the compiled entry points, none of which exist on a Runner that has
+    # not executed.  `energy` is deliberately NOT a gradient-driven runtype, so
+    # the energy pass leaves no fused SC-NEVPT2 result behind and the dispatch
+    # below consults the route for real instead of consuming a cache.
+    runner = _make_runner(tmp_path, "pt2_route", H4_BOHR, runtype="energy",
                           pt2_extra=dict(pt2_extra))
+    runner.run(test_mod=True)
     calc = Gradient(runner.mol)
     called = []
 
@@ -653,8 +659,9 @@ def test_building_the_setup_never_runs_the_scnevpt2_energy_pass(tmp_path):
     from oqp.library.caspt2_dyall import CASPT2Setup, _caspt2_setup
 
     runner = _make_runner(
-        tmp_path, "pt2_setup_type", H4_BOHR, runtype="grad",
+        tmp_path, "pt2_setup_type", H4_BOHR, runtype="energy",
         pt2_extra={"h0": "dyall", "contraction": "strong"})
+    runner.run(test_mod=True)
     setup = _caspt2_setup(runner.mol, run_reference=False)
 
     assert isinstance(setup, CASPT2Setup), type(setup)
