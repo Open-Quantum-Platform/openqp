@@ -829,6 +829,12 @@ set(DFTD4_COMMON_ARGS
         # import library under LIBDIR.  Point both at lib/ so the DLLs land
         # beside the .lib files and every DFTD4_*_LIB path stays valid.
         -DCMAKE_INSTALL_BINDIR=lib
+        # Only dftd4's own sources carry `!DEC$ ATTRIBUTES DLLEXPORT`; the
+        # mctc-lib and multicharge Fortran modules export nothing, so MSVC
+        # produced a DLL with no import library at all and the link died with
+        # "cannot open input file 'mctc-lib.lib'".  Let CMake generate the
+        # export table from the objects instead.  Ignored on ELF/Mach-O.
+        -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DWITH_TESTS=OFF
