@@ -1,4 +1,2 @@
-rhf/lanl2dz
-guess(type=huckel,save_mol=true)
-dftgrid(rad_type=becke)
+rhf/lanl2dz guess(save_mol=true) dftgrid(rad_type=becke)
 geom="../geometries/Mg-21a9b71503dd.xyz"

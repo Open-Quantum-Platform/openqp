@@ -1,5 +1,2 @@
-rks/bhhlyp/6-31gs
-qmmm_flag=true
-guess(type=huckel)
-dftgrid(rad_type=becke)
+rks/bhhlyp/6-31gs qmmm_flag=true dftgrid(rad_type=becke)
 geom="ala.pdb 9 10 17 18 19"

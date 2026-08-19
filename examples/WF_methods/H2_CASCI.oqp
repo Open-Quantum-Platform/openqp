@@ -1,7 +1,4 @@
-casci/sto-3g
-guess(type=hcore)
-scf(maxit=60,forced_attempt=3,save_molden=false)
-properties(scf_prop="")
-cas(active_electrons=2,active_orbitals=2,frozen_core=0,active_orbital_indices="",core_orbital_indices="",orbital_source=rhf,orbital_file="",localize=none,sort_orbitals=energy,max_det=1000,max_memory=256)
-ci(nroot=1,solver=davidson,eig_tol=1e-10,davidson_maxiter=100,davidson_subspace=4,integral_backend=native,integral_cutoff=5e-11,spin_adapted=false,target_spin=any,root_tracking=energy,print_ci_vectors=false,ci_print_threshold=0.05,save_ci_vectors=false,save_rdm=false)
+casci/sto-3g guess(type=hcore) scf(maxit=60,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,max_det=1000,max_memory=256)
+ci(solver=davidson,davidson_subspace=4)
 geom="../geometries/H2-069e977a383f.xyz"

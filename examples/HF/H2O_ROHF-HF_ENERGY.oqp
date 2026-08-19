@@ -1,4 +1,2 @@
-rohf/6-31g*
-mult=3
-guess(type=huckel)
+rohf/6-31g* mult=3
 geom="../geometries/H2O-0381125c86f2.xyz"

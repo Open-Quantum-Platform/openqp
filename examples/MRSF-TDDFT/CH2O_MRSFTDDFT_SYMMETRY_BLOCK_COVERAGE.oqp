@@ -1,0 +1,2 @@
+mrsf-tdhf(nstate=3)/6-31g energy(T0) scf(conv=1e-10)
+geom="../geometries/CH2O-a39551b507e8.xyz"

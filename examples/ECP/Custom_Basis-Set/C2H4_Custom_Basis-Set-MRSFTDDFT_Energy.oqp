@@ -1,7 +1,3 @@
-mrsf(nstate=10)/bhhlyp/file:custom_basis-set.json
-energy(S0)
-guess(type=huckel,save_mol=false)
-scf(maxit=30,save_molden=false,conv=1e-08)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
-tdhf(maxit=30,conv=1e-08,zvconv=1e-10)
+mrsf(nstate=10)/bhhlyp/file:custom_basis-set.json energy(S0) scf(save_molden=false,conv=1e-08)
+dftgrid(pruned="") tdhf(maxit=30,conv=1e-08,zvconv=1e-10)
 geom="../../geometries/C2H4-c7ec226122c3.xyz"

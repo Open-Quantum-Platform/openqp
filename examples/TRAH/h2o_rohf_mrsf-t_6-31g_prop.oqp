@@ -1,8 +1,3 @@
-mrsf(nstate=2)/bhhlyp/6-31g*
-prop(S1)
-guess(type=huckel,save_mol=false)
-scf(maxit=200,converger_type=trah,conv=1e-08)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
-tdhf(maxit=100,maxit_zv=100,nvdav=100,zvconv=1e-10)
-properties(export=true,nac=nacme,back_door=true)
+mrsf/bhhlyp/6-31g* prop(S1) scf(maxit=200,converger_type=trah,conv=1e-08) dftgrid(pruned="")
+tdhf(maxit=100,maxit_zv=100,nvdav=100,zvconv=1e-10) properties(export=true,nac=nacme,back_door=true)
 geom="../geometries/H2O-0381125c86f2.xyz"

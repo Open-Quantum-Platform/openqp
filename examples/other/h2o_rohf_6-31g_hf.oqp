@@ -1,8 +1,2 @@
-rohf/6-31g
-mult=3
-d4=false
-grad
-guess(type=huckel,save_mol=false)
-scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=false)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+rohf/6-31g mult=3 grad scf(maxdiis=5,conv=1e-08,save_molden=false) dftgrid(pruned="")
 geom="../geometries/H2O-0381125c86f2.xyz"

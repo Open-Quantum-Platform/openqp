@@ -1,5 +1,3 @@
-rks/bhhlyp/6-31g
-md(S0)
-scf(maxit=100)
-qmmm(forcefield_files="tip3p.xml",qm_atoms="0-2",cutoff=PME,embedding=electrostatic,n_steps=1000,timestep=0.1,temperature=300.0)
+rks/bhhlyp/6-31g md(S0) scf(maxit=100)
+qmmm(forcefield_files="tip3p.xml",qm_atoms="0-2",cutoff=PME,timestep=0.1)
 geom="water_dimer.pdb"

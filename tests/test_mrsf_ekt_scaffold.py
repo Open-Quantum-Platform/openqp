@@ -239,7 +239,9 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("save_mol=True", inp)
         self.assertIn("save_molden=True", inp)
         self.assertIn("save_mol=true", oqp)
-        self.assertIn("save_molden=true", oqp)
+        # scf.save_molden=True is the runtime default, so the concise twin
+        # does not restate it; the dump still happens.
+        self.assertNotIn("save_molden=false", oqp)
         self.assertIn("[Molden Format]", dyson)
         self.assertIn("Sym= Dyson-IP-state-1", dyson)
         self.assertIn("Sym= Dyson-IP-state-5", dyson)

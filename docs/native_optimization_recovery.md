@@ -4,8 +4,7 @@ OpenQP's concise `.oqp` format defaults to a vertical energy when no driver is
 written:
 
 ```text
-mrsf-tddftb(nstate=3)
-dftb(model=dtcam)
+mrsf-tddftb(nstate=3) dftb(model=dtcam)
 geom="molecule.xyz"
 ```
 
@@ -15,9 +14,7 @@ omitted. The automatic native coordinate profile starts in DLC. A different
 backend remains an explicit opt-in; for example, `lib=geometric`:
 
 ```text
-mrsf-tddftb(nstate=3)
-opt(S1,lib=geometric,maxit=100)
-dftb(model=dtcam)
+mrsf-tddftb(nstate=3) opt(S1,lib=geometric,maxit=100) dftb(model=dtcam)
 geom="molecule.xyz"
 ```
 

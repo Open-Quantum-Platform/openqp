@@ -1,6 +1,2 @@
-rhf/3-21g
-d4=false
-guess(type=minao,save_mol=false)
-scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=false)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+rhf/3-21g guess(type=minao) scf(maxdiis=5,conv=1e-08,save_molden=false) dftgrid(pruned="")
 geom="../geometries/H2O-0381125c86f2.xyz"

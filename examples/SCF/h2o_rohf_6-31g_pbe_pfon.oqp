@@ -1,7 +1,2 @@
-roks/pbe/6-31g
-mult=3
-d4=false
-guess(type=huckel,save_mol=true)
-scf(maxit=200,maxdiis=7,pfon=true,pfon_start_temp=2000.0,pfon_cooling_rate=50.0,pfon_nsmear=5.0,conv=1e-06)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+roks/pbe/6-31g mult=3 guess(save_mol=true) scf(maxit=200,pfon=true) dftgrid(pruned="")
 geom="../geometries/H2O-0381125c86f2.xyz"

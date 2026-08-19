@@ -1,0 +1,2 @@
+rks/bhhlyp/6-31g scf(conv=1e-08,save_molden=false)
+geom="../geometries/H2O-fd8610ce9a72.xyz"

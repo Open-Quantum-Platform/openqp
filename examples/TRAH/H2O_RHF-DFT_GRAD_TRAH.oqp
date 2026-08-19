@@ -1,6 +1,2 @@
-rks/bhhlyp/6-31g*
-grad
-guess(type=huckel,save_mol=true)
-scf(converger_type=trah,conv=1e-08)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+rks/bhhlyp/6-31g* grad guess(save_mol=true) scf(converger_type=trah,conv=1e-08) dftgrid(pruned="")
 geom="../geometries/H2O-7c17dce6a2e9.xyz"

@@ -108,7 +108,8 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "nstep=2" in example_inp
     assert "nstep=2" in example_oqp
     assert "nacme_check=baeck_an" in example_inp
-    assert "nacme_check=baeck_an" in example_oqp
+    # baeck_an is the md.nacme_check default; the concise twin relies on it.
+    assert "nacme_check=off" not in example_oqp
     for keyword in (
             "trajectory_interval=2", "restart_interval=2",
             "trajectory_file=", "restart_file="):

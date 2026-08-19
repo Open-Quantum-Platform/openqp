@@ -1,9 +1,4 @@
-mrsf(nstate=10)/bhhlyp/cc-pvdz
-ispher=true
-d4=false
-ekt(ip=false,ea=true)
-guess(type=huckel,save_mol=false)
-scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=false)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+mrsf(nstate=10)/bhhlyp/cc-pvdz ispher=true ekt(ip=false,ea=true)
+scf(maxdiis=5,conv=1e-08,save_molden=false) dftgrid(pruned="")
 tdhf(maxit=30,conv=1e-08,zvconv=1e-08)
 geom="../geometries/H2O-0381125c86f2.xyz"

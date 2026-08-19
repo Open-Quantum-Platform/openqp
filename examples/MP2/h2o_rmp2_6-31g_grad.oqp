@@ -1,6 +1,3 @@
-mp2/6-31g
-grad(S0)
-guess(type=huckel,save_mol=false)
+mp2/6-31g grad(S0) symmetry(enabled=false,use_integral_symmetry=false)
 scf(maxit=50,conv=1e-10,incremental=false,save_molden=false)
-symmetry(enabled=false,use_integral_symmetry=false)
 geom="../geometries/H2O-0381125c86f2.xyz"
