@@ -65,7 +65,7 @@ string(SUBSTRING "${_OQP_DFTD4_PATCHSET_KEY}" 0 12 _OQP_DFTD4_PATCHSET_KEY)
 # matching static archives instead; the linkage remains part of the D4-only
 # cache namespace so the two modes can never reuse one another's artifacts.
 set(_OQP_DFTD4_LINKAGE "shared")
-if(NOT OQP_DFTD4_SHARED)
+if(NOT BUILD_SHARED_LIBS)
   set(_OQP_DFTD4_LINKAGE "static")
 endif()
 set(_OQP_EXTERNALS_VERSION_KEY
@@ -91,16 +91,6 @@ if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
 endif()
 set(_OQP_DFTD4_CACHE_KEY
     "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
-if(WIN32)
-  # Windows caps a full object-file path at 250 characters
-  # (CMAKE_OBJECT_PATH_MAX); the descriptive key above pushes the nested
-  # ExternalProject scratch directories past it, and CMake then fails to even
-  # identify the Fortran compiler.  Hash it, exactly as the outer externals
-  # key is hashed a few lines above.
-  string(MD5 _OQP_DFTD4_CACHE_KEY_HASH "${_OQP_DFTD4_CACHE_KEY}")
-  string(SUBSTRING "${_OQP_DFTD4_CACHE_KEY_HASH}" 0 12 _OQP_DFTD4_CACHE_KEY_HASH)
-  set(_OQP_DFTD4_CACHE_KEY "d4-${_OQP_DFTD4_CACHE_KEY_HASH}")
-endif()
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
@@ -770,6 +760,7 @@ endif()
 
 
 # ---------------------------------------------------------------------------
+if(ENABLE_DFTD4)
 # DFT-D4 dispersion (native): mctc-lib -> multicharge -> dftd4.
 # Replaces the former `dftd4` Python (cffi) package. All three install into one
 # prefix so dftd4 finds its deps via find_package().  Normal shared OpenQP
@@ -810,20 +801,17 @@ if(APPLE)
     set(DFTD4_ORIGIN_RPATH "@loader_path")
 elseif(UNIX)
     set(DFTD4_ORIGIN_RPATH "$ORIGIN")
-elseif(OQP_DFTD4_SHARED)
+else()
     message(FATAL_ERROR
         "The replaceable DFT-D4 shared-library stack is currently supported "
         "only on Linux and macOS.")
-else()
-    # Static DFT-D4 stack (Windows): no loader-relative RPATH needed.
-    set(DFTD4_ORIGIN_RPATH "")
 endif()
 set(DFTD4_COMMON_ARGS
         -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
         -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
         -DCMAKE_INSTALL_LIBDIR=lib
         -DCMAKE_BUILD_TYPE=Release
-        -DBUILD_SHARED_LIBS=${OQP_DFTD4_SHARED}
+        -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DWITH_TESTS=OFF
         -DWITH_OpenMP=${ENABLE_OPENMP}
         -DCMAKE_INSTALL_RPATH=${DFTD4_ORIGIN_RPATH}
@@ -892,7 +880,7 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
-if(OQP_DFTD4_SHARED)
+if(BUILD_SHARED_LIBS)
     set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}")
     set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_SHARED_LIBRARY_SUFFIX}")
 else()
@@ -917,7 +905,7 @@ set(DFTD4_DFTD4_LIB
 string(REGEX REPLACE "\\..*" "" _OQP_MCTC_LIB_SOVERSION "${_OQP_MCTC_LIB_VERSION}")
 string(REGEX REPLACE "\\..*" "" _OQP_MULTICHARGE_SOVERSION "${_OQP_MULTICHARGE_VERSION}")
 string(REGEX REPLACE "\\..*" "" _OQP_DFTD4_SOVERSION "${_OQP_DFTD4_VERSION}")
-if(NOT OQP_DFTD4_SHARED)
+if(NOT BUILD_SHARED_LIBS)
     set(DFTD4_MCTC_RUNTIME_SOURCE "${DFTD4_MCTC_LIB}"
         CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
     set(DFTD4_MULTICHARGE_RUNTIME_SOURCE "${DFTD4_MULTICHARGE_LIB}"
@@ -976,7 +964,7 @@ endif()
 set(DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_LIB}")
 set(DFTD4_MULTICHARGE_ARTIFACTS "${DFTD4_MULTICHARGE_LIB}")
 set(DFTD4_DFTD4_ARTIFACTS "${DFTD4_DFTD4_LIB}")
-if(OQP_DFTD4_SHARED)
+if(BUILD_SHARED_LIBS)
     list(APPEND DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_RUNTIME_SOURCE}")
     list(APPEND DFTD4_MULTICHARGE_ARTIFACTS
         "${DFTD4_MULTICHARGE_RUNTIME_SOURCE}")
@@ -1099,6 +1087,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         add_dependencies(dftd4 LAPACK)
     endif()
 endif()
+endif()  # ENABLE_DFTD4
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
 

@@ -9,6 +9,13 @@ if(NOT ENABLE_OPENTRAH)
   list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/otr_interface.F90")
 endif()
 
+# dftd4_interface.F90 is the bind(C) shim over the external DFT-D4 library;
+# drop it when the backend is disabled (see ENABLE_DFTD4 in the top-level
+# CMakeLists.txt).
+if(NOT ENABLE_DFTD4)
+  list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90")
+endif()
+
 add_subdirectory(io)
 add_subdirectory(mathlib)
 add_subdirectory(modules)
@@ -118,13 +125,14 @@ set_property(SOURCE ${SOURCES_mathlib_ilp64} APPEND PROPERTY COMPILE_DEFINITIONS
 # DFT-D4 dispersion (native, see external/CMakeLists.txt). dftd4_interface.F90
 # (globbed into SOURCES above) `use`s the dftd4/mctc-lib modules, so the module
 # dirs must be on the include path and the ExternalProjects must build first.
+if(ENABLE_DFTD4)
 add_dependencies(oqp dftd4)
 set(DFTD4_MODTAG ${CMAKE_Fortran_COMPILER_ID}-${CMAKE_Fortran_COMPILER_VERSION})
 target_include_directories(oqp PRIVATE
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-if(OQP_DFTD4_SHARED)
+if(BUILD_SHARED_LIBS)
   # Link liboqp only to the shared libraries whose APIs the shim calls
   # directly. dftd4 records its canonical multicharge and mctc-lib SOVERSION
   # dependencies, so adding multicharge here would create a redundant edge.
@@ -148,13 +156,11 @@ else()
   # linked earlier, before multicharge introduced its LAPACK references; put
   # the complete cycle in a GNU-ld rescan group so those late references are
   # resolved for both in-tree executables and downstream static consumers.
-  # LINK_GROUP:RESCAN is a GNU-ld feature; the MSVC linker (Windows) resolves
-  # static-archive order itself, so Windows takes the plain branch below.
-  if(LIBLAPACK AND NOT APPLE AND NOT WIN32)
+  if(LIBLAPACK AND NOT APPLE)
     target_link_libraries(oqp
             "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>>"
             "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>>")
-  elseif(NOT APPLE AND NOT WIN32 AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))
+  elseif(NOT APPLE AND (LAPACK_LIBRARIES OR BLAS_LIBRARIES))
     # findLinearAlgebra() linked the system archives before DFT-D4.  Repeat
     # them after the DFT-D4 rescan group so late multicharge references can
     # pull symbols from static OpenBLAS/MKL archives.  The repeated public
@@ -176,7 +182,8 @@ else()
   target_link_directories(oqp PUBLIC
           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>")
 endif()
-if(OQP_DFTD4_SHARED AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+endif()  # ENABLE_DFTD4
+if(ENABLE_DFTD4 AND BUILD_SHARED_LIBS AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # The DFT-D4 stack is linked in separate ExternalProjects.  Fail the OpenQP
   # build if either BLAS-using dylib retained a classic LP64 Accelerate symbol
   # despite declaring WITH_ILP64=ON.
@@ -197,7 +204,7 @@ if(APPLE)
 else()
   set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
-if(OQP_DFTD4_SHARED)
+if(BUILD_SHARED_LIBS AND ENABLE_DFTD4)
   set_target_properties(oqp PROPERTIES
           BUILD_RPATH "${DFTD4_INSTALL}/lib"
           INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
@@ -207,8 +214,10 @@ endif()
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
+if(ENABLE_DFTD4)
 set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90
         APPEND PROPERTY COMPILE_DEFINITIONS OQP_D4_INT_KIND=4)
+endif()
 
 install(TARGETS oqp
 EXPORT "${PROJECT_NAME}Targets"
@@ -221,7 +230,9 @@ EXPORT "${PROJECT_NAME}Targets"
 # runtime SONAME/install-name that liboqp and the DFT-D4 libraries reference.
 # Replacing one of these files with an ABI-compatible build therefore changes
 # the implementation used at the next process start.
-if(OQP_DFTD4_SHARED)
+if(NOT ENABLE_DFTD4)
+  # nothing to install
+elseif(BUILD_SHARED_LIBS)
   install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
           DESTINATION ${CMAKE_INSTALL_LIBDIR}
           RENAME "${DFTD4_MCTC_RUNTIME_NAME}")

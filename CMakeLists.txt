@@ -97,15 +97,21 @@ endif()
 
 option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 
-# The replaceable DFT-D4 shared-library stack depends on a loader-relative
-# RPATH ($ORIGIN / @loader_path).  Windows has no equivalent, so there the
-# three DFT-D4 libraries are built as static archives and linked into
-# liboqp.dll instead.  Linux/macOS keep the shared stack.
-if(BUILD_SHARED_LIBS AND NOT WIN32)
-  set(OQP_DFTD4_SHARED ON)
+# Native DFT-D4 dispersion.  The bundled DFT-D4 stack (mctc-lib, multicharge,
+# dftd4) ships as replaceable shared libraries found through a loader-relative
+# RPATH, which Windows does not have; a static build is not an alternative
+# either, because dftd4's sources carry unconditional
+# `!DEC$ ATTRIBUTES DLLEXPORT`, so Intel Fortran emits __imp_ references that
+# only an import library can resolve.  Default the backend off on Windows.
+# oqp_dftd4_disp/oqp_dftd4_disp_v2 are then absent from liboqp, and the Python
+# layer (pyoqp/oqp/library/single_point.py) already probes for that symbol and
+# reports dispersion as unavailable instead of failing.
+if(WIN32)
+  set(_OQP_ENABLE_DFTD4_DEFAULT OFF)
 else()
-  set(OQP_DFTD4_SHARED OFF)
+  set(_OQP_ENABLE_DFTD4_DEFAULT ON)
 endif()
+option(ENABLE_DFTD4 "Build the native DFT-D4 dispersion backend" ${_OQP_ENABLE_DFTD4_DEFAULT})
 
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 
@@ -347,7 +353,7 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
-  if(OQP_DFTD4_SHARED)
+  if(BUILD_SHARED_LIBS AND ENABLE_DFTD4)
     add_test(NAME oqp_dftd4_dynamic_dependencies
       COMMAND ${CMAKE_COMMAND}
         "-DOQP_LIBRARY=$<TARGET_FILE:oqp>"
