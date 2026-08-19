@@ -118,6 +118,8 @@ class ReadmeLogMetadataTests(unittest.TestCase):
             "Energies and analytic nuclear gradients: state specific, the "
             "weighted SA-CASSCF objective, and an individual averaged root",
             readme)
+        self.assertIn(
+            "state-specific CASSCF and SA-CASSCF", readme)
         self.assertNotIn("central-difference SA-CASSCF gradients", readme)
         # `runtype=namd` is MRSF-TDDFT only (input_checker.py: "NAMD
         # (surface hopping) currently supports only MRSF-TDDFT"), and the
@@ -127,18 +129,9 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         self.assertNotIn(
             "optimization, reaction paths, and dynamics", readme)
         self.assertIn("`runtype=namd` dynamics is MRSF-TDDFT only", readme)
-        # Likewise the numerical row is scoped by what has no analytic
-        # derivative, not by method family.
         self.assertIn(
             "The legacy `method=casscf` plus `[state_average]` spelling, and "
-            "the CASPT2/NEVPT2/QDPT2 variants without an analytic derivative",
-            readme)
-        self.assertIn(
-            "state-specific CASSCF and SA-CASSCF, and strongly contracted NEVPT2",
-            readme)
-        self.assertIn(
-            "strongly contracted NEVPT2 on a state-specific CASSCF reference "
-            "has an **analytic** nuclear gradient", readme)
+            "the CASPT2/NEVPT2/QDPT2 families", readme)
 
     def test_capabilities_include_learning_resources_and_geometry_workflows(self):
         readme = (ROOT / "README.md").read_text()
