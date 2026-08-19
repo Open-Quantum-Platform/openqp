@@ -23,6 +23,7 @@ METHODS = {
     "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
     "fci", "casci", "casscf", "sa-casscf", "sacasscf",
     "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+    "nevpt2", "sc-nevpt2", "scnevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 CC_METHODS = {"ccsd", "ccsd(t)"}
@@ -176,11 +177,14 @@ PT2_METHOD_ALIASES = {
     "mrmp2": "mrmp2",
     "mcqdpt2": "mcqdpt2",
     "xmcqdpt2": "xmcqdpt2",
+    "nevpt2": "nevpt2",
+    "sc-nevpt2": "sc-nevpt2",
+    "scnevpt2": "sc-nevpt2",
 }
 PT2_VARIANTS = {"auto", "caspt2", "ms-caspt2", "xms-caspt2",
                 "mrmp2", "mcqdpt2", "xmcqdpt2"}
 # QDPT (GAMESS-convention) family groupings used by the consistency checks
-PT2_SINGLE_STATE_METHODS = {"caspt2", "mrmp2"}
+PT2_SINGLE_STATE_METHODS = {"caspt2", "mrmp2", "nevpt2", "sc-nevpt2"}
 PT2_MS_METHODS = {"ms-caspt2", "mcqdpt2"}
 PT2_XMS_METHODS = {"xms-caspt2", "xmcqdpt2"}
 PT2_QDPT_METHODS = {"mrmp2", "mcqdpt2", "xmcqdpt2"}
@@ -2854,6 +2858,7 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     if method not in {
         "casci", "casscf", "sa-casscf", "sacasscf",
         "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+        "nevpt2", "sc-nevpt2", "scnevpt2",
         "mrmp2", "mcqdpt2", "xmcqdpt2",
     }:
         return

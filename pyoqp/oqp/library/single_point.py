@@ -131,6 +131,7 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 #: which is the numerical half of the same set.
 PT2_GRAD_METHODS = frozenset({
     'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
 import oqp.utils.qmmm as qmmm
@@ -162,6 +163,7 @@ SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
     'hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
     'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
     'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 }
 
@@ -667,6 +669,7 @@ class SinglePoint(Calculator):
                 energies = CASSCF(self.mol).energy(ref_energy)
             elif _normalized_method_label(self.method) in {
                 'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'nevpt2', 'sc-nevpt2', 'scnevpt2',
                 'mrmp2', 'mcqdpt2', 'xmcqdpt2'
             }:
                 from oqp.library.caspt2_dyall import native_caspt2_energy

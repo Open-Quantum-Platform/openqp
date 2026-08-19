@@ -55,7 +55,15 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
   and `grad_ranks_per_group`). State-specific CASSCF also uses an analytic
   derivative.
 - `[state_average]` — `enabled`, `target_roots`, weights.
-- `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2),
+- `[input] method` — `caspt2`, `ms-caspt2`, `xms-caspt2`, `nevpt2`,
+  `sc-nevpt2`, `mrmp2`, `mcqdpt2`, `xmcqdpt2`.  NEVPT2 used to be the one
+  member without its own name (`caspt2` plus `[pt2] h0=dyall`); that spelling
+  is the same calculation and still works, but two different theories reaching
+  the gradient dispatch under one name is what made routing them a matter of
+  inspecting options instead of reading the method.
+- `[pt2]` — `h0` (fock=CASPT2 / dyall=NEVPT2), `contraction` (none / strong=SC-NEVPT2);
+  a method that names them (`nevpt2`, `sc-nevpt2`) rejects an option that
+  contradicts it rather than letting one win,
   `frozen` (auto=standard deep cores, matches OpenMolcas), `ipea_shift`,
   `level_shift`, `imaginary_shift`, `edshft` (GAMESS ISA `d -> d + edshft/d`,
   QDPT-style intruder handling; exclusive with the level shifts); `gradient`
@@ -110,7 +118,7 @@ falls back to central differences and writes the offending number into the log �
 and `analytic` refuses. A penalty-function MECI search walks into the degenerate
 case by construction; the fallback is what keeps it running.
 
-### Strongly contracted NEVPT2 (`h0=dyall`, `contraction=strong`)
+### Strongly contracted NEVPT2 (`method=sc-nevpt2`)
 
 Analytic when the run is strongly contracted, state specific, on a
 state-specific CASSCF reference, with `runtype` in grad/optimize/ts/mep/irc. It

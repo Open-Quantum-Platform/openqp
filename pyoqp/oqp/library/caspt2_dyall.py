@@ -156,6 +156,23 @@ def _as_int_tuple(value):
     return tuple(int(v) for v in items if str(v).strip() != "")
 
 
+#: The PT2 methods that name their own zeroth-order Hamiltonian and
+#: contraction, rather than leaving them to `[pt2] h0` / `contraction`.
+#:
+#: NEVPT2 was the one member of the family without its own method name:
+#: MS-CASPT2, XMS-CASPT2, MRMP2, MCQDPT2 and XMCQDPT2 each have one, while
+#: NEVPT2 had to be spelled `method=caspt2` plus two options.  Two different
+#: theories then arrived at the gradient dispatch under one name, which is
+#: what made routing them a matter of inspecting options instead of reading
+#: the method.  The old spelling keeps working -- it is what every existing
+#: input says -- and is simply the same calculation.
+_METHOD_IMPLIED_PT2 = {
+    "nevpt2": ("dyall", "none"),
+    "sc-nevpt2": ("dyall", "strong"),
+    "scnevpt2": ("dyall", "strong"),
+}
+
+
 def _caspt2_options(config: dict) -> CASPT2Options:
     raw = config.get("pt2", {}) or {}
     reference = str(raw.get("reference", "casscf")).strip().lower()
@@ -183,25 +200,43 @@ def _caspt2_options(config: dict) -> CASPT2Options:
     else:
         raise ValueError("pt2.variant must be auto, caspt2, ms-caspt2, xms-caspt2, "
                          "mrmp2, mcqdpt2 or xmcqdpt2")
-    h0_raw = str(raw.get("h0", "fock")).strip().lower()
-    if h0_raw in {"fock", "caspt2", ""}:
+    implied_h0, implied_contraction = _METHOD_IMPLIED_PT2.get(method, (None, None))
+    h0_raw = str(raw.get("h0", "")).strip().lower()
+    if h0_raw in {"fock", "caspt2"}:
         h0 = "fock"
     elif h0_raw in {"dyall", "nevpt2", "nevpt"}:
         h0 = "dyall"
+    elif h0_raw == "":
+        h0 = implied_h0 or "fock"
     else:
         raise ValueError("pt2.h0 must be 'fock' (CASPT2) or 'dyall' (NEVPT2)")
+    if implied_h0 is not None and h0 != implied_h0:
+        # Contradiction, not a preference: `method=nevpt2` names the Dyall H0.
+        raise ValueError(
+            f"[input] method={method} is defined for h0='{implied_h0}', but "
+            f"[pt2] h0='{h0_raw}' was requested.  Drop [pt2] h0, or select the "
+            "method that matches it.")
     if family == "qdpt" and h0 != "fock":
         raise ValueError(
             "MRMP2/MCQDPT2/XMCQDPT2 are defined for the diagonal-Fock (MP-like) "
             "zeroth order only; drop [pt2] h0 or set h0=fock."
         )
-    contraction_raw = str(raw.get("contraction", "none")).strip().lower()
-    if contraction_raw in {"none", "uncontracted", "full", ""}:
+    contraction_raw = str(raw.get("contraction", "")).strip().lower()
+    if contraction_raw in {"none", "uncontracted", "full"}:
         contraction = "none"
     elif contraction_raw in {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}:
         contraction = "strong"
+    elif contraction_raw == "":
+        contraction = implied_contraction or "none"
     else:
         raise ValueError("pt2.contraction must be 'none' (uncontracted) or 'strong' (SC-NEVPT2)")
+    if implied_contraction is not None and contraction != implied_contraction:
+        raise ValueError(
+            f"[input] method={method} is the "
+            f"{'strongly contracted' if implied_contraction == 'strong' else 'uncontracted'}"
+            f" variant, but [pt2] contraction='{contraction_raw}' was requested."
+            "  Drop [pt2] contraction, or select the method that matches it "
+            "(nevpt2 = uncontracted, sc-nevpt2 = strongly contracted).")
     if contraction == "strong" and h0 != "dyall":
         raise ValueError(
             "pt2.contraction='strong' (SC-NEVPT2) requires h0='dyall'; "

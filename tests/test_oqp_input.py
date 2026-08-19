@@ -1866,17 +1866,26 @@ def test_natural_wf_spellings_lower_to_checker_accepted_methods(alias, expected)
     assert legacy["input"]["method"] == expected
 
 
-def test_nevpt2_is_a_caspt2_zeroth_order_hamiltonian_not_a_route():
-    """NEVPT2 has no ``input.method``; it is ``caspt2`` plus Dyall's H0.
+def test_nevpt2_is_a_route_and_the_option_spelling_still_parses():
+    """NEVPT2 names its own method, and the older spelling is the same run.
 
-    Both NEVPT2 examples set ``method=caspt2``, so accepting a ``nevpt2``
-    route would have to silently inject ``[pt2] h0=dyall`` behind the user's
-    back.  The concise form keeps the selector visible instead.
+    NEVPT2 used to be the one member of the PT2 family without an
+    ``input.method``: MS-CASPT2, XMS-CASPT2, MRMP2, MCQDPT2 and XMCQDPT2 each
+    have one, while NEVPT2 had to be written as ``caspt2`` plus two options.
+    Two different theories then reached the gradient dispatch under one name.
+
+    The old spelling is what every existing input says, so it keeps working
+    and means exactly the same calculation -- which is the half of this test
+    that must not be allowed to rot.
     """
 
-    with pytest.raises(OQPInputError, match="Unknown electronic-structure model"):
-        oqp_input.parse_canonical_oqp('nevpt2/6-31g geom="h4.xyz" energy')
+    _, legacy = _parse('nevpt2/6-31g geom="h4.xyz" energy')
+    assert legacy["input"]["method"] == "nevpt2"
 
+    _, legacy = _parse('sc-nevpt2/6-31g geom="h4.xyz" energy')
+    assert legacy["input"]["method"] == "sc-nevpt2"
+
+    # The option spelling, unchanged.
     _, legacy = _parse(
         'caspt2/6-31g geom="h4.xyz" energy pt2(h0=dyall,contraction=strong)'
     )

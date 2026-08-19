@@ -1422,7 +1422,6 @@ class OpenQP:
         "imaginary_shift": "0.0",
         "level_shift": "0.0",
         "edshft": "0.0",
-        "gradient": "auto",
     }
 
     def _pt2_helper_opts(self, keywords, overrides, **helper_defaults):
@@ -1487,9 +1486,12 @@ class OpenQP:
                runtype=None, basis=None, reference="rhf", **keywords):
         """Use a compact OpenQP NEVPT2 setup.
 
-        NEVPT2 is CASPT2's determinant machinery with the Dyall H0, so it is
-        `method=caspt2` plus `[pt2] h0=dyall`.  `contraction='strong'` gives
-        SC-NEVPT2; the default is the uncontracted form.
+        NEVPT2 is CASPT2's determinant machinery with the Dyall H0, and it now
+        has its own method name like the rest of the family: `method=nevpt2`
+        for the uncontracted form and `method=sc-nevpt2` for the strongly
+        contracted one.  `contraction='strong'` selects the latter.  The older
+        spelling -- `method=caspt2` with `[pt2] h0=dyall` -- is the same
+        calculation and keeps working.
 
         `gradient` selects the nuclear-gradient route: `auto` (the default)
         takes the analytic SC-NEVPT2 derivative when the calculation is
@@ -1498,11 +1500,19 @@ class OpenQP:
         and reports why if the run is out of scope; `numerical` forces central
         differences."""
         self._require_active_space("NEVPT2", active_electrons, active_orbitals)
+        strong = str(contraction or "").strip().lower() in {
+            "strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}
+        # The method NAMES the H0 and the contraction, and _PT2_OWNED_KEYS
+        # seeds every [pt2] block with h0=fock -- so the emitted options have
+        # to agree with the name or the run is rejected as self-contradictory.
+        # Emitting them explicitly is what makes the two spellings identical
+        # rather than merely equivalent.
         opts = self._pt2_helper_opts(
-            keywords, {"contraction": contraction, "gradient": gradient},
-            h0="dyall")
+            keywords, {"gradient": gradient},
+            h0="dyall", contraction="strong" if strong else "none")
         return self._wf_setup(
-            "caspt2", runtype=runtype, basis=basis, reference=reference,
+            "sc-nevpt2" if strong else "nevpt2",
+            runtype=runtype, basis=basis, reference=reference,
             active_electrons=active_electrons, active_orbitals=active_orbitals,
             frozen_core=frozen_core, nroot=nroot, pt2=opts, **keywords)
 

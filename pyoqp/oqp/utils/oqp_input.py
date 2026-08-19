@@ -197,6 +197,7 @@ DEFAULT_SINGLET_MODELS = {
     # user asks for another one; see WF_MODELS below.
     "fci", "casci", "casscf", "sa-casscf",
     "caspt2", "ms-caspt2", "xms-caspt2",
+    "nevpt2", "sc-nevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
@@ -509,9 +510,9 @@ MODEL_ALIASES = {
     "mrsf-dftb": "mrsf-dftb",
     # Native multiconfigurational stack.  Every target below is a literal
     # ``input.method`` value accepted by oqp.utils.input_checker.METHODS, so
-    # the route name and the lowered method never diverge.  NEVPT2 is
-    # deliberately absent: it is not an input.method but the Dyall zeroth-order
-    # Hamiltonian of the CASPT2 driver (``caspt2 ... pt2(h0=dyall)``).
+    # the route name and the lowered method never diverge.  NEVPT2 now has
+    # its own method name like the rest of the family; the older spelling
+    # (``caspt2 ... pt2(h0=dyall)``) is the same calculation and still parses.
     "fci": "fci",
     "full-ci": "fci",
     "fullci": "fci",
@@ -533,6 +534,10 @@ MODEL_ALIASES = {
     "mcqdpt": "mcqdpt2",
     "xmcqdpt2": "xmcqdpt2",
     "xmcqdpt": "xmcqdpt2",
+    "nevpt2": "nevpt2",
+    "nev-pt2": "nevpt2",
+    "sc-nevpt2": "sc-nevpt2",
+    "scnevpt2": "sc-nevpt2",
 }
 
 # Multiconfigurational models are their own ``input.method``: unlike the
@@ -542,6 +547,7 @@ MODEL_ALIASES = {
 WF_MODELS = {
     "fci", "casci", "casscf", "sa-casscf",
     "caspt2", "ms-caspt2", "xms-caspt2",
+    "nevpt2", "sc-nevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
