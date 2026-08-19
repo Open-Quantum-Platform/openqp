@@ -61,6 +61,11 @@ if(ENABLE_OPENTRAH)
 endif()
 # dlsym() in mathlib/blas_thread_ctl.c
 target_link_libraries(oqp ${CMAKE_DL_LIBS})
+if(WIN32)
+  # routec_bridge/routec_sig reach their optional accelerator library through
+  # the platform dynamic loader; on Windows that is kernel32, not libdl.
+  target_compile_definitions(oqp PRIVATE OQP_DL_WIN32)
+endif()
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()
