@@ -1587,21 +1587,28 @@ def test_conventional_tddftb_triplet_is_rejected_with_spin_flip_guidance():
         )
 
 
+# These inputs are the four minimal DFTB-family examples that examples/DFTB
+# carried before the tight-binding material was removed from the public
+# repository. The routes still exist in the input layer, so keep parsing them
+# here; the text is inline because there is no example file to read any more.
 @pytest.mark.parametrize(
-    "filename,expected_model,expected_type",
+    "text,expected_model,expected_type",
     [
-        ("H2_DFTB_ENERGY.oqp", "dftb", "ground"),
-        ("H2O_TDDFTB_ENERGY.oqp", "tddftb", "tddftb"),
-        ("CH2_SF-TDDFTB_ENERGY.oqp", "sf-dftb", "sf"),
-        ("CH2_MRSF-TDDFTB_ENERGY.oqp", "mrsf-dftb", "mrsf"),
+        ('dftb geom="h2.xyz" energy() dftb(backend=native,parameter_path="")',
+         "dftb", "ground"),
+        ('tddftb(nstate=3) geom="h2o.xyz" energy() '
+         'dftb(backend=native,parameter_path="")',
+         "tddftb", "tddftb"),
+        ('sf-tddftb(nstate=3) geom="ch2.xyz" energy() '
+         'dftb(backend=native,parameter_path="")',
+         "sf-dftb", "sf"),
+        ('mrsf-tddftb(nstate=3) geom="ch2.xyz" energy(S0) '
+         'dftb(backend=native,parameter_path="")',
+         "mrsf-dftb", "mrsf"),
     ],
 )
-def test_minimal_dftb_family_examples_parse(filename, expected_model, expected_type):
-    example_dir = ROOT / "examples" / "DFTB"
-    text = (example_dir / filename).read_text(encoding="utf-8")
-
-    spec = oqp_input.parse_canonical_oqp(text)
-    legacy = oqp_input.lower_to_legacy(spec, source_dir=example_dir)
+def test_minimal_dftb_family_inputs_parse(text, expected_model, expected_type):
+    spec, legacy = _parse(text)
 
     assert spec.model == expected_model
     assert legacy["input"]["method"] == "dftb"
