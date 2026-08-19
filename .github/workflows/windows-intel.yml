@@ -75,8 +75,13 @@ jobs:
           FC: ifx
           CMAKE_GENERATOR: Ninja
           CMAKE_BUILD_PARALLEL_LEVEL: 4
+          # Windows caps object-file paths at 250 characters; keep the build
+          # tree and the reusable externals cache near the drive root.
+          OQP_EXTERNALS_ROOT: C:\oqpx
         run: |
+          New-Item -ItemType Directory -Force -Path C:\oqpx, C:\oqpb | Out-Null
           python -m pip install -v . --no-build-isolation `
+            --config-settings=build-dir=C:\oqpb `
             --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
             --config-settings=cmake.define.ENABLE_MPI=OFF `
             --config-settings=cmake.define.ENABLE_OPENMP=ON `

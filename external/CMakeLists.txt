@@ -91,6 +91,16 @@ if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
 endif()
 set(_OQP_DFTD4_CACHE_KEY
     "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
+if(WIN32)
+  # Windows caps a full object-file path at 250 characters
+  # (CMAKE_OBJECT_PATH_MAX); the descriptive key above pushes the nested
+  # ExternalProject scratch directories past it, and CMake then fails to even
+  # identify the Fortran compiler.  Hash it, exactly as the outer externals
+  # key is hashed a few lines above.
+  string(MD5 _OQP_DFTD4_CACHE_KEY_HASH "${_OQP_DFTD4_CACHE_KEY}")
+  string(SUBSTRING "${_OQP_DFTD4_CACHE_KEY_HASH}" 0 12 _OQP_DFTD4_CACHE_KEY_HASH)
+  set(_OQP_DFTD4_CACHE_KEY "d4-${_OQP_DFTD4_CACHE_KEY_HASH}")
+endif()
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
