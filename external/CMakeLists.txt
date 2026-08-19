@@ -52,7 +52,6 @@ foreach(_oqp_d4_patch IN ITEMS "${DFTD4_MCTC_PATCH}" "${DFTD4_DFTD4_PATCH}")
         "Required DFT-D4 corresponding-source patch is missing: ${_oqp_d4_patch}")
   endif()
 endforeach()
-endif()  # ENABLE_DFTD4 (source-transformation prerequisites)
 file(SHA256 "${DFTD4_MCTC_PATCH}" DFTD4_MCTC_PATCH_SHA256)
 file(SHA256 "${DFTD4_DFTD4_PATCH}" DFTD4_DFTD4_PATCH_SHA256)
 set(DFTD4_MCTC_PATCH_SHA256 "${DFTD4_MCTC_PATCH_SHA256}"
@@ -70,6 +69,8 @@ set(_OQP_DFTD4_LINKAGE "shared")
 if(NOT BUILD_SHARED_LIBS)
   set(_OQP_DFTD4_LINKAGE "static")
 endif()
+endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
+
 set(_OQP_EXTERNALS_VERSION_KEY
     "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
@@ -91,8 +92,10 @@ if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # $NEWLAPACK$ILP64 symbols, not its classic LP64 Fortran entry points.
   set(_OQP_DFTD4_BLAS_ABI_KEY "-accel-ilp64-alias1")
 endif()
+if(ENABLE_DFTD4)
 set(_OQP_DFTD4_CACHE_KEY
     "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
+endif()  # ENABLE_DFTD4
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
