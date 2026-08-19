@@ -239,6 +239,11 @@ PRIMARY_ALIASES = {
 # has one deterministic spelling for every accepted form.
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 
+# Modifiers that lower to no configuration at all: Hessian workflows always
+# compute IR and Raman intensities, so ``ir``/``raman`` only record the user's
+# intent.  Canonical rendering keeps them verbatim.
+INTENT_ONLY_MODIFIERS = {"ir", "raman"}
+
 SECTION_NAMES = {
     "input", "d4", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
@@ -2972,10 +2977,15 @@ def strip_default_options(spec: CalculationSpec) -> CalculationSpec:
         if accept(candidate):
             current = candidate
 
-    # Modifier calls: first the whole call, then each keyword.
+    # Modifier calls: first the whole call, then each keyword.  Intent-only
+    # modifiers lower to nothing on purpose and are kept to document the
+    # requested analysis, so they are never candidates for removal.
     index = 0
     while index < len(current.modifiers):
         call = current.modifiers[index]
+        if call.name in INTENT_ONLY_MODIFIERS:
+            index += 1
+            continue
         without = current.modifiers[:index] + current.modifiers[index + 1:]
         candidate = CalculationSpec(
             current.model, current.functional, current.basis, current.model_options,

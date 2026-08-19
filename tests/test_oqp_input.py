@@ -256,6 +256,20 @@ def test_explicit_bare_energy_renders_as_the_same_implicit_default():
     )
 
 
+def test_intent_only_ir_raman_modifiers_survive_canonical_rendering():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="h2o.xyz" hess(S0,type=analytical) ir raman'
+    )
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert rendered == (
+        "dft/pbe0/def2-svp hess(S0,type=analytical) ir raman\n"
+        'geom="h2o.xyz"\n'
+    )
+    assert oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp(rendered)
+    ) == rendered
+
+
 def test_energy_state_selector_is_not_dropped():
     spec, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" energy(T0)'
