@@ -84,15 +84,26 @@ jobs:
                            'libintlc*.dll','libimalloc*.dll') {
             $dlls += Get-ChildItem -Path "$env:CMPLR_ROOT" -Filter $pat -Recurse -ErrorAction SilentlyContinue
           }
-          # Every MKL runtime DLL: the interface/threading/core trio plus the
-          # per-ISA kernels MKL dispatches to at run time.
-          $dlls += Get-ChildItem -Path "$env:MKLROOT" -Filter "mkl_*.dll" -Recurse -ErrorAction SilentlyContinue
+          # MKL: the interface/threading/core trio and the per-ISA kernels it
+          # dispatches to at run time.  Everything OpenQP never calls -- SYCL
+          # offload, ScaLAPACK/BLACS/CDFT (no MPI here), the TBB and sequential
+          # threading layers, the PGI and F95 shims -- is left out; keeping them
+          # would roughly triple the download for no benefit.
+          $mklSkip = 'mkl_sycl','mkl_scalapack','mkl_blacs','mkl_cdft','mkl_pgi',
+                     'mkl_tbb_thread','mkl_sequential','mkl_lapack95','mkl_blas95'
+          $dlls += Get-ChildItem -Path "$env:MKLROOT" -Filter "mkl_*.dll" -Recurse -ErrorAction SilentlyContinue |
+                   Where-Object { $n = $_.Name; -not ($mklSkip | Where-Object { $n -like "$_*" }) }
           $dlls = $dlls | Sort-Object FullName -Unique
           if (-not $dlls) { throw "no runtime DLLs discovered" }
           Write-Host ("discovered {0} DLLs, {1:N0} MB" -f $dlls.Count, (($dlls | Measure-Object Length -Sum).Sum/1MB))
-          $dlls | ForEach-Object { Write-Host "  $($_.Name)" }
-          foreach ($n in 'liboqp.dll','dftd4.dll','mkl_core.2.dll') {
-            if (-not ($dlls.Name -contains $n)) { throw "required DLL missing from the bundle: $n" }
+          $dlls | ForEach-Object { Write-Host ("  {0,-32} {1,8:N1} MB" -f $_.Name, ($_.Length/1MB)) }
+          # Version-agnostic: MKL suffixes its DLLs with a major version that
+          # changes between releases (mkl_core.2.dll -> mkl_core.3.dll).
+          foreach ($pat in 'liboqp.dll','dftd4.dll','mctc-lib.dll','multicharge.dll',
+                           'mkl_core.*.dll','mkl_intel_thread.*.dll','libifcoremd.dll') {
+            if (-not ($dlls.Name | Where-Object { $_ -like $pat })) {
+              throw "required DLL missing from the bundle: $pat"
+            }
           }
 
           $addBin = $dlls | ForEach-Object { "--add-binary=`"$($_.FullName);oqp/lib`"" }
