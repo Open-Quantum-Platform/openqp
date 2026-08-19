@@ -26,9 +26,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Cache oneAPI install
+      - name: Restore oneAPI install from cache
         id: oneapi-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: C:\Program Files (x86)\Intel\oneAPI
           key: oneapi-win-${{ env.ONEAPI_URL }}-${{ env.ONEAPI_COMPONENTS }}-v1
@@ -43,6 +43,14 @@ jobs:
           rd /s /q %RUNNER_TEMP%\oneapi_ex
           dir "C:\Program Files (x86)\Intel\oneAPI"
           exit /b %rc%
+      - name: Save oneAPI install to cache
+        # Save right after a successful install, regardless of how the build
+        # goes later, so the next run never re-downloads the toolkit.
+        if: steps.oneapi-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:\Program Files (x86)\Intel\oneAPI
+          key: oneapi-win-${{ env.ONEAPI_URL }}-${{ env.ONEAPI_COMPONENTS }}-v1
       - name: Export oneAPI + MSVC environment
         shell: cmd
         run: |
