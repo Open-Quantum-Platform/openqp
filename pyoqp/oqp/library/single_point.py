@@ -131,6 +131,7 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 #: which is the numerical half of the same set.
 PT2_GRAD_METHODS = frozenset({
     'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
 import oqp.utils.qmmm as qmmm
@@ -162,6 +163,7 @@ SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
     'hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
     'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
     'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 }
 
@@ -667,6 +669,7 @@ class SinglePoint(Calculator):
                 energies = CASSCF(self.mol).energy(ref_energy)
             elif _normalized_method_label(self.method) in {
                 'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'nevpt2', 'sc-nevpt2', 'scnevpt2',
                 'mrmp2', 'mcqdpt2', 'xmcqdpt2'
             }:
                 from oqp.library.caspt2_dyall import native_caspt2_energy
@@ -1466,16 +1469,17 @@ class Gradient(Calculator):
 
         from oqp.library.caspt2_dyall import _caspt2_options
         from oqp.library.nevpt2_gradient import (
+            OTHER_ROUTE,
             SCNEVPT2NotApplicable,
             consume_sc_nevpt2_gradient,
-            is_sc_nevpt2_configuration,
             sc_nevpt2_gradient_route,
         )
 
-        # Decline by CONFIGURATION before consulting the route; see
-        # is_sc_nevpt2_configuration() for why probing it would kill every
-        # `h0=fock` + `gradient=analytic` run with an SC-NEVPT2 refusal.
-        if not is_sc_nevpt2_configuration(self.mol.config):
+        route, reason = sc_nevpt2_gradient_route(self.mol)
+        if route == OTHER_ROUTE:
+            # Another PT2 derivative's calculation.  Silent: this is not a
+            # refusal, and announcing one would put an SC-NEVPT2 message in
+            # the log of every analytic CASPT2 run.
             return None
         options = _caspt2_options(self.mol.config)
 
@@ -1489,7 +1493,6 @@ class Gradient(Calculator):
             dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
             return cached
 
-        route, reason = sc_nevpt2_gradient_route(self.mol)
         if route != 'analytic':
             # Say WHY before handing the run on.  The reason is often the only
             # record that an analytic derivative was attempted and declined --

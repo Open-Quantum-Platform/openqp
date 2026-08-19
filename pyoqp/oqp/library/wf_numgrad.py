@@ -61,6 +61,7 @@ CASSCF_NUMGRAD_METHODS = frozenset({
 })
 PT2_NUMGRAD_METHODS = frozenset({
     'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
 WF_NUMGRAD_METHODS = CASSCF_NUMGRAD_METHODS | PT2_NUMGRAD_METHODS
