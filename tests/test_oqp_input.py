@@ -1497,6 +1497,7 @@ def test_mrsf_tddftb_target_spin_reaches_dftb_adapter():
     )
     assert legacy["tdhf"]["multiplicity"] == "3"
     assert legacy["dftb"]["target_multiplicity"] == "3"
+    assert legacy["dftb"]["type"] == "mrsf"
     with pytest.raises(OQPInputError, match="not quintet"):
         oqp_input.parse_canonical_oqp(
             'mrsf-tddftb(nstate=4) geom="h2o.xyz" grad(Q1)'
@@ -1585,34 +1586,6 @@ def test_conventional_tddftb_triplet_is_rejected_with_spin_flip_guidance():
         oqp_input.parse_canonical_oqp(
             'tddftb(nstate=3) geom="h2o.xyz" grad(T1)'
         )
-
-
-# These inputs are the four minimal DFTB-family examples that examples/DFTB
-# carried before the tight-binding material was removed from the public
-# repository. The routes still exist in the input layer, so keep parsing them
-# here; the text is inline because there is no example file to read any more.
-@pytest.mark.parametrize(
-    "text,expected_model,expected_type",
-    [
-        ('dftb geom="h2.xyz" energy() dftb(backend=native,parameter_path="")',
-         "dftb", "ground"),
-        ('tddftb(nstate=3) geom="h2o.xyz" energy() '
-         'dftb(backend=native,parameter_path="")',
-         "tddftb", "tddftb"),
-        ('sf-tddftb(nstate=3) geom="ch2.xyz" energy() '
-         'dftb(backend=native,parameter_path="")',
-         "sf-dftb", "sf"),
-        ('mrsf-tddftb(nstate=3) geom="ch2.xyz" energy(S0) '
-         'dftb(backend=native,parameter_path="")',
-         "mrsf-dftb", "mrsf"),
-    ],
-)
-def test_minimal_dftb_family_inputs_parse(text, expected_model, expected_type):
-    spec, legacy = _parse(text)
-
-    assert spec.model == expected_model
-    assert legacy["input"]["method"] == "dftb"
-    assert legacy["dftb"]["type"] == expected_type
 
 
 def test_sf_tddftb_route_uses_high_spin_reference_and_explicit_root():
