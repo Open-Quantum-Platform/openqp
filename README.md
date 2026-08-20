@@ -92,54 +92,28 @@ is also available.
 
 #### Windows
 
-Download **`openqp-<version>-windows-x86_64.zip`** from the
-[latest release](https://github.com/Open-Quantum-Platform/openqp/releases/latest),
-unzip it anywhere, and run:
-
-```bat
-openqp.exe examples\HF\H2O_RHF-HF_ENERGY.inp
+```bash
+pip install openqp
 ```
 
-Nothing else to install: the archive carries its own Python, Intel Fortran
-runtime, Intel MKL and the basis-set data, and reads no system installation of
-them. Set `OMP_NUM_THREADS` to the number of physical cores for parallel runs.
+pip pulls in Intel MKL alongside the wheel; nothing else to install. Windows
+wheels are built with Intel oneAPI (ifx/icx) against MKL ILP64.
 
-To use OpenQP as a Python library on Windows instead (`import oqp`), install
-the wheel with `pip install openqp` — pip pulls in Intel MKL alongside it.
+#### Standalone builds (no Python required)
 
-#### Standalone macOS build
-
-`openqp-<version>-macos-arm64.zip` and `openqp-<version>-macos-x86_64.zip` on
-the same [release page](https://github.com/Open-Quantum-Platform/openqp/releases/latest)
-are the equivalent for macOS — unzip and run, with no Python or compiler
-installed:
+Self-contained archives for Windows, macOS and Linux — unzip and run, with no
+Python, compiler or BLAS on the machine — are produced and published by
+[OQP Studio](https://github.com/Open-Quantum-Platform/oqp-studio), which
+rebuilds them weekly from OpenQP's latest release tag and ships them with the
+desktop application:
 
 ```bash
 ./openqp examples/HF/H2O_RHF-HF_ENERGY.inp
 ```
 
-They are much smaller than the Windows archive because linear algebra uses
-Apple Accelerate, which is part of macOS. If Gatekeeper blocks the download,
-clear the quarantine flag once with
-`xattr -dr com.apple.quarantine /path/to/openqp`.
-
-#### Standalone Linux build
-
-`openqp-<version>-linux-x86_64.tar.gz` and `openqp-<version>-linux-aarch64.tar.gz`
-complete the set:
-
-```bash
-tar xf openqp-*-linux-x86_64.tar.gz && cd openqp
-./openqp examples/HF/H2O_RHF-HF_ENERGY.inp
-```
-
-Built inside `manylinux_2_28`, so they run on any distribution with glibc 2.28
-or newer (RHEL/Rocky 8 and later) — useful on clusters where pip is not an
-option. Linear algebra is a bundled ILP64 OpenBLAS with runtime CPU dispatch.
-
-`pip install openqp` remains the usual route on macOS and Linux; the archives
-exist for machines without a Python environment and for embedding in other
-applications.
+`pip install openqp` remains the usual route when a Python environment is
+available; the archives exist for machines without one, for clusters where pip
+is not an option, and for embedding in other applications.
 
 ### Quick Start
 
