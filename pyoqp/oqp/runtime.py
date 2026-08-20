@@ -59,6 +59,11 @@ def library_path(root, suffix=None):
     return None
 
 
+# Held for the lifetime of the process: each entry is an
+# os.add_dll_directory() handle whose closure undoes the registration.
+_DLL_DIRECTORY_HANDLES = []
+
+
 def _register_dll_directory(directory):
     """On Windows, make liboqp's own directory and the directories on PATH
     searchable for liboqp's dependent DLLs (the bundled DFT-D4 libraries next
@@ -82,7 +87,11 @@ def _register_dll_directory(directory):
         if entry and entry not in seen and os.path.isdir(entry):
             seen.add(entry)
             try:
-                os.add_dll_directory(entry)
+                # Keep the handle: closing it removes the directory from the
+                # search path again, and a discarded one can be collected
+                # before ffi.dlopen() runs -- which would leave liboqp.dll
+                # unable to find the DFT-D4 DLLs or MKL, at import time.
+                _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(entry))
             except OSError:
                 pass
 

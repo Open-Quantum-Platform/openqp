@@ -207,7 +207,15 @@ class RuntimeRootResolutionTests(unittest.TestCase):
             "!contains(github.event.pull_request.labels.*.name, 'release')",
             source,
         )
-        self.assertNotIn("OQP_EXTERNALS_ROOT", source)
+        # The point is that the PR smoke job reuses the standard cached
+        # externals rather than redirecting them somewhere of its own.  Scope
+        # the check to that job: the Windows matrix leg does set an externals
+        # root, to keep nested ExternalProject paths under the 250-character
+        # object-path limit, and it has nothing to do with this policy.
+        smoke_section = source[
+            source.index("  build_wheel_smoke:"):source.index("  build_wheels:")
+        ]
+        self.assertNotIn("OQP_EXTERNALS_ROOT", smoke_section)
         self.assertIn("CIBW_BUILD: \"cp311-*\"", source)
         self.assertIn("path: .cache/openqp/externals", source)
         self.assertIn("XDG_CACHE_HOME=/host-cache", source)

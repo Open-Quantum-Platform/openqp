@@ -552,9 +552,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
-          # windows-x86_64 is built but not yet required: the DFT-D4
-          # subprojects still need the OpenBLAS import library forwarded to
-          # them on Windows (see the experimental leg in build_wheels).
+          # windows-x86_64 is recognized but not required: its leg is still
+          # marked experimental, so a release must not block on it.  Windows
+          # wheels that ARE produced still have to pass every check below --
+          # naming, interpreter tags, duplicates -- rather than crashing the
+          # verifier as an unexpected platform.
           expected_platform_tags = {
               "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
           }
@@ -571,6 +573,8 @@ jobs:
                   platform = "macos-x86_64"
               elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
                   platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
               else:
                   raise SystemExit(f"{wheel.name}: unexpected platform tag")
               return python_tag, platform
@@ -855,9 +859,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
-          # windows-x86_64 is built but not yet required: the DFT-D4
-          # subprojects still need the OpenBLAS import library forwarded to
-          # them on Windows (see the experimental leg in build_wheels).
+          # windows-x86_64 is recognized but not required: its leg is still
+          # marked experimental, so a release must not block on it.  Windows
+          # wheels that ARE produced still have to pass every check below --
+          # naming, interpreter tags, duplicates -- rather than crashing the
+          # verifier as an unexpected platform.
           expected_platform_tags = {
               "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
           }
@@ -874,6 +880,8 @@ jobs:
                   platform = "macos-x86_64"
               elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
                   platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
               else:
                   raise SystemExit(f"{wheel.name}: unexpected platform tag")
               return python_tag, platform
