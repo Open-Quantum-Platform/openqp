@@ -107,6 +107,26 @@ them. Set `OMP_NUM_THREADS` to the number of physical cores for parallel runs.
 To use OpenQP as a Python library on Windows instead (`import oqp`), install
 the wheel with `pip install openqp` — pip pulls in Intel MKL alongside it.
 
+#### Standalone macOS build
+
+`openqp-<version>-macos-arm64.zip` and `openqp-<version>-macos-x86_64.zip` on
+the same [release page](https://github.com/Open-Quantum-Platform/openqp/releases/latest)
+are the equivalent for macOS — unzip and run, with no Python or compiler
+installed:
+
+```bash
+./openqp examples/HF/H2O_RHF-HF_ENERGY.inp
+```
+
+They are much smaller than the Windows archive because linear algebra uses
+Apple Accelerate, which is part of macOS. If Gatekeeper blocks the download,
+clear the quarantine flag once with
+`xattr -dr com.apple.quarantine /path/to/openqp`.
+
+On macOS and Linux `pip install openqp` remains the usual route; the archives
+exist for machines without a Python environment and for embedding in other
+applications.
+
 ### Quick Start
 
 ```bash
