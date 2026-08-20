@@ -55,6 +55,7 @@ def library_path(root, suffix=None):
         candidate = directory / f"liboqp.{suffix}"
         if candidate.is_file():
             _register_dll_directory(directory)
+            _preload_package_dlls(directory)
             return candidate
     return None
 
@@ -62,6 +63,37 @@ def library_path(root, suffix=None):
 # Held for the lifetime of the process: each entry is an
 # os.add_dll_directory() handle whose closure undoes the registration.
 _DLL_DIRECTORY_HANDLES = []
+
+# Likewise for the preloaded package DLLs -- dropping the last reference
+# would let the loader unload them again.
+_PRELOADED_DLLS = []
+
+
+def _preload_package_dlls(directory):
+    """Load the package's own DFT-D4 DLLs, by absolute path, before liboqp.
+
+    Windows leaves the search order among directories added with
+    AddDllDirectory undefined, so registering the package directory does not
+    guarantee it beats a `dftd4.dll` that happens to sit somewhere on PATH --
+    which would mean an ABI mismatch, or silently running a different
+    dispersion implementation.  Loading ours first settles it: the loader
+    resolves liboqp's imports against the module already loaded under that
+    base name.  Dependency order, so each is satisfied from this directory
+    too.
+    """
+    if platform.uname()[0] != "Windows":
+        return
+    import ctypes
+
+    for name in ("mctc-lib.dll", "multicharge.dll", "dftd4.dll"):
+        dll = os.path.join(str(directory), name)
+        if os.path.isfile(dll):
+            try:
+                _PRELOADED_DLLS.append(ctypes.WinDLL(dll))
+            except OSError:
+                # Absent or unloadable: liboqp's own load will report it
+                # properly, and an ENABLE_DFTD4=OFF build has none of these.
+                pass
 
 
 def _register_dll_directory(directory):

@@ -39,7 +39,14 @@ dependencies = [
   # alongside; pyoqp/oqp/runtime.py adds its DLL directory to the search path.
   # `mkl` pulls in `intel-openmp`, which supplies the single libiomp5md the
   # process should have.
-  'mkl>=2023.0; sys_platform == "win32"',
+  # Pinned to the oneAPI series the wheel is COMPILED against
+  # (.github/actions/setup-oneapi-windows).  MKL embeds versioned DLL names in
+  # its import libraries -- liboqp.dll references mkl_core.2.dll and friends,
+  # and those names change between releases -- so an older runtime that
+  # satisfies a loose lower bound can leave liboqp unable to load.  CI has only
+  # ever resolved and tested mkl 2026.1.  Bump this together with the oneAPI
+  # version in the Windows workflows.
+  'mkl>=2026.1,<2027; sys_platform == "win32"',
 ]
 
 [project.optional-dependencies]
