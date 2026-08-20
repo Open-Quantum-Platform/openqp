@@ -129,6 +129,9 @@ jobs:
 
       - name: Add the data tree and a README
         run: |
+          $ver = python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
+          "OQP_VERSION=$ver" >> $env:GITHUB_ENV
+          $env:OQP_VERSION = $ver
           $root = "C:\oqpdist\openqp"
           # `import oqp` prints "Failed to import mpi4py" to stdout on a non-MPI
           # build, so take only the last line -- the path.
@@ -157,8 +160,14 @@ jobs:
             'installation of them.'
             ''
             'Built with Intel oneAPI ifx/icx 2026.1 and Intel MKL (ILP64).'
+            ''
+            "OpenQP version : $env:OQP_VERSION"
+            "Commit         : $env:GITHUB_SHA"
+            "Built          : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') UTC"
+            "Workflow run   : $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           )
           $readme | Set-Content -Encoding UTF8 "$root\README.txt"
+          Get-Content "$root\README.txt" | Select-Object -Last 5
 
       - name: Smoke test the bundle in a clean shell
         run: |
@@ -179,8 +188,17 @@ jobs:
 
       - name: Zip the bundle
         run: |
-          $ver = python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
-          $zip = "openqp-$ver-windows-x86_64.zip"
+          $ver = $env:OQP_VERSION
+          # A release asset gets the plain, citable name.  Every other build --
+          # the weekly run, a manual one -- carries the commit, because
+          # otherwise three different archives share one filename and nobody
+          # can tell which is which after downloading.
+          if ("${{ github.event_name }}" -eq "release") {
+            $zip = "openqp-$ver-windows-x86_64.zip"
+          } else {
+            $sha = "${{ github.sha }}".Substring(0, 7)
+            $zip = "openqp-$ver+g$sha-windows-x86_64.zip"
+          }
           Compress-Archive -Path C:\oqpdist\openqp\* -DestinationPath $zip -CompressionLevel Optimal
           "BUNDLE_ZIP=$zip" >> $env:GITHUB_ENV
           Get-Item $zip | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
