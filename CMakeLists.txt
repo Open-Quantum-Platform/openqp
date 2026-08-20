@@ -250,6 +250,16 @@ if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
   # CMAKE_Fortran_FLAGS rather than add_compile_options() so that
   # external/CMakeLists.txt forwards it to the DFT-D4 subprojects too.
   string(APPEND CMAKE_Fortran_FLAGS " /libs:dll /threads")
+
+  # Fortran symbol naming must match the BLAS being linked.  Intel Fortran on
+  # Windows emits UPPERCASE names with no trailing underscore, which is what
+  # MKL's Windows libraries export.  OpenBLAS keeps the Unix convention
+  # (`dgemm_`) even on Windows, so a build against it must switch, or every
+  # BLAS/LAPACK call goes unresolved -- including the ones inside the DFT-D4
+  # stack, which is built from these same flags.
+  if(LINALG_LIB STREQUAL OpenBLAS)
+    string(APPEND CMAKE_Fortran_FLAGS " /names:lowercase /assume:underscore")
+  endif()
 endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
