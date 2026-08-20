@@ -30,6 +30,7 @@ set(_OQP_DFTD4_SHA256
     "f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c")
 set(_OQP_DFTD4_COMPLIANCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/dftd4-corresponding-source")
+if(ENABLE_DFTD4)
 find_program(OQP_DFTD4_PATCH_EXECUTABLE NAMES patch)
 if(NOT OQP_DFTD4_PATCH_EXECUTABLE
    OR NOT EXISTS "${OQP_DFTD4_PATCH_EXECUTABLE}")
@@ -68,6 +69,8 @@ set(_OQP_DFTD4_LINKAGE "shared")
 if(NOT BUILD_SHARED_LIBS)
   set(_OQP_DFTD4_LINKAGE "static")
 endif()
+endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
+
 set(_OQP_EXTERNALS_VERSION_KEY
     "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
@@ -89,8 +92,19 @@ if(APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # $NEWLAPACK$ILP64 symbols, not its classic LP64 Fortran entry points.
   set(_OQP_DFTD4_BLAS_ABI_KEY "-accel-ilp64-alias1")
 endif()
+if(ENABLE_DFTD4)
 set(_OQP_DFTD4_CACHE_KEY
     "d4stack-${_OQP_DFTD4_LINKAGE}1-rpathclean1-mctc${_OQP_MCTC_LIB_VERSION}-mc${_OQP_MULTICHARGE_VERSION}-d4${_OQP_DFTD4_VERSION}-omp${ENABLE_OPENMP}-patch${_OQP_DFTD4_PATCHSET_KEY}${_OQP_DFTD4_BLAS_ABI_KEY}${_OQP_DFTD4_PLATFORM_KEY}")
+if(WIN32)
+  # Windows caps a full object-file path at 250 characters
+  # (CMAKE_OBJECT_PATH_MAX).  The descriptive key above pushes the nested
+  # ExternalProject scratch directories past it, and CMake then fails even to
+  # identify the Fortran compiler.  Hash it, as the outer externals key is.
+  string(MD5 _OQP_DFTD4_CACHE_KEY_HASH "${_OQP_DFTD4_CACHE_KEY}")
+  string(SUBSTRING "${_OQP_DFTD4_CACHE_KEY_HASH}" 0 12 _OQP_DFTD4_CACHE_KEY_HASH)
+  set(_OQP_DFTD4_CACHE_KEY "d4-${_OQP_DFTD4_CACHE_KEY_HASH}")
+endif()
+endif()  # ENABLE_DFTD4
 
 set(OQP_EXTERNAL_GENERATOR_ARGS
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
@@ -760,6 +774,7 @@ endif()
 
 
 # ---------------------------------------------------------------------------
+if(ENABLE_DFTD4)
 # DFT-D4 dispersion (native): mctc-lib -> multicharge -> dftd4.
 # Replaces the former `dftd4` Python (cffi) package. All three install into one
 # prefix so dftd4 finds its deps via find_package().  Normal shared OpenQP
@@ -801,14 +816,25 @@ if(APPLE)
 elseif(UNIX)
     set(DFTD4_ORIGIN_RPATH "$ORIGIN")
 else()
-    message(FATAL_ERROR
-        "The replaceable DFT-D4 shared-library stack is currently supported "
-        "only on Linux and macOS.")
+    # Windows: no RPATH.  The three DLLs are installed next to liboqp.dll and
+    # found through the DLL search path (pyoqp/oqp/runtime.py registers that
+    # directory with os.add_dll_directory), so there is nothing to embed.
+    set(DFTD4_ORIGIN_RPATH "")
 endif()
 set(DFTD4_COMMON_ARGS
         -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
         -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
         -DCMAKE_INSTALL_LIBDIR=lib
+        # Windows installs a shared library's DLL under BINDIR and only its
+        # import library under LIBDIR.  Point both at lib/ so the DLLs land
+        # beside the .lib files and every DFTD4_*_LIB path stays valid.
+        -DCMAKE_INSTALL_BINDIR=lib
+        # Only dftd4's own sources carry `!DEC$ ATTRIBUTES DLLEXPORT`; the
+        # mctc-lib and multicharge Fortran modules export nothing, so MSVC
+        # produced a DLL with no import library at all and the link died with
+        # "cannot open input file 'mctc-lib.lib'".  Let CMake generate the
+        # export table from the objects instead.  Ignored on ELF/Mach-O.
+        -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DWITH_TESTS=OFF
@@ -879,7 +905,11 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
-if(BUILD_SHARED_LIBS)
+if(BUILD_SHARED_LIBS AND WIN32)
+    # What liboqp LINKS against on Windows is the import library, not the DLL.
+    set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_IMPORT_LIBRARY_PREFIX}")
+    set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+elseif(BUILD_SHARED_LIBS)
     set(_OQP_DFTD4_LIBRARY_PREFIX "${CMAKE_SHARED_LIBRARY_PREFIX}")
     set(_OQP_DFTD4_LIBRARY_SUFFIX "${CMAKE_SHARED_LIBRARY_SUFFIX}")
 else()
@@ -919,6 +949,22 @@ if(NOT BUILD_SHARED_LIBS)
         CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_NAME" FORCE)
     set(DFTD4_DFTD4_RUNTIME_NAME
         "${CMAKE_STATIC_LIBRARY_PREFIX}dftd4${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
+elseif(WIN32)
+    # A Windows DLL has no version suffix and no SONAME; build artifact and
+    # runtime name are the same file.  mctc-lib, multicharge and dftd4 all
+    # install(TARGETS) with only ARCHIVE/LIBRARY destinations, so on Windows
+    # CMake installs their import libraries and NOT the DLLs -- take the DLLs
+    # from the build tree instead.  (Set after the ExternalProjects below have
+    # published *_BUILD_DIR; see oqp_windows_dftd4_runtime_paths().)
+    set(DFTD4_MCTC_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MCTC_RUNTIME_NAME" FORCE)
+    set(DFTD4_MULTICHARGE_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_NAME" FORCE)
+    set(DFTD4_DFTD4_RUNTIME_NAME
+        "${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 elseif(APPLE)
     set(DFTD4_MCTC_RUNTIME_SOURCE
@@ -960,6 +1006,43 @@ else()
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 endif()
 
+# Resolve every source/build/stamp path, and on Windows the DLL locations
+# that depend on them, BEFORE the artifact lists below.  oqp_reuse_or_build
+# validates a cache against those lists: if the DLL paths were still empty
+# here, a cache holding the import libraries and stamps but missing a DLL
+# would be accepted as complete, and the install would then fail copying a
+# file that was never built.
+oqp_set_external_paths(DFTD4_MCTC "${_OQP_DFTD4_CACHE_KEY}-mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_set_external_paths(DFTD4_MC "${_OQP_DFTD4_CACHE_KEY}-multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_set_external_paths(DFTD4_D4 "${_OQP_DFTD4_CACHE_KEY}-dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+if(WIN32 AND BUILD_SHARED_LIBS)
+  # The DLLs live at the top of each ExternalProject build directory.
+  set(DFTD4_MCTC_RUNTIME_SOURCE
+      "${DFTD4_MCTC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
+      "${DFTD4_MC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_DFTD4_RUNTIME_SOURCE
+      "${DFTD4_D4_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+endif()
+
 set(DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_LIB}")
 set(DFTD4_MULTICHARGE_ARTIFACTS "${DFTD4_MULTICHARGE_LIB}")
 set(DFTD4_DFTD4_ARTIFACTS "${DFTD4_DFTD4_LIB}")
@@ -978,12 +1061,6 @@ set(DFTD4_BUILD_INFO_FILE
 include("${_OQP_DFTD4_COMPLIANCE_DIR}/generate-build-info.cmake")
 oqp_generate_dftd4_build_info("${DFTD4_BUILD_INFO_FILE}")
 
-oqp_set_external_paths(DFTD4_MCTC "${_OQP_DFTD4_CACHE_KEY}-mctc-lib"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(mctc-lib
     ${DFTD4_MCTC_ARTIFACTS}
     "${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt"
@@ -1011,12 +1088,6 @@ ExternalProject_Add(mctc-lib
         )
 endif()
 
-oqp_set_external_paths(DFTD4_MC "${_OQP_DFTD4_CACHE_KEY}-multicharge"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(multicharge
     ${DFTD4_MULTICHARGE_ARTIFACTS}
     "${DFTD4_MC_SOURCE_DIR}/CMakeLists.txt"
@@ -1039,12 +1110,6 @@ ExternalProject_Add(multicharge
 add_dependencies(multicharge mctc-lib)
 endif()
 
-oqp_set_external_paths(DFTD4_D4 "${_OQP_DFTD4_CACHE_KEY}-dftd4"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(dftd4
     ${DFTD4_DFTD4_ARTIFACTS}
     ${DFTD4_MULTICHARGE_ARTIFACTS}
@@ -1086,6 +1151,9 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         add_dependencies(dftd4 LAPACK)
     endif()
 endif()
+
+
+endif()  # ENABLE_DFTD4
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
 

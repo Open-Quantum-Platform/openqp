@@ -248,7 +248,10 @@ def test_shared_stack_packaging_contract_is_declared():
     assert source.count('check_accelerate_aliases.cmake') >= 2
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)' in top_level
     assert 'set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)' not in top_level
-    assert 'if(BUILD_SHARED_LIBS)\n    add_test(NAME oqp_dftd4_dynamic_dependencies' in top_level
+    # The dependency check reads ELF/Mach-O load commands, so it is registered
+    # only where those exist and only when the backend is actually built.
+    assert ('if(BUILD_SHARED_LIBS AND ENABLE_DFTD4 AND NOT WIN32)\n'
+            '    add_test(NAME oqp_dftd4_dynamic_dependencies') in top_level
     d4_link = re.search(
         r'target_link_libraries\(oqp\s+'
         r'"\$<BUILD_INTERFACE:\$\{DFTD4_DFTD4_LIB\}>"'
@@ -260,7 +263,7 @@ def test_shared_stack_packaging_contract_is_declared():
     assert "DFTD4_MCTC_LIB" in d4_link.group(0)
     assert "DFTD4_MULTICHARGE_LIB" not in d4_link.group(0)
     static_branch = source[source.index("else()", d4_link.end()):]
-    static_branch = static_branch[:static_branch.index("if(BUILD_SHARED_LIBS AND APPLE")]
+    static_branch = static_branch[:static_branch.index("if(ENABLE_DFTD4 AND BUILD_SHARED_LIBS AND APPLE")]
     assert "if(LIBLAPACK AND NOT APPLE)" in static_branch
     assert "$<LINK_GROUP:RESCAN,${DFTD4_DFTD4_LIB},${DFTD4_MULTICHARGE_LIB},${DFTD4_MCTC_LIB},${LIBLAPACK},${LIBBLAS}>" in static_branch
     assert "$<LINK_GROUP:RESCAN,dftd4,multicharge,mctc-lib,lapack,blas>" in static_branch

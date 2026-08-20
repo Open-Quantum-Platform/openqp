@@ -54,8 +54,78 @@ def library_path(root, suffix=None):
     for directory in library_directories(root):
         candidate = directory / f"liboqp.{suffix}"
         if candidate.is_file():
+            _register_dll_directory(directory)
+            _preload_package_dlls(directory)
             return candidate
     return None
+
+
+# Held for the lifetime of the process: each entry is an
+# os.add_dll_directory() handle whose closure undoes the registration.
+_DLL_DIRECTORY_HANDLES = []
+
+# Likewise for the preloaded package DLLs -- dropping the last reference
+# would let the loader unload them again.
+_PRELOADED_DLLS = []
+
+
+def _preload_package_dlls(directory):
+    """Load the package's own DFT-D4 DLLs, by absolute path, before liboqp.
+
+    Windows leaves the search order among directories added with
+    AddDllDirectory undefined, so registering the package directory does not
+    guarantee it beats a `dftd4.dll` that happens to sit somewhere on PATH --
+    which would mean an ABI mismatch, or silently running a different
+    dispersion implementation.  Loading ours first settles it: the loader
+    resolves liboqp's imports against the module already loaded under that
+    base name.  Dependency order, so each is satisfied from this directory
+    too.
+    """
+    if platform.uname()[0] != "Windows":
+        return
+    import ctypes
+
+    for name in ("mctc-lib.dll", "multicharge.dll", "dftd4.dll"):
+        dll = os.path.join(str(directory), name)
+        if os.path.isfile(dll):
+            try:
+                _PRELOADED_DLLS.append(ctypes.WinDLL(dll))
+            except OSError:
+                # Absent or unloadable: liboqp's own load will report it
+                # properly, and an ENABLE_DFTD4=OFF build has none of these.
+                pass
+
+
+def _register_dll_directory(directory):
+    """On Windows, make liboqp's own directory and the directories on PATH
+    searchable for liboqp's dependent DLLs (the bundled DFT-D4 libraries next
+    to it, and the MKL / Intel runtime DLLs the user put on PATH).  Python 3.8+
+    no longer consults PATH for dependencies of a dlopen()ed DLL."""
+    if platform.uname()[0] != "Windows" or not hasattr(os, "add_dll_directory"):
+        return
+    # Intel publishes MKL as a wheel that drops its DLLs under
+    # <sys.prefix>/Library/bin, which is not on PATH.  Windows wheels link MKL
+    # without carrying it (see pyproject.toml), so that directory has to be
+    # searched or liboqp.dll fails to load.
+    import sys
+
+    extra = [
+        os.path.join(sys.prefix, "Library", "bin"),
+        os.path.join(sys.base_prefix, "Library", "bin"),
+    ]
+
+    seen = set()
+    for entry in [str(directory)] + extra + os.environ.get("PATH", "").split(os.pathsep):
+        if entry and entry not in seen and os.path.isdir(entry):
+            seen.add(entry)
+            try:
+                # Keep the handle: closing it removes the directory from the
+                # search path again, and a discarded one can be collected
+                # before ffi.dlopen() runs -- which would leave liboqp.dll
+                # unable to find the DFT-D4 DLLs or MKL, at import time.
+                _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(entry))
+            except OSError:
+                pass
 
 
 def _is_oqp_root(path, suffix):

@@ -37,6 +37,7 @@ name: Build and release distributions
     branches: [main]
     paths:
       - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
       - "CMakeLists.txt"
       - "CONTRIBUTING.md"
       - "LICENSE"
@@ -56,6 +57,7 @@ name: Build and release distributions
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
       - "CMakeLists.txt"
       - "CONTRIBUTING.md"
       - "LICENSE"
@@ -189,6 +191,10 @@ jobs:
           && contains(github.event.pull_request.labels.*.name, 'release'))
       || (github.event_name == 'workflow_dispatch' && inputs.action == 'build')
     runs-on: ${{ matrix.os }}
+    # The Windows leg is still being brought up (the DFT-D4 subprojects need
+    # the OpenBLAS import library forwarded to them there); let it report
+    # without failing a release.
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -292,6 +298,36 @@ jobs:
               delocate-wheel --require-archs {delocate_archs}
               -w {dest_dir} -v {wheel}
 
+          # Windows wheels: Intel oneAPI ifx/icx and MKL ILP64 -- the same
+          # combination the source build and the standalone zip use, and the
+          # one the Windows example suite passes on.  OpenBLAS is not an
+          # option here: built for Windows with this toolchain it exposes only
+          # its CBLAS entry points, so every Fortran BLAS call goes unresolved.
+          #
+          # MKL is too large for PyPI, so the wheel does not carry it: it is
+          # excluded from the repair and declared as the `mkl` runtime
+          # dependency instead (pyproject.toml), which pip installs alongside.
+          # The Intel Fortran runtime is small and IS bundled; libiomp5md is
+          # left to the `intel-openmp` package that `mkl` pulls in, so the
+          # process ends up with exactly one OpenMP runtime.
+          - name: windows-x86_64
+            os: windows-2025
+            platform: windows
+            archs: AMD64
+            cache_path: C:\oqpx
+            container_engine: "docker"
+            # Built in a dedicated, cached step below rather than here, so its
+            # log is legible and it is not repeated per interpreter.
+            before_all: ""
+            # Set in the step below instead: the compiler paths are only known
+            # once the oneAPI setup action has run, and cibuildwheel's build
+            # environment does not inherit its PATH.
+            environment: ""
+            repair: >-
+              delvewheel repair --add-path "{package}/oqp/lib"
+              --exclude "mkl_*.dll" --exclude "libiomp5md.dll"
+              -w {dest_dir} {wheel}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -309,6 +345,34 @@ jobs:
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
+
+      # Windows: the toolchain the wheels are compiled with, the pkg-config
+      # implementation the BLAS lookup needs, and the repair tool that bundles
+      # the runtime DLLs into the wheel.
+      - name: Set up Intel oneAPI (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        uses: ./.github/actions/setup-oneapi-windows
+
+      - name: Install delvewheel (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        run: python -m pip install --upgrade delvewheel
+
+      # oneAPI lives under "C:\Program Files (x86)\...".  Passing those paths
+      # through CIBW_ENVIRONMENT -> CMAKE_ARGS means two rounds of shell-style
+      # splitting, which turns them into "C:Program".  A toolchain file at a
+      # space-free path carries them verbatim instead.
+      - name: Write the Intel toolchain file (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\oqptc | Out-Null
+          $c = ($env:CMPLR_ROOT -replace '\\','/')
+          @(
+            "set(CMAKE_C_COMPILER       `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_CXX_COMPILER     `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_Fortran_COMPILER `"$c/bin/ifx.exe`" CACHE FILEPATH `"`")"
+          ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
+          Get-Content C:\oqptc\intel.cmake
 
       # Linux legs bind-mount the host cache into the build container (see the
       # smoke job); create the host dir runner-owned first. No-op on macOS.
@@ -332,6 +396,26 @@ jobs:
           # while a bare `import oqp` still succeeded).
           CIBW_TEST_COMMAND: >-
             python {project}/.github/scripts/wheel_smoke_test.py {project}
+          # The BLAS lookup asks pkg-config for the openblas64 module, so the
+          # per-interpreter build environment needs a pkg-config of its own
+          # (the one on the host is not on cibuildwheel's PATH).
+          CIBW_BEFORE_BUILD_WINDOWS: python -m pip install pkgconf
+          # Windows only.  CIBW_ENVIRONMENT_WINDOWS overrides CIBW_ENVIRONMENT
+          # for this platform, and unlike the matrix value it is evaluated
+          # after the oneAPI setup step, so ${{ env.CMPLR_ROOT }} is known.
+          # The compilers are given as absolute paths (forward slashes, which
+          # CMake accepts) because cibuildwheel's isolated build environment
+          # does not carry the toolchain's PATH.
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CMAKE_GENERATOR=Ninja
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
+            -DOQP_REUSE_EXTERNALS=ON
+            -DOQP_EXTERNALS_ROOT=C:/oqpx
+            -DLINALG_LIB=Intel10_64ilp
+            -DENABLE_MPI=OFF
+            -DUSE_LIBINT=OFF
+            -DENABLE_OPENTRAH=OFF
+            -DBUILD_TESTING=OFF"
         run: python -m cibuildwheel --output-dir dist
 
       - uses: actions/upload-artifact@v4
@@ -469,8 +553,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # Windows is a supported target, not a bonus: a release that is
+          # missing its wheels is incomplete, so require them like the rest.
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
           }
 
           def wheel_key(wheel):
@@ -485,6 +572,8 @@ jobs:
                   platform = "macos-x86_64"
               elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
                   platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
               else:
                   raise SystemExit(f"{wheel.name}: unexpected platform tag")
               return python_tag, platform
@@ -769,8 +858,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # Windows is a supported target, not a bonus: a release that is
+          # missing its wheels is incomplete, so require them like the rest.
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
           }
 
           def wheel_key(wheel):
@@ -785,6 +877,8 @@ jobs:
                   platform = "macos-x86_64"
               elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
                   platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
               else:
                   raise SystemExit(f"{wheel.name}: unexpected platform tag")
               return python_tag, platform

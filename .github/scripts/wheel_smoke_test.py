@@ -82,6 +82,19 @@ if sys.platform == "darwin":
     inspect_command = lambda path: ["otool", "-L", str(path)]
     rpath_command = lambda path: ["otool", "-l", str(path)]
     local_rpath = "@loader_path"
+elif sys.platform == "win32":
+    # Windows DLLs carry no SOVERSION, and there is no RPATH: dependent DLLs
+    # are found through the search path, which pyoqp/oqp/runtime.py primes with
+    # os.add_dll_directory.  The ELF/Mach-O dependency and rpath checks below
+    # have no counterpart, so this platform stops after the file checks.
+    d4_names = {
+        "dftd4": "dftd4.dll",
+        "multicharge": "multicharge.dll",
+        "mctc": "mctc-lib.dll",
+    }
+    inspect_command = None
+    rpath_command = None
+    local_rpath = None
 else:
     d4_names = {
         "dftd4": "libdftd4.so.3",
@@ -96,9 +109,22 @@ d4_paths = {name: libdir / filename for name, filename in d4_names.items()}
 for name, path in d4_paths.items():
     assert path.is_file(), f"missing package-local {name} shared library: {path}"
     assert not path.is_symlink(), f"wheel must contain a regular replaceable file: {path}"
-assert not list(libdir.glob("libdftd4.a")), "static libdftd4 archive leaked into wheel"
-assert not list(libdir.glob("libmulticharge.a")), "static multicharge archive leaked into wheel"
-assert not list(libdir.glob("libmctc-lib.a")), "static mctc-lib archive leaked into wheel"
+for stem in ("libdftd4", "libmulticharge", "libmctc-lib"):
+    assert not list(libdir.glob(f"{stem}.a")), f"static {stem} archive leaked into wheel"
+
+if sys.platform == "win32":
+    # MKL is linked but deliberately not carried (see pyproject.toml): pip
+    # installs it as a dependency.  A wheel that shipped it would blow past
+    # PyPI's per-file limit, so assert it is absent rather than present.
+    stowaways = sorted(p.name for p in libdir.glob("mkl_*.dll"))
+    assert not stowaways, f"MKL must not ship inside the wheel: {stowaways}"
+    print("windows wheel: DFT-D4 DLLs present, MKL correctly left to pip")
+
+# Only the ELF/Mach-O metadata inspection is skipped on Windows -- PE carries
+# no SOVERSION and no RPATH, and there is no readelf/otool/nm to read.  Every
+# behavioural check below it, including the DFT-D4 numerical ABI, must run on
+# every platform: Windows wheels are a required release artifact, and a
+# missing entry point or a broken D4 ABI has to fail the gate here.
 
 liboqp_path = libdir / f"liboqp.{native_suffix}"
 
@@ -265,79 +291,84 @@ def assert_canonical_dependency_graph(
 
 
 assert liboqp_path.is_file(), f"missing package-local OpenQP library: {liboqp_path}"
-dependency_graph = {
-    liboqp_path: {"dftd4", "mctc"},
-    d4_paths["dftd4"]: {"multicharge", "mctc"},
-    d4_paths["multicharge"]: {"mctc"},
-    d4_paths["mctc"]: set(),
-}
-oqp_deps = ""
-dependencies_by_owner = {}
-for owner, required_edges in dependency_graph.items():
-    metadata = native_metadata(owner, inspect_command)
-    if owner == liboqp_path:
-        oqp_deps = metadata
-    dependencies = parse_dynamic_dependencies(metadata, sys.platform)
-    dependencies_by_owner[owner] = dependencies
-    assert_canonical_dependency_graph(
-        owner, dependencies, required_edges, d4_names, sys.platform
-    )
-
-# NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
-# the native dependency table and defined/undefined dynamic symbols so a stale
-# link or an accidentally retained call cannot pass the wheel gate.
-assert "nlopt" not in oqp_deps.lower(), (
-    f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
-)
-if sys.platform == "darwin":
-    symbol_commands = [
-        ["nm", "-gU", str(liboqp_path)],
-        ["nm", "-u", str(liboqp_path)],
-    ]
-else:
-    symbol_commands = [["nm", "-D", str(liboqp_path)]]
-symbol_text = "\n".join(
-    subprocess.run(command, check=True, capture_output=True, text=True).stdout
-    for command in symbol_commands
-)
-assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
-
-for path in (liboqp_path, *d4_paths.values()):
-    rpath_metadata = native_metadata(path, rpath_command)
-    assert_package_local_runtime_search_paths(
-        path, rpath_metadata, sys.platform, local_rpath,
-        dependencies_by_owner.get(path, ()),
-        # Containment boundary: delocate puts the repaired copies in
-        # oqp/.dylibs, a sibling of oqp/lib, so a legitimate
-        # "@loader_path/../.dylibs/x" must stay allowed while anything that
-        # climbs past the package must not.
-        package_root=oqp_root,
-    )
-
-# A repaired wheel must not retain a canonical file while secretly relinking to
-# an auditwheel/delocate hash copy in ``*.libs`` or ``.dylibs``.  Inspect the
-# complete installed artifact, not just oqp/lib.
-artifact_root = Path(oqp_root).parent
-stack_prefixes = {
-    "dftd4": "libdftd4",
-    "multicharge": "libmulticharge",
-    "mctc": "libmctc-lib",
-}
-for logical_name, prefix in stack_prefixes.items():
-    candidates = set()
-    for candidate in artifact_root.rglob(f"{prefix}*"):
-        filename = candidate.name
-        is_native = (
-            filename.endswith(".dylib") if sys.platform == "darwin"
-            else ".so" in filename
+# Everything from here to the DFT-D4 child test reads ELF/Mach-O metadata
+# with readelf/otool/nm.  PE has no SOVERSION and no RPATH, and none of
+# those tools exist on Windows, so this block alone is platform-specific.
+# The behavioural checks below it run everywhere.
+if sys.platform != "win32":
+    dependency_graph = {
+        liboqp_path: {"dftd4", "mctc"},
+        d4_paths["dftd4"]: {"multicharge", "mctc"},
+        d4_paths["multicharge"]: {"mctc"},
+        d4_paths["mctc"]: set(),
+    }
+    oqp_deps = ""
+    dependencies_by_owner = {}
+    for owner, required_edges in dependency_graph.items():
+        metadata = native_metadata(owner, inspect_command)
+        if owner == liboqp_path:
+            oqp_deps = metadata
+        dependencies = parse_dynamic_dependencies(metadata, sys.platform)
+        dependencies_by_owner[owner] = dependencies
+        assert_canonical_dependency_graph(
+            owner, dependencies, required_edges, d4_names, sys.platform
         )
-        if candidate.is_file() and is_native:
-            candidates.add(candidate.absolute())
-    expected = {d4_paths[logical_name].absolute()}
-    assert candidates == expected, (
-        f"installed wheel contains alternate {logical_name} binaries: "
-        f"{sorted(map(str, candidates))}; expected only {sorted(map(str, expected))}"
+
+    # NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
+    # the native dependency table and defined/undefined dynamic symbols so a stale
+    # link or an accidentally retained call cannot pass the wheel gate.
+    assert "nlopt" not in oqp_deps.lower(), (
+        f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
     )
+    if sys.platform == "darwin":
+        symbol_commands = [
+            ["nm", "-gU", str(liboqp_path)],
+            ["nm", "-u", str(liboqp_path)],
+        ]
+    else:
+        symbol_commands = [["nm", "-D", str(liboqp_path)]]
+    symbol_text = "\n".join(
+        subprocess.run(command, check=True, capture_output=True, text=True).stdout
+        for command in symbol_commands
+    )
+    assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
+
+    for path in (liboqp_path, *d4_paths.values()):
+        rpath_metadata = native_metadata(path, rpath_command)
+        assert_package_local_runtime_search_paths(
+            path, rpath_metadata, sys.platform, local_rpath,
+            dependencies_by_owner.get(path, ()),
+            # Containment boundary: delocate puts the repaired copies in
+            # oqp/.dylibs, a sibling of oqp/lib, so a legitimate
+            # "@loader_path/../.dylibs/x" must stay allowed while anything that
+            # climbs past the package must not.
+            package_root=oqp_root,
+        )
+
+    # A repaired wheel must not retain a canonical file while secretly relinking to
+    # an auditwheel/delocate hash copy in ``*.libs`` or ``.dylibs``.  Inspect the
+    # complete installed artifact, not just oqp/lib.
+    artifact_root = Path(oqp_root).parent
+    stack_prefixes = {
+        "dftd4": "libdftd4",
+        "multicharge": "libmulticharge",
+        "mctc": "libmctc-lib",
+    }
+    for logical_name, prefix in stack_prefixes.items():
+        candidates = set()
+        for candidate in artifact_root.rglob(f"{prefix}*"):
+            filename = candidate.name
+            is_native = (
+                filename.endswith(".dylib") if sys.platform == "darwin"
+                else ".so" in filename
+            )
+            if candidate.is_file() and is_native:
+                candidates.add(candidate.absolute())
+        expected = {d4_paths[logical_name].absolute()}
+        assert candidates == expected, (
+            f"installed wheel contains alternate {logical_name} binaries: "
+            f"{sorted(map(str, candidates))}; expected only {sorted(map(str, expected))}"
+        )
 
 
 D4_CHILD_MARKER = "OQP_D4_CHILD_RESULT="
@@ -374,6 +405,51 @@ if sys.platform == "darwin":
         value = dyld._dyld_get_image_name(index)
         if value:
             image_paths.append(value.decode("utf-8", errors="surrogateescape"))
+elif sys.platform == "win32":
+    # No /proc and no dyld: ask the loader which modules this process mapped.
+    # This is what proves the package-local DLLs won over any same-named copy
+    # elsewhere on PATH (pyoqp/oqp/runtime.py preloads them by absolute path).
+    import ctypes.wintypes
+
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # Declare the signatures.  Without a restype, ctypes treats the returned
+    # pseudo-handle as a C int and truncates (HANDLE)-1 to 32 bits, which the
+    # call then rejects with ERROR_INVALID_HANDLE.
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = ctypes.wintypes.HANDLE
+    psapi.EnumProcessModules.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.POINTER(ctypes.wintypes.HMODULE),
+        ctypes.wintypes.DWORD,
+        ctypes.POINTER(ctypes.wintypes.DWORD),
+    ]
+    psapi.EnumProcessModules.restype = ctypes.wintypes.BOOL
+    psapi.GetModuleFileNameExW.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HMODULE,
+        ctypes.wintypes.LPWSTR,
+        ctypes.wintypes.DWORD,
+    ]
+    psapi.GetModuleFileNameExW.restype = ctypes.wintypes.DWORD
+    process = kernel32.GetCurrentProcess()
+    capacity = 4096
+    modules = (ctypes.wintypes.HMODULE * capacity)()
+    needed = ctypes.wintypes.DWORD()
+    # Pass the array itself: ctypes converts an array of T to POINTER(T),
+    # whereas byref() of it is a pointer TO the array and does not match.
+    if not psapi.EnumProcessModules(
+        process, modules, ctypes.sizeof(modules), ctypes.byref(needed)
+    ):
+        raise AssertionError(
+            f"EnumProcessModules failed: {ctypes.get_last_error()}"
+        )
+    count = min(capacity, needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE))
+    name = ctypes.create_unicode_buffer(32768)
+    image_paths = []
+    for index in range(count):
+        if psapi.GetModuleFileNameExW(process, modules[index], name, len(name)):
+            image_paths.append(name.value)
 else:
     image_paths = []
     with open("/proc/self/maps", encoding="utf-8") as maps:
@@ -382,7 +458,11 @@ else:
             if len(fields) == 6 and fields[5].startswith("/"):
                 image_paths.append(fields[5].removesuffix(" (deleted)"))
 
-prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
+# Windows DLLs carry no "lib" prefix and no SOVERSION.
+if sys.platform == "win32":
+    prefixes = ("dftd4.dll", "multicharge.dll", "mctc-lib.dll")
+else:
+    prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
 loaded_stack = sorted({
     os.path.realpath(path) for path in image_paths
     if os.path.basename(path).startswith(prefixes)

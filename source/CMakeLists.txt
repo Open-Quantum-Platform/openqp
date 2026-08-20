@@ -9,6 +9,13 @@ if(NOT ENABLE_OPENTRAH)
   list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/otr_interface.F90")
 endif()
 
+# dftd4_interface.F90 is the bind(C) shim over the external DFT-D4 library;
+# drop it when the backend is disabled (see ENABLE_DFTD4 in the top-level
+# CMakeLists.txt).
+if(NOT ENABLE_DFTD4)
+  list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90")
+endif()
+
 add_subdirectory(io)
 add_subdirectory(mathlib)
 add_subdirectory(modules)
@@ -33,6 +40,18 @@ message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
+if(WIN32)
+  # The Python runtime (pyoqp/oqp/runtime.py) loads "liboqp.<suffix>" from the
+  # configured libdir on every platform.  On Windows CMake would otherwise
+  # produce "oqp.dll" and install it to bin/.  Symbols are not exported from a
+  # DLL by default; export them all so cffi's dlopen finds the C API.
+  set_target_properties(oqp PROPERTIES
+    PREFIX "lib"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_LIBDIR})
+else()
+  set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 add_dependencies(oqp libxc libtagarray libecpint)
 target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
 if(ENABLE_OPENTRAH)
@@ -42,6 +61,11 @@ if(ENABLE_OPENTRAH)
 endif()
 # dlsym() in mathlib/blas_thread_ctl.c
 target_link_libraries(oqp ${CMAKE_DL_LIBS})
+if(WIN32)
+  # routec_bridge/routec_sig reach their optional accelerator library through
+  # the platform dynamic loader; on Windows that is kernel32, not libdl.
+  target_compile_definitions(oqp PRIVATE OQP_DL_WIN32)
+endif()
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()
@@ -106,6 +130,7 @@ set_property(SOURCE ${SOURCES_mathlib_ilp64} APPEND PROPERTY COMPILE_DEFINITIONS
 # DFT-D4 dispersion (native, see external/CMakeLists.txt). dftd4_interface.F90
 # (globbed into SOURCES above) `use`s the dftd4/mctc-lib modules, so the module
 # dirs must be on the include path and the ExternalProjects must build first.
+if(ENABLE_DFTD4)
 add_dependencies(oqp dftd4)
 set(DFTD4_MODTAG ${CMAKE_Fortran_COMPILER_ID}-${CMAKE_Fortran_COMPILER_VERSION})
 target_include_directories(oqp PRIVATE
@@ -162,7 +187,8 @@ else()
   target_link_directories(oqp PUBLIC
           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}>")
 endif()
-if(BUILD_SHARED_LIBS AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
+endif()  # ENABLE_DFTD4
+if(ENABLE_DFTD4 AND BUILD_SHARED_LIBS AND APPLE AND _LINALG_LIB_TYPE STREQUAL "Accelerate_ILP64")
   # The DFT-D4 stack is linked in separate ExternalProjects.  Fail the OpenQP
   # build if either BLAS-using dylib retained a classic LP64 Accelerate symbol
   # despite declaring WITH_ILP64=ON.
@@ -183,22 +209,32 @@ if(APPLE)
 else()
   set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
-if(BUILD_SHARED_LIBS)
+# Whenever ANY bundled shared dependency is installed next to liboqp, not just
+# DFT-D4: ddX installs ${DDX_LIBRARY} into the same directory (see above), and
+# with CMAKE_INSTALL_RPATH_USE_LINK_PATH disabled at the top level an
+# ENABLE_DDX=ON, ENABLE_DFTD4=OFF install could not find its own libddx.
+if(BUILD_SHARED_LIBS AND NOT WIN32 AND (ENABLE_DFTD4 OR ENABLE_DDX))
   set_target_properties(oqp PROPERTIES
-          BUILD_RPATH "${DFTD4_INSTALL}/lib"
           INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
           INSTALL_RPATH_USE_LINK_PATH FALSE
           INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE)
+  if(ENABLE_DFTD4)
+    # Build-tree only: the D4 stack is linked from its external install prefix
+    # before it is copied into the package.
+    set_target_properties(oqp PROPERTIES BUILD_RPATH "${DFTD4_INSTALL}/lib")
+  endif()
 endif()
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
+if(ENABLE_DFTD4)
 set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90
         APPEND PROPERTY COMPILE_DEFINITIONS OQP_D4_INT_KIND=4)
+endif()
 
 install(TARGETS oqp
 EXPORT "${PROJECT_NAME}Targets"
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  RUNTIME DESTINATION ${_OQP_RUNTIME_DESTINATION}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
@@ -207,7 +243,9 @@ EXPORT "${PROJECT_NAME}Targets"
 # runtime SONAME/install-name that liboqp and the DFT-D4 libraries reference.
 # Replacing one of these files with an ABI-compatible build therefore changes
 # the implementation used at the next process start.
-if(BUILD_SHARED_LIBS)
+if(NOT ENABLE_DFTD4)
+  # nothing to install
+elseif(BUILD_SHARED_LIBS)
   install(FILES "${DFTD4_MCTC_RUNTIME_SOURCE}"
           DESTINATION ${CMAKE_INSTALL_LIBDIR}
           RENAME "${DFTD4_MCTC_RUNTIME_NAME}")
@@ -247,6 +285,7 @@ endif()
 # or on an upstream URL remaining available. BUILD-INFO.json records resolved
 # build settings; the checked-in unified patches record the two build-file-only
 # modifications exactly.
+if(ENABLE_DFTD4)
 set(_OQP_DFTD4_SOURCE_DESTINATION
     "${CMAKE_INSTALL_DATADIR}/corresponding-source/dftd4-stack")
 install(DIRECTORY "${DFTD4_MCTC_SOURCE_DIR}/"
@@ -268,3 +307,4 @@ install(FILES
 install(FILES "${CMAKE_SOURCE_DIR}/external/CMakeLists.txt"
         DESTINATION "${_OQP_DFTD4_SOURCE_DESTINATION}"
         RENAME "openqp-external-build.cmake")
+endif()  # ENABLE_DFTD4
