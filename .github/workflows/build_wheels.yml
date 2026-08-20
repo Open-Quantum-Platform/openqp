@@ -313,7 +313,11 @@ jobs:
             environment: >-
               OQP_EXTERNALS_ROOT=C:\\oqpx
               PKG_CONFIG_PATH=C:\\oqpblas\\lib\\pkgconfig
-              CMAKE_ARGS="-DLINALG_LIB=OpenBLAS
+              CC=icx CXX=icx FC=ifx
+              CMAKE_ARGS="-DCMAKE_C_COMPILER=icx
+              -DCMAKE_CXX_COMPILER=icx
+              -DCMAKE_Fortran_COMPILER=ifx
+              -DLINALG_LIB=OpenBLAS
               -DENABLE_MPI=OFF
               -DUSE_LIBINT=OFF
               -DENABLE_OPENTRAH=OFF
@@ -373,12 +377,6 @@ jobs:
           # while a bare `import oqp` still succeeded).
           CIBW_TEST_COMMAND: >-
             python {project}/.github/scripts/wheel_smoke_test.py {project}
-          # Windows builds with ifx/icx; the oneAPI environment is already in
-          # $GITHUB_ENV from the setup action above, and these tell CMake which
-          # drivers to use.
-          CC: ${{ matrix.platform == 'windows' && 'icx' || '' }}
-          CXX: ${{ matrix.platform == 'windows' && 'icx' || '' }}
-          FC: ${{ matrix.platform == 'windows' && 'ifx' || '' }}
         run: python -m cibuildwheel --output-dir dist
 
       - uses: actions/upload-artifact@v4
