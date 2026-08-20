@@ -347,6 +347,23 @@ jobs:
         if: ${{ matrix.platform == 'windows' }}
         run: python -m pip install --upgrade delvewheel pkgconf
 
+      # oneAPI lives under "C:\Program Files (x86)\...".  Passing those paths
+      # through CIBW_ENVIRONMENT -> CMAKE_ARGS means two rounds of shell-style
+      # splitting, which turns them into "C:Program".  A toolchain file at a
+      # space-free path carries them verbatim instead.
+      - name: Write the Intel toolchain file (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\oqptc | Out-Null
+          $c = ($env:CMPLR_ROOT -replace '\\','/')
+          @(
+            "set(CMAKE_C_COMPILER       `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_CXX_COMPILER     `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_Fortran_COMPILER `"$c/bin/ifx.exe`" CACHE FILEPATH `"`")"
+          ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
+          Get-Content C:\oqptc\intel.cmake
+
       # Linux legs bind-mount the host cache into the build container (see the
       # smoke job); create the host dir runner-owned first. No-op on macOS.
       - name: Prepare externals cache mount
@@ -378,9 +395,8 @@ jobs:
           CIBW_ENVIRONMENT_WINDOWS: >-
             OQP_EXTERNALS_ROOT='C:\oqpx'
             PKG_CONFIG_PATH='C:\oqpblas\lib\pkgconfig'
-            CMAKE_ARGS="-DCMAKE_C_COMPILER=${{ env.CMPLR_ROOT }}/bin/icx.exe
-            -DCMAKE_CXX_COMPILER=${{ env.CMPLR_ROOT }}/bin/icx.exe
-            -DCMAKE_Fortran_COMPILER=${{ env.CMPLR_ROOT }}/bin/ifx.exe
+            CMAKE_GENERATOR=Ninja
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
             -DLINALG_LIB=OpenBLAS
             -DENABLE_MPI=OFF
             -DUSE_LIBINT=OFF
