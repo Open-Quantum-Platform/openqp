@@ -413,6 +413,25 @@ elif sys.platform == "win32":
 
     psapi = ctypes.WinDLL("psapi", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # Declare the signatures.  Without a restype, ctypes treats the returned
+    # pseudo-handle as a C int and truncates (HANDLE)-1 to 32 bits, which the
+    # call then rejects with ERROR_INVALID_HANDLE.
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = ctypes.wintypes.HANDLE
+    psapi.EnumProcessModules.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.POINTER(ctypes.wintypes.HMODULE),
+        ctypes.wintypes.DWORD,
+        ctypes.POINTER(ctypes.wintypes.DWORD),
+    ]
+    psapi.EnumProcessModules.restype = ctypes.wintypes.BOOL
+    psapi.GetModuleFileNameExW.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HMODULE,
+        ctypes.wintypes.LPWSTR,
+        ctypes.wintypes.DWORD,
+    ]
+    psapi.GetModuleFileNameExW.restype = ctypes.wintypes.DWORD
     process = kernel32.GetCurrentProcess()
     capacity = 4096
     modules = (ctypes.wintypes.HMODULE * capacity)()
