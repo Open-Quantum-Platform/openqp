@@ -92,22 +92,6 @@ and the [build guide](https://open-quantum-platform.github.io/openqp-docs/build-
 A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image)
 is also available.
 
-#### Standalone builds (no Python required)
-
-Self-contained archives for Windows, macOS and Linux — unzip and run, with no
-Python, compiler or BLAS on the machine — are produced and published by
-[OQP Studio](https://github.com/Open-Quantum-Platform/oqp-studio), which
-rebuilds them weekly from OpenQP's latest release tag and ships them with the
-desktop application:
-
-```bash
-./openqp examples/HF/H2O_RHF-HF_ENERGY.inp
-```
-
-`pip install openqp` remains the usual route when a Python environment is
-available; the archives exist for machines without one, for clusters where pip
-is not an option, and for embedding in other applications.
-
 ### Quick Start
 
 ```bash
