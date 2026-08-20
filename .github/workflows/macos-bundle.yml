@@ -36,10 +36,14 @@ jobs:
           - arch: x86_64
             os: macos-15-intel
     env:
-      # Accelerate's ILP64 interface needs macOS >= 13.3, which is therefore
-      # the floor; going lower is not possible, and going higher would exclude
-      # machines for no gain.
-      MACOSX_DEPLOYMENT_TARGET: "13.3"
+      # 13.3 is the floor for OUR code (Accelerate's ILP64 interface), but the
+      # archive also carries Homebrew's prebuilt GCC runtime, and a deployment
+      # target cannot retarget an already-compiled dylib.  Measured on a real
+      # bundle, libgomp and libstdc++ from gcc@15 declare minos 15.0, so 15.0
+      # is what this archive actually requires -- the same value the wheels
+      # use, for the same reason.  The step after the build verifies it rather
+      # than trusting this comment.
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -149,9 +153,10 @@ jobs:
 
               OMP_NUM_THREADS=8 ./openqp myjob.inp
 
-          This bundle carries its own Python, the GCC Fortran runtime and the
-          DFT-D4 libraries.  Linear algebra uses Apple Accelerate, which is part
-          of macOS.
+          Requires macOS 15 or newer.  The bundle carries its own Python, the
+          GCC Fortran runtime and the DFT-D4 libraries; that runtime is built
+          for macOS 15, which sets the floor.  Linear algebra uses Apple
+          Accelerate, part of macOS.
 
           If macOS refuses to run it because it was downloaded from the
           internet, clear the quarantine flag once:
@@ -165,6 +170,37 @@ jobs:
           Workflow run   : $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           EOF
           tail -6 "$root/README.txt"
+
+      - name: Verify the advertised macOS floor
+        run: |
+          # Every Mach-O in the archive, including the prebuilt Homebrew
+          # runtime, must load on the version the README advertises.  The
+          # smoke test cannot catch this: it runs on the newest macOS.
+          python3 - "$MACOSX_DEPLOYMENT_TARGET" <<'PY'
+          import pathlib, re, subprocess, sys
+
+          floor = tuple(int(part) for part in sys.argv[1].split("."))
+          worst, offenders = floor, []
+          for path in pathlib.Path("/tmp/oqpdist/openqp").rglob("*"):
+              if not path.is_file():
+                  continue
+              out = subprocess.run(["otool", "-l", str(path)],
+                                   capture_output=True, text=True).stdout
+              match = re.search(r"^\s*minos\s+([0-9.]+)\s*$", out, re.MULTILINE)
+              if not match:
+                  continue
+              minos = tuple(int(part) for part in match.group(1).split("."))
+              worst = max(worst, minos)
+              if minos > floor:
+                  offenders.append(f"{match.group(1)}  {path.name}")
+          if offenders:
+              print("\n".join(sorted(set(offenders))))
+              raise SystemExit(
+                  f"bundle requires macOS {'.'.join(map(str, worst))}, "
+                  f"but advertises {'.'.join(map(str, floor))}"
+              )
+          print(f"every bundled binary loads on macOS {'.'.join(map(str, floor))}")
+          PY
 
       - name: Smoke test the bundle in a clean environment
         run: |
