@@ -85,19 +85,12 @@ cd openqp
 pip install .
 ```
 
-Source-build options are documented in the
-[build guide](https://open-quantum-platform.github.io/openqp-docs/build-options/).
+Windows, macOS and Linux are all supported; per-platform requirements and
+source-build options are documented in the
+[installation guide](https://open-quantum-platform.github.io/openqp-docs/installation/)
+and the [build guide](https://open-quantum-platform.github.io/openqp-docs/build-options/).
 A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image)
 is also available.
-
-#### Windows
-
-```bash
-pip install openqp
-```
-
-pip pulls in Intel MKL alongside the wheel; nothing else to install. Windows
-wheels are built with Intel oneAPI (ifx/icx) against MKL ILP64.
 
 #### Standalone builds (no Python required)
 
