@@ -386,6 +386,10 @@ jobs:
           # while a bare `import oqp` still succeeded).
           CIBW_TEST_COMMAND: >-
             python {project}/.github/scripts/wheel_smoke_test.py {project}
+          # The BLAS lookup asks pkg-config for the openblas64 module, so the
+          # per-interpreter build environment needs a pkg-config of its own
+          # (the one on the host is not on cibuildwheel's PATH).
+          CIBW_BEFORE_BUILD_WINDOWS: python -m pip install pkgconf
           # Windows only.  CIBW_ENVIRONMENT_WINDOWS overrides CIBW_ENVIRONMENT
           # for this platform, and unlike the matrix value it is evaluated
           # after the oneAPI setup step, so ${{ env.CMPLR_ROOT }} is known.
@@ -397,6 +401,8 @@ jobs:
             PKG_CONFIG_PATH='C:\oqpblas\lib\pkgconfig'
             CMAKE_GENERATOR=Ninja
             CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
+            -DOQP_REUSE_EXTERNALS=ON
+            -DOQP_EXTERNALS_ROOT=C:/oqpx
             -DLINALG_LIB=OpenBLAS
             -DENABLE_MPI=OFF
             -DUSE_LIBINT=OFF
