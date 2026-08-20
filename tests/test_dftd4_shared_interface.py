@@ -560,40 +560,6 @@ Load command 21
             raise AssertionError("absolute runtime search path passed wheel gate")
 
 
-def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_one():
-    """delocate >= 0.13 removes LC_RPATH after rewriting to @loader_path.
-
-    That layout has no runtime search path at all, which is package-local by
-    construction and must pass.  The same absence with a surviving ``@rpath/``
-    dependency is a library that cannot load, and must still fail.
-    """
-    helpers = _load_wheel_artifact_helpers()
-    validate = helpers["assert_package_local_runtime_search_paths"]
-    rpath_free = "Load command 12\n          cmd LC_SEGMENT_64\n"
-
-    # The first otool -L entry is the library's own LC_ID_DYLIB.  It is a name
-    # consumers link against, not an edge this file resolves, so an @rpath ID
-    # on an RPATH-free library is normal and must not be read as dangling.
-    validate(
-        "liboqp.dylib", rpath_free, "darwin", "@loader_path",
-        [
-            "@rpath/liboqp.dylib",
-            "@loader_path/libdftd4.3.dylib",
-            "/usr/lib/libSystem.B.dylib",
-        ],
-    )
-
-    try:
-        validate(
-            "liboqp.dylib", rpath_free, "darwin", "@loader_path",
-            ["@rpath/libdftd4.3.dylib"],
-        )
-    except AssertionError as exc:
-        assert "through @rpath" in str(exc)
-    else:
-        raise AssertionError("unresolvable @rpath dependency passed the wheel gate")
-
-
 def test_macos_package_rpath_sanitizer_is_fail_closed_and_runs_last():
     sanitizer = MACOS_RPATH_SANITIZER.read_text(encoding="utf-8")
     source = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")

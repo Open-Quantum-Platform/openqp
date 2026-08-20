@@ -172,31 +172,12 @@ def parse_runtime_search_paths(metadata, platform_name):
 
 
 def assert_package_local_runtime_search_paths(
-    path, metadata, platform_name, local_rpath, dependencies=()
+    path, metadata, platform_name, local_rpath
 ):
     runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
-    if not runtime_search_paths:
-        # delocate >= 0.13 rewrites every ``@rpath/x`` load command to an
-        # explicit ``@loader_path/x`` and then drops the now-unused LC_RPATH.
-        # That is package-local by construction -- strictly tighter than an
-        # RPATH, which is a search list the loader could resolve elsewhere --
-        # so an empty list is correct *provided* nothing still needs a search
-        # path.  A library that kept an ``@rpath/`` dependency with no RPATH
-        # left to resolve it would not load at all, so that stays fatal.
-        # ``otool -L`` prints the library's own LC_ID_DYLIB first.  That ID is
-        # a name consumers link against, not something this file resolves at
-        # load time, so it needs no search path of its own -- delocate rewrote
-        # the consumers' references instead.  Count real edges only.
-        own_basename = str(path).rsplit("/", 1)[-1]
-        unresolvable = [
-            d for d in dependencies
-            if d.startswith("@rpath/") and d.rsplit("/", 1)[-1] != own_basename
-        ]
-        assert not unresolvable, (
-            f"{path} has no runtime search path, yet still depends on "
-            f"{unresolvable} through @rpath:\n{metadata}"
-        )
-        return
+    assert runtime_search_paths, (
+        f"{path} lacks package-local RPATH {local_rpath}:\n{metadata}"
+    )
     nonlocal_search_paths = [
         entry for entry in runtime_search_paths
         if entry != local_rpath and not entry.startswith(f"{local_rpath}/")
@@ -261,13 +242,11 @@ dependency_graph = {
     d4_paths["mctc"]: set(),
 }
 oqp_deps = ""
-dependencies_by_owner = {}
 for owner, required_edges in dependency_graph.items():
     metadata = native_metadata(owner, inspect_command)
     if owner == liboqp_path:
         oqp_deps = metadata
     dependencies = parse_dynamic_dependencies(metadata, sys.platform)
-    dependencies_by_owner[owner] = dependencies
     assert_canonical_dependency_graph(
         owner, dependencies, required_edges, d4_names, sys.platform
     )
@@ -294,8 +273,7 @@ assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
 for path in (liboqp_path, *d4_paths.values()):
     rpath_metadata = native_metadata(path, rpath_command)
     assert_package_local_runtime_search_paths(
-        path, rpath_metadata, sys.platform, local_rpath,
-        dependencies_by_owner.get(path, ()),
+        path, rpath_metadata, sys.platform, local_rpath
     )
 
 # A repaired wheel must not retain a canonical file while secretly relinking to
