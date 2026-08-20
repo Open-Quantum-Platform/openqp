@@ -123,7 +123,21 @@ Apple Accelerate, which is part of macOS. If Gatekeeper blocks the download,
 clear the quarantine flag once with
 `xattr -dr com.apple.quarantine /path/to/openqp`.
 
-On macOS and Linux `pip install openqp` remains the usual route; the archives
+#### Standalone Linux build
+
+`openqp-<version>-linux-x86_64.tar.gz` and `openqp-<version>-linux-aarch64.tar.gz`
+complete the set:
+
+```bash
+tar xf openqp-*-linux-x86_64.tar.gz && cd openqp
+./openqp examples/HF/H2O_RHF-HF_ENERGY.inp
+```
+
+Built inside `manylinux_2_28`, so they run on any distribution with glibc 2.28
+or newer (RHEL/Rocky 8 and later) — useful on clusters where pip is not an
+option. Linear algebra is a bundled ILP64 OpenBLAS with runtime CPU dispatch.
+
+`pip install openqp` remains the usual route on macOS and Linux; the archives
 exist for machines without a Python environment and for embedding in other
 applications.
 
