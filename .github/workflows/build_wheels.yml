@@ -312,9 +312,9 @@ jobs:
             archs: AMD64
             cache_path: C:\oqpx
             container_engine: "docker"
-            before_all: >-
-              python -m pip install scipy-openblas64 &&
-              python .github/scripts/stage_openblas64_windows.py C:\oqpblas
+            # Built in a dedicated, cached step below rather than here, so its
+            # log is legible and it is not repeated per interpreter.
+            before_all: ""
             # Set in the step below instead: the compiler paths are only known
             # once the oneAPI setup action has run, and cibuildwheel's build
             # environment does not inherit its PATH.
@@ -368,6 +368,24 @@ jobs:
             "set(CMAKE_Fortran_COMPILER `"$c/bin/ifx.exe`" CACHE FILEPATH `"`")"
           ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
           Get-Content C:\oqptc\intel.cmake
+
+      - name: Cache the ILP64 OpenBLAS (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        id: openblas-cache
+        uses: actions/cache@v4
+        with:
+          path: C:\oqpblas
+          key: oqp-openblas64-windows-0.3.30-ifx-v1
+
+      - name: Build the ILP64 OpenBLAS (windows)
+        if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
+        run: python .github/scripts/build_openblas64_windows.py C:\oqpblas 0.3.30
+
+      - name: Refresh the OpenBLAS metadata (windows)
+        # Cheap, and keeps the .pc / initial-cache files right after a cache
+        # restore that predates a change to their contents.
+        if: ${{ matrix.platform == 'windows' }}
+        run: python .github/scripts/build_openblas64_windows.py C:\oqpblas 0.3.30
 
       # Linux legs bind-mount the host cache into the build container (see the
       # smoke job); create the host dir runner-owned first. No-op on macOS.
