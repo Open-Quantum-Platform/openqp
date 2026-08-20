@@ -6,6 +6,7 @@ import array
 import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -107,7 +108,7 @@ def _load_wheel_artifact_helpers():
             "assert_package_local_runtime_search_paths",
         }
     ]
-    namespace = {"re": re}
+    namespace = {"re": re, "os": os}
     exec(compile(ast.Module(body=selected, type_ignores=[]), str(WHEEL_SMOKE), "exec"), namespace)
     return namespace
 
@@ -575,12 +576,15 @@ def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_on
     # consumers link against, not an edge this file resolves, so an @rpath ID
     # on an RPATH-free library is normal and must not be read as dangling.
     validate(
-        "liboqp.dylib", rpath_free, "darwin", "@loader_path",
+        "/pkg/oqp/lib/liboqp.dylib", rpath_free, "darwin", "@loader_path",
         [
-            "@rpath/liboqp.dylib",
+            "@rpath/liboqp.dylib",                     # the install ID
             "@loader_path/libdftd4.3.dylib",
+            "@loader_path/../.dylibs/libgfortran.5.dylib",   # delocate's copy
             "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/Accelerate.framework/Accelerate",
         ],
+        package_root="/pkg/oqp",
     )
 
     # Every way a Mach-O dependency can escape the package.  A build-machine
@@ -591,14 +595,23 @@ def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_on
         "@executable_path/libdftd4.3.dylib",  # depends on who loads it
         "libdftd4.3.dylib",                 # bare install name
         "/usr/local/opt/gcc@15/lib/gcc/15/libgfortran.5.dylib",
+        # Lexically loader-relative, but it climbs out of the wheel and lands
+        # on a library that exists only on the build runner.
+        "@loader_path/../../../../opt/homebrew/lib/libgfortran.5.dylib",
+        # Lexically under /usr/lib, and not a system library at all.
+        "/usr/lib/../../opt/homebrew/lib/libgfortran.5.dylib",
+        # A real, nonlocal edge that happens to share the owner's basename:
+        # skipping by name rather than by position would have let it through.
+        "/build/liboqp.dylib",
     ):
         try:
             validate(
-                "liboqp.dylib", rpath_free, "darwin", "@loader_path",
-                [dependency],
+                "/pkg/oqp/lib/liboqp.dylib", rpath_free, "darwin",
+                "@loader_path", ["@rpath/liboqp.dylib", dependency],
+                package_root="/pkg/oqp",
             )
         except AssertionError as exc:
-            assert "loader-relative" in str(exc), dependency
+            assert "macOS system library" in str(exc), dependency
         else:
             raise AssertionError(f"{dependency} passed the wheel gate")
 
