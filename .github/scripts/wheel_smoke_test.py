@@ -436,8 +436,10 @@ elif sys.platform == "win32":
     capacity = 4096
     modules = (ctypes.wintypes.HMODULE * capacity)()
     needed = ctypes.wintypes.DWORD()
+    # Pass the array itself: ctypes converts an array of T to POINTER(T),
+    # whereas byref() of it is a pointer TO the array and does not match.
     if not psapi.EnumProcessModules(
-        process, ctypes.byref(modules), ctypes.sizeof(modules), ctypes.byref(needed)
+        process, modules, ctypes.sizeof(modules), ctypes.byref(needed)
     ):
         raise AssertionError(
             f"EnumProcessModules failed: {ctypes.get_last_error()}"
