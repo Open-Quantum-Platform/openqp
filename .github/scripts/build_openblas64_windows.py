@@ -119,7 +119,15 @@ def main(argv: list[str]) -> int:
         # Runtime CPU dispatch, as the Linux wheels do, so one wheel serves
         # every x86-64 machine.
         "-DDYNAMIC_ARCH=ON",
-        "-DUSE_OPENMP=ON",
+        # OpenBLAS's own thread pool rather than OpenMP.  Its OpenMP check
+        # rejects this toolchain outright -- icx advertises -Qiopenmp and ifx
+        # -openmp, and it reads two spellings of Intel's single runtime as
+        # "multiple OpenMP runtime libraries" -- and a pthread OpenBLAS is what
+        # numpy and scipy ship on Windows anyway.  OpenQP drives its thread
+        # count through openblas_set_num_threads (source/mathlib/
+        # blas_thread_ctl.c), which works either way.
+        "-DUSE_OPENMP=OFF",
+        "-DUSE_THREAD=ON",
         "-DBUILD_TESTING=OFF",
         "-DBUILD_WITHOUT_LAPACK=OFF",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
