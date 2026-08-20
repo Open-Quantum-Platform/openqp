@@ -292,6 +292,36 @@ jobs:
               delocate-wheel --require-archs {delocate_archs}
               -w {dest_dir} -v {wheel}
 
+          # Windows wheels: Intel oneAPI ifx/icx for the compile, and OpenBLAS
+          # ILP64 for the BLAS -- the same reason as the Linux legs (MKL cannot
+          # ship on PyPI), and the same 8-byte integer interface OpenQP
+          # mandates.  scipy-openblas64 is the ILP64 OpenBLAS numpy/scipy ship;
+          # unpack it to a fixed location and publish it as the `openblas64`
+          # pkg-config module the build looks for.  delvewheel is the Windows
+          # counterpart of auditwheel/delocate: it copies OpenBLAS and the
+          # Intel Fortran/OpenMP redistributables into the wheel, so the user
+          # installs nothing but the wheel itself.
+          - name: windows-x86_64
+            os: windows-2025
+            platform: windows
+            archs: AMD64
+            cache_path: C:\oqpx
+            container_engine: "docker"
+            before_all: >-
+              python -m pip install scipy-openblas64 &&
+              python .github/scripts/stage_openblas64_windows.py C:\oqpblas
+            environment: >-
+              OQP_EXTERNALS_ROOT=C:\\oqpx
+              PKG_CONFIG_PATH=C:\\oqpblas\\lib\\pkgconfig
+              CMAKE_ARGS="-DLINALG_LIB=OpenBLAS
+              -DENABLE_MPI=OFF
+              -DUSE_LIBINT=OFF
+              -DENABLE_OPENTRAH=OFF
+              -DBUILD_TESTING=OFF"
+            repair: >-
+              delvewheel repair --add-path "C:\oqpblas\bin;{package}/oqp/lib"
+              -w {dest_dir} {wheel}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -309,6 +339,17 @@ jobs:
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
+
+      # Windows: the toolchain the wheels are compiled with, the pkg-config
+      # implementation the BLAS lookup needs, and the repair tool that bundles
+      # the runtime DLLs into the wheel.
+      - name: Set up Intel oneAPI (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        uses: ./.github/actions/setup-oneapi-windows
+
+      - name: Install delvewheel and pkgconf (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        run: python -m pip install --upgrade delvewheel pkgconf
 
       # Linux legs bind-mount the host cache into the build container (see the
       # smoke job); create the host dir runner-owned first. No-op on macOS.
@@ -332,6 +373,12 @@ jobs:
           # while a bare `import oqp` still succeeded).
           CIBW_TEST_COMMAND: >-
             python {project}/.github/scripts/wheel_smoke_test.py {project}
+          # Windows builds with ifx/icx; the oneAPI environment is already in
+          # $GITHUB_ENV from the setup action above, and these tell CMake which
+          # drivers to use.
+          CC: ${{ matrix.platform == 'windows' && 'icx' || '' }}
+          CXX: ${{ matrix.platform == 'windows' && 'icx' || '' }}
+          FC: ${{ matrix.platform == 'windows' && 'ifx' || '' }}
         run: python -m cibuildwheel --output-dir dist
 
       - uses: actions/upload-artifact@v4
@@ -470,7 +517,8 @@ jobs:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
           }
 
           def wheel_key(wheel):
@@ -770,7 +818,8 @@ jobs:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
           }
 
           def wheel_key(wheel):
