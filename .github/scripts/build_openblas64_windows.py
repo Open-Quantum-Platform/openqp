@@ -80,15 +80,23 @@ def write_metadata(prefix: Path, version: str) -> None:
     # with no underscore by default, OpenBLAS normally uses the Unix `dgemm_`,
     # and the "openblas64" distributions add a `64_` suffix -- link failures
     # here are always one of the three, so say which is present.
-    blob = lib.read_bytes()
-    spellings = [b"dgemm_64_", b"dgemm_", b"DGEMM", b"dgemm"]
-    found = [sp.decode() for sp in spellings if sp in blob]
-    print(f"dgemm spellings present in {lib.name}: {found or '(none)'}")
-    if not found:
-        raise SystemExit(
-            f"{lib} exports no recognisable dgemm symbol; the OpenBLAS build "
-            "did not produce usable BLAS"
-        )
+    # A byte search finds strings, not symbols; ask the linker's own tool.
+    try:
+        out = subprocess.run(["dumpbin", "/symbols", str(lib)],
+                             capture_output=True, text=True, check=False).stdout
+        if not out:
+            out = subprocess.run(["llvm-nm", str(lib)],
+                                 capture_output=True, text=True, check=False).stdout
+    except FileNotFoundError:
+        out = ""
+    if out:
+        names = {ln.split()[-1] for ln in out.splitlines()
+                 if "dgemm" in ln.lower() and ln.split()}
+        print(f"dgemm symbols in {lib.name}: {sorted(names)[:6] or '(none)'}")
+        if not any("dgemm" in n.lower() for n in names):
+            raise SystemExit(f"{lib} defines no dgemm symbol")
+    else:
+        print("no symbol dumper available; skipping the symbol check")
 
     print(f"import library: {lib}")
     print(f"pkg-config:     {pc_dir / 'openblas64.pc'}")
@@ -134,15 +142,14 @@ def main(argv: list[str]) -> int:
         "-DINTERFACE64=ON",
         "-DSYMBOLPREFIX=",
         "-DSYMBOLSUFFIX=",
-        # Runtime CPU dispatch, as the Linux wheels do, so one wheel serves
-        # every x86-64 machine -- but only over the kernels that build here.
-        # OpenBLAS's AVX-512 micro-kernels are compiled without their target
-        # feature flags under clang-cl ("always_inline function
-        # '_mm512_setzero_ps' requires target feature 'avx512f'"), so the
-        # dispatch list stops at AVX2.  Every machine from Sandy Bridge on is
-        # still covered; only the AVX-512 fast paths are given up.
-        "-DDYNAMIC_ARCH=ON",
-        "-DDYNAMIC_LIST=NEHALEM;SANDYBRIDGE;HASWELL;ZEN",
+        # No runtime CPU dispatch.  DYNAMIC_ARCH under OpenBLAS's CMake build
+        # produced a library whose BLAS entry points the linker could not find
+        # at all (dgemm_ unresolved with the archive on the link line), on top
+        # of its AVX-512 kernels failing to compile under clang-cl.  A single
+        # fixed target is the supported shape here; NEHALEM (SSE4.2) runs on
+        # every x86-64 machine this software plausibly meets.
+        "-DDYNAMIC_ARCH=OFF",
+        "-DTARGET=NEHALEM",
         # OpenBLAS's own thread pool rather than OpenMP.  Its OpenMP check
         # rejects this toolchain outright -- icx advertises -Qiopenmp and ifx
         # -openmp, and it reads two spellings of Intel's single runtime as
