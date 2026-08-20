@@ -76,10 +76,30 @@ def main(argv: list[str]) -> int:
         encoding="ascii",
     )
 
+    # OpenQP forwards BLAS/LAPACK to the DFT-D4 subprojects only when
+    # BLAS_LIBRARIES and LAPACK_LIBRARIES are defined (external/CMakeLists.txt,
+    # DFTD4_BLAS_ARGS); the pkg-config route alone leaves them unset and
+    # multicharge then fails to link against an undiscoverable OpenBLAS.  Emit
+    # an initial-cache file naming the import library so `cmake -C` can supply
+    # them without the caller having to know the wheel's library name.
+    import_lib = (prefix / "lib" / copied["lib"][0]).as_posix()
+    cache = prefix / "openblas-cache.cmake"
+    cache.write_text(
+        "\n".join(
+            [
+                f'set(BLAS_LIBRARIES "{import_lib}" CACHE FILEPATH "")',
+                f'set(LAPACK_LIBRARIES "{import_lib}" CACHE FILEPATH "")',
+                "",
+            ]
+        ),
+        encoding="ascii",
+    )
+
     print(f"staged scipy-openblas64 {version} into {prefix}")
     for kind, names in copied.items():
         print(f"  {kind}: {', '.join(sorted(names))}")
     print(f"  pkg-config: {pc}")
+    print(f"  initial cache: {cache}")
     return 0
 
 

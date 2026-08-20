@@ -405,7 +405,8 @@ jobs:
             OQP_EXTERNALS_ROOT='C:\oqpx'
             PKG_CONFIG_PATH='C:\oqpblas\lib\pkgconfig'
             CMAKE_GENERATOR=Ninja
-            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
+            CMAKE_ARGS="-C C:/oqpblas/openblas-cache.cmake
+            -DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
             -DOQP_REUSE_EXTERNALS=ON
             -DOQP_EXTERNALS_ROOT=C:/oqpx
             -DLINALG_LIB=OpenBLAS
