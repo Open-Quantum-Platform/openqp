@@ -310,18 +310,10 @@ jobs:
             before_all: >-
               python -m pip install scipy-openblas64 &&
               python .github/scripts/stage_openblas64_windows.py C:\oqpblas
-            environment: >-
-              OQP_EXTERNALS_ROOT=C:\\oqpx
-              PKG_CONFIG_PATH=C:\\oqpblas\\lib\\pkgconfig
-              CC=icx CXX=icx FC=ifx
-              CMAKE_ARGS="-DCMAKE_C_COMPILER=icx
-              -DCMAKE_CXX_COMPILER=icx
-              -DCMAKE_Fortran_COMPILER=ifx
-              -DLINALG_LIB=OpenBLAS
-              -DENABLE_MPI=OFF
-              -DUSE_LIBINT=OFF
-              -DENABLE_OPENTRAH=OFF
-              -DBUILD_TESTING=OFF"
+            # Set in the step below instead: the compiler paths are only known
+            # once the oneAPI setup action has run, and cibuildwheel's build
+            # environment does not inherit its PATH.
+            environment: ""
             repair: >-
               delvewheel repair --add-path "C:\oqpblas\bin;{package}/oqp/lib"
               -w {dest_dir} {wheel}
@@ -377,6 +369,23 @@ jobs:
           # while a bare `import oqp` still succeeded).
           CIBW_TEST_COMMAND: >-
             python {project}/.github/scripts/wheel_smoke_test.py {project}
+          # Windows only.  CIBW_ENVIRONMENT_WINDOWS overrides CIBW_ENVIRONMENT
+          # for this platform, and unlike the matrix value it is evaluated
+          # after the oneAPI setup step, so ${{ env.CMPLR_ROOT }} is known.
+          # The compilers are given as absolute paths (forward slashes, which
+          # CMake accepts) because cibuildwheel's isolated build environment
+          # does not carry the toolchain's PATH.
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            OQP_EXTERNALS_ROOT='C:\oqpx'
+            PKG_CONFIG_PATH='C:\oqpblas\lib\pkgconfig'
+            CMAKE_ARGS="-DCMAKE_C_COMPILER=${{ env.CMPLR_ROOT }}/bin/icx.exe
+            -DCMAKE_CXX_COMPILER=${{ env.CMPLR_ROOT }}/bin/icx.exe
+            -DCMAKE_Fortran_COMPILER=${{ env.CMPLR_ROOT }}/bin/ifx.exe
+            -DLINALG_LIB=OpenBLAS
+            -DENABLE_MPI=OFF
+            -DUSE_LIBINT=OFF
+            -DENABLE_OPENTRAH=OFF
+            -DBUILD_TESTING=OFF"
         run: python -m cibuildwheel --output-dir dist
 
       - uses: actions/upload-artifact@v4
