@@ -23,6 +23,11 @@ on:
   release:
     types: [published]
 
+# `gh release upload` needs write access to contents, and the default workflow
+# token is read-only.  This is the only write these workflows do -- the archive
+# is attached to an already-published release, nothing else is touched.
+permissions:
+  contents: write
 
 jobs:
   bundle:

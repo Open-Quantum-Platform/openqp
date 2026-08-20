@@ -102,6 +102,18 @@ option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 # oqp_dftd4_disp is simply absent from liboqp and the Python layer reports
 # dispersion as unavailable.  On every supported platform the default is ON.
 option(ENABLE_DFTD4 "Build the native DFT-D4 dispersion backend" ON)
+if(WIN32 AND ENABLE_DFTD4 AND NOT BUILD_SHARED_LIBS)
+    # Upstream dftd4 exports its API with !DEC$ ATTRIBUTES DLLEXPORT, which
+    # marks the symbols __declspec(dllimport) for consumers.  A static link
+    # then leaves unresolved __imp_* references, so this combination cannot
+    # work -- say so during configuration instead of failing at link time,
+    # after the whole stack has been compiled.
+    message(FATAL_ERROR
+        "On Windows the DFT-D4 backend requires a shared build: its Fortran "
+        "sources carry DLLEXPORT attributes that a static link cannot "
+        "satisfy.  Use -DBUILD_SHARED_LIBS=ON, or -DENABLE_DFTD4=OFF to drop "
+        "dispersion.")
+endif()
 
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 

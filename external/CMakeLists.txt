@@ -1006,6 +1006,43 @@ else()
         CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_NAME" FORCE)
 endif()
 
+# Resolve every source/build/stamp path, and on Windows the DLL locations
+# that depend on them, BEFORE the artifact lists below.  oqp_reuse_or_build
+# validates a cache against those lists: if the DLL paths were still empty
+# here, a cache holding the import libraries and stamps but missing a DLL
+# would be accepted as complete, and the install would then fail copying a
+# file that was never built.
+oqp_set_external_paths(DFTD4_MCTC "${_OQP_DFTD4_CACHE_KEY}-mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_set_external_paths(DFTD4_MC "${_OQP_DFTD4_CACHE_KEY}-multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_set_external_paths(DFTD4_D4 "${_OQP_DFTD4_CACHE_KEY}-dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+if(WIN32 AND BUILD_SHARED_LIBS)
+  # The DLLs live at the top of each ExternalProject build directory.
+  set(DFTD4_MCTC_RUNTIME_SOURCE
+      "${DFTD4_MCTC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
+      "${DFTD4_MC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
+  set(DFTD4_DFTD4_RUNTIME_SOURCE
+      "${DFTD4_D4_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
+endif()
+
 set(DFTD4_MCTC_ARTIFACTS "${DFTD4_MCTC_LIB}")
 set(DFTD4_MULTICHARGE_ARTIFACTS "${DFTD4_MULTICHARGE_LIB}")
 set(DFTD4_DFTD4_ARTIFACTS "${DFTD4_DFTD4_LIB}")
@@ -1024,12 +1061,6 @@ set(DFTD4_BUILD_INFO_FILE
 include("${_OQP_DFTD4_COMPLIANCE_DIR}/generate-build-info.cmake")
 oqp_generate_dftd4_build_info("${DFTD4_BUILD_INFO_FILE}")
 
-oqp_set_external_paths(DFTD4_MCTC "${_OQP_DFTD4_CACHE_KEY}-mctc-lib"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(mctc-lib
     ${DFTD4_MCTC_ARTIFACTS}
     "${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt"
@@ -1057,12 +1088,6 @@ ExternalProject_Add(mctc-lib
         )
 endif()
 
-oqp_set_external_paths(DFTD4_MC "${_OQP_DFTD4_CACHE_KEY}-multicharge"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(multicharge
     ${DFTD4_MULTICHARGE_ARTIFACTS}
     "${DFTD4_MC_SOURCE_DIR}/CMakeLists.txt"
@@ -1085,12 +1110,6 @@ ExternalProject_Add(multicharge
 add_dependencies(multicharge mctc-lib)
 endif()
 
-oqp_set_external_paths(DFTD4_D4 "${_OQP_DFTD4_CACHE_KEY}-dftd4"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
-    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${DFTD4_INSTALL}")
 oqp_reuse_or_build(dftd4
     ${DFTD4_DFTD4_ARTIFACTS}
     ${DFTD4_MULTICHARGE_ARTIFACTS}
@@ -1133,18 +1152,6 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
     endif()
 endif()
 
-if(WIN32 AND BUILD_SHARED_LIBS)
-  # The DLLs live at the top of each ExternalProject build directory.
-  set(DFTD4_MCTC_RUNTIME_SOURCE
-      "${DFTD4_MCTC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}mctc-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      CACHE INTERNAL "DFTD4_MCTC_RUNTIME_SOURCE" FORCE)
-  set(DFTD4_MULTICHARGE_RUNTIME_SOURCE
-      "${DFTD4_MC_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}multicharge${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      CACHE INTERNAL "DFTD4_MULTICHARGE_RUNTIME_SOURCE" FORCE)
-  set(DFTD4_DFTD4_RUNTIME_SOURCE
-      "${DFTD4_D4_BUILD_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}dftd4${CMAKE_SHARED_LIBRARY_SUFFIX}"
-      CACHE INTERNAL "DFTD4_DFTD4_RUNTIME_SOURCE" FORCE)
-endif()
 
 endif()  # ENABLE_DFTD4
 
