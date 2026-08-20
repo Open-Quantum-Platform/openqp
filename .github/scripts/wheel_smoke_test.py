@@ -151,7 +151,8 @@ def parse_runtime_search_paths(metadata, platform_name):
 
 
 def assert_package_local_runtime_search_paths(
-    path, metadata, platform_name, local_rpath, dependencies=()
+    path, metadata, platform_name, local_rpath, dependencies=(),
+    package_root=None,
 ):
     runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
     if not runtime_search_paths:
@@ -174,21 +175,37 @@ def assert_package_local_runtime_search_paths(
             f"{path} has no runtime search path and no dependency list was "
             f"supplied, so nothing was actually verified:\n{metadata}"
         )
-        # ``otool -L`` prints the library's own LC_ID_DYLIB first.  That ID is
-        # the name consumers link against, not an edge this file resolves, so
-        # it needs no search path of its own.
-        own_basename = str(path).rsplit("/", 1)[-1]
-        system_prefixes = ("/usr/lib/", "/System/Library/")
-        nonlocal_dependencies = [
-            d for d in dependencies
-            if d.rsplit("/", 1)[-1] != own_basename
-            and not d.startswith("@loader_path/")
-            and not d.startswith(system_prefixes)
-        ]
+        # ``otool -L`` prints the library's own LC_ID_DYLIB first, and only
+        # first.  Skip exactly that entry -- matching on the basename instead
+        # would also swallow a genuine, nonlocal edge that happens to share the
+        # owner's filename, such as an erroneous /build/liboqp.dylib.
+        library_dir = os.path.dirname(os.path.abspath(str(path)))
+        root = os.path.abspath(package_root) if package_root else library_dir
+
+        def _contains(directory, candidate):
+            return candidate == directory or candidate.startswith(directory + os.sep)
+
+        # Resolve before judging: "@loader_path/../../../../opt/homebrew/lib/x"
+        # has the right prefix and still points outside the wheel, and
+        # "/usr/lib/../../opt/x" is not a system library.
+        nonlocal_dependencies = []
+        for dependency in dependencies[1:]:
+            if dependency.startswith("@loader_path/"):
+                resolved = os.path.normpath(
+                    os.path.join(library_dir, dependency[len("@loader_path/"):])
+                )
+                if _contains(root, resolved):
+                    continue
+            elif dependency.startswith("/"):
+                resolved = os.path.normpath(dependency)
+                if any(_contains(d, resolved) for d in ("/usr/lib", "/System/Library")):
+                    continue
+            nonlocal_dependencies.append(dependency)
+
         assert not nonlocal_dependencies, (
-            f"{path} has no runtime search path, so every dependency must be "
-            f"loader-relative or a macOS system library; these are neither: "
-            f"{nonlocal_dependencies}\n{metadata}"
+            f"{path} has no runtime search path, so every dependency must "
+            f"resolve inside {root} or to a macOS system library; these do "
+            f"neither: {nonlocal_dependencies}\n{metadata}"
         )
         return
     nonlocal_search_paths = [
@@ -290,6 +307,11 @@ for path in (liboqp_path, *d4_paths.values()):
     assert_package_local_runtime_search_paths(
         path, rpath_metadata, sys.platform, local_rpath,
         dependencies_by_owner.get(path, ()),
+        # Containment boundary: delocate puts the repaired copies in
+        # oqp/.dylibs, a sibling of oqp/lib, so a legitimate
+        # "@loader_path/../.dylibs/x" must stay allowed while anything that
+        # climbs past the package must not.
+        package_root=oqp_root,
     )
 
 # A repaired wheel must not retain a canonical file while secretly relinking to
