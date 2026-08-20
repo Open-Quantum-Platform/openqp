@@ -209,12 +209,20 @@ if(APPLE)
 else()
   set(_OQP_PACKAGE_LIB_RPATH "$ORIGIN")
 endif()
-if(BUILD_SHARED_LIBS AND ENABLE_DFTD4 AND NOT WIN32)
+# Whenever ANY bundled shared dependency is installed next to liboqp, not just
+# DFT-D4: ddX installs ${DDX_LIBRARY} into the same directory (see above), and
+# with CMAKE_INSTALL_RPATH_USE_LINK_PATH disabled at the top level an
+# ENABLE_DDX=ON, ENABLE_DFTD4=OFF install could not find its own libddx.
+if(BUILD_SHARED_LIBS AND NOT WIN32 AND (ENABLE_DFTD4 OR ENABLE_DDX))
   set_target_properties(oqp PROPERTIES
-          BUILD_RPATH "${DFTD4_INSTALL}/lib"
           INSTALL_RPATH "${_OQP_PACKAGE_LIB_RPATH}"
           INSTALL_RPATH_USE_LINK_PATH FALSE
           INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE)
+  if(ENABLE_DFTD4)
+    # Build-tree only: the D4 stack is linked from its external install prefix
+    # before it is copied into the package.
+    set_target_properties(oqp PROPERTIES BUILD_RPATH "${DFTD4_INSTALL}/lib")
+  endif()
 endif()
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that

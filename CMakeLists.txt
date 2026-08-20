@@ -115,6 +115,20 @@ if(WIN32 AND ENABLE_DFTD4 AND NOT BUILD_SHARED_LIBS)
         "dispersion.")
 endif()
 
+get_property(_oqp_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(WIN32 AND ENABLE_DFTD4 AND _oqp_multi_config)
+    # The DFT-D4 DLLs are taken from the top of each ExternalProject build
+    # directory.  A multi-config generator puts them in a per-configuration
+    # subdirectory (Release\, Debug\) instead, so the recorded paths would
+    # match nothing: the external cache would never be reused, and the install
+    # would fail copying a file that is not where it was expected.  Ninja is
+    # the generator this platform is built and tested with.
+    message(FATAL_ERROR
+        "On Windows OpenQP needs a single-configuration generator: the "
+        "DFT-D4 runtime paths are resolved without a per-config "
+        "subdirectory.  Configure with -G Ninja, or -DENABLE_DFTD4=OFF.")
+endif()
+
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 
 option(USE_LIBINT        "Use Libint two-electron code"      ON)
