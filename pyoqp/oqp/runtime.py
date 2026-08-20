@@ -66,8 +66,19 @@ def _register_dll_directory(directory):
     no longer consults PATH for dependencies of a dlopen()ed DLL."""
     if platform.uname()[0] != "Windows" or not hasattr(os, "add_dll_directory"):
         return
+    # Intel publishes MKL as a wheel that drops its DLLs under
+    # <sys.prefix>/Library/bin, which is not on PATH.  Windows wheels link MKL
+    # without carrying it (see pyproject.toml), so that directory has to be
+    # searched or liboqp.dll fails to load.
+    import sys
+
+    extra = [
+        os.path.join(sys.prefix, "Library", "bin"),
+        os.path.join(sys.base_prefix, "Library", "bin"),
+    ]
+
     seen = set()
-    for entry in [str(directory)] + os.environ.get("PATH", "").split(os.pathsep):
+    for entry in [str(directory)] + extra + os.environ.get("PATH", "").split(os.pathsep):
         if entry and entry not in seen and os.path.isdir(entry):
             seen.add(entry)
             try:

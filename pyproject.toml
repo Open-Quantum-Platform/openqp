@@ -34,6 +34,12 @@ dependencies = [
   "cffi>=1.16.0",
 #  "mpi4py>=4.0.0",
   "basis_set_exchange",
+  # Windows wheels link MKL ILP64 but do not carry it -- libmkl_core alone
+  # exceeds PyPI's per-file limit.  Intel publishes it, so let pip install it
+  # alongside; pyoqp/oqp/runtime.py adds its DLL directory to the search path.
+  # `mkl` pulls in `intel-openmp`, which supplies the single libiomp5md the
+  # process should have.
+  'mkl>=2023.0; sys_platform == "win32"',
 ]
 
 [project.optional-dependencies]

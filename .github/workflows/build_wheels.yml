@@ -296,15 +296,18 @@ jobs:
               delocate-wheel --require-archs {delocate_archs}
               -w {dest_dir} -v {wheel}
 
-          # Windows wheels: Intel oneAPI ifx/icx for the compile, and OpenBLAS
-          # ILP64 for the BLAS -- the same reason as the Linux legs (MKL cannot
-          # ship on PyPI), and the same 8-byte integer interface OpenQP
-          # mandates.  scipy-openblas64 is the ILP64 OpenBLAS numpy/scipy ship;
-          # unpack it to a fixed location and publish it as the `openblas64`
-          # pkg-config module the build looks for.  delvewheel is the Windows
-          # counterpart of auditwheel/delocate: it copies OpenBLAS and the
-          # Intel Fortran/OpenMP redistributables into the wheel, so the user
-          # installs nothing but the wheel itself.
+          # Windows wheels: Intel oneAPI ifx/icx and MKL ILP64 -- the same
+          # combination the source build and the standalone zip use, and the
+          # one the Windows example suite passes on.  OpenBLAS is not an
+          # option here: built for Windows with this toolchain it exposes only
+          # its CBLAS entry points, so every Fortran BLAS call goes unresolved.
+          #
+          # MKL is too large for PyPI, so the wheel does not carry it: it is
+          # excluded from the repair and declared as the `mkl` runtime
+          # dependency instead (pyproject.toml), which pip installs alongside.
+          # The Intel Fortran runtime is small and IS bundled; libiomp5md is
+          # left to the `intel-openmp` package that `mkl` pulls in, so the
+          # process ends up with exactly one OpenMP runtime.
           - name: windows-x86_64
             experimental: true
             os: windows-2025
@@ -320,7 +323,8 @@ jobs:
             # environment does not inherit its PATH.
             environment: ""
             repair: >-
-              delvewheel repair --add-path "C:\oqpblas\bin;{package}/oqp/lib"
+              delvewheel repair --add-path "{package}/oqp/lib"
+              --exclude "mkl_*.dll" --exclude "libiomp5md.dll"
               -w {dest_dir} {wheel}
 
     steps:
@@ -348,9 +352,9 @@ jobs:
         if: ${{ matrix.platform == 'windows' }}
         uses: ./.github/actions/setup-oneapi-windows
 
-      - name: Install delvewheel and pkgconf (windows)
+      - name: Install delvewheel (windows)
         if: ${{ matrix.platform == 'windows' }}
-        run: python -m pip install --upgrade delvewheel pkgconf
+        run: python -m pip install --upgrade delvewheel
 
       # oneAPI lives under "C:\Program Files (x86)\...".  Passing those paths
       # through CIBW_ENVIRONMENT -> CMAKE_ARGS means two rounds of shell-style
@@ -368,34 +372,6 @@ jobs:
             "set(CMAKE_Fortran_COMPILER `"$c/bin/ifx.exe`" CACHE FILEPATH `"`")"
           ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
           Get-Content C:\oqptc\intel.cmake
-
-      # restore/save rather than the combined action: the combined one saves
-      # only when the job succeeds, so an unrelated later failure threw away a
-      # 20-minute OpenBLAS build on every iteration.
-      - name: Restore the ILP64 OpenBLAS (windows)
-        if: ${{ matrix.platform == 'windows' }}
-        id: openblas-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: C:\oqpblas
-          key: oqp-openblas64-windows-0.3.30-ifx-static-nehalem-v3
-
-      - name: Build the ILP64 OpenBLAS (windows)
-        if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
-        run: python .github/scripts/build_openblas64_windows.py C:\oqpblas 0.3.30
-
-      - name: Save the ILP64 OpenBLAS (windows)
-        if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: C:\oqpblas
-          key: oqp-openblas64-windows-0.3.30-ifx-static-nehalem-v3
-
-      - name: Refresh the OpenBLAS metadata (windows)
-        # Cheap, and keeps the .pc / initial-cache files right after a cache
-        # restore that predates a change to their contents.
-        if: ${{ matrix.platform == 'windows' }}
-        run: python .github/scripts/build_openblas64_windows.py C:\oqpblas 0.3.30
 
       # Linux legs bind-mount the host cache into the build container (see the
       # smoke job); create the host dir runner-owned first. No-op on macOS.
@@ -430,14 +406,11 @@ jobs:
           # CMake accepts) because cibuildwheel's isolated build environment
           # does not carry the toolchain's PATH.
           CIBW_ENVIRONMENT_WINDOWS: >-
-            OQP_EXTERNALS_ROOT='C:\oqpx'
-            PKG_CONFIG_PATH='C:\oqpblas\lib\pkgconfig'
             CMAKE_GENERATOR=Ninja
-            CMAKE_ARGS="-C C:/oqpblas/openblas-cache.cmake
-            -DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
             -DOQP_REUSE_EXTERNALS=ON
             -DOQP_EXTERNALS_ROOT=C:/oqpx
-            -DLINALG_LIB=OpenBLAS
+            -DLINALG_LIB=Intel10_64ilp
             -DENABLE_MPI=OFF
             -DUSE_LIBINT=OFF
             -DENABLE_OPENTRAH=OFF
