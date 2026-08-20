@@ -119,246 +119,252 @@ if sys.platform == "win32":
     stowaways = sorted(p.name for p in libdir.glob("mkl_*.dll"))
     assert not stowaways, f"MKL must not ship inside the wheel: {stowaways}"
     print("windows wheel: DFT-D4 DLLs present, MKL correctly left to pip")
-    raise SystemExit(0)
 
-liboqp_path = libdir / f"liboqp.{native_suffix}"
+# Only the ELF/Mach-O metadata inspection is skipped on Windows -- PE carries
+# no SOVERSION and no RPATH, and there is no readelf/otool/nm to read.  Every
+# behavioural check below it, including the DFT-D4 numerical ABI, must run on
+# every platform: Windows wheels are a required release artifact, and a
+# missing entry point or a broken D4 ABI has to fail the gate here.
+if sys.platform != "win32":
 
-
-def native_metadata(path, command):
-    result = subprocess.run(command(path), capture_output=True, text=True, check=True)
-    metadata = result.stdout + result.stderr
-    assert "/root/.cache/openqp" not in metadata, (
-        f"build cache path leaked into {path}:\n{metadata}"
-    )
-    assert "Library/Caches/openqp" not in metadata, (
-        f"macOS build cache path leaked into {path}:\n{metadata}"
-    )
-    return metadata
+    liboqp_path = libdir / f"liboqp.{native_suffix}"
 
 
-def parse_dynamic_dependencies(metadata, platform_name):
-    """Return exact DT_NEEDED/install-name entries from native-tool output."""
-    if platform_name == "darwin":
-        dependencies = []
-        for line in metadata.splitlines()[1:]:
-            match = re.match(
-                r"\s*(.+?)\s+\(compatibility version [^)]+\)$", line
-            )
-            if match:
-                dependencies.append(match.group(1))
-        return dependencies
-    return re.findall(
-        r"\(NEEDED\)\s+Shared library:\s*\[([^]]+)\]", metadata
-    )
-
-
-def parse_runtime_search_paths(metadata, platform_name):
-    """Return individual LC_RPATH/RPATH/RUNPATH entries."""
-    if platform_name == "darwin":
-        return re.findall(
-            r"^\s*path\s+(\S+)\s+\(offset\s+\d+\)\s*$",
-            metadata,
-            re.MULTILINE,
+    def native_metadata(path, command):
+        result = subprocess.run(command(path), capture_output=True, text=True, check=True)
+        metadata = result.stdout + result.stderr
+        assert "/root/.cache/openqp" not in metadata, (
+            f"build cache path leaked into {path}:\n{metadata}"
         )
-    encoded_paths = re.findall(
-        r"\((?:RPATH|RUNPATH)\).*?\[([^]]*)\]", metadata
-    )
-    return [
-        entry
-        for encoded_path in encoded_paths
-        for entry in encoded_path.split(":")
-        if entry
-    ]
-
-
-def assert_package_local_runtime_search_paths(
-    path, metadata, platform_name, local_rpath, dependencies=(),
-    package_root=None,
-):
-    runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
-    if not runtime_search_paths:
-        # ELF has no per-dependency location: DT_NEEDED carries bare sonames,
-        # and RUNPATH/$ORIGIN is the only thing keeping resolution inside the
-        # package.  Its absence stays fatal, with no exception to inspect.
-        assert platform_name == "darwin", (
-            f"{path} lacks package-local RPATH {local_rpath}:\n{metadata}"
+        assert "Library/Caches/openqp" not in metadata, (
+            f"macOS build cache path leaked into {path}:\n{metadata}"
         )
-        # Mach-O does: delocate >= 0.13 rewrites every ``@rpath/x`` load
-        # command to an explicit ``@loader_path/x`` and then drops the LC_RPATH
-        # it no longer needs.  That is stricter than an RPATH, which is a
-        # search list the loader could satisfy from elsewhere -- but only if
-        # EVERY load command is genuinely loader-relative, so verify that
-        # rather than assuming it.  Anything else -- a surviving ``@rpath/``
-        # with nothing left to resolve it, an ``@executable_path`` reference,
-        # a bare install name, or an absolute build-machine path that happens
-        # to exist on this runner and will not on a user's Mac -- fails here.
-        assert dependencies, (
-            f"{path} has no runtime search path and no dependency list was "
-            f"supplied, so nothing was actually verified:\n{metadata}"
-        )
-        # ``otool -L`` prints the library's own LC_ID_DYLIB first, and only
-        # first.  Skip exactly that entry -- matching on the basename instead
-        # would also swallow a genuine, nonlocal edge that happens to share the
-        # owner's filename, such as an erroneous /build/liboqp.dylib.
-        library_dir = os.path.dirname(os.path.abspath(str(path)))
-        root = os.path.abspath(package_root) if package_root else library_dir
+        return metadata
 
-        def _contains(directory, candidate):
-            return candidate == directory or candidate.startswith(directory + os.sep)
 
-        # Resolve before judging: "@loader_path/../../../../opt/homebrew/lib/x"
-        # has the right prefix and still points outside the wheel, and
-        # "/usr/lib/../../opt/x" is not a system library.
-        nonlocal_dependencies = []
-        for dependency in dependencies[1:]:
-            if dependency.startswith("@loader_path/"):
-                resolved = os.path.normpath(
-                    os.path.join(library_dir, dependency[len("@loader_path/"):])
+    def parse_dynamic_dependencies(metadata, platform_name):
+        """Return exact DT_NEEDED/install-name entries from native-tool output."""
+        if platform_name == "darwin":
+            dependencies = []
+            for line in metadata.splitlines()[1:]:
+                match = re.match(
+                    r"\s*(.+?)\s+\(compatibility version [^)]+\)$", line
                 )
-                if _contains(root, resolved):
-                    continue
-            elif dependency.startswith("/"):
-                resolved = os.path.normpath(dependency)
-                if any(_contains(d, resolved) for d in ("/usr/lib", "/System/Library")):
-                    continue
-            nonlocal_dependencies.append(dependency)
-
-        assert not nonlocal_dependencies, (
-            f"{path} has no runtime search path, so every dependency must "
-            f"resolve inside {root} or to a macOS system library; these do "
-            f"neither: {nonlocal_dependencies}\n{metadata}"
+                if match:
+                    dependencies.append(match.group(1))
+            return dependencies
+        return re.findall(
+            r"\(NEEDED\)\s+Shared library:\s*\[([^]]+)\]", metadata
         )
-        return
-    nonlocal_search_paths = [
-        entry for entry in runtime_search_paths
-        if entry != local_rpath and not entry.startswith(f"{local_rpath}/")
-    ]
-    assert not nonlocal_search_paths, (
-        f"{path} contains non-package-local runtime search paths "
-        f"{nonlocal_search_paths}:\n{metadata}"
+
+
+    def parse_runtime_search_paths(metadata, platform_name):
+        """Return individual LC_RPATH/RPATH/RUNPATH entries."""
+        if platform_name == "darwin":
+            return re.findall(
+                r"^\s*path\s+(\S+)\s+\(offset\s+\d+\)\s*$",
+                metadata,
+                re.MULTILINE,
+            )
+        encoded_paths = re.findall(
+            r"\((?:RPATH|RUNPATH)\).*?\[([^]]*)\]", metadata
+        )
+        return [
+            entry
+            for encoded_path in encoded_paths
+            for entry in encoded_path.split(":")
+            if entry
+        ]
+
+
+    def assert_package_local_runtime_search_paths(
+        path, metadata, platform_name, local_rpath, dependencies=(),
+        package_root=None,
+    ):
+        runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
+        if not runtime_search_paths:
+            # ELF has no per-dependency location: DT_NEEDED carries bare sonames,
+            # and RUNPATH/$ORIGIN is the only thing keeping resolution inside the
+            # package.  Its absence stays fatal, with no exception to inspect.
+            assert platform_name == "darwin", (
+                f"{path} lacks package-local RPATH {local_rpath}:\n{metadata}"
+            )
+            # Mach-O does: delocate >= 0.13 rewrites every ``@rpath/x`` load
+            # command to an explicit ``@loader_path/x`` and then drops the LC_RPATH
+            # it no longer needs.  That is stricter than an RPATH, which is a
+            # search list the loader could satisfy from elsewhere -- but only if
+            # EVERY load command is genuinely loader-relative, so verify that
+            # rather than assuming it.  Anything else -- a surviving ``@rpath/``
+            # with nothing left to resolve it, an ``@executable_path`` reference,
+            # a bare install name, or an absolute build-machine path that happens
+            # to exist on this runner and will not on a user's Mac -- fails here.
+            assert dependencies, (
+                f"{path} has no runtime search path and no dependency list was "
+                f"supplied, so nothing was actually verified:\n{metadata}"
+            )
+            # ``otool -L`` prints the library's own LC_ID_DYLIB first, and only
+            # first.  Skip exactly that entry -- matching on the basename instead
+            # would also swallow a genuine, nonlocal edge that happens to share the
+            # owner's filename, such as an erroneous /build/liboqp.dylib.
+            library_dir = os.path.dirname(os.path.abspath(str(path)))
+            root = os.path.abspath(package_root) if package_root else library_dir
+
+            def _contains(directory, candidate):
+                return candidate == directory or candidate.startswith(directory + os.sep)
+
+            # Resolve before judging: "@loader_path/../../../../opt/homebrew/lib/x"
+            # has the right prefix and still points outside the wheel, and
+            # "/usr/lib/../../opt/x" is not a system library.
+            nonlocal_dependencies = []
+            for dependency in dependencies[1:]:
+                if dependency.startswith("@loader_path/"):
+                    resolved = os.path.normpath(
+                        os.path.join(library_dir, dependency[len("@loader_path/"):])
+                    )
+                    if _contains(root, resolved):
+                        continue
+                elif dependency.startswith("/"):
+                    resolved = os.path.normpath(dependency)
+                    if any(_contains(d, resolved) for d in ("/usr/lib", "/System/Library")):
+                        continue
+                nonlocal_dependencies.append(dependency)
+
+            assert not nonlocal_dependencies, (
+                f"{path} has no runtime search path, so every dependency must "
+                f"resolve inside {root} or to a macOS system library; these do "
+                f"neither: {nonlocal_dependencies}\n{metadata}"
+            )
+            return
+        nonlocal_search_paths = [
+            entry for entry in runtime_search_paths
+            if entry != local_rpath and not entry.startswith(f"{local_rpath}/")
+        ]
+        assert not nonlocal_search_paths, (
+            f"{path} contains non-package-local runtime search paths "
+            f"{nonlocal_search_paths}:\n{metadata}"
+        )
+
+
+    def assert_canonical_dependency_graph(
+        owner, dependencies, required, canonical_names, platform_name
+    ):
+        """Require exactly the canonical SOVERSION name at every D4-stack edge."""
+        prefixes = {
+            "dftd4": "libdftd4",
+            "multicharge": "libmulticharge",
+            "mctc": "libmctc-lib",
+        }
+        stack_entries = {}
+        owner_basename = str(owner).rsplit("/", 1)[-1]
+        for dependency in dependencies:
+            basename = dependency.rsplit("/", 1)[-1]
+            logical_name = next(
+                (name for name, prefix in prefixes.items()
+                 if basename.startswith(prefix)),
+                None,
+            )
+            if logical_name is None:
+                continue
+            canonical = canonical_names[logical_name]
+            allowed = {canonical}
+            if platform_name == "darwin":
+                allowed = {f"@rpath/{canonical}", f"@loader_path/{canonical}"}
+            assert dependency in allowed, (
+                f"{owner} has noncanonical {logical_name} dependency "
+                f"{dependency!r}; expected one of {sorted(allowed)}"
+            )
+            # ``otool -L`` reports a dylib's LC_ID_DYLIB before its actual load
+            # commands.  Validate that install ID above, but do not count it as a
+            # dependency edge from the library to itself.
+            if platform_name == "darwin" and basename == owner_basename:
+                continue
+            stack_entries.setdefault(logical_name, []).append(dependency)
+
+        assert set(stack_entries) == set(required), (
+            f"{owner} DFT-D4 dependency edges are {stack_entries}; "
+            f"expected exactly {sorted(required)}"
+        )
+        duplicates = {
+            name: entries for name, entries in stack_entries.items()
+            if len(entries) != 1
+        }
+        assert not duplicates, f"{owner} has duplicate DFT-D4 edges: {duplicates}"
+
+
+    assert liboqp_path.is_file(), f"missing package-local OpenQP library: {liboqp_path}"
+    dependency_graph = {
+        liboqp_path: {"dftd4", "mctc"},
+        d4_paths["dftd4"]: {"multicharge", "mctc"},
+        d4_paths["multicharge"]: {"mctc"},
+        d4_paths["mctc"]: set(),
+    }
+    oqp_deps = ""
+    dependencies_by_owner = {}
+    for owner, required_edges in dependency_graph.items():
+        metadata = native_metadata(owner, inspect_command)
+        if owner == liboqp_path:
+            oqp_deps = metadata
+        dependencies = parse_dynamic_dependencies(metadata, sys.platform)
+        dependencies_by_owner[owner] = dependencies
+        assert_canonical_dependency_graph(
+            owner, dependencies, required_edges, d4_names, sys.platform
+        )
+
+    # NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
+    # the native dependency table and defined/undefined dynamic symbols so a stale
+    # link or an accidentally retained call cannot pass the wheel gate.
+    assert "nlopt" not in oqp_deps.lower(), (
+        f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
     )
+    if sys.platform == "darwin":
+        symbol_commands = [
+            ["nm", "-gU", str(liboqp_path)],
+            ["nm", "-u", str(liboqp_path)],
+        ]
+    else:
+        symbol_commands = [["nm", "-D", str(liboqp_path)]]
+    symbol_text = "\n".join(
+        subprocess.run(command, check=True, capture_output=True, text=True).stdout
+        for command in symbol_commands
+    )
+    assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
 
+    for path in (liboqp_path, *d4_paths.values()):
+        rpath_metadata = native_metadata(path, rpath_command)
+        assert_package_local_runtime_search_paths(
+            path, rpath_metadata, sys.platform, local_rpath,
+            dependencies_by_owner.get(path, ()),
+            # Containment boundary: delocate puts the repaired copies in
+            # oqp/.dylibs, a sibling of oqp/lib, so a legitimate
+            # "@loader_path/../.dylibs/x" must stay allowed while anything that
+            # climbs past the package must not.
+            package_root=oqp_root,
+        )
 
-def assert_canonical_dependency_graph(
-    owner, dependencies, required, canonical_names, platform_name
-):
-    """Require exactly the canonical SOVERSION name at every D4-stack edge."""
-    prefixes = {
+    # A repaired wheel must not retain a canonical file while secretly relinking to
+    # an auditwheel/delocate hash copy in ``*.libs`` or ``.dylibs``.  Inspect the
+    # complete installed artifact, not just oqp/lib.
+    artifact_root = Path(oqp_root).parent
+    stack_prefixes = {
         "dftd4": "libdftd4",
         "multicharge": "libmulticharge",
         "mctc": "libmctc-lib",
     }
-    stack_entries = {}
-    owner_basename = str(owner).rsplit("/", 1)[-1]
-    for dependency in dependencies:
-        basename = dependency.rsplit("/", 1)[-1]
-        logical_name = next(
-            (name for name, prefix in prefixes.items()
-             if basename.startswith(prefix)),
-            None,
+    for logical_name, prefix in stack_prefixes.items():
+        candidates = set()
+        for candidate in artifact_root.rglob(f"{prefix}*"):
+            filename = candidate.name
+            is_native = (
+                filename.endswith(".dylib") if sys.platform == "darwin"
+                else ".so" in filename
+            )
+            if candidate.is_file() and is_native:
+                candidates.add(candidate.absolute())
+        expected = {d4_paths[logical_name].absolute()}
+        assert candidates == expected, (
+            f"installed wheel contains alternate {logical_name} binaries: "
+            f"{sorted(map(str, candidates))}; expected only {sorted(map(str, expected))}"
         )
-        if logical_name is None:
-            continue
-        canonical = canonical_names[logical_name]
-        allowed = {canonical}
-        if platform_name == "darwin":
-            allowed = {f"@rpath/{canonical}", f"@loader_path/{canonical}"}
-        assert dependency in allowed, (
-            f"{owner} has noncanonical {logical_name} dependency "
-            f"{dependency!r}; expected one of {sorted(allowed)}"
-        )
-        # ``otool -L`` reports a dylib's LC_ID_DYLIB before its actual load
-        # commands.  Validate that install ID above, but do not count it as a
-        # dependency edge from the library to itself.
-        if platform_name == "darwin" and basename == owner_basename:
-            continue
-        stack_entries.setdefault(logical_name, []).append(dependency)
-
-    assert set(stack_entries) == set(required), (
-        f"{owner} DFT-D4 dependency edges are {stack_entries}; "
-        f"expected exactly {sorted(required)}"
-    )
-    duplicates = {
-        name: entries for name, entries in stack_entries.items()
-        if len(entries) != 1
-    }
-    assert not duplicates, f"{owner} has duplicate DFT-D4 edges: {duplicates}"
-
-
-assert liboqp_path.is_file(), f"missing package-local OpenQP library: {liboqp_path}"
-dependency_graph = {
-    liboqp_path: {"dftd4", "mctc"},
-    d4_paths["dftd4"]: {"multicharge", "mctc"},
-    d4_paths["multicharge"]: {"mctc"},
-    d4_paths["mctc"]: set(),
-}
-oqp_deps = ""
-dependencies_by_owner = {}
-for owner, required_edges in dependency_graph.items():
-    metadata = native_metadata(owner, inspect_command)
-    if owner == liboqp_path:
-        oqp_deps = metadata
-    dependencies = parse_dynamic_dependencies(metadata, sys.platform)
-    dependencies_by_owner[owner] = dependencies
-    assert_canonical_dependency_graph(
-        owner, dependencies, required_edges, d4_names, sys.platform
-    )
-
-# NLopt was replaced by OpenQP's deterministic simplex-QP solver.  Inspect both
-# the native dependency table and defined/undefined dynamic symbols so a stale
-# link or an accidentally retained call cannot pass the wheel gate.
-assert "nlopt" not in oqp_deps.lower(), (
-    f"NLopt dependency leaked into {liboqp_path}:\n{oqp_deps}"
-)
-if sys.platform == "darwin":
-    symbol_commands = [
-        ["nm", "-gU", str(liboqp_path)],
-        ["nm", "-u", str(liboqp_path)],
-    ]
-else:
-    symbol_commands = [["nm", "-D", str(liboqp_path)]]
-symbol_text = "\n".join(
-    subprocess.run(command, check=True, capture_output=True, text=True).stdout
-    for command in symbol_commands
-)
-assert not re.search(r"(?i)(?:nlopt|nlo_[a-z0-9_]+)", symbol_text), symbol_text
-
-for path in (liboqp_path, *d4_paths.values()):
-    rpath_metadata = native_metadata(path, rpath_command)
-    assert_package_local_runtime_search_paths(
-        path, rpath_metadata, sys.platform, local_rpath,
-        dependencies_by_owner.get(path, ()),
-        # Containment boundary: delocate puts the repaired copies in
-        # oqp/.dylibs, a sibling of oqp/lib, so a legitimate
-        # "@loader_path/../.dylibs/x" must stay allowed while anything that
-        # climbs past the package must not.
-        package_root=oqp_root,
-    )
-
-# A repaired wheel must not retain a canonical file while secretly relinking to
-# an auditwheel/delocate hash copy in ``*.libs`` or ``.dylibs``.  Inspect the
-# complete installed artifact, not just oqp/lib.
-artifact_root = Path(oqp_root).parent
-stack_prefixes = {
-    "dftd4": "libdftd4",
-    "multicharge": "libmulticharge",
-    "mctc": "libmctc-lib",
-}
-for logical_name, prefix in stack_prefixes.items():
-    candidates = set()
-    for candidate in artifact_root.rglob(f"{prefix}*"):
-        filename = candidate.name
-        is_native = (
-            filename.endswith(".dylib") if sys.platform == "darwin"
-            else ".so" in filename
-        )
-        if candidate.is_file() and is_native:
-            candidates.add(candidate.absolute())
-    expected = {d4_paths[logical_name].absolute()}
-    assert candidates == expected, (
-        f"installed wheel contains alternate {logical_name} binaries: "
-        f"{sorted(map(str, candidates))}; expected only {sorted(map(str, expected))}"
-    )
 
 
 D4_CHILD_MARKER = "OQP_D4_CHILD_RESULT="
@@ -395,6 +401,30 @@ if sys.platform == "darwin":
         value = dyld._dyld_get_image_name(index)
         if value:
             image_paths.append(value.decode("utf-8", errors="surrogateescape"))
+elif sys.platform == "win32":
+    # No /proc and no dyld: ask the loader which modules this process mapped.
+    # This is what proves the package-local DLLs won over any same-named copy
+    # elsewhere on PATH (pyoqp/oqp/runtime.py preloads them by absolute path).
+    import ctypes.wintypes
+
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    process = kernel32.GetCurrentProcess()
+    capacity = 4096
+    modules = (ctypes.wintypes.HMODULE * capacity)()
+    needed = ctypes.wintypes.DWORD()
+    if not psapi.EnumProcessModules(
+        process, ctypes.byref(modules), ctypes.sizeof(modules), ctypes.byref(needed)
+    ):
+        raise AssertionError(
+            f"EnumProcessModules failed: {ctypes.get_last_error()}"
+        )
+    count = min(capacity, needed.value // ctypes.sizeof(ctypes.wintypes.HMODULE))
+    name = ctypes.create_unicode_buffer(32768)
+    image_paths = []
+    for index in range(count):
+        if psapi.GetModuleFileNameExW(process, modules[index], name, len(name)):
+            image_paths.append(name.value)
 else:
     image_paths = []
     with open("/proc/self/maps", encoding="utf-8") as maps:
@@ -403,7 +433,11 @@ else:
             if len(fields) == 6 and fields[5].startswith("/"):
                 image_paths.append(fields[5].removesuffix(" (deleted)"))
 
-prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
+# Windows DLLs carry no "lib" prefix and no SOVERSION.
+if sys.platform == "win32":
+    prefixes = ("dftd4.dll", "multicharge.dll", "mctc-lib.dll")
+else:
+    prefixes = ("libdftd4", "libmulticharge", "libmctc-lib")
 loaded_stack = sorted({
     os.path.realpath(path) for path in image_paths
     if os.path.basename(path).startswith(prefixes)
