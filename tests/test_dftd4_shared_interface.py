@@ -6,6 +6,7 @@ import array
 import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -107,7 +108,7 @@ def _load_wheel_artifact_helpers():
             "assert_package_local_runtime_search_paths",
         }
     ]
-    namespace = {"re": re}
+    namespace = {"re": re, "os": os}
     exec(compile(ast.Module(body=selected, type_ignores=[]), str(WHEEL_SMOKE), "exec"), namespace)
     return namespace
 
@@ -555,6 +556,80 @@ Load command 21
             assert "non-package-local runtime search paths" in str(exc)
         else:
             raise AssertionError("absolute runtime search path passed wheel gate")
+
+
+def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_one():
+    """delocate >= 0.13 removes LC_RPATH after rewriting to @loader_path.
+
+    That layout has no runtime search path at all, which is package-local by
+    construction and must pass.  The same absence with a surviving ``@rpath/``
+    dependency is a library that cannot load, and must still fail.
+    """
+    helpers = _load_wheel_artifact_helpers()
+    validate = helpers["assert_package_local_runtime_search_paths"]
+    rpath_free = "Load command 12\n          cmd LC_SEGMENT_64\n"
+
+    # The first otool -L entry is the library's own LC_ID_DYLIB.  It is a name
+    # consumers link against, not an edge this file resolves, so an @rpath ID
+    # on an RPATH-free library is normal and must not be read as dangling.
+    validate(
+        "/pkg/oqp/lib/liboqp.dylib", rpath_free, "darwin", "@loader_path",
+        [
+            "@rpath/liboqp.dylib",                     # the install ID
+            "@loader_path/libdftd4.3.dylib",
+            "@loader_path/../.dylibs/libgfortran.5.dylib",   # delocate's copy
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/Accelerate.framework/Accelerate",
+        ],
+        package_root="/pkg/oqp",
+    )
+
+    # Every way a Mach-O dependency can escape the package.  A build-machine
+    # absolute path is the dangerous one: it resolves on the runner that built
+    # the wheel and is missing on the user's Mac.
+    for dependency in (
+        "@rpath/libdftd4.3.dylib",          # nothing left to resolve it
+        "@executable_path/libdftd4.3.dylib",  # depends on who loads it
+        "libdftd4.3.dylib",                 # bare install name
+        "/usr/local/opt/gcc@15/lib/gcc/15/libgfortran.5.dylib",
+        # Lexically loader-relative, but it climbs out of the wheel and lands
+        # on a library that exists only on the build runner.
+        "@loader_path/../../../../opt/homebrew/lib/libgfortran.5.dylib",
+        # Lexically under /usr/lib, and not a system library at all.
+        "/usr/lib/../../opt/homebrew/lib/libgfortran.5.dylib",
+        # A real, nonlocal edge that happens to share the owner's basename:
+        # skipping by name rather than by position would have let it through.
+        "/build/liboqp.dylib",
+    ):
+        try:
+            validate(
+                "/pkg/oqp/lib/liboqp.dylib", rpath_free, "darwin",
+                "@loader_path", ["@rpath/liboqp.dylib", dependency],
+                package_root="/pkg/oqp",
+            )
+        except AssertionError as exc:
+            assert "macOS system library" in str(exc), dependency
+        else:
+            raise AssertionError(f"{dependency} passed the wheel gate")
+
+    # Nothing to inspect is not the same as nothing wrong.
+    try:
+        validate("liboqp.dylib", rpath_free, "darwin", "@loader_path", [])
+    except AssertionError as exc:
+        assert "nothing was actually verified" in str(exc)
+    else:
+        raise AssertionError("an unverified library passed the wheel gate")
+
+    # ELF carries bare sonames, so an absent RUNPATH leaves nothing to check:
+    # the requirement stays absolute there, exception or not.
+    try:
+        validate(
+            "liboqp.so", "", "linux", "$ORIGIN", ["libdftd4.so.3"],
+        )
+    except AssertionError as exc:
+        assert "lacks package-local RPATH" in str(exc)
+    else:
+        raise AssertionError("an ELF artifact without RUNPATH passed the wheel gate")
 
 
 def test_macos_package_rpath_sanitizer_is_fail_closed_and_runs_last():
