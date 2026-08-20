@@ -334,6 +334,13 @@ macro(findLinearAlgebra)
       elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         set(linalg_lib OpenBLAS)
         set(_oqp_linalg_mandated TRUE)
+      elseif(WIN32)
+        # Same MKL ILP64 the Windows wheels and the standalone archive use.
+        # Naming it here keeps `auto` off the mkl_rt path below, whose single
+        # dynamic library defaults to the LP64 interface at RUN time -- an
+        # 8-byte-integer build calling 4-byte routines, silently.
+        set(linalg_lib Intel10_64ilp)
+        set(_oqp_linalg_mandated TRUE)
       endif()
       if(_oqp_linalg_mandated)
         message(STATUS "LINALG_LIB=auto resolved to '${linalg_lib}' for "
@@ -456,6 +463,12 @@ macro(findLinearAlgebra)
       if(TARGET oqp)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
+      # NOTE: nothing reads this.  mkl_rt picks its interface layer at run
+      # time and defaults to LP64; making ILP64 stick would require
+      # MKL_INTERFACE_LAYER in the environment or mkl_set_interface_layer()
+      # before the first BLAS call.  Every platform in the mandated table
+      # above avoids this branch; leaving the variable here so the gap is
+      # visible rather than implied.
       set(_MKL_INTERFACE_LAYER "ILP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
     elseif(linalg_lib STREQUAL Apple)
       set(_LINALG_LIB_TYPE "Accelerate_ILP64" CACHE INTERNAL "_LIANLG_LIB_TYPE")

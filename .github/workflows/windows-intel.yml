@@ -1,13 +1,20 @@
-name: Windows Intel (experimental)
-# Experimental: build OpenQP on Windows with Intel oneAPI (ifx + icx) and MKL
-# ILP64.  Not part of the required CI yet -- runs on this branch and on demand.
+name: Windows Intel
+# Build OpenQP on Windows with Intel oneAPI (ifx + icx) and MKL ILP64.
 on:
-  # Not on every push to main: this job takes the better part of an hour.  A
-  # weekly run catches a Windows regression within days, and a release always
-  # rebuilds from scratch.
+  # Not on every push: this job takes the better part of an hour.  A weekly
+  # run catches a Windows regression within days.
   schedule:
     - cron: "0 3 * * 0"   # Sundays, 03:00 UTC
   workflow_dispatch:
+  # But DO run on a PR that touches the Windows toolchain itself.  Without
+  # this, a change to the oneAPI setup action reaches main unexercised: the
+  # wheel workflow's paths do not list .github/actions/**, and its Windows leg
+  # only runs for releases and dispatches, so nothing else would build Windows
+  # before the merge.
+  pull_request:
+    paths:
+      - ".github/actions/setup-oneapi-windows/**"
+      - ".github/workflows/windows-intel.yml"
 
 
 jobs:

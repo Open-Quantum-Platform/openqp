@@ -37,6 +37,7 @@ name: Build and release distributions
     branches: [main]
     paths:
       - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
       - "CMakeLists.txt"
       - "CONTRIBUTING.md"
       - "LICENSE"
@@ -56,6 +57,7 @@ name: Build and release distributions
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
       - "CMakeLists.txt"
       - "CONTRIBUTING.md"
       - "LICENSE"
