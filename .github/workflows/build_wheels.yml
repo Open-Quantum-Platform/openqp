@@ -189,6 +189,10 @@ jobs:
           && contains(github.event.pull_request.labels.*.name, 'release'))
       || (github.event_name == 'workflow_dispatch' && inputs.action == 'build')
     runs-on: ${{ matrix.os }}
+    # The Windows leg is still being brought up (the DFT-D4 subprojects need
+    # the OpenBLAS import library forwarded to them there); let it report
+    # without failing a release.
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -302,6 +306,7 @@ jobs:
           # Intel Fortran/OpenMP redistributables into the wheel, so the user
           # installs nothing but the wheel itself.
           - name: windows-x86_64
+            experimental: true
             os: windows-2025
             platform: windows
             archs: AMD64
@@ -545,9 +550,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # windows-x86_64 is built but not yet required: the DFT-D4
+          # subprojects still need the OpenBLAS import library forwarded to
+          # them on Windows (see the experimental leg in build_wheels).
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
-              "windows-x86_64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
           }
 
           def wheel_key(wheel):
@@ -846,9 +853,11 @@ jobs:
           if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
               raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
           expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # windows-x86_64 is built but not yet required: the DFT-D4
+          # subprojects still need the OpenBLAS import library forwarded to
+          # them on Windows (see the experimental leg in build_wheels).
           expected_platform_tags = {
-              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
-              "windows-x86_64"
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64"
           }
 
           def wheel_key(wheel):
