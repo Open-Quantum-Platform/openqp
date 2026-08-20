@@ -4,9 +4,15 @@ name: Windows standalone bundle
 # carries the interpreter, liboqp.dll, the DFT-D4 DLLs, the Intel Fortran/OpenMP
 # redistributables, MKL, and the basis-set data.
 #
-# MKL (not OpenBLAS) on purpose: the PyPI wheels must use OpenBLAS because
-# libmkl_core exceeds PyPI's per-file size limit, but a zip release has no such
-# limit and MKL is the faster backend on the Intel hardware these users have.
+# MKL is carried INSIDE this archive, which is the one difference from the
+# Windows wheel.  Both link the same MKL ILP64, but libmkl_core alone exceeds
+# PyPI's per-file size limit, so the wheel excludes every mkl_*.dll from its
+# repair and declares `mkl` as a pip dependency instead.  A zip has no such
+# limit and no package manager to lean on, so it ships the DLLs: the whole
+# point is that the user installs nothing.
+#
+# (The Linux wheels differ again -- they bundle an ILP64 OpenBLAS, because
+# there is no pip-installable MKL story that fits the manylinux policy.)
 on:
   # Not on every push to main: this job takes the better part of an hour.  A
   # weekly run catches a Windows regression within days, and a release always
