@@ -580,15 +580,43 @@ def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_on
         ],
     )
 
+    # Every way a Mach-O dependency can escape the package.  A build-machine
+    # absolute path is the dangerous one: it resolves on the runner that built
+    # the wheel and is missing on the user's Mac.
+    for dependency in (
+        "@rpath/libdftd4.3.dylib",          # nothing left to resolve it
+        "@executable_path/libdftd4.3.dylib",  # depends on who loads it
+        "libdftd4.3.dylib",                 # bare install name
+        "/usr/local/opt/gcc@15/lib/gcc/15/libgfortran.5.dylib",
+    ):
+        try:
+            validate(
+                "liboqp.dylib", rpath_free, "darwin", "@loader_path",
+                [dependency],
+            )
+        except AssertionError as exc:
+            assert "loader-relative" in str(exc), dependency
+        else:
+            raise AssertionError(f"{dependency} passed the wheel gate")
+
+    # Nothing to inspect is not the same as nothing wrong.
+    try:
+        validate("liboqp.dylib", rpath_free, "darwin", "@loader_path", [])
+    except AssertionError as exc:
+        assert "nothing was actually verified" in str(exc)
+    else:
+        raise AssertionError("an unverified library passed the wheel gate")
+
+    # ELF carries bare sonames, so an absent RUNPATH leaves nothing to check:
+    # the requirement stays absolute there, exception or not.
     try:
         validate(
-            "liboqp.dylib", rpath_free, "darwin", "@loader_path",
-            ["@rpath/libdftd4.3.dylib"],
+            "liboqp.so", "", "linux", "$ORIGIN", ["libdftd4.so.3"],
         )
     except AssertionError as exc:
-        assert "through @rpath" in str(exc)
+        assert "lacks package-local RPATH" in str(exc)
     else:
-        raise AssertionError("unresolvable @rpath dependency passed the wheel gate")
+        raise AssertionError("an ELF artifact without RUNPATH passed the wheel gate")
 
 
 def test_macos_package_rpath_sanitizer_is_fail_closed_and_runs_last():

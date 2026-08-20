@@ -155,26 +155,40 @@ def assert_package_local_runtime_search_paths(
 ):
     runtime_search_paths = parse_runtime_search_paths(metadata, platform_name)
     if not runtime_search_paths:
-        # delocate >= 0.13 rewrites every ``@rpath/x`` load command to an
-        # explicit ``@loader_path/x`` and then drops the now-unused LC_RPATH.
-        # That is package-local by construction -- strictly tighter than an
-        # RPATH, which is a search list the loader could resolve elsewhere --
-        # so an empty list is correct *provided* nothing still needs a search
-        # path.  A library that kept an ``@rpath/`` dependency with no RPATH
-        # left to resolve it would not load at all, so that stays fatal.
-        #
+        # ELF has no per-dependency location: DT_NEEDED carries bare sonames,
+        # and RUNPATH/$ORIGIN is the only thing keeping resolution inside the
+        # package.  Its absence stays fatal, with no exception to inspect.
+        assert platform_name == "darwin", (
+            f"{path} lacks package-local RPATH {local_rpath}:\n{metadata}"
+        )
+        # Mach-O does: delocate >= 0.13 rewrites every ``@rpath/x`` load
+        # command to an explicit ``@loader_path/x`` and then drops the LC_RPATH
+        # it no longer needs.  That is stricter than an RPATH, which is a
+        # search list the loader could satisfy from elsewhere -- but only if
+        # EVERY load command is genuinely loader-relative, so verify that
+        # rather than assuming it.  Anything else -- a surviving ``@rpath/``
+        # with nothing left to resolve it, an ``@executable_path`` reference,
+        # a bare install name, or an absolute build-machine path that happens
+        # to exist on this runner and will not on a user's Mac -- fails here.
+        assert dependencies, (
+            f"{path} has no runtime search path and no dependency list was "
+            f"supplied, so nothing was actually verified:\n{metadata}"
+        )
         # ``otool -L`` prints the library's own LC_ID_DYLIB first.  That ID is
-        # a name consumers link against, not something this file resolves at
-        # load time, so it needs no search path of its own -- delocate rewrote
-        # the consumers' references instead.  Count real edges only.
+        # the name consumers link against, not an edge this file resolves, so
+        # it needs no search path of its own.
         own_basename = str(path).rsplit("/", 1)[-1]
-        unresolvable = [
+        system_prefixes = ("/usr/lib/", "/System/Library/")
+        nonlocal_dependencies = [
             d for d in dependencies
-            if d.startswith("@rpath/") and d.rsplit("/", 1)[-1] != own_basename
+            if d.rsplit("/", 1)[-1] != own_basename
+            and not d.startswith("@loader_path/")
+            and not d.startswith(system_prefixes)
         ]
-        assert not unresolvable, (
-            f"{path} has no runtime search path, yet still depends on "
-            f"{unresolvable} through @rpath:\n{metadata}"
+        assert not nonlocal_dependencies, (
+            f"{path} has no runtime search path, so every dependency must be "
+            f"loader-relative or a macOS system library; these are neither: "
+            f"{nonlocal_dependencies}\n{metadata}"
         )
         return
     nonlocal_search_paths = [
