@@ -183,7 +183,15 @@ def assert_package_local_runtime_search_paths(
         # so an empty list is correct *provided* nothing still needs a search
         # path.  A library that kept an ``@rpath/`` dependency with no RPATH
         # left to resolve it would not load at all, so that stays fatal.
-        unresolvable = [d for d in dependencies if d.startswith("@rpath/")]
+        # ``otool -L`` prints the library's own LC_ID_DYLIB first.  That ID is
+        # a name consumers link against, not something this file resolves at
+        # load time, so it needs no search path of its own -- delocate rewrote
+        # the consumers' references instead.  Count real edges only.
+        own_basename = str(path).rsplit("/", 1)[-1]
+        unresolvable = [
+            d for d in dependencies
+            if d.startswith("@rpath/") and d.rsplit("/", 1)[-1] != own_basename
+        ]
         assert not unresolvable, (
             f"{path} has no runtime search path, yet still depends on "
             f"{unresolvable} through @rpath:\n{metadata}"

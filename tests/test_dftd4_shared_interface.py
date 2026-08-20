@@ -571,9 +571,16 @@ def test_wheel_metadata_accepts_delocate_rpath_free_layout_but_not_a_dangling_on
     validate = helpers["assert_package_local_runtime_search_paths"]
     rpath_free = "Load command 12\n          cmd LC_SEGMENT_64\n"
 
+    # The first otool -L entry is the library's own LC_ID_DYLIB.  It is a name
+    # consumers link against, not an edge this file resolves, so an @rpath ID
+    # on an RPATH-free library is normal and must not be read as dangling.
     validate(
         "liboqp.dylib", rpath_free, "darwin", "@loader_path",
-        ["@loader_path/libdftd4.3.dylib", "/usr/lib/libSystem.B.dylib"],
+        [
+            "@rpath/liboqp.dylib",
+            "@loader_path/libdftd4.3.dylib",
+            "/usr/lib/libSystem.B.dylib",
+        ],
     )
 
     try:
