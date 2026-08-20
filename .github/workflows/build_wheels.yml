@@ -369,10 +369,13 @@ jobs:
           ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
           Get-Content C:\oqptc\intel.cmake
 
-      - name: Cache the ILP64 OpenBLAS (windows)
+      # restore/save rather than the combined action: the combined one saves
+      # only when the job succeeds, so an unrelated later failure threw away a
+      # 20-minute OpenBLAS build on every iteration.
+      - name: Restore the ILP64 OpenBLAS (windows)
         if: ${{ matrix.platform == 'windows' }}
         id: openblas-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: C:\oqpblas
           key: oqp-openblas64-windows-0.3.30-ifx-v1
@@ -380,6 +383,13 @@ jobs:
       - name: Build the ILP64 OpenBLAS (windows)
         if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
         run: python .github/scripts/build_openblas64_windows.py C:\oqpblas 0.3.30
+
+      - name: Save the ILP64 OpenBLAS (windows)
+        if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: C:\oqpblas
+          key: oqp-openblas64-windows-0.3.30-ifx-v1
 
       - name: Refresh the OpenBLAS metadata (windows)
         # Cheap, and keeps the .pc / initial-cache files right after a cache
