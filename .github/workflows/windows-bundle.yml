@@ -43,6 +43,21 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Verify the release tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          # build_wheels.yml validates this for the wheels, but that job cannot
+          # protect a separate workflow: without this, publishing v1.4.0 from a
+          # tree still declaring 1.3.0 would attach an archive named 1.3.0 to
+          # the v1.4.0 release.  Checked before the hour-long build, not at
+          # upload time.
+          $ver = python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
+          $tag = "${{ github.event.release.tag_name }}"
+          if ($tag -ne "v$ver") {
+            throw "Release tag '$tag' does not match pyproject.toml version '$ver' (expected 'v$ver')"
+          }
+          Write-Host "Release tag matches OpenQP version $ver."
+
       - name: Set up Intel oneAPI
         uses: ./.github/actions/setup-oneapi-windows
 

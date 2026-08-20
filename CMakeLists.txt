@@ -262,16 +262,6 @@ if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
   # CMAKE_Fortran_FLAGS rather than add_compile_options() so that
   # external/CMakeLists.txt forwards it to the DFT-D4 subprojects too.
   string(APPEND CMAKE_Fortran_FLAGS " /libs:dll /threads")
-
-  # Fortran symbol naming must match the BLAS being linked.  Intel Fortran on
-  # Windows emits UPPERCASE names with no trailing underscore, which is what
-  # MKL's Windows libraries export.  OpenBLAS keeps the Unix convention
-  # (`dgemm_`) even on Windows, so a build against it must switch, or every
-  # BLAS/LAPACK call goes unresolved -- including the ones inside the DFT-D4
-  # stack, which is built from these same flags.
-  if(LINALG_LIB STREQUAL OpenBLAS)
-    string(APPEND CMAKE_Fortran_FLAGS " /names:lowercase /assume:underscore")
-  endif()
 endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
@@ -354,6 +344,21 @@ endif()
 # the external project graph is generated. Linking to oqp happens when
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
+
+# Fortran symbol naming must match the BLAS actually selected.  Intel Fortran
+# on Windows emits UPPERCASE names with no trailing underscore, which is what
+# MKL's Windows libraries export; OpenBLAS keeps the Unix convention (`dgemm_`)
+# even on Windows, so a build against it must switch or every BLAS/LAPACK call
+# goes unresolved -- including the ones inside the DFT-D4 stack, which inherits
+# these flags.  Decide AFTER findLinearAlgebra(): with the public default
+# LINALG_LIB=auto the request says nothing about the backend, and auto resolves
+# to OpenBLAS whenever MKL is absent.  Both add_subdirectory() calls below
+# still see CMAKE_Fortran_FLAGS, so this is early enough.
+if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
+              OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+         AND _LINALG_LIB_SELECTED STREQUAL "OpenBLAS")
+  string(APPEND CMAKE_Fortran_FLAGS " /names:lowercase /assume:underscore")
+endif()
 
 # Prebuilt ddX (find_package(DDX) above) created the DDX::ddx imported target in
 # cmake/FindDDX.cmake BEFORE findLinearAlgebra() resolved BLAS/LAPACK, so it

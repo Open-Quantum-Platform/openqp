@@ -1,6 +1,7 @@
 """OQP instance"""
 
 import os
+import platform
 from oqp.utils.mpi_utils import MPIManager
 from oqp.runtime import library_path, resolve_oqp_root
 MPIManager()
@@ -31,7 +32,13 @@ def _oqp_wrapper(func):
     return wrapper
 
 
-if os.environ.get('OQP_RTLD'):
+if platform.uname()[0] == 'Windows':
+    # No _oqp extension is built on Windows (see pyoqp/CMakeLists.txt: it would
+    # need the MSVC toolchain and an import library for liboqp), so the ABI
+    # path is the only one that exists there.  Honouring OQP_RTLD=0 would mean
+    # `from _oqp import ...` and a ModuleNotFoundError at import.
+    RTLD = True
+elif os.environ.get('OQP_RTLD'):
     RTLD = str(os.environ.get('OQP_RTLD')).lower() in ('true', '1', 't', 'y', 'yes', 'on')
 else:
     RTLD = True

@@ -476,5 +476,10 @@ macro(findLinearAlgebra)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
     endif()
+    # Publish what `auto` actually resolved to.  LINALG_LIB itself keeps the
+    # user's spelling, so anything deciding on the real backend -- Fortran
+    # symbol mangling, for one -- must read this instead.
+    set(_LINALG_LIB_SELECTED "${linalg_lib}"
+        CACHE INTERNAL "LINALG_LIB after auto resolution")
     unset(linalg_lib)
 endmacro()

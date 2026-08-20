@@ -43,6 +43,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify the release tag matches the package version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # build_wheels.yml validates this for the wheels, but that job cannot
+          # protect a separate workflow: without this, publishing v1.4.0 from a
+          # tree still declaring 1.3.0 would attach an archive named 1.3.0 to
+          # the v1.4.0 release.  Checked before the hour-long build, not at
+          # upload time.
+          ver=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ "$RELEASE_TAG" != "v$ver" ]; then
+            echo "Release tag '$RELEASE_TAG' does not match pyproject.toml version '$ver' (expected 'v$ver')"
+            exit 1
+          fi
+          echo "Release tag matches OpenQP version $ver."
+
       - name: Cache the OpenBLAS and externals trees
         uses: actions/cache@v4
         with:
