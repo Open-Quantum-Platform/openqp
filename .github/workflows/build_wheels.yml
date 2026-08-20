@@ -378,7 +378,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: C:\oqpblas
-          key: oqp-openblas64-windows-0.3.30-ifx-v1
+          key: oqp-openblas64-windows-0.3.30-ifx-static-v2
 
       - name: Build the ILP64 OpenBLAS (windows)
         if: ${{ matrix.platform == 'windows' && steps.openblas-cache.outputs.cache-hit != 'true' }}
@@ -389,7 +389,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: C:\oqpblas
-          key: oqp-openblas64-windows-0.3.30-ifx-v1
+          key: oqp-openblas64-windows-0.3.30-ifx-static-v2
 
       - name: Refresh the OpenBLAS metadata (windows)
         # Cheap, and keeps the .pc / initial-cache files right after a cache

@@ -110,7 +110,11 @@ def main(argv: list[str]) -> int:
         f"-DCMAKE_Fortran_COMPILER={cmplr}/bin/ifx.exe",
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_INSTALL_PREFIX={prefix.as_posix()}",
-        "-DBUILD_SHARED_LIBS=ON",
+        # Static.  OpenBLAS's CMake shared build on Windows does not produce a
+        # usable export table -- the import library resolves neither `DGEMM`
+        # nor `dgemm_` -- and linking the archive into liboqp.dll sidesteps the
+        # question entirely, with nothing extra for delvewheel to bundle.
+        "-DBUILD_SHARED_LIBS=OFF",
         # The whole point: 8-byte BLAS integers, and NO symbol renaming --
         # OpenQP and the DFT-D4 stack call plain dgemm_/dsytrf_.
         "-DINTERFACE64=ON",
@@ -143,6 +147,10 @@ def main(argv: list[str]) -> int:
         # mode) makes the mismatch an error rather than a warning.  The
         # conversion is harmless -- prefetch ignores the pointee type.
         "-DCMAKE_C_FLAGS=/clang:-Wno-incompatible-pointer-types",
+        # OpenBLAS's C kernels export the Unix convention (`dgemm_`); build its
+        # Fortran LAPACK the same way so the archive is internally consistent
+        # and matches what OpenQP emits under /names:lowercase.
+        "-DCMAKE_Fortran_FLAGS=/names:lowercase /assume:underscore",
     ])
     run(["cmake", "--build", str(build), "--parallel"])
     run(["cmake", "--install", str(build)])
