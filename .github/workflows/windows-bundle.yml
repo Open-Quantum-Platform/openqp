@@ -8,8 +8,11 @@ name: Windows standalone bundle
 # libmkl_core exceeds PyPI's per-file size limit, but a zip release has no such
 # limit and MKL is the faster backend on the Intel hardware these users have.
 on:
-  push:
-    branches: [feat/windows-intel-build]
+  # Not on every push to main: this job takes the better part of an hour.  A
+  # weekly run catches a Windows regression within days, and a release always
+  # rebuilds from scratch.
+  schedule:
+    - cron: "0 3 * * 0"   # Sundays, 03:00 UTC
   workflow_dispatch:
   release:
     types: [published]

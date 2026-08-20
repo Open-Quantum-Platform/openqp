@@ -2,8 +2,11 @@ name: Windows Intel (experimental)
 # Experimental: build OpenQP on Windows with Intel oneAPI (ifx + icx) and MKL
 # ILP64.  Not part of the required CI yet -- runs on this branch and on demand.
 on:
-  push:
-    branches: [feat/windows-intel-build]
+  # Not on every push to main: this job takes the better part of an hour.  A
+  # weekly run catches a Windows regression within days, and a release always
+  # rebuilds from scratch.
+  schedule:
+    - cron: "0 3 * * 0"   # Sundays, 03:00 UTC
   workflow_dispatch:
 
 

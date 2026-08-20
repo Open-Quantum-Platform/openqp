@@ -90,6 +90,23 @@ Source-build options are documented in the
 A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image)
 is also available.
 
+#### Windows
+
+Download **`openqp-<version>-windows-x86_64.zip`** from the
+[latest release](https://github.com/Open-Quantum-Platform/openqp/releases/latest),
+unzip it anywhere, and run:
+
+```bat
+openqp.exe examples\HF\H2O_RHF-HF_ENERGY.inp
+```
+
+Nothing else to install: the archive carries its own Python, Intel Fortran
+runtime, Intel MKL and the basis-set data, and reads no system installation of
+them. Set `OMP_NUM_THREADS` to the number of physical cores for parallel runs.
+
+To use OpenQP as a Python library on Windows instead (`import oqp`), install
+the wheel with `pip install openqp` — pip pulls in Intel MKL alongside it.
+
 ### Quick Start
 
 ```bash

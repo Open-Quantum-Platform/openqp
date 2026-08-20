@@ -82,6 +82,19 @@ if sys.platform == "darwin":
     inspect_command = lambda path: ["otool", "-L", str(path)]
     rpath_command = lambda path: ["otool", "-l", str(path)]
     local_rpath = "@loader_path"
+elif sys.platform == "win32":
+    # Windows DLLs carry no SOVERSION, and there is no RPATH: dependent DLLs
+    # are found through the search path, which pyoqp/oqp/runtime.py primes with
+    # os.add_dll_directory.  The ELF/Mach-O dependency and rpath checks below
+    # have no counterpart, so this platform stops after the file checks.
+    d4_names = {
+        "dftd4": "dftd4.dll",
+        "multicharge": "multicharge.dll",
+        "mctc": "mctc-lib.dll",
+    }
+    inspect_command = None
+    rpath_command = None
+    local_rpath = None
 else:
     d4_names = {
         "dftd4": "libdftd4.so.3",
@@ -96,9 +109,17 @@ d4_paths = {name: libdir / filename for name, filename in d4_names.items()}
 for name, path in d4_paths.items():
     assert path.is_file(), f"missing package-local {name} shared library: {path}"
     assert not path.is_symlink(), f"wheel must contain a regular replaceable file: {path}"
-assert not list(libdir.glob("libdftd4.a")), "static libdftd4 archive leaked into wheel"
-assert not list(libdir.glob("libmulticharge.a")), "static multicharge archive leaked into wheel"
-assert not list(libdir.glob("libmctc-lib.a")), "static mctc-lib archive leaked into wheel"
+for stem in ("libdftd4", "libmulticharge", "libmctc-lib"):
+    assert not list(libdir.glob(f"{stem}.a")), f"static {stem} archive leaked into wheel"
+
+if sys.platform == "win32":
+    # MKL is linked but deliberately not carried (see pyproject.toml): pip
+    # installs it as a dependency.  A wheel that shipped it would blow past
+    # PyPI's per-file limit, so assert it is absent rather than present.
+    stowaways = sorted(p.name for p in libdir.glob("mkl_*.dll"))
+    assert not stowaways, f"MKL must not ship inside the wheel: {stowaways}"
+    print("windows wheel: DFT-D4 DLLs present, MKL correctly left to pip")
+    raise SystemExit(0)
 
 liboqp_path = libdir / f"liboqp.{native_suffix}"
 
