@@ -8,13 +8,31 @@
 # with nothing installed:  ./openqp job.inp
 set -euo pipefail
 
-PY=/opt/python/cp311-cp311/bin/python
+# NOT one of the /opt/python/* interpreters this image is famous for: those are
+# built static (Py_ENABLE_SHARED=0, no libpython*.so anywhere under /opt), and
+# PyInstaller cannot freeze an interpreter it cannot load as a library --
+# "Python was built without a shared library".  The image's own AlmaLinux 8
+# python3.12 IS a shared build, sits on the same glibc 2.28, and therefore
+# keeps the portability floor this container exists to enforce.  It ships
+# without headers or pip, so add them.
+dnf install -y -q python3.12-devel python3.12-pip
+VENV=/tmp/oqpvenv
+/usr/bin/python3.12 -m venv "$VENV"
+PY="$VENV/bin/python"
 CACHE=/host-cache/openqp
 BLAS="$CACHE/openblas64"
 export XDG_CACHE_HOME=/host-cache
 
 echo "::group::toolchain"
 "$PY" --version
+# Fail here, in one line, rather than 40 minutes later at the freeze step.
+"$PY" - <<'PY_CHECK'
+import sysconfig
+assert sysconfig.get_config_var("Py_ENABLE_SHARED"), (
+    "interpreter is a static build; PyInstaller cannot freeze it"
+)
+print("shared libpython in", sysconfig.get_config_var("LIBDIR"))
+PY_CHECK
 gcc --version | head -1
 gfortran --version | head -1
 echo "::endgroup::"
