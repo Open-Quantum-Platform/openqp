@@ -197,6 +197,27 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         self.assertIn("os: ubuntu-24.04-arm", source)
         self.assertIn("archs: aarch64", source)
 
+    def test_release_wheel_matrix_requires_windows(self):
+        source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        self.assertIn("name: windows-x86_64", source)
+        self.assertIn("os: windows-2025", source)
+        # Promoted out of the experimental legs: a release missing its Windows
+        # wheels is incomplete, so both verifiers must demand them and the job
+        # must not be allowed to fail quietly.
+        self.assertEqual(
+            source.count(
+                '"linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",\n'
+                '              "windows-x86_64"'
+            ),
+            2,
+            "both release verifiers must require Windows wheels",
+        )
+        self.assertEqual(source.count('platform = "windows-x86_64"'), 2)
+        windows_leg = source[source.index("- name: windows-x86_64"):]
+        windows_leg = windows_leg[:windows_leg.index("cache_path:")]
+        self.assertNotIn("experimental", windows_leg)
+
     def test_pull_requests_use_cached_smoke_wheel_not_full_matrix(self):
         source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
 
