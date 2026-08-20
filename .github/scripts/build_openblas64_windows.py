@@ -131,6 +131,12 @@ def main(argv: list[str]) -> int:
         "-DBUILD_TESTING=OFF",
         "-DBUILD_WITHOUT_LAPACK=OFF",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        # OpenBLAS's x86-64 micro-kernels call _mm_prefetch(&x[0], ...) with a
+        # float*.  On Unix the intrinsic takes const void*, but Windows'
+        # winnt.h declares `CHAR CONST *`, and current clang (icx in clang-cl
+        # mode) makes the mismatch an error rather than a warning.  The
+        # conversion is harmless -- prefetch ignores the pointee type.
+        "-DCMAKE_C_FLAGS=/clang:-Wno-incompatible-pointer-types",
     ])
     run(["cmake", "--build", str(build), "--parallel"])
     run(["cmake", "--install", str(build)])
