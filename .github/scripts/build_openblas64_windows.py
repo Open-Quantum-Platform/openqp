@@ -117,8 +117,14 @@ def main(argv: list[str]) -> int:
         "-DSYMBOLPREFIX=",
         "-DSYMBOLSUFFIX=",
         # Runtime CPU dispatch, as the Linux wheels do, so one wheel serves
-        # every x86-64 machine.
+        # every x86-64 machine -- but only over the kernels that build here.
+        # OpenBLAS's AVX-512 micro-kernels are compiled without their target
+        # feature flags under clang-cl ("always_inline function
+        # '_mm512_setzero_ps' requires target feature 'avx512f'"), so the
+        # dispatch list stops at AVX2.  Every machine from Sandy Bridge on is
+        # still covered; only the AVX-512 fast paths are given up.
         "-DDYNAMIC_ARCH=ON",
+        "-DDYNAMIC_LIST=NEHALEM;SANDYBRIDGE;HASWELL;ZEN",
         # OpenBLAS's own thread pool rather than OpenMP.  Its OpenMP check
         # rejects this toolchain outright -- icx advertises -Qiopenmp and ifx
         # -openmp, and it reads two spellings of Intel's single runtime as
