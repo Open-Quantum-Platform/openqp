@@ -250,6 +250,10 @@ jobs:
    intel-build:
       name: Intel oneAPI ifx + MKL ILP64 (ubuntu-24.04)
       runs-on: ubuntu-24.04
+      # Bounded so a slow Intel mirror fails this leg instead of occupying a
+      # runner for the six-hour default (it once sat in the apt step for over
+      # two hours).
+      timeout-minutes: 120
       env:
          ONEAPI_VERSION: "2026.1"
       steps:
@@ -261,14 +265,23 @@ jobs:
             python-version: '3.11'
             cache: 'pip'
             cache-dependency-path: pyoqp/requirements.txt
+         # ~5 GB from Intel's mirror, and its throughput varies a lot; give the
+         # step its own deadline so a bad mirror is a clear failure rather than
+         # a hang.  --no-install-recommends keeps the SYCL extras out.
+         #
+         # The C/C++ compilers cannot be dropped in favour of the runner's GCC:
+         # CMake resolves OpenMP_Fortran to Intel's -fiopenmp and passes it to
+         # the link driver, which g++ rejects, and the result would carry two
+         # OpenMP runtimes.
          - name: Install Intel oneAPI compilers and MKL
+           timeout-minutes: 45
            run: |
             wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
               | sudo gpg --dearmor -o /usr/share/keyrings/oneapi-archive-keyring.gpg
             echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
               | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
             sudo apt-get update
-            sudo apt-get install -y \
+            sudo apt-get install -y --no-install-recommends \
               intel-oneapi-compiler-fortran-${ONEAPI_VERSION} \
               intel-oneapi-compiler-dpcpp-cpp-${ONEAPI_VERSION} \
               intel-oneapi-mkl-devel-${ONEAPI_VERSION}
