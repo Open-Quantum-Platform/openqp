@@ -76,6 +76,20 @@ def write_metadata(prefix: Path, version: str) -> None:
         ),
         encoding="ascii",
     )
+    # Which spelling did it actually export?  ifx on Windows emits UPPERCASE
+    # with no underscore by default, OpenBLAS normally uses the Unix `dgemm_`,
+    # and the "openblas64" distributions add a `64_` suffix -- link failures
+    # here are always one of the three, so say which is present.
+    blob = lib.read_bytes()
+    spellings = [b"dgemm_64_", b"dgemm_", b"DGEMM", b"dgemm"]
+    found = [sp.decode() for sp in spellings if sp in blob]
+    print(f"dgemm spellings present in {lib.name}: {found or '(none)'}")
+    if not found:
+        raise SystemExit(
+            f"{lib} exports no recognisable dgemm symbol; the OpenBLAS build "
+            "did not produce usable BLAS"
+        )
+
     print(f"import library: {lib}")
     print(f"pkg-config:     {pc_dir / 'openblas64.pc'}")
     print(f"initial cache:  {prefix / 'openblas-cache.cmake'}")
