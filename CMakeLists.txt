@@ -102,17 +102,21 @@ option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 # oqp_dftd4_disp is simply absent from liboqp and the Python layer reports
 # dispersion as unavailable.  On every supported platform the default is ON.
 option(ENABLE_DFTD4 "Build the native DFT-D4 dispersion backend" ON)
-if(WIN32 AND ENABLE_DFTD4 AND NOT BUILD_SHARED_LIBS)
-    # Upstream dftd4 exports its API with !DEC$ ATTRIBUTES DLLEXPORT, which
-    # marks the symbols __declspec(dllimport) for consumers.  A static link
-    # then leaves unresolved __imp_* references, so this combination cannot
-    # work -- say so during configuration instead of failing at link time,
-    # after the whole stack has been compiled.
+if(WIN32 AND NOT BUILD_SHARED_LIBS)
+    # Two independent reasons, so this is rejected regardless of ENABLE_DFTD4:
+    #  * upstream dftd4 exports its API with !DEC$ ATTRIBUTES DLLEXPORT, which
+    #    marks the symbols __declspec(dllimport) for consumers; a static link
+    #    leaves unresolved __imp_* references.
+    #  * the static branch below forces CMAKE_FIND_LIBRARY_SUFFIXES to ".a",
+    #    which finds nothing on Windows -- MKL and the rest are ".lib" -- so
+    #    BLAS discovery fails before anything is compiled.
+    # Turning the backend off would only move the failure, so do not offer it
+    # as a workaround.  Windows is built and tested shared.
     message(FATAL_ERROR
-        "On Windows the DFT-D4 backend requires a shared build: its Fortran "
-        "sources carry DLLEXPORT attributes that a static link cannot "
-        "satisfy.  Use -DBUILD_SHARED_LIBS=ON, or -DENABLE_DFTD4=OFF to drop "
-        "dispersion.")
+        "On Windows OpenQP must be built shared: static Windows builds are "
+        "not supported (DFT-D4 exports through DLLEXPORT, and static library "
+        "discovery here looks for Unix '.a' names).  Configure with "
+        "-DBUILD_SHARED_LIBS=ON.")
 endif()
 
 get_property(_oqp_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

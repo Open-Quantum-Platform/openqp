@@ -476,10 +476,28 @@ macro(findLinearAlgebra)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
     endif()
-    # Publish what `auto` actually resolved to.  LINALG_LIB itself keeps the
-    # user's spelling, so anything deciding on the real backend -- Fortran
-    # symbol mangling, for one -- must read this instead.
-    set(_LINALG_LIB_SELECTED "${linalg_lib}"
+    # Publish the backend actually in use.  LINALG_LIB keeps the user's
+    # spelling, so anything deciding on the real provider -- Fortran symbol
+    # mangling, for one -- must read this instead.
+    #
+    # `auto` is only rewritten for the platforms in the mandated table above;
+    # everywhere else (Windows included) it stays "auto" and the generic
+    # FindBLAS probe picks the provider.  Naming that provider is the whole
+    # point here, so read it back off the libraries FindBLAS returned.
+    set(_oqp_selected_linalg "${linalg_lib}")
+    if(_oqp_selected_linalg STREQUAL auto)
+      string(TOLOWER "${BLAS_LIBRARIES};${LAPACK_LIBRARIES}" _oqp_found_blas)
+      if(_oqp_found_blas MATCHES "openblas")
+        set(_oqp_selected_linalg OpenBLAS)
+      elseif(_oqp_found_blas MATCHES "mkl")
+        set(_oqp_selected_linalg Intel10_64ilp)
+      endif()
+      message(STATUS "LINALG_LIB=auto: FindBLAS selected "
+                     "'${_oqp_selected_linalg}' (${BLAS_LIBRARIES})")
+    endif()
+    set(_LINALG_LIB_SELECTED "${_oqp_selected_linalg}"
         CACHE INTERNAL "LINALG_LIB after auto resolution")
+    unset(_oqp_selected_linalg)
+    unset(_oqp_found_blas)
     unset(linalg_lib)
 endmacro()
