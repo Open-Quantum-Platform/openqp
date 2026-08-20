@@ -239,6 +239,102 @@ jobs:
             # module fails to import.
             python -m pytest tests -q -n auto --forked --tb=short -rf
 
+   # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
+   # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),
+   # which the gcc legs above cannot exercise. The compilers and MKL come from
+   # Intel's apt repository (compiler + mkl-devel only, no full Base/HPC kit).
+   # gfortran ignores Intel-specific directives and accepts several non-standard
+   # constructs that ifx rejects, so this leg is what keeps the tree Intel-clean.
+   # MPI and ddX are not exercised here (Intel MPI wrappers and a ddX Intel
+   # build are separate validation items); the PCM/ddX examples report SKIPPED.
+   intel-build:
+      name: Intel oneAPI ifx + MKL ILP64 (ubuntu-24.04)
+      runs-on: ubuntu-24.04
+      # Bounded so a slow Intel mirror fails this leg instead of occupying a
+      # runner for the six-hour default (it once sat in the apt step for over
+      # two hours).
+      timeout-minutes: 120
+      env:
+         ONEAPI_VERSION: "2026.1"
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: '3.11'
+            cache: 'pip'
+            cache-dependency-path: pyoqp/requirements.txt
+         # ~5 GB from Intel's mirror, and its throughput varies a lot; give the
+         # step its own deadline so a bad mirror is a clear failure rather than
+         # a hang.  --no-install-recommends keeps the SYCL extras out.
+         #
+         # The C/C++ compilers cannot be dropped in favour of the runner's GCC:
+         # CMake resolves OpenMP_Fortran to Intel's -fiopenmp and passes it to
+         # the link driver, which g++ rejects, and the result would carry two
+         # OpenMP runtimes.
+         - name: Install Intel oneAPI compilers and MKL
+           timeout-minutes: 45
+           run: |
+            wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+              | sudo gpg --dearmor -o /usr/share/keyrings/oneapi-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+              | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              intel-oneapi-compiler-fortran-${ONEAPI_VERSION} \
+              intel-oneapi-compiler-dpcpp-cpp-${ONEAPI_VERSION} \
+              intel-oneapi-mkl-devel-${ONEAPI_VERSION}
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            echo "ifx=$(ifx --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/.cache/openqp/externals
+            key: oqp-externals-ubuntu-24.04-ifx${{ steps.toolchain.outputs.ifx }}-mkl-ilp64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-ubuntu-24.04-ifx${{ steps.toolchain.outputs.ifx }}-mkl-ilp64-
+         - name: Install CMake
+           run: pip install ninja cmake
+         - name: Build & install OpenQP (ifx / icx / MKL ILP64)
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            export CC=icx CXX=icpx FC=ifx
+            # LINALG_LIB=auto resolves to Intel MKL ILP64 on Linux x86_64; the
+            # loaded oneAPI MKL (MKLROOT) takes precedence over any distribution
+            # MKL (cmake/oqp_functions.cmake, findBlasLapack).
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.define.LINALG_LIB=auto \
+                --config-settings=cmake.define.ENABLE_MPI=OFF; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         - name: Check that liboqp links the oneAPI MKL
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            lib="$(python -c 'import oqp, os; print(os.path.dirname(oqp.__file__))' | tail -n1)/lib/liboqp.so"
+            ldd "$lib" | tee ldd.out
+            if ! grep -q 'libmkl_intel_ilp64' ldd.out; then
+              echo "::error::liboqp.so is not linked against the MKL ILP64 interface layer"
+              exit 1
+            fi
+         - name: Run example test suite
+           env:
+            OQP_TEST_OMP_THREADS: 1
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
+
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
    # resolve to Apple Accelerate ILP64 -- OpenQP is ILP64-only, one uniform

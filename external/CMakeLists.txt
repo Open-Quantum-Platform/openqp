@@ -1,6 +1,6 @@
 include(ExternalProject)
 
-set(_OQP_EXTERNALS_CACHE_REVISION "1")
+set(_OQP_EXTERNALS_CACHE_REVISION "2")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 # NLopt is no longer built or linked. Keep its former aggregate-key fragment
 # verbatim so this removal does not select a fresh cache namespace and rebuild
@@ -323,7 +323,8 @@ ExternalProject_Add(libxc
         STAMP_DIR  ${LIBXC_STAMP_DIR}
         UPDATE_COMMAND ""
         INSTALL_COMMAND ""
-        CMAKE_ARGS ${LIBXC_CMAKE_ARGS}
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                    ${LIBXC_CMAKE_ARGS}
         )
 endif()
 
@@ -370,9 +371,11 @@ ExternalProject_Add(libtagarray
         # -std=f2018 build truncates under gfortran>=12; wrap it (idempotent).
         PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_linelen.py ${TAGARRAY_SOURCE_DIR}
         INSTALL_COMMAND ""
-        CMAKE_ARGS -DENABLE_FORTRAN=ON
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                    -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
                    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                    "-DCMAKE_Fortran_FLAGS=${_TAGARRAY_Fortran_FLAGS}"
@@ -405,7 +408,8 @@ ExternalProject_Add(libecpint
         STAMP_DIR  ${LIBECPINT_STAMP_DIR}
 	INSTALL_DIR ${LIBECPINT_INSTALL_DIR}
         UPDATE_COMMAND ""
-        CMAKE_ARGS -DLIBECPINT_BUILD_DOCS=OFF
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                    -DLIBECPINT_BUILD_DOCS=OFF
                    -DLIBECPINT_BUILD_TESTS=OFF
 		   -DLIBECPINT_USE_PUGIXML=OFF
                    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -448,7 +452,8 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         UPDATE_COMMAND ""
         PATCH_COMMAND perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
         INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_INDEX64=ON
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                    -DBUILD_INDEX64=ON
                    -DBUILD_SINGLE=ON
                    -DBUILD_DOUBLE=ON
                    -DBUILD_COMPLEX=ON

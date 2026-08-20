@@ -281,6 +281,18 @@ endmacro()
 
 macro(findBlasLapack)
     cleanBlasVars()
+    # CMake's FindBLAS passes $MKLROOT to find_library() as PATHS, which is
+    # searched AFTER the system library directories.  On a host that also has
+    # a distribution MKL (for example Ubuntu's libmkl-* 2020 packages in
+    # /usr/lib/x86_64-linux-gnu) that stale copy silently wins over the
+    # oneAPI MKL the user loaded with setvars.sh.  Put MKLROOT first so that
+    # the loaded oneAPI MKL is the one that is found.
+    if(BLA_VENDOR MATCHES "^Intel" AND DEFINED ENV{MKLROOT})
+        file(TO_CMAKE_PATH "$ENV{MKLROOT}" _oqp_mklroot)
+        list(PREPEND CMAKE_LIBRARY_PATH
+             "${_oqp_mklroot}/lib" "${_oqp_mklroot}/lib/intel64")
+        unset(_oqp_mklroot)
+    endif()
     find_package(BLAS)
     find_package(LAPACK)
     if(BLAS_FOUND AND DEFINED BLAS_SIZEOF_INTEGER AND NOT BLAS_SIZEOF_INTEGER EQUAL ${BLA_SIZEOF_INTEGER})

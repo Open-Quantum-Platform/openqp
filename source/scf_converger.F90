@@ -1602,7 +1602,8 @@ contains
     conv => self%select_method(self%current_error)
 
     if (self%state == conv_state_not_initialized) then
-      conv_result = scf_conv_result(error=self%current_error)
+      if (allocated(conv_result)) deallocate(conv_result)
+      allocate(conv_result, source=scf_conv_result(error=self%current_error))
       return
     end if
 
@@ -1612,10 +1613,11 @@ contains
     call conv%setup()
     ! Nothing left to do on the first iteration, exit
     if (self%step == 1) then
-      conv_result = scf_conv_result( &
+      if (allocated(conv_result)) deallocate(conv_result)
+      allocate(conv_result, source=scf_conv_result( &
                       ierr=0, &
                       active_converger_name='SD', &
-                      error=self%current_error)
+                      error=self%current_error))
       return
     end if
 

@@ -2318,7 +2318,7 @@ contains
   subroutine run_xc(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
     use blas_thread, only: blas_thread_count, blas_thread_set
-    use, intrinsic :: iso_c_binding, only: c_int64_t
+    use, intrinsic :: iso_c_binding, only: c_int64_t, c_int
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
 !$                     omp_get_max_threads, omp_get_num_procs, omp_get_wtime, &
 !$                     omp_set_num_threads
@@ -2583,7 +2583,7 @@ contains
     call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
     ! ...and put the OpenMP count back to exactly what this routine found.  On
     ! an OpenMP OpenBLAS the line above has just moved it to the BLAS count.
-!$  call omp_set_num_threads(nOmpThreads)
+!$  call omp_set_num_threads(int(nOmpThreads, kind=c_int))
 
     call xc_dat%parallel_stop()
     call xc_dat%pe%allreduce(exc, 1)
@@ -2610,7 +2610,7 @@ contains
   subroutine run_grid_aos(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
     use blas_thread, only: blas_thread_count, blas_thread_set
-    use, intrinsic :: iso_c_binding, only: c_int64_t
+    use, intrinsic :: iso_c_binding, only: c_int64_t, c_int
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
 !$                     omp_get_max_threads, omp_get_num_procs, &
 !$                     omp_set_num_threads
@@ -2725,7 +2725,7 @@ contains
 
     call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
     ! ...and put the OpenMP count back, see run_xc
-!$  call omp_set_num_threads(nOmpThreads)
+!$  call omp_set_num_threads(int(nOmpThreads, kind=c_int))
 
     call xc_dat%parallel_stop()
 

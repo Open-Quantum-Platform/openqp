@@ -108,10 +108,6 @@ CONTAINS
     REAL(REAL64) :: ovl, kinx, kiny, kinz, kin
     real(real64) :: xyzovl(0:max_ang+2,0:max_ang,3)
     real(real64) :: xyzkin(0:max_ang_pad,0:max_ang,3)
-!dir$ assume_aligned sblk : 64
-!dir$ assume_aligned tblk : 64
-!dir$ assume_aligned xyzkin : 64
-!dir$ assume_aligned xyzovl : 64
 
     jmax = cp%jang
     IF (dokinetic) jmax = cp%jang+2
@@ -178,8 +174,6 @@ CONTAINS
     INTEGER :: i, j, ij, jmax, nx, ny, nz, mx, my, mz
     REAL(REAL64) :: dum, dij
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned vblk : 64
 
     ASSOCIATE (pp => cp%p(id), &
                iang => cp%iang, jang => cp%jang, &
@@ -246,8 +240,6 @@ END SUBROUTINE
     INTEGER :: i, j, ij, jmax, nx, ny, nz, mx, my, mz
     REAL(REAL64) :: dum, dij, xfac
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned vblk : 64
 
     ASSOCIATE (pp => cp%p(id), &
                iang => cp%iang, jang => cp%jang, &
@@ -318,8 +310,6 @@ END SUBROUTINE
     REAL(REAL64) :: dumgij, pcsq, prei, dum, dum1
     INTEGER :: i, j, ij, nx, ny, nz, mx, my, mz, jmax
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned vblk : 64
 
     ASSOCIATE (pp => cp%p(id), &
                iang => cp%iang, jang => cp%jang, &
@@ -386,7 +376,6 @@ END SUBROUTINE
     REAL(REAL64) :: tmp
     INTEGER :: i, j, ij, jmax, nx, ny, nz, mx, my, mz
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
 
     ASSOCIATE (pp => cp%p(id), &
                iang => cp%iang, jang => cp%jang, &
@@ -446,9 +435,6 @@ END SUBROUTINE
     REAL(REAL64) :: dum2
     real(real64) :: xyzovl(0:max_ang+2,0:max_ang,3)
     real(real64) :: xyzlz(0:max_ang_pad,0:max_ang,2)
-!dir$ assume_aligned zblk : 64
-!dir$ assume_aligned xyzovl : 64
-!dir$ assume_aligned xyzlz : 64
 
     ASSOCIATE (pp => cp%p(id), &
                iang => cp%iang, jang => cp%jang, &
@@ -649,10 +635,6 @@ END SUBROUTINE
     real(real64) :: xyzovl(0:max_ang+2,0:max_ang+1,3)
     real(real64) :: xyzkin(0:max_ang_pad,0:max_ang+1,3)
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,NRT)
-!dir$ assume_aligned blk : 64
-!dir$ assume_aligned xyzkin : 64
-!dir$ assume_aligned xyzovl : 64
-!dir$ assume_aligned xyzin : 64
 
     cvec = cp%ri(:3) - cp%rj(:3)
 
@@ -767,7 +749,6 @@ END SUBROUTINE
     real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)
     ! per-coord factors by kind: 0=plain,1=field,2=moment,3=moment*field
     real(real64) :: facK(0:max_ang, 0:max_ang, 3, 0:3, NRT)
-!dir$ assume_aligned xyzin : 64
 
     ric = cp%ri(:3) - c(:3)
     rio = cp%ri(:3) - o(:3)
@@ -897,7 +878,6 @@ END SUBROUTINE
     real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
     real(real64) :: fld(0:max_ang, 0:max_ang, 3, NRT)   ! (ket,bra,coord,root)
     real(real64) :: dkt(0:max_ang, 0:max_ang, 3, NRT)   ! ket derivative
-!dir$ assume_aligned xyzin : 64
 
     ric = cp%ri(:3) - c(:3)
     rji = cp%rj(:3) - cp%ri(:3)
@@ -1012,7 +992,6 @@ END SUBROUTINE
     real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
     real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)   ! (ket,bra,coord,root)
     real(real64) :: dkt(0:max_ang, 0:max_ang+1, 3, NRT)   ! ket derivative
-!dir$ assume_aligned xyzin : 64
 
     ric = cp%ri(:3) - c(:3)
     rji = cp%rj(:3) - cp%ri(:3)
@@ -1156,10 +1135,6 @@ END SUBROUTINE
     INTEGER :: i, j, nx, ny, nz, mx, my, mz, ij, jmax
     REAL(REAL64) :: tmp(10)
     real(real64) :: xyzmom(3,0:3,0:max_ang,0:max_ang)
-!dir$ assume_aligned sblk : 64
-!dir$ assume_aligned tblk : 64
-!dir$ assume_aligned xyzkin : 64
-!dir$ assume_aligned xyzovl : 64
 
     ASSOCIATE (pp => cp%p(id))
     CALL multipole_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang, cp%jang, r, mom, xyzmom)
@@ -1255,10 +1230,6 @@ END SUBROUTINE
     INTEGER :: i, j, nx, ny, nz, mx, my, mz, ij, jmax, blkdim
     REAL(REAL64) :: tmp(19)
     real(real64) :: xyzmom(3,0:3,0:max_ang,0:max_ang)
-!dir$ assume_aligned sblk : 64
-!dir$ assume_aligned tblk : 64
-!dir$ assume_aligned xyzkin : 64
-!dir$ assume_aligned xyzovl : 64
 
     blkdim = blkdims(mxmom)
 
@@ -1683,8 +1654,6 @@ END SUBROUTINE
     INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
     real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyzc : 64
 
     dernuc = 0.0
 
@@ -1764,8 +1733,6 @@ END SUBROUTINE
     INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
     real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyzc : 64
 
     derhf = 0.0
 
@@ -2081,8 +2048,6 @@ END SUBROUTINE
     INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
     real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyzc : 64
 
     !dernuc = 0.0
 
@@ -2166,8 +2131,6 @@ END SUBROUTINE
     INTEGER :: id, i, j, ix, iy, iz, jx, jy, jz
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,max_nroots)
     real(real64) :: dxyzc(0:max_ang_pad,0:max_ang,3,max_nroots)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyzc : 64
 
     derhf = 0.0
 
@@ -2418,8 +2381,6 @@ END SUBROUTINE
     INTEGER, INTENT(IN) :: lit, ljt, nroots
 
     INTEGER :: i
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyzdi : 64
 
     dxyzdi(0:ljt,0:lit,1:3,1:nroots) = 2*ai * xyzin(0:ljt,1:lit+1,1:3,1:nroots)
 
@@ -2449,8 +2410,6 @@ END SUBROUTINE
     INTEGER, INTENT(IN) :: lit, ljt, nroots
 
     INTEGER :: i
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned d2xyz : 64
 
     d2xyz(0:ljt,0:lit,1:3,1:nroots) = 4*ai*ai * xyzin(0:ljt,2:lit+2,1:3,1:nroots)
 
@@ -2487,7 +2446,6 @@ END SUBROUTINE
     REAL(REAL64), CONTIGUOUS, INTENT(IN) ::  xyzin(0:,0:,:,:)
     REAL(REAL64), CONTIGUOUS, INTENT(OUT) :: dxyzdc(0:,0:,:,:)
     INTEGER, INTENT(IN) :: lit, ljt, nroots
-!dir$ assume_aligned xyzin : 64
 
     dxyzdc(0:ljt,0:lit,1,1:nroots) = xyzin(0:ljt,1:lit+1,1,1:nroots) + ric(1)*xyzin(0:ljt,0:lit,1,1:nroots)
     dxyzdc(0:ljt,0:lit,2,1:nroots) = xyzin(0:ljt,1:lit+1,2,1:nroots) + ric(2)*xyzin(0:ljt,0:lit,2,1:nroots)
@@ -2581,7 +2539,6 @@ END SUBROUTINE
     INTEGER :: ni, nj, k, igrd1
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
-!dir$ assume_aligned xyzin : 64
 
     igrd1 = 0
     IF (present(igrd)) igrd1 = igrd
@@ -2651,7 +2608,6 @@ END SUBROUTINE
     INTEGER :: k
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
-!dir$ assume_aligned xyzin : 64
 
     call ryscomp%evaluate()
 
@@ -2721,7 +2677,6 @@ END SUBROUTINE
     INTEGER :: ni, nj, k, igrd1
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
-!dir$ assume_aligned xyzin : 64
 
     igrd1 = 0
     IF (present(igrd)) igrd1 = igrd
@@ -2795,7 +2750,6 @@ END SUBROUTINE
     INTEGER :: ni, nj, k, igrd1
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
-!dir$ assume_aligned xyzin : 64
 
     igrd1 = 1
     IF (present(igrd)) igrd1 = igrd
@@ -2872,7 +2826,6 @@ END SUBROUTINE
     INTEGER :: ni, nj, k
     REAL(REAL64) :: ww, tt
     REAL(REAL64) :: b, d(3), dij(3)
-!dir$ assume_aligned xyzin : 64
 
     call ryscomp%evaluate()
 
@@ -2936,7 +2889,6 @@ END SUBROUTINE
 
     INTEGER :: i, j, nn, li, lj, mj, mi, jmax
     LOGICAL :: iandj
-!dir$ assume_aligned mblk : 64
 
     iandj = shi%shid==shj%shid
 
@@ -2972,7 +2924,6 @@ END SUBROUTINE
     REAL(REAL64), CONTIGUOUS, INTENT(IN) :: mblk(:)
 
     INTEGER :: i, j, nn, li, lj
-!dir$ assume_aligned mblk : 64
 
     nn = 0
     DO i = 0, shi%nao-1
@@ -3160,11 +3111,8 @@ END SUBROUTINE
     integer,         intent(in)    :: id
     real(real64),    intent(in)    :: c(3), znuc
     real(real64), contiguous, intent(inout) :: pvpblk(:)
-!dir$ assume_aligned pvpblk : 64
     real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, max_nroots+1)
     real(real64) :: dxyz (0:2*max_ang+3, 0:max_ang+2, 3, max_nroots+1)
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned dxyz  : 64
 
     type(rys_root_t) :: ryscomp
     integer      :: i, j, ij, jmax
@@ -3247,9 +3195,6 @@ END SUBROUTINE
     real(real64), intent(in) :: ai, aj
 
     integer :: n
-!dir$ assume_aligned xyzin : 64
-!dir$ assume_aligned di    : 64
-!dir$ assume_aligned dj    : 64
 
 ! bra derivative (second index): di(m,n) = n*xyzin(m,n-1) - 2*ai*xyzin(m,n+1)
     di(0:jang, 0:iang, 1:3, 1:nroots) = -2*ai * xyzin(0:jang, 1:iang+1, 1:3, 1:nroots)
@@ -3301,8 +3246,6 @@ END SUBROUTINE
     real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1, 3, max_nroots+1)
     real(real64) :: di(0:max_ang_pad, 0:max_ang, 3, max_nroots+1)
     real(real64) :: dj(0:max_ang_pad, 0:max_ang, 3, max_nroots+1)
-!dir$ assume_aligned xyzin  : 64
-!dir$ assume_aligned socblk : 64
 
     associate (pp   => cp%p(id), &
                iang => cp%iang,  jang => cp%jang, &
@@ -3402,7 +3345,6 @@ END SUBROUTINE
     TYPE(shpair_t),   INTENT(IN)    :: cpij, cpkl
     INTEGER,          INTENT(IN)    :: idij, idkl
     REAL(real64), CONTIGUOUS, INTENT(OUT) :: gfull(0:, 0:, 0:, 0:, :, :)
-!dir$ assume_aligned gfull : 64
     ! --- local constants ---
     REAL(real64), PARAMETER :: PI252 = 34.986836655250_real64   ! 2*pi^(5/2)
 
@@ -3669,8 +3611,6 @@ END SUBROUTINE
     real(real64) :: xyzin(0:MAX_ANG+1, 0:MAX_ANG+1, 3, MAX_NROOTS)
     real(real64) :: di(0:MAX_ANG_PAD, 0:MAX_ANG, 3, MAX_NROOTS)
     real(real64) :: dj(0:MAX_ANG_PAD, 0:MAX_ANG, 3, MAX_NROOTS)
-!dir$ assume_aligned gfull  : 64
-!dir$ assume_aligned socblk : 64
 
     ! loop indices
     integer  :: i, j, ij, jmax

@@ -92,7 +92,7 @@ contains
     use int1, only: giao_h10_core, giao_overlap_derivative, pso_integrals, &
                     nmr_dia_shielding, giao_a11part_corr, giao_a01gp_contract
     use nmr_giao_debug_mod, only: giao_h10_twoe_matrix
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_giao, only: giao_vxc
 

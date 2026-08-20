@@ -1187,7 +1187,7 @@ contains
     use tdhf_sf_lib, only: sfrorhs, mrsf_state_label, &
       sfromcal, sfrogen, sfrolhs, pcgrbpini, &
       pcgb, sfropcal, sfdmat
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: utddft_fxc
     use mathlib, only: symmetrize_matrix, orthogonal_transform, &
             orthogonal_transform_sym
@@ -1727,12 +1727,12 @@ contains
       ! matters once a warm-start guess (xk/=0) is used.
       call int2_data%clean()
       deallocate(int2_data)
-      int2_data = int2_tdgrd_data_t( &
+      allocate(int2_data, source=int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &
           int_amb = .false., &
           tamm_dancoff = .false., &
-          scale_exchange = scale_exch)
+          scale_exchange = scale_exch))
 
       if (zv_tmr_on) t0 = zv_wtime()
       call int2_driver%run(int2_data, &
@@ -1820,12 +1820,12 @@ contains
         !     (A+B)*PK
         call int2_data%clean()
         deallocate(int2_data)
-        int2_data = int2_tdgrd_data_t( &
+        allocate(int2_data, source=int2_tdgrd_data_t( &
             d2 = pa, &
             int_apb = .true., &
             int_amb = .false., &
             tamm_dancoff = .false., &
-            scale_exchange = scale_exch)
+            scale_exchange = scale_exch))
 
         if (zv_tmr_on) t0 = zv_wtime()
         call int2_driver%run(int2_data, &
@@ -2034,12 +2034,12 @@ contains
       call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
       call int2_data%clean()
       deallocate(int2_data)
-      int2_data = int2_tdgrd_data_t( &
+      allocate(int2_data, source=int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &
           int_amb = .false., &
           tamm_dancoff = .false., &
-          scale_exchange = scale_exch)
+          scale_exchange = scale_exch))
 
       call int2_driver%run(int2_data, &
               cam=dft.and.infos%dft%cam_flag, &
@@ -2162,12 +2162,13 @@ contains
 
       end if
 
-      int2_data = int2_tdgrd_data_t( &
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &
           int_amb = .false., &
           tamm_dancoff = .false., &
-          scale_exchange = scale_exch)
+          scale_exchange = scale_exch))
 
       call int2_driver%run(int2_data, &
               cam=dft.and.infos%dft%cam_flag, &

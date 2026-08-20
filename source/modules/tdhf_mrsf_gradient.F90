@@ -54,7 +54,7 @@ contains
 
     use grd1, only: eijden, print_gradient
     use util, only: measure_time
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
@@ -297,7 +297,8 @@ contains
       de = 0.0d0
     end if
 
-    gcomp = grd2_mrsf_compute_data_t( d2 = d &
+    if (allocated(gcomp)) deallocate(gcomp)
+    allocate(gcomp, source=grd2_mrsf_compute_data_t( d2 = d &
                                     , p2 = p &
                                     , spc2 = spc &
                                     , nbf = basis%nbf &
@@ -306,7 +307,7 @@ contains
                                     , spcscale = [infos%tddft%spc_coco, &
                                                   infos%tddft%spc_ovov, &
                                                   infos%tddft%spc_coov] &
-                                    , mrst = infos%tddft%mult )
+                                    , mrst = infos%tddft%mult ))
 
     call gcomp%init()
 

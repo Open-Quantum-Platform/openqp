@@ -1154,11 +1154,14 @@ contains
 
     select case (infos%control%scftype)
     case (1)
-      int2_data = int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     case (2)
-      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     case (3)
-      int2_data = int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c)
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     end select
 
 
@@ -1775,7 +1778,7 @@ contains
   subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)
     use precision, only: dp
     use types, only: information
-    use dft, only: dftexcor
+    use mod_dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
     use oqp_tagarray_driver
@@ -1865,7 +1868,7 @@ contains
     type(basis_set), intent(in) :: basis
     type(dft_grid_t), intent(in) :: molgrid
     real(kind=dp), intent(in) :: dmat(:,:)
-    real(kind=dp), intent(out) :: pfxc(:,:)
+    real(kind=dp), intent(out), contiguous, target :: pfxc(:,:)
     real(kind=dp), intent(out) :: eexc, totele, totkin
     !> Symmetry-reduction atom weights. Present => integrate unique atoms only.
     real(kind=dp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
@@ -1873,6 +1876,15 @@ contains
     integer :: scf_type, nbf, nbf_tri, nang
     logical :: urohf
     real(kind=dp), allocatable :: da(:,:), db(:,:)
+    ! Beta-spin XC matrix target.  For a closed-shell run pfxc has a single
+    ! column; dmatd_density_blk's fa and fb dummies must then NOT both be
+    ! associated with pfxc(:,1): that is argument aliasing (the Fortran
+    ! standard forbids it) and Intel ifx, which passes each array section
+    ! through its own copy-in/copy-out temporary, copies the untouched fb
+    ! temporary back LAST and silently zeroes the XC Fock matrix.  gfortran
+    ! happened to pass the section by reference, hiding the defect.
+    real(kind=dp), allocatable, target :: fb_scratch(:)
+    real(kind=dp), pointer :: fb_out(:)
 
     scf_type = infos%control%scftype
     urohf = scf_type /= scf_rhf
@@ -1889,8 +1901,14 @@ contains
     end if
 
     pfxc = 0.0_dp
+    if (size(pfxc,2) >= 2) then
+      fb_out => pfxc(:,2)
+    else
+      allocate(fb_scratch(nbf_tri), source=0.0_dp)
+      fb_out => fb_scratch
+    end if
     if (present(sym_atom_weight)) then
-      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
+      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), fb_out, &
                             eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
                             urohf, infos, sym_atom_weight)
       ! The reduced-grid XC matrix is a skeleton: project onto the totally
@@ -1913,11 +1931,13 @@ contains
       ! the weights stay on the same group by construction.
       call symmetrize_skeleton_signed(infos, basis%nbf, pfxc)
     else
-      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
+      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), fb_out, &
                             eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
                             urohf, infos)
     end if
 
+    nullify(fb_out)
+    if (allocated(fb_scratch)) deallocate(fb_scratch)
     deallocate(da, db)
   end subroutine calc_dft_xc_density
 
