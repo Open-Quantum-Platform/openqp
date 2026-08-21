@@ -362,13 +362,23 @@ enum {
   FCI_I_NTHREADS  = 11, /* OpenMP threads for the kernels                 */
   FCI_I_WANT_S2   = 12, /* 1 = also return <S^2> per returned root        */
   FCI_I_GUESS     = 13, /* 1 = civecs holds nroot Davidson start vectors  */
-  FCI_NIOPT       = 14
+  FCI_I_IRREP     = 14, /* target irrep index (1-based), 0 = any          */
+  FCI_I_NIRREP    = 15, /* irreps in the staged table, 0 = no symmetry    */
+  FCI_NIOPT       = 16
+  /* When iopt[FCI_I_IRREP] != 0 the symmetry tables follow the fixed
+   * options in the same array, so this signature does not change and a
+   * caller that does not ask for an irrep supplies only FCI_NIOPT entries:
+   *
+   *   iopt[FCI_NIOPT        .. FCI_NIOPT+nirrep-1]      XOR code per irrep
+   *   iopt[FCI_NIOPT+nirrep .. +nirrep+nact-1]          XOR code per active MO
+   */
 };
 enum {
   FCI_D_ECORE     = 0,  /* scalar added to every returned root            */
   FCI_D_EIG_TOL   = 1,  /* eigenpair residual tolerance                   */
   FCI_D_CUTOFF    = 2,  /* integral screening cutoff                      */
-  FCI_NDOPT       = 3
+  FCI_D_MIN_PURITY = 3, /* min weight in the dominant irrep to accept root */
+  FCI_NDOPT       = 4
 };
 int64_t fci_solve(const int32_t *iopt, const double *dopt,
     const int32_t *active, const int32_t *core,

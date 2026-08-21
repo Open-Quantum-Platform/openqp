@@ -2905,6 +2905,41 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     max_det = _get(config, "cas", "max_det", 5000)
     max_memory = _get(config, "cas", "max_memory", 2048)
 
+    # Irrep selection is meaningful for a fixed-orbital CI. A CASSCF that
+    # optimizes orbitals would additionally have to FOLLOW the selected root
+    # across macroiterations; the orbital optimizer does not do that, so the
+    # request would be honoured for the final CI and ignored by everything
+    # that produced the orbitals. Refuse rather than half-apply it.
+    _irrep = str(_get(config, "ci", "irrep", "any")).strip().lower()
+    if _irrep and _irrep != "any":
+        _method = _as_lower(_get(config, "input", "method", "hf"))
+        if _method in {"sa-casscf", "sacasscf"} or (
+                _method == "casscf"
+                and int(_get(config, "casscf", "max_macro_iterations", 0) or 0) != 0):
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "Irrep selection is not supported with orbital optimization: "
+                "the CASSCF orbital optimizer does not follow a "
+                "symmetry-selected root across macroiterations.",
+                value=_irrep,
+                expected="any",
+                action="Use method=casci (or a zero-update CASSCF scaffold) "
+                       "for [ci] irrep, or drop [ci] irrep.",
+            )
+        _sym = _get(config, "symmetry", "enabled", False)
+        _sym_on = (_sym is True) or (str(_sym).lower() in ("true", "1", "on", "yes"))
+        if not _sym_on:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "[ci] irrep needs MO irrep labels, which are only produced "
+                "when symmetry detection is enabled.",
+                value=_irrep,
+                expected="[symmetry] enabled=true",
+                action="Set [symmetry] enabled=true, or drop [ci] irrep.",
+            )
+
     nroot = _get(config, "ci", "nroot", 1)
     eig_tol = _get(config, "ci", "eig_tol", 1.0e-10)
     integral_backend = _check_choice_literal(

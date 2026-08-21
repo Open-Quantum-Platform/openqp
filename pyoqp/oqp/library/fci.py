@@ -70,6 +70,13 @@ class FCISettings:
     orbital_source: str = "rhf"
     orbital_file: str = ""
     target_spin: str = "any"
+    #: Spatial-symmetry filter on the returned roots. "any" (the default)
+    #: leaves root selection exactly as it was; a point-group irrep name keeps
+    #: only roots whose dominant irrep is that one.
+    target_irrep: str = "any"
+    #: Weight a root must carry in its dominant irrep to count as a symmetry
+    #: eigenstate at all.
+    irrep_min_purity: float = 0.5
 
 
 def _annihilate(det: int, orb: int) -> tuple[int, int] | None:
@@ -2156,6 +2163,8 @@ def _settings_from_config(config: dict) -> FCISettings:
         ),
         save_rdm=_bool_setting(raw.get("save_rdm", False), "fci.save_rdm"),
         target_spin=_target_spin_setting(raw.get("target_spin", "any"), "fci.target_spin"),
+        target_irrep=str(raw.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(raw.get("irrep_min_purity", 0.5)),
     )
     return _validate_ci_settings(settings, ci_section="fci")
 
@@ -2279,6 +2288,8 @@ def settings_from_casci_config(config: dict) -> FCISettings:
         ),
         orbital_file=_string_setting(cas.get("orbital_file", ""), "cas.orbital_file"),
         target_spin=_target_spin_setting(ci.get("target_spin", "any"), "ci.target_spin"),
+        target_irrep=str(ci.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(ci.get("irrep_min_purity", 0.5)),
     )
     if settings.orbital_source == "json" and not settings.orbital_file:
         raise ValueError("cas.orbital_file is required when cas.orbital_source=json")
@@ -2609,14 +2620,89 @@ def _active_space(
 _FCI_IOPT = (
     "norb", "nact", "ncore", "nalpha", "nbeta", "nroot", "solver", "maxiter",
     "subspace", "mult", "maxmemory", "nthreads", "want_s2", "guess",
+    # Correlated-state irrep selection.  0 = any, which is what a caller that
+    # never heard of this leaves in the slot, so the native root selection is
+    # byte-identical without it.  When it is non-zero the per-irrep and
+    # per-active-orbital XOR codes ride in the tail of the same array.
+    "irrep", "nirrep",
 )
-_FCI_DOPT = ("ecore", "eig_tol", "cutoff")
+_FCI_DOPT = ("ecore", "eig_tol", "cutoff", "min_purity")
 _FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}
 _FCI_DOPT_INDEX = {name: i for i, name in enumerate(_FCI_DOPT)}
 _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
 # Determinants are packed into one 64-bit key, so the active space caps out at
 # 31 spatial orbitals (62 spin orbitals).
 _FCI_MAX_NSPIN = 62
+
+
+class IrrepSelectionUnavailable(RuntimeError):
+    """An irrep was requested but the symmetry data to honour it is missing."""
+
+
+def resolve_irrep_selection(mol, plan, target_irrep, min_purity=0.5):
+    """Resolve ``[ci] irrep`` into the tables the native selector needs.
+
+    Returns ``None`` when no irrep was requested. Otherwise returns
+    ``(index, xor_codes, active_orbital_codes, min_purity)`` where the codes are
+    the bitmask encoding ``Molecule.stage_mo_irreps`` writes, so the direct
+    product of orbital irreps is a bitwise XOR.
+
+    Raises rather than falling back: silently ignoring a symmetry request would
+    return roots of the wrong symmetry with no diagnostic, which is the failure
+    this is meant to prevent.
+    """
+    name = str(target_irrep or "any").strip()
+    if not name or name.lower() == "any":
+        return None
+
+    meta = (getattr(mol, "symmetry_metadata", None) or {}).get("mo_irreps") or {}
+    if meta.get("status") != "active":
+        raise IrrepSelectionUnavailable(
+            f"[ci] irrep={name} needs MO irrep labels, which are not available "
+            f"(mo_irreps status: {meta.get('status', 'not staged')}). Enable "
+            "[symmetry] and use a geometry whose point group is detected."
+        )
+
+    irreps = list(meta.get("irreps") or ())
+    lowered = {str(n).strip().lower(): i + 1 for i, n in enumerate(irreps)}
+    index = lowered.get(name.lower())
+    if index is None:
+        raise ValueError(
+            f"[ci] irrep={name} is not an irrep of the detected point group; "
+            f"available: {', '.join(irreps)}"
+        )
+
+    xor_codes = [int(c) for c in (meta.get("xor_codes") or ())]
+    if len(xor_codes) != len(irreps):
+        raise IrrepSelectionUnavailable(
+            "staged irrep table is inconsistent with its XOR codes")
+
+    try:
+        mo_index = np.asarray(mol.data["OQP::sym_mo_irrep_a"], dtype=int).ravel()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise IrrepSelectionUnavailable(
+            "OQP::sym_mo_irrep_a is not staged; cannot classify determinants"
+        ) from exc
+
+    codes = [0] + xor_codes                     # slot 0 = unclassified
+    orb_codes = []
+    for p in plan.active:
+        p = int(p)
+        if p < 0 or p >= mo_index.size:
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} is outside the staged MO irrep table")
+        idx = int(mo_index[p])
+        if idx <= 0:
+            # An unclassified orbital would be given code 0, which is also the
+            # totally symmetric code -- every determinant containing it would
+            # be mislabelled rather than declined.
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} has no irrep label (the SCF returned a "
+                "mixed or near-degenerate orbital), so determinant irreps "
+                "cannot be assigned; run without [ci] irrep")
+        orb_codes.append(codes[idx])
+
+    return (index, tuple(xor_codes), tuple(orb_codes), float(min_purity))
 
 
 def _fci_solve_backend():
@@ -2653,7 +2739,16 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
         return None
 
-    iopt = np.zeros(len(_FCI_IOPT), dtype=np.int32)
+    # An irrep request rides in plan.metadata: it is resolved once at the
+    # driver, where the Molecule (and therefore the staged symmetry tables) is
+    # in scope, rather than threaded through every solver signature.
+    irrep = (plan.metadata or {}).get("irrep")
+    tail = 0
+    if irrep is not None:
+        _idx, _xor, _orb, _pure = irrep
+        tail = len(_xor) + len(_orb)
+
+    iopt = np.zeros(len(_FCI_IOPT) + tail, dtype=np.int32)
     iopt[_FCI_IOPT_INDEX["norb"]] = plan.norb
     iopt[_FCI_IOPT_INDEX["nact"]] = nact
     iopt[_FCI_IOPT_INDEX["ncore"]] = plan.ncore
@@ -2669,10 +2764,19 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     iopt[_FCI_IOPT_INDEX["nthreads"]] = nthreads
     iopt[_FCI_IOPT_INDEX["want_s2"]] = 1 if want_s2 else 0
 
+    if irrep is not None:
+        iopt[_FCI_IOPT_INDEX["irrep"]] = _idx
+        iopt[_FCI_IOPT_INDEX["nirrep"]] = len(_xor)
+        base = len(_FCI_IOPT)
+        iopt[base:base + len(_xor)] = np.asarray(_xor, dtype=np.int32)
+        iopt[base + len(_xor):] = np.asarray(_orb, dtype=np.int32)
+
     dopt = np.zeros(len(_FCI_DOPT), dtype=np.float64)
     dopt[_FCI_DOPT_INDEX["ecore"]] = spec.ecore
     dopt[_FCI_DOPT_INDEX["eig_tol"]] = spec.eig_tol
     dopt[_FCI_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+    if irrep is not None:
+        dopt[_FCI_DOPT_INDEX["min_purity"]] = _pure
 
     active = np.ascontiguousarray(plan.active, dtype=np.int32)
     # cffi will not cast an empty buffer; the engine reads none of it anyway
@@ -2756,6 +2860,18 @@ def solve_active_ci(
     )
     if native is not None:
         return native
+
+    # The Python driver has no irrep classification, so honouring an irrep
+    # request here is impossible.  Refuse rather than silently return the
+    # lowest roots of any symmetry: the two paths disagreeing about which root
+    # a run returns is worse than not offering the feature on the fallback.
+    if (plan.metadata or {}).get("irrep") is not None:
+        raise IrrepSelectionUnavailable(
+            "[ci] irrep selection requires the native CI engine, which "
+            "declined this solve (missing symbol, active space wider than a "
+            "64-bit determinant key, allocation failure, or no root of that "
+            "irrep). Re-run without [ci] irrep to use the Python driver."
+        )
 
     h_act, eri_act, active_nelec, ecore_act = apply_active_space(
         h1e, eri, plan, ecore)
@@ -3119,6 +3235,25 @@ class FCI:
         """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
         check_ao_eri_budget(nbf, self.settings.max_memory, self.active_section)
 
+    def _stage_irrep_selection(self, plan):
+        """Resolve an ``[ci] irrep`` request onto ``plan.metadata``.
+
+        Done here, in the driver, because this is where the Molecule -- and so
+        the tables ``stage_mo_irreps`` wrote -- is in scope.  Riding in
+        ``plan.metadata`` keeps it out of every solver signature between here
+        and ``_lib_fci_solve``.
+
+        Inherited by CASCI, which builds its own plan from its own orbitals.
+        """
+        selection = resolve_irrep_selection(
+            self.mol, plan,
+            getattr(self.settings, "target_irrep", "any"),
+            getattr(self.settings, "irrep_min_purity", 0.5),
+        )
+        if selection is not None:
+            plan.metadata["irrep"] = selection
+        return selection
+
     def _native_mo_integrals(self):
         nbf = int(self.mol.data.get_basis()["nbf"])
         self._check_ao_eri_budget(nbf)
@@ -3138,6 +3273,7 @@ class FCI:
         # frozen-core fold now happen inside the native CI driver, so doing
         # them here would only be work thrown away.
         plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        self._stage_irrep_selection(plan)
         metadata = dict(plan.metadata)
         metadata["orbital_source"] = "rhf"
         return h1e, eri, plan, ecore, metadata

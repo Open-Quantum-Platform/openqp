@@ -165,6 +165,9 @@ class CASCI(FCI):
         nelec = (int(self.mol.data["nelec_A"]), int(self.mol.data["nelec_B"]))
         ecore = float(self.mol.mol_energy.nenergy)
         plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        # CASCI builds its own plan from its own (possibly external) orbitals,
+        # so the irrep request has to be resolved here too.
+        self._stage_irrep_selection(plan)
         self._check_combined_ci_memory(nbf, plan)
         metadata = dict(plan.metadata)
         metadata["orbital_source"] = source_label
