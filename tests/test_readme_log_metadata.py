@@ -48,6 +48,19 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         self.assertIn("Vladimir Makhnev", banner)
         self.assertIn("Alireza Lashkaripour", banner)
 
+    def test_log_banner_version_comes_from_the_build(self):
+        banner = (ROOT / "source" / "modules" / "oqp_banner.F90").read_text()
+        cmake = (ROOT / "source" / "CMakeLists.txt").read_text()
+
+        # The banner printed "Version: 1.0 Aug, 2024" for two years of
+        # releases because nothing tied it to the real version.  It must use
+        # the compile definition, and no literal version may reappear.
+        self.assertIn("OQP_VERSION_STRING", banner)
+        self.assertNotRegex(banner, r"Version:\s*\d")
+        self.assertIn(
+            "OQP_VERSION_STRING='${PROJECT_VERSION}'", cmake
+        )
+
     def test_package_metadata_lists_alireza_without_invented_contact_data(self):
         metadata = (ROOT / "pyproject.toml").read_text()
 

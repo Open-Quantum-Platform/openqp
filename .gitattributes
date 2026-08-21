@@ -1,12 +1,20 @@
-# Line endings are part of the artifact, not a local preference.
+# Line endings for the files that are byte-compared between the repository and
+# the distribution.
 #
-# Windows runners check out with core.autocrlf enabled by default, which
-# rewrites LF to CRLF in the working tree.  A wheel built there then ships a
-# LICENSE whose bytes differ from the tagged source, and the release
-# verification refuses it -- correctly, since license text must not change
-# silently between the repository and the distribution.  It cost the v1.3.1
-# release exactly that check.
+# Windows runners check out with core.autocrlf enabled, which rewrites LF to
+# CRLF.  A wheel built there shipped a LICENSE of 8773 bytes against the tagged
+# 8591 -- one extra byte on each of 182 lines -- and release verification
+# refused it, correctly: license text must not change silently between the
+# repository and the distribution.  These are exactly the files pyproject.toml
+# declares in project.license-files.
 #
-# Declaring it here makes the result identical on every machine, instead of
-# depending on each contributor's git configuration.
-* text=auto eol=lf
+# Scoped deliberately.  A repository-wide `* text=auto eol=lf` also normalizes
+# external/dftd4-corresponding-source/patches/**, and Windows patch.exe then
+# fails to apply them ("source matches neither side of patch"), taking the
+# whole DFT-D4 build with it.  Those patches are consumed by a Windows tool,
+# not compared against anything, so they keep whatever the platform gives them.
+LICENSE                  text eol=lf
+LICENSING.md             text eol=lf
+SUSTAINABILITY.md        text eol=lf
+THIRD_PARTY_NOTICES.md   text eol=lf
+licenses/third_party/**  text eol=lf
