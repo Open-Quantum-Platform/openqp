@@ -997,14 +997,21 @@ contains
     call orthogonal_transform('t', nbf, mo_b, gmres_wrk2, gmres_pa(:,:,2), gmres_wrk3)
     if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
 
-    ! Initialize ERI calculation with proper allocation
-    allocate(int2_data)
-    int2_data = int2_tdgrd_data_t( &
+    ! Initialize ERI calculation with proper allocation.
+    !
+    ! Sourced allocation, not allocate-then-assign: intrinsic assignment onto
+    ! an allocatable derived type carrying allocatable components is the
+    ! pattern #357 traced its ifx `forrtl: severe` aborts to, and both sibling
+    ! modules (tdhf_z_vector, tdhf_sf_z_vector) were converted then. This site
+    ! was missed. It runs once per GMRES iteration, so a long multi-step job
+    ! executes it far more often than a single-point one.
+    if (allocated(int2_data)) deallocate(int2_data)
+    allocate(int2_data, source=int2_tdgrd_data_t( &
         d2 = gmres_pa, &
         int_apb = .true., &
         int_amb = .false., &
         tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
+        scale_exchange = scale_exch))
 
     if (zv_tmr_on) t0_op = zv_wtime()
     call int2_driver%run(int2_data, &
@@ -2145,20 +2152,25 @@ contains
 
       if (mrst==1 .or. mrst==3 ) then
 
-        int2_data_st = int2_mrsf_data_t( &
+        ! Sourced allocation for the same reason as apply_z_operator above:
+        ! this is intrinsic assignment onto an allocatable derived type, and
+        ! it relies on automatic (re)allocation across Davidson iterations.
+        if (allocated(int2_data_st)) deallocate(int2_data_st)
+        allocate(int2_data_st, source=int2_mrsf_data_t( &
             d3 = fmrst1, &
             tamm_dancoff = .true., &
             scale_exchange = scale_exch2, &
-            scale_coulomb = scale_exch2)
+            scale_coulomb = scale_exch2))
 
       else if( mrst==5  )then
 
-        int2_data_q = int2_td_data_t( &
+        if (allocated(int2_data_q)) deallocate(int2_data_q)
+        allocate(int2_data_q, source=int2_td_data_t( &
             d2=bvec, &
             int_apb = .false., &
             int_amb = .false., &
             tamm_dancoff = .true., &
-            scale_exchange = scale_exch2)
+            scale_exchange = scale_exch2))
 
       end if
 
