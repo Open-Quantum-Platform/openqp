@@ -85,7 +85,7 @@ contains
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density, get_umrsf_transition_dipole, &
-      get_jacobi, umrsfssqu, mrsf_set_fp32
+      get_jacobi, umrsfssqu, mrsf_set_fp32, mrsf_check_block_representation
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use routec_sig, only: routec_sig_available, routec_sig_begin, &
@@ -107,6 +107,10 @@ contains
     real(kind=dp), allocatable :: scr2(:),scr3(:)
     real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
     real(kind=dp), allocatable :: sym_ritz(:,:)
+    !> Trial vectors mrinivec handed to each symmetry block.  Left unallocated
+    !> for a quintet solve (inivec) or when no pair-irrep table is staged, and
+    !> the post-solve representation check is then inert.
+    integer, allocatable :: seeds_per_irrep(:)
     real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
     real(kind=dp), allocatable :: squared_S(:)
     real(kind=dp), allocatable :: amb(:,:), apb(:,:), smat_full(:,:)
@@ -559,10 +563,12 @@ contains
       if (.not. umrsf) then
         ! ROHF: mo_energy_work_a holds the Guest-Saunders spin average and goes
         ! in as BOTH ea and eb on purpose -- see the measurement above.
-        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
       else
         ! UHF reference: genuine alpha/beta eigenvalues, no spin average to undo.
-        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
       end if
 
     else if (mrst==5) then
@@ -847,6 +853,17 @@ contains
       write(*,'(/,2x,"..something is wrong.. No vectors were added")')
       infos%mol_energy%Davidson_converged=.false.
     end select
+
+    ! A converged spectrum can still be missing a root whose symmetry block
+    ! WAS seeded -- mrinivec's nmiss counter cannot see that case, because it
+    ! counts blocks that got no seed at all.  sym_ritz holds the converged
+    ! Ritz vectors (it is rebuilt every iteration, and the loop exits right
+    ! after).  Only checked on a converged solve: an unconverged one already
+    ! says so, louder.
+    if (ierr == 0 .and. allocated(sym_ritz)) &
+      call mrsf_check_block_representation(infos, sym_ritz, nstates, &
+                                           seeds_per_irrep)
+
     call flush(iw)
 
     call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)

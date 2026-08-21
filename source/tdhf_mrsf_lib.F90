@@ -439,7 +439,7 @@ contains
 !> spin-averaged input is closer to the exact operator diagonal than the
 !> alpha/beta Fock diagonals on 45 of 45 amplitudes.  See the long comment at
 !> the call site in tdhf_mrsf_energy.F90 and issue #328 before changing this.
-  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec)
+  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -452,6 +452,13 @@ contains
     real(kind=dp), intent(out), dimension(:,:) :: bvec_mo
     real(kind=dp), intent(out), dimension(:) :: xm
     integer, intent(in) :: nvec
+    !> Trial vectors handed to each symmetry block, indexed by irrep.
+    !> Allocated only when the pair-irrep table is staged and usable; left
+    !> unallocated otherwise, which makes the post-solve check inert.
+    !> Seeding a block is NOT sufficient for its roots to appear (see
+    !> mrsf_check_block_representation), so the caller needs this count to
+    !> tell "was never asked for" from "was asked for and did not arrive".
+    integer, allocatable, optional, intent(out) :: seeds_per_irrep(:)
 
     logical :: debug_mode
     real(kind=dp) :: xmj
@@ -724,6 +731,20 @@ contains
               write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
                 &cover otherwise unrepresented irreps")') nadd
             end if
+
+            ! Census of the FINAL seed set, after every substitution.  This is
+            ! what the caller compares the converged spectrum against.
+            if (present(seeds_per_irrep)) then
+              allocate(seeds_per_irrep(nirr))
+              seeds_per_irrep = 0
+              do k = 1, nvec
+                if (itmp(k) >= 1 .and. itmp(k) <= xvec_dim) then
+                  ir = int(pair_irrep(itmp(k)))
+                  if (ir >= 1 .and. ir <= nirr) &
+                    seeds_per_irrep(ir) = seeds_per_irrep(ir) + 1
+                end if
+              end do
+            end if
           end if
         end if
       end if
@@ -745,6 +766,112 @@ contains
     return
 
   end subroutine mrinivec
+
+!###############################################################################
+
+!> @brief Warn when a seeded symmetry block contributed no root to the spectrum.
+!> @details
+!>   `mrinivec` already warns when a block gets NO trial vector (`nmiss > 0`):
+!>   its roots are then absent and the state numbering is shifted.  Seeding a
+!>   block does not make its roots reachable, though.  The Davidson expands
+!>   only on the residuals of the lowest `nstates` Ritz vectors, so a seed
+!>   whose diagonal estimate starts above that window is never enriched and its
+!>   block stays one-dimensional -- the block is seeded, `nmiss` is 0, and a
+!>   root is missing anyway.
+!>
+!>   Measured on CH2O/6-31G MRSF (C2v, nstate=3): B1 is seeded, every root
+!>   converges to err = 0, the run exits 0, and the reported third state is
+!>   6.803920 eV (B2).  The physical third state is 5.788160 eV (B1); it
+!>   appears at nstate=4 from the SAME six trial vectors.  Only the width of
+!>   the tracked window differs.
+!>
+!>   The solver is not stable against widening that window here (raising the
+!>   trial-set dimension moved four example references, and one extra vector
+!>   alone moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to 5.224000 eV,
+!>   converged and wrong), so this reports rather than repairs.
+!>
+!> @param[in]  infos       OQP information struct (for the pair-irrep table)
+!> @param[in]  ritz_full   converged Ritz vectors in the pair basis (xvec_dim, nstates)
+!> @param[in]  nstates     number of reported states
+!> @param[in]  seeds_per_irrep  seeds handed to each block by mrinivec
+  subroutine mrsf_check_block_representation(infos, ritz_full, nstates, &
+                                             seeds_per_irrep)
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: ritz_full(:,:)
+    integer, intent(in) :: nstates
+    integer, allocatable, intent(in) :: seeds_per_irrep(:)
+
+    integer(8), contiguous, pointer :: pair_irrep(:)
+    integer(4) :: ta_status
+    integer :: nirr, ir, istate, ipair, best, xvec_dim, nsilent
+    integer, allocatable :: roots_per_irrep(:)
+    real(kind=dp), allocatable :: weight(:)
+
+    if (.not. allocated(seeds_per_irrep)) return
+    if (nstates < 1) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                           status=ta_status)
+    if (ta_status /= TA_OK) return
+
+    xvec_dim = ubound(ritz_full, 1)
+    if (size(pair_irrep) /= xvec_dim) return
+    nirr = size(seeds_per_irrep)
+    if (nirr < 1) return
+
+    ! Label each reported root by the irrep carrying most of its weight.  The
+    ! response matrix is block-diagonal over these blocks for a totally
+    ! symmetric reference, so a converged root belongs to exactly one of them
+    ! up to numerical leakage; the dominant block is that one.
+    allocate(roots_per_irrep(nirr))
+    roots_per_irrep = 0
+    allocate(weight(nirr))
+    do istate = 1, min(nstates, ubound(ritz_full, 2))
+      weight = 0.0_dp
+      do ipair = 1, xvec_dim
+        ir = int(pair_irrep(ipair))
+        if (ir >= 1 .and. ir <= nirr) &
+          weight(ir) = weight(ir) + ritz_full(ipair, istate)**2
+      end do
+      best = maxloc(weight, 1)
+      if (best >= 1 .and. best <= nirr) &
+        roots_per_irrep(best) = roots_per_irrep(best) + 1
+    end do
+
+    nsilent = 0
+    do ir = 1, nirr
+      if (seeds_per_irrep(ir) > 0 .and. roots_per_irrep(ir) == 0) &
+        nsilent = nsilent + 1
+    end do
+
+    if (nsilent > 0) then
+      write(iw,'(/,2X,"MRSF WARNING: ",I0," symmetry block(s) received an ", &
+        &"initial trial vector but contributed NO root to the reported ", &
+        &"spectrum.  Seeding a block does not guarantee its roots: the ", &
+        &"Davidson expands only on the residuals of the lowest ",I0," Ritz ", &
+        &"vectors, so a block whose diagonal estimate starts above that ", &
+        &"window is never enriched.  A state of that symmetry may lie BELOW ", &
+        &"the highest state reported here, in which case the numbering is ", &
+        &"shifted and state N is not the physical state N.  Re-run with a ", &
+        &"larger nstate and check whether a new state appears below the ", &
+        &"ones you care about.",/)') nsilent, nstates
+      do ir = 1, nirr
+        if (seeds_per_irrep(ir) > 0 .and. roots_per_irrep(ir) == 0) &
+          write(iw,'(4X,"unrepresented block: irrep index ",I0, &
+            &" (",I0," seed(s), 0 roots)")') ir, seeds_per_irrep(ir)
+      end do
+      write(iw,'(a)') ''
+    end if
+
+  end subroutine mrsf_check_block_representation
 
 !> Transform MRSF response vectors from MO to AO basis
 !>
