@@ -192,7 +192,15 @@ REGISTRY = (
     # elements that mean anything are O(1) Hartree, where the default
     # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
     # below any real regression.
-    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
+    # ... and phase_invariant, for the reason nac and td_trans_dipole are: an
+    # off-diagonal H_IJ carries the product of two CI-root phases, which are
+    # arbitrary, so its SIGN is not a property of the calculation. Observed on
+    # H4_MCQDPT2: reproducible run to run in one execution context, but +6.085e-03
+    # against the reference's own value in another (2 OpenMP threads through the
+    # .oqp deck), which is a 2x6.085e-03 "regression" on a calculation that did
+    # not move. The magnitudes are what mean anything.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False,
+           phase_invariant=True),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
