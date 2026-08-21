@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from itertools import combinations
 import math
+import warnings
 from math import comb
 
 import numpy as np
@@ -460,6 +461,89 @@ def fci_spin_diagnostics(
     )
 
 
+#: How far <S^2> may sit from the nearest S(S+1) before the multiplicity label
+#: derived from it stops being trustworthy.  A converged spin eigenstate lands
+#: on S(S+1) to solver precision; a mixture of two spin states in a degenerate
+#: subspace is off by O(1), so anything in between is generous.
+SPIN_LABEL_TOLERANCE = 1.0e-2
+
+
+class SpinLabelAmbiguityError(RuntimeError):
+    """A CI root's <S^2> is not that of any spin eigenstate.
+
+    Deliberately NOT a ValueError: the target_spin call sites retry with more
+    roots when the filter raises ValueError, and solving for more roots cannot
+    make a spin-mixed vector spin-pure.
+    """
+
+
+def _total_electrons(nelec) -> int:
+    if isinstance(nelec, (tuple, list, np.ndarray)):
+        return int(sum(int(x) for x in nelec))
+    return int(nelec)
+
+
+def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERANCE):
+    """Roots whose multiplicity label cannot be trusted, as (root, s2, mult, why).
+
+    The label comes from rounding ``sqrt(1 + 4*<S^2>)``, which identifies the
+    spin only when the eigenvector IS an S^2 eigenstate.  Inside a degenerate --
+    or numerically near-degenerate -- energy subspace the eigensolver may return
+    an arbitrary orthogonal mixture of the degenerate states, and a mixture of
+    different-spin states is not an S^2 eigenstate at all.  Two things then give
+    it away:
+
+    * the implied <S^2> does not match S(S+1) for the rounded label, and
+    * the label can be impossible for the electron count -- an open-shell
+      two-electron Ms=0 determinant has <S^2> = 1, so the formula reports
+      sqrt(5) = 2.236 -> a "doublet", which two electrons cannot form.
+    """
+    s2 = np.atleast_1d(np.asarray(s2, dtype=float))
+    mult = np.atleast_1d(np.asarray(multiplicity, dtype=np.int64))
+    total = _total_electrons(nelec)
+    problems = []
+    for root in range(s2.size):
+        m = int(mult[root])
+        value = float(s2[root])
+        spin = 0.5 * (m - 1)
+        pure = spin * (spin + 1.0)
+        if m > total + 1:
+            problems.append((root, value, m,
+                             f"multiplicity {m} exceeds the maximum {total + 1} "
+                             f"for {total} electrons"))
+        elif (m % 2) != ((total + 1) % 2):
+            problems.append((root, value, m,
+                             f"multiplicity {m} has the wrong parity for "
+                             f"{total} electrons (allowed: "
+                             f"{'odd' if (total + 1) % 2 else 'even'})"))
+        elif abs(value - pure) > tol:
+            problems.append((root, value, m,
+                             f"<S^2> = {value:.6f} is {abs(value - pure):.2e} "
+                             f"away from S(S+1) = {pure:.6f} for multiplicity {m}"))
+    return problems
+
+
+def _format_spin_problems(problems, ci_label: str) -> str:
+    detail = "; ".join(f"root {root}: {why}" for root, _s2, _m, why in problems)
+    return (
+        f"{ci_label} spin labels are unreliable for {len(problems)} root(s): "
+        f"{detail}. The multiplicity is read from <S^2>, which identifies the "
+        f"spin only for an S^2 eigenstate; within a degenerate energy subspace "
+        f"the solver may return a spin-mixed combination. Reported energies are "
+        f"then the energies of mixtures, not of spin-pure states."
+    )
+
+
+def warn_unreliable_spin_labels(s2, multiplicity, nelec, *, ci_label: str,
+                                tol: float = SPIN_LABEL_TOLERANCE) -> list:
+    """Emit a warning for any root whose spin label cannot be trusted."""
+    problems = spin_label_diagnosis(s2, multiplicity, nelec, tol=tol)
+    if problems:
+        warnings.warn(_format_spin_problems(problems, ci_label), RuntimeWarning,
+                      stacklevel=2)
+    return problems
+
+
 def _target_spin_multiplicity(target_spin: str) -> int | None:
     target = _target_spin_setting(target_spin, "target_spin")
     if target == "any":
@@ -586,10 +670,28 @@ def _filter_roots_by_target_spin(
     requested_nroot: int,
     ci_label: str,
     ci_section: str,
+    nelec=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return root arrays filtered to the requested spin multiplicity."""
+    """Return root arrays filtered to the requested spin multiplicity.
+
+    When ``nelec`` is supplied the labels are checked before they are used to
+    select anything: filtering on a label that is not a spin eigenvalue picks
+    the wrong root, or reports none, without saying so.  Warn either way;
+    refuse only when a label is actually about to decide the answer.
+    """
     target_multiplicity = _target_spin_multiplicity(target_spin)
     root_indices = np.arange(np.asarray(energies).shape[0], dtype=np.int64)
+    if nelec is not None:
+        problems = warn_unreliable_spin_labels(
+            s2, multiplicity, nelec, ci_label=ci_label)
+        if problems and target_multiplicity is not None:
+            raise SpinLabelAmbiguityError(
+                _format_spin_problems(problems, ci_label)
+                + f" Refusing to apply {ci_section} target_spin={target_spin} "
+                  "to labels that are not spin eigenvalues; run with "
+                  "target_spin=any and select the root yourself, or lift the "
+                  "degeneracy."
+            )
     if target_multiplicity is None:
         return energies, coeffs, s2, multiplicity, root_indices
 
@@ -1749,6 +1851,7 @@ def solve_fci(
                         requested_nroot=nroot,
                         ci_label="FCI",
                         ci_section=ci_section,
+                        nelec=(nalpha, nbeta),
                     )
                     break
                 except ValueError:
@@ -1822,6 +1925,7 @@ def solve_fci(
                         requested_nroot=nroot,
                         ci_label="FCI",
                         ci_section=ci_section,
+                        nelec=(nalpha, nbeta),
                     )
                 )
                 break
@@ -2748,6 +2852,11 @@ class FCI:
         if target_multiplicity is None:
             energies, coeffs, s2, multiplicity = solve_and_diagnose(self.settings.nroot)
             root_indices = np.arange(len(energies), dtype=np.int64)
+            # target_spin=any skips the filter, so nothing else would look at
+            # these labels -- but they are still reported, and a label that is
+            # not a spin eigenvalue must not be reported silently.
+            warn_unreliable_spin_labels(s2, multiplicity, nelec,
+                                        ci_label=self.data_prefix)
         else:
             solve_nroot = min(determinant_count, max(1, int(self.settings.nroot)))
             while True:
@@ -2762,6 +2871,7 @@ class FCI:
                         requested_nroot=self.settings.nroot,
                         ci_label=self.data_prefix,
                         ci_section=self.ci_section,
+                        nelec=nelec,
                     )
                     break
                 except ValueError:
