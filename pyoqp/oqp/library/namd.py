@@ -2375,6 +2375,8 @@ class NAMD:
             'weight_derivative': enabled_by_default('ESPF_WDERIV'),
             'weight_scale': real_value('ESPF_WSCALE', 1.0),
             'switch_delta': real_value('ESPF_SWDELTA', 0.7),
+            # 1.8 is the whole-molecule default; use 1.5 at a covalent QM/MM
+            # boundary (docs/espf_qmmm_switching.md, issue #260).
             'switch_scale': real_value('ESPF_SWSCALE', 1.8),
         }
 
