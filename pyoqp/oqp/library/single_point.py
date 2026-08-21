@@ -168,6 +168,23 @@ SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
 }
 
 
+def _marks_grad_buffer(kernel):
+    """Wrap a native gradient kernel so the buffer write is recorded.
+
+    The Fortran kernels fill ``mol.data._data.grad`` in place.  That buffer is
+    allocated once and never cleared, so nothing downstream can tell a computed
+    gradient from leftover memory unless the write is declared.
+    """
+
+    def _call(mol, *args, **kwargs):
+        result = kernel(mol, *args, **kwargs)
+        mol.mark_grad_valid()
+        return result
+
+    _call.__name__ = getattr(kernel, '__name__', 'gradient_kernel')
+    return _call
+
+
 def _normalized_method_label(method):
     return str(method).strip().lower()
 
@@ -830,6 +847,16 @@ class SinglePoint(Calculator):
         # Metadata-only MO irrep labels (no-op unless symmetry is enabled).
         if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.label_molecular_orbitals()
+            # Stage the per-MO irrep indices the correlated methods read.
+            # Descriptive data only -- it changes nothing until a method
+            # chooses to block by it -- but until now nothing on a production
+            # path called this, so OQP::sym_mo_irrep_a/_b and
+            # OQP::sym_irrep_xor were never written in a real symmetry-enabled
+            # FCI/CASCI/CASSCF run and the machinery that reads them could
+            # never be reached (issue #340).
+            stage = getattr(self.mol, 'stage_mo_irreps', None)
+            if callable(stage):
+                stage()
 
         return energy
 
@@ -1255,13 +1282,19 @@ class Gradient(Calculator):
             'mrsf': oqp.tdhf_mrsf_z_vector,
         }
 
+        # Every native gradient kernel writes mol.data._data.grad in place, so
+        # it cannot go through Molecule.set_grad.  Wrap the dispatch once here
+        # -- this dict is the only reference to these entry points -- so the
+        # buffer is marked written wherever the kernel is invoked from.
         self.grad_func = {
-            'hf': oqp.hf_gradient,
-            'mp2': oqp.mp2_gradient,
-            'rpa': oqp.tdhf_gradient,
-            'tda': oqp.tdhf_gradient,
-            'sf': oqp.tdhf_sf_gradient,
-            'mrsf': oqp.tdhf_mrsf_gradient,
+            key: _marks_grad_buffer(func) for key, func in {
+                'hf': oqp.hf_gradient,
+                'mp2': oqp.mp2_gradient,
+                'rpa': oqp.tdhf_gradient,
+                'tda': oqp.tdhf_gradient,
+                'sf': oqp.tdhf_sf_gradient,
+                'mrsf': oqp.tdhf_mrsf_gradient,
+            }.items()
         }
 
     def gradient(self):
@@ -1400,6 +1433,13 @@ class Gradient(Calculator):
             buffer_row = int(getattr(self, '_sa_buffer_row', 0))
         elif self.method == 'tdhf' and len(self.grads):
             buffer_row = int(self.grads[-1])     # tddft_grad's last iteration
+        elif is_tb_method(self.method) and len(self.grads):
+            # The TB adapter fills only the requested rows of a
+            # (nstate+1, natom, 3) array and reports max(states) as the active
+            # state, so that is the row the buffer must hold.  Without this the
+            # buffer is never written on a TB gradient run and the saved
+            # 'grad' would be whatever the allocation contained.
+            buffer_row = max(int(s) for s in np.atleast_1d(self.grads))
         if buffer_row is not None:
             arr = np.asarray(grads, dtype=float).reshape(-1, self.natom, 3)
             if 0 <= buffer_row < arr.shape[0]:

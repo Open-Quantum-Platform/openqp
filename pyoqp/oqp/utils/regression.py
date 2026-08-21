@@ -174,6 +174,22 @@ REGISTRY = (
     # above, is sensitive to the SCF convergence path well beyond the energy;
     # compare with a small relative tolerance (a real regression is far larger).
     RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
+    # Multi-root wavefunction results.  Not `required`: the correlated
+    # references predate these keys and are skipped until regenerated, exactly
+    # as td_trans_dipole above.  Without them a multistate reference pins only
+    # the lowest mixed root, so a regression in any higher root, in a
+    # state-specific correction, or in the off-diagonal couplings of the
+    # effective Hamiltonian is invisible.
+    RegKey('casscf_energies', runtypes='*', required=False),
+    RegKey('caspt2_energies', runtypes='*', required=False),
+    RegKey('caspt2_reference_energies', runtypes='*', required=False),
+    RegKey('caspt2_ss_energies', runtypes='*', required=False),
+    RegKey('caspt2_state_specific_corrections', runtypes='*', required=False),
+    # Sign of an eigenvector column is arbitrary, but Heff itself is not a
+    # vector -- compare it directly, with the same relative tolerance as the
+    # other response-path quantities above.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False,
+           rtol=1e-6),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),

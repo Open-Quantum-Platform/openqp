@@ -83,6 +83,11 @@ class Molecule:
             self.log_path = os.path.dirname(os.path.abspath(__file__))
         self.energies = None
         self.grads = None
+        # False until a gradient kernel (native or Python) actually writes the
+        # native ``data._data.grad`` buffer.  The buffer is allocated but never
+        # zeroed, so reading it after a runtype that computes no gradient
+        # returns uninitialised memory; see get_results().
+        self._grad_valid = False
         self.dcm = []  # Nstate, Nstate
         self.nac = []  # Npairs, 3, Natom,
         self.soc = []  # Npairs, 1,
@@ -2040,6 +2045,26 @@ class Molecule:
         )
         view.setflags(write=True)
         view[:] = flat
+        self._grad_valid = True
+
+    def has_grad(self):
+        """True when the native gradient buffer holds a computed gradient.
+
+        ``data._data.grad`` is allocated once and never cleared, so "is there a
+        gradient?" cannot be answered from its contents: an energy-only run
+        leaves whatever the allocation happened to contain, which is sometimes
+        denormal noise and sometimes a plausible-looking number.  Track the
+        write instead.
+        """
+        return bool(getattr(self, '_grad_valid', False))
+
+    def mark_grad_valid(self):
+        """Record that a native kernel wrote the gradient buffer in place.
+
+        The Fortran kernels write ``data._data.grad`` directly, so they cannot
+        go through ``set_grad``; their Python caller declares the write here.
+        """
+        self._grad_valid = True
 
     def get_nac(self):
         """
@@ -2291,6 +2316,38 @@ class Molecule:
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
+        # Multi-root wavefunction results.  The correlated drivers publish
+        # every root and its decomposition into OQP:: tags, but only the
+        # lowest scalar reached the public payload, so a committed MS/XMS
+        # reference covered one mixed root and nothing compared the others.
+        for key, tag in (
+                ('casscf_energies', 'OQP::CASSCF_ENERGIES'),
+                ('caspt2_energies', 'OQP::CASPT2_ENERGIES'),
+                ('caspt2_reference_energies', 'OQP::CASPT2_REFERENCE_ENERGIES'),
+                ('caspt2_ss_energies', 'OQP::CASPT2_SS_ENERGIES'),
+                ('caspt2_state_specific_corrections',
+                 'OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS')):
+            try:
+                arr = np.asarray(self.data[tag], dtype=float).ravel()
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            if arr.size:
+                data[key] = arr.tolist()
+
+        # The multistate effective Hamiltonian is the object the MS/XMS mixing
+        # is read from; its eigenvalues are caspt2_energies, so comparing only
+        # those leaves the off-diagonal couplings untested.
+        try:
+            heff = np.asarray(self.data['OQP::CASPT2_EFFECTIVE_HAMILTONIAN'],
+                              dtype=float)
+            if heff.size:
+                nroot = int(round(heff.size ** 0.5))
+                if nroot * nroot == heff.size:
+                    data['caspt2_effective_hamiltonian'] = \
+                        heff.reshape((nroot, nroot)).tolist()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+
         # save NMR isotropic shielding if available (CGO or GIAO).
         # Flat atom-major array -> (natom, 5) in ppm; columns =
         # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].
@@ -2324,11 +2381,22 @@ class Molecule:
             except Exception:
                 pass
 
-        # save gradients if available
-        data['grad'] = np.array(self.get_grad()).tolist()
-        data['nac'] = np.array(self.get_nac()).tolist()
-        data['soc'] = np.array(self.get_soc()).tolist()
-        data['hess'] = np.array(self.get_hess()).tolist()
+        # Derivative results are emitted only when they were actually
+        # computed.  ``grad`` in particular used to be read unconditionally
+        # from the native buffer, which no kernel writes on an energy-only
+        # run: every such reference shipped uninitialised memory as a public
+        # numeric field -- denormal noise in most cases, but also values like
+        # 1.7e+243 and 2.18 that a consumer cannot tell from a real gradient.
+        # An absent key is the honest answer; ``nac``/``soc``/``hess`` follow
+        # the same rule rather than publishing an empty list.
+        if self.has_grad():
+            data['grad'] = np.array(self.get_grad()).tolist()
+        for _key, _value in (('nac', self.get_nac()),
+                             ('soc', self.get_soc()),
+                             ('hess', self.get_hess())):
+            _arr = np.array(_value)
+            if _arr.size:
+                data[_key] = _arr.tolist()
         data.update(self.get_mrsf_ekt_results())
 
         # Keep the programmatic API and the on-disk JSON on the same public
