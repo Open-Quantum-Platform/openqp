@@ -64,7 +64,7 @@ unset(_oqp_env_cc)
 unset(_oqp_env_cxx)
 
 project(Open-Quantum-Package
-  VERSION 1.3.0
+  VERSION 1.3.1
   LANGUAGES C CXX Fortran)
 
 include(GNUInstallDirs)
