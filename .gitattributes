@@ -1,0 +1,12 @@
+# Line endings are part of the artifact, not a local preference.
+#
+# Windows runners check out with core.autocrlf enabled by default, which
+# rewrites LF to CRLF in the working tree.  A wheel built there then ships a
+# LICENSE whose bytes differ from the tagged source, and the release
+# verification refuses it -- correctly, since license text must not change
+# silently between the repository and the distribution.  It cost the v1.3.1
+# release exactly that check.
+#
+# Declaring it here makes the result identical on every machine, instead of
+# depending on each contributor's git configuration.
+* text=auto eol=lf
