@@ -349,7 +349,20 @@ def compute_s2(
 
     if det_index is None:
         det_index = {det: idx for idx, det in enumerate(dets)}
-    spin_flip = 0.0
+    flipped = _apply_spin_flip(coeff, dets, norb, det_index)
+    return float(s2 + float(coeff @ flipped))
+
+
+def _apply_spin_flip(coeff, dets, norb, det_index):
+    """Return the spin-flip part of ``S^2`` applied to one CI vector.
+
+    ``<a|S^2|b> = ms(ms+1) <a|b> + a . _apply_spin_flip(b)``, so factoring the
+    application out of :func:`compute_s2` is what makes the OFF-diagonal
+    elements reachable. Only the diagonal was ever needed while a root's
+    multiplicity was read from its own expectation value; resolving a
+    spin-mixed degenerate subspace needs the whole matrix.
+    """
+    out = np.zeros(len(dets), dtype=float)
     for col, det in enumerate(dets):
         c_col = coeff[col]
         if c_col == 0.0:
@@ -374,16 +387,117 @@ def compute_s2(
                 det_beta_p, phase_beta_p = cre_beta_p
                 row = det_index.get(det_beta_p)
                 if row is not None:
-                    spin_flip += (
-                        coeff[row]
-                        * phase_q
-                        * phase_alpha_q
-                        * phase_p
-                        * phase_beta_p
-                        * c_col
+                    out[row] += (
+                        phase_q * phase_alpha_q * phase_p * phase_beta_p * c_col
                     )
+    return out
 
-    return float(s2 + spin_flip)
+
+def s2_matrix(vectors, determinants, norb, nelec):
+    """``<a|S^2|b>`` over the columns of ``vectors``, in the determinant basis."""
+    dets = list(determinants)
+    vecs = _real_array(vectors, "CI vectors")
+    if vecs.ndim == 1:
+        vecs = vecs[:, None]
+    if vecs.shape[0] != len(dets):
+        raise ValueError("CI vectors must have one row per determinant")
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ms = 0.5 * (nalpha - nbeta)
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    applied = np.column_stack([
+        _apply_spin_flip(vecs[:, k], dets, norb, det_index)
+        for k in range(vecs.shape[1])
+    ])
+    mat = vecs.T @ applied + ms * (ms + 1.0) * (vecs.T @ vecs)
+    # S^2 is Hermitian; symmetrise away the round-off so the eigensolver
+    # cannot return complex pairs from an asymmetric input.
+    return 0.5 * (mat + mat.T)
+
+
+#: Energies closer than this are treated as one degenerate cluster. A CI solve
+#: converges eigenpairs to eig_tol (1e-10 by default), so 1e-8 is loose enough
+#: to catch a genuine degeneracy resolved only to solver precision and tight
+#: enough not to merge two physically distinct states.
+DEGENERACY_TOLERANCE = 1.0e-8
+
+
+def degenerate_clusters(energies, tol=DEGENERACY_TOLERANCE):
+    """Indices of the energy-ordered roots, grouped into degenerate clusters."""
+    e = np.atleast_1d(np.asarray(energies, dtype=float))
+    clusters = []
+    current = [0] if e.size else []
+    for k in range(1, e.size):
+        if abs(e[k] - e[current[0]]) <= tol:
+            current.append(k)
+        else:
+            clusters.append(current)
+            current = [k]
+    if current:
+        clusters.append(current)
+    return clusters
+
+
+def spin_purify_degenerate_clusters(energies, coeffs, determinants, norb, nelec,
+                                    *, tol=DEGENERACY_TOLERANCE):
+    """Re-express each degenerate cluster in the S^2 eigenbasis.
+
+    Within a degenerate -- or numerically near-degenerate -- energy subspace the
+    eigensolver is free to return any orthogonal mixture of the degenerate
+    states, and a mixture of different-spin states is not an S^2 eigenstate at
+    all. Its <S^2> is then a weighted average, and the multiplicity read from it
+    can be one no electron count admits.
+
+    Rotating WITHIN a degenerate subspace leaves every vector an eigenvector of
+    H with the same eigenvalue, so this changes no energy. What it changes is
+    which combination each root is -- and therefore its <S^2>, its multiplicity
+    label, and whether a target_spin filter picks it.
+
+    Returns ``(coeffs, s2, multiplicity, changed)``. ``changed`` is False when
+    every cluster was already spin-pure, in which case the vectors are returned
+    untouched rather than re-expressed in a numerically equivalent basis.
+    """
+    e = np.atleast_1d(np.asarray(energies, dtype=float))
+    vecs = _real_array(coeffs, "CI vectors")
+    if vecs.ndim == 1:
+        vecs = vecs[:, None]
+    dets = list(determinants)
+    out = np.array(vecs, dtype=float, copy=True)
+    changed = False
+
+    for cluster in degenerate_clusters(e, tol=tol):
+        if len(cluster) < 2:
+            continue
+        block = vecs[:, cluster]
+        mat = s2_matrix(block, dets, norb, nelec)
+        # Already diagonal to solver precision: leave the vectors alone rather
+        # than rotate them by an arbitrary eigenvector convention.
+        off = mat - np.diag(np.diag(mat))
+        if np.max(np.abs(off)) <= 1.0e-8:
+            continue
+        vals, vecs_sub = _symmetric_eigh(mat)
+        # Deterministic order inside the cluster: ascending S^2. The previous
+        # order was whatever the eigensolver happened to produce, so there is
+        # nothing to preserve, and a stable rule keeps references reproducible.
+        order = np.argsort(vals, kind="stable")
+        rotated = block @ vecs_sub[:, order]
+        # An eigenvector's sign is arbitrary, so pin one: make the
+        # largest-magnitude coefficient positive. Without this the rotation is
+        # reproducible only up to a per-root sign, and anything built from the
+        # vectors (a multistate effective Hamiltonian's off-diagonals, a
+        # transition density) flips with it between runs.
+        for c in range(rotated.shape[1]):
+            col = rotated[:, c]
+            pivot = int(np.argmax(np.abs(col)))
+            if col[pivot] < 0.0:
+                rotated[:, c] = -col
+        out[:, cluster] = rotated
+        changed = True
+
+    # Relabel through the shared diagnostics so the engine's fast <S^2> path is
+    # used where it is available; the Python reference is O(ndet * norb^2) per
+    # root and this runs on every root, not just the rotated ones.
+    s2, multiplicity = fci_spin_diagnostics(out, dets, norb, nelec)
+    return out, s2, multiplicity, changed
 
 
 def _lib_spin_square(coeffs, dets, norb, nelec):
@@ -2774,10 +2888,24 @@ def solve_active_ci(
         active_section=active_section,
         ci_section=ci_section,
     )
+    # Both engines converge here, so this is the one place a spin-mixed
+    # degenerate subspace can be resolved once and have the native and Python
+    # paths agree by construction rather than by keeping two implementations in
+    # step.  Skipped entirely when no two roots are degenerate, which is the
+    # common case and costs one pass over the energies.
     s2 = None
-    if want_s2:
+    dets_active = None
+    if any(len(c) > 1 for c in degenerate_clusters(energies)):
+        dets_active = _determinants(plan.nact, active_nelec)
+        coeffs, purified_s2, _mult, changed = spin_purify_degenerate_clusters(
+            energies, coeffs, dets_active, plan.nact, active_nelec)
+        if changed and want_s2:
+            s2 = purified_s2
+    if want_s2 and s2 is None:
+        if dets_active is None:
+            dets_active = _determinants(plan.nact, active_nelec)
         s2, _multiplicity = fci_spin_diagnostics(
-            coeffs, _determinants(plan.nact, active_nelec), plan.nact, active_nelec)
+            coeffs, dets_active, plan.nact, active_nelec)
     return energies, coeffs, s2
 
 

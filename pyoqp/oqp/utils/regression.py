@@ -192,6 +192,11 @@ REGISTRY = (
     # elements that mean anything are O(1) Hartree, where the default
     # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
     # below any real regression.
+    #
+    # NOT phase_invariant, despite an off-diagonal H_IJ carrying the product of
+    # two arbitrary CI-root phases in principle: measured three times on
+    # H4_MCQDPT2 the sign is reproducible (+6.085e-03 every run), so comparing
+    # magnitudes would weaken the test for no demonstrated benefit.
     RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
