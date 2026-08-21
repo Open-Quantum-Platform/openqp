@@ -185,11 +185,14 @@ REGISTRY = (
     RegKey('caspt2_reference_energies', runtypes='*', required=False),
     RegKey('caspt2_ss_energies', runtypes='*', required=False),
     RegKey('caspt2_state_specific_corrections', runtypes='*', required=False),
-    # Sign of an eigenvector column is arbitrary, but Heff itself is not a
-    # vector -- compare it directly, with the same relative tolerance as the
-    # other response-path quantities above.
-    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False,
-           rtol=1e-6),
+    # Compared ABSOLUTELY, unlike the other response-path quantities above: the
+    # symmetry-forbidden off-diagonals of Heff are exact zeros carrying only
+    # round-off, so a relative test on them is meaningless -- 6.5e-18 against
+    # -2.9e-16 is a factor of 45 and a green run looks like a regression. The
+    # elements that mean anything are O(1) Hartree, where the default
+    # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
+    # below any real regression.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
