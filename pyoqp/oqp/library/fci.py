@@ -70,6 +70,13 @@ class FCISettings:
     orbital_source: str = "rhf"
     orbital_file: str = ""
     target_spin: str = "any"
+    #: Spatial-symmetry filter on the returned roots. "any" (the default)
+    #: leaves root selection exactly as it was; a point-group irrep name keeps
+    #: only roots whose dominant irrep is that one.
+    target_irrep: str = "any"
+    #: Weight a root must carry in its dominant irrep to count as a symmetry
+    #: eigenstate at all.
+    irrep_min_purity: float = 0.5
 
 
 def _annihilate(det: int, orb: int) -> tuple[int, int] | None:
@@ -757,7 +764,6 @@ def _filter_roots_by_target_spin(
         np.asarray(multiplicity)[keep],
         root_indices[keep],
     )
-
 
 def _electron_count_component(value, label: str) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
@@ -1737,6 +1743,61 @@ def resolve_ci_solve(
     )
 
 
+#: Relative window that decides which amplitudes count as "the largest" when
+#: :func:`canonicalize_ci_phase` picks the amplitude whose sign it fixes.
+#: Symmetry-equivalent determinants carry mathematically equal weights that a
+#: floating-point solve reproduces only to ~1e-14 relative, so an exact
+#: ``argmax`` over ``|c|`` would let round-off elect a different representative
+#: -- and therefore a different sign -- from one run to the next, which is the
+#: whole freedom this convention exists to remove.  Mirrored by
+#: ``FCI_PHASE_TIE_RTOL`` in ``source/modules/fci_driver.F90``.
+_CI_PHASE_TIE_RTOL = 1.0e-8
+
+
+def canonicalize_ci_phase(civecs: np.ndarray) -> np.ndarray:
+    """Fix the arbitrary overall sign of each CI vector, in place.
+
+    An eigenvector is determined only up to ``|Psi> -> -|Psi>``, and which of
+    the two a diagonalization hands back is not a property of the calculation:
+    it follows the Davidson start vector, the LAPACK implementation, and the
+    order the OpenMP reductions happen to accumulate in.  H4_MCQDPT2 returned
+    ``+6.085296e-03`` for the same Heff off-diagonal on one and two threads of
+    one build and ``-6.085296e-03`` on four, with the energies identical to
+    1e-10.  Everything LINEAR in the CI vector inherits that freedom; the
+    multistate CASPT2 effective Hamiltonian, whose off-diagonal carries the
+    product of two root phases, is where it surfaced -- as a 2 x 6.085e-03
+    Hartree "regression" on a calculation that had not moved.
+
+    Convention: the amplitude of largest magnitude is positive.  Ties -- the
+    rule rather than the exception in a symmetric molecule, where
+    symmetry-equivalent determinants carry equal weight -- go to the lowest
+    determinant index, selected within :data:`_CI_PHASE_TIE_RTOL` so that
+    round-off between two mathematically equal amplitudes cannot elect a
+    different representative from one run to the next.  ``canonical_phase()``
+    in ``source/modules/fci_driver.F90`` applies the identical rule to the
+    vectors the native engine returns, and
+    ``tests/test_fci_solve.py::test_native_solve_matches_python_driver`` pins
+    the two together by requiring a SIGNED overlap of +1.
+
+    ``civecs`` is ``(ndet, nroot)``.  The convention is idempotent, so applying
+    it to already-canonical vectors is a no-op.
+    """
+    vecs = np.asarray(civecs)
+    if vecs.ndim != 2 or vecs.size == 0:
+        return civecs
+    if not vecs.flags.writeable:
+        vecs = vecs.copy()
+    magnitudes = np.abs(vecs)
+    # A wholly zero column falls out of the same expression: its window admits
+    # every row, the leading amplitude is 0, and 0 is not negative.
+    window = magnitudes.max(axis=0) * (1.0 - _CI_PHASE_TIE_RTOL)
+    lead = np.argmax(magnitudes >= window, axis=0)
+    flip = vecs[lead, np.arange(vecs.shape[1])] < 0.0
+    if flip.any():
+        vecs[:, flip] *= -1.0
+    return vecs
+
+
 def solve_fci(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -1977,7 +2038,7 @@ def solve_fci(
                     raise
                 solve_nroot = min(ndet, max(solve_nroot + 1, 2 * solve_nroot))
 
-    return selected_eigvals + ecore, selected_eigvecs
+    return selected_eigvals + ecore, canonicalize_ci_phase(selected_eigvecs)
 
 
 def _unpack_lower_triangle(packed: np.ndarray, n: int) -> np.ndarray:
@@ -2199,6 +2260,8 @@ def _settings_from_config(config: dict) -> FCISettings:
         ),
         save_rdm=_bool_setting(raw.get("save_rdm", False), "fci.save_rdm"),
         target_spin=_target_spin_setting(raw.get("target_spin", "any"), "fci.target_spin"),
+        target_irrep=str(raw.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(raw.get("irrep_min_purity", 0.5)),
     )
     return _validate_ci_settings(settings, ci_section="fci")
 
@@ -2322,6 +2385,8 @@ def settings_from_casci_config(config: dict) -> FCISettings:
         ),
         orbital_file=_string_setting(cas.get("orbital_file", ""), "cas.orbital_file"),
         target_spin=_target_spin_setting(ci.get("target_spin", "any"), "ci.target_spin"),
+        target_irrep=str(ci.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(ci.get("irrep_min_purity", 0.5)),
     )
     if settings.orbital_source == "json" and not settings.orbital_file:
         raise ValueError("cas.orbital_file is required when cas.orbital_source=json")
@@ -2652,8 +2717,20 @@ def _active_space(
 _FCI_IOPT = (
     "norb", "nact", "ncore", "nalpha", "nbeta", "nroot", "solver", "maxiter",
     "subspace", "mult", "maxmemory", "nthreads", "want_s2", "guess",
+    # Correlated-state irrep selection.  0 = any, which is what a caller that
+    # never heard of this leaves in the slot, so the native root selection is
+    # byte-identical without it.  When it is non-zero the per-irrep and
+    # per-active-orbital XOR codes ride in the tail of the same array.
+    "irrep", "nirrep",
 )
-_FCI_DOPT = ("ecore", "eig_tol", "cutoff")
+_FCI_DOPT = ("ecore", "eig_tol", "cutoff", "min_purity")
+#: The lengths the RELEASED ``fci_solve`` reads, mirroring FCI_NIOPT_V1 /
+#: FCI_NDOPT_V1 in fci_driver.F90 and include/oqp.h.  Everything added after
+#: v1.3.x is reached through ``fci_solve_ex``, which is told how much the
+#: caller allocated; a binary built against the v1.3.1 header allocates only
+#: this much, so the old symbol must never read past it.
+_FCI_NIOPT_V1 = 14
+_FCI_NDOPT_V1 = 3
 _FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}
 _FCI_DOPT_INDEX = {name: i for i, name in enumerate(_FCI_DOPT)}
 _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
@@ -2662,13 +2739,87 @@ _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
 _FCI_MAX_NSPIN = 62
 
 
+class IrrepSelectionUnavailable(RuntimeError):
+    """An irrep was requested but the symmetry data to honour it is missing."""
+
+
+def resolve_irrep_selection(mol, plan, target_irrep, min_purity=0.5):
+    """Resolve ``[ci] irrep`` into the tables the native selector needs.
+
+    Returns ``None`` when no irrep was requested. Otherwise returns
+    ``(index, xor_codes, active_orbital_codes, min_purity)`` where the codes are
+    the bitmask encoding ``Molecule.stage_mo_irreps`` writes, so the direct
+    product of orbital irreps is a bitwise XOR.
+
+    Raises rather than falling back: silently ignoring a symmetry request would
+    return roots of the wrong symmetry with no diagnostic, which is the failure
+    this is meant to prevent.
+    """
+    name = str(target_irrep or "any").strip()
+    if not name or name.lower() == "any":
+        return None
+
+    meta = (getattr(mol, "symmetry_metadata", None) or {}).get("mo_irreps") or {}
+    if meta.get("status") != "active":
+        raise IrrepSelectionUnavailable(
+            f"[ci] irrep={name} needs MO irrep labels, which are not available "
+            f"(mo_irreps status: {meta.get('status', 'not staged')}). Enable "
+            "[symmetry] and use a geometry whose point group is detected."
+        )
+
+    irreps = list(meta.get("irreps") or ())
+    lowered = {str(n).strip().lower(): i + 1 for i, n in enumerate(irreps)}
+    index = lowered.get(name.lower())
+    if index is None:
+        raise ValueError(
+            f"[ci] irrep={name} is not an irrep of the detected point group; "
+            f"available: {', '.join(irreps)}"
+        )
+
+    xor_codes = [int(c) for c in (meta.get("xor_codes") or ())]
+    if len(xor_codes) != len(irreps):
+        raise IrrepSelectionUnavailable(
+            "staged irrep table is inconsistent with its XOR codes")
+
+    try:
+        mo_index = np.asarray(mol.data["OQP::sym_mo_irrep_a"], dtype=int).ravel()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise IrrepSelectionUnavailable(
+            "OQP::sym_mo_irrep_a is not staged; cannot classify determinants"
+        ) from exc
+
+    codes = [0] + xor_codes                     # slot 0 = unclassified
+    orb_codes = []
+    for p in plan.active:
+        p = int(p)
+        if p < 0 or p >= mo_index.size:
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} is outside the staged MO irrep table")
+        idx = int(mo_index[p])
+        if idx <= 0:
+            # An unclassified orbital would be given code 0, which is also the
+            # totally symmetric code -- every determinant containing it would
+            # be mislabelled rather than declined.
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} has no irrep label (the SCF returned a "
+                "mixed or near-degenerate orbital), so determinant irreps "
+                "cannot be assigned; run without [ci] irrep")
+        orb_codes.append(codes[idx])
+
+    return (index, tuple(xor_codes), tuple(orb_codes), float(min_purity))
+
+
 def _fci_solve_backend():
     """liboqp ``(lib, ffi)`` for the one-call CI driver, or ``None``."""
     backend = _lib_backend()
     if backend is None:
         return None
     lib, ffi = backend
-    if not hasattr(lib, "fci_solve"):
+    # fci_solve_ex is what the driver calls: it is the length-negotiated entry
+    # point, and the only one that reports root provenance.  A library old
+    # enough to lack it is treated as no backend at all, which is the existing
+    # "engine declined" path into the Python driver.
+    if not hasattr(lib, "fci_solve_ex"):
         return None
     return lib, ffi
 
@@ -2696,7 +2847,16 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
         return None
 
-    iopt = np.zeros(len(_FCI_IOPT), dtype=np.int32)
+    # An irrep request rides in plan.metadata: it is resolved once at the
+    # driver, where the Molecule (and therefore the staged symmetry tables) is
+    # in scope, rather than threaded through every solver signature.
+    irrep = (plan.metadata or {}).get("irrep")
+    tail = 0
+    if irrep is not None:
+        _idx, _xor, _orb, _pure = irrep
+        tail = len(_xor) + len(_orb)
+
+    iopt = np.zeros(len(_FCI_IOPT) + tail, dtype=np.int32)
     iopt[_FCI_IOPT_INDEX["norb"]] = plan.norb
     iopt[_FCI_IOPT_INDEX["nact"]] = nact
     iopt[_FCI_IOPT_INDEX["ncore"]] = plan.ncore
@@ -2712,10 +2872,19 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     iopt[_FCI_IOPT_INDEX["nthreads"]] = nthreads
     iopt[_FCI_IOPT_INDEX["want_s2"]] = 1 if want_s2 else 0
 
+    if irrep is not None:
+        iopt[_FCI_IOPT_INDEX["irrep"]] = _idx
+        iopt[_FCI_IOPT_INDEX["nirrep"]] = len(_xor)
+        base = len(_FCI_IOPT)
+        iopt[base:base + len(_xor)] = np.asarray(_xor, dtype=np.int32)
+        iopt[base + len(_xor):] = np.asarray(_orb, dtype=np.int32)
+
     dopt = np.zeros(len(_FCI_DOPT), dtype=np.float64)
     dopt[_FCI_DOPT_INDEX["ecore"]] = spec.ecore
     dopt[_FCI_DOPT_INDEX["eig_tol"]] = spec.eig_tol
     dopt[_FCI_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+    if irrep is not None:
+        dopt[_FCI_DOPT_INDEX["min_purity"]] = _pure
 
     active = np.ascontiguousarray(plan.active, dtype=np.int32)
     # cffi will not cast an empty buffer; the engine reads none of it anyway
@@ -2728,7 +2897,11 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     civecs = np.zeros((ndet, spec.nroot), dtype=np.float64)
     s2 = np.zeros(spec.nroot, dtype=np.float64)
 
-    status = int(lib.fci_solve(
+    roots = np.zeros(spec.nroot, dtype=np.int32)
+
+    status = int(lib.fci_solve_ex(
+        np.int32(iopt.size),
+        np.int32(dopt.size),
         ffi.cast("int32_t *", iopt.ctypes.data),
         ffi.cast("double *", dopt.ctypes.data),
         ffi.cast("int32_t *", active.ctypes.data),
@@ -2737,10 +2910,15 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
         ffi.cast("double *", vv.ctypes.data),
         ffi.cast("double *", energies.ctypes.data),
         ffi.cast("double *", civecs.ctypes.data),
-        ffi.cast("double *", s2.ctypes.data)))
+        ffi.cast("double *", s2.ctypes.data),
+        ffi.cast("int32_t *", roots.ctypes.data)))
     if status < 0:
         return None
-    return energies, civecs, (s2 if want_s2 else None)
+    # No canonicalize_ci_phase() here: fci_driver.F90 applies the convention on
+    # its own copy-out, and repeating it in Python would hide a regression on
+    # the Fortran side from the very test that checks for one.
+    return (energies, civecs, (s2 if want_s2 else None),
+            np.ascontiguousarray(roots, dtype=np.int64))
 
 
 def solve_active_ci(
@@ -2756,6 +2934,7 @@ def solve_active_ci(
     integral_cutoff: float = 0.0,
     active_section: str = "[fci]",
     ci_section: str = "[fci]",
+    want_roots: bool = False,
 ):
     """One complete CI solve from the FULL MO integrals.
 
@@ -2770,7 +2949,11 @@ def solve_active_ci(
     indices *within the unfiltered window*, which is a reporting concern rather
     than a compute one.
 
-    Returns ``(energies, civecs, s2 | None)``.
+    Returns ``(energies, civecs, s2 | None)``, or, with ``want_roots``, a
+    fourth element: each returned root's 0-based index among the roots the
+    solve computed, or ``None`` when this path cannot know it.  An irrep filter
+    runs inside the engine, so without that the caller would have to invent
+    ``0, 1, 2, ...`` -- and publish a B1 root that is really state 1 as root 0.
     """
     spec = resolve_ci_solve(
         plan.nact,
@@ -2798,7 +2981,20 @@ def solve_active_ci(
         use_target_spin=use_target_spin,
     )
     if native is not None:
-        return native
+        energies, civecs, s2, roots = native
+        return (energies, civecs, s2, roots) if want_roots else (energies, civecs, s2)
+
+    # The Python driver has no irrep classification, so honouring an irrep
+    # request here is impossible.  Refuse rather than silently return the
+    # lowest roots of any symmetry: the two paths disagreeing about which root
+    # a run returns is worse than not offering the feature on the fallback.
+    if (plan.metadata or {}).get("irrep") is not None:
+        raise IrrepSelectionUnavailable(
+            "[ci] irrep selection requires the native CI engine, which "
+            "declined this solve (missing symbol, active space wider than a "
+            "64-bit determinant key, allocation failure, or no root of that "
+            "irrep). Re-run without [ci] irrep to use the Python driver."
+        )
 
     h_act, eri_act, active_nelec, ecore_act = apply_active_space(
         h1e, eri, plan, ecore)
@@ -2821,7 +3017,15 @@ def solve_active_ci(
     if want_s2:
         s2, _multiplicity = fci_spin_diagnostics(
             coeffs, _determinants(plan.nact, active_nelec), plan.nact, active_nelec)
-    return energies, coeffs, s2
+    if not want_roots:
+        return energies, coeffs, s2
+    # The Python driver returns the lowest roots of the window it solved, so
+    # the identity map is the truth here -- EXCEPT when it did its own spin
+    # filtering, where it drops the indices it selected on.  Say so rather than
+    # hand back a plausible-looking lie.
+    roots = (None if use_target_spin
+             else np.arange(len(energies), dtype=np.int64))
+    return energies, coeffs, s2, roots
 
 
 class FCI:
@@ -2872,7 +3076,7 @@ class FCI:
             # The spin filter stays here rather than in the engine: the root
             # indices reported below are positions in the UNFILTERED window, so
             # this is a reporting concern, not part of the compute path.
-            window_energies, window_coeffs, window_s2 = solve_active_ci(
+            window_energies, window_coeffs, window_s2, window_roots = solve_active_ci(
                 h1e_mo,
                 eri_mo,
                 plan,
@@ -2884,17 +3088,21 @@ class FCI:
                 integral_cutoff=self.settings.integral_cutoff,
                 active_section=self.active_section,
                 ci_section=self.ci_section,
+                want_roots=True,
             )
             window_multiplicity = np.maximum(
                 np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * window_s2))).astype(np.int64),
                 1,
             )
+            if window_roots is None:
+                window_roots = np.arange(len(window_energies), dtype=np.int64)
             return (window_energies, window_coeffs, _as_f64c(window_s2),
-                    np.ascontiguousarray(window_multiplicity, dtype=np.int64))
+                    np.ascontiguousarray(window_multiplicity, dtype=np.int64),
+                    np.ascontiguousarray(window_roots, dtype=np.int64))
 
         if target_multiplicity is None:
-            energies, coeffs, s2, multiplicity = solve_and_diagnose(self.settings.nroot)
-            root_indices = np.arange(len(energies), dtype=np.int64)
+            energies, coeffs, s2, multiplicity, root_indices = solve_and_diagnose(
+                self.settings.nroot)
             # target_spin=any skips the filter, so nothing else would look at
             # these labels -- but they are still reported, and a label that is
             # not a spin eigenvalue must not be reported silently.
@@ -2903,7 +3111,8 @@ class FCI:
         else:
             solve_nroot = min(determinant_count, max(1, int(self.settings.nroot)))
             while True:
-                energies, coeffs, s2, multiplicity = solve_and_diagnose(solve_nroot)
+                energies, coeffs, s2, multiplicity, window_roots = solve_and_diagnose(
+                    solve_nroot)
                 try:
                     energies, coeffs, s2, multiplicity, root_indices = _filter_roots_by_target_spin(
                         energies,
@@ -2916,6 +3125,12 @@ class FCI:
                         ci_section=self.ci_section,
                         nelec=nelec,
                     )
+                    # _filter_roots_by_target_spin reports positions inside the
+                    # window; map them back onto the solve's own root numbering,
+                    # which an irrep filter may already have made non-contiguous.
+                    root_indices = np.ascontiguousarray(
+                        np.asarray(window_roots, dtype=np.int64)[root_indices],
+                        dtype=np.int64)
                     break
                 except ValueError:
                     if solve_nroot >= determinant_count:
@@ -3162,6 +3377,25 @@ class FCI:
         """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
         check_ao_eri_budget(nbf, self.settings.max_memory, self.active_section)
 
+    def _stage_irrep_selection(self, plan):
+        """Resolve an ``[ci] irrep`` request onto ``plan.metadata``.
+
+        Done here, in the driver, because this is where the Molecule -- and so
+        the tables ``stage_mo_irreps`` wrote -- is in scope.  Riding in
+        ``plan.metadata`` keeps it out of every solver signature between here
+        and ``_lib_fci_solve``.
+
+        Inherited by CASCI, which builds its own plan from its own orbitals.
+        """
+        selection = resolve_irrep_selection(
+            self.mol, plan,
+            getattr(self.settings, "target_irrep", "any"),
+            getattr(self.settings, "irrep_min_purity", 0.5),
+        )
+        if selection is not None:
+            plan.metadata["irrep"] = selection
+        return selection
+
     def _native_mo_integrals(self):
         nbf = int(self.mol.data.get_basis()["nbf"])
         self._check_ao_eri_budget(nbf)
@@ -3181,6 +3415,7 @@ class FCI:
         # frozen-core fold now happen inside the native CI driver, so doing
         # them here would only be work thrown away.
         plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        self._stage_irrep_selection(plan)
         metadata = dict(plan.metadata)
         metadata["orbital_source"] = "rhf"
         return h1e, eri, plan, ecore, metadata

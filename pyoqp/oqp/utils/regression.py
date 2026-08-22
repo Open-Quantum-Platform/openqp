@@ -192,15 +192,17 @@ REGISTRY = (
     # elements that mean anything are O(1) Hartree, where the default
     # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
     # below any real regression.
-    # ... and phase_invariant, for the reason nac and td_trans_dipole are: an
-    # off-diagonal H_IJ carries the product of two CI-root phases, which are
-    # arbitrary, so its SIGN is not a property of the calculation. Observed on
-    # H4_MCQDPT2: reproducible run to run in one execution context, but +6.085e-03
-    # against the reference's own value in another (2 OpenMP threads through the
-    # .oqp deck), which is a 2x6.085e-03 "regression" on a calculation that did
-    # not move. The magnitudes are what mean anything.
-    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False,
-           phase_invariant=True),
+    # Compared WITH its sign, unlike nac and td_trans_dipole. An off-diagonal
+    # H_IJ does carry the product of two CI-root phases, and those phases used
+    # to be whatever the diagonalization happened to return -- H4_MCQDPT2 gave
+    # +6.085e-03 on one and two OpenMP threads of one build and -6.085e-03 on
+    # four, a 2x6.085e-03 "regression" on a calculation that had not moved.
+    # That is now fixed where it arises rather than hidden here: the canonical
+    # CI phase (canonical_phase in fci_driver.F90, canonicalize_ci_phase in
+    # fci.py) pins every root, and _xms_rotation pins the XMS rotation columns.
+    # The sign is therefore a property of the calculation again, and a flip is
+    # a real regression rather than a coin toss.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
