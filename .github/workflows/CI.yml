@@ -1,5 +1,23 @@
 name: CI
 on: [push, pull_request]
+
+# Without this, every push leaves its predecessor running.  On 2026-08-22, 22 of
+# the 34 CI runs that day were still executing when a later push superseded
+# them -- about 1000 run-minutes, and 44 macOS jobs validating code that had
+# already been replaced.  The macOS legs are the scarcest runners in the matrix
+# (measured queue waits that day: 16 to 88 minutes), so that backlog is paid as
+# latency by every other open pull request.
+#
+# The key is the PR number for pull_request events rather than the branch name:
+# these PRs come from forks, and a branch name can repeat across forks while a
+# PR number cannot.  Branch pushes fall back to the ref.  A push to main gets a
+# per-commit group so that landed commits neither cancel nor queue behind each
+# other -- only one run per group may be pending, so grouping them would drop
+# the middle commit's result when three land in quick succession.
+concurrency:
+   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'shared' }}
+   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
    gcc-build:
       runs-on: ${{ matrix.os }}
