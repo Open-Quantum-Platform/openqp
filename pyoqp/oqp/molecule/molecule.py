@@ -2320,13 +2320,21 @@ class Molecule:
         # every root and its decomposition into OQP:: tags, but only the
         # lowest scalar reached the public payload, so a committed MS/XMS
         # reference covered one mixed root and nothing compared the others.
+        # The CI drivers' <S^2> is published for the same reason: in a
+        # degenerate cluster the energies of a singlet and a triplet are equal
+        # to solver precision, so an energy-only reference cannot tell which
+        # one a target_spin request actually selected.
         for key, tag in (
                 ('casscf_energies', 'OQP::CASSCF_ENERGIES'),
                 ('caspt2_energies', 'OQP::CASPT2_ENERGIES'),
                 ('caspt2_reference_energies', 'OQP::CASPT2_REFERENCE_ENERGIES'),
                 ('caspt2_ss_energies', 'OQP::CASPT2_SS_ENERGIES'),
                 ('caspt2_state_specific_corrections',
-                 'OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS')):
+                 'OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS'),
+                ('fci_energies', 'OQP::FCI_ENERGIES'),
+                ('fci_s2', 'OQP::FCI_S2'),
+                ('casci_energies', 'OQP::CASCI_ENERGIES'),
+                ('casci_s2', 'OQP::CASCI_S2')):
             try:
                 arr = np.asarray(self.data[tag], dtype=float).ravel()
             except (AttributeError, KeyError, TypeError, ValueError):
