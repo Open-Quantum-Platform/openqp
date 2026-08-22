@@ -57,7 +57,11 @@ if(DDX_FOUND)
   set(DDX_LIBRARIES ${DDX_LIBRARY})
 
   if(NOT TARGET DDX::ddx)
-    add_library(DDX::ddx UNKNOWN IMPORTED)
+    if(WIN32)
+      add_library(DDX::ddx SHARED IMPORTED)
+    else()
+      add_library(DDX::ddx UNKNOWN IMPORTED)
+    endif()
     set_target_properties(DDX::ddx PROPERTIES
       IMPORTED_LOCATION "${DDX_RUNTIME_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${DDX_INCLUDE_DIR}"

@@ -23,6 +23,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("find_library(DDX_LIBRARY", text)
         self.assertIn("DDX_RUNTIME_LIBRARY", text)
         self.assertIn("IMPORTED_IMPLIB", text)
+        self.assertIn("add_library(DDX::ddx SHARED IMPORTED)", text)
         self.assertIn("DDX::ddx", text)
 
     def test_oqp_links_ddx_only_when_enabled(self):
@@ -47,6 +48,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn('option(DDX_DRIVER "Build the ddX command-line driver" ON)', patch)
         self.assertIn("if(NOT DDX_RUNTIME_LIBRARY STREQUAL DDX_LIBRARY)", text)
         self.assertIn("BUILD_BYPRODUCTS ${_ddx_build_byproducts}", text)
+        self.assertIn("add_library(DDX::ddx SHARED IMPORTED GLOBAL)", text)
 
     def test_oqp_owned_ddx_adapter_api_exists(self):
         header = (ROOT / "source" / "solvent_ddx_adapter.h").read_text(encoding="utf-8")

@@ -783,7 +783,14 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     # on the `ddx` ExternalProject at each consumer). The include dir must exist
     # at configure time for INTERFACE_INCLUDE_DIRECTORIES.
     file(MAKE_DIRECTORY ${DDX_INCLUDE_DIR})
-    add_library(DDX::ddx UNKNOWN IMPORTED GLOBAL)
+    if(WIN32)
+        # A Windows shared-library imported target links IMPORTED_IMPLIB and
+        # keeps IMPORTED_LOCATION as the runtime DLL. UNKNOWN imports would
+        # otherwise put the DLL directly on the linker command line.
+        add_library(DDX::ddx SHARED IMPORTED GLOBAL)
+    else()
+        add_library(DDX::ddx UNKNOWN IMPORTED GLOBAL)
+    endif()
     set_target_properties(DDX::ddx PROPERTIES
         IMPORTED_LOCATION ${DDX_RUNTIME_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
