@@ -64,10 +64,14 @@ index 23d6706..b7d99e3 100644
  
      #
      # Installation rules
-@@ -84,7 +87,9 @@
+@@ -84,7 +87,12 @@
  
      # Install library, binaries and headers
-     install(TARGETS ddx EXPORT ddXTargets)
+-    install(TARGETS ddx EXPORT ddXTargets)
++    install(TARGETS ddx EXPORT ddXTargets
++        RUNTIME DESTINATION bin
++        LIBRARY DESTINATION lib
++        ARCHIVE DESTINATION lib)
 +    if (DDX_DRIVER)
      install(TARGETS ddx_driver)
 +    endif()
