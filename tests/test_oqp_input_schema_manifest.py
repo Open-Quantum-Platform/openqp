@@ -222,8 +222,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
     # gradient (the PT2 nuclear-gradient route selector: analytic derivative
-    # vs central differences).
-    assert len(checked) == 353
+    # vs central differences).  357 since correlated-state irrep selection added
+    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity.
+    assert len(checked) == 357
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():
