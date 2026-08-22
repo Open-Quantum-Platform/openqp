@@ -207,12 +207,13 @@ def test_target_the_electron_count_forbids_is_rejected_as_such():
     <S^2> is untrustworthy names the wrong problem, and no amount of extra
     roots would ever satisfy it.
     """
-    with pytest.raises(ValueError, match="wrong parity|exceeds the maximum"):
+    with pytest.raises(ValueError, match="found no matching roots") as raised:
         fci_module._filter_roots_by_target_spin(
             np.array([-1.0, -1.0]), _open_shell_block(),
             np.array([1.0, 1.0]), np.array([2, 2]),
             target_spin="quintet", requested_nroot=1,
             ci_label="FCI", ci_section="[fci]", nelec=NELEC)
+    assert not isinstance(raised.value, fci_module.SpinLabelAmbiguityError)
 
 
 def test_cluster_grouping_uses_the_tolerance():
