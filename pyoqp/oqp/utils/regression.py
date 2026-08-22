@@ -174,6 +174,33 @@ REGISTRY = (
     # above, is sensitive to the SCF convergence path well beyond the energy;
     # compare with a small relative tolerance (a real regression is far larger).
     RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
+    # Multi-root wavefunction results.  Not `required`: the correlated
+    # references predate these keys and are skipped until regenerated, exactly
+    # as td_trans_dipole above.  Without them a multistate reference pins only
+    # the lowest mixed root, so a regression in any higher root, in a
+    # state-specific correction, or in the off-diagonal couplings of the
+    # effective Hamiltonian is invisible.
+    RegKey('casscf_energies', runtypes='*', required=False),
+    RegKey('caspt2_energies', runtypes='*', required=False),
+    RegKey('caspt2_reference_energies', runtypes='*', required=False),
+    RegKey('caspt2_ss_energies', runtypes='*', required=False),
+    RegKey('caspt2_state_specific_corrections', runtypes='*', required=False),
+    # Compared ABSOLUTELY, unlike the other response-path quantities above: the
+    # symmetry-forbidden off-diagonals of Heff are exact zeros carrying only
+    # round-off, so a relative test on them is meaningless -- 6.5e-18 against
+    # -2.9e-16 is a factor of 45 and a green run looks like a regression. The
+    # elements that mean anything are O(1) Hartree, where the default
+    # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
+    # below any real regression.
+    # ... and phase_invariant, for the reason nac and td_trans_dipole are: an
+    # off-diagonal H_IJ carries the product of two CI-root phases, which are
+    # arbitrary, so its SIGN is not a property of the calculation. Observed on
+    # H4_MCQDPT2: reproducible run to run in one execution context, but +6.085e-03
+    # against the reference's own value in another (2 OpenMP threads through the
+    # .oqp deck), which is a 2x6.085e-03 "regression" on a calculation that did
+    # not move. The magnitudes are what mean anything.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False,
+           phase_invariant=True),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),

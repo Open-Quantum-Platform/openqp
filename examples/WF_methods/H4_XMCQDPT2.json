@@ -19,7 +19,7 @@
     0.0,
     4.195191996669211
   ],
-  "energy": -2.1343414453810725,
+  "energy": -2.13434144538237,
   "symmetry_metadata": {
     "status": "enabled",
     "enabled": true,
@@ -32,7 +32,7 @@
     "label_mo": true,
     "label_states": true,
     "label_modes": true,
-    "use_integral_symmetry": false,
+    "use_integral_symmetry": true,
     "use_response_symmetry": false,
     "strict": false,
     "tolerance": 1e-05,
@@ -43,7 +43,7 @@
       "label_mo": true,
       "label_states": true,
       "label_modes": true,
-      "use_integral_symmetry": "false",
+      "use_integral_symmetry": "true",
       "use_response_symmetry": false,
       "strict": false,
       "tolerance": 1e-05
@@ -515,68 +515,13 @@
       "n_atoms": 4
     },
     "requested_matches_detected": true,
-    "mo_labels": {
-      "status": "ok",
-      "alpha": {
-        "labels": [
-          "ag",
-          "b1u",
-          "ag",
-          "b1u"
-        ],
-        "characters": [
-          [
-            1.0,
-            1.0,
-            0.9999999999999999,
-            0.9999999999999999,
-            0.9999999999999999,
-            0.9999999999999999,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0
-          ]
-        ],
-        "max_deviation": 1.1102230246251565e-16,
-        "status": "label_only_no_reductions"
-      },
-      "scf_state": {
-        "irrep": "ag",
-        "nelec_alpha": 2,
-        "nelec_beta": 2,
-        "multiplicity": 1,
-        "term": "1AG"
-      },
-      "geometry_key": "3761faa94b38290545d4d48a66d73774"
+    "integral_symmetry": {
+      "status": "active",
+      "group": "d2h",
+      "n_operations": 8,
+      "full_group": false,
+      "reoriented": false,
+      "frame": "input"
     },
     "reduction_maps": {
       "n_operations": 8,
@@ -755,28 +700,129 @@
       "n_shells": 4,
       "n_ao": 4,
       "status": "metadata_only_no_reductions"
+    },
+    "mo_labels": {
+      "status": "ok",
+      "alpha": {
+        "labels": [
+          "ag",
+          "b1u",
+          "ag",
+          "b1u"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -0.9999999999999998,
+            -0.9999999999999998,
+            -0.9999999999999998,
+            -0.9999999999999998,
+            1.0,
+            1.0
+          ]
+        ],
+        "max_deviation": 2.220446049250313e-16,
+        "status": "label_only_no_reductions"
+      },
+      "scf_state": {
+        "irrep": "ag",
+        "nelec_alpha": 2,
+        "nelec_beta": 2,
+        "multiplicity": 1,
+        "term": "1AG"
+      },
+      "geometry_key": "e4126eca4b570f7125e96a24d3c9724b"
+    },
+    "mo_irreps": {
+      "status": "active",
+      "irreps": [
+        "ag",
+        "b1g",
+        "b2g",
+        "b3g",
+        "au",
+        "b1u",
+        "b2u",
+        "b3u"
+      ],
+      "xor_codes": [
+        0,
+        204,
+        170,
+        102,
+        240,
+        60,
+        90,
+        150
+      ],
+      "spins": {
+        "alpha": {
+          "n_mo": 4,
+          "n_unclassified": 0
+        }
+      }
     }
   },
   "td_energies": [
     0
   ],
-  "grad": [
-    1.8803662e-316,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0
+  "caspt2_energies": [
+    -2.13434144538237,
+    -1.4368698845973848
   ],
-  "nac": [],
-  "soc": [],
-  "hess": [],
+  "caspt2_reference_energies": [
+    -2.1147334915283253,
+    -1.4095269958140082
+  ],
+  "caspt2_ss_energies": [
+    -2.13434144538237,
+    -1.4368698845973848
+  ],
+  "caspt2_state_specific_corrections": [
+    -0.01960795385404474,
+    -0.027342888783376745
+  ],
+  "caspt2_effective_hamiltonian": [
+    [
+      -2.13434144538237,
+      5.983302514656362e-16
+    ],
+    [
+      5.983302514656362e-16,
+      -1.4368698845973848
+    ]
+  ],
   "json": {
     "scf_type": "rhf",
     "basis": "sto-3g",

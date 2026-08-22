@@ -308,6 +308,55 @@ def test_solve_fci_target_spin_reports_no_matching_roots():
         )
 
 
+def test_solve_fci_target_spin_ignores_ambiguous_roots_above_the_selection():
+    # The degenerate open-shell pair at E=1 comes back as spin-mixed
+    # determinants labelled "doublet" (impossible for two electrons), but the
+    # requested singlet ground state at E=0 is pure and unambiguous, so the
+    # mislabelled roots above the selection window must not abort the solve.
+    _use_real_oqp_package()
+    from oqp.library.fci import solve_fci
+
+    h1e = np.diag([0.0, 1.0])
+    eri = np.zeros((2, 2, 2, 2), dtype=float)
+
+    with pytest.warns(RuntimeWarning, match="wrong parity"):
+        energies, coeffs = solve_fci(
+            h1e,
+            eri,
+            (1, 1),
+            nroot=1,
+            max_det=100,
+            solver="dense",
+            target_spin="singlet",
+        )
+
+    np.testing.assert_allclose(energies, [0.0], atol=1.0e-12)
+    assert coeffs.shape == (4, 1)
+
+
+def test_solve_fci_target_spin_still_refuses_ambiguity_inside_the_selection():
+    # Asking for two singlets pushes the selection window past the mislabelled
+    # degenerate pair at E=1; the labels then decide the answer and the solve
+    # must refuse rather than silently return energies of spin mixtures.
+    _use_real_oqp_package()
+    from oqp.library.fci import SpinLabelAmbiguityError, solve_fci
+
+    h1e = np.diag([0.0, 1.0])
+    eri = np.zeros((2, 2, 2, 2), dtype=float)
+
+    with pytest.raises(SpinLabelAmbiguityError, match="target_spin=singlet"), \
+            pytest.warns(RuntimeWarning, match="wrong parity"):
+        solve_fci(
+            h1e,
+            eri,
+            (1, 1),
+            nroot=2,
+            max_det=100,
+            solver="dense",
+            target_spin="singlet",
+        )
+
+
 def test_ci_vector_log_entries_apply_threshold_and_active_labels():
     _use_real_oqp_package()
     from oqp.library.fci import _ci_vector_log_entries, _determinants
