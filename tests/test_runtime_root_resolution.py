@@ -111,7 +111,10 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         external = (ROOT / "external" / "CMakeLists.txt").read_text()
         top_level = (ROOT / "CMakeLists.txt").read_text()
 
-        self.assertIn("install(FILES ${DDX_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})", source)
+        self.assertIn(
+            "install(FILES ${DDX_RUNTIME_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})",
+            source,
+        )
         self.assertIn("DESTINATION ${CMAKE_INSTALL_LIBDIR}", pyoqp)
         self.assertIn("DESTINATION ${CMAKE_INSTALL_LIBDIR}", external)
         self.assertIn("openqp-runtime-libdir.txt", top_level)

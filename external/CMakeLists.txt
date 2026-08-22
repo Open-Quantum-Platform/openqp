@@ -16,7 +16,7 @@ set(_OQP_DDX_VERSION "0.8.0")
 # The first Windows-ready ddX integration can encounter an incomplete legacy
 # ddx install (headers/stamps without the runtime library). Keep the other
 # expensive externals reusable, but give ddX its own fresh cache directory.
-set(_OQP_DDX_CACHE_NAME "ddx-runtime1")
+set(_OQP_DDX_CACHE_NAME "ddx-runtime2")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
 set(_OQP_MULTICHARGE_VERSION "0.3.0")
 set(_OQP_DFTD4_VERSION "3.7.0")
@@ -684,6 +684,9 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
 
     set(DDX_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${DDX_INSTALL}
+        # GNUInstallDirs selects lib64 on manylinux by default, while OpenQP
+        # packages this dynamic dependency from a uniform lib directory.
+        -DCMAKE_INSTALL_LIBDIR=lib
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DTESTS=OFF
