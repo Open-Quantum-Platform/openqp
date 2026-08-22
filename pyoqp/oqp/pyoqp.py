@@ -459,6 +459,14 @@ class Runner:
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
 
+        # The gradient-validity marker belongs to ONE calculation, but the
+        # legacy OPENQP API reuses this Runner and its Molecule across calls
+        # (op.run("grad") then op.run("energy")).  Left set, an energy-only run
+        # still satisfies has_grad() and get_results() republishes the previous
+        # run's derivatives as if this run had produced them.  Clear it here,
+        # where every path -- CLI, programmatic Runner, legacy OPENQP -- begins.
+        self.mol.invalidate_grad()
+
         # Turn off convergence check for test
         if test_mod:
             self.mol.config['tests']['exception'] = True

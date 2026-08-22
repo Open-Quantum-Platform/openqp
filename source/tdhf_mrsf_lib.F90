@@ -811,7 +811,7 @@ contains
 
     integer(8), contiguous, pointer :: pair_irrep(:)
     integer(4) :: ta_status
-    integer :: nirr, ir, istate, ipair, best, xvec_dim, nsilent
+    integer :: nirr, ir, istate, ipair, best, xvec_dim, nsilent, nseeded
     integer, allocatable :: roots_per_irrep(:)
     real(kind=dp), allocatable :: weight(:)
 
@@ -847,9 +847,11 @@ contains
     end do
 
     nsilent = 0
+    nseeded = 0
     do ir = 1, nirr
-      if (seeds_per_irrep(ir) > 0 .and. roots_per_irrep(ir) == 0) &
-        nsilent = nsilent + 1
+      if (seeds_per_irrep(ir) <= 0) cycle
+      nseeded = nseeded + 1
+      if (roots_per_irrep(ir) == 0) nsilent = nsilent + 1
     end do
 
     if (nsilent > 0) then
@@ -868,6 +870,22 @@ contains
           write(iw,'(4X,"unrepresented block: irrep index ",I0, &
             &" (",I0," seed(s), 0 roots)")') ir, seeds_per_irrep(ir)
       end do
+      ! mrinivec seeds nvec = max(nstates, 6) vectors, so asking for fewer
+      ! states than there are seeded blocks leaves some unrepresented by
+      ! COUNTING alone.  Say so, because the reader will otherwise read every
+      ! line above as a detected fault.  It does not make the run safe: the
+      ! block's absence is exactly why its roots could not be found, and a
+      ! Ritz value cannot rule the hazard out -- Rayleigh-Ritz gives an UPPER
+      ! bound, so an estimate above the window is consistent with a true root
+      ! below it.  Measured on this file's own CH2O deck at nstate=3, where
+      ! the missing B1 root's Ritz estimate sits above the window and the
+      ! physical state (5.788160 eV) sits below it.
+      if (nstates < nseeded) &
+        write(iw,'(4X,"note: ",I0," state(s) requested vs ",I0," seeded ", &
+          &"block(s) -- some blocks cannot be represented at this nstate. ", &
+          &"That is a consequence of the count, not evidence of a fault, but ", &
+          &"it does not rule the shift out either: only re-running with a ", &
+          &"larger nstate does.")') nstates, nseeded
       write(iw,'(a)') ''
     end if
 
