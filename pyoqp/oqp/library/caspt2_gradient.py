@@ -152,7 +152,11 @@ from oqp.library.caspt2_dyall import (
     _xms_rotation,
 )
 from oqp.library.casscf import _full_rdms, _nonredundant_pairs
-from oqp.library.fci import _symmetric_eigh, _transform_integrals
+from oqp.library.fci import (
+    _symmetric_eigh,
+    _transform_integrals,
+    canonicalize_ci_phase,
+)
 from oqp.library.rdm import make_rdm1_spatial, make_rdm2_spatial
 
 #: Largest within-block off-diagonal of the closed+active Fock still accepted as
@@ -890,6 +894,14 @@ def _xms_model_fock(state):
             fmodel[i, j] = base[j] @ fi
     fmodel = 0.5 * (fmodel + fmodel.T)
     lam, rot = np.linalg.eigh(fmodel)
+    # Same canonical column phase _xms_rotation applies in the energy path.
+    # This recomputation is compared against the rotation that path returned,
+    # so the two have to agree on the gauge as well as on the subspace; without
+    # it the check below would be asking whether eigh happened to hand back the
+    # same arbitrary signs twice.  Z_R is bilinear in the columns and so is
+    # unchanged by the convention -- the gradient does not move, only the
+    # representative does.
+    rot = canonicalize_ci_phase(rot)
     return fmodel, rot, lam, base, fock_det
 
 

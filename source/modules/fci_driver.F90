@@ -73,7 +73,7 @@ module fci_driver_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: fci_solve
+  public :: fci_solve, fci_solve_ex
   ! Reused by the CASSCF driver (casscf_driver.F90), which holds `h1e`/`eri`
   ! in local arrays and calls `fci_solve` directly -- exactly the in-process
   ! Fortran caller this entry point was shaped handle-free for.  It packs the
@@ -83,8 +83,9 @@ module fci_driver_mod
   public :: FCI_I_NORB, FCI_I_NACT, FCI_I_NCORE, FCI_I_NALPHA, FCI_I_NBETA
   public :: FCI_I_NROOT, FCI_I_SOLVER, FCI_I_MAXITER, FCI_I_SUBSPACE
   public :: FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, FCI_I_WANT_S2
-  public :: FCI_I_GUESS
+  public :: FCI_I_GUESS, FCI_I_IRREP, FCI_I_NIRREP, FCI_D_MIN_PURITY
   public :: FCI_NIOPT, FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT
+  public :: FCI_NIOPT_V1, FCI_NDOPT_V1
   public :: FCI_MAX_NSPIN
 
   ! ------------------------------------------------------------------ schema
@@ -108,13 +109,38 @@ module fci_driver_mod
   integer, parameter :: FCI_I_WANT_S2    = 12  ! 1 = also return <S^2> per root
   integer, parameter :: FCI_I_GUESS      = 13  ! 1 = civecs holds nroot Davidson
                                                !     start vectors on entry
-  integer, parameter :: FCI_NIOPT        = 14
+  integer, parameter :: FCI_I_IRREP      = 14  ! target irrep index (1-based),
+                                               !     0 = any (the default)
+  integer, parameter :: FCI_I_NIRREP     = 15  ! irreps in the staged table,
+                                               !     0 = no symmetry data
+  integer, parameter :: FCI_NIOPT        = 16
+  !
+  ! When FCI_I_IRREP /= 0 the symmetry tables ride in the tail of the same
+  ! assumed-size array, so the C signature does not change and a caller that
+  ! does not ask for an irrep never has to supply them:
+  !
+  !   iopt(FCI_NIOPT        .. FCI_NIOPT+nirrep-1)       XOR code per irrep
+  !   iopt(FCI_NIOPT+nirrep .. FCI_NIOPT+nirrep+nact-1)  XOR code per active MO
+  !
   !
   ! dopt (double):
   integer, parameter :: FCI_D_ECORE      = 0   ! scalar added to every root
   integer, parameter :: FCI_D_EIG_TOL    = 1   ! eigenpair residual tolerance
   integer, parameter :: FCI_D_CUTOFF     = 2   ! integral screening cutoff
-  integer, parameter :: FCI_NDOPT        = 3
+  integer, parameter :: FCI_D_MIN_PURITY = 3   ! reject a root whose dominant
+                                               !     irrep holds less than this
+                                               !     fraction of its weight
+  integer, parameter :: FCI_NDOPT        = 4
+  !
+  ! The RELEASED option-array lengths, as published in the v1.3.0 and v1.3.1
+  ! include/oqp.h.  A binary compiled against those headers allocates exactly
+  ! this much and calls the unchanged `fci_solve` symbol, so reading iopt(14),
+  ! iopt(15) or dopt(3) there is an out-of-bounds read of the CALLER's memory --
+  ! and adjacent nonzero memory would read as an irrep request.  `fci_solve`
+  ! therefore reads no more than these; everything added since is reached only
+  ! through `fci_solve_ex`, which is handed the lengths the caller allocated.
+  integer, parameter :: FCI_NIOPT_V1     = 14
+  integer, parameter :: FCI_NDOPT_V1     = 3
 
   ! Status codes.  Success is the number of roots written (>= 0); every
   ! negative value means "the caller should fall back to the Python solver",
@@ -125,10 +151,21 @@ module fci_driver_mod
   integer(i8), parameter :: FCI_ERR_DAVIDSON = -4_i8  ! did not converge
   integer(i8), parameter :: FCI_ERR_SPIN     = -5_i8  ! no/too few roots of the target spin
   integer(i8), parameter :: FCI_ERR_EIGEN    = -6_i8  ! LAPACK failure or bad residual
+  integer(i8), parameter :: FCI_ERR_IRREP    = -7_i8  ! no/too few roots of the target irrep
 
   ! Determinants are packed into one 64-bit key (alpha bits 0..nact-1, beta
   ! bits nact..2*nact-1), so the active space is capped at 31 orbitals.
   integer, parameter :: FCI_MAX_NSPIN = 62
+
+  ! Relative window that decides which amplitudes count as "the largest" when
+  ! the canonical phase below is chosen.  Symmetry-equivalent determinants
+  ! carry mathematically equal weights that a floating-point solve reproduces
+  ! only to ~1e-14 relative, so an exact search for the single biggest |c|
+  ! would let round-off elect a different representative -- and therefore a
+  ! different sign -- from one run to the next, which is the whole freedom this
+  ! convention exists to remove.  Mirrored by _CI_PHASE_TIE_RTOL in
+  ! pyoqp/oqp/library/fci.py.
+  real(dp), parameter :: FCI_PHASE_TIE_RTOL = 1.0e-8_dp
 
 contains
 
@@ -145,8 +182,61 @@ contains
   !> @param[out] civecs   CI vectors, C-order [ndet, nroot]
   !> @param[out] s2       <S^2> per returned root, written only when WANT_S2
   !> @return     the number of roots written, or a negative status
+  !> The released entry point, unchanged: reads exactly FCI_NIOPT_V1 integer
+  !> and FCI_NDOPT_V1 real options and nothing beyond them, so a binary built
+  !> against the v1.3.x header keeps working byte for byte.
   function fci_solve(iopt, dopt, active, core, h1e, eri, &
                      energies, civecs, s2) result(status) bind(C, name="fci_solve")
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    integer(c_int32_t), intent(in) :: active(0:*), core(0:*)
+    real(dp), intent(in) :: h1e(0:*), eri(0:*)
+    real(dp), intent(inout) :: energies(0:*), civecs(0:*), s2(0:*)
+    integer(i8) :: status
+    integer(c_int32_t) :: no_roots(0:0)
+
+    no_roots = 0_c_int32_t
+    status = fci_solve_impl(FCI_NIOPT_V1, FCI_NDOPT_V1, 0, no_roots, &
+                            iopt, dopt, active, core, h1e, eri, &
+                            energies, civecs, s2)
+  end function fci_solve
+
+  !> Length-negotiated entry point for everything added after v1.3.x.
+  !>
+  !> `niopt`/`ndopt` are how many entries the CALLER allocated, so the library
+  !> never reads past them: pass FCI_NIOPT/FCI_NDOPT for the fixed options, and
+  !> FCI_NIOPT + nirrep + nact when an irrep request carries its symmetry
+  !> tables in the tail.  A short array is refused (FCI_ERR_INPUT) rather than
+  !> read.
+  !>
+  !> `roots` additionally receives, for each returned root, its 0-based index
+  !> among the roots the solve computed -- the provenance the spin and irrep
+  !> filters would otherwise discard, and which the caller publishes as
+  !> OQP::*_ROOT_INDICES.
+  function fci_solve_ex(niopt, ndopt, iopt, dopt, active, core, h1e, eri, &
+                        energies, civecs, s2, roots) result(status) &
+      bind(C, name="fci_solve_ex")
+    integer(c_int32_t), value, intent(in) :: niopt, ndopt
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    integer(c_int32_t), intent(in) :: active(0:*), core(0:*)
+    real(dp), intent(in) :: h1e(0:*), eri(0:*)
+    real(dp), intent(inout) :: energies(0:*), civecs(0:*), s2(0:*)
+    integer(c_int32_t), intent(inout) :: roots(0:*)
+    integer(i8) :: status
+
+    status = fci_solve_impl(int(niopt), int(ndopt), 1, roots, &
+                            iopt, dopt, active, core, h1e, eri, &
+                            energies, civecs, s2)
+  end function fci_solve_ex
+
+  !> The solve itself.  `niopt`/`ndopt` bound every optional read; `want_roots`
+  !> selects whether `roots` receives the source indices.
+  function fci_solve_impl(niopt, ndopt, want_roots, roots, &
+                          iopt, dopt, active, core, h1e, eri, &
+                          energies, civecs, s2) result(status)
+    integer, intent(in) :: niopt, ndopt, want_roots
+    integer(c_int32_t), intent(inout) :: roots(0:*)
     ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
     integer(c_int32_t), intent(in) :: iopt(0:*)
     real(dp), intent(in) :: dopt(0:*)
@@ -157,7 +247,9 @@ contains
 
     integer :: norb, nact, ncore, na, nb, nroot, solver, maxiter, subspace
     integer :: mult, maxmem, nthreads, want_s2, nspin, ierr, nguess
-    real(dp) :: ecore, eig_tol, cutoff
+    integer :: target_irrep, nirrep, kk
+    integer, allocatable :: orb_code(:), xor_code(:)
+    real(dp) :: ecore, eig_tol, cutoff, min_pure
     integer(i8) :: ndet, dense_bytes, budget_bytes, spin_bytes
 
     integer(i8), allocatable :: dets(:), skeys(:), sperm(:)
@@ -188,6 +280,51 @@ contains
     ecore    = dopt(FCI_D_ECORE)
     eig_tol  = dopt(FCI_D_EIG_TOL)
     cutoff   = dopt(FCI_D_CUTOFF)
+
+    ! Correlated-state irrep selection.  0 means "any", and a caller working to
+    ! the released schema does not supply these slots at all -- reading them
+    ! anyway would be an out-of-bounds read of its arrays -- so every one of
+    ! them is taken only when the caller said it allocated that far.  The
+    ! selection paths below then stay exactly as they were.
+    target_irrep = 0
+    nirrep       = 0
+    min_pure     = 0.0_dp
+    if (niopt > FCI_I_IRREP)  target_irrep = int(iopt(FCI_I_IRREP))
+    if (niopt > FCI_I_NIRREP) nirrep       = int(iopt(FCI_I_NIRREP))
+    if (ndopt > FCI_D_MIN_PURITY) min_pure = dopt(FCI_D_MIN_PURITY)
+    ! A root whose dominant irrep holds less than half its weight is not a
+    ! symmetry eigenstate under any reading, so refuse to treat an unset
+    ! threshold as "accept anything".
+    if (min_pure <= 0.0_dp) min_pure = 0.5_dp
+    if (target_irrep /= 0) then
+      if (nirrep < 1 .or. target_irrep < 1 .or. target_irrep > nirrep) then
+        status = FCI_ERR_INPUT
+        return
+      end if
+      ! The symmetry tables ride in the tail of the same array, so the caller
+      ! has to have allocated them.  Refuse a short array instead of reading
+      ! whatever follows it.
+      if (niopt < FCI_NIOPT + nirrep + nact) then
+        status = FCI_ERR_INPUT
+        return
+      end if
+      allocate(xor_code(nirrep), orb_code(nact), stat=ierr)
+      if (ierr /= 0) then
+        status = FCI_ERR_ALLOC
+        return
+      end if
+      do kk = 1, nirrep
+        xor_code(kk) = int(iopt(FCI_NIOPT + kk - 1))
+      end do
+      do kk = 1, nact
+        orb_code(kk) = int(iopt(FCI_NIOPT + nirrep + kk - 1))
+      end do
+    else
+      ! Never read, but both solvers take them as explicit-shape dummies.
+      allocate(xor_code(1), orb_code(1))
+      xor_code = 0
+      orb_code = 0
+    end if
 
     nspin = 2 * nact
     if (nact <= 0 .or. norb <= 0 .or. nspin > FCI_MAX_NSPIN) then
@@ -264,11 +401,13 @@ contains
     if (solver == 1) then
       call solve_dense(ndet, nspin, dets, skeys, sperm, hspin, gspin, cutoff, &
                        nroot, mult, eig_tol, maxiter, nthreads, &
+                       orb_code, xor_code, nirrep, target_irrep, min_pure, &
                        evals, evecs, s2_win, keep, nsel, status)
     else
       call solve_iterative(ndet, nspin, dets, skeys, sperm, hspin, gspin, &
                            cutoff, nroot, mult, eig_tol, maxiter, subspace, &
                            budget_bytes, nthreads, nguess, civecs, &
+                           orb_code, xor_code, nirrep, target_irrep, min_pure, &
                            evals, evecs, s2_win, keep, nsel, status)
     end if
     if (status < 0_i8) return
@@ -283,11 +422,19 @@ contains
     do k = 1, nroot
       r = keep(k)
       energies(k - 1) = evals(r) + ecore
-      call scatter_column(ndet, evecs, r, nroot, k, civecs)
+      call scatter_column(ndet, evecs, r, nroot, k, &
+                          canonical_phase(ndet, evecs, r), civecs)
     end do
 
     if (want_s2 /= 0) then
-      if (allocated(s2_win)) then
+      ! `mult /= 0`, not merely `allocated(s2_win)`: an irrep-only request
+      ! (mult == 0, target_irrep /= 0) allocates s2_win as a ZEROED placeholder
+      ! for select_by_spin_and_irrep, which does not read it.  Keying on
+      ! allocation alone therefore reported <S^2> = 0 for every root of an
+      ! irrep-filtered solve -- H2/STO-3G FCI with irrep=b1u returned the
+      ! triplet at -0.53077 labelled a singlet.  Only mult /= 0 means the
+      ! window was really classified.
+      if (mult /= 0 .and. allocated(s2_win)) then
         ! the spin diagnostics already ran on the root window; the per-root
         ! accumulation is independent, so the subset values are bit-identical
         do k = 1, nroot
@@ -306,8 +453,18 @@ contains
       end if
     end if
 
+    ! Root provenance.  `keep` holds each returned root's position among the
+    ! roots this solve computed; without it a caller that asked for a spin or
+    ! irrep filter can only guess (and guessed 0, 1, 2, ... -- so a B1 root that
+    ! is really state 1 was published as root 0).
+    if (want_roots /= 0) then
+      do k = 1, nroot
+        roots(k - 1) = int(keep(k) - 1, c_int32_t)
+      end do
+    end if
+
     status = int(nroot, i8)
-  end function fci_solve
+  end function fci_solve_impl
 
   ! ==================================================================== dense
   !> Explicit ndet x ndet build followed by root extraction, mirroring
@@ -317,9 +474,15 @@ contains
   !> the fallback and the path taken whenever a spin filter needs a window.
   subroutine solve_dense(ndet, nspin, dets, skeys, sperm, hspin, gspin, cutoff, &
                          nroot, mult, eig_tol, maxiter, nthreads, &
+                         orb_code, xor_code, nirrep, target_irrep, min_pure, &
                          evals, evecs, s2_win, keep, nsel, status)
     integer(i8), intent(in) :: ndet
     integer, intent(in) :: nspin, nroot, mult, maxiter, nthreads
+    !> Symmetry selection.  target_irrep == 0 (the default) means "any", and
+    !> the tables are then unused; the existing selection path is taken
+    !> unchanged.
+    integer, intent(in) :: orb_code(:), xor_code(:), nirrep, target_irrep
+    real(dp), intent(in) :: min_pure
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
     real(dp), intent(in) :: hspin(*), gspin(*), cutoff, eig_tol
     real(dp), allocatable, intent(out) :: evals(:), evecs(:), s2_win(:)
@@ -348,7 +511,10 @@ contains
     hsym = is_symmetric(ndet, hmat)
 
     have_roots = .false.
-    if (mult == 0) then
+    ! An irrep filter needs a WINDOW of roots to select from, exactly as the
+    ! spin filter does, so the partial solve below is only valid when neither
+    ! filter is active.
+    if (mult == 0 .and. target_irrep == 0) then
       ! Measured crossover of the whole dense path (see _lowest_dense_roots):
       ! below ndet=256, or when the requested window is a large fraction of
       ! the spectrum, the full solve already wins.
@@ -387,7 +553,37 @@ contains
       end if
     end if
 
-    if (mult == 0) then
+    if (target_irrep /= 0) then
+      ! Same prefix-growth shape as the spin filter below, with the irrep
+      ! selection intersected in.  Kept as its own branch so a run that does
+      ! not ask for an irrep takes the pre-existing path byte for byte.
+      limit = int(min(ndet, int(max(4 * nroot, nroot + 12), i8)))
+      do
+        if (mult /= 0) then
+          call classify_prefix(nact, ndet, dets, evecs, limit, nspin, nthreads, &
+                               s2_win, ierr)
+        else
+          ! s2_win is not read when mult == 0, but it is an assumed-size dummy
+          ! of the selector, so it still has to exist.
+          if (allocated(s2_win)) deallocate(s2_win)
+          allocate(s2_win(limit), stat=ierr)
+          if (ierr == 0) s2_win = 0.0_dp
+        end if
+        if (ierr /= 0) then
+          status = FCI_ERR_ALLOC
+          return
+        end if
+        call select_by_spin_and_irrep(s2_win, limit, mult, nact, ndet, dets, &
+                                      orb_code, xor_code, nirrep, target_irrep, &
+                                      min_pure, evecs, nroot, keep, nsel)
+        if (nsel >= nroot) exit
+        if (int(limit, i8) >= ndet) then
+          status = FCI_ERR_IRREP
+          return
+        end if
+        limit = int(min(ndet, 2_i8 * int(limit, i8)))
+      end do
+    else if (mult == 0) then
       allocate(keep(nroot))
       do k = 1, nroot
         keep(k) = k
@@ -432,9 +628,13 @@ contains
   subroutine solve_iterative(ndet, nspin, dets, skeys, sperm, hspin, gspin, &
                              cutoff, nroot, mult, eig_tol, maxiter, subspace, &
                              budget_bytes, nthreads, nguess, guess, &
+                             orb_code, xor_code, nirrep, target_irrep, min_pure, &
                              evals, evecs, s2_win, keep, nsel, status)
     integer(i8), intent(in) :: ndet, budget_bytes
     integer, intent(in) :: nspin, nroot, mult, maxiter, subspace, nthreads
+    !> See solve_dense: target_irrep == 0 leaves the existing path untouched.
+    integer, intent(in) :: orb_code(:), xor_code(:), nirrep, target_irrep
+    real(dp), intent(in) :: min_pure
     integer, intent(in) :: nguess
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
     real(dp), intent(in) :: guess(*)
@@ -493,7 +693,7 @@ contains
         return
       end if
 
-      if (mult == 0) then
+      if (mult == 0 .and. target_irrep == 0) then
         allocate(keep(nroot))
         do k = 1, nroot
           keep(k) = k
@@ -502,16 +702,34 @@ contains
         return
       end if
 
-      call classify_prefix(nact, ndet, dets, evecs, solve_nroot, nspin, &
-                           nthreads, s2_win, ierr)
+      if (mult /= 0) then
+        call classify_prefix(nact, ndet, dets, evecs, solve_nroot, nspin, &
+                             nthreads, s2_win, ierr)
+      else
+        ! Irrep-only request: s2_win is unread but must exist (see solve_dense).
+        if (allocated(s2_win)) deallocate(s2_win)
+        allocate(s2_win(solve_nroot), stat=ierr)
+        if (ierr == 0) s2_win = 0.0_dp
+      end if
       if (ierr /= 0) then
         status = FCI_ERR_ALLOC
         return
       end if
-      call select_by_multiplicity(s2_win, solve_nroot, mult, nroot, keep, nsel)
+      if (target_irrep == 0) then
+        call select_by_multiplicity(s2_win, solve_nroot, mult, nroot, keep, nsel)
+      else
+        call select_by_spin_and_irrep(s2_win, solve_nroot, mult, nact, ndet, &
+                                      dets, orb_code, xor_code, nirrep, &
+                                      target_irrep, min_pure, evecs, nroot, &
+                                      keep, nsel)
+      end if
       if (nsel >= nroot) return
       if (int(solve_nroot, i8) >= ndet) then
-        status = FCI_ERR_SPIN
+        if (target_irrep /= 0) then
+          status = FCI_ERR_IRREP
+        else
+          status = FCI_ERR_SPIN
+        end if
         return
       end if
       solve_nroot = int(min(ndet, int(max(solve_nroot + 1, 2 * solve_nroot), i8)))
@@ -1354,6 +1572,57 @@ contains
     end do
   end subroutine select_by_multiplicity
 
+  !> Indices of the first `nroot` roots matching BOTH the requested
+  !> multiplicity and the requested spatial irrep.
+  !>
+  !> Deliberately a separate routine rather than an extra branch inside
+  !> select_by_multiplicity: a run that does not ask for an irrep must take
+  !> exactly the path it took before, byte for byte.
+  !>
+  !> `mult` == 0 means "any spin", so this also serves an irrep-only request.
+  subroutine select_by_spin_and_irrep(s2_win, limit, mult, nact, ndet, dets, &
+                                      orb_code, xor_code, nirrep, target_irrep, &
+                                      min_pure, evecs, nroot, keep, nsel)
+    use fci_symmetry, only: fci_classify_root_irreps
+    real(dp), intent(in) :: s2_win(*)
+    integer, intent(in) :: limit, mult, nact, nirrep, target_irrep, nroot
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*)
+    integer, intent(in) :: orb_code(:), xor_code(:)
+    real(dp), intent(in) :: min_pure
+    real(dp), intent(in) :: evecs(*)
+    integer, allocatable, intent(inout) :: keep(:)
+    integer, intent(out) :: nsel
+
+    integer :: k, m
+    integer, allocatable :: irr_win(:)
+    real(dp), allocatable :: purity(:)
+
+    if (allocated(keep)) deallocate(keep)
+    allocate(keep(nroot))
+    allocate(irr_win(limit), purity(limit))
+
+    call fci_classify_root_irreps(nact, ndet, dets, orb_code, xor_code, &
+                                  nirrep, limit, evecs, irr_win, purity)
+
+    nsel = 0
+    do k = 1, limit
+      if (irr_win(k) /= target_irrep) cycle
+      ! A root whose dominant irrep does not hold enough of its weight is not
+      ! a symmetry eigenstate; calling it one would be a guess.
+      if (purity(k) < min_pure) cycle
+      if (mult /= 0) then
+        m = max(1, nint(sqrt(max(0.0_dp, 1.0_dp + 4.0_dp * s2_win(k)))))
+        if (m /= mult) cycle
+      end if
+      nsel = nsel + 1
+      keep(nsel) = k
+      if (nsel == nroot) exit
+    end do
+
+    deallocate(irr_win, purity)
+  end subroutine select_by_spin_and_irrep
+
   !> Copy `m` column-major vectors of length n into a flat column-major buffer.
   subroutine pack_columns(n, m, src, dst)
     integer(i8), intent(in) :: n
@@ -1369,17 +1638,63 @@ contains
     end do
   end subroutine pack_columns
 
-  !> Write column-major eigenvector `col` into slot `slot` of a C-order
-  !> [ndet, nroot] output buffer.
-  subroutine scatter_column(ndet, evecs, col, nroot, slot, out)
+  !> Canonical overall sign of eigenvector `col` of `evecs`.
+  !>
+  !> An eigenvector is determined only up to |Psi> -> -|Psi>, and which of the
+  !> two a diagonalization hands back is not a property of the calculation: it
+  !> follows the Davidson start vector and the order the OpenMP reductions
+  !> happen to accumulate in.  H4_MCQDPT2 returned +6.085296e-03 for the same
+  !> Heff off-diagonal on one and two threads of this build and -6.085296e-03
+  !> on four, with the energies identical to 1e-10 -- a 2 x 6.085e-03 Hartree
+  !> "regression" on a calculation that had not moved.  Everything LINEAR in
+  !> the CI vector inherits that freedom; the multistate CASPT2 effective
+  !> Hamiltonian, whose off-diagonal carries the product of two root phases, is
+  !> where it surfaced.
+  !>
+  !> Convention: the amplitude of largest magnitude is positive.  Ties -- the
+  !> rule rather than the exception in a symmetric molecule, where
+  !> symmetry-equivalent determinants carry equal weight -- go to the lowest
+  !> determinant index, selected within FCI_PHASE_TIE_RTOL so that round-off
+  !> between two mathematically equal amplitudes cannot elect a different
+  !> representative from one run to the next.  canonicalize_ci_phase() in
+  !> pyoqp/oqp/library/fci.py applies the identical rule to the Python driver's
+  !> vectors, and tests/test_fci_solve.py pins the two together.
+  pure function canonical_phase(ndet, evecs, col) result(phase)
+    integer(i8), intent(in) :: ndet
+    real(dp), intent(in) :: evecs(*)
+    integer, intent(in) :: col
+    real(dp) :: phase
+    real(dp) :: peak, window
+    integer(i8) :: j, base
+    base = (int(col, i8) - 1_i8) * ndet
+    phase = 1.0_dp
+    peak = 0.0_dp
+    do j = 1_i8, ndet
+      peak = max(peak, abs(evecs(base + j)))
+    end do
+    ! A wholly zero vector has no phase to fix.
+    if (peak <= 0.0_dp) return
+    window = peak * (1.0_dp - FCI_PHASE_TIE_RTOL)
+    do j = 1_i8, ndet
+      if (abs(evecs(base + j)) >= window) then
+        if (evecs(base + j) < 0.0_dp) phase = -1.0_dp
+        return
+      end if
+    end do
+  end function canonical_phase
+
+  !> Write column-major eigenvector `col`, times `phase`, into slot `slot` of a
+  !> C-order [ndet, nroot] output buffer.
+  subroutine scatter_column(ndet, evecs, col, nroot, slot, phase, out)
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: evecs(*)
     integer, intent(in) :: col, nroot, slot
+    real(dp), intent(in) :: phase
     real(dp), intent(out) :: out(0:*)
     integer(i8) :: j, base
     base = (int(col, i8) - 1_i8) * ndet
     do j = 1_i8, ndet
-      out((j - 1_i8) * int(nroot, i8) + int(slot, i8) - 1_i8) = evecs(base + j)
+      out((j - 1_i8) * int(nroot, i8) + int(slot, i8) - 1_i8) = phase * evecs(base + j)
     end do
   end subroutine scatter_column
 

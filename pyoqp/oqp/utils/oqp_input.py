@@ -373,13 +373,13 @@ GENERIC_SCHEMA_KEYS = {
         nroot solver eig_tol davidson_maxiter davidson_subspace
         integral_backend integral_cutoff spin_adapted target_spin
         root_tracking print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm
+        save_rdm irrep irrep_min_purity
     """),
     "fci": _keys("""
         nroot active_electrons active_orbitals frozen_core max_det max_memory
         eig_tol integral_backend integral_cutoff solver davidson_maxiter
         davidson_subspace print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm target_spin
+        save_rdm target_spin irrep irrep_min_purity
     """),
     "pt2": _keys("""
         variant reference h0 contraction frozen multistate xms ipea_shift

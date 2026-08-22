@@ -85,6 +85,7 @@ from oqp.library.fci import (
     fci_spin_diagnostics,
     settings_from_casci_config,
     _symmetric_eigh,
+    canonicalize_ci_phase,
 )
 from oqp.library.casscf import CASSCF, _solve_active
 from oqp.utils.file_utils import print_module_banner
@@ -1206,7 +1207,15 @@ def _xms_rotation(h1e, eri, D_sa, coeffs, dets, ncore, nact, norb, roots, det_in
         for j in range(nstate):
             fmodel[i, j] = refs[j] @ fi
     _w, R = np.linalg.eigh(0.5 * (fmodel + fmodel.T))
-    return R
+    # eigh fixes each rotated reference only up to a column sign, and that sign
+    # reaches Heff exactly as the CI-root phases do -- a rotated reference IS a
+    # linear combination of the roots, so an off-diagonal of the rotated Heff
+    # carries the product of two rotation-column signs.  Canonicalizing the CI
+    # vectors alone would therefore leave XMCQDPT2/XMS-CASPT2 free to flip
+    # where MCQDPT2/MS-CASPT2 no longer does; C2H4_XMCQDPT2_CCPVDZ is the
+    # shipped example that reported it (2 x 7.038e-02 Hartree).  The rotation
+    # columns are vectors over the model space, so the same convention applies.
+    return canonicalize_ci_phase(R)
 
 
 def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,

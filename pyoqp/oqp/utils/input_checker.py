@@ -2604,6 +2604,7 @@ def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
     )
     davidson_maxiter = _get(config, "fci", "davidson_maxiter", 100)
     davidson_subspace = _get(config, "fci", "davidson_subspace", 0)
+    _check_irrep_min_purity(config, "fci", report)
     _validate_bool_literal(
         _get(config, "fci", "print_ci_vectors", False),
         "fci.print_ci_vectors",
@@ -2853,6 +2854,57 @@ def _target_spin_is_valid(target_spin: Any) -> bool:
     return valid and parsed >= 1
 
 
+def _check_irrep_min_purity(config: dict[str, Any], section: str,
+                            report: CheckReport) -> None:
+    """Reject an irrep purity threshold the selector cannot act on.
+
+    The value is the fraction of a root's weight that must sit in its dominant
+    irrep.  Every out-of-range value fails silently rather than loudly:
+    ``<= 0`` is replaced by the 0.5 default inside ``fci_solve``, ``> 1`` makes
+    every valid root look absent, and ``NaN`` disables the test altogether
+    because ``purity < NaN`` is false.  Catch all three here, where there is a
+    keyword to name.
+    """
+    raw = _get(config, section, "irrep_min_purity", None)
+    if raw is None or isinstance(raw, bool):
+        if isinstance(raw, bool):
+            report.add(
+                "ERROR",
+                f"{section}.irrep_min_purity",
+                f"[{section}] irrep_min_purity must be a fraction, not a boolean.",
+                value=raw,
+                expected="0 < value <= 1",
+                action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                       "and at most 1 (default 0.5).",
+            )
+        return
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a number.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+        return
+    if not math.isfinite(value) or value <= 0.0 or value > 1.0:
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a finite fraction above 0 "
+            "and at most 1; outside that range the irrep filter either accepts "
+            "everything or nothing without reporting it.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+
+
 def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method not in {
@@ -2904,6 +2956,49 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     )
     max_det = _get(config, "cas", "max_det", 5000)
     max_memory = _get(config, "cas", "max_memory", 2048)
+
+    # Irrep selection is meaningful for a fixed-orbital CI. A CASSCF that
+    # optimizes orbitals would additionally have to FOLLOW the selected root
+    # across macroiterations; the orbital optimizer does not do that, so the
+    # request would be honoured for the final CI and ignored by everything
+    # that produced the orbitals. Refuse rather than half-apply it.
+    _irrep = str(_get(config, "ci", "irrep", "any")).strip().lower()
+    _check_irrep_min_purity(config, "ci", report)
+    if _irrep and _irrep != "any":
+        _method = _as_lower(_get(config, "input", "method", "hf"))
+        # Every CASSCF method is rejected, including the zero-update scaffold.
+        # An optimizing run would have to FOLLOW the selected root across
+        # macroiterations, which the orbital optimizer does not do.  A
+        # max_macro_iterations=0 run has no such problem in principle, but
+        # neither _pack_cas_wavefunction_arrays nor the Python
+        # _solve_active_rdms path stages resolve_irrep_selection, so it runs
+        # the ordinary unfiltered CI and returns the lowest root of any
+        # symmetry.  Accepting that deck -- and, worse, recommending it here --
+        # is the silent wrong answer this keyword exists to prevent.
+        if _method in {"sa-casscf", "sacasscf", "casscf"}:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "Irrep selection is not implemented for CASSCF: the orbital "
+                "optimizer does not follow a symmetry-selected root across "
+                "macroiterations, and the fixed-orbital CASSCF path does not "
+                "stage the selection at all.",
+                value=_irrep,
+                expected="any",
+                action="Use method=casci for [ci] irrep, or drop [ci] irrep.",
+            )
+        _sym = _get(config, "symmetry", "enabled", False)
+        _sym_on = (_sym is True) or (str(_sym).lower() in ("true", "1", "on", "yes"))
+        if not _sym_on:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "[ci] irrep needs MO irrep labels, which are only produced "
+                "when symmetry detection is enabled.",
+                value=_irrep,
+                expected="[symmetry] enabled=true",
+                action="Set [symmetry] enabled=true, or drop [ci] irrep.",
+            )
 
     nroot = _get(config, "ci", "nroot", 1)
     eig_tol = _get(config, "ci", "eig_tol", 1.0e-10)
