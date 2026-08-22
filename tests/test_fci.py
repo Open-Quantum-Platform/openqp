@@ -692,7 +692,10 @@ def test_ci_energy_stores_fixed_orbital_state_average(monkeypatch):
             return h1e, eri, plan, 0.0, {"determinants": 4}
 
     # The CI solve is one call now (native or the Python driver behind it), so
-    # the fabricated roots are injected there rather than at solve_fci.
+    # the fabricated roots are injected there rather than at solve_fci.  The
+    # driver asks for want_roots, so the double returns the fourth element as
+    # well: each returned root's index among the roots the solve computed,
+    # which is the identity map for an unfiltered window like this one.
     monkeypatch.setattr(
         fci_module,
         "solve_active_ci",
@@ -700,6 +703,7 @@ def test_ci_energy_stores_fixed_orbital_state_average(monkeypatch):
             np.asarray([-1.0, -0.5, 0.25], dtype=float),
             np.eye(4, 3, dtype=float),
             np.asarray([0.0, 0.0, 2.0], dtype=float),
+            np.asarray([0, 1, 2], dtype=np.int64),
         ),
     )
     monkeypatch.setattr(fci_module, "_determinants", lambda norb, nelec: [0, 1, 2, 3])
