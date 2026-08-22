@@ -58,9 +58,10 @@ module mod_dft
     real(kind=dp), allocatable :: me_rscale(:) !< MultiExp R of radial type (0: DE2)
   end type
 
-!  SG1 region boundaries (in units of the atomic radius) and Lebedev
-!  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
-!  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
+!  SG1 region boundaries (in units of the atomic radius), radial shell
+!  counts on the 50-point MHL/EML grid, and Lebedev orders, from
+!  P.M.W. Gill, B.G. Johnson, J.A. Pople, Chem. Phys. Lett. 209
+!  (1993) 506: columns are H-He, Li-Ne, Na-Ar.
 !  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
 !  the unpruned 194-point grid at all radii.  Row 4 is fully
 !  overridden via nang_override (set in dft_set_options), so its
@@ -73,6 +74,12 @@ module mod_dft
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
+  integer, parameter :: SG1_NRAD = 50
+  integer, parameter :: sg1shells(5,3) = reshape(&
+        [17, 4, 4, 9, 16, &
+         14, 7, 3, 9, 17, &
+         12, 7, 5, 7, 19], &
+         [5,3])
 
 !  SG-2 / SG-3 pruned grids: S. Dasgupta, J.M. Herbert,
 !  J. Comput. Chem. 38, 869 (2017).  Radial grid: Mitani
@@ -675,6 +682,7 @@ contains
 
   subroutine dft_set_options(infos, pruned, need_functional)
     use iso_c_binding, only: c_null_char
+    use dft_radial_grid_types, only: dft_radial_grid_mhl
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
@@ -734,10 +742,15 @@ contains
       select case (trim(pruned_name))
       case ("SG1")
         pruned%ngrids = 5
+        pruned%nrad = SG1_NRAD
+        infos%dft%rad_grid_type = dft_radial_grid_mhl
         ntyps = 4
         allocate(pruned%nang(pruned%ngrids, ntyps), &
-                 pruned%radii(pruned%ngrids, ntyps))
+                 pruned%radii(pruned%ngrids, ntyps), &
+                 pruned%nradPerRegion(pruned%ngrids, ntyps))
         pruned%radii = sg1rads
+        pruned%nradPerRegion = 0
+        pruned%nradPerRegion(:, 1:3) = sg1shells
         do i = 1, ntyps
           pruned%nang(:,i) = sg1grids
         end do
