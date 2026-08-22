@@ -593,11 +593,15 @@ TOP_OPTION_ALIASES = {
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
 # workflow options that may live directly in the primary call.
-_OPT_OPTIONS = {
+_GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
-    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
+    "energy_shift", "init_scf",
 }
+_CROSSING_SEARCH_OPTIONS = {
+    "energy_gap", "meci_search", "pen_sigma",
+    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
+}
+_OPT_OPTIONS = _GEOMETRY_CONVERGENCE_OPTIONS | _CROSSING_SEARCH_OPTIONS
 # gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
 # mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
 # route-driver manifest still owns them, but the driver option sets keep them
@@ -632,7 +636,9 @@ _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
+    "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+                 | set(_NATIVE_ENGINE_OPTIONS)
+                 | set(_NATIVE_CONSTRAINT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.
@@ -642,7 +648,8 @@ DRIVER_OPTIONS = {
              | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
-    "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
+    "ts": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+           | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"}),
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
     "neb": {
         "maxit",

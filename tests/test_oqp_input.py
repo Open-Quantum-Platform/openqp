@@ -1424,6 +1424,27 @@ def test_default_normalization_does_not_hide_lossy_numeric_types():
         )
 
 
+@pytest.mark.parametrize("driver", ["opt(S0", "ts(S0"])
+@pytest.mark.parametrize(
+    "option",
+    [
+        "energy_gap=1e-5",
+        "meci_search=auto",
+        "pen_sigma=1",
+        "pen_alpha=0.02",
+        "pen_incre=1",
+        "pen_delta=0.025",
+        'pen_jump="10,25"',
+        "gap_weight=1",
+    ],
+)
+def test_minimum_and_ts_reject_crossing_search_options(driver, option):
+    with pytest.raises(OQPInputError, match="does not define option"):
+        oqp_input.parse_canonical_oqp(
+            f'dft/pbe0/6-31g* geom="g.xyz" {driver},{option})'
+        )
+
+
 def test_tci_retains_legacy_multiplicative_controls():
     _, legacy = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
