@@ -16,6 +16,8 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
+    select_boundary_switching,
+    SWSCALE_WHOLE_MOLECULE, SWSCALE_COVALENT_BOUNDARY,
 )
 
 import oqp
@@ -198,41 +200,22 @@ class OpenQpQMMM:
 
     # --- Internal helpers -------------------------------------------------
 
-    #: Grid switching width for a QM region made of whole molecules. Also the
-    #: value the native default falls back to when nothing selects otherwise.
-    SWSCALE_WHOLE_MOLECULE = 1.8
-    #: ... and across a covalent cut, where the shipped whole-molecule value
-    #: over-smooths and concentrates the gradient residual on the MM host atom.
-    SWSCALE_COVALENT_BOUNDARY = 1.5
+    SWSCALE_WHOLE_MOLECULE = SWSCALE_WHOLE_MOLECULE
+    SWSCALE_COVALENT_BOUNDARY = SWSCALE_COVALENT_BOUNDARY
 
     def _select_boundary_switching(self):
         """Pick ESPF_SWSCALE from whether the QM/MM cut is covalent.
 
-        The knob lives in the native ESPF gradient, which is handed a grid and a
-        density and has no way to know whether a bond was cut. This driver does:
-        it just built the link atoms. So the choice is made here and passed down
-        the way the native code already reads it.
-
-        1.8 over-smooths at a covalent boundary -- 1.5 cuts the boundary-host
-        gradient residual 5-13x on both measured link-atom systems -- while 1.5
-        is about 20% worse without a cut bond. Neither is a safe global default,
-        which is why this is selected per system rather than changed outright.
-        See docs/espf_qmmm_switching.md and issue #260.
-
-        An explicit ESPF_SWSCALE always wins: someone who set it is running a
-        sweep or reproducing a number, and silently overriding that would be
-        worse than any default.
+        The selection itself lives in :mod:`oqp.library.qmmm_connectivity`
+        (OpenMM-free, so it stays unit-testable without the optional MM
+        stack); this driver supplies the one fact only it knows -- whether
+        link atoms were built -- and reports the outcome.
         """
-        if os.environ.get('ESPF_SWSCALE', '').strip():
-            self.espf_swscale = None          # user-set; nothing to select
-            return None
         covalent = bool(self.link_atoms)
-        value = (self.SWSCALE_COVALENT_BOUNDARY if covalent
-                 else self.SWSCALE_WHOLE_MOLECULE)
-        os.environ['ESPF_SWSCALE'] = repr(float(value))
-        self.espf_swscale = float(value)
-        if covalent:
-            print(f"[QM/MM] covalent boundary detected; ESPF_SWSCALE={value} "
+        self.espf_swscale = select_boundary_switching(covalent)
+        if self.espf_swscale is not None and covalent:
+            print(f"[QM/MM] covalent boundary detected; "
+                  f"ESPF_SWSCALE={self.espf_swscale} "
                   f"(whole-molecule default is "
                   f"{self.SWSCALE_WHOLE_MOLECULE}). Set ESPF_SWSCALE to "
                   f"override.")
