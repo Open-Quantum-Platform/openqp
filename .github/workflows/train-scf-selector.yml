@@ -2,6 +2,12 @@ name: train-scf-selector
 
 on:
   push:
+    # Branches only.  A tag push matches `push` as well, and the checkout is
+    # then a detached HEAD, so the commit step below has no branch to push to
+    # and the job dies with "You are not currently on a branch" -- which is
+    # what every release tag since v1.3.0 has done.  Retraining belongs to
+    # changes on main, not to tagging.
+    branches: [main]
     paths:
       - "tools/scf-converger-ml/data/**"
       - "tools/scf-converger-ml/geometries/**"
@@ -34,4 +40,11 @@ jobs:
             tools/scf-converger-ml/model/metrics.txt \
             pyoqp/oqp/library/scf_selector_model.py
           git diff --cached --quiet || git commit -m "auto: retrain selector on new data [skip ci]"
-          git push
+          # Belt and braces: a manual dispatch can still be aimed at a tag, and
+          # pushing from a detached HEAD is an error, not a no-op.
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$branch" = "HEAD" ]; then
+            echo "::notice::detached HEAD (${{ github.ref }}); trained but not pushing"
+            exit 0
+          fi
+          git push origin "HEAD:$branch"
