@@ -16,9 +16,9 @@ set(_OQP_DDX_VERSION "0.8.0")
 # The first Windows-ready ddX integration can encounter an incomplete legacy
 # ddx install (headers/stamps without the runtime library). Keep the other
 # expensive externals reusable, but give ddX its own fresh cache directory.
-# runtime4 also avoids reusing a Windows build configured before DDX_DRIVER
-# was actually disabled.
-set(_OQP_DDX_CACHE_NAME "ddx-runtime4")
+# runtime5 also avoids reusing a Windows build that completed the ddX compile
+# but not its install step.
+set(_OQP_DDX_CACHE_NAME "ddx-runtime5")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
 set(_OQP_MULTICHARGE_VERSION "0.3.0")
 set(_OQP_DFTD4_VERSION "3.7.0")
@@ -773,6 +773,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         BUILD_BYPRODUCTS ${_ddx_build_byproducts}
         UPDATE_COMMAND ""
         CMAKE_ARGS ${DDX_CMAKE_ARGS}
+        INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
     )
     endif()
     if(_LINALG_LIB_TYPE STREQUAL NetLib)
