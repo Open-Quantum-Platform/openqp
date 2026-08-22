@@ -176,8 +176,6 @@ def test_d4_public_result_uses_the_dispersion_corrected_energy():
         data={"OQP::td_energies": [0.0]},
         get_atoms=lambda: np.array([1]),
         get_system=lambda: np.zeros(3),
-        # get_results() asks before it publishes a gradient, so an energy-only
-        # double has to answer: this fake computes none.
         has_grad=lambda: False,
         get_grad=lambda: [],
         get_nac=lambda: [],

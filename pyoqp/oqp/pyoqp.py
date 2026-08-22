@@ -445,6 +445,17 @@ class Runner:
             test_mod (bool): Flag to run in test mode.
         """
 
+        # A reused Runner/Molecule carries the previous calculation's gradient
+        # buffer AND its validity flag.  The flag is only initialised in
+        # Molecule.__init__, so a gradient run followed by an energy-only run on
+        # the same object would publish the earlier gradient as if this run had
+        # produced it -- the stale-result failure #336 is about, but with a
+        # physically plausible value instead of uninitialised memory.  Any
+        # multi-step consumer that reuses one Molecule (OPENQP.set/run,
+        # optimisation, NAMD) is exposed.  Invalidate at the start of every
+        # top-level calculation; the kernels re-declare it when they write.
+        self.mol._grad_valid = False
+
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
 

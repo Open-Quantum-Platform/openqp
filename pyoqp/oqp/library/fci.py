@@ -667,6 +667,46 @@ def _state_average_integer_vector(values, label: str) -> np.ndarray:
     return np.ascontiguousarray(raw, dtype=np.int64)
 
 
+def _spin_problems_can_decide_selection(
+    problems,
+    keep: np.ndarray,
+    energies: np.ndarray,
+    target_multiplicity: int,
+    requested_nroot: int,
+    nelec,
+    *,
+    degeneracy_tol: float = 1.0e-8,
+) -> bool:
+    """Whether an unreliable spin label could change the target-spin answer.
+
+    A mislabelled root is harmless when it cannot enter or displace the
+    selection: the selection takes the ``requested_nroot`` lowest roots whose
+    label matches the target, so a mixed root strictly above that energy
+    window, carrying a non-target label, decides nothing.  It does matter when
+
+    * the target multiplicity is achievable for the electron count AND
+    * its own label claims the target multiplicity (it may be selected), or
+      there are not enough matching labels anyway (the missing roots may be
+      hiding inside the mixtures), or it lies at or below the energy of the
+      last selected root (the true ordering may differ).
+    """
+    total = _total_electrons(nelec)
+    achievable = (target_multiplicity <= total + 1
+                  and (target_multiplicity % 2) == ((total + 1) % 2))
+    if not achievable:
+        return False
+    if keep.size < requested_nroot:
+        return True
+    cutoff = float(energies[keep[requested_nroot - 1]])
+    scale = max(1.0, abs(cutoff))
+    for root, _s2_value, label, _why in problems:
+        if int(label) == int(target_multiplicity):
+            return True
+        if float(energies[int(root)]) <= cutoff + degeneracy_tol * scale:
+            return True
+    return False
+
+
 def _filter_roots_by_target_spin(
     energies: np.ndarray,
     coeffs: np.ndarray,
@@ -690,49 +730,33 @@ def _filter_roots_by_target_spin(
     root_indices = np.arange(np.asarray(energies).shape[0], dtype=np.int64)
     problems = []
     if nelec is not None:
-        # Warn about every unreliable label in the window; whether one of them
-        # is disqualifying is decided AFTER the selection, below.
         problems = warn_unreliable_spin_labels(
             s2, multiplicity, nelec, ci_label=ci_label)
     if target_multiplicity is None:
         return energies, coeffs, s2, multiplicity, root_indices
 
     keep = np.flatnonzero(np.asarray(multiplicity, dtype=np.int64) == target_multiplicity)
-    _ambiguity_note = (
-        "" if not problems else
-        f" ({len(problems)} root(s) in the window carry an unreliable spin"
-        " label, which can hide a matching root: see the warning above.)"
-    )
-    if keep.size == 0:
-        raise ValueError(
-            f"{ci_label} target_spin={target_spin} found no matching roots among "
-            f"{len(root_indices)} solved roots; choose another target_spin for this "
-            f"active space.{_ambiguity_note}"
-        )
-    if keep.size < int(requested_nroot):
-        raise ValueError(
-            f"{ci_label} target_spin={target_spin} found only {keep.size} matching roots among "
-            f"{len(root_indices)} solved roots; lower {ci_section} nroot or choose another "
-            f"target_spin.{_ambiguity_note}"
-        )
-    keep = keep[: int(requested_nroot)]
-
-    # Refuse only for an ambiguity that could have DECIDED this selection.  The
-    # window is classified generously -- the dense path classifies at least 13
-    # eigenvectors for a one-root request -- so checking the whole window let an
-    # unrelated high-lying mixed-spin degeneracy abort an otherwise well-defined
-    # ground-state solve.  A root above the last retained one cannot change which
-    # roots are selected; a mislabelled root at or below it can, because its true
-    # multiplicity may be the target.
-    deciding = [entry for entry in problems if int(entry[0]) <= int(keep[-1])]
-    if deciding:
+    if problems and _spin_problems_can_decide_selection(
+            problems, keep, np.asarray(energies, dtype=float),
+            target_multiplicity, int(requested_nroot), nelec):
         raise SpinLabelAmbiguityError(
-            _format_spin_problems(deciding, ci_label)
+            _format_spin_problems(problems, ci_label)
             + f" Refusing to apply {ci_section} target_spin={target_spin} "
               "to labels that are not spin eigenvalues; run with "
               "target_spin=any and select the root yourself, or lift the "
               "degeneracy."
         )
+    if keep.size == 0:
+        raise ValueError(
+            f"{ci_label} target_spin={target_spin} found no matching roots among "
+            f"{len(root_indices)} solved roots; choose another target_spin for this active space."
+        )
+    if keep.size < int(requested_nroot):
+        raise ValueError(
+            f"{ci_label} target_spin={target_spin} found only {keep.size} matching roots among "
+            f"{len(root_indices)} solved roots; lower {ci_section} nroot or choose another target_spin."
+        )
+    keep = keep[: int(requested_nroot)]
     return (
         np.asarray(energies)[keep],
         np.asarray(coeffs)[:, keep],
@@ -740,7 +764,6 @@ def _filter_roots_by_target_spin(
         np.asarray(multiplicity)[keep],
         root_indices[keep],
     )
-
 
 def _electron_count_component(value, label: str) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
