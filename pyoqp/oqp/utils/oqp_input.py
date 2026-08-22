@@ -593,11 +593,15 @@ TOP_OPTION_ALIASES = {
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
 # workflow options that may live directly in the primary call.
-_OPT_OPTIONS = {
+_GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
-    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
+    "energy_shift", "init_scf",
 }
+_CROSSING_SEARCH_OPTIONS = {
+    "energy_gap", "meci_search", "pen_sigma",
+    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
+}
+_OPT_OPTIONS = _GEOMETRY_CONVERGENCE_OPTIONS | _CROSSING_SEARCH_OPTIONS
 # gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
 # mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
 # route-driver manifest still owns them, but the driver option sets keep them
@@ -610,13 +614,6 @@ _NATIVE_ENGINE_OPTIONS = {
     "auto_recovery", "recovery_maxit", "recovery_trust",
 }
 _NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
-_GEOMETRIC_ENGINE_OPTIONS = {
-    "coordsys", "trust", "tmax", "convergence_set", "hessian",
-}
-_OPTIMIZER_BACKEND_OPTIONS = (
-    {"lib"} | _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS
-    | _GEOMETRIC_ENGINE_OPTIONS
-)
 _MECI_PUBLIC_OPTIONS = {
     "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
 }
@@ -639,7 +636,9 @@ _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
+    "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+                 | set(_NATIVE_ENGINE_OPTIONS)
+                 | set(_NATIVE_CONSTRAINT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.
@@ -649,7 +648,8 @@ DRIVER_OPTIONS = {
              | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
-    "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
+    "ts": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+           | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"}),
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
     "neb": {
         "maxit",
@@ -689,9 +689,9 @@ DRIVER_OPTIONS = {
     "data": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
 }
 
-# Exact ``oqp(...)`` section calls are accepted only when every key is consumed
-# by the selected native workflow.  This prevents valid-looking but ignored
-# controls such as ``energy oqp(init_hessian=analytical)``.
+# ``oqp(...)`` was an early concise spelling for options consumed by the native
+# geometry engine. It remains a read-time compatibility alias only: parsing
+# folds it into the primary driver and canonical rendering never writes it.
 OQP_DRIVER_OPTIONS = {
     "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
     "meci": set(_NATIVE_ENGINE_OPTIONS),
@@ -705,6 +705,49 @@ OQP_DRIVER_OPTIONS = {
         "maxmove", "align", "opt_ends", "end_fmax", "neb_output",
     },
 }
+
+
+def _fold_native_section_into_driver(
+    driver: CallSpec, modifiers: Sequence[CallSpec],
+) -> Tuple[CallSpec, Tuple[CallSpec, ...]]:
+    """Convert an old ``oqp(...)`` call into its public driver spelling."""
+
+    native_calls = [call for call in modifiers if call.name == "oqp"]
+    if not native_calls:
+        return driver, tuple(modifiers)
+    if len(native_calls) > 1:
+        raise OQPInputError("Duplicate modifier/section call: oqp")
+
+    native = native_calls[0]
+    if native.args:
+        raise OQPInputError("Section call oqp accepts keyword arguments only")
+    allowed = OQP_DRIVER_OPTIONS.get(driver.name, set())
+    unsupported = set(native.kwargs) - allowed
+    if unsupported:
+        key = sorted(unsupported)[0]
+        raise OQPInputError(
+            "oqp.%s is not used by the native %s workflow; place only "
+            "workflow options in %s(...)" % (key, driver.name, driver.name)
+        )
+
+    rename = {
+        "init_hessian": "hessian",
+        "path_gtol": "gtol",
+        "irc_direction": "direction",
+        "neb_dt": "dt",
+        "neb_output": "output",
+    }
+    options = dict(driver.kwargs)
+    for key, value in native.kwargs.items():
+        public_key = rename.get(key, key)
+        if public_key in options:
+            raise OQPInputError(
+                "Option '%s' is specified in both %s(...) and oqp(...)"
+                % (public_key, driver.name)
+            )
+        options[public_key] = value
+    retained = tuple(call for call in modifiers if call.name != "oqp")
+    return CallSpec(driver.name, driver.args, options, driver.explicit), retained
 
 # Route parentheses describe the electronic model, not an alternate spelling
 # for every legacy section.  Keeping this surface deliberately small prevents
@@ -1206,6 +1249,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         )
     driver = primary[0] if primary else CallSpec("energy", explicit=False)
     driver = _normalize_driver_defaults(model, driver)
+    driver, modifiers = _fold_native_section_into_driver(driver, modifiers)
     spec = CalculationSpec(
         model=model,
         functional=functional,
@@ -1213,7 +1257,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         model_options=model_options,
         options=options,
         driver=driver,
-        modifiers=tuple(modifiers),
+        modifiers=modifiers,
         source_text=text,
     )
     _validate_semantics(spec)
@@ -1509,15 +1553,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "algorithm=auto or algorithm=baeka"
             )
     legacy_backend_options = {
+        "lib",
         "optimizer", "step_size", "step_tol", "mep_maxit",
         "k", "maxg", "avgg", "optep",
     }.intersection(options)
     if legacy_backend_options:
         key = sorted(legacy_backend_options)[0]
+        if key == "lib":
+            raise OQPInputError(
+                "lib is available only in traditional sectioned .inp files; "
+                "concise .oqp geometry drivers always use the native OpenQP engine"
+            )
         if key in {"optimizer", "step_size", "step_tol", "mep_maxit"}:
             raise OQPInputError(
                 "%s is a legacy SciPy-backend option. Concise .oqp workflows "
-                "support lib=oqp or lib=geometric." % key
+                "always use the native OpenQP engine." % key
             )
         replacement = {
             "k": "spring", "maxg": "fmax", "avgg": "frms", "optep": "opt_ends",
@@ -1531,35 +1581,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if unknown_driver_options:
         key = sorted(unknown_driver_options)[0]
         raise OQPInputError(
-            "%s does not define option '%s'; use the exact legacy section call for advanced options"
+            "%s does not define option '%s'; use the concise section that owns advanced options"
             % (driver.name, key)
         )
-    backend = str(options.get("lib", "oqp")).strip().lower()
-    if driver.name == "optimize":
-        if backend not in {"oqp", "geometric"}:
-            raise OQPInputError(
-                "opt lib must be oqp or geometric in concise .oqp input"
-            )
-        if backend == "geometric":
-            native_only = {
-                "trust_max", "auto_recovery", "recovery_maxit",
-                "recovery_trust", "freeze",
-            }.intersection(options)
-            if native_only:
-                raise OQPInputError(
-                    "%s is a native lib=oqp option; use geomeTRIC tmax or a "
-                    "traditional constraints file as appropriate"
-                    % sorted(native_only)[0]
-                )
-        else:
-            geometric_only = {
-                "tmax", "convergence_set", "hessian",
-            }.intersection(options)
-            if geometric_only:
-                raise OQPInputError(
-                    "%s is available only with opt(...,lib=geometric)"
-                    % sorted(geometric_only)[0]
-                )
     if driver.name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         if "maxit" in options:
             if not _is_positive_integer(options["maxit"]):
@@ -1571,20 +1595,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
             )
-        if driver.name == "optimize" and backend == "geometric":
-            try:
-                trust = float(options.get("trust", 0.1))
-                tmax = float(options.get("tmax", 0.3))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax must be positive numbers"
-                ) from exc
-            if (not math.isfinite(trust) or not math.isfinite(tmax)
-                    or trust <= 0 or tmax <= 0 or trust > tmax):
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax require 0 < trust <= tmax"
-                )
-        elif {"trust", "trust_max"}.intersection(options):
+        if {"trust", "trust_max"}.intersection(options):
             try:
                 trust = float(options.get("trust", 0.2))
                 trust_max = float(options.get("trust_max", 0.5))
@@ -2043,106 +2054,6 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "Option '%s' is specified in both %s(...) and %s(...)"
                 % (sorted(overlap)[0], driver.name, call.name)
             )
-
-    oqp_call = modifier_by_name.get("oqp")
-    if oqp_call is not None:
-        allowed_oqp = OQP_DRIVER_OPTIONS.get(driver.name, set())
-        ignored = set(oqp_call.kwargs) - allowed_oqp
-        if ignored:
-            key = sorted(ignored)[0]
-            raise OQPInputError(
-                "oqp.%s is not used by the native %s workflow"
-                % (key, driver.name)
-            )
-        if "init_hessian" in oqp_call.kwargs:
-            policy = str(oqp_call.kwargs["init_hessian"]).strip().lower()
-            if policy not in {"model", "numerical", "analytical"}:
-                raise OQPInputError(
-                    "oqp.init_hessian must be model, numerical, or analytical"
-                )
-        if "irc_direction" in oqp_call.kwargs:
-            direction = str(oqp_call.kwargs["irc_direction"]).strip().lower()
-            if direction not in {"forward", "backward", "reverse"}:
-                raise OQPInputError(
-                    "oqp.irc_direction must be forward or backward"
-                )
-        if "coordsys" in oqp_call.kwargs:
-            coordsys = str(oqp_call.kwargs["coordsys"]).strip().lower()
-            if coordsys not in {
-                "auto", "tric", "dlc", "ric", "internal", "cart", "cartesian",
-            }:
-                raise OQPInputError(
-                    "oqp.coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
-                )
-        if {"trust", "trust_max"}.intersection(oqp_call.kwargs):
-            try:
-                trust = float(oqp_call.kwargs.get("trust", 0.2))
-                trust_max = float(oqp_call.kwargs.get("trust_max", 0.5))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.trust and oqp.trust_max must be positive numbers") from exc
-            if (not math.isfinite(trust) or not math.isfinite(trust_max)
-                    or trust <= 0 or trust_max <= 0 or trust > trust_max):
-                raise OQPInputError("oqp trust controls require 0 < trust <= trust_max")
-        if "freeze" in oqp_call.kwargs:
-            _validate_freeze_spec(oqp_call.kwargs["freeze"])
-        if "follow" in oqp_call.kwargs:
-            if not _is_non_negative_integer(oqp_call.kwargs["follow"]):
-                raise OQPInputError("oqp.follow must be a non-negative mode index")
-        for key in {
-            "spring", "fmax", "frms", "climb_fmax", "neb_dt", "maxmove",
-            "end_fmax", "irc_step", "mep_step", "path_gtol",
-        }.intersection(oqp_call.kwargs):
-            try:
-                value = float(oqp_call.kwargs[key])
-                if not math.isfinite(value) or value <= 0:
-                    raise ValueError
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.%s must be a positive number" % key) from exc
-        for key in {"climb", "align", "opt_ends"}.intersection(oqp_call.kwargs):
-            if not isinstance(oqp_call.kwargs[key], bool):
-                raise OQPInputError("oqp.%s must be true or false" % key)
-        native_aliases = {
-            "coordsys": "coordsys", "trust": "trust", "trust_max": "trust_max",
-        }
-        if driver.name == "optimize":
-            native_aliases.update({"freeze": "freeze"})
-        elif driver.name == "ts":
-            native_aliases.update({"follow": "follow", "hessian": "init_hessian"})
-        elif driver.name == "mep":
-            native_aliases.update({"step": "mep_step", "mep_step": "mep_step"})
-        elif driver.name == "irc":
-            native_aliases.update({
-                "direction": "irc_direction", "step": "irc_step", "irc_step": "irc_step",
-            })
-        elif driver.name == "neb":
-            native_aliases.update({
-                "spring": "spring", "climb": "climb", "fmax": "fmax",
-                "frms": "frms", "climb_fmax": "climb_fmax", "dt": "neb_dt",
-                "neb_dt": "neb_dt", "maxmove": "maxmove", "align": "align",
-                "opt_ends": "opt_ends", "end_fmax": "end_fmax",
-                "output": "neb_output",
-            })
-        for public_key, section_key in native_aliases.items():
-            if public_key in options and section_key in oqp_call.kwargs:
-                raise OQPInputError(
-                    "%s and oqp.%s specify the same native control; use one form"
-                    % (public_key, section_key)
-                )
-        if driver.name == "neb":
-            effective_climb = oqp_call.kwargs.get(
-                "climb", options.get("climb", True)
-            )
-            effective_fmax = float(oqp_call.kwargs.get(
-                "fmax", options.get("fmax", 2.0e-3)
-            ))
-            effective_climb_fmax = float(oqp_call.kwargs.get(
-                "climb_fmax", options.get("climb_fmax", 0.05)
-            ))
-            if effective_climb and effective_climb_fmax < effective_fmax:
-                raise OQPInputError(
-                    "neb climb_fmax must be greater than or equal to fmax when climb=true"
-                )
-
 
 def _internal_root(model: str, state: StateRef) -> int:
     if state.root is not None:
@@ -2636,16 +2547,8 @@ def lower_to_legacy(
             put("properties", key, value)
     elif name in {"optimize", "mep", "ts", "irc", "neb"}:
         put("optimize", "istate", roots[0] if roots else 0)
-        optimizer_backend = str(
-            driver_options.get("lib", "oqp")
-        ).strip().lower()
         for key, value in driver_options.items():
-            if name == "optimize" and key == "lib":
-                put("optimize", "lib", optimizer_backend)
-            elif (name == "optimize" and optimizer_backend == "geometric"
-                  and key in _GEOMETRIC_ENGINE_OPTIONS):
-                put("geometric", key, value)
-            elif name == "neb" and key in {"product", "images", "nimage"}:
+            if name == "neb" and key in {"product", "images", "nimage"}:
                 target_key = "nimage" if key in {"images", "nimage"} else "product"
                 if target_key == "product":
                     value = _resolve_path(value, source_dir)
@@ -2676,7 +2579,8 @@ def lower_to_legacy(
                     put("oqp", "mep_step", value)
                 elif key == "gtol":
                     put("oqp", "path_gtol", value)
-            elif name == "ts" and key in {"coordsys", "trust", "trust_max", "follow", "hessian"}:
+            elif name == "ts" and key in (
+                    _NATIVE_ENGINE_OPTIONS | {"follow", "hessian"}):
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
             elif name == "optimize" and key in (
                     _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):

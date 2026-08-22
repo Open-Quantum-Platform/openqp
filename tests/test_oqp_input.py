@@ -1160,7 +1160,7 @@ def test_irc_public_options_lower_to_owning_sections():
     assert legacy["oqp"]["path_gtol"] == "2e-05"
     assert legacy["hess"]["type"] == "analytical"
 
-    with pytest.raises(OQPInputError, match="does not define option 'lib'"):
+    with pytest.raises(OQPInputError, match="available only in traditional sectioned .inp"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" irc(S0,lib=geometric,step=0.1)'
         )
@@ -1238,21 +1238,20 @@ def test_geometry_drivers_are_native_and_mep_aliases_map_correctly():
         "init_hessian": "numerical", "coordsys": "dlc", "trust": "0.1",
         "trust_max": "0.3", "follow": "1",
     }
-    with pytest.raises(OQPInputError, match="does not define option 'lib'"):
+    with pytest.raises(OQPInputError, match="available only in traditional sectioned .inp"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,lib=geometric)'
         )
 
 
-def test_readable_opt_supports_native_recovery_and_explicit_geometric_backend():
+def test_readable_opt_supports_native_recovery_without_a_backend_selector():
     native_text = """
 mrsf-tddftb(nstate=3)
-opt(S0,lib=oqp,maxit=100,auto_recovery=true,recovery_maxit=40,recovery_trust=0.02)
+opt(S0,maxit=100,auto_recovery=true,recovery_maxit=40,recovery_trust=0.02)
 dftb(model=dtcam-tb)
 geom="c60.xyz"
 """
     native_spec, native = _parse(native_text)
-    assert native["optimize"]["lib"] == "oqp"
     assert native["oqp"]["auto_recovery"] == "True"
     assert native["oqp"]["recovery_maxit"] == "40"
     assert native["oqp"]["recovery_trust"] == "0.02"
@@ -1260,36 +1259,11 @@ geom="c60.xyz"
     assert " opt(S0,maxit=100,recovery_maxit=40)" in rendered_native
     assert rendered_native.rstrip().endswith('geom="c60.xyz"')
 
-    geometric_text = """
-mrsf-tddftb(nstate=3)
-opt(S0,lib=geometric,maxit=200,coordsys=dlc,trust=0.02,tmax=0.05,
-    convergence_set=GAU,hessian=never)
-dftb(model=dtcam-tb)
-geom="c60.xyz"
-"""
-    geometric_spec, geometric = _parse(geometric_text)
-    assert geometric["optimize"]["lib"] == "geometric"
-    assert geometric["geometric"] == {
-        "coordsys": "dlc",
-        "trust": "0.02",
-        "tmax": "0.05",
-        "convergence_set": "GAU",
-        "hessian": "never",
-    }
-    reparsed_geometric = oqp_input.parse_canonical_oqp(
-        oqp_input.render_canonical_oqp(geometric_spec)
-    )
-    # convergence_set=GAU and hessian=never restate geomeTRIC defaults, so
-    # the canonical rendering omits them without changing the request.
-    assert set(reparsed_geometric.driver.kwargs) == {
-        "lib", "maxit", "coordsys", "trust", "tmax"
-    }
-    schema = oqp_input._load_schema_defaults()
-    assert oqp_input._effective_config(
-        oqp_input.lower_to_legacy(reparsed_geometric), schema
-    ) == oqp_input._effective_config(geometric, schema)
-    assert reparsed_geometric.modifiers == geometric_spec.modifiers
-    assert reparsed_geometric.options == geometric_spec.options
+    with pytest.raises(OQPInputError, match="available only in traditional sectioned .inp"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf-tddftb(nstate=3) opt(S0,lib=geometric,maxit=200) '
+            'dftb(model=dtcam-tb) geom="c60.xyz"'
+        )
 
 
 def test_dftb_preset_allows_explicit_first_try_trah_mixer():
@@ -1307,12 +1281,11 @@ geom="alanine-dipeptide.xyz"
 @pytest.mark.parametrize(
     "options,message",
     [
-        ("lib=scipy", "must be oqp or geometric"),
-        ("lib=geometric,trust=0.2,tmax=0.1", "0 < trust <= tmax"),
-        ("lib=geometric,trust_max=0.2", "native lib=oqp option"),
-        ("lib=oqp,tmax=0.1", "only with opt.*lib=geometric"),
-        ("lib=oqp,auto_recovery=1", "must be true or false"),
-        ("lib=oqp,recovery_maxit=0", "positive integer"),
+        ("lib=scipy", "available only in traditional sectioned .inp"),
+        ("lib=geometric,trust=0.2", "available only in traditional sectioned .inp"),
+        ("tmax=0.1", "does not define option 'tmax'"),
+        ("auto_recovery=1", "must be true or false"),
+        ("recovery_maxit=0", "positive integer"),
     ],
 )
 def test_readable_opt_rejects_backend_option_mismatches(options, message):
@@ -1451,6 +1424,27 @@ def test_default_normalization_does_not_hide_lossy_numeric_types():
         )
 
 
+@pytest.mark.parametrize("driver", ["opt(S0", "ts(S0"])
+@pytest.mark.parametrize(
+    "option",
+    [
+        "energy_gap=1e-5",
+        "meci_search=auto",
+        "pen_sigma=1",
+        "pen_alpha=0.02",
+        "pen_incre=1",
+        "pen_delta=0.025",
+        'pen_jump="10,25"',
+        "gap_weight=1",
+    ],
+)
+def test_minimum_and_ts_reject_crossing_search_options(driver, option):
+    with pytest.raises(OQPInputError, match="does not define option"):
+        oqp_input.parse_canonical_oqp(
+            f'dft/pbe0/6-31g* geom="g.xyz" {driver},{option})'
+        )
+
+
 def test_tci_retains_legacy_multiplicative_controls():
     _, legacy = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
@@ -1509,11 +1503,46 @@ def test_native_minimum_accepts_frozen_distance_constraints():
          "positive number"),
         ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0,trust=nan)',
          "0 < trust <= trust_max"),
+        ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0) oqp(dlc)',
+         "accepts keyword arguments only"),
     ],
 )
 def test_native_exact_section_controls_cannot_be_ignored_or_invalid(text, message):
     with pytest.raises(OQPInputError, match=message):
         oqp_input.parse_canonical_oqp(text)
+
+
+def test_legacy_native_section_is_folded_into_the_canonical_driver():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="h2o.xyz" '
+        'opt(S0,maxit=40) oqp(coordsys=dlc,trust=0.1,trust_max=0.3)'
+    )
+
+    assert oqp_input.render_canonical_oqp(spec) == (
+        'dft/pbe0/def2-svp opt(maxit=40,coordsys=dlc,trust=0.1,trust_max=0.3)\n'
+        'geom="h2o.xyz"\n'
+    )
+    legacy = oqp_input.lower_to_legacy(spec)
+    assert legacy["oqp"] == {
+        "coordsys": "dlc", "trust": "0.1", "trust_max": "0.3",
+    }
+
+
+def test_legacy_ts_recovery_controls_remain_in_the_native_section():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="ts.xyz" ts(S0) '
+        'oqp(auto_recovery=false,recovery_maxit=5,recovery_trust=0.01)'
+    )
+
+    legacy = oqp_input.lower_to_legacy(spec)
+    assert legacy["oqp"] == {
+        "auto_recovery": "False",
+        "recovery_maxit": "5",
+        "recovery_trust": "0.01",
+    }
+    assert not {
+        "auto_recovery", "recovery_maxit", "recovery_trust",
+    }.intersection(legacy["optimize"])
 
 
 def test_ekt_parent_state_uses_physical_mrsf_label():
@@ -1669,7 +1698,7 @@ def test_mrsf_prop_has_an_explicit_or_default_physical_state():
 
 
 def test_primary_call_rejects_unknown_convenience_option_with_section_hint():
-    with pytest.raises(OQPInputError, match="exact legacy section call"):
+    with pytest.raises(OQPInputError, match="concise section that owns advanced options"):
         oqp_input.parse_canonical_oqp(
             'mrsf/bhhlyp/6-31g* geom="h2o.xyz" opt(S0,rad_npts=100)'
         )
