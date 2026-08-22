@@ -40,6 +40,10 @@ message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
+# The log banner prints this; PROJECT_VERSION comes from the VERSION in the
+# top-level project() call, which the release-metadata test keeps in sync with
+# pyproject.toml.
+target_compile_definitions(oqp PRIVATE "OQP_VERSION_STRING='${PROJECT_VERSION}'")
 if(WIN32)
   # The Python runtime (pyoqp/oqp/runtime.py) loads "liboqp.<suffix>" from the
   # configured libdir on every platform.  On Windows CMake would otherwise
