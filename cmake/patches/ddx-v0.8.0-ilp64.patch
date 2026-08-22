@@ -53,7 +53,16 @@ index 23d6706..b7d99e3 100644
  option(DDX_LIBRARY "Build ddx library" ON)
  if (DDX_LIBRARY)
      add_library(ddx SHARED ${SRC_DDX})
-@@ -74,8 +75,10 @@
+@@ -67,5 +68,8 @@
+ if (DDX_LIBRARY)
+     add_library(ddx SHARED ${SRC_DDX})
++    if (WIN32)
++        set_target_properties(ddx PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
++    endif()
+     target_link_libraries(ddx PUBLIC
+         ${BLAS_LIBRARIES}
+         ${LAPACK_LIBRARIES}
+@@ -74,8 +78,10 @@
          target_link_libraries(ddx PRIVATE gcov)
      endif()
  
@@ -64,7 +73,7 @@ index 23d6706..b7d99e3 100644
  
      #
      # Installation rules
-@@ -84,7 +87,12 @@
+@@ -84,7 +90,12 @@
  
      # Install library, binaries and headers
 -    install(TARGETS ddx EXPORT ddXTargets)

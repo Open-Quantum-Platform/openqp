@@ -16,8 +16,8 @@ set(_OQP_DDX_VERSION "0.8.0")
 # The first Windows-ready ddX integration can encounter an incomplete legacy
 # ddx install (headers/stamps without the runtime library). Keep the other
 # expensive externals reusable, but give ddX its own fresh cache directory.
-# runtime6 also avoids reusing a Windows install missing the ddX import library.
-set(_OQP_DDX_CACHE_NAME "ddx-runtime6")
+# runtime7 also avoids reusing a Windows DLL built before its C ABI was exported.
+set(_OQP_DDX_CACHE_NAME "ddx-runtime7")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
 set(_OQP_MULTICHARGE_VERSION "0.3.0")
 set(_OQP_DFTD4_VERSION "3.7.0")

@@ -38,7 +38,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
 
     def test_autobuild_registers_distinct_windows_runtime_once(self):
         text = (ROOT / "external" / "CMakeLists.txt").read_text(encoding="utf-8")
-        self.assertIn('set(_OQP_DDX_CACHE_NAME "ddx-runtime6")', text)
+        self.assertIn('set(_OQP_DDX_CACHE_NAME "ddx-runtime7")', text)
         self.assertIn("oqp_set_external_paths(DDX ${_OQP_DDX_CACHE_NAME}", text)
         self.assertIn("-DCMAKE_INSTALL_LIBDIR=lib", text)
         self.assertIn("-DDDX_DRIVER=OFF", text)
@@ -47,6 +47,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         )
         self.assertIn('option(DDX_DRIVER "Build the ddX command-line driver" ON)', patch)
         self.assertIn("ARCHIVE DESTINATION lib", patch)
+        self.assertIn("WINDOWS_EXPORT_ALL_SYMBOLS ON", patch)
         self.assertIn("if(NOT DDX_RUNTIME_LIBRARY STREQUAL DDX_LIBRARY)", text)
         self.assertIn("BUILD_BYPRODUCTS ${_ddx_build_byproducts}", text)
         self.assertIn("INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>", text)
