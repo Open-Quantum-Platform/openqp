@@ -156,6 +156,17 @@ class CASCI(FCI):
             _tgt = np.asarray(self.mol.data["OQP::VEC_MO_A"], dtype=float)
             self.mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(
                 np.asarray(coeff, dtype=float).T.reshape(_tgt.shape))
+            # The MO irrep labels staged after SCF describe the RHF orbitals
+            # that were just replaced.  _stage_irrep_selection below reads
+            # OQP::sym_mo_irrep_a to code the ACTIVE orbitals, so leaving the
+            # stale table in place would label the imported coefficients with
+            # another set of orbitals and let [ci] irrep return a root of the
+            # wrong symmetry without saying so.  Reclassify what is now in the
+            # handle; the labels are also reported, so this is right even when
+            # no irrep is requested.
+            _restage = getattr(self.mol, "stage_mo_irreps", None)
+            if callable(_restage):
+                _restage()
         eri_ao = np.asarray(self.mol.data["OQP::AO_ERI"], dtype=float).reshape(
             (nbf, nbf, nbf, nbf),
             order="F",

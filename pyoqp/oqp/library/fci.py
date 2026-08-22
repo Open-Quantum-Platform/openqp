@@ -688,32 +688,51 @@ def _filter_roots_by_target_spin(
     """
     target_multiplicity = _target_spin_multiplicity(target_spin)
     root_indices = np.arange(np.asarray(energies).shape[0], dtype=np.int64)
+    problems = []
     if nelec is not None:
+        # Warn about every unreliable label in the window; whether one of them
+        # is disqualifying is decided AFTER the selection, below.
         problems = warn_unreliable_spin_labels(
             s2, multiplicity, nelec, ci_label=ci_label)
-        if problems and target_multiplicity is not None:
-            raise SpinLabelAmbiguityError(
-                _format_spin_problems(problems, ci_label)
-                + f" Refusing to apply {ci_section} target_spin={target_spin} "
-                  "to labels that are not spin eigenvalues; run with "
-                  "target_spin=any and select the root yourself, or lift the "
-                  "degeneracy."
-            )
     if target_multiplicity is None:
         return energies, coeffs, s2, multiplicity, root_indices
 
     keep = np.flatnonzero(np.asarray(multiplicity, dtype=np.int64) == target_multiplicity)
+    _ambiguity_note = (
+        "" if not problems else
+        f" ({len(problems)} root(s) in the window carry an unreliable spin"
+        " label, which can hide a matching root: see the warning above.)"
+    )
     if keep.size == 0:
         raise ValueError(
             f"{ci_label} target_spin={target_spin} found no matching roots among "
-            f"{len(root_indices)} solved roots; choose another target_spin for this active space."
+            f"{len(root_indices)} solved roots; choose another target_spin for this "
+            f"active space.{_ambiguity_note}"
         )
     if keep.size < int(requested_nroot):
         raise ValueError(
             f"{ci_label} target_spin={target_spin} found only {keep.size} matching roots among "
-            f"{len(root_indices)} solved roots; lower {ci_section} nroot or choose another target_spin."
+            f"{len(root_indices)} solved roots; lower {ci_section} nroot or choose another "
+            f"target_spin.{_ambiguity_note}"
         )
     keep = keep[: int(requested_nroot)]
+
+    # Refuse only for an ambiguity that could have DECIDED this selection.  The
+    # window is classified generously -- the dense path classifies at least 13
+    # eigenvectors for a one-root request -- so checking the whole window let an
+    # unrelated high-lying mixed-spin degeneracy abort an otherwise well-defined
+    # ground-state solve.  A root above the last retained one cannot change which
+    # roots are selected; a mislabelled root at or below it can, because its true
+    # multiplicity may be the target.
+    deciding = [entry for entry in problems if int(entry[0]) <= int(keep[-1])]
+    if deciding:
+        raise SpinLabelAmbiguityError(
+            _format_spin_problems(deciding, ci_label)
+            + f" Refusing to apply {ci_section} target_spin={target_spin} "
+              "to labels that are not spin eigenvalues; run with "
+              "target_spin=any and select the root yourself, or lift the "
+              "degeneracy."
+        )
     return (
         np.asarray(energies)[keep],
         np.asarray(coeffs)[:, keep],
@@ -2682,6 +2701,13 @@ _FCI_IOPT = (
     "irrep", "nirrep",
 )
 _FCI_DOPT = ("ecore", "eig_tol", "cutoff", "min_purity")
+#: The lengths the RELEASED ``fci_solve`` reads, mirroring FCI_NIOPT_V1 /
+#: FCI_NDOPT_V1 in fci_driver.F90 and include/oqp.h.  Everything added after
+#: v1.3.x is reached through ``fci_solve_ex``, which is told how much the
+#: caller allocated; a binary built against the v1.3.1 header allocates only
+#: this much, so the old symbol must never read past it.
+_FCI_NIOPT_V1 = 14
+_FCI_NDOPT_V1 = 3
 _FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}
 _FCI_DOPT_INDEX = {name: i for i, name in enumerate(_FCI_DOPT)}
 _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
@@ -2766,7 +2792,11 @@ def _fci_solve_backend():
     if backend is None:
         return None
     lib, ffi = backend
-    if not hasattr(lib, "fci_solve"):
+    # fci_solve_ex is what the driver calls: it is the length-negotiated entry
+    # point, and the only one that reports root provenance.  A library old
+    # enough to lack it is treated as no backend at all, which is the existing
+    # "engine declined" path into the Python driver.
+    if not hasattr(lib, "fci_solve_ex"):
         return None
     return lib, ffi
 
@@ -2844,7 +2874,11 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     civecs = np.zeros((ndet, spec.nroot), dtype=np.float64)
     s2 = np.zeros(spec.nroot, dtype=np.float64)
 
-    status = int(lib.fci_solve(
+    roots = np.zeros(spec.nroot, dtype=np.int32)
+
+    status = int(lib.fci_solve_ex(
+        np.int32(iopt.size),
+        np.int32(dopt.size),
         ffi.cast("int32_t *", iopt.ctypes.data),
         ffi.cast("double *", dopt.ctypes.data),
         ffi.cast("int32_t *", active.ctypes.data),
@@ -2853,10 +2887,15 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
         ffi.cast("double *", vv.ctypes.data),
         ffi.cast("double *", energies.ctypes.data),
         ffi.cast("double *", civecs.ctypes.data),
-        ffi.cast("double *", s2.ctypes.data)))
+        ffi.cast("double *", s2.ctypes.data),
+        ffi.cast("int32_t *", roots.ctypes.data)))
     if status < 0:
         return None
-    return energies, civecs, (s2 if want_s2 else None)
+    # No canonicalize_ci_phase() here: fci_driver.F90 applies the convention on
+    # its own copy-out, and repeating it in Python would hide a regression on
+    # the Fortran side from the very test that checks for one.
+    return (energies, civecs, (s2 if want_s2 else None),
+            np.ascontiguousarray(roots, dtype=np.int64))
 
 
 def solve_active_ci(
@@ -2872,6 +2911,7 @@ def solve_active_ci(
     integral_cutoff: float = 0.0,
     active_section: str = "[fci]",
     ci_section: str = "[fci]",
+    want_roots: bool = False,
 ):
     """One complete CI solve from the FULL MO integrals.
 
@@ -2886,7 +2926,11 @@ def solve_active_ci(
     indices *within the unfiltered window*, which is a reporting concern rather
     than a compute one.
 
-    Returns ``(energies, civecs, s2 | None)``.
+    Returns ``(energies, civecs, s2 | None)``, or, with ``want_roots``, a
+    fourth element: each returned root's 0-based index among the roots the
+    solve computed, or ``None`` when this path cannot know it.  An irrep filter
+    runs inside the engine, so without that the caller would have to invent
+    ``0, 1, 2, ...`` -- and publish a B1 root that is really state 1 as root 0.
     """
     spec = resolve_ci_solve(
         plan.nact,
@@ -2914,7 +2958,8 @@ def solve_active_ci(
         use_target_spin=use_target_spin,
     )
     if native is not None:
-        return native
+        energies, civecs, s2, roots = native
+        return (energies, civecs, s2, roots) if want_roots else (energies, civecs, s2)
 
     # The Python driver has no irrep classification, so honouring an irrep
     # request here is impossible.  Refuse rather than silently return the
@@ -2949,7 +2994,15 @@ def solve_active_ci(
     if want_s2:
         s2, _multiplicity = fci_spin_diagnostics(
             coeffs, _determinants(plan.nact, active_nelec), plan.nact, active_nelec)
-    return energies, coeffs, s2
+    if not want_roots:
+        return energies, coeffs, s2
+    # The Python driver returns the lowest roots of the window it solved, so
+    # the identity map is the truth here -- EXCEPT when it did its own spin
+    # filtering, where it drops the indices it selected on.  Say so rather than
+    # hand back a plausible-looking lie.
+    roots = (None if use_target_spin
+             else np.arange(len(energies), dtype=np.int64))
+    return energies, coeffs, s2, roots
 
 
 class FCI:
@@ -3000,7 +3053,7 @@ class FCI:
             # The spin filter stays here rather than in the engine: the root
             # indices reported below are positions in the UNFILTERED window, so
             # this is a reporting concern, not part of the compute path.
-            window_energies, window_coeffs, window_s2 = solve_active_ci(
+            window_energies, window_coeffs, window_s2, window_roots = solve_active_ci(
                 h1e_mo,
                 eri_mo,
                 plan,
@@ -3012,17 +3065,21 @@ class FCI:
                 integral_cutoff=self.settings.integral_cutoff,
                 active_section=self.active_section,
                 ci_section=self.ci_section,
+                want_roots=True,
             )
             window_multiplicity = np.maximum(
                 np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * window_s2))).astype(np.int64),
                 1,
             )
+            if window_roots is None:
+                window_roots = np.arange(len(window_energies), dtype=np.int64)
             return (window_energies, window_coeffs, _as_f64c(window_s2),
-                    np.ascontiguousarray(window_multiplicity, dtype=np.int64))
+                    np.ascontiguousarray(window_multiplicity, dtype=np.int64),
+                    np.ascontiguousarray(window_roots, dtype=np.int64))
 
         if target_multiplicity is None:
-            energies, coeffs, s2, multiplicity = solve_and_diagnose(self.settings.nroot)
-            root_indices = np.arange(len(energies), dtype=np.int64)
+            energies, coeffs, s2, multiplicity, root_indices = solve_and_diagnose(
+                self.settings.nroot)
             # target_spin=any skips the filter, so nothing else would look at
             # these labels -- but they are still reported, and a label that is
             # not a spin eigenvalue must not be reported silently.
@@ -3031,7 +3088,8 @@ class FCI:
         else:
             solve_nroot = min(determinant_count, max(1, int(self.settings.nroot)))
             while True:
-                energies, coeffs, s2, multiplicity = solve_and_diagnose(solve_nroot)
+                energies, coeffs, s2, multiplicity, window_roots = solve_and_diagnose(
+                    solve_nroot)
                 try:
                     energies, coeffs, s2, multiplicity, root_indices = _filter_roots_by_target_spin(
                         energies,
@@ -3044,6 +3102,12 @@ class FCI:
                         ci_section=self.ci_section,
                         nelec=nelec,
                     )
+                    # _filter_roots_by_target_spin reports positions inside the
+                    # window; map them back onto the solve's own root numbering,
+                    # which an irrep filter may already have made non-contiguous.
+                    root_indices = np.ascontiguousarray(
+                        np.asarray(window_roots, dtype=np.int64)[root_indices],
+                        dtype=np.int64)
                     break
                 except ValueError:
                     if solve_nroot >= determinant_count:

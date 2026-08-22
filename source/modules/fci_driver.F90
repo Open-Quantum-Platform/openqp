@@ -73,7 +73,7 @@ module fci_driver_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: fci_solve
+  public :: fci_solve, fci_solve_ex
   ! Reused by the CASSCF driver (casscf_driver.F90), which holds `h1e`/`eri`
   ! in local arrays and calls `fci_solve` directly -- exactly the in-process
   ! Fortran caller this entry point was shaped handle-free for.  It packs the
@@ -85,6 +85,7 @@ module fci_driver_mod
   public :: FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, FCI_I_WANT_S2
   public :: FCI_I_GUESS, FCI_I_IRREP, FCI_I_NIRREP, FCI_D_MIN_PURITY
   public :: FCI_NIOPT, FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT
+  public :: FCI_NIOPT_V1, FCI_NDOPT_V1
   public :: FCI_MAX_NSPIN
 
   ! ------------------------------------------------------------------ schema
@@ -130,6 +131,16 @@ module fci_driver_mod
                                                !     irrep holds less than this
                                                !     fraction of its weight
   integer, parameter :: FCI_NDOPT        = 4
+  !
+  ! The RELEASED option-array lengths, as published in the v1.3.0 and v1.3.1
+  ! include/oqp.h.  A binary compiled against those headers allocates exactly
+  ! this much and calls the unchanged `fci_solve` symbol, so reading iopt(14),
+  ! iopt(15) or dopt(3) there is an out-of-bounds read of the CALLER's memory --
+  ! and adjacent nonzero memory would read as an irrep request.  `fci_solve`
+  ! therefore reads no more than these; everything added since is reached only
+  ! through `fci_solve_ex`, which is handed the lengths the caller allocated.
+  integer, parameter :: FCI_NIOPT_V1     = 14
+  integer, parameter :: FCI_NDOPT_V1     = 3
 
   ! Status codes.  Success is the number of roots written (>= 0); every
   ! negative value means "the caller should fall back to the Python solver",
@@ -171,8 +182,61 @@ contains
   !> @param[out] civecs   CI vectors, C-order [ndet, nroot]
   !> @param[out] s2       <S^2> per returned root, written only when WANT_S2
   !> @return     the number of roots written, or a negative status
+  !> The released entry point, unchanged: reads exactly FCI_NIOPT_V1 integer
+  !> and FCI_NDOPT_V1 real options and nothing beyond them, so a binary built
+  !> against the v1.3.x header keeps working byte for byte.
   function fci_solve(iopt, dopt, active, core, h1e, eri, &
                      energies, civecs, s2) result(status) bind(C, name="fci_solve")
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    integer(c_int32_t), intent(in) :: active(0:*), core(0:*)
+    real(dp), intent(in) :: h1e(0:*), eri(0:*)
+    real(dp), intent(inout) :: energies(0:*), civecs(0:*), s2(0:*)
+    integer(i8) :: status
+    integer(c_int32_t) :: no_roots(0:0)
+
+    no_roots = 0_c_int32_t
+    status = fci_solve_impl(FCI_NIOPT_V1, FCI_NDOPT_V1, 0, no_roots, &
+                            iopt, dopt, active, core, h1e, eri, &
+                            energies, civecs, s2)
+  end function fci_solve
+
+  !> Length-negotiated entry point for everything added after v1.3.x.
+  !>
+  !> `niopt`/`ndopt` are how many entries the CALLER allocated, so the library
+  !> never reads past them: pass FCI_NIOPT/FCI_NDOPT for the fixed options, and
+  !> FCI_NIOPT + nirrep + nact when an irrep request carries its symmetry
+  !> tables in the tail.  A short array is refused (FCI_ERR_INPUT) rather than
+  !> read.
+  !>
+  !> `roots` additionally receives, for each returned root, its 0-based index
+  !> among the roots the solve computed -- the provenance the spin and irrep
+  !> filters would otherwise discard, and which the caller publishes as
+  !> OQP::*_ROOT_INDICES.
+  function fci_solve_ex(niopt, ndopt, iopt, dopt, active, core, h1e, eri, &
+                        energies, civecs, s2, roots) result(status) &
+      bind(C, name="fci_solve_ex")
+    integer(c_int32_t), value, intent(in) :: niopt, ndopt
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    integer(c_int32_t), intent(in) :: active(0:*), core(0:*)
+    real(dp), intent(in) :: h1e(0:*), eri(0:*)
+    real(dp), intent(inout) :: energies(0:*), civecs(0:*), s2(0:*)
+    integer(c_int32_t), intent(inout) :: roots(0:*)
+    integer(i8) :: status
+
+    status = fci_solve_impl(int(niopt), int(ndopt), 1, roots, &
+                            iopt, dopt, active, core, h1e, eri, &
+                            energies, civecs, s2)
+  end function fci_solve_ex
+
+  !> The solve itself.  `niopt`/`ndopt` bound every optional read; `want_roots`
+  !> selects whether `roots` receives the source indices.
+  function fci_solve_impl(niopt, ndopt, want_roots, roots, &
+                          iopt, dopt, active, core, h1e, eri, &
+                          energies, civecs, s2) result(status)
+    integer, intent(in) :: niopt, ndopt, want_roots
+    integer(c_int32_t), intent(inout) :: roots(0:*)
     ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
     integer(c_int32_t), intent(in) :: iopt(0:*)
     real(dp), intent(in) :: dopt(0:*)
@@ -217,18 +281,30 @@ contains
     eig_tol  = dopt(FCI_D_EIG_TOL)
     cutoff   = dopt(FCI_D_CUTOFF)
 
-    ! Correlated-state irrep selection.  0 means "any", which is what a caller
-    ! that never heard of this leaves in the slot, so the selection paths below
-    ! stay exactly as they were.
-    target_irrep = int(iopt(FCI_I_IRREP))
-    nirrep       = int(iopt(FCI_I_NIRREP))
-    min_pure     = dopt(FCI_D_MIN_PURITY)
+    ! Correlated-state irrep selection.  0 means "any", and a caller working to
+    ! the released schema does not supply these slots at all -- reading them
+    ! anyway would be an out-of-bounds read of its arrays -- so every one of
+    ! them is taken only when the caller said it allocated that far.  The
+    ! selection paths below then stay exactly as they were.
+    target_irrep = 0
+    nirrep       = 0
+    min_pure     = 0.0_dp
+    if (niopt > FCI_I_IRREP)  target_irrep = int(iopt(FCI_I_IRREP))
+    if (niopt > FCI_I_NIRREP) nirrep       = int(iopt(FCI_I_NIRREP))
+    if (ndopt > FCI_D_MIN_PURITY) min_pure = dopt(FCI_D_MIN_PURITY)
     ! A root whose dominant irrep holds less than half its weight is not a
     ! symmetry eigenstate under any reading, so refuse to treat an unset
     ! threshold as "accept anything".
     if (min_pure <= 0.0_dp) min_pure = 0.5_dp
     if (target_irrep /= 0) then
       if (nirrep < 1 .or. target_irrep < 1 .or. target_irrep > nirrep) then
+        status = FCI_ERR_INPUT
+        return
+      end if
+      ! The symmetry tables ride in the tail of the same array, so the caller
+      ! has to have allocated them.  Refuse a short array instead of reading
+      ! whatever follows it.
+      if (niopt < FCI_NIOPT + nirrep + nact) then
         status = FCI_ERR_INPUT
         return
       end if
@@ -370,8 +446,18 @@ contains
       end if
     end if
 
+    ! Root provenance.  `keep` holds each returned root's position among the
+    ! roots this solve computed; without it a caller that asked for a spin or
+    ! irrep filter can only guess (and guessed 0, 1, 2, ... -- so a B1 root that
+    ! is really state 1 was published as root 0).
+    if (want_roots /= 0) then
+      do k = 1, nroot
+        roots(k - 1) = int(keep(k) - 1, c_int32_t)
+      end do
+    end if
+
     status = int(nroot, i8)
-  end function fci_solve
+  end function fci_solve_impl
 
   ! ==================================================================== dense
   !> Explicit ndet x ndet build followed by root extraction, mirroring

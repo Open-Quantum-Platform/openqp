@@ -56,6 +56,92 @@ def _header_schema(prefix):
     return [(m.group(1).lower(), int(m.group(2))) for m in pattern.finditer(text)]
 
 
+def test_released_option_lengths_are_frozen():
+    """v1.3.0/v1.3.1 published FCI_NIOPT=14, FCI_NDOPT=3.
+
+    Those are the lengths a binary compiled against the released oqp.h
+    allocates, and `fci_solve` is the symbol it calls.  Reading iopt[14],
+    iopt[15] or dopt[3] there is an out-of-bounds read of the caller's memory,
+    and adjacent nonzero memory reads as an irrep request.  The three copies of
+    that promise -- Fortran, header, Python -- have to agree and must not move.
+    """
+    from oqp.library.fci import _FCI_NDOPT_V1, _FCI_NIOPT_V1
+
+    assert (_FCI_NIOPT_V1, _FCI_NDOPT_V1) == (14, 3)
+    for path in (_FORTRAN, _HEADER):
+        text = open(path, encoding="utf-8").read()
+        niopt = int(re.search(r"FCI_NIOPT_V1\s*=\s*(\d+)", text).group(1))
+        ndopt = int(re.search(r"FCI_NDOPT_V1\s*=\s*(\d+)", text).group(1))
+        assert (niopt, ndopt) == (14, 3), f"{path} moved the released lengths"
+
+
+@requires_driver
+def test_released_entry_point_reads_only_the_released_layout():
+    """`fci_solve` still works when handed exactly 14 iopt and 3 dopt entries.
+
+    This is the call an unrecompiled v1.3.x consumer makes.  It must return the
+    same roots as the extended entry point given the same options -- if the old
+    symbol had grown a dependency on the new slots, the two would disagree (or
+    the short call would read past its arrays).
+    """
+    import numpy as np
+    from oqp import ffi, lib
+    from oqp.library import fci as F
+
+    plan, settings = _plan(4, (2, 2), frozen_core=0, active_orbitals=4,
+                           nroot=3, solver="dense")
+    h, v = _system(4, seed=11)
+    reference = F.solve_active_ci(
+        h, v, plan, 0.0, settings, nroot=3, want_s2=False,
+        use_target_spin=False)
+    assert reference is not None
+    ref_energies = reference[0]
+
+    spec = F.resolve_ci_solve(
+        plan.nact, plan.nelec, ecore=0.0, nroot=3,
+        max_det=settings.max_det, max_memory=settings.max_memory,
+        eig_tol=settings.eig_tol, solver="dense")
+
+    # exactly the released lengths -- nothing allocated beyond them
+    iopt = np.zeros(F._FCI_NIOPT_V1, dtype=np.int32)
+    dopt = np.zeros(F._FCI_NDOPT_V1, dtype=np.float64)
+    iopt[F._FCI_IOPT_INDEX["norb"]] = plan.norb
+    iopt[F._FCI_IOPT_INDEX["nact"]] = plan.nact
+    iopt[F._FCI_IOPT_INDEX["ncore"]] = plan.ncore
+    iopt[F._FCI_IOPT_INDEX["nalpha"]] = spec.nalpha
+    iopt[F._FCI_IOPT_INDEX["nbeta"]] = spec.nbeta
+    iopt[F._FCI_IOPT_INDEX["nroot"]] = spec.nroot
+    iopt[F._FCI_IOPT_INDEX["solver"]] = F._FCI_SOLVER_CODE["dense"]
+    iopt[F._FCI_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
+    iopt[F._FCI_IOPT_INDEX["maxmemory"]] = spec.max_memory
+    iopt[F._FCI_IOPT_INDEX["nthreads"]] = 1
+    dopt[F._FCI_DOPT_INDEX["eig_tol"]] = spec.eig_tol
+
+    active = np.ascontiguousarray(plan.active, dtype=np.int32)
+    core = (np.ascontiguousarray(plan.core, dtype=np.int32) if plan.core
+            else np.zeros(1, dtype=np.int32))
+    h_c = F._as_f64c(h)
+    v_c = F._as_f64c(v)
+    ndet = len(F._determinants(plan.nact, (spec.nalpha, spec.nbeta)))
+    energies = np.zeros(spec.nroot, dtype=np.float64)
+    civecs = np.zeros((ndet, spec.nroot), dtype=np.float64)
+    s2 = np.zeros(spec.nroot, dtype=np.float64)
+
+    status = int(lib.fci_solve(
+        ffi.cast("int32_t *", iopt.ctypes.data),
+        ffi.cast("double *", dopt.ctypes.data),
+        ffi.cast("int32_t *", active.ctypes.data),
+        ffi.cast("int32_t *", core.ctypes.data),
+        ffi.cast("double *", h_c.ctypes.data),
+        ffi.cast("double *", v_c.ctypes.data),
+        ffi.cast("double *", energies.ctypes.data),
+        ffi.cast("double *", civecs.ctypes.data),
+        ffi.cast("double *", s2.ctypes.data)))
+
+    assert status == spec.nroot
+    assert np.allclose(energies, ref_energies, rtol=0.0, atol=1.0e-10)
+
+
 def test_option_schema_matches_fortran():
     """The Python mirror of the iopt/dopt layout is the Fortran one."""
     from oqp.library.fci import _FCI_DOPT, _FCI_IOPT
