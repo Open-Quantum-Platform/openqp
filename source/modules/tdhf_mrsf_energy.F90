@@ -62,6 +62,7 @@ contains
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
+    use tagarray, only: TA_OK
 
     use types, only: information
     use strings, only: cstring, fstring
@@ -147,6 +148,13 @@ contains
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
+    !> Reported states (nstates) and the strictly wider window the Davidson
+    !> actually tracks and expands on (nsolve = nstates + nextra).
+    integer :: nsolve, nextra
+    character(len=32) :: slack_env
+    integer :: slack_stat, slack_val
+    integer(8), contiguous, pointer :: pair_irrep_probe(:)
+    integer(4) :: pair_irrep_stat
     logical :: roref = .false.
     logical :: uhfref = .false.
     logical :: debug_mode
@@ -256,16 +264,63 @@ contains
 
     if (mrst==1 ) then
       nstates = min(nstates, xvec_dim-1)
-      mxvec = min(maxvec*nstates, xvec_dim-1, infos%control%maxit_dav*nstates)
     else if (mrst==3) then
       nstates = min(nstates, xvec_dim-3)
-      mxvec = min(maxvec*nstates, xvec_dim-3, infos%control%maxit_dav*nstates)
     else if (mrst==5) then
       nstates = min(nstates, xvec_dim)
-      mxvec = min(maxvec*nstates, xvec_dim, infos%control%maxit_dav*nstates)
     end if
 
     infos%tddft%nstate = nstates
+
+    ! The Davidson expands only on the residuals of the roots it TRACKS.  When
+    ! the tracked set is the reported set, a symmetry block whose crude
+    ! diagonal estimate starts just above the reported window is never enriched:
+    ! its subspace stays at the dimension it was seeded with, its Rayleigh
+    ! quotient never descends, and a root that physically belongs inside the
+    ! window is simply absent while the run converges and exits 0 (issue #327).
+    !
+    ! Separating the two removes the mechanism: track nsolve = nstates + nextra
+    ! roots, expand on all of them, and report the lowest nstates.  Convergence
+    ! is still tested on the reported roots only, so the extra window costs
+    ! subspace but cannot turn a converging run into a non-converging one.
+    !
+    ! Measured minimum window needed for a correct reported set (GCC/OpenBLAS,
+    ! this tree): CH2O 6-31G MRSF singlet nstate=3 needs 4; the same deck as a
+    ! triplet at nstate=6 needs 8; CH3Br-BHHLYP-SOC nstate=8 needs 10.  The
+    ! default below covers all three with margin.
+    nextra = max(3, nstates/4)
+
+    ! Two independent mechanisms lose a root, and they need different remedies.
+    ! A block that is SEEDED but starts above the reported window is fixed by
+    ! the window slack above.  A block that is never seeded at all is not: the
+    ! guess picks the nvec smallest diagonal estimates, and a block whose
+    ! diagonal estimates are all large gets nothing, however wide the window.
+    ! mrinivec repairs that from the pair-irrep table, so when the table is
+    ! absent -- [symmetry] enabled=false -- the window has to absorb the job
+    ! instead, and it takes a wider one.  Measured on CH2O 6-31G MRSF with
+    ! symmetry off: a slack of 6 is the smallest that recovers the 1B1 root at
+    ! every nstate from 3 upward; 5 still loses it at nstate=3.
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep_probe, &
+                           status=pair_irrep_stat)
+    if (pair_irrep_stat /= TA_OK) nextra = max(nextra, 6)
+
+    call get_environment_variable('OQP_MRSF_DAVIDSON_SLACK', slack_env, status=slack_stat)
+    if (slack_stat == 0 .and. len_trim(slack_env) > 0) then
+      read(slack_env,*,iostat=slack_stat) slack_val
+      if (slack_stat == 0 .and. slack_val >= 0) nextra = slack_val
+    end if
+
+    if (mrst==1 ) then
+      nsolve = min(nstates + nextra, xvec_dim-1)
+      mxvec = min(maxvec*nsolve, xvec_dim-1, infos%control%maxit_dav*nsolve)
+    else if (mrst==3) then
+      nsolve = min(nstates + nextra, xvec_dim-3)
+      mxvec = min(maxvec*nsolve, xvec_dim-3, infos%control%maxit_dav*nsolve)
+    else if (mrst==5) then
+      nsolve = min(nstates + nextra, xvec_dim)
+      mxvec = min(maxvec*nsolve, xvec_dim, infos%control%maxit_dav*nsolve)
+    end if
+    nsolve = max(nstates, min(nsolve, mxvec))
 
     ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
     ! Every attempt to enlarge it perturbed converged results.  Raising the
@@ -284,7 +339,7 @@ contains
     ! outright under the restriction and reports all six correctly without it,
     ! while both SOC anchors reproduce their references either way (CH3Br
     ! 9.8e-10, H2O 1.6e-13).  See the victim-selection comment in mrinivec.
-    nvec = min(max(nstates,6), mxvec)
+    nvec = min(max(nsolve,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
     call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
@@ -328,8 +383,8 @@ contains
              bvec_mo_tmp(xvec_dim), &
              scr2(mxvec*mxvec), &
              scr3(nocca), &
-             qvec(xvec_dim,nstates), &
-             RNORM(nstates), &
+             qvec(xvec_dim,nsolve), &
+             RNORM(nsolve), &
              source=0.0_dp,stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
     allocate(trans(xvec_dim,2), &
@@ -801,19 +856,25 @@ contains
       call rparedms(bvec_mo,amo,amo,apb,amb,nvec,tamm_dancoff=.true.)
       call rpaeig(eex,vl_p,vr_p,apb,amb,scr2,tamm_dancoff=.true.)
       call rpavnorm(vr_p,vl_p,tamm_dancoff=.true.)
-      call rpaechk(eex,nvec,nstates,imax,tamm_dancoff=.true.)
+      call rpaechk(eex,nvec,nsolve,imax,tamm_dancoff=.true.)
 
       for_trnsf_b_vec = vr_p
-      call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nstates)
-      call sfqvec(qvec,xm,eex,nstates)
+!     Residuals and preconditioned corrections for the whole TRACKED window,
+!     not just the reported one: this is what keeps a block that starts above
+!     the reported window being enriched until its root descends into it.
+      call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nsolve)
+      call sfqvec(qvec,xm,eex,nsolve)
 
 !     Response-space symmetry blocking (no-op unless staged by pyoqp):
 !     confine each root's update to the dominant irrep of its Ritz vector.
-      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
-      call sym_response_project(infos, sym_ritz, qvec, nstates)
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nsolve))
+      call sym_response_project(infos, sym_ritz, qvec, nsolve)
+      call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
 
-      mxerr = maxval(rnorm)
+!     Convergence is judged on the REPORTED roots only.  The extra tracked
+!     roots exist to feed the subspace; demanding their convergence too would
+!     turn a converging run into a non-converging one for no gain.
+      mxerr = maxval(rnorm(1:nstates))
 
 !     Check convergence
       converged = mxerr<=cnvtol
@@ -823,7 +884,7 @@ contains
       if (nvec==mxvec) ierr = 1
       if (ierr/=0) exit
 
-      call rpanewb(nstates,bvec_mo,qvec,novec,nvec,ierr,tamm_dancoff=.true.)
+      call rpanewb(nsolve,bvec_mo,qvec,novec,nvec,ierr,tamm_dancoff=.true.)
 
   !   ierr=1 nvec over mxvec: not converged case
       if (ierr/=0) exit
@@ -863,6 +924,25 @@ contains
     if (ierr == 0 .and. allocated(sym_ritz)) &
       call mrsf_check_block_representation(infos, sym_ritz, nstates, &
                                            seeds_per_irrep)
+
+    ! The reported window can still cut a near-degenerate manifold in half.
+    ! That is not a solver defect, but "state N" is then not a well-separated
+    ! label: any change to the guess can swap which member lands in slot N
+    ! while both stay converged.  CH3Br-BHHLYP-SOC nstate=6 is exactly this --
+    ! its 6th and 7th singlets sit 9.4 meV apart.  Say so rather than let a
+    ! single scalar be treated as a stable reference.
+    if (ierr == 0 .and. nsolve > nstates .and. nstates >= 1) then
+      if (abs(eex(nstates+1) - eex(nstates)) < 1.0e-3_dp) then
+        write(iw,'(/,2X,"MRSF WARNING: the reported window ends inside a ", &
+          &"near-degenerate manifold: state ",I0," (",F14.8,") and the first ", &
+          &"unreported root (",F14.8,") differ by ",ES10.3," Hartree.  Which ", &
+          &"member occupies slot ",I0," is not robust against a change of ", &
+          &"initial guess; request more states, or match this manifold by ", &
+          &"overlap or irrep rather than by root index.",/)') &
+          nstates, eex(nstates), eex(nstates+1), &
+          abs(eex(nstates+1)-eex(nstates)), nstates
+      end if
+    end if
 
     call flush(iw)
 
