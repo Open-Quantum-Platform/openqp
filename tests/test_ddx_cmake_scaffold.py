@@ -74,6 +74,8 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("q_cav_norm", source)
         self.assertIn("ddx_get_xi", source)
         self.assertIn("ddx_get_cavity", source)
+        self.assertIn("OQP_PI", source)
+        self.assertNotIn("M_PI", source)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@
 
 #ifdef OQP_ENABLE_DDX
 #include "ddx.h"
+static const double OQP_PI = 3.141592653589793238462643383279502884;
 #endif
 
 static void set_message(char* message, int message_len, const char* text) {
@@ -146,7 +147,7 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
   }
 
   for (int i = 0; i < nsph; ++i) {
-    solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
+    solute_multipoles[i] = charges[i] / sqrt(4.0 * OQP_PI);
   }
 
   electrostatics = ddx_allocate_electrostatics(model, error);
@@ -338,7 +339,7 @@ int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
   }
 
   for (int i = 0; i < nsph; ++i) {
-    solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
+    solute_multipoles[i] = charges[i] / sqrt(4.0 * OQP_PI);
   }
 
   ddx_multipole_psi(model, nbasis, nsph, nmultipoles, solute_multipoles, psi,
@@ -562,7 +563,7 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
   }
 
   for (int i = 0; i < nsph; ++i) {
-    solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
+    solute_multipoles[i] = charges[i] / sqrt(4.0 * OQP_PI);
   }
 
   ddx_multipole_psi(model, nbasis, nsph, nmultipoles, solute_multipoles, psi,
@@ -931,7 +932,7 @@ int oqp_ddx_pcm_solve(int natom, const double* xyz_bohr, const double* charges,
    * deferred refinement.
    */
   for (int i = 0; i < nsph; ++i) {
-    solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
+    solute_multipoles[i] = charges[i] / sqrt(4.0 * OQP_PI);
   }
   ddx_multipole_psi(model, nbasis, nsph, nmultipoles, solute_multipoles, psi,
                     error);
@@ -1395,4 +1396,3 @@ cleanup:
   return status;
 #endif
 }
-
