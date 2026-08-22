@@ -49,6 +49,7 @@ type=huckel
 [scf]
 multiplicity=1
 type=rhf
+verbose=2
 
 [properties]
 scf_prop=nmr

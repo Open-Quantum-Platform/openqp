@@ -85,7 +85,7 @@ contains
     real(kind=8), allocatable :: sig_para_c(:,:,:), siso_para_c(:), siso_tot_c(:)
     real(kind=8) :: scale_exch, pb_asym, jnorm, knorm
     integer :: nvir, lvir
-    logical :: is_dft
+    logical :: is_dft, nmr_debug
     real(kind=8) :: o(3), com(3), trg, pso_diag_max, pso_asym_max
     integer :: nat, i, c, t, s, nocc, nmo
 
@@ -287,13 +287,16 @@ contains
       end do
     end block
 
-    ! ---- Phase-0 validation gates (reported as diagnostics) ----
-    write(iw,'(/4x,a)') 'Phase-0 magnetic-response gates:'
-    write(iw,'(4x,a,es12.3)') '  gate0  max|P^B + (P^B)^T|        = ', pb_asym
-    write(iw,'(4x,a,es12.3)') '  gate1  ||J(P^B)|| (Coulomb)      = ', jnorm
-    write(iw,'(4x,a,es12.3)') '  gate2  ||K(P^B)|| (exact exch.)  = ', knorm
-    write(iw,'(4x,a,2es12.3)') '  PSO    max|diag|, max|A+A^T|    = ', &
-           pso_diag_max, pso_asym_max
+    ! ---- Phase-0 validation gates (verbose>1 only; consumed by the NMR tests) ----
+    nmr_debug = infos%control%verbose > 1
+    if (nmr_debug) then
+      write(iw,'(/4x,a)') 'Phase-0 magnetic-response gates:'
+      write(iw,'(4x,a,es12.3)') '  gate0  max|P^B + (P^B)^T|        = ', pb_asym
+      write(iw,'(4x,a,es12.3)') '  gate1  ||J(P^B)|| (Coulomb)      = ', jnorm
+      write(iw,'(4x,a,es12.3)') '  gate2  ||K(P^B)|| (exact exch.)  = ', knorm
+      write(iw,'(4x,a,2es12.3)') '  PSO    max|diag|, max|A+A^T|    = ', &
+             pso_diag_max, pso_asym_max
+    end if
     call flush(iw)
 
     deallocate(amom, lfull, gdia, coords, sig_dia, siso_dia)

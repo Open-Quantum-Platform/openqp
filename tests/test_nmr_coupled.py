@@ -60,7 +60,7 @@ def _input(functional):
     grid = "[dftgrid]\nrad_type=becke\n\n" if functional else ""
     return (f"[input]\nsystem=\n{GEOM}\ncharge=0\nruntype=energy\n{fxc}"
             f"basis=sto-3g\nmethod=hf\n\n[guess]\ntype=huckel\n\n"
-            f"[scf]\nmultiplicity=1\ntype=rhf\n\n{grid}"
+            f"[scf]\nmultiplicity=1\ntype=rhf\nverbose=2\n\n{grid}"
             f"[properties]\nscf_prop=nmr\n")
 
 
