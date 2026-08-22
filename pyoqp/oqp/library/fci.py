@@ -1701,6 +1701,61 @@ def resolve_ci_solve(
     )
 
 
+#: Relative window that decides which amplitudes count as "the largest" when
+#: :func:`canonicalize_ci_phase` picks the amplitude whose sign it fixes.
+#: Symmetry-equivalent determinants carry mathematically equal weights that a
+#: floating-point solve reproduces only to ~1e-14 relative, so an exact
+#: ``argmax`` over ``|c|`` would let round-off elect a different representative
+#: -- and therefore a different sign -- from one run to the next, which is the
+#: whole freedom this convention exists to remove.  Mirrored by
+#: ``FCI_PHASE_TIE_RTOL`` in ``source/modules/fci_driver.F90``.
+_CI_PHASE_TIE_RTOL = 1.0e-8
+
+
+def canonicalize_ci_phase(civecs: np.ndarray) -> np.ndarray:
+    """Fix the arbitrary overall sign of each CI vector, in place.
+
+    An eigenvector is determined only up to ``|Psi> -> -|Psi>``, and which of
+    the two a diagonalization hands back is not a property of the calculation:
+    it follows the Davidson start vector, the LAPACK implementation, and the
+    order the OpenMP reductions happen to accumulate in.  H4_MCQDPT2 returned
+    ``+6.085296e-03`` for the same Heff off-diagonal on one and two threads of
+    one build and ``-6.085296e-03`` on four, with the energies identical to
+    1e-10.  Everything LINEAR in the CI vector inherits that freedom; the
+    multistate CASPT2 effective Hamiltonian, whose off-diagonal carries the
+    product of two root phases, is where it surfaced -- as a 2 x 6.085e-03
+    Hartree "regression" on a calculation that had not moved.
+
+    Convention: the amplitude of largest magnitude is positive.  Ties -- the
+    rule rather than the exception in a symmetric molecule, where
+    symmetry-equivalent determinants carry equal weight -- go to the lowest
+    determinant index, selected within :data:`_CI_PHASE_TIE_RTOL` so that
+    round-off between two mathematically equal amplitudes cannot elect a
+    different representative from one run to the next.  ``canonical_phase()``
+    in ``source/modules/fci_driver.F90`` applies the identical rule to the
+    vectors the native engine returns, and
+    ``tests/test_fci_solve.py::test_native_solve_matches_python_driver`` pins
+    the two together by requiring a SIGNED overlap of +1.
+
+    ``civecs`` is ``(ndet, nroot)``.  The convention is idempotent, so applying
+    it to already-canonical vectors is a no-op.
+    """
+    vecs = np.asarray(civecs)
+    if vecs.ndim != 2 or vecs.size == 0:
+        return civecs
+    if not vecs.flags.writeable:
+        vecs = vecs.copy()
+    magnitudes = np.abs(vecs)
+    # A wholly zero column falls out of the same expression: its window admits
+    # every row, the leading amplitude is 0, and 0 is not negative.
+    window = magnitudes.max(axis=0) * (1.0 - _CI_PHASE_TIE_RTOL)
+    lead = np.argmax(magnitudes >= window, axis=0)
+    flip = vecs[lead, np.arange(vecs.shape[1])] < 0.0
+    if flip.any():
+        vecs[:, flip] *= -1.0
+    return vecs
+
+
 def solve_fci(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -1941,7 +1996,7 @@ def solve_fci(
                     raise
                 solve_nroot = min(ndet, max(solve_nroot + 1, 2 * solve_nroot))
 
-    return selected_eigvals + ecore, selected_eigvecs
+    return selected_eigvals + ecore, canonicalize_ci_phase(selected_eigvecs)
 
 
 def _unpack_lower_triangle(packed: np.ndarray, n: int) -> np.ndarray:

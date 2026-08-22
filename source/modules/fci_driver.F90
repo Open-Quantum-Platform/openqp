@@ -146,6 +146,16 @@ module fci_driver_mod
   ! bits nact..2*nact-1), so the active space is capped at 31 orbitals.
   integer, parameter :: FCI_MAX_NSPIN = 62
 
+  ! Relative window that decides which amplitudes count as "the largest" when
+  ! the canonical phase below is chosen.  Symmetry-equivalent determinants
+  ! carry mathematically equal weights that a floating-point solve reproduces
+  ! only to ~1e-14 relative, so an exact search for the single biggest |c|
+  ! would let round-off elect a different representative -- and therefore a
+  ! different sign -- from one run to the next, which is the whole freedom this
+  ! convention exists to remove.  Mirrored by _CI_PHASE_TIE_RTOL in
+  ! pyoqp/oqp/library/fci.py.
+  real(dp), parameter :: FCI_PHASE_TIE_RTOL = 1.0e-8_dp
+
 contains
 
   !> Complete CI solve: active space -> determinants -> eigenpairs -> roots.
@@ -336,7 +346,8 @@ contains
     do k = 1, nroot
       r = keep(k)
       energies(k - 1) = evals(r) + ecore
-      call scatter_column(ndet, evecs, r, nroot, k, civecs)
+      call scatter_column(ndet, evecs, r, nroot, k, &
+                          canonical_phase(ndet, evecs, r), civecs)
     end do
 
     if (want_s2 /= 0) then
@@ -1534,17 +1545,63 @@ contains
     end do
   end subroutine pack_columns
 
-  !> Write column-major eigenvector `col` into slot `slot` of a C-order
-  !> [ndet, nroot] output buffer.
-  subroutine scatter_column(ndet, evecs, col, nroot, slot, out)
+  !> Canonical overall sign of eigenvector `col` of `evecs`.
+  !>
+  !> An eigenvector is determined only up to |Psi> -> -|Psi>, and which of the
+  !> two a diagonalization hands back is not a property of the calculation: it
+  !> follows the Davidson start vector and the order the OpenMP reductions
+  !> happen to accumulate in.  H4_MCQDPT2 returned +6.085296e-03 for the same
+  !> Heff off-diagonal on one and two threads of this build and -6.085296e-03
+  !> on four, with the energies identical to 1e-10 -- a 2 x 6.085e-03 Hartree
+  !> "regression" on a calculation that had not moved.  Everything LINEAR in
+  !> the CI vector inherits that freedom; the multistate CASPT2 effective
+  !> Hamiltonian, whose off-diagonal carries the product of two root phases, is
+  !> where it surfaced.
+  !>
+  !> Convention: the amplitude of largest magnitude is positive.  Ties -- the
+  !> rule rather than the exception in a symmetric molecule, where
+  !> symmetry-equivalent determinants carry equal weight -- go to the lowest
+  !> determinant index, selected within FCI_PHASE_TIE_RTOL so that round-off
+  !> between two mathematically equal amplitudes cannot elect a different
+  !> representative from one run to the next.  canonicalize_ci_phase() in
+  !> pyoqp/oqp/library/fci.py applies the identical rule to the Python driver's
+  !> vectors, and tests/test_fci_solve.py pins the two together.
+  pure function canonical_phase(ndet, evecs, col) result(phase)
+    integer(i8), intent(in) :: ndet
+    real(dp), intent(in) :: evecs(*)
+    integer, intent(in) :: col
+    real(dp) :: phase
+    real(dp) :: peak, window
+    integer(i8) :: j, base
+    base = (int(col, i8) - 1_i8) * ndet
+    phase = 1.0_dp
+    peak = 0.0_dp
+    do j = 1_i8, ndet
+      peak = max(peak, abs(evecs(base + j)))
+    end do
+    ! A wholly zero vector has no phase to fix.
+    if (peak <= 0.0_dp) return
+    window = peak * (1.0_dp - FCI_PHASE_TIE_RTOL)
+    do j = 1_i8, ndet
+      if (abs(evecs(base + j)) >= window) then
+        if (evecs(base + j) < 0.0_dp) phase = -1.0_dp
+        return
+      end if
+    end do
+  end function canonical_phase
+
+  !> Write column-major eigenvector `col`, times `phase`, into slot `slot` of a
+  !> C-order [ndet, nroot] output buffer.
+  subroutine scatter_column(ndet, evecs, col, nroot, slot, phase, out)
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: evecs(*)
     integer, intent(in) :: col, nroot, slot
+    real(dp), intent(in) :: phase
     real(dp), intent(out) :: out(0:*)
     integer(i8) :: j, base
     base = (int(col, i8) - 1_i8) * ndet
     do j = 1_i8, ndet
-      out((j - 1_i8) * int(nroot, i8) + int(slot, i8) - 1_i8) = evecs(base + j)
+      out((j - 1_i8) * int(nroot, i8) + int(slot, i8) - 1_i8) = phase * evecs(base + j)
     end do
   end subroutine scatter_column
 

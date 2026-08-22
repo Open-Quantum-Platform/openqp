@@ -146,8 +146,13 @@ def test_native_solve_matches_python_driver(norb, nelec, frozen, nact, nroot, so
 
     assert np.allclose(e_n, e_p, rtol=0.0, atol=1.0e-10)
     assert np.allclose(s2_n, s2_p, rtol=0.0, atol=1.0e-9)
-    # CI vectors are defined only up to a sign
-    overlap = np.abs(np.sum(c_n * c_p, axis=0))
+    # A CI vector is defined only up to a sign, so both engines impose the SAME
+    # canonical phase on the way out -- canonical_phase() in fci_driver.F90 and
+    # canonicalize_ci_phase() in fci.py.  The overlap is therefore required to
+    # be +1, not |1|: an unsigned check here is what let the two drift apart
+    # and let a thread-count change flip the sign of a multistate CASPT2
+    # off-diagonal.
+    overlap = np.sum(c_n * c_p, axis=0)
     assert np.allclose(overlap, 1.0, atol=1.0e-8)
 
 
@@ -164,7 +169,72 @@ def test_native_target_spin_matches_python_driver(solver, target):
         nroot=1, want_s2=False, use_target_spin=True,
         active_section="[cas]", ci_section="[ci]")
     assert np.allclose(e_n, e_p, rtol=0.0, atol=1.0e-10)
-    assert np.allclose(np.abs(np.sum(c_n * c_p, axis=0)), 1.0, atol=1.0e-8)
+    # signed, for the reason above: spin filtering must not lose the phase
+    assert np.allclose(np.sum(c_n * c_p, axis=0), 1.0, atol=1.0e-8)
+
+
+def test_canonical_ci_phase_makes_the_largest_amplitude_positive():
+    """The convention, stated directly."""
+    from oqp.library.fci import canonicalize_ci_phase
+
+    vecs = np.array([
+        [0.1, -0.2],
+        [-0.7, 0.3],
+        [0.3, -0.9],
+    ])
+    out = canonicalize_ci_phase(vecs.copy())
+    # column 0: |c| peaks at row 1 with -0.7 -> flipped
+    assert np.allclose(out[:, 0], [-0.1, 0.7, -0.3])
+    # column 1: |c| peaks at row 2 with -0.9 -> flipped
+    assert np.allclose(out[:, 1], [0.2, -0.3, 0.9])
+    # and applying it again changes nothing
+    assert np.allclose(canonicalize_ci_phase(out.copy()), out)
+
+
+def test_canonical_ci_phase_breaks_a_round_off_tie_by_determinant_index():
+    """Symmetry-equivalent amplitudes must not let round-off pick the phase.
+
+    Two determinants related by symmetry carry equal weight in exact
+    arithmetic and differ by ~1e-16 in a real solve.  An exact argmax over
+    |c| would follow that noise to whichever row happened to come out
+    fractionally larger -- and if the two have opposite signs, the vector
+    flips.  The tie window has to send both orderings to the same answer.
+    """
+    from oqp.library.fci import canonicalize_ci_phase
+
+    lo = np.array([[-0.5], [0.5 + 1.0e-16], [0.1]])
+    hi = np.array([[-0.5 - 1.0e-16], [0.5], [0.1]])
+    out_lo = canonicalize_ci_phase(lo.copy())
+    out_hi = canonicalize_ci_phase(hi.copy())
+    # row 0 is the lowest index inside the window, and it is negative in both
+    assert out_lo[0, 0] > 0.0 and out_hi[0, 0] > 0.0
+    assert np.allclose(out_lo, out_hi, atol=1.0e-15)
+
+
+def test_canonical_ci_phase_leaves_a_zero_vector_alone():
+    from oqp.library.fci import canonicalize_ci_phase
+
+    zeros = np.zeros((4, 2))
+    assert np.array_equal(canonicalize_ci_phase(zeros.copy()), zeros)
+
+
+@requires_driver
+@pytest.mark.parametrize("solver", ["dense", "davidson"])
+def test_native_roots_obey_the_canonical_phase(solver):
+    """The engine applies the convention, not just the Python fallback."""
+    from oqp.library import fci as F
+
+    plan, settings = _plan(6, (3, 3), frozen_core=0, active_orbitals=6,
+                           nroot=3, solver=solver)
+    h, v = _system(6, seed=31)
+    _energies, civecs, _ = F.solve_active_ci(
+        h, v, plan, 0.0, settings, nroot=3, want_s2=False,
+        use_target_spin=False, active_section="[cas]", ci_section="[ci]")
+
+    magnitudes = np.abs(civecs)
+    window = magnitudes.max(axis=0) * (1.0 - F._CI_PHASE_TIE_RTOL)
+    lead = np.argmax(magnitudes >= window, axis=0)
+    assert np.all(civecs[lead, np.arange(civecs.shape[1])] > 0.0)
 
 
 @requires_driver
