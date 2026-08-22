@@ -151,8 +151,6 @@ contains
     !> Reported states (nstates) and the strictly wider window the Davidson
     !> actually tracks and expands on (nsolve = nstates + nextra).
     integer :: nsolve, nextra
-    character(len=32) :: slack_env
-    integer :: slack_stat, slack_val
     integer(8), contiguous, pointer :: pair_irrep_probe(:)
     integer(4) :: pair_irrep_stat
     logical :: roref = .false.
@@ -295,20 +293,26 @@ contains
     ! the window slack above.  A block that is never seeded at all is not: the
     ! guess picks the nvec smallest diagonal estimates, and a block whose
     ! diagonal estimates are all large gets nothing, however wide the window.
-    ! mrinivec repairs that from the pair-irrep table, so when the table is
-    ! absent -- [symmetry] enabled=false -- the window has to absorb the job
-    ! instead, and it takes a wider one.  Measured on CH2O 6-31G MRSF with
-    ! symmetry off: a slack of 6 is the smallest that recovers the 1B1 root at
-    ! every nstate from 3 upward; 5 still loses it at nstate=3.
+    ! mrinivec repairs that from the pair-irrep table, so when the repair does
+    ! not run the window has to absorb the job instead, and it takes a wider
+    ! one.  The table being staged is NOT the same as the repair running -- it
+    ! is staged by pyoqp whenever symmetry detection produced usable labels,
+    ! independently of this solve.  The repair is skipped in three cases:
+    !
+    !   * no table at all              -- [symmetry] enabled=false;
+    !   * ixcore_len /= 0              -- mrinivec exits its seed-coverage
+    !                                     block outright for an XAS solve;
+    !   * mrst == 5                    -- the quintet path goes through inivec,
+    !                                     which never sees the table.
+    !
+    ! Measured on CH2O 6-31G MRSF with symmetry off: a slack of 6 is the
+    ! smallest that recovers the 1B1 root at every nstate from 3 upward; 5
+    ! still loses it at nstate=3.
     call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep_probe, &
                            status=pair_irrep_stat)
-    if (pair_irrep_stat /= TA_OK) nextra = max(nextra, 6)
-
-    call get_environment_variable('OQP_MRSF_DAVIDSON_SLACK', slack_env, status=slack_stat)
-    if (slack_stat == 0 .and. len_trim(slack_env) > 0) then
-      read(slack_env,*,iostat=slack_stat) slack_val
-      if (slack_stat == 0 .and. slack_val >= 0) nextra = slack_val
-    end if
+    if (pair_irrep_stat /= TA_OK &
+        .or. infos%tddft%ixcore_len /= 0 &
+        .or. mrst == 5) nextra = max(nextra, 6)
 
     if (mrst==1 ) then
       nsolve = min(nstates + nextra, xvec_dim-1)
@@ -871,10 +875,20 @@ contains
       call sym_response_project(infos, sym_ritz, qvec, nsolve)
       call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
 
-!     Convergence is judged on the REPORTED roots only.  The extra tracked
-!     roots exist to feed the subspace; demanding their convergence too would
-!     turn a converging run into a non-converging one for no gain.
+!     Convergence is judged on the REPORTED roots -- demanding that every extra
+!     tracked root converge too would turn a converging run into a
+!     non-converging one for no gain.  But an extra pair sitting above the
+!     reporting boundary may still descend past it, and exiting while it can
+!     would recreate exactly the loss this change removes.  For a symmetric
+!     operator the eigenvalue a Ritz pair approximates lies within ||r|| of its
+!     Ritz value, so a pair whose Ritz value is further than ||r|| above the
+!     boundary cannot cross it; anything closer keeps the loop alive.
+!     rnorm holds ||r||^2 (sfresvec stores dot_product(q,q)).
       mxerr = maxval(rnorm(1:nstates))
+      do ivec = nstates + 1, nsolve
+        if (eex(ivec) - sqrt(rnorm(ivec)) <= eex(nstates)) &
+          mxerr = max(mxerr, rnorm(ivec))
+      end do
 
 !     Check convergence
       converged = mxerr<=cnvtol
