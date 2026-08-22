@@ -40,3 +40,37 @@ index 9530e53..7c9d6e2 100644
          & sphere_centres, sphere_radii, logfile, ddx_model%params, ddx_error)
      if (ddx_error%flag .ne. 0) then
          return
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 23d6706..b7d99e3 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -63,6 +63,7 @@
+ #
+ # Library build
+ #
++option(DDX_DRIVER "Build the ddX command-line driver" ON)
+ option(DDX_LIBRARY "Build ddx library" ON)
+ if (DDX_LIBRARY)
+     add_library(ddx SHARED ${SRC_DDX})
+@@ -74,8 +75,10 @@
+         target_link_libraries(ddx PRIVATE gcov)
+     endif()
+ 
++    if (DDX_DRIVER)
+     add_executable(ddx_driver ddx_driver.f90)
+     target_link_libraries(ddx_driver PUBLIC ddx)
++    endif()
+ 
+     #
+     # Installation rules
+@@ -84,7 +87,9 @@
+ 
+     # Install library, binaries and headers
+     install(TARGETS ddx EXPORT ddXTargets)
++    if (DDX_DRIVER)
+     install(TARGETS ddx_driver)
++    endif()
+     install(FILES ddx.h TYPE INCLUDE)
+     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/" TYPE INCLUDE FILES_MATCHING PATTERN "*.mod")
+     target_include_directories(ddx INTERFACE $<INSTALL_INTERFACE:include>)
