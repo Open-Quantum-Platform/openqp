@@ -112,7 +112,7 @@ contains
     integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
     integer(4) :: status
-    logical :: is_dft, open_shell, iw_open
+    logical :: is_dft, open_shell, iw_open, giao_debug
     real(kind=dp) :: tol, scale_exch
 
     real(kind=dp), allocatable :: h10p(:,:), s10p(:,:)            ! packed (nbf2,3)
@@ -347,32 +347,35 @@ contains
       nmrout(5*(iat-1)+5) = nmrout(5*(iat-1)+1) + nmrout(5*(iat-1)+3)
     end do
 
-    ! --- Emit parseable records ---
+    ! --- Emit parseable records (verbose>1 only; consumed by the GIAO tests) ---
+    giao_debug = infos%control%verbose > 1
     inquire(unit=iw, opened=iw_open)
     if (.not. iw_open) open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao shielding (ppm)'
-    write(iw,'(A,1X,I0)') 'GIAO_SHIELDING_DEBUG_NATOM', nat
-    write(iw,'(A,1X,F10.6)') 'GIAO_SHIELDING_DEBUG_CX', scale_exch
-    do iat = 1, nat
-      do t = 1, 3
-        do s = 1, 3
-          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_UNC', &
-            iat, t, s, sig_u(t,s,iat)
-          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_CPL', &
-            iat, t, s, sig_c(t,s,iat)
-          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_DIA', &
-            iat, t, s, sig_dia(t,s,iat)
-          write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_TOTAL', &
-            iat, t, s, sig_tot(t,s,iat)
+    if (giao_debug) then
+      write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao shielding (ppm)'
+      write(iw,'(A,1X,I0)') 'GIAO_SHIELDING_DEBUG_NATOM', nat
+      write(iw,'(A,1X,F10.6)') 'GIAO_SHIELDING_DEBUG_CX', scale_exch
+      do iat = 1, nat
+        do t = 1, 3
+          do s = 1, 3
+            write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_UNC', &
+              iat, t, s, sig_u(t,s,iat)
+            write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_PARA_CPL', &
+              iat, t, s, sig_c(t,s,iat)
+            write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_DIA', &
+              iat, t, s, sig_dia(t,s,iat)
+            write(iw,'(A,1X,I0,1X,I0,1X,I0,1X,ES24.16)') 'GIAO_SHIELDING_DEBUG_TOTAL', &
+              iat, t, s, sig_tot(t,s,iat)
+          end do
         end do
+        write(iw,'(A,1X,I0,4(1X,ES24.16))') 'GIAO_SHIELDING_DEBUG_ISO', iat, &
+          (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
+          (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0, &
+          (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0, &
+          (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
       end do
-      write(iw,'(A,1X,I0,4(1X,ES24.16))') 'GIAO_SHIELDING_DEBUG_ISO', iat, &
-        (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
-        (sig_c(1,1,iat)+sig_c(2,2,iat)+sig_c(3,3,iat))/3.0d0, &
-        (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0, &
-        (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
-    end do
-    write(iw,'(A)') 'GIAO_SHIELDING_DEBUG_END'
+      write(iw,'(A)') 'GIAO_SHIELDING_DEBUG_END'
+    end if
 
     ! --- Human-readable production table (GIAO isotropic shielding) ---
     write(iw,'(2/)')
