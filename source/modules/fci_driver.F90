@@ -427,7 +427,14 @@ contains
     end do
 
     if (want_s2 /= 0) then
-      if (allocated(s2_win)) then
+      ! `mult /= 0`, not merely `allocated(s2_win)`: an irrep-only request
+      ! (mult == 0, target_irrep /= 0) allocates s2_win as a ZEROED placeholder
+      ! for select_by_spin_and_irrep, which does not read it.  Keying on
+      ! allocation alone therefore reported <S^2> = 0 for every root of an
+      ! irrep-filtered solve -- H2/STO-3G FCI with irrep=b1u returned the
+      ! triplet at -0.53077 labelled a singlet.  Only mult /= 0 means the
+      ! window was really classified.
+      if (mult /= 0 .and. allocated(s2_win)) then
         ! the spin diagnostics already ran on the root window; the per-root
         ! accumulation is independent, so the subset values are bit-identical
         do k = 1, nroot

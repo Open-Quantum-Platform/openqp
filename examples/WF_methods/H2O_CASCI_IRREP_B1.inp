@@ -54,6 +54,10 @@ eig_tol=1.0e-10
 integral_backend=native
 target_spin=any
 irrep=b1
+# Explicit rather than left at the 0.5 default: these roots are exact symmetry
+# eigenstates, so a demanding threshold is met, and the keyword gets covered by
+# a run instead of by a unit test alone.
+irrep_min_purity=0.9
 
 [symmetry]
 enabled=true
