@@ -203,6 +203,16 @@ REGISTRY = (
     # The sign is therefore a property of the calculation again, and a flip is
     # a real regression rather than a coin toss.
     RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
+    # Determinant-CI roots and their <S^2>.  Not `required`, as above: the
+    # existing FCI/CASCI references predate the keys.  <S^2> is compared
+    # because inside a degenerate cluster it is the ONLY thing that separates
+    # the roots -- a singlet and a triplet there have the same energy to
+    # solver precision, so an energy-only reference passes whichever one a
+    # target_spin request returns.
+    RegKey('fci_energies', runtypes='*', required=False),
+    RegKey('fci_s2', runtypes='*', required=False),
+    RegKey('casci_energies', runtypes='*', required=False),
+    RegKey('casci_s2', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
