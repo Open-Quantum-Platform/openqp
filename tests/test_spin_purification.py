@@ -13,10 +13,14 @@ bits norb..2*norb-1, which is the layout fci_sigma_strings builds and reads.
 import numpy as np
 import pytest
 
+import oqp.library.fci as fci_module
 from oqp.library.fci import (
+    ActiveSpacePlan,
+    FCISettings,
     compute_s2,
     degenerate_clusters,
     s2_matrix,
+    solve_active_ci,
     spin_label_diagnosis,
     spin_purify_degenerate_clusters,
 )
@@ -114,6 +118,47 @@ def test_already_pure_degenerate_cluster_is_not_rotated():
     assert not changed
     assert coeffs == pytest.approx(block)
     assert sorted(np.round(s2, 10)) == [0.0, 2.0]
+
+
+def test_native_engine_results_are_purified_too():
+    """solve_active_ci purifies the NATIVE result, not just the Python fallback.
+
+    The production path returns from _lib_fci_solve; if purification ran only
+    after the solve_fci fallback, the compiled engine would still publish
+    spin-mixed roots (the first Codex P1 on PR #367).  The engine is faked
+    here to return the issue's mixed pair, in the determinant order
+    _determinants produces -- the same order the real engine is pinned to by
+    tests/test_fci_solve.py.
+    """
+    plan = ActiveSpacePlan(norb=NORB, active=(0, 1), core=(), nelec=NELEC,
+                           metadata={})
+    settings = FCISettings(nroot=2, active_electrons=NELEC,
+                           active_orbitals=NORB)
+    mixed = _open_shell_block()
+
+    def fake_native(h1e, eri, plan_, spec, *, nthreads, want_s2,
+                    use_target_spin):
+        return (np.array([-2.0, -2.0]), np.array(mixed, copy=True),
+                np.array([1.0, 1.0]) if want_s2 else None)
+
+    original = fci_module._lib_fci_solve
+    fci_module._lib_fci_solve = fake_native
+    try:
+        energies, coeffs, s2 = solve_active_ci(
+            -np.eye(NORB), np.zeros((NORB,) * 4), plan, 0.0, settings,
+            nroot=2, want_s2=True)
+    finally:
+        fci_module._lib_fci_solve = original
+
+    assert energies == pytest.approx([-2.0, -2.0])
+    assert sorted(np.round(s2, 10)) == [0.0, 2.0]
+    assert not spin_label_diagnosis(
+        s2, np.rint(np.sqrt(1.0 + 4.0 * np.asarray(s2))).astype(int), NELEC)
+    root = 1.0 / np.sqrt(2.0)
+    for column in range(2):
+        weights = np.abs(coeffs[:, column])
+        assert weights[OPEN_A] == pytest.approx(root)
+        assert weights[OPEN_B] == pytest.approx(root)
 
 
 def test_cluster_grouping_uses_the_tolerance():

@@ -586,8 +586,12 @@ class SpinLabelAmbiguityError(RuntimeError):
     """A CI root's <S^2> is not that of any spin eigenstate.
 
     Deliberately NOT a ValueError: the target_spin call sites retry with more
-    roots when the filter raises ValueError, and solving for more roots cannot
-    make a spin-mixed vector spin-pure.
+    roots when the filter raises ValueError, and for a mixed root whose full
+    degenerate manifold is already inside the window purification has run and
+    failed, so more roots cannot help.  The ONE case where widening does help
+    -- the window boundary cut a degenerate manifold, so purification saw a
+    truncated cluster -- is recognized at the call site by the mixed root
+    lying at the window's edge, and retried there explicitly.
     """
 
 
@@ -2869,44 +2873,47 @@ def solve_active_ci(
         use_target_spin=use_target_spin,
     )
     if native is not None:
-        return native
-
-    h_act, eri_act, active_nelec, ecore_act = apply_active_space(
-        h1e, eri, plan, ecore)
-    energies, coeffs = solve_fci(
-        h_act, eri_act, active_nelec,
-        ecore=ecore_act,
-        nroot=spec.nroot,
-        max_det=spec.max_det,
-        max_memory=spec.max_memory,
-        eig_tol=spec.eig_tol,
-        integral_cutoff=spec.integral_cutoff,
-        solver=settings.solver,
-        davidson_maxiter=spec.davidson_maxiter,
-        davidson_subspace=spec.davidson_subspace,
-        target_spin=spec.target_spin,
-        active_section=active_section,
-        ci_section=ci_section,
-    )
+        energies, coeffs, s2 = native
+        active_nelec = (spec.nalpha, spec.nbeta)
+    else:
+        h_act, eri_act, active_nelec, ecore_act = apply_active_space(
+            h1e, eri, plan, ecore)
+        energies, coeffs = solve_fci(
+            h_act, eri_act, active_nelec,
+            ecore=ecore_act,
+            nroot=spec.nroot,
+            max_det=spec.max_det,
+            max_memory=spec.max_memory,
+            eig_tol=spec.eig_tol,
+            integral_cutoff=spec.integral_cutoff,
+            solver=settings.solver,
+            davidson_maxiter=spec.davidson_maxiter,
+            davidson_subspace=spec.davidson_subspace,
+            target_spin=spec.target_spin,
+            active_section=active_section,
+            ci_section=ci_section,
+        )
+        s2 = None
     # Both engines converge here, so this is the one place a spin-mixed
     # degenerate subspace can be resolved once and have the native and Python
     # paths agree by construction rather than by keeping two implementations in
-    # step.  Skipped entirely when no two roots are degenerate, which is the
+    # step.  The native civecs are in the same determinant order _determinants
+    # produces (pinned by tests/test_fci_solve.py), so one purification serves
+    # both.  Skipped entirely when no two roots are degenerate, which is the
     # common case and costs one pass over the energies.
-    s2 = None
     dets_active = None
     if any(len(c) > 1 for c in degenerate_clusters(energies)):
         dets_active = _determinants(plan.nact, active_nelec)
         coeffs, purified_s2, _mult, changed = spin_purify_degenerate_clusters(
             energies, coeffs, dets_active, plan.nact, active_nelec)
-        if changed and want_s2:
-            s2 = purified_s2
+        if changed:
+            s2 = purified_s2 if want_s2 else None
     if want_s2 and s2 is None:
         if dets_active is None:
             dets_active = _determinants(plan.nact, active_nelec)
         s2, _multiplicity = fci_spin_diagnostics(
             coeffs, dets_active, plan.nact, active_nelec)
-    return energies, coeffs, s2
+    return energies, coeffs, (s2 if want_s2 else None)
 
 
 class FCI:
@@ -3002,6 +3009,22 @@ class FCI:
                         nelec=nelec,
                     )
                     break
+                except SpinLabelAmbiguityError:
+                    # A mixed root strictly inside the window means its whole
+                    # degenerate manifold was solved and purification still
+                    # failed -- more roots cannot help.  A mixed root AT the
+                    # window's edge means the window may have cut the manifold,
+                    # so purification saw a truncated cluster; widening closes
+                    # it.
+                    problems = spin_label_diagnosis(s2, multiplicity, nelec)
+                    at_edge = any(
+                        abs(float(energies[root]) - float(energies[-1]))
+                        <= DEGENERACY_TOLERANCE
+                        for root, _s2v, _m, _why in problems
+                    )
+                    if not at_edge or solve_nroot >= determinant_count:
+                        raise
+                    solve_nroot = min(determinant_count, max(solve_nroot + 1, 2 * solve_nroot))
                 except ValueError:
                     if solve_nroot >= determinant_count:
                         raise
