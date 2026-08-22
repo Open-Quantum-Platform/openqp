@@ -227,7 +227,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     assert len(checked) == 357
 
 
-def test_geometric_backend_is_canonical_only_through_opt_driver_options():
+def test_concise_geometry_drivers_reject_legacy_backend_selectors():
     oqp_input = _load_oqp_input()
 
     assert oqp_input.LEGACY_ONLY_SCHEMA_KEYS == {
@@ -238,10 +238,15 @@ def test_geometric_backend_is_canonical_only_through_opt_driver_options():
         }),
         "neb": frozenset({"k", "maxg", "avgg", "climb", "align", "optep"}),
     }
-    spec = oqp_input.parse_canonical_oqp(
-        'dft/pbe0/def2-svp opt(S0,lib=geometric,coordsys=dlc) geom="h2o.xyz"'
-    )
-    assert oqp_input.lower_to_legacy(spec)["optimize"]["lib"] == "geometric"
+    for selector in ("lib=oqp", "lib=geometric"):
+        try:
+            oqp_input.parse_canonical_oqp(
+                f'dft/pbe0/def2-svp opt(S0,{selector}) geom="h2o.xyz"'
+            )
+        except oqp_input.OQPInputError as exc:
+            assert "traditional sectioned .inp" in str(exc)
+        else:
+            raise AssertionError("concise .oqp must not expose optimizer backends")
     try:
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp opt(S0) geometric(coordsys=tric) geom="h2o.xyz"'

@@ -9,13 +9,23 @@ geom="molecule.xyz"
 ```
 
 Every geometry driver implemented natively -- `opt`, `ts`, `meci`, `mecp`,
-`tci`, `neb`, `irc`, and `mep` -- uses the native optimizer when `lib` is
-omitted. The automatic native coordinate profile starts in DLC. A different
-backend remains an explicit opt-in; for example, `lib=geometric`:
+`tci`, `neb`, `irc`, and `mep` -- always uses the native optimizer. The
+automatic native coordinate profile starts in DLC. A different backend is
+available only through traditional sectioned `.inp` input; for example,
+`[optimize] lib=geometric`:
 
 ```text
-mrsf-tddftb(nstate=3) opt(S1,lib=geometric,maxit=100) dftb(model=dtcam)
-geom="molecule.xyz"
+[input]
+runtype=optimize
+method=tdhf
+functional=bhhlyp
+basis=6-31g*
+system=molecule.xyz
+
+[optimize]
+istate=1
+lib=geometric
+maxit=100
 ```
 
 ## Electronic recovery is local to one geometry
