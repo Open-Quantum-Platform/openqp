@@ -105,9 +105,17 @@ jobs:
         with:
           fetch-depth: 1
 
+      # This job is deliberately NOT given github_token, unlike the review job
+      # above. It holds contents: write and can push commits to a pull request
+      # branch, and a push authenticated with GITHUB_TOKEN does not start another
+      # workflow run (GitHub's recursion protection). The pull request would then
+      # display CI results belonging to the previous commit. Every check in this
+      # repository - CI.yml, pr-policy.yml, build_wheels.yml, docker-build.yml,
+      # windows-intel.yml - runs on push/pull_request and would be affected.
+      # Making this handler work needs a token that can trigger workflows, i.e. a
+      # GitHub App token or a PAT, which is a separate decision from the review
+      # gate. Until then it keeps failing the app-token exchange as before.
       - name: Claude Code Action Official
         uses: anthropics/claude-code-action@v1
         with:
-          # Same app-token-exchange workaround as the review job above.
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
