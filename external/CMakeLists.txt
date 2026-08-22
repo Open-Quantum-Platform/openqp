@@ -13,6 +13,10 @@ set(_OQP_LAPACK_VERSION "3.10.0")
 set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
 set(_OQP_FPRETTIFY_VERSION "0.3.7")
 set(_OQP_DDX_VERSION "0.8.0")
+# The first Windows-ready ddX integration can encounter an incomplete legacy
+# ddx install (headers/stamps without the runtime library). Keep the other
+# expensive externals reusable, but give ddX its own fresh cache directory.
+set(_OQP_DDX_CACHE_NAME "ddx-runtime1")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
 set(_OQP_MULTICHARGE_VERSION "0.3.0")
 set(_OQP_DFTD4_VERSION "3.7.0")
@@ -641,7 +645,7 @@ endif()
 # ddX's int32 C ABI while letting the core be int64.
 # ---------------------------------------------------------------------------
 if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
-    oqp_set_external_paths(DDX ddx
+    oqp_set_external_paths(DDX ${_OQP_DDX_CACHE_NAME}
         "${CMAKE_BINARY_DIR}/external/ddx"
         "${CMAKE_BINARY_DIR}/external/ddx/src/ddx"
         "${CMAKE_BINARY_DIR}/external/ddx/build-${CMAKE_Fortran_COMPILER_ID}"

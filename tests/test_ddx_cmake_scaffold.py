@@ -37,6 +37,8 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
 
     def test_autobuild_registers_distinct_windows_runtime_once(self):
         text = (ROOT / "external" / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn('set(_OQP_DDX_CACHE_NAME "ddx-runtime1")', text)
+        self.assertIn("oqp_set_external_paths(DDX ${_OQP_DDX_CACHE_NAME}", text)
         self.assertIn("if(NOT DDX_RUNTIME_LIBRARY STREQUAL DDX_LIBRARY)", text)
         self.assertIn("BUILD_BYPRODUCTS ${_ddx_build_byproducts}", text)
 
