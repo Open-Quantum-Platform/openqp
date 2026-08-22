@@ -3059,6 +3059,41 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
             np.ascontiguousarray(roots, dtype=np.int64))
 
 
+def fix_ci_phase(ci_vectors):
+    """Give each CI vector a deterministic sign.
+
+    Nothing in a CI solve fixes the sign of an eigenvector, so every signed
+    quantity built from one -- the off-diagonal elements of a multistate
+    effective Hamiltonian, non-adiabatic couplings, spin-orbit matrix elements
+    -- carries a sign that is not a property of the calculation.  It changes
+    with the BLAS, the thread count and the machine, which is why those
+    regression keys are marked ``phase_invariant``: comparing magnitudes hides
+    the symptom rather than removing it, and it also discards sign information
+    that IS physical (an individual ``H_IJ`` carries the arbitrary product
+    ``s_I s_J``, but a loop product ``H_IJ H_JK H_KI`` carries ``+1`` and is
+    meaningful).
+
+    The rule is the largest-magnitude coefficient positive, with near-ties
+    resolved by the LOWEST index: an exact tie is measure-zero, but two
+    coefficients agreeing to round-off are not, and picking by index keeps the
+    choice stable on platforms where ``argmax`` alone would not be.
+    """
+    coeffs = _real_array(ci_vectors, "CI vectors")
+    single = coeffs.ndim == 1
+    if single:
+        coeffs = coeffs[:, None]
+    out = np.array(coeffs, dtype=np.float64, copy=True)
+    for k in range(out.shape[1]):
+        col = out[:, k]
+        amax = float(np.abs(col).max()) if col.size else 0.0
+        if amax <= 0.0:
+            continue
+        pin = int(np.argmax(np.abs(col) >= amax * (1.0 - 1.0e-10)))
+        if col[pin] < 0.0:
+            out[:, k] = -col
+    return out[:, 0] if single else _as_f64c(out)
+
+
 def solve_active_ci(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -3179,6 +3214,9 @@ def solve_active_ci(
             dets_active = _determinants(plan.nact, active_nelec)
         s2, _multiplicity = fci_spin_diagnostics(
             coeffs, dets_active, plan.nact, active_nelec)
+    # Both engines converge here, so this is also the one place a deterministic
+    # sign can be imposed once and have the native and Python paths agree.
+    coeffs = fix_ci_phase(coeffs)
     if not want_roots:
         return energies, coeffs, (s2 if want_s2 else None)
     return energies, coeffs, (s2 if want_s2 else None), roots

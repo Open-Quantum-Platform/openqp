@@ -138,6 +138,9 @@ contains
     integer :: nbf, nbf2, xvec_dim
     integer :: mxvec, ist, jst, iend, nvec, novec
     integer :: iter, nv, iv, ivec
+    !> Deterministic-phase pinning for the reported response vectors.
+    integer :: iphase_pin, iphase_pair
+    real(kind=dp) :: phase_amax
     integer :: diag_index, i
     integer :: mxiter
     logical :: tamm_dancoff
@@ -961,6 +964,33 @@ contains
     call flush(iw)
 
     call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)
+
+!   Give each reported response vector a deterministic sign.  Nothing in the
+!   solve fixes the sign of an eigenvector, so every quantity built from one --
+!   transition dipoles, NACs, SOC matrix elements -- carries a sign that is not
+!   a property of the calculation: it changes with the BLAS, the thread count
+!   and the machine.  Measured on C4H6_BHHLYP_UMRSFTDDFT_ENERGY, where rerunning
+!   an unmodified tree reproduces every |mu| to 1e-9 while the stored vectors
+!   come back sign-flipped (max|d mu| = 4.658 against the committed file).
+!
+!   The rule is the largest-magnitude amplitude positive, with near-ties
+!   resolved by the LOWEST index: an exact tie is measure-zero, but two
+!   amplitudes agreeing to round-off are not, and picking by index keeps the
+!   choice stable across platforms where argmax alone would not be.
+    do ist = 1, nstates
+      phase_amax = maxval(abs(bvec_mo(:,ist)))
+      if (phase_amax <= 0.0_dp) cycle
+      iphase_pin = 0
+      do iphase_pair = 1, xvec_dim
+        if (abs(bvec_mo(iphase_pair,ist)) >= phase_amax*(1.0_dp - 1.0e-10_dp)) then
+          iphase_pin = iphase_pair
+          exit
+        end if
+      end do
+      if (iphase_pin > 0) then
+        if (bvec_mo(iphase_pin,ist) < 0.0_dp) bvec_mo(:,ist) = -bvec_mo(:,ist)
+      end if
+    end do
 
     select case (mrst)
       case(1)
