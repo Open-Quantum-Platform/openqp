@@ -719,6 +719,8 @@ def _fold_native_section_into_driver(
         raise OQPInputError("Duplicate modifier/section call: oqp")
 
     native = native_calls[0]
+    if native.args:
+        raise OQPInputError("Section call oqp accepts keyword arguments only")
     allowed = OQP_DRIVER_OPTIONS.get(driver.name, set())
     unsupported = set(native.kwargs) - allowed
     if unsupported:
@@ -2577,7 +2579,8 @@ def lower_to_legacy(
                     put("oqp", "mep_step", value)
                 elif key == "gtol":
                     put("oqp", "path_gtol", value)
-            elif name == "ts" and key in {"coordsys", "trust", "trust_max", "follow", "hessian"}:
+            elif name == "ts" and key in (
+                    _NATIVE_ENGINE_OPTIONS | {"follow", "hessian"}):
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
             elif name == "optimize" and key in (
                     _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):

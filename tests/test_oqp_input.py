@@ -1503,6 +1503,8 @@ def test_native_minimum_accepts_frozen_distance_constraints():
          "positive number"),
         ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0,trust=nan)',
          "0 < trust <= trust_max"),
+        ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0) oqp(dlc)',
+         "accepts keyword arguments only"),
     ],
 )
 def test_native_exact_section_controls_cannot_be_ignored_or_invalid(text, message):
@@ -1524,6 +1526,23 @@ def test_legacy_native_section_is_folded_into_the_canonical_driver():
     assert legacy["oqp"] == {
         "coordsys": "dlc", "trust": "0.1", "trust_max": "0.3",
     }
+
+
+def test_legacy_ts_recovery_controls_remain_in_the_native_section():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="ts.xyz" ts(S0) '
+        'oqp(auto_recovery=false,recovery_maxit=5,recovery_trust=0.01)'
+    )
+
+    legacy = oqp_input.lower_to_legacy(spec)
+    assert legacy["oqp"] == {
+        "auto_recovery": "False",
+        "recovery_maxit": "5",
+        "recovery_trust": "0.01",
+    }
+    assert not {
+        "auto_recovery", "recovery_maxit", "recovery_trust",
+    }.intersection(legacy["optimize"])
 
 
 def test_ekt_parent_state_uses_physical_mrsf_label():
