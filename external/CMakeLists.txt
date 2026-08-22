@@ -744,7 +744,11 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         endif()
     endif()
 
-    oqp_reuse_or_build(ddx "${DDX_LIBRARY}" "${DDX_RUNTIME_LIBRARY}" "${DDX_INCLUDE_DIR}")
+    set(_ddx_build_byproducts "${DDX_LIBRARY}")
+    if(NOT DDX_RUNTIME_LIBRARY STREQUAL DDX_LIBRARY)
+        list(APPEND _ddx_build_byproducts "${DDX_RUNTIME_LIBRARY}")
+    endif()
+    oqp_reuse_or_build(ddx ${_ddx_build_byproducts} "${DDX_INCLUDE_DIR}")
     if(NOT TARGET ddx)
     ExternalProject_Add(ddx
         PREFIX ${DDX_PREFIX}
@@ -756,7 +760,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         PATCH_COMMAND patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/ddx-v0.8.0-ilp64.patch
         BINARY_DIR ${DDX_BUILD_DIR}
         STAMP_DIR  ${DDX_STAMP_DIR}
-        BUILD_BYPRODUCTS ${DDX_LIBRARY} ${DDX_RUNTIME_LIBRARY}
+        BUILD_BYPRODUCTS ${_ddx_build_byproducts}
         UPDATE_COMMAND ""
         CMAKE_ARGS ${DDX_CMAKE_ARGS}
     )

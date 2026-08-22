@@ -35,6 +35,11 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
             text,
         )
 
+    def test_autobuild_registers_distinct_windows_runtime_once(self):
+        text = (ROOT / "external" / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn("if(NOT DDX_RUNTIME_LIBRARY STREQUAL DDX_LIBRARY)", text)
+        self.assertIn("BUILD_BYPRODUCTS ${_ddx_build_byproducts}", text)
+
     def test_oqp_owned_ddx_adapter_api_exists(self):
         header = (ROOT / "source" / "solvent_ddx_adapter.h").read_text(encoding="utf-8")
         source = (ROOT / "source" / "solvent_ddx_adapter.c").read_text(encoding="utf-8")
