@@ -176,6 +176,7 @@ def test_d4_public_result_uses_the_dispersion_corrected_energy():
         data={"OQP::td_energies": [0.0]},
         get_atoms=lambda: np.array([1]),
         get_system=lambda: np.zeros(3),
+        has_grad=lambda: False,
         get_grad=lambda: [],
         get_nac=lambda: [],
         get_soc=lambda: [],
