@@ -1,5 +1,18 @@
 name: CI
 on: [push, pull_request]
+
+# Every push used to leave its predecessor running.  The macOS legs are the
+# scarcest runners in the matrix -- measured queue waits of 16 to 88 minutes on
+# 2026-08-22 -- so a branch pushed three times put six macOS jobs in the queue,
+# four of them already validating superseded code, and the wait they created
+# was paid by every other pull request.  Keep only the newest run per branch.
+#
+# `main` is exempt: a push there is a landed commit, and its result is worth
+# having even once another commit lands on top of it.
+concurrency:
+   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
    gcc-build:
       runs-on: ${{ matrix.os }}
