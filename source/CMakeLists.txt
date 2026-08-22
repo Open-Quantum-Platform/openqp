@@ -102,7 +102,7 @@ if(ENABLE_DDX)
   # target does not always propagate it, so add it explicitly (harmless if the
   # imported target already carries it).
   target_include_directories(oqp PRIVATE ${DDX_INCLUDE_DIR})
-  install(FILES ${DDX_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(FILES ${DDX_RUNTIME_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 if(ENABLE_MPI)
     target_compile_definitions(oqp PRIVATE ENABLE_MPI)

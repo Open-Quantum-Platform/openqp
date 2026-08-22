@@ -75,18 +75,6 @@ include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
-if(WIN32 AND ENABLE_DDX)
-    # The ddX ExternalProject models DDX_LIBRARY as the runtime artifact and
-    # links consumers against it directly.  On Windows a consumer links the
-    # import library while the DLL is a separate file, and unlike the DFT-D4
-    # stack ddX records neither path, so this configuration cannot link.
-    # Rejected rather than half-supported: it is off by default and untested
-    # here.
-    message(FATAL_ERROR
-        "ENABLE_DDX is not supported on Windows: the ddX build models only a "
-        "single library artifact, and Windows needs the import library and "
-        "the DLL modelled separately.  Configure with -DENABLE_DDX=OFF.")
-endif()
 option(OQP_REUSE_EXTERNALS
        "Reuse bundled external dependency builds across fresh OpenQP build directories"
        ON)

@@ -652,6 +652,18 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     set(DDX_LIBRARY
         ${DDX_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}ddx${CMAKE_SHARED_LIBRARY_SUFFIX}
         CACHE INTERNAL "DDX_LIBRARY" FORCE)
+    # CMake generates a .lib import library and a .dll runtime library on
+    # Windows. Consumers link the former, whereas wheel/standalone packaging
+    # needs the latter next to liboqp.
+    set(DDX_RUNTIME_LIBRARY ${DDX_LIBRARY} CACHE INTERNAL "DDX_RUNTIME_LIBRARY" FORCE)
+    if(WIN32)
+        set(DDX_LIBRARY
+            ${DDX_INSTALL}/lib/${CMAKE_IMPORT_LIBRARY_PREFIX}ddx${CMAKE_IMPORT_LIBRARY_SUFFIX}
+            CACHE INTERNAL "DDX_LIBRARY" FORCE)
+        set(DDX_RUNTIME_LIBRARY
+            ${DDX_INSTALL}/bin/${CMAKE_SHARED_LIBRARY_PREFIX}ddx${CMAKE_SHARED_LIBRARY_SUFFIX}
+            CACHE INTERNAL "DDX_RUNTIME_LIBRARY" FORCE)
+    endif()
 
     # Match OpenTrustRegion's BLAS integer flags.
     # ILP64-only: default integers are always 8 bytes.
@@ -732,7 +744,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         endif()
     endif()
 
-    oqp_reuse_or_build(ddx "${DDX_LIBRARY}" "${DDX_INCLUDE_DIR}")
+    oqp_reuse_or_build(ddx "${DDX_LIBRARY}" "${DDX_RUNTIME_LIBRARY}" "${DDX_INCLUDE_DIR}")
     if(NOT TARGET ddx)
     ExternalProject_Add(ddx
         PREFIX ${DDX_PREFIX}
@@ -744,7 +756,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         PATCH_COMMAND patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/ddx-v0.8.0-ilp64.patch
         BINARY_DIR ${DDX_BUILD_DIR}
         STAMP_DIR  ${DDX_STAMP_DIR}
-        BUILD_BYPRODUCTS ${DDX_LIBRARY}
+        BUILD_BYPRODUCTS ${DDX_LIBRARY} ${DDX_RUNTIME_LIBRARY}
         UPDATE_COMMAND ""
         CMAKE_ARGS ${DDX_CMAKE_ARGS}
     )
@@ -759,8 +771,11 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     file(MAKE_DIRECTORY ${DDX_INCLUDE_DIR})
     add_library(DDX::ddx UNKNOWN IMPORTED GLOBAL)
     set_target_properties(DDX::ddx PROPERTIES
-        IMPORTED_LOCATION ${DDX_LIBRARY}
+        IMPORTED_LOCATION ${DDX_RUNTIME_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
+    if(WIN32)
+        set_target_properties(DDX::ddx PROPERTIES IMPORTED_IMPLIB ${DDX_LIBRARY})
+    endif()
     # Propagate ddX's own BLAS/LAPACK dependency to every consumer. Without this,
     # linking DDX::ddx on Linux fails with "undefined reference to drot_/dtrmm_/
     # dswap_/..." because libddx.so does not record its BLAS dependency the way a
@@ -769,7 +784,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         set_target_properties(DDX::ddx PROPERTIES
             INTERFACE_LINK_LIBRARIES "${_ddx_interface_libs}")
     endif()
-    message(STATUS "ddX will be built with ${BLA_SIZEOF_INTEGER}-byte BLAS integers from source: ${DDX_LIBRARY}")
+    message(STATUS "ddX will be built with ${BLA_SIZEOF_INTEGER}-byte BLAS integers from source: ${DDX_RUNTIME_LIBRARY}")
 endif()
 
 

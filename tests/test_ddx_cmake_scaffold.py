@@ -11,6 +11,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
     def test_top_level_cmake_defines_optional_ddx_backend(self):
         text = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         self.assertIn("option(ENABLE_DDX", text)
+        self.assertNotIn("ENABLE_DDX is not supported on Windows", text)
         self.assertIn("find_package(DDX REQUIRED)", text)
         self.assertIn("oqp_ddx_link_smoke", text)
         self.assertIn("oqp_ddx_adapter_smoke", text)
@@ -20,6 +21,8 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         text = (ROOT / "cmake" / "FindDDX.cmake").read_text(encoding="utf-8")
         self.assertIn("find_path(DDX_INCLUDE_DIR", text)
         self.assertIn("find_library(DDX_LIBRARY", text)
+        self.assertIn("DDX_RUNTIME_LIBRARY", text)
+        self.assertIn("IMPORTED_IMPLIB", text)
         self.assertIn("DDX::ddx", text)
 
     def test_oqp_links_ddx_only_when_enabled(self):
@@ -28,7 +31,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("OQP_ENABLE_DDX", text)
         self.assertIn("target_link_libraries(oqp DDX::ddx)", text)
         self.assertIn(
-            "install(FILES ${DDX_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})",
+            "install(FILES ${DDX_RUNTIME_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})",
             text,
         )
 
