@@ -40,6 +40,15 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
+          # Authenticate to GitHub with the workflow token. Without this input the
+          # action exchanges the Actions OIDC token for a Claude GitHub App token,
+          # and that exchange returns "401 Unauthorized - Invalid OIDC token" here
+          # because the app installation is not linked to an Anthropic account
+          # (anthropics/claude-code-action#873), so the review never ran. Cost of
+          # the workaround: comments come from github-actions[bot], not claude[bot],
+          # and use_sticky_comment is unavailable. Drop this line once the app
+          # installation is linked.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
@@ -67,10 +76,14 @@ jobs:
                  (a linked openqp-docs PR).
             For each rule, state PASS, or explain what is missing.
 
+      # The review step is continue-on-error so that this step can report the
+      # failure in its own words, but the job must still go red: a review gate
+      # that reports success while no review ran is worse than no gate at all.
       - name: Claude review unavailable
         if: steps.claude_review.outcome == 'failure'
         run: |
-          echo "::warning::Claude automatic review did not complete. Check CLAUDE_CODE_OAUTH_TOKEN and the Claude workflow logs."
+          echo "::error::Claude automatic review did not complete, so this pull request has not been reviewed by Claude. Open the 'Claude PR Review' step log above for the underlying error."
+          exit 1
 
   claude-mention:
     name: Claude mention handler
@@ -95,4 +108,6 @@ jobs:
       - name: Claude Code Action Official
         uses: anthropics/claude-code-action@v1
         with:
+          # Same app-token-exchange workaround as the review job above.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
