@@ -641,6 +641,23 @@ def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERA
     return problems
 
 
+def _impossible_multiplicity(multiplicity: int, nelec) -> str:
+    """Why ``multiplicity`` cannot occur for this electron count, or ``''``.
+
+    Parity and magnitude are fixed by the electron count alone, so this is
+    decidable before any root is looked at.
+    """
+    total = _total_electrons(nelec)
+    if multiplicity > total + 1:
+        return (f"multiplicity {multiplicity} exceeds the maximum {total + 1} "
+                f"for {total} electrons")
+    if (multiplicity % 2) != ((total + 1) % 2):
+        return (f"multiplicity {multiplicity} has the wrong parity for "
+                f"{total} electrons (allowed: "
+                f"{'odd' if (total + 1) % 2 else 'even'})")
+    return ""
+
+
 def _format_spin_problems(problems, ci_label: str) -> str:
     detail = "; ".join(f"root {root}: {why}" for root, _s2, _m, why in problems)
     return (
@@ -799,21 +816,48 @@ def _filter_roots_by_target_spin(
     """
     target_multiplicity = _target_spin_multiplicity(target_spin)
     root_indices = np.arange(np.asarray(energies).shape[0], dtype=np.int64)
+    problems = []
     if nelec is not None:
         problems = warn_unreliable_spin_labels(
             s2, multiplicity, nelec, ci_label=ci_label)
-        if problems and target_multiplicity is not None:
+    if target_multiplicity is None:
+        return energies, coeffs, s2, multiplicity, root_indices
+
+    # A target the electron count cannot form is unsatisfiable whatever the
+    # labels say, so answer THAT rather than the label quality: two electrons
+    # have no quintet, and refusing such a request because some root's <S^2>
+    # is untrustworthy names the wrong problem.
+    if nelec is not None:
+        impossible = _impossible_multiplicity(target_multiplicity, nelec)
+        if impossible:
+            raise ValueError(
+                f"{ci_label} target_spin={target_spin} found no matching roots among "
+                f"{len(root_indices)} solved roots: {impossible}."
+            )
+
+    keep = np.flatnonzero(np.asarray(multiplicity, dtype=np.int64) == target_multiplicity)
+    if problems:
+        # Refuse only for the roots that can change this answer.  Selection
+        # walks the energy-ordered list and stops once the request is filled,
+        # so an untrustworthy label BEYOND the last root taken cannot affect
+        # which roots come back -- refusing on it turns an unambiguous request
+        # (the lowest root is a pure singlet; give me one singlet) into an
+        # error because some higher inspected root happens to be spin-mixed.
+        # When the request is NOT filled, every inspected root could have
+        # supplied a missing match, so all of them decide it.
+        if keep.size >= int(requested_nroot) > 0:
+            cutoff = int(keep[: int(requested_nroot)][-1])
+        else:
+            cutoff = int(root_indices[-1]) if root_indices.size else -1
+        deciding = [p for p in problems if p[0] <= cutoff]
+        if deciding:
             raise SpinLabelAmbiguityError(
-                _format_spin_problems(problems, ci_label)
+                _format_spin_problems(deciding, ci_label)
                 + f" Refusing to apply {ci_section} target_spin={target_spin} "
                   "to labels that are not spin eigenvalues; run with "
                   "target_spin=any and select the root yourself, or lift the "
                   "degeneracy."
             )
-    if target_multiplicity is None:
-        return energies, coeffs, s2, multiplicity, root_indices
-
-    keep = np.flatnonzero(np.asarray(multiplicity, dtype=np.int64) == target_multiplicity)
     if keep.size == 0:
         raise ValueError(
             f"{ci_label} target_spin={target_spin} found no matching roots among "
@@ -2993,6 +3037,16 @@ class FCI:
             warn_unreliable_spin_labels(s2, multiplicity, nelec,
                                         ci_label=self.data_prefix)
         else:
+            # Checked before the retry loop, not inside it: widening the window
+            # cannot conjure a multiplicity the electron count forbids, and the
+            # loop would grow to the full determinant space to find that out.
+            impossible = _impossible_multiplicity(target_multiplicity, nelec)
+            if impossible:
+                raise ValueError(
+                    f"{self.data_prefix} {self.ci_section} "
+                    f"target_spin={self.settings.target_spin} is impossible "
+                    f"here: {impossible}."
+                )
             solve_nroot = min(determinant_count, max(1, int(self.settings.nroot)))
             while True:
                 energies, coeffs, s2, multiplicity = solve_and_diagnose(solve_nroot)

@@ -2058,6 +2058,17 @@ class Molecule:
         """
         return bool(getattr(self, '_grad_valid', False))
 
+    def invalidate_grad(self):
+        """Forget that any gradient in the native buffer belongs to this run.
+
+        The buffer itself is allocated once and never cleared, so a reused
+        Molecule -- the legacy ``OPENQP`` API runs several calculations through
+        one -- carries the previous run's derivatives in it.  ``Runner.run``
+        calls this at the start of every calculation so an energy-only run
+        after a gradient run does not republish them.
+        """
+        self._grad_valid = False
+
     def mark_grad_valid(self):
         """Record that a native kernel wrote the gradient buffer in place.
 

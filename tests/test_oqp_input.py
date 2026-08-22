@@ -1809,7 +1809,10 @@ def test_every_wf_methods_example_has_a_committed_oqp_twin():
     # path (runtype=grad plus the [pt2] grad_* controls); 16 before that, when
     # H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region converger.
     # LiH_CASSCF_optimize.inp then added a gradient-driven optimizer example.
-    assert len(WF_EXAMPLES) == 29
+    # 30 since H2_FCI_DEGENERATE_TRIPLET.inp added the first example that
+    # reaches a degenerate CI cluster (dissociated H2, where a singlet and a
+    # triplet share an energy) and selects the triplet out of it;
+    assert len(WF_EXAMPLES) == 30
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()

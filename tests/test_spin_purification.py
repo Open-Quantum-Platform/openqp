@@ -161,6 +161,60 @@ def test_native_engine_results_are_purified_too():
         assert weights[OPEN_B] == pytest.approx(root)
 
 
+def test_ambiguous_root_beyond_the_selection_does_not_refuse():
+    """Refuse only for labels that can change WHICH roots come back.
+
+    Selection stops once the request is filled, so an untrustworthy label on a
+    higher inspected root cannot affect the answer; refusing on it turned an
+    unambiguous request into an error (the second Codex P2 on PR #367).
+    """
+    four = (2, 2)                             # singlet/triplet/quintet allowed
+    energies = np.array([-1.0, -0.5, -0.2])
+    coeffs = np.eye(3)
+    s2 = np.array([0.0, 1.0, 2.0])            # root 1 carries the bad label
+    mult = np.array([1, 2, 3])                # "doublet" is impossible here
+
+    # Root 1 is untrustworthy but sits past the singlet the request is filled
+    # by, so it cannot change the answer.
+    kept_e, _c, kept_s2, kept_m, idx = fci_module._filter_roots_by_target_spin(
+        energies, coeffs, s2, mult,
+        target_spin="singlet", requested_nroot=1,
+        ci_label="FCI", ci_section="[fci]", nelec=four)
+    assert kept_e == pytest.approx([-1.0])
+    assert kept_s2 == pytest.approx([0.0])
+    assert kept_m.tolist() == [1] and idx.tolist() == [0]
+
+    # The same bad label now lies inside the span the selection walks.
+    with pytest.raises(fci_module.SpinLabelAmbiguityError):
+        fci_module._filter_roots_by_target_spin(
+            energies, coeffs, s2, mult,
+            target_spin="triplet", requested_nroot=1,
+            ci_label="FCI", ci_section="[fci]", nelec=four)
+
+    # And when the request cannot be filled, every inspected root could have
+    # supplied a missing match, so the ambiguity still decides it.
+    with pytest.raises(fci_module.SpinLabelAmbiguityError):
+        fci_module._filter_roots_by_target_spin(
+            energies, coeffs, s2, mult,
+            target_spin="singlet", requested_nroot=2,
+            ci_label="FCI", ci_section="[fci]", nelec=four)
+
+
+def test_target_the_electron_count_forbids_is_rejected_as_such():
+    """An impossible target is answered as impossible, not as bad labels.
+
+    Two electrons have no quintet; refusing that request because some root's
+    <S^2> is untrustworthy names the wrong problem, and no amount of extra
+    roots would ever satisfy it.
+    """
+    with pytest.raises(ValueError, match="wrong parity|exceeds the maximum"):
+        fci_module._filter_roots_by_target_spin(
+            np.array([-1.0, -1.0]), _open_shell_block(),
+            np.array([1.0, 1.0]), np.array([2, 2]),
+            target_spin="quintet", requested_nroot=1,
+            ci_label="FCI", ci_section="[fci]", nelec=NELEC)
+
+
 def test_cluster_grouping_uses_the_tolerance():
     assert degenerate_clusters([-1.0, -1.0 + 1e-12, -0.5]) == [[0, 1], [2]]
     assert degenerate_clusters([-1.0, -0.9, -0.5]) == [[0], [1], [2]]
