@@ -1,6 +1,8 @@
 import openmm.app as app
 import openmm as mm
 import openmm.unit as unit
+import os
+
 import numpy as np
 
 from oqp.openqp import OPENQP
@@ -14,6 +16,8 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
+    select_boundary_switching,
+    SWSCALE_WHOLE_MOLECULE, SWSCALE_COVALENT_BOUNDARY,
 )
 
 import oqp
@@ -190,10 +194,32 @@ class OpenQpQMMM:
                 f"[QM/MM] {len(self.link_atoms)} covalent boundary bond(s); "
                 f"frontier-charge embedding = {note}."
             )
+        self._select_boundary_switching()
 
         self.mm_systems = self.prepare_mm()
 
     # --- Internal helpers -------------------------------------------------
+
+    SWSCALE_WHOLE_MOLECULE = SWSCALE_WHOLE_MOLECULE
+    SWSCALE_COVALENT_BOUNDARY = SWSCALE_COVALENT_BOUNDARY
+
+    def _select_boundary_switching(self):
+        """Pick ESPF_SWSCALE from whether the QM/MM cut is covalent.
+
+        The selection itself lives in :mod:`oqp.library.qmmm_connectivity`
+        (OpenMM-free, so it stays unit-testable without the optional MM
+        stack); this driver supplies the one fact only it knows -- whether
+        link atoms were built -- and reports the outcome.
+        """
+        covalent = bool(self.link_atoms)
+        self.espf_swscale = select_boundary_switching(covalent)
+        if self.espf_swscale is not None and covalent:
+            print(f"[QM/MM] covalent boundary detected; "
+                  f"ESPF_SWSCALE={self.espf_swscale} "
+                  f"(whole-molecule default is "
+                  f"{self.SWSCALE_WHOLE_MOLECULE}). Set ESPF_SWSCALE to "
+                  f"override.")
+        return self.espf_swscale
 
     def _detect_link_atoms(self):
         """Find dangling QM–MM bonds in the topology and build link atoms."""

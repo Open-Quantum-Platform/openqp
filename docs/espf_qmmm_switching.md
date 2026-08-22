@@ -10,22 +10,33 @@ switching parameter `ESPF_SWSCALE` — the grid weight-derivative term in
 The shipped default, `ESPF_SWSCALE=1.8`, **over-smooths at covalent
 boundaries**.
 
-## Recommendation
+## What OpenQP selects
 
-| QM/MM boundary | recommended `ESPF_SWSCALE` |
+| QM/MM boundary | `ESPF_SWSCALE` |
 | --- | --- |
-| covalent (a bond is cut; link atoms present) | **1.5** |
-| whole-molecule (no bond cut) | 1.8 (the default) |
+| covalent (a bond is cut; link atoms present) | **1.5**, selected automatically |
+| whole-molecule (no bond cut) | 1.8 |
 
-`ESPF_SWSCALE` is read from the environment, so adopting the recommendation
-needs no rebuild:
+The QM/MM driver picks this when it builds the QM/MM partition, because that is
+where it is known whether a bond was cut: the native ESPF gradient is handed a
+grid and a density and cannot tell. A covalent-boundary run says so:
 
-```bash
-export ESPF_SWSCALE=1.5
+```
+[QM/MM] 1 covalent boundary bond(s); frontier-charge embedding = ...
+[QM/MM] covalent boundary detected; ESPF_SWSCALE=1.5 (whole-molecule default
+        is 1.8). Set ESPF_SWSCALE to override.
 ```
 
-The default is deliberately left at 1.8: 1.5 is better at covalent boundaries
-and worse without one, so it is not a safe global value.
+Setting `ESPF_SWSCALE` yourself always wins — the automatic choice stands down
+entirely, so a sweep or a reproduction is never silently overridden:
+
+```bash
+export ESPF_SWSCALE=1.8      # force the whole-molecule width at a boundary
+```
+
+Neither value is a safe global default, which is why this is selected per
+system rather than changed outright: 1.5 is better at covalent boundaries and
+about 20% worse without one.
 
 ## Measurement behind it
 
@@ -67,5 +78,12 @@ SOC-NAMD-QMMM. It is independent of the frontier-charge work: with the RCD
 frontier scheme the analytic gradient already matches the full-field baseline,
 and is better at the boundary host because RCD removes the raw M1 charge.
 
-Broader multi-system validation is welcome before the shipped default is
-reconsidered; see issue #260.
+The 5-13x figure above is the measurement recorded in issue #260; it has not
+been re-derived here. What is verified in this repository is the selection
+itself -- which width is chosen for which boundary, and that an explicit
+setting overrides it (`tests/test_espf_boundary_switching.py`), together with
+the alanine dipeptide example reporting one covalent boundary bond and
+selecting 1.5 while the whole-molecule formaldehyde/water example stays at 1.8.
+
+Broader multi-system validation is welcome before the shipped whole-molecule
+value is reconsidered; see issue #260.
