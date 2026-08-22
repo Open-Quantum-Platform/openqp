@@ -138,8 +138,10 @@ def test_native_engine_results_are_purified_too():
 
     def fake_native(h1e, eri, plan_, spec, *, nthreads, want_s2,
                     use_target_spin):
+        # (energies, civecs, s2, roots) -- the engine's own return shape.
         return (np.array([-2.0, -2.0]), np.array(mixed, copy=True),
-                np.array([1.0, 1.0]) if want_s2 else None)
+                np.array([1.0, 1.0]) if want_s2 else None,
+                np.arange(2, dtype=np.int64))
 
     original = fci_module._lib_fci_solve
     fci_module._lib_fci_solve = fake_native
