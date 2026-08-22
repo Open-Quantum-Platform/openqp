@@ -360,6 +360,103 @@ def compute_s2(
     return float(s2 + float(coeff @ flipped))
 
 
+#: How far the spin variance <S^4> - <S^2>^2 may sit from zero before the
+#: multiplicity label derived from <S^2> stops being trustworthy.  The variance
+#: of a two-state mixture with weights w and 1-w is w(1-w)(a-b)^2, so for a
+#: singlet/triplet pair (a-b = 2) this threshold corresponds to a contaminant
+#: weight of about 2.5e-5 -- far below anything of physical interest, and far
+#: above the numerical floor of a converged eigenvector.
+SPIN_VARIANCE_TOLERANCE = 1.0e-4
+
+
+def apply_s2(coeff, dets, norb, nelec, det_index=None):
+    """Return ``S^2`` applied to one CI vector, in the determinant basis."""
+    coeff = _real_array(coeff, "CI vector").reshape(-1)
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ms = 0.5 * (nalpha - nbeta)
+    if det_index is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+    return ms * (ms + 1.0) * coeff + _apply_spin_flip(coeff, dets, norb, det_index)
+
+
+def compute_s2_variance(ci_vector, determinants, norb, nelec, *, det_index=None):
+    """Return ``(<S^2>, <S^4> - <S^2>^2)`` for one CI vector.
+
+    The variance vanishes if and only if the vector is an ``S^2`` eigenstate,
+    which ``<S^2>`` on its own cannot establish: an average is reproduced
+    exactly by mixtures that contain none of the state it names.  For four
+    electrons a 2/3 : 1/3 mixture of a degenerate S=0 and S=2 pair gives
+    ``<S^2>`` = 2.000000 and so is labelled a triplet, with no triplet
+    component at all; its variance is 8.
+
+    One extra application of ``S^2`` over :func:`compute_s2`, which is the same
+    cost again.
+    """
+    dets = list(determinants)
+    coeff = _real_array(ci_vector, "CI vector").reshape(-1)
+    if coeff.size != len(dets):
+        raise ValueError("CI vector length must match the determinant count")
+    norm = np.linalg.norm(coeff)
+    if norm <= 0.0:
+        raise ValueError("CI vector norm must be non-zero")
+    coeff = coeff / norm
+    if det_index is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+    s2c = apply_s2(coeff, dets, norb, nelec, det_index=det_index)
+    s2 = float(coeff @ s2c)
+    s4 = float(s2c @ s2c)
+    return s2, max(0.0, s4 - s2 * s2)
+
+
+def spin_variance_for_clusters(energies, ci_vectors, determinants, norb, nelec,
+                               tol=None):
+    """``<S^4> - <S^2>^2`` for roots inside a degenerate cluster, NaN elsewhere.
+
+    Applying ``S^2`` is why ``_lib_spin_square`` exists: the Python path costs
+    O(ndet * norb^2) per root, so computing the variance for every root would
+    undo that.  A spin mixture needs degenerate partners to mix with, which is
+    the same gate :func:`spin_purify_degenerate_clusters` uses, so the cost is
+    paid only where a mixture can arise -- nothing in the common case.
+
+    Roots left as NaN are reported as "not computed" rather than as clean, and
+    :func:`spin_label_diagnosis` skips the variance test for them.
+    """
+    # DEGENERACY_TOLERANCE is defined below this point, so it is resolved here
+    # rather than as a default argument, which would be evaluated at import.
+    if tol is None:
+        tol = DEGENERACY_TOLERANCE
+    coeffs = _real_array(ci_vectors, "CI vectors")
+    if coeffs.ndim == 1:
+        coeffs = coeffs[:, None]
+    out = np.full(coeffs.shape[1], np.nan, dtype=np.float64)
+    clusters = [c for c in degenerate_clusters(energies, tol=tol) if len(c) > 1]
+    if not clusters:
+        return out
+    dets = list(determinants)
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    for cluster in clusters:
+        for root in cluster:
+            if root < coeffs.shape[1]:
+                out[root] = compute_s2_variance(
+                    coeffs[:, root], dets, norb, nelec, det_index=det_index)[1]
+    return out
+
+
+def fci_spin_variance(ci_vectors, determinants, norb, nelec):
+    """Per-root ``<S^4> - <S^2>^2`` for a set of CI vectors."""
+    dets = list(determinants)
+    coeffs = _real_array(ci_vectors, "CI vectors")
+    if coeffs.ndim == 1:
+        coeffs = coeffs[:, None]
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    return np.array(
+        [compute_s2_variance(coeffs[:, r], dets, norb, nelec,
+                             det_index=det_index)[1]
+         for r in range(coeffs.shape[1])],
+        dtype=np.float64,
+    )
+
+
 def _apply_spin_flip(coeff, dets, norb, det_index):
     """Return the spin-flip part of ``S^2`` applied to one CI vector.
 
@@ -606,7 +703,9 @@ def _total_electrons(nelec) -> int:
     return int(nelec)
 
 
-def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERANCE):
+def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERANCE,
+                         variance=None,
+                         var_tol: float = SPIN_VARIANCE_TOLERANCE):
     """Roots whose multiplicity label cannot be trusted, as (root, s2, mult, why).
 
     The label comes from rounding ``sqrt(1 + 4*<S^2>)``, which identifies the
@@ -623,6 +722,7 @@ def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERA
     """
     s2 = np.atleast_1d(np.asarray(s2, dtype=float))
     mult = np.atleast_1d(np.asarray(multiplicity, dtype=np.int64))
+    var = None if variance is None else np.atleast_1d(np.asarray(variance, dtype=float))
     total = _total_electrons(nelec)
     problems = []
     for root in range(s2.size):
@@ -630,6 +730,9 @@ def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERA
         value = float(s2[root])
         spin = 0.5 * (m - 1)
         pure = spin * (spin + 1.0)
+        v = None if var is None or root >= var.size else float(var[root])
+        if v is not None and not np.isfinite(v):
+            v = None      # not computed for this root; see spin_variance_for_clusters
         if m > total + 1:
             problems.append((root, value, m,
                              f"multiplicity {m} exceeds the maximum {total + 1} "
@@ -639,6 +742,12 @@ def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERA
                              f"multiplicity {m} has the wrong parity for "
                              f"{total} electrons (allowed: "
                              f"{'odd' if (total + 1) % 2 else 'even'})"))
+        elif v is not None and v > var_tol:
+            problems.append((root, value, m,
+                             f"the state is not an S^2 eigenstate: "
+                             f"<S^4> - <S^2>^2 = {v:.3e}, which is a mixture of "
+                             f"at least two spins even though <S^2> = {value:.6f} "
+                             f"reads as multiplicity {m}"))
         elif abs(value - pure) > tol:
             problems.append((root, value, m,
                              f"<S^2> = {value:.6f} is {abs(value - pure):.2e} "
@@ -675,9 +784,11 @@ def _format_spin_problems(problems, ci_label: str) -> str:
 
 
 def warn_unreliable_spin_labels(s2, multiplicity, nelec, *, ci_label: str,
-                                tol: float = SPIN_LABEL_TOLERANCE) -> list:
+                                tol: float = SPIN_LABEL_TOLERANCE,
+                                variance=None) -> list:
     """Emit a warning for any root whose spin label cannot be trusted."""
-    problems = spin_label_diagnosis(s2, multiplicity, nelec, tol=tol)
+    problems = spin_label_diagnosis(s2, multiplicity, nelec, tol=tol,
+                                    variance=variance)
     if problems:
         warnings.warn(_format_spin_problems(problems, ci_label), RuntimeWarning,
                       stacklevel=2)
@@ -3299,9 +3410,16 @@ class FCI:
                 self.settings.nroot)
             # target_spin=any skips the filter, so nothing else would look at
             # these labels -- but they are still reported, and a label that is
-            # not a spin eigenvalue must not be reported silently.
-            warn_unreliable_spin_labels(s2, multiplicity, nelec,
-                                        ci_label=self.data_prefix)
+            # not a spin eigenvalue must not be reported silently.  <S^2> alone
+            # cannot establish that: it is an average, and a mixture reproduces
+            # the average of a state it contains none of.  The variance settles
+            # it, and is computed only inside degenerate clusters, where a
+            # mixture can actually arise.
+            warn_unreliable_spin_labels(
+                s2, multiplicity, nelec, ci_label=self.data_prefix,
+                variance=spin_variance_for_clusters(
+                    energies, coeffs,
+                    _determinants(plan.nact, nelec), plan.nact, nelec))
         else:
             # Checked before the retry loop, not inside it: widening the window
             # cannot conjure a multiplicity the electron count forbids, and the
