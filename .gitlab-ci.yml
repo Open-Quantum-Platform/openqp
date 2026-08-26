@@ -267,7 +267,9 @@ windows-intel-mkl-ilp64:
       & $python -m venv .venv-windows-native
       $venvPython = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\python.exe"
       $venvPip = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\pip.exe"
-      $env:PATH = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts;$env:PATH"
+      $gitUnixBin = 'C:\Program Files\Git\usr\bin'
+      if (-not (Test-Path "$gitUnixBin\patch.exe")) { throw "Git for Windows patch.exe is missing" }
+      $env:PATH = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts;$gitUnixBin;$env:PATH"
       $env:CC = 'icx'
       $env:CXX = 'icx'
       $env:FC = 'ifx'
