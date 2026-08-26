@@ -39,7 +39,7 @@ variables:
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install --upgrade pip cmake ninja
     - mkdir -p "$CI_PROJECT_DIR/.tmp/$CI_JOB_NAME" "$OQP_EXTERNALS_ROOT"
   cache:
-    key: "$CI_JOB_NAME-$CI_RUNNER_ID-gcc12-openblas64-v1"
+    key: "openqp-linux-$CI_RUNNER_ID-gcc12-openblas64-v2"
     paths:
       - .cache/pip/
       - .cache/openqp/
@@ -67,7 +67,7 @@ linux-openblas64-full:
     CC: gcc-12
     CXX: g++-12
     FC: gfortran-12
-    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID/full"
+    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID"
     TMPDIR: "$CI_PROJECT_DIR/.tmp/linux-openblas64-full"
   script:
     - set -o pipefail
@@ -81,6 +81,7 @@ linux-openblas64-full:
       --config-settings=cmake.define.ENABLE_DDX=ON
       --config-settings=cmake.define.ENABLE_MPI=OFF
       --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
+      --config-settings=cmake.define.OQP_EXTERNALS_ROOT="$OQP_EXTERNALS_ROOT"
       2>&1 | tee build-linux-openblas64.log
     - >-
       ! grep -Eiq "Performing (download|build) step for ['\"]?libint|Building Libint"
@@ -118,7 +119,7 @@ linux-openblas64-mpi:
     CC: gcc-12
     CXX: g++-12
     FC: gfortran-12
-    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID/mpi"
+    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID"
     TMPDIR: "$CI_PROJECT_DIR/.tmp/linux-openblas64-mpi"
   script:
     - set -o pipefail
@@ -132,6 +133,7 @@ linux-openblas64-mpi:
       --config-settings=cmake.define.ENABLE_DDX=OFF
       --config-settings=cmake.define.ENABLE_MPI=ON
       --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
+      --config-settings=cmake.define.OQP_EXTERNALS_ROOT="$OQP_EXTERNALS_ROOT"
       2>&1 | tee build-linux-openblas64-mpi.log
     - >-
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
