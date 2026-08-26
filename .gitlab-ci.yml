@@ -167,8 +167,13 @@ windows-source-regression:
     - $env:PYTHONPATH = "$env:CI_PROJECT_DIR\pyoqp"
     - .\.venv-windows-ci\Scripts\python.exe -m compileall -q pyoqp tests tools
     - >-
-      .\.venv-windows-ci\Scripts\python.exe -m pytest tests -q --tb=short -rf
-      --ignore=tests\test_native_simplex_qp.py
+      .\.venv-windows-ci\Scripts\python.exe -m pytest -q --tb=short -rf
+      tests\test_cmake_mpi_linking.py
+      tests\test_ddx_cmake_scaffold.py
+      tests\test_dftd4_shared_interface.py
+      tests\test_opentrustregion_linalg_config.py
+      tests\test_oqp_input_schema_manifest.py
+      tests\test_runtime_root_resolution.py
   artifacts:
     when: always
     expire_in: 14 days
