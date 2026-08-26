@@ -265,8 +265,9 @@ windows-intel-mkl-ilp64:
       $venvPython = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\python.exe"
       $venvPip = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\pip.exe"
       $gitUnixBin = 'C:\Program Files\Git\usr\bin'
-      if (-not (Test-Path "$gitUnixBin\patch.exe")) { throw "Git for Windows patch.exe is missing" }
-      $env:PATH = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts;$gitUnixBin;$env:PATH"
+      $patchExe = "$gitUnixBin\patch.exe"
+      if (-not (Test-Path $patchExe)) { throw "Git for Windows patch.exe is missing" }
+      $env:PATH = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts;$env:PATH"
       $env:CC = 'icx'
       $env:CXX = 'icx'
       $env:FC = 'ifx'
@@ -288,6 +289,7 @@ windows-intel-mkl-ilp64:
         --config-settings=cmake.define.ENABLE_OPENMP=ON `
         --config-settings=cmake.define.USE_LIBINT=OFF `
         --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
+        "--config-settings=cmake.define.OQP_DFTD4_PATCH_EXECUTABLE=$patchExe" `
         --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON `
         --config-settings=cmake.define.OQP_EXTERNALS_ROOT=$env:OQP_EXTERNALS_ROOT `
         2>&1 | Tee-Object -FilePath build-windows-intel-mkl-ilp64.log
