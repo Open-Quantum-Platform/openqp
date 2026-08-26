@@ -1,8 +1,15 @@
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
     - if: '$CI_COMMIT_TAG'
+    # A green merge-request pipeline already validates the exact fast-forwarded SHA.
+    # Direct pushes to the protected default branch are disabled in GitLab.
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: never
+    # Once a merge request exists, its pipeline replaces the branch pipeline.
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
 
 stages:
   - preflight
@@ -16,6 +23,11 @@ default:
     when:
       - runner_system_failure
       - stuck_or_timeout_failure
+
+.full-ci:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
 
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -64,7 +76,9 @@ source-policy:
       echo 'LP64/NetLib CI configuration is forbidden'; exit 1; fi
 
 linux-openblas64-full:
-  extends: .linux-native
+  extends:
+    - .linux-native
+    - .full-ci
   stage: native
   variables:
     CC: gcc-12
@@ -149,7 +163,9 @@ linux-openblas64-full:
       - openqp_test_tmp*/test_report.txt
 
 linux-openblas64-mpi:
-  extends: .linux-native
+  extends:
+    - .linux-native
+    - .full-ci
   stage: native
   variables:
     CC: gcc-12
@@ -250,7 +266,9 @@ linux-openblas64-mpi:
       - openqp_test_tmp*/test_report.txt
 
 macos-intel-accelerate-ilp64:
-  extends: .macos-accelerate-native
+  extends:
+    - .macos-accelerate-native
+    - .full-ci
   tags:
     - macos-intel
     - zeus
@@ -259,7 +277,9 @@ macos-intel-accelerate-ilp64:
     EXPECTED_ARCH: x86_64
 
 macos-arm64-accelerate-ilp64:
-  extends: .macos-accelerate-native
+  extends:
+    - .macos-accelerate-native
+    - .full-ci
   tags:
     - macos-arm64
     - macmaster
@@ -268,6 +288,7 @@ macos-arm64-accelerate-ilp64:
     EXPECTED_ARCH: arm64
 
 windows-intel-mkl-ilp64:
+  extends: .full-ci
   stage: native
   tags:
     - windows
