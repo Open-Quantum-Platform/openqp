@@ -263,10 +263,13 @@ windows-intel-mkl-ilp64:
       $env:OQP_REUSE_EXTERNALS = 'ON'
       $env:OQP_EXTERNALS_ROOT = 'C:\oqp-gitlab-cache\externals'
       $buildDir = "C:\oqp-gitlab-build\$env:CI_PIPELINE_ID"
-      New-Item -ItemType Directory -Force -Path $env:OQP_EXTERNALS_ROOT,$buildDir | Out-Null
+      $tempDir = "C:\oqp-gitlab-temp\$env:CI_PIPELINE_ID"
+      $env:TEMP = $tempDir
+      $env:TMP = $tempDir
+      New-Item -ItemType Directory -Force -Path $env:OQP_EXTERNALS_ROOT,$buildDir,$tempDir | Out-Null
       & $venvPython -m pip install --upgrade pip cmake ninja numpy cffi scikit-build-core
       if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      & $venvPython -m pip install -v . --no-build-isolation --force-reinstall `
+      & $venvPython -m pip install -v . --no-build-isolation --no-deps --force-reinstall `
         --config-settings=build-dir=$buildDir `
         --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
         --config-settings=cmake.define.ENABLE_MPI=OFF `
