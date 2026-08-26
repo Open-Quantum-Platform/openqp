@@ -28,6 +28,8 @@ variables:
   tags:
     - small-linux
   timeout: 4h
+  variables:
+    CMAKE_BUILD_PARALLEL_LEVEL: "16"
   before_script:
     - apt-get update
     - >-
@@ -245,6 +247,8 @@ windows-intel-mkl-ilp64:
     - windows
     - winserver1
   timeout: 4h
+  variables:
+    CMAKE_BUILD_PARALLEL_LEVEL: "12"
   needs:
     - source-policy
   script:
