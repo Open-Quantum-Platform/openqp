@@ -37,6 +37,7 @@ variables:
     - python -m venv "$CI_PROJECT_DIR/.venv-ci"
     - >-
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install --upgrade pip cmake ninja
+    - export PATH="$CI_PROJECT_DIR/.venv-ci/bin:$PATH"
     - mkdir -p "$CI_PROJECT_DIR/.tmp/$CI_JOB_NAME" "$OQP_EXTERNALS_ROOT"
   cache:
     key: "openqp-linux-$CI_RUNNER_ID-gcc12-openblas64-v2"
@@ -152,6 +153,149 @@ linux-openblas64-mpi:
     paths:
       - build-linux-openblas64-mpi.log
 
+.macos-accelerate-native:
+  stage: native
+  timeout: 4h
+  variables:
+    OQP_REUSE_EXTERNALS: "ON"
+    CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  before_script:
+    - export PATH="$HOMEBREW_PREFIX/bin:$HOMEBREW_PREFIX/opt/python@3.11/libexec/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    - test "$(uname -m)" = "$EXPECTED_ARCH"
+    - >-
+      "$HOMEBREW_PREFIX/bin/python3.11" --version
+    - >-
+      "$HOMEBREW_PREFIX/bin/gfortran-15" --version
+    - export OQP_EXTERNALS_ROOT="$HOME/Library/Caches/openqp-ci/gitlab/$EXPECTED_ARCH/externals"
+    - mkdir -p "$OQP_EXTERNALS_ROOT" "$CI_PROJECT_DIR/.tmp/$CI_JOB_NAME"
+    - >-
+      "$HOMEBREW_PREFIX/bin/python3.11" -m venv "$CI_PROJECT_DIR/.venv-ci"
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install --upgrade pip cmake ninja
+    - export PATH="$CI_PROJECT_DIR/.venv-ci/bin:$PATH"
+  script:
+    - set -o pipefail
+    - >-
+      CMAKE_ARGS="-DCMAKE_C_COMPILER=$HOMEBREW_PREFIX/bin/gcc-15
+      -DCMAKE_CXX_COMPILER=$HOMEBREW_PREFIX/bin/g++-15
+      -DCMAKE_Fortran_COMPILER=$HOMEBREW_PREFIX/bin/gfortran-15
+      -DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DLINALG_LIB=auto
+      -DENABLE_OPENTRAH=OFF -DOQP_REUSE_EXTERNALS=ON
+      -DOQP_EXTERNALS_ROOT=$OQP_EXTERNALS_ROOT"
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install -v . --no-deps --force-reinstall
+      2>&1 | tee "build-macos-$EXPECTED_ARCH.log"
+    - >-
+      ! grep -Eiq "Performing (download|build) step for ['\"]?libint|Building Libint"
+      "build-macos-$EXPECTED_ARCH.log"
+    - grep -Eiq 'Apple Accelerate.*ILP64|Accelerate ILP64|NEWLAPACK.*ILP64' "build-macos-$EXPECTED_ARCH.log"
+    - >-
+      LIBOQP="$("$CI_PROJECT_DIR/.venv-ci/bin/python" -c
+      'import glob,os,oqp; print(glob.glob(os.path.join(os.path.dirname(oqp.__file__),"lib","liboqp*.dylib"))[0])'
+      | tail -n1)"
+    - otool -L "$LIBOQP" | grep -q 'Accelerate.framework'
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
+      -r pyoqp/requirements.txt 'numpy<2.2' geometric basis_set_exchange
+      pytest pytest-xdist pytest-forked
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --validate_examples
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --check_feature_coverage
+    - set -o pipefail
+    - >-
+      OQP_TEST_OMP_THREADS=1 "$CI_PROJECT_DIR/.venv-ci/bin/openqp"
+      --run_tests all 2>&1 | tee "run-tests-macos-$EXPECTED_ARCH.log"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - build-macos-*.log
+      - run-tests-macos-*.log
+      - openqp_test_tmp*/test_report.txt
+
+macos-intel-accelerate-ilp64:
+  extends: .macos-accelerate-native
+  tags:
+    - macos-intel
+    - zeus
+  variables:
+    HOMEBREW_PREFIX: /usr/local
+    EXPECTED_ARCH: x86_64
+
+macos-arm64-accelerate-ilp64:
+  extends: .macos-accelerate-native
+  tags:
+    - macos-arm64
+    - macmaster
+  variables:
+    HOMEBREW_PREFIX: /opt/homebrew
+    EXPECTED_ARCH: arm64
+
+windows-intel-mkl-ilp64:
+  stage: native
+  tags:
+    - windows
+    - winserver1
+  timeout: 4h
+  needs:
+    - source-policy
+  script:
+    - |
+      $oneapi = 'C:\Program Files (x86)\Intel\oneAPI\setvars.bat'
+      if (-not (Test-Path $oneapi)) { throw "Intel oneAPI setvars.bat is missing" }
+      $envLines = & cmd.exe /d /s /c "`"$oneapi`" --force >nul && set"
+      foreach ($line in $envLines) {
+        if ($line -match '^([^=]+)=(.*)$') {
+          [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+        }
+      }
+      $python = 'C:\Program Files\Python311\python.exe'
+      if (-not (Test-Path $python)) { throw "Python 3.11 is missing" }
+      & $python -m venv .venv-windows-native
+      $venvPython = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\python.exe"
+      $venvPip = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\pip.exe"
+      $env:PATH = "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts;$env:PATH"
+      $env:CC = 'icx'
+      $env:CXX = 'icx'
+      $env:FC = 'ifx'
+      $env:CMAKE_GENERATOR = 'Ninja'
+      $env:CMAKE_BUILD_PARALLEL_LEVEL = '4'
+      $env:OQP_REUSE_EXTERNALS = 'ON'
+      $env:OQP_EXTERNALS_ROOT = 'C:\oqp-gitlab-cache\externals'
+      $buildDir = "C:\oqp-gitlab-build\$env:CI_PIPELINE_ID"
+      New-Item -ItemType Directory -Force -Path $env:OQP_EXTERNALS_ROOT,$buildDir | Out-Null
+      & $venvPython -m pip install --upgrade pip cmake ninja numpy cffi scikit-build-core
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & $venvPython -m pip install -v . --no-build-isolation --force-reinstall `
+        --config-settings=build-dir=$buildDir `
+        --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
+        --config-settings=cmake.define.ENABLE_MPI=OFF `
+        --config-settings=cmake.define.ENABLE_OPENMP=ON `
+        --config-settings=cmake.define.USE_LIBINT=OFF `
+        --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
+        --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON `
+        --config-settings=cmake.define.OQP_EXTERNALS_ROOT=$env:OQP_EXTERNALS_ROOT `
+        2>&1 | Tee-Object -FilePath build-windows-intel-mkl-ilp64.log
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      if (Select-String -Path build-windows-intel-mkl-ilp64.log -Pattern 'Building Libint|Performing (download|build) step for .*libint' -Quiet) {
+        throw "Libint build was unexpectedly enabled"
+      }
+      if (-not (Select-String -Path build-windows-intel-mkl-ilp64.log -Pattern 'Intel10_64ilp|MKL.*ILP64|ILP64.*MKL' -Quiet)) {
+        throw "MKL ILP64 configuration evidence is missing"
+      }
+      & $venvPython -m pip install -r pyoqp\requirements.txt 'numpy<2.2' basis_set_exchange geometric pytest
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\openqp.exe" --validate_examples
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & "$env:CI_PROJECT_DIR\.venv-windows-native\Scripts\openqp.exe" --run_tests all 2>&1 | Tee-Object -FilePath run-tests-windows-intel.log
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - build-windows-intel-mkl-ilp64.log
+      - run-tests-windows-intel.log
+
 windows-source-regression:
   stage: regression
   tags:
@@ -161,7 +305,7 @@ windows-source-regression:
   needs:
     - source-policy
   script:
-    - python -m venv .venv-windows-ci
+    - py -3.11 -m venv .venv-windows-ci
     - .\.venv-windows-ci\Scripts\python.exe -m pip install --upgrade pip
     - >-
       .\.venv-windows-ci\Scripts\python.exe -m pip install

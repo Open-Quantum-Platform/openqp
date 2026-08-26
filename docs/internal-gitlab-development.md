@@ -15,3 +15,18 @@ expected remote SHA.
 Imports from `Open-Quantum-Platform/openqp` are read-only. Synchronization adds
 new refs or fast-forwards existing refs and must not delete or overwrite
 divergent internal branches. GitLab CI must not commit or push source code.
+
+The private CI acceptance matrix is deliberately platform-native:
+
+- Linux x86_64 builds the package with OpenBLAS ILP64, runs the complete example
+  and Python regression suites, and separately verifies a two-rank MPI build.
+- macOS x86_64 on Zeus and macOS arm64 on macmaster build with Python 3.11,
+  GCC 15, and the default Apple Accelerate ILP64 policy, then run the complete
+  example suite. Each host has a runner-only persistent external cache.
+- Windows x86_64 on Winserver1 builds with Intel oneAPI ifx/icx and MKL ILP64,
+  runs the complete example suite, and also runs a fast portable source gate.
+
+Runner authentication is restricted to the private OpenQP GitLab group. CI
+jobs never receive GitHub write credentials. Platform caches are isolated by
+runner and toolchain; jobs on a given runner execute serially so two builds do
+not write the same external cache concurrently.
