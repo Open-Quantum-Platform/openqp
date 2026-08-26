@@ -1,99 +1,175 @@
-image: qchemlab.knu.ac.kr:5050/open-quantum-package/modules/ci-ubuntu:latest
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
 
 stages:
- - build
- - test
- - format
- - install
+  - preflight
+  - native
+  - regression
 
-.only-default: &only-default
-  only:
-    - main
-    - master
-    - merge_requests
-    - tags
-    - pushes
+default:
+  interruptible: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
 
-build:
-  <<: *only-default
-  stage: build
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  OQP_REUSE_EXTERNALS: "ON"
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+.linux-native:
+  image: python:3.11-bookworm
+  tags:
+    - small-linux
+  timeout: 4h
+  before_script:
+    - apt-get update
+    - >-
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+      gcc-12 g++-12 gfortran-12 libopenblas64-dev libopenmpi-dev openmpi-bin
+      ninja-build pkg-config git ca-certificates
+    - python -m venv "$CI_PROJECT_DIR/.venv-ci"
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install --upgrade pip cmake ninja
+    - mkdir -p "$CI_PROJECT_DIR/.tmp/$CI_JOB_NAME" "$OQP_EXTERNALS_ROOT"
   cache:
+    key: "$CI_JOB_NAME-$CI_RUNNER_ID-gcc12-openblas64-v1"
     paths:
-      - external/nlopt
-      - external/libxc
-      - external/libint
-      - external/libtagarray
-      - external/fprettify
-      - objdir/external
-  script:
-    # LINALG_LIB=netlib pins the bundled reference BLAS explicitly: this job's
-    # image provides no MKL/OpenBLAS, and since the native-BLAS platform policy
-    # landed, LINALG_LIB=auto on Linux x86_64 mandates Intel MKL and FAILS the
-    # configure when it is missing (no more silent NetLib fallback). Pinning
-    # netlib reproduces this job's previous effective behavior, explicitly.
-    # Upgrade path: install an ILP64 OpenBLAS in the CI image and switch to
-    # -DLINALG_LIB=OpenBLAS (what GitHub CI tests and the Linux wheels bundle).
-    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DLINALG_LIB=netlib -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
-    - cmake --build objdir --parallel 4 --target install
+      - .cache/pip/
+      - .cache/openqp/
+    policy: pull-push
 
-  artifacts:
-    paths:
-      - lib/
-      - include/
-      - share/
-      - basis_sets/
-      - pyoqp/
-      - objdir/
-      - external/
-
-test:
-  <<: *only-default
-  stage: test
+source-policy:
+  stage: preflight
+  image: python:3.11-bookworm
+  tags:
+    - small-linux
   script:
-    - export OPENQP_ROOT=$CI_PROJECT_DIR
-    - export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
-    - cd pyoqp
-    - pip install .
-    - cd $OPENQP_ROOT
-    - openqp --run_tests other
+    - python -m compileall -q pyoqp tests tools
+    - python tools/check_blas_wrapper.py
+    - >-
+      if grep -nE 'git[[:space:]]+p[u]sh|git[[:space:]]+c[o]mmit' .gitlab-ci.yml; then
+      echo 'CI configuration must not commit or push source'; exit 1; fi
+    - >-
+      if grep -nE 'LINALG_LIB=[Nn]et[Ll]ib|LINALG_LIB_INT6[4]' .gitlab-ci.yml; then
+      echo 'LP64/NetLib CI configuration is forbidden'; exit 1; fi
+
+linux-openblas64-full:
+  extends: .linux-native
+  stage: native
+  variables:
+    CC: gcc-12
+    CXX: g++-12
+    FC: gfortran-12
+    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID/full"
+    TMPDIR: "$CI_PROJECT_DIR/.tmp/linux-openblas64-full"
+  script:
+    - set -o pipefail
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install -v . --no-deps --force-reinstall
+      --config-settings=cmake.build-type=Release
+      --config-settings=cmake.define.LINALG_LIB=OpenBLAS
+      --config-settings=cmake.define.USE_LIBINT=OFF
+      --config-settings=cmake.define.ENABLE_OPENMP=ON
+      --config-settings=cmake.define.ENABLE_OPENTRAH=OFF
+      --config-settings=cmake.define.ENABLE_DDX=ON
+      --config-settings=cmake.define.ENABLE_MPI=OFF
+      --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
+      2>&1 | tee build-linux-openblas64.log
+    - >-
+      ! grep -Eiq "Performing (download|build) step for ['\"]?libint|Building Libint"
+      build-linux-openblas64.log
+    - grep -Eiq 'OpenBLAS.*(ILP64|8-byte)|(ILP64|8-byte).*OpenBLAS' build-linux-openblas64.log
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
+      -r pyoqp/requirements.txt 'numpy<2.2' geometric basis_set_exchange
+      pytest pytest-xdist pytest-forked
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -c "import oqp; print(oqp.__file__)"
+    - export OPENQP_ROOT="$("$CI_PROJECT_DIR/.venv-ci/bin/python" -c 'import oqp,os; print(os.path.dirname(oqp.__file__))' | tail -n1)"
+    - export LD_LIBRARY_PATH="$(dirname "$(find "$OQP_EXTERNALS_ROOT" -name 'libddx.so*' -print -quit)"):${LD_LIBRARY_PATH:-}"
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --validate_examples
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --check_feature_coverage
+    - set -o pipefail
+    - OQP_TEST_OMP_THREADS=1 "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --run_tests all 2>&1 | tee run-tests-all.log
+    - >-
+      OQP_REQUIRE_NATIVE_TESTS=1 "$CI_PROJECT_DIR/.venv-ci/bin/python"
+      -m pytest tests -q -n auto --forked --tb=short -rf
   artifacts:
-    paths:
-      - openqp_test_tmp*/test_report.txt
     when: always
-
-format:
-  stage: format
-  only:
-    - merge_requests
-  cache:
+    expire_in: 14 days
     paths:
-      - external/nlopt
-      - external/libxc
-      - external/libint
-      - external/libtagarray
-      - external/fprettify
-      - objdir/external
-    policy: pull
-  script:
-    - black pyoqp
-    - cmake --build objdir --parallel 4 -- format
-    - cmake --build objdir --parallel 4
-    - cd objdir
-    - ln -s ../pyoqp/src oqp
-    - ctest --verbose
-    - git commit -am "Reformat source code in CI" && git push || true
+      - build-linux-openblas64.log
+      - run-tests-all.log
+      - openqp_test_tmp*/test_report.txt
 
-install:
-  <<: *only-default
-  cache:
-    paths:
-      - external/nlopt
-      - external/libxc
-      - external/libint
-      - external/libtagarray
-      - external/fprettify
-      - objdir/external
-    policy: pull
-  stage: install
+linux-openblas64-mpi:
+  extends: .linux-native
+  stage: native
+  variables:
+    CC: gcc-12
+    CXX: g++-12
+    FC: gfortran-12
+    OQP_EXTERNALS_ROOT: "$CI_PROJECT_DIR/.cache/openqp/externals/$CI_RUNNER_ID/mpi"
+    TMPDIR: "$CI_PROJECT_DIR/.tmp/linux-openblas64-mpi"
   script:
-    - cmake --build objdir --parallel 4 -- install
+    - set -o pipefail
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install -v . --no-deps --force-reinstall
+      --config-settings=cmake.build-type=Release
+      --config-settings=cmake.define.LINALG_LIB=OpenBLAS
+      --config-settings=cmake.define.USE_LIBINT=OFF
+      --config-settings=cmake.define.ENABLE_OPENMP=ON
+      --config-settings=cmake.define.ENABLE_OPENTRAH=OFF
+      --config-settings=cmake.define.ENABLE_DDX=OFF
+      --config-settings=cmake.define.ENABLE_MPI=ON
+      --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
+      2>&1 | tee build-linux-openblas64-mpi.log
+    - >-
+      "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
+      -r pyoqp/requirements.txt 'numpy<2.2' basis_set_exchange mpi4py
+    - test_dir="$(mktemp -d)"
+    - cp examples/QUANTUM/h2.inp "$test_dir/banner.inp"
+    - >-
+      OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+      mpiexec --oversubscribe -n 2 "$CI_PROJECT_DIR/.venv-ci/bin/openqp"
+      "$test_dir/banner.inp" --silent
+    - test "$(grep -c 'OpenQP: Open Quantum Platform' "$test_dir/banner.log")" -eq 1
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - build-linux-openblas64-mpi.log
+
+windows-source-regression:
+  stage: regression
+  tags:
+    - windows
+    - winserver1
+  timeout: 1h
+  needs:
+    - source-policy
+  script:
+    - python -m venv .venv-windows-ci
+    - .\.venv-windows-ci\Scripts\python.exe -m pip install --upgrade pip
+    - >-
+      .\.venv-windows-ci\Scripts\python.exe -m pip install
+      -r pyoqp\requirements.txt "numpy<2.2" basis_set_exchange pytest pytest-forked
+    - $env:PYTHONPATH = "$env:CI_PROJECT_DIR\pyoqp"
+    - .\.venv-windows-ci\Scripts\python.exe -m compileall -q pyoqp tests tools
+    - >-
+      .\.venv-windows-ci\Scripts\python.exe -m pytest tests -q --tb=short -rf
+      --ignore=tests\test_native_simplex_qp.py
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - .pytest_cache/
