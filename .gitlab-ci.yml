@@ -29,7 +29,7 @@ variables:
     - small-linux
   timeout: 4h
   variables:
-    CMAKE_BUILD_PARALLEL_LEVEL: "16"
+    CMAKE_BUILD_PARALLEL_LEVEL: "32"
   before_script:
     - apt-get update
     - >-
@@ -108,11 +108,36 @@ linux-openblas64-full:
       "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --validate_examples
     - >-
       "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --check_feature_coverage
-    - set -o pipefail
-    - OQP_TEST_OMP_THREADS=1 "$CI_PROJECT_DIR/.venv-ci/bin/openqp" --run_tests all 2>&1 | tee run-tests-all.log
-    - >-
-      OQP_REQUIRE_NATIVE_TESTS=1 "$CI_PROJECT_DIR/.venv-ci/bin/python"
-      -m pytest tests -q -n auto --forked --tb=short -rf
+    - |
+      set -euo pipefail
+      test "$(nproc)" -ge 48
+      taskset -c 0-31 "$CI_PROJECT_DIR/.venv-ci/bin/python" - <<'PY' >run-tests-all.log 2>&1 &
+      from oqp.utils.mpi_utils import MPIManager
+      from oqp.utils.oqp_tester import OQPTester
+      tester = OQPTester(
+          base_test_dir=None,
+          output_dir="openqp_test_tmp",
+          total_cpus=32,
+          omp_threads=1,
+          mpi_manager=MPIManager(),
+      )
+      report = tester.run("all", input_format="auto")
+      print(report)
+      raise SystemExit(tester.status)
+      PY
+      oqp_test_pid=$!
+      taskset -c 32-47 env OQP_REQUIRE_NATIVE_TESTS=1 \
+        "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pytest tests -q -n 16 \
+        --forked --tb=short -rf >pytest-linux.log 2>&1 &
+      pytest_pid=$!
+      set +e
+      wait "$oqp_test_pid"; oqp_test_rc=$?
+      wait "$pytest_pid"; pytest_rc=$?
+      set -e
+      cat run-tests-all.log
+      cat pytest-linux.log
+      test "$oqp_test_rc" -eq 0
+      test "$pytest_rc" -eq 0
   artifacts:
     when: always
     expire_in: 14 days
@@ -120,6 +145,7 @@ linux-openblas64-full:
       - build-linux-openblas64.log
       - linkage-linux-openblas64.log
       - run-tests-all.log
+      - pytest-linux.log
       - openqp_test_tmp*/test_report.txt
 
 linux-openblas64-mpi:
