@@ -142,7 +142,8 @@ linux-openblas64-mpi:
       OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
       mpiexec --oversubscribe -n 2 "$CI_PROJECT_DIR/.venv-ci/bin/openqp"
       "$test_dir/banner.inp" --silent
-    - test "$(grep -c 'OpenQP: Open Quantum Platform' "$test_dir/banner.log")" -eq 1
+    - >-
+      test "$(grep -c 'OpenQP: Open Quantum Platform' "$test_dir/banner.log")" -eq 1
   artifacts:
     when: always
     expire_in: 14 days
