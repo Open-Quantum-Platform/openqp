@@ -87,7 +87,16 @@ linux-openblas64-full:
     - >-
       ! grep -Eiq "Performing (download|build) step for ['\"]?libint|Building Libint"
       build-linux-openblas64.log
-    - grep -Eiq 'OpenBLAS.*(ILP64|8-byte)|(ILP64|8-byte).*OpenBLAS' build-linux-openblas64.log
+    - >-
+      find "$OQP_EXTERNALS_ROOT" -maxdepth 1 -type d
+      -name '*OpenBLAS*blasint8*' -print -quit | grep -q .
+    - >-
+      LIBOQP="$(find "$CI_PROJECT_DIR/.venv-ci/lib/python3.11/site-packages/oqp/lib"
+      -name 'liboqp.so*' -print -quit)"
+    - test -n "$LIBOQP"
+    - ldd "$LIBOQP" | tee linkage-linux-openblas64.log
+    - grep -Eiq 'libopenblas64[^/[:space:]]*\.so' linkage-linux-openblas64.log
+    - '! grep -Eiq ''libopenblas\.so'' linkage-linux-openblas64.log'
     - >-
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
       -r pyoqp/requirements.txt 'numpy<2.2' geometric basis_set_exchange
@@ -110,6 +119,7 @@ linux-openblas64-full:
     expire_in: 14 days
     paths:
       - build-linux-openblas64.log
+      - linkage-linux-openblas64.log
       - run-tests-all.log
       - openqp_test_tmp*/test_report.txt
 
@@ -166,6 +176,7 @@ linux-openblas64-mpi:
       "$HOMEBREW_PREFIX/bin/python3.11" --version
     - >-
       "$HOMEBREW_PREFIX/bin/gfortran-15" --version
+    - test -x "$HOMEBREW_PREFIX/bin/mpiexec"
     - export OQP_EXTERNALS_ROOT="$HOME/Library/Caches/openqp-ci/gitlab/$EXPECTED_ARCH/externals"
     - mkdir -p "$OQP_EXTERNALS_ROOT" "$CI_PROJECT_DIR/.tmp/$CI_JOB_NAME"
     - >-
@@ -242,8 +253,10 @@ windows-intel-mkl-ilp64:
   script:
     - |
       $oneapi = 'C:\Program Files (x86)\Intel\oneAPI\setvars.bat'
+      $vcvars = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
       if (-not (Test-Path $oneapi)) { throw "Intel oneAPI setvars.bat is missing" }
-      $envLines = & cmd.exe /d /s /c "`"$oneapi`" --force >nul && set"
+      if (-not (Test-Path $vcvars)) { throw "Visual Studio 2022 vcvars64.bat is missing" }
+      $envLines = & cmd.exe /d /s /c "call `"$vcvars`" >nul && call `"$oneapi`" --force >nul && set"
       foreach ($line in $envLines) {
         if ($line -match '^([^=]+)=(.*)$') {
           [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
