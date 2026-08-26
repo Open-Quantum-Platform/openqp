@@ -189,9 +189,9 @@ linux-openblas64-mpi:
       "build-macos-$EXPECTED_ARCH.log"
     - grep -Eiq 'Apple Accelerate.*ILP64|Accelerate ILP64|NEWLAPACK.*ILP64' "build-macos-$EXPECTED_ARCH.log"
     - >-
-      LIBOQP="$("$CI_PROJECT_DIR/.venv-ci/bin/python" -c
-      'import glob,os,oqp; print(glob.glob(os.path.join(os.path.dirname(oqp.__file__),"lib","liboqp*.dylib"))[0])'
-      | tail -n1)"
+      LIBOQP="$(find "$CI_PROJECT_DIR/.venv-ci/lib/python3.11/site-packages/oqp/lib"
+      -name 'liboqp*.dylib' -print -quit)"
+    - test -n "$LIBOQP"
     - otool -L "$LIBOQP" | grep -q 'Accelerate.framework'
     - >-
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install
