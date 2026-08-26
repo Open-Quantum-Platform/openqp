@@ -88,9 +88,6 @@ linux-openblas64-full:
       ! grep -Eiq "Performing (download|build) step for ['\"]?libint|Building Libint"
       build-linux-openblas64.log
     - >-
-      find "$OQP_EXTERNALS_ROOT" -maxdepth 1 -type d
-      -name '*OpenBLAS*blasint8*' -print -quit | grep -q .
-    - >-
       LIBOQP="$(find "$CI_PROJECT_DIR/.venv-ci/lib/python3.11/site-packages/oqp/lib"
       -name 'liboqp.so*' -print -quit)"
     - test -n "$LIBOQP"
