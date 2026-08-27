@@ -1141,6 +1141,10 @@ contains
 
 !     Assemble molecular grid from atomic grids
 
+      molGrid%partFunType = dft_partfun
+      molGrid%hasSurfaceShift = .false.
+      molGrid%surfaceShift = 0.0_dp
+
 !     Do Becke's fuzzy cell
       select case (dft_bfc_algo)
       case(0)
@@ -1151,6 +1155,8 @@ contains
       case (1)
 !       Precompute surface shifting parameters
         call setaij(aij, nat, bsrad)
+        molGrid%hasSurfaceShift = .true.
+        molGrid%surfaceShift = aij
 !       Becke's algorithm:
 !       4th deg. Becke's polynomial and surface shifting
         call dft_fc_blk(molgrid, dft_partfun, &
@@ -1170,6 +1176,8 @@ contains
           bsrad_becke(i) = bragg_slater_radius(brsl_becke, infos%atoms%zn(i))
         end do
         call setaij_treutler(aij, nat, bsrad_becke)
+        molGrid%hasSurfaceShift = .true.
+        molGrid%surfaceShift = aij
         call dft_fc_blk(molgrid, dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 

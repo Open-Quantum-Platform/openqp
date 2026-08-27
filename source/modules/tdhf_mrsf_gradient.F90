@@ -181,6 +181,40 @@ contains
            threshold=0.0d0, &
            infos=infos)
 
+      ! Lee Eq. (3.16) identifies P=T+Z as the relaxed linear XC probe.
+      ! The call above contains the established ground-state and fixed-grid
+      ! AO/basis terms, but it does not differentiate the normalized
+      ! atom-centred quadrature weights or the motion of each grid slice with
+      ! its owner atom.  Add only those two moving-grid contributions in a
+      ! separate sweep.  Combining the ground-state and probe responses here
+      ! would differentiate a different quantity and double count terms.
+      block
+        real(kind=dp), allocatable :: grid_correction(:,:), grid_d(:,:,:), &
+                                      grid_p(:,:,:)
+        allocate(grid_correction(3,infos%mol_prop%natom), &
+                 grid_d(nbf,nbf,2), grid_p(nbf,nbf,2), source=0.0_dp)
+        ! utddft_xc_gradient temporarily applies AO normalization factors to
+        ! its density arguments.  Copies avoid a second normalization round
+        ! trip changing the arrays used later by mrsf_2e_grad.
+        grid_d = d
+        grid_p = p
+        call utddft_xc_gradient(basis=basis, &
+             molGrid=molGrid, &
+             dedft=grid_correction, &
+             da=grid_d(:,:,1), &
+             db=grid_d(:,:,2), &
+             pa=grid_p(:,:,1:1), &
+             pb=grid_p(:,:,2:2), &
+             nmtx=1, &
+             threshold=0.0_dp, &
+             infos=infos, &
+             include_ground_state=.false., &
+             include_weight_derivative=.true., &
+             weight_derivative_only=.true.)
+        infos%atoms%grad = infos%atoms%grad + grid_correction
+        deallocate(grid_correction, grid_d, grid_p)
+      end block
+
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
       call flush(iw)
