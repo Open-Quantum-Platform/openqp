@@ -212,6 +212,27 @@ contains
              include_weight_derivative=.true., &
              weight_derivative_only=.true.)
         infos%atoms%grad = infos%atoms%grad + grid_correction
+
+        ! The total excited-state energy also contains the ROKS reference
+        ! energy.  Differentiate its finite XC quadrature separately: using a
+        ! zero probe prevents the relaxed P response above from being mixed
+        ! into the ground-state owner-motion term.
+        grid_correction = 0.0_dp
+        grid_p = 0.0_dp
+        call utddft_xc_gradient(basis=basis, &
+             molGrid=molGrid, &
+             dedft=grid_correction, &
+             da=grid_d(:,:,1), &
+             db=grid_d(:,:,2), &
+             pa=grid_p(:,:,1:1), &
+             pb=grid_p(:,:,2:2), &
+             nmtx=1, &
+             threshold=0.0_dp, &
+             infos=infos, &
+             include_ground_state=.true., &
+             include_weight_derivative=.true., &
+             weight_derivative_only=.true.)
+        infos%atoms%grad = infos%atoms%grad + grid_correction
         deallocate(grid_correction, grid_d, grid_p)
       end block
 

@@ -663,6 +663,21 @@ contains
                 rhoab, sigma, tauab, &
                 f_r, f_s, f_t)
 
+        if (dat%do_weight_derivative) then
+          if (dat%do_ground_state) then
+            dat%probe_value(i,mythread) = &
+              xc%exc(i)*xce%xyzw(i,4)
+          else
+            dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+            if (xce%funTyp /= OQP_FUNTYP_LDA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_s, sigma)
+            if (xce%funTyp == OQP_FUNTYP_MGGA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_t, tauab)
+          end if
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
 !          f_s = 0
@@ -763,13 +778,20 @@ contains
         ! q_w = w * delta_P e_xc[D].  It remains separate from the
         ! ground-state XC energy because the moving-grid response is linear
         ! in the relaxed probe P.
-        dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
-        if (xce%funTyp /= OQP_FUNTYP_LDA) &
-          dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
-                                      + dot_product(d_s, sigma)
-        if (xce%funTyp == OQP_FUNTYP_MGGA) &
-          dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
-                                      + dot_product(d_t, tauab)
+        if (dat%do_weight_derivative) then
+          if (dat%do_ground_state) then
+            dat%probe_value(i,mythread) = &
+              xc%exc(i)*xce%xyzw(i,4)
+          else
+            dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+            if (xce%funTyp /= OQP_FUNTYP_LDA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_s, sigma)
+            if (xce%funTyp == OQP_FUNTYP_MGGA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_t, tauab)
+          end if
+        end if
 
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
@@ -1218,10 +1240,6 @@ contains
     if (present(include_ground_state)) &
       dat%do_ground_state = include_ground_state
     dat%do_weight_derivative = requested_weight_derivative
-    if (dat%do_weight_derivative .and. dat%do_ground_state) &
-      call show_message('XC moving-grid linear-probe response requires '// &
-                        'include_ground_state=.false..', with_abort)
-
     if (dat%do_weight_derivative) then
       dat%part_fun_type = molGrid%partFunType
       dat%has_surface_shift = molGrid%hasSurfaceShift

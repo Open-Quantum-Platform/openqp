@@ -24,6 +24,8 @@ def test_mrsf_gradient_requests_probe_only_moving_grid_response():
     assert "include_ground_state=.false." in body
     assert "include_weight_derivative=.true." in body
     assert "weight_derivative_only=.true." in body
+    assert "include_ground_state=.true." in body
+    assert "grid_p = 0.0_dp" in body
 
 
 def test_linear_probe_has_partition_and_owner_motion_terms():
@@ -43,8 +45,20 @@ def test_moving_grid_mode_is_restricted_to_one_linear_probe():
 
     assert "requested_weight_derivative .and. doFxc" in source
     assert "requested_weight_derivative .and. nMtx /= 1" in source
-    assert "dat%do_weight_derivative .and. dat%do_ground_state" in source
     assert "if (.not. requested_weight_only) then" in source
+    assert "xc%exc(i)*xce%xyzw(i,4)" in source
+
+
+def test_ground_state_xc_gradient_has_partition_and_owner_motion_terms():
+    source = _source("source/dftlib/dft_gridint_grad.F90")
+    body = source.split("subroutine add_partition_weight_gradient", 1)[1]
+    body = body.split("end subroutine add_partition_weight_gradient", 1)[0]
+
+    assert "xc%exc(1:numPts)*xce%xyzw(1:numPts,4)" in source
+    assert "partfunc%deriv(mu)" in body
+    assert "dlog(:,b,owner)" in body
+    assert "sum(tmpGrad, dim=1)" in source
+    assert "dedft = dedft + dat%nucGrad(:,:,1)" in source
 
 
 def test_grid_retains_partition_metadata_for_all_surface_shift_modes():
