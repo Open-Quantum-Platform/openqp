@@ -1,0 +1,42 @@
+{
+  "molecule": "low-symmetry H2O",
+  "coordinates_angstrom": [
+    [8, 0.07, 0.02, 0.01],
+    [1, 0.95, 0.06, -0.03],
+    [1, -0.25, 0.93, 0.10]
+  ],
+  "functional": "bhhlyp",
+  "basis": "6-31g*",
+  "grid": {
+    "rad_npts": 96,
+    "ang_npts": 302,
+    "pruned": false
+  },
+  "finite_difference": "five-point central",
+  "cases": [
+    {
+      "state": "triplet ROKS reference",
+      "step_bohr": 0.0005,
+      "max_abs_error_before_hartree_per_bohr": 0.00014221752548,
+      "max_abs_error_after_hartree_per_bohr": 2.3e-9
+    },
+    {
+      "state": "lowest MRSF singlet root (OpenQP S0)",
+      "step_bohr": 0.001,
+      "max_abs_error_before_hartree_per_bohr": 0.00014214,
+      "max_abs_error_after_hartree_per_bohr": 5.3238724258e-7
+    },
+    {
+      "state": "lowest MRSF singlet root (OpenQP S0)",
+      "step_bohr": 0.0005,
+      "max_abs_error_before_hartree_per_bohr": 0.00014214,
+      "max_abs_error_after_hartree_per_bohr": 5.3210065701e-7
+    },
+    {
+      "state": "lowest MRSF singlet root (OpenQP S0)",
+      "step_bohr": 0.00025,
+      "max_abs_error_before_hartree_per_bohr": 0.00014214,
+      "max_abs_error_after_hartree_per_bohr": 5.3220250147e-7
+    }
+  ]
+}

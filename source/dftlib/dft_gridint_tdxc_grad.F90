@@ -13,6 +13,18 @@ module mod_dft_gridint_tdxc_grad
     integer :: nMtx = 1
     logical :: do_fxc = .true. !< Whether to compute dF_xc / dR_i
     logical :: do_ground_state = .true. !< Whether to add g.s. XC gradient contribution
+    logical :: do_weight_derivative = .false. !< Moving-grid response for a linear probe
+    integer :: part_fun_type = 0
+    logical :: has_surface_shift = .false.
+    real(kind=fp), allocatable :: atom_xyz(:,:)
+    logical, allocatable :: dummy_atom(:)
+    real(kind=fp), allocatable :: surface_shift(:,:)
+    real(kind=fp), allocatable :: part_rij(:,:)
+    real(kind=fp), allocatable :: part_rhat(:,:,:)
+    real(kind=fp), allocatable :: part_dist(:,:)
+    real(kind=fp), allocatable :: part_cells(:,:)
+    real(kind=fp), allocatable :: part_dlog(:,:,:,:)
+    real(kind=fp), allocatable :: part_dsum(:,:,:)
     real(kind=fp), pointer :: pa(:,:,:)
     real(kind=fp), pointer :: pb(:,:,:)
     real(kind=fp), pointer :: xa(:,:,:)
@@ -21,6 +33,8 @@ module mod_dft_gridint_tdxc_grad
     real(kind=fp), allocatable :: drrho(:,:,:,:,:)
     real(kind=fp), allocatable :: rtau(:,:,:,:)
     real(kind=fp), allocatable :: bfgrad(:,:,:)
+    real(kind=fp), allocatable :: nucgrad(:,:,:)
+    real(kind=fp), allocatable :: probe_value(:,:)
     real(kind=fp), allocatable :: grad_d(:,:,:,:) !< density gradient
     real(kind=fp), allocatable :: grad_p(:,:,:,:) !< diff. density gradient
     real(kind=fp), allocatable :: grad_x(:,:,:,:) !< transition (X+Y) gradient
@@ -57,8 +71,8 @@ contains
     class(xc_consumer_tdg_t), target, intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nthreads
-    integer :: nspin, nterms, nDeriv
-    call self%clean()
+    integer :: nspin, nterms, nDeriv, nat, i, j
+    call clean_work(self)
     nterms = 1
     if (xce%funTyp /= OQP_FUNTYP_LDA) nterms = nterms + 3
     if (xce%funTyp == OQP_FUNTYP_MGGA) nterms = nterms + 1
@@ -67,6 +81,8 @@ contains
     nDeriv = merge(2, 1, self%do_fxc)
     allocate( &
         self%bfgrad(xce%numAOs, 3, nthreads) &
+      , self%nucgrad(3, xce%numAtoms, nthreads) &
+      , self%probe_value(xce%maxPts, nthreads) &
       , self%rrho(nspin, xce%maxPts, self%nMtx, nthreads) &
       , self%drrho(3, nspin, xce%maxPts, self%nMtx, nthreads) &
       , self%grad_d(xce%maxPts, nterms, nspin, nthreads) &
@@ -89,6 +105,28 @@ contains
             self%rtau(nSpin, xce%maxPts, self%nMtx, nthreads) &
           , source=0.0d0)
     end if
+
+    if (self%do_weight_derivative) then
+      nat = xce%numAtoms
+      allocate( &
+          self%part_rij(nat,nat) &
+        , self%part_rhat(3,nat,nat) &
+        , self%part_dist(nat,nthreads) &
+        , self%part_cells(nat,nthreads) &
+        , self%part_dlog(3,nat,nat,nthreads) &
+        , self%part_dsum(3,nat,nthreads) &
+        , source=0.0_fp)
+      do i = 1, nat
+        do j = 1, nat
+          if (i == j) cycle
+          self%part_rij(i,j) = norm2( &
+            self%atom_xyz(:,i)-self%atom_xyz(:,j))
+          if (self%part_rij(i,j) > tiny(1.0_fp)) &
+            self%part_rhat(:,i,j) = &
+              (self%atom_xyz(:,i)-self%atom_xyz(:,j))/self%part_rij(i,j)
+        end do
+      end do
+    end if
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -99,24 +137,49 @@ contains
 
     if (ubound(self%bfGrad,3) /= 1) then
       self%bfGrad(:,:,lbound(self%bfGrad,3)) = sum(self%bfGrad, dim=3)
+      self%nucGrad(:,:,lbound(self%nucGrad,3)) = sum(self%nucGrad, dim=3)
     end if
     call self%pe%allreduce(self%bfGrad(:,:,1), &
               size(self%bfGrad(:,:,1)))
+    call self%pe%allreduce(self%nucGrad(:,:,1), &
+              size(self%nucGrad(:,:,1)))
   end subroutine
+
+!-------------------------------------------------------------------------------
+
+  subroutine clean_work(self)
+    implicit none
+    class(xc_consumer_tdg_t), intent(inout) :: self
+    if (allocated(self%bfgrad)) deallocate(self%bfgrad)
+    if (allocated(self%nucgrad)) deallocate(self%nucgrad)
+    if (allocated(self%probe_value)) deallocate(self%probe_value)
+    if (allocated(self%rrho)) deallocate(self%rrho)
+    if (allocated(self%drrho)) deallocate(self%drrho)
+    if (allocated(self%rtau)) deallocate(self%rtau)
+    if (allocated(self%grad_d)) deallocate(self%grad_d)
+    if (allocated(self%grad_p)) deallocate(self%grad_p)
+    if (allocated(self%grad_x)) deallocate(self%grad_x)
+    if (allocated(self%tmpGrad_)) deallocate(self%tmpGrad_)
+    if (allocated(self%tmp_)) deallocate(self%tmp_)
+    if (allocated(self%tmpV_)) deallocate(self%tmpV_)
+    if (allocated(self%tmpG1_)) deallocate(self%tmpG1_)
+    if (allocated(self%part_rij)) deallocate(self%part_rij)
+    if (allocated(self%part_rhat)) deallocate(self%part_rhat)
+    if (allocated(self%part_dist)) deallocate(self%part_dist)
+    if (allocated(self%part_cells)) deallocate(self%part_cells)
+    if (allocated(self%part_dlog)) deallocate(self%part_dlog)
+    if (allocated(self%part_dsum)) deallocate(self%part_dsum)
+  end subroutine clean_work
 
 !-------------------------------------------------------------------------------
 
   subroutine clean(self)
     implicit none
     class(xc_consumer_tdg_t), intent(inout) :: self
-    if (allocated(self%bfgrad)) deallocate(self%bfgrad)
-    if (allocated(self%rrho)) deallocate(self%rrho)
-    if (allocated(self%drrho)) deallocate(self%drrho)
-    if (allocated(self%rtau)) deallocate(self%rtau)
-    if (allocated(self%tmpGrad_)) deallocate(self%tmpGrad_)
-    if (allocated(self%tmp_)) deallocate(self%tmp_)
-    if (allocated(self%tmpV_)) deallocate(self%tmpV_)
-    if (allocated(self%tmpG1_)) deallocate(self%tmpG1_)
+    call clean_work(self)
+    if (allocated(self%atom_xyz)) deallocate(self%atom_xyz)
+    if (allocated(self%dummy_atom)) deallocate(self%dummy_atom)
+    if (allocated(self%surface_shift)) deallocate(self%surface_shift)
   end subroutine
 
 !-------------------------------------------------------------------------------
@@ -346,9 +409,143 @@ contains
 
       end if
 
+      if (self%do_weight_derivative .and. .not. self%do_fxc) then
+        call add_partition_weight_gradient(self, xce, mythread)
+        ! Differentiate the discrete atom-centred quadrature consistently:
+        ! the grid point moves with the atom that owns the current slice.
+        self%nucgrad(:,xce%currAtom,mythread) = &
+          self%nucgrad(:,xce%currAtom,mythread) + sum(tmpGrad, dim=1)
+      end if
+
    end associate
 
  end subroutine
+
+!> Add the derivative of normalized atom-centred fuzzy-cell weights for a
+!> linear density probe P.  The AO/basis contribution is accumulated in
+!> tmpGrad; this routine supplies q_P d(log p_owner)/dR.  The owner-motion
+!> contribution is added by update immediately after this call.
+ subroutine add_partition_weight_gradient(self, xce, mythread)
+    use mod_dft_partfunc, only: partition_function
+
+    class(xc_consumer_tdg_t), intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer, intent(in) :: mythread
+
+    type(partition_function) :: partfunc
+    real(kind=fp) :: point(3), ui(3), uj(3), df(3)
+    real(kind=fp) :: dri(3), drj(3), drij(3), dmu(3)
+    real(kind=fp) :: mu0, mu, f, fi, fj, dfi_scale, dfj_scale
+    real(kind=fp) :: sumc, p_owner, q_weighted, aij, dfactor
+    integer :: nat, owner, ipt, i, j, b, ib, nb
+    integer :: derivative_atoms(3)
+
+    nat = xce%numAtoms
+    owner = xce%currAtom
+    if (owner < 1 .or. owner > nat) return
+    if (.not. allocated(self%atom_xyz)) return
+    call partfunc%set(self%part_fun_type)
+
+    associate ( &
+        dist => self%part_dist(:,mythread) &
+      , cells => self%part_cells(:,mythread) &
+      , dlog => self%part_dlog(:,:,:,mythread) &
+      , dsum => self%part_dsum(:,:,mythread))
+      do ipt = 1, xce%numPts
+        q_weighted = self%probe_value(ipt,mythread)
+        if (abs(q_weighted) <= tiny(1.0_fp)) cycle
+
+        point = xce%xyzw(ipt,1:3)
+        do i = 1, nat
+          dist(i) = norm2(point-self%atom_xyz(:,i))
+        end do
+
+        cells = 1.0_fp
+        where (self%dummy_atom) cells = 0.0_fp
+        dlog = 0.0_fp
+
+        do i = 2, nat
+          if (self%dummy_atom(i)) cycle
+          do j = 1, i-1
+            if (self%dummy_atom(j)) cycle
+            if (self%part_rij(j,i) <= tiny(1.0_fp)) cycle
+
+            mu0 = (dist(i)-dist(j))/self%part_rij(j,i)
+            mu = mu0
+            aij = 0.0_fp
+            if (self%has_surface_shift) then
+              aij = self%surface_shift(j,i)
+              mu = mu0 + aij*(1.0_fp-mu0*mu0)
+            end if
+            f = partfunc%eval(mu)
+            fi = abs(f)
+            fj = abs(1.0_fp-f)
+            dfi_scale = sign(1.0_fp, f)
+            dfj_scale = -sign(1.0_fp, 1.0_fp-f)
+
+            ui = 0.0_fp
+            uj = 0.0_fp
+            if (dist(i) > tiny(1.0_fp)) &
+              ui = (point-self%atom_xyz(:,i))/dist(i)
+            if (dist(j) > tiny(1.0_fp)) &
+              uj = (point-self%atom_xyz(:,j))/dist(j)
+
+            ! Only the point owner and the two atoms in this pair affect
+            ! mu_ij.  Logarithmic derivatives reduce the work to
+            ! O(Ngrid*Natom**2) and avoid allocation in this loop.
+            derivative_atoms = owner
+            derivative_atoms(2) = i
+            derivative_atoms(3) = j
+            nb = 1
+            if (i /= owner) nb = nb + 1
+            if (j /= owner .and. j /= i) nb = nb + 1
+            if (nb == 2) then
+              if (i == owner) derivative_atoms(2) = j
+            else if (nb == 3) then
+              derivative_atoms(2) = i
+              derivative_atoms(3) = j
+            end if
+
+            do ib = 1, nb
+              b = derivative_atoms(ib)
+              dri = ui * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == i), fp)
+              drj = uj * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == j), fp)
+              drij = self%part_rhat(:,i,j) * &
+                      real(merge(1,0,b == i) - merge(1,0,b == j), fp)
+              dmu = (dri-drj-mu0*drij)/self%part_rij(j,i)
+              if (self%has_surface_shift) &
+                dmu = (1.0_fp-2.0_fp*aij*mu0)*dmu
+              df = partfunc%deriv(mu)*dmu
+              if (fi > tiny(1.0_fp)) &
+                dlog(:,b,i) = dlog(:,b,i) + dfi_scale*df/fi
+              if (fj > tiny(1.0_fp)) &
+                dlog(:,b,j) = dlog(:,b,j) + dfj_scale*df/fj
+            end do
+            cells(i) = cells(i)*fi
+            cells(j) = cells(j)*fj
+          end do
+        end do
+
+        sumc = sum(cells)
+        if (sumc <= tiny(1.0_fp)) cycle
+        p_owner = cells(owner)/sumc
+        if (p_owner <= sqrt(tiny(1.0_fp))) cycle
+        dsum = 0.0_fp
+        do i = 1, nat
+          do b = 1, nat
+            dsum(:,b) = dsum(:,b) + cells(i)*dlog(:,b,i)
+          end do
+        end do
+        do b = 1, nat
+          dfactor = 1.0_fp/sumc
+          self%nucgrad(:,b,mythread) = self%nucgrad(:,b,mythread) &
+            + q_weighted * (dlog(:,b,owner)-dfactor*dsum(:,b))
+        end do
+      end do
+    end associate
+ end subroutine add_partition_weight_gradient
 
  subroutine postUpdate(self, xce, mythread)
 
@@ -466,6 +663,21 @@ contains
                 rhoab, sigma, tauab, &
                 f_r, f_s, f_t)
 
+        if (dat%do_weight_derivative) then
+          if (dat%do_ground_state) then
+            dat%probe_value(i,mythread) = &
+              xc%exc(i)*xce%xyzw(i,4)
+          else
+            dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+            if (xce%funTyp /= OQP_FUNTYP_LDA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_s, sigma)
+            if (xce%funTyp == OQP_FUNTYP_MGGA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_t, tauab)
+          end if
+        end if
+
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
 !          f_s = 0
@@ -560,6 +772,26 @@ contains
         call xc_der2_contr(xce, xce%hasBeta, i, &
                 rhoab, sigma, tauab, &
                 f_r, f_s, f_t)
+
+        ! Directional XC energy density, already multiplied by the current
+        ! quadrature weight because xc_der1 returns the scaled libxc arrays:
+        ! q_w = w * delta_P e_xc[D].  It remains separate from the
+        ! ground-state XC energy because the moving-grid response is linear
+        ! in the relaxed probe P.
+        if (dat%do_weight_derivative) then
+          if (dat%do_ground_state) then
+            dat%probe_value(i,mythread) = &
+              xc%exc(i)*xce%xyzw(i,4)
+          else
+            dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+            if (xce%funTyp /= OQP_FUNTYP_LDA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_s, sigma)
+            if (xce%funTyp == OQP_FUNTYP_MGGA) &
+              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                          + dot_product(d_t, tauab)
+          end if
+        end if
 
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          d_s = 0
@@ -891,18 +1123,21 @@ contains
 !> @author Vladimir Mironov
   subroutine utddft_xc_gradient(basis, molGrid, dedft, &
                   da, db, pa, pb, xa, xb, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, &
+                  include_ground_state, include_weight_derivative, &
+                  weight_derivative_only)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
+    use messages, only: show_message, with_abort
 
     implicit none
 
     type(information), target, intent(in) :: infos
     type(dft_grid_t), target, intent(in) :: molGrid
-    real(kind=fp), intent(out) :: dedft(:,:)
+    real(kind=fp), intent(inout) :: dedft(:,:)
 
     type(basis_set) :: basis
     integer, intent(in) :: nMtx
@@ -911,14 +1146,32 @@ contains
     real(kind=fp), intent(inout), optional, target :: &
             xa(:,:,:), xb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    logical, intent(in), optional :: include_ground_state
+    logical, intent(in), optional :: include_weight_derivative
+    logical, intent(in), optional :: weight_derivative_only
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf, nxcder
-    logical :: doFxc
+    logical :: doFxc, requested_weight_derivative, requested_weight_only
 
     nbf = ubound(da,1)
+    doFxc = present(xa)
+    requested_weight_derivative = .false.
+    if (present(include_weight_derivative)) &
+      requested_weight_derivative = include_weight_derivative
+    requested_weight_only = .false.
+    if (present(weight_derivative_only)) &
+      requested_weight_only = weight_derivative_only
+    if (requested_weight_derivative .and. doFxc) &
+      call show_message('XC moving-grid response is available only for '// &
+                        'the linear-probe branch (xa/xb absent).', with_abort)
+    if (requested_weight_derivative .and. nMtx /= 1) &
+      call show_message('XC moving-grid response requires nMtx=1.', with_abort)
+    if (requested_weight_only .and. .not. requested_weight_derivative) &
+      call show_message('XC weight_derivative_only requires '// &
+                        'include_weight_derivative=.true..', with_abort)
 
     ! Scale densities by B.F. norms
       do i = 1, nbf
@@ -939,8 +1192,6 @@ contains
                  * basis%bfnrm(:)
       end do
     end do
-
-    doFxc = present(xa)
 
     if (doFxc) then
       do j = 1, nMtx
@@ -985,6 +1236,17 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    dat%do_ground_state = .true.
+    if (present(include_ground_state)) &
+      dat%do_ground_state = include_ground_state
+    dat%do_weight_derivative = requested_weight_derivative
+    if (dat%do_weight_derivative) then
+      dat%part_fun_type = molGrid%partFunType
+      dat%has_surface_shift = molGrid%hasSurfaceShift
+      dat%atom_xyz = infos%atoms%xyz
+      dat%dummy_atom = molGrid%dummyAtom
+      dat%surface_shift = molGrid%surfaceShift
+    end if
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
@@ -1023,15 +1285,19 @@ contains
       end do
     end if
 
-    do j = 1, basis%nshell
-      associate (atom => basis%origin(j), &
-                 offset => basis%ao_offset(j), &
-                 naos => basis%naos(j))
-        dedft(1, atom) = dedft(1, atom)-sum(dat%bfGrad(offset:offset+naos-1, 1, 1))
-        dedft(2, atom) = dedft(2, atom)-sum(dat%bfGrad(offset:offset+naos-1, 2, 1))
-        dedft(3, atom) = dedft(3, atom)-sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
-      end associate
-    end do
+    if (.not. requested_weight_only) then
+      do j = 1, basis%nshell
+        associate (atom => basis%origin(j), &
+                   offset => basis%ao_offset(j), &
+                   naos => basis%naos(j))
+          dedft(1, atom) = dedft(1, atom)-sum(dat%bfGrad(offset:offset+naos-1, 1, 1))
+          dedft(2, atom) = dedft(2, atom)-sum(dat%bfGrad(offset:offset+naos-1, 2, 1))
+          dedft(3, atom) = dedft(3, atom)-sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
+        end associate
+      end do
+    end if
+
+    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
 
     call dat%clean()
   end subroutine
