@@ -93,11 +93,12 @@ def test_gradient_and_nac_can_share_one_native_multi_rhs_solve():
     single_point = (ROOT / "pyoqp/oqp/library/single_point.py").read_text()
     assert "fused_rhs(:,1) = 2.0_dp*gradient_rhs" in driver
     assert "solution_batch = fused_solution(:,2:npair+1)" in driver
-    assert "fused_tolerance(1) = max(1.0e-20_dp, infos%tddft%zvconv)" in driver
     assert "rhs_tolerances=fused_tolerance" in driver
     assert "NAC_GRADIENT_Z_FUSION" in driver
     assert "OQP_MRSF_NAC_ZV_FUSE_GRADIENT" in zvector
-    assert "mrsf_nac_fusion_set_rhs(rhs)" in zvector
+    assert "mrsf_nac_fusion_set_rhs(rhs,cnvtol)" in zvector
+    assert "mrsf_nac_fusion_get_tolerance(gradient_tolerance)" in driver
+    assert "fused_tolerance(1) = max(1.0e-20_dp, gradient_tolerance)" in driver
     assert "mrsf_nac_lagrangian_fused_external(infos)" in zvector
     assert "mrsf_nac_fusion_take_solution(xk)" in zvector
     assert "_nac_fused_gradient_ready" in single_point

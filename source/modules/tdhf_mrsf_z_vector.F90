@@ -1574,7 +1574,7 @@ contains
       fuse_env(1:1) == 'y' .or. fuse_env(1:1) == 'Y' .or. &
       fuse_env(1:1) == 't' .or. fuse_env(1:1) == 'T')
     if (fuse_nac_gradient) then
-      call mrsf_nac_fusion_set_rhs(rhs)
+      call mrsf_nac_fusion_set_rhs(rhs,cnvtol)
       call mrsf_nac_lagrangian_fused_external(infos)
       call mrsf_nac_fusion_take_solution(xk)
       ! The resident NAC driver reserves TagArray storage.  Reacquire every

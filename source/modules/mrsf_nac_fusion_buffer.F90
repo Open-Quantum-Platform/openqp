@@ -8,18 +8,27 @@ module mrsf_nac_fusion_buffer_mod
   implicit none
   private
   public :: mrsf_nac_fusion_set_rhs, mrsf_nac_fusion_get_rhs, &
-            mrsf_nac_fusion_set_solution, mrsf_nac_fusion_take_solution
+            mrsf_nac_fusion_get_tolerance, mrsf_nac_fusion_set_solution, &
+            mrsf_nac_fusion_take_solution
 
   real(kind=dp), allocatable, save :: gradient_rhs_buffer(:)
   real(kind=dp), allocatable, save :: gradient_solution_buffer(:)
+  real(kind=dp), save :: gradient_tolerance_buffer = -1.0_dp
 
 contains
 
-  subroutine mrsf_nac_fusion_set_rhs(rhs)
+  subroutine mrsf_nac_fusion_set_rhs(rhs, tolerance)
+    use messages, only: show_message, WITH_ABORT
     real(kind=dp), intent(in) :: rhs(:)
+    real(kind=dp), intent(in) :: tolerance
+
+    if (tolerance <= 0.0_dp) &
+      call show_message('Fused gradient/NAC tolerance must be positive.', &
+                        WITH_ABORT)
 
     if (allocated(gradient_rhs_buffer)) deallocate(gradient_rhs_buffer)
     allocate(gradient_rhs_buffer(size(rhs)), source=rhs)
+    gradient_tolerance_buffer = tolerance
     if (allocated(gradient_solution_buffer)) &
       deallocate(gradient_solution_buffer)
   end subroutine mrsf_nac_fusion_set_rhs
@@ -35,6 +44,16 @@ contains
                         WITH_ABORT)
     rhs = gradient_rhs_buffer
   end subroutine mrsf_nac_fusion_get_rhs
+
+  subroutine mrsf_nac_fusion_get_tolerance(tolerance)
+    use messages, only: show_message, WITH_ABORT
+    real(kind=dp), intent(out) :: tolerance
+
+    if (gradient_tolerance_buffer <= 0.0_dp) &
+      call show_message('Fused gradient/NAC tolerance buffer is empty.', &
+                        WITH_ABORT)
+    tolerance = gradient_tolerance_buffer
+  end subroutine mrsf_nac_fusion_get_tolerance
 
   subroutine mrsf_nac_fusion_set_solution(solution)
     real(kind=dp), intent(in) :: solution(:)
@@ -57,6 +76,7 @@ contains
     solution = gradient_solution_buffer
     deallocate(gradient_solution_buffer)
     if (allocated(gradient_rhs_buffer)) deallocate(gradient_rhs_buffer)
+    gradient_tolerance_buffer = -1.0_dp
   end subroutine mrsf_nac_fusion_take_solution
 
 end module mrsf_nac_fusion_buffer_mod

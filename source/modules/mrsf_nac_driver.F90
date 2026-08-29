@@ -69,6 +69,7 @@ contains
 !###############################################################################
 
   subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)
+    use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_get_tolerance
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use, intrinsic :: iso_c_binding, only: c_int64_t
     use types, only: information
@@ -168,6 +169,7 @@ contains
     integer :: profile_status
     character(len=16) :: profile_value, audit_value
     logical :: profile_enabled, audit_enabled
+    real(kind=dp) :: gradient_tolerance
 
     if (present(gradient_rhs) .neqv. present(gradient_solution)) then
       call show_message('Gradient/NAC fusion requires both RHS and solution arrays.', &
@@ -517,6 +519,7 @@ contains
     ! nrhs=3 solve, in place of six independent ordered-pair solves.
     if (profile_enabled) call system_clock(profile_stop)
     if (present(gradient_rhs)) then
+      call mrsf_nac_fusion_get_tolerance(gradient_tolerance)
       if (size(gradient_rhs) /= ltot .or. size(gradient_solution) /= ltot) then
         call show_message('Gradient/NAC fusion has the wrong ROHF rotation dimension.', &
                           WITH_ABORT)
@@ -536,7 +539,7 @@ contains
       ! Keep the established gradient residual threshold while the NAC pair
       ! columns retain the tighter property threshold.  Once the gradient is
       ! converged, its density/Fock column drops out of the shared traversal.
-      fused_tolerance(1) = max(1.0e-20_dp, infos%tddft%zvconv)
+      fused_tolerance(1) = max(1.0e-20_dp, gradient_tolerance)
       call cphf_solve_rohf(infos,npair+1,fused_rhs,fused_solution, &
                            tol=1.0e-20_dp, &
                            maxit=max(int(infos%control%maxit_zv),ltot+5), &
