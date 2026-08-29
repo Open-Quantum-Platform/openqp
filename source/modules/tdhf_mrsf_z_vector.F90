@@ -2404,7 +2404,8 @@ contains
         if (mrsf_nac_cphf_mode) then
           block
             character(len=80) :: tags_gamma(1)
-            integer(c_int32_t) :: gstat, gtag_id
+            integer(c_int32_t) :: gtag_id
+            logical :: have_gamma, have_orbgrad
             real(kind=dp), contiguous, pointer :: gam_tlf(:,:,:)
             ! NAC Phase 12 (closed-form d_amp): if the bare interstate orbital
             ! gradient L_pq = d(X_I^T A X_J)/d theta_pq is supplied in
@@ -2414,22 +2415,21 @@ contains
             ! forms L(hi,lo)-L(lo,hi), exactly as for the overlap gamma.
             block
               character(len=80) :: tag_L(1)
-              integer(c_int32_t) :: lstat, ltag_id
+              integer(c_int32_t) :: ltag_id
               real(kind=dp), contiguous, pointer :: orbL(:)
               tag_L(1) = "OQP::nac_orbgrad_L"
-              lstat = infos%dat%contains(tag_L, ltag_id)
-              if (lstat == ta_ok) then
+              have_orbgrad = infos%dat%contains(tag_L, ltag_id)
+              if (have_orbgrad) then
                 call tagarray_get_data(infos%dat, "OQP::nac_orbgrad_L", orbL)
                 wrk1(:,:) = reshape(orbL, (/ nbf, nbf /))
-                gstat = -999   ! signal: L was used, skip the gamma branches
               end if
             end block
-            if (gstat == -999) then
+            if (have_orbgrad) then
               continue
             else
             tags_gamma(1) = "OQP::nac_gamma_tlf"
-            gstat = infos%dat%contains(tags_gamma, gtag_id)
-            if (gstat == ta_ok) then
+            have_gamma = infos%dat%contains(tags_gamma, gtag_id)
+            if (have_gamma) then
               ! TLF-consistent transition density supplied externally
               call tagarray_get_data(infos%dat, "OQP::nac_gamma_tlf", gam_tlf)
               wrk1(:,:) = reshape(gam_tlf(:, mrsf_nac_istate, mrsf_nac_jstate), &

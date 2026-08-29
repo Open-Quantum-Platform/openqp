@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
 GRADIENT = ROOT / "source" / "modules" / "tdhf_mrsf_gradient.F90"
 DRIVER = ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
+ZVECTOR = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
 
 
 def _body(source, name):
@@ -65,3 +66,15 @@ def test_driver_owns_energy_record_and_guards_integer_products_before_cast():
         "default_int_limit64/nbfsq64",
     ):
         assert body.index(guard) < cast
+
+
+def test_tagarray_contains_results_are_used_as_logicals():
+    gradient = GRADIENT.read_text()
+    zvector = ZVECTOR.read_text()
+    assert "have_custom = infos%dat%contains(tags_gamma, gtag_id)" in gradient
+    assert "gstat = infos%dat%contains" not in gradient
+    assert "have_orbgrad = infos%dat%contains(tag_L, ltag_id)" in zvector
+    assert "have_gamma = infos%dat%contains(tags_gamma, gtag_id)" in zvector
+    assert "gstat = infos%dat%contains" not in zvector
+    assert "lstat = infos%dat%contains" not in zvector
+    assert "gstat = -999" not in zvector

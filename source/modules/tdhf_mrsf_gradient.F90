@@ -336,7 +336,7 @@ contains
 
     integer :: nbf, natom, nstate, i, j, ist, jst, mu, nu, c, a, ok
     integer :: noca, nocb, p, q, isp, jsq
-    integer(c_int32_t) :: gstat, gtag_id
+    integer(c_int32_t) :: gtag_id
     character(len=80) :: tags_gamma(1)
     real(kind=dp), contiguous, pointer :: gam_tlf(:,:,:)
     logical :: have_custom
@@ -365,8 +365,7 @@ contains
     ! consistent transition density, e.g. built in Python from the closed
     ! form), contract it instead of get_mrsf_transition_density's gamma.
     tags_gamma(1) = OQP_nac_gamma
-    gstat = infos%dat%contains(tags_gamma, gtag_id)
-    have_custom = (gstat == ta_ok)
+    have_custom = infos%dat%contains(tags_gamma, gtag_id)
     if (have_custom) call tagarray_get_data(infos%dat, OQP_nac_gamma, gam_tlf)
 
     call infos%dat%erase((/ character(len=80) :: OQP_nac_overlap, &
