@@ -56,6 +56,29 @@ nuclear time step tends to zero.  A finite-step overlap coupling represents an
 interval average; comparisons therefore use either a midpoint evaluation or a
 time-symmetric average of endpoint analytic values.
 
+## Distinct roles in surface hopping
+
+The scalar `tau_IJ` controls electronic population transfer and the stochastic
+hop probability.  It does not specify the nuclear momentum change after a hop.
+When directional momentum rescaling is selected, the complete analytic vector
+defines that direction.  With mass-weighted momentum `p` and mass-weighted unit
+coupling direction `n_IJ`, the accepted-hop correction has the form
+
+\[
+\mathbf p' = \mathbf p + \alpha\mathbf n_{IJ},
+\qquad
+\tfrac12|\mathbf p'|^2 + E_J = \tfrac12|\mathbf p|^2 + E_I,
+\]
+
+where the energy-conserving root for `alpha` is used.  At a nonzero gap,
+`h_IJ=(E_J-E_I)d_IJ` gives the same line and is numerically preferable near a
+conical intersection.  The sign of this line does not affect the quadratic
+energy equation, whereas its orientation relative to the nuclear momentum does.
+Consequently, NAC-directed and isotropic/full-velocity rescaling may change the
+number of frustrated hops, the post-hop momentum distribution, recrossing, and
+eventual product branching.  This is tested as a physical dynamics choice and
+is not folded into the validation of the electronic hop probability.
+
 ## New assumptions and optional approximations
 
 The velocity-contracted analytic TDC itself adds no electronic-structure
@@ -74,6 +97,51 @@ be identified in output and restart records:
 4. `local-lvc`: reuse an analytically determined local `g/h` branching plane.
    This is a model approximation and is out of scope until the exact directional
    implementation and its molecular comparisons pass.
+
+## Response reuse between adjacent geometries
+
+The first acceleration path preserves the exact analytic result.  Cache each
+converged unordered-pair ROHF adjoint Z-vector and use it only as the initial
+guess for the next MINRES solve.  Since the vector is represented in the MO
+rotation space, it must first be transported to the new geometry using the AO
+cross-overlap and phase-aligned maximum-overlap/Procrustes transformations
+within the closed, open, and virtual subspaces.  State-pair permutation and
+signs follow the same electronic-state overlap tracking used by dynamics.
+
+Two predictors are evaluated:
+
+\[
+z_{n+1}^{(0)}=\mathcal T_{n\to n+1}z_n,
+\]
+
+and, after two accepted steps,
+
+\[
+z_{n+1}^{(0)}=\mathcal T_{n\to n+1}
+\left[z_n+\eta\left(z_n-\mathcal T_{n-1\to n}z_{n-1}\right)\right],
+\]
+
+where `eta` is the ratio of consecutive nuclear time steps and is bounded to
+avoid an unstable extrapolation.  MINRES then corrects this predictor until the
+same certified true residual as a cold solve is reached.  This warm-start mode
+therefore changes cost but not the final NAC within the solver tolerance.  It is
+accepted only when it saves Hessian actions after including the extra `H z0`
+residual evaluation.
+
+The cache is invalidated upon a change in basis dimension, orbital occupation,
+MRSF reference identity, tracked state manifold, failed subspace-overlap
+criterion, large geometry displacement, nonfinite predictor, or increased
+initial residual relative to the zero/preconditioned guess.  Cache contents,
+transport overlaps, predictor type, initial/final residuals, and iteration
+counts are restart data and are written to the calculation record.
+
+A separately named approximate mode may accept the transported predictor
+without complete correction only after one explicit Hessian action evaluates
+`r=b-Hz`.  It must use a calibrated residual-to-`tau` error criterion, periodic
+exact refreshes, and an immediate exact solve in a transition region or before
+NAC-directed momentum rescaling.  Reusing derivative integrals, XC grid terms,
+or an untransported Z-vector at a displaced geometry is not permitted as an
+unlabelled approximation.
 
 TD-Baeck-An is retained as an independent, phase-free energy-curvature
 diagnostic.  It is not an external reference for the signed analytic coupling
@@ -113,6 +181,12 @@ and must not replace `h` in the immediate vicinity of a conical intersection.
 7. Only after items 1-6 pass, compare paired NAMD trajectories and adaptive
    policies.  Use identical initial conditions, random streams, gradients,
    decoherence, electronic substeps, and velocity-rescaling rule.
+8. For response reuse, compare cold and transported warm starts over smooth and
+   near-intersection paths.  Require identical certified residuals and NACs,
+   record Hessian actions, and force cache invalidation at constructed orbital,
+   reference, and state-switching events.  An approximate predictor-only mode
+   requires a separate error calibration and must never serve as evidence for
+   the exact method.
 
 ## Performance evidence
 
