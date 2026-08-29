@@ -107,7 +107,7 @@ def test_gradient_and_nac_can_share_one_native_multi_rhs_solve():
 
 def test_namd_final_json_is_saved_after_the_last_current_geometry_gradient():
     final_restart = "self._save_restart(istep, r, self.vel, accel)"
-    final_save = "if mol.config['guess']['save_mol']:\n            mol.save_data()"
+    final_save = "or self._gradient_nac_fusion_enabled()):\n            mol.save_data()"
     assert final_restart in NAMD
     assert final_save in NAMD
     assert NAMD.index(final_restart) < NAMD.index(final_save)

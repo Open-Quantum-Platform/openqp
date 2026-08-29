@@ -3831,7 +3831,8 @@ class NAMD:
         # right-hand sides.  Save once at trajectory completion to ensure the
         # generic JSON carries the final current-geometry gradient as well as
         # the restart/trajectory records.
-        if mol.config['guess']['save_mol']:
+        if (mol.config['guess']['save_mol']
+                or self._gradient_nac_fusion_enabled()):
             mol.save_data()
         dump_log(mol, title='PyOQP: NAMD trajectory complete')
 
