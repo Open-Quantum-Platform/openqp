@@ -3825,6 +3825,14 @@ class NAMD:
                 transition_energy_jump=transition_energy_jump)
             self._save_restart(istep, r, self.vel, accel)
 
+        # State-overlap evaluation normally refreshes the generic molecule
+        # JSON after the force calculation.  In the fused gradient/NAC path it
+        # must run before the gradient so that root phases are fixed for both
+        # right-hand sides.  Save once at trajectory completion to ensure the
+        # generic JSON carries the final current-geometry gradient as well as
+        # the restart/trajectory records.
+        if mol.config['guess']['save_mol']:
+            mol.save_data()
         dump_log(mol, title='PyOQP: NAMD trajectory complete')
 
     # ------------------------------------------------------------------ #

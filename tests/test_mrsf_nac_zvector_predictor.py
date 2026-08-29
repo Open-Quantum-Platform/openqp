@@ -103,3 +103,11 @@ def test_gradient_and_nac_can_share_one_native_multi_rhs_solve():
     assert "mrsf_nac_fusion_take_solution(xk)" in zvector
     assert "_nac_fused_gradient_ready" in single_point
     assert "self._state_overlap(istep, update_analytic=False)" in NAMD
+
+
+def test_namd_final_json_is_saved_after_the_last_current_geometry_gradient():
+    final_restart = "self._save_restart(istep, r, self.vel, accel)"
+    final_save = "if mol.config['guess']['save_mol']:\n            mol.save_data()"
+    assert final_restart in NAMD
+    assert final_save in NAMD
+    assert NAMD.index(final_restart) < NAMD.index(final_save)
