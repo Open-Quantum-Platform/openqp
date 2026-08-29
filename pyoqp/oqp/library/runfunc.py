@@ -156,8 +156,11 @@ def compute_nacme(mol):
     # Numerical-NAC displacement workers must compare the same physical root
     # on the +dx and -dx sides even if the adiabatic solver exchanges their
     # energy order.  Ordinary NACME/MD steps retain energy-root order.
-    reorder_x = os.environ.get('OQP_NUM_NAC_WORKER', '') == '1'
-    NACME(mol).nacme(reorder_x=reorder_x)
+    spatial_worker = os.environ.get('OQP_NUM_NAC_WORKER', '') == '1'
+    NACME(mol).nacme(
+        reorder_x=spatial_worker,
+        normalize_retained=spatial_worker,
+    )
 
 
 def compute_nac(mol):

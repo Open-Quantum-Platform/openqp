@@ -23,6 +23,16 @@ class TestJsonTdLayout(unittest.TestCase):
 
         self.assertEqual(result, [[11.0, 21.0], [12.0, 22.0], [13.0, 23.0]])
 
+    def test_td_response_vectors_round_trip_back_to_tag_bridge_layout(self):
+        bridged = np.array([[11.0, 12.0], [13.0, 21.0], [22.0, 23.0]])
+
+        documented = JSON_UTILS.json_array("OQP::td_bvec_mo", bridged)
+        restored = JSON_UTILS.tag_array_from_json(
+            "OQP::td_bvec_mo", documented
+        )
+
+        np.testing.assert_array_equal(restored, bridged)
+
     def test_unrelated_matrices_keep_their_layout(self):
         matrix = np.array([[1.0, 2.0], [3.0, 4.0]])
 

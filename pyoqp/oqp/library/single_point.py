@@ -119,6 +119,7 @@ from oqp.library.nac_utils import (
     hst_derivative_coupling,
     interstate_coupling,
     load_numerical_nac_cache,
+    normalize_retained_state_overlap,
     write_numerical_nac_cache_marker,
 )
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
@@ -2925,7 +2926,10 @@ class NACME(BasisOverlap):
         current_x = copy.deepcopy(self.mol.data['OQP::td_bvec_mo'])
         x_shape = current_x.shape
 
-        # reshape Fortran data into Python style
+        # The tag-array bridge exposes the Fortran (amplitude, state) buffer
+        # in a C-shaped view.  Its contiguous buffer remains state-major, so
+        # rebuild (state, amplitude) rows from that buffer.  JSON loading must
+        # first restore this bridge layout (see tag_array_from_json).
         current_x = current_x.reshape((x_shape[1], x_shape[0]))
         previous_x = previous_x.reshape((x_shape[1], x_shape[0]))
 
@@ -3019,8 +3023,9 @@ class NACME(BasisOverlap):
         # available above as transport history, but are not current results.
         self.mol._state_tracking_fresh = True
 
-        # update x in Fortran data shape
-        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape((x_shape[0], x_shape[1]))
+        # Restore the tag-array bridge shape without changing its state-major
+        # contiguous buffer.
+        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape(x_shape)
 
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
@@ -3044,7 +3049,7 @@ class NACME(BasisOverlap):
             noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
         data["OQP::td_states_overlap"] = s_st
 
-    def nacme(self, align=True, reorder_x=False):
+    def nacme(self, align=True, reorder_x=False, normalize_retained=False):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
         between the two geometries.
@@ -3070,6 +3075,8 @@ class NACME(BasisOverlap):
         state_overlap = canonical_state_overlap(
             self.mol.data["OQP::td_states_overlap"]
         )
+        if normalize_retained:
+            state_overlap = normalize_retained_state_overlap(state_overlap)
 
         # compute time-derivative nac
         dc_matrix = hst_derivative_coupling(state_overlap, self.dt)
@@ -3606,7 +3613,7 @@ def nacme_wrapper(key_dict):
             BasisOverlap(mol).overlap()
             sp.excitation(ref_energy)
             LastStep(mol).compute(mol)
-            NACME(mol).nacme(reorder_x=True)
+            NACME(mol).nacme(reorder_x=True, normalize_retained=True)
             dump_log(mol, title='', section='end')
 
         try:
