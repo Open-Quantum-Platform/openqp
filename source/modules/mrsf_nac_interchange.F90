@@ -29,7 +29,8 @@ module mrsf_nac_interchange_mod
   real(kind=dp), allocatable, save :: nac_z_geometry(:,:,:)
   logical, allocatable, save :: nac_z_have_recent(:), nac_z_have_earlier(:), &
                                 nac_z_have_geometry(:)
-  integer, allocatable, save :: nac_z_steps_since_exact(:)
+  integer, allocatable, save :: nac_z_steps_since_exact(:), &
+                                nac_z_exact_count(:)
   integer, save :: nac_z_ltot = 0, nac_z_npair = 0, nac_z_natom = 0
   integer, save :: nac_z_nbf = 0, nac_z_nocca = 0, nac_z_noccb = 0
 
@@ -45,6 +46,7 @@ contains
     if (allocated(nac_z_have_earlier)) deallocate(nac_z_have_earlier)
     if (allocated(nac_z_have_geometry)) deallocate(nac_z_have_geometry)
     if (allocated(nac_z_steps_since_exact)) deallocate(nac_z_steps_since_exact)
+    if (allocated(nac_z_exact_count)) deallocate(nac_z_exact_count)
     nac_z_ltot = 0; nac_z_npair = 0; nac_z_natom = 0
     nac_z_nbf = 0; nac_z_nocca = 0; nac_z_noccb = 0
   end subroutine nac_z_cache_reset
@@ -65,12 +67,14 @@ contains
     allocate(nac_z_recent(ltot,npair), nac_z_earlier(ltot,npair), &
              nac_z_geometry(3,natom,npair), &
              nac_z_have_recent(npair), nac_z_have_earlier(npair), &
-             nac_z_have_geometry(npair), nac_z_steps_since_exact(npair))
+             nac_z_have_geometry(npair), nac_z_steps_since_exact(npair), &
+             nac_z_exact_count(npair))
     nac_z_recent = 0.0_dp; nac_z_earlier = 0.0_dp
     nac_z_geometry = 0.0_dp
     nac_z_have_recent = .false.; nac_z_have_earlier = .false.
     nac_z_have_geometry = .false.
     nac_z_steps_since_exact = 0
+    nac_z_exact_count = 0
     nac_z_ltot = ltot; nac_z_npair = npair; nac_z_natom = natom
     nac_z_nbf = nbf; nac_z_nocca = nocca; nac_z_noccb = noccb
   end subroutine nac_z_cache_prepare
@@ -440,7 +444,7 @@ contains
       transport_valid, same_geometry, pass_guess, use_approximation
     integer, allocatable :: iterations(:)
     integer :: nbf, nocca, noccb, nvira, offset, ltot, nrhs, irhs, &
-      npair_total, first_pair, absolute_pair, ios, exact_every
+      npair_total, first_pair, absolute_pair, ios, exact_every, warmup_exact
     character(len=32) :: mode, env
 
     if (infos%control%scftype /= 3) then
@@ -507,6 +511,18 @@ contains
       if (ios /= 0) exact_every = 0
     end if
     exact_every = max(0,exact_every)
+    warmup_exact = 1
+    if (linear_mode) warmup_exact = 2
+    env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_WARMUP_EXACT',env)
+    if (len_trim(env) > 0) then
+      read(env,*,iostat=ios) warmup_exact
+      if (ios /= 0) then
+        warmup_exact = 1
+        if (linear_mode) warmup_exact = 2
+      end if
+    end if
+    warmup_exact = max(1,warmup_exact)
 
     allocate(converged(nrhs), residual(nrhs), initial_residual(nrhs), &
              iterations(nrhs), guess(ltot,nrhs), guess_available(nrhs), &
@@ -558,6 +574,8 @@ contains
 
     pass_guess = predictor_mode .and. all(guess_available)
     use_approximation = approximate_mode .and. pass_guess
+    if (use_approximation) use_approximation = all(nac_z_exact_count( &
+      first_pair:first_pair+nrhs-1) >= warmup_exact)
     if (use_approximation .and. exact_every > 0) then
       use_approximation = .not. any(nac_z_steps_since_exact( &
         first_pair:first_pair+nrhs-1) >= exact_every-1)
@@ -664,6 +682,9 @@ contains
             nac_z_steps_since_exact(absolute_pair) + 1
         else
           nac_z_steps_since_exact(absolute_pair) = 0
+          nac_z_exact_count(absolute_pair) = &
+            min(huge(nac_z_exact_count(absolute_pair)), &
+                nac_z_exact_count(absolute_pair) + 1)
         end if
       end do
     end if

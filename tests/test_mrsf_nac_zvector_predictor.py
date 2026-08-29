@@ -68,10 +68,28 @@ def test_approximate_mode_replaces_only_z_and_has_exact_refreshes():
     assert "residual = -1.0_dp" in INTERCHANGE
     assert "iterations = 0" in INTERCHANGE
     assert "OQP_MRSF_NAC_ZV_EXACT_EVERY" in INTERCHANGE
+    assert "OQP_MRSF_NAC_ZV_WARMUP_EXACT" in INTERCHANGE
+    assert "nac_z_exact_count" in INTERCHANGE
+    assert ">= warmup_exact" in INTERCHANGE
     assert "call cphf_solve_rohf" in INTERCHANGE
     assert INTERCHANGE.index("if (use_approximation) then") < INTERCHANGE.index(
         "call cphf_solve_rohf"
     )
+
+
+def test_linear_approximation_requires_two_exact_vectors_by_default():
+    assert "warmup_exact = 1" in INTERCHANGE
+    assert "if (linear_mode) warmup_exact = 2" in INTERCHANGE
+    first_approximation_gate = INTERCHANGE.index(
+        "use_approximation = approximate_mode .and. pass_guess"
+    )
+    warmup_gate = INTERCHANGE.index(
+        "nac_z_exact_count(", first_approximation_gate
+    )
+    periodic_gate = INTERCHANGE.index(
+        "nac_z_steps_since_exact(", warmup_gate
+    )
+    assert first_approximation_gate < warmup_gate < periodic_gate
 
 
 def test_namd_records_full_vector_and_velocity_contraction_predictor_errors():
