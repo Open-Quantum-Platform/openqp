@@ -42,7 +42,7 @@ contains
       bind(C, name="mrsf_nac_metric_column")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, TA_TYPE_REAL64
     use, intrinsic :: iso_c_binding, only: c_int32_t
 
     type(oqp_handle_t) :: c_handle
@@ -57,9 +57,9 @@ contains
     nstate = inf%tddft%nstate
     allocate(column(nbf*nbf,nstate))
     call mrsf_nac_metric_column(inf, int(jstate), column)
-    call inf%dat%remove_records((/ character(len=80) :: &
+    call inf%dat%erase((/ character(len=80) :: &
       'OQP::nac_gamma_column' /))
-    call inf%dat%reserve_data('OQP::nac_gamma_column', TA_TYPE_REAL64, &
+    call tagarray_reserve_data(inf%dat, 'OQP::nac_gamma_column', TA_TYPE_REAL64, &
       nbf*nbf*nstate, (/ nbf*nbf, nstate /), &
       comment='diagnostic streamed exact-TLF metric column')
     call tagarray_get_data(inf%dat, 'OQP::nac_gamma_column', exported)
@@ -84,7 +84,7 @@ contains
 !> gamma^IJ and -gamma^JI are not interchangeable identities.
   subroutine mrsf_nac_metric_data(infos)
     use types, only: information
-    use oqp_tagarray_driver, only: data_has_tags, tagarray_get_data, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo, TA_TYPE_REAL64
     use tdhf_mrsf_lib, only: mrsfxvec
     use messages, only: show_message, WITH_ABORT
@@ -180,8 +180,8 @@ contains
       end if
     end do
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_gamma /))
-    call infos%dat%reserve_data(tag_gamma, TA_TYPE_REAL64, &
+    call infos%dat%erase((/ character(len=80) :: tag_gamma /))
+    call tagarray_reserve_data(infos%dat, tag_gamma, TA_TYPE_REAL64, &
       nbf*nbf*nstate*nstate, (/ nbf*nbf, nstate, nstate /), &
       comment='closed-form exact-tlf MRSF state-overlap orbital source')
     call tagarray_get_data(infos%dat, tag_gamma, gamma_tlf)
@@ -240,7 +240,7 @@ contains
 !> gamma_column(:,I) contains gamma^(I,J); the diagonal column is zero.
   subroutine mrsf_nac_metric_column(infos, jstate, gamma_column)
     use types, only: information
-    use oqp_tagarray_driver, only: data_has_tags, tagarray_get_data, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo
     use tdhf_mrsf_lib, only: mrsfxvec
     use messages, only: show_message, WITH_ABORT

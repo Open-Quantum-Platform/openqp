@@ -20,7 +20,7 @@ def test_pair_overlap_reacquires_mos_after_output_reservations():
         INTERCHANGE.read_text(),
         "mrsf_nac_rohf_pair_overlap(infos, metric_only)",
     )
-    last_reserve = body.index("reserve_data(tag_gsk")
+    last_reserve = body.index("tagarray_reserve_data(infos%dat, tag_gsk")
     reacquire = body.index("tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)", last_reserve)
     first_transform = body.index("call der_overlap_matrix_ket")
     assert last_reserve < reacquire < first_transform
@@ -28,7 +28,7 @@ def test_pair_overlap_reacquires_mos_after_output_reservations():
 
 def test_pair_finalize_reacquires_inputs_after_output_reservations():
     body = _body(INTERCHANGE.read_text(), "mrsf_nac_pair_finalize(infos)")
-    last_reserve = body.index("reserve_data(tag_nacv")
+    last_reserve = body.index("tagarray_reserve_data(infos%dat, tag_nacv")
     dp_reacquire = body.index("tagarray_get_data(infos%dat, tag_dp, dp_ordered)", last_reserve)
     energy_reacquire = body.index(
         "tagarray_get_data(infos%dat, OQP_td_energies, energies)", last_reserve

@@ -50,7 +50,7 @@ contains
     use, intrinsic :: iso_c_binding, only: c_int64_t
     use types, only: information
     use io_constants, only: iw
-    use oqp_tagarray_driver, only: data_has_tags, tagarray_get_data, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo, OQP_td_energies, TA_TYPE_REAL64
     use messages, only: show_message, WITH_ABORT
     use mrsf_nac_metric_data_mod, only: mrsf_nac_metric_column
@@ -288,13 +288,13 @@ contains
       end do
     end do
 
-    call infos%dat%remove_records((/ character(len=80) :: &
+    call infos%dat%erase((/ character(len=80) :: &
       tag_ytil, tag_xstate, tag_gamma, tag_z /))
-    call infos%dat%reserve_data(tag_ytil, TA_TYPE_REAL64, nij, (/ nij /), &
+    call tagarray_reserve_data(infos%dat, tag_ytil, TA_TYPE_REAL64, nij, (/ nij /), &
       comment='streamed MRSF ordered-pair eigenvector response')
-    call infos%dat%reserve_data(tag_xstate, TA_TYPE_REAL64, nij, (/ nij /), &
+    call tagarray_reserve_data(infos%dat, tag_xstate, TA_TYPE_REAL64, nij, (/ nij /), &
       comment='streamed MRSF right-state amplitude')
-    call infos%dat%reserve_data(tag_gamma, TA_TYPE_REAL64, nbf*nbf, &
+    call tagarray_reserve_data(infos%dat, tag_gamma, TA_TYPE_REAL64, nbf*nbf, &
       (/ nbf*nbf /), comment='streamed exact-TLF pair metric source')
 
     cutoff_saved = infos%control%int2e_cutoff
@@ -367,9 +367,9 @@ contains
           xstate_tag = bvec_saved(:,jstate)
           ! Publish only the current pair.  Downstream overlap assembly sees
           ! the same record at the same point as in the scalar implementation.
-          call infos%dat%remove_records((/ character(len=80) :: &
+          call infos%dat%erase((/ character(len=80) :: &
             tag_mt_frozen /))
-          call infos%dat%reserve_data(tag_mt_frozen, TA_TYPE_REAL64, &
+          call tagarray_reserve_data(infos%dat, tag_mt_frozen, TA_TYPE_REAL64, &
             nbf*nbf, (/ nbf*nbf /), &
             comment='current batched MRSF frozen pair orbital source')
           call tagarray_get_data(infos%dat, tag_mt_frozen, mt_frozen_tag)
@@ -484,13 +484,13 @@ contains
     end do
     if (profile_enabled) call profile_add(profile_xc, profile_stop)
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_z, tag_hf, &
+    call infos%dat%erase((/ character(len=80) :: tag_z, tag_hf, &
                                                         tag_xc /))
-    call infos%dat%reserve_data(tag_z, TA_TYPE_REAL64, ltot, (/ ltot /), &
+    call tagarray_reserve_data(infos%dat, tag_z, TA_TYPE_REAL64, ltot, (/ ltot /), &
       comment='current antisymmetric unordered-pair ROHF adjoint')
-    call infos%dat%reserve_data(tag_hf, TA_TYPE_REAL64, 3*natom, &
+    call tagarray_reserve_data(infos%dat, tag_hf, TA_TYPE_REAL64, 3*natom, &
       (/ 3, natom /), comment='batched native ROHF NAC analytic HF adjoint')
-    call infos%dat%reserve_data(tag_xc, TA_TYPE_REAL64, 3*natom, &
+    call tagarray_reserve_data(infos%dat, tag_xc, TA_TYPE_REAL64, 3*natom, &
       (/ 3, natom /), comment='batched native ROHF NAC analytic XC adjoint')
     do ipair = 1, npair
       ! Every adjoint contraction is linear in z.  Applying it once to the

@@ -1634,9 +1634,9 @@ contains
       real(kind=dp), pointer :: xk_dump(:)
       call get_environment_variable('NAC_DUMP_RHS', ev_dump)
       if (len_trim(ev_dump) > 0) then
-        call infos%dat%remove_records((/ character(len=80) :: &
+        call infos%dat%erase((/ character(len=80) :: &
           'OQP::nac_zvec_solution' /))
-        call infos%dat%reserve_data('OQP::nac_zvec_solution', &
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_zvec_solution', &
              ta_type_real64, lzdim, (/ lzdim /), &
              comment='flat SD/DV/SV legacy multiplier; density uses xk/2')
         call tagarray_get_data(infos%dat, 'OQP::nac_zvec_solution', xk_dump)
@@ -2385,8 +2385,8 @@ contains
           real(kind=dp), pointer :: rhs_dump(:)
           call get_environment_variable('NAC_DUMP_RHS', ev_dump)
           if (len_trim(ev_dump) > 0) then
-            call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_zvec_rhs' /))
-            call infos%dat%reserve_data('OQP::nac_zvec_rhs', ta_type_real64, &
+            call infos%dat%erase((/ character(len=80) :: 'OQP::nac_zvec_rhs' /))
+            call tagarray_reserve_data(infos%dat, 'OQP::nac_zvec_rhs', ta_type_real64, &
                  size(rhs), (/ size(rhs) /))
             call tagarray_get_data(infos%dat, 'OQP::nac_zvec_rhs', rhs_dump)
             rhs_dump = rhs

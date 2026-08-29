@@ -369,14 +369,14 @@ contains
     have_custom = (gstat == ta_ok)
     if (have_custom) call tagarray_get_data(infos%dat, OQP_nac_gamma, gam_tlf)
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_overlap, &
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_overlap, &
                                                           OQP_nac_trden /))
-    call infos%dat%reserve_data(OQP_nac_overlap, ta_type_real64, &
+    call tagarray_reserve_data(infos%dat, OQP_nac_overlap, ta_type_real64, &
           3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
     call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
     nac_ov = 0.0_dp
     ! also export the MO interstate transition densities for diagnostics
-    call infos%dat%reserve_data(OQP_nac_trden, ta_type_real64, &
+    call tagarray_reserve_data(infos%dat, OQP_nac_trden, ta_type_real64, &
           nbf*nbf*nstate*nstate, (/ nbf*nbf, nstate, nstate /))
     call tagarray_get_data(infos%dat, OQP_nac_trden, trden_st)
     trden_st = 0.0_dp
@@ -401,11 +401,11 @@ contains
       real(kind=dp), pointer :: dsk_out(:,:), dsf_out(:,:)
       call get_environment_variable('NAC_DUMP_DS', ev_ds)
       if (len_trim(ev_ds) > 0) then
-        call infos%dat%remove_records((/ character(len=80) :: &
+        call infos%dat%erase((/ character(len=80) :: &
           'OQP::dbg_dsket', 'OQP::dbg_dsfull' /))
-        call infos%dat%reserve_data('OQP::dbg_dsket', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_dsket', ta_type_real64, &
               nbf*nbf*3*natom, (/ nbf*nbf, 3*natom /))
-        call infos%dat%reserve_data('OQP::dbg_dsfull', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_dsfull', ta_type_real64, &
               nbf*nbf*3*natom, (/ nbf*nbf, 3*natom /))
         call tagarray_get_data(infos%dat, 'OQP::dbg_dsket', dsk_out)
         call tagarray_get_data(infos%dat, 'OQP::dbg_dsfull', dsf_out)
@@ -1355,8 +1355,8 @@ contains
     mo_a => mo_a_owned
     bvec_mo => bvec_mo_owned
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_amp /))
-    call infos%dat%reserve_data(OQP_nac_amp, ta_type_real64, &
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_amp /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_amp, ta_type_real64, &
           3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
     call tagarray_get_data(infos%dat, OQP_nac_amp, nac_amp)
     nac_amp = 0.0_dp
@@ -1570,16 +1570,16 @@ contains
   ! of the production ABI; production must not depend on env-gated dbg_* tags.
     block
       real(kind=dp), pointer :: pa_pair(:), pb_pair(:), pa_packed(:), pb_packed(:)
-      call infos%dat%remove_records((/ character(len=80) :: &
+      call infos%dat%erase((/ character(len=80) :: &
         'OQP::nac_pij_a', 'OQP::nac_pij_b', &
         'OQP::nac_dm1_a', 'OQP::nac_dm1_b' /))
-      call infos%dat%reserve_data('OQP::nac_pij_a', ta_type_real64, &
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_pij_a', ta_type_real64, &
             nbf*nbf, (/ nbf*nbf /), comment='ordered MRSF alpha AO pair density')
-      call infos%dat%reserve_data('OQP::nac_pij_b', ta_type_real64, &
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_pij_b', ta_type_real64, &
             nbf*nbf, (/ nbf*nbf /), comment='ordered MRSF beta AO pair density')
-      call infos%dat%reserve_data('OQP::nac_dm1_a', ta_type_real64, &
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_dm1_a', ta_type_real64, &
             nbf2, (/ nbf2 /), comment='packed ordered MRSF alpha AO pair density')
-      call infos%dat%reserve_data('OQP::nac_dm1_b', ta_type_real64, &
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_dm1_b', ta_type_real64, &
             nbf2, (/ nbf2 /), comment='packed ordered MRSF beta AO pair density')
       call tagarray_get_data(infos%dat, 'OQP::nac_pij_a', pa_pair)
       call tagarray_get_data(infos%dat, 'OQP::nac_pij_b', pb_pair)
@@ -1597,11 +1597,11 @@ contains
       real(kind=dp), pointer :: pa_out(:), pb_out(:)
       call get_environment_variable('NAC_DUMP_PIJ', ev_p)
       if (len_trim(ev_p) > 0) then
-        call infos%dat%remove_records((/ character(len=80) :: &
+        call infos%dat%erase((/ character(len=80) :: &
           'OQP::dbg_pij_a', 'OQP::dbg_pij_b' /))
-        call infos%dat%reserve_data('OQP::dbg_pij_a', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_pij_a', ta_type_real64, &
               nbf*nbf, (/ nbf*nbf /))
-        call infos%dat%reserve_data('OQP::dbg_pij_b', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_pij_b', ta_type_real64, &
               nbf*nbf, (/ nbf*nbf /))
         call tagarray_get_data(infos%dat, 'OQP::dbg_pij_a', pa_out)
         call tagarray_get_data(infos%dat, 'OQP::dbg_pij_b', pb_out)
@@ -1623,8 +1623,8 @@ contains
   ! diagnostic split: export the 1e part alone so the 1e/2e balance can be checked
     block
       real(kind=dp), pointer :: o1(:,:)
-      call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_esum_1e' /))
-      call infos%dat%reserve_data('OQP::nac_esum_1e', ta_type_real64, 3*natom, (/ 3, natom /))
+      call infos%dat%erase((/ character(len=80) :: 'OQP::nac_esum_1e' /))
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_esum_1e', ta_type_real64, 3*natom, (/ 3, natom /))
       call tagarray_get_data(infos%dat, 'OQP::nac_esum_1e', o1)
       o1 = gx
     end block
@@ -1722,15 +1722,15 @@ contains
       gw = 0.0_dp
       call grad_ee_overlap(basis, wpk, gw)
       gw = -gw
-      call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_wsx' /))
-      call infos%dat%reserve_data('OQP::nac_wsx', ta_type_real64, 3*natom, (/ 3, natom /))
+      call infos%dat%erase((/ character(len=80) :: 'OQP::nac_wsx' /))
+      call tagarray_reserve_data(infos%dat, 'OQP::nac_wsx', ta_type_real64, 3*natom, (/ 3, natom /))
       call tagarray_get_data(infos%dat, 'OQP::nac_wsx', owsx)
       owsx = gw
       deallocate(fa, fb, mA, mB, wao, wpk, gw, sc, fpk)
     end block
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_esum /))
-    call infos%dat%reserve_data(OQP_nac_esum, ta_type_real64, 3*natom, (/ 3, natom /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_esum /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_esum, ta_type_real64, 3*natom, (/ 3, natom /))
     call tagarray_get_data(infos%dat, OQP_nac_esum, out)
     out = gx
 
@@ -1825,8 +1825,8 @@ contains
         bvec_mo = save_bvec
         infos%tddft%target_state = save_target
         infos%atoms%grad = 0.0_dp
-        call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_homog' /))
-        call infos%dat%reserve_data('OQP::nac_homog', ta_type_real64, &
+        call infos%dat%erase((/ character(len=80) :: 'OQP::nac_homog' /))
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_homog', ta_type_real64, &
              3*natom*4, (/ 3*natom, 4 /))
         call tagarray_get_data(infos%dat, 'OQP::nac_homog', homog_out)
         homog_out = reshape(homog, (/ 3*natom, 4 /))
@@ -1854,8 +1854,8 @@ contains
     infos%tddft%target_state = save_target
     infos%atoms%grad = 0.0_dp
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_amp_polar /))
-    call infos%dat%reserve_data(OQP_nac_amp_polar, ta_type_real64, &
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_amp_polar /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_amp_polar, ta_type_real64, &
          3*natom, (/ 3, natom /))
     call tagarray_get_data(infos%dat, OQP_nac_amp_polar, out)
     out = accum
@@ -2060,8 +2060,8 @@ end module tdhf_mrsf_gradient_mod
     xstate_batch(:,1) = xstate
     call mrsf_nac_wpair_batch_impl(infos, ytil_batch, xstate_batch, mt_batch)
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mt /))
-    call infos%dat%reserve_data(OQP_nac_mt, ta_type_real64, nbf*nbf, &
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_mt /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mt, ta_type_real64, nbf*nbf, &
                                 (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_mt, mt_out)
     mt_out = reshape(mt_batch(:,:,1), (/ nbf*nbf /))

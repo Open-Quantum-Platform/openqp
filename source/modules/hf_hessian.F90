@@ -33,7 +33,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A, &
       OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
@@ -559,7 +559,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_E_MO_A, OQP_E_MO_B, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
@@ -1123,7 +1123,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, OQP_Hcore, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn, &
@@ -1452,7 +1452,7 @@ contains
         real(dp), contiguous, pointer :: dump_bvec_hf_jk_pulay(:,:)
         real(dp), contiguous, pointer :: dump_bvec_full(:,:), dump_uvec(:,:)
 
-        call infos%dat%remove_records((/ character(len=80) :: &
+        call infos%dat%erase((/ character(len=80) :: &
           'OQP::nac_rohf_bvec_hf_jk_pulay', &
           'OQP::nac_rohf_bvec_full', &
           'OQP::nac_rohf_uvec' /))
@@ -1460,13 +1460,13 @@ contains
         ! first index = packed ds/dv/sv ROHF rotation, second = Cartesian
         ! coordinate.  Python must use raw.reshape(ncart,ltot).T to undo the
         ! C-order view of the column-major storage.
-        call infos%dat%reserve_data('OQP::nac_rohf_bvec_hf_jk_pulay', &
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_bvec_hf_jk_pulay', &
           TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
           comment='ROHF HF+JK/Pulay CPHF RHS; Fortran (rotation,Cartesian)')
-        call infos%dat%reserve_data('OQP::nac_rohf_bvec_full', &
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_bvec_full', &
           TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
           comment='ROHF full HF+JK+XC CPHF RHS; Fortran (rotation,Cartesian)')
-        call infos%dat%reserve_data('OQP::nac_rohf_uvec', &
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_uvec', &
           TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
           comment='ROHF CPHF response U; Fortran (rotation,Cartesian)')
         call tagarray_get_data(infos%dat, 'OQP::nac_rohf_bvec_hf_jk_pulay', &

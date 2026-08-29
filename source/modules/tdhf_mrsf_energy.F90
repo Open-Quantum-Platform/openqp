@@ -188,14 +188,14 @@ contains
       end do
     end block
 
-    call infos%dat%remove_records((/ character(len=80) :: &
+    call infos%dat%erase((/ character(len=80) :: &
       OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b, &
       OQP_nac_mt_response /))
-    call infos%dat%reserve_data(OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
-    call infos%dat%reserve_data(OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
-    call infos%dat%reserve_data(OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
-    call infos%dat%reserve_data(OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
-    call infos%dat%reserve_data(OQP_nac_mt_response, ta_type_real64, &
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mt_response, ta_type_real64, &
          nbf*nbf, (/ nbf*nbf /), &
          comment='ordered MRSF full ground-state response orbital source')
     call tagarray_get_data(infos%dat, OQP_nac_v1_a, nac_v1_a)
@@ -350,13 +350,13 @@ contains
     call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
     call mrsfesum(infos, wrk1, fa, fb, amo, 1)
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mvax /))
-    call infos%dat%reserve_data(OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_mvax /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
     call tagarray_get_data(infos%dat, OQP_nac_mvax, nac_ax)
     nac_ax = amo(:,1)
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_gmo /))
-    call infos%dat%reserve_data(OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gmo /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_gmo, nac_gmo)
     nac_gmo = reshape(gmo, (/ nbf*nbf /))
 
@@ -365,18 +365,18 @@ contains
     ! ixcore level shift) that mrsfesum contracts with the amplitude. Lets the
     ! interstate relaxation term be built analytically in Python with the
     ! bit-identical Fock (no packed-triangular reconstruction).
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_fa /))
-    call infos%dat%reserve_data(OQP_nac_fa, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fa /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fa, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_fa, nac_fa)
     nac_fa = reshape(fa, (/ nbf*nbf /))
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_fb /))
-    call infos%dat%reserve_data(OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fb /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_fb, nac_fb)
     nac_fb = reshape(fb, (/ nbf*nbf /))
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_gchan /))
-    call infos%dat%reserve_data(OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gchan /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
     call tagarray_get_data(infos%dat, OQP_nac_gchan, nac_gchan)
     nac_gchan = reshape(gchan, (/ nbf*nbf*6 /))
 

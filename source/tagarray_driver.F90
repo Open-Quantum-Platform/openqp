@@ -224,9 +224,37 @@ module oqp_tagarray_driver
   end interface
   public :: data_has_tags, check_status
   public :: tagarray_get_data
+  public :: tagarray_reserve_data
   public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
   public :: ta_ok
 contains
+
+  ! Compatibility adapter for resident NAC records written against the
+  ! pre-1.0 TagArray reserve_data interface.  TagArray 1.0 replaces that
+  ! interface with container%create/alloc; override=.true. preserves the old
+  ! replace-existing-record semantics without changing the stored shape.
+  subroutine tagarray_reserve_data(container, tag, type_id, data_size, shape, comment)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(c_int32_t), intent(in) :: type_id
+    integer, intent(in) :: data_size
+    integer, intent(in) :: shape(:)
+    character(len=*), optional, intent(in) :: comment
+    integer(c_int32_t) :: status
+    integer(c_int64_t) :: shape64(size(shape))
+
+    shape64 = int(shape, c_int64_t)
+    if (int(data_size, c_int64_t) /= product(shape64)) then
+      error stop "tagarray_reserve_data: data_size does not match shape"
+    end if
+    if (present(comment)) then
+      status = container%create(tag, type_id, shape64, description=comment, &
+                                override=.true.)
+    else
+      status = container%create(tag, type_id, shape64, override=.true.)
+    end if
+    call check_status(status, module_name, "tagarray_reserve_data", tag, .true.)
+  end subroutine tagarray_reserve_data
 
     function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
     type(container_t), intent(inout) :: container

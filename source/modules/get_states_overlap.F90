@@ -512,14 +512,14 @@ contains
       real(kind=dp), pointer :: d1(:), d2(:), d3(:)
       call get_environment_variable('NAC_DUMP_MINORS', ev)
       if (len_trim(ev) > 0) then
-        call infos%dat%remove_records((/ character(len=80) :: &
+        call infos%dat%erase((/ character(len=80) :: &
              'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia', &
              'OQP::dbg_s_mo' /))
-        call infos%dat%reserve_data('OQP::dbg_s_ij', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ij', ta_type_real64, &
              noca*noca, (/ noca*noca /))
-        call infos%dat%reserve_data('OQP::dbg_s_ab', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ab', ta_type_real64, &
              nvirb*nvirb, (/ nvirb*nvirb /))
-        call infos%dat%reserve_data('OQP::dbg_s_ia', ta_type_real64, &
+        call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_ia', ta_type_real64, &
              noca*nvirb, (/ noca*nvirb /))
         call tagarray_get_data(infos%dat, 'OQP::dbg_s_ij', d1)
         call tagarray_get_data(infos%dat, 'OQP::dbg_s_ab', d2)
@@ -529,7 +529,7 @@ contains
         d3 = reshape(s_ia, (/ noca*nvirb /))
         block
           real(kind=dp), pointer :: d4(:)
-          call infos%dat%reserve_data('OQP::dbg_s_mo', ta_type_real64, &
+          call tagarray_reserve_data(infos%dat, 'OQP::dbg_s_mo', ta_type_real64, &
                nbf*nbf, (/ nbf*nbf /))
           call tagarray_get_data(infos%dat, 'OQP::dbg_s_mo', d4)
           d4 = reshape(s_mo(1:nbf,1:nbf), (/ nbf*nbf /))

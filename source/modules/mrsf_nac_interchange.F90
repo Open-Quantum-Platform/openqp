@@ -124,7 +124,7 @@ contains
 !> Output: OQP::nac_rohf_solution  (ltot)
   subroutine mrsf_nac_rohf_zvector(infos)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, TA_TYPE_REAL64
     use messages, only: show_message, WITH_ABORT
 
     implicit none
@@ -159,8 +159,8 @@ contains
     rhs(:,1) = rhs_in
     call mrsf_nac_rohf_zvector_batch(infos, rhs, solution)
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_solution /))
-    call infos%dat%reserve_data(tag_solution, TA_TYPE_REAL64, ltot, (/ ltot /), &
+    call infos%dat%erase((/ character(len=80) :: tag_solution /))
+    call tagarray_reserve_data(infos%dat, tag_solution, TA_TYPE_REAL64, ltot, (/ ltot /), &
          comment='one-pair ROHF NAC adjoint Z-vector; no 3N forward CPHF')
     call tagarray_get_data(infos%dat, tag_solution, solution_out)
     solution_out = solution(:,1)
@@ -317,7 +317,7 @@ contains
   subroutine mrsf_nac_rohf_pair_overlap(infos, metric_only)
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_VEC_MO_A, &
       TA_TYPE_REAL64
     use grd1, only: der_overlap_matrix_ket, der_overlap_matrix
     use messages, only: show_message, WITH_ABORT
@@ -392,19 +392,19 @@ contains
            + reshape(mt_response_flat, (/ nbf, nbf /)) + gamma
     end if
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_xmat, tag_rhs, &
+    call infos%dat%erase((/ character(len=80) :: tag_xmat, tag_rhs, &
                                                         tag_out, tag_vmask, &
                                                         tag_gsk /))
-    call infos%dat%reserve_data(tag_xmat, TA_TYPE_REAL64, nbf*nbf, &
+    call tagarray_reserve_data(infos%dat, tag_xmat, TA_TYPE_REAL64, nbf*nbf, &
          (/ nbf*nbf /), comment='assembled ordered MRSF orbital source')
-    call infos%dat%reserve_data(tag_rhs, TA_TYPE_REAL64, ltot, (/ ltot /), &
+    call tagarray_reserve_data(infos%dat, tag_rhs, TA_TYPE_REAL64, ltot, (/ ltot /), &
          comment='native ROHF dual of ordered MRSF orbital source')
-    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+    call tagarray_reserve_data(infos%dat, tag_out, TA_TYPE_REAL64, 3*natom, &
          (/ 3, natom /), &
          comment='ordered MRSF overlap and dependent-MO response')
-    call infos%dat%reserve_data(tag_vmask, TA_TYPE_REAL64, 3*natom, &
+    call tagarray_reserve_data(infos%dat, tag_vmask, TA_TYPE_REAL64, 3*natom, &
          (/ 3, natom /), comment='ordered MRSF dependent-MO response')
-    call infos%dat%reserve_data(tag_gsk, TA_TYPE_REAL64, 3*natom, &
+    call tagarray_reserve_data(infos%dat, tag_gsk, TA_TYPE_REAL64, 3*natom, &
          (/ 3, natom /), comment='ordered MRSF metric-overlap response')
     ! A TagArray reserve can relocate the backing store for records other than
     ! the one being added.  The MO record itself is unchanged, so reacquire its
@@ -520,7 +520,7 @@ contains
 !> Output: OQP::nac_dp_ordered (3*natom,nstate,nstate)
   subroutine mrsf_nac_pair_accumulator_init(infos)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, TA_TYPE_REAL64
     use messages, only: show_message, WITH_ABORT
 
     implicit none
@@ -540,9 +540,9 @@ contains
                         WITH_ABORT)
     end if
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_dp, tag_dcv, &
+    call infos%dat%erase((/ character(len=80) :: tag_dp, tag_dcv, &
                                                         tag_nacv /))
-    call infos%dat%reserve_data(tag_dp, TA_TYPE_REAL64, &
+    call tagarray_reserve_data(infos%dat, tag_dp, TA_TYPE_REAL64, &
          ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
          comment='resident ordered MRSF NAC Lagrangian vectors')
     call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
@@ -563,7 +563,7 @@ contains
 !> In/out: OQP::nac_dp_ordered           (3*natom,nstate,nstate)
   subroutine mrsf_nac_pair_accumulate(infos, istate, jstate)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data
     use messages, only: show_message, WITH_ABORT
 
     implicit none
@@ -636,7 +636,7 @@ contains
   subroutine mrsf_nac_pair_accumulate_antisym(infos, istate, jstate, &
                                                nonz_antisym)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data
     use messages, only: show_message, WITH_ABORT
 
     implicit none
@@ -699,7 +699,7 @@ contains
 !>         OQP::nac_nacv       (3*natom,nstate,nstate)
   subroutine mrsf_nac_pair_finalize(infos)
     use types, only: information
-    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, TA_TYPE_REAL64, &
       OQP_td_energies
     use messages, only: show_message, WITH_ABORT
 
@@ -726,12 +726,12 @@ contains
                         WITH_ABORT)
     end if
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_dcv, &
+    call infos%dat%erase((/ character(len=80) :: tag_dcv, &
                                                         tag_nacv /))
-    call infos%dat%reserve_data(tag_dcv, TA_TYPE_REAL64, &
+    call tagarray_reserve_data(infos%dat, tag_dcv, TA_TYPE_REAL64, &
          ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
          comment='antisymmetric MRSF derivative coupling')
-    call infos%dat%reserve_data(tag_nacv, TA_TYPE_REAL64, &
+    call tagarray_reserve_data(infos%dat, tag_nacv, TA_TYPE_REAL64, &
          ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
          comment='symmetric gap-scaled MRSF nonadiabatic coupling')
     ! Output reservations may relocate unrelated TagArray records.  Reacquire
@@ -787,7 +787,7 @@ contains
   subroutine mrsf_nac_rohf_hf_adjoint(infos)
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use cphf_mod, only: rohf_unpack_trial
@@ -964,8 +964,8 @@ contains
       end do
     end do
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_out /))
-    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+    call infos%dat%erase((/ character(len=80) :: tag_out /))
+    call tagarray_reserve_data(infos%dat, tag_out, TA_TYPE_REAL64, 3*natom, &
          (/ 3, natom /), comment='native ROHF NAC analytic HF/JK/Pulay adjoint')
     call tagarray_get_data(infos%dat, tag_out, out)
     out = ghf
@@ -994,7 +994,7 @@ contains
   subroutine mrsf_nac_rohf_hf_adjoint_batch(infos, z_vectors, ghf_vectors)
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix, pack_matrix
     use cphf_mod, only: rohf_unpack_trial
@@ -1249,7 +1249,7 @@ contains
   subroutine mrsf_nac_xc_adjoint(infos)
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, &
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix
     use cphf_mod, only: rohf_unpack_trial
@@ -1422,8 +1422,8 @@ contains
       gxc = 0.0_dp
     end if
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_out /))
-    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+    call infos%dat%erase((/ character(len=80) :: tag_out /))
+    call tagarray_reserve_data(infos%dat, tag_out, TA_TYPE_REAL64, 3*natom, &
          (/ 3, natom /), comment='native ROHF NAC analytic XC adjoint')
     call tagarray_get_data(infos%dat, tag_out, out)
     out = gxc
@@ -1451,7 +1451,7 @@ contains
   subroutine mrsf_nac_xc_adjoint_batch(infos, z_vectors, gxc_vectors)
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, &
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A
     use mathlib, only: unpack_matrix
     use cphf_mod, only: rohf_unpack_trial
