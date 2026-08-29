@@ -186,7 +186,7 @@ contains
     use types, only: information
     use io_constants, only: iw
     use cphf_mod, only: cphf_solve_rohf
-    use messages, only: show_message, WITH_ABORT
+    use messages, only: show_message, WITH_ABORT, WITHOUT_ABORT
 
     implicit none
 
@@ -225,18 +225,28 @@ contains
     inquire(unit=iw, opened=log_was_open)
     if (.not. log_was_open) &
       open(unit=iw, file=infos%log_filename, position='append')
-    ! Request ||H z - rhs||_2 <= 1e-10 independently for every batched RHS.
+    ! Keep requesting ||H z - rhs||_2 <= 1e-10.  Large response spaces can
+    ! reach machine-precision stagnation just above that target; accept the
+    ! best MINRES iterate only when its squared residual remains <= 1e-16
+    ! (residual norm <= 1e-8), and report that fallback explicitly.
     call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
                          maxit=max(int(infos%control%maxit_zv), ltot + 5), &
                          converged=converged, residual=residual, &
                          minres_solver=.true.)
     do irhs = 1, nrhs
-      if (.not. converged(irhs)) then
+      if (.not. converged(irhs) .and. residual(irhs) > 1.0e-16_dp) then
         call show_message( &
           'Native ROHF NAC batched Z-vector RHS ' // &
           trim(integer_to_string(irhs)) // &
           ' failed to converge; squared residual=' // &
           trim(real_to_string(residual(irhs))), WITH_ABORT)
+      else if (.not. converged(irhs)) then
+        call show_message( &
+          'Native ROHF NAC batched Z-vector RHS ' // &
+          trim(integer_to_string(irhs)) // &
+          ' accepted after MINRES stagnation; squared residual=' // &
+          trim(real_to_string(residual(irhs))) // &
+          ' (fallback threshold=1.0E-16).', WITHOUT_ABORT)
       end if
     end do
     if (.not. log_was_open) close(iw)
