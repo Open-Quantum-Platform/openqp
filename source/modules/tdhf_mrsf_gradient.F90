@@ -365,7 +365,7 @@ contains
     ! consistent transition density, e.g. built in Python from the closed
     ! form), contract it instead of get_mrsf_transition_density's gamma.
     tags_gamma(1) = OQP_nac_gamma
-    gstat = infos%dat%has_records(tags_gamma, gtag_id)
+    gstat = infos%dat%contains(tags_gamma, gtag_id)
     have_custom = (gstat == ta_ok)
     if (have_custom) call tagarray_get_data(infos%dat, OQP_nac_gamma, gam_tlf)
 

@@ -2417,7 +2417,7 @@ contains
               integer(c_int32_t) :: lstat, ltag_id
               real(kind=dp), contiguous, pointer :: orbL(:)
               tag_L(1) = "OQP::nac_orbgrad_L"
-              lstat = infos%dat%has_records(tag_L, ltag_id)
+              lstat = infos%dat%contains(tag_L, ltag_id)
               if (lstat == ta_ok) then
                 call tagarray_get_data(infos%dat, "OQP::nac_orbgrad_L", orbL)
                 wrk1(:,:) = reshape(orbL, (/ nbf, nbf /))
@@ -2428,7 +2428,7 @@ contains
               continue
             else
             tags_gamma(1) = "OQP::nac_gamma_tlf"
-            gstat = infos%dat%has_records(tags_gamma, gtag_id)
+            gstat = infos%dat%contains(tags_gamma, gtag_id)
             if (gstat == ta_ok) then
               ! TLF-consistent transition density supplied externally
               call tagarray_get_data(infos%dat, "OQP::nac_gamma_tlf", gam_tlf)
