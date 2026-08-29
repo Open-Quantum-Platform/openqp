@@ -20,6 +20,8 @@ inputs, running calculations, and analyzing results. **[Download OQP Studio](htt
 for macOS, Windows, or Linux; choose a `with-engine` installer for the easiest
 setup, with OpenQP bundled and ready to run.
 
+![OQP Studio Analysis showing a selected molecular orbital and its positive and negative three-dimensional phases](docs/images/oqp-studio-analysis-orbital.png)
+
 Use the **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)**
 for guided calculations and the
 **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)**
