@@ -1160,9 +1160,9 @@ contains
     call namd_hop(inf)
   end subroutine namd_hop_C
 
-!> @brief One Tully FSSH step: TDC from the state overlap, RK4 amplitude
-!>        propagation over sub-steps, optional EDC decoherence, trivial-crossing
-!>        following, hop decision and isotropic velocity rescaling.
+!> @brief One Tully FSSH step: supplied TDC, RK4 amplitude propagation over
+!>        sub-steps, optional EDC decoherence, trivial-crossing following, hop
+!>        decision, and selectable isotropic or directional velocity rescaling.
 !>
 !>   Exchanges all NAMD state with the Python driver via flat tagarray records
 !>   (1-D, layout-unambiguous):
