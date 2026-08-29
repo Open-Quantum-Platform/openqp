@@ -95,6 +95,11 @@ class FormulaKernelTests(unittest.TestCase):
         Krot = Krot - Krot.T
         th = 1e-3
         SF = K.fortran_S(mol, ctx, th, Krot)
+        # Production TLF deliberately retains the raw projection because a
+        # finite state window need not be closed under a nuclear step.  The
+        # formula replica below tests the historical column-normalized
+        # cofactor expression, so apply that normalization only to this oracle.
+        SF /= np.linalg.norm(SF, axis=0, keepdims=True)
         SP = K.replica_S(ctx, expm(th * Krot))
         self.assertLessEqual(np.abs(SP - SF).max(), 1e-12)
 
