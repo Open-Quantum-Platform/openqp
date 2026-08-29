@@ -387,8 +387,9 @@ contains
 
     type(grd2_fockprobe_os_data_t), allocatable :: gcomps(:)
     real(kind=dp), allocatable :: gall(:,:,:)
+    integer, allocatable :: off_dummy(:)
     integer, parameter :: max_rhs = 3
-    integer :: irhs, nrhs, ia, ib
+    integer :: irhs, nrhs, ia, ib, ncart
 
     nrhs = size(mmata,3)
     if (nrhs < 1 .or. nrhs > max_rhs .or. &
@@ -419,6 +420,20 @@ contains
       gcomps(ib)%hfscale = hfscale
       gcomps(ia)%hfscale2 = hfscale
       gcomps(ib)%hfscale2 = hfscale
+      if (HARMONIC_ACTIVE) then
+        call fockprobe_cart(basis, pcoul, gcomps(ia)%pcoul_cart, &
+                            gcomps(ia)%cart_off, ncart)
+        call fockprobe_cart(basis, pexcha, gcomps(ia)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmata(:,:,irhs), &
+                            gcomps(ia)%mmat_cart, off_dummy, ncart)
+        call fockprobe_cart(basis, pcoul, gcomps(ib)%pcoul_cart, &
+                            gcomps(ib)%cart_off, ncart)
+        call fockprobe_cart(basis, pexchb, gcomps(ib)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmatb(:,:,irhs), &
+                            gcomps(ib)%mmat_cart, off_dummy, ncart)
+      end if
     end do
 
     call grd2_driver_batch(infos, basis, gall, gcomps)

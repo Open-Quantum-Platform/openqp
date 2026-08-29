@@ -8,6 +8,7 @@ INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
 GRADIENT = ROOT / "source" / "modules" / "tdhf_mrsf_gradient.F90"
 DRIVER = ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
 ZVECTOR = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
+FOCK_DERIV = ROOT / "source" / "modules" / "fock_deriv.F90"
 
 
 def _body(source, name):
@@ -78,3 +79,22 @@ def test_tagarray_contains_results_are_used_as_logicals():
     assert "gstat = infos%dat%contains" not in zvector
     assert "lstat = infos%dat%contains" not in zvector
     assert "gstat = -999" not in zvector
+
+
+def test_batched_open_shell_fock_probes_prepare_spherical_cartesian_views():
+    source = FOCK_DERIV.read_text()
+    body = source.split("subroutine fock_deriv_contract_os_batch(", 1)[1].split(
+        "end subroutine fock_deriv_contract_os_batch", 1
+    )[0]
+    assert "if (HARMONIC_ACTIVE) then" in body
+    for view in (
+        "gcomps(ia)%pcoul_cart",
+        "gcomps(ia)%pexch_cart",
+        "gcomps(ia)%mmat_cart",
+        "gcomps(ib)%pcoul_cart",
+        "gcomps(ib)%pexch_cart",
+        "gcomps(ib)%mmat_cart",
+    ):
+        assert view in body
+    assert "gcomps(ia)%cart_off" in body
+    assert "gcomps(ib)%cart_off" in body
