@@ -860,6 +860,9 @@ int oqp_namd_com_restraint(int64_t natom, const double *coordinates,
 int oqp_namd_langevin_thermostat(int64_t natom, double dt,
         double temperature, double friction, int64_t seed, int64_t stream,
         int64_t step, const double *masses, double *velocities, double *heat);
+int oqp_namd_rescale_directional(int64_t natom, double *velocity,
+        const double *mass, const double *direction, double delta_e,
+        double *gamma, double *discriminant);
 int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
         int *assignment, double *signs, double *matched, double *margins);
 int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,

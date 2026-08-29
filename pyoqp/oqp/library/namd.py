@@ -15,10 +15,12 @@ nuclei with velocity Verlet:
              -> SinglePoint.excitation() (MRSF energies + response vectors)
              -> Gradient (active state)
              -> velocity 2nd half-kick
-             -> NACME.nacme()            (state overlap S = <i(t-dt)|j(t)>)
-             -> oqp.mrsf_namd_hop()      (TDC, RK4 amplitude propagation, EDC,
+             -> TDC provider             (overlap FD/NPI or resident analytic
+                                          sigma_ij = v dot d_ij)
+             -> oqp.mrsf_namd_hop()      (RK4 amplitude propagation, EDC,
                                           trivial-crossing follow, FSSH hop +
-                                          isotropic velocity rescaling)
+                                          isotropic or analytic-NAC directional
+                                          velocity rescaling)
              -> on hop: recompute gradient on the new active surface
              -> output / restart
 
@@ -249,6 +251,9 @@ def _namd_trajectory_dtype(nstate, natom, ncv=0):
         ('gate_candidate_tdc_au', '<f8', matrix),
         ('reference_tdc_au', '<f8', matrix),
         ('reference_mask', 'u1', matrix), ('reference_source', 'i1'),
+        ('tdc_source', 'i1'), ('rescale_source', 'i1'),
+        ('rescale_gamma', '<f8'), ('rescale_discriminant', '<f8'),
+        ('hop_direction', '<f8', vectors),
         ('gate_center_step', '<i8'), ('gate_verdict', 'i1'),
         ('gate_counts', '<i8', (3,)), ('gate_streak', '<i8'),
         ('gate_metrics', '<f8', (7,)),
@@ -460,6 +465,7 @@ _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _P_ALLOW_HOP = 13       # +1 permit state changes; -1 propagate coefficients only
+_P_RESCALE = 14         # 0 isotropic; 1 analytic derivative-coupling direction
 _NPARAMS = 16
 
 
@@ -549,7 +555,15 @@ class NAMD:
         self.decoherence = 1 if str(md['decoherence']).lower() in ('edc', 'on', 'true', '1') else 0
         self.edc_c = float(md['edc_c'])
         self.thrshe = float(md['thrshe'])
-        self.tdc_scheme = 1 if str(md['tdc']).lower() == 'npi' else 0
+        self.tdc_provider = str(md['tdc']).strip().lower().replace('-', '_')
+        if self.tdc_provider not in ('fd', 'npi', 'analytic'):
+            raise ValueError("[md] tdc must be fd, npi, or analytic")
+        self.tdc_scheme = {'fd': 0, 'npi': 1, 'analytic': 2}[self.tdc_provider]
+        self.rescale_provider = str(md.get('rescale', 'isotropic')).strip().lower().replace('-', '_')
+        if self.rescale_provider in ('analytic', 'nac'):
+            self.rescale_provider = 'analytic_nac'
+        if self.rescale_provider not in ('isotropic', 'analytic_nac'):
+            raise ValueError("[md] rescale must be isotropic or analytic_nac")
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
@@ -560,8 +574,8 @@ class NAMD:
             'nacme_check', 'baeck_an')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
-        if self.nacme_check not in ('off', 'baeck_an'):
-            raise ValueError("[md] nacme_check must be off or baeck_an")
+        if self.nacme_check not in ('off', 'baeck_an', 'analytic'):
+            raise ValueError("[md] nacme_check must be off, baeck_an, or analytic")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
         if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
             raise ValueError("[md] ba_gap_max must be positive and finite")
@@ -652,9 +666,12 @@ class NAMD:
             # Baeck-An is a real same-spin magnitude diagnostic.  SOC records
             # the full complex spin-adiabatic overlap and anti-Hermitian TDC.
             self.nacme_check = 'off'
-        if soc_requested and self.nacme_check != 'off':
+        if soc_requested and (
+                self.nacme_check != 'off'
+                or self.tdc_provider == 'analytic'
+                or self.rescale_provider == 'analytic_nac'):
             raise NotImplementedError(
-                "[md] nacme_check currently supports same-spin NAMD only"
+                "analytic NAC TDC/rescaling/check currently supports same-spin NAMD only"
             )
         if soc_requested and self.odp is not None:
             raise NotImplementedError(
@@ -711,6 +728,14 @@ class NAMD:
         self._nacme_reference_source = 0
         self._last_state_overlap = None
         self._last_overlap_tdc = None
+        self._last_analytic_dcv = None
+        self._last_analytic_tdc = None
+        self._analytic_tdc_previous = None
+        self._analytic_tdc_centered = None
+        self._last_rescale_source = int(self.rescale_provider == 'analytic_nac')
+        self._last_rescale_gamma = np.nan
+        self._last_rescale_discriminant = np.nan
+        self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
         self._nve_reference_energy = None
         self._nve_previous_energy = None
         self._nve_gate_failures = 0
@@ -1565,6 +1590,8 @@ class NAMD:
         self._last_state_overlap = np.array(state_overlap, copy=True)
         self._last_overlap_tdc = np.array(self._compute_tdc(state_overlap), copy=True)
         self._update_baeck_an_check(istep, state_overlap)
+        if self._needs_analytic_nac():
+            self._update_analytic_nac(istep, compare_overlap=True)
         return state_overlap
 
     def _validated_td_energies(self, tag):
@@ -1575,6 +1602,64 @@ class NAMD:
             raise RuntimeError(
                 f'{tag} must be an exact finite nstate TD-energy vector')
         return np.ascontiguousarray(energies)
+
+    def _needs_analytic_nac(self):
+        """Return whether this trajectory consumes the resident analytic NAC."""
+        return (
+            self.tdc_provider == 'analytic'
+            or self.rescale_provider == 'analytic_nac'
+            or self.nacme_check == 'analytic'
+        )
+
+    def _update_analytic_nac(self, istep=None, *, compare_overlap=False):
+        """Evaluate phase-aligned analytic d and contract it with velocity.
+
+        The endpoint value is used when ``tdc=analytic``.  A trapezoidal value
+        is retained separately for comparison with the overlap integrated over
+        the preceding nuclear interval.
+        """
+        from oqp.library.nac_analytic import analytic_nac
+
+        _nacv, dcv = analytic_nac(self.mol)
+        dcv = np.asarray(dcv, dtype=np.float64).reshape(
+            (self.nstate, self.nstate, self.natom, 3))
+        endpoint = np.einsum('ijac,ac->ij', dcv, self.vel, optimize=True)
+        self._last_analytic_dcv = np.array(dcv, copy=True)
+        self._last_analytic_tdc = np.array(endpoint, copy=True)
+
+        previous = self._analytic_tdc_previous
+        centered = None if previous is None else 0.5*(previous + endpoint)
+        self._analytic_tdc_centered = (
+            None if centered is None else np.array(centered, copy=True))
+        self._analytic_tdc_previous = np.array(endpoint, copy=True)
+
+        # Preserve the analytic quantity in the dense trajectory even when it
+        # is the production provider rather than a validation reference.
+        reference = endpoint if centered is None else centered
+        mask = np.ones((self.nstate, self.nstate), dtype=np.int32)
+        np.fill_diagonal(mask, 0)
+        self._nacme_reference_tdc = np.array(reference, copy=True)
+        self._nacme_reference_mask = mask
+        self._nacme_reference_source = 2
+
+        if (compare_overlap and self.nacme_check == 'analytic'
+                and centered is not None):
+            gate = self._run_nacme_gate(
+                self._last_overlap_tdc,
+                centered,
+                reference_mask=mask,
+                source='analytic',
+                center_step=None if istep is None else int(istep),
+                signed=True,
+            )
+            dump_log(
+                self.mol,
+                title='NACME check: centered analytic d_ij dot velocity',
+                section='nacm',
+                info=centered,
+            )
+            return gate
+        return None
 
     def _update_baeck_an_check(self, istep, state_overlap):
         """Compare overlap TDC magnitudes with a centred TD-Baeck-An estimate.
@@ -1686,12 +1771,12 @@ class NAMD:
                         center_step=None, evaluation_step=None, signed=False):
         """Run the common resident-Fortran NACME validation gate.
 
-        Future analytic NAC support should contract the phase-aligned analytic
-        coupling vector with the nuclear velocity at the same time point, then
-        call this method with ``signed=True``.  TD-Baeck-An calls it with
-        ``signed=False`` because an energy-only estimate has no wavefunction
-        gauge.  Thus the invariant and policy machinery is shared without
-        treating the approximate TD-BA sign as physical.
+        The analytic NAC path contracts the phase-aligned coupling vector with
+        the nuclear velocity and calls this method with ``signed=True``.
+        TD-Baeck-An calls it with ``signed=False`` because an energy-only
+        estimate has no wavefunction gauge. Thus the invariant and policy
+        machinery is shared without treating the approximate TD-BA sign as
+        physical.
         """
         self._pending_nacme_gate_error = None
         n = self.nstate
@@ -2002,6 +2087,9 @@ class NAMD:
                 'independent_controls': self._independent_settings_record(),
                 'reference_source': {'0': 'none', '1': 'TD-Baeck-An',
                                      '2': 'analytic', '127': 'other'},
+                'tdc_source': {'0': 'overlap_fd', '1': 'overlap_npi',
+                               '2': 'analytic_endpoint'},
+                'rescale_source': {'0': 'isotropic', '1': 'analytic_nac'},
                 'gate_metrics': [
                     'candidate_diagonal_max', 'candidate_antisymmetry_max',
                     'reference_diagonal_max', 'reference_antisymmetry_max',
@@ -2072,7 +2160,8 @@ class NAMD:
                 'odp_bias_perpendicular_hartree', 'odp_bias_hartree',
                 'tracking_phase', 'tracking_phase_initial',
                 'tracking_previous_phase_initial', 'tracking_overlap',
-                'tracking_margin'):
+                'tracking_margin', 'rescale_gamma',
+                'rescale_discriminant'):
             record[field] = np.nan
         record['tracking_order'] = -1
         record['tracking_raw_order'] = -1
@@ -2088,6 +2177,16 @@ class NAMD:
         record['time_fs'] = time_fs
         record['active'] = self.active
         record['hopped'] = int(bool(hopped))
+        record['tdc_source'] = getattr(self, 'tdc_scheme', 0)
+        default_rescale = int(
+            getattr(self, 'rescale_provider', 'isotropic') == 'analytic_nac')
+        record['rescale_source'] = getattr(
+            self, '_last_rescale_source', default_rescale)
+        record['rescale_gamma'] = getattr(self, '_last_rescale_gamma', np.nan)
+        record['rescale_discriminant'] = getattr(
+            self, '_last_rescale_discriminant', np.nan)
+        record['hop_direction'] = getattr(
+            self, '_last_hop_direction', np.zeros_like(coords))
         record['rng'] = self._last_hop_random
         record['e_unbiased_pot_hartree'] = getattr(
             self, '_unbiased_potential_energy', epot)
@@ -2622,7 +2721,8 @@ class NAMD:
             'substep': md.get('substep', ''),
             'decoherence': md.get('decoherence', ''),
             'edc_c': md.get('edc_c', ''), 'thrshe': md.get('thrshe', ''),
-            'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
+            'tdc': md.get('tdc', ''), 'rescale': md.get('rescale', ''),
+            'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
             'soc_settings': {
@@ -2822,6 +2922,7 @@ class NAMD:
             'ba_energy_center': self._ba_energy_center,
             'ba_tdc_left': self._ba_tdc_left,
             'ba_dt_left': self._ba_dt_left,
+            'analytic_tdc_previous': self._analytic_tdc_previous,
             'nve_reference_energy': self._nve_reference_energy,
             'nve_previous_energy': self._nve_previous_energy,
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
@@ -3447,6 +3548,7 @@ class NAMD:
         """Propagate amplitudes in Fortran and optionally permit a state change."""
         mol = self.mol
         n = self.nstate
+        active_before = self.active
 
         # amplitudes: flat 1-D, interleaved [re1, im1, re2, im2, ...]
         coef_io = np.zeros(2 * n)
@@ -3469,6 +3571,7 @@ class NAMD:
         params[_P_TRIV_THR] = self.trivial_thresh
         params[_P_NSTATE] = float(n)
         params[_P_ALLOW_HOP] = 1.0 if allow_hop else -1.0
+        params[_P_RESCALE] = float(self.rescale_provider == 'analytic_nac')
         mol.data["OQP::namd_params"] = params
 
         # state overlap + time-derivative couplings (FD or NPI), passed to the
@@ -3477,11 +3580,25 @@ class NAMD:
         s = canonical_state_overlap(
             np.asarray(mol.data["OQP::td_states_overlap"]).reshape((n, n))
         )
-        tdc = self._compute_tdc(s)
+        if self.tdc_provider == 'analytic':
+            if self._last_analytic_tdc is None:
+                raise RuntimeError(
+                    "analytic TDC requested before an analytic NAC was evaluated")
+            tdc = np.asarray(self._last_analytic_tdc, dtype=np.float64)
+        else:
+            tdc = self._compute_tdc(s)
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
         mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
         mol.data["OQP::namd_eabs"] = self._validated_td_energies(
             "OQP::td_energies").copy()
+        if self.rescale_provider == 'analytic_nac':
+            if self._last_analytic_dcv is None:
+                raise RuntimeError(
+                    "analytic NAC rescaling requested before d_ij was evaluated")
+            dcv = np.asarray(self._last_analytic_dcv, dtype=np.float64)
+        else:
+            dcv = np.zeros((n, n, self.natom, 3), dtype=np.float64)
+        mol.data["OQP::namd_dcv"] = dcv.reshape(-1).copy()
 
         oqp.mrsf_namd_hop(mol)
 
@@ -3490,8 +3607,17 @@ class NAMD:
         self.coef = coef_io[0::2] + 1j * coef_io[1::2]
         self.vel = np.array(mol.data["OQP::namd_velocity"]).reshape((self.natom, 3)).copy()
         params = np.array(mol.data["OQP::namd_params"])
+        results = np.asarray(mol.data["OQP::namd_results"], dtype=float).reshape(-1)
         new_active = int(round(params[_P_ACTIVE]))
         hopped = int(round(params[_P_HOPPED])) == 1
+        self._last_rescale_source = int(round(results[n*n + 5]))
+        self._last_rescale_gamma = float(results[n*n + 6])
+        self._last_rescale_discriminant = float(results[n*n + 7])
+        self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
+        if (hopped and self.rescale_provider == 'analytic_nac'
+                and 1 <= active_before <= n and 1 <= new_active <= n):
+            self._last_hop_direction = np.array(
+                dcv[active_before - 1, new_active - 1], copy=True)
         return new_active, hopped
 
     # ------------------------------------------------------------------ #
@@ -3509,6 +3635,8 @@ class NAMD:
             restraint_force, _ = self._evaluate_conservative_restraints(
                 r, self.mass)
             accel = (-self._active_gradient() + restraint_force) / self.mass[:, None]
+            if self._needs_analytic_nac():
+                self._update_analytic_nac(0, compare_overlap=False)
             self._record_previous(r)
             self._log_step(0, r)
             self._save_restart(0, r, self.vel, accel)
@@ -3536,6 +3664,11 @@ class NAMD:
 
             # state overlap (couplings) and FSSH hop
             self._state_overlap(istep)
+            self._last_rescale_source = int(
+                self.rescale_provider == 'analytic_nac')
+            self._last_rescale_gamma = np.nan
+            self._last_rescale_discriminant = np.nan
+            self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
             active_old = self.active
             odp = self._evaluate_odp(r)
             bias_energy = 0.0 if odp is None else odp['energy']
@@ -3667,6 +3800,9 @@ class NAMD_QMMM(NAMD):
 
     def __init__(self, mol):
         super().__init__(mol)
+        if self._needs_analytic_nac():
+            raise NotImplementedError(
+                "analytic NAC TDC/rescaling/check is not yet available for QM/MM NAMD")
         import openmm as mm
         import openmm.app as app
         import openmm.unit as u

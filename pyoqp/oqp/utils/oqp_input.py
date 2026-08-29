@@ -425,7 +425,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "hess": _keys("type state dx nproc read restart temperature clean symmetry_unique"),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
-        nstep dt active substep decoherence edc_c thrshe tdc trivial
+        nstep dt active substep decoherence edc_c thrshe tdc rescale trivial
         trivial_thresh init_temp velocity seed rng_stream first_hop_step
         nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
         nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
@@ -678,7 +678,7 @@ DRIVER_OPTIONS = {
     "md": set(),
     "namd": {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
-        "thrshe", "tdc", "trivial", "trivial_thresh", "init_temp",
+        "thrshe", "tdc", "rescale", "trivial", "trivial_thresh", "init_temp",
         "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
         "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
         "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",

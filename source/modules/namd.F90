@@ -6,13 +6,13 @@
 !>   clean, argument-based modern Fortran so the kernels are unit-testable and
 !>   free of COMMON-block / dynamic-memory coupling.  The implementation covers:
 !>
-!>     - time-derivative couplings (TDC) from wavefunction overlaps
-!>       between consecutive nuclear steps
+!>     - time-derivative couplings (TDC) supplied either from consecutive-step
+!>       wavefunction overlaps or from the resident analytic derivative coupling
 !>     - RK4 propagation of the electronic amplitudes
 !>       i*hbar*\dot{c} = (E - i*sigma) c
 !>     - cumulative Tully hopping probabilities
-!>     - fewest-switches hop decision + isotropic
-!>       velocity rescaling (energy conservation)
+!>     - fewest-switches hop decision with selectable isotropic or analytic-NAC
+!>       directional velocity rescaling (energy conservation)
 !>     - kinetic energy
 !>
 !>   Internal-conversion accuracy upgrades, added per a verified literature
@@ -63,6 +63,7 @@ module namd_mod
   public :: namd_finalize_hop_prob
   public :: namd_kinetic_energy
   public :: namd_rescale_velocities
+  public :: namd_rescale_velocities_directional
   public :: namd_fssh_decision
   public :: namd_decoherence_edc
   public :: namd_trivial_crossing
@@ -844,8 +845,112 @@ contains
     vel = scale*vel
   end subroutine namd_rescale_velocities
 
-!> @brief Fewest-switches hop decision and (on accept) isotropic velocity
-!>        rescaling.
+!> @brief Conserve energy by changing velocity only along a coupling vector.
+!>
+!> For DeltaE = E_new - E_old, use
+!>   v'_A = v_A + gamma*d_A/M_A,
+!> where 0.5*A*gamma^2 + B*gamma + DeltaE = 0,
+!> A = sum_A |d_A|^2/M_A and B = sum_A v_A.d_A.  The real root with
+!> the smallest absolute gamma is selected.  A state-gauge sign or any nonzero
+!> scalar multiplication of d therefore leaves the final velocity unchanged.
+  subroutine namd_rescale_velocities_directional(vel, mass, direction, delta_e, &
+      accepted, gamma, discriminant)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    real(kind=dp), intent(inout) :: vel(:,:)
+    real(kind=dp), intent(in) :: mass(:), direction(:,:), delta_e
+    logical, intent(out) :: accepted
+    real(kind=dp), intent(out) :: gamma, discriminant
+    integer :: a, nat
+    real(kind=dp) :: avec, bvec, sqrt_disc, q, gamma1, gamma2, scale
+
+    accepted = .false.
+    gamma = 0.0_dp
+    discriminant = -huge(1.0_dp)
+    nat = size(mass)
+    if (size(vel, 1) /= 3 .or. size(vel, 2) /= nat .or. &
+        size(direction, 1) /= 3 .or. size(direction, 2) /= nat) return
+    if (.not. ieee_is_finite(delta_e)) return
+
+    avec = 0.0_dp
+    bvec = 0.0_dp
+    do a = 1, nat
+      if (.not. ieee_is_finite(mass(a)) .or. mass(a) <= 0.0_dp) return
+      if (.not. all(ieee_is_finite(vel(:,a))) .or. &
+          .not. all(ieee_is_finite(direction(:,a)))) return
+      avec = avec + sum(direction(:,a)**2)/mass(a)
+      bvec = bvec + dot_product(vel(:,a), direction(:,a))
+    end do
+    if (.not. ieee_is_finite(avec) .or. avec <= tiny(1.0_dp)) return
+
+    discriminant = bvec*bvec - 2.0_dp*avec*delta_e
+    scale = bvec*bvec + abs(2.0_dp*avec*delta_e)
+    if (discriminant < 0.0_dp .and. &
+        abs(discriminant) <= 64.0_dp*epsilon(1.0_dp)*max(scale, tiny(1.0_dp))) &
+      discriminant = 0.0_dp
+    if (.not. ieee_is_finite(discriminant) .or. discriminant < 0.0_dp) return
+
+    sqrt_disc = sqrt(discriminant)
+    if (bvec >= 0.0_dp) then
+      q = -bvec - sqrt_disc
+    else
+      q = -bvec + sqrt_disc
+    end if
+    if (abs(q) <= tiny(1.0_dp)) then
+      if (abs(delta_e) > tiny(1.0_dp)) return
+      gamma = 0.0_dp
+    else
+      gamma1 = q/avec
+      gamma2 = 2.0_dp*delta_e/q
+      if (abs(gamma1) <= abs(gamma2)) then
+        gamma = gamma1
+      else
+        gamma = gamma2
+      end if
+    end if
+    if (.not. ieee_is_finite(gamma)) return
+    do a = 1, nat
+      vel(:,a) = vel(:,a) + gamma*direction(:,a)/mass(a)
+    end do
+    accepted = .true.
+  end subroutine namd_rescale_velocities_directional
+
+!> @brief C ABI for the directional velocity-rescaling kernel.
+  function namd_rescale_directional_C(natom, velocity, mass, direction, &
+      delta_e, gamma, discriminant) result(info) &
+      bind(C, name="oqp_namd_rescale_directional")
+    integer(c_int64_t), value, intent(in) :: natom
+    real(c_double), intent(inout) :: velocity(*)
+    real(c_double), intent(in) :: mass(*), direction(*)
+    real(c_double), value, intent(in) :: delta_e
+    real(c_double), intent(out) :: gamma, discriminant
+    integer(c_int) :: info
+    integer :: a, nat
+    real(kind=dp), allocatable :: vel2(:,:), dir2(:,:), mass2(:)
+    logical :: accepted
+
+    info = -1_c_int
+    if (natom <= 0_c_int64_t) return
+    nat = int(natom)
+    allocate(vel2(3,nat), dir2(3,nat), mass2(nat))
+    do a = 1, nat
+      vel2(:,a) = velocity(3*a-2:3*a)
+      dir2(:,a) = direction(3*a-2:3*a)
+      mass2(a) = mass(a)
+    end do
+    call namd_rescale_velocities_directional(&
+        vel2, mass2, dir2, real(delta_e, dp), accepted, gamma, discriminant)
+    if (.not. accepted) then
+      info = 1_c_int
+      return
+    end if
+    do a = 1, nat
+      velocity(3*a-2:3*a) = vel2(:,a)
+    end do
+    info = 0_c_int
+  end function namd_rescale_directional_C
+
+!> @brief Fewest-switches hop decision and (on accept) selectable isotropic or
+!>        derivative-coupling directional velocity rescaling.
 !>
 !>   All energies in Hartree, velocities/masses in atomic units.
 !>
@@ -863,7 +968,9 @@ contains
 !> @param[out]    blocked  .true. if a candidate hop was rejected (frustrated
 !>                         or gated)
   subroutine namd_fssh_decision(cmhp, eabs, rand, thrshe, mass, vel, &
-                                active, hopped, target, blocked)
+                                active, hopped, target, blocked, &
+                                direction_vectors, rescale_mode, &
+                                rescale_gamma, rescale_discriminant)
     real(kind=dp), intent(in)    :: cmhp(:,:)
     real(kind=dp), intent(in)    :: eabs(:)
     real(kind=dp), intent(in)    :: rand
@@ -874,15 +981,23 @@ contains
     logical,       intent(out)   :: hopped
     integer,       intent(out)   :: target
     logical,       intent(out)   :: blocked
+    real(kind=dp), intent(in), optional :: direction_vectors(:,:,:,:)
+    integer, intent(in), optional :: rescale_mode
+    real(kind=dp), intent(out), optional :: rescale_gamma, rescale_discriminant
 
-    integer :: i, ncrst, n
-    real(kind=dp) :: lower, upper, de, ke
+    integer :: i, ncrst, n, mode
+    real(kind=dp) :: lower, upper, de, ke, gamma, discriminant
+    logical :: directional_ok
 
     n = size(eabs)
     ncrst = active
     hopped = .false.
     blocked = .false.
     target = active
+    if (present(rescale_gamma)) rescale_gamma = 0.0_dp
+    if (present(rescale_discriminant)) rescale_discriminant = -huge(1.0_dp)
+    mode = 0
+    if (present(rescale_mode)) mode = rescale_mode
 
     ! Walk the cumulative probability ladder over candidate target states.
     ! Self-transition probability is identically zero (sigma(i,i)=0), so the
@@ -897,23 +1012,42 @@ contains
       if (rand > lower .and. rand < upper) then
         de = eabs(ncrst) - eabs(i)       ! E_old - E_new
         ke = namd_kinetic_energy(vel, mass)
-        ! Frustrated hop: not enough kinetic energy to climb uphill.
-        if (de < 0.0_dp .and. ke < abs(de)) then
-          blocked = .true.
-          lower = upper
-          cycle
-        end if
         ! Energy-gap gate.
         if (abs(de) > thrshe) then
           blocked = .true.
           lower = upper
           cycle
         end if
-        ! Accept the hop.
+        if (mode == 1) then
+          if (.not. present(direction_vectors)) then
+            blocked = .true.
+            lower = upper
+            cycle
+          end if
+          call namd_rescale_velocities_directional(&
+              vel, mass, direction_vectors(:,:,i,ncrst), -de, &
+              directional_ok, gamma, discriminant)
+          if (present(rescale_gamma)) rescale_gamma = gamma
+          if (present(rescale_discriminant)) &
+            rescale_discriminant = discriminant
+          if (.not. directional_ok) then
+            blocked = .true.
+            lower = upper
+            cycle
+          end if
+        else
+          ! Frustrated hop under isotropic rescaling: insufficient total KE.
+          if (de < 0.0_dp .and. ke < abs(de)) then
+            blocked = .true.
+            lower = upper
+            cycle
+          end if
+          call namd_rescale_velocities(vel, ke, de)
+        end if
+        ! Accept the hop after a successful energy-conserving velocity update.
         active = i
         target = i
         hopped = .true.
-        call namd_rescale_velocities(vel, ke, de)
         return
       end if
       lower = upper
@@ -1034,8 +1168,9 @@ contains
 !>   (1-D, layout-unambiguous):
 !>     in : OQP_td_states_overlap (n x n), OQP_td_energies (n),
 !>          OQP_namd_coef (2n: re1,im1,re2,im2,...), OQP_namd_velocity (3*nat),
-!>          OQP_namd_params (>=14 packed scalars; slot 14 < 0 suppresses
-!>          state changes while retaining coefficient propagation)
+!>          OQP_namd_params (>=15 packed scalars; slot 14 < 0 suppresses
+!>          state changes while retaining coefficient propagation; slot 15
+!>          selects isotropic or analytic-NAC velocity rescaling)
 !>     out: OQP_namd_coef, OQP_namd_velocity (rescaled), OQP_namd_params(active,
 !>          hopped, target), OQP_namd_results (n*n cumulative probs + flags)
   subroutine namd_hop(infos)
@@ -1049,15 +1184,17 @@ contains
     type(information), target, intent(inout) :: infos
 
     integer :: n, nat, i, a, isub, nsub, active, target, decoherence, trivial_en
+    integer :: tdc_scheme, rescale_mode
     real(kind=dp) :: dt_fs, dt_au, hsub, thrshe, rand, edc_c, triv_thr, ekin
+    real(kind=dp) :: rescale_gamma, rescale_discriminant
     logical :: hopped, blocked, swapped, allow_hop
 
     real(kind=dp), allocatable :: tdc(:,:), cmhp(:,:), cr(:), ci(:), eabs(:), vel(:,:)
-    real(kind=dp), allocatable :: mass_au(:)
+    real(kind=dp), allocatable :: mass_au(:), dcv(:,:,:,:)
 
     ! tagarray records
     real(kind=dp), contiguous, pointer :: stas_in(:), eabs_in(:), coef(:), velf(:), &
-                                          params(:), results(:), tdc_in(:)
+                                          params(:), results(:), tdc_in(:), dcv_in(:)
     real(kind=dp), contiguous, pointer :: mass(:)
     real(kind=dp), allocatable :: stas2(:,:)
 
@@ -1070,7 +1207,7 @@ contains
     ! and spin-adiabatic SOC NAMD (n = ns + 3*nt).
     character(len=*), parameter :: tags_req(*) = (/ character(len=80) :: &
         OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_tdc, &
-        OQP_namd_eabs, OQP_namd_stas /)
+        OQP_namd_eabs, OQP_namd_stas, OQP_namd_dcv /)
     character(len=*), parameter :: tags_out(*) = (/ character(len=80) :: &
         OQP_namd_results /)
 
@@ -1088,6 +1225,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_namd_tdc, tdc_in)
     call tagarray_get_data(infos%dat, OQP_namd_eabs, eabs_in)
     call tagarray_get_data(infos%dat, OQP_namd_stas, stas_in)
+    call tagarray_get_data(infos%dat, OQP_namd_dcv, dcv_in)
 
     ! number of states: from params (slot 13); fall back to tddft%nstate
     n = nint(params(13))
@@ -1108,16 +1246,20 @@ contains
     active      = nint(params(5))
     decoherence = nint(params(6))
     edc_c       = params(7)
-    ! params(8) = tdc scheme (0 finite-diff, 1 NPI), handled in the Python driver
+    ! params(8) = TDC scheme (0 finite-diff, 1 NPI, 2 analytic v.d)
+    tdc_scheme = nint(params(8))
     trivial_en  = nint(params(9))
     triv_thr    = params(10)
     allow_hop   = .true.
     if (size(params) >= 14) allow_hop = params(14) >= 0.0_dp
+    ! params(15): 0 isotropic rescaling; 1 analytic derivative-coupling direction
+    rescale_mode = 0
+    if (size(params) >= 15) rescale_mode = nint(params(15))
     dt_au       = dt_fs*FS_TO_AU
     hsub        = dt_au/real(nsub, dp)
 
     allocate(tdc(n,n), cmhp(n,n), cr(n), ci(n), eabs(n), vel(3,nat), mass_au(nat), &
-             stas2(n,n))
+             stas2(n,n), dcv(3,nat,n,n))
     mass_au = mass*AMU_TO_AU        ! infos%atoms%mass is in amu; integrate in a.u.
     do i = 1, n
       cr(i) = coef(2*i-1)
@@ -1135,6 +1277,7 @@ contains
       end do
     end do
     cmhp = 0.0_dp
+    dcv = reshape(dcv_in(1:3*nat*n*n), shape(dcv))
 
     ! 1) follow diabatic character across trivial/unavoided crossings
     swapped = .false.
@@ -1143,15 +1286,17 @@ contains
     end if
 
     ! 2) time-derivative couplings: supplied by the Python driver as a flat
-    !    row-major (n x n) matrix (finite difference or norm-preserving
-    !    interpolation). tdc(i,j) = tdc_in((i-1)*n + j). Fall back to the
-    !    in-Fortran finite difference if a degenerate (all-zero) matrix is passed.
+    !    row-major (n x n) matrix (finite difference, norm-preserving
+    !    interpolation, or analytic v.d). tdc(i,j) = tdc_in((i-1)*n + j).
+    !    Preserve an exactly zero analytic/NPI matrix: zero can be the physical
+    !    answer. The legacy in-Fortran FD fallback applies only to FD mode.
     do i = 1, n
       do a = 1, n
         tdc(i,a) = tdc_in((i-1)*n + a)
       end do
     end do
-    if (all(abs(tdc) < 1.0e-30_dp)) call namd_state_tdc(stas2, dt_au, tdc)
+    if (tdc_scheme == 0 .and. all(abs(tdc) < 1.0e-30_dp)) &
+      call namd_state_tdc(stas2, dt_au, tdc)
 
     ! 3) propagate amplitudes over electronic sub-steps; accumulate hop flux
     do isub = 1, nsub
@@ -1165,13 +1310,16 @@ contains
     if (decoherence == 1) &
       call namd_decoherence_edc(cr, ci, eabs, active, ekin, dt_au, edc_c)
 
-    ! 5) fewest-switches hop + isotropic velocity rescaling
+    ! 5) fewest-switches hop + selected energy-conserving velocity rescaling
     hopped = .false.
     blocked = .false.
     target = active
+    rescale_gamma = 0.0_dp
+    rescale_discriminant = -huge(1.0_dp)
     if (allow_hop) then
       call namd_fssh_decision(cmhp, eabs, rand, thrshe, mass_au, vel, &
-                              active, hopped, target, blocked)
+                              active, hopped, target, blocked, dcv, rescale_mode, &
+                              rescale_gamma, rescale_discriminant)
     end if
 
     ! pack results back
@@ -1195,8 +1343,11 @@ contains
     results(n*n+3) = merge(1.0_dp, 0.0_dp, blocked)
     results(n*n+4) = ekin
     results(n*n+5) = merge(1.0_dp, 0.0_dp, swapped)
+    results(n*n+6) = real(rescale_mode, dp)
+    results(n*n+7) = rescale_gamma
+    results(n*n+8) = rescale_discriminant
 
-    deallocate(tdc, cmhp, cr, ci, eabs, vel, mass_au, stas2)
+    deallocate(tdc, cmhp, cr, ci, eabs, vel, mass_au, stas2, dcv)
     close(iw)
   end subroutine namd_hop
 
