@@ -14,6 +14,12 @@ descriptions of multiconfigurational ground and excited states, including
 diradicals, bond breaking, conical intersections, photochemical processes, and
 spin-orbit coupling.
 
+Prefer a graphical interface? **[OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/)**
+is the desktop application for building molecular structures, preparing OpenQP
+inputs, running calculations, and analyzing results. **[Download OQP Studio](https://github.com/Open-Quantum-Platform/openqp/releases/latest)**
+for macOS, Windows, or Linux; choose a `with-engine` installer for the easiest
+setup, with OpenQP bundled and ready to run.
+
 Use the **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)**
 for guided calculations and the
 **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)**
