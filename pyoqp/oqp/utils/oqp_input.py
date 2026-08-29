@@ -1094,6 +1094,56 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     return model, model_options, functional.lower(), normalized_basis
 
 
+def _starts_post_route_syntax(token: str) -> bool:
+    """Return whether *token* cannot be another route component."""
+
+    if "=" in token:
+        return True
+    if Path(token).suffix.lower() in {".xyz", ".pdb"}:
+        return True
+    name = token.split("(", 1)[0].lower().replace("-", "_")
+    return (
+        name in PRIMARY_ALIASES
+        or name in BARE_MODIFIER_CALLS
+        or name in SECTION_NAMES
+        or name in {"nmr", "ir", "raman", "d4"}
+    )
+
+
+def _parse_route_prefix(
+    tokens: Sequence[str],
+) -> Tuple[str, Dict[str, Any], str, str, int]:
+    """Parse a slash- or whitespace-separated route at the token prefix.
+
+    A route contains at most three components.  Joining only the leading
+    non-driver tokens lets ``mrsf bhhlyp 6-31g*`` and mixed spellings denote
+    the same calculation as ``mrsf/bhhlyp/6-31g*`` without consuming a bare
+    driver, a geometry file, or an explicit ``basis=...`` option.
+    """
+
+    candidates: List[Tuple[int, str]] = []
+    for count in range(1, min(len(tokens), 3) + 1):
+        if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
+            break
+        candidate = "/".join(tokens[:count])
+        if len(_split_top_level(candidate, "/")) > 3:
+            break
+        candidates.append((count, candidate))
+
+    errors: List[OQPInputError] = []
+    for count, candidate in reversed(candidates):
+        try:
+            model, model_options, functional, basis = _parse_route(candidate)
+        except OQPInputError as exc:
+            errors.append(exc)
+            continue
+        return model, model_options, functional, basis, count
+
+    if errors:
+        raise errors[-1]
+    raise OQPInputError("Missing electronic-structure route")
+
+
 def looks_canonical(text: str) -> bool:
     """Return whether malformed text should be treated as canonical, not prose."""
 
@@ -1153,12 +1203,20 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
-    model, model_options, functional, basis = _parse_route(tokens[0])
+    model, model_options, functional, basis, route_token_count = (
+        _parse_route_prefix(tokens)
+    )
     options: Dict[str, Any] = {}
     calls: List[CallSpec] = []
-    for token_index, token in enumerate(tokens[1:], start=1):
+    for token_index, token in enumerate(
+        tokens[route_token_count:], start=route_token_count
+    ):
         assignment = _split_assignment(token)
-        if token_index == 1 and assignment is None and "(" not in token:
+        if (
+            token_index == route_token_count
+            and assignment is None
+            and "(" not in token
+        ):
             positional_geom = _parse_value(token)
             if (
                 isinstance(positional_geom, str)

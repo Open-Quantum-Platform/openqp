@@ -26,6 +26,94 @@ def _parse(text, source_dir=None):
     return spec, oqp_input.lower_to_legacy(spec, source_dir=source_dir)
 
 
+@pytest.mark.parametrize(
+    ("slash_route", "spaced_route"),
+    [
+        ("mrsf(nstate=5)/bhhlyp/6-31g*", "mrsf(nstate=5) bhhlyp 6-31g*"),
+        ("dft/pbe0/def2-svp", "dft pbe0 def2-svp"),
+        ("tddft(nstate=3)/pbe/6-31g", "tddft(nstate=3) pbe 6-31g"),
+        ("mrsf-tdhf(nstate=3)/6-31g*", "mrsf-tdhf(nstate=3) 6-31g*"),
+        ("mp2(reference=uhf)/cc-pvdz", "mp2(reference=uhf) cc-pvdz"),
+        ("ccsd(t)/6-31g", "ccsd(t) 6-31g"),
+        ("casscf/sto-3g", "casscf sto-3g"),
+    ],
+)
+def test_space_separated_route_components_match_slash_routes(
+    slash_route, spaced_route
+):
+    suffix = ' geom="h2o.xyz" energy'
+    slash_spec, slash_legacy = _parse(slash_route + suffix)
+    spaced_spec, spaced_legacy = _parse(spaced_route + suffix)
+
+    assert spaced_spec.model == slash_spec.model
+    assert spaced_spec.functional == slash_spec.functional
+    assert spaced_spec.basis == slash_spec.basis
+    assert spaced_spec.model_options == slash_spec.model_options
+    assert spaced_legacy == slash_legacy
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        "mrsf(nstate=3)/bhhlyp 6-31g*",
+        "mrsf(nstate=3) bhhlyp/6-31g*",
+    ],
+)
+def test_mixed_route_separators_are_accepted(route):
+    spec, legacy = _parse(route + ' geom="h2o.xyz" grad(S1)')
+
+    assert spec.model == "mrsf"
+    assert spec.functional == "bhhlyp"
+    assert spec.basis == "6-31g*"
+    assert legacy["input"]["method"] == "tdhf"
+
+
+def test_space_separated_route_stops_before_explicit_basis_and_driver():
+    spec = oqp_input.parse_canonical_oqp(
+        'mrsf bhhlyp basis="FILE:My Basis.JSON" geom="h2o.xyz" energy'
+    )
+    assert spec.basis == "file:My Basis.JSON"
+
+    dftb = oqp_input.parse_canonical_oqp('dftb geom="h2o.xyz" energy')
+    assert dftb.model == "dftb"
+    assert dftb.driver.name == "energy"
+
+    with pytest.raises(OQPInputError, match="requires a basis set"):
+        oqp_input.parse_canonical_oqp('dft pbe0 geom="h2o.xyz" energy')
+    with pytest.raises(OQPInputError, match="requires a basis set"):
+        oqp_input.parse_canonical_oqp('hf geom="h2o.xyz" energy')
+
+
+@pytest.mark.parametrize(
+    ("alias", "model"), sorted(oqp_input.MODEL_ALIASES.items())
+)
+def test_every_model_alias_accepts_its_route_components_as_separate_tokens(
+    alias, model
+):
+    functional_models = {
+        "dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"
+    }
+    component_free_models = {
+        "dftb", "dftb0", "tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"
+    }
+    if model in functional_models:
+        tokens = [alias, "pbe0", "sto-3g", "energy"]
+        expected_count = 3
+    elif model in component_free_models:
+        tokens = [alias, "energy"]
+        expected_count = 1
+    else:
+        tokens = [alias, "sto-3g", "energy"]
+        expected_count = 2
+
+    parsed_model, _, functional, basis, count = oqp_input._parse_route_prefix(tokens)
+
+    assert parsed_model == model
+    assert count == expected_count
+    assert functional == ("pbe0" if model in functional_models else "")
+    assert basis == ("" if model in component_free_models else "sto-3g")
+
+
 def test_mrsf_s1_opt_hides_reference_and_root_bookkeeping(tmp_path):
     spec, legacy = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="h2o.xyz" charge=0 '
