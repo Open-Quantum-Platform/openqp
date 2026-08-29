@@ -5,8 +5,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def markdown_table_rows(text, start_heading, end_heading):
-    block = text.split(start_heading, 1)[1].split(end_heading, 1)[0]
+def markdown_table_rows(text, section):
+    summary = f"<summary><strong>{section}</strong></summary>"
+    block = text.split(summary, 1)[1].split("</details>", 1)[0]
     rows = []
     for line in block.splitlines():
         if not line.startswith("|") or line.startswith("| ---"):
@@ -74,8 +75,7 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text()
         method_rows = markdown_table_rows(
             readme,
-            "#### Electronic-Structure Methods",
-            "#### Capabilities",
+            "Electronic-Structure Methods",
         )
 
         self.assertEqual(
@@ -87,8 +87,7 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text()
         method_rows = markdown_table_rows(
             readme,
-            "#### Electronic-Structure Methods",
-            "#### Capabilities",
+            "Electronic-Structure Methods",
         )
 
         self.assertEqual(
@@ -149,8 +148,7 @@ class ReadmeLogMetadataTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text()
         capability_rows = markdown_table_rows(
             readme,
-            "#### Capabilities",
-            "#### Ecosystem & Integrations",
+            "Capabilities",
         )
 
         for row in capability_rows[1:]:
