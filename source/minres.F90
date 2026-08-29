@@ -71,11 +71,12 @@ contains
 
 !#################################################################
 
-  subroutine minres_init(this, b, update, precond, dat, x0, tol)
+  subroutine minres_init(this, b, update, precond, dat, x0, ax0, tol)
     class(minres_t), intent(inout) :: this
     real(kind=dp), intent(in) :: b(:)
     procedure(minres_matvec) :: update, precond
     real(kind=dp), optional, intent(in) :: x0(:)
+    real(kind=dp), optional, intent(in) :: ax0(:)
     real(kind=dp), optional, intent(in) :: tol
     type(*), target :: dat
     integer :: n
@@ -86,6 +87,12 @@ contains
     end if
     if (present(x0)) then
       if (size(x0) /= size(b)) then
+        this%errcode = MINRES_BAD_ARGUMENT
+        return
+      end if
+    end if
+    if (present(ax0)) then
+      if (.not. present(x0) .or. size(ax0) /= size(b)) then
         this%errcode = MINRES_BAD_ARGUMENT
         return
       end if
@@ -113,7 +120,11 @@ contains
     ! that overwhelmingly common case.  An explicit x0 retains the complete
     ! update and finite-value validation used by all existing callers.
     if (present(x0)) then
-      call this%update(this%av, this%x, this%dat)
+      if (present(ax0)) then
+        this%av = ax0
+      else
+        call this%update(this%av, this%x, this%dat)
+      end if
       if (.not. all(ieee_is_finite(this%av))) then
         this%errcode = MINRES_BREAKDOWN
         return

@@ -6,6 +6,9 @@ module tdhf_mrsf_z_vector_mod
   use basis_tools, only: basis_set
   use int2_compute, only: int2_compute_t
   use mod_dft_molgrid, only: dft_grid_t
+
+  use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_set_rhs, &
+    mrsf_nac_fusion_take_solution
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
   use zvector_common, only: sanitize_zvector_preconditioner
   implicit none
@@ -335,6 +338,7 @@ contains
   subroutine init_gmres_work(nbf, nocca, noccb)
     use messages, only: show_message, with_abort
     implicit none
+
     integer, intent(in) :: nbf, nocca, noccb
     integer :: nvira, nvirb, ok
     
@@ -1310,8 +1314,9 @@ contains
     character(len=10) :: solver_name
     character(len=12) :: target_label
     character(len=16) :: method_name
+    character(len=16) :: fuse_env
 
-    logical :: dft, mrsf_zvector_breakdown
+    logical :: dft, mrsf_zvector_breakdown, fuse_nac_gradient
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
@@ -1562,7 +1567,40 @@ contains
     ! Step 2: solve the z-vector linear system.
     !   0 = CG (default)   1 = GMRES (legacy)   2 = MINRES   3 = AUTO (CG->MINRES->GMRES)
     ! ======================================================================
-    if (mrsf_nac_cphf_mode) then
+    fuse_env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_FUSE_GRADIENT',fuse_env)
+    fuse_nac_gradient = .not. mrsf_nac_cphf_mode .and. &
+      len_trim(fuse_env) > 0 .and. (fuse_env(1:1) == '1' .or. &
+      fuse_env(1:1) == 'y' .or. fuse_env(1:1) == 'Y' .or. &
+      fuse_env(1:1) == 't' .or. fuse_env(1:1) == 'T')
+    if (fuse_nac_gradient) then
+      call mrsf_nac_fusion_set_rhs(rhs)
+      call mrsf_nac_lagrangian_fused_external(infos)
+      call mrsf_nac_fusion_take_solution(xk)
+      ! The resident NAC driver reserves TagArray storage.  Reacquire every
+      ! view used by the gradient back-projection after the nested call.
+      call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+      call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+      call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+      call tagarray_get_data(infos%dat, OQP_td_t, td_t)
+      call tagarray_get_data(infos%dat, OQP_td_energies, mrsf_energies)
+      call tagarray_get_data(infos%dat, OQP_WAO, wao)
+      call tagarray_get_data(infos%dat, OQP_td_mrsf_density, td_mrsf_den)
+      call tagarray_get_data(infos%dat, OQP_td_p, td_p)
+      call tagarray_get_data(infos%dat, OQP_td_abxc, td_abxc)
+      ta => td_t(:,1)
+      tb => td_t(:,2)
+      bvec(1:nbf,1:nbf,1:1) => td_abxc
+      ! The nested native CPHF/NAC path closes process-global DFT work. Rebuild
+      ! it for the exact relaxed-density and W back-projection below.
+      if (dft) call dft_initialize(infos,basis,molGrid)
+      error = 0.0_dp
+      solver_name = 'FUSED'
+      infos%mol_energy%Z_Vector_converged = .true.
+    else if (mrsf_nac_cphf_mode) then
       call run_mrsf_minres_zvector()
     else
       select case (infos%tddft%z_solver)

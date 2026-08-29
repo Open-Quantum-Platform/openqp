@@ -145,6 +145,13 @@ def analytic_nac(mol):
             'dcv': np.array(mol.data['OQP::nac_dcv'], copy=True),
             'nacv': np.array(mol.data['OQP::nac_nacv'], copy=True),
         }
+        for key, tag in (
+                ('predictor_dcv', 'OQP::nac_predictor_dcv'),
+                ('predictor_nacv', 'OQP::nac_predictor_nacv')):
+            try:
+                debug[key] = np.array(mol.data[tag], copy=True)
+            except (KeyError, RuntimeError, TypeError, ValueError):
+                pass
         np.savez(debug_path, **debug)
 
     dcv = _resident_pair_cartesian(

@@ -15,7 +15,7 @@ module mrsf_nac_driver_mod
   implicit none
 
   private
-  public :: mrsf_nac_lagrangian
+  public :: mrsf_nac_lagrangian, mrsf_nac_lagrangian_fused_buffered
 
   character(len=*), parameter :: module_name = "mrsf_nac_driver_mod"
 
@@ -45,7 +45,30 @@ contains
 
 !###############################################################################
 
-  subroutine mrsf_nac_lagrangian(infos)
+  subroutine mrsf_nac_lagrangian_fused_buffered(infos)
+    use types, only: information
+    use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_get_rhs, &
+      mrsf_nac_fusion_set_solution
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), allocatable :: gradient_rhs(:), gradient_solution(:)
+    integer :: nbf, nocca, noccb, ltot
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    ltot = (nocca-noccb)*noccb + (nbf-nocca)*noccb + &
+           (nbf-nocca)*(nocca-noccb)
+    allocate(gradient_rhs(ltot), gradient_solution(ltot))
+    call mrsf_nac_fusion_get_rhs(gradient_rhs)
+    call mrsf_nac_lagrangian(infos,gradient_rhs,gradient_solution)
+    call mrsf_nac_fusion_set_solution(gradient_solution)
+    deallocate(gradient_rhs,gradient_solution)
+  end subroutine mrsf_nac_lagrangian_fused_buffered
+
+!###############################################################################
+
+  subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use, intrinsic :: iso_c_binding, only: c_int64_t
     use types, only: information
@@ -53,6 +76,7 @@ contains
     use oqp_tagarray_driver, only: tagarray_reserve_data, data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo, OQP_td_energies, TA_TYPE_REAL64
     use messages, only: show_message, WITH_ABORT
+    use cphf_mod, only: cphf_solve_rohf
     use mrsf_nac_metric_data_mod, only: mrsf_nac_metric_column
     use tdhf_mrsf_gradient_mod, only: mrsf_nac_amp, mrsf_nac_esum
     use tdhf_mrsf_energy_mod, only: mrsf_nac_response
@@ -94,23 +118,40 @@ contains
     character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
     character(len=*), parameter :: tag_hf = "OQP::nac_rohf_hf_adjoint"
     character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
+    character(len=*), parameter :: tag_predictor_dcv = &
+      "OQP::nac_predictor_dcv"
+    character(len=*), parameter :: tag_predictor_nacv = &
+      "OQP::nac_predictor_nacv"
     character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
       OQP_td_bvec_mo, OQP_td_energies /)
 
     type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in), optional :: gradient_rhs(:)
+    real(kind=dp), intent(out), optional :: gradient_solution(:)
     real(kind=dp), contiguous, pointer :: bvec_mo(:,:), energies(:)
     real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
       pair_overlap(:,:)
     real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), &
-      mt_frozen_tag(:), z_tag(:), hf_tag(:,:), xc_tag(:,:)
+      mt_frozen_tag(:), z_tag(:), hf_tag(:,:), xc_tag(:,:), &
+      predictor_dcv_tag(:,:,:), predictor_nacv_tag(:,:,:)
     real(kind=dp), allocatable :: bvec_saved(:,:), energies_saved(:), ytil(:)
     real(kind=dp), allocatable :: gamma_column(:,:)
     real(kind=dp), allocatable :: gamma_pair(:), rhs_batch(:,:), &
-      solution_batch(:,:), nonz_batch(:,:), hf_batch(:,:,:), xc_batch(:,:,:)
+      solution_batch(:,:), predictor_batch(:,:), nonz_batch(:,:), &
+      hf_batch(:,:,:), xc_batch(:,:,:), hf_predictor(:,:,:), &
+      xc_predictor(:,:,:), predictor_initial_residual(:), &
+      predictor_final_residual(:)
+    real(kind=dp), allocatable :: fused_rhs(:,:), fused_solution(:,:), &
+      fused_residual(:), fused_tolerance(:)
     real(kind=dp), allocatable :: wpair_ytil(:,:), wpair_xstate(:,:), &
       wpair_mt(:,:,:)
     integer, allocatable :: pair_i(:), pair_j(:)
-    real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign
+    integer, allocatable :: predictor_iterations(:)
+    logical, allocatable :: predictor_available(:), predictor_accepted(:), &
+      fused_converged(:)
+    integer, allocatable :: fused_iterations(:)
+    real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign, &
+      fused_scaled_residual
     real(kind=dp) :: profile_total, profile_metric, profile_wpair
     real(kind=dp) :: profile_amp, profile_esum, profile_response
     real(kind=dp) :: profile_overlap, profile_zvector, profile_hf
@@ -125,14 +166,23 @@ contains
     integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
-    character(len=16) :: profile_value
-    logical :: profile_enabled
+    character(len=16) :: profile_value, audit_value
+    logical :: profile_enabled, audit_enabled
+
+    if (present(gradient_rhs) .neqv. present(gradient_solution)) then
+      call show_message('Gradient/NAC fusion requires both RHS and solution arrays.', &
+                        WITH_ABORT)
+    end if
 
     profile_value = ''
     call get_environment_variable('OQP_NAC_PROFILE', profile_value, &
                                   status=profile_status)
     profile_enabled = profile_status == 0 .and. &
       len_trim(profile_value) > 0 .and. trim(profile_value) /= '0'
+    audit_value = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_AUDIT',audit_value)
+    audit_enabled = len_trim(audit_value) > 0 .and. &
+                    trim(audit_value) /= '0'
     profile_total = 0.0_dp
     profile_metric = 0.0_dp
     profile_wpair = 0.0_dp
@@ -261,8 +311,13 @@ contains
     allocate(bvec_saved(nij,nstate), energies_saved(nstate), ytil(nij), &
              gamma_column(nbf*nbf,nstate), gamma_pair(nbf*nbf), &
              rhs_batch(ltot,npair), solution_batch(ltot,npair), &
+             predictor_batch(ltot,npair), &
              nonz_batch(ncoord,npair), hf_batch(3,natom,npair), &
-             xc_batch(3,natom,npair), &
+             xc_batch(3,natom,npair), hf_predictor(3,natom,npair), &
+             xc_predictor(3,natom,npair), &
+             predictor_initial_residual(npair), &
+             predictor_final_residual(npair), predictor_iterations(npair), &
+             predictor_available(npair), predictor_accepted(npair), &
              wpair_ytil(nij,wpair_batch_width), &
              wpair_xstate(nij,wpair_batch_width), &
              wpair_mt(nbf,nbf,wpair_batch_width), &
@@ -274,9 +329,17 @@ contains
     energies_saved = energies
     rhs_batch = 0.0_dp
     solution_batch = 0.0_dp
+    predictor_batch = 0.0_dp
     nonz_batch = 0.0_dp
     hf_batch = 0.0_dp
     xc_batch = 0.0_dp
+    hf_predictor = 0.0_dp
+    xc_predictor = 0.0_dp
+    predictor_initial_residual = 0.0_dp
+    predictor_final_residual = 0.0_dp
+    predictor_iterations = 0
+    predictor_available = .false.
+    predictor_accepted = .false.
     wpair_first = 1
     wpair_last = 0
     ipair = 0
@@ -453,12 +516,71 @@ contains
     ! requesting many states.  The production three-state case remains one
     ! nrhs=3 solve, in place of six independent ordered-pair solves.
     if (profile_enabled) call system_clock(profile_stop)
-    do z_first = 1, npair, z_batch_width
-      z_last = min(npair, z_first + z_batch_width - 1)
-      call mrsf_nac_rohf_zvector_batch( &
-        infos, rhs_batch(:,z_first:z_last), &
-        solution_batch(:,z_first:z_last))
-    end do
+    if (present(gradient_rhs)) then
+      if (size(gradient_rhs) /= ltot .or. size(gradient_solution) /= ltot) then
+        call show_message('Gradient/NAC fusion has the wrong ROHF rotation dimension.', &
+                          WITH_ABORT)
+      end if
+      allocate(fused_rhs(ltot,npair+1), fused_solution(ltot,npair+1), &
+               fused_residual(npair+1), fused_tolerance(npair+1), &
+               fused_converged(npair+1), &
+               fused_iterations(npair+1))
+      ! The native Hessian H is twice the legacy MRSF-gradient Hessian A in
+      ! the shared SD/DV/SV coordinates. H*x_g=2*b_g therefore returns the
+      ! exact legacy gradient multiplier, while the remaining columns are the
+      ! native unordered-pair adjoints. One synchronized multi-RHS traversal
+      ! serves the active-state gradient and all three-state NAC pairs.
+      fused_rhs(:,1) = 2.0_dp*gradient_rhs
+      fused_rhs(:,2:npair+1) = rhs_batch
+      fused_tolerance = 1.0e-20_dp
+      ! Keep the established gradient residual threshold while the NAC pair
+      ! columns retain the tighter property threshold.  Once the gradient is
+      ! converged, its density/Fock column drops out of the shared traversal.
+      fused_tolerance(1) = max(1.0e-20_dp, infos%tddft%zvconv)
+      call cphf_solve_rohf(infos,npair+1,fused_rhs,fused_solution, &
+                           tol=1.0e-20_dp, &
+                           maxit=max(int(infos%control%maxit_zv),ltot+5), &
+                           converged=fused_converged, &
+                           residual=fused_residual, minres_solver=.true., &
+                           iterations=fused_iterations, &
+                           rhs_tolerances=fused_tolerance)
+      do z_first = 1, npair+1
+        fused_scaled_residual = fused_residual(z_first)/max(1.0_dp, &
+          sum(fused_rhs(:,z_first)*fused_rhs(:,z_first)))
+        write(iw,'(A,1X,I0,2(1X,ES16.8),1X,I0)') &
+          'NAC_GRADIENT_Z_FUSION',z_first,fused_residual(z_first), &
+          fused_scaled_residual,fused_iterations(z_first)
+        if (.not. fused_converged(z_first) .and. fused_scaled_residual > &
+            (10.0_dp*sqrt(epsilon(1.0_dp)))**2) then
+          call show_message('Fused gradient/NAC ROHF Z-vector failed residual gate.', &
+                            WITH_ABORT)
+        end if
+      end do
+      gradient_solution = fused_solution(:,1)
+      solution_batch = fused_solution(:,2:npair+1)
+      predictor_available = .false.
+      predictor_accepted = .false.
+      predictor_batch = 0.0_dp
+      predictor_initial_residual = 0.0_dp
+      predictor_final_residual = 0.0_dp
+      predictor_iterations = 0
+      deallocate(fused_rhs,fused_solution,fused_residual,fused_tolerance, &
+                 fused_converged,fused_iterations)
+    else
+      do z_first = 1, npair, z_batch_width
+        z_last = min(npair, z_first + z_batch_width - 1)
+        call mrsf_nac_rohf_zvector_batch( &
+          infos, rhs_batch(:,z_first:z_last), &
+          solution_batch(:,z_first:z_last), pair_offset=z_first-1, &
+          predictor=predictor_batch(:,z_first:z_last), &
+          predictor_available=predictor_available(z_first:z_last), &
+          predictor_accepted=predictor_accepted(z_first:z_last), &
+          initial_residual_out= &
+            predictor_initial_residual(z_first:z_last), &
+          final_residual_out=predictor_final_residual(z_first:z_last), &
+          iterations_out=predictor_iterations(z_first:z_last))
+      end do
+    end if
     if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
     if (profile_enabled) call system_clock(profile_stop)
@@ -483,6 +605,25 @@ contains
         xc_batch(:,:,xc_first:xc_last))
     end do
     if (profile_enabled) call profile_add(profile_xc, profile_stop)
+
+    ! The optional audit evaluates the transported or extrapolated Z vector
+    ! before MINRES correction with the same analytic adjoint contractions.
+    ! It is an observational comparison only: the exact solution above remains
+    ! the source of the production NAC and trajectory coupling.
+    if (audit_enabled .and. any(predictor_available)) then
+      do hf_first = 1, npair, hf_batch_width
+        hf_last = min(npair, hf_first + hf_batch_width - 1)
+        call mrsf_nac_rohf_hf_adjoint_batch( &
+          infos, predictor_batch(:,hf_first:hf_last), &
+          hf_predictor(:,:,hf_first:hf_last))
+      end do
+      do xc_first = 1, npair, xc_batch_width
+        xc_last = min(npair, xc_first + xc_batch_width - 1)
+        call mrsf_nac_xc_adjoint_batch( &
+          infos, predictor_batch(:,xc_first:xc_last), &
+          xc_predictor(:,:,xc_first:xc_last))
+      end do
+    end if
 
     call infos%dat%erase((/ character(len=80) :: tag_z, tag_hf, &
                                                         tag_xc /))
@@ -513,6 +654,36 @@ contains
     infos%control%int2e_cutoff = cutoff_saved
     if (profile_enabled) call system_clock(profile_stop)
     call mrsf_nac_pair_finalize(infos)
+    call infos%dat%erase((/ character(len=80) :: tag_predictor_dcv, &
+      tag_predictor_nacv /))
+    if (audit_enabled .and. any(predictor_available)) then
+      call tagarray_reserve_data(infos%dat,tag_predictor_dcv, &
+        TA_TYPE_REAL64,ncoord*nstate*nstate,(/ ncoord,nstate,nstate /), &
+        comment='uncorrected transported/extrapolated MRSF derivative coupling')
+      call tagarray_reserve_data(infos%dat,tag_predictor_nacv, &
+        TA_TYPE_REAL64,ncoord*nstate*nstate,(/ ncoord,nstate,nstate /), &
+        comment='uncorrected transported/extrapolated gap-scaled coupling')
+      call tagarray_get_data(infos%dat,tag_predictor_dcv,predictor_dcv_tag)
+      call tagarray_get_data(infos%dat,tag_predictor_nacv,predictor_nacv_tag)
+      predictor_dcv_tag = 0.0_dp
+      predictor_nacv_tag = 0.0_dp
+      do ipair = 1, npair
+        if (.not. predictor_available(ipair)) cycle
+        gap = energies_saved(pair_j(ipair))-energies_saved(pair_i(ipair))
+        do coord = 1, ncoord
+          predictor_dcv_tag(coord,pair_i(ipair),pair_j(ipair)) = &
+            nonz_batch(coord,ipair) + &
+            hf_predictor(mod(coord-1,3)+1,(coord-1)/3+1,ipair) + &
+            xc_predictor(mod(coord-1,3)+1,(coord-1)/3+1,ipair)
+          predictor_dcv_tag(coord,pair_j(ipair),pair_i(ipair)) = &
+            -predictor_dcv_tag(coord,pair_i(ipair),pair_j(ipair))
+          predictor_nacv_tag(coord,pair_i(ipair),pair_j(ipair)) = &
+            gap*predictor_dcv_tag(coord,pair_i(ipair),pair_j(ipair))
+          predictor_nacv_tag(coord,pair_j(ipair),pair_i(ipair)) = &
+            predictor_nacv_tag(coord,pair_i(ipair),pair_j(ipair))
+        end do
+      end do
+    end if
     if (profile_enabled) then
       call profile_add(profile_finalize, profile_stop)
       call system_clock(profile_stop)
@@ -528,7 +699,11 @@ contains
     end if
 
     deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair, &
-               rhs_batch, solution_batch, nonz_batch, hf_batch, xc_batch, &
+               rhs_batch, solution_batch, predictor_batch, nonz_batch, &
+               hf_batch, xc_batch, hf_predictor, xc_predictor, &
+               predictor_initial_residual, predictor_final_residual, &
+               predictor_iterations, predictor_available, &
+               predictor_accepted, &
                wpair_ytil, wpair_xstate, wpair_mt, &
                pair_i, pair_j)
   contains
@@ -554,3 +729,14 @@ contains
   end subroutine mrsf_nac_lagrangian
 
 end module mrsf_nac_driver_mod
+
+! External bridge used by the legacy MRSF gradient module without introducing
+! a Fortran module-dependency cycle (the NAC driver itself consumes resident
+! kernels from tdhf_mrsf_gradient_mod).
+subroutine mrsf_nac_lagrangian_fused_external(infos)
+  use types, only: information
+  use mrsf_nac_driver_mod, only: mrsf_nac_lagrangian_fused_buffered
+  implicit none
+  type(information), target, intent(inout) :: infos
+  call mrsf_nac_lagrangian_fused_buffered(infos)
+end subroutine mrsf_nac_lagrangian_fused_external

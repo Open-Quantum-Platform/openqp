@@ -61,7 +61,7 @@ def test_driver_uses_actual_resident_state_count_and_streamed_metric():
 def test_driver_batches_one_adjoint_per_unordered_pair():
     driver = DRIVER.read_text()
     body = driver.split(
-        "subroutine mrsf_nac_lagrangian(infos)", 1
+        "subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)", 1
     )[1].split("end subroutine mrsf_nac_lagrangian", 1)[0]
     ordered_source_sequence = (
         "call mrsf_nac_wpair_batch_impl(",
@@ -94,8 +94,11 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     metric_publish = body.index("gamma_tag = gamma_pair", direct_call)
     assert direct_guard < direct_call < metric_publish
     assert body.count("call mrsf_nac_rohf_zvector_batch(") == 1
-    assert body.count("call mrsf_nac_xc_adjoint_batch(") == 1
-    assert body.count("call mrsf_nac_rohf_hf_adjoint_batch(") == 1
+    # One exact contraction is always present; the second is guarded by the
+    # research-only predictor audit and cannot replace the production vector.
+    assert body.count("call mrsf_nac_xc_adjoint_batch(") == 2
+    assert body.count("call mrsf_nac_rohf_hf_adjoint_batch(") == 2
+    assert "if (audit_enabled .and. any(predictor_available)) then" in body
     assert "integer, parameter :: z_batch_width = 3" in body
     assert "do z_first = 1, npair, z_batch_width" in body
     assert "rhs_batch(:,z_first:z_last)" in body
@@ -127,7 +130,10 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
         < accumulate_call
     )
     assert "call mrsf_nac_rohf_zvector(infos)" not in body
-    assert "call cphf_solve_rohf" not in body
+    assert body.count("call cphf_solve_rohf") == 1
+    assert body.index("if (present(gradient_rhs)) then") < body.index(
+        "call cphf_solve_rohf"
+    )
     assert "hf_hessian" not in body
 
 

@@ -643,6 +643,11 @@ class NAMD:
         self.restart_requested = self._as_bool(md.get('restart', False))
         self.trajectory_file = self._md_output_path(
             md.get('trajectory_file', ''), '.namd.trj')
+        # Observational sidecar for the transported/extrapolated NAC adjoint.
+        # Its path is deliberately derived rather than added to the public
+        # input schema while the approximation remains experimental.
+        self.zpredict_audit_file = self._md_output_path(
+            '', '.namd.zpredict.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = self._restart_manifest_path()
@@ -1188,6 +1193,7 @@ class NAMD:
         outputs = {
             'log_file': self.mol.log,
             'trajectory_file': self.trajectory_file,
+            'zpredict_audit_file': self.zpredict_audit_file,
             'restart_file': self.restart_file,
             'restart_manifest_file': self.restart_manifest_file,
         }
@@ -1356,6 +1362,7 @@ class NAMD:
             self.mol,
             title=(f'NAMD files: trajectory={self.trajectory_file} '
                    f'trajectory_interval={self.trajectory_interval}step '
+                   f'zpredict_audit={self.zpredict_audit_file} '
                    f'restart={self.restart_file} '
                    f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
@@ -1391,6 +1398,8 @@ class NAMD:
             if os.path.lexists(path):
                 os.unlink(path)
         with open(self.trajectory_file, 'w', encoding='utf-8'):
+            pass
+        with open(self.zpredict_audit_file, 'w', encoding='utf-8'):
             pass
         self._trajectory_prefix_hasher = None
         self._trajectory_prefix_bytes = 0
@@ -1581,7 +1590,7 @@ class NAMD:
             gradient = gradient - odp['force']
         return gradient
 
-    def _state_overlap(self, istep=None):
+    def _state_overlap(self, istep=None, *, update_analytic=True):
         """Compute the phase-corrected state overlap S(i,j)=<i(t-dt)|j(t)>."""
         NACME(self.mol).nacme()
         state_overlap = canonical_state_overlap(
@@ -1590,7 +1599,7 @@ class NAMD:
         self._last_state_overlap = np.array(state_overlap, copy=True)
         self._last_overlap_tdc = np.array(self._compute_tdc(state_overlap), copy=True)
         self._update_baeck_an_check(istep, state_overlap)
-        if self._needs_analytic_nac():
+        if update_analytic and self._needs_analytic_nac():
             self._update_analytic_nac(istep, compare_overlap=True)
         return state_overlap
 
@@ -1611,6 +1620,13 @@ class NAMD:
             or self.nacme_check == 'analytic'
         )
 
+    def _gradient_nac_fusion_enabled(self):
+        return (
+            self._needs_analytic_nac()
+            and os.environ.get('OQP_MRSF_NAC_ZV_FUSE_GRADIENT', '')
+            .strip().lower() in ('1', 'y', 'yes', 't', 'true', 'on')
+        )
+
     def _update_analytic_nac(self, istep=None, *, compare_overlap=False):
         """Evaluate phase-aligned analytic d and contract it with velocity.
 
@@ -1618,11 +1634,33 @@ class NAMD:
         is retained separately for comparison with the overlap integrated over
         the preceding nuclear interval.
         """
-        from oqp.library.nac_analytic import analytic_nac
+        from oqp.library.nac_analytic import analytic_nac, _resident_pair_cartesian
 
-        _nacv, dcv = analytic_nac(self.mol)
+        if getattr(self.mol, '_nac_fused_gradient_ready', False):
+            _nacv = _resident_pair_cartesian(
+                self.mol.data['OQP::nac_nacv'], self.nstate, self.natom)
+            dcv = _resident_pair_cartesian(
+                self.mol.data['OQP::nac_dcv'], self.nstate, self.natom)
+            self.mol._nac_fused_gradient_ready = False
+        else:
+            _nacv, dcv = analytic_nac(self.mol)
         dcv = np.asarray(dcv, dtype=np.float64).reshape(
             (self.nstate, self.nstate, self.natom, 3))
+        try:
+            predictor_dcv = _resident_pair_cartesian(
+                self.mol.data['OQP::nac_predictor_dcv'],
+                self.nstate, self.natom)
+            predictor_nacv = _resident_pair_cartesian(
+                self.mol.data['OQP::nac_predictor_nacv'],
+                self.nstate, self.natom)
+        except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
+            predictor_dcv = None
+            predictor_nacv = None
+        if predictor_dcv is not None:
+            self._write_zpredict_audit_row(
+                istep, dcv, predictor_dcv,
+                np.asarray(_nacv, dtype=np.float64).reshape(dcv.shape),
+                predictor_nacv)
         endpoint = np.einsum('ijac,ac->ij', dcv, self.vel, optimize=True)
         self._last_analytic_dcv = np.array(dcv, copy=True)
         self._last_analytic_tdc = np.array(endpoint, copy=True)
@@ -1660,6 +1698,71 @@ class NAMD:
             )
             return gate
         return None
+
+    def _write_zpredict_audit_row(self, istep, exact_dcv, predictor_dcv,
+                                  exact_nacv, predictor_nacv):
+        """Append gauge-aligned full-vector and velocity-contraction errors."""
+        if not self._is_io_rank():
+            self._io_barrier()
+            return
+        n = self.nstate
+        pairs = np.triu_indices(n, 1)
+        exact_d = np.asarray(exact_dcv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
+        pred_d = np.asarray(predictor_dcv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
+        exact_h = np.asarray(exact_nacv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
+        pred_h = np.asarray(predictor_nacv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
+        delta_d = pred_d - exact_d
+        delta_h = pred_h - exact_h
+        dot = np.sum(pred_d*exact_d, axis=1)
+        denom = np.linalg.norm(pred_d, axis=1)*np.linalg.norm(exact_d, axis=1)
+        cosine = np.divide(dot, denom, out=np.ones_like(dot), where=denom > 0.0)
+        exact_vd = np.einsum('pac,ac->p', exact_d.reshape(-1, self.natom, 3),
+                             self.vel, optimize=True)
+        pred_vd = np.einsum('pac,ac->p', pred_d.reshape(-1, self.natom, 3),
+                            self.vel, optimize=True)
+        delta_vd = pred_vd - exact_vd
+        mode = os.environ.get('OQP_MRSF_NAC_ZV_PREDICTOR', 'off').strip()
+        result = {
+            'step': '' if istep is None else int(istep),
+            'mode': mode,
+            'production_is_predictor': int(mode.lower().endswith('_approx')),
+            'eta': os.environ.get('OQP_MRSF_NAC_ZV_ETA', '1.0'),
+            'exact_every': os.environ.get('OQP_MRSF_NAC_ZV_EXACT_EVERY', '0'),
+            'pair_count': len(pairs[0]),
+            'd_rms': float(np.sqrt(np.mean(delta_d*delta_d))),
+            'd_max': float(np.max(np.abs(delta_d))),
+            'd_relative_l2': float(np.linalg.norm(delta_d) /
+                                   max(np.linalg.norm(exact_d), 1.0e-300)),
+            'd_cosine_mean': float(np.mean(cosine)),
+            'd_cosine_min': float(np.min(cosine)),
+            'h_rms': float(np.sqrt(np.mean(delta_h*delta_h))),
+            'h_max': float(np.max(np.abs(delta_h))),
+            'h_relative_l2': float(np.linalg.norm(delta_h) /
+                                   max(np.linalg.norm(exact_h), 1.0e-300)),
+            'vd_rms': float(np.sqrt(np.mean(delta_vd*delta_vd))),
+            'vd_max': float(np.max(np.abs(delta_vd))),
+            'vd_relative_l2': float(np.linalg.norm(delta_vd) /
+                                    max(np.linalg.norm(exact_vd), 1.0e-300)),
+        }
+        tracking = self.mol.get_state_tracking()
+        result['tracking_overlap_min'] = (
+            '' if tracking is None else
+            float(np.min(np.abs(np.asarray(tracking['matched_overlap'], dtype=float))))
+        )
+        result['tracking_margin_min'] = (
+            '' if tracking is None else
+            float(np.min(np.asarray(tracking['margin'], dtype=float)))
+        )
+        columns = tuple(result)
+        path = self.zpredict_audit_file
+        needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
+        with open(path, 'a', encoding='utf-8') as stream:
+            if needs_header:
+                stream.write('\t'.join(columns) + '\n')
+            stream.write('\t'.join(str(result[name]) for name in columns) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        self._io_barrier()
 
     def _update_baeck_an_check(self, istep, state_overlap):
         """Compare overlap TDC magnitudes with a centred TD-Baeck-An estimate.
@@ -3655,6 +3758,12 @@ class NAMD:
 
             # electronic structure at the new geometry (with overlap vs previous)
             self._electronic(with_overlap=True)
+            fused_gradient_nac = self._gradient_nac_fusion_enabled()
+            if fused_gradient_nac:
+                # Fix root identity and phase before constructing the fused
+                # gradient/NAC right-hand sides. The analytic velocity
+                # contraction is deferred until after the Verlet half kick.
+                self._state_overlap(istep, update_analytic=False)
             restraint_force, _ = self._evaluate_conservative_restraints(
                 r, self.mass)
             accel_new = (-self._active_gradient() + restraint_force) / self.mass[:, None]
@@ -3663,7 +3772,10 @@ class NAMD:
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
 
             # state overlap (couplings) and FSSH hop
-            self._state_overlap(istep)
+            if fused_gradient_nac:
+                self._update_analytic_nac(istep, compare_overlap=True)
+            else:
+                self._state_overlap(istep)
             self._last_rescale_source = int(
                 self.rescale_provider == 'analytic_nac')
             self._last_rescale_gamma = np.nan

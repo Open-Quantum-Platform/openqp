@@ -924,7 +924,9 @@ contains
 !>   convention retained by the historical CPHF drivers; PCG itself receives
 !>   sqrt(tol) and tests the unsquared residual norm.
   subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit, &
-                             converged, residual, minres_solver)
+                             converged, residual, minres_solver, &
+                             initial_guess, initial_residual, iterations, &
+                             initial_guess_accepted, rhs_tolerances)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix
@@ -939,6 +941,11 @@ contains
     logical, intent(out), optional :: converged(:)
     real(kind=dp), intent(out), optional :: residual(:)
     logical, intent(in), optional :: minres_solver
+    real(kind=dp), intent(in), optional :: initial_guess(:,:)
+    real(kind=dp), intent(out), optional :: initial_residual(:)
+    integer, intent(out), optional :: iterations(:)
+    logical, intent(out), optional :: initial_guess_accepted(:)
+    real(kind=dp), intent(in), optional :: rhs_tolerances(:)
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
@@ -960,7 +967,7 @@ contains
       work3_batch(:,:,:), dxa_batch(:,:,:), dxb_batch(:,:,:), &
       fxa_batch(:,:,:), fxb_batch(:,:,:), kmat_batch(:,:,:), &
       dm_tri_batch(:,:), pfock_batch(:,:)
-    real(kind=dp), allocatable :: xvec_batch(:,:), ax_batch(:,:)
+    real(kind=dp), allocatable :: xvec_batch(:,:), ax_batch(:,:), rhs_cnv(:)
     integer, allocatable :: active_rhs(:)
     integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: iter_min, iter_max, nconv
@@ -980,9 +987,27 @@ contains
     ltot = noccb*(offset + nvira) + offset*nvira
     dft = infos%control%hamilton == 20
     cnv = default_tol; if (present(tol)) cnv = tol
+    allocate(rhs_cnv(nrhs), source=cnv)
+    if (present(rhs_tolerances)) then
+      if (size(rhs_tolerances) < nrhs) error stop &
+        'cphf_solve_rohf: rhs_tolerances is smaller than nrhs'
+      if (.not. all(ieee_is_finite(rhs_tolerances(1:nrhs))) .or. &
+          any(rhs_tolerances(1:nrhs) <= 0.0_dp)) error stop &
+        'cphf_solve_rohf: rhs_tolerances must be finite and positive'
+      rhs_cnv = rhs_tolerances(1:nrhs)
+    end if
     mxit = 100; if (present(maxit)) mxit = maxit
     use_minres = .false.; if (present(minres_solver)) use_minres = minres_solver
     if (mxit < ltot + 5) mxit = ltot + 5
+    if (present(initial_guess)) then
+      if (.not. use_minres) error stop &
+        'cphf_solve_rohf: initial_guess currently requires MINRES'
+      if (size(initial_guess,1) /= ltot .or. &
+          size(initial_guess,2) < nrhs) error stop &
+        'cphf_solve_rohf: initial_guess has inconsistent dimensions'
+      if (.not. all(ieee_is_finite(initial_guess(:,1:nrhs)))) error stop &
+        'cphf_solve_rohf: initial_guess contains non-finite values'
+    end if
     if (present(converged)) then
       if (size(converged) < nrhs) error stop &
         'cphf_solve_rohf: converged output is smaller than nrhs'
@@ -992,6 +1017,21 @@ contains
       if (size(residual) < nrhs) error stop &
         'cphf_solve_rohf: residual output is smaller than nrhs'
       residual(1:nrhs) = huge(1.0_dp)
+    end if
+    if (present(initial_residual)) then
+      if (size(initial_residual) < nrhs) error stop &
+        'cphf_solve_rohf: initial_residual output is smaller than nrhs'
+      initial_residual(1:nrhs) = huge(1.0_dp)
+    end if
+    if (present(iterations)) then
+      if (size(iterations) < nrhs) error stop &
+        'cphf_solve_rohf: iterations output is smaller than nrhs'
+      iterations(1:nrhs) = 0
+    end if
+    if (present(initial_guess_accepted)) then
+      if (size(initial_guess_accepted) < nrhs) error stop &
+        'cphf_solve_rohf: initial_guess_accepted output is smaller than nrhs'
+      initial_guess_accepted(1:nrhs) = .false.
     end if
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
@@ -1105,6 +1145,9 @@ contains
     end if
     write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
     write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+    if (present(rhs_tolerances)) &
+      write(iw,'(6x,"per-RHS tolerance range =",1P,E10.3," ... ",E10.3)') &
+        minval(rhs_cnv), maxval(rhs_cnv)
     write(iw,'(3x,60("-"))')
 
     if (use_minres) then
@@ -1112,15 +1155,47 @@ contains
       ! expensive Hessian actions.  This is deliberately not block MINRES:
       ! there is no block orthogonalization, rank decision, or coupled stopping
       ! criterion that could change the solutions near a reference instability.
+      if (present(initial_guess)) then
+        ! Evaluate all H*z0 products in one shared ERI/XC traversal.  Supplying
+        ! ax0 to MINRES avoids repeating the same expensive action once per
+        ! state pair during recurrence initialization.
+        call cphf_apbx_rohf_batch(ax_batch(:,1:nrhs), &
+                                  initial_guess(:,1:nrhs), cgdata)
+      end if
       do irhs = 1, nrhs
         ! An orbital Hessian is symmetric but need not be positive definite
         ! near a reference instability.  Pair-adjoint Z vectors therefore use
         ! MINRES, while ordinary forward CPHF keeps the historical PCG default.
         ! Ask the recurrence for a slightly tighter estimate, then certify the
         ! returned vector with the true unpreconditioned residual below.
-        call minres_batch(irhs)%init(b=bvec(:,irhs), update=cphf_apbx_rohf, &
-                         precond=cphf_precond_rohf_minres, dat=cgdata, &
-                         tol=0.1_dp*sqrt(abs(cnv)))
+        if (present(initial_guess)) then
+          residual_sq = sum((bvec(:,irhs)-ax_batch(:,irhs))**2)
+          if (present(initial_residual)) &
+            initial_residual(irhs) = residual_sq
+          if (ieee_is_finite(residual_sq) .and. &
+              residual_sq < sum(bvec(:,irhs)**2)) then
+            if (present(initial_guess_accepted)) &
+              initial_guess_accepted(irhs) = .true.
+            call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                             update=cphf_apbx_rohf, &
+                             precond=cphf_precond_rohf_minres, dat=cgdata, &
+                             x0=initial_guess(:,irhs), &
+                             ax0=ax_batch(:,irhs), &
+                             tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+          else
+            call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                             update=cphf_apbx_rohf, &
+                             precond=cphf_precond_rohf_minres, dat=cgdata, &
+                             tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+          end if
+        else
+          if (present(initial_residual)) &
+            initial_residual(irhs) = sum(bvec(:,irhs)**2)
+          call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                           update=cphf_apbx_rohf, &
+                           precond=cphf_precond_rohf_minres, dat=cgdata, &
+                           tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+        end if
       end do
 
       do iter = 1, mxit
@@ -1179,19 +1254,20 @@ contains
         end if
         solved = (minres_batch(irhs)%errcode == MINRES_CONVERGED .or. &
                   minres_batch(irhs)%errcode == MINRES_OK) .and. &
-                 residual_norm <= sqrt(abs(cnv))
+                 residual_norm <= sqrt(abs(rhs_cnv(irhs)))
         write(iw,'(" ROHF Z-VECTOR MINRES RHS",I5," stopped after",I5," iterations; status=",I3,"; true error=",1P,E10.3)') &
                  irhs, minres_batch(irhs)%iter, &
                  int(minres_batch(irhs)%errcode), residual_sq
         call flush(iw)
         if (present(converged)) converged(irhs) = solved
         if (present(residual)) residual(irhs) = residual_sq
+        if (present(iterations)) iterations(irhs) = minres_batch(irhs)%iter
         call minres_batch(irhs)%clean()
       end do
     else
       do irhs = 1, nrhs
         call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
-                      dat=cgdata, tol=sqrt(abs(cnv)))
+                      dat=cgdata, tol=sqrt(abs(rhs_cnv(irhs))))
         do iter = 1, mxit
           if (pcg%errcode /= PCG_OK) exit
           call pcg%step()
@@ -1219,7 +1295,7 @@ contains
       call int2_driver_batch%clean()
     end if
 
-    deallocate(famo, fbmo, xminv, fao, w2, w3, ax)
+    deallocate(famo, fbmo, xminv, fao, w2, w3, ax, rhs_cnv)
     deallocate(xa_work, xb_work, x2a_work, x2b_work, v_work, kmat_work, &
                dm_tri_work, pfock_work)
     if (use_minres) then

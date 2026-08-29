@@ -135,13 +135,22 @@ initial residual relative to the zero/preconditioned guess.  Cache contents,
 transport overlaps, predictor type, initial/final residuals, and iteration
 counts are restart data and are written to the calculation record.
 
-A separately named approximate mode may accept the transported predictor
-without complete correction only after one explicit Hessian action evaluates
-`r=b-Hz`.  It must use a calibrated residual-to-`tau` error criterion, periodic
-exact refreshes, and an immediate exact solve in a transition region or before
-NAC-directed momentum rescaling.  Reusing derivative integrals, XC grid terms,
-or an untransported Z-vector at a displaced geometry is not permitted as an
-unlabelled approximation.
+A separately named approximate mode, `transport_approx` or `linear_approx`,
+uses the transported predictor as the current Z vector and omits both MINRES
+and the trial Hessian action.  The first point, a failed orbital/state-overlap
+test, an excessive nuclear displacement, and every user-selected periodic
+refresh point retain the exact solve.  All explicit current-geometry NAC terms
+and the analytic HF/XC contraction of the approximate Z vector are still
+evaluated.  A residual value of `-1` in the log means that the Z equation was
+deliberately not tested at that step; it must not be read as convergence.
+
+This solver-replacement mode is admissible for production dynamics only after
+a paired corrected calculation has calibrated errors in `d`, `h`, and
+`v dot d` against the finite-time-step error of the overlap/TLF propagation at
+the same nuclear time step.  Periodic exact refreshes and immediate fallback
+upon tracking failure limit cumulative drift.  Reusing derivative integrals,
+XC grid terms, or an untransported Z vector at a displaced geometry is not
+permitted as an unlabelled approximation.
 
 TD-Baeck-An is retained as an independent, phase-free energy-curvature
 diagnostic.  It is not an external reference for the signed analytic coupling

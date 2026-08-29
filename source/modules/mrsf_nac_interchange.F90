@@ -1,6 +1,8 @@
 module mrsf_nac_interchange_mod
 
   use precision, only: dp
+  use oqp_linalg
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
 
@@ -18,7 +20,229 @@ module mrsf_nac_interchange_mod
   public :: mrsf_nac_xc_adjoint
   public :: mrsf_nac_xc_adjoint_batch
 
+  ! Converged unordered-pair ROHF adjoints from the two preceding geometries.
+  ! Both saved vectors for a pair are expressed in the most recent saved MO
+  ! frame.  At the next geometry the overlap-defined block-Procrustes map
+  ! transports them together before either a one-step or linear predictor is
+  ! supplied to MINRES.  The converged residual criterion remains unchanged.
+  real(kind=dp), allocatable, save :: nac_z_recent(:,:), nac_z_earlier(:,:)
+  real(kind=dp), allocatable, save :: nac_z_geometry(:,:,:)
+  logical, allocatable, save :: nac_z_have_recent(:), nac_z_have_earlier(:), &
+                                nac_z_have_geometry(:)
+  integer, allocatable, save :: nac_z_steps_since_exact(:)
+  integer, save :: nac_z_ltot = 0, nac_z_npair = 0, nac_z_natom = 0
+  integer, save :: nac_z_nbf = 0, nac_z_nocca = 0, nac_z_noccb = 0
+
 contains
+
+!###############################################################################
+
+  subroutine nac_z_cache_reset()
+    if (allocated(nac_z_recent)) deallocate(nac_z_recent)
+    if (allocated(nac_z_earlier)) deallocate(nac_z_earlier)
+    if (allocated(nac_z_geometry)) deallocate(nac_z_geometry)
+    if (allocated(nac_z_have_recent)) deallocate(nac_z_have_recent)
+    if (allocated(nac_z_have_earlier)) deallocate(nac_z_have_earlier)
+    if (allocated(nac_z_have_geometry)) deallocate(nac_z_have_geometry)
+    if (allocated(nac_z_steps_since_exact)) deallocate(nac_z_steps_since_exact)
+    nac_z_ltot = 0; nac_z_npair = 0; nac_z_natom = 0
+    nac_z_nbf = 0; nac_z_nocca = 0; nac_z_noccb = 0
+  end subroutine nac_z_cache_reset
+
+!###############################################################################
+
+  subroutine nac_z_cache_prepare(ltot, npair, natom, nbf, nocca, noccb)
+    integer, intent(in) :: ltot, npair, natom, nbf, nocca, noccb
+    logical :: dimensions_match
+
+    dimensions_match = allocated(nac_z_recent) .and. &
+      nac_z_ltot == ltot .and. nac_z_npair == npair .and. &
+      nac_z_natom == natom .and. nac_z_nbf == nbf .and. &
+      nac_z_nocca == nocca .and. nac_z_noccb == noccb
+    if (dimensions_match) return
+
+    call nac_z_cache_reset()
+    allocate(nac_z_recent(ltot,npair), nac_z_earlier(ltot,npair), &
+             nac_z_geometry(3,natom,npair), &
+             nac_z_have_recent(npair), nac_z_have_earlier(npair), &
+             nac_z_have_geometry(npair), nac_z_steps_since_exact(npair))
+    nac_z_recent = 0.0_dp; nac_z_earlier = 0.0_dp
+    nac_z_geometry = 0.0_dp
+    nac_z_have_recent = .false.; nac_z_have_earlier = .false.
+    nac_z_have_geometry = .false.
+    nac_z_steps_since_exact = 0
+    nac_z_ltot = ltot; nac_z_npair = npair; nac_z_natom = natom
+    nac_z_nbf = nbf; nac_z_nocca = nocca; nac_z_noccb = noccb
+  end subroutine nac_z_cache_prepare
+
+!###############################################################################
+
+  subroutine nac_z_nearest_orthogonal(overlap, rotation, singular_min, ok)
+    real(kind=dp), intent(in) :: overlap(:,:)
+    real(kind=dp), intent(out) :: rotation(:,:)
+    real(kind=dp), intent(out) :: singular_min
+    logical, intent(out) :: ok
+    real(kind=dp), allocatable :: a(:,:), u(:,:), vt(:,:), singular(:), work(:)
+    real(kind=dp) :: work_query(1)
+    integer :: n, info, lwork
+
+    n = size(overlap,1)
+    ok = n == size(overlap,2) .and. size(rotation,1) == n .and. &
+         size(rotation,2) == n
+    if (.not. ok) return
+    if (n == 0) then
+      singular_min = 1.0_dp
+      return
+    end if
+    allocate(a(n,n), u(n,n), vt(n,n), singular(n))
+    a = overlap
+    call dgesvd('A','A',n,n,a,n,singular,u,n,vt,n,work_query,-1,info)
+    if (info /= 0) then
+      ok = .false.; singular_min = 0.0_dp
+      deallocate(a,u,vt,singular)
+      return
+    end if
+    lwork = max(1,int(work_query(1)))
+    allocate(work(lwork))
+    a = overlap
+    call dgesvd('A','A',n,n,a,n,singular,u,n,vt,n,work,lwork,info)
+    ok = info == 0 .and. all(ieee_is_finite(singular))
+    if (ok) then
+      singular_min = minval(singular)
+      call dgemm('n','n',n,n,n,1.0_dp,u,n,vt,n,0.0_dp,rotation,n)
+    else
+      singular_min = 0.0_dp
+      rotation = 0.0_dp
+    end if
+    deallocate(a,u,vt,singular,work)
+  end subroutine nac_z_nearest_orthogonal
+
+!###############################################################################
+
+  subroutine nac_z_transport_vector(old_vector, new_vector, q_closed, q_open, &
+                                    q_virtual, nocca, noccb, nbf)
+    real(kind=dp), intent(in) :: old_vector(:)
+    real(kind=dp), intent(out) :: new_vector(:)
+    real(kind=dp), intent(in) :: q_closed(:,:), q_open(:,:), q_virtual(:,:)
+    integer, intent(in) :: nocca, noccb, nbf
+    real(kind=dp), allocatable :: co(:,:), cv(:,:), ov(:,:), transformed(:,:)
+    integer :: offset, nvira, iv, io, ic, k
+
+    offset = nocca - noccb
+    nvira = nbf - nocca
+    allocate(co(offset,noccb), cv(nvira,noccb), ov(nvira,offset))
+    k = 0
+    do io = 1, offset
+      do ic = 1, noccb
+        k = k + 1; co(io,ic) = old_vector(k)
+      end do
+    end do
+    do iv = 1, nvira
+      do ic = 1, noccb
+        k = k + 1; cv(iv,ic) = old_vector(k)
+      end do
+    end do
+    do iv = 1, nvira
+      do io = 1, offset
+        k = k + 1; ov(iv,io) = old_vector(k)
+      end do
+    end do
+
+    if (offset > 0 .and. noccb > 0) then
+      transformed = matmul(q_open, matmul(co, transpose(q_closed)))
+      co = transformed
+    end if
+    if (nvira > 0 .and. noccb > 0) then
+      transformed = matmul(q_virtual, matmul(cv, transpose(q_closed)))
+      cv = transformed
+    end if
+    if (nvira > 0 .and. offset > 0) then
+      transformed = matmul(q_virtual, matmul(ov, transpose(q_open)))
+      ov = transformed
+    end if
+
+    k = 0
+    do io = 1, offset
+      do ic = 1, noccb
+        k = k + 1; new_vector(k) = co(io,ic)
+      end do
+    end do
+    do iv = 1, nvira
+      do ic = 1, noccb
+        k = k + 1; new_vector(k) = cv(iv,ic)
+      end do
+    end do
+    do iv = 1, nvira
+      do io = 1, offset
+        k = k + 1; new_vector(k) = ov(iv,io)
+      end do
+    end do
+    deallocate(co,cv,ov)
+  end subroutine nac_z_transport_vector
+
+!###############################################################################
+
+  subroutine nac_z_transport_matrices(infos, q_closed, q_open, q_virtual, &
+                                      singular_min, valid)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_overlap_mo
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(out) :: q_closed(:,:), q_open(:,:), q_virtual(:,:)
+    real(kind=dp), intent(out) :: singular_min
+    logical, intent(out) :: valid
+    character(len=80) :: tags_overlap(1), tags_state(1)
+    integer(c_int32_t) :: tag_id
+    real(kind=dp), contiguous, pointer :: overlap(:,:), state_overlap(:)
+    real(kind=dp) :: sc, so, sv, state_min, threshold
+    character(len=32) :: env
+    integer :: ios, nbf, nocca, noccb
+    logical :: okc, oko, okv
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    tags_overlap(1) = OQP_overlap_mo
+    valid = infos%dat%contains(tags_overlap, tag_id)
+    if (.not. valid) then
+      singular_min = 0.0_dp
+      return
+    end if
+    call tagarray_get_data(infos%dat, OQP_overlap_mo, overlap)
+    if (size(overlap,1) /= nbf .or. size(overlap,2) /= nbf) then
+      valid = .false.; singular_min = 0.0_dp
+      return
+    end if
+
+    ! overlap stores <old|current>.  Its transpose is the orthogonal map from
+    ! the old orbital coordinates into the current coordinates, which is the
+    ! direction needed to transport a saved response vector.
+    call nac_z_nearest_orthogonal(transpose(overlap(1:noccb,1:noccb)), &
+                                  q_closed,sc,okc)
+    call nac_z_nearest_orthogonal( &
+      transpose(overlap(noccb+1:nocca,noccb+1:nocca)), q_open,so,oko)
+    call nac_z_nearest_orthogonal( &
+      transpose(overlap(nocca+1:nbf,nocca+1:nbf)), q_virtual,sv,okv)
+    singular_min = min(sc,min(so,sv))
+    threshold = 0.5_dp
+    env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_OVERLAP_MIN',env)
+    if (len_trim(env) > 0) then
+      read(env,*,iostat=ios) threshold
+      if (ios /= 0) threshold = 0.5_dp
+    end if
+    valid = okc .and. oko .and. okv .and. &
+            singular_min >= max(0.0_dp,min(1.0_dp,threshold))
+
+    tags_state(1) = 'OQP::state_tracking_overlap'
+    if (valid .and. infos%dat%contains(tags_state,tag_id)) then
+      call tagarray_get_data(infos%dat,tags_state(1),state_overlap)
+      if (size(state_overlap) > 0) then
+        state_min = minval(abs(state_overlap))
+        valid = state_min >= max(0.0_dp,min(1.0_dp,threshold))
+      end if
+    end if
+  end subroutine nac_z_transport_matrices
 
 !###############################################################################
 
@@ -182,7 +406,9 @@ contains
 !> preconditioner and XC context once, then certifies the true unpreconditioned
 !> residual of every returned MINRES solution.  The public residual convention
 !> is squared, so tol=1e-20 requests ||H z - rhs||_2 <= 1e-10.
-  subroutine mrsf_nac_rohf_zvector_batch(infos, rhs, solution)
+  subroutine mrsf_nac_rohf_zvector_batch(infos, rhs, solution, pair_offset, &
+      predictor, predictor_available, predictor_accepted, &
+      initial_residual_out, final_residual_out, iterations_out)
     use types, only: information
     use io_constants, only: iw
     use cphf_mod, only: cphf_solve_rohf
@@ -197,11 +423,25 @@ contains
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: rhs(:,:)
     real(kind=dp), intent(out) :: solution(:,:)
-    real(kind=dp), allocatable :: residual(:)
-    real(kind=dp) :: rhs_scale_sq, scaled_residual_sq
-    logical, allocatable :: converged(:)
-    logical :: log_was_open
-    integer :: nbf, nocca, noccb, nvira, offset, ltot, nrhs, irhs
+    integer, intent(in), optional :: pair_offset
+    real(kind=dp), intent(out), optional :: predictor(:,:)
+    logical, intent(out), optional :: predictor_available(:), &
+                                      predictor_accepted(:)
+    real(kind=dp), intent(out), optional :: initial_residual_out(:), &
+                                            final_residual_out(:)
+    integer, intent(out), optional :: iterations_out(:)
+    real(kind=dp), allocatable :: residual(:), initial_residual(:), &
+      guess(:,:), recent_current(:), earlier_current(:), q_closed(:,:), &
+      q_open(:,:), q_virtual(:,:)
+    real(kind=dp) :: rhs_scale_sq, scaled_residual_sq, eta, max_disp, &
+      displacement, singular_min, z_relative_error
+    logical, allocatable :: converged(:), guess_available(:), guess_accepted(:)
+    logical :: log_was_open, predictor_mode, linear_mode, approximate_mode, &
+      transport_valid, same_geometry, pass_guess, use_approximation
+    integer, allocatable :: iterations(:)
+    integer :: nbf, nocca, noccb, nvira, offset, ltot, nrhs, irhs, &
+      npair_total, first_pair, absolute_pair, ios, exact_every
+    character(len=32) :: mode, env
 
     if (infos%control%scftype /= 3) then
       call show_message( &
@@ -223,7 +463,106 @@ contains
         WITH_ABORT)
     end if
 
-    allocate(converged(nrhs), residual(nrhs))
+    first_pair = 1
+    if (present(pair_offset)) first_pair = pair_offset + 1
+    npair_total = int(infos%tddft%nstate)* &
+                  (int(infos%tddft%nstate)-1)/2
+    if (first_pair < 1 .or. first_pair + nrhs - 1 > npair_total) then
+      call show_message('Invalid unordered-pair offset for NAC Z-vector batch.', &
+                        WITH_ABORT)
+    end if
+
+    mode = 'off'
+    call get_environment_variable('OQP_MRSF_NAC_ZV_PREDICTOR',mode)
+    predictor_mode = trim(mode) == 'transport' .or. &
+                     trim(mode) == 'TRANSPORT' .or. &
+                     trim(mode) == 'linear' .or. trim(mode) == 'LINEAR'
+    approximate_mode = trim(mode) == 'transport_approx' .or. &
+      trim(mode) == 'TRANSPORT_APPROX' .or. &
+      trim(mode) == 'linear_approx' .or. trim(mode) == 'LINEAR_APPROX'
+    predictor_mode = predictor_mode .or. approximate_mode
+    linear_mode = trim(mode) == 'linear' .or. trim(mode) == 'LINEAR' .or. &
+      trim(mode) == 'linear_approx' .or. trim(mode) == 'LINEAR_APPROX'
+    eta = 1.0_dp
+    env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_ETA',env)
+    if (len_trim(env) > 0) then
+      read(env,*,iostat=ios) eta
+      if (ios /= 0 .or. .not. ieee_is_finite(eta)) eta = 1.0_dp
+    end if
+    eta = max(0.0_dp,min(2.0_dp,eta))
+    max_disp = 0.25_dp
+    env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_MAX_DISP',env)
+    if (len_trim(env) > 0) then
+      read(env,*,iostat=ios) max_disp
+      if (ios /= 0 .or. .not. ieee_is_finite(max_disp)) max_disp = 0.25_dp
+    end if
+    max_disp = max(0.0_dp,max_disp)
+    exact_every = 0
+    env = ''
+    call get_environment_variable('OQP_MRSF_NAC_ZV_EXACT_EVERY',env)
+    if (len_trim(env) > 0) then
+      read(env,*,iostat=ios) exact_every
+      if (ios /= 0) exact_every = 0
+    end if
+    exact_every = max(0,exact_every)
+
+    allocate(converged(nrhs), residual(nrhs), initial_residual(nrhs), &
+             iterations(nrhs), guess(ltot,nrhs), guess_available(nrhs), &
+             guess_accepted(nrhs), recent_current(ltot), &
+             earlier_current(ltot), q_closed(noccb,noccb), &
+             q_open(offset,offset), q_virtual(nvira,nvira))
+    guess = 0.0_dp; guess_available = .false.; guess_accepted = .false.
+    transport_valid = .false.; singular_min = 0.0_dp
+    if (predictor_mode) then
+      call nac_z_cache_prepare(ltot,npair_total,int(infos%mol_prop%natom),nbf, &
+                               nocca,noccb)
+      if (any(nac_z_have_recent(first_pair:first_pair+nrhs-1))) then
+        call nac_z_transport_matrices(infos,q_closed,q_open,q_virtual, &
+                                      singular_min,transport_valid)
+      end if
+      do irhs = 1, nrhs
+        absolute_pair = first_pair + irhs - 1
+        if (.not. nac_z_have_recent(absolute_pair) .or. &
+            .not. nac_z_have_geometry(absolute_pair)) cycle
+        displacement = sqrt(sum((infos%atoms%xyz - &
+          nac_z_geometry(:,:,absolute_pair))**2)/ &
+          real(max(1,int(infos%mol_prop%natom)),dp))
+        same_geometry = maxval(abs(infos%atoms%xyz - &
+          nac_z_geometry(:,:,absolute_pair))) <= 1.0e-12_dp
+        if (.not. same_geometry .and. &
+            (.not. transport_valid .or. displacement > max_disp)) cycle
+        if (same_geometry) then
+          recent_current = nac_z_recent(:,absolute_pair)
+        else
+          call nac_z_transport_vector(nac_z_recent(:,absolute_pair), &
+            recent_current,q_closed,q_open,q_virtual,nocca,noccb,nbf)
+        end if
+        guess(:,irhs) = recent_current
+        if (linear_mode .and. nac_z_have_earlier(absolute_pair)) then
+          if (same_geometry) then
+            earlier_current = nac_z_earlier(:,absolute_pair)
+          else
+            call nac_z_transport_vector(nac_z_earlier(:,absolute_pair), &
+              earlier_current,q_closed,q_open,q_virtual,nocca,noccb,nbf)
+          end if
+          guess(:,irhs) = recent_current + &
+                          eta*(recent_current-earlier_current)
+        end if
+        guess_available(irhs) = all(ieee_is_finite(guess(:,irhs)))
+      end do
+    else
+      call nac_z_cache_reset()
+    end if
+
+    pass_guess = predictor_mode .and. all(guess_available)
+    use_approximation = approximate_mode .and. pass_guess
+    if (use_approximation .and. exact_every > 0) then
+      use_approximation = .not. any(nac_z_steps_since_exact( &
+        first_pair:first_pair+nrhs-1) >= exact_every-1)
+    end if
+
     ! The energy driver closes IW before the Python NAC orchestrator runs.
     ! Open the requested log locally so the shared CPHF reporter never creates
     ! a process-global fort.6 file, which would collide across worker jobs.
@@ -236,10 +575,37 @@ contains
     ! max(1,||rhs||_2), is no larger than 10*sqrt(machine epsilon).  This
     ! provides an absolute floor for small sources and a relative criterion
     ! for large sources while remaining independent of response-space size.
-    call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
-                         maxit=max(int(infos%control%maxit_zv), ltot + 5), &
-                         converged=converged, residual=residual, &
-                         minres_solver=.true.)
+    if (use_approximation) then
+      ! Deliberately omit the ROHF response solve.  The transported or linearly
+      ! extrapolated adjoint replaces z for this nuclear step; all explicit
+      ! current-geometry NAC terms and analytic adjoint contractions remain.
+      ! A negative residual sentinel denotes "not evaluated", never success
+      ! of the certified equation.  Periodic exact refresh is controlled by
+      ! OQP_MRSF_NAC_ZV_EXACT_EVERY; tracking/overlap invalidation also falls
+      ! through to the full solve below.
+      solution = guess
+      converged = .true.
+      residual = -1.0_dp
+      initial_residual = -1.0_dp
+      iterations = 0
+      guess_accepted = .true.
+    else if (pass_guess) then
+      call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
+                           maxit=max(int(infos%control%maxit_zv), ltot + 5), &
+                           converged=converged, residual=residual, &
+                           minres_solver=.true., initial_guess=guess, &
+                           initial_residual=initial_residual, &
+                           iterations=iterations, &
+                           initial_guess_accepted=guess_accepted)
+    else
+      call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
+                           maxit=max(int(infos%control%maxit_zv), ltot + 5), &
+                           converged=converged, residual=residual, &
+                           minres_solver=.true., &
+                           initial_residual=initial_residual, &
+                           iterations=iterations, &
+                           initial_guess_accepted=guess_accepted)
+    end if
     do irhs = 1, nrhs
       rhs_scale_sq = max(1.0_dp, sum(rhs(:,irhs)*rhs(:,irhs)))
       scaled_residual_sq = residual(irhs)/rhs_scale_sq
@@ -262,9 +628,80 @@ contains
           trim(real_to_string(scaled_residual_sq)) // &
           ' (fallback relative norm=10*sqrt(epsilon)).', WITHOUT_ABORT)
       end if
+      z_relative_error = 0.0_dp
+      if (guess_available(irhs)) z_relative_error = &
+        sqrt(sum((guess(:,irhs)-solution(:,irhs))**2))/ &
+        max(sqrt(sum(solution(:,irhs)**2)),tiny(1.0_dp))
+      write(iw,'(A,1X,I0,1X,A,1X,3(L1,1X),5(ES16.8,1X),I0)') &
+        'NAC_Z_PREDICTOR', first_pair+irhs-1, trim(mode), &
+        guess_available(irhs), guess_accepted(irhs), use_approximation, &
+        eta, singular_min, &
+        initial_residual(irhs), residual(irhs), z_relative_error, &
+        iterations(irhs)
     end do
+
+    if (predictor_mode) then
+      do irhs = 1, nrhs
+        absolute_pair = first_pair + irhs - 1
+        same_geometry = nac_z_have_geometry(absolute_pair) .and. &
+          maxval(abs(infos%atoms%xyz - &
+          nac_z_geometry(:,:,absolute_pair))) <= 1.0e-12_dp
+        if (nac_z_have_recent(absolute_pair) .and. .not. same_geometry .and. &
+            transport_valid) then
+          call nac_z_transport_vector(nac_z_recent(:,absolute_pair), &
+            nac_z_earlier(:,absolute_pair),q_closed,q_open,q_virtual, &
+            nocca,noccb,nbf)
+          nac_z_have_earlier(absolute_pair) = .true.
+        else if (.not. same_geometry) then
+          nac_z_have_earlier(absolute_pair) = .false.
+        end if
+        nac_z_recent(:,absolute_pair) = solution(:,irhs)
+        nac_z_have_recent(absolute_pair) = .true.
+        nac_z_geometry(:,:,absolute_pair) = infos%atoms%xyz
+        nac_z_have_geometry(absolute_pair) = .true.
+        if (use_approximation) then
+          nac_z_steps_since_exact(absolute_pair) = &
+            nac_z_steps_since_exact(absolute_pair) + 1
+        else
+          nac_z_steps_since_exact(absolute_pair) = 0
+        end if
+      end do
+    end if
+
+    if (present(predictor)) then
+      if (size(predictor,1) /= ltot .or. size(predictor,2) < nrhs) &
+        error stop 'mrsf_nac_rohf_zvector_batch: predictor output shape'
+      predictor(:,1:nrhs) = guess
+    end if
+    if (present(predictor_available)) then
+      if (size(predictor_available) < nrhs) error stop &
+        'mrsf_nac_rohf_zvector_batch: predictor_available output shape'
+      predictor_available(1:nrhs) = guess_available
+    end if
+    if (present(predictor_accepted)) then
+      if (size(predictor_accepted) < nrhs) error stop &
+        'mrsf_nac_rohf_zvector_batch: predictor_accepted output shape'
+      predictor_accepted(1:nrhs) = guess_accepted
+    end if
+    if (present(initial_residual_out)) then
+      if (size(initial_residual_out) < nrhs) error stop &
+        'mrsf_nac_rohf_zvector_batch: initial residual output shape'
+      initial_residual_out(1:nrhs) = initial_residual
+    end if
+    if (present(final_residual_out)) then
+      if (size(final_residual_out) < nrhs) error stop &
+        'mrsf_nac_rohf_zvector_batch: final residual output shape'
+      final_residual_out(1:nrhs) = residual
+    end if
+    if (present(iterations_out)) then
+      if (size(iterations_out) < nrhs) error stop &
+        'mrsf_nac_rohf_zvector_batch: iterations output shape'
+      iterations_out(1:nrhs) = iterations
+    end if
     if (.not. log_was_open) close(iw)
-    deallocate(converged, residual)
+    deallocate(converged,residual,initial_residual,iterations,guess, &
+               guess_available,guess_accepted,recent_current, &
+               earlier_current,q_closed,q_open,q_virtual)
   contains
     function integer_to_string(value) result(text)
       integer, intent(in) :: value

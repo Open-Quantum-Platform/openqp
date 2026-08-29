@@ -69,7 +69,7 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertNotIn("cphf_apbx_rohf_batch", certification)
         self.assertIn("legacy scalar operator", certification)
         solved = self.solve.split("solved =", 1)[1].split("write(iw", 1)[0]
-        self.assertIn("residual_norm <= sqrt(abs(cnv))", solved)
+        self.assertIn("residual_norm <= sqrt(abs(rhs_cnv(irhs)))", solved)
         self.assertNotIn("minres%error", solved)
 
     def test_squared_residual_fails_closed_without_overflow(self):
@@ -99,11 +99,15 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertLess(scalar_cert, self.solve.index("if (dft) call dftclean(infos)"))
         self.assertLess(
             scalar_cert,
-            self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
+            self.solve.index(
+                "deallocate(famo, fbmo, xminv, fao, w2, w3, ax, rhs_cnv)"
+            ),
         )
         self.assertLess(
             self.solve.index("call minres_batch(irhs)%clean()"),
-            self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
+            self.solve.index(
+                "deallocate(famo, fbmo, xminv, fao, w2, w3, ax, rhs_cnv)"
+            ),
         )
 
     def test_independent_minres_recursions_share_batched_physics_kernels(self):
@@ -169,8 +173,10 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         residual_setup = self.minres_init.split("! r1 = b - a x", 1)[1].split(
             "! y = m^-1 r1", 1
         )[0]
-        explicit_guess, zero_guess = residual_setup.split("else", 1)
+        explicit_guess, zero_guess = residual_setup.rsplit("else", 1)
         self.assertIn("if (present(x0)) then", explicit_guess)
+        self.assertIn("if (present(ax0)) then", explicit_guess)
+        self.assertIn("this%av = ax0", explicit_guess)
         self.assertIn("call this%update(this%av, this%x, this%dat)", explicit_guess)
         self.assertIn("all(ieee_is_finite(this%av))", explicit_guess)
         self.assertIn("this%r1 = this%b - this%av", explicit_guess)

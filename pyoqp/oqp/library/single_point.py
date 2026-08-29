@@ -1758,6 +1758,10 @@ class Gradient(Calculator):
             dump_log(self.mol, title='PyOQP: Gradient of %s' % target)
             self.mol.data.set_tdhf_target(i)
             self.zvec_func[self.td](self.mol)
+            if (self.td == 'mrsf' and
+                    os.environ.get('OQP_MRSF_NAC_ZV_FUSE_GRADIENT', '')
+                    .strip().lower() in ('1', 'y', 'yes', 't', 'true', 'on')):
+                self.mol._nac_fused_gradient_ready = True
 
             # check convergence
             z_flag = self.mol.mol_energy.Z_Vector_converged
