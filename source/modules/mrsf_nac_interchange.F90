@@ -190,10 +190,15 @@ contains
 
     implicit none
 
+    real(kind=dp), parameter :: fallback_rel_norm = &
+      10.0_dp*sqrt(epsilon(1.0_dp))
+    real(kind=dp), parameter :: fallback_rel_sq = &
+      fallback_rel_norm*fallback_rel_norm
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: rhs(:,:)
     real(kind=dp), intent(out) :: solution(:,:)
     real(kind=dp), allocatable :: residual(:)
+    real(kind=dp) :: rhs_scale_sq, scaled_residual_sq
     logical, allocatable :: converged(:)
     logical :: log_was_open
     integer :: nbf, nocca, noccb, nvira, offset, ltot, nrhs, irhs
@@ -226,27 +231,36 @@ contains
     if (.not. log_was_open) &
       open(unit=iw, file=infos%log_filename, position='append')
     ! Keep requesting ||H z - rhs||_2 <= 1e-10.  Large response spaces can
-    ! reach machine-precision stagnation just above that target; accept the
-    ! best MINRES iterate only when its squared residual remains <= 1e-16
-    ! (residual norm <= 1e-8), and report that fallback explicitly.
+    ! reach machine-precision stagnation just above that target.  Accept the
+    ! best MINRES iterate only when its residual norm, scaled by
+    ! max(1,||rhs||_2), is no larger than 10*sqrt(machine epsilon).  This
+    ! provides an absolute floor for small sources and a relative criterion
+    ! for large sources while remaining independent of response-space size.
     call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
                          maxit=max(int(infos%control%maxit_zv), ltot + 5), &
                          converged=converged, residual=residual, &
                          minres_solver=.true.)
     do irhs = 1, nrhs
-      if (.not. converged(irhs) .and. residual(irhs) > 1.0e-16_dp) then
+      rhs_scale_sq = max(1.0_dp, sum(rhs(:,irhs)*rhs(:,irhs)))
+      scaled_residual_sq = residual(irhs)/rhs_scale_sq
+      if (.not. converged(irhs) .and. &
+          scaled_residual_sq > fallback_rel_sq) then
         call show_message( &
           'Native ROHF NAC batched Z-vector RHS ' // &
           trim(integer_to_string(irhs)) // &
           ' failed to converge; squared residual=' // &
-          trim(real_to_string(residual(irhs))), WITH_ABORT)
+          trim(real_to_string(residual(irhs))) // &
+          '; scaled squared residual=' // &
+          trim(real_to_string(scaled_residual_sq)), WITH_ABORT)
       else if (.not. converged(irhs)) then
         call show_message( &
           'Native ROHF NAC batched Z-vector RHS ' // &
           trim(integer_to_string(irhs)) // &
           ' accepted after MINRES stagnation; squared residual=' // &
           trim(real_to_string(residual(irhs))) // &
-          ' (fallback threshold=1.0E-16).', WITHOUT_ABORT)
+          '; scaled squared residual=' // &
+          trim(real_to_string(scaled_residual_sq)) // &
+          ' (fallback relative norm=10*sqrt(epsilon)).', WITHOUT_ABORT)
       end if
     end do
     if (.not. log_was_open) close(iw)
