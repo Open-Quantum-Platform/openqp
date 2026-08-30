@@ -85,6 +85,30 @@ def test_space_separated_route_stops_before_explicit_basis_and_driver():
 
 
 @pytest.mark.parametrize(
+    ("misspelling", "suggestion"),
+    [("gradd(S0)", "grad"), ("scff(conv=1e-8)", "scf")],
+)
+def test_space_separated_route_does_not_consume_call_misspellings_as_basis(
+    misspelling, suggestion
+):
+    with pytest.raises(
+        OQPInputError, match=r"Unknown \.oqp call:.*Did you mean '%s" % suggestion
+    ):
+        oqp_input.parse_canonical_oqp(
+            'dft pbe0 %s geom="h2o.xyz"' % misspelling
+        )
+
+
+@pytest.mark.parametrize("basis", ["6-31g(2df,p)", "def2-svp(jkfit)"])
+def test_call_shaped_basis_names_remain_route_components(basis):
+    spec = oqp_input.parse_canonical_oqp(
+        'dft pbe0 %s geom="h2o.xyz" energy' % basis
+    )
+
+    assert spec.basis == basis
+
+
+@pytest.mark.parametrize(
     ("alias", "model"), sorted(oqp_input.MODEL_ALIASES.items())
 )
 def test_every_model_alias_accepts_its_route_components_as_separate_tokens(

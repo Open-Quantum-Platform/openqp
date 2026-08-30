@@ -1102,12 +1102,22 @@ def _starts_post_route_syntax(token: str) -> bool:
     if Path(token).suffix.lower() in {".xyz", ".pdb"}:
         return True
     name = token.split("(", 1)[0].lower().replace("-", "_")
-    return (
+    known_call = (
         name in PRIMARY_ALIASES
         or name in BARE_MODIFIER_CALLS
         or name in SECTION_NAMES
         or name in {"nmr", "ir", "raman", "d4"}
     )
+    if known_call:
+        return True
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*\(.*\)", token, re.DOTALL):
+        call_names = (
+            list(PRIMARY_ALIASES)
+            + list(SECTION_NAMES)
+            + ["nmr", "ir", "raman", "d4"]
+        )
+        return bool(difflib.get_close_matches(name, call_names, n=1, cutoff=0.6))
+    return False
 
 
 def _parse_route_prefix(
