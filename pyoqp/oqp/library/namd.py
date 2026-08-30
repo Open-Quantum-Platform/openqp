@@ -556,9 +556,14 @@ class NAMD:
         self.edc_c = float(md['edc_c'])
         self.thrshe = float(md['thrshe'])
         self.tdc_provider = str(md['tdc']).strip().lower().replace('-', '_')
-        if self.tdc_provider not in ('fd', 'npi', 'analytic'):
-            raise ValueError("[md] tdc must be fd, npi, or analytic")
-        self.tdc_scheme = {'fd': 0, 'npi': 1, 'analytic': 2}[self.tdc_provider]
+        if self.tdc_provider in ('ba', 'tdba'):
+            self.tdc_provider = 'baeck_an'
+        if self.tdc_provider not in ('fd', 'npi', 'analytic', 'baeck_an'):
+            raise ValueError(
+                "[md] tdc must be fd, npi, analytic, or baeck_an")
+        self.tdc_scheme = {
+            'fd': 0, 'npi': 1, 'analytic': 2, 'baeck_an': 3,
+        }[self.tdc_provider]
         self.rescale_provider = str(md.get('rescale', 'isotropic')).strip().lower().replace('-', '_')
         if self.rescale_provider in ('analytic', 'nac'):
             self.rescale_provider = 'analytic_nac'
@@ -678,7 +683,7 @@ class NAMD:
             self.nacme_check = 'off'
         if soc_requested and (
                 self.nacme_check != 'off'
-                or self.tdc_provider == 'analytic'
+                or self.tdc_provider in ('analytic', 'baeck_an')
                 or self.rescale_provider in (
                     'analytic_nac', 'hop_analytic_nac')):
             raise NotImplementedError(
@@ -730,6 +735,11 @@ class NAMD:
         self._ba_tdc_left = None
         self._ba_dt_left = None
         self._ba_last = None
+        self._last_baeck_an_tdc = None
+        # Baeck-An needs three energy points.  Its first interval and every
+        # reseeded interval therefore use the phase-tracked overlap TDC.
+        self._last_tdc_source = (
+            1 if self.tdc_provider == 'baeck_an' else self.tdc_scheme)
         self._nacme_gate_failures = 0
         self._nacme_gate_last = None
         self._pending_nacme_gate_error = None
@@ -1779,7 +1789,8 @@ class NAMD:
         TD-BA is phase-free and therefore cannot validate the signed gauge.
         It is retained only as an independent energy-curvature diagnostic.
         """
-        if self.nacme_check != 'baeck_an':
+        if (self.nacme_check != 'baeck_an'
+                and getattr(self, 'tdc_provider', '') != 'baeck_an'):
             return
 
         n = self.nstate
@@ -1793,6 +1804,9 @@ class NAMD:
 
         if self._ba_energy_center is None:
             self._reset_nacme_gate_evaluation()
+            self._last_baeck_an_tdc = None
+            if getattr(self, 'tdc_provider', '') == 'baeck_an':
+                self._last_tdc_source = 1
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -1806,6 +1820,9 @@ class NAMD:
                 title='NACME check: Baeck-An history discontinuity; reseeding',
             )
             self._reset_nacme_gate_evaluation()
+            self._last_baeck_an_tdc = None
+            if getattr(self, 'tdc_provider', '') == 'baeck_an':
+                self._last_tdc_source = 1
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -1830,42 +1847,85 @@ class NAMD:
         overlap_center = (
             dt_right*self._ba_tdc_left + self._ba_dt_left*tdc_current
         )/dt_sum
+        signed_ba_tdc = self._signed_baeck_an_tdc(
+            ba_tdc, overlap_center)
+        self._last_baeck_an_tdc = signed_ba_tdc
+        if getattr(self, 'tdc_provider', '') == 'baeck_an':
+            self._last_tdc_source = 3
         center_step = None if istep is None else int(istep) - 1
-        ba_mask = np.asarray(np.abs(ba_tdc) > 0.0, dtype=np.int32)
-        gate = self._run_nacme_gate(
-            overlap_center,
-            ba_tdc,
-            reference_mask=ba_mask,
-            source='TD-Baeck-An',
-            center_step=center_step,
-            evaluation_step=istep,
-            signed=False,
-        )
-        self._ba_last = {
-            'center_step': center_step,
-            'baeck_an_tdc': ba_tdc.copy(),
-            'overlap_tdc_centered': overlap_center.copy(),
-            'magnitude_rms_error': gate['pair_rms_error'],
-            'magnitude_max_error': gate['pair_max_error'],
-            'gate': gate,
-        }
-        dump_log(
-            self.mol,
-            title='NACME check: TD-Baeck-An TDC (magnitude diagnostic)',
-            section='nacm',
-            info=ba_tdc,
-        )
-        dump_log(
-            self.mol,
-            title='NACME check: centered overlap TDC',
-            section='nacm',
-            info=overlap_center,
-        )
+        if self.nacme_check == 'baeck_an':
+            ba_mask = np.asarray(np.abs(ba_tdc) > 0.0, dtype=np.int32)
+            gate = self._run_nacme_gate(
+                overlap_center,
+                ba_tdc,
+                reference_mask=ba_mask,
+                source='TD-Baeck-An',
+                center_step=center_step,
+                evaluation_step=istep,
+                signed=False,
+            )
+            self._ba_last = {
+                'center_step': center_step,
+                'baeck_an_tdc': ba_tdc.copy(),
+                'signed_baeck_an_tdc': signed_ba_tdc.copy(),
+                'overlap_tdc_centered': overlap_center.copy(),
+                'signed_pair_count': int(np.count_nonzero(
+                    np.triu(signed_ba_tdc, k=1))),
+                'magnitude_rms_error': gate['pair_rms_error'],
+                'magnitude_max_error': gate['pair_max_error'],
+                'gate': gate,
+            }
+            dump_log(
+                self.mol,
+                title='NACME check: TD-Baeck-An TDC (magnitude diagnostic)',
+                section='nacm',
+                info=ba_tdc,
+            )
+            dump_log(
+                self.mol,
+                title='NACME check: centered overlap TDC',
+                section='nacm',
+                info=overlap_center,
+            )
+        else:
+            # Production Baeck-An dynamics needs the coupling but not the
+            # optional matrix dump and comparison at every nuclear step.
+            self._ba_last = None
 
         self._ba_energy_left = self._ba_energy_center.copy()
         self._ba_energy_center = energies_current.copy()
         self._ba_tdc_left = tdc_current.copy()
         self._ba_dt_left = dt_right
+
+    @staticmethod
+    def _signed_baeck_an_tdc(baeck_an_tdc, overlap_tdc):
+        """Apply only a transported wavefunction-gauge sign to TD-BA.
+
+        Baeck-An supplies a magnitude.  The phase-tracked overlap coupling
+        supplies the sign; a pair with an exactly indeterminate sign remains
+        zero.  Constructing one triangle and reflecting it makes
+        antisymmetry exact rather than a floating-point postcondition.
+        """
+        magnitude_matrix = np.asarray(baeck_an_tdc, dtype=np.float64)
+        phase_matrix = np.asarray(overlap_tdc, dtype=np.float64)
+        if (magnitude_matrix.ndim != 2
+                or magnitude_matrix.shape[0] != magnitude_matrix.shape[1]
+                or phase_matrix.shape != magnitude_matrix.shape
+                or not np.all(np.isfinite(magnitude_matrix))
+                or not np.all(np.isfinite(phase_matrix))):
+            raise ValueError(
+                'Baeck-An magnitude and overlap sign matrices must be finite '
+                'square matrices of the same shape')
+        signed = np.zeros_like(magnitude_matrix)
+        for i in range(magnitude_matrix.shape[0]):
+            for j in range(i + 1, magnitude_matrix.shape[1]):
+                magnitude = abs(float(magnitude_matrix[i, j]))
+                phase_reference = float(phase_matrix[i, j])
+                if magnitude > 0.0 and phase_reference != 0.0:
+                    value = np.copysign(magnitude, phase_reference)
+                    signed[i, j] = value
+                    signed[j, i] = -value
+        return signed
 
     def _reset_nacme_gate_evaluation(self):
         """Clear streak and record state for a non-evaluable NACME interval."""
@@ -2200,7 +2260,8 @@ class NAMD:
                 'reference_source': {'0': 'none', '1': 'TD-Baeck-An',
                                      '2': 'analytic', '127': 'other'},
                 'tdc_source': {'0': 'overlap_fd', '1': 'overlap_npi',
-                               '2': 'analytic_endpoint'},
+                               '2': 'analytic_endpoint',
+                               '3': 'lagged_baeck_an_overlap_sign'},
                 'rescale_source': {
                     '0': 'isotropic', '1': 'analytic_nac',
                     '2': 'hop_triggered_analytic_nac',
@@ -2292,7 +2353,8 @@ class NAMD:
         record['time_fs'] = time_fs
         record['active'] = self.active
         record['hopped'] = int(bool(hopped))
-        record['tdc_source'] = getattr(self, 'tdc_scheme', 0)
+        record['tdc_source'] = getattr(
+            self, '_last_tdc_source', getattr(self, 'tdc_scheme', 0))
         default_rescale = {
             'isotropic': 0, 'analytic_nac': 1,
             'hop_analytic_nac': 2,
@@ -3650,7 +3712,7 @@ class NAMD:
                 two-state identity T*dt = arcsin(s_10) and to the finite
                 difference in the weak-coupling limit.
         """
-        if self.tdc_scheme == 1:
+        if self.tdc_scheme in (1, 3):
             from scipy.linalg import logm, sqrtm
             m = s.T @ s
             u = s @ np.linalg.inv(np.real(sqrtm(m)))     # nearest orthogonal (Loewdin)
@@ -3753,8 +3815,20 @@ class NAMD:
                 raise RuntimeError(
                     "analytic TDC requested before an analytic NAC was evaluated")
             tdc = np.asarray(self._last_analytic_tdc, dtype=np.float64)
+            self._last_tdc_source = 2
+        elif self.tdc_provider == 'baeck_an':
+            if self._last_baeck_an_tdc is None:
+                if self._last_overlap_tdc is None:
+                    raise RuntimeError(
+                        "Baeck-An TDC requested before overlap warm-up")
+                tdc = np.asarray(self._last_overlap_tdc, dtype=np.float64)
+                self._last_tdc_source = 1
+            else:
+                tdc = np.asarray(self._last_baeck_an_tdc, dtype=np.float64)
+                self._last_tdc_source = 3
         else:
             tdc = self._compute_tdc(s)
+            self._last_tdc_source = self.tdc_scheme
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
         mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
         mol.data["OQP::namd_eabs"] = self._validated_td_energies(

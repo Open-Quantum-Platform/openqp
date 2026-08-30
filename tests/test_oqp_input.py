@@ -875,6 +875,16 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     assert legacy["md"]["restart_file"] == "state.npz"
 
 
+def test_namd_baeck_an_tdc_provider_lowers_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,tdc=baeck_an,rescale=isotropic,nacme_check=off)'
+    )
+    assert legacy["md"]["tdc"] == "baeck_an"
+    assert legacy["md"]["rescale"] == "isotropic"
+    assert legacy["md"]["nacme_check"] == "off"
+
+
 def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
