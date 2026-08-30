@@ -362,3 +362,72 @@ def test_hop_triggered_record_clear_prevents_stale_exact_vector():
     assert driver._nacme_reference_tdc is None
     assert driver._nacme_reference_mask is None
     assert driver._nacme_reference_source == 0
+
+
+def test_built_hop_triggered_kernel_returns_uncommitted_candidate(tmp_path):
+    """Exercise native rescale mode 2, not the Python test double above."""
+    script = r"""
+import json
+import numpy as np
+import oqp
+from oqp.pyoqp import Runner
+
+runner = Runner(
+    project='native_ht_contract',
+    input_file='examples/ODP/H2CO_BHHLYP-MRSF-NAMD-ODP.inp',
+    log=LOG_PATH, silent=1, usempi=False)
+mol = runner.mol
+n = 2
+natom = int(mol.data['natom'])
+coef = np.array([2**-0.5, 0.0, 2**-0.5, 0.0])
+velocity = np.linspace(1.0e-4, 1.2e-3, 3*natom)
+params = np.zeros(16)
+params[:15] = [0.5, 1, 1.0, 1.0e-8, 1, 0, 0.1, 2,
+               0, 0.5, 0, 1, 2, 1, 2]
+mol.data['OQP::namd_coef'] = coef.copy()
+mol.data['OQP::namd_velocity'] = velocity.copy()
+mol.data['OQP::namd_params'] = params
+mol.data['OQP::namd_tdc'] = np.array([0.0, -0.05, 0.05, 0.0])
+mol.data['OQP::namd_eabs'] = np.array([0.0, 0.0])
+mol.data['OQP::namd_stas'] = np.eye(n).reshape(-1)
+mol.data['OQP::namd_dcv'] = np.zeros(n*n*natom*3)
+oqp.mrsf_namd_hop(mol)
+params_out = np.asarray(mol.data['OQP::namd_params'])
+velocity_out = np.asarray(mol.data['OQP::namd_velocity'])
+results = np.asarray(mol.data['OQP::namd_results'])
+print('HT_NATIVE=' + json.dumps({
+    'active': int(round(params_out[4])),
+    'hopped': int(round(params_out[10])),
+    'target': int(round(params_out[11])),
+    'result_target': int(round(results[n*n + 1])),
+    'rescale_source': int(round(results[n*n + 5])),
+    'velocity_unchanged': bool(np.array_equal(velocity_out, velocity)),
+    'candidate_probability': float(results[2]),
+}))
+""".replace('LOG_PATH', repr(str(tmp_path / 'native_ht_contract.log')))
+    env = os.environ.copy()
+    pythonpath = str(ROOT / 'pyoqp')
+    if env.get('PYTHONPATH'):
+        pythonpath += os.pathsep + env['PYTHONPATH']
+    env['PYTHONPATH'] = pythonpath
+    result = subprocess.run(
+        [sys.executable, '-c', script], cwd=ROOT, env=env,
+        capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        if ('No module named' in result.stderr or 'cannot load' in result.stderr
+                or 'mode 2' in result.stderr):
+            pytest.skip('matching compiled HT-NAC runtime is not available')
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(
+        line for line in result.stdout.splitlines()
+        if line.startswith('HT_NATIVE='))
+    values = json.loads(marker.removeprefix('HT_NATIVE='))
+    assert values == {
+        'active': 1,
+        'hopped': 0,
+        'target': 2,
+        'result_target': 2,
+        'rescale_source': 2,
+        'velocity_unchanged': True,
+        'candidate_probability': pytest.approx(0.5097010658),
+    }
