@@ -3025,7 +3025,8 @@ class NAMD:
             'ba_energy_center': self._ba_energy_center,
             'ba_tdc_left': self._ba_tdc_left,
             'ba_dt_left': self._ba_dt_left,
-            'analytic_tdc_previous': self._analytic_tdc_previous,
+            'analytic_tdc_previous': getattr(
+                self, '_analytic_tdc_previous', None),
             'nve_reference_energy': self._nve_reference_energy,
             'nve_previous_energy': self._nve_previous_energy,
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
