@@ -142,6 +142,19 @@ def test_slash_inside_space_separated_functional_preserves_component_boundary():
     assert spec.basis == "6-31g"
 
 
+@pytest.mark.parametrize("functional", ["CAM-QTP(00)", "CAM-QTP(01)", "CAM-QTP(02)"])
+def test_parenthesized_space_separated_functional_is_a_route_component(functional):
+    spaced = oqp_input.parse_canonical_oqp(
+        'dft %s sto-3g geom="h2o.xyz" energy' % functional
+    )
+    slash = oqp_input.parse_canonical_oqp(
+        'dft/%s/sto-3g geom="h2o.xyz" energy' % functional
+    )
+
+    assert spaced.functional == slash.functional == functional.lower()
+    assert spaced.basis == slash.basis == "sto-3g"
+
+
 @pytest.mark.parametrize("geometry", ['"h2o.xyz"', '"my geometry.xyz"'])
 def test_quoted_positional_geometry_stops_a_space_separated_route(geometry):
     spec = oqp_input.parse_canonical_oqp(

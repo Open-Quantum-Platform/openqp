@@ -1117,7 +1117,8 @@ def _starts_post_route_syntax(token: str) -> bool:
         and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
     ):
         return True
-    name = token.split("(", 1)[0].lower().replace("-", "_")
+    raw_name = token.split("(", 1)[0].lower()
+    name = raw_name.replace("-", "_")
     known_call = (
         name in PRIMARY_ALIASES
         or name in BARE_MODIFIER_CALLS
@@ -1141,12 +1142,15 @@ def _starts_post_route_syntax(token: str) -> bool:
                 and name[-1] == name[-2]
                 and name[:-1] in call_names
             )
-        # Parenthesized basis variants have a digit or hyphen in their family
-        # name (for example 6-31g(2df,p) and def2-svp(jkfit)).  Other
-        # identifier-shaped calls must reach normal call validation even when
-        # their name is not close enough for a spelling suggestion.
-        probable_basis = any(char.isdigit() or char == "-" for char in name)
-        if not probable_basis:
+        # Parenthesized route components have a digit or hyphen in their family
+        # name (for example CAM-QTP(00), 6-31g(2df,p), and
+        # def2-svp(jkfit)). Other identifier-shaped calls must reach normal
+        # call validation even when their name is not close enough for a
+        # spelling suggestion.
+        probable_route_component = any(
+            char.isdigit() or char == "-" for char in raw_name
+        )
+        if not probable_route_component:
             return True
         return bool(difflib.get_close_matches(name, call_names, n=1, cutoff=0.6))
     return False
