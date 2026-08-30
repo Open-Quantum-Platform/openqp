@@ -142,6 +142,19 @@ def test_slash_inside_space_separated_functional_preserves_component_boundary():
     assert spec.basis == "6-31g"
 
 
+@pytest.mark.parametrize(
+    "route",
+    ["dft/pbe-3/8 6-31g", "dft pbe-3/8/6-31g"],
+)
+def test_slash_bearing_functional_survives_mixed_route_separators(route):
+    spec = oqp_input.parse_canonical_oqp(
+        route + ' geom="h2o.xyz" energy'
+    )
+
+    assert spec.functional == "pbe-3/8"
+    assert spec.basis == "6-31g"
+
+
 @pytest.mark.parametrize("functional", ["CAM-QTP(00)", "CAM-QTP(01)", "CAM-QTP(02)"])
 def test_parenthesized_space_separated_functional_is_a_route_component(functional):
     spaced = oqp_input.parse_canonical_oqp(
@@ -153,6 +166,22 @@ def test_parenthesized_space_separated_functional_is_a_route_component(functiona
 
     assert spaced.functional == slash.functional == functional.lower()
     assert spaced.basis == slash.basis == "sto-3g"
+
+
+def test_parenthesized_basis_resembling_a_call_remains_a_route_component():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft pbe0 dhf-SV(P) geom="h2o.xyz" energy'
+    )
+
+    assert spec.basis == "dhf-sv(p)"
+
+
+def test_quoted_space_separated_basis_is_unquoted():
+    spec = oqp_input.parse_canonical_oqp(
+        'hf "DZ (Dunning-Hay)" geom="h2o.xyz" energy'
+    )
+
+    assert spec.basis == "dz (dunning-hay)"
 
 
 @pytest.mark.parametrize("geometry", ['"h2o.xyz"', '"my geometry.xyz"'])

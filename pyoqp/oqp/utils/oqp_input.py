@@ -1015,6 +1015,26 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
+def _split_route_token(token: str) -> List[str]:
+    """Split route separators while preserving slash-bearing component names."""
+
+    raw_parts = _split_top_level(token, "/")
+    parts: List[str] = []
+    index = 0
+    while index < len(raw_parts):
+        if (
+            index + 1 < len(raw_parts)
+            and raw_parts[index].lower() == "pbe-3"
+            and raw_parts[index + 1].lower() == "8"
+        ):
+            parts.append(raw_parts[index] + "/" + raw_parts[index + 1])
+            index += 2
+        else:
+            parts.append(raw_parts[index])
+            index += 1
+    return parts
+
+
 def _parse_route_components(
     parts: Sequence[str], route: str
 ) -> Tuple[str, Dict[str, Any], str, str]:
@@ -1074,6 +1094,10 @@ def _parse_route_components(
             "%s is not a route option for %s; use the exact section call %s(%s=...)"
             % (key, alias, section, key)
         )
+    component_values: List[str] = []
+    for part in parts[1:]:
+        parsed = _parse_value(part)
+        component_values.append(parsed if isinstance(parsed, str) else part)
     functional = ""
     basis = ""
     if model in {
@@ -1091,11 +1115,11 @@ def _parse_route_components(
             "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
-            basis = parts[1]
+            basis = component_values[0]
         else:
-            functional = parts[1]
+            functional = component_values[0]
     elif len(parts) == 3:
-        functional, basis = parts[1], parts[2]
+        functional, basis = component_values
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
     normalized_basis = _normalize_basis_value(basis)
@@ -1103,7 +1127,7 @@ def _parse_route_components(
 
 
 def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    return _parse_route_components(_split_top_level(route, "/"), route)
+    return _parse_route_components(_split_route_token(route), route)
 
 
 def _starts_post_route_syntax(token: str) -> bool:
@@ -1150,9 +1174,9 @@ def _starts_post_route_syntax(token: str) -> bool:
         probable_route_component = any(
             char.isdigit() or char == "-" for char in raw_name
         )
-        if not probable_route_component:
-            return True
-        return bool(difflib.get_close_matches(name, call_names, n=1, cutoff=0.6))
+        if probable_route_component:
+            return False
+        return True
     return False
 
 
@@ -1162,9 +1186,8 @@ def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
     variants: List[List[str]] = [[]]
     for token in tokens:
         choices = [[token]]
-        split = _split_top_level(token, "/")
-        # PBE-3/8 is a registered functional name, not a mixed route spelling.
-        if len(split) > 1 and token.lower() != "pbe-3/8":
+        split = _split_route_token(token)
+        if len(split) > 1:
             choices.append(split)
         variants = [
             prefix + choice
