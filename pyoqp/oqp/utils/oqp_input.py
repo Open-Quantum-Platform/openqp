@@ -1015,8 +1015,36 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
-def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    parts = _split_top_level(route, "/")
+def _split_route_token(token: str) -> List[str]:
+    """Split route separators while preserving slash-bearing component names."""
+
+    raw_parts = _split_top_level(token, "/")
+    parts: List[str] = []
+    index = 0
+    while index < len(raw_parts):
+        if (
+            index + 1 < len(raw_parts)
+            and raw_parts[index].lower() == "pbe-3"
+            and raw_parts[index + 1].lower() == "8"
+        ):
+            parts.append(raw_parts[index] + "/" + raw_parts[index + 1])
+            index += 2
+        else:
+            parts.append(raw_parts[index])
+            index += 1
+    return parts
+
+
+def _parse_route_components(
+    parts: Sequence[str], route: str
+) -> Tuple[str, Dict[str, Any], str, str]:
+    """Parse already-separated route components.
+
+    Keeping this separate from the slash spelling is important for functional
+    names such as ``PBE-3/8``: whitespace supplies an unambiguous component
+    boundary that must not be lost by joining the tokens with ``/`` first.
+    """
+
     if not parts or len(parts) > 3:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
@@ -1066,6 +1094,10 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "%s is not a route option for %s; use the exact section call %s(%s=...)"
             % (key, alias, section, key)
         )
+    component_values: List[str] = []
+    for part in parts[1:]:
+        parsed = _parse_value(part)
+        component_values.append(parsed if isinstance(parsed, str) else part)
     functional = ""
     basis = ""
     if model in {
@@ -1083,15 +1115,128 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
-            basis = parts[1]
+            basis = component_values[0]
         else:
-            functional = parts[1]
+            functional = component_values[0]
     elif len(parts) == 3:
-        functional, basis = parts[1], parts[2]
+        functional, basis = component_values
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
     normalized_basis = _normalize_basis_value(basis)
     return model, model_options, functional.lower(), normalized_basis
+
+
+def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
+    return _parse_route_components(_split_route_token(route), route)
+
+
+def _starts_post_route_syntax(token: str) -> bool:
+    """Return whether *token* cannot be another route component."""
+
+    if "=" in token:
+        return True
+    token_value = _parse_value(token)
+    if (
+        isinstance(token_value, str)
+        and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
+    ):
+        return True
+    raw_name = token.split("(", 1)[0].lower()
+    name = raw_name.replace("-", "_")
+    known_call = (
+        name in PRIMARY_ALIASES
+        or name in BARE_MODIFIER_CALLS
+        or name in SECTION_NAMES
+        or name in {"nmr", "ir", "raman", "d4"}
+    )
+    if known_call:
+        return True
+    call_shape = re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
+    )
+    if call_shape:
+        call_names = (
+            list(PRIMARY_ALIASES)
+            + list(SECTION_NAMES)
+            + ["nmr", "ir", "raman", "d4"]
+        )
+        if "(" not in token:
+            return (
+                len(name) > 1
+                and name[-1] == name[-2]
+                and name[:-1] in call_names
+            )
+        # Parenthesized route components have a digit or hyphen in their family
+        # name (for example CAM-QTP(00), 6-31g(2df,p), and
+        # def2-svp(jkfit)). Other identifier-shaped calls must reach normal
+        # call validation even when their name is not close enough for a
+        # spelling suggestion.
+        probable_route_component = any(
+            char.isdigit() or char == "-" for char in raw_name
+        )
+        if probable_route_component:
+            return False
+        return True
+    return False
+
+
+def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
+    """Return route-component interpretations without losing token boundaries."""
+
+    variants: List[List[str]] = [[]]
+    for token in tokens:
+        choices = [[token]]
+        split = _split_route_token(token)
+        if len(split) > 1:
+            choices.append(split)
+        variants = [
+            prefix + choice
+            for prefix in variants
+            for choice in choices
+            if len(prefix) + len(choice) <= 3
+        ]
+    # Prefer interpretations that fill all route components.  For equal
+    # lengths, the construction order preserves whitespace-delimited tokens.
+    return sorted(variants, key=len, reverse=True)
+
+
+def _parse_route_prefix(
+    tokens: Sequence[str],
+) -> Tuple[str, Dict[str, Any], str, str, int]:
+    """Parse a slash- or whitespace-separated route at the token prefix.
+
+    A route contains at most three components.  Joining only the leading
+    non-driver tokens lets ``mrsf bhhlyp 6-31g*`` and mixed spellings denote
+    the same calculation as ``mrsf/bhhlyp/6-31g*`` without consuming a bare
+    driver, a geometry file, or an explicit ``basis=...`` option.
+    """
+
+    candidates: List[Tuple[int, List[str], str]] = []
+    for count in range(1, min(len(tokens), 3) + 1):
+        if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
+            break
+        display = " ".join(tokens[:count])
+        for parts in _route_component_variants(tokens[:count]):
+            candidates.append((count, parts, display))
+
+    errors: List[OQPInputError] = []
+    for count, parts, display in sorted(
+        candidates, key=lambda candidate: candidate[0], reverse=True
+    ):
+        try:
+            model, model_options, functional, basis = _parse_route_components(
+                parts, display
+            )
+        except OQPInputError as exc:
+            errors.append(exc)
+            continue
+        return model, model_options, functional, basis, count
+
+    if errors:
+        # Candidates are ordered from the most complete interpretation to the
+        # least.  Preserve the diagnostic from that best interpretation.
+        raise errors[0]
+    raise OQPInputError("Missing electronic-structure route")
 
 
 def looks_canonical(text: str) -> bool:
@@ -1153,12 +1298,20 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
-    model, model_options, functional, basis = _parse_route(tokens[0])
+    model, model_options, functional, basis, route_token_count = (
+        _parse_route_prefix(tokens)
+    )
     options: Dict[str, Any] = {}
     calls: List[CallSpec] = []
-    for token_index, token in enumerate(tokens[1:], start=1):
+    for token_index, token in enumerate(
+        tokens[route_token_count:], start=route_token_count
+    ):
         assignment = _split_assignment(token)
-        if token_index == 1 and assignment is None and "(" not in token:
+        if (
+            token_index == route_token_count
+            and assignment is None
+            and "(" not in token
+        ):
             positional_geom = _parse_value(token)
             if (
                 isinstance(positional_geom, str)
