@@ -1170,8 +1170,8 @@ contains
         ! An orbital Hessian is symmetric but need not be positive definite
         ! near a reference instability.  Pair-adjoint Z vectors therefore use
         ! MINRES, while ordinary forward CPHF keeps the historical PCG default.
-        ! Ask the recurrence for a slightly tighter estimate, then certify the
-        ! returned vector with the true unpreconditioned residual below.
+        ! Use half the requested residual norm in the recurrence, then certify
+        ! the returned vector with the true unpreconditioned residual below.
         if (present(initial_guess)) then
           residual_sq = sum((bvec(:,irhs)-ax_batch(:,irhs))**2)
           if (present(initial_residual)) &
@@ -1185,12 +1185,12 @@ contains
                              precond=cphf_precond_rohf_minres, dat=cgdata, &
                              x0=initial_guess(:,irhs), &
                              ax0=ax_batch(:,irhs), &
-                             tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+                             tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
           else
             call minres_batch(irhs)%init(b=bvec(:,irhs), &
                              update=cphf_apbx_rohf, &
                              precond=cphf_precond_rohf_minres, dat=cgdata, &
-                             tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+                             tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
           end if
         else
           if (present(initial_residual)) &
@@ -1198,7 +1198,7 @@ contains
           call minres_batch(irhs)%init(b=bvec(:,irhs), &
                            update=cphf_apbx_rohf, &
                            precond=cphf_precond_rohf_minres, dat=cgdata, &
-                           tol=0.1_dp*sqrt(abs(rhs_cnv(irhs))))
+                           tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
         end if
       end do
 
