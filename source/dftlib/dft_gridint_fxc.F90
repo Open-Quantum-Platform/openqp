@@ -58,12 +58,41 @@ contains
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nThreads
     integer :: nSpin
-    call self%clean()
+    logical :: reusable
 
     nSpin = 1
     if (xce%hasBeta) nSpin = 2
 
-    allocate( &
+    ! A response solver can apply the same XC kernel hundreds of times with
+    ! unchanged AO/grid/thread dimensions.  Retain the consumer storage in
+    ! that case; only its numerical contents are iteration dependent.  The
+    ! ordinary one-shot callers still clean their local consumer explicitly.
+    reusable = allocated(self%focks) .and. allocated(self%mo) .and. &
+      allocated(self%rRho) .and. allocated(self%drRho) .and. &
+      allocated(self%rTau) .and. allocated(self%focks_) .and. &
+      allocated(self%tmpMO_) .and. allocated(self%tmpDensity_) .and. &
+      allocated(self%tmp_)
+    if (reusable) then
+      reusable = size(self%focks,1) == xce%numAOs .and. &
+        size(self%focks,2) == xce%numAOs .and. &
+        size(self%focks,3) == self%nMtx .and. &
+        size(self%focks,4) == nSpin .and. &
+        size(self%focks,5) == nThreads .and. &
+        size(self%mo,2) == xce%maxPts .and. &
+        size(self%tmp_,1) == xce%numAOs*xce%maxPts*xce%numTmpVec
+      if (xce%funTyp == OQP_FUNTYP_MGGA) then
+        reusable = reusable .and. allocated(self%moG1_) .and. &
+          size(self%moG1_,1) == xce%numAOs*xce%maxPts*3*self%nMtx .and. &
+          size(self%moG1_,2) == nThreads
+      else
+        reusable = reusable .and. .not. allocated(self%moG1_)
+      end if
+    end if
+
+    if (.not. reusable) then
+      call self%clean()
+
+      allocate( &
         self%focks(xce%numAOs, xce%numAOs, self%nMtx, nSpin, nThreads) &
       , self%mo(xce%numAOs, xce%maxPts, self%nMtx, nSpin, nThreads) &
       , self%rRho(nSpin, xce%maxPts, self%nMtx, nThreads) &
@@ -80,12 +109,24 @@ contains
       , self%tmpMO_(xce%numAOs * xce%maxPts * self%nMtx * nSpin, nThreads) &
       , self%tmpDensity_(xce%numAOs * xce%numAOs * self%nMtx, nSpin, nThreads) &
       , self%tmp_(xce%numAOs * xce%maxPts * xce%numTmpVec, nthreads) &
-      , source=0.0d0)
+        , source=0.0d0)
 
-    if (xce%funTyp == OQP_FUNTYP_MGGA) then
+      if (xce%funTyp == OQP_FUNTYP_MGGA) then
         allocate( &
             self%moG1_(xce%numAOs*xce%maxPts*3*self%nMtx, nThreads) &
           , source=0.0d0)
+      end if
+    else
+      self%focks = 0.0_fp
+      self%mo = 0.0_fp
+      self%rRho = 0.0_fp
+      self%drRho = 0.0_fp
+      self%rTau = 0.0_fp
+      self%focks_ = 0.0_fp
+      self%tmpMO_ = 0.0_fp
+      self%tmpDensity_ = 0.0_fp
+      self%tmp_ = 0.0_fp
+      if (allocated(self%moG1_)) self%moG1_ = 0.0_fp
     end if
   end subroutine
 
@@ -627,7 +668,7 @@ contains
                   wfa, wfb, &
                   fxa, fxb, &
                   dxa, dxb, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, consumer)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -647,8 +688,10 @@ contains
     real(kind=fp), intent(inout), target :: dxa(:,:,:), dxb(:,:,:)
     real(kind=fp), intent(inout) :: fxa(:,:,:), fxb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
 
-    type(xc_consumer_tde_t) :: dat
+    type(xc_consumer_tde_t), target :: local_consumer
+    type(xc_consumer_tde_t), pointer :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf
@@ -656,6 +699,11 @@ contains
     real(kind=fp), allocatable, target :: d2a(:,:), d2b(:,:)
 
     nbf = ubound(wfa,1)
+    if (present(consumer)) then
+      dat => consumer
+    else
+      dat => local_consumer
+    end if
 
     ! Scale w.f. by B.F. norms
     allocate(d2a(nbf,nbf), d2b(nbf,nbf))
@@ -746,7 +794,7 @@ contains
       end do
     end do
 
-    call dat%clean()
+    if (.not. present(consumer)) call dat%clean()
 
   end subroutine
 

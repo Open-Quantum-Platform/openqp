@@ -127,7 +127,7 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertIn("nmtx=nvec", self.apbx_batch)
         self.assertIn("call utddft_fxc(", self.apbx_batch)
         self.assertIn("batching is conservative", self.apbx_batch)
-        self.assertIn("active width may safely shrink from 3 to 2 to 1", self.apbx_batch)
+        self.assertIn("reuse the consumer while the active minres width is unchanged", self.apbx_batch)
         self.assertNotIn("allocate(", self.apbx_batch)
 
     def test_unrestricted_eri_consumer_accepts_adjacent_spin_batches(self):
@@ -141,7 +141,7 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertIn("do ifock = 1, this%nfocks, 2", update)
         self.assertIn("ifock:ifock+1", update)
 
-    def test_xc_consumer_reallocates_for_each_active_width(self):
+    def test_xc_consumer_reuses_fixed_width_workspace(self):
         fxc = (
             ROOT / "source" / "dftlib" / "dft_gridint_fxc.F90"
         ).read_text().lower()
@@ -149,11 +149,15 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         parallel = parallel.split("end subroutine", 1)[0]
         utd = fxc.split("subroutine utddft_fxc(", 1)[1]
         utd = utd.split("end subroutine", 1)[0]
-        self.assertIn("call self%clean()", parallel)
+        self.assertIn("reusable = allocated(self%focks)", parallel)
+        self.assertIn("if (.not. reusable) then", parallel)
         self.assertIn("self%nmtx", parallel)
-        self.assertIn("type(xc_consumer_tde_t) :: dat", utd)
+        self.assertIn("optional :: consumer", utd)
+        self.assertIn("dat => consumer", utd)
         self.assertIn("dat%nmtx = nmtx", utd)
-        self.assertIn("call dat%clean()", utd)
+        self.assertIn("if (.not. present(consumer)) call dat%clean()", utd)
+        self.assertIn("consumer=p%xc_consumer", self.apbx_batch)
+        self.assertIn("parallel_start", self.apbx_batch)
 
     def test_rohf_operator_reuses_solver_owned_workspace(self):
         """Krylov Hessian actions must not allocate their eleven work arrays."""

@@ -26,6 +26,7 @@ module cphf_mod
   use int2_compute, only: int2_compute_t, int2_fock_data_t, int2_urohf_data_t
   use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
+  use mod_dft_gridint_fxc, only: xc_consumer_tde_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
   use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
   use io_constants, only: iw
@@ -91,6 +92,7 @@ module cphf_mod
     type(dft_grid_t), pointer :: molgrid => null()
     type(int2_compute_t), pointer :: int2_driver => null()
     class(int2_fock_data_t), pointer :: int2_data => null()
+    type(xc_consumer_tde_t), pointer :: xc_consumer => null()
     real(kind=dp), pointer :: mo(:,:) => null()
     real(kind=dp), pointer :: famo(:,:) => null()    ! alpha Fock (full, MO basis)
     real(kind=dp), pointer :: fbmo(:,:) => null()    ! beta  Fock (full, MO basis)
@@ -952,6 +954,7 @@ contains
     type(int2_compute_t), target :: int2_driver_batch
     class(int2_fock_data_t), allocatable, target :: int2_data_batch
     type(cphf_cg_data_rohf), target :: cgdata
+    type(xc_consumer_tde_t), target :: xc_consumer
     type(pcg_t) :: pcg
     type(minres_t), allocatable :: minres_batch(:)
 
@@ -1122,6 +1125,7 @@ contains
                scale_exchange=scale_exch, scale_coulomb=1.0_dp))
       cgdata%int2_driver => int2_driver_batch
       cgdata%int2_data => int2_data_batch
+      if (dft) cgdata%xc_consumer => xc_consumer
       cgdata%xa_batch => xa_batch; cgdata%xb_batch => xb_batch
       cgdata%x2a_batch => x2a_batch; cgdata%x2b_batch => x2b_batch
       cgdata%work2_batch => work2_batch; cgdata%work3_batch => work3_batch
@@ -1292,6 +1296,7 @@ contains
     if (dft) call dftclean(infos)
 
     if (use_minres) then
+      if (dft) call xc_consumer%clean()
       call int2_data_batch%clean()
       deallocate(int2_data_batch)
       call int2_driver_batch%clean()
@@ -1564,15 +1569,17 @@ contains
     end do
 
     if (p%dft) then
-      ! utddft_fxc creates a local consumer on every call; its parallel_start
-      ! first cleans and then allocates all work arrays from the current nMtx.
-      ! Therefore the active width may safely shrink from 3 to 2 to 1 as
-      ! independent MINRES recurrences converge, with no stale-width storage.
+      ! Reuse the consumer while the active MINRES width is unchanged.  When
+      ! independent recurrences converge and nvec shrinks, parallel_start
+      ! resizes the workspace once for that new width; subsequent Hessian
+      ! actions at the same width reuse it without computing inactive columns.
+      if (.not. associated(p%xc_consumer)) &
+        error stop 'cphf_apbx_rohf_batch: missing XC consumer workspace'
       call utddft_fxc(basis=p%basis, molGrid=p%molgrid, isVecs=.true., &
            wfa=p%mo, wfb=p%mo, fxa=p%fxa_batch(:,:,1:nvec), &
            fxb=p%fxb_batch(:,:,1:nvec), dxa=p%dxa_batch(:,:,1:nvec), &
            dxb=p%dxb_batch(:,:,1:nvec), nMtx=nvec, threshold=0.0_dp, &
-           infos=p%infos)
+           infos=p%infos, consumer=p%xc_consumer)
     end if
 
     do ivec = 1, nvec
