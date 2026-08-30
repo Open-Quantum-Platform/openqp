@@ -1114,14 +1114,21 @@ def _starts_post_route_syntax(token: str) -> bool:
     )
     if known_call:
         return True
-    if re.fullmatch(
+    call_shape = re.fullmatch(
         r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
-    ):
+    )
+    if call_shape:
         call_names = (
             list(PRIMARY_ALIASES)
             + list(SECTION_NAMES)
             + ["nmr", "ir", "raman", "d4"]
         )
+        if "(" not in token:
+            return (
+                len(name) > 1
+                and name[-1] == name[-2]
+                and name[:-1] in call_names
+            )
         return bool(difflib.get_close_matches(name, call_names, n=1, cutoff=0.6))
     return False
 

@@ -112,6 +112,19 @@ def test_space_separated_route_does_not_consume_bare_call_misspellings_as_basis(
         )
 
 
+@pytest.mark.parametrize("functional", ["tpss", "blyp", "bp86"])
+def test_valid_functionals_resembling_bare_calls_remain_route_components(functional):
+    spaced = oqp_input.parse_canonical_oqp(
+        'dft %s 6-31g geom="h2o.xyz" energy' % functional
+    )
+    slash = oqp_input.parse_canonical_oqp(
+        'dft/%s/6-31g geom="h2o.xyz" energy' % functional
+    )
+
+    assert spaced.functional == slash.functional == functional
+    assert spaced.basis == slash.basis == "6-31g"
+
+
 @pytest.mark.parametrize("geometry", ['"h2o.xyz"', '"my geometry.xyz"'])
 def test_quoted_positional_geometry_stops_a_space_separated_route(geometry):
     spec = oqp_input.parse_canonical_oqp(
