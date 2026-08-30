@@ -1711,7 +1711,7 @@ contains
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix
     use cphf_mod, only: rohf_unpack_trial
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use mod_dft_gridint_fxc, only: utddft_fxc
@@ -1913,7 +1913,7 @@ contains
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A
     use mathlib, only: unpack_matrix
     use cphf_mod, only: rohf_unpack_trial
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use mod_dft_gridint_fxc, only: utddft_fxc

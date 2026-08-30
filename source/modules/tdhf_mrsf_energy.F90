@@ -103,7 +103,7 @@ contains
     use basis_tools, only: basis_set
     use messages, only: with_abort
     use precision, only: dp
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use scf_addons, only: get_response_packed
 

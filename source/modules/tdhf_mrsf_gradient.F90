@@ -1472,7 +1472,7 @@ contains
     use fock_deriv_mod, only: fock_deriv_contract_os
     use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, &
                     grad_ee_overlap
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
 
