@@ -17,19 +17,22 @@ external_root=/bighome/cheolho.choi/.cache/openqp/externals
 gcc_root=/opt/soft/install/GCCcore/12.3.0
 mkl_root=/opt/soft/install/imkl/2023.1.0/mkl/2023.1.0
 python_root=/opt/soft/install/Python/3.11.3-GCCcore-12.3.0
+python_runtime_libs=/opt/soft/install/OpenSSL/1.1/lib:/opt/soft/install/libffi/3.4.4-GCCcore-12.3.0/lib64:/opt/soft/install/XZ/5.4.2-GCCcore-12.3.0/lib:/opt/soft/install/SQLite/3.42.0-GCCcore-12.3.0/lib:/opt/soft/install/Tcl/8.6.13-GCCcore-12.3.0/lib:/opt/soft/install/libreadline/8.2-GCCcore-12.3.0/lib:/opt/soft/install/ncurses/6.4-GCCcore-12.3.0/lib:/opt/soft/install/bzip2/1.0.8-GCCcore-12.3.0/lib:/opt/soft/install/binutils/2.40-GCCcore-12.3.0/lib:/opt/soft/install/zlib/1.2.13-GCCcore-12.3.0/lib
 
 test ! -e "$attempt_root"
 mkdir -p "$campaign_root/build/logs" "$attempt_root" "$external_root"
 
-export MODULEPATH=/etc/scl/modulefiles:/etc/modulefiles:/usr/share/modulefiles:/opt/nvidia/hpc_sdk/modulefiles:/opt/soft/modulefiles/all
-set +u
-source /usr/share/lmod/lmod/init/bash
-module purge 2>/dev/null || true
-module load GCC/12.3.0 Python/3.11.3-GCCcore-12.3.0 imkl/2023.1.0
-set -u
+if [ "${OQP_BUILD_MODULELESS:-0}" != 1 ]; then
+  export MODULEPATH=/etc/scl/modulefiles:/etc/modulefiles:/usr/share/modulefiles:/opt/nvidia/hpc_sdk/modulefiles:/opt/soft/modulefiles/all
+  set +u
+  source /usr/share/lmod/lmod/init/bash
+  module purge 2>/dev/null || true
+  module load GCC/12.3.0 Python/3.11.3-GCCcore-12.3.0 imkl/2023.1.0
+  set -u
+fi
 
 export PATH="$gcc_root/bin:$python_root/bin:$PATH"
-export LD_LIBRARY_PATH="$gcc_root/lib64:$python_root/lib:$mkl_root/lib/intel64:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$mkl_root/lib/intel64:/opt/soft/install/imkl/2023.1.0/compiler/2023.1.0/linux/compiler/lib/intel64_lin:$python_root/lib:$python_runtime_libs:$gcc_root/lib64:${LD_LIBRARY_PATH:-}"
 export MKLROOT="$mkl_root"
 export MKL_INTERFACE_LAYER=ILP64
 export MKL_THREADING_LAYER=GNU
@@ -49,15 +52,20 @@ mkdir -p "$TMPDIR" "$attempt_root/wheelhouse"
   "$gcc_root/bin/gfortran" --version | head -n 1
   "$python_root/bin/python3.11" -V
   sha256sum "$bundle_path"
-  git init --bare "$attempt_root/bundle-verify.git"
-  git -C "$attempt_root/bundle-verify.git" bundle verify "$bundle_path"
+  if command -v git >/dev/null 2>&1; then
+    git init --bare "$attempt_root/bundle-verify.git"
+    git -C "$attempt_root/bundle-verify.git" bundle verify "$bundle_path"
+  fi
   ls -l "$mkl_root/lib/intel64/libmkl_rt.so"
 } > "$attempt_root/machine-toolchain.txt" 2>&1
 
-git clone "$bundle_path" "$source_root"
-git -C "$source_root" checkout --detach "$source_commit"
-test "$(git -C "$source_root" rev-parse HEAD)" = "$source_commit"
-test -z "$(git -C "$source_root" status --porcelain)"
+test -d "$source_root/.git"
+if command -v git >/dev/null 2>&1; then
+  test "$(git -C "$source_root" rev-parse HEAD)" = "$source_commit"
+  test -z "$(git -C "$source_root" status --porcelain)"
+else
+  test "$(cat "$source_root/.git/HEAD")" = "$source_commit"
+fi
 
 "$python_root/bin/python3.11" -m venv "$attempt_root/venv"
 "$attempt_root/venv/bin/python" -m pip install --upgrade pip
