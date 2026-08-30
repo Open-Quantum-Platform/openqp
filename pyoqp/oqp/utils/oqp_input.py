@@ -1099,7 +1099,11 @@ def _starts_post_route_syntax(token: str) -> bool:
 
     if "=" in token:
         return True
-    if Path(token).suffix.lower() in {".xyz", ".pdb"}:
+    token_value = _parse_value(token)
+    if (
+        isinstance(token_value, str)
+        and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
+    ):
         return True
     name = token.split("(", 1)[0].lower().replace("-", "_")
     known_call = (
@@ -1110,7 +1114,9 @@ def _starts_post_route_syntax(token: str) -> bool:
     )
     if known_call:
         return True
-    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*\(.*\)", token, re.DOTALL):
+    if re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
+    ):
         call_names = (
             list(PRIMARY_ALIASES)
             + list(SECTION_NAMES)

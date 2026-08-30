@@ -86,7 +86,10 @@ def test_space_separated_route_stops_before_explicit_basis_and_driver():
 
 @pytest.mark.parametrize(
     ("misspelling", "suggestion"),
-    [("gradd(S0)", "grad"), ("scff(conv=1e-8)", "scf")],
+    [
+        ("gradd(S0)", "grad"),
+        ("scff(conv=1e-8)", "scf"),
+    ],
 )
 def test_space_separated_route_does_not_consume_call_misspellings_as_basis(
     misspelling, suggestion
@@ -97,6 +100,26 @@ def test_space_separated_route_does_not_consume_call_misspellings_as_basis(
         oqp_input.parse_canonical_oqp(
             'dft pbe0 %s geom="h2o.xyz"' % misspelling
         )
+
+
+@pytest.mark.parametrize("misspelling", ["gradd", "scff"])
+def test_space_separated_route_does_not_consume_bare_call_misspellings_as_basis(
+    misspelling,
+):
+    with pytest.raises(OQPInputError, match=r"Expected a call.*%s" % misspelling):
+        oqp_input.parse_canonical_oqp(
+            'dft pbe0 %s geom="h2o.xyz"' % misspelling
+        )
+
+
+@pytest.mark.parametrize("geometry", ['"h2o.xyz"', '"my geometry.xyz"'])
+def test_quoted_positional_geometry_stops_a_space_separated_route(geometry):
+    spec = oqp_input.parse_canonical_oqp(
+        'dft pbe0 %s basis=def2-svp energy' % geometry
+    )
+
+    assert spec.basis == "def2-svp"
+    assert spec.options["geom"] == geometry.strip('"')
 
 
 @pytest.mark.parametrize("basis", ["6-31g(2df,p)", "def2-svp(jkfit)"])
