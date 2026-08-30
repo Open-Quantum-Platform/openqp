@@ -1015,8 +1015,16 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
-def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    parts = _split_top_level(route, "/")
+def _parse_route_components(
+    parts: Sequence[str], route: str
+) -> Tuple[str, Dict[str, Any], str, str]:
+    """Parse already-separated route components.
+
+    Keeping this separate from the slash spelling is important for functional
+    names such as ``PBE-3/8``: whitespace supplies an unambiguous component
+    boundary that must not be lost by joining the tokens with ``/`` first.
+    """
+
     if not parts or len(parts) > 3:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
@@ -1094,6 +1102,10 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     return model, model_options, functional.lower(), normalized_basis
 
 
+def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
+    return _parse_route_components(_split_top_level(route, "/"), route)
+
+
 def _starts_post_route_syntax(token: str) -> bool:
     """Return whether *token* cannot be another route component."""
 
@@ -1129,8 +1141,36 @@ def _starts_post_route_syntax(token: str) -> bool:
                 and name[-1] == name[-2]
                 and name[:-1] in call_names
             )
+        # Parenthesized basis variants have a digit or hyphen in their family
+        # name (for example 6-31g(2df,p) and def2-svp(jkfit)).  Other
+        # identifier-shaped calls must reach normal call validation even when
+        # their name is not close enough for a spelling suggestion.
+        probable_basis = any(char.isdigit() or char == "-" for char in name)
+        if not probable_basis:
+            return True
         return bool(difflib.get_close_matches(name, call_names, n=1, cutoff=0.6))
     return False
+
+
+def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
+    """Return route-component interpretations without losing token boundaries."""
+
+    variants: List[List[str]] = [[]]
+    for token in tokens:
+        choices = [[token]]
+        split = _split_top_level(token, "/")
+        # PBE-3/8 is a registered functional name, not a mixed route spelling.
+        if len(split) > 1 and token.lower() != "pbe-3/8":
+            choices.append(split)
+        variants = [
+            prefix + choice
+            for prefix in variants
+            for choice in choices
+            if len(prefix) + len(choice) <= 3
+        ]
+    # Prefer interpretations that fill all route components.  For equal
+    # lengths, the construction order preserves whitespace-delimited tokens.
+    return sorted(variants, key=len, reverse=True)
 
 
 def _parse_route_prefix(
@@ -1144,26 +1184,31 @@ def _parse_route_prefix(
     driver, a geometry file, or an explicit ``basis=...`` option.
     """
 
-    candidates: List[Tuple[int, str]] = []
+    candidates: List[Tuple[int, List[str], str]] = []
     for count in range(1, min(len(tokens), 3) + 1):
         if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
             break
-        candidate = "/".join(tokens[:count])
-        if len(_split_top_level(candidate, "/")) > 3:
-            break
-        candidates.append((count, candidate))
+        display = " ".join(tokens[:count])
+        for parts in _route_component_variants(tokens[:count]):
+            candidates.append((count, parts, display))
 
     errors: List[OQPInputError] = []
-    for count, candidate in reversed(candidates):
+    for count, parts, display in sorted(
+        candidates, key=lambda candidate: candidate[0], reverse=True
+    ):
         try:
-            model, model_options, functional, basis = _parse_route(candidate)
+            model, model_options, functional, basis = _parse_route_components(
+                parts, display
+            )
         except OQPInputError as exc:
             errors.append(exc)
             continue
         return model, model_options, functional, basis, count
 
     if errors:
-        raise errors[-1]
+        # Candidates are ordered from the most complete interpretation to the
+        # least.  Preserve the diagnostic from that best interpretation.
+        raise errors[0]
     raise OQPInputError("Missing electronic-structure route")
 
 

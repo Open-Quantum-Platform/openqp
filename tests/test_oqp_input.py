@@ -102,6 +102,13 @@ def test_space_separated_route_does_not_consume_call_misspellings_as_basis(
         )
 
 
+def test_space_separated_route_does_not_consume_unknown_call_as_basis():
+    with pytest.raises(OQPInputError, match=r"Unknown \.oqp call: force"):
+        oqp_input.parse_canonical_oqp(
+            'dft pbe0 force(S0) geom="h2o.xyz"'
+        )
+
+
 @pytest.mark.parametrize("misspelling", ["gradd", "scff"])
 def test_space_separated_route_does_not_consume_bare_call_misspellings_as_basis(
     misspelling,
@@ -123,6 +130,16 @@ def test_valid_functionals_resembling_bare_calls_remain_route_components(functio
 
     assert spaced.functional == slash.functional == functional
     assert spaced.basis == slash.basis == "6-31g"
+
+
+def test_slash_inside_space_separated_functional_preserves_component_boundary():
+    spec = oqp_input.parse_canonical_oqp(
+        'dft pbe-3/8 6-31g geom="h2o.xyz" energy'
+    )
+
+    assert spec.model == "dft"
+    assert spec.functional == "pbe-3/8"
+    assert spec.basis == "6-31g"
 
 
 @pytest.mark.parametrize("geometry", ['"h2o.xyz"', '"my geometry.xyz"'])
