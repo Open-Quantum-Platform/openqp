@@ -22,6 +22,11 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("find_library(DDX_LIBRARY", text)
         self.assertIn("DDX::ddx", text)
 
+    def test_autobuilt_ddx_installs_to_imported_library_path(self):
+        text = (ROOT / "external" / "CMakeLists.txt").read_text(encoding="utf-8")
+        ddx_args = text.split("set(DDX_CMAKE_ARGS", 1)[1].split("\n    )", 1)[0]
+        self.assertIn("-DCMAKE_INSTALL_LIBDIR=lib", ddx_args)
+
     def test_oqp_links_ddx_only_when_enabled(self):
         text = (ROOT / "source" / "CMakeLists.txt").read_text(encoding="utf-8")
         self.assertIn("if(ENABLE_DDX)", text)
