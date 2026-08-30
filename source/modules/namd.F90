@@ -1018,7 +1018,15 @@ contains
           lower = upper
           cycle
         end if
-        if (mode == 1) then
+        if (mode == 2) then
+          ! Defer the energy-conserving velocity update until the caller has
+          ! evaluated the analytic derivative-coupling direction for this
+          ! stochastic candidate.  Returning target /= active is the explicit
+          ! candidate contract; amplitudes and decoherence have already been
+          ! advanced exactly once, while velocity and active remain unchanged.
+          target = i
+          return
+        else if (mode == 1) then
           if (.not. present(direction_vectors)) then
             blocked = .true.
             lower = upper
@@ -1172,7 +1180,9 @@ contains
 !>          state changes while retaining coefficient propagation; slot 15
 !>          selects isotropic or analytic-NAC velocity rescaling)
 !>     out: OQP_namd_coef, OQP_namd_velocity (rescaled), OQP_namd_params(active,
-!>          hopped, target), OQP_namd_results (n*n cumulative probs + flags)
+!>          hopped, target), OQP_namd_results (n*n cumulative probs + flags).
+!>          Rescale mode 2 returns an uncommitted stochastic target so the
+!>          caller can compute an analytic NAC only for that candidate pair.
   subroutine namd_hop(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -1252,7 +1262,8 @@ contains
     triv_thr    = params(10)
     allow_hop   = .true.
     if (size(params) >= 14) allow_hop = params(14) >= 0.0_dp
-    ! params(15): 0 isotropic rescaling; 1 analytic derivative-coupling direction
+    ! params(15): 0 isotropic rescaling; 1 resident analytic direction;
+    !             2 defer a selected candidate for hop-triggered analytic NAC
     rescale_mode = 0
     if (size(params) >= 15) rescale_mode = nint(params(15))
     dt_au       = dt_fs*FS_TO_AU

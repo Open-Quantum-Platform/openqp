@@ -75,6 +75,51 @@ An uphill hop is frustrated when \(B^2-2A\Delta E<0\). Multiplying
 leave the final velocity invariant. A zero or non-finite direction is rejected,
 not silently replaced by isotropic rescaling.
 
+## Hop-triggered analytic NAC (HT-NAC)
+
+HT-NAC is a computational approximation to the use of the analytic NAC at
+every nuclear step; it is not an approximation to the resident analytic NAC
+evaluated at a selected geometry.  Consecutive-state overlaps provide the NPI
+time-derivative coupling used for electronic propagation and for the FSSH hop
+probability.  The native FSSH kernel advances the amplitudes and decoherence
+once, draws one random number, and returns an uncommitted candidate
+\(I\rightarrow J\).  Only when such a candidate passes the energy-gap gate is
+the exact resident analytic \(\mathbf d_{IJ}\) evaluated and used in the
+directional velocity update above.  A successful update commits the state
+change; a negative discriminant produces a frustrated hop.
+
+The public input is
+
+```ini
+[md]
+tdc = npi
+rescale = hop_analytic_nac
+```
+
+Thus, HT-NAC supplies the physically defined momentum-rescaling direction at
+an attempted transition while avoiding an analytic NAC calculation on steps
+with no candidate.  It does not replace NPI hop probabilities by analytic
+\(\dot{\mathbf R}\cdot\mathbf d\), and it does not provide a continuous NAC
+record away from candidates.  Exact-NAC fields are explicitly empty on those
+steps so that a preceding candidate vector cannot be mistaken for a current
+quantity.
+
+For the same overlap history, time step, amplitudes, random stream, and nuclear
+state, HT-NAC must make the same stochastic candidate and final directional
+rescaling decision as `tdc=npi, rescale=analytic_nac`.  It must use exactly one
+electronic propagation and one random draw per step.  Analytic-NAC failure,
+zero/non-finite direction, and a frustrated uphill update are hard recorded
+failures of the candidate; there is no silent isotropic fallback.  The current
+implementation inherits the same-spin, no-SOC, and no-QM/MM validity boundary
+of analytic directional rescaling.
+
+This addition changes neither the two-SOMO mixed reference nor the CO, OV, CV,
+and OO MRSF response topology.  The electron number, orbital occupations,
+target spin, response metric, operator, units, root tracking, and fermionic
+phase convention are inherited unchanged.  The only new approximation is the
+set of nuclear time points at which the already-defined analytic observable is
+evaluated.
+
 ## Assumptions and validity boundary
 
 - Only same-spin singlet MRSF-TDDFT is supported by the current analytic NAC.
@@ -107,7 +152,11 @@ not silently replaced by isotropic rescaling.
    time steps; endpoint and quadrature errors must not be conflated with an
    electronic-structure error.
 5. Exact source/binary/build provenance and fail-on-skip test accounting.
-6. Only after gates 1--5 pass: H2/FCI, ordinary-point molecules, CI branching
+6. HT-NAC candidate tests: no exact evaluation without a candidate; exactly one
+   exact evaluation, one random draw, and one amplitude/decoherence propagation
+   with a candidate; accepted/frustrated energy conservation; and no stale NAC
+   record on a subsequent no-candidate step.
+7. Only after gates 1--6 pass: H2/FCI, ordinary-point molecules, CI branching
    planes, then NAMD product-branching demonstrations.
 
 ## Initial verification record

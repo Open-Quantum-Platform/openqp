@@ -28,6 +28,8 @@ def test_directional_rescaling_contract_is_native_and_explicit():
     assert "np.einsum('ijac,ac->ij'" in driver
     assert "self.tdc_provider == 'analytic'" in driver
     assert "self.rescale_provider == 'analytic_nac'" in driver
+    assert "if (mode == 2) then" in source
+    assert "hop_analytic_nac" in driver
 
 
 def test_built_directional_kernel_conserves_energy_and_is_gauge_invariant():
@@ -216,3 +218,147 @@ def test_hop_passes_analytic_tdc_and_full_direction_tensor(monkeypatch):
     assert captured['params'][_P_RESCALE] == 1.0
     assert new_active == 1
     assert hopped is False
+
+
+def _hop_triggered_driver():
+    from oqp.library.namd import NAMD
+
+    class Mol:
+        def __init__(self):
+            self.data = {
+                'OQP::td_states_overlap': np.eye(2),
+                'OQP::td_energies': np.array([-0.5, -0.4]),
+            }
+
+    driver = NAMD.__new__(NAMD)
+    driver.mol = Mol()
+    driver.nstate = 2
+    driver.natom = 1
+    driver.mass = np.array([1836.0])
+    driver.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
+    driver.vel = np.array([[0.1, 0.2, 0.3]])
+    driver.dt_fs = 0.5
+    driver.dt = 0.5 * 41.3413745758
+    driver.substep = 4
+    driver.thrshe = 1.0
+    driver.active = 1
+    driver.decoherence = 0
+    driver.edc_c = 0.1
+    driver.tdc_scheme = 0
+    driver.tdc_provider = 'fd'
+    driver.rescale_provider = 'hop_analytic_nac'
+    driver.trivial = 0
+    driver.trivial_thresh = 0.5
+    driver._last_analytic_tdc = None
+    driver._last_analytic_dcv = None
+    driver._analytic_tdc_previous = None
+    driver._analytic_tdc_centered = None
+    driver._nacme_reference_tdc = None
+    driver._nacme_reference_mask = None
+    driver._nacme_reference_source = 0
+    driver._last_rescale_source = 2
+    driver._last_rescale_gamma = np.nan
+    driver._last_rescale_discriminant = np.nan
+    driver._last_hop_direction = np.zeros((1, 3))
+    return driver
+
+
+def _fake_native_hop_result(mol, *, target):
+    params = np.array(mol.data['OQP::namd_params'], copy=True)
+    n = int(round(params[12]))
+    params[10] = 0.0
+    params[11] = float(target)
+    mol.data['OQP::namd_params'] = params
+    results = np.zeros(n*n + 8)
+    results[n*n + 1] = float(target)
+    results[n*n + 5] = 2.0
+    results[n*n + 6] = 0.0
+    results[n*n + 7] = -1.0
+    mol.data['OQP::namd_results'] = results
+
+
+def test_hop_triggered_analytic_evaluates_exact_nac_once_for_candidate(monkeypatch):
+    import oqp
+    from oqp.library.namd import _P_RESCALE
+
+    driver = _hop_triggered_driver()
+    calls = {'random': 0, 'exact': 0, 'rescale': 0}
+
+    def random_once():
+        calls['random'] += 1
+        return 0.25
+
+    def fake_native(mol):
+        assert np.all(np.asarray(mol.data['OQP::namd_dcv']) == 0.0)
+        assert mol.data['OQP::namd_params'][_P_RESCALE] == 2.0
+        _fake_native_hop_result(mol, target=2)
+
+    def fake_exact(_istep, *, compare_overlap=False):
+        assert compare_overlap is False
+        calls['exact'] += 1
+        dcv = np.zeros((2, 2, 1, 3))
+        dcv[0, 1, 0] = [1.0, 0.0, 0.0]
+        dcv[1, 0, 0] = -dcv[0, 1, 0]
+        driver._last_analytic_dcv = dcv
+
+    def fake_rescale(_natom, velocity_ptr, _mass_ptr, direction_ptr,
+                     _delta_e, gamma_ptr, discriminant_ptr):
+        calls['rescale'] += 1
+        velocity = np.frombuffer(oqp.ffi.buffer(velocity_ptr, 3*8), dtype=np.float64)
+        direction = np.frombuffer(oqp.ffi.buffer(direction_ptr, 3*8), dtype=np.float64)
+        gamma = np.frombuffer(oqp.ffi.buffer(gamma_ptr, 8), dtype=np.float64)
+        discriminant = np.frombuffer(
+            oqp.ffi.buffer(discriminant_ptr, 8), dtype=np.float64)
+        np.testing.assert_allclose(direction, [1.0, 0.0, 0.0])
+        velocity[0] += 0.01
+        gamma[0] = 0.125
+        discriminant[0] = 0.5
+        return 0
+
+    driver._hop_random = random_once
+    driver._update_analytic_nac = fake_exact
+    monkeypatch.setattr(oqp, 'mrsf_namd_hop', fake_native)
+    monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional', fake_rescale)
+
+    new_active, hopped = driver._hop(allow_hop=True, istep=7)
+    assert (new_active, hopped) == (2, True)
+    assert calls == {'random': 1, 'exact': 1, 'rescale': 1}
+    assert driver.vel[0, 0] == pytest.approx(0.11)
+    assert driver._last_rescale_source == 2
+    assert driver._last_rescale_gamma == pytest.approx(0.125)
+    assert driver._last_rescale_discriminant == pytest.approx(0.5)
+    np.testing.assert_allclose(driver._last_hop_direction, [[1.0, 0.0, 0.0]])
+
+
+def test_hop_triggered_analytic_skips_exact_nac_without_candidate(monkeypatch):
+    import oqp
+
+    driver = _hop_triggered_driver()
+    driver._hop_random = lambda: 0.75
+    driver._update_analytic_nac = lambda *_args, **_kwargs: pytest.fail(
+        'exact analytic NAC was evaluated without an FSSH candidate')
+    monkeypatch.setattr(
+        oqp, 'mrsf_namd_hop',
+        lambda mol: _fake_native_hop_result(mol, target=1))
+
+    new_active, hopped = driver._hop(allow_hop=True, istep=8)
+    assert (new_active, hopped) == (1, False)
+
+
+def test_hop_triggered_record_clear_prevents_stale_exact_vector():
+    driver = _hop_triggered_driver()
+    driver._last_analytic_dcv = np.ones((2, 2, 1, 3))
+    driver._last_analytic_tdc = np.ones((2, 2))
+    driver._analytic_tdc_previous = np.ones((2, 2))
+    driver._analytic_tdc_centered = np.ones((2, 2))
+    driver._nacme_reference_tdc = np.ones((2, 2))
+    driver._nacme_reference_mask = np.ones((2, 2), dtype=np.int32)
+    driver._nacme_reference_source = 2
+    driver._clear_hop_triggered_analytic_record()
+    assert driver._last_analytic_dcv is None
+    assert driver._last_analytic_tdc is None
+    assert driver._analytic_tdc_previous is None
+    assert driver._analytic_tdc_centered is None
+    assert driver._nacme_reference_tdc is None
+    assert driver._nacme_reference_mask is None
+    assert driver._nacme_reference_source == 0

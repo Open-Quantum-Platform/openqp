@@ -465,7 +465,7 @@ _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _P_ALLOW_HOP = 13       # +1 permit state changes; -1 propagate coefficients only
-_P_RESCALE = 14         # 0 isotropic; 1 analytic derivative-coupling direction
+_P_RESCALE = 14         # 0 isotropic; 1 resident analytic NAC; 2 hop-triggered NAC
 _NPARAMS = 16
 
 
@@ -562,8 +562,13 @@ class NAMD:
         self.rescale_provider = str(md.get('rescale', 'isotropic')).strip().lower().replace('-', '_')
         if self.rescale_provider in ('analytic', 'nac'):
             self.rescale_provider = 'analytic_nac'
-        if self.rescale_provider not in ('isotropic', 'analytic_nac'):
-            raise ValueError("[md] rescale must be isotropic or analytic_nac")
+        if self.rescale_provider in ('hop_analytic', 'hop_nac', 'ht_nac'):
+            self.rescale_provider = 'hop_analytic_nac'
+        if self.rescale_provider not in (
+                'isotropic', 'analytic_nac', 'hop_analytic_nac'):
+            raise ValueError(
+                "[md] rescale must be isotropic, analytic_nac, or "
+                "hop_analytic_nac")
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
@@ -674,7 +679,8 @@ class NAMD:
         if soc_requested and (
                 self.nacme_check != 'off'
                 or self.tdc_provider == 'analytic'
-                or self.rescale_provider == 'analytic_nac'):
+                or self.rescale_provider in (
+                    'analytic_nac', 'hop_analytic_nac')):
             raise NotImplementedError(
                 "analytic NAC TDC/rescaling/check currently supports same-spin NAMD only"
             )
@@ -737,7 +743,10 @@ class NAMD:
         self._last_analytic_tdc = None
         self._analytic_tdc_previous = None
         self._analytic_tdc_centered = None
-        self._last_rescale_source = int(self.rescale_provider == 'analytic_nac')
+        self._last_rescale_source = {
+            'isotropic': 0, 'analytic_nac': 1,
+            'hop_analytic_nac': 2,
+        }[self.rescale_provider]
         self._last_rescale_gamma = np.nan
         self._last_rescale_discriminant = np.nan
         self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
@@ -2192,7 +2201,10 @@ class NAMD:
                                      '2': 'analytic', '127': 'other'},
                 'tdc_source': {'0': 'overlap_fd', '1': 'overlap_npi',
                                '2': 'analytic_endpoint'},
-                'rescale_source': {'0': 'isotropic', '1': 'analytic_nac'},
+                'rescale_source': {
+                    '0': 'isotropic', '1': 'analytic_nac',
+                    '2': 'hop_triggered_analytic_nac',
+                },
                 'gate_metrics': [
                     'candidate_diagonal_max', 'candidate_antisymmetry_max',
                     'reference_diagonal_max', 'reference_antisymmetry_max',
@@ -2281,8 +2293,10 @@ class NAMD:
         record['active'] = self.active
         record['hopped'] = int(bool(hopped))
         record['tdc_source'] = getattr(self, 'tdc_scheme', 0)
-        default_rescale = int(
-            getattr(self, 'rescale_provider', 'isotropic') == 'analytic_nac')
+        default_rescale = {
+            'isotropic': 0, 'analytic_nac': 1,
+            'hop_analytic_nac': 2,
+        }.get(getattr(self, 'rescale_provider', 'isotropic'), 0)
         record['rescale_source'] = getattr(
             self, '_last_rescale_source', default_rescale)
         record['rescale_gamma'] = getattr(self, '_last_rescale_gamma', np.nan)
@@ -3648,7 +3662,54 @@ class NAMD:
     # ------------------------------------------------------------------ #
     # Fortran FSSH hop
     # ------------------------------------------------------------------ #
-    def _hop(self, allow_hop=True):
+    def _hop_triggered_analytic_rescale(self, active, target, istep):
+        """Evaluate one exact analytic NAC and rescale a deferred hop.
+
+        The stochastic FSSH decision and coefficient propagation have already
+        occurred in the native kernel.  This routine performs no second random
+        draw and no second electronic propagation.
+        """
+        self._update_analytic_nac(istep, compare_overlap=False)
+        direction = np.ascontiguousarray(
+            np.asarray(self._last_analytic_dcv, dtype=np.float64)[
+                active - 1, target - 1])
+        velocity = np.ascontiguousarray(self.vel, dtype=np.float64)
+        mass = np.ascontiguousarray(self.mass, dtype=np.float64)
+        energies = self._validated_td_energies("OQP::td_energies")
+        delta_e = float(energies[target - 1] - energies[active - 1])
+        gamma = np.zeros(1, dtype=np.float64)
+        discriminant = np.zeros(1, dtype=np.float64)
+        status = oqp.oqp_namd_rescale_directional(
+            self.natom,
+            oqp.ffi.cast("double *", velocity.ctypes.data),
+            oqp.ffi.cast("double *", mass.ctypes.data),
+            oqp.ffi.cast("double *", direction.ctypes.data),
+            delta_e,
+            oqp.ffi.cast("double *", gamma.ctypes.data),
+            oqp.ffi.cast("double *", discriminant.ctypes.data),
+        )
+        self._last_rescale_source = 2
+        self._last_rescale_gamma = float(gamma[0])
+        self._last_rescale_discriminant = float(discriminant[0])
+        if int(status) != 0:
+            return active, False
+        self.vel = velocity
+        self._last_hop_direction = np.array(direction, copy=True)
+        return target, True
+
+    def _clear_hop_triggered_analytic_record(self):
+        """Clear exact-NAC fields before a step without a known hop candidate."""
+        if self.rescale_provider != 'hop_analytic_nac':
+            return
+        self._last_analytic_dcv = None
+        self._last_analytic_tdc = None
+        self._analytic_tdc_previous = None
+        self._analytic_tdc_centered = None
+        self._nacme_reference_tdc = None
+        self._nacme_reference_mask = None
+        self._nacme_reference_source = 0
+
+    def _hop(self, allow_hop=True, istep=None):
         """Propagate amplitudes in Fortran and optionally permit a state change."""
         mol = self.mol
         n = self.nstate
@@ -3675,7 +3736,10 @@ class NAMD:
         params[_P_TRIV_THR] = self.trivial_thresh
         params[_P_NSTATE] = float(n)
         params[_P_ALLOW_HOP] = 1.0 if allow_hop else -1.0
-        params[_P_RESCALE] = float(self.rescale_provider == 'analytic_nac')
+        params[_P_RESCALE] = float({
+            'isotropic': 0, 'analytic_nac': 1,
+            'hop_analytic_nac': 2,
+        }[self.rescale_provider])
         mol.data["OQP::namd_params"] = params
 
         # state overlap + time-derivative couplings (FD or NPI), passed to the
@@ -3718,6 +3782,24 @@ class NAMD:
         self._last_rescale_gamma = float(results[n*n + 6])
         self._last_rescale_discriminant = float(results[n*n + 7])
         self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
+        target = int(round(results[n*n + 1]))
+        blocked = int(round(results[n*n + 2])) == 1
+        if (allow_hop and self.rescale_provider == 'hop_analytic_nac'
+                and target != active_before and not blocked):
+            new_active, hopped = self._hop_triggered_analytic_rescale(
+                active_before, target, istep)
+            blocked = not hopped
+            params[_P_ACTIVE] = float(new_active)
+            params[_P_HOPPED] = 1.0 if hopped else 0.0
+            params[_P_TARGET] = float(target)
+            results[n*n] = 1.0 if hopped else 0.0
+            results[n*n + 2] = 1.0 if blocked else 0.0
+            results[n*n + 5] = 2.0
+            results[n*n + 6] = self._last_rescale_gamma
+            results[n*n + 7] = self._last_rescale_discriminant
+            mol.data["OQP::namd_params"] = params
+            mol.data["OQP::namd_results"] = results
+            mol.data["OQP::namd_velocity"] = self.vel.reshape(-1).copy()
         if (hopped and self.rescale_provider == 'analytic_nac'
                 and 1 <= active_before <= n and 1 <= new_active <= n):
             self._last_hop_direction = np.array(
@@ -3759,6 +3841,10 @@ class NAMD:
 
             # electronic structure at the new geometry (with overlap vs previous)
             self._electronic(with_overlap=True)
+            # HT-NAC is evaluated only after the native FSSH kernel selects a
+            # stochastic candidate.  Clear the preceding candidate's exact
+            # vector so a no-candidate step cannot publish stale NAC data.
+            self._clear_hop_triggered_analytic_record()
             fused_gradient_nac = self._gradient_nac_fusion_enabled()
             if fused_gradient_nac:
                 # Fix root identity and phase before constructing the fused
@@ -3777,8 +3863,10 @@ class NAMD:
                 self._update_analytic_nac(istep, compare_overlap=True)
             else:
                 self._state_overlap(istep)
-            self._last_rescale_source = int(
-                self.rescale_provider == 'analytic_nac')
+            self._last_rescale_source = {
+                'isotropic': 0, 'analytic_nac': 1,
+                'hop_analytic_nac': 2,
+            }[self.rescale_provider]
             self._last_rescale_gamma = np.nan
             self._last_rescale_discriminant = np.nan
             self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
@@ -3795,7 +3883,8 @@ class NAMD:
             if getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
             else:
-                new_active, hopped = self._hop(allow_hop=hop_ready)
+                new_active, hopped = self._hop(
+                    allow_hop=hop_ready, istep=istep)
 
             active_changed = new_active != active_old
             if active_changed:
@@ -3922,7 +4011,8 @@ class NAMD_QMMM(NAMD):
 
     def __init__(self, mol):
         super().__init__(mol)
-        if self._needs_analytic_nac():
+        if (self._needs_analytic_nac()
+                or self.rescale_provider == 'hop_analytic_nac'):
             raise NotImplementedError(
                 "analytic NAC TDC/rescaling/check is not yet available for QM/MM NAMD")
         import openmm as mm
