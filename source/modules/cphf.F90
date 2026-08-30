@@ -19,7 +19,7 @@ module cphf_mod
 !>   for comparison against an external reference (no geometry derivatives required).
 
   use precision, only: dp
-  use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
+  use iso_c_binding, only: c_ptr, c_f_pointer
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use types, only: information
   use basis_tools, only: basis_set
@@ -1230,12 +1230,14 @@ contains
       do irhs = 1, nrhs
         if (allocated(minres_batch(irhs)%x)) then
           ! Krylov iterations deliberately use the conservative multi-density
-          ! screening envelope.  Certify with the legacy scalar operator so
-          ! each reported residual uses exactly that RHS's screening bound.
-          ! The scalar callback workspaces and DFT grid remain solver-owned and
-          ! live until after this loop.
-          call cphf_apbx_rohf(ax, uvec(:,irhs), c_loc(cgdata))
-          residual_norm = norm2(bvec(:,irhs) - ax)
+          ! screening envelope.  Certify one RHS at a time so each reported
+          ! residual retains its own scalar screening bound, while reusing the
+          ! persistent integral driver and batch workspaces owned by this
+          ! solve.  A one-column call cannot inherit another RHS's density
+          ! envelope and avoids rebuilding immutable integral-driver state.
+          call cphf_apbx_rohf_batch(ax_batch(:,1:1), &
+                                    uvec(:,irhs:irhs), cgdata)
+          residual_norm = norm2(bvec(:,irhs) - ax_batch(:,1))
         else
           residual_norm = huge(1.0_dp)
         end if

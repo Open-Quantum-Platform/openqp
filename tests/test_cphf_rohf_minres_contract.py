@@ -60,14 +60,18 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertRegex(
             self.solve,
             r"(?s)do\s+irhs\s*=\s*1,\s*nrhs.*?"
-            r"call\s+cphf_apbx_rohf\(ax,\s*uvec\(:,irhs\),\s*c_loc\(cgdata\)\)"
-            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*ax\)",
+            r"call\s+cphf_apbx_rohf_batch\(ax_batch\(:,1:1\),\s*&?\s*"
+            r"uvec\(:,irhs:irhs\),\s*cgdata\)"
+            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*"
+            r"ax_batch\(:,1\)\)",
         )
         certification = self.solve.split(
             "! krylov iterations deliberately use", 1
         )[1].split("else", 1)[0]
-        self.assertNotIn("cphf_apbx_rohf_batch", certification)
-        self.assertIn("legacy scalar operator", certification)
+        self.assertIn("one rhs at a time", certification)
+        self.assertIn("ax_batch(:,1:1)", certification)
+        self.assertIn("uvec(:,irhs:irhs)", certification)
+        self.assertNotIn("ax_batch(:,1:nrhs)", certification)
         solved = self.solve.split("solved =", 1)[1].split("write(iw", 1)[0]
         self.assertIn("residual_norm <= sqrt(abs(rhs_cnv(irhs)))", solved)
         self.assertNotIn("minres%error", solved)
@@ -93,12 +97,14 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
     def test_callback_data_lifetime_covers_solver_and_true_residual(self):
         self.assertIn("type(cphf_cg_data_rohf), target :: cgdata", self.solve)
         self.assertIn("precond=cphf_precond_rohf_minres, dat=cgdata", self.solve)
-        scalar_cert = self.solve.index(
-            "call cphf_apbx_rohf(ax, uvec(:,irhs), c_loc(cgdata))"
+        independent_cert = self.solve.index(
+            "call cphf_apbx_rohf_batch(ax_batch(:,1:1)"
         )
-        self.assertLess(scalar_cert, self.solve.index("if (dft) call dftclean(infos)"))
         self.assertLess(
-            scalar_cert,
+            independent_cert, self.solve.index("if (dft) call dftclean(infos)")
+        )
+        self.assertLess(
+            independent_cert,
             self.solve.index(
                 "deallocate(famo, fbmo, xminv, fao, w2, w3, ax, rhs_cnv)"
             ),
