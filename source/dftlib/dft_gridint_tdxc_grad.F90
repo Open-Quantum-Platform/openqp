@@ -413,8 +413,11 @@ contains
         call add_partition_weight_gradient(self, xce, mythread)
         ! Differentiate the discrete atom-centred quadrature consistently:
         ! the grid point moves with the atom that owns the current slice.
+        ! tmpGrad contains both spin contributions in the unrestricted path,
+        ! but only the alpha contribution in the restricted path.
         self%nucgrad(:,xce%currAtom,mythread) = &
-          self%nucgrad(:,xce%currAtom,mythread) + sum(tmpGrad, dim=1)
+          self%nucgrad(:,xce%currAtom,mythread) + &
+          merge(1.0_fp,2.0_fp,xce%hasBeta)*sum(tmpGrad, dim=1)
       end if
 
    end associate
@@ -1461,9 +1464,10 @@ contains
       end associate
     end do
 
-    ! The restricted consumer evaluates one spin channel.  Apply the same
-    ! closed-shell factor to the explicit grid-motion terms as to bfGrad.
-    if (dat%do_weight_derivative) dedft = dedft + 2.0_fp*dat%nucGrad(:,:,1)
+    ! The partition-weight probe is already spin summed by grad_v_xc_np and
+    ! grad_f_xc_np.  The restricted factor for owner motion is applied where
+    ! that one-spin AO contribution enters nucGrad.
+    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
 
     call dat%clean()
   end subroutine

@@ -80,4 +80,9 @@ def test_production_tddft_gradient_includes_moving_grid_response():
     assert "include_weight_derivative=.true." in TDHF_GRAD
     assert "call derexc_blk" in TDHF_GRAD
     assert "include_ground_state=.false." in TDHF_GRAD
-    assert "2.0_fp*dat%nucgrad(:,:,1)" in TDXC_GRAD
+    assert "dedft = dedft + dat%nucgrad(:,:,1)" in TDXC_GRAD
+
+
+def test_restricted_owner_motion_alone_gets_closed_shell_factor():
+    assert "merge(1.0_fp,2.0_fp,xce%hasbeta)*sum(tmpgrad, dim=1)" in TDXC_GRAD
+    assert "2.0_fp*dat%nucgrad(:,:,1)" not in TDXC_GRAD
