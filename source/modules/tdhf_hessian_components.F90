@@ -7,6 +7,7 @@ module tdhf_hessian_components_mod
   private
   public :: assemble_tdhf_cartesian_hessian
   public :: tdhf_hessian_is_applicable
+  public :: tdhf_hessian_functional_is_verified
 
 contains
 
@@ -68,22 +69,52 @@ contains
 !###############################################################################
 
   pure logical function tdhf_hessian_is_applicable(scf_type, td_multiplicity, &
-                                                    tamm_dancoff, needs_tau, &
-                                                    mpi_size) result(applicable)
+                                                    tamm_dancoff, is_dft, &
+                                                    verified_local_density, &
+                                                    needs_gradient, needs_tau, &
+                                                    range_separated, mpi_size) &
+                                                    result(applicable)
     ! Applicability of the imported GAMESS formulation at its verified limit.
     ! OpenQP SCF type 1 is the closed-shell restricted reference.  The initial
-    ! import is restricted to singlet full-response TDHF/TDDFT, functionals
-    ! without kinetic-energy-density dependence, and one MPI rank.
+    ! import is restricted to singlet full-response TDHF and restricted LDA
+    ! TDDFT on one MPI rank.  GGA, meta-GGA, and range-separated functionals
+    ! must fail closed until their complete Hessian terms are verified.
 
     integer, intent(in) :: scf_type
     integer, intent(in) :: td_multiplicity
     logical, intent(in) :: tamm_dancoff
+    logical, intent(in) :: is_dft
+    logical, intent(in) :: verified_local_density
+    logical, intent(in) :: needs_gradient
     logical, intent(in) :: needs_tau
+    logical, intent(in) :: range_separated
     integer, intent(in) :: mpi_size
 
     applicable = scf_type == 1 .and. td_multiplicity == 1 .and. &
-                 .not. tamm_dancoff .and. .not. needs_tau .and. mpi_size == 1
+                 .not. tamm_dancoff .and. mpi_size == 1 .and. &
+                 (.not. is_dft .or. &
+                  (verified_local_density .and. .not. needs_gradient .and. &
+                   .not. needs_tau .and. &
+                   .not. range_separated))
 
   end function tdhf_hessian_is_applicable
+
+!###############################################################################
+
+  pure logical function tdhf_hessian_functional_is_verified(name) result(verified)
+    character(*), intent(in) :: name
+    character(len=len(name)) :: upper_name
+    integer :: i, code
+
+    upper_name = adjustl(name)
+    do i = 1, len_trim(upper_name)
+      code = iachar(upper_name(i:i))
+      if (code >= iachar('a') .and. code <= iachar('z')) &
+        upper_name(i:i) = achar(code - iachar('a') + iachar('A'))
+    end do
+    verified = trim(upper_name) == 'SVWN' .or. &
+               trim(upper_name) == 'SVWN5' .or. &
+               trim(upper_name) == 'LDA'
+  end function tdhf_hessian_functional_is_verified
 
 end module tdhf_hessian_components_mod

@@ -56,10 +56,9 @@ contains
       call show_message('TDHF fixed-density Hessian currently requires a '// &
         'closed-shell restricted reference, a singlet target, and full response.', WITH_ABORT)
     end if
-    if (infos%control%hamilton >= 20) then
-      call show_message('TDDFT fixed-density Hessian requires the XC quadrature '// &
-        'second derivatives, which are not included in this TDHF routine.', WITH_ABORT)
-    end if
+    ! The XC quadrature part is assembled separately by
+    ! build_tdhf_xc_fixed_hessian; this routine supplies the one- and
+    ! two-electron skeleton with hybrid exchange scaling.
 
     basis => infos%basis
     basis%atoms => infos%atoms

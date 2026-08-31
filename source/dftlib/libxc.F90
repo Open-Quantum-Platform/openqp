@@ -80,6 +80,11 @@ contains
       HFEX = 1.00_fp
     case ("SLATER")
       call functional%add_functional(XC_LDA_X, 1.00_fp) !SLATER_X
+    case ("SVWN", "LDA", "SVWN5")
+      ! Slater exchange plus the VWN5 local correlation convention used by
+      ! GAMESS DFTTYP=SVWN and Libxc's canonical LDA_C_VWN identifier.
+      call functional%add_functional(XC_LDA_X, 1.00_fp)
+      call functional%add_functional(XC_LDA_C_VWN, 1.00_fp)
     case ("TETER")
       call functional%add_functional(XC_LDA_XC_TETER93, 1.00_fp) !TETER93_XC
     case ("KSDT")

@@ -6,7 +6,7 @@ module tdhf_hessian_rows_mod
 contains
 
   subroutine build_tdhf_response_rows_hf(infos, umat, eps_deriv, dground, &
-      dprel, dwexc, duexc, dvexc, rows, rows_one, rows_two)
+      dprel, dwexc, duexc, dvexc, dxc_skeleton, rows, rows_one, rows_two)
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, &
@@ -19,7 +19,7 @@ contains
 
     type(information),target,intent(inout)::infos
     real(dp),intent(in)::umat(:,:,:),eps_deriv(:,:),dground(:,:,:),dprel(:,:,:), &
-      dwexc(:,:,:),duexc(:,:,:),dvexc(:,:,:)
+      dwexc(:,:,:),duexc(:,:,:),dvexc(:,:,:),dxc_skeleton(:,:,:)
     real(dp),intent(out)::rows(:,:),rows_one(:,:),rows_two(:,:)
     type(basis_set),pointer::basis
     real(dp),contiguous,pointer::dpk(:),c(:,:),eps(:),ppk(:,:),xpy(:,:),xmy(:,:)
@@ -33,7 +33,8 @@ contains
     nbf=basis%nbf; nbf2=nbf*(nbf+1)/2; natom=size(basis%atoms%xyz,2); ncart=3*natom
     nocc=infos%mol_prop%nocc
     if(any(shape(rows)/=[ncart,ncart]) .or. any(shape(rows_one)/=[ncart,ncart]) .or. &
-       any(shape(rows_two)/=[ncart,ncart])) &
+       any(shape(rows_two)/=[ncart,ncart]) .or. &
+       any(shape(dxc_skeleton)/=[nbf,nbf,ncart])) &
       call show_message('TDHF response rows have wrong shape.',WITH_ABORT)
     call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call tagarray_get_data(infos%dat,OQP_VEC_MO_A,c)
     call tagarray_get_data(infos%dat,OQP_E_MO_A,eps); call tagarray_get_data(infos%dat,OQP_TD_P,ppk)
@@ -54,14 +55,24 @@ contains
     do k=1,ncart
       call pack_matrix(-2.0_dp*dwexc(:,:,k),dens)
       gplus=0.0_dp; call grad_ee_overlap(basis,dens,gplus)
-      call pack_matrix(2.0_dp*dprel(:,:,k),dens)
+      ! DPEFF itself is nonsymmetric (its Z part is C_v Z C_o^T), while
+      ! the packed one-electron derivative interface contracts a symmetric
+      ! operator.  Supply the exact symmetric projection of DPEFF=2*dprel.
+      wrk=0.5_dp*(dprel(:,:,k)+transpose(dprel(:,:,k)))
+      call pack_matrix(2.0_dp*wrk,dens)
       call grad_en_hellman_feynman(basis,basis%atoms%xyz,basis%atoms%zn-basis%ecp_zn_num,dens,gplus)
       call grad_ee_kinetic(basis,dens,gplus)
       call grad_en_pulay(basis,basis%atoms%xyz,basis%atoms%zn-basis%ecp_zn_num,dens,gplus)
       call grad_1e_ecp(infos,basis,basis%atoms%xyz,dens,gplus)
       rows_one(:,k)=reshape(gplus,[ncart])
+      ! Under DFT, GAMESS HMO is the bare one-electron derivative plus the
+      ! explicit XC/grid skeleton derivative.  The fxc[dD] part belongs to
+      ! the response operator and has already been removed by the caller.
+      do i=1,ncart
+        rows_one(i,k)=rows_one(i,k)+sum(2.0_dp*wrk*dxc_skeleton(:,:,i))
+      end do
       dplus(:,:,1)=d0(:,:,1); dminus(:,:,1)=d0(:,:,1)
-      pplus(:,:,1)=p0(:,:,1)+dprel(:,:,k); pminus(:,:,1)=p0(:,:,1)-dprel(:,:,k)
+      pplus(:,:,1)=p0(:,:,1)+wrk; pminus(:,:,1)=p0(:,:,1)-wrk
       uplus(:,:,1)=u0(:,:,1)+duexc(:,:,k); uminus(:,:,1)=u0(:,:,1)-duexc(:,:,k)
       vplus(:,:,1)=v0(:,:,1)+dvexc(:,:,k); vminus(:,:,1)=v0(:,:,1)-dvexc(:,:,k)
       call two_e_gradient(infos,basis,dplus,pplus,uplus,vplus,gminus)

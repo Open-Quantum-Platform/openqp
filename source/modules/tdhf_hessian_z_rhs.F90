@@ -7,6 +7,7 @@ module tdhf_hessian_z_rhs_mod
   public :: build_tdhf_z_rhs_derivative
   public :: differentiated_channel
   public :: explicit_channel_derivative_matrix
+  logical, parameter :: enable_tddft_explicit_gxc = .true.
 
 contains
 
@@ -15,22 +16,34 @@ contains
     use basis_tools, only: basis_set
     use grd2, only: grd2_driver
     use tdhf_gradient_mod, only: grd2_tdhf_compute_data_t
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A
+    use mathlib, only: unpack_matrix
+    use mod_dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient
     type(information),target,intent(inout)::infos
     real(dp),intent(in)::coeff(:,:),base(:,:)
     integer,intent(in)::channel
     real(dp),intent(out)::result(:,:,:)
     type(basis_set),pointer::basis
     type(grd2_tdhf_compute_data_t)::gc
-    real(dp),allocatable,target::d(:,:,:),p(:,:,:),xp(:,:,:),xm(:,:,:)
-    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),gp(:,:),gm(:,:)
+    type(dft_grid_t)::grid
+    real(dp),contiguous,pointer::dpk(:)
+    real(dp),allocatable,target::d(:,:,:),p(:,:,:),xp(:,:,:),xm(:,:,:),dxc(:,:)
+    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),gp(:,:),gm(:,:),gxcp(:,:),gxcm(:,:)
     integer::i,j,nbf,ncart
     real(dp)::scale_exch
     basis=>infos%basis; basis%atoms=>infos%atoms
     nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
     scale_exch=1.0_dp
     if(infos%control%hamilton>=20) scale_exch=infos%dft%hfscale
-    allocate(d(nbf,nbf,1),p(nbf,nbf,1),xp(nbf,nbf,1),xm(nbf,nbf,1), &
-      probe(nbf,nbf),buse(nbf,nbf),quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3),source=0.0_dp)
+    allocate(d(nbf,nbf,1),p(nbf,nbf,1),xp(nbf,nbf,1),xm(nbf,nbf,1),dxc(nbf,nbf), &
+      probe(nbf,nbf),buse(nbf,nbf),quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3), &
+      gxcp(3,ncart/3),gxcm(3,ncart/3),source=0.0_dp)
+    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
+      call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call unpack_matrix(dpk,dxc)
+      call dft_initialize(infos,basis,grid)
+    end if
     result=0.0_dp
     if(channel>0) then
       buse=0.5_dp*(base+transpose(base))
@@ -48,15 +61,24 @@ contains
       if(channel>0) then; xp(:,:,1)=buse+quse; else; xm(:,:,1)=buse+quse; end if
       gp=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
       call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gp,gc); call gc%clean()
+      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
+        gxcp=0.0_dp
+        call tddft_xc_gradient(basis,grid,gxcp,dxc,p,xp,1,1.0e-14_dp,infos)
+      end if
       if(channel>0) then; xp(:,:,1)=buse-quse; else; xm(:,:,1)=buse-quse; end if
       gm=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
       call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gm,gc); call gc%clean()
+      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
+        gxcm=0.0_dp
+        call tddft_xc_gradient(basis,grid,gxcm,dxc,p,xp,1,1.0e-14_dp,infos)
+        gp=gp+gxcp; gm=gm+gxcm
+      end if
       result(i,j,:)=reshape(0.25_dp*(gp-gm),[ncart])
     end do; end do
-    deallocate(d,p,xp,xm,probe,buse,quse,gp,gm)
+    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) &
+      call dftclean(infos)
+    deallocate(d,p,xp,xm,dxc,probe,buse,quse,gp,gm,gxcp,gxcm)
   end subroutine explicit_channel_derivative_matrix
-
-!###############################################################################
 
   subroutine build_tdhf_z_rhs_derivative(infos, umat, u0, v0, du, dv, drhs)
     ! Nuclear derivative of the closed-shell TDHF Z-vector right-hand side.
@@ -94,10 +116,6 @@ contains
         any(shape(dv) /= [nexc,ncoord]) .or. &
         any(shape(drhs) /= [nexc,ncoord])) then
       call show_message('TDHF Z-RHS derivative arrays have incompatible shapes.', WITH_ABORT)
-    end if
-    if (infos%control%hamilton >= 20) then
-      call show_message('TDDFT Z-RHS derivatives require the differentiated XC kernel.', &
-                        WITH_ABORT)
     end if
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
@@ -220,12 +238,26 @@ contains
     use types, only: information
     use int2_compute, only: int2_compute_t
     use tdhf_lib, only: int2_td_data_t
+    use tdhf_response_operator_mod, only: apply_tdhf_ao_operators
     type(information),target,intent(inout)::infos
     real(dp),intent(in),target::density(:,:,:)
     integer,intent(in)::sign_channel
     real(dp),intent(out)::result(:,:,:)
     type(int2_compute_t),target::driver
     type(int2_td_data_t),target::data
+    real(dp),allocatable::amb(:,:,:),apb(:,:,:)
+    if(infos%control%hamilton==20) then
+      allocate(amb(size(result,1),size(result,2),size(result,3)), &
+               apb(size(result,1),size(result,2),size(result,3)))
+      call apply_tdhf_ao_operators(infos,density,amb,apb)
+      if(sign_channel>0) then
+        result=apb
+      else
+        result=amb
+      end if
+      deallocate(amb,apb)
+      return
+    end if
     call driver%init(infos%basis,infos); call driver%set_screening()
     if(sign_channel>0) then
       data=int2_td_data_t(d2=density,int_apb=.true.,int_amb=.false., &

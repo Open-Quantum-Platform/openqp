@@ -6719,10 +6719,23 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type == "rpa" and scf_type == "rhf" and not functional and state > 0:
-            return "supported", "Native OpenQP closed-shell singlet TDHF analytic Hessian dispatch is enabled."
+        if td_type == "rpa" and scf_type == "rhf" and state > 0:
+            # The imported excited-state XC Hessian is currently verified only
+            # for the restricted LDA/SVWN aliases below.  In particular, a
+            # functional being usable for energies or gradients does not imply
+            # that its GGA, meta-GGA, or range-separated Hessian terms exist.
+            # Pure TDHF is selected by an empty functional and remains valid.
+            verified_lda = {"svwn", "svwn5", "lda"}
+            if functional and functional not in verified_lda:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support only the restricted "
+                    "LDA/SVWN path; GGA, meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            return "supported", "Native OpenQP closed-shell singlet TDHF/LDA-TDDFT analytic Hessian dispatch is enabled."
         if td_type == "rpa":
-            return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference and the HF Hamiltonian."
+            return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
         if td_type == "tda":
             return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."

@@ -2,7 +2,7 @@ program test_tdhf_hessian_components
 
   use precision, only: dp
   use tdhf_hessian_components_mod, only: assemble_tdhf_cartesian_hessian, &
-    tdhf_hessian_is_applicable
+    tdhf_hessian_is_applicable, tdhf_hessian_functional_is_verified
 
   implicit none
 
@@ -23,17 +23,42 @@ program test_tdhf_hessian_components
   if (abs(asymmetry - 2.0_dp) > 1.0e-14_dp) &
     error stop 'directional-row asymmetry is incorrect'
 
-  if (.not. tdhf_hessian_is_applicable(1, 1, .false., .false., 1)) &
-    error stop 'verified closed-shell full-response case was rejected'
-  if (tdhf_hessian_is_applicable(2, 1, .false., .false., 1)) &
+  if (.not. tdhf_hessian_is_applicable(1, 1, .false., .false., &
+                                        .false., .false., .false., .false., 1)) &
+    error stop 'verified TDHF case was rejected'
+  if (.not. tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                        .true., .false., .false., .false., 1)) &
+    error stop 'verified restricted LDA case was rejected'
+  if (tdhf_hessian_is_applicable(2, 1, .false., .false., &
+                                  .false., .false., .false., .false., 1)) &
     error stop 'open-shell reference was accepted'
-  if (tdhf_hessian_is_applicable(1, 1, .true., .false., 1)) &
+  if (tdhf_hessian_is_applicable(1, 1, .true., .false., &
+                                  .false., .false., .false., .false., 1)) &
     error stop 'Tamm-Dancoff response was accepted'
-  if (tdhf_hessian_is_applicable(1, 3, .false., .false., 1)) &
+  if (tdhf_hessian_is_applicable(1, 3, .false., .false., &
+                                  .false., .false., .false., .false., 1)) &
     error stop 'triplet target was accepted'
-  if (tdhf_hessian_is_applicable(1, 1, .false., .true., 1)) &
+  if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                  .true., .true., .false., .false., 1)) &
+    error stop 'GGA functional was accepted'
+  if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                  .true., .false., .true., .false., 1)) &
     error stop 'kinetic-energy-density functional was accepted'
-  if (tdhf_hessian_is_applicable(1, 1, .false., .false., 2)) &
+  if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                  .true., .false., .false., .true., 1)) &
+    error stop 'range-separated functional was accepted'
+  if (tdhf_hessian_is_applicable(1, 1, .false., .false., &
+                                  .false., .false., .false., .false., 2)) &
     error stop 'unverified multi-rank evaluation was accepted'
+  if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                  .false., .false., .false., .false., 1)) &
+    error stop 'unverified local-density functional was accepted'
+
+  if (.not. tdhf_hessian_functional_is_verified('svwn')) &
+    error stop 'case-insensitive SVWN alias was rejected'
+  if (.not. tdhf_hessian_functional_is_verified(' LDA ')) &
+    error stop 'LDA alias was rejected'
+  if (tdhf_hessian_functional_is_verified('TETER')) &
+    error stop 'unverified LDA functional was accepted'
 
 end program test_tdhf_hessian_components

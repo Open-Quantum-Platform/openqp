@@ -6,12 +6,13 @@ module tdhf_hessian_rhs_mod
 
   private
   public :: build_tdhf_amplitude_derivative_actions
+  logical, parameter :: enable_tddft_kxc_ground_response = .true.
 
 contains
 
 !###############################################################################
 
-  subroutine build_tdhf_amplitude_derivative_actions(infos, umat, eps_deriv, &
+  subroutine build_tdhf_amplitude_derivative_actions(infos, umat, eps_deriv, dground, &
                                                        u0, v0, dambu, dapbv)
     ! Analytic nuclear derivatives d(A-B)U and d(A+B)V for closed-shell TDHF.
     ! The four terms are the derivative-ERI contraction, outer MO rotation,
@@ -27,7 +28,7 @@ contains
     use messages, only: show_message, WITH_ABORT
 
     type(information), target, intent(inout) :: infos
-    real(kind=dp), intent(in) :: umat(:,:,:), eps_deriv(:,:), u0(:), v0(:)
+    real(kind=dp), intent(in) :: umat(:,:,:), eps_deriv(:,:), dground(:,:,:), u0(:), v0(:)
     real(kind=dp), intent(out) :: dambu(:,:), dapbv(:,:)
 
     type(basis_set), pointer :: basis
@@ -50,11 +51,8 @@ contains
     nexc = nocc*nvir
     ncart = 3*size(basis%atoms%xyz,2)
     ncoord = size(umat,3)
-    if (infos%control%hamilton >= 20) then
-      call show_message('TDDFT amplitude derivatives require the XC skeleton derivative.', &
-                        WITH_ABORT)
-    end if
     if (ncoord /= ncart .or. any(shape(umat) /= [nbf,nbf,ncart]) .or. &
+        any(shape(dground) /= [nbf,nbf,ncart]) .or. &
         any(shape(eps_deriv) /= [nbf,ncart]) .or. size(u0) /= nexc .or. &
         size(v0) /= nexc .or. any(shape(dambu) /= [nexc,ncart]) .or. &
         any(shape(dapbv) /= [nexc,ncart])) then
@@ -91,6 +89,32 @@ contains
     allocate(deri_full_m(nbf,nbf,ncart),deri_full_p(nbf,nbf,ncart))
     call explicit_channel_derivative_matrix(infos,mo,pu,-1,deri_full_m)
     call explicit_channel_derivative_matrix(infos,mo,pv,+1,deri_full_p)
+    if (infos%control%hamilton == 20 .and. enable_tddft_kxc_ground_response) then
+      block
+        use mod_dft, only: dft_initialize,dftclean
+        use mod_dft_molgrid, only: dft_grid_t
+        use mod_dft_gridint_gxc, only: tddft_gxc
+        type(dft_grid_t) :: grid
+        real(dp),allocatable,target :: dx(:,:,:)
+        real(dp),allocatable :: fx(:,:,:),pvs(:,:)
+        integer :: kk
+        allocate(dx(nbf,nbf,3*ncart),fx(nbf,nbf,3*ncart),pvs(nbf,nbf),source=0.0_dp)
+        pvs=0.5_dp*(pv+transpose(pv))
+        do kk=1,ncart
+          dx(:,:,3*kk-2)=pvs+dground(:,:,kk)
+          dx(:,:,3*kk-1)=pvs
+          dx(:,:,3*kk)=dground(:,:,kk)
+        end do
+        call dft_initialize(infos,basis,grid)
+        call tddft_gxc(basis,grid,.true.,mo,fx,dx,3*ncart,1.0e-14_dp,infos)
+        call dftclean(infos)
+        do kk=1,ncart
+          fx(:,:,3*kk-2)=0.5_dp*(fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk))
+          deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+fx(:,:,3*kk-2)
+        end do
+        deallocate(dx,fx,pvs)
+      end block
+    end if
     do k = 1, ncart
       deri_m(:,k)=reshape(deri_full_m(1:nocc,nocc+1:,k),[nexc])
       deri_p(:,k)=reshape(deri_full_p(1:nocc,nocc+1:,k),[nexc])

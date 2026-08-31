@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "source" / "modules" / "tdhf_hessian_components.F90"
 FIXED_DENSITY = ROOT / "source" / "modules" / "tdhf_hessian_fixed_density.F90"
 RESPONSE = ROOT / "source" / "modules" / "tdhf_hessian_response.F90"
+XC = ROOT / "source" / "modules" / "tdhf_hessian_xc.F90"
 DESIGN = ROOT / "docs" / "TDDFT_HESSIAN_IMPORT.md"
 
 
@@ -70,10 +71,13 @@ class TdhfHessianImportTests(unittest.TestCase):
         self.assertIn("one_density = dmat_a + 2.0_dp*td_p(:,1)", source)
         self.assertIn("call grd2_hess_driver", source)
 
-    def test_fixed_density_contraction_rejects_unported_xc_terms(self):
+    def test_fixed_density_contraction_routes_xc_terms_separately(self):
         source = FIXED_DENSITY.read_text().lower()
+        xc_source = XC.read_text().lower()
         self.assertRegex(source, r"infos%control%hamilton\s*>=\s*20")
-        self.assertRegex(source, r"xc quadrature\s*'//\s*&\s*'second derivatives")
+        self.assertIn("xc quadrature part is assembled separately", source)
+        self.assertIn("subroutine build_tdhf_xc_fixed_hessian", xc_source)
+        self.assertIn("subroutine add_tdhf_xc_response_rows", xc_source)
 
     def test_design_records_the_total_energy_decomposition(self):
         design = DESIGN.read_text()
