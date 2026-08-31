@@ -205,6 +205,7 @@ contains
     real(dp),target,intent(inout)::p(:,:,:),x(:,:,:)
     real(dp),intent(out)::g(:,:)
     type(information),target,intent(in)::infos
+    g = 0.0_dp
     call tddft_xc_gradient(basis,grid,g,d,p,x,1,1.0e-14_dp,infos,.true.)
   end subroutine xc_gradient
 end module tdhf_hessian_xc_mod

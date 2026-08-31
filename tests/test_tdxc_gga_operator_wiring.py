@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 GXC = (ROOT / "source" / "dftlib" / "dft_gridint_gxc.F90").read_text().lower()
 RHS = (ROOT / "source" / "modules" / "tdhf_hessian_rhs.F90").read_text().lower()
 Z_RHS = (ROOT / "source" / "modules" / "tdhf_hessian_z_rhs.F90").read_text().lower()
+TDXC_GRAD = (ROOT / "source" / "dftlib" / "dft_gridint_tdxc_grad.F90").read_text().lower()
+TDHESS_XC = (ROOT / "source" / "modules" / "tdhf_hessian_xc.F90").read_text().lower()
 
 
 def test_restricted_gga_x3_uses_total_density_algebra():
@@ -47,3 +49,16 @@ def test_gxc_keeps_cross_sigma_and_self_sigma_in_distinct_arrays():
     assert "ssigma = 2*sum(drrho(1:3,1,i,j)*drrho(1:3,1,i,j))" in GXC
     assert sum(line.strip() == "sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]"
                for line in GXC.splitlines()) == 2
+
+
+def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
+    body = TDXC_GRAD.split("subroutine tddft_xc_gradient", 1)[1].split(
+        "end subroutine", 1
+    )[0]
+    assert "intent(inout) :: dedft" in body
+    assert "dedft = 0.0_fp" not in body
+    # Standalone Hessian probes remain responsible for starting from zero.
+    helper = TDHESS_XC.split("subroutine xc_gradient", 1)[1].split(
+        "end subroutine", 1
+    )[0]
+    assert "g = 0.0_dp" in helper

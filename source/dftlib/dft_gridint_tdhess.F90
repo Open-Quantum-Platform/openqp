@@ -67,6 +67,7 @@ contains
     call require_restricted_lda(infos, 'tdxc_response_rows')
     if (size(peff,3) /= size(xpy,3)) error stop &
       'tdxc_response_rows: Peff/X+Y batch mismatch'
+    rows = 0.0_fp
     call tddft_xc_gradient(basis, grid, rows, ground, peff, xpy, &
                            size(peff,3), threshold, infos)
   end subroutine tdxc_response_rows

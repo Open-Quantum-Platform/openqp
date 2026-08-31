@@ -1335,7 +1335,7 @@ contains
 
     type(information), target, intent(in) :: infos
     type(dft_grid_t), target, intent(in) :: molGrid
-    real(kind=fp), intent(out) :: dedft(:,:)
+    real(kind=fp), intent(inout) :: dedft(:,:)
 
     type(basis_set) :: basis
     integer, intent(in) :: nMtx
@@ -1352,8 +1352,6 @@ contains
     logical :: doFxc, doWeight
 
     nbf = ubound(da,1)
-    dedft = 0.0_fp
-
     ! Scale densities by B.F. norms
       do i = 1, nbf
         da(:,i) = da(:,i) &
