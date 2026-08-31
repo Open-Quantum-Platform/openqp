@@ -82,7 +82,11 @@ coupled response equations.
    the total TDHF fixed-density contribution and explicitly rejects DFT until
    the XC quadrature term is present.
 3. Solve the ground-state orbital response, paired amplitude response, and
-   derivative Z-vector for every Cartesian perturbation.
+   derivative Z-vector for every Cartesian perturbation. The projected paired
+   solve is implemented in
+   `tdhf_hessian_response_mod::solve_tdhf_amplitude_response`; its right-hand
+   sides still require the analytic coordinate derivatives of the two response
+   operators.
 4. Assemble and symmetrize the directional response rows only at the final
    sum. Record their maximum antisymmetric element before symmetrization.
 5. Compare every Cartesian element of the TDHF Hessian with a central

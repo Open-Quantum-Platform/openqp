@@ -73,6 +73,7 @@ module fock_deriv_mod
   public :: grd2_fockprobe_data_t
   public :: grd2_fockprobe_os_data_t
   public :: fock_deriv_contract
+  public :: fock_deriv_matrix
   public :: fock_deriv_contract_os
 
 contains
@@ -113,6 +114,61 @@ contains
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
   end subroutine fock_deriv_contract
+
+!###############################################################################
+
+!> @brief Build the complete symmetric two-electron derivative Fock matrix
+!>        F^x[P] for every nuclear coordinate.
+!>
+!> @details The validated scalar contraction above is evaluated on the
+!>          orthonormal basis of symmetric AO probe matrices.  A diagonal
+!>          probe has M_uu=1, while an off-diagonal probe has
+!>          M_uv=M_vu=1/2.  Therefore tr(M F^x) is exactly the corresponding
+!>          independent element of the symmetric Fock derivative.  This
+!>          reference implementation favors a direct, auditable relation to
+!>          fock_deriv_contract; a later blocked-quartet implementation may
+!>          replace it without changing the result or the calling convention.
+!>
+!> @param[in]  infos    system information for the converged SCF state
+!> @param[in]  basis    basis set
+!> @param[in]  pmat     closed-shell alpha density in the AO basis
+!> @param[in]  hfscale  exact-exchange scale
+!> @param[out] fmat     (nbf,nbf,3,natom) derivative two-electron Fock matrices
+  subroutine fock_deriv_matrix(infos, basis, pmat, hfscale, fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
+    real(kind=dp), allocatable, target :: probe(:,:)
+    real(kind=dp), allocatable :: gx(:,:)
+    integer :: mu, nu, natom, nbf
+
+    nbf = basis%nbf
+    natom = size(basis%atoms%xyz, 2)
+    if (any(shape(pmat) /= [nbf, nbf])) &
+      error stop 'fock_deriv_matrix: density shape does not match the basis'
+    if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
+      error stop 'fock_deriv_matrix: output shape does not match the system'
+
+    allocate(probe(nbf,nbf), gx(3,natom))
+    fmat = 0.0_dp
+    do nu = 1, nbf
+      do mu = nu, nbf
+        probe = 0.0_dp
+        if (mu == nu) then
+          probe(mu,nu) = 1.0_dp
+        else
+          probe(mu,nu) = 0.5_dp
+          probe(nu,mu) = 0.5_dp
+        end if
+        call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
+        fmat(mu,nu,:,:) = gx
+        fmat(nu,mu,:,:) = gx
+      end do
+    end do
+  end subroutine fock_deriv_matrix
 
 !###############################################################################
 

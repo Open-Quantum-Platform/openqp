@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "source" / "modules" / "tdhf_hessian_components.F90"
 FIXED_DENSITY = ROOT / "source" / "modules" / "tdhf_hessian_fixed_density.F90"
+RESPONSE = ROOT / "source" / "modules" / "tdhf_hessian_response.F90"
 DESIGN = ROOT / "docs" / "TDDFT_HESSIAN_IMPORT.md"
 
 
@@ -93,6 +94,27 @@ class TdhfHessianImportTests(unittest.TestCase):
                     str(ROOT / "source" / "precision.F90"),
                     str(SOURCE),
                     str(ROOT / "tests" / "fortran" / "test_tdhf_hessian_components.F90"),
+                    "-o",
+                    str(exe),
+                ],
+                cwd=tmp,
+                check=True,
+            )
+            subprocess.run([str(exe)], cwd=tmp, check=True)
+
+    def test_fortran_projected_amplitude_response(self):
+        compiler = shutil.which("gfortran-15") or shutil.which("gfortran")
+        if compiler is None:
+            self.skipTest("GNU Fortran compiler is not available")
+
+        with tempfile.TemporaryDirectory(prefix="oqp-tdhf-response-") as tmp:
+            exe = Path(tmp) / "test_tdhf_hessian_response"
+            subprocess.run(
+                [
+                    compiler,
+                    str(ROOT / "source" / "precision.F90"),
+                    str(RESPONSE),
+                    str(ROOT / "tests" / "fortran" / "test_tdhf_hessian_response.F90"),
                     "-o",
                     str(exe),
                 ],
