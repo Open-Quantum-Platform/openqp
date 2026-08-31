@@ -11,7 +11,7 @@ contains
 
 !###############################################################################
 
-  subroutine build_tdhf_fixed_density_hessian(infos, h_fixed)
+  subroutine build_tdhf_fixed_density_hessian(infos, h_fixed, h_ground_fixed)
     ! Fixed-density part of the total closed-shell TDHF Cartesian Hessian.
     !
     ! This is the direct second derivative of the stationary state-specific
@@ -36,7 +36,7 @@ contains
     implicit none
 
     type(information), target, intent(inout) :: infos
-    real(kind=dp), intent(out) :: h_fixed(:,:)
+    real(kind=dp), intent(out) :: h_fixed(:,:), h_ground_fixed(:,:)
 
     character(len=*), parameter :: subroutine_name = 'build_tdhf_fixed_density_hessian'
     character(len=*), parameter :: tags_required(*) = [character(len=80) :: &
@@ -49,6 +49,7 @@ contains
     real(kind=dp), allocatable, target :: d(:,:,:), p(:,:,:), xpy_ao(:,:,:), xmy_ao(:,:,:)
     real(kind=dp), allocatable :: wrk1(:,:), wrk2(:,:), overlap_density(:), one_density(:)
     integer :: natom, ncart, nbf, nocc
+    real(kind=dp) :: scale_exch
 
     if (infos%control%scftype /= 1 .or. infos%mol_prop%mult /= 1 .or. &
         infos%tddft%mult /= 1 .or. infos%tddft%tda) then
@@ -66,8 +67,11 @@ contains
     ncart = 3*natom
     nbf = basis%nbf
     nocc = infos%mol_prop%nocc
+    scale_exch = 1.0_dp
+    if (infos%control%hamilton >= 20) scale_exch = infos%dft%hfscale
 
-    if (any(shape(h_fixed) /= [ncart, ncart])) then
+    if (any(shape(h_fixed) /= [ncart, ncart]) .or. &
+        any(shape(h_ground_fixed) /= [ncart, ncart])) then
       call show_message('TDHF fixed-density Hessian output has the wrong Cartesian shape.', &
                         WITH_ABORT)
     end if
@@ -112,10 +116,31 @@ contains
     call add_ecphess(basis, basis%atoms%xyz, one_density, h_fixed)
 
     gcomp = grd2_tdhf_compute_data_t(d2=d, p2=p, xpy2=xpy_ao, xmy2=xmy_ao, &
-                                      hfscale=1.0_dp, nbf=nbf)
+                                      hfscale=scale_exch, nbf=nbf)
     call gcomp%init()
     call gcomp%build_cart(basis)
     call grd2_hess_driver(infos, basis, h_fixed, gcomp)
+    call gcomp%clean()
+
+    ! Ground-state skeleton.  The complete ground-state response is taken from
+    ! the independently validated native RHF Hessian; keeping this skeleton
+    ! separate lets the caller replace only its response part and avoids the
+    ! noncanonical occupied-block ambiguity in dW.
+    h_ground_fixed = 0.0_dp
+    call hess_nn(basis%atoms, basis%ecp_zn_num, h_ground_fixed)
+    call eijden(overlap_density, nbf, infos)
+    one_density = dmat_a
+    call hess_ee_overlap(basis, overlap_density, h_ground_fixed)
+    call hess_ee_kinetic(basis, one_density, h_ground_fixed)
+    call hess_en(basis, basis%atoms%xyz, &
+                 basis%atoms%zn - basis%ecp_zn_num, one_density, h_ground_fixed)
+    call add_ecphess(basis, basis%atoms%xyz, one_density, h_ground_fixed)
+    p = 0.0_dp; xpy_ao = 0.0_dp; xmy_ao = 0.0_dp
+    gcomp = grd2_tdhf_compute_data_t(d2=d, p2=p, xpy2=xpy_ao, xmy2=xmy_ao, &
+                                      hfscale=scale_exch, nbf=nbf)
+    call gcomp%init()
+    call gcomp%build_cart(basis)
+    call grd2_hess_driver(infos, basis, h_ground_fixed, gcomp)
     call gcomp%clean()
 
     deallocate(d, p, xpy_ao, xmy_ao, wrk1, wrk2, overlap_density, one_density)

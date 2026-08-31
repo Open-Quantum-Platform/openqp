@@ -42,7 +42,8 @@ contains
     real(kind=dp), allocatable :: d0(:,:), d0pack(:,:), gpack(:,:), gfull(:,:)
     real(kind=dp), allocatable :: probe1(:,:), bvec(:,:), uvec(:,:)
     real(kind=dp), allocatable :: dmo_occ(:,:)
-    integer :: a, c, i, ia, k, mu, nbf, nbf2, natom, ncart, nocc, nvir, status
+    integer :: a, c, i, ia, k, mu, nbf, nbf2, natom, ncart, nocc, nvir, p, q, status
+    real(kind=dp) :: scale_exch
     logical :: converged
 
     if (infos%control%scftype /= 1 .or. infos%mol_prop%mult /= 1) then
@@ -62,6 +63,8 @@ contains
     ncart = 3*natom
     nocc = infos%mol_prop%nocc
     nvir = nbf-nocc
+    scale_exch = 1.0_dp
+    if (infos%control%hamilton >= 20) scale_exch = infos%dft%hfscale
     if (any(shape(sx_mo) /= [nbf,nbf,ncart]) .or. &
         any(shape(umat) /= [nbf,nbf,ncart]) .or. &
         any(shape(eps_deriv) /= [nbf,ncart]) .or. &
@@ -93,7 +96,7 @@ contains
     end do
     call ecp_deriv_ints(basis, basis%atoms%xyz, decp)
     dv = dv + decp
-    call fock_deriv_matrix(infos, basis, pfull, 1.0_dp, dg)
+    call fock_deriv_matrix(infos, basis, pfull, scale_exch, dg)
 
     allocate(f0ao(nbf,nbf), f0mo(nbf,nbf), gd0mo(nbf,nbf), &
              d0(nbf,nbf), d0pack(nbf2,1), gpack(nbf2,1), gfull(nbf,nbf), &
@@ -110,7 +113,7 @@ contains
                             transpose(mo(:,1:nocc)))
         call pack_matrix(d0, d0pack(:,1))
         gpack = 0.0_dp
-        call fock_jk(basis, d=d0pack, f=gpack, scale_exch=1.0_dp, infos=infos)
+        call fock_jk(basis, d=d0pack, f=gpack, scale_exch=scale_exch, infos=infos)
         call unpack_symmetric(gpack(:,1), gfull, nbf)
         call ao_to_mo(gfull, mo, gd0mo, probe1)
         do a = 1, nvir
@@ -136,10 +139,21 @@ contains
       f0ao = dt(:,:,c,k) + dv(:,:,c,k) + dg(:,:,c,k)
       call pack_matrix(dp_ao(:,:,ia), d0pack(:,1))
       gpack = 0.0_dp
-      call fock_jk(basis, d=d0pack, f=gpack, scale_exch=1.0_dp, infos=infos)
+      call fock_jk(basis, d=d0pack, f=gpack, scale_exch=scale_exch, infos=infos)
       call unpack_symmetric(gpack(:,1), gfull, nbf)
       call ao_to_mo(f0ao+gfull, mo, f0mo, probe1)
       eps_deriv(:,ia) = [(f0mo(i,i)-eps(i)*sx_mo(i,i,ia), i=1,nbf)]
+      ! Canonical orbitals fix the occupied-occupied and virtual-virtual
+      ! rotations as well as the occupied-virtual response.  The former must
+      ! not be replaced by the symmetric -S^R/2 gauge: differentiated TDHF
+      ! matrices depend on the canonical frame within both subspaces.
+      do q = 1, nbf
+        do p = 1, nbf
+          if (p /= q .and. abs(eps(p)-eps(q)) > 1.0e-10_dp) then
+            umat(p,q,ia) = (sx_mo(p,q,ia)*eps(q)-f0mo(p,q))/(eps(p)-eps(q))
+          end if
+        end do
+      end do
     end do
 
     deallocate(pfull, ds, dt, dv, decp, dg, f0ao, f0mo, gd0mo, d0, &

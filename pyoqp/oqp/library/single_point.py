@@ -2133,9 +2133,40 @@ class Hessian(Calculator):
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']
-        raise NotImplementedError(
-            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
-        )
+        self.mol.data.set_tdhf_target(self.state)
+        oqp.tdhf_z_vector(self.mol)
+        if not self.mol.mol_energy.Z_Vector_converged:
+            raise ZVnotConverged()
+        native_hess_func = getattr(oqp, 'tdhf_hessian', None)
+        if native_hess_func is None:
+            raise RuntimeError('This OpenQP build does not export the native TD Hessian kernel.')
+        native_hess_func(self.mol)
+        self._collect_native_fort6_logs(self.mol)
+        try:
+            raw_hessian = self.mol.data['OQP::tdhf_hessian']
+        except (AttributeError, KeyError) as exc:
+            raise RuntimeError('Native oqp.tdhf_hessian did not store OQP::tdhf_hessian.') from exc
+        hessian = self.mol.set_hessian_result(raw_hessian)
+        disp_hessian = self._dispersion_hessian()
+        d4_added = np.ndim(disp_hessian) != 0
+        if d4_added:
+            hessian = hessian + disp_hessian
+            self.mol.hessian = hessian
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp',
+            'native_openqp_kernel': True,
+            'native_openqp_coupled_td_response': True,
+            'native_openqp_z_response': True,
+            'native_openqp_final_assembly': True,
+            'native_openqp_d4_dispersion': d4_added,
+            'no_external_hessian_backend': True,
+            'no_numerical_fallback': True,
+            'tdhf_type': td_type,
+            'shape': list(hessian.shape),
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp']
 
     def analytical_sf_hess(self):
         raise NotImplementedError(

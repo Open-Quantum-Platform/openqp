@@ -21,8 +21,8 @@ contains
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
-    use fock_deriv_mod, only: fock_deriv_matrix_general
     use tdhf_response_operator_mod, only: apply_tdhf_ao_operators
+    use tdhf_hessian_z_rhs_mod, only: explicit_channel_derivative_matrix
     use tdhf_hessian_response_mod, only: assemble_tdhf_sigma_derivative
     use messages, only: show_message, WITH_ABORT
 
@@ -33,12 +33,14 @@ contains
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: mo(:,:)
     real(kind=dp), allocatable, target :: pu(:,:), pv(:,:), put(:,:), pvt(:,:)
-    real(kind=dp), allocatable :: fpu(:,:,:,:), fput(:,:,:,:), fpv(:,:,:,:), fpvt(:,:,:,:)
     real(kind=dp), allocatable :: dp_u(:,:,:), dp_v(:,:,:), densities(:,:,:)
     real(kind=dp), allocatable :: amb_ao(:,:,:), apb_ao(:,:,:)
     real(kind=dp), allocatable :: gminus(:,:), gplus(:,:), deri_m(:,:), deri_p(:,:)
     real(kind=dp), allocatable :: inner_m(:,:), inner_p(:,:), work(:,:), dmo(:,:,:)
-    integer :: c, i, k, nbf, ncart, ncoord, nocc, nvir, nexc, status
+    real(kind=dp), allocatable :: deri_full_m(:,:,:),deri_full_p(:,:,:)
+    real(kind=dp), allocatable :: orbital_m(:,:),orbital_p(:,:)
+    integer :: c, k, nbf, ncart, ncoord, nocc, nvir, nexc, status
+    logical :: zero_orbital_connection
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -60,17 +62,11 @@ contains
     end if
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
 
-    allocate(pu(nbf,nbf), pv(nbf,nbf), put(nbf,nbf), pvt(nbf,nbf), &
-      fpu(nbf,nbf,3,ncart/3), fput(nbf,nbf,3,ncart/3), &
-      fpv(nbf,nbf,3,ncart/3), fpvt(nbf,nbf,3,ncart/3))
+    allocate(pu(nbf,nbf), pv(nbf,nbf), put(nbf,nbf), pvt(nbf,nbf))
     call transition_density(mo, nocc, u0, pu)
     call transition_density(mo, nocc, v0, pv)
     put = transpose(pu)
     pvt = transpose(pv)
-    call fock_deriv_matrix_general(infos, basis, pu, 1.0_dp, fpu)
-    call fock_deriv_matrix_general(infos, basis, put, 1.0_dp, fput)
-    call fock_deriv_matrix_general(infos, basis, pv, 1.0_dp, fpv)
-    call fock_deriv_matrix_general(infos, basis, pvt, 1.0_dp, fpvt)
 
     allocate(dp_u(nbf,nbf,ncart), dp_v(nbf,nbf,ncart), dmo(nbf,nbf,ncart))
     do k = 1, ncart
@@ -92,15 +88,12 @@ contains
       work(nbf,nbf), source=0.0_dp)
     call ao_to_mo(amb_ao(:,:,1), mo, gminus, work)
     call ao_to_mo(apb_ao(:,:,2), mo, gplus, work)
+    allocate(deri_full_m(nbf,nbf,ncart),deri_full_p(nbf,nbf,ncart))
+    call explicit_channel_derivative_matrix(infos,mo,pu,-1,deri_full_m)
+    call explicit_channel_derivative_matrix(infos,mo,pv,+1,deri_full_p)
     do k = 1, ncart
-      c = mod(k-1,3)+1
-      i = (k-1)/3+1
-      ! OpenQP stores the transition density as C_occ Z C_vir^T, the
-      ! transpose of the GAMESS TDHPTD convention; hence the A-B sign below.
-      work = 2.0_dp*(fpu(:,:,c,i)-fput(:,:,c,i))
-      call ao_to_ov(work, mo, nocc, deri_m(:,k))
-      work = 2.0_dp*(fpv(:,:,c,i)+fpvt(:,:,c,i))
-      call ao_to_ov(work, mo, nocc, deri_p(:,k))
+      deri_m(:,k)=reshape(deri_full_m(1:nocc,nocc+1:,k),[nexc])
+      deri_p(:,k)=reshape(deri_full_p(1:nocc,nocc+1:,k),[nexc])
       call ao_to_ov(amb_ao(:,:,k+2), mo, nocc, inner_m(:,k))
       call ao_to_ov(apb_ao(:,:,ncart+k+2), mo, nocc, inner_p(:,k))
     end do
@@ -111,10 +104,63 @@ contains
       deri_p, inner_p, dapbv, status)
     if (status /= 0) call show_message('Failed to assemble d(A+B)V.', WITH_ABORT)
 
-    deallocate(pu, pv, put, pvt, fpu, fput, fpv, fpvt, dp_u, dp_v, &
+    allocate(orbital_m(nexc,ncart),orbital_p(nexc,ncart))
+    call orbital_channel_derivative(u0,-1,orbital_m)
+    call orbital_channel_derivative(v0,+1,orbital_p)
+    zero_orbital_connection = .true.
+    do k=1,ncart
+      if (maxval(abs(umat(:,:,k)-transpose(umat(:,:,k)))) > 1.0e-10_dp) &
+        zero_orbital_connection = .false.
+    end do
+    do k=1,ncart
+      ! The derivative-gradient polarization is already expressed in the
+      ! moving AO frame used by the analytic gradient.  It therefore contains
+      ! the metric/orbital-energy connection terms which would otherwise be
+      ! added explicitly in a fixed AO frame.  Adding C*U and eps^R here would
+      ! count those contributions twice.
+      if (zero_orbital_connection) then
+        dambu(:,k)=deri_m(:,k)+orbital_m(:,k)
+        dapbv(:,k)=deri_p(:,k)+orbital_p(:,k)
+      end if
+    end do
+
+    deallocate(pu, pv, put, pvt, dp_u, dp_v, &
       densities, amb_ao, apb_ao, gminus, gplus, deri_m, deri_p, inner_m, &
-      inner_p, work, dmo)
+      inner_p, work, dmo, deri_full_m, deri_full_p, orbital_m, orbital_p)
   contains
+    subroutine orbital_channel_derivative(z,channel,result)
+      real(dp),intent(in)::z(:)
+      integer,intent(in)::channel
+      real(dp),intent(out)::result(:,:)
+      real(dp),allocatable::ct(:,:),dc(:,:),dens(:,:,:),am(:,:,:),ap(:,:,:),vals(:,:),tmp(:,:),momat(:,:)
+      real(dp),parameter::steps(4)=[0.5_dp,-0.5_dp,1.0_dp,-1.0_dp]
+      integer::kk,s
+      allocate(ct(nbf,nbf),dc(nbf,nbf),dens(nbf,nbf,4),am(nbf,nbf,4),ap(nbf,nbf,4), &
+        vals(nexc,4),tmp(nbf,nbf),momat(nbf,nbf))
+      do kk=1,ncart
+        ! Only the anti-Hermitian MO rotation is an independent response in
+        ! the moving-AO frame.  The symmetric metric connection is already
+        ! contained in the explicit derivative-gradient polarization.
+        dc=0.5_dp*matmul(mo,umat(:,:,kk)-transpose(umat(:,:,kk)))
+        do s=1,4
+          ct=mo+steps(s)*dc
+          call transition_density(ct,nocc,z,dens(:,:,s))
+        end do
+        call apply_tdhf_ao_operators(infos,dens,am,ap)
+        do s=1,4
+          ct=mo+steps(s)*dc
+          if(channel<0) then
+            call ao_to_mo(am(:,:,s),ct,momat,tmp)
+          else
+            call ao_to_mo(ap(:,:,s),ct,momat,tmp)
+          end if
+          vals(:,s)=reshape(momat(1:nocc,nocc+1:),[nexc])
+        end do
+        result(:,kk)=(4.0_dp*(vals(:,1)-vals(:,2))-(vals(:,3)-vals(:,4))/2.0_dp)/3.0_dp
+      end do
+      deallocate(ct,dc,dens,am,ap,vals,tmp,momat)
+    end subroutine orbital_channel_derivative
+
     subroutine transition_density(coeff, no, z, p)
       real(kind=dp), intent(in) :: coeff(:,:), z(:)
       integer, intent(in) :: no

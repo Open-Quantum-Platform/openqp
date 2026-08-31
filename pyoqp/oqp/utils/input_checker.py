@@ -6719,8 +6719,12 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if td_type == "rpa" and scf_type == "rhf" and not functional and state > 0:
+            return "supported", "Native OpenQP closed-shell singlet TDHF analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference and the HF Hamiltonian."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
