@@ -123,6 +123,10 @@ campaign: /bighome/cheolho.choi/openqp-uracil-baeck-an-27dbada-20260830
 
 이 역시 detached HEAD이며 깨끗하다. 이 구현은 한 step 지연된 Baeck–An coupling magnitude에 phase-tracked overlap sign을 붙이고, 초기 두 step은 NPI로 시작한다. `tdc=baeck_an,rescale=isotropic,nacme_check=off`이다. 360개 회귀 중 360 passed, OpenMM 전용 1개 skip이 기록되어 있다.
 
+학생용 private GitHub branch `codex/student-handoff-20260831`에는 이 exact
+`27dbada1062f3c374faac3bf6d1f40cc63adea02` 계보가 merge되어 있다. 따라서 별도
+bundle을 다시 가져오지 말고 이 branch에서 학생 전용 worktree를 만든다.
+
 Baeck–An은 full derivative-coupling vector가 아니라 에너지 곡률에 근거한 time-derivative coupling의 크기 근사이다. analytic NAC 정확도와 동일한 물리량이라고 쓰면 안 된다.
 
 ### 3.3 계산 campaign
@@ -364,12 +368,13 @@ commit message: Replace uracil TD population panel with 500 fs ensemble
 
 학생은 최신 `origin/main`에서 자기 이름이 포함된 새 worktree/branch를 만든다. 다른 사람의 worktree를 공유하지 않는다. push 전에는 remote SHA를 다시 읽고 fast-forward만 허용한다. plain force push는 금지한다.
 
-현재 이 인수인계 문서가 작성된 로컬 worktree/branch:
+코드와 이 인수인계 문서를 함께 보존한 private GitHub branch:
 
 ```text
-/Users/cheolhochoi/Documents/논문작성/.codex-worktrees/nac-student-handoff-20260831
-codex/nac-student-handoff-20260831
-base: origin/main c01989e438d973c713775e54dfe5dbad7a3d753b
+repository: https://github.com/karmachoi/openqp-private
+branch: codex/student-handoff-20260831
+analytic/HT source: ec04414dc2226c67cd1b59355060faa2d5c0cd4b
+Baeck-An source: 27dbada1062f3c374faac3bf6d1f40cc63adea02
 ```
 
 현재 논문의 3.4–3.6은 네 NAMD 방법, population, torsional motion으로 재구성하는 방향이다. 그러나 현재 NPI/EDC population figure는 조건이 잘못 맞춰졌으므로 최종 수치로 사용하지 않는다. 새 TD-FD/HT-FD 결과로 교체하고, 표본 수와 confidence interval을 함께 쓴다.
