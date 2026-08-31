@@ -10,6 +10,7 @@ RHS = (ROOT / "source" / "modules" / "tdhf_hessian_rhs.F90").read_text().lower()
 Z_RHS = (ROOT / "source" / "modules" / "tdhf_hessian_z_rhs.F90").read_text().lower()
 TDXC_GRAD = (ROOT / "source" / "dftlib" / "dft_gridint_tdxc_grad.F90").read_text().lower()
 TDHESS_XC = (ROOT / "source" / "modules" / "tdhf_hessian_xc.F90").read_text().lower()
+TDHF_GRAD = (ROOT / "source" / "modules" / "tdhf_gradient.F90").read_text().lower()
 
 
 def test_restricted_gga_x3_uses_total_density_algebra():
@@ -67,3 +68,11 @@ def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
         "end subroutine", 1
     )[0]
     assert "g = 0.0_dp" in helper
+
+
+def test_production_tddft_gradient_includes_moving_grid_response():
+    assert re.search(
+        r"call\s+tddft_xc_gradient\s*\(.*?include_weight_derivative\s*=\s*\.true\.\s*\)",
+        TDHF_GRAD,
+        re.DOTALL,
+    )

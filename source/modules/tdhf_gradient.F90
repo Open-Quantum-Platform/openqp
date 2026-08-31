@@ -178,7 +178,8 @@ contains
              xa=xpy2(:,:,1:1), &
              nmtx=1, &
              threshold=1.0d-14, &
-             infos=infos)
+             infos=infos, &
+             include_weight_derivative=.true.)
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
       call flush(iw)
