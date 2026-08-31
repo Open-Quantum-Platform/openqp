@@ -33,8 +33,10 @@ contains
       mp(nbf,nbf),mm(nbf,nbf),gp(nbf,nbf,1),gm(nbf,nbf,1),source=0.0_dp)
 
     call symmetric_transition(xpy,mp)
-    xao(:,:,1)=matmul(matmul(c,mp),transpose(c)); gxp=0.0_dp
+    xao(:,:,1)=matmul(matmul(c,mp),transpose(c))
+    gxp=0.0_dp
     call dft_initialize(infos,basis,grid)
+    gp=0.0_dp
     call tddft_gxc(basis,grid,.true.,c,gp,xao,1,0.0_dp,infos)
     call dftclean(infos)
     gxp=gp(:,:,1)
@@ -44,19 +46,21 @@ contains
       dcp=matmul(c,umat(:,:,k)); cp=c+step*dcp; cm=c-step*dcp
       call symmetric_transition(xpy+step*reshape(dxpy(:,k),shape(xpy)),mp)
       call symmetric_transition(xpy-step*reshape(dxpy(:,k),shape(xpy)),mm)
-      xao(:,:,1)=matmul(matmul(cp,mp),transpose(cp)); gp=0.0_dp
+      xao(:,:,1)=matmul(matmul(cp,mp),transpose(cp))
       cc=mod(k-1,3)+1; aa=(k-1)/3+1
       basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)+step
       call basis%init_shell_centers()
       call dft_initialize(infos,basis,grid)
+      gp=0.0_dp
       call tddft_gxc(basis,grid,.true.,cp,gp,xao,1,0.0_dp,infos)
       call dftclean(infos)
       call orthogonal_transform('n',nbf,cp,gp(:,:,1))
 
-      xao(:,:,1)=matmul(matmul(cm,mm),transpose(cm)); gm=0.0_dp
+      xao(:,:,1)=matmul(matmul(cm,mm),transpose(cm))
       basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)-2.0_dp*step
       call basis%init_shell_centers()
       call dft_initialize(infos,basis,grid)
+      gm=0.0_dp
       call tddft_gxc(basis,grid,.true.,cm,gm,xao,1,0.0_dp,infos)
       call dftclean(infos)
       call orthogonal_transform('n',nbf,cm,gm(:,:,1))

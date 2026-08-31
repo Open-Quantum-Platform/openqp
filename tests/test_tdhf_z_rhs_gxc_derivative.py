@@ -41,3 +41,16 @@ def test_helper_restores_geometry_after_each_central_difference():
     assert "basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)+step" in HELPER
     assert "basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)-2.0_dp*step" in HELPER
     assert HELPER.count("call basis%init_shell_centers()") >= 3
+
+
+def test_every_gxc_accumulator_is_zeroed_immediately_before_use():
+    calls = [
+        "call tddft_gxc(basis,grid,.true.,c,gp,xao,1,0.0_dp,infos)",
+        "call tddft_gxc(basis,grid,.true.,cp,gp,xao,1,0.0_dp,infos)",
+        "call tddft_gxc(basis,grid,.true.,cm,gm,xao,1,0.0_dp,infos)",
+    ]
+    lines = [line.strip() for line in HELPER.splitlines()]
+    for call in calls:
+        index = lines.index(call)
+        accumulator = "gm=0.0_dp" if ",cm,gm," in call else "gp=0.0_dp"
+        assert lines[index-1] == accumulator
