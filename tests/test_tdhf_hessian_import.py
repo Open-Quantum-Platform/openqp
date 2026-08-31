@@ -79,6 +79,16 @@ class TdhfHessianImportTests(unittest.TestCase):
         self.assertIn("subroutine build_tdhf_xc_fixed_hessian", xc_source)
         self.assertIn("subroutine add_tdhf_xc_response_rows", xc_source)
 
+    def test_restricted_xc_ground_response_uses_one_spin_density(self):
+        """Restricted XC drivers receive half the spin-summed dD matrix."""
+        xc_source = XC.read_text().lower()
+        rhs_source = (ROOT / "source" / "modules" / "tdhf_hessian_rhs.F90").read_text().lower()
+
+        self.assertIn("dp1=d0+0.5_dp*step*dground(:,:,k)", xc_source)
+        self.assertIn("dm1=d0-0.5_dp*step*dground(:,:,k)", xc_source)
+        self.assertIn("pvs+0.5_dp*dground(:,:,kk)", rhs_source)
+        self.assertIn("dx(:,:,3*kk)=0.5_dp*dground(:,:,kk)", rhs_source)
+
     def test_design_records_the_total_energy_decomposition(self):
         design = DESIGN.read_text()
         self.assertIn("E_I(\\mathbf R) = E_0(\\mathbf R) + \\omega_I(\\mathbf R)", design)
