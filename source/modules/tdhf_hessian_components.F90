@@ -76,9 +76,9 @@ contains
                                                     result(applicable)
     ! Applicability of the imported GAMESS formulation at its verified limit.
     ! OpenQP SCF type 1 is the closed-shell restricted reference.  The initial
-    ! import is restricted to singlet full-response TDHF and restricted LDA
-    ! TDDFT on one MPI rank.  GGA, meta-GGA, and range-separated functionals
-    ! must fail closed until their complete Hessian terms are verified.
+    ! import is restricted to singlet full-response TDHF and restricted
+    ! LDA/GGA or global-hybrid GGA TDDFT on one MPI rank.  Meta-GGA and
+    ! range-separated functionals must fail closed.
 
     integer, intent(in) :: scf_type
     integer, intent(in) :: td_multiplicity
@@ -93,7 +93,7 @@ contains
     applicable = scf_type == 1 .and. td_multiplicity == 1 .and. &
                  .not. tamm_dancoff .and. mpi_size == 1 .and. &
                  (.not. is_dft .or. &
-                  (verified_local_density .and. .not. needs_gradient .and. &
+                  (verified_local_density .and. &
                    .not. needs_tau .and. &
                    .not. range_separated))
 
@@ -114,7 +114,11 @@ contains
     end do
     verified = trim(upper_name) == 'SVWN' .or. &
                trim(upper_name) == 'SVWN5' .or. &
-               trim(upper_name) == 'LDA'
+               trim(upper_name) == 'LDA' .or. &
+               trim(upper_name) == 'BLYP' .or. &
+               trim(upper_name) == 'PBE' .or. &
+               trim(upper_name) == 'B3LYP' .or. &
+               trim(upper_name) == 'B3LYP5'
   end function tdhf_hessian_functional_is_verified
 
 end module tdhf_hessian_components_mod

@@ -38,9 +38,9 @@ program test_tdhf_hessian_components
   if (tdhf_hessian_is_applicable(1, 3, .false., .false., &
                                   .false., .false., .false., .false., 1)) &
     error stop 'triplet target was accepted'
-  if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
-                                  .true., .true., .false., .false., 1)) &
-    error stop 'GGA functional was accepted'
+  if (.not. tdhf_hessian_is_applicable(1, 1, .false., .true., &
+                                        .true., .true., .false., .false., 1)) &
+    error stop 'verified restricted GGA case was rejected'
   if (tdhf_hessian_is_applicable(1, 1, .false., .true., &
                                   .true., .false., .true., .false., 1)) &
     error stop 'kinetic-energy-density functional was accepted'
@@ -58,6 +58,10 @@ program test_tdhf_hessian_components
     error stop 'case-insensitive SVWN alias was rejected'
   if (.not. tdhf_hessian_functional_is_verified(' LDA ')) &
     error stop 'LDA alias was rejected'
+  if (.not. tdhf_hessian_functional_is_verified('blyp')) &
+    error stop 'BLYP alias was rejected'
+  if (.not. tdhf_hessian_functional_is_verified(' B3LYP5 ')) &
+    error stop 'B3LYP5 alias was rejected'
   if (tdhf_hessian_functional_is_verified('TETER')) &
     error stop 'unverified LDA functional was accepted'
 

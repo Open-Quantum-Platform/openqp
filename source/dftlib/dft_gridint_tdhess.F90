@@ -74,8 +74,8 @@ contains
   subroutine require_restricted_lda(infos, caller)
     type(information), intent(in) :: infos
     character(*), intent(in) :: caller
-    if (infos%functional%needGrd .or. infos%functional%needTau) &
-      error stop trim(caller)//': only LDA is implemented'
+    if (infos%functional%needTau) &
+      error stop trim(caller)//': meta-GGA response derivatives are not implemented'
   end subroutine require_restricted_lda
 
 end module mod_dft_gridint_tdhess

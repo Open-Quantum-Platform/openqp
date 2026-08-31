@@ -71,7 +71,7 @@ contains
         logical(infos%functional%needTau,kind=kind(.false.)), &
         logical(infos%dft%cam_flag,kind=kind(.false.)), int(pe%size))) then
       call show_message('Analytic TD Hessian requires serial closed-shell restricted '// &
-        'singlet full response and supports only TDHF or restricted LDA/SVWN TDDFT.', &
+        'singlet full response and supports TDHF or restricted LDA/GGA TDDFT.', &
         WITH_ABORT)
     end if
     nbf=infos%basis%nbf; nocc=infos%mol_prop%nocc; nvir=nbf-nocc; nexc=nocc*nvir

@@ -286,20 +286,20 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             "hess": {"state": 1},
         }
 
-        for functional in ("", "SVWN", "svwn5", "LDA"):
+        for functional in ("", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "B3LYP", "b3lyp5"):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "supported", reason)
 
-        for functional in ("PBE", "B3LYP", "M06-L", "CAM-B3LYP", "TETER"):
+        for functional in ("M06-L", "CAM-B3LYP", "TETER"):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "unsupported_feature")
-                self.assertIn("only the restricted LDA/SVWN path", reason)
+                self.assertIn("LDA/GGA and global-hybrid paths", reason)
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {

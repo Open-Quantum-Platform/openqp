@@ -6720,20 +6720,18 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "rpa" and scf_type == "rhf" and state > 0:
-            # The imported excited-state XC Hessian is currently verified only
-            # for the restricted LDA/SVWN aliases below.  In particular, a
-            # functional being usable for energies or gradients does not imply
-            # that its GGA, meta-GGA, or range-separated Hessian terms exist.
-            # Pure TDHF is selected by an empty functional and remains valid.
-            verified_lda = {"svwn", "svwn5", "lda"}
-            if functional and functional not in verified_lda:
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            verified_semilocal = {"svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5"}
+            if functional and functional not in verified_semilocal:
                 return (
                     "unsupported_feature",
-                    "Analytic TDDFT Hessians currently support only the restricted "
-                    "LDA/SVWN path; GGA, meta-GGA, CAM, and other range-separated "
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
                     "functionals require a numerical Hessian.",
                 )
-            return "supported", "Native OpenQP closed-shell singlet TDHF/LDA-TDDFT analytic Hessian dispatch is enabled."
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
         if td_type == "rpa":
             return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
         if td_type == "tda":

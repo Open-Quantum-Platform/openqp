@@ -1352,6 +1352,7 @@ contains
     logical :: doFxc, doWeight
 
     nbf = ubound(da,1)
+    dedft = 0.0_fp
 
     ! Scale densities by B.F. norms
       do i = 1, nbf
@@ -1456,6 +1457,8 @@ contains
         dedft(3, atom) = dedft(3, atom)-2*sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
       end associate
     end do
+
+    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
 
     call dat%clean()
   end subroutine
