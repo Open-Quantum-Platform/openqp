@@ -101,9 +101,12 @@ contains
         allocate(dx(nbf,nbf,3*ncart),fx(nbf,nbf,3*ncart),pvs(nbf,nbf),source=0.0_dp)
         pvs=0.5_dp*(pv+transpose(pv))
         do kk=1,ncart
-          dx(:,:,3*kk-2)=pvs+dground(:,:,kk)
+          ! dground is spin summed, whereas the restricted grid consumer
+          ! accepts a one-spin density.  The quadratic Gxc polarization must
+          ! therefore use dground/2 at this API boundary.
+          dx(:,:,3*kk-2)=pvs+0.5_dp*dground(:,:,kk)
           dx(:,:,3*kk-1)=pvs
-          dx(:,:,3*kk)=dground(:,:,kk)
+          dx(:,:,3*kk)=0.5_dp*dground(:,:,kk)
         end do
         call dft_initialize(infos,basis,grid)
         call tddft_gxc(basis,grid,.true.,mo,fx,dx,3*ncart,1.0e-14_dp,infos)

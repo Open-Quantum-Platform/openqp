@@ -42,6 +42,11 @@ def test_response_paths_reach_x2_skeleton_and_x3_response_terms():
     assert "deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+fx(:,:,3*kk-2)" in RHS
 
 
+def test_kxc_ground_response_crosses_the_one_spin_grid_boundary():
+    assert "pvs+0.5_dp*dground(:,:,kk)" in RHS
+    assert "dx(:,:,3*kk)=0.5_dp*dground(:,:,kk)" in RHS
+
+
 def test_gxc_keeps_cross_sigma_and_self_sigma_in_distinct_arrays():
     # Two unrestricted-spin passes use vector assignments; the restricted
     # pass uses scalar sums.  None may overwrite sigma with the self product.
