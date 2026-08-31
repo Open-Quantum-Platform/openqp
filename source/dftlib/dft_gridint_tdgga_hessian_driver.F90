@@ -116,8 +116,8 @@ contains
   end subroutine tddft_gga_fixed_hessian
 
   subroutine tdgga_hess_parallel_start(self,xce,nthreads)
-    class(xc_consumer_tdgga_hess_t), intent(inout) :: self
-    class(xc_engine_t), target, intent(in) :: xce
+    class(xc_consumer_tdgga_hess_t), target, intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nthreads
     if (allocated(self%hessian)) deallocate(self%hessian)
     allocate(self%hessian(3,3,xce%numAtoms,xce%numAtoms,nthreads),source=0.0_fp)
@@ -146,22 +146,20 @@ contains
   subroutine tdgga_hess_post_update(self,xce,mythread)
     class(xc_consumer_tdgga_hess_t), intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
-    integer, intent(in) :: mythread
+    integer :: mythread
     ! All work is accumulated directly by update.
   end subroutine tdgga_hess_post_update
 
   subroutine tdgga_hess_update(self,xce,mythread)
     class(xc_consumer_tdgga_hess_t), intent(inout) :: self
-    class(xc_engine_t), target, intent(in) :: xce
-    integer, intent(in) :: mythread
+    class(xc_engine_t), intent(in) :: xce
+    integer :: mythread
 
     type(gga_tdxc_kernel_t), allocatable :: kernels(:)
-    class(xc_engine_t), pointer :: xlocal
     real(fp), allocatable :: p(:,:), v(:,:)
     integer, allocatable :: atoms(:)
     integer :: i, n, status
 
-    xlocal => xce
     n = xce%numAOs_p
     allocate(p(n,n),v(n,n),atoms(n),kernels(xce%numPts))
     if (xce%skip_p) then
@@ -173,7 +171,7 @@ contains
       v = self%density_v(xce%indices_p(1:n),xce%indices_p(1:n))
       atoms = self%ao_atom(xce%indices_p(1:n))
     end if
-    call build_unweighted_gga_kernels(self,xlocal,kernels)
+    call build_unweighted_gga_kernels(self,xce,kernels)
     do i = 1, xce%numPts
       call gga_fixed_density_quadrature_point(kernels(i),xce%wfAlpha_p,p,v, &
         atoms,xce%aoV(:,i),xce%aoG1(:,i,:),xce%aoG2(:,i,:),xce%aoG3(:,i,:), &
