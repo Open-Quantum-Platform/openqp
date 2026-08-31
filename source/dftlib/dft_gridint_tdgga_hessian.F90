@@ -45,6 +45,7 @@ contains
     integer, intent(out) :: status
 
     integer :: nat
+    real(fp), parameter :: rho_cutoff=1.0e-8_fp
     real(fp) :: r, p, v, grad_r(3), grad_p(3), grad_v(3)
     real(fp), allocatable :: fr1(:,:), fp1(:,:), fv1(:,:)
     real(fp), allocatable :: fgr1(:,:,:), fgp1(:,:,:), fgv1(:,:,:)
@@ -80,6 +81,9 @@ contains
       d2weights(3,nat,3,nat,nat),du(7,3,nat),d2u(7,3,3,nat,nat))
 
     call field_value_gradient(density_r,aov,aog1,r,grad_r)
+    ! Match GAMESS TDHXD2G/TDHXDPG: the complete point contribution is
+    ! omitted below RCUTG, not only the finite-difference fourth kernel.
+    if (r < rho_cutoff) return
     call field_value_gradient(density_p,aov,aog1,p,grad_p)
     call field_value_gradient(density_v,aov,aog1,v,grad_v)
     call gga_density_nuclear_point(density_r,ao_atom,aov,aog1,aog2,aog3, &

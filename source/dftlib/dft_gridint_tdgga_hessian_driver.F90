@@ -192,7 +192,8 @@ contains
     type(xc_engine_t) :: probe
     type(gga_tdxc_kernel_t) :: krp, krm, ksp, ksm
     real(fp), allocatable :: ones(:)
-    real(fp), parameter :: eps_r=1.0e-4_fp, eps_s=1.0e-4_fp
+    real(fp), parameter :: eps_r=1.0e-3_fp, eps_s=1.0e-3_fp
+    real(fp), parameter :: rho_cutoff=1.0e-8_fp
     real(fp) :: rho, sigma, wt
     integer :: i, n, irp, irm, isp, ism
 
@@ -229,7 +230,7 @@ contains
       rho=sum(xce%xclib%rho(:,i))
       sigma=4.0_fp*xce%xclib%sig(xce%xclib%ids%ga,i)
       call gga_fourth_from_third(rho,sigma,krp,krm,ksp,ksm, &
-        eps_r,eps_s,1.0e-14_fp,kernels(i))
+        eps_r,eps_s,rho_cutoff,kernels(i))
     end do
   end subroutine build_unweighted_gga_kernels
 

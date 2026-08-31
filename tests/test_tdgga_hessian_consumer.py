@@ -130,6 +130,16 @@ class TestTDGGAHessianConsumer(unittest.TestCase):
         self.assertIn("if (infos%functional%needGrd) then", assembly)
         self.assertIn("+2.0_dp*(exp-2.0_dp*ex0+exm)", assembly)
 
+    def test_gamess_gga_cutoff_and_fourth_kernel_step_are_preserved(self):
+        driver = (ROOT / "source" / "dftlib" /
+                  "dft_gridint_tdgga_hessian_driver.F90").read_text().lower()
+        point = (ROOT / "source" / "dftlib" /
+                 "dft_gridint_tdgga_hessian.F90").read_text().lower()
+        self.assertIn("eps_r=1.0e-3_fp, eps_s=1.0e-3_fp", driver)
+        self.assertIn("rho_cutoff=1.0e-8_fp", driver)
+        self.assertIn("eps_r,eps_s,rho_cutoff,kernels(i)", driver)
+        self.assertIn("if (r < rho_cutoff) return", point)
+
     def test_full_chain_rule_weight_and_owner_motion(self):
         compiler = shutil.which("gfortran-15") or shutil.which("gfortran")
         if compiler is None:
