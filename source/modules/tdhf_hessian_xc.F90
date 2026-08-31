@@ -169,12 +169,7 @@ contains
     call orthogonal_transform('t',nbf,c,wrk,x0(:,:,1),tmp); z=0.0_dp
     call dft_initialize(infos,basis,grid)
     do k=1,ncart
-      ! dground is the spin-summed closed-shell density derivative, whereas
-      ! the restricted XC driver receives the one-spin density in da and
-      ! forms the beta density implicitly.  Halve dground here so that the
-      ! induced total-density change is exactly dground, as in GAMESS TDHXR1.
-      dp1=d0+0.5_dp*step*dground(:,:,k)
-      dm1=d0-0.5_dp*step*dground(:,:,k)
+      dp1=d0+step*dground(:,:,k); dm1=d0-step*dground(:,:,k)
       ! GAMESS TDHXR1 keeps Peff frozen.  Its response row contains dD_K
       ! and dPv_K, but no dPeff_K; the latter belongs to the ordinary D1G/D2G
       ! response rows and would be counted twice here.
