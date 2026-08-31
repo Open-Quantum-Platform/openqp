@@ -128,7 +128,8 @@ class TestTDGGAHessianConsumer(unittest.TestCase):
         self.assertIn("2.0_fp*density_p(:,i)", driver)
         self.assertIn("call tddft_gga_fixed_hessian", assembly)
         self.assertIn("if (infos%functional%needGrd) then", assembly)
-        self.assertIn("+2.0_dp*(exp-2.0_dp*ex0+exm)", assembly)
+        self.assertIn("call tddft_lda_fixed_hessian", assembly)
+        self.assertNotIn("build_scalar_fixed_hessian", assembly)
 
     def test_gamess_gga_cutoff_and_fourth_kernel_step_are_preserved(self):
         driver = (ROOT / "source" / "dftlib" /

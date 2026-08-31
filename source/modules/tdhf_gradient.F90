@@ -189,7 +189,9 @@ contains
              pa=p(:,:,1:1), &
              xa=xpy2(:,:,1:1), &
              nmtx=1, &
-             threshold=1.0d-14, &
+             ! Match the density cutoffs used by GAMESS TDHXR1/TDHXR1G
+             ! and by OpenQP's direct LDA/GGA Hessian quadratures.
+             threshold=merge(1.0d-8,1.0d-12,infos%functional%needGrd), &
              infos=infos, &
              include_weight_derivative=.true., &
              include_ground_state=.false.)

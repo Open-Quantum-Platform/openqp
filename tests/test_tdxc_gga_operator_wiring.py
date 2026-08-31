@@ -69,11 +69,11 @@ def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
     )[0]
     assert "intent(inout) :: dedft" in body
     assert "dedft = 0.0_fp" not in body
-    # Standalone Hessian probes remain responsible for starting from zero.
-    helper = TDHESS_XC.split("subroutine xc_gradient", 1)[1].split(
-        "end subroutine", 1
-    )[0]
-    assert "g = 0.0_dp" in helper
+    # Hessian XC terms now use direct grid consumers, not a molecular-gradient
+    # finite-difference helper that could accidentally reset the total.
+    assert "subroutine xc_gradient" not in TDHESS_XC
+    assert "tddft_lda_fixed_hessian" in TDHESS_XC
+    assert "tddft_gga_fixed_hessian" in TDHESS_XC
 
 
 def test_production_tddft_gradient_includes_moving_grid_response():
@@ -81,6 +81,7 @@ def test_production_tddft_gradient_includes_moving_grid_response():
     assert "call derexc_blk" in TDHF_GRAD
     assert "include_ground_state=.false." in TDHF_GRAD
     assert "dedft = dedft + dat%nucgrad(:,:,1)" in TDXC_GRAD
+    assert "threshold=merge(1.0d-8,1.0d-12,infos%functional%needgrd)" in TDHF_GRAD
 
 
 def test_restricted_owner_motion_alone_gets_closed_shell_factor():
