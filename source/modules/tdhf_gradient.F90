@@ -75,6 +75,7 @@ contains
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient
+    use mod_dft_gridint_grad, only: derexc_blk
     use mathlib, only: unpack_matrix
     use printing, only: print_module_info
 
@@ -85,7 +86,8 @@ contains
     type(basis_set), pointer :: basis
     type(information), target, intent(inout) :: infos
 
-    integer :: nbf, nocc
+    integer :: nbf, nocc, nang
+    real(kind=dp) :: xc_nelec, xc_kinetic
 
     type(dft_grid_t) :: molGrid
 
@@ -170,6 +172,16 @@ contains
       d(:,:,2) = d(:,:,1)
       p(:,:,2) = p(:,:,1)
       xpy2(:,:,2) = xpy2(:,:,1)
+      ! Use the established ground-state XC gradient (including normalized
+      ! partition-weight motion), then add only the excitation contribution
+      ! from the TDDFT Lagrangian.  This avoids evaluating the ground term
+      ! with the one-spin TD consumer while retaining its P and X response.
+      nang = maxval(basis%am)+2
+      xc_nelec = 0.0_dp
+      xc_kinetic = 0.0_dp
+      call derexc_blk(basis,molGrid,d(:,:,1),d(:,:,2),infos%atoms%grad, &
+             xc_nelec,xc_kinetic,nang,nbf,infos%dft%grid_density_cutoff, &
+             .false.,infos)
       call tddft_xc_gradient(basis=basis, &
              molGrid=molGrid, &
              dedft=infos%atoms%grad, &
@@ -179,7 +191,8 @@ contains
              nmtx=1, &
              threshold=1.0d-14, &
              infos=infos, &
-             include_weight_derivative=.true.)
+             include_weight_derivative=.true., &
+             include_ground_state=.false.)
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
       call flush(iw)

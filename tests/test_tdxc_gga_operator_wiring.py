@@ -71,8 +71,7 @@ def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
 
 
 def test_production_tddft_gradient_includes_moving_grid_response():
-    assert re.search(
-        r"call\s+tddft_xc_gradient\s*\(.*?include_weight_derivative\s*=\s*\.true\.\s*\)",
-        TDHF_GRAD,
-        re.DOTALL,
-    )
+    assert "include_weight_derivative=.true." in TDHF_GRAD
+    assert "call derexc_blk" in TDHF_GRAD
+    assert "include_ground_state=.false." in TDHF_GRAD
+    assert "2.0_fp*dat%nucgrad(:,:,1)" in TDXC_GRAD

@@ -1324,7 +1324,8 @@ contains
 !> @author Vladimir Mironov
   subroutine tddft_xc_gradient(basis, molGrid, dedft, &
                   da, pa, xa, &
-                  nMtx, threshold, infos, include_weight_derivative)
+                  nMtx, threshold, infos, include_weight_derivative, &
+                  include_ground_state)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -1344,6 +1345,7 @@ contains
     real(kind=fp), intent(inout), optional, target :: xa(:,:,:)
     real(kind=fp), intent(in) :: threshold
     logical, intent(in), optional :: include_weight_derivative
+    logical, intent(in), optional :: include_ground_state
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
@@ -1407,6 +1409,9 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    dat%do_ground_state = .true.
+    if (present(include_ground_state)) &
+      dat%do_ground_state = include_ground_state
     dat%do_weight_derivative = doWeight
     if (doWeight) then
       dat%part_fun_type = molGrid%partFunType
@@ -1456,7 +1461,9 @@ contains
       end associate
     end do
 
-    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
+    ! The restricted consumer evaluates one spin channel.  Apply the same
+    ! closed-shell factor to the explicit grid-motion terms as to bfGrad.
+    if (dat%do_weight_derivative) dedft = dedft + 2.0_fp*dat%nucGrad(:,:,1)
 
     call dat%clean()
   end subroutine
