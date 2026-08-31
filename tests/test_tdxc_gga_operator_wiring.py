@@ -38,3 +38,12 @@ def test_response_paths_reach_x2_skeleton_and_x3_response_terms():
     assert "call tddft_xc_gradient" in Z_RHS
     assert "call tddft_gxc" in RHS
     assert "deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+fx(:,:,3*kk-2)" in RHS
+
+
+def test_gxc_keeps_cross_sigma_and_self_sigma_in_distinct_arrays():
+    # Two unrestricted-spin passes use vector assignments; the restricted
+    # pass uses scalar sums.  None may overwrite sigma with the self product.
+    assert GXC.count("ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]") == 2
+    assert "ssigma = 2*sum(drrho(1:3,1,i,j)*drrho(1:3,1,i,j))" in GXC
+    assert sum(line.strip() == "sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]"
+               for line in GXC.splitlines()) == 2

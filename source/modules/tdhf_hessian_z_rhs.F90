@@ -93,6 +93,7 @@ contains
     use types, only: information
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use messages, only: show_message, WITH_ABORT
+    use tdhf_hessian_gxc_derivative_mod, only: build_gxc_and_derivative
 
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: umat(:,:,:), u0(:), v0(:), du(:,:), dv(:,:)
@@ -103,6 +104,7 @@ contains
     real(kind=dp), allocatable :: tm(:,:), dtm(:,:,:)
     real(kind=dp), allocatable :: hp(:,:), hm(:,:), ht(:,:)
     real(kind=dp), allocatable :: dhp(:,:,:), dhm(:,:,:), dht(:,:,:)
+    real(kind=dp), allocatable :: gxp(:,:), dgxp(:,:,:)
     real(kind=dp), allocatable :: block(:,:)
     integer :: k, nbf, ncoord, nocc, nvir, nexc
 
@@ -140,6 +142,9 @@ contains
     call differentiated_channel(infos, mo, umat, ov_matrix(vm,nbf,nocc), &
                                 ov_derivatives(dv,nbf,nocc), -1, hm, dhm)
     call differentiated_channel(infos, mo, umat, tm, dtm, +1, ht, dht)
+    allocate(gxp(nbf,nbf), dgxp(nbf,nbf,ncoord), source=0.0_dp)
+    if (infos%control%hamilton == 20) &
+      call build_gxc_and_derivative(infos, mo, umat, um, du, gxp, dgxp)
 
     do k = 1, ncoord
       dum = reshape(du(:,k), [nocc,nvir])
@@ -154,9 +159,14 @@ contains
             - matmul(transpose(hm(1:nocc,1:nocc)), dvm) &
             + dht(1:nocc,nocc+1:,k)
       drhs(:,k) = -reshape(block, [nexc])
+      ! The static Z-vector RHS contains -2 Gxc[X+Y,X+Y]_ov after the
+      ! enclosing sign convention is applied.  Differentiate that term too.
+      drhs(:,k) = drhs(:,k) &
+        - 2.0_dp*reshape(dgxp(1:nocc,nocc+1:,k), [nexc])
     end do
 
-    deallocate(um, vm, dum, dvm, tm, dtm, hp, hm, ht, dhp, dhm, dht, block)
+    deallocate(um, vm, dum, dvm, tm, dtm, hp, hm, ht, dhp, dhm, dht, &
+               gxp, dgxp, block)
   end subroutine build_tdhf_z_rhs_derivative
 
 !###############################################################################

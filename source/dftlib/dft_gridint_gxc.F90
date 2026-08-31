@@ -79,7 +79,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
@@ -140,7 +140,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
