@@ -2,7 +2,8 @@ program test_tdhf_hessian_response
 
   use precision, only: dp
   use tdhf_hessian_response_mod, only: solve_tdhf_amplitude_response, &
-    solve_tdhf_z_response, complete_rhf_orbital_response
+    solve_tdhf_z_response, complete_rhf_orbital_response, &
+    assemble_tdhf_sigma_derivative
 
   implicit none
 
@@ -11,6 +12,8 @@ program test_tdhf_hessian_response
   real(kind=dp) :: domega(1), residual
   real(kind=dp) :: ohess(2,2), drhs(2,1), dhz(2,1), dz(2,1)
   real(kind=dp) :: mo(3,3), sx(3,3), umat(3,3), dmo(3,1), dpao(3,3), uov(2)
+  real(kind=dp) :: umat3(3,3,1), epsx(3,1), gmat(3,3)
+  real(kind=dp) :: deri(2,1), inner(2,1), dsigma(2,1), ztest(2)
   integer :: status
 
   amb(1,1) = 2.0_dp
@@ -61,5 +64,19 @@ program test_tdhf_hessian_response
                                   1.4_dp, 0.0_dp,  0.0_dp, &
                                  -0.8_dp, 0.0_dp,  0.0_dp], [3,3]))) > 1.0e-14_dp) &
     error stop 'closed-shell AO density derivative is incorrect'
+
+  umat3(:,:,1) = umat
+  epsx(:,1) = [0.1_dp, 0.4_dp, -0.2_dp]
+  gmat = reshape([1.0_dp, 0.2_dp, 0.3_dp, &
+                  0.4_dp, 1.5_dp, 0.6_dp, &
+                  0.7_dp, 0.8_dp, 2.0_dp], [3,3])
+  deri(:,1) = [0.05_dp, -0.07_dp]
+  inner(:,1) = [0.02_dp, 0.09_dp]
+  ztest = [0.5_dp, -0.25_dp]
+  call assemble_tdhf_sigma_derivative(ztest, 1, umat3, epsx, gmat, &
+                                       deri, inner, dsigma, status)
+  if (status /= 0) error stop 'sigma-derivative assembly rejected valid data'
+  if (maxval(abs(dsigma(:,1) - [0.005_dp, 0.535_dp])) > 1.0e-14_dp) &
+    error stop 'sigma-derivative primitive contraction is incorrect'
 
 end program test_tdhf_hessian_response

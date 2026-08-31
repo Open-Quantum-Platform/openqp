@@ -8,6 +8,7 @@ module tdhf_hessian_response_mod
   public :: solve_tdhf_amplitude_response
   public :: solve_tdhf_z_response
   public :: complete_rhf_orbital_response
+  public :: assemble_tdhf_sigma_derivative
 
 contains
 
@@ -62,6 +63,63 @@ contains
     dp_ao = 2.0_dp*(matmul(dmo_occ, transpose(mo(:,1:nocc))) + &
                     matmul(mo(:,1:nocc), transpose(dmo_occ)))
   end subroutine complete_rhf_orbital_response
+
+!###############################################################################
+
+  subroutine assemble_tdhf_sigma_derivative(z, nocc, umat, eps_deriv, gmat, &
+                                             deri_ov, inner_ov, sigma_deriv, status)
+    ! Assemble one differentiated TDHF/TDDFT response-operator action.
+    ! For either the A-B or A+B channel and every nuclear coordinate K,
+    !
+    ! dSigma_ia = dERI_ia + sum_p(U_pi G_pa + G_ip U_pa)
+    !             + W[dP]_ia + (eps_a^K-eps_i^K) Z_ia.
+    !
+    ! The caller supplies channel-specific derivative-ERI, G, and inner
+    ! density-response contractions.  Keeping this contraction independent
+    ! of their integral realization makes every primitive directly testable.
+
+    real(kind=dp), intent(in) :: z(:), umat(:,:,:), eps_deriv(:,:), gmat(:,:)
+    integer, intent(in) :: nocc
+    real(kind=dp), intent(in) :: deri_ov(:,:), inner_ov(:,:)
+    real(kind=dp), intent(out) :: sigma_deriv(:,:)
+    integer, intent(out) :: status
+
+    integer :: a, i, ia, k, ncoord, nexc, nmo, nvir
+
+    nmo = size(gmat,1)
+    ncoord = size(umat,3)
+    nexc = size(z)
+    status = 0
+    sigma_deriv = 0.0_dp
+    if (nmo <= 1 .or. nocc <= 0 .or. nocc >= nmo .or. &
+        size(gmat,2) /= nmo .or. size(umat,1) /= nmo .or. &
+        size(umat,2) /= nmo .or. any(shape(eps_deriv) /= [nmo,ncoord]) .or. &
+        any(shape(deri_ov) /= [nexc,ncoord]) .or. &
+        any(shape(inner_ov) /= [nexc,ncoord]) .or. &
+        any(shape(sigma_deriv) /= [nexc,ncoord])) then
+      status = -1
+      return
+    end if
+
+    nvir = nmo - nocc
+    if (nexc /= nocc*nvir) then
+      status = -2
+      return
+    end if
+
+    ia = 0
+    do a = 1, nvir
+      do i = 1, nocc
+        ia = ia + 1
+        do k = 1, ncoord
+          sigma_deriv(ia,k) = deri_ov(ia,k) + inner_ov(ia,k) &
+            + dot_product(umat(:,i,k), gmat(:,nocc+a)) &
+            + dot_product(gmat(i,:), umat(:,nocc+a,k)) &
+            + (eps_deriv(nocc+a,k)-eps_deriv(i,k))*z(ia)
+        end do
+      end do
+    end do
+  end subroutine assemble_tdhf_sigma_derivative
 
 !###############################################################################
 

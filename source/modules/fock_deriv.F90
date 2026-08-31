@@ -33,7 +33,7 @@ module fock_deriv_mod
   !> grd2 compute-data extension forming the mixed two-density product M (x) P.
   type, extends(grd2_compute_data_t) :: grd2_fockprobe_data_t
     real(kind=dp), pointer :: pmat(:,:) => null()   !< density P (nbf,nbf), full
-    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe  M (nbf,nbf), full (symmetric)
+    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe M (nbf,nbf), full
     ! Cartesian-effective (bfnrm-folded) copies + Cartesian offsets, used under
     ! HARMONIC_ACTIVE so the spherical probe/density contract with Cartesian
     ! derivative ERIs (set by prepare_cart).
@@ -74,6 +74,7 @@ module fock_deriv_mod
   public :: grd2_fockprobe_os_data_t
   public :: fock_deriv_contract
   public :: fock_deriv_matrix
+  public :: fock_deriv_matrix_general
   public :: fock_deriv_contract_os
 
 contains
@@ -84,7 +85,7 @@ contains
 !> @param[in]  infos    system info (converged SCF)
 !> @param[in]  basis    basis set
 !> @param[in]  pmat     density P (nbf,nbf) full, AO basis (alpha density for RHF)
-!> @param[in]  mmat     probe M (nbf,nbf) full, symmetric, AO basis
+!> @param[in]  mmat     probe M (nbf,nbf) full, AO basis
 !> @param[in]  hfscale  HF exchange scale (1.0 for HF; HFscale for hybrids)
 !> @param[out] gx       (3, natom) contraction per nuclear coordinate
   subroutine fock_deriv_contract(infos, basis, pmat, mmat, hfscale, gx)
@@ -123,8 +124,9 @@ contains
 !> @details The validated scalar contraction above is evaluated on the
 !>          orthonormal basis of symmetric AO probe matrices.  A diagonal
 !>          probe has M_uu=1, while an off-diagonal probe has
-!>          M_uv=M_vu=1/2.  Therefore tr(M F^x) is exactly the corresponding
-!>          independent element of the symmetric Fock derivative.  This
+!>          M_uv=M_vu=1/2.  The closed-shell contraction is one half of the
+!>          SCF response-Fock trace, so twice its value is the corresponding
+!>          independent matrix element.  This
 !>          reference implementation favors a direct, auditable relation to
 !>          fock_deriv_contract; a later blocked-quartet implementation may
 !>          replace it without changing the result or the calling convention.
@@ -164,11 +166,54 @@ contains
           probe(nu,mu) = 0.5_dp
         end if
         call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
-        fmat(mu,nu,:,:) = gx
-        fmat(nu,mu,:,:) = gx
+        fmat(mu,nu,:,:) = 2.0_dp*gx
+        fmat(nu,mu,:,:) = 2.0_dp*gx
       end do
     end do
   end subroutine fock_deriv_matrix
+
+!###############################################################################
+
+!> @brief Build F^x[P] for a general, possibly nonsymmetric AO density.
+!>
+!> @details Each ordered AO matrix unit is used as a probe.  Unlike
+!>          fock_deriv_matrix, this routine does not identify transposed
+!>          elements.  It is required for the separate P and P^T transition-
+!>          density contractions in differentiated TDHF response operators.
+!>
+!> @param[in]  infos    system information for the converged SCF state
+!> @param[in]  basis    basis set
+!> @param[in]  pmat     general AO density
+!> @param[in]  hfscale  exact-exchange scale
+!> @param[out] fmat     (nbf,nbf,3,natom) derivative Fock matrices
+  subroutine fock_deriv_matrix_general(infos, basis, pmat, hfscale, fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
+    real(kind=dp), allocatable, target :: probe(:,:)
+    real(kind=dp), allocatable :: gx(:,:)
+    integer :: mu, nu, natom, nbf
+
+    nbf = basis%nbf
+    natom = size(basis%atoms%xyz, 2)
+    if (any(shape(pmat) /= [nbf, nbf])) &
+      error stop 'fock_deriv_matrix_general: density shape does not match the basis'
+    if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
+      error stop 'fock_deriv_matrix_general: output shape does not match the system'
+
+    allocate(probe(nbf,nbf), gx(3,natom))
+    do nu = 1, nbf
+      do mu = 1, nbf
+        probe = 0.0_dp
+        probe(mu,nu) = 1.0_dp
+        call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
+        fmat(mu,nu,:,:) = 2.0_dp*gx
+      end do
+    end do
+  end subroutine fock_deriv_matrix_general
 
 !###############################################################################
 
@@ -215,7 +260,9 @@ contains
 !>     - x_hf/2 ( M_ik P_jl + M_il P_jk + P_ik M_jl + P_il M_jk ).
 !>   The 1/2 with the four symmetric exchange terms reproduces the same total as
 !>   the energy routine's x_hf ( D_ik D_jl + D_il D_jk ) when M = P, so the trace
-!>   identity tr(P . F^x[P]) = (2e gradient) holds exactly.
+!>   identity tr(P . F^x[P]) = (2e gradient) holds exactly.  This bilinear
+!>   expression retains the ordered M and P elements and therefore also
+!>   applies to nonsymmetric transition densities.
   subroutine grd2_fockprobe_get_density(this, basis, id, dab, dabmax)
     class(grd2_fockprobe_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
