@@ -178,6 +178,20 @@ contains
     call unpack_matrix(dpk,d0); call unpack_matrix(ppk(:,1),p0(:,:,1))
     call iatogen(xpy(:,infos%tddft%target_state),wrk,nocc,nocc); call symmetrize_matrix(wrk,nbf); wrk=0.5_dp*wrk
     call orthogonal_transform('t',nbf,c,wrk,x0(:,:,1),tmp); z=0.0_dp
+    if (infos%functional%needGrd) then
+      block
+        use mod_dft_gridint_tdgga_response_driver, only: tddft_gga_response_rows
+        real(dp), allocatable :: direct_rows(:,:)
+        allocate(direct_rows(ncart,ncart))
+        call dft_initialize(infos,basis,grid)
+        call tddft_gga_response_rows(basis,grid,d0,p0(:,:,1),x0(:,:,1), &
+          dground,dxpy,direct_rows,infos)
+        call dftclean(infos)
+        rows=rows+direct_rows
+      end block
+      deallocate(d0,p0,x0,z,dp1,dm1,pp,pm,xp,xm,wrk,tmp,gp,gm,g0p,g0m)
+      return
+    end if
     call dft_initialize(infos,basis,grid)
     do k=1,ncart
       dp1=d0+step*dground(:,:,k); dm1=d0-step*dground(:,:,k)
