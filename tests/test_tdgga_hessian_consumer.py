@@ -120,6 +120,16 @@ end program
 
 
 class TestTDGGAHessianConsumer(unittest.TestCase):
+    def test_production_gga_dispatch_and_restricted_spin_factors(self):
+        driver = (ROOT / "source" / "dftlib" /
+                  "dft_gridint_tdgga_hessian_driver.F90").read_text()
+        assembly = (ROOT / "source" / "modules" /
+                    "tdhf_hessian_xc.F90").read_text()
+        self.assertIn("2.0_fp*density_p(:,i)", driver)
+        self.assertIn("call tddft_gga_fixed_hessian", assembly)
+        self.assertIn("if (infos%functional%needGrd) then", assembly)
+        self.assertIn("+2.0_dp*(exp-2.0_dp*ex0+exm)", assembly)
+
     def test_full_chain_rule_weight_and_owner_motion(self):
         compiler = shutil.which("gfortran-15") or shutil.which("gfortran")
         if compiler is None:

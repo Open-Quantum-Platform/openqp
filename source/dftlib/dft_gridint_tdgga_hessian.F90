@@ -33,14 +33,14 @@ contains
   subroutine gga_fixed_density_quadrature_point(kernel, density_r, density_p, &
       density_v, ao_atom, aov, aog1, aog2, aog3, atom_xyz, point, owner, &
       dummy_atom, part_fun_type, has_surface_shift, surface_shift, &
-      quadrature_scale, hessian, status)
+      finite_weight, hessian, status)
     type(gga_tdxc_kernel_t), intent(in) :: kernel
     real(fp), intent(in) :: density_r(:,:), density_p(:,:), density_v(:,:)
     integer, intent(in) :: ao_atom(:), owner, part_fun_type
     real(fp), intent(in) :: aov(:), aog1(:,:), aog2(:,:), aog3(:,:)
     real(fp), intent(in) :: atom_xyz(:,:), point(3), surface_shift(:,:)
     logical, intent(in) :: dummy_atom(:), has_surface_shift
-    real(fp), intent(in) :: quadrature_scale
+    real(fp), intent(in) :: finite_weight
     real(fp), intent(inout) :: hessian(:,:,:,:)
     integer, intent(out) :: status
 
@@ -97,8 +97,10 @@ contains
       part_fun_type,has_surface_shift,surface_shift,weights,dweights, &
       d2weights,status)
     if (status /= 0) return
-    call gga_weighted_point_hessian(kernel,u,du,d2u,quadrature_scale, &
-      weights(owner),dweights(:,:,owner),d2weights(:,:,:,:,owner),hessian)
+    if (weights(owner) <= sqrt(tiny(1.0_fp))) return
+    call gga_weighted_point_hessian(kernel,u,du,d2u, &
+      finite_weight/weights(owner),weights(owner),dweights(:,:,owner), &
+      d2weights(:,:,:,:,owner),hessian)
 
   contains
 

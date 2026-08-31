@@ -34,6 +34,16 @@ contains
     call iatogen(xpy(:,infos%tddft%target_state),wrk,nocc,nocc)
     call symmetrize_matrix(wrk,nbf); wrk=0.5_dp*wrk
     call orthogonal_transform('t',nbf,c,wrk,x(:,:,1),tmp); z=0.0_dp; hxc=0.0_dp
+    if (infos%functional%needGrd) then
+      block
+        use mod_dft_gridint_tdgga_hessian_driver, only: tddft_gga_fixed_hessian
+        call dft_initialize(infos,basis,grid)
+        call tddft_gga_fixed_hessian(basis,grid,d,p(:,:,1),x(:,:,1),hxc,infos)
+        call dftclean(infos)
+      end block
+      deallocate(d,p,x,z,wrk,tmp,gp,gm,g0p,g0m)
+      return
+    end if
     do k=1,ncart
       cc=mod(k-1,3)+1; aa=(k-1)/3+1
       basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)+step; call basis%init_shell_centers()
@@ -58,8 +68,8 @@ contains
       close(iw)
     end block
     ! dmatd_density_blk receives the alpha density in the restricted path.
-    ! The TDDFT Lagrangian uses the closed-shell total-density contraction,
-    ! hence the remaining alpha/beta degeneracy factor is two.
+    ! The OpenQP transition-density contraction already carries the paired
+    ! occupied-virtual normalization; apply only the remaining spin factor.
     hxc=2.0_dp*(4.0_dp*hhalf-hxc)/3.0_dp
     deallocate(d,p,x,z,wrk,tmp,gp,gm,g0p,g0m,hgrad,hhalf)
   end subroutine build_tdhf_xc_fixed_hessian
@@ -125,7 +135,8 @@ contains
     den=d; call xc_energy(den,ex0)
     den=d+dens_step*x; call xc_energy(den,exp)
     den=d-dens_step*x; call xc_energy(den,exm)
-    q=(ep-em)/(2.0_dp*dens_step)+(exp-2.0_dp*ex0+exm)/(dens_step*dens_step)
+    q=(ep-em)/(2.0_dp*dens_step) &
+      +2.0_dp*(exp-2.0_dp*ex0+exm)/(dens_step*dens_step)
     call dftclean(infos); deallocate(fa,fb,den)
   contains
     subroutine xc_energy(dena,e)
