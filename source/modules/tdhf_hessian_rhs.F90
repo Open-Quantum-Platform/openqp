@@ -134,7 +134,9 @@ contains
     allocate(orbital_m(nexc,ncart),orbital_p(nexc,ncart))
     call orbital_channel_derivative(u0,-1,orbital_m)
     call orbital_channel_derivative(v0,+1,orbital_p)
-    zero_orbital_connection = .true.
+    ! Never suppress the KS orbital/density connection.  The DFT kxc and XC
+    ! response rows require dD even when the antisymmetric part of U vanishes.
+    zero_orbital_connection = infos%control%hamilton < 20
     do k=1,ncart
       if (maxval(abs(umat(:,:,k)-transpose(umat(:,:,k)))) > 1.0e-10_dp) &
         zero_orbital_connection = .false.

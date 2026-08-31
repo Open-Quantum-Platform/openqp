@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GXC = (ROOT / "source" / "dftlib" / "dft_gridint_gxc.F90").read_text().lower()
 RHS = (ROOT / "source" / "modules" / "tdhf_hessian_rhs.F90").read_text().lower()
+TDHESS = (ROOT / "source" / "modules" / "tdhf_hessian.F90").read_text().lower()
 Z_RHS = (ROOT / "source" / "modules" / "tdhf_hessian_z_rhs.F90").read_text().lower()
 TDXC_GRAD = (ROOT / "source" / "dftlib" / "dft_gridint_tdxc_grad.F90").read_text().lower()
 TDHESS_XC = (ROOT / "source" / "modules" / "tdhf_hessian_xc.F90").read_text().lower()
@@ -46,6 +47,11 @@ def test_response_paths_reach_x2_skeleton_and_x3_response_terms():
 def test_kxc_ground_response_crosses_the_one_spin_grid_boundary():
     assert "pvs+0.5_dp*dground(:,:,kk)" in RHS
     assert "dx(:,:,3*kk)=0.5_dp*dground(:,:,kk)" in RHS
+
+
+def test_zero_orbital_connection_shortcut_is_never_applied_to_dft():
+    assert "zero_orbital_connection=infos%control%hamilton<20" in TDHESS
+    assert "zero_orbital_connection = infos%control%hamilton < 20" in RHS
 
 
 def test_gxc_keeps_cross_sigma_and_self_sigma_in_distinct_arrays():

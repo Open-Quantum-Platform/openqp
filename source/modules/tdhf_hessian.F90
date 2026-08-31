@@ -98,7 +98,9 @@ contains
     if(status/=0) call show_message('TDHF derivative Z-vector did not converge.',WITH_ABORT)
     allocate(dprel(nbf,nbf,ncart),dw(nbf,nbf,ncart),dua(nbf,nbf,ncart),dva(nbf,nbf,ncart))
     allocate(umat_ao(nbf,nbf,ncart),deps_ao(nbf,ncart)); umat_ao=umat; deps_ao=deps
-    zero_orbital_connection=.true.
+    ! This historical minimal-basis shortcut is not valid for KS response:
+    ! GAMESS propagates U, orbital-energy, and dD terms through every DFT row.
+    zero_orbital_connection=infos%control%hamilton<20
     do status=1,ncart
       if(maxval(abs(umat(:,:,status)-transpose(umat(:,:,status))))>1.0e-10_dp) &
         zero_orbital_connection=.false.
