@@ -43,6 +43,7 @@ contains
     allocate(dum(nocc,nvir),dvm(nocc,nvir),dzm(nocc,nvir),dtm(nbf,nbf,ncoord), &
              dpm(nbf,nbf,ncoord),dwm(nbf,nbf,ncoord),source=0.0_dp)
     um=reshape(u0,[nocc,nvir]); vm=reshape(v0,[nocc,nvir]); zm=reshape(z0,[nocc,nvir])
+    tm=0.0_dp
     call trans_square(tm,um,um,0.5_dp); call trans_square(tm,vm,vm,0.5_dp)
     do k=1,ncoord
       dum=reshape(du(:,k),[nocc,nvir]); dvm=reshape(dv(:,k),[nocc,nvir])

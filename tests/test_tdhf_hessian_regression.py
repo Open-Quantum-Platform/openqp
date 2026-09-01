@@ -97,7 +97,7 @@ conv=1.0e-10
 [tdhf]
 type=rpa
 multiplicity=1
-nstate=1
+nstate=2
 conv=1.0e-10
 zvconv=1.0e-10
 
