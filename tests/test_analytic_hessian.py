@@ -313,7 +313,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_mrsf_tddft_analytical_hessian_xc_row_remains_fail_closed(self):
+    def test_mrsf_tddft_semilocal_analytical_hessian_is_supported(self):
         config = {
             "input": {"method": "tdhf", "functional": "B3LYP"},
             "scf": {"type": "rohf", "multiplicity": 3},
@@ -321,8 +321,14 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             "hess": {"state": 1},
         }
         status, reason = self.input_checker.analytic_hessian_capability(config)
-        self.assertEqual(status, "unsupported_feature")
-        self.assertIn("open-shell XC Hessian row", reason)
+        self.assertEqual(status, "supported", reason)
+        self.assertIn("MRSF-TDDFT", reason)
+
+        for functional in ("M06-L", "CAM-B3LYP"):
+            config["input"]["functional"] = functional
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            self.assertEqual(status, "unsupported_feature")
+            self.assertIn("remain fail-closed", reason)
 
     def test_mrsf_native_ts_analytical_initial_hessian_is_supported(self):
         config = {

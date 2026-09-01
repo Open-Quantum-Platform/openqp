@@ -51,8 +51,11 @@ contains
     use tdhf_mrsf_hessian_fixed_density_mod, only: &
       build_mrsf_fixed_density_hessian
     use tdhf_mrsf_hessian_rows_mod, only: build_tdhf_mrsf_response_rows
+    use mod_dft_gridint_mrsf_xc_hessian, only: &
+      mrsf_tddft_xc_hessian_rows
     use tdhf_mrsf_z_vector_mod, only: apply_z_operator
     use parallel, only: par_env_t
+    use mod_dft, only: dft_initialize,dftclean
     use messages, only: show_message,WITH_ABORT
     use io_constants, only: iw
 !$  use omp_lib, only: omp_get_max_threads,omp_set_num_threads
@@ -76,10 +79,12 @@ contains
       dreference_fock(:,:,:,:),drelaxed_spin(:,:,:,:),hfixed(:,:), &
       hxc(:,:),xc_rows(:,:),rows(:,:),rows_one(:,:),rows_two(:,:), &
       rows_xc(:,:),htotal(:,:)
-    real(kind=dp) :: amplitude_residual,z_residual,row_asymmetry,w_error
+    real(kind=dp) :: amplitude_residual,z_residual,row_asymmetry,w_error, &
+      orbital_exchange_scale
     integer :: nbf,nbf2,natom,ncoord,nocca,noccb,lzdim,status,local_status
     integer :: omp_saved_threads
     character(len=160) :: error_message
+    logical :: is_dft
 
     omp_saved_threads=1
 !$  omp_saved_threads=omp_get_max_threads()
@@ -91,6 +96,9 @@ contains
     ncoord=3*natom
     nocca=infos%mol_prop%nelec_a
     noccb=infos%mol_prop%nelec_b
+    is_dft=infos%control%hamilton==20
+    orbital_exchange_scale=1.0_dp
+    if(is_dft) orbital_exchange_scale=infos%dft%hfscale
     lzdim=noccb*(nocca-noccb+nbf-nocca)+(nocca-noccb)*(nbf-nocca)
     if(.not.mrsf_hessian_is_applicable(infos%control%scftype, &
        infos%mol_prop%mult,nocca,noccb,infos%tddft%mult, &
@@ -101,10 +109,6 @@ contains
        logical(infos%dft%cam_flag,kind=kind(.false.)),int(pe%size))) then
       call show_message('Analytic MRSF Hessian requires a serial two-SOMO '// &
         'triplet ROHF reference and a singlet or triplet MRSF target.',WITH_ABORT)
-    end if
-    if(infos%control%hamilton==20) then
-      call show_message('The native MRSF-TDDFT XC Hessian row is not yet '// &
-        'verified; use MRSF-TDHF or a numerical Hessian.',WITH_ABORT)
     end if
     call data_has_tags(infos%dat,required,'tdhf_mrsf_hessian_mod', &
       'tdhf_mrsf_hessian',WITH_ABORT)
@@ -130,6 +134,17 @@ contains
        any(.not.ieee_is_finite(response%dax))) call show_message( &
       'MRSF amplitude response contains a non-finite or unconverged result.', &
       WITH_ABORT)
+    allocate(reference_spin(nbf,nbf,2),reference_fock(nbf,nbf,2), &
+      dreference_spin(nbf,nbf,2,ncoord), &
+      dreference_fock(nbf,nbf,2,ncoord),source=0.0_dp)
+    call unpack_matrix(dm_a,reference_spin(:,:,1))
+    call unpack_matrix(dm_b,reference_spin(:,:,2))
+    reference_fock(:,:,1)=response%fock_a
+    reference_fock(:,:,2)=response%fock_b
+    dreference_spin(:,:,1,:)=response%dpa
+    dreference_spin(:,:,2,:)=response%dpb
+    dreference_fock(:,:,1,:)=response%dfock_a
+    dreference_fock(:,:,2,:)=response%dfock_b
     basis=>infos%basis
     basis%atoms=>infos%atoms
     call int2_driver%init(basis,infos)
@@ -137,12 +152,13 @@ contains
     call build_mrsf_hf_z_intermediates(infos,int2_driver,response%mo_a, &
       response%mo_b,response%dmo_common,response%dmo_common,response%fock_a, &
       response%fock_b,response%dfock_a,response%dfock_b,response%x, &
-      response%dx,z,intermediate,status)
+      response%dx,z,reference_spin,dreference_spin,intermediate,status)
     if(status/=0) call show_message( &
       'MRSF Z-response intermediates could not be built.',WITH_ABORT)
 
     allocate(drhs(lzdim,ncoord),operator_derivative_z(lzdim,ncoord), &
       dz(lzdim,ncoord),source=0.0_dp)
+    if(is_dft) call dft_initialize(infos,basis,unused_grid)
     call solve_mrsf_z_response_from_mo_derivatives(orbital_hessian_action, &
       infos%tddft%mult,logical(infos%tddft%umrsf,kind=kind(.false.)), &
       .false.,nocca,noccb,intermediate%mo_energy,intermediate%fa, &
@@ -161,6 +177,7 @@ contains
       tol=max(1.0e-10_dp,infos%tddft%zvconv), &
       maxit=max(200,int(infos%control%maxit_zv)), &
       restart=lzdim)
+    if(is_dft) call dftclean(infos)
     if(status/=0) call show_message( &
       'MRSF differentiated Z-vector did not converge.',WITH_ABORT)
     if(.not.ieee_is_finite(z_residual) .or. z_residual>1.0e-6_dp .or. &
@@ -171,12 +188,16 @@ contains
     allocate(drelaxed_a(nbf,nbf,ncoord),drelaxed_b(nbf,nbf,ncoord), &
       source=0.0_dp)
     call build_mrsf_hf_w_intermediates(infos,response%mo_a,response%mo_b, &
-      response%dmo_common,response%dmo_common,intermediate%tij, &
+      response%dmo_common,response%dmo_common,reference_spin, &
+      dreference_spin,intermediate%tij, &
       intermediate%tab, &
       intermediate%dtij,intermediate%dtab,z,dz,intermediate,drelaxed_a, &
       drelaxed_b,status)
-    if(status/=0) call show_message( &
-      'MRSF relaxed-density response could not be built.',WITH_ABORT)
+    if(status/=0) then
+      write(error_message,'(A,I0,A)') &
+        'MRSF relaxed-density response failed with status ',status,'.'
+      call show_message(trim(error_message),WITH_ABORT)
+    end if
     allocate(dw(nbf,nbf,ncoord),w_baseline(nbf,nbf),w_stored(nbf,nbf), &
       source=0.0_dp)
     call build_mrsf_w_ao(response%mo_a,intermediate%mo_energy, &
@@ -202,21 +223,10 @@ contains
       infos%tddft%mult,.false.,.false.,dw,status)
     if(status/=0) call show_message('MRSF W response failed.',WITH_ABORT)
 
-    allocate(reference_spin(nbf,nbf,2),reference_fock(nbf,nbf,2), &
-      relaxed_spin(nbf,nbf,2), &
-      dreference_spin(nbf,nbf,2,ncoord), &
-      dreference_fock(nbf,nbf,2,ncoord), &
+    allocate(relaxed_spin(nbf,nbf,2), &
       drelaxed_spin(nbf,nbf,2,ncoord),source=0.0_dp)
-    call unpack_matrix(dm_a,reference_spin(:,:,1))
-    call unpack_matrix(dm_b,reference_spin(:,:,2))
-    reference_fock(:,:,1)=response%fock_a
-    reference_fock(:,:,2)=response%fock_b
     call unpack_matrix(td_p(:,1),relaxed_spin(:,:,1))
     call unpack_matrix(td_p(:,2),relaxed_spin(:,:,2))
-    dreference_spin(:,:,1,:)=response%dpa
-    dreference_spin(:,:,2,:)=response%dpb
-    dreference_fock(:,:,1,:)=response%dfock_a
-    dreference_fock(:,:,2,:)=response%dfock_b
     drelaxed_spin(:,:,1,:)=drelaxed_a
     drelaxed_spin(:,:,2,:)=drelaxed_b
     allocate(hfixed(ncoord,ncoord),hxc(ncoord,ncoord),xc_rows(ncoord,ncoord), &
@@ -225,6 +235,19 @@ contains
     call build_mrsf_fixed_density_hessian(infos,hfixed,status)
     if(status/=0) call show_message('MRSF fixed-density Hessian failed.', &
       WITH_ABORT)
+    if(infos%control%hamilton==20) then
+      block
+        use mod_dft, only: dft_initialize,dftclean
+        use mod_dft_molgrid, only: dft_grid_t
+        type(dft_grid_t) :: xc_grid
+        call dft_initialize(infos,basis,xc_grid)
+        call mrsf_tddft_xc_hessian_rows(basis,xc_grid,reference_spin, &
+          relaxed_spin,dreference_spin,drelaxed_spin,hxc,xc_rows,infos,status)
+        call dftclean(infos)
+      end block
+      if(status/=0) call show_message( &
+        'MRSF-TDDFT semilocal XC Hessian integration failed.',WITH_ABORT)
+    end if
     call build_tdhf_mrsf_response_rows(infos,reference_spin,reference_fock, &
       relaxed_spin,seven,dreference_spin,dreference_fock,drelaxed_spin,dw, &
       intermediate%dseven, &
@@ -241,7 +264,7 @@ contains
     call project_mrsf_rigid_translations(htotal,natom,status)
     if(status/=0) call show_message('MRSF Hessian projection failed.',WITH_ABORT)
     call infos%dat%alloc_or_die(OQP_tdhf_hessian,(/ncoord,ncoord/),hstore, &
-      description='Native OpenQP analytic spin-adapted MRSF-TDHF Hessian')
+      description='Native OpenQP analytic spin-adapted MRSF Hessian')
     hstore=htotal
     open(unit=iw,file=infos%log_filename,position='append')
     write(iw,'(/,A,1P,E12.4)') &
@@ -275,6 +298,12 @@ contains
     write(iw,'(A,1P,E12.4)') &
       'MRSF Hessian maximum two-electron response-row element: ', &
       maxval(abs(rows_two))
+    if(infos%control%hamilton==20) then
+      write(iw,'(A,1P,E12.4)') &
+        'MRSF Hessian maximum fixed XC element: ',maxval(abs(hxc))
+      write(iw,'(A,1P,E12.4)') &
+        'MRSF Hessian maximum XC response-row element: ',maxval(abs(rows_xc))
+    end if
     write(iw,'(A,1P,E12.4)') &
       'MRSF Hessian one-electron response-row asymmetry: ', &
       maxval(abs(rows_one-transpose(rows_one)))
@@ -295,7 +324,8 @@ contains
       integer, intent(out) :: callback_status
       call apply_z_operator(vector,result,infos,basis,unused_grid,int2_driver, &
         nocca,noccb,nbf,response%mo_a,response%mo_b, &
-        intermediate%mo_energy,intermediate%fa,intermediate%fb,1.0_dp,.false.)
+        intermediate%mo_energy,intermediate%fa,intermediate%fb, &
+        orbital_exchange_scale,is_dft)
       callback_status=0
       if(any(.not.ieee_is_finite(result))) callback_status=-1
     end subroutine orbital_hessian_action

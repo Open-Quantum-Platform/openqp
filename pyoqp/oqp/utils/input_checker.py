@@ -6716,12 +6716,16 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     if method == "tdhf":
         if td_type == "mrsf":
-            if functional:
+            verified_mrsf_semilocal = {
+                "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5",
+                "bhhlyp", "pbe0",
+            }
+            if functional and functional not in verified_mrsf_semilocal:
                 return (
                     "unsupported_feature",
-                    "The native spin-adapted MRSF analytic Hessian is currently "
-                    "enabled for MRSF-TDHF; the open-shell XC Hessian row remains "
-                    "fail-closed for MRSF-TDDFT.",
+                    "MRSF-TDDFT analytic Hessians currently support the "
+                    "spin-polarized LDA/GGA and global-hybrid paths; meta-GGA "
+                    "and range-separated/CAM functionals remain fail-closed.",
                 )
             if scf_type != "rohf" or scf_multiplicity != 3:
                 return (
@@ -6738,9 +6742,10 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "unsupported_feature",
                     "MRSF analytic Hessians require a positive excited-state index.",
                 )
+            method_name = "MRSF-TDDFT" if functional else "MRSF-TDHF"
             return (
                 "supported",
-                "Native OpenQP spin-adapted two-SOMO MRSF-TDHF analytic Hessian dispatch is enabled.",
+                f"Native OpenQP spin-adapted two-SOMO {method_name} analytic Hessian dispatch is enabled.",
             )
         if td_type == "umrsf":
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."

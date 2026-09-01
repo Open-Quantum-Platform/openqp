@@ -13,10 +13,52 @@ module mod_dft_gridint_mrsf_xc_fock_deriv_point
 
   public :: lda_spin_fock_point_derivative
   public :: gga_spin_fock_point_derivative
+  public :: spin_fock_point_derivative
   public :: moving_ao_pair_derivative
   public :: moving_density_derivative
 
 contains
+
+!> Differentiate a spin-resolved AO operator with independently supplied
+!> scalar-pair and gradient-pair coefficients.  This is the general form
+!> needed for the derivative of the spin-polarized XC-kernel action.
+  pure subroutine spin_fock_point_derivative(quadrature_scale,weight, &
+      dweight,v_r,coefficient,dv_r,dcoefficient,pair,grad_pair,dpair, &
+      dgrad_pair,derivative,status)
+    real(fp), intent(in) :: quadrature_scale,weight,dweight(:)
+    real(fp), intent(in) :: v_r(2),coefficient(3,2),dv_r(:,:), &
+      dcoefficient(:,:,:)
+    real(fp), intent(in) :: pair,grad_pair(3),dpair(:),dgrad_pair(:,:)
+    real(fp), intent(out) :: derivative(:,:)
+    integer, intent(out) :: status
+
+    real(fp) :: integrand,dintegrand
+    integer :: coordinate,ncoord,spin
+
+    ncoord=size(dweight)
+    status=0
+    derivative=0.0_fp
+    if(ncoord<=0 .or. any(shape(dv_r)/=[2,ncoord]) .or. &
+       any(shape(dcoefficient)/=[3,2,ncoord]) .or. &
+       size(dpair)/=ncoord .or. any(shape(dgrad_pair)/=[3,ncoord]) .or. &
+       any(shape(derivative)/=[2,ncoord])) then
+      status=-1
+      return
+    end if
+    do coordinate=1,ncoord
+      do spin=1,2
+        integrand=v_r(spin)*pair+dot_product(coefficient(:,spin),grad_pair)
+        dintegrand=dv_r(spin,coordinate)*pair+ &
+          v_r(spin)*dpair(coordinate)+ &
+          dot_product(dcoefficient(:,spin,coordinate),grad_pair)+ &
+          dot_product(coefficient(:,spin),dgrad_pair(:,coordinate))
+        derivative(spin,coordinate)=quadrature_scale*( &
+          dweight(coordinate)*integrand+weight*dintegrand)
+      end do
+    end do
+  end subroutine spin_fock_point_derivative
+
+!-------------------------------------------------------------------------------
 
 !> Differentiate one spin-resolved LDA AO-matrix integrand.
 !>

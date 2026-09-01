@@ -1314,7 +1314,23 @@ def write_config(config):
         input_file += f'[{section}]\n'
         input_dict[section] = {}
         for key, value in config[section].items():
-            if not value:
+            # Numerical-derivative workers must inherit the *effective*
+            # parent configuration exactly.  Dropping every false-y scalar
+            # changes explicit False/0 values back to the child parser's
+            # defaults.  In particular, an unpruned DFT grid is represented
+            # internally by pruned=""; omitting it silently selected SG2 for
+            # every displaced gradient while the parent Hessian used the
+            # requested unpruned rad_npts x ang_npts grid.
+            if value is None:
+                continue
+
+            if isinstance(value, str) and value == '':
+                if section == 'dftgrid' and key == 'pruned':
+                    value = 'none'
+                else:
+                    continue
+
+            if isinstance(value, (list, tuple)) and len(value) == 0:
                 continue
 
             if isinstance(value, list):

@@ -1,0 +1,41 @@
+[input]
+system=
+  O   0.000000000   0.000000000  -0.041061554
+  H  -0.533194329   0.533194329  -0.614469223
+  H   0.533194329  -0.533194329  -0.614469223
+charge=0
+method=tdhf
+basis=6-31g
+runtype=hess
+functional=bhhlyp
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rohf
+maxit=80
+multiplicity=3
+conv=1.0e-10
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+grid_ao_pruned=False
+
+[tdhf]
+type=mrsf
+maxit=80
+multiplicity=1
+conv=1.0e-12
+nstate=6
+zvconv=1.0e-12
+resp_cutoff=5.0e-11
+zv_warmstart=off
+
+[hess]
+type=analytical
+state=3
+clean=True

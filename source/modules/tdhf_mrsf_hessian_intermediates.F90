@@ -35,7 +35,7 @@ contains
 
   subroutine build_mrsf_hf_z_intermediates(infos,int2_driver,mo_a,mo_b, &
       dmo_a,dmo_b,fock_a_ao,fock_b_ao,dfock_a_ao,dfock_b_ao,x,dx,z, &
-      data,status)
+      reference_spin,dreference_spin,data,status)
     ! Build the baseline and first nuclear derivatives entering the MRSF
     ! orbital-adjoint equation.  This is Hiroya Nakata's TDHF/TDDFT Hessian
     ! differentiation strategy applied to the physical seven-density,
@@ -69,6 +69,8 @@ contains
     real(kind=dp), intent(in) :: fock_a_ao(:,:),fock_b_ao(:,:)
     real(kind=dp), intent(in) :: dfock_a_ao(:,:,:),dfock_b_ao(:,:,:)
     real(kind=dp), intent(in) :: x(:),dx(:,:),z(:)
+    real(kind=dp), intent(in) :: reference_spin(:,:,:)
+    real(kind=dp), intent(in) :: dreference_spin(:,:,:,:)
     type(mrsf_hessian_z_intermediates_t), intent(inout) :: data
     integer, intent(out) :: status
 
@@ -100,10 +102,6 @@ contains
     packed=nocca*nvirb
     lzdim=noccb*(nocca-noccb+nvira)+(nocca-noccb)*nvira
     status=0
-    if(infos%control%hamilton==20) then
-      status=-2
-      return
-    end if
     if(nbf<=0 .or. ncoord<=0 .or. nocca-noccb/=2 .or. &
        size(x)/=packed .or. any(shape(dx)/=[packed,ncoord]) .or. &
        size(z)/=lzdim .or. any(shape(mo_a)/=[nbf,nbf]) .or. &
@@ -111,7 +109,9 @@ contains
        any(shape(dmo_a)/=[nbf,nbf,ncoord]) .or. &
        any(shape(dmo_b)/=[nbf,nbf,ncoord]) .or. &
        any(shape(dfock_a_ao)/=[nbf,nbf,ncoord]) .or. &
-       any(shape(dfock_b_ao)/=[nbf,nbf,ncoord])) then
+       any(shape(dfock_b_ao)/=[nbf,nbf,ncoord]) .or. &
+       any(shape(reference_spin)/=[nbf,nbf,2]) .or. &
+       any(shape(dreference_spin)/=[nbf,nbf,2,ncoord])) then
       status=-1
       return
     end if
@@ -192,7 +192,8 @@ contains
     allocate(f_ta(nbf,nbf),f_tb(nbf,nbf),df_ta(nbf,nbf,ncoord), &
       df_tb(nbf,nbf,ncoord),source=0.0_dp)
     call build_hf_response_fock(infos,ta,tb,dta,dtb,f_ta,f_tb,df_ta, &
-      df_tb,local_status)
+      df_tb,reference_spin(:,:,1),reference_spin(:,:,2), &
+      dreference_spin(:,:,1,:),dreference_spin(:,:,2,:),local_status)
     if(local_status/=0) then
       status=-6
       call data%clean()
@@ -213,7 +214,8 @@ contains
     ta=matmul(mo_a,matmul(ava,transpose(mo_a)))
     tb=matmul(mo_b,matmul(avb,transpose(mo_b)))
     call build_hf_response_fock(infos,ta,tb,dava,davb,f_za,f_zb,df_za, &
-      df_zb,local_status)
+      df_zb,reference_spin(:,:,1),reference_spin(:,:,2), &
+      dreference_spin(:,:,1,:),dreference_spin(:,:,2,:),local_status)
     if(local_status/=0) then
       status=-7
       call data%clean()
@@ -357,7 +359,8 @@ contains
 !###############################################################################
 
   subroutine build_mrsf_hf_w_intermediates(infos,mo_a,mo_b,dmo_a,dmo_b, &
-      tij,tab,dtij,dtab,z,dz,data,drelaxed_a,drelaxed_b,status)
+      reference_spin,dreference_spin,tij,tab,dtij,dtab,z,dz,data, &
+      drelaxed_a,drelaxed_b,status)
     use types, only: information
     use oqp_tagarray_driver, only: tagarray_get_data,data_has_tags,OQP_td_p, &
       OQP_td_mrsf_ppija,OQP_td_mrsf_ppijb
@@ -365,9 +368,12 @@ contains
     use tdhf_mrsf_hessian_relaxed_density_mod, only: &
       build_mrsf_relaxed_density_derivatives
     use messages, only: WITH_ABORT
+    use io_constants, only: iw
 
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: mo_a(:,:),mo_b(:,:),dmo_a(:,:,:),dmo_b(:,:,:)
+    real(kind=dp), intent(in) :: reference_spin(:,:,:)
+    real(kind=dp), intent(in) :: dreference_spin(:,:,:,:)
     real(kind=dp), intent(in) :: tij(:,:),tab(:,:),dtij(:,:,:),dtab(:,:,:)
     real(kind=dp), intent(in) :: z(:),dz(:,:)
     type(mrsf_hessian_z_intermediates_t), intent(inout) :: data
@@ -387,12 +393,10 @@ contains
     noccb=infos%mol_prop%nelec_b
     ncoord=size(dmo_a,3)
     status=0
-    if(infos%control%hamilton==20) then
-      status=-2
-      return
-    end if
     if(any(shape(drelaxed_a)/=[nbf,nbf,ncoord]) .or. &
-       any(shape(drelaxed_b)/=[nbf,nbf,ncoord])) then
+       any(shape(drelaxed_b)/=[nbf,nbf,ncoord]) .or. &
+       any(shape(reference_spin)/=[nbf,nbf,2]) .or. &
+       any(shape(dreference_spin)/=[nbf,nbf,2,ncoord])) then
       status=-1
       return
     end if
@@ -420,8 +424,11 @@ contains
     dpa_fock=drelaxed_a
     dpb_fock=drelaxed_b
     call build_hf_response_fock(infos,pa,pb,dpa_fock,dpb_fock,fpa,fpb, &
-      dfpa,dfpb,local_status)
+      dfpa,dfpb,reference_spin(:,:,1),reference_spin(:,:,2), &
+      dreference_spin(:,:,1,:),dreference_spin(:,:,2,:),local_status)
     if(local_status/=0) then
+      write(iw,'(A,I0,A)') 'MRSF response-Fock construction failed with '// &
+        'status ',local_status,'.'
       status=-4
       deallocate(pa,pb,fpa,fpb,dfpa,dfpb,dpa_fock,dpb_fock,full_a,full_b, &
         dfull_a,dfull_b)
@@ -437,6 +444,9 @@ contains
     baseline_error_a=maxval(abs(data%ppija-stored_ppija))
     baseline_error_b=maxval(abs(data%ppijb-stored_ppijb))
     if(max(baseline_error_a,baseline_error_b)>1.0e-8_dp) then
+      write(iw,'(A,1P,E15.7,A,E15.7,A)') &
+        'MRSF ppij reconstruction errors: alpha=',baseline_error_a, &
+        ', beta=',baseline_error_b,'.'
       status=-5
       deallocate(pa,pb,fpa,fpb,dfpa,dfpb,dpa_fock,dpb_fock,full_a,full_b, &
         dfull_a,dfull_b)
@@ -453,31 +463,45 @@ contains
 !###############################################################################
 
   subroutine build_hf_response_fock(infos,pa,pb,dpa,dpb,fa,fb,dfa,dfb, &
-      status)
+      reference_a,reference_b,dreference_a,dreference_b,status)
     use types, only: information
     use basis_tools, only: basis_set
     use int2_compute, only: int2_compute_t
     use tdhf_lib, only: int2_tdgrd_data_t
     use fock_deriv_mod, only: fock_deriv_matrix_os
+    use mod_dft, only: dft_initialize,dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    use mod_dft_gridint_mrsf_xc_kernel_derivative, only: &
+      mrsf_xc_kernel_fock_total_derivative
 
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: pa(:,:),pb(:,:),dpa(:,:,:),dpb(:,:,:)
     real(kind=dp), intent(out) :: fa(:,:),fb(:,:),dfa(:,:,:),dfb(:,:,:)
+    real(kind=dp), intent(in) :: reference_a(:,:),reference_b(:,:)
+    real(kind=dp), intent(in) :: dreference_a(:,:,:),dreference_b(:,:,:)
     integer, intent(out) :: status
 
     type(basis_set), pointer :: basis
     type(int2_compute_t) :: int2_driver
     type(int2_tdgrd_data_t) :: int2_data
+    type(dft_grid_t) :: grid
     real(kind=dp), allocatable, target :: density(:,:,:)
     real(kind=dp), allocatable :: explicit_a(:,:,:,:),explicit_b(:,:,:,:), &
-      ptot(:,:),sym_a(:,:),sym_b(:,:)
+      ptot(:,:),sym_a(:,:),sym_b(:,:),probe_a(:,:,:),probe_b(:,:,:), &
+      dprobe_a(:,:,:),dprobe_b(:,:,:),kernel_a(:,:,:),kernel_b(:,:,:), &
+      dkernel_a(:,:,:),dkernel_b(:,:,:),reference_a_work(:,:), &
+      reference_b_work(:,:)
+    real(kind=dp) :: exchange_scale
     integer :: atom,cart,coordinate,natom,nbf,ncoord
+    logical :: dft
 
     basis=>infos%basis
     basis%atoms=>infos%atoms
     nbf=basis%nbf
     natom=size(infos%atoms%xyz,2)
     ncoord=3*natom
+    dft=infos%control%hamilton==20
     status=0
     fa=0.0_dp
     fb=0.0_dp
@@ -485,19 +509,25 @@ contains
     dfb=0.0_dp
     if(any(shape(pa)/=[nbf,nbf]) .or. any(shape(pb)/=[nbf,nbf]) .or. &
        any(shape(dpa)/=[nbf,nbf,ncoord]) .or. &
-       any(shape(dpb)/=[nbf,nbf,ncoord])) then
+       any(shape(dpb)/=[nbf,nbf,ncoord]) .or. &
+       any(shape(reference_a)/=[nbf,nbf]) .or. &
+       any(shape(reference_b)/=[nbf,nbf]) .or. &
+       any(shape(dreference_a)/=[nbf,nbf,ncoord]) .or. &
+       any(shape(dreference_b)/=[nbf,nbf,ncoord])) then
       status=-1
       return
     end if
     allocate(density(nbf,nbf,2), &
       explicit_a(nbf,nbf,3,natom),explicit_b(nbf,nbf,3,natom), &
       ptot(nbf,nbf),sym_a(nbf,nbf),sym_b(nbf,nbf),source=0.0_dp)
+    exchange_scale=1.0_dp
+    if(dft) exchange_scale=infos%dft%hfscale
     call int2_driver%init(basis,infos)
     call int2_driver%set_screening()
     density(:,:,1)=pa
     density(:,:,2)=pb
     int2_data=int2_tdgrd_data_t(d2=density,int_apb=.true., &
-      int_amb=.false.,tamm_dancoff=.false.,scale_exchange=1.0_dp)
+      int_amb=.false.,tamm_dancoff=.false.,scale_exchange=exchange_scale)
     call int2_driver%run(int2_data)
     fa=int2_data%apb(:,:,1,1)
     fb=int2_data%apb(:,:,2,1)
@@ -505,8 +535,8 @@ contains
     sym_a=0.5_dp*(pa+transpose(pa))
     sym_b=0.5_dp*(pb+transpose(pb))
     ptot=sym_a+sym_b
-    call fock_deriv_matrix_os(infos,basis,ptot,sym_a,1.0_dp,explicit_a)
-    call fock_deriv_matrix_os(infos,basis,ptot,sym_b,1.0_dp,explicit_b)
+    call fock_deriv_matrix_os(infos,basis,ptot,sym_a,exchange_scale,explicit_a)
+    call fock_deriv_matrix_os(infos,basis,ptot,sym_b,exchange_scale,explicit_b)
     coordinate=0
     do atom=1,natom
       do cart=1,3
@@ -514,7 +544,8 @@ contains
         density(:,:,1)=dpa(:,:,coordinate)
         density(:,:,2)=dpb(:,:,coordinate)
         int2_data=int2_tdgrd_data_t(d2=density,int_apb=.true., &
-          int_amb=.false.,tamm_dancoff=.false.,scale_exchange=1.0_dp)
+          int_amb=.false.,tamm_dancoff=.false., &
+          scale_exchange=exchange_scale)
         call int2_driver%run(int2_data)
         ! int2_tdgrd_data_t returns the spin A+B response to D+D^T.  Its
         ! explicit nuclear derivative must follow the same convention; the
@@ -526,6 +557,45 @@ contains
         call int2_data%clean()
       end do
     end do
+    if(dft) then
+      allocate(probe_a(nbf,nbf,1),probe_b(nbf,nbf,1), &
+        dprobe_a(nbf,nbf,ncoord),dprobe_b(nbf,nbf,ncoord), &
+        kernel_a(nbf,nbf,1),kernel_b(nbf,nbf,1), &
+        dkernel_a(nbf,nbf,ncoord),dkernel_b(nbf,nbf,ncoord), &
+        reference_a_work(nbf,nbf),reference_b_work(nbf,nbf),source=0.0_dp)
+      probe_a(:,:,1)=2.0_dp*sym_a
+      probe_b(:,:,1)=2.0_dp*sym_b
+      do coordinate=1,ncoord
+        dprobe_a(:,:,coordinate)=dpa(:,:,coordinate)+ &
+          transpose(dpa(:,:,coordinate))
+        dprobe_b(:,:,coordinate)=dpb(:,:,coordinate)+ &
+          transpose(dpb(:,:,coordinate))
+      end do
+      reference_a_work=reference_a
+      reference_b_work=reference_b
+      call dft_initialize(infos,basis,grid)
+      call utddft_fxc(basis=basis,molGrid=grid,isVecs=.false., &
+        wfa=reference_a_work,wfb=reference_b_work,fxa=kernel_a,fxb=kernel_b, &
+        dxa=probe_a,dxb=probe_b,nMtx=1,threshold=1.0e-15_dp,infos=infos)
+      call mrsf_xc_kernel_fock_total_derivative(basis,grid,reference_a, &
+        reference_b,probe_a(:,:,1),probe_b(:,:,1),dreference_a, &
+        dreference_b,dprobe_a, &
+        dprobe_b,dkernel_a,dkernel_b,infos,status,threshold=1.0e-15_dp)
+      call dftclean(infos)
+      if(status/=0) then
+        call int2_driver%clean()
+        deallocate(density,explicit_a,explicit_b,ptot,sym_a,sym_b,probe_a, &
+          probe_b,dprobe_a,dprobe_b,kernel_a,kernel_b,dkernel_a,dkernel_b, &
+          reference_a_work,reference_b_work)
+        return
+      end if
+      fa=fa+kernel_a(:,:,1)
+      fb=fb+kernel_b(:,:,1)
+      dfa=dfa+dkernel_a
+      dfb=dfb+dkernel_b
+      deallocate(probe_a,probe_b,dprobe_a,dprobe_b,kernel_a,kernel_b, &
+        dkernel_a,dkernel_b,reference_a_work,reference_b_work)
+    end if
     call int2_driver%clean()
     deallocate(density,explicit_a,explicit_b,ptot,sym_a,sym_b)
   end subroutine build_hf_response_fock
