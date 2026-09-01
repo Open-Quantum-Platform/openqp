@@ -52,3 +52,18 @@ def test_fortran_path_is_spin_adapted_and_contains_no_geometry_fd():
     lowered = text.lower()
     for token in forbidden:
         assert token not in lowered
+
+
+def test_mo_difference_density_derivative_matches_small_step():
+    rng = np.random.default_rng(184111)
+    x = rng.normal(size=(5, 7))
+    dx = rng.normal(size=(5, 7))
+    dtij = -(dx @ x.T + x @ dx.T)
+    dtab = dx.T @ x + x.T @ dx
+    step = 2.0e-6
+    tij_plus = -(x + step * dx) @ (x + step * dx).T
+    tij_minus = -(x - step * dx) @ (x - step * dx).T
+    tab_plus = (x + step * dx).T @ (x + step * dx)
+    tab_minus = (x - step * dx).T @ (x - step * dx)
+    np.testing.assert_allclose(dtij, (tij_plus - tij_minus) / (2 * step), atol=2e-8)
+    np.testing.assert_allclose(dtab, (tab_plus - tab_minus) / (2 * step), atol=2e-8)

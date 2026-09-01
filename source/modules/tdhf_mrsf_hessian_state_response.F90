@@ -21,7 +21,8 @@ contains
 
   subroutine solve_mrsf_first_nuclear_response(infos,int2_driver,mo_a,mo_b, &
       dmo_a,dmo_b,fock_a_ao,fock_b_ao,hcore_derivative,omega,x_packed,dax, &
-      dx,domega,residual_max,status,dvxc_a,dvxc_b)
+      dx,domega,residual_max,status,dvxc_a,dvxc_b,dpa_out,dpb_out, &
+      dfock_a_out,dfock_b_out)
     ! End-to-end first nuclear response of an isolated spin-adapted MRSF-TDA
     ! state.  ROHF/ROKS orbital response, total spin-Fock response, the seven
     ! density derivative action, and the projected amplitude equation meet at
@@ -35,6 +36,8 @@ contains
     real(kind=dp), intent(out) :: dax(:,:),dx(:,:),domega(:),residual_max
     integer, intent(out) :: status
     real(kind=dp), intent(in), optional :: dvxc_a(:,:,:),dvxc_b(:,:,:)
+    real(kind=dp), intent(out), optional :: dpa_out(:,:,:),dpb_out(:,:,:), &
+      dfock_a_out(:,:,:),dfock_b_out(:,:,:)
 
     real(kind=dp), allocatable :: pa(:,:),pb(:,:),dpa(:,:,:),dpb(:,:,:), &
       dfock_a(:,:,:),dfock_b(:,:,:),fa_mo(:,:),fb_mo(:,:)
@@ -57,6 +60,30 @@ contains
        any(shape(dx)/=[packed,ncoord]) .or. size(domega)/=ncoord) then
       status=-1
       return
+    end if
+    if(present(dpa_out)) then
+      if(any(shape(dpa_out)/=[nbf,nbf,ncoord])) then
+        status=-1
+        return
+      end if
+    end if
+    if(present(dpb_out)) then
+      if(any(shape(dpb_out)/=[nbf,nbf,ncoord])) then
+        status=-1
+        return
+      end if
+    end if
+    if(present(dfock_a_out)) then
+      if(any(shape(dfock_a_out)/=[nbf,nbf,ncoord])) then
+        status=-1
+        return
+      end if
+    end if
+    if(present(dfock_b_out)) then
+      if(any(shape(dfock_b_out)/=[nbf,nbf,ncoord])) then
+        status=-1
+        return
+      end if
     end if
     if(dft .and. (.not.present(dvxc_a) .or. .not.present(dvxc_b))) then
       status=-2
@@ -88,6 +115,12 @@ contains
       infos,int2_driver,mo_a,mo_b,fa_mo,fb_mo,omega,x_packed,dax,dx, &
       domega,residual_max,local_status)
     if(local_status/=0) status=-3
+    if(status==0) then
+      if(present(dpa_out)) dpa_out=dpa
+      if(present(dpb_out)) dpb_out=dpb
+      if(present(dfock_a_out)) dfock_a_out=dfock_a
+      if(present(dfock_b_out)) dfock_b_out=dfock_b
+    end if
     deallocate(pa,pb,dpa,dpb,dfock_a,dfock_b,fa_mo,fb_mo)
   end subroutine solve_mrsf_first_nuclear_response
 

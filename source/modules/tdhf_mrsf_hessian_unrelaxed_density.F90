@@ -12,8 +12,67 @@ module tdhf_mrsf_hessian_unrelaxed_density_mod
 
   private
   public :: build_mrsf_unrelaxed_density_derivatives
+  public :: build_mrsf_mo_difference_density_derivatives
 
 contains
+
+!###############################################################################
+
+  subroutine build_mrsf_mo_difference_density_derivatives(infos,x_packed, &
+      dx_packed,tij,tab,dtij,dtab,status)
+    ! MO-basis unrelaxed difference-density blocks and their analytic nuclear
+    ! derivatives.  The spin-adapted physical amplitude is expanded exactly
+    ! once, and the homogeneous quadratic maps are differentiated directly.
+
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in) :: x_packed(:),dx_packed(:,:)
+    real(kind=dp), intent(out) :: tij(:,:),tab(:,:),dtij(:,:,:),dtab(:,:,:)
+    integer, intent(out) :: status
+
+    real(kind=dp), allocatable :: x_expanded(:),dx_expanded(:), &
+      x_matrix(:,:),dx_matrix(:,:)
+    integer :: coordinate,nbf,nocca,noccb,nvirb,ncoord,packed
+
+    nbf=infos%basis%nbf
+    nocca=infos%mol_prop%nelec_a
+    noccb=infos%mol_prop%nelec_b
+    nvirb=nbf-noccb
+    ncoord=size(dx_packed,2)
+    packed=nocca*nvirb
+    status=0
+    tij=0.0_dp
+    tab=0.0_dp
+    dtij=0.0_dp
+    dtab=0.0_dp
+    if(nbf<=0 .or. ncoord<=0 .or. nocca-noccb/=2 .or. &
+       size(x_packed)/=packed .or. any(shape(dx_packed)/=[packed,ncoord]) .or. &
+       any(shape(tij)/=[nocca,nocca]) .or. any(shape(tab)/=[nvirb,nvirb]) .or. &
+       any(shape(dtij)/=[nocca,nocca,ncoord]) .or. &
+       any(shape(dtab)/=[nvirb,nvirb,ncoord])) then
+      status=-1
+      return
+    end if
+    if(infos%tddft%mult/=1 .and. infos%tddft%mult/=3) then
+      status=-2
+      return
+    end if
+
+    allocate(x_expanded(packed),dx_expanded(packed), &
+      x_matrix(nocca,nvirb),dx_matrix(nocca,nvirb))
+    call mrsfxvec(infos,x_packed,x_expanded)
+    x_matrix=reshape(x_expanded,[nocca,nvirb])
+    tij=-matmul(x_matrix,transpose(x_matrix))
+    tab=matmul(transpose(x_matrix),x_matrix)
+    do coordinate=1,ncoord
+      call mrsfxvec(infos,dx_packed(:,coordinate),dx_expanded)
+      dx_matrix=reshape(dx_expanded,[nocca,nvirb])
+      dtij(:,:,coordinate)=-matmul(dx_matrix,transpose(x_matrix)) &
+        -matmul(x_matrix,transpose(dx_matrix))
+      dtab(:,:,coordinate)=matmul(transpose(dx_matrix),x_matrix) &
+        +matmul(transpose(x_matrix),dx_matrix)
+    end do
+    deallocate(x_expanded,dx_expanded,x_matrix,dx_matrix)
+  end subroutine build_mrsf_mo_difference_density_derivatives
 
 !###############################################################################
 

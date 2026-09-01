@@ -1279,9 +1279,9 @@ contains
       fock_a(:), mo_a(:,:), mo_energy_a(:), &
       fock_b(:), mo_b(:,:), &
       td_p(:,:), td_t(:,:), ta(:), tb(:), td_abxc(:,:), &
-      td_mrsf_den(:,:,:), bvec_mo(:,:), wao(:), mrsf_energies(:)
-    character(len=*), parameter :: tags_alloc(4) = (/ character(len=80) :: &
-      OQP_WAO, OQP_td_mrsf_density, OQP_td_p, OQP_td_abxc /)
+      td_mrsf_den(:,:,:), bvec_mo(:,:), wao(:), mrsf_energies(:),td_z(:)
+    character(len=*), parameter :: tags_alloc(5) = (/ character(len=80) :: &
+      OQP_WAO, OQP_td_mrsf_density, OQP_td_p, OQP_td_abxc,OQP_td_z /)
     character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
       OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
       OQP_td_energies /)
@@ -1412,6 +1412,8 @@ contains
     call infos%dat%alloc_or_die(OQP_td_mrsf_density, (/7, nbf, nbf /), td_mrsf_den, description=OQP_td_mrsf_density)
     call infos%dat%alloc_or_die(OQP_td_p, (/ nbf_tri, 2 /), td_p, description=OQP_td_p)
     call infos%dat%alloc_or_die(OQP_td_abxc, (/ nbf, nbf /), td_abxc, description=OQP_td_abxc)
+    call infos%dat%alloc_or_die(OQP_td_z, (/ lzdim /), td_z, &
+      description=OQP_td_z_comment)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -1565,6 +1567,9 @@ contains
                            mo_a, mo_b, nbf)
     endif
 
+    ! Preserve the spin-adapted orbital Lagrange multiplier for the analytic
+    ! Hessian.  A nonconverged calculation is rejected by the Python driver.
+    td_z=xk
     call flush(iw)
 
     ! ======================================================================

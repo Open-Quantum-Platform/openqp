@@ -72,4 +72,6 @@ def test_first_nuclear_response_connects_orbitals_fock_operator_and_amplitudes()
         "callsolve_mrsf_tda_amplitude_derivatives",
     ):
         assert call in compact
+    for output in ("dpa_out", "dpb_out", "dfock_a_out", "dfock_b_out"):
+        assert output in compact
     assert "numericalnucleardisplacement" in compact
