@@ -82,6 +82,14 @@ units, `K` is in `sqrt(atomic mass unit) * bohr`.
 - `orthogonality_tolerance` can be supplied to either public helper when an
   application requires a fail-closed residual threshold.
 
+## Harmonic vibronic spectra
+
+The separate `oqp.library.vibronic` API uses the returned `J` and `K` together
+with positive ground- and excited-state frequencies to evaluate harmonic
+Franck--Condon factors, first-order Herzberg--Teller transition moments, and
+relative spectra.  See `docs/vibronic-spectroscopy.md` for its required units,
+phase checks, thermal truncation criteria, and property-derivative boundaries.
+
 ## Scope boundary
 
 The API returns normal modes, the Duschinsky matrix `J`, displacement `K`, the

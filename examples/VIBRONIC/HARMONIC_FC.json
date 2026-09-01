@@ -1,0 +1,18 @@
+{
+  "ground_frequencies_cm1": [1000.0],
+  "excited_frequencies_cm1": [900.0],
+  "J": [[1.0]],
+  "K": [6.0],
+  "coordinate_unit": "sqrt(me)*bohr",
+  "coordinate_phase_convention": "synthetic one-mode phase",
+  "orthogonality_tolerance": 1.0e-10,
+  "electronic_origin_cm1": 20000.0,
+  "origin_kind": "zero_zero",
+  "max_final_quanta": 8,
+  "temperature_kelvin": 300.0,
+  "max_initial_quanta": 5,
+  "minimum_thermal_population": 0.999,
+  "broadening_kind": "gaussian",
+  "fwhm_cm1": 80.0,
+  "normalization": "sum"
+}
