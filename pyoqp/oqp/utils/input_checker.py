@@ -6694,6 +6694,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    scf_multiplicity = int(_get(config, "scf", "multiplicity", 1))
+    td_multiplicity = int(_get(config, "tdhf", "multiplicity", 1))
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
@@ -6714,7 +6716,32 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     if method == "tdhf":
         if td_type == "mrsf":
-            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+            if functional:
+                return (
+                    "unsupported_feature",
+                    "The native spin-adapted MRSF analytic Hessian is currently "
+                    "enabled for MRSF-TDHF; the open-shell XC Hessian row remains "
+                    "fail-closed for MRSF-TDDFT.",
+                )
+            if scf_type != "rohf" or scf_multiplicity != 3:
+                return (
+                    "unsupported_scf_type",
+                    "MRSF analytic Hessians require a triplet ROHF two-SOMO reference.",
+                )
+            if td_multiplicity not in (1, 3):
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians support singlet and triplet target states only.",
+                )
+            if state <= 0:
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians require a positive excited-state index.",
+                )
+            return (
+                "supported",
+                "Native OpenQP spin-adapted two-SOMO MRSF-TDHF analytic Hessian dispatch is enabled.",
+            )
         if td_type == "umrsf":
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":

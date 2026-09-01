@@ -21,11 +21,12 @@ def _assert_required_production_seams(source: str) -> None:
         "call contraction%init()",
         "call contraction%build_cart(basis)",
         "petite=.false.",
-        "dplus=reference_spin_density",
+        "dplus=reference_spin_density+d_reference_spin_density",
+        "dminus=reference_spin_density-d_reference_spin_density",
         "pplus=relaxed_spin_density+d_relaxed_spin_density",
+        "pminus=relaxed_spin_density-d_relaxed_spin_density",
         "splus=seven_density+d_seven_density",
-        "dplus=d_reference_spin_density",
-        "dminus=-d_reference_spin_density",
+        "sminus=seven_density-d_seven_density",
         "call check_mrsf_seven_density_alias",
         "infos%tddft%mult/=1 .and. infos%tddft%mult/=3",
         "MRSF_ROWS_XC_INCOMPLETE",
@@ -74,16 +75,19 @@ def test_production_uses_seven_density_gradient_contraction_and_raw_rows():
     assert "transpose(rows)" not in executable
 
 
-def test_reference_response_excludes_fixed_ground_state_hessian_term():
+def test_reference_and_state_responses_are_differentiated_simultaneously():
     source = SOURCE.read_text()
     mixed = source.split(
-        "dplus=d_reference_spin_density(:,:,:,response)", 1
+        "dplus=reference_spin_density+d_reference_spin_density", 1
     )[1].split("two_reference_mixed(:,response)", 1)[0]
-    assert "dminus=-d_reference_spin_density(:,:,:,response)" in mixed
-    assert "pplus=relaxed_spin_density" in mixed
-    assert "pminus=relaxed_spin_density" in mixed
-    assert "dplus=reference_spin_density" not in mixed
-    assert "dminus=reference_spin_density" not in mixed
+    assert "dminus=reference_spin_density-d_reference_spin_density" in mixed
+    assert "pplus=relaxed_spin_density+d_relaxed_spin_density" in mixed
+    assert "pminus=relaxed_spin_density-d_relaxed_spin_density" in mixed
+    assert "splus=seven_density+d_seven_density" in mixed
+    assert "sminus=seven_density-d_seven_density" in mixed
+    # The simultaneous D/P/seven-density difference already contains the
+    # mixed reference-response product rule; a second block would double it.
+    assert "two_reference_mixed(:,response)=0.0_dp" in source
     assert "hess1" not in source.lower()
     assert "grd2_hess" not in source.lower()
 
@@ -102,17 +106,19 @@ def test_xc_and_channel_7_boundaries_fail_closed_before_contractions():
 def test_negative_source_mutations_are_detected():
     source = SOURCE.read_text()
     _assert_required_production_seams(source)
-    mutations = (
-        source.replace("petite=.false.", "petite=.true.", 1),
-        source.replace("dminus=-d_reference_spin_density", "dminus=0.0_dp", 1),
-        source.replace(
+    replacements = (
+        ("petite=.false.", "petite=.true."),
+        ("dminus=reference_spin_density-d_reference_spin_density",
+         "dminus=reference_spin_density"),
+        (
             "call check_mrsf_seven_density_alias",
             "call skip_alias_check",
-            1,
         ),
-        source.replace("splus=seven_density+d_seven_density", "splus=seven_density", 1),
+        ("splus=seven_density+d_seven_density", "splus=seven_density"),
     )
-    for mutated in mutations:
+    for old, new in replacements:
+        mutated = source.replace(old, new, 1)
+        assert mutated != source, f"mutation target was absent: {old}"
         try:
             _assert_required_production_seams(mutated)
         except AssertionError:

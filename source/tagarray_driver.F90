@@ -33,6 +33,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_p = OQP_prefix // "td_p"
   character(len=*), parameter, public :: OQP_td_t = OQP_prefix // "td_t"
   character(len=*), parameter, public :: OQP_td_z = OQP_prefix // "td_z"
+  character(len=*), parameter, public :: OQP_td_mrsf_hxa = OQP_prefix // "td_mrsf_hxa"
+  character(len=*), parameter, public :: OQP_td_mrsf_hxb = OQP_prefix // "td_mrsf_hxb"
+  character(len=*), parameter, public :: OQP_td_mrsf_ppija = OQP_prefix // "td_mrsf_ppija"
+  character(len=*), parameter, public :: OQP_td_mrsf_ppijb = OQP_prefix // "td_mrsf_ppijb"
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
@@ -164,6 +168,14 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
   character(len=*), parameter, public :: OQP_td_z_comment = &
     "TDHF/TDDFT orbital-relaxation Z vector for the target state"
+  character(len=*), parameter, public :: OQP_td_mrsf_hxa_comment = &
+    "MRSF gradient spin-adapted alpha H_X intermediate in the MO basis"
+  character(len=*), parameter, public :: OQP_td_mrsf_hxb_comment = &
+    "MRSF gradient spin-adapted beta H_X intermediate in the MO basis"
+  character(len=*), parameter, public :: OQP_td_mrsf_ppija_comment = &
+    "MRSF gradient alpha occupied-occupied relaxed-response intermediate"
+  character(len=*), parameter, public :: OQP_td_mrsf_ppijb_comment = &
+    "MRSF gradient beta occupied-occupied relaxed-response intermediate"
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
@@ -202,6 +214,7 @@ module oqp_tagarray_driver
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, OQP_AO_ERI, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, OQP_td_z, &
+    OQP_td_mrsf_hxa, OQP_td_mrsf_hxb, OQP_td_mrsf_ppija, OQP_td_mrsf_ppijb, &
     OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
     OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, &
     OQP_hf_hessian, OQP_tdhf_hessian, &

@@ -1,0 +1,35 @@
+[input]
+system=
+  O   0.000000000   0.000000000  -0.041061554
+  H  -0.533194329   0.533194329  -0.614469223
+  H   0.533194329  -0.533194329  -0.614469223
+charge=0
+method=tdhf
+basis=6-31g
+runtype=hess
+functional=
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rohf
+maxit=50
+multiplicity=3
+conv=1.0e-10
+
+[tdhf]
+type=mrsf
+maxit=50
+multiplicity=1
+conv=1.0e-16
+nstate=6
+zvconv=1.0e-16
+resp_cutoff=5.0e-11
+zv_warmstart=off
+
+[hess]
+type=analytical
+state=3
+clean=True

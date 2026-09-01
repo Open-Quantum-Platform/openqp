@@ -1279,7 +1279,8 @@ contains
       fock_a(:), mo_a(:,:), mo_energy_a(:), &
       fock_b(:), mo_b(:,:), &
       td_p(:,:), td_t(:,:), ta(:), tb(:), td_abxc(:,:), &
-      td_mrsf_den(:,:,:), bvec_mo(:,:), wao(:), mrsf_energies(:),td_z(:)
+      td_mrsf_den(:,:,:), bvec_mo(:,:), wao(:), mrsf_energies(:),td_z(:), &
+      stored_hxa(:,:),stored_hxb(:,:),stored_ppija(:,:),stored_ppijb(:,:)
     character(len=*), parameter :: tags_alloc(5) = (/ character(len=80) :: &
       OQP_WAO, OQP_td_mrsf_density, OQP_td_p, OQP_td_abxc,OQP_td_z /)
     character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
@@ -2100,6 +2101,23 @@ contains
                  1.0_dp, mo_b,  nbf,  &
                          wrk2,  nbf,  &
                  0.0_dp, ppijb, noccb)
+
+      ! Preserve the exact stationary-gradient intermediates consumed by W.
+      ! The analytic Hessian differentiates these quantities, but its baseline
+      ! must be bitwise the same one used by the gradient rather than a second
+      ! reconstruction through a nominally equivalent integral path.
+      call infos%dat%alloc_or_die(OQP_td_mrsf_hxa,(/nbf,nocca/),stored_hxa, &
+        description=OQP_td_mrsf_hxa_comment)
+      call infos%dat%alloc_or_die(OQP_td_mrsf_hxb,(/nbf,nbf/),stored_hxb, &
+        description=OQP_td_mrsf_hxb_comment)
+      call infos%dat%alloc_or_die(OQP_td_mrsf_ppija,(/nocca,nocca/), &
+        stored_ppija,description=OQP_td_mrsf_ppija_comment)
+      call infos%dat%alloc_or_die(OQP_td_mrsf_ppijb,(/noccb,noccb/), &
+        stored_ppijb,description=OQP_td_mrsf_ppijb_comment)
+      stored_hxa=hxa
+      stored_hxb=hxb
+      stored_ppija=ppija
+      stored_ppijb=ppijb
 
   !   Calculate W (in MO basis)
       wmo => wrk3

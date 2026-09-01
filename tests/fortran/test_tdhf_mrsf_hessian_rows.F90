@@ -30,7 +30,7 @@ program test_tdhf_mrsf_hessian_rows
   drelaxed(:,:,2,1)=reshape([-0.5_dp,0.0_dp,0.0_dp,0.25_dp],[2,2])
   drelaxed(:,:,1,2)=reshape([0.0_dp,0.2_dp,0.6_dp,0.0_dp],[2,2])
   drelaxed(:,:,2,2)=reshape([0.0_dp,0.3_dp,-0.1_dp,0.0_dp],[2,2])
-  expected_one=reshape([0.05_dp,0.495_dp,-0.14_dp,-0.10_dp],[2,2])
+  expected_one=reshape([-1.55_dp,1.055_dp,0.34_dp,1.10_dp],[2,2])
 
   call assemble_mrsf_one_e_primitive_rows(ds,dh,drelaxed,dw,one_e,status)
   if(status/=MRSF_ROWS_SUCCESS) &

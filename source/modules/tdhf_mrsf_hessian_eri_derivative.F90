@@ -3,7 +3,7 @@ module tdhf_mrsf_hessian_eri_derivative_mod
   use precision, only: dp
   use types, only: information
   use basis_tools, only: basis_set
-  use fock_deriv_mod, only: fock_deriv_matrix_general_scaled
+  use fock_deriv_mod, only: fock_deriv_matrix_mrsf_scaled
   use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
 
   implicit none
@@ -65,7 +65,7 @@ contains
         channel_scale=response_scale
         coulomb_scale=0.0_dp
       end select
-      call fock_deriv_matrix_general_scaled(infos,basis,density(channel,:,:), &
+      call fock_deriv_matrix_mrsf_scaled(infos,basis,density(channel,:,:), &
         coulomb_scale,channel_scale,matrix4)
       if(channel<=6) matrix4=spin_multiplier*matrix4
       do atom=1,natom

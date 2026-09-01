@@ -1472,12 +1472,14 @@ contains
     type(information), intent(in) :: infos
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
-    real(kind=dp), intent(out), dimension(:,:) :: pmo
+    ! Only column IVEC is defined below.  Batch callers retain columns already
+    ! transformed on earlier calls, so the whole array is an in/out object.
+    real(kind=dp), intent(inout), dimension(:,:) :: pmo
     real(kind=dp), intent(in), dimension(:,:) :: va, vb
     integer, intent(in) :: ivec
 
     real(kind=dp), allocatable :: &
-      scr(:,:), tmp(:), wrk(:,:)
+      scr(:,:), tmp(:), tmp_virtual(:), wrk(:,:)
     real(kind=dp), pointer, dimension(:,:) :: &
       adco1, adco2, ado1v, ado2v, agdlr, aco12, ao21v
     integer :: noca, nocb, mrst, i, ij, &
@@ -1493,7 +1495,8 @@ contains
     nocb = infos%mol_prop%nelec_b
     debug_mode = infos%tddft%debug_mode
 
-    allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf),tmp_virtual(nbf-noca),scr(nbf,nbf),wrk(nbf,nbf), &
+      source=0.0_dp,stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
     agdlr => fmrsf(7,:,:)
@@ -1638,10 +1641,9 @@ contains
                one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO-1,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
-    call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
-                    tmp, nbf, &
-               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+    call dgemv('t',nbf,nbf-noca,one,vb(:,noca+1),nbf,tmp,1, &
+      zero,tmp_virtual,1)
+    wrk(lr1,noca+1:nbf)=wrk(lr1,noca+1:nbf)+tmp_virtual
     !-----------------------------------------------------------------------
     ! Section 6: Corrections for O2(HOMO, alpha) -> V(beta) response element
     !-----------------------------------------------------------------------
@@ -1672,10 +1674,9 @@ contains
               -one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
-    call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
-                    tmp, nbf, &
-               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+    call dgemv('t',nbf,nbf-noca,one,vb(:,noca+1),nbf,tmp,1, &
+      zero,tmp_virtual,1)
+    wrk(lr2,noca+1:nbf)=wrk(lr2,noca+1:nbf)+tmp_virtual
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1,O1) diagonal element (OO block)
@@ -2180,7 +2181,12 @@ contains
     use messages, only: show_message, with_abort
     implicit none
 
-    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    ! These matrices already contain the ordinary (channel-7) response terms
+    ! on entry.  This routine adds only the six spin-pairing contributions.
+    ! Declaring them INTENT(OUT) made their incoming values undefined by the
+    ! Fortran standard and caused optimization- and memory-layout-dependent
+    ! corruption in differentiated MRSF calculations.
+    real(kind=dp), intent(inout), dimension(:,:) :: xhxa, xhxb
     real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
     real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
     integer, intent(in) :: noca, nocb

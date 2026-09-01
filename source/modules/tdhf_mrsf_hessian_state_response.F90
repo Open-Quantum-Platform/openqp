@@ -9,6 +9,8 @@ module tdhf_mrsf_hessian_state_response_mod
     build_mrsf_operator_derivative_action
   use tdhf_mrsf_hessian_amplitude_mod, only: &
     solve_mrsf_tda_amplitude_derivatives
+  use tdhf_mrsf_hessian_mo_response_mod, only: &
+    canonicalize_rohf_common_response
 
   implicit none
 
@@ -20,9 +22,9 @@ contains
 !###############################################################################
 
   subroutine solve_mrsf_first_nuclear_response(infos,int2_driver,mo_a,mo_b, &
-      dmo_a,dmo_b,fock_a_ao,fock_b_ao,hcore_derivative,omega,x_packed,dax, &
-      dx,domega,residual_max,status,dvxc_a,dvxc_b,dpa_out,dpb_out, &
-      dfock_a_out,dfock_b_out)
+      dmo_a,dmo_b,dmo_common,fock_a_ao,fock_b_ao,hcore_derivative,omega, &
+      x_packed,dax,dx,domega,residual_max,status,dvxc_a,dvxc_b,dpa_out, &
+      dpb_out,dfock_a_out,dfock_b_out)
     ! End-to-end first nuclear response of an isolated spin-adapted MRSF-TDA
     ! state.  ROHF/ROKS orbital response, total spin-Fock response, the seven
     ! density derivative action, and the projected amplitude equation meet at
@@ -30,7 +32,9 @@ contains
 
     type(information), target, intent(inout) :: infos
     type(int2_compute_t), intent(inout) :: int2_driver
-    real(kind=dp), intent(in) :: mo_a(:,:),mo_b(:,:),dmo_a(:,:,:),dmo_b(:,:,:)
+    real(kind=dp), intent(in) :: mo_a(:,:),mo_b(:,:),dmo_a(:,:,:), &
+      dmo_b(:,:,:)
+    real(kind=dp), intent(inout) :: dmo_common(:,:,:)
     real(kind=dp), intent(in) :: fock_a_ao(:,:),fock_b_ao(:,:), &
       hcore_derivative(:,:,:),omega,x_packed(:)
     real(kind=dp), intent(out) :: dax(:,:),dx(:,:),domega(:),residual_max
@@ -57,7 +61,8 @@ contains
     residual_max=0.0_dp
     if(nbf<=0 .or. ncoord<=0 .or. nocca-noccb/=2 .or. &
        size(x_packed)/=packed .or. any(shape(dax)/=[packed,ncoord]) .or. &
-       any(shape(dx)/=[packed,ncoord]) .or. size(domega)/=ncoord) then
+       any(shape(dx)/=[packed,ncoord]) .or. size(domega)/=ncoord .or. &
+       any(shape(dmo_common)/=[nbf,nbf,ncoord])) then
       status=-1
       return
     end if
@@ -97,7 +102,8 @@ contains
     call build_orbital_density_derivatives(mo_a,dmo_a,nocca,dpa,local_status)
     if(local_status==0) call build_orbital_density_derivatives( &
       mo_b,dmo_b,noccb,dpb,local_status)
-    if(local_status==0) then
+    if(local_status/=0) status=-10+local_status
+    if(status==0) then
       if(dft) then
         call build_rohf_total_fock_derivatives(infos,hcore_derivative,pa,pb, &
           dpa,dpb,dfock_a,dfock_b,local_status,dvxc_a,dvxc_b)
@@ -106,15 +112,21 @@ contains
           dpa,dpb,dfock_a,dfock_b,local_status)
       end if
     end if
+    if(status==0 .and. local_status/=0) status=-20+local_status
+    if(status==0) call canonicalize_rohf_common_response(mo_a,dmo_common, &
+      fock_a_ao,fock_b_ao,dfock_a,dfock_b,nocca,noccb,local_status)
+    if(status==0 .and. local_status/=0) status=-25+local_status
     fa_mo=matmul(transpose(mo_a),matmul(fock_a_ao,mo_a))
     fb_mo=matmul(transpose(mo_b),matmul(fock_b_ao,mo_b))
-    if(local_status==0) call build_mrsf_operator_derivative_action( &
-      infos,int2_driver,mo_a,mo_b,dmo_a,dmo_b,fock_a_ao,fock_b_ao, &
+    if(status==0) call build_mrsf_operator_derivative_action( &
+      infos,int2_driver,mo_a,mo_b,dmo_common,dmo_common, &
+      fock_a_ao,fock_b_ao, &
       dfock_a,dfock_b,x_packed,dax,local_status)
-    if(local_status==0) call solve_mrsf_tda_amplitude_derivatives( &
+    if(status==0 .and. local_status/=0) status=-30+local_status
+    if(status==0) call solve_mrsf_tda_amplitude_derivatives( &
       infos,int2_driver,mo_a,mo_b,fa_mo,fb_mo,omega,x_packed,dax,dx, &
       domega,residual_max,local_status)
-    if(local_status/=0) status=-3
+    if(status==0 .and. local_status/=0) status=-40+local_status
     if(status==0) then
       if(present(dpa_out)) dpa_out=dpa
       if(present(dpb_out)) dpb_out=dpb

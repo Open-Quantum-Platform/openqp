@@ -133,7 +133,14 @@ contains
       plus_ta(nbf_tri),minus_ta(nbf_tri),plus_tb(nbf_tri), &
       minus_tb(nbf_tri),work_ta(nbf_tri),work_tb(nbf_tri),source=0.0_dp)
     call mrsfxvec(infos,x_packed,x_expanded)
-    call build_mrsf_density_orbital_derivative(infos,mo_a,mo_b,dmo_a,dmo_b, &
+    ! The stationary MRSF gradient constructs all seven channels with the
+    ! common ROHF response orbital set (mo_a,mo_a), see
+    ! build_mrsf_zvector_rhs.  The alpha and beta semicanonical coefficient
+    ! arrays need not have the same nuclear connection, even though they span
+    ! the same ROHF spaces.  Differentiating (mo_a,mo_b) here would therefore
+    ! be the derivative of the Davidson sigma map, not the derivative of the
+    ! density actually contracted by the gradient.
+    call build_mrsf_density_orbital_derivative(infos,mo_a,mo_a,dmo_a,dmo_a, &
       x_packed,orbital_channel,local_status)
     if(local_status/=0) then
       status=-3
@@ -145,9 +152,12 @@ contains
 
     do coordinate=1,ncoord
       call mrsfxvec(infos,dx_packed(:,coordinate),dx_expanded)
-      call iatogen(dx_expanded,dx_matrix,nocca,noccb)
+      ! The seven-channel mrsfcbc map consumes the stored physical MRSF
+      ! response vector, exactly as build_mrsf_zvector_rhs does.  The expanded
+      ! vector is reserved for sfdmat and the relaxed-density maps below.
+      call iatogen(dx_packed(:,coordinate),dx_matrix,nocca,noccb)
       amplitude_channel=0.0_dp
-      call mrsfcbc(infos,mo_a,mo_b,dx_matrix,amplitude_channel)
+      call mrsfcbc(infos,mo_a,mo_a,dx_matrix,amplitude_channel)
       dchannel(:,:,:,coordinate)=orbital_channel(:,:,:,coordinate)+ &
         amplitude_channel
 
@@ -179,6 +189,13 @@ contains
         nocca,noccb)
       dta(:,coordinate)=dta(:,coordinate)+0.5_dp*(plus_ta-minus_ta)
       dtb(:,coordinate)=dtb(:,coordinate)+0.5_dp*(plus_tb-minus_tb)
+
+      ! The gradient replaces the raw mrsfcbc ball channel by td_abxc before
+      ! every response-integral contraction.  Its derivative must therefore
+      ! obey the same alias exactly; retaining the derivative of the discarded
+      ! raw ball would both violate the stationary-gradient data model and
+      ! double count the ordinary response-exchange contribution downstream.
+      dchannel(7,:,:,coordinate)=dabxc(:,:,coordinate)
     end do
     deallocate(x_expanded,dx_expanded,dx_matrix,orbital_channel, &
       amplitude_channel,plus_a,minus_a,plus_abxc,minus_abxc,work_abxc, &

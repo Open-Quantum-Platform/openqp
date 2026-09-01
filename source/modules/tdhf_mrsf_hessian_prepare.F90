@@ -13,7 +13,8 @@ module tdhf_mrsf_hessian_prepare_mod
     real(kind=dp) :: omega=0.0_dp
     real(kind=dp) :: residual=0.0_dp
     real(kind=dp), allocatable :: mo_a(:,:),mo_b(:,:),fock_a(:,:),fock_b(:,:)
-    real(kind=dp), allocatable :: x(:),dmo_a(:,:,:),dmo_b(:,:,:),ds(:,:,:)
+    real(kind=dp), allocatable :: x(:),dmo_a(:,:,:),dmo_b(:,:,:), &
+      dmo_common(:,:,:),ds(:,:,:)
     real(kind=dp), allocatable :: dhcore(:,:,:),dpa(:,:,:),dpb(:,:,:)
     real(kind=dp), allocatable :: dfock_a(:,:,:),dfock_b(:,:,:)
     real(kind=dp), allocatable :: dax(:,:),dx(:,:),domega(:)
@@ -114,6 +115,7 @@ contains
     allocate(response%mo_a(nbf,nbf),response%mo_b(nbf,nbf), &
       response%fock_a(nbf,nbf),response%fock_b(nbf,nbf),response%x(packed), &
       response%dmo_a(nbf,nbf,ncoord),response%dmo_b(nbf,nbf,ncoord), &
+      response%dmo_common(nbf,nbf,ncoord), &
       response%ds(nbf,nbf,ncoord),response%dhcore(nbf,nbf,ncoord), &
       response%dpa(nbf,nbf,ncoord),response%dpb(nbf,nbf,ncoord), &
       response%dfock_a(nbf,nbf,ncoord), &
@@ -134,6 +136,7 @@ contains
     end if
     response%dmo_a=orbital_response%dmo_alpha
     response%dmo_b=orbital_response%dmo_beta
+    response%dmo_common=orbital_response%dmo_common
     response%ds=orbital_response%ds_ao
     response%dhcore=orbital_response%dhcore_ao
     call orbital_response%clean()
@@ -168,6 +171,7 @@ contains
       if(dft) then
         call solve_mrsf_first_nuclear_response(infos,int2_driver, &
           response%mo_a,response%mo_b,response%dmo_a,response%dmo_b, &
+          response%dmo_common, &
           response%fock_a,response%fock_b,response%dhcore,response%omega, &
           response%x,response%dax,response%dx,response%domega, &
           response%residual,local_status,dvxc_a,dvxc_b, &
@@ -175,6 +179,7 @@ contains
       else
         call solve_mrsf_first_nuclear_response(infos,int2_driver, &
           response%mo_a,response%mo_b,response%dmo_a,response%dmo_b, &
+          response%dmo_common, &
           response%fock_a,response%fock_b,response%dhcore,response%omega, &
           response%x,response%dax,response%dx,response%domega, &
           response%residual,local_status,dpa_out=response%dpa, &
@@ -186,7 +191,7 @@ contains
     if(allocated(dvxc_a)) deallocate(dvxc_a,dvxc_b)
     deallocate(pa,pb)
     if(local_status/=0) then
-      status=-5
+      status=local_status
       call response%clean()
     end if
   end subroutine prepare_mrsf_hessian_first_response
@@ -203,6 +208,7 @@ contains
     if(allocated(this%x)) deallocate(this%x)
     if(allocated(this%dmo_a)) deallocate(this%dmo_a)
     if(allocated(this%dmo_b)) deallocate(this%dmo_b)
+    if(allocated(this%dmo_common)) deallocate(this%dmo_common)
     if(allocated(this%ds)) deallocate(this%ds)
     if(allocated(this%dhcore)) deallocate(this%dhcore)
     if(allocated(this%dpa)) deallocate(this%dpa)

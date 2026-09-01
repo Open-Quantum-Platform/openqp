@@ -1,6 +1,8 @@
 module tdhf_hessian_response_mod
 
   use precision, only: dp
+  use, intrinsic :: iso_fortran_env, only: error_unit
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
 
@@ -194,7 +196,11 @@ contains
     end if
     allocate(rhs(n),solution(n),check(n),ax(n))
     call apply_operator(x0,ax,operator_status)
-    if(operator_status/=0 .or. maxval(abs(ax-omega*x0))>1.0e-8_dp) then
+    residual_max=maxval(abs(ax-omega*x0))
+    if(operator_status/=0 .or. residual_max>1.0e-8_dp) then
+      write(error_unit,'(A,I0,A,1P,E15.7,A,E15.7)') &
+        ' MRSF response eigenpair check: operator status ',operator_status, &
+        ', max residual = ',residual_max,', omega = ',omega
       status=-3
       deallocate(rhs,solution,check,ax)
       return
@@ -504,7 +510,10 @@ contains
     logical :: converged
 
     n=size(rhs); m=min(restart,n); status=0; iterations=0; converged=.false.
-    if(n<=0 .or. size(solution)/=n .or. m<=0) then
+    if(n<=0 .or. size(solution)/=n .or. m<=0 .or. &
+       .not.ieee_is_finite(tolerance) .or. tolerance<=0.0_dp .or. &
+       any(.not.ieee_is_finite(rhs)) .or. &
+       any(.not.ieee_is_finite(solution))) then
       status=-1
       return
     end if
@@ -517,7 +526,7 @@ contains
     end if
     do while(iterations<max_iterations .and. .not.converged)
       call apply_operator(solution,applied,operator_status)
-      if(operator_status/=0) then
+      if(operator_status/=0 .or. any(.not.ieee_is_finite(applied))) then
         status=-2
         exit
       end if
@@ -534,7 +543,7 @@ contains
         if(iterations>=max_iterations) exit
         iterations=iterations+1; used=j
         call apply_operator(basis(:,j),work,operator_status)
-        if(operator_status/=0) then
+        if(operator_status/=0 .or. any(.not.ieee_is_finite(work))) then
           status=-2
           exit
         end if
@@ -546,6 +555,10 @@ contains
           end do
         end do
         hessenberg(j+1,j)=sqrt(dot_product(work,work))
+        if(.not.ieee_is_finite(hessenberg(j+1,j))) then
+          status=-6
+          exit
+        end if
         if(hessenberg(j+1,j)>100.0_dp*epsilon(1.0_dp)) &
           basis(:,j+1)=work/hessenberg(j+1,j)
         do i=1,j-1
@@ -589,10 +602,14 @@ contains
       end do
       if(status/=0) exit
       solution=solution+matmul(basis(:,1:used),y(1:used))
+      if(any(.not.ieee_is_finite(solution))) then
+        status=-6
+        exit
+      end if
     end do
     if(status==0) then
       call apply_operator(solution,applied,operator_status)
-      if(operator_status/=0 .or. &
+      if(operator_status/=0 .or. any(.not.ieee_is_finite(applied)) .or. &
          sqrt(dot_product(rhs-applied,rhs-applied))> &
            tolerance*max(1.0_dp,norm_rhs)) status=-5
     end if
@@ -616,13 +633,23 @@ contains
     logical :: converged
 
     n=size(rhs); m=min(restart,n); status=0; iterations=0; converged=.false.
-    if(n<=0 .or. size(x0)/=n .or. size(solution)/=n .or. m<=0) then
+    if(n<=0 .or. size(x0)/=n .or. size(solution)/=n .or. m<=0 .or. &
+       .not.ieee_is_finite(omega) .or. &
+       .not.ieee_is_finite(tolerance) .or. tolerance<=0.0_dp .or. &
+       any(.not.ieee_is_finite(x0)) .or. &
+       any(.not.ieee_is_finite(rhs)) .or. &
+       any(.not.ieee_is_finite(solution))) then
       status=-1
       return
     end if
     allocate(basis(n,m+1),hessenberg(m+1,m),givens_c(m),givens_s(m), &
       g(m+1),y(m),work(n),amat_work(n),residual(n))
     norm_rhs=sqrt(dot_product(rhs,rhs))
+    if(.not.ieee_is_finite(norm_rhs)) then
+      deallocate(basis,hessenberg,givens_c,givens_s,g,y,work,amat_work,residual)
+      status=-6
+      return
+    end if
     if(norm_rhs<=tolerance) then
       deallocate(basis,hessenberg,givens_c,givens_s,g,y,work,amat_work,residual)
       return
@@ -630,12 +657,16 @@ contains
     do while(iterations<max_iterations .and. .not.converged)
       call apply_projected_operator(apply_operator,omega,x0,solution, &
         amat_work,operator_status)
-      if(operator_status/=0) then
+      if(operator_status/=0 .or. any(.not.ieee_is_finite(amat_work))) then
         status=-2
         exit
       end if
       residual=rhs-amat_work
       beta=sqrt(dot_product(residual,residual))
+      if(.not.ieee_is_finite(beta)) then
+        status=-6
+        exit
+      end if
       if(beta<=tolerance*max(1.0_dp,norm_rhs)) then
         converged=.true.
         exit
@@ -648,7 +679,7 @@ contains
         iterations=iterations+1; used=j
         call apply_projected_operator(apply_operator,omega,x0,basis(:,j), &
           work,operator_status)
-        if(operator_status/=0) then
+        if(operator_status/=0 .or. any(.not.ieee_is_finite(work))) then
           status=-2
           exit
         end if
@@ -662,6 +693,10 @@ contains
           end do
         end do
         hessenberg(j+1,j)=sqrt(dot_product(work,work))
+        if(.not.ieee_is_finite(hessenberg(j+1,j))) then
+          status=-6
+          exit
+        end if
         if(hessenberg(j+1,j)>100.0_dp*epsilon(1.0_dp)) &
           basis(:,j+1)=work/hessenberg(j+1,j)
         do i=1,j-1
@@ -671,6 +706,10 @@ contains
           hessenberg(i,j)=temp
         end do
         denominator=hypot(hessenberg(j,j),hessenberg(j+1,j))
+        if(.not.ieee_is_finite(denominator)) then
+          status=-6
+          exit
+        end if
         if(denominator<=100.0_dp*epsilon(1.0_dp)) then
           if(abs(g(j+1))<=tolerance*max(1.0_dp,norm_rhs)) then
             givens_c(j)=1.0_dp; givens_s(j)=0.0_dp
@@ -702,15 +741,23 @@ contains
         end if
         if(i<used) y(i)=y(i)-dot_product(hessenberg(i,i+1:used),y(i+1:used))
         y(i)=y(i)/hessenberg(i,i)
+        if(.not.ieee_is_finite(y(i))) then
+          status=-6
+          exit
+        end if
       end do
       if(status/=0) exit
       solution=solution+matmul(basis(:,1:used),y(1:used))
       solution=solution-x0*dot_product(x0,solution)
+      if(any(.not.ieee_is_finite(solution))) then
+        status=-6
+        exit
+      end if
     end do
     if(status==0) then
       call apply_projected_operator(apply_operator,omega,x0,solution, &
         amat_work,operator_status)
-      if(operator_status/=0 .or. &
+      if(operator_status/=0 .or. any(.not.ieee_is_finite(amat_work)) .or. &
          sqrt(dot_product(rhs-amat_work,rhs-amat_work))> &
            tolerance*max(1.0_dp,norm_rhs)) status=-5
     end if
@@ -728,13 +775,24 @@ contains
     real(kind=dp) :: parallel_component
 
     allocate(projected(size(vector)),applied(size(vector)))
+    status=0
+    result=0.0_dp
+    if(size(x0)/=size(vector) .or. size(result)/=size(vector) .or. &
+       .not.ieee_is_finite(omega) .or. any(.not.ieee_is_finite(x0)) .or. &
+       any(.not.ieee_is_finite(vector))) then
+      status=-1
+      deallocate(projected,applied)
+      return
+    end if
     parallel_component=dot_product(x0,vector)
     projected=vector-parallel_component*x0
     call apply_operator(projected,applied,status)
-    if(status==0) then
+    if(status==0 .and. all(ieee_is_finite(applied))) then
       result=applied-omega*projected
       result=result-x0*dot_product(x0,result)+parallel_component*x0
+      if(any(.not.ieee_is_finite(result))) status=-1
     else
+      status=-1
       result=0.0_dp
     end if
     deallocate(projected,applied)
@@ -1141,9 +1199,12 @@ contains
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit,restart
 
-    real(kind=dp), allocatable :: rhs(:),solution(:),applied(:)
+    real(kind=dp), allocatable :: rhs(:),solution(:),applied(:), &
+      dense_operator(:,:),unit_vector(:)
     real(kind=dp) :: solve_tol
-    integer :: coordinate,n,ncoord,niter,nrestart,operator_status,solve_status
+    integer :: column,coordinate,n,ncoord,niter,nrestart,operator_status, &
+      solve_status
+    logical :: dense_ready
 
     n=size(rhs_derivative,1)
     ncoord=size(rhs_derivative,2)
@@ -1159,30 +1220,60 @@ contains
     if(n<=0 .or. ncoord<=0 .or. &
        any(shape(operator_derivative_z)/=[n,ncoord]) .or. &
        any(shape(dz)/=[n,ncoord]) .or. solve_tol<=0.0_dp .or. &
-       niter<=0 .or. nrestart<=0) then
+       niter<=0 .or. nrestart<=0 .or. &
+       any(.not.ieee_is_finite(rhs_derivative)) .or. &
+       any(.not.ieee_is_finite(operator_derivative_z))) then
       status=-1
       return
     end if
 
-    allocate(rhs(n),solution(n),applied(n))
+    allocate(rhs(n),solution(n),applied(n),dense_operator(n,n),unit_vector(n))
+    dense_operator=0.0_dp
+    unit_vector=0.0_dp
+    dense_ready=.false.
     do coordinate=1,ncoord
       rhs=rhs_derivative(:,coordinate)-operator_derivative_z(:,coordinate)
       solution=0.0_dp
       call solve_general_gmres(apply_orbital_hessian,rhs,solution,solve_tol, &
         niter,nrestart,solve_status)
       if(solve_status/=0) then
-        status=coordinate
-        exit
+        ! Screening in the production integral action can set a residual floor
+        ! below which restarted GMRES cannot certify convergence.  Build the
+        ! same operator column by column and use the dense pivoted reference as
+        ! a fail-closed fallback.  This path is entered only after GMRES fails.
+        if(.not.dense_ready) then
+          do column=1,n
+            unit_vector=0.0_dp
+            unit_vector(column)=1.0_dp
+            call apply_orbital_hessian(unit_vector,dense_operator(:,column), &
+              operator_status)
+            if(operator_status/=0 .or. &
+               any(.not.ieee_is_finite(dense_operator(:,column)))) exit
+          end do
+          dense_ready=column>n
+        end if
+        if(dense_ready) then
+          call solve_linear_pivot(dense_operator,rhs,solution,1.0e-12_dp, &
+            solve_status)
+        end if
+        if(.not.dense_ready .or. solve_status/=0) then
+          write(error_unit,'(A,I0,A,I0,A,1P,E12.4)') &
+            'MRSF differentiated Z solve failed for coordinate ',coordinate, &
+            ' with status ',solve_status,', max|rhs|=',maxval(abs(rhs))
+          status=coordinate
+          exit
+        end if
       end if
       dz(:,coordinate)=solution
       call apply_orbital_hessian(solution,applied,operator_status)
-      if(operator_status/=0) then
+      if(operator_status/=0 .or. any(.not.ieee_is_finite(applied)) .or. &
+         any(.not.ieee_is_finite(solution))) then
         status=coordinate
         exit
       end if
       residual_max=max(residual_max,maxval(abs(applied-rhs)))
     end do
-    deallocate(rhs,solution,applied)
+    deallocate(rhs,solution,applied,dense_operator,unit_vector)
   end subroutine solve_mrsf_z_response_matrix_free
 
 !###############################################################################

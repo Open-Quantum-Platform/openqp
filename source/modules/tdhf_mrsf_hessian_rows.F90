@@ -65,7 +65,9 @@ contains
           transpose(d_energy_weighted(:,:,response)))
         operator_matrix=0.5_dp*(overlap_derivative(:,:,coordinate)+ &
           transpose(overlap_derivative(:,:,coordinate)))
-        rows(coordinate,response)=rows(coordinate,response)- &
+        ! MRSF stores W with the sign already used by the production
+        ! eijden+2W overlap contraction; keep this oracle on that convention.
+        rows(coordinate,response)=rows(coordinate,response)+ &
           2.0_dp*sum(density*operator_matrix)
         density=sum(d_relaxed_spin(:,:,:,response),dim=3)
         density=0.5_dp*(density+transpose(density))
@@ -173,7 +175,8 @@ contains
 !###############################################################################
 
   subroutine build_tdhf_mrsf_response_rows(infos,reference_spin_density, &
-      relaxed_spin_density,seven_density,d_reference_spin_density, &
+      reference_spin_fock,relaxed_spin_density,seven_density, &
+      d_reference_spin_density,d_reference_spin_fock, &
       d_relaxed_spin_density,d_energy_weighted_density,d_seven_density, &
       d_td_abxc,xc_rows,xc_complete,rows,rows_one,rows_two,rows_xc,status)
     ! Cartesian response-row assembly for the founding spin-adapted two-SOMO
@@ -194,9 +197,11 @@ contains
 
     type(information),target,intent(inout) :: infos
     real(kind=dp),intent(in) :: reference_spin_density(:,:,:)
+    real(kind=dp),intent(in) :: reference_spin_fock(:,:,:)
     real(kind=dp),intent(in) :: relaxed_spin_density(:,:,:)
     real(kind=dp),intent(in) :: seven_density(:,:,:)
     real(kind=dp),intent(in) :: d_reference_spin_density(:,:,:,:)
+    real(kind=dp),intent(in) :: d_reference_spin_fock(:,:,:,:)
     real(kind=dp),intent(in) :: d_relaxed_spin_density(:,:,:,:)
     real(kind=dp),intent(in) :: d_energy_weighted_density(:,:,:)
     real(kind=dp),intent(in) :: d_seven_density(:,:,:,:)
@@ -208,7 +213,7 @@ contains
     integer,intent(out) :: status
 
     type(basis_set),pointer :: basis
-    real(kind=dp),allocatable :: packed_density(:),density(:,:)
+    real(kind=dp),allocatable :: packed_density(:),packed_response(:),density(:,:)
     real(kind=dp),allocatable :: gradient_one(:,:),gradient_plus(:,:)
     real(kind=dp),allocatable :: gradient_minus(:,:)
     real(kind=dp),allocatable :: one_bare(:,:),two_response(:,:)
@@ -217,7 +222,7 @@ contains
     real(kind=dp),allocatable,target :: pplus(:,:,:),pminus(:,:,:)
     real(kind=dp),allocatable,target :: splus(:,:,:),sminus(:,:,:)
     real(kind=dp) :: alias_tolerance,alias_scale
-    integer :: response,nbf,nbf_tri,natom,ncart,local_status
+    integer :: response,nbf,nbf_tri,natom,ncart,local_status,spin,diagonal,ij
     logical :: is_dft
 
     status=MRSF_ROWS_SUCCESS
@@ -234,9 +239,11 @@ contains
     is_dft=infos%control%hamilton==20
     if(nbf<=0 .or. ncart<=0 .or. &
        any(shape(reference_spin_density)/=[nbf,nbf,2]) .or. &
+       any(shape(reference_spin_fock)/=[nbf,nbf,2]) .or. &
        any(shape(relaxed_spin_density)/=[nbf,nbf,2]) .or. &
        any(shape(seven_density)/=[7,nbf,nbf]) .or. &
        any(shape(d_reference_spin_density)/=[nbf,nbf,2,ncart]) .or. &
+       any(shape(d_reference_spin_fock)/=[nbf,nbf,2,ncart]) .or. &
        any(shape(d_relaxed_spin_density)/=[nbf,nbf,2,ncart]) .or. &
        any(shape(d_energy_weighted_density)/=[nbf,nbf,ncart]) .or. &
        any(shape(d_seven_density)/=[7,nbf,nbf,ncart]) .or. &
@@ -272,7 +279,7 @@ contains
       return
     end if
 
-    allocate(packed_density(nbf_tri),density(nbf,nbf), &
+    allocate(packed_density(nbf_tri),packed_response(nbf_tri),density(nbf,nbf), &
       gradient_one(3,natom),gradient_plus(3,natom), &
       gradient_minus(3,natom),one_bare(ncart,ncart), &
       two_response(ncart,ncart), &
@@ -282,12 +289,34 @@ contains
 
     do response=1,ncart
       gradient_one=0.0_dp
+      density=0.0_dp
+      do spin=1,2
+        density=density- &
+          matmul(d_reference_spin_density(:,:,spin,response), &
+            matmul(reference_spin_fock(:,:,spin), &
+              reference_spin_density(:,:,spin))) &
+          -matmul(reference_spin_density(:,:,spin), &
+            matmul(d_reference_spin_fock(:,:,spin,response), &
+              reference_spin_density(:,:,spin))) &
+          -matmul(reference_spin_density(:,:,spin), &
+            matmul(reference_spin_fock(:,:,spin), &
+              d_reference_spin_density(:,:,spin,response)))
+      end do
+      density=0.5_dp*(density+transpose(density))
+      call pack_matrix(density,packed_density)
+      ij=0
+      do diagonal=1,nbf
+        ij=ij+diagonal
+        packed_density(ij)=0.5_dp*packed_density(ij)
+      end do
       density=0.5_dp*(d_energy_weighted_density(:,:,response)+ &
         transpose(d_energy_weighted_density(:,:,response)))
-      call pack_matrix(-2.0_dp*density,packed_density)
+      call pack_matrix(2.0_dp*density,packed_response)
+      packed_density=packed_density+packed_response
       call grad_ee_overlap(basis,packed_density,gradient_one)
 
-      density=sum(d_relaxed_spin_density(:,:,:,response),dim=3)
+      density=sum(d_reference_spin_density(:,:,:,response),dim=3)+ &
+        sum(d_relaxed_spin_density(:,:,:,response),dim=3)
       density=0.5_dp*(density+transpose(density))
       call pack_matrix(density,packed_density)
       call grad_en_hellman_feynman(basis,basis%atoms%xyz, &
@@ -299,8 +328,8 @@ contains
         gradient_one)
       one_bare(:,response)=reshape(gradient_one,[ncart])
 
-      dplus=reference_spin_density
-      dminus=reference_spin_density
+      dplus=reference_spin_density+d_reference_spin_density(:,:,:,response)
+      dminus=reference_spin_density-d_reference_spin_density(:,:,:,response)
       pplus=relaxed_spin_density+d_relaxed_spin_density(:,:,:,response)
       pminus=relaxed_spin_density-d_relaxed_spin_density(:,:,:,response)
       splus=seven_density+d_seven_density(:,:,:,response)
@@ -312,28 +341,13 @@ contains
       two_response(:,response)=reshape( &
         0.5_dp*(gradient_plus-gradient_minus),[ncart])
 
-      ! Exact odd polarization about zero reference density retains P*dD and
-      ! dD*P, while the even dD*dD ground-state term cancels.  This is an
-      ! algebraic derivative of a quadratic density contraction, not a nuclear
-      ! displacement.
-      dplus=d_reference_spin_density(:,:,:,response)
-      dminus=-d_reference_spin_density(:,:,:,response)
-      pplus=relaxed_spin_density
-      pminus=relaxed_spin_density
-      splus=seven_density
-      sminus=seven_density
-      call mrsf_two_e_gradient_row(infos,basis,dplus,pplus,splus, &
-        gradient_plus)
-      call mrsf_two_e_gradient_row(infos,basis,dminus,pminus,sminus, &
-        gradient_minus)
-      two_reference_mixed(:,response)=reshape( &
-        0.5_dp*(gradient_plus-gradient_minus),[ncart])
+      two_reference_mixed(:,response)=0.0_dp
     end do
 
     call combine_mrsf_response_row_blocks(one_bare,two_response, &
       two_reference_mixed,xc_rows,is_dft,xc_complete,rows,rows_one, &
       rows_two,rows_xc,status)
-    deallocate(packed_density,density,gradient_one,gradient_plus, &
+    deallocate(packed_density,packed_response,density,gradient_one,gradient_plus, &
       gradient_minus,one_bare,two_response,two_reference_mixed,dplus, &
       dminus,pplus,pminus,splus,sminus)
   end subroutine build_tdhf_mrsf_response_rows

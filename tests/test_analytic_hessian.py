@@ -301,7 +301,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
                 self.assertEqual(status, "unsupported_feature")
                 self.assertIn("LDA/GGA and global-hybrid paths", reason)
 
-    def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
+    def test_mrsf_tdhf_analytical_hessian_is_supported_without_fallback(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rohf", "multiplicity": 3},
@@ -311,10 +311,20 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertFalse(report.ok)
-        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
 
-    def test_mrsf_native_ts_analytical_initial_hessian_is_rejected_in_preflight(self):
+    def test_mrsf_tddft_analytical_hessian_xc_row_remains_fail_closed(self):
+        config = {
+            "input": {"method": "tdhf", "functional": "B3LYP"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "multiplicity": 1},
+            "hess": {"state": 1},
+        }
+        status, reason = self.input_checker.analytic_hessian_capability(config)
+        self.assertEqual(status, "unsupported_feature")
+        self.assertIn("open-shell XC Hessian row", reason)
+
+    def test_mrsf_native_ts_analytical_initial_hessian_is_supported(self):
         config = {
             "input": {"method": "tdhf", "runtype": "ts",
                       "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
@@ -331,9 +341,8 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             config, raise_error=False, emit=False,
         )
 
-        self.assertFalse(report.ok)
-        self.assertIn("Analytical native TS initialization is unavailable", report.to_text())
-        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
+        self.assertNotIn("not implemented", report.to_text())
 
     def test_native_ts_analytical_initial_hessian_applies_basis_l_gate(self):
         config = {

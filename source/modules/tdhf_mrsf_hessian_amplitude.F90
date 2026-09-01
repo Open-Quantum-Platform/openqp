@@ -84,6 +84,7 @@ contains
     call solve_mrsf_tda_response_matrix_free(apply_physical_sigma,omega, &
       x_physical,dax_physical,dx_physical,domega,residual_max,status, &
       tol=solve_tolerance,maxit=solve_iterations,restart=solve_restart)
+    if(status/=0) status=-100+status
     if(status==0) dx_packed=matmul(transform,dx_physical)
     deallocate(transform,x_physical,dax_physical,dx_physical)
 

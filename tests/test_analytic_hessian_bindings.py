@@ -17,9 +17,9 @@ class TestAnalyticHessianBindings(unittest.TestCase):
             "hf_hessian",
             "tdhf_hessian",
             "tdhf_sf_hessian",
+            "tdhf_mrsf_hessian",
         ]:
             self.assertIn(f"void {symbol}(struct oqp_handle_t *inf);", header)
-        self.assertNotIn("tdhf_mrsf_hessian", header)
 
     def test_python_dispatch_mentions_native_hessian_entry_points(self):
         source = read("pyoqp/oqp/library/single_point.py")
@@ -92,7 +92,16 @@ class TestAnalyticHessianBindings(unittest.TestCase):
             "WITH_ABORT",
         ):
             self.assertIn(needle, sf_source)
-        self.assertFalse((ROOT / "source/modules/tdhf_mrsf_hessian.F90").exists())
+        mrsf_source = read("source/modules/tdhf_mrsf_hessian.F90")
+        for needle in (
+            "module tdhf_mrsf_hessian_mod",
+            "bind(C,name='tdhf_mrsf_hessian')",
+            "solve_mrsf_z_response_from_mo_derivatives",
+            "build_mrsf_w_ao_derivative",
+            "build_tdhf_mrsf_response_rows",
+            "alloc_or_die(OQP_tdhf_hessian",
+        ):
+            self.assertIn(needle, mrsf_source)
 
     def test_molecule_has_single_hessian_storage_helper_with_asymmetry_metadata(self):
         source = read("pyoqp/oqp/molecule/molecule.py")

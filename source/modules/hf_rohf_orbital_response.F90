@@ -13,6 +13,7 @@ module hf_rohf_orbital_response_mod
     integer :: ncart = 0
     real(dp), allocatable :: dmo_alpha(:,:,:)
     real(dp), allocatable :: dmo_beta(:,:,:)
+    real(dp), allocatable :: dmo_common(:,:,:)
     real(dp), allocatable :: ds_ao(:,:,:)
     real(dp), allocatable :: dhcore_ao(:,:,:)
   contains
@@ -73,7 +74,8 @@ contains
     real(dp), allocatable :: d0a(:,:),d0b(:,:),dpck(:,:),fpck(:,:)
     real(dp), allocatable :: gfull(:,:),gd0(:,:),ba(:,:),bb(:,:)
     real(dp), allocatable :: bvec(:,:),uvec(:,:),xa(:,:),xb(:,:)
-    real(dp), allocatable :: connection(:,:)
+    real(dp), allocatable :: connection(:,:),connection_alpha(:,:), &
+      connection_common(:,:)
     real(dp), allocatable :: dvecp(:,:,:,:)
     real(dp) :: hfscale,gx(3,size(infos%atoms%xyz,2))
     integer :: nbf,nbf2,natom,ncart,nocca,noccb,nvira,nvirb
@@ -137,6 +139,7 @@ contains
     response%ncart=ncart
     allocate(response%dmo_alpha(nbf,nbf,ncart), &
              response%dmo_beta(nbf,nbf,ncart), &
+             response%dmo_common(nbf,nbf,ncart), &
              response%ds_ao(nbf,nbf,ncart), &
              response%dhcore_ao(nbf,nbf,ncart),source=0.0_dp, &
              stat=alloc_status)
@@ -236,6 +239,7 @@ contains
              gfull(nbf,nbf),gd0(nbf,nbf),ba(nvira,nocca), &
              bb(nvirb,noccb),bvec(ltot,ncart),uvec(ltot,ncart), &
              xa(nvira,nocca),xb(nvirb,noccb),connection(nbf,nbf), &
+             connection_alpha(nbf,nbf),connection_common(nbf,nbf), &
              source=0.0_dp,stat=alloc_status)
     if(alloc_status/=0) then
       call response%clean()
@@ -302,7 +306,11 @@ contains
       call rohf_pack_trial(bvec(:,x),ba,bb,nbf,nocca,noccb)
     end do
 
-    call cphf_solve_rohf(infos,ncart,bvec,uvec)
+    ! Hessian rows differentiate this response once more.  The ordinary
+    ! gradient tolerance leaves a few microhartree/bohr**2 of antisymmetric
+    ! noise in the unsymmetrized matrix, so solve the nuclear response to the
+    ! tighter accuracy required by the second derivative.
+    call cphf_solve_rohf(infos,ncart,bvec,uvec,tol=1.0d-13)
 
     if(dft) then
       block
@@ -323,12 +331,25 @@ contains
         call response%clean()
         return
       end if
+      connection_alpha=connection
       call complete_rohf_orbital_connection(mo,sxmo,noccb,xb, &
         response%dmo_beta(:,:,x),connection,status)
       if(status/=0) then
         call response%clean()
         return
       end if
+      ! A restricted open-shell calculation stores one common spatial-MO
+      ! coefficient matrix.  The alpha completion above supplies its O-V and
+      ! C-V rotations, whereas the beta completion supplies C-O and the same
+      ! C-V rotations.  Each spin-specific completion is sufficient for its
+      ! occupied density, but neither alone is the derivative of the complete
+      ! common ROHF orbital set required by an MRSF response operator.
+      connection_common=connection_alpha
+      connection_common(1:noccb,noccb+1:nocca)= &
+        connection(1:noccb,noccb+1:nocca)
+      connection_common(noccb+1:nocca,1:noccb)= &
+        connection(noccb+1:nocca,1:noccb)
+      response%dmo_common(:,:,x)=matmul(mo,connection_common)
     end do
   end subroutine build_rohf_nuclear_response
 
@@ -506,6 +527,7 @@ contains
 
     if(allocated(this%dmo_alpha)) deallocate(this%dmo_alpha)
     if(allocated(this%dmo_beta)) deallocate(this%dmo_beta)
+    if(allocated(this%dmo_common)) deallocate(this%dmo_common)
     if(allocated(this%ds_ao)) deallocate(this%ds_ao)
     if(allocated(this%dhcore_ao)) deallocate(this%dhcore_ao)
     this%nbf=0

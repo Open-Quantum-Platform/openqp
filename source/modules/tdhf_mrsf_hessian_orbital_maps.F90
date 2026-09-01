@@ -45,11 +45,17 @@ contains
     end if
     allocate(x_matrix(nbf,nbf),plus_density(7,nbf,nbf), &
       minus_density(7,nbf,nbf),plus_a(nbf,nbf),minus_a(nbf,nbf), &
-      plus_b(nbf,nbf),minus_b(nbf,nbf))
+      plus_b(nbf,nbf),minus_b(nbf,nbf),source=0.0_dp)
     call iatogen(x_packed,x_matrix,nocca,noccb)
     do coordinate=1,ncoord
       plus_a=mo_a+dmo_a(:,:,coordinate); minus_a=mo_a-dmo_a(:,:,coordinate)
       plus_b=mo_b+dmo_b(:,:,coordinate); minus_b=mo_b-dmo_b(:,:,coordinate)
+      ! mrsfcbc accumulates into its seven output channels.  Each algebraic
+      ! polarization endpoint must therefore start from an independent zero;
+      ! otherwise uninitialized data and preceding coordinates contaminate
+      ! the nuclear derivative.
+      plus_density=0.0_dp
+      minus_density=0.0_dp
       call mrsfcbc(infos,plus_a,plus_b,x_matrix,plus_density)
       call mrsfcbc(infos,minus_a,minus_b,x_matrix,minus_density)
       density_derivative(:,:,:,coordinate)=0.5_dp*(plus_density-minus_density)
