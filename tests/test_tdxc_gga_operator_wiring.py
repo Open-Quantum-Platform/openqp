@@ -76,12 +76,18 @@ def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
     assert "tddft_gga_fixed_hessian" in TDHESS_XC
 
 
-def test_production_tddft_gradient_includes_moving_grid_response():
-    assert "include_weight_derivative=.true." in TDHF_GRAD
-    assert "call derexc_blk" in TDHF_GRAD
-    assert "include_ground_state=.false." in TDHF_GRAD
+def test_production_tddft_gradient_preserves_the_validated_fixed_grid_path():
+    # The standard restricted TDDFT gradient already matches an independent
+    # PySCF reference.  Moving-grid probes are used by the MRSF correction and
+    # Hessian response machinery, but must not be added to this production call.
+    body = TDHF_GRAD.split("subroutine tdhf_gradient(infos)", 1)[1].split(
+        "end subroutine", 1
+    )[0]
+    assert "include_weight_derivative" not in body
+    assert "include_ground_state" not in body
+    assert "call derexc_blk" not in body
+    assert "threshold=1.0d-14" in body
     assert "dedft = dedft + dat%nucgrad(:,:,1)" in TDXC_GRAD
-    assert "threshold=merge(1.0d-8,1.0d-12,infos%functional%needgrd)" in TDHF_GRAD
 
 
 def test_restricted_owner_motion_alone_gets_closed_shell_factor():
