@@ -434,6 +434,19 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertIn("type=analytical", text)
         self.assertIn("state=0", text)
 
+    def test_analytic_rpa_hessian_examples_compute_an_isolation_root(self):
+        examples = sorted((ROOT / "examples/HESS").glob("*_RPA_ANA_HESS.inp"))
+
+        self.assertTrue(examples)
+        for example in examples:
+            nstate_lines = [
+                line for line in example.read_text().splitlines()
+                if line.strip().lower().startswith("nstate=")
+            ]
+            with self.subTest(example=example.name):
+                self.assertEqual(len(nstate_lines), 1)
+                self.assertGreaterEqual(int(nstate_lines[0].split("=", 1)[1]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

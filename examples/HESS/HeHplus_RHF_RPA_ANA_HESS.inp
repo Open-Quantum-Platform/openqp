@@ -4,7 +4,7 @@ system=
   H   0.0000000000  0.0000000000  0.4000000000
 charge=1
 method=tdhf
-basis=sto-3g
+basis=6-31g
 runtype=hess
 functional=
 
@@ -16,7 +16,7 @@ conv=1.0e-10
 [tdhf]
 type=rpa
 multiplicity=1
-nstate=1
+nstate=2
 conv=1.0e-10
 zvconv=1.0e-10
 

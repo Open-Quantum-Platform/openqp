@@ -43,7 +43,7 @@ contains
     use io_constants, only: iw
     use parallel, only: par_env_t
     use messages, only: show_message, WITH_ABORT
-    use strings, only: c_f_char
+    use, intrinsic :: iso_c_binding, only: c_null_char
 !$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads
 
     implicit none
@@ -59,8 +59,8 @@ contains
     real(dp)::amp_res,z_res,asym,omega,projection_mean
     logical::zero_orbital_connection
     logical::verified_functional
-    character(len=:),allocatable::functional_name
-    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,omp_saved_threads
+    character(len=size(infos%dft%xc_functional_name))::functional_name
+    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,omp_saved_threads,i
     type(par_env_t) :: pe
 
     omp_saved_threads=1
@@ -69,7 +69,14 @@ contains
     call pe%init(infos%mpiinfo%comm,infos%mpiinfo%usempi)
     verified_functional=.true.
     if(infos%control%hamilton==20) then
-      functional_name=c_f_char(infos%dft%xc_functional_name)
+      ! XC_functional_name is a fixed-size C buffer and may occupy all twenty
+      ! bytes without a terminating NUL.  Decode it within its declared bound
+      ! instead of letting the unbounded C-string helper read adjacent fields.
+      functional_name=' '
+      do i=1,size(infos%dft%xc_functional_name)
+        if(infos%dft%xc_functional_name(i)==c_null_char) exit
+        functional_name(i:i)=infos%dft%xc_functional_name(i)
+      end do
       verified_functional=tdhf_hessian_functional_is_verified(functional_name)
     end if
     if (.not.tdhf_hessian_is_applicable(infos%control%scftype,infos%tddft%mult, &
