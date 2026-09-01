@@ -2,6 +2,10 @@
 
 ## Provenance and scope
 
+The present analytic TDHF/TDDFT nuclear-Hessian methodology and its
+implementation effort were initiated by Hiroya Nakata. This OpenQP development
+continues that work and records his originating contribution explicitly.
+
 This development is based on the supplied GAMESS implementation and its
 verification record. The principal TDHF/TDDFT Hessian routines are in
 `tddgrd.src`, with connections and second-derivative terms in `hess.src`,
