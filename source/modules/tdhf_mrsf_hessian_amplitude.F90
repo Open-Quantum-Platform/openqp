@@ -13,6 +13,13 @@ module tdhf_mrsf_hessian_amplitude_mod
   private
   public :: solve_mrsf_tda_amplitude_derivatives
 
+  ! A 40-vector restart is too short for the 134-dimensional physical
+  ! singlet space of CH2O/6-31G: the excited-root projected equation stalls
+  ! even though its operator eigenpair residual is below 1e-8.  Retain a
+  ! bounded Krylov basis for large calculations, but make systems up to this
+  ! size unrestarted so an isolated-root response can converge in one cycle.
+  integer, parameter :: MRSF_HESSIAN_AMPLITUDE_RESTART_CAP=256
+
 contains
 
 !###############################################################################
@@ -79,7 +86,7 @@ contains
     if(present(tolerance)) solve_tolerance=tolerance
     solve_iterations=max(200,4*physical)
     if(present(max_iterations)) solve_iterations=max_iterations
-    solve_restart=min(40,physical)
+    solve_restart=min(MRSF_HESSIAN_AMPLITUDE_RESTART_CAP,physical)
     if(present(restart)) solve_restart=restart
     call solve_mrsf_tda_response_matrix_free(apply_physical_sigma,omega, &
       x_physical,dax_physical,dx_physical,domega,residual_max,status, &

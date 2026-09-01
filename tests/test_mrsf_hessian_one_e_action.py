@@ -10,6 +10,7 @@ SOURCE = ROOT / "source/modules/tdhf_mrsf_hessian_one_e_action.F90"
 TOTAL_ACTION = ROOT / "source/modules/tdhf_mrsf_hessian_operator_derivative.F90"
 TWO_E_ACTION = ROOT / "source/modules/tdhf_mrsf_hessian_two_e_action.F90"
 STATE_RESPONSE = ROOT / "source/modules/tdhf_mrsf_hessian_state_response.F90"
+AMPLITUDE_RESPONSE = ROOT / "source/modules/tdhf_mrsf_hessian_amplitude.F90"
 
 
 def _analytic_mo_derivative(c, dc, f, df):
@@ -75,3 +76,13 @@ def test_first_nuclear_response_connects_orbitals_fock_operator_and_amplitudes()
     for output in ("dpa_out", "dpb_out", "dfock_a_out", "dfock_b_out"):
         assert output in compact
     assert "numericalnucleardisplacement" in compact
+
+
+def test_production_amplitude_solver_uses_bounded_full_krylov_for_small_spaces():
+    compact = "".join(AMPLITUDE_RESPONSE.read_text().lower().split())
+    assert "mrsf_hessian_amplitude_restart_cap=256" in compact
+    assert (
+        "solve_restart=min(mrsf_hessian_amplitude_restart_cap,physical)"
+        in compact
+    )
+    assert "build_mrsf_packed_transform" in compact
