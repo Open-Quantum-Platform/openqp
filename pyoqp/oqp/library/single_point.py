@@ -2055,6 +2055,144 @@ class Hessian(Calculator):
             }
             return
 
+        # A generic ROHF dipole and ROHF CPHF polarizability are properties of
+        # the high-spin reference, not of an MRSF response root.  The former
+        # implementation ran those two kernels for every MRSF Hessian and
+        # published the resulting arrays without a state-role distinction.
+        # Route ordinary two-SOMO MRSF through the dedicated state-tracked path
+        # and fail closed: no reference-state tensor is an allowed fallback.
+        td_type = str(self.mol.config.get('tdhf', {}).get('type', '')).lower()
+        if td_type == 'mrsf':
+            self.mol.infrared_intensities = np.zeros(0)
+            self.mol.raman_activities = np.zeros(0)
+            self.mol.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+            self.mol.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
+            if int(self.state) < 1:
+                self.mol.vibrational_intensity_metadata = {
+                    'status': 'not_computed',
+                    'backend': 'mrsf_state_tracked_normal_coordinate_fd',
+                    'electronic_state_role': 'reference_state',
+                    'reason': (
+                        'A target MRSF response root is required; the generic '
+                        'ROHF dipole/CPHF polarizability path is disabled for '
+                        'an MRSF Hessian calculation.'
+                    ),
+                    'generic_rohf_cphf_fallback': False,
+                    'replacement_used': False,
+                }
+                return
+            try:
+                from oqp.library.mrsf_spectroscopy_fd import (
+                    run_openqp_mrsf_spectroscopy_fd,
+                )
+
+                state_label = public_state_label(self.mol.config, int(self.state))
+                hess_config = self.mol.config.get('hess', {})
+                result = run_openqp_mrsf_spectroscopy_fd(
+                    self.mol,
+                    modes,
+                    state_index=int(self.state),
+                    electronic_state=state_label,
+                    coordinate_phase_convention=(
+                        'OpenQP Hessian normal modes in stored eigenvector phase'
+                    ),
+                    displacement=float(hess_config.get('property_dx', 1.0e-3)),
+                    minimum_state_overlap=float(
+                        hess_config.get('property_min_overlap', 0.99)
+                    ),
+                    minimum_tracking_margin=float(
+                        hess_config.get('property_min_margin', 0.05)
+                    ),
+                    fd_relative_tolerance=float(
+                        hess_config.get('property_fd_relative_tolerance', 0.05)
+                    ),
+                    fd_absolute_tolerance=float(
+                        hess_config.get('property_fd_absolute_tolerance', 1.0e-6)
+                    ),
+                    polarizability_backend=str(
+                        hess_config.get('raman_backend', 'truncated_sos')
+                    ),
+                    sos_tail_states=int(
+                        hess_config.get('raman_sos_tail_states', 2)
+                    ),
+                    sos_tail_relative_tolerance=float(
+                        hess_config.get('raman_sos_tail_tolerance', 0.05)
+                    ),
+                    sos_minimum_gap_hartree=float(
+                        hess_config.get('raman_sos_min_gap', 1.0e-5)
+                    ),
+                )
+            except Exception as exc:
+                self.mol.vibrational_intensity_metadata = {
+                    'status': 'failed',
+                    'backend': 'mrsf_state_tracked_normal_coordinate_fd',
+                    'electronic_state_role': 'target_excited_state',
+                    'state_index_one_based': int(self.state),
+                    'reason': str(exc),
+                    'failure_type': type(exc).__name__,
+                    'generic_rohf_cphf_fallback': False,
+                    'replacement_used': False,
+                }
+                return
+
+            self.mol.infrared_intensities = np.asarray(
+                result.infrared.intensities_km_mol, dtype=float
+            )
+            self.mol.infrared_mode_dipole_derivatives = np.asarray(
+                result.infrared.mode_dipole_derivatives.real, dtype=float
+            )
+            if result.raman is not None:
+                self.mol.raman_activities = np.asarray(
+                    result.raman.activities_au, dtype=float
+                )
+                self.mol.raman_mode_polarizability_derivatives = np.asarray(
+                    result.raman.mode_polarizability_derivatives.real, dtype=float
+                )
+                raman_status = 'computed_truncated_sos'
+            else:
+                raman_status = 'not_computed_sos_convergence_gate'
+
+            overlaps = [
+                float(record['matched_overlap'])
+                for record in result.displacement_records
+            ]
+            margins = [
+                float(record['tracking_margin'])
+                for record in result.displacement_records
+            ]
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'computed' if result.raman is not None else 'partial',
+                'backend': 'mrsf_state_tracked_normal_coordinate_fd',
+                'electronic_state_role': 'target_excited_state',
+                'state_index_one_based': int(self.state),
+                'electronic_state': state_label,
+                'response_representation': (
+                    'two_somo_spin_adapted_CO_OV_CV_OO'
+                ),
+                'minimum_state_overlap': min(overlaps),
+                'minimum_tracking_margin': min(margins),
+                'ir_status': 'computed_state_density_fd',
+                'ir_intensity_unit': 'km/mol',
+                'dipole_derivative_unit': 'e*bohr/(sqrt(amu)*bohr)',
+                'raman_status': raman_status,
+                'raman_activity_unit': 'bohr^4/amu',
+                'polarizability_derivative_unit': 'bohr^3/(sqrt(amu)*bohr)',
+                'raman_scope': (
+                    'convergence-gated finite-state MRSF SOS; not analytic and '
+                    'not a complete static polarizability'
+                ),
+                'generic_rohf_cphf_fallback': False,
+                'property_kernels': (
+                    'complete MRSF state density and state-to-state transition '
+                    'densities; no generic ROHF property kernel'
+                ),
+                'displacements': [
+                    dict(record) for record in result.displacement_records
+                ],
+                'provenance': dict(result.provenance),
+            }
+            return
+
         displacement = 1.0e-3
         dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
         polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)

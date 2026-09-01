@@ -148,6 +148,74 @@ The adapter performs no electronic-structure calculation.  In particular, it
 cannot and does not replace a missing MRSF target-state property by the ROHF or
 SCF reference property.
 
+### OpenQP MRSF normal-coordinate driver
+
+`run_openqp_mrsf_spectroscopy_fd` supplies the corresponding electronic-
+structure driver for ordinary two-SOMO MRSF.  Starting from a completed central
+MRSF calculation, it runs the plus and minus normal-coordinate displacements,
+aligns the closed, open, and virtual orbitals to the central calculation, and
+matches the complete spin-adapted response roots by overlap.  Every accepted
+displacement records the overlap, assignment margin, electronic phase, raw
+root index, and the normalized CO, OV, CV, and OO response weights.  A failed
+or ambiguous state match stops that property derivative.  The isolated-root
+gate requires an overlap of at least 0.99 and an assignment margin of at least
+0.05; user input may tighten but cannot weaken these values.  It also requires
+the target to be bracketed by the calculated root ladder, rejects a gap below
+`1e-5` Hartree, preserves the singlet or triplet spin-adapted sector, and checks
+spatial symmetry whenever symmetry analysis is enabled.  A degenerate
+manifold requires a separately validated projector treatment.
+
+For the permanent dipole, each displaced value is
+
+\[
+\boldsymbol{\mu}_I = \sum_A Z_A^{\mathrm{eff}}
+(\mathbf{R}_A-\mathbf{R}_{\mathrm{COM}})
+- \operatorname{Tr}[P_I\,\mathbf{r}_{\mathrm{COM}}],
+\]
+
+where `P_I` is the complete MRSF state 1-RDM of the tracked root and
+`Z_A^eff` includes electrons removed by an effective core potential.  The
+result is therefore the full target-state dipole; it does not call or relabel
+the ROHF permanent-dipole kernel.  Central differences in excited-state
+normal coordinates give `dmu/dQ` in `e*bohr / (sqrt(amu)*bohr)`, which is passed
+directly to `excited_state_ir_intensities`.
+
+OpenQP presently has no uniform-electric-field Hamiltonian input for an MRSF
+finite-field polarizability.  The implemented Raman development path instead
+uses the explicitly truncated static sum over calculated spin-adapted MRSF
+states,
+
+\[
+\alpha_{ab}^{I}(0) = \sum_{J\ne I}
+\frac{\mu_{IJ,a}\mu_{JI,b}+\mu_{IJ,b}\mu_{JI,a}}{E_J-E_I}.
+\]
+
+Removing the highest requested tail of states must change the tensor by less
+than the stated relative tolerance.  Otherwise Raman remains absent while the
+independently valid target-state IR result is retained.  This finite-state SOS
+quantity is not an analytic MRSF polarizability and must be converged with
+respect to `nstate`.  Requesting `polarizability_backend="finite_field"` fails
+closed until the MRSF Hamiltonian supports a uniform electric field; the driver
+never substitutes the ROHF CPHF polarizability.
+
+The JSON schema is illustrated by
+`examples/VIBRONIC/MRSF_PROPERTY_FD.json`.  Its fixed declarations are
+`electronic_state_role="target_excited_state"`,
+`response_representation="two_somo_spin_adapted_CO_OV_CV_OO"`,
+`coordinate_basis="excited_normal"`, and
+`coordinate_unit="sqrt(amu)*bohr"`.  The driver evaluates central differences
+at `h`, `h/2`, and `h/4`, requires the medium-to-fine change to satisfy the
+stated absolute or relative tolerance, and publishes the `h/4` derivative.
+The output records units, all displacement steps, tracking diagnostics, source
+identity, and the unavailable analytic/finite-field response explicitly.
+
+Traditional OpenQP inputs expose the same numerical gates in `[hess]` as
+`property_dx`, `property_min_overlap`, `property_min_margin`,
+`property_fd_relative_tolerance`, `property_fd_absolute_tolerance`, `raman_backend`,
+`raman_sos_tail_states`, `raman_sos_tail_tolerance`, and
+`raman_sos_min_gap`.  The Raman backend choices are `truncated_sos` and the
+deliberately unavailable `finite_field` sentinel.
+
 ## Analytic MRSF property-derivative hook
 
 `mrsf_analytic_property_derivative_from_provider` is the fail-closed entry for

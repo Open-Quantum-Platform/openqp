@@ -37,4 +37,15 @@ from .vibronic import (
     resonance_raman_fc_ht,
     vibronic_transition_moment,
 )
+from .mrsf_spectroscopy_fd import (
+    MRSFPropertyFDRequest,
+    MRSFSpectroscopyFDResult,
+    MRSFTrackedPropertySnapshot,
+    OpenQPMRSFNormalModeEvaluator,
+    assemble_mrsf_spectroscopy_derivatives,
+    full_mrsf_state_dipole,
+    response_block_weights,
+    run_openqp_mrsf_spectroscopy_fd,
+    truncated_sos_polarizability,
+)
 from .odp import ODPUmbrella, odp_wham, write_odp_wham
