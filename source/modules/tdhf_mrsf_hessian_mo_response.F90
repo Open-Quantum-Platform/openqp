@@ -78,7 +78,7 @@ contains
     status=0
     tolerance=1.0e-8_dp
     if(present(gap_tolerance)) tolerance=gap_tolerance
-    if(nbf<=0 .or. ncoord<=0 .or. noccb<1 .or. noccb>=nocca .or. &
+    if(nbf<=0 .or. ncoord<=0 .or. noccb<0 .or. noccb>=nocca .or. &
        nocca>=nbf .or. tolerance<=0.0_dp .or. &
        any(shape(mo)/=[nbf,nbf]) .or. &
        any(shape(fock_a_ao)/=[nbf,nbf]) .or. &

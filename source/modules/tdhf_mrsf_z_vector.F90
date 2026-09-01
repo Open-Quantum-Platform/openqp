@@ -2093,14 +2093,17 @@ contains
                          wrk2,  nbf,  &
                  0.0_dp, ppija, nocca)
   !   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
-      call dgemm('n', 'n', nbf, noccb, nbf,  &
-                 1.0_dp, ab1(:,:,2), nbf,  &
-                         mo_b, nbf,  &
-                 0.0_dp, wrk2, nbf)
-      call dgemm('t', 'n', noccb, noccb, nbf,  &
-                 1.0_dp, mo_b,  nbf,  &
-                         wrk2,  nbf,  &
-                 0.0_dp, ppijb, noccb)
+      ppijb = 0.0_dp
+      if (noccb > 0) then
+        call dgemm('n', 'n', nbf, noccb, nbf,  &
+                   1.0_dp, ab1(:,:,2), nbf,  &
+                           mo_b, nbf,  &
+                   0.0_dp, wrk2, nbf)
+        call dgemm('t', 'n', noccb, noccb, nbf,  &
+                   1.0_dp, mo_b,  nbf,  &
+                           wrk2,  nbf,  &
+                   0.0_dp, ppijb, noccb)
+      end if
 
       ! Preserve the exact stationary-gradient intermediates consumed by W.
       ! The analytic Hessian differentiates these quantities, but its baseline
@@ -2112,12 +2115,17 @@ contains
         description=OQP_td_mrsf_hxb_comment)
       call infos%dat%alloc_or_die(OQP_td_mrsf_ppija,(/nocca,nocca/), &
         stored_ppija,description=OQP_td_mrsf_ppija_comment)
-      call infos%dat%alloc_or_die(OQP_td_mrsf_ppijb,(/noccb,noccb/), &
+      ! Tagarray cannot represent a zero extent.  Store a zero 1x1 envelope
+      ! only for the empty beta occupied-occupied block; the physical Hessian
+      ! arrays retain their native (0,0) shape.
+      call infos%dat%alloc_or_die(OQP_td_mrsf_ppijb, &
+        (/max(1,noccb),max(1,noccb)/), &
         stored_ppijb,description=OQP_td_mrsf_ppijb_comment)
       stored_hxa=hxa
       stored_hxb=hxb
       stored_ppija=ppija
-      stored_ppijb=ppijb
+      stored_ppijb=0.0_dp
+      if (noccb > 0) stored_ppijb(1:noccb,1:noccb)=ppijb
 
   !   Calculate W (in MO basis)
       wmo => wrk3

@@ -513,6 +513,10 @@ contains
 
     nbf = ubound(pao, 1)
 
+    ! A zero-dimensional occupied or virtual response block has no MO
+    ! elements.  Do not pass its zero leading dimension to BLAS.
+    if (nocca == 0 .or. noccb == nbf) return
+
     allocate(scr(nocca,nbf))
 
     vap => va(:,1:nocca)

@@ -414,6 +414,21 @@ contains
     call tagarray_get_data(infos%dat,OQP_td_p,td_p)
     call tagarray_get_data(infos%dat,OQP_td_mrsf_ppija,stored_ppija)
     call tagarray_get_data(infos%dat,OQP_td_mrsf_ppijb,stored_ppijb)
+    if(any(shape(stored_ppija)/=[nocca,nocca])) then
+      status=-2
+      return
+    end if
+    if(noccb>0) then
+      if(any(shape(stored_ppijb)/=[noccb,noccb])) then
+        status=-2
+        return
+      end if
+    else
+      if(any(shape(stored_ppijb)/=[1,1])) then
+        status=-2
+        return
+      end if
+    end if
     allocate(pa(nbf,nbf),pb(nbf,nbf),fpa(nbf,nbf),fpb(nbf,nbf), &
       dfpa(nbf,nbf,ncoord),dfpb(nbf,nbf,ncoord), &
       dpa_fock(nbf,nbf,ncoord),dpb_fock(nbf,nbf,ncoord), &
@@ -442,7 +457,11 @@ contains
     data%ppija=full_a(1:nocca,1:nocca)
     data%ppijb=full_b(1:noccb,1:noccb)
     baseline_error_a=maxval(abs(data%ppija-stored_ppija))
-    baseline_error_b=maxval(abs(data%ppijb-stored_ppijb))
+    if(noccb>0) then
+      baseline_error_b=maxval(abs(data%ppijb-stored_ppijb))
+    else
+      baseline_error_b=abs(stored_ppijb(1,1))
+    end if
     if(max(baseline_error_a,baseline_error_b)>1.0e-8_dp) then
       write(iw,'(A,1P,E15.7,A,E15.7,A)') &
         'MRSF ppij reconstruction errors: alpha=',baseline_error_a, &
@@ -453,7 +472,7 @@ contains
       return
     end if
     data%ppija=stored_ppija
-    data%ppijb=stored_ppijb
+    if(noccb>0) data%ppijb=stored_ppijb
     data%dppija=dfull_a(1:nocca,1:nocca,:)
     data%dppijb=dfull_b(1:noccb,1:noccb,:)
     deallocate(pa,pb,fpa,fpb,dfpa,dfpb,dpa_fock,dpb_fock,full_a,full_b, &

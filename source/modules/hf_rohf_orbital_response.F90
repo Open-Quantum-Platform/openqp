@@ -478,7 +478,7 @@ contains
     status=0
     nbf=size(mo,1)
     nvir=nbf-nocc
-    if(nbf<=0 .or. nocc<=0 .or. nvir<=0 .or. &
+    if(nbf<=0 .or. nocc<0 .or. nvir<=0 .or. &
        any(shape(mo)/=[nbf,nbf]) .or. &
        any(shape(sx_mo)/=[nbf,nbf]) .or. &
        any(shape(xvo)/=[nvir,nocc]) .or. &
@@ -488,9 +488,11 @@ contains
       return
     end if
     connection=-0.5_dp*sx_mo
-    connection(nocc+1:nbf,1:nocc)=xvo
-    connection(1:nocc,nocc+1:nbf)= &
-      -sx_mo(1:nocc,nocc+1:nbf)-transpose(xvo)
+    if(nocc>0) then
+      connection(nocc+1:nbf,1:nocc)=xvo
+      connection(1:nocc,nocc+1:nbf)= &
+        -sx_mo(1:nocc,nocc+1:nbf)-transpose(xvo)
+    end if
     dmo=matmul(mo,connection)
   end subroutine complete_rohf_orbital_connection
 

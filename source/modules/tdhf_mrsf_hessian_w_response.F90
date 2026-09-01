@@ -164,7 +164,7 @@ contains
     status = MRSF_W_BAD_DIMENSION
     nbf = size(mo, 1)
     if (nbf < 1 .or. size(mo, 2) /= nbf) return
-    if (nocb < 1 .or. noca - nocb /= 2 .or. noca >= nbf) return
+    if (nocb < 0 .or. noca - nocb /= 2 .or. noca >= nbf) return
     nz = nocb*(2 + nbf - noca) + 2*(nbf - noca)
 
     if (size(mo_energy) /= nbf) return

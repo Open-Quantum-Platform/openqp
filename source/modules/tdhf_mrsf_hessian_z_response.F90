@@ -60,7 +60,7 @@ contains
       status = MRSF_Z_RESPONSE_UNSUPPORTED_MULTIPLICITY
       return
     end if
-    if (nocca <= 0 .or. noccb <= 0 .or. noccb >= nocca) then
+    if (nocca <= 0 .or. noccb < 0 .or. noccb >= nocca) then
       status = MRSF_Z_RESPONSE_INVALID_SHAPE
       return
     end if
