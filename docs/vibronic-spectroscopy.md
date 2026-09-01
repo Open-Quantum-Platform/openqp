@@ -204,8 +204,11 @@ The JSON schema is illustrated by
 `response_representation="two_somo_spin_adapted_CO_OV_CV_OO"`,
 `coordinate_basis="excited_normal"`, and
 `coordinate_unit="sqrt(amu)*bohr"`.  The driver evaluates central differences
-at `h`, `h/2`, and `h/4`, requires the medium-to-fine change to satisfy the
-stated absolute or relative tolerance, and publishes the `h/4` derivative.
+at `h`, `h/2`, and `h/4`.  It verifies `L M L^T = I` for the supplied Cartesian
+normal-mode rows, requires the medium-to-fine change of every normal mode to
+satisfy the stated absolute or relative tolerance, and publishes the `h/4`
+derivative.  Thus a large derivative of one mode cannot conceal an unconverged
+derivative of another mode in an aggregate norm.
 The output records units, all displacement steps, tracking diagnostics, source
 identity, and the unavailable analytic/finite-field response explicitly.
 

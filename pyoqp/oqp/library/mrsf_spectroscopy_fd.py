@@ -49,7 +49,16 @@ SPIN_ADAPTED_LAYOUT = "two_somo_spin_adapted_CO_OV_CV_OO"
 
 
 def _finite_real(name: str, values: ArrayLike) -> FloatArray:
-    array = np.asarray(values, dtype=float)
+    source = np.asarray(values)
+    if np.iscomplexobj(source):
+        imaginary = float(np.max(np.abs(source.imag), initial=0.0))
+        if imaginary > 1.0e-12:
+            raise ValueError(
+                f"{name} must be real for ordinary zero-field MRSF "
+                f"(max imaginary component {imaginary:.3e})"
+            )
+        source = source.real
+    array = np.asarray(source, dtype=float)
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must contain only finite values")
     return array
@@ -60,6 +69,36 @@ def _sha256_json(value: object) -> str:
         value, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_mass_normalized_modes(
+    normal_modes: ArrayLike,
+    atomic_masses_amu: ArrayLike,
+    *,
+    tolerance: float = 1.0e-8,
+) -> float:
+    """Require ``L M L^T = I`` for Cartesian normal-mode rows.
+
+    This normalization is what makes a displacement ``dR = L dQ`` use
+    ``Q`` in ``sqrt(amu)*bohr``.  Accepting an arbitrary Cartesian vector under
+    that unit label would scale both IR intensities and Raman activities by an
+    unreported factor.
+    """
+
+    modes = _finite_real("normal_modes", normal_modes)
+    masses = _finite_real("atomic_masses_amu", atomic_masses_amu).reshape(-1)
+    if masses.size == 0 or np.any(masses <= 0.0):
+        raise ValueError("atomic masses must be positive")
+    if modes.ndim != 2 or modes.shape[1] != 3 * masses.size:
+        raise ValueError("normal modes and atomic masses have inconsistent dimensions")
+    gram = (modes * np.repeat(masses, 3)[None, :]) @ modes.T
+    residual = float(np.max(np.abs(gram - np.eye(modes.shape[0])), initial=0.0))
+    if residual > float(tolerance):
+        raise ValueError(
+            "normal modes are not mass-normalized in amu "
+            f"(max |L M L^T - I|={residual:.3e}, tolerance={tolerance:.3e})"
+        )
+    return residual
 
 
 @dataclass(frozen=True)
@@ -502,6 +541,15 @@ def truncated_sos_polarizability(
     energies = _finite_real("MRSF excitation energies", getattr(states, "energies"))
     if energies.ndim != 1:
         raise ValueError("MRSF excitation energies must be one-dimensional")
+    if int(tail_states) < 1:
+        raise ValueError("tail_states must be positive")
+    if tail_relative_tolerance <= 0.0 or minimum_gap_hartree <= 0.0:
+        raise ValueError("SOS convergence tolerance and minimum gap must be positive")
+    if np.any(np.diff(energies) < -1.0e-12):
+        raise ValueError(
+            "MRSF excitation energies must be in nondecreasing order so the "
+            "highest-state SOS tail is defined"
+        )
     root = int(root_index)
     if not 0 <= root < energies.size:
         raise IndexError("target MRSF root is outside the calculated state ladder")
@@ -715,31 +763,57 @@ def assemble_mrsf_spectroscopy_derivatives(
         if len(derivatives) != 3:
             raise RuntimeError("finite-difference validation requires h, h/2, and h/4")
         coarse, medium, fine = [item.values for item in derivatives]
-        coarse_change = float(np.linalg.norm(medium - coarse))
-        fine_change = float(np.linalg.norm(fine - medium))
-        fine_norm = float(np.linalg.norm(fine))
+        # The last axis enumerates normal coordinates.  Check convergence for
+        # every mode separately: a large, well-converged derivative must not
+        # hide an unconverged weak mode in one aggregate Frobenius norm.
+        coarse_delta = np.moveaxis(medium - coarse, -1, 0)
+        fine_delta = np.moveaxis(fine - medium, -1, 0)
+        fine_by_mode = np.moveaxis(fine, -1, 0)
+        component_axes = tuple(range(1, fine_by_mode.ndim))
+        coarse_change_by_mode = np.linalg.norm(
+            coarse_delta, axis=component_axes
+        )
+        fine_change_by_mode = np.linalg.norm(fine_delta, axis=component_axes)
+        fine_norm_by_mode = np.linalg.norm(fine_by_mode, axis=component_axes)
+        relative_change_by_mode = fine_change_by_mode / np.maximum(
+            fine_norm_by_mode, request.fd_absolute_tolerance
+        )
+        within_tolerance = (
+            (fine_change_by_mode <= request.fd_absolute_tolerance)
+            | (relative_change_by_mode <= request.fd_relative_tolerance)
+        )
+        decreasing = (
+            (coarse_change_by_mode <= request.fd_absolute_tolerance)
+            | (fine_change_by_mode <= 1.25 * coarse_change_by_mode)
+        )
+        failed = np.flatnonzero(~(within_tolerance & decreasing))
+        if failed.size:
+            mode_summary = ", ".join(
+                f"{int(mode) + 1} (fine={fine_change_by_mode[mode]:.3e}, "
+                f"relative={relative_change_by_mode[mode]:.3e}, "
+                f"coarse={coarse_change_by_mode[mode]:.3e})"
+                for mode in failed
+            )
+            raise ValueError(
+                f"{name} finite difference is not converged over h, h/2, h/4: "
+                f"normal modes {mode_summary}"
+            )
+        coarse_change = float(np.linalg.norm(coarse_delta))
+        fine_change = float(np.linalg.norm(fine_delta))
+        fine_norm = float(np.linalg.norm(fine_by_mode))
         relative_change = fine_change / max(
             fine_norm, request.fd_absolute_tolerance
         )
-        within_tolerance = (
-            fine_change <= request.fd_absolute_tolerance
-            or relative_change <= request.fd_relative_tolerance
-        )
-        decreasing = (
-            coarse_change <= request.fd_absolute_tolerance
-            or fine_change <= 1.25 * coarse_change
-        )
-        if not within_tolerance or not decreasing:
-            raise ValueError(
-                f"{name} finite difference is not converged over h, h/2, h/4: "
-                f"fine change {fine_change:.3e}, relative change "
-                f"{relative_change:.3e}, coarse change {coarse_change:.3e}"
-            )
         return {
             "step_scales": list(step_scales),
             "coarse_to_medium_norm": coarse_change,
             "medium_to_fine_norm": fine_change,
             "medium_to_fine_relative_norm": relative_change,
+            "coarse_to_medium_norm_by_mode": coarse_change_by_mode.tolist(),
+            "medium_to_fine_norm_by_mode": fine_change_by_mode.tolist(),
+            "medium_to_fine_relative_norm_by_mode": (
+                relative_change_by_mode.tolist()
+            ),
             "relative_tolerance": request.fd_relative_tolerance,
             "absolute_tolerance": request.fd_absolute_tolerance,
             "accepted_step_scale": step_scales[-1],
@@ -824,6 +898,9 @@ class OpenQPMRSFNormalModeEvaluator:
         ).reshape((-1, 3))
         if self.central_geometry.size != request.normal_modes.shape[1]:
             raise ValueError("central OpenQP geometry and normal_modes disagree")
+        self.normal_mode_mass_metric_max_residual = _validate_mass_normalized_modes(
+            request.normal_modes, getattr(central_mol, "get_mass")()
+        )
         config = getattr(central_mol, "config")
         self._validate_config(config, central_mol)
         nstate = int(config["tdhf"]["nstate"])
@@ -1025,6 +1102,9 @@ class OpenQPMRSFNormalModeEvaluator:
                 "isolated_root_invariants": dict(tracking_report),
                 "state_dipole": "nuclear plus complete MRSF state-density contraction",
                 "response_representation": SPIN_ADAPTED_LAYOUT,
+                "normal_mode_mass_metric_max_residual": (
+                    self.normal_mode_mass_metric_max_residual
+                ),
             },
         )
 

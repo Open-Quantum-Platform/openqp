@@ -103,12 +103,28 @@ def test_request_schema_requires_spin_adapted_two_somo_topology(fd):
     with pytest.raises(ValueError, match="projector treatment"):
         fd.MRSFPropertyFDRequest.from_dict(weak_tracking)
 
+    with pytest.raises(ValueError, match="must be real"):
+        fd._finite_real("ordinary MRSF quantity", [1.0 + 1.0e-4j])
+
 
 def test_response_weights_retain_all_co_ov_cv_oo_classes(fd):
     weights = fd.response_block_weights(FakeStates(), 0)
     assert set(weights) == {"CO", "OV", "CV", "OO"}
     assert sum(weights.values()) == pytest.approx(1.0)
     assert all(value > 0.0 for value in weights.values())
+
+
+def test_normal_coordinate_unit_requires_mass_normalized_modes(fd):
+    masses = np.array([1.0, 4.0])
+    modes = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.5, 0.0, 0.0],
+        ]
+    )
+    assert fd._validate_mass_normalized_modes(modes, masses) < 1.0e-15
+    with pytest.raises(ValueError, match="not mass-normalized"):
+        fd._validate_mass_normalized_modes(2.0 * modes, masses)
 
 
 def test_full_state_dipole_contracts_complete_mrsf_density_and_nuclei(fd):
@@ -160,6 +176,17 @@ def test_truncated_sos_tensor_and_tail_convergence_gate(fd):
             0,
             tail_states=2,
             tail_relative_tolerance=0.01,
+            minimum_gap_hartree=1.0e-5,
+        )
+
+    unsorted = FakeStates()
+    unsorted.energies = np.array([0.0, 0.5, 2.0, 1.0, 3.0])
+    with pytest.raises(ValueError, match="nondecreasing order"):
+        fd.truncated_sos_polarizability(
+            unsorted,
+            0,
+            tail_states=2,
+            tail_relative_tolerance=0.05,
             minimum_gap_hartree=1.0e-5,
         )
 
@@ -323,6 +350,60 @@ def test_unconverged_polarizability_fd_keeps_independent_ir(fd):
     assert result.infrared.intensities_km_mol.size == 1
     assert result.raman is None
     assert "not converged" in result.provenance["polarizability_fd_failure"]
+
+
+def test_fd_convergence_is_required_for_each_normal_mode(fd):
+    request = fd.MRSFPropertyFDRequest.create(
+        electronic_method="MRSF-TDHF",
+        electronic_state="MRSF S0",
+        state_index=1,
+        normal_modes=[
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+        ],
+        displacement=0.001,
+        coordinate_phase_convention="synthetic",
+    )
+
+    def evaluator(mode, sign, geometry):
+        del sign
+        displacement_value = float(np.asarray(geometry).reshape(-1)[mode])
+        dipole = np.zeros(3)
+        if mode == 0:
+            # This large, exactly linear derivative would dominate the former
+            # aggregate Frobenius-norm convergence check.
+            dipole[0] = 1.0e6 * displacement_value
+        else:
+            # Central derivatives at h, h/2, and h/4 are 100001, 25001, and
+            # 6251.  The individual mode is plainly unconverged even though its
+            # medium-to-fine change is below 5% of the aggregate derivative.
+            dipole[1] = displacement_value + 1.0e8 * displacement_value**3
+        return fd.MRSFTrackedPropertySnapshot.create(
+            state_dipole_au=dipole,
+            polarizability_au=None,
+            matched_overlap=0.995,
+            tracking_margin=0.2,
+            phase_to_central=1.0,
+            raw_root_index=0,
+            state_energy_hartree=-10.0,
+            target_multiplicity=1,
+            expected_s2=0.0,
+            state_irrep=None,
+            response_block_weights={
+                "CO": 0.25,
+                "OV": 0.25,
+                "CV": 0.25,
+                "OO": 0.25,
+            },
+        )
+
+    with pytest.raises(ValueError, match=r"normal modes 2 "):
+        fd.assemble_mrsf_spectroscopy_derivatives(
+            request,
+            evaluator,
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            electronic_method="MRSF-TDHF",
+        )
 
 
 def test_finite_field_request_fails_without_substituting_rohf_cphf(fd):
