@@ -238,6 +238,34 @@ class TestVibronicSpectrumAndHT(unittest.TestCase):
         )
         self.assertGreater(result.retained_thermal_population, 0.999)
 
+    def test_incomplete_final_basis_is_rejected_before_normalization(self):
+        displaced = self.vibronic.HarmonicVibronicModel.create(
+            [1000.0],
+            [900.0],
+            [[1.0]],
+            [50.0],
+            coordinate_unit="sqrt(me)*bohr",
+            coordinate_phase_convention="strongly displaced synthetic mode",
+        )
+        with self.assertRaisesRegex(ValueError, "Franck-Condon completeness"):
+            self.vibronic.harmonic_vibronic_spectrum(
+                displaced,
+                electronic_origin_cm1=20000.0,
+                origin_kind="zero_zero",
+                max_final_quanta=0,
+                normalization="sum",
+            )
+
+        partial = self.vibronic.harmonic_vibronic_spectrum(
+            displaced,
+            electronic_origin_cm1=20000.0,
+            origin_kind="zero_zero",
+            max_final_quanta=0,
+            normalization="sum",
+            minimum_franck_condon_completeness=0.0,
+        )
+        self.assertLess(partial.franck_condon_completeness, 0.01)
+
     def test_ht_fundamental_matches_ladder_operator_limit(self):
         derivative = self.derivative((2.0, 0.0, 0.0))
         engine = self.vibronic.HarmonicOverlapEngine(self.model)
@@ -369,6 +397,11 @@ class TestPropertyDerivativeObservables(unittest.TestCase):
             self.vibronic.IR_INTENSITY_CONVERSION_KM_MOL
             * np.array([9.0, 9.0, 0.0]),
         )
+        self.assertAlmostEqual(
+            self.vibronic.IR_INTENSITY_CONVERSION_KM_MOL,
+            974.88011,
+            places=5,
+        )
 
     def test_raman_isotropic_and_anisotropic_analytic_limits(self):
         values = np.zeros((3, 3, 2))
@@ -417,6 +450,22 @@ class TestPropertyDerivativeObservables(unittest.TestCase):
                 electronic_phase_convention="phase-invariant expectation value",
                 coordinate_phase_convention="tracked S1 normal modes",
                 state_tracking_overlaps=[[0.95, 0.4]],
+            )
+
+    def test_finite_difference_rejects_nonphysical_overlap(self):
+        with self.assertRaisesRegex(ValueError, "must lie in"):
+            self.vibronic.finite_difference_excited_state_property(
+                [[1.0, 0.0, 0.0]],
+                [[0.8, 0.0, 0.0]],
+                [0.1],
+                property_kind="state_dipole",
+                coordinate_basis="excited_normal",
+                coordinate_unit="sqrt(amu)*bohr",
+                property_unit="e*bohr",
+                electronic_state="S1",
+                electronic_phase_convention="phase-invariant expectation value",
+                coordinate_phase_convention="tracked S1 normal modes",
+                state_tracking_overlaps=[[1.01, 0.99]],
             )
 
     def test_mrsf_analytic_provider_hook_requires_complete_target_state_record(self):
@@ -469,8 +518,12 @@ class TestPropertyDerivativeObservables(unittest.TestCase):
         raman = self.vibronic.excited_state_raman_activities(
             self.property(polarizability, "polarizability", "bohr^3")
         )
-        json.dumps(ir.to_dict())
-        json.dumps(raman.to_dict())
+        ir_record = ir.to_dict()
+        raman_record = raman.to_dict()
+        self.assertEqual(ir_record["mode_dipole_derivative_unit"], "e/sqrt(amu)")
+        self.assertEqual(raman_record["activity_unit"], "bohr^4/amu")
+        json.dumps(ir_record)
+        json.dumps(raman_record)
 
 
 class TestResonanceRamanAndPublicAPI(unittest.TestCase):
@@ -529,6 +582,42 @@ class TestResonanceRamanAndPublicAPI(unittest.TestCase):
         )
         self.assertGreater(result.tensor_norm_squared[0], 0.0)
         self.assertIn("resonant-term", result.approximation)
+        self.assertGreater(result.intermediate_transition_completeness, 0.999)
+        self.assertEqual(result.to_dict()["tensor_unit"], "(e*bohr)^2/cm^-1")
+
+    def test_incomplete_resonance_raman_sum_is_rejected(self):
+        displaced = self.vibronic.HarmonicVibronicModel.create(
+            [1000.0],
+            [900.0],
+            [[1.0]],
+            [40.0],
+            coordinate_unit="sqrt(me)*bohr",
+            coordinate_phase_convention="RR synthetic normal modes",
+        )
+        with self.assertRaisesRegex(ValueError, "transition-strength completeness"):
+            self.vibronic.resonance_raman_fc_ht(
+                displaced,
+                electronic_origin_cm1=20000.0,
+                origin_kind="zero_zero",
+                incident_wavenumber_cm1=19500.0,
+                damping_cm1=100.0,
+                transition=self.transition,
+                transition_dipole_derivative=None,
+                max_intermediate_quanta=0,
+            )
+
+        partial = self.vibronic.resonance_raman_fc_ht(
+            displaced,
+            electronic_origin_cm1=20000.0,
+            origin_kind="zero_zero",
+            incident_wavenumber_cm1=19500.0,
+            damping_cm1=100.0,
+            transition=self.transition,
+            transition_dipole_derivative=None,
+            max_intermediate_quanta=0,
+            minimum_intermediate_completeness=0.0,
+        )
+        self.assertLess(partial.intermediate_transition_completeness, 0.1)
 
     def test_json_cli_writes_lines_and_normalized_spectrum(self):
         data = {

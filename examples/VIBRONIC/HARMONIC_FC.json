@@ -12,6 +12,7 @@
   "temperature_kelvin": 300.0,
   "max_initial_quanta": 5,
   "minimum_thermal_population": 0.999,
+  "minimum_franck_condon_completeness": 0.999,
   "broadening_kind": "gaussian",
   "fwhm_cm1": 80.0,
   "normalization": "sum"

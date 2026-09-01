@@ -63,7 +63,10 @@ populations are normalized by the exact harmonic partition function, rather
 than by the truncated state list.  `retained_thermal_population` therefore
 measures the population retained by the selected basis.  By default the
 calculation fails if this value is below 0.999.  The final-state truncation is
-reported separately as `franck_condon_completeness`.
+reported separately as `franck_condon_completeness`.  By default the
+calculation also fails when that completeness is below 0.999, before any
+unit-sum normalization could conceal omitted vibronic strength.  An explicitly
+lower `minimum_franck_condon_completeness` permits a deliberately partial band.
 
 `origin_kind="zero_zero"` interprets `electronic_origin_cm1` as the 0--0 band
 origin.  `origin_kind="adiabatic_minima"` interprets it as the energy difference
@@ -129,6 +132,18 @@ requires state-overlap diagnostics for every displacement.  Transition-dipole
 differences additionally require explicit unit-modulus phase factors for both
 geometries.
 
+Each supplied phase factor multiplies the corresponding raw transition moment
+before differencing and must align that complete transition moment with the
+central-geometry convention.  It must therefore include every electronic
+phase relevant to the bra and ket; an excited-state overlap phase alone is not
+sufficient when the reference-state phase has not already been fixed.
+
+This adapter checks the supplied isolated-state overlap magnitudes, but does
+not itself establish root identity.  An MRSF calculation must additionally
+retain agreement in energy, spatial symmetry, spin sector, and the complete
+spin-adapted response vector.  A degenerate or near-degenerate manifold
+requires projector tracking and is outside this isolated-state adapter.
+
 The adapter performs no electronic-structure calculation.  In particular, it
 cannot and does not replace a missing MRSF target-state property by the ROHF or
 SCF reference property.
@@ -154,7 +169,9 @@ polarizability response equations are already available.
 
 `excited_state_ir_intensities` accepts a target-state permanent-dipole
 derivative in excited-state normal coordinates, with shape `(3, nmode)`, and
-returns double-harmonic intensities in km mol^-1.
+returns double-harmonic intensities in km mol^-1.  The required derivative unit
+is `e*bohr` per `sqrt(amu)*bohr`, numerically equivalent to
+`e/sqrt(amu)`; its intensity conversion factor is 974.88011 km mol^-1.
 
 `excited_state_raman_activities` accepts a target-state static-polarizability
 derivative with shape `(3, 3, nmode)`.  It returns
@@ -163,7 +180,7 @@ derivative with shape `(3, 3, nmode)`.  It returns
 S_k = 45\bar{\alpha}_k'^2 + 7\gamma_k'^2
 \]
 
-in atomic units, together with the polarized and unpolarized depolarization
+in `bohr^4/amu`, together with the polarized and unpolarized depolarization
 ratios.  The nonresonant polarizability derivative must be real and symmetric.
 
 These two functions report fundamental-mode intensities in the double-harmonic
@@ -186,7 +203,17 @@ Kramers--Heisenberg--Dirac sum over intermediate excited-state vibrational
 levels.  It requires the electronic origin, laser wavenumber, damping, phase-
 consistent transition dipole, and optional first-order HT derivative.  The
 result is a complex scattering tensor for each requested final vibrational
-state.
+state in `(e*bohr)^2/cm^-1`.  `damping_cm1` is the positive imaginary-energy
+parameter used directly in the resonant denominator, not a separately
+converted full width at half maximum.
+
+The intermediate-state truncation is compared with the exact closure sum for
+the supplied constant-plus-linear transition dipole.  By default the
+calculation fails if the retained transition strength is below 0.999.  The
+returned `intermediate_transition_completeness` records this fraction.  This
+closure condition does not replace an explicit convergence comparison of the
+complex tensor with respect to `max_intermediate_quanta`, particularly near a
+vibronic resonance.
 
 This deliberately limited model omits the antiresonant term, higher-order
 non-Condon terms, coordinate dependence beyond first order, and absolute

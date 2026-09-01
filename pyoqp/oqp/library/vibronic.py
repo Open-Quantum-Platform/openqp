@@ -38,7 +38,10 @@ CM1_PER_HARTREE = 219474.6313705
 CM1_TO_HARTREE = 1.0 / CM1_PER_HARTREE
 AMU_TO_ELECTRON_MASS = 1822.888486209
 BOLTZMANN_CM1_PER_K = 0.6950348004861274
-IR_INTENSITY_CONVERSION_KM_MOL = 42.255
+# Integrated harmonic IR intensity for a dipole derivative expressed as
+# e*bohr / (sqrt(amu)*bohr) = e / sqrt(amu).  The often quoted 42.255 factor
+# instead applies to derivatives in debye / (angstrom*sqrt(amu)).
+IR_INTENSITY_CONVERSION_KM_MOL = 974.88011
 
 CoordinateUnit = Literal["sqrt(amu)*bohr", "sqrt(me)*bohr"]
 OriginKind = Literal["zero_zero", "adiabatic_minima"]
@@ -433,7 +436,11 @@ def finite_difference_excited_state_property(
     Input arrays have shape ``(ncoordinate, *property_shape)``.  Transition-
     dipole differences additionally require complex unit-modulus phase factors
     with shape ``(ncoordinate, 2)`` for the plus and minus geometries.  The
-    returned derivative never invokes an electronic-structure calculation.
+    factors multiply the raw transition moments and must align the complete
+    bra--ket phase with the central geometry.  The returned derivative never
+    invokes an electronic-structure calculation.  The overlap threshold is an
+    isolated-state diagnostic, not a replacement for energy, symmetry, spin,
+    and response-vector identity checks by the electronic-structure driver.
     """
 
     plus = _finite_numeric("plus_values", plus_values)
@@ -452,6 +459,8 @@ def finite_difference_excited_state_property(
         )
     if not 0.0 <= minimum_overlap <= 1.0:
         raise ValueError("minimum_overlap must lie in [0, 1]")
+    if np.any(overlaps < 0.0) or np.any(overlaps > 1.0):
+        raise ValueError("state_tracking_overlaps must lie in [0, 1]")
     observed_minimum = float(np.min(overlaps))
     if observed_minimum < minimum_overlap:
         raise ValueError(
@@ -618,7 +627,7 @@ def _validate_state(name: str, state: Sequence[int], nmode: int) -> tuple[int, .
         raise ValueError(f"{name} state must contain {nmode} occupations")
     values = tuple(int(value) for value in state)
     if any(value < 0 for value in values) or any(
-        float(source) != value for source, value in zip(state, values, strict=True)
+        float(source) != value for source, value in zip(state, values)
     ):
         raise ValueError(f"{name} state occupations must be non-negative integers")
     return values
@@ -804,6 +813,7 @@ def harmonic_vibronic_spectrum(
     normalization: Literal["none", "sum"] = "sum",
     grid_cm1: ArrayLike | None = None,
     minimum_thermal_population: float = 0.999,
+    minimum_franck_condon_completeness: float = 0.999,
     max_states: int = 250000,
 ) -> VibronicSpectrum:
     """Calculate harmonic FC/FC--HT stick and broadened absorption spectra.
@@ -865,7 +875,7 @@ def harmonic_vibronic_spectrum(
         ]
     ] = []
     fc_weight = 0.0
-    for initial, population in zip(initial_states, populations, strict=True):
+    for initial, population in zip(initial_states, populations):
         if population == 0.0:
             continue
         for final in final_states:
@@ -907,6 +917,17 @@ def harmonic_vibronic_spectrum(
             provisional.append(
                 (initial, final, position, overlap, population, moment, raw_strength)
             )
+    completeness = fc_weight / retained_population if retained_population else 0.0
+    if not 0.0 <= minimum_franck_condon_completeness <= 1.0:
+        raise ValueError(
+            "minimum_franck_condon_completeness must lie in [0, 1]"
+        )
+    if completeness + 1.0e-15 < minimum_franck_condon_completeness:
+        raise ValueError(
+            f"Franck-Condon completeness {completeness:.8f} is below the "
+            f"required {minimum_franck_condon_completeness:.8f}; increase "
+            "max_final_quanta"
+        )
     total_strength = sum(item[-1] for item in provisional)
     if normalization == "sum" and total_strength <= 0.0:
         raise ValueError("spectrum cannot be normalized because total strength is zero")
@@ -953,7 +974,6 @@ def harmonic_vibronic_spectrum(
         if area <= 0.0:
             raise ValueError("broadened spectrum has nonpositive numerical area")
         intensity /= area
-    completeness = fc_weight / retained_population if retained_population else 0.0
     return VibronicSpectrum(
         lines=lines,
         wavenumbers_cm1=grid,
@@ -977,6 +997,7 @@ class InfraredResult:
             "model": "target-excited-state double-harmonic infrared",
             "intensities": self.intensities_km_mol.tolist(),
             "intensity_unit": "km/mol",
+            "mode_dipole_derivative_unit": "e/sqrt(amu)",
             "mode_dipole_derivatives": _complex_json(
                 self.mode_dipole_derivatives
             ),
@@ -1025,7 +1046,7 @@ class RamanResult:
         return {
             "model": "target-excited-state nonresonant double-harmonic Raman",
             "activities": self.activities_au.tolist(),
-            "activity_unit": "atomic units",
+            "activity_unit": "bohr^4/amu",
             "depolarization_ratio_polarized": (
                 self.depolarization_ratio_polarized.tolist()
             ),
@@ -1127,6 +1148,7 @@ class ResonanceRamanResult:
     tensor_norm_squared: FloatArray
     incident_wavenumber_cm1: float
     damping_cm1: float
+    intermediate_transition_completeness: float
     approximation: str
 
     def to_dict(self) -> dict[str, object]:
@@ -1137,6 +1159,10 @@ class ResonanceRamanResult:
             "tensor_norm_squared": self.tensor_norm_squared.tolist(),
             "incident_wavenumber_cm1": self.incident_wavenumber_cm1,
             "damping_cm1": self.damping_cm1,
+            "intermediate_transition_completeness": (
+                self.intermediate_transition_completeness
+            ),
+            "tensor_unit": "(e*bohr)^2/cm^-1",
             "absolute_cross_section": None,
         }
 
@@ -1152,6 +1178,7 @@ def resonance_raman_fc_ht(
     transition_dipole_derivative: ExcitedStatePropertyDerivative | None,
     max_intermediate_quanta: int,
     final_states: Sequence[Sequence[int]] | None = None,
+    minimum_intermediate_completeness: float = 0.999,
     max_states: int = 250000,
 ) -> ResonanceRamanResult:
     """Resonant-term KHD sum with harmonic FC/first-order HT moments.
@@ -1174,7 +1201,12 @@ def resonance_raman_fc_ht(
         raise ValueError("electronic origin, incident wavenumber, and damping must be finite")
     if incident_wavenumber_cm1 <= 0.0 or damping_cm1 <= 0.0:
         raise ValueError("incident wavenumber and damping must be positive")
-    _validate_transition_inputs(model, transition, transition_dipole_derivative)
+    dipole, gradient = _validate_transition_inputs(
+        model, transition, transition_dipole_derivative
+    )
+    assert dipole is not None
+    if not 0.0 <= minimum_intermediate_completeness <= 1.0:
+        raise ValueError("minimum_intermediate_completeness must lie in [0, 1]")
     initial = (0,) * model.nmode
     if final_states is None:
         requested_final = []
@@ -1191,10 +1223,12 @@ def resonance_raman_fc_ht(
         model.nmode, max_intermediate_quanta, max_states=max_states
     )
     tensors = np.zeros((len(finals), 3, 3), dtype=complex)
+    retained_transition_strength = 0.0
     for state in intermediate:
         absorption = vibronic_transition_moment(
             engine, initial, state, transition, transition_dipole_derivative
         )
+        retained_transition_strength += float(np.vdot(absorption, absorption).real)
         if origin_kind == "zero_zero":
             vibronic_energy = electronic_origin_cm1 + float(
                 np.dot(state, model.excited_frequencies_cm1)
@@ -1217,6 +1251,25 @@ def resonance_raman_fc_ht(
                 )
             )
             tensors[index] += np.outer(emission_conjugate, absorption) / denominator
+    complete_transition_strength = float(np.vdot(dipole, dipole).real)
+    if gradient is not None:
+        ground_omega = model.ground_frequencies_cm1 * CM1_TO_HARTREE
+        complete_transition_strength += float(
+            np.sum(np.abs(gradient) ** 2 / (2.0 * ground_omega[None, :]))
+        )
+    if complete_transition_strength == 0.0:
+        intermediate_completeness = 1.0
+    else:
+        intermediate_completeness = (
+            retained_transition_strength / complete_transition_strength
+        )
+    if intermediate_completeness + 1.0e-15 < minimum_intermediate_completeness:
+        raise ValueError(
+            f"intermediate transition-strength completeness "
+            f"{intermediate_completeness:.8f} is below the required "
+            f"{minimum_intermediate_completeness:.8f}; increase "
+            "max_intermediate_quanta"
+        )
     norms = np.einsum("ijk,ijk->i", tensors.conj(), tensors).real
     return ResonanceRamanResult(
         final_states=finals,
@@ -1224,6 +1277,7 @@ def resonance_raman_fc_ht(
         tensor_norm_squared=norms.astype(float),
         incident_wavenumber_cm1=float(incident_wavenumber_cm1),
         damping_cm1=float(damping_cm1),
+        intermediate_transition_completeness=float(intermediate_completeness),
         approximation=(
             "resonant-term Kramers-Heisenberg-Dirac harmonic FC/first-order HT sum"
         ),
@@ -1266,6 +1320,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         fwhm_cm1=data.get("fwhm_cm1", 100.0),
         normalization=data.get("normalization", "sum"),
         minimum_thermal_population=data.get("minimum_thermal_population", 0.999),
+        minimum_franck_condon_completeness=data.get(
+            "minimum_franck_condon_completeness", 0.999
+        ),
     )
     output = {
         "model": "multidimensional harmonic Franck-Condon",
