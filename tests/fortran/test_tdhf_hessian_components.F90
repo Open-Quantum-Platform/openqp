@@ -78,6 +78,8 @@ program test_tdhf_hessian_components
     error stop 'higher excited root was accepted'
   if(.not.tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.3_dp],1.0e-10_dp)) &
     error stop 'isolated lowest root was rejected'
+  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp],1.0e-10_dp)) &
+    error stop 'single computed root was accepted without an isolation gap'
   if(tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.2_dp+1.0e-11_dp],1.0e-10_dp)) &
     error stop 'degenerate lowest-root manifold was accepted'
 

@@ -135,9 +135,8 @@ contains
 
   pure logical function tdhf_hessian_lowest_root_is_isolated(energies,tol) result(isolated)
     real(kind=dp), intent(in) :: energies(:),tol
-    isolated = size(energies)>=1 .and. tol>=0.0_dp
-    if(isolated .and. size(energies)>1) &
-      isolated=abs(energies(2)-energies(1))>tol
+    isolated = size(energies)>=2 .and. tol>=0.0_dp
+    if(isolated) isolated=abs(energies(2)-energies(1))>tol
   end function tdhf_hessian_lowest_root_is_isolated
 
 end module tdhf_hessian_components_mod

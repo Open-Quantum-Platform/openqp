@@ -282,7 +282,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         base = {
             "input": {"method": "tdhf"},
             "scf": {"type": "rhf"},
-            "tdhf": {"type": "rpa"},
+            "tdhf": {"type": "rpa", "nstate": 2},
             "hess": {"state": 1},
         }
 
@@ -339,6 +339,24 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("only the lowest excited root", report.to_text())
+
+    def test_excited_state_analytic_hessian_requires_two_computed_roots(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nH 0 0 -0.37\nH 0 0 0.37",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("tdhf.nstate>=2", report.to_text())
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {
