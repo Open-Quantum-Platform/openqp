@@ -20,9 +20,33 @@ This module is validated at GATE 2: reconstructing
 :math:`\\mu^{i\\to j}=-\\mathrm{Tr}(\\gamma^{i\\to j}_{\\rm AO}\\,r)` from the exposed
 1-TDM reproduces ``dip`` to ~1e-15, and ``Tr(gamma^n_AO . S) = N``.
 """
+import warnings
+
 import numpy as np
 
 __all__ = ["MRSFExcitedStates"]
+
+
+_ACCELERATE_MATMUL_WARNING = (
+    r"(divide by zero|overflow|invalid value) encountered in matmul"
+)
+
+
+def _finite_matmul(left, right, quantity):
+    """Return a finite matrix product without leaking stale Accelerate flags."""
+    if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+        raise FloatingPointError(f"inputs to {quantity} contain non-finite values")
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=_ACCELERATE_MATMUL_WARNING,
+            category=RuntimeWarning,
+        )
+        with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+            product = np.matmul(left, right)
+    if not np.all(np.isfinite(product)):
+        raise FloatingPointError(f"{quantity} contains non-finite values")
+    return product
 
 
 def _f_order(mol, tag, shape):
@@ -107,7 +131,12 @@ class MRSFExcitedStates:
 
     def tdm_ao(self, i, j):
         """1-TDM gamma^{i->j} in the AO basis: C gamma_mo C^T."""
-        return self.C @ self.tdm_mo(i, j) @ self.C.T
+        density = _finite_matmul(
+            self.C, self.tdm_mo(i, j), "partially transformed transition density"
+        )
+        return _finite_matmul(
+            density, self.C.T, "AO transition density"
+        )
 
     def diff_density_mo(self, n):
         """Traceless difference density Delta gamma^n = gamma^n - gamma^ref (MO)."""
@@ -120,7 +149,10 @@ class MRSFExcitedStates:
     def state_density_ao(self, n):
         """Unrelaxed state 1-RDM gamma^n in the AO basis."""
         g = self.state_density_mo(n)
-        return self.C @ g @ self.C.T
+        density = _finite_matmul(
+            self.C, g, "partially transformed state density"
+        )
+        return _finite_matmul(density, self.C.T, "AO state density")
 
     def mo_density_ao(self, mo_index):
         """AO density of a single (alpha) MO |phi><phi| (for cube export)."""

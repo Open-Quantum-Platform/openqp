@@ -25,6 +25,27 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
 HESSIAN_CACHE_VERSION = 2
 
+_ACCELERATE_MATMUL_WARNING = (
+    r'(divide by zero|overflow|invalid value) encountered in matmul'
+)
+
+
+def _finite_matmul(left, right, quantity):
+    """Return a finite matrix product without leaking stale Accelerate flags."""
+    if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+        raise FloatingPointError(f'inputs to {quantity} contain non-finite values')
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message=_ACCELERATE_MATMUL_WARNING,
+            category=RuntimeWarning,
+        )
+        with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+            product = np.matmul(left, right)
+    if not np.all(np.isfinite(product)):
+        raise FloatingPointError(f'{quantity} contains non-finite values')
+    return product
+
 
 def _env_wants_lean_json():
     """True when ``OQP_LEAN_JSON`` is set to a truthy value."""
@@ -403,9 +424,17 @@ class Molecule:
                 # Functions transform with T as columns, so invariance of the
                 # metric reads T^T S T = S -- not T S T^T, which is the
                 # signed-permutation convention the integral path uses.
+                transformed_metric = _finite_matmul(
+                    transform.T, smat, 'partially transformed AO overlap'
+                )
+                transformed_metric = _finite_matmul(
+                    transformed_metric, transform, 'symmetry-transformed AO overlap'
+                )
                 worst = max(worst, float(np.max(np.abs(
-                    transform.T @ smat @ transform - smat))))
+                    transformed_metric - smat))))
             return worst
+        except FloatingPointError:
+            raise
         except Exception:
             # A guard that cannot be evaluated must not block labelling.
             return None

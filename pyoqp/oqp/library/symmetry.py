@@ -6,10 +6,33 @@ planning gates. It does not change SCF/integral/response execution behavior.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 import numpy as np
+
+
+_ACCELERATE_MATMUL_WARNING = (
+    r"(divide by zero|overflow|invalid value) encountered in matmul"
+)
+
+
+def _finite_matmul(left: Any, right: Any, quantity: str) -> np.ndarray:
+    """Return a finite matrix product without leaking stale Accelerate flags."""
+    if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+        raise FloatingPointError(f"inputs to {quantity} contain non-finite values")
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=_ACCELERATE_MATMUL_WARNING,
+            category=RuntimeWarning,
+        )
+        with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+            product = np.matmul(left, right)
+    if not np.all(np.isfinite(product)):
+        raise FloatingPointError(f"{quantity} contains non-finite values")
+    return product
 
 
 @dataclass(frozen=True)
@@ -636,12 +659,12 @@ def assign_mo_irreps(
 
     table = {str(irrep): [int(ch) for ch in row] for irrep, row in character_table.items()}
 
-    sc = s @ c
+    sc = _finite_matmul(s, c, "overlap-weighted MO coefficients")
     denominator = np.einsum('im,im->m', sc, c)
     characters = np.zeros((c.shape[1], len(op_list)))
     for iop, op in enumerate(op_list):
         t = _ao_operator_matrix(shell_list, op, matrix_key=matrix_key)
-        transformed = t @ c
+        transformed = _finite_matmul(t, c, "symmetry-transformed MO coefficients")
         numerator = np.einsum('im,im->m', sc, transformed)
         characters[:, iop] = numerator / denominator
 
@@ -886,8 +909,12 @@ def assign_state_irreps(
     characters = np.zeros((x.shape[0], len(op_list)))
     for iop, op in enumerate(op_list):
         t = _ao_operator_matrix(shell_list, op, matrix_key=matrix_key)
-        u = c_occ.T @ s @ t @ c_occ
-        v = c_vir.T @ s @ t @ c_vir
+        u = _finite_matmul(c_occ.T, s, "occupied-space overlap projection")
+        u = _finite_matmul(u, t, "occupied-space symmetry projection")
+        u = _finite_matmul(u, c_occ, "occupied-space symmetry representation")
+        v = _finite_matmul(c_vir.T, s, "virtual-space overlap projection")
+        v = _finite_matmul(v, t, "virtual-space symmetry projection")
+        v = _finite_matmul(v, c_vir, "virtual-space symmetry representation")
         transformed = np.einsum('ji,sia,ba->sjb', u, x, v)
         characters[:, iop] = np.einsum('sia,sia->s', x, transformed) / norms
 
