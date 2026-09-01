@@ -79,4 +79,3 @@ def test_orbitals_are_canonicalized_after_ao_back_transform() -> None:
     assert routine is not None
     body = routine.group(0)
     assert body.index("call dgemm") < body.index("call canonicalize_orbital_phases")
-
