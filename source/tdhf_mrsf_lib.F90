@@ -174,12 +174,13 @@ contains
 
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
-    integer :: sized
 
-    sized = ubound(this%d3,2)
-
-!   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
+!   Form a conservative shell-density envelope over every trial vector and
+!   every spin-adapted density component.  Coulomb and exchange contractions
+!   use all components of d3; screening from only the final component makes
+!   the response operator depend on the number and composition of vectors in
+!   a Davidson batch.
+    call shell_den_screen_mrsf(this%dsh, this%d3, basis)
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -195,7 +196,7 @@ contains
 
     type(basis_set), intent(in) :: basis
     real(kind=dp), intent(out) :: dsh(:,:)
-    real(kind=dp), intent(in), dimension(:,:,:) :: da
+    real(kind=dp), intent(in), dimension(:,:,:,:) :: da
 
     integer :: ish, jsh, maxi, maxj, mini, minj
 
@@ -206,7 +207,7 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        dsh(ish,jsh) = maxval(abs(da(:,:,minj:maxj,mini:maxi)))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
