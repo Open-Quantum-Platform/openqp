@@ -149,6 +149,20 @@ program test_tdhf_hessian_response
   if (residual > 1.0e-11_dp) &
     error stop 'matrix-free MRSF response residual is too large'
 
+  ! Force the iterative path to stop before convergence.  The bounded dense
+  ! projected fallback must recover the same spin-adapted response without
+  ! introducing a determinant representation.
+  mrsf_dx=0.0_dp; mrsf_domega=0.0_dp; residual=0.0_dp
+  call solve_mrsf_tda_response_matrix_free(apply_test_mrsf_operator,2.0_dp, &
+    mrsf_x,mrsf_dax,mrsf_dx,mrsf_domega,residual,status,tol=1.0e-13_dp, &
+    maxit=1,restart=1)
+  if(status/=0) error stop 'dense projected MRSF fallback failed'
+  if(maxval(abs(mrsf_dx(:,1)-[0.3_dp,0.0_dp,0.25_dp]))>1.0e-12_dp .or. &
+     maxval(abs(mrsf_dx(:,2)-[0.4_dp,0.0_dp,-0.1_dp]))>1.0e-12_dp) &
+    error stop 'dense projected MRSF fallback is incorrect'
+  if(residual>1.0e-11_dp) &
+    error stop 'dense projected MRSF fallback residual is too large'
+
   mrsf_d2a = reshape([0.7_dp,0.11_dp,0.11_dp,-0.4_dp],[2,2])
   call assemble_mrsf_tda_eigenvalue_hessian(mrsf_x,mrsf_dax,mrsf_dx, &
     mrsf_d2a,mrsf_hess,mrsf_asym,status)

@@ -17,6 +17,12 @@ module tdhf_hessian_response_mod
   public :: solve_mrsf_tda_cluster_response_matrix_free
   public :: assemble_mrsf_tda_eigenvalue_hessian
 
+  ! A dense projected fallback is affordable for the small response spaces
+  ! used in molecular validation and removes a residual floor caused by
+  ! screened matrix-vector products.  Larger spaces remain matrix-free and
+  ! fail closed if GMRES cannot certify their solution.
+  integer, parameter :: MRSF_TDA_DENSE_FALLBACK_MAX=256
+
   abstract interface
     subroutine mrsf_tda_operator(vector, result, status)
       import dp
@@ -171,9 +177,13 @@ contains
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit,restart
 
-    real(kind=dp), allocatable :: rhs(:),solution(:),check(:),ax(:)
-    real(kind=dp) :: norm2,solve_tol
-    integer :: coordinate,n,ncoord,niter,nrestart,operator_status,solve_status
+    real(kind=dp), allocatable :: rhs(:),solution(:),check(:),ax(:), &
+      dense_projected(:,:),unit_vector(:)
+    real(kind=dp) :: dense_asymmetry,dense_scale,norm2,norm_rhs, &
+      solve_residual,solve_tolerance,solve_tol
+    integer :: column,coordinate,n,ncoord,niter,nrestart,operator_status, &
+      solve_status
+    logical :: dense_allowed,dense_ready
 
     n=size(x0); ncoord=size(dax,2)
     status=0; residual_max=0.0_dp; dx=0.0_dp; domega=0.0_dp
@@ -195,6 +205,9 @@ contains
       return
     end if
     allocate(rhs(n),solution(n),check(n),ax(n))
+    dense_allowed=n<=MRSF_TDA_DENSE_FALLBACK_MAX
+    dense_ready=.false.
+    if(dense_allowed) allocate(dense_projected(n,n),unit_vector(n))
     call apply_operator(x0,ax,operator_status)
     residual_max=maxval(abs(ax-omega*x0))
     if(operator_status/=0 .or. residual_max>1.0e-8_dp) then
@@ -213,8 +226,59 @@ contains
       call solve_projected_gmres(apply_operator,omega,x0,rhs,solution, &
         solve_tol,niter,nrestart,solve_status)
       if(solve_status/=0) then
-        status=coordinate
-        exit
+        ! A screened sigma action can leave GMRES just above its requested
+        ! residual even after the full physical Krylov space is exhausted.
+        ! For small systems, construct the same spin-adapted projected
+        ! operator once and solve it with the independent pivoted reference.
+        ! No determinant or expanded forbidden OO slot enters this fallback.
+        if(dense_allowed .and. .not.dense_ready) then
+          dense_projected=0.0_dp
+          do column=1,n
+            unit_vector=0.0_dp
+            unit_vector(column)=1.0_dp
+            call apply_projected_operator(apply_operator,omega,x0, &
+              unit_vector,dense_projected(:,column),operator_status)
+            if(operator_status/=0 .or. &
+               any(.not.ieee_is_finite(dense_projected(:,column)))) exit
+          end do
+          dense_ready=column>n
+          if(dense_ready) then
+            dense_scale=max(1.0_dp,maxval(abs(dense_projected)))
+            dense_asymmetry=maxval(abs(dense_projected- &
+              transpose(dense_projected)))
+            if(dense_asymmetry>max(1.0e-8_dp,100.0_dp*solve_tol)* &
+               dense_scale) dense_ready=.false.
+          end if
+        end if
+        if(dense_ready) then
+          call solve_linear_pivot(dense_projected,rhs,solution, &
+            1.0e-12_dp,solve_status)
+          if(solve_status==0) then
+            solution=solution-x0*dot_product(x0,solution)
+            call apply_projected_operator(apply_operator,omega,x0,solution, &
+              ax,operator_status)
+            norm_rhs=sqrt(dot_product(rhs,rhs))
+            solve_residual=sqrt(dot_product(rhs-ax,rhs-ax))
+            solve_tolerance=max(1.0e-8_dp,100.0_dp*solve_tol)* &
+              max(1.0_dp,norm_rhs)
+            if(operator_status/=0 .or. &
+               any(.not.ieee_is_finite(solution)) .or. &
+               .not.ieee_is_finite(solve_residual) .or. &
+               solve_residual>solve_tolerance) solve_status=-5
+          end if
+        end if
+        if(.not.dense_ready .or. solve_status/=0) then
+          write(error_unit,'(A,I0,A,I0,A,L1)') &
+            'MRSF projected amplitude solve failed for coordinate ', &
+            coordinate,' with status ',solve_status, &
+            '; dense fallback ready=',dense_ready
+          status=coordinate
+          exit
+        end if
+        write(error_unit,'(A,I0,A,1P,E12.4,A,E12.4)') &
+          'MRSF projected amplitude coordinate ',coordinate, &
+          ' used dense fallback; residual=',solve_residual, &
+          ', asymmetry=',dense_asymmetry
       end if
       solution=solution-x0*dot_product(x0,solution)
       dx(:,coordinate)=solution
@@ -227,6 +291,7 @@ contains
       residual_max=max(residual_max,maxval(abs(check)), &
         abs(dot_product(x0,solution)))
     end do
+    if(allocated(dense_projected)) deallocate(dense_projected,unit_vector)
     deallocate(rhs,solution,check,ax)
   end subroutine solve_mrsf_tda_response_matrix_free
 
