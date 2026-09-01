@@ -6692,6 +6692,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
+    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
@@ -6719,8 +6721,53 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if (td_type == "rpa" and scf_type == "rhf"
+                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            functional_aliases = {
+                "svwn": "svwn5",
+                "svwn5": "svwn5",
+                "lda": "svwn5",
+                "blyp": "blyp",
+                "pbe": "pbe",
+                "pbepbe": "pbe",
+                "b3lyp5": "b3lyp5",
+                "b3lypv5": "b3lyp5",
+            }
+            canonical_functional = functional_aliases.get(functional, functional)
+            verified_semilocal = {"svwn5", "blyp", "pbe", "b3lyp5"}
+            if functional and canonical_functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            if scf_type != "rhf":
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+            if td_multiplicity != 1:
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently support singlet targets only (tdhf.multiplicity=1)."
+            if state != 1:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians currently support only the lowest "
+                    "excited root (hess.state=1); higher roots require an "
+                    "indefinite-safe projected amplitude-response solver.",
+                )
+            if td_nstate < 2:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
+                    "lowest excited root can be verified as isolated from "
+                    "the next computed root.",
+                )
+            return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."

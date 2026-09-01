@@ -1,0 +1,1297 @@
+{
+  "atoms": [
+    1,
+    1
+  ],
+  "coord": [
+    0.0,
+    0.0,
+    -0.699198666111535,
+    0.0,
+    0.0,
+    0.699198666111535
+  ],
+  "mass": [
+    1.007825,
+    1.007825
+  ],
+  "energy": -0.5747943177320808,
+  "hessian_cache_version": 2,
+  "state": 1,
+  "hessian_request": {
+    "version": 2,
+    "state": 1,
+    "model_config": {
+      "input": {
+        "basis": "6-31g",
+        "charge": 0,
+        "d4": false,
+        "functional": "",
+        "ispher": "auto",
+        "library": "",
+        "method": "tdhf",
+        "perf": 1,
+        "qmmm_flag": false,
+        "soc_2e": 1
+      },
+      "mp2": {
+        "opposite_spin_scale": 1.0,
+        "same_spin_scale": 1.0,
+        "variant": "mp2"
+      },
+      "guess": {
+        "continue_geom": false,
+        "file": "",
+        "file2": "",
+        "save_mol": false,
+        "swapmo": "",
+        "type": "huckel"
+      },
+      "pcm": {
+        "backend": "ddx",
+        "enabled": false,
+        "epsilon": 78.3553,
+        "mode": "reference_scf",
+        "model": "ddpcm",
+        "radii": "uff",
+        "solvent": "water"
+      },
+      "dftb": {
+        "backend": "native",
+        "c_mrsf": -1.0,
+        "c_mrsf_oo": -1.0,
+        "cam_alpha": 0.0,
+        "cam_beta": 1.0,
+        "executable": "",
+        "lc_gamma": "yukawa",
+        "lc_ground_state": false,
+        "library_path": "",
+        "max_scc_iterations": 1200,
+        "model": "",
+        "mrsf_shift_co": 0.0,
+        "mrsf_shift_cv": 0.0,
+        "mrsf_shift_oo": 0.0,
+        "mrsf_shift_ov": 0.0,
+        "omega": 0.3,
+        "onsite_exchange_scale": 0.0,
+        "onsite_pp": 0.0,
+        "onsite_sp": 0.0,
+        "onsite_ss": 0.0,
+        "parameter_path": "",
+        "print_level": 1,
+        "reference": "",
+        "reference_multiplicity": 0,
+        "response_cam_alpha": -1.0,
+        "response_cam_beta": -1.0,
+        "response_global_hybrid": false,
+        "response_max_iterations": 50,
+        "response_max_subspace": 100,
+        "response_omega": -1.0,
+        "response_solver": "auto",
+        "response_tolerance": 1e-06,
+        "response_w_scale": -1.0,
+        "scc_history": 12,
+        "scc_max_step": 0.5,
+        "scc_mixer": "auto",
+        "scc_mixing": 0.35,
+        "scc_tolerance": 1e-08,
+        "spc": 0.5,
+        "spc_coco": -999.0,
+        "spc_coov": -999.0,
+        "spc_ovov": -999.0,
+        "spin_complete": true,
+        "state_to_state_spectrum": true,
+        "target_multiplicity": 1,
+        "timeout": 300,
+        "type": "auto",
+        "unpaired": 2,
+        "w_scale": 1.0,
+        "zvector": true
+      },
+      "symmetry": {
+        "enabled": "true",
+        "label_mo": true,
+        "label_modes": true,
+        "label_states": true,
+        "move_to_standard_frame": false,
+        "point_group": "auto",
+        "strict": false,
+        "subgroup": "auto",
+        "tolerance": 1e-05,
+        "use_integral_symmetry": "true",
+        "use_response_symmetry": false
+      },
+      "scf": {
+        "alternative_scf": "trah",
+        "cdiis_switch": 0.3,
+        "conv": 1e-10,
+        "converger_type": "diis",
+        "diis_reset_conv": 0.005,
+        "diis_reset_mod": 10,
+        "diis_type": "cdiis",
+        "escalation": "",
+        "forced_attempt": 2,
+        "grad_cutoff": "1.0d-10",
+        "incremental": true,
+        "init_basis": "none",
+        "init_conv": 0.001,
+        "init_converger": "none",
+        "init_it": 15,
+        "init_library": "",
+        "init_scf": "no",
+        "maxdiis": 7,
+        "maxit": 30,
+        "mom": false,
+        "mom_switch": 0.003,
+        "multiplicity": 1,
+        "pfon": false,
+        "pfon_cooling_rate": 50.0,
+        "pfon_nsmear": 5.0,
+        "pfon_start_temp": 2000.0,
+        "pscreen": false,
+        "pscreen_cap": 1e-08,
+        "pscreen_grid_ang": 0,
+        "pscreen_grid_rad": 0,
+        "pscreen_k": 0.01,
+        "pscreen_tight": 0.0001,
+        "pscreen_xc_aocut": 0.0,
+        "pscreen_xc_dcut": 0.0,
+        "rstctmo": false,
+        "save_molden": true,
+        "scal_rel": 0,
+        "soscf_lvl_shift": 0.0,
+        "stability": false,
+        "trh_gred": 0.001,
+        "trh_impl": "auto",
+        "trh_jd_start": 30,
+        "trh_lred": 0.0001,
+        "trh_ls": false,
+        "trh_nmic": 50,
+        "trh_nrtv": 1,
+        "trh_r0": 0.4,
+        "trh_stab": false,
+        "trh_sub_solver": "davidson",
+        "type": "rhf",
+        "vdiis_vshift_switch": 0.003,
+        "verbose": 1,
+        "vshift": 0.0,
+        "xc_c2f": "off",
+        "xc_incdft": "off",
+        "xc_phi_cache": "off"
+      },
+      "dftgrid": {
+        "ang_npts": 302,
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_flag": false,
+        "cam_mu": -1.0,
+        "grid_ao_pruned": true,
+        "grid_ao_sparsity_ratio": 0.9,
+        "grid_ao_threshold": 1e-15,
+        "hfscale": -1.0,
+        "partfun": "ssf",
+        "pruned": "sg2",
+        "rad_npts": 96,
+        "rad_type": "ta"
+      },
+      "tdhf": {
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_mu": -1.0,
+        "conf_threshold": 0.05,
+        "conv": 1e-10,
+        "fp32": "off",
+        "gmres_dim": 50,
+        "hfscale": -1.0,
+        "ixcore": "-1",
+        "maxit": 50,
+        "maxit_zv": 50,
+        "multiplicity": 1,
+        "nstate": 2,
+        "nstate_s": 0,
+        "nstate_t": 0,
+        "nvdav": 50,
+        "resp_cutoff": "1e-8",
+        "spc_coco": -1.0,
+        "spc_coov": -1.0,
+        "spc_ovov": -1.0,
+        "target": 1,
+        "tlf": 2,
+        "type": "rpa",
+        "z_solver": 0,
+        "zv_warmstart": "on",
+        "zvconv": 1e-10
+      },
+      "qmmm": {
+        "barostat_interval": 25,
+        "constraints": "None",
+        "cutoff": "NoCutoff",
+        "embedding": "electrostatic",
+        "energy_file": "",
+        "ensemble": "nve",
+        "forcefield": [
+          "amber14-all.xml",
+          "amber14/tip3p.xml"
+        ],
+        "forcefield_files": "",
+        "friction": 1.0,
+        "frontier_scheme": "none",
+        "istate": 0,
+        "log_file": "",
+        "n_steps": 1000,
+        "nonbondedmethod": "NoCutoff",
+        "nsteps": 1,
+        "pdb_file": "",
+        "pressure": 1.0,
+        "qm_atoms": "",
+        "qm_atoms_xyz": null,
+        "qm_list": null,
+        "report_interval": 1,
+        "rigidwater": false,
+        "temperature": 300.0,
+        "timestep": 1.0,
+        "trajectory_file": "",
+        "trajectory_format": "pdb"
+      }
+    }
+  },
+  "hessian": [
+    [
+      -0.15055382083695895,
+      0.0,
+      0.0,
+      0.15055382083695895,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      -0.15055382083695915,
+      0.0,
+      0.0,
+      0.15055382083695915,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.4550446875944422,
+      0.0,
+      0.0,
+      -0.4550446875944422
+    ],
+    [
+      0.15055382083695895,
+      0.0,
+      0.0,
+      -0.15055382083695895,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.15055382083695915,
+      0.0,
+      0.0,
+      -0.15055382083695915,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -0.4550446875944422,
+      0.0,
+      0.0,
+      0.4550446875944422
+    ]
+  ],
+  "hessian_metadata": {
+    "max_asymmetry": 0.0,
+    "symmetrized": false,
+    "backend": "native_openqp",
+    "native_openqp_kernel": true,
+    "native_openqp_coupled_td_response": true,
+    "native_openqp_z_response": true,
+    "native_openqp_final_assembly": true,
+    "native_openqp_d4_dispersion": false,
+    "no_external_hessian_backend": true,
+    "no_numerical_fallback": true,
+    "tdhf_type": "rpa",
+    "shape": [
+      6,
+      6
+    ]
+  },
+  "freqs": [
+    4884.880108955481
+  ],
+  "modes": [
+    [
+      0.0,
+      0.0,
+      -0.7043563569726048,
+      0.0,
+      0.0,
+      0.7043563569726049
+    ]
+  ],
+  "frequency_modes": {
+    "format": "OpenQP normal modes v1",
+    "frequencies_cm-1": [
+      4884.880108955481
+    ],
+    "normal_mode_eigenvectors": [
+      [
+        0.0,
+        0.0,
+        -0.7043563569726048,
+        0.0,
+        0.0,
+        0.7043563569726049
+      ]
+    ],
+    "normal_mode_eigenvectors_units": "Cartesian displacement, mass-unweighted, row-major by vibrational mode"
+  },
+  "inertia": [
+    0.0,
+    0.9854085022082318,
+    0.9854085022082318
+  ],
+  "infrared_intensities": [
+    8.948325721999845e-24
+  ],
+  "raman_activities": [
+    1167.4780824115794
+  ],
+  "vibrational_intensity_metadata": {
+    "status": "computed",
+    "backend": "native_openqp_finite_difference",
+    "property_kernels": "electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native",
+    "displacement_bohr": 0.001,
+    "ir_units": "km/mol",
+    "raman_units": "a.u."
+  },
+  "infrared_mode_dipole_derivatives": [
+    [
+      0.0,
+      0.0,
+      -4.601843436605318e-13
+    ]
+  ],
+  "raman_mode_polarizability_derivatives": [
+    [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        9.863561233193868
+      ]
+    ]
+  ],
+  "symmetry_metadata": {
+    "status": "enabled",
+    "enabled": true,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "dooh",
+    "subgroup": "d2h",
+    "detected_point_group": "dooh",
+    "detected_subgroup": "d2h",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": true,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "true",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "true",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    },
+    "detection": {
+      "point_group": "dooh",
+      "abelian_subgroup": "d2h",
+      "origin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "orientation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "operations": [
+        {
+          "name": "E",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "C2z",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "C2y",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ],
+          "permutation": [
+            1,
+            0
+          ],
+          "matrix_input_frame": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ]
+        },
+        {
+          "name": "C2x",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ],
+          "permutation": [
+            1,
+            0
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ]
+        },
+        {
+          "name": "i",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ],
+          "permutation": [
+            1,
+            0
+          ],
+          "matrix_input_frame": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ]
+        },
+        {
+          "name": "sxy",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ],
+          "permutation": [
+            1,
+            0
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ]
+        },
+        {
+          "name": "sxz",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "syz",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "irreps": [
+        "ag",
+        "b1g",
+        "b2g",
+        "b3g",
+        "au",
+        "b1u",
+        "b2u",
+        "b3u"
+      ],
+      "character_table": {
+        "ag": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "b1g": [
+          1,
+          1,
+          -1,
+          -1,
+          1,
+          1,
+          -1,
+          -1
+        ],
+        "b2g": [
+          1,
+          -1,
+          1,
+          -1,
+          1,
+          -1,
+          1,
+          -1
+        ],
+        "b3g": [
+          1,
+          -1,
+          -1,
+          1,
+          1,
+          -1,
+          -1,
+          1
+        ],
+        "au": [
+          1,
+          1,
+          1,
+          1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "b1u": [
+          1,
+          1,
+          -1,
+          -1,
+          -1,
+          -1,
+          1,
+          1
+        ],
+        "b2u": [
+          1,
+          -1,
+          1,
+          -1,
+          -1,
+          1,
+          -1,
+          1
+        ],
+        "b3u": [
+          1,
+          -1,
+          -1,
+          1,
+          -1,
+          1,
+          1,
+          -1
+        ]
+      },
+      "tolerance": 1e-05,
+      "n_atoms": 2
+    },
+    "requested_matches_detected": true,
+    "integral_symmetry": {
+      "status": "skipped_runtype_hess"
+    },
+    "mo_labels": {
+      "status": "ok",
+      "alpha": {
+        "labels": [
+          "ag",
+          "b1u",
+          "ag",
+          "b1u"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "max_deviation": 0.0,
+        "status": "label_only_no_reductions"
+      },
+      "scf_state": {
+        "irrep": "ag",
+        "nelec_alpha": 1,
+        "nelec_beta": 1,
+        "multiplicity": 1,
+        "term": "1AG"
+      },
+      "geometry_key": "ab84c9ff67f5ea16d6f1f8febba622bb"
+    },
+    "reduction_maps": {
+      "n_operations": 8,
+      "operation_names": [
+        "E",
+        "C2z",
+        "C2y",
+        "C2x",
+        "i",
+        "sxy",
+        "sxz",
+        "syz"
+      ],
+      "shell_permutation": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "ao_sign": [
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "ao_target": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          2,
+          3,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "shell_orbit_representative": [
+        0,
+        1,
+        0,
+        1
+      ],
+      "shell_orbit_size": [
+        2,
+        2,
+        0,
+        0
+      ],
+      "n_shells": 4,
+      "n_ao": 4,
+      "status": "metadata_only_no_reductions"
+    },
+    "mo_irreps": {
+      "status": "active",
+      "irreps": [
+        "ag",
+        "b1g",
+        "b2g",
+        "b3g",
+        "au",
+        "b1u",
+        "b2u",
+        "b3u"
+      ],
+      "xor_codes": [
+        0,
+        204,
+        170,
+        102,
+        240,
+        60,
+        90,
+        150
+      ],
+      "spins": {
+        "alpha": {
+          "n_mo": 4,
+          "n_unclassified": 0
+        }
+      }
+    },
+    "response_symmetry": {
+      "status": "pair_table_staged",
+      "projection": false,
+      "td_type": "rpa",
+      "n_pairs": 3,
+      "irreps": [
+        "ag",
+        "b1g",
+        "b2g",
+        "b3g",
+        "au",
+        "b1u",
+        "b2u",
+        "b3u"
+      ]
+    },
+    "state_labels": {
+      "status": "error",
+      "error": "Key `OQP::td_bvec_mo` not found in QOP data"
+    },
+    "mode_labels": {
+      "labels": [
+        "ag"
+      ],
+      "characters": [
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "max_deviation": 0.0,
+      "status": "ok"
+    }
+  },
+  "basis_set": {
+    "format": "OpenQP portable basis v1",
+    "coefficient_convention": "molden",
+    "basis_function_order": "molden",
+    "spherical_harmonics": false,
+    "nbf": 4,
+    "shells": [
+      {
+        "atom_index": 0,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          18.73113696,
+          2.825394365,
+          0.6401216923
+        ],
+        "coefficients": [
+          0.03349460434,
+          0.23472695350000003,
+          0.8137573261
+        ]
+      },
+      {
+        "atom_index": 0,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          0.1612777588
+        ],
+        "coefficients": [
+          1.0
+        ]
+      },
+      {
+        "atom_index": 1,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          18.73113696,
+          2.825394365,
+          0.6401216923
+        ],
+        "coefficients": [
+          0.03349460434,
+          0.23472695350000003,
+          0.8137573261
+        ]
+      },
+      {
+        "atom_index": 1,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          0.1612777588
+        ],
+        "coefficients": [
+          1.0
+        ]
+      }
+    ]
+  },
+  "molecular_orbitals": {
+    "format": "OpenQP portable orbitals v1",
+    "basis_function_order": "molden",
+    "alpha": {
+      "energies_hartree": [
+        -0.5958173111253788,
+        0.23847275631894105,
+        0.7747228663825595,
+        1.4044119645835837
+      ],
+      "occupancies": [
+        2.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "coefficients": [
+        [
+          0.3269351501595006,
+          0.2718059540509388,
+          0.3269351501594998,
+          0.27180595405094143
+        ],
+        [
+          0.12264887412700307,
+          1.714895154478695,
+          -0.12264887412700282,
+          -1.7148951544786952
+        ],
+        [
+          0.7663146719686992,
+          -0.6862521707405831,
+          0.7663146719686993,
+          -0.6862521707405813
+        ],
+        [
+          -1.1226344688888454,
+          1.3494319056503645,
+          1.1226344688888457,
+          -1.349431905650365
+        ]
+      ]
+    }
+  }
+}

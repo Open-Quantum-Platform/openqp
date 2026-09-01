@@ -110,7 +110,7 @@ contains
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
-      mo_a(:,:), mo_energy_a(:), wao(:), td_p(:,:), td_t(:,:), &
+      mo_a(:,:), mo_energy_a(:), wao(:), td_p(:,:), td_t(:,:), td_z(:), &
       ta(:), xpy(:,:), xmy(:,:), td_energies(:)
 
     character(len=*), parameter :: &
@@ -318,6 +318,9 @@ contains
     deallocate(int2_data)
     allocate(zvec, source=pcg%x)
     call pcg%clean()
+    call infos%dat%alloc_or_die(OQP_td_z, (/ lexc /), td_z, &
+      description=OQP_td_z_comment)
+    td_z = zvec
 
 !   3. Now, compute relaxed energy-weighted difference density matrix W
 

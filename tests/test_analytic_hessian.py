@@ -82,6 +82,25 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         openqp_dftb = types.ModuleType("oqp.library.openqp_dftb")
         setattr(openqp_dftb, "OpenQPDFTBAdapter", object)
         sys.modules["oqp.library.openqp_dftb"] = openqp_dftb
+        state_tracking = types.ModuleType("oqp.library.state_tracking")
+        setattr(state_tracking, "diagonal_phase_tracking", lambda *args, **kwargs: None)
+        setattr(state_tracking, "maximum_overlap_assignment", lambda *args, **kwargs: None)
+        sys.modules["oqp.library.state_tracking"] = state_tracking
+        nac_utils = types.ModuleType("oqp.library.nac_utils")
+        for name in (
+            "canonical_state_overlap",
+            "hst_derivative_coupling",
+            "interstate_coupling",
+            "load_numerical_nac_cache",
+            "write_numerical_nac_cache_marker",
+        ):
+            setattr(nac_utils, name, lambda *args, **kwargs: None)
+        sys.modules["oqp.library.nac_utils"] = nac_utils
+        tb_backends = types.ModuleType("oqp.utils.tb_backends")
+        setattr(tb_backends, "is_tb_method", lambda *_args, **_kwargs: False)
+        setattr(tb_backends, "make_tb_adapter", lambda *_args, **_kwargs: None)
+        setattr(tb_backends, "tb_config", lambda *_args, **_kwargs: {})
+        sys.modules["oqp.utils.tb_backends"] = tb_backends
         frequency = types.ModuleType("oqp.library.frequency")
         setattr(frequency, "normal_mode", lambda *args, **kwargs: (np.array([]), np.array([]), np.array([])))
         setattr(frequency, "thermal_analysis", lambda *args, **kwargs: {})
@@ -247,7 +266,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_tddft_analytical_hessian_is_rejected_until_scaffold_exists(self):
+    def test_pure_tdhf_analytical_hessian_is_supported(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rhf", "multiplicity": 1},
@@ -257,8 +276,87 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_excited_state_analytic_hessian_functional_gate(self):
+        base = {
+            "input": {"method": "tdhf"},
+            "scf": {"type": "rhf"},
+            "tdhf": {"type": "rpa", "nstate": 2},
+            "hess": {"state": 1},
+        }
+
+        for functional in (
+            "", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "PBEPBE",
+            "b3lyp5", "B3LYPV5",
+        ):
+            config = {section: values.copy() for section, values in base.items()}
+            config["input"]["functional"] = functional
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(functional=functional):
+                self.assertEqual(status, "supported", reason)
+
+        for functional in ("B3LYP", "M06-L", "CAM-B3LYP", "TETER"):
+            config = {section: values.copy() for section, values in base.items()}
+            config["input"]["functional"] = functional
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(functional=functional):
+                self.assertEqual(status, "unsupported_feature")
+                self.assertIn("LDA/GGA and global-hybrid paths", reason)
+
+    def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 3},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
         self.assertFalse(report.ok)
-        self.assertIn("TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertIn("singlet targets only", report.to_text())
+
+    def test_excited_state_analytic_hessian_rejects_higher_roots_until_indefinite_solver(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 2, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("only the lowest excited root", report.to_text())
+
+    def test_excited_state_analytic_hessian_requires_two_computed_roots(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nH 0 0 -0.37\nH 0 0 0.37",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("tdhf.nstate>=2", report.to_text())
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {
@@ -335,6 +433,19 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertIn("runtype=hess", text)
         self.assertIn("type=analytical", text)
         self.assertIn("state=0", text)
+
+    def test_analytic_rpa_hessian_examples_compute_an_isolation_root(self):
+        examples = sorted((ROOT / "examples/HESS").glob("*_RPA_ANA_HESS.inp"))
+
+        self.assertTrue(examples)
+        for example in examples:
+            nstate_lines = [
+                line for line in example.read_text().splitlines()
+                if line.strip().lower().startswith("nstate=")
+            ]
+            with self.subTest(example=example.name):
+                self.assertEqual(len(nstate_lines), 1)
+                self.assertGreaterEqual(int(nstate_lines[0].split("=", 1)[1]), 2)
 
 
 if __name__ == "__main__":
