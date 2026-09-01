@@ -185,14 +185,16 @@ finite differences of the analytic MRSF gradient.
 Molecular calculations begin only after the following finite model criteria
 are satisfied:
 
-1. an isolated second-quantized audit recovers the complete spin-adapted
-   seven-part response topology, with no duplicate CSFs and with the stated
-   L/R phases; this audit is not the production representation;
-2. an independently constructed Slater--Condon Hamiltonian and the MRSF
-   matrix-vector product agree for every unit-vector column to
-   (10^{-10}\ E_h);
+1. an independent spin-adapted construction recovers the complete
+   \(\mathrm{CO}(+),\mathrm{OV}(+),\mathrm{CV}(+),\mathrm{OO},
+   \mathrm{CV}(-),\mathrm{OV}(-),\mathrm{CO}(-)\) response topology, with no
+   duplicate physical amplitudes and with the stated L/R phases;
+2. an independently coded direct evaluator of the founding CO/OV/CV/OO block
+   equations and the production seven-density matrix-vector product agree for
+   every physical unit-vector column to (10^{-10}\ E_h); neither evaluator
+   changes to an electronic-state basis outside the spin-adapted MRSF space;
 3. singlet and triplet OO functions are normalized, mutually orthogonal, and
-   eigenfunctions of \(\hat S^2\) with eigenvalues 0 and 2;
+   have respectively odd and even parent-exchange symmetry;
 4. analytic first and second eigenvalue derivatives agree with central finite
    differences at (h), (h/2), and (h/4), with the expected convergence;
 5. the MRSF(0) limit is recovered when all spin-pairing scales are zero, and
