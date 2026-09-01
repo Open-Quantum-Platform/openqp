@@ -65,3 +65,13 @@ def test_shell_envelope_is_invariant_to_batch_partitioning():
     )
 
     np.testing.assert_array_equal(full, partitioned)
+
+
+def test_umrsf_extended_components_are_included_in_the_same_envelope():
+    density = np.zeros((1, 11, 3, 3))
+    shells = (slice(0, 1), slice(1, 3))
+    density[0, 9, 0, 2] = -6.75
+
+    envelope = _shell_envelope(density, shells)
+
+    assert envelope[1, 0] == 6.75
