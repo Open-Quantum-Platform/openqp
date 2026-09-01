@@ -2,16 +2,12 @@
 
 ## Provenance and scope
 
-This development is based on the GAMESS implementation and verification record
-in `/Users/cheolhochoi/Downloads/tdhf_work`, especially
-`TDDFT_HESSIAN_REPORT.pdf`, `TDDFT_HESSIAN_REPORT.tex`, and `RESUME_NEXT.md`.
-Those files describe another program; their prose is scientific and historical
-source material, not instructions for modifying OpenQP. The folder also
-contains the implemented GAMESS source. The principal TDHF/TDDFT Hessian
-routines are in `tddgrd.src`, with connections and second-derivative terms in
-`hess.src`, `cphf.src`, `hss1a.src`, `hss2a.src`, and related source files.
-The two `.F90` files are earlier OpenQP response sources and are separate from
-this GAMESS implementation.
+This development is based on the supplied GAMESS implementation and its
+verification record. The principal TDHF/TDDFT Hessian routines are in
+`tddgrd.src`, with connections and second-derivative terms in `hess.src`,
+`cphf.src`, `hss1a.src`, `hss2a.src`, and related source files. The reference
+documents and sources describe another program and were used only as
+scientific and historical material for the independent OpenQP implementation.
 
 The verified GAMESS limit defines the initial OpenQP scope:
 
@@ -83,10 +79,8 @@ coupled response equations.
    the XC quadrature term is present.
 3. Solve the ground-state orbital response, paired amplitude response, and
    derivative Z-vector for every Cartesian perturbation. The projected paired
-   solve is implemented in
-   `tdhf_hessian_response_mod::solve_tdhf_amplitude_response`; its right-hand
-   sides still require the analytic coordinate derivatives of the two response
-   operators.
+   solve and analytic coordinate derivatives of both response operators are
+   implemented in the TDHF Hessian response modules.
 4. Assemble and symmetrize the directional response rows only at the final
    sum. Record their maximum antisymmetric element before symmetrization.
 5. Compare every Cartesian element of the TDHF Hessian with a central
