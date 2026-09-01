@@ -152,6 +152,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);", header)
         self.assertIn("bind(C, name=\"electric_dipole_au\")", electric)
         self.assertIn("bind(C, name=\"vibrational_intensities_native\")", vib)
+        self.assertIn("IR_INTENSITY_CONVERSION = 974.88011d0", vib)
         self.assertIn("void vibrational_intensities_native(struct oqp_handle_t *inf, int64_t nmode, int64_t ncoord,", header)
         self.assertIn("oqp.vibrational_intensities_native", single_point)
         self.assertNotIn("vibrational_intensities_from_pyscf", single_point)

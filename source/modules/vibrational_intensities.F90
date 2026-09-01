@@ -7,7 +7,10 @@ module vibrational_intensities_mod
   private
   public :: vibrational_intensities_native_C
 
-  real(c_double), parameter :: IR_INTENSITY_CONVERSION = 42.255d0
+  ! The projected derivative is in e/sqrt(amu), because the Cartesian dipole
+  ! derivative is in atomic units and modes carry amu**(-1/2).  The 42.255
+  ! factor applies to Debye/(Angstrom*sqrt(amu)), not to this representation.
+  real(c_double), parameter :: IR_INTENSITY_CONVERSION = 974.88011d0
 
 contains
 
