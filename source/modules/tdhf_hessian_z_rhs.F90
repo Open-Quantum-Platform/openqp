@@ -185,13 +185,14 @@ contains
     real(kind=dp), allocatable :: dpao(:,:,:), dcoeff(:,:), work(:,:)
     real(kind=dp), allocatable :: deri(:,:,:)
     real(kind=dp), allocatable :: dens(:,:,:), amb(:,:,:), apb(:,:,:)
-    real(kind=dp), allocatable :: gao(:,:), dgao(:,:)
-    integer :: atom, cart, k, nbf, ncoord
+    real(kind=dp), allocatable :: gao(:,:), dgao(:,:), kxc_ground(:,:,:)
+    integer :: atom, cart, k, nbf, ncoord, nocc
 
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = size(coeff,1)
     ncoord = size(umat,3)
+    nocc = infos%mol_prop%nocc
     allocate(p0(nbf,nbf), pt(nbf,nbf), dpao(nbf,nbf,ncoord), &
              dcoeff(nbf,nbf), work(nbf,nbf))
     p0 = matmul(matmul(coeff,m0),transpose(coeff))
@@ -207,6 +208,35 @@ contains
 
     allocate(deri(nbf,nbf,ncoord))
     call explicit_channel_derivative_matrix(infos,coeff,p0,sign_channel,deri)
+    allocate(kxc_ground(nbf,nbf,ncoord),source=0.0_dp)
+    if (infos%control%hamilton==20 .and. sign_channel>0) then
+      block
+        use mod_dft, only: dft_initialize,dftclean
+        use mod_dft_molgrid, only: dft_grid_t
+        use mod_dft_gridint_gxc, only: tddft_gxc
+        type(dft_grid_t) :: grid
+        real(dp),allocatable,target :: dx(:,:,:)
+        real(dp),allocatable :: fx(:,:,:),dground(:,:)
+        integer :: kk
+        allocate(dx(nbf,nbf,3*ncoord),fx(nbf,nbf,3*ncoord),dground(nbf,nbf),source=0.0_dp)
+        do kk=1,ncoord
+          dcoeff=matmul(coeff,umat(:,:,kk))
+          dground=2.0_dp*(matmul(dcoeff(:,1:nocc),transpose(coeff(:,1:nocc)))+ &
+            matmul(coeff(:,1:nocc),transpose(dcoeff(:,1:nocc))))
+          ! The restricted grid interface consumes a one-spin ground density.
+          dx(:,:,3*kk-2)=p0+0.5_dp*dground
+          dx(:,:,3*kk-1)=p0
+          dx(:,:,3*kk)=0.5_dp*dground
+        end do
+        call dft_initialize(infos,basis,grid)
+        call tddft_gxc(basis,grid,.true.,coeff,fx,dx,3*ncoord,1.0e-14_dp,infos)
+        call dftclean(infos)
+        do kk=1,ncoord
+          kxc_ground(:,:,kk)=fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk)
+        end do
+        deallocate(dx,fx,dground)
+      end block
+    end if
     allocate(dens(nbf,nbf,ncoord+1), amb(nbf,nbf,ncoord+1), &
              apb(nbf,nbf,ncoord+1))
     dens(:,:,1) = p0
@@ -229,13 +259,13 @@ contains
       if (sign_channel < 0) then
         dgao = amb(:,:,k+1)
       else
-        dgao = apb(:,:,k+1)
+        dgao = apb(:,:,k+1)+kxc_ground(:,:,k)
       end if
       call ao_to_mo(dgao,coeff,dgmo(:,:,k),work)
       dgmo(:,:,k) = dgmo(:,:,k) + deri(:,:,k) + matmul(transpose(umat(:,:,k)),gmo) &
                                      + matmul(gmo,umat(:,:,k))
     end do
-    deallocate(p0,pt,dpao,dcoeff,work,deri,dens,amb,apb,gao,dgao)
+    deallocate(p0,pt,dpao,dcoeff,work,deri,dens,amb,apb,gao,dgao,kxc_ground)
   end subroutine differentiated_channel
 
 !###############################################################################

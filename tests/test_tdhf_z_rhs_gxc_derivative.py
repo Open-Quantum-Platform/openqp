@@ -19,6 +19,8 @@ def test_gxc_derivative_has_one_reusable_owner():
 
 
 def test_z_rhs_builds_gxc_derivative_from_xpy_and_dxpy():
+    # The driver passes X+Y as this routine's first channel (um/du).
+    # Gxc is quadratic in X+Y, so both its value and derivative use it.
     assert re.search(
         r"call\s+build_gxc_and_derivative\s*\(\s*infos\s*,\s*mo\s*,\s*umat\s*,"
         r"\s*um\s*,\s*du\s*,\s*gxp\s*,\s*dgxp\s*\)",
@@ -41,6 +43,14 @@ def test_helper_restores_geometry_after_each_central_difference():
     assert "basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)+step" in HELPER
     assert "basis%atoms%xyz(cc,aa)=basis%atoms%xyz(cc,aa)-2.0_dp*step" in HELPER
     assert HELPER.count("call basis%init_shell_centers()") >= 3
+
+
+def test_energy_weighted_density_uses_same_xpy_channel():
+    assert re.search(
+        r"call\s+build_gxc_and_derivative\s*\(\s*infos\s*,\s*c\s*,\s*umat\s*,"
+        r"\s*um\s*,\s*du\s*,\s*gxp\s*,\s*dgxp\s*\)",
+        DENSITY,
+    )
 
 
 def test_every_gxc_accumulator_is_zeroed_immediately_before_use():

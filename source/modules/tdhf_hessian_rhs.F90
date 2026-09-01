@@ -96,9 +96,10 @@ contains
         use mod_dft_gridint_gxc, only: tddft_gxc
         type(dft_grid_t) :: grid
         real(dp),allocatable,target :: dx(:,:,:)
-        real(dp),allocatable :: fx(:,:,:),pvs(:,:)
+        real(dp),allocatable :: fx(:,:,:),pvs(:,:),kxc_mo(:,:),kxc_work(:,:)
         integer :: kk
-        allocate(dx(nbf,nbf,3*ncart),fx(nbf,nbf,3*ncart),pvs(nbf,nbf),source=0.0_dp)
+        allocate(dx(nbf,nbf,3*ncart),fx(nbf,nbf,3*ncart),pvs(nbf,nbf), &
+          kxc_mo(nbf,nbf),kxc_work(nbf,nbf),source=0.0_dp)
         pvs=0.5_dp*(pv+transpose(pv))
         do kk=1,ncart
           ! dground is spin summed, whereas the restricted grid consumer
@@ -112,10 +113,11 @@ contains
         call tddft_gxc(basis,grid,.true.,mo,fx,dx,3*ncart,1.0e-14_dp,infos)
         call dftclean(infos)
         do kk=1,ncart
-          fx(:,:,3*kk-2)=0.5_dp*(fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk))
-          deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+fx(:,:,3*kk-2)
+          fx(:,:,3*kk-2)=fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk)
+          call ao_to_mo(fx(:,:,3*kk-2),mo,kxc_mo,kxc_work)
+          deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+kxc_mo
         end do
-        deallocate(dx,fx,pvs)
+        deallocate(dx,fx,pvs,kxc_mo,kxc_work)
       end block
     end if
     do k = 1, ncart

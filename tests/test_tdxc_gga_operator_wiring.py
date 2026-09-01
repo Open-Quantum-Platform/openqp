@@ -41,12 +41,21 @@ def test_response_paths_reach_x2_skeleton_and_x3_response_terms():
     # TDDFT XC gradient.  KORD=3 response half: the GGA-wired Gxc consumer.
     assert "call tddft_xc_gradient" in Z_RHS
     assert "call tddft_gxc" in RHS
-    assert "deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+fx(:,:,3*kk-2)" in RHS
+    assert "call ao_to_mo(fx(:,:,3*kk-2),mo,kxc_mo,kxc_work)" in RHS
+    assert "deri_full_p(:,:,kk)=deri_full_p(:,:,kk)+kxc_mo" in RHS
 
 
 def test_kxc_ground_response_crosses_the_one_spin_grid_boundary():
     assert "pvs+0.5_dp*dground(:,:,kk)" in RHS
     assert "dx(:,:,3*kk)=0.5_dp*dground(:,:,kk)" in RHS
+    # G[p+d]-G[p]-G[d] is 2*G[p,d], matching the production H+ convention.
+    assert "fx(:,:,3*kk-2)=fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk)" in RHS
+
+
+def test_static_plus_channels_include_ground_density_kxc_in_ao_frame():
+    assert "kxc_ground(:,:,kk)=fx(:,:,3*kk-2)-fx(:,:,3*kk-1)-fx(:,:,3*kk)" in Z_RHS
+    assert "dgao = apb(:,:,k+1)+kxc_ground(:,:,k)" in Z_RHS
+    assert "call ao_to_mo(dgao,coeff,dgmo(:,:,k),work)" in Z_RHS
 
 
 def test_zero_orbital_connection_shortcut_is_never_applied_to_dft():
