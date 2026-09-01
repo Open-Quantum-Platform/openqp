@@ -73,9 +73,12 @@ module fock_deriv_mod
   public :: grd2_fockprobe_data_t
   public :: grd2_fockprobe_os_data_t
   public :: fock_deriv_contract
+  public :: fock_deriv_contract_scaled
   public :: fock_deriv_matrix
   public :: fock_deriv_matrix_general
+  public :: fock_deriv_matrix_general_scaled
   public :: fock_deriv_contract_os
+  public :: fock_deriv_matrix_os
 
 contains
 
@@ -95,26 +98,46 @@ contains
     real(kind=dp), intent(in) :: hfscale
     real(kind=dp), intent(out) :: gx(:,:)
 
-    type(grd2_fockprobe_data_t) :: gcomp
+    call fock_deriv_contract_scaled(infos,basis,pmat,mmat,1.0_dp,hfscale,gx)
+  end subroutine fock_deriv_contract
 
+!###############################################################################
+
+!> @brief General derivative response-Fock contraction with independent
+!>        Coulomb and exchange scales.
+!>
+!> MRSF uses seven AO response densities. Channels 1:4 carry Coulomb and
+!> exchange, whereas channels 5:7 carry exchange only; both are multiplied by
+!> the response exact-exchange scale before the channel-specific SPC factors
+!> are applied. Keeping the two scales explicit provides the derivative-ERI
+!> action without changing representation or reconstructing four-index
+!> derivative integrals in the MRSF driver.
+  subroutine fock_deriv_contract_scaled(infos,basis,pmat,mmat,coulscale, &
+      exchangescale,gx)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:),mmat(:,:)
+    real(kind=dp), intent(in) :: coulscale,exchangescale
+    real(kind=dp), intent(out) :: gx(:,:)
+
+    type(grd2_fockprobe_data_t) :: gcomp
     integer, allocatable :: off_dummy(:)
     integer :: ncart
 
-    gcomp%pmat => pmat
-    gcomp%mmat => mmat
-    gcomp%nbf = basis%nbf
-    gcomp%coulscale = 1.0_dp
-    gcomp%hfscale = hfscale
-    gcomp%hfscale2 = hfscale
-
-    if (HARMONIC_ACTIVE) then
-      call fockprobe_cart(basis, pmat, gcomp%pmat_cart, gcomp%cart_off, ncart)
-      call fockprobe_cart(basis, mmat, gcomp%mmat_cart, off_dummy, ncart)
+    gcomp%pmat=>pmat
+    gcomp%mmat=>mmat
+    gcomp%nbf=basis%nbf
+    gcomp%coulscale=coulscale
+    gcomp%hfscale=exchangescale
+    gcomp%hfscale2=exchangescale
+    if(HARMONIC_ACTIVE) then
+      call fockprobe_cart(basis,pmat,gcomp%pmat_cart,gcomp%cart_off,ncart)
+      call fockprobe_cart(basis,mmat,gcomp%mmat_cart,off_dummy,ncart)
     end if
-
-    gx = 0.0_dp
-    call grd2_driver(infos, basis, gx, gcomp)
-  end subroutine fock_deriv_contract
+    gx=0.0_dp
+    call grd2_driver(infos,basis,gx,gcomp)
+    call gcomp%clean()
+  end subroutine fock_deriv_contract_scaled
 
 !###############################################################################
 
@@ -193,27 +216,43 @@ contains
     real(kind=dp), intent(in) :: hfscale
     real(kind=dp), intent(out) :: fmat(:,:,:,:)
 
+    call fock_deriv_matrix_general_scaled(infos,basis,pmat,1.0_dp,hfscale,fmat)
+  end subroutine fock_deriv_matrix_general
+
+!###############################################################################
+
+!> @brief Build the ordered derivative response-Fock matrix with independent
+!>        Coulomb and exchange scales for every nuclear coordinate.
+  subroutine fock_deriv_matrix_general_scaled(infos,basis,pmat,coulscale, &
+      exchangescale,fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:)
+    real(kind=dp), intent(in) :: coulscale,exchangescale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
     real(kind=dp), allocatable, target :: probe(:,:)
     real(kind=dp), allocatable :: gx(:,:)
-    integer :: mu, nu, natom, nbf
+    integer :: mu,nu,natom,nbf
 
-    nbf = basis%nbf
-    natom = size(basis%atoms%xyz, 2)
-    if (any(shape(pmat) /= [nbf, nbf])) &
-      error stop 'fock_deriv_matrix_general: density shape does not match the basis'
-    if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
-      error stop 'fock_deriv_matrix_general: output shape does not match the system'
-
-    allocate(probe(nbf,nbf), gx(3,natom))
-    do nu = 1, nbf
-      do mu = 1, nbf
-        probe = 0.0_dp
-        probe(mu,nu) = 1.0_dp
-        call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
-        fmat(mu,nu,:,:) = 2.0_dp*gx
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    if(any(shape(pmat)/=[nbf,nbf])) &
+      error stop 'fock_deriv_matrix_general_scaled: density shape mismatch'
+    if(any(shape(fmat)/=[nbf,nbf,3,natom])) &
+      error stop 'fock_deriv_matrix_general_scaled: output shape mismatch'
+    allocate(probe(nbf,nbf),gx(3,natom))
+    do nu=1,nbf
+      do mu=1,nbf
+        probe=0.0_dp
+        probe(mu,nu)=1.0_dp
+        call fock_deriv_contract_scaled(infos,basis,pmat,probe,coulscale, &
+          exchangescale,gx)
+        fmat(mu,nu,:,:)=2.0_dp*gx
       end do
     end do
-  end subroutine fock_deriv_matrix_general
+    deallocate(probe,gx)
+  end subroutine fock_deriv_matrix_general_scaled
 
 !###############################################################################
 
@@ -368,6 +407,53 @@ contains
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
   end subroutine fock_deriv_contract_os
+
+!###############################################################################
+
+!> @brief Build the full symmetric explicit derivative of an open-shell spin
+!>        Fock matrix J^x[P_alpha+P_beta]-c_x K^x[P_spin].
+!>
+!> @details fock_deriv_contract_os returns the genuine matrix trace against a
+!>          symmetric probe.  A unit diagonal probe therefore yields F_uu,
+!>          while a half-weighted symmetric off-diagonal probe yields F_uv for
+!>          a symmetric derivative Fock.  This validation-grade implementation
+!>          avoids reconstructing derivative four-index integrals and is used
+!>          by the first MRSF Hessian driver for modest molecular systems.
+  subroutine fock_deriv_matrix_os(infos,basis,pcoul,pexch,hfscale,fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pcoul(:,:),pexch(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
+    real(kind=dp), allocatable, target :: probe(:,:)
+    real(kind=dp), allocatable :: gx(:,:)
+    integer :: mu,nu,natom,nbf
+
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    if(any(shape(pcoul)/=[nbf,nbf]) .or. any(shape(pexch)/=[nbf,nbf])) &
+      error stop 'fock_deriv_matrix_os: density shape does not match the basis'
+    if(any(shape(fmat)/=[nbf,nbf,3,natom])) &
+      error stop 'fock_deriv_matrix_os: output shape does not match the system'
+    allocate(probe(nbf,nbf),gx(3,natom))
+    fmat=0.0_dp
+    do nu=1,nbf
+      do mu=nu,nbf
+        probe=0.0_dp
+        if(mu==nu) then
+          probe(mu,nu)=1.0_dp
+        else
+          probe(mu,nu)=0.5_dp
+          probe(nu,mu)=0.5_dp
+        end if
+        call fock_deriv_contract_os(infos,basis,pcoul,pexch,probe,hfscale,gx)
+        fmat(mu,nu,:,:)=gx
+        fmat(nu,mu,:,:)=gx
+      end do
+    end do
+    deallocate(probe,gx)
+  end subroutine fock_deriv_matrix_os
 
 !###############################################################################
 
