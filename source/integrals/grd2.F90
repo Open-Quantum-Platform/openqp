@@ -6,7 +6,8 @@ module grd2
   use constants, only: tol_int
   use io_constants, only: iw
   use basis_tools, only: basis_set
-  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute
+  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute, &
+                      grd2_operator_consumer_t, grd2_rys_compute_operator
   use constants, only: BAS_MXANG
   use int2_compute, only: int2_compute_data_t, ints_exchange
 
@@ -66,6 +67,7 @@ module grd2
 
   private
   public :: grd2_driver
+  public :: grd2_operator_driver
   public :: grd2_hess_driver
   public :: grd2_compute_data_t
 
@@ -389,6 +391,97 @@ contains
     end if
 
   end subroutine grd2_driver_gen
+
+!> @brief Traverse derivative ERI shell quartets once and assemble an AO
+!>        operator through a consumer callback.
+!>
+!> This path deliberately omits density-dependent fine screening: an operator
+!> represents every AO probe simultaneously, so no single probe-density bound
+!> can safely screen a shell quartet.  The ordinary Schwarz and primitive
+!> integral cutoffs remain active.  TDHF Hessians currently require one MPI
+!> rank and set one OpenMP thread, so the callback can scatter deterministically
+!> without atomics or thread-private O(nbf^2*ncart) buffers.
+  subroutine grd2_operator_driver(infos, basis, consumer, attenuated, mu)
+    use messages, only: show_message, WITH_ABORT
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use parallel, only: par_env_t
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    logical, optional, intent(in) :: attenuated
+    real(kind=dp), optional, intent(in) :: mu
+
+    type(grd2_int_data_t) :: gdat
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp) :: cutoff, dabcut, dtol, rtol, zbig, gmax, emu2
+    integer :: i, j, k, l, ij, kl, maxl, iok
+    logical :: do_attenuated
+
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (pe%size /= 1) call show_message( &
+      'Blocked derivative-operator assembly currently requires one MPI rank.', &
+      WITH_ABORT)
+
+    do_attenuated = .false.
+    if (present(attenuated)) do_attenuated = attenuated
+    if (do_attenuated .and. .not.present(mu)) call show_message( &
+      'Attenuated derivative-operator assembly requires a range parameter.', &
+      WITH_ABORT)
+    if (do_attenuated) emu2 = mu**2
+
+    cutoff = infos%control%grad_cutoff
+    if (cutoff <= 0.0_dp) cutoff = 1.0e-10_dp
+    zbig = maxval(basis%ex)
+    dabcut = 1.0e-11_dp
+    if (zbig > 1.0e6_dp) dabcut = dabcut/10.0_dp
+    if (zbig > 1.0e7_dp) dabcut = dabcut/10.0_dp
+    dtol = 10.0_dp**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+    call cutoffs%set(cutoff_integral_value=dabcut, cutoff_exp=rtol, &
+                     cutoff_prefactor_pq=dtol, cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+    allocate(schwarz_ints(basis%nshell,basis%nshell))
+    if (do_attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
+
+    call gdat%init(basis%mxam, 1, dtol*dtol, dabcut, iok)
+    if (iok /= 0) call show_message( &
+      'Unable to allocate blocked derivative-operator integral workspace.', &
+      WITH_ABORT)
+    do i = 1, basis%nshell
+      do j = 1, i
+        ij = i*(i-1)/2+j
+        if (ppairs%ppid(1,ij) == 0) cycle
+        do k = 1, i
+          maxl = k
+          if (k == i) maxl = j
+          do l = 1, maxl
+            kl = k*(k-1)/2+l
+            if (ppairs%ppid(1,kl) == 0) cycle
+            gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+            if (gmax < cutoff) cycle
+            call gdat%set_ids(basis, i, j, k, l)
+            if (all(gdat%skip)) cycle
+            if (do_attenuated) then
+              call grd2_rys_compute_operator(gdat, ppairs, consumer, basis, emu2)
+            else
+              call grd2_rys_compute_operator(gdat, ppairs, consumer, basis)
+            end if
+          end do
+        end do
+      end do
+    end do
+    call gdat%clean()
+  end subroutine grd2_operator_driver
 
 !###############################################################################
 

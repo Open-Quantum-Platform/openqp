@@ -286,20 +286,59 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             "hess": {"state": 1},
         }
 
-        for functional in ("", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "B3LYP", "b3lyp5"):
+        for functional in (
+            "", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "PBEPBE",
+            "b3lyp5", "B3LYPV5",
+        ):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "supported", reason)
 
-        for functional in ("M06-L", "CAM-B3LYP", "TETER"):
+        for functional in ("B3LYP", "M06-L", "CAM-B3LYP", "TETER"):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "unsupported_feature")
                 self.assertIn("LDA/GGA and global-hybrid paths", reason)
+
+    def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 3},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("singlet targets only", report.to_text())
+
+    def test_excited_state_analytic_hessian_rejects_higher_roots_until_indefinite_solver(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 2, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("only the lowest excited root", report.to_text())
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {

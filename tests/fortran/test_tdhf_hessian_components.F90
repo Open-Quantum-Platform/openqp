@@ -2,7 +2,8 @@ program test_tdhf_hessian_components
 
   use precision, only: dp
   use tdhf_hessian_components_mod, only: assemble_tdhf_cartesian_hessian, &
-    tdhf_hessian_is_applicable, tdhf_hessian_functional_is_verified
+    tdhf_hessian_is_applicable, tdhf_hessian_functional_is_verified, &
+    tdhf_hessian_target_is_supported,tdhf_hessian_lowest_root_is_isolated
 
   implicit none
 
@@ -62,7 +63,22 @@ program test_tdhf_hessian_components
     error stop 'BLYP alias was rejected'
   if (.not. tdhf_hessian_functional_is_verified(' B3LYP5 ')) &
     error stop 'B3LYP5 alias was rejected'
+  if (.not. tdhf_hessian_functional_is_verified(' PBEPBE ')) &
+    error stop 'PBEPBE alias was rejected'
+  if (.not. tdhf_hessian_functional_is_verified(' B3LYPV5 ')) &
+    error stop 'B3LYPV5 alias was rejected'
+  if (tdhf_hessian_functional_is_verified('B3LYP')) &
+    error stop 'ambiguous bare B3LYP name was accepted'
   if (tdhf_hessian_functional_is_verified('TETER')) &
     error stop 'unverified LDA functional was accepted'
+
+  if(.not.tdhf_hessian_target_is_supported(1)) &
+    error stop 'lowest excited root was rejected'
+  if(tdhf_hessian_target_is_supported(2)) &
+    error stop 'higher excited root was accepted'
+  if(.not.tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.3_dp],1.0e-10_dp)) &
+    error stop 'isolated lowest root was rejected'
+  if(tdhf_hessian_lowest_root_is_isolated([0.2_dp,0.2_dp+1.0e-11_dp],1.0e-10_dp)) &
+    error stop 'degenerate lowest-root manifold was accepted'
 
 end program test_tdhf_hessian_components

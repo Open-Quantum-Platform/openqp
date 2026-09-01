@@ -30,7 +30,8 @@ contains
     use fock_deriv_mod, only: fock_deriv_matrix
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
-    use tdhf_hessian_response_mod, only: complete_rhf_orbital_response
+    use tdhf_hessian_response_mod, only: complete_rhf_orbital_response, &
+      tdhf_reference_has_degenerate_subspace
     use messages, only: show_message, WITH_ABORT
 
     type(information), target, intent(inout) :: infos
@@ -78,6 +79,10 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, eps)
+    if (tdhf_reference_has_degenerate_subspace(eps, nocc, 1.0e-10_dp)) then
+      call show_message('Analytic TD Hessian does not yet support degenerate occupied '// &
+                        'or virtual canonical MO subspaces; use a numerical Hessian.', WITH_ABORT)
+    end if
     allocate(pfull(nbf,nbf)); call unpack_matrix(dmat, pfull)
     dxc_skeleton = 0.0_dp
     allocate(ds(nbf,nbf,3,natom), dt(nbf,nbf,3,natom), &

@@ -1,21 +1,33 @@
 module tdhf_hessian_z_rhs_mod
 
   use precision, only: dp
+  use grd2_rys, only: grd2_operator_consumer_t
 
   implicit none
   private
   public :: build_tdhf_z_rhs_derivative
   public :: differentiated_channel
   public :: explicit_channel_derivative_matrix
+  public :: accumulate_tdhf_channel_quartet
   logical, parameter :: enable_tddft_explicit_gxc = .true.
+
+  type, extends(grd2_operator_consumer_t) :: tdhf_channel_operator_consumer_t
+    real(dp), pointer :: base(:,:) => null()
+    real(dp), pointer :: operator(:,:,:) => null()
+    integer, allocatable :: cart_off(:)
+    integer :: channel = 0
+    real(dp) :: coulscale = 1.0_dp
+    real(dp) :: hfscale = 1.0_dp
+  contains
+    procedure :: accumulate => accumulate_tdhf_channel_operator
+  end type tdhf_channel_operator_consumer_t
 
 contains
 
   subroutine explicit_channel_derivative_matrix(infos, coeff, base, channel, result)
     use types, only: information
-    use basis_tools, only: basis_set
-    use grd2, only: grd2_driver
-    use tdhf_gradient_mod, only: grd2_tdhf_compute_data_t
+    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+    use grd2, only: grd2_operator_driver
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A
     use mathlib, only: unpack_matrix
     use mod_dft, only: dft_initialize, dftclean
@@ -26,59 +38,179 @@ contains
     integer,intent(in)::channel
     real(dp),intent(out)::result(:,:,:)
     type(basis_set),pointer::basis
-    type(grd2_tdhf_compute_data_t)::gc
+    type(tdhf_channel_operator_consumer_t)::consumer
     type(dft_grid_t)::grid
     real(dp),contiguous,pointer::dpk(:)
-    real(dp),allocatable,target::d(:,:,:),p(:,:,:),xp(:,:,:),xm(:,:,:),dxc(:,:)
-    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),gp(:,:),gm(:,:),gxcp(:,:),gxcm(:,:)
-    integer::i,j,nbf,ncart
+    real(dp),allocatable,target::p(:,:,:),xp(:,:,:),dxc(:,:)
+    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
+    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),operator_ao(:,:,:), &
+      work(:,:),gp(:,:),gm(:,:)
+    integer::i,j,k,nbf,ncart,nwork
     real(dp)::scale_exch
     basis=>infos%basis; basis%atoms=>infos%atoms
     nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
     scale_exch=1.0_dp
     if(infos%control%hamilton>=20) scale_exch=infos%dft%hfscale
-    allocate(d(nbf,nbf,1),p(nbf,nbf,1),xp(nbf,nbf,1),xm(nbf,nbf,1),dxc(nbf,nbf), &
-      probe(nbf,nbf),buse(nbf,nbf),quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3), &
-      gxcp(3,ncart/3),gxcm(3,ncart/3),source=0.0_dp)
-    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-      call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call unpack_matrix(dpk,dxc)
-      call dft_initialize(infos,basis,grid)
-    end if
-    result=0.0_dp
+    allocate(buse(nbf,nbf),source=base)
     if(channel>0) then
       buse=0.5_dp*(base+transpose(base))
-    else
-      buse=base
     end if
-    do j=1,nbf; do i=1,nbf
-      probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+
+    ! Match the exact density convention consumed by grd2 under pure
+    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
+    ! Cartesian effective densities.
+    bwork=buse
+    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
+    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
+    consumer%base=>base_cart
+    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
+    consumer%operator=>operator_cart
+    consumer%channel=channel
+    consumer%coulscale=1.0_dp
+    consumer%hfscale=scale_exch
+    call grd2_operator_driver(infos,basis,consumer)
+
+    do k=1,ncart
       if(channel>0) then
-        quse=0.5_dp*(probe+transpose(probe))
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
       else
-        quse=probe
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
       end if
-      xp=0.0_dp; xm=0.0_dp
-      if(channel>0) then; xp(:,:,1)=buse+quse; else; xm(:,:,1)=buse+quse; end if
-      gp=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
-      call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gp,gc); call gc%clean()
-      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-        gxcp=0.0_dp
-        call tddft_xc_gradient(basis,grid,gxcp,dxc,p,xp,1,1.0e-14_dp,infos)
-      end if
-      if(channel>0) then; xp(:,:,1)=buse-quse; else; xm(:,:,1)=buse-quse; end if
-      gm=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
-      call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gm,gc); call gc%clean()
-      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-        gxcm=0.0_dp
-        call tddft_xc_gradient(basis,grid,gxcm,dxc,p,xp,1,1.0e-14_dp,infos)
-        gp=gp+gxcp; gm=gm+gxcm
-      end if
-      result(i,j,:)=reshape(0.25_dp*(gp-gm),[ncart])
-    end do; end do
-    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) &
+    end do
+    allocate(operator_ao(nbf,nbf,ncart))
+    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
+    allocate(work(nbf,nbf))
+    do k=1,ncart
+      work=matmul(operator_ao(:,:,k),coeff)
+      result(:,:,k)=matmul(transpose(coeff),work)
+    end do
+
+    ! The ERI term above is now one blocked quartet traversal.  The XC grid
+    ! contribution uses its existing finite-difference oracle independently;
+    ! it does not invoke grd2 and therefore cannot reintroduce derivative-ERI
+    ! traversals.
+    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
+      allocate(p(nbf,nbf,1),xp(nbf,nbf,1),dxc(nbf,nbf),probe(nbf,nbf), &
+        quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3),source=0.0_dp)
+      call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call unpack_matrix(dpk,dxc)
+      call dft_initialize(infos,basis,grid)
+      do j=1,nbf; do i=1,nbf
+        probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+        quse=0.5_dp*(probe+transpose(probe))
+        xp(:,:,1)=buse+quse; gp=0.0_dp
+        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos)
+        xp(:,:,1)=buse-quse; gm=0.0_dp
+        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos)
+        result(i,j,:)=result(i,j,:)+reshape(0.25_dp*(gp-gm),[ncart])
+      end do; end do
       call dftclean(infos)
-    deallocate(d,p,xp,xm,dxc,probe,buse,quse,gp,gm,gxcp,gxcm)
+      deallocate(p,xp,dxc,probe,quse,gp,gm)
+    end if
+    nullify(consumer%base,consumer%operator)
+    deallocate(buse,bwork,base_cart,operator_cart,operator_ao,work)
   end subroutine explicit_channel_derivative_matrix
+
+  subroutine accumulate_tdhf_channel_operator(this,basis,shell_ids,atom_ids, &
+                                               local_ids,derivative)
+    use basis_tools, only: basis_set
+    class(tdhf_channel_operator_consumer_t),intent(inout)::this
+    type(basis_set),intent(in)::basis
+    integer,intent(in)::shell_ids(4),atom_ids(4),local_ids(4)
+    real(dp),intent(in)::derivative(3,4)
+    integer::gi,gj,gk,gl,center,axis,coord
+    real(dp)::value
+
+    gi=this%cart_off(shell_ids(1))+local_ids(1)-1
+    gj=this%cart_off(shell_ids(2))+local_ids(2)-1
+    gk=this%cart_off(shell_ids(3))+local_ids(3)-1
+    gl=this%cart_off(shell_ids(4))+local_ids(4)-1
+    ! A shell quartet can place more than one derivative center on the same
+    ! atom.  Accumulate each center explicitly so those contributions add
+    ! rather than being lost through a repeated vector subscript.
+    do center=1,4
+      do axis=1,3
+        value=derivative(axis,center)
+        if(value==0.0_dp) cycle
+        coord=3*(atom_ids(center)-1)+axis
+        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord), &
+          [gi,gj,gk,gl],this%channel,this%coulscale,this%hfscale,value)
+      end do
+    end do
+  end subroutine accumulate_tdhf_channel_operator
+
+  pure subroutine accumulate_tdhf_channel_quartet(base,operator,ids,channel, &
+                                                   coulscale,hfscale,value)
+    real(dp),intent(in)::base(:,:),coulscale,hfscale,value
+    real(dp),intent(inout)::operator(:,:)
+    integer,intent(in)::ids(4),channel
+    integer::gi,gj,gk,gl
+    real(dp)::ail,ajk,ajl,aik
+    gi=ids(1);gj=ids(2);gk=ids(3);gl=ids(4)
+    if(channel>0) then
+      operator(gk,gl)=operator(gk,gl)+16.0_dp*coulscale*base(gi,gj)*value
+      operator(gi,gj)=operator(gi,gj)+16.0_dp*coulscale*base(gk,gl)*value
+      operator(gl,gj)=operator(gl,gj)-4.0_dp*hfscale*base(gk,gi)*value
+      operator(gk,gi)=operator(gk,gi)-4.0_dp*hfscale*base(gl,gj)*value
+      operator(gk,gj)=operator(gk,gj)-4.0_dp*hfscale*base(gl,gi)*value
+      operator(gl,gi)=operator(gl,gi)-4.0_dp*hfscale*base(gk,gj)*value
+    else
+      ail=base(gi,gl)-base(gl,gi)
+      ajk=base(gj,gk)-base(gk,gj)
+      ajl=base(gj,gl)-base(gl,gj)
+      aik=base(gi,gk)-base(gk,gi)
+      call add_antisymmetric(operator,gj,gk,-hfscale*ail*value)
+      call add_antisymmetric(operator,gi,gl,-hfscale*ajk*value)
+      call add_antisymmetric(operator,gi,gk,-hfscale*ajl*value)
+      call add_antisymmetric(operator,gj,gl,-hfscale*aik*value)
+    end if
+  end subroutine accumulate_tdhf_channel_quartet
+
+  pure subroutine add_antisymmetric(matrix,row,col,value)
+    real(dp),intent(inout)::matrix(:,:)
+    integer,intent(in)::row,col
+    real(dp),intent(in)::value
+    matrix(row,col)=matrix(row,col)+value
+    matrix(col,row)=matrix(col,row)-value
+  end subroutine add_antisymmetric
+
+  subroutine reduce_cartesian_operator(basis,cart_off,cart,sph)
+    use basis_tools, only: basis_set,bas_norm_matrix
+    use cart2sph, only: cart2sph_mat
+    use constants, only: NUM_CART_BF
+    type(basis_set),intent(in)::basis
+    integer,intent(in)::cart_off(:)
+    real(dp),intent(in)::cart(:,:,:)
+    real(dp),intent(out)::sph(:,:,:)
+    real(dp),allocatable::block(:)
+    integer::coord,si,sj,ii,jj,nci,ncj,nsi,nsj,coi,coj,soi,soj,idx
+
+    sph=0.0_dp
+    do coord=1,size(cart,3)
+      do sj=1,basis%nshell
+        ncj=NUM_CART_BF(basis%am(sj));nsj=basis%naos(sj)
+        coj=cart_off(sj);soj=basis%ao_offset(sj)
+        do si=1,basis%nshell
+          nci=NUM_CART_BF(basis%am(si));nsi=basis%naos(si)
+          coi=cart_off(si);soi=basis%ao_offset(si)
+          allocate(block(nci*ncj));idx=0
+          do jj=1,ncj;do ii=1,nci
+            idx=idx+1
+            block(idx)=cart(coi+ii-1,coj+jj-1,coord)
+          end do;end do
+          if(basis%harmonic(si)==1 .or. basis%harmonic(sj)==1) &
+            call cart2sph_mat(block,basis%am(si),basis%harmonic(si), &
+              basis%am(sj),basis%harmonic(sj))
+          idx=0
+          do jj=1,nsj;do ii=1,nsi
+            idx=idx+1
+            sph(soi+ii-1,soj+jj-1,coord)=block(idx)
+          end do;end do
+          deallocate(block)
+        end do
+      end do
+      call bas_norm_matrix(sph(:,:,coord),basis%bfnrm,basis%nbf)
+    end do
+  end subroutine reduce_cartesian_operator
 
   subroutine build_tdhf_z_rhs_derivative(infos, umat, u0, v0, du, dv, drhs)
     ! Nuclear derivative of the closed-shell TDHF Z-vector right-hand side.

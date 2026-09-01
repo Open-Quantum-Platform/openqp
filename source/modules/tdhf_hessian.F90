@@ -27,7 +27,8 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_TD_XPY, OQP_TD_XMY, &
       OQP_TD_Z, OQP_TD_ENERGIES, OQP_hf_hessian, OQP_tdhf_hessian
     use tdhf_hessian_components_mod, only: assemble_tdhf_cartesian_hessian, &
-      tdhf_hessian_is_applicable
+      tdhf_hessian_is_applicable,tdhf_hessian_functional_is_verified, &
+      tdhf_hessian_target_is_supported,tdhf_hessian_lowest_root_is_isolated
     use tdhf_hessian_fixed_density_mod, only: build_tdhf_fixed_density_hessian
     use tdhf_response_operator_mod, only: build_tdhf_response_matrices
     use tdhf_hessian_orbital_mod, only: build_tdhf_ground_orbital_response
@@ -42,6 +43,7 @@ contains
     use io_constants, only: iw
     use parallel, only: par_env_t
     use messages, only: show_message, WITH_ABORT
+    use strings, only: c_f_char
 !$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads
 
     implicit none
@@ -56,6 +58,8 @@ contains
     real(dp),allocatable::rows(:,:),rowsxc(:,:),rows_one(:,:),rows_two(:,:),htotal(:,:)
     real(dp)::amp_res,z_res,asym,omega,projection_mean
     logical::zero_orbital_connection
+    logical::verified_functional
+    character(len=:),allocatable::functional_name
     integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,omp_saved_threads
     type(par_env_t) :: pe
 
@@ -63,10 +67,15 @@ contains
 !$  omp_saved_threads=omp_get_max_threads()
 !$  call omp_set_num_threads(1)
     call pe%init(infos%mpiinfo%comm,infos%mpiinfo%usempi)
+    verified_functional=.true.
+    if(infos%control%hamilton==20) then
+      functional_name=c_f_char(infos%dft%xc_functional_name)
+      verified_functional=tdhf_hessian_functional_is_verified(functional_name)
+    end if
     if (.not.tdhf_hessian_is_applicable(infos%control%scftype,infos%tddft%mult, &
         logical(infos%tddft%tda,kind=kind(.false.)), &
         infos%control%hamilton==20, &
-        .true., &
+        verified_functional, &
         logical(infos%functional%needGrd,kind=kind(.false.)), &
         logical(infos%functional%needTau,kind=kind(.false.)), &
         logical(infos%dft%cam_flag,kind=kind(.false.)), int(pe%size))) then
@@ -76,8 +85,16 @@ contains
     end if
     nbf=infos%basis%nbf; nocc=infos%mol_prop%nocc; nvir=nbf-nocc; nexc=nocc*nvir
     natom=size(infos%atoms%xyz,2); ncart=3*natom; target=infos%tddft%target_state
+    if (.not.tdhf_hessian_target_is_supported(target)) then
+      call show_message('Analytic TD Hessian currently supports only the lowest '// &
+                        'excited root (target state 1).', WITH_ABORT)
+    end if
     call tagarray_get_data(infos%dat,OQP_TD_XPY,xpy); call tagarray_get_data(infos%dat,OQP_TD_XMY,xmy)
     call tagarray_get_data(infos%dat,OQP_TD_Z,zstore); call tagarray_get_data(infos%dat,OQP_TD_ENERGIES,energies)
+    if(.not.tdhf_hessian_lowest_root_is_isolated(energies,1.0e-10_dp)) then
+      call show_message('Analytic TD Hessian requires an isolated lowest excited '// &
+                        'root; use a numerical Hessian for a degenerate root manifold.',WITH_ABORT)
+    end if
     ! The coupled solver stores its first block in the A-B channel and its
     ! second block in the A+B channel.  OpenQP tags these as X-Y and X+Y,
     ! respectively.

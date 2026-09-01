@@ -9,8 +9,50 @@ module tdhf_hessian_response_mod
   public :: solve_tdhf_z_response
   public :: complete_rhf_orbital_response
   public :: assemble_tdhf_sigma_derivative
+  public :: tdhf_reference_has_degenerate_subspace
 
 contains
+
+!###############################################################################
+
+  pure logical function tdhf_reference_has_degenerate_subspace(eps, nocc, tol) &
+      result(has_degeneracy)
+    ! The canonical MO connection contains denominators eps_p-eps_q within
+    ! the occupied and virtual spaces.  Until degenerate perturbation theory
+    ! is implemented, reject a reference for which either subspace contains
+    ! an unresolved degenerate pair instead of retaining an arbitrary
+    ! symmetric-gauge rotation.
+
+    real(kind=dp), intent(in) :: eps(:), tol
+    integer, intent(in) :: nocc
+    integer :: p, q
+    real(kind=dp) :: effective_tol
+
+    has_degeneracy = .true.
+    if (size(eps) < 2 .or. nocc <= 0 .or. nocc >= size(eps) .or. tol < 0.0_dp) return
+
+    has_degeneracy = .false.
+    ! Include only a few ulps so a separation constructed at the requested
+    ! decimal threshold is not classified differently by subtraction
+    ! roundoff.  This is not a physically meaningful widening of the gate.
+    effective_tol = tol + 8.0_dp*epsilon(1.0_dp)*max(1.0_dp,maxval(abs(eps)))
+    do q = 1, nocc
+      do p = q + 1, nocc
+        if (abs(eps(p)-eps(q)) <= effective_tol) then
+          has_degeneracy = .true.
+          return
+        end if
+      end do
+    end do
+    do q = nocc + 1, size(eps)
+      do p = q + 1, size(eps)
+        if (abs(eps(p)-eps(q)) <= effective_tol) then
+          has_degeneracy = .true.
+          return
+        end if
+      end do
+    end do
+  end function tdhf_reference_has_degenerate_subspace
 
 !###############################################################################
 

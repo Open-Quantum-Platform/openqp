@@ -8,6 +8,8 @@ module tdhf_hessian_components_mod
   public :: assemble_tdhf_cartesian_hessian
   public :: tdhf_hessian_is_applicable
   public :: tdhf_hessian_functional_is_verified
+  public :: tdhf_hessian_target_is_supported
+  public :: tdhf_hessian_lowest_root_is_isolated
 
 contains
 
@@ -117,8 +119,25 @@ contains
                trim(upper_name) == 'LDA' .or. &
                trim(upper_name) == 'BLYP' .or. &
                trim(upper_name) == 'PBE' .or. &
-               trim(upper_name) == 'B3LYP' .or. &
-               trim(upper_name) == 'B3LYP5'
+               trim(upper_name) == 'PBEPBE' .or. &
+               trim(upper_name) == 'B3LYP5' .or. &
+               trim(upper_name) == 'B3LYPV5'
   end function tdhf_hessian_functional_is_verified
+
+!###############################################################################
+
+  pure logical function tdhf_hessian_target_is_supported(target) result(supported)
+    integer, intent(in) :: target
+    supported = target == 1
+  end function tdhf_hessian_target_is_supported
+
+!###############################################################################
+
+  pure logical function tdhf_hessian_lowest_root_is_isolated(energies,tol) result(isolated)
+    real(kind=dp), intent(in) :: energies(:),tol
+    isolated = size(energies)>=1 .and. tol>=0.0_dp
+    if(isolated .and. size(energies)>1) &
+      isolated=abs(energies(2)-energies(1))>tol
+  end function tdhf_hessian_lowest_root_is_isolated
 
 end module tdhf_hessian_components_mod

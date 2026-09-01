@@ -32,19 +32,32 @@ def load_gamess_dat(path: str | Path) -> dict[str, Any]:
     if not matches:
         raise ValueError(f"no $HESS section found in {path}")
 
-    rows: dict[int, list[float]] = {}
+    row_blocks: dict[int, dict[int, list[float]]] = {}
     for line in matches[-1].group(0).splitlines()[1:]:
-        prefix = re.match(r"^\s*(\d+)\s+([12])(?=[ +\-])", line)
+        prefix = re.match(r"^\s*(\d+)\s+([1-9]\d*)(?=[ +\-])", line)
         if prefix is None:
             continue
         row = int(prefix.group(1))
+        block = int(prefix.group(2))
         values = [
             float(x.replace("D", "E").replace("d", "e"))
             for x in _FLOAT_RE.findall(line[prefix.end() :])
         ]
-        rows.setdefault(row, []).extend(values)
-    if not rows:
+        blocks = row_blocks.setdefault(row, {})
+        if block in blocks:
+            raise ValueError(f"duplicate $HESS block {block} for row {row} in {path}")
+        blocks[block] = values
+    if not row_blocks:
         raise ValueError(f"empty $HESS section in {path}")
+    rows: dict[int, list[float]] = {}
+    for row, blocks in row_blocks.items():
+        expected = set(range(1, max(blocks) + 1))
+        if set(blocks) != expected:
+            raise ValueError(
+                f"noncontiguous $HESS blocks for row {row} in {path}: "
+                f"found {sorted(blocks)}"
+            )
+        rows[row] = [value for block in sorted(blocks) for value in blocks[block]]
     n = max(rows)
     if set(rows) != set(range(1, n + 1)) or any(len(rows[i]) != n for i in range(1, n + 1)):
         sizes = {i: len(v) for i, v in rows.items()}
