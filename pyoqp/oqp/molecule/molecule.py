@@ -2109,7 +2109,83 @@ class Molecule:
 
         return copy.deepcopy(self.hessian)
 
-    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8):
+    def _hessian_invariance_diagnostics(self, raw_hessian,
+                                        reference_gradient=None):
+        """Rigid-motion residuals of a raw Cartesian Hessian.
+
+        OpenQP's derivative builders assemble one nuclear-displacement row at
+        a time, so ``raw_hessian[i,j] = d g_j / d R_i`` before the final
+        symmetry operation. Consequently the physical Hessian action used for
+        the translation and rotation identities is ``raw_hessian.T @ mode``.
+        No symmetry operation or rigid-motion projection is applied here.
+        """
+
+        hessian = np.asarray(raw_hessian, dtype=float)
+        natom = int(np.asarray(self.data['natom']).reshape(-1)[0])
+        ncoord = 3 * natom
+        if hessian.shape != (ncoord, ncoord):
+            raise ValueError(
+                f'Expected Hessian shape ({ncoord}, {ncoord}), got {hessian.shape}')
+        coordinates = np.asarray(self.get_system(), dtype=float).reshape(natom, 3)
+        try:
+            masses = np.asarray(self.get_mass(), dtype=float).reshape(natom)
+            if not np.all(np.isfinite(masses)) or np.any(masses <= 0.0):
+                raise ValueError
+            origin = np.average(coordinates, axis=0, weights=masses)
+            origin_kind = 'center_of_mass'
+        except (AttributeError, TypeError, ValueError):
+            origin = np.mean(coordinates, axis=0)
+            origin_kind = 'geometric_centroid'
+        centered = coordinates - origin
+
+        translations = np.zeros((ncoord, 3), dtype=float)
+        for atom in range(natom):
+            translations[3 * atom:3 * atom + 3, :] = np.eye(3)
+        translation_image = hessian.T @ translations
+
+        axes = np.eye(3)
+        rotations = np.column_stack([
+            np.cross(axis, centered).reshape(-1) for axis in axes
+        ])
+        rotation_image = hessian.T @ rotations
+        gradient_correction = False
+        if reference_gradient is not None:
+            gradient = np.asarray(reference_gradient, dtype=float).reshape(-1)
+            if gradient.size != ncoord or not np.all(np.isfinite(gradient)):
+                raise ValueError(
+                    f'Expected finite reference gradient with {ncoord} elements')
+            gradient = gradient.reshape(natom, 3)
+            rotation_gradient = np.column_stack([
+                np.cross(axis, gradient).reshape(-1) for axis in axes
+            ])
+            rotation_image = rotation_image - rotation_gradient
+            gradient_correction = True
+
+        asymmetry = hessian - hessian.T
+        return {
+            'stage': 'raw_cartesian_before_symmetrization_or_rigid_motion_projection',
+            'matrix_convention': 'rows_displacement_columns_gradient',
+            'asymmetry_units': 'hartree/bohr^2',
+            'max_abs_asymmetry': (
+                float(np.max(np.abs(asymmetry))) if hessian.size else 0.0),
+            'frobenius_asymmetry': float(np.linalg.norm(asymmetry)),
+            'translation_max_abs_residual': (
+                float(np.max(np.abs(translation_image)))
+                if translation_image.size else 0.0),
+            'translation_frobenius_residual': float(np.linalg.norm(translation_image)),
+            'translation_residual_units': 'hartree/bohr^2',
+            'rotation_max_abs_residual': (
+                float(np.max(np.abs(rotation_image)))
+                if rotation_image.size else 0.0),
+            'rotation_frobenius_residual': float(np.linalg.norm(rotation_image)),
+            'rotation_residual_units': 'hartree/bohr',
+            'rotation_origin': origin_kind,
+            'rotation_gradient_covariance_correction': gradient_correction,
+            'rigid_motion_projection_applied': False,
+        }
+
+    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8,
+                           reference_gradient=None):
         """
         Store a final Cartesian Hessian in OpenQP frequency conventions.
 
@@ -2130,10 +2206,12 @@ class Molecule:
                 f"Expected Hessian shape ({expected}, {expected}) for {natom} atoms, got {hessian.shape}"
             )
 
-        max_asymmetry = float(np.max(np.abs(hessian - hessian.T))) if hessian.size else 0.0
+        diagnostics = self._hessian_invariance_diagnostics(
+            hessian, reference_gradient=reference_gradient)
+        max_asymmetry = diagnostics['max_abs_asymmetry']
         if max_asymmetry > asymmetry_tol:
             warnings.warn(
-                f"Analytic Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
+                f"Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
                 RuntimeWarning,
             )
 
@@ -2141,6 +2219,7 @@ class Molecule:
         self.hessian_metadata = {
             'max_asymmetry': max_asymmetry,
             'symmetrized': bool(max_asymmetry > 0.0),
+            'pre_symmetrization_invariance': diagnostics,
         }
         return self.hessian
 

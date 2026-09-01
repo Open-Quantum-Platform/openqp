@@ -134,6 +134,49 @@ PT2_GRAD_METHODS = frozenset({
     'nevpt2', 'sc-nevpt2', 'scnevpt2',
     'mrmp2', 'mcqdpt2', 'xmcqdpt2',
 })
+
+# Numerical MRSF Hessians differentiate one isolated adiabatic root.  These
+# fixed internal gates deliberately are not user-tunable: weakening them turns
+# an ambiguous crossing into a smooth-looking but physically undefined second
+# derivative.  Degenerate manifolds need projector transport, which is outside
+# the present isolated-root path.
+_MRSF_HESS_ROOT_OVERLAP_TOL = 0.99
+_MRSF_HESS_ROOT_MARGIN_TOL = 0.05
+_MRSF_HESS_ROOT_GAP_TOL = 1.0e-5
+_MRSF_HESS_TRACKING_SCHEMA = 'mrsf_hessian_root_tracking.v1'
+
+
+def _read_mrsf_hessian_tracking(path, state=None, tag=None):
+    """Return a validated numerical-Hessian tracking sidecar or ``None``."""
+
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            report = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return None
+    if report.get('schema_version') != _MRSF_HESS_TRACKING_SCHEMA:
+        return None
+    if report.get('status') != 'accepted':
+        return None
+    if state is not None and int(report.get('reference_state', -1)) != int(state):
+        return None
+    if tag is not None and str(report.get('displacement_tag', '')) != str(tag):
+        return None
+    return report
+
+
+def _write_mrsf_hessian_tracking(path, report):
+    """Atomically write one accepted numerical-Hessian tracking report."""
+
+    payload = dict(report)
+    payload['schema_version'] = _MRSF_HESS_TRACKING_SCHEMA
+    tmp = f'{path}.tmp.{os.getpid()}'
+    with open(tmp, 'w', encoding='utf-8') as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write('\n')
+    os.replace(tmp, path)
+
+
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {
@@ -2431,6 +2474,11 @@ class Hessian(Calculator):
         nproc = self.mol.config['hess']['nproc']
         dx = self.mol.config['hess']['dx']
         origin_coord = self.mol.get_system()
+        tracked_mrsf_root = (
+            str(self.mol.config.get('input', {}).get('method', '')).lower() == 'tdhf'
+            and str(self.mol.config.get('tdhf', {}).get('type', '')).lower() == 'mrsf'
+            and int(self.state) > 0
+        )
 
         # prepare scratch folder
         os.makedirs(dir_hess, exist_ok=True)
@@ -2520,10 +2568,26 @@ class Hessian(Calculator):
         # rest block in a collective is a hang, not a failure. The verdict has
         # to be broadcast alongside the data it describes.
         flags = self.mpi_manager.bcast(flags)
+        tracking_reports = []
+        if tracked_mrsf_root:
+            for worker in variables_wrapper:
+                tracking_path = (
+                    f"{dir_hess}/{self.mol.project_name}."
+                    f"{worker['tag']}.tracking.json")
+                report = _read_mrsf_hessian_tracking(
+                    tracking_path, state=self.state, tag=worker['tag'])
+                if report is None:
+                    flags.append('failed')
+                else:
+                    tracking_reports.append(report)
         # compute hessian
         forward = np.array(grads[0:nred])
         backward = np.array(grads[nred:])
         rows = (forward - backward) / (2 * dx)
+        # Each +/- pair also supplies an O(dx^2) estimate of the central
+        # gradient. It is used only to remove the exact covariant gradient term
+        # from the raw rotational identity H (axis x R) = axis x g.
+        central_gradient = np.mean(0.5 * (forward + backward), axis=0)
 
         if uniq is None:
             hessian = rows
@@ -2553,8 +2617,40 @@ class Hessian(Calculator):
             # Guaranteed by the pre-launch coverage proof.
             assert filled.all()
 
-        # symmetrize hessian
-        hessian = (hessian + hessian.T) / 2
+        # Record the unsymmetrized Cartesian matrix and rigid-motion residuals
+        # before the one final symmetry operation used by normal-mode analysis.
+        hessian = self.mol.set_hessian_result(
+            hessian, reference_gradient=central_gradient,
+            asymmetry_tol=float('inf'))
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'openqp_gradient_finite_difference',
+            'finite_difference_step_bohr': float(dx),
+            'raw_cartesian_rows_recorded_before_symmetrization': True,
+            'rigid_motion_projection_applied': False,
+        })
+        if tracked_mrsf_root:
+            metadata['mrsf_root_tracking'] = {
+                'schema_version': _MRSF_HESS_TRACKING_SCHEMA,
+                'status': ('accepted' if len(tracking_reports) == ndim else 'failed'),
+                'n_displacements': int(ndim),
+                'n_accepted': int(len(tracking_reports)),
+                'minimum_matched_overlap': (
+                    float(min(item['matched_overlap'] for item in tracking_reports))
+                    if tracking_reports else None),
+                'minimum_assignment_margin': (
+                    float(min(item['assignment_margin'] for item in tracking_reports))
+                    if tracking_reports else None),
+                'minimum_central_gap_hartree': (
+                    float(min(item['central_gap_hartree'] for item in tracking_reports))
+                    if tracking_reports else None),
+                'minimum_displaced_gap_hartree': (
+                    float(min(item['displaced_gap_hartree'] for item in tracking_reports))
+                    if tracking_reports else None),
+                'degenerate_manifold_solver': False,
+                'displacements': tracking_reports,
+            }
+        self.mol.hessian_metadata = metadata
 
         # delete scratch folder
         if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
@@ -2613,9 +2709,18 @@ def grad_wrapper(key_dict):
     xyz = f'{dir_hess}/{project_name}.{tag}.tmp.xyz'
     dat = f'{dir_hess}/{project_name}.{tag}.grad_{state}'
     log = f'{dir_hess}/{project_name}.{tag}.tmp.log'
+    tracking_file = f'{dir_hess}/{project_name}.{tag}.tracking.json'
+    tracked_mrsf_root = (
+        str(config.get('input', {}).get('method', '')).lower() == 'tdhf'
+        and str(config.get('tdhf', {}).get('type', '')).lower() == 'mrsf'
+        and int(state) > 0
+    )
 
     # attempt to read computed data
-    if restart and os.path.exists(dat):
+    cached_tracking = (_read_mrsf_hessian_tracking(
+        tracking_file, state=state, tag=tag) if tracked_mrsf_root else {})
+    if restart and os.path.exists(dat) and (
+            not tracked_mrsf_root or cached_tracking is not None):
         status = 'loaded'
     else:
         status = 'computed'
@@ -2638,6 +2743,11 @@ def grad_wrapper(key_dict):
             os.remove(dat)
         except FileNotFoundError:
             pass
+        if tracked_mrsf_root:
+            try:
+                os.remove(tracking_file)
+            except FileNotFoundError:
+                pass
 
         # modify config
         config['input']['runtype'] = 'grad'
@@ -2645,6 +2755,13 @@ def grad_wrapper(key_dict):
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
+        if tracked_mrsf_root:
+            config['guess']['file2'] = guess_file
+            # Root-amplitude overlaps are meaningful only after the displaced
+            # MO basis has been transported into the central ordering.  This
+            # is an internal Hessian requirement, independent of the NAC
+            # alignment preference in the parent input.
+            config['nac']['align'] = 'reorder'
         config['guess']['continue_geom'] = 'false'
         config['properties']['grad'] = config['hess']['state']
         config['properties']['export'] = 'True'
@@ -2664,7 +2781,14 @@ def grad_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run grad calculation externally
-            _run_oqp_external(inp)
+            env = None
+            if tracked_mrsf_root:
+                env = {
+                    'OQP_NUM_HESS_WORKER': '1',
+                    'OQP_NUM_HESS_TRACKING_FILE': tracking_file,
+                    'OQP_NUM_HESS_DISPLACEMENT_TAG': str(tag),
+                }
+            _run_oqp_external(inp, env)
         else:
             # run grad calculation internally
             start_time = time.time()
@@ -2676,7 +2800,16 @@ def grad_wrapper(key_dict):
             dump_log(mol, title='', section='start')
             mol.data["OQP::log_filename"] = log
             oqp.oqp_banner(mol)
-            SinglePoint(mol).energy()
+            if tracked_mrsf_root:
+                sp = SinglePoint(mol)
+                ref_energy = sp.reference()
+                BasisOverlap(mol).overlap()
+                sp.excitation(ref_energy)
+                report = NACME(mol).track_isolated_mrsf_hessian_root(state)
+                report['displacement_tag'] = str(tag)
+                _write_mrsf_hessian_tracking(tracking_file, report)
+            else:
+                SinglePoint(mol).energy()
             Gradient(mol).gradient()
             LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
             dump_log(mol, title='', section='end')
@@ -2690,6 +2823,9 @@ def grad_wrapper(key_dict):
         # did not.
         if grad.size != np.asarray(coord).size or not np.all(np.isfinite(grad)):
             raise ValueError('incomplete numerical-Hessian worker output')
+        if tracked_mrsf_root and _read_mrsf_hessian_tracking(
+                tracking_file, state=state, tag=tag) is None:
+            raise ValueError('missing or invalid MRSF Hessian root-tracking report')
 
     except (OSError, ValueError):
         grad = np.zeros_like(coord)
@@ -2799,6 +2935,7 @@ class BasisOverlap(Calculator):
 
     def load_previous_data(self):
         dump_log(self.mol, title='PyOQP: Loading Previous Data')
+        previous_symmetry_metadata = None
         if self.back_door:
             # get data externally
             previous_xyz, previous_data = self.mol.get_data_from_back_door()
@@ -2807,12 +2944,25 @@ class BasisOverlap(Calculator):
             current_file = self.mol.config["guess"]["file"]
             current_xyz = copy.deepcopy(self.mol.get_system())
             current_data = copy.deepcopy(self.mol.get_data())
+            current_symmetry_metadata = copy.deepcopy(
+                getattr(self.mol, 'symmetry_metadata', None))
 
             # check data from the previous step
             previous_coord = self.mol.data.mol2
             previous_file = self.mol.config['guess']['file2']
 
             if previous_file:
+                # Read the central geometry's own metadata directly. load_data
+                # deliberately refuses to merge geometry-derived labels into a
+                # displaced molecule, so inspecting self.mol.symmetry_metadata
+                # after that call would return the displaced labels instead.
+                try:
+                    with open(previous_file, 'r', encoding='utf-8') as handle:
+                        previous_payload = json.load(handle)
+                    previous_symmetry_metadata = copy.deepcopy(
+                        previous_payload.get('symmetry_metadata'))
+                except (OSError, ValueError, TypeError):
+                    previous_symmetry_metadata = None
                 self.mol.config['guess']['file'] = previous_file
                 self.mol.config['guess']['continue_geom'] = True
                 self.mol.load_data()
@@ -2832,6 +2982,8 @@ class BasisOverlap(Calculator):
                     LastStep(self.mol).compute(self.mol)
                     previous_xyz = previous_coord
                     previous_data = copy.deepcopy(self.mol.get_data())
+                    previous_symmetry_metadata = copy.deepcopy(
+                        getattr(self.mol, 'symmetry_metadata', None))
                 else:
                     previous_xyz = None
                     previous_data = None
@@ -2842,6 +2994,18 @@ class BasisOverlap(Calculator):
             self.mol.config['guess']['file'] = current_file
             self.mol.update_system(current_xyz)
             self.mol.put_data(current_data)
+            # get_data() contains native arrays only. Without this explicit
+            # restoration, load_data(previous_file) re-detects the CENTRAL
+            # geometry after continue_geom=True and leaves those operations
+            # and state labels attached to the DISPLACED geometry.
+            self.mol.symmetry_metadata = current_symmetry_metadata
+
+        # Geometry-derived symmetry metadata is intentionally not merged into
+        # the displaced calculation. Retain a private copy solely so the
+        # isolated-root tracker can verify the central state's pure irrep and,
+        # when the displaced geometry preserves the same subgroup, require the
+        # transported root to keep that irrep.
+        self.mol._previous_symmetry_metadata = previous_symmetry_metadata
 
         # copy previous data to old tags
         natom = self.mol.data["natom"]
@@ -2953,6 +3117,242 @@ class NACME(BasisOverlap):
         self.mol = mol
         self.dt = mol.config['nac']['dt']
         self.nac_dim = self.nstate
+
+    @staticmethod
+    def _tracking_state_labels(metadata):
+        if not isinstance(metadata, dict):
+            return None
+        result = metadata.get('state_labels')
+        if not isinstance(result, dict) or result.get('status') != 'ok':
+            return None
+        labels = result.get('labels')
+        if not isinstance(labels, (list, tuple)):
+            return None
+        return [str(label).lower() for label in labels]
+
+    def track_isolated_mrsf_hessian_root(
+            self, reference_state,
+            overlap_tol=_MRSF_HESS_ROOT_OVERLAP_TOL,
+            margin_tol=_MRSF_HESS_ROOT_MARGIN_TOL,
+            gap_tol=_MRSF_HESS_ROOT_GAP_TOL):
+        """Transport one isolated MRSF root to a displaced geometry.
+
+        ``reference_state`` uses the public Hessian convention (zero is the
+        reference state; one is the first response root). MRSF amplitudes stay
+        in their spin-adapted packed CO/OV/CV/OO representation. No determinant
+        expansion or post hoc spin projection is used.
+
+        Current response roots are matched globally to the central roots by
+        normalized amplitude overlap after cross-geometry MO alignment. The
+        method refuses a weak or ambiguous match, an unresolved degeneracy, an
+        impure central irrep, a same-group irrep change, or a spin manifold
+        outside the established singlet/triplet MRSF path. Accepted amplitudes
+        and excitation energies are transported together into central order
+        before the gradient kernel is called.
+        """
+
+        td = self.mol.config.get('tdhf', {})
+        if str(td.get('type', '')).strip().lower() != 'mrsf':
+            raise RuntimeError(
+                'isolated-root numerical-Hessian tracking is implemented only '
+                'for spin-adapted two-SOMO MRSF')
+        multiplicity = int(td.get('multiplicity', 0))
+        if multiplicity not in (1, 3):
+            raise RuntimeError(
+                'isolated-root MRSF Hessian tracking supports only singlet and '
+                'triplet target manifolds; degenerate/higher-spin extensions '
+                'require a separately validated projector treatment')
+
+        public_state = int(reference_state)
+        target = public_state - 1
+        if target < 0:
+            raise ValueError('MRSF excited-state tracking requires hess.state >= 1')
+
+        try:
+            previous_raw = np.asarray(
+                self.mol.data['OQP::td_bvec_mo_old'], dtype=float)
+            current_raw = np.asarray(
+                self.mol.data['OQP::td_bvec_mo'], dtype=float)
+            previous_energy = np.asarray(
+                self.mol.data['OQP::td_energies_old'], dtype=float).reshape(-1)
+            current_energy = np.asarray(
+                self.mol.data['OQP::td_energies'], dtype=float).reshape(-1)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                'MRSF Hessian root tracking requires central and displaced '
+                'response vectors and excitation energies') from exc
+
+        if previous_raw.ndim != 2 or current_raw.ndim != 2:
+            raise RuntimeError('MRSF response-vector storage must be two-dimensional')
+        if previous_raw.shape != current_raw.shape:
+            raise RuntimeError(
+                'central/displaced MRSF response spaces have different shapes: '
+                f'{previous_raw.shape} != {current_raw.shape}')
+
+        # Native tag layout is (packed amplitude, state). Match the convention
+        # already used by align_x: one response root per Python row.
+        x_shape = current_raw.shape
+        previous = previous_raw.reshape((x_shape[1], x_shape[0])).copy()
+        current = current_raw.reshape((x_shape[1], x_shape[0])).copy()
+        nroot = current.shape[0]
+        if previous_energy.size != nroot or current_energy.size != nroot:
+            raise RuntimeError('MRSF response-vector and energy root counts disagree')
+        if target >= nroot:
+            raise RuntimeError(
+                f'hess.state={public_state} is outside the {nroot} solved MRSF roots')
+        if nroot < 2 or target == nroot - 1:
+            raise RuntimeError(
+                'the requested MRSF Hessian root is not bracketed by the solved '
+                'spectrum; enlarge tdhf.nstate before differentiating it')
+
+        old_norm = np.linalg.norm(previous, axis=1)
+        new_norm = np.linalg.norm(current, axis=1)
+        if (not np.all(np.isfinite(old_norm)) or not np.all(np.isfinite(new_norm))
+                or np.any(old_norm <= 0.0) or np.any(new_norm <= 0.0)):
+            raise RuntimeError('MRSF Hessian root tracking found a null/non-finite response vector')
+        overlap = (current / new_norm[:, None]) @ (previous / old_norm[:, None]).T
+        order, signs, matched, margins = maximum_overlap_assignment(overlap)
+        order = np.asarray(order, dtype=np.int32).reshape(-1)
+        signs = np.asarray(signs, dtype=float).reshape(-1)
+        matched = np.asarray(matched, dtype=float).reshape(-1)
+        margins = np.asarray(margins, dtype=float).reshape(-1)
+        selected_matches = np.flatnonzero(order == target)
+        if selected_matches.size != 1:
+            raise RuntimeError('global MRSF root assignment did not preserve a one-to-one target')
+        selected = int(selected_matches[0])
+        if matched[selected] < float(overlap_tol):
+            raise RuntimeError(
+                f'MRSF Hessian root overlap {matched[selected]:.6f} is below '
+                f'the isolated-state threshold {float(overlap_tol):.6f}')
+        if margins[selected] < float(margin_tol):
+            raise RuntimeError(
+                f'MRSF Hessian root assignment margin {margins[selected]:.6f} '
+                f'is below {float(margin_tol):.6f}; a projector treatment is required')
+
+        def isolated_gap(energies, index):
+            mask = np.arange(energies.size) != int(index)
+            return float(np.min(np.abs(energies[mask] - energies[int(index)])))
+
+        central_gap = isolated_gap(previous_energy, target)
+        displaced_gap = isolated_gap(current_energy, selected)
+        if central_gap < float(gap_tol) or displaced_gap < float(gap_tol):
+            raise RuntimeError(
+                'MRSF Hessian root is degenerate or near-degenerate '
+                f'(central gap={central_gap:.3e}, displaced gap={displaced_gap:.3e} Eh; '
+                f'threshold={float(gap_tol):.3e} Eh); isolated-root response is undefined')
+
+        previous_meta = getattr(self.mol, '_previous_symmetry_metadata', None)
+        current_meta = getattr(self.mol, 'symmetry_metadata', None)
+        old_labels = self._tracking_state_labels(previous_meta)
+        new_labels = self._tracking_state_labels(current_meta)
+        old_enabled = isinstance(previous_meta, dict) and \
+            previous_meta.get('status', 'disabled') != 'disabled'
+        symmetry_setting = str(
+            self.mol.config.get('symmetry', {}).get('enabled', 'true')
+        ).strip().lower()
+        symmetry_requested = symmetry_setting not in (
+            'false', '.false.', '0', 'off', 'no', 'f', '')
+        if symmetry_requested and not old_enabled:
+            raise RuntimeError(
+                'central symmetry metadata is missing or disabled; refusing '
+                'MRSF Hessian root transport without the requested symmetry gate')
+        symmetry_status = 'not_enabled'
+        reference_irrep = current_irrep = None
+        if old_enabled:
+            if old_labels is None or target >= len(old_labels):
+                raise RuntimeError(
+                    'central MRSF state symmetry is unavailable; refusing an '
+                    'excited-state numerical Hessian without a pure reference irrep')
+            reference_irrep = old_labels[target]
+            if reference_irrep in ('', 'mixed', 'none', 'unknown'):
+                raise RuntimeError(
+                    'central MRSF state lacks a pure spatial symmetry; isolated-root '
+                    'numerical Hessian tracking is not defined')
+            if new_labels is None or selected >= len(new_labels):
+                raise RuntimeError('displaced MRSF state symmetry labelling is unavailable')
+            current_irrep = new_labels[selected]
+            if current_irrep in ('', 'mixed', 'none', 'unknown'):
+                raise RuntimeError('displaced MRSF root lacks a pure spatial symmetry')
+            old_group = str(previous_meta.get('detected_subgroup', '')).lower()
+            new_group = str((current_meta or {}).get('detected_subgroup', '')).lower()
+            if not old_group or not new_group:
+                raise RuntimeError(
+                    'central/displaced symmetry subgroup metadata is incomplete')
+            if old_group and old_group == new_group:
+                if current_irrep != reference_irrep:
+                    raise RuntimeError(
+                        'MRSF Hessian root changed spatial irrep within the same '
+                        f'{old_group} subgroup ({reference_irrep} -> {current_irrep})')
+                symmetry_status = 'same_subgroup_same_irrep'
+            else:
+                # A Cartesian displacement normally lowers the point group.
+                # Irrep names of different groups cannot be equated. The
+                # central root must still be pure, the displaced root must be
+                # pure in its subgroup, and overlap supplies the correlation.
+                symmetry_status = 'pure_reference_subgroup_lowered'
+
+        inverse = np.argsort(order)
+        transported = (current * signs[:, None])[inverse]
+        transported_energy = current_energy[inverse]
+        self.mol.data['OQP::td_bvec_mo'] = transported.reshape(x_shape)
+        self.mol.data['OQP::td_energies'] = transported_energy
+        if getattr(self.mol, 'energies', None) is not None:
+            total = np.asarray(self.mol.energies, dtype=float).reshape(-1)
+            if total.size == nroot + 1:
+                self.mol.energies = np.concatenate((total[:1], total[1:][inverse]))
+
+        try:
+            previous_lineage = np.asarray(
+                self.mol.data['OQP::state_tracking_lineage_old'],
+                dtype=np.int32).reshape(-1)
+            if previous_lineage.size != nroot:
+                raise ValueError
+        except (AttributeError, KeyError, TypeError, ValueError):
+            previous_lineage = np.arange(nroot, dtype=np.int32)
+        self.mol.data['OQP::state_tracking_raw_order'] = order.copy()
+        self.mol.data['OQP::state_tracking_output_reordered'] = np.array([1], dtype=np.int32)
+        self.mol.data['OQP::state_tracking_order'] = order[inverse]
+        self.mol.data['OQP::state_tracking_lineage'] = previous_lineage[order][inverse]
+        self.mol.data['OQP::state_tracking_phase_step'] = signs[inverse]
+        self.mol.data['OQP::state_tracking_phase_initial'] = signs[inverse]
+        self.mol.data['OQP::state_tracking_previous_phase_initial'] = np.ones(nroot)
+        self.mol.data['OQP::state_tracking_overlap'] = matched[inverse]
+        self.mol.data['OQP::state_tracking_margin'] = margins[inverse]
+        self.mol._state_tracking_fresh = True
+
+        state_labels = (current_meta or {}).get('state_labels')
+        if isinstance(state_labels, dict):
+            for key in ('labels', 'terms', 'transition_labels'):
+                values = state_labels.get(key)
+                if isinstance(values, list) and len(values) == nroot:
+                    state_labels[key] = [values[int(i)] for i in inverse]
+
+        report = {
+            'schema_version': _MRSF_HESS_TRACKING_SCHEMA,
+            'status': 'accepted',
+            'representation': 'spin_adapted_mrsf_co_ov_cv_oo',
+            'reference_state': public_state,
+            'selected_raw_state': selected + 1,
+            'transported_state': public_state,
+            'solved_root_count': nroot,
+            'target_multiplicity': multiplicity,
+            'spin_check': 'fixed_spin_adapted_mrsf_manifold',
+            's2_expectation_evaluated': False,
+            'reference_irrep': reference_irrep,
+            'selected_raw_irrep': current_irrep,
+            'symmetry_check': symmetry_status,
+            'matched_overlap': float(matched[selected]),
+            'assignment_margin': float(margins[selected]),
+            'central_gap_hartree': central_gap,
+            'displaced_gap_hartree': displaced_gap,
+            'overlap_threshold': float(overlap_tol),
+            'margin_threshold': float(margin_tol),
+            'gap_threshold_hartree': float(gap_tol),
+            'degenerate_manifold_solver': False,
+        }
+        self.mol.mrsf_hessian_root_tracking = report
+        dump_log(self.mol, title='PyOQP: MRSF Hessian isolated-root tracking')
+        return report
 
     def align_x(self, reorder=False):
         # use current td data if previous td data is unavailable
