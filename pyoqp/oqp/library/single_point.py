@@ -144,6 +144,93 @@ _MRSF_HESS_ROOT_OVERLAP_TOL = 0.99
 _MRSF_HESS_ROOT_MARGIN_TOL = 0.05
 _MRSF_HESS_ROOT_GAP_TOL = 1.0e-5
 _MRSF_HESS_TRACKING_SCHEMA = 'mrsf_hessian_root_tracking.v1'
+_MRSF_FORBIDDEN_AMPLITUDE_RTOL = 1.0e-10
+
+
+def _mrsf_spin_adapted_response_overlap(
+        current, previous, nalpha, nbeta, multiplicity):
+    """Return normalized overlap in the physical two-SOMO MRSF metric.
+
+    ``current`` and ``previous`` contain one packed response vector per row.
+    The packed Davidson rectangle retains redundant OO positions, so its raw
+    Euclidean metric is not the physical singlet/triplet metric.  The folded L
+    coefficient is already normalized by the two-sided 1/sqrt(2) MRSF map;
+    therefore the physical metric is the identity on retained CO/OV/CV/OO
+    coordinates and zero on the redundant R coordinate (and on G/D for a
+    triplet).  This is the same selector used by the analytic Hessian response
+    space and does not expand the state into determinants.
+    """
+
+    current = np.asarray(current, dtype=float)
+    previous = np.asarray(previous, dtype=float)
+    if (current.ndim != 2 or previous.ndim != 2
+            or current.shape != previous.shape):
+        raise RuntimeError(
+            'central/displaced MRSF response rows have incompatible shapes')
+    nalpha = int(nalpha)
+    nbeta = int(nbeta)
+    multiplicity = int(multiplicity)
+    if nalpha <= 0 or nbeta < 0 or nalpha - nbeta != 2:
+        raise RuntimeError(
+            'MRSF response metric requires the founding two-SOMO reference')
+    if multiplicity not in (1, 3):
+        raise RuntimeError(
+            'MRSF response metric is defined only for singlet/triplet targets')
+
+    expanded = current.shape[1]
+    if expanded % nalpha != 0:
+        raise RuntimeError(
+            'packed MRSF response dimension is inconsistent with alpha occupancy')
+    nbf = nbeta + expanded // nalpha
+    if nbf < nalpha or expanded != nalpha * (nbf - nbeta):
+        raise RuntimeError('packed MRSF response dimension is invalid')
+
+    offset = nalpha - nbeta
+    index_l = (offset - 2) * nalpha + nalpha - 2
+    index_g = (offset - 2) * nalpha + nalpha - 1
+    index_d = (offset - 1) * nalpha + nalpha - 2
+    index_r = (offset - 1) * nalpha + nalpha - 1
+    if index_l < 0 or index_r >= expanded:
+        raise RuntimeError('packed MRSF OO slots are outside the response space')
+
+    retained = np.ones(expanded, dtype=bool)
+    retained[index_r] = False
+    if multiplicity == 3:
+        retained[index_g] = False
+        retained[index_d] = False
+    physical_dimension = int(np.count_nonzero(retained))
+    if physical_dimension <= 0:
+        raise RuntimeError('physical MRSF response space is empty')
+
+    def physical_rows(name, rows):
+        full_norm = np.linalg.norm(rows, axis=1)
+        forbidden_norm = np.linalg.norm(rows[:, ~retained], axis=1)
+        if (not np.all(np.isfinite(full_norm))
+                or np.any(full_norm <= 0.0)):
+            raise RuntimeError(
+                f'MRSF Hessian root tracking found a null/non-finite {name} '
+                'response vector')
+        if np.any(forbidden_norm > _MRSF_FORBIDDEN_AMPLITUDE_RTOL * full_norm):
+            raise RuntimeError(
+                f'MRSF Hessian root tracking found a nonphysical {name} '
+                'OO response component')
+        return rows[:, retained]
+
+    current_physical = physical_rows('displaced', current)
+    previous_physical = physical_rows('central', previous)
+    new_norm = np.linalg.norm(current_physical, axis=1)
+    old_norm = np.linalg.norm(previous_physical, axis=1)
+    if (np.any(new_norm <= 0.0) or np.any(old_norm <= 0.0)
+            or not np.all(np.isfinite(new_norm))
+            or not np.all(np.isfinite(old_norm))):
+        raise RuntimeError(
+            'MRSF Hessian root tracking found a null/non-finite physical '
+            'response vector')
+    overlap = (
+        (current_physical / new_norm[:, None])
+        @ (previous_physical / old_norm[:, None]).T
+    )
+    return overlap, physical_dimension
 
 
 def _read_mrsf_hessian_tracking(path, state=None, tag=None):
@@ -3315,6 +3402,10 @@ class NACME(BasisOverlap):
                 self.mol.data['OQP::td_energies_old'], dtype=float).reshape(-1)
             current_energy = np.asarray(
                 self.mol.data['OQP::td_energies'], dtype=float).reshape(-1)
+            nalpha = int(np.asarray(
+                self.mol.data['nelec_A'], dtype=int).reshape(-1)[0])
+            nbeta = int(np.asarray(
+                self.mol.data['nelec_B'], dtype=int).reshape(-1)[0])
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 'MRSF Hessian root tracking requires central and displaced '
@@ -3327,14 +3418,17 @@ class NACME(BasisOverlap):
                 'central/displaced MRSF response spaces have different shapes: '
                 f'{previous_raw.shape} != {current_raw.shape}')
 
-        # Native tag layout is (packed amplitude, state). Match the convention
-        # already used by align_x: one response root per Python row.
+        # Native tag layout is (packed amplitude, state), but its contiguous
+        # buffer is state-major. Match the convention already used by align_x:
+        # one response root per Python row. JSON restarts are converted back to
+        # this native view before reaching this point.
         x_shape = current_raw.shape
-        previous = previous_raw.reshape((x_shape[1], x_shape[0])).copy()
-        current = current_raw.reshape((x_shape[1], x_shape[0])).copy()
-        nroot = current.shape[0]
-        if previous_energy.size != nroot or current_energy.size != nroot:
+        nroot = x_shape[1]
+        if (previous_energy.size != nroot or current_energy.size != nroot
+                or nroot < 1):
             raise RuntimeError('MRSF response-vector and energy root counts disagree')
+        previous = previous_raw.reshape((nroot, x_shape[0])).copy()
+        current = current_raw.reshape((nroot, x_shape[0])).copy()
         if target >= nroot:
             raise RuntimeError(
                 f'hess.state={public_state} is outside the {nroot} solved MRSF roots')
@@ -3343,12 +3437,8 @@ class NACME(BasisOverlap):
                 'the requested MRSF Hessian root is not bracketed by the solved '
                 'spectrum; enlarge tdhf.nstate before differentiating it')
 
-        old_norm = np.linalg.norm(previous, axis=1)
-        new_norm = np.linalg.norm(current, axis=1)
-        if (not np.all(np.isfinite(old_norm)) or not np.all(np.isfinite(new_norm))
-                or np.any(old_norm <= 0.0) or np.any(new_norm <= 0.0)):
-            raise RuntimeError('MRSF Hessian root tracking found a null/non-finite response vector')
-        overlap = (current / new_norm[:, None]) @ (previous / old_norm[:, None]).T
+        overlap, physical_dimension = _mrsf_spin_adapted_response_overlap(
+            current, previous, nalpha, nbeta, multiplicity)
         order, signs, matched, margins = maximum_overlap_assignment(overlap)
         order = np.asarray(order, dtype=np.int32).reshape(-1)
         signs = np.asarray(signs, dtype=float).reshape(-1)
@@ -3469,6 +3559,9 @@ class NACME(BasisOverlap):
             'schema_version': _MRSF_HESS_TRACKING_SCHEMA,
             'status': 'accepted',
             'representation': 'spin_adapted_mrsf_co_ov_cv_oo',
+            'response_overlap_metric': 'spin_adapted_mrsf_physical_packed',
+            'expanded_response_dimension': int(current.shape[1]),
+            'physical_response_dimension': physical_dimension,
             'reference_state': public_state,
             'selected_raw_state': selected + 1,
             'transported_state': public_state,

@@ -104,6 +104,11 @@ def _molecule_module_without_native_runtime():
     helper = _load_source_module(
         'mrsf_hessian_symmetry_metadata_loader',
         'tests/test_symmetry_metadata.py')
+    # The helper stubs the oqp package, so pin the matching source-tree JSON
+    # adapter explicitly instead of inheriting an installed OpenQP copy.
+    _load_source_module(
+        'oqp.utils.json_utils',
+        'pyoqp/oqp/utils/json_utils.py')
     module = helper.load_molecule_module()
     for name in list(sys.modules):
         if (name == 'oqp' or name.startswith('oqp.')) and name not in snapshot:
@@ -132,15 +137,22 @@ class DummyMRSFMolecule:
     def __init__(self):
         # Current raw order is old [1, 2, 0].  The public S1 root is therefore
         # raw displaced root 3 and must be transported back to slot 1.
+        central_rows = np.zeros((3, 6))
+        central_rows[0, 0] = 1.0
+        central_rows[1, 1] = 1.0
+        central_rows[2, 2] = 1.0
+        current_rows = central_rows[[1, 2, 0]]
+        # Native tag shape is (packed, state), but the contiguous buffer is
+        # state-major.  Keep this deliberately non-square so a layout mistake
+        # cannot be hidden by an identity matrix.
+        self.central_bridge = central_rows.reshape((6, 3))
         self.data = {
-            'OQP::td_bvec_mo_old': np.eye(3),
-            'OQP::td_bvec_mo': np.array([
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-                [1.0, 0.0, 0.0],
-            ]),
+            'OQP::td_bvec_mo_old': self.central_bridge.copy(),
+            'OQP::td_bvec_mo': current_rows.reshape((6, 3)),
             'OQP::td_energies_old': np.array([0.10, 0.20, 0.30]),
             'OQP::td_energies': np.array([0.20, 0.30, 0.10]),
+            'nelec_A': np.array([2]),
+            'nelec_B': np.array([0]),
         }
         self.config = {
             'tdhf': {'type': 'mrsf', 'multiplicity': 1},
@@ -195,8 +207,13 @@ def test_isolated_root_exchange_transports_amplitude_energy_and_irrep(tracker):
     assert report['symmetry_check'] == 'same_subgroup_same_irrep'
     assert report['spin_check'] == 'fixed_spin_adapted_mrsf_manifold'
     assert report['representation'] == 'spin_adapted_mrsf_co_ov_cv_oo'
+    assert report['response_overlap_metric'] == \
+        'spin_adapted_mrsf_physical_packed'
+    assert report['expanded_response_dimension'] == 6
+    assert report['physical_response_dimension'] == 5
     assert report['degenerate_manifold_solver'] is False
-    np.testing.assert_allclose(tracker.mol.data['OQP::td_bvec_mo'], np.eye(3))
+    np.testing.assert_allclose(
+        tracker.mol.data['OQP::td_bvec_mo'], tracker.mol.central_bridge)
     np.testing.assert_allclose(
         tracker.mol.data['OQP::td_energies'], [0.10, 0.20, 0.30])
     np.testing.assert_allclose(
@@ -232,11 +249,67 @@ def test_missing_requested_symmetry_metadata_is_rejected(tracker):
 
 def test_weak_overlap_is_rejected_before_gradient(tracker):
     angle = np.arccos(0.98)
-    tracker.mol.data['OQP::td_bvec_mo'][2, :] = np.array([
-        np.cos(angle), np.sin(angle), 0.0])
+    current_rows = tracker.mol.data['OQP::td_bvec_mo'].reshape((3, 6)).copy()
+    current_rows[2, :] = 0.0
+    current_rows[2, 0] = np.cos(angle)
+    current_rows[2, 4] = np.sin(angle)
+    tracker.mol.data['OQP::td_bvec_mo'] = current_rows.reshape((6, 3))
 
     with pytest.raises(RuntimeError, match='root overlap'):
         tracker.track_isolated_mrsf_hessian_root(1)
+
+
+def test_h2_spin_adapted_metric_normalizes_the_folded_oo_response(tracker):
+    current_rows = tracker.mol.data['OQP::td_bvec_mo'].reshape((3, 6)).copy()
+    current_rows[2, :] *= 7.0
+    tracker.mol.data['OQP::td_bvec_mo'] = current_rows.reshape((6, 3))
+
+    report = tracker.track_isolated_mrsf_hessian_root(1)
+
+    assert report['matched_overlap'] == pytest.approx(1.0)
+
+
+def test_h2_nearby_spin_adapted_response_has_unit_limit(tracker):
+    angle = 1.0e-3
+    current_rows = tracker.mol.data['OQP::td_bvec_mo'].reshape((3, 6)).copy()
+    current_rows[2, :] = 0.0
+    current_rows[2, 0] = np.cos(angle)
+    current_rows[2, 4] = np.sin(angle)
+    tracker.mol.data['OQP::td_bvec_mo'] = current_rows.reshape((6, 3))
+
+    report = tracker.track_isolated_mrsf_hessian_root(1)
+
+    assert report['matched_overlap'] == pytest.approx(np.cos(angle))
+    assert report['matched_overlap'] > 0.999999
+
+
+def test_h2_spin_adapted_metric_rejects_redundant_r_contamination(tracker):
+    current_rows = tracker.mol.data['OQP::td_bvec_mo'].reshape((3, 6)).copy()
+    current_rows[2, 3] = 1.0e-4
+    tracker.mol.data['OQP::td_bvec_mo'] = current_rows.reshape((6, 3))
+
+    with pytest.raises(RuntimeError, match='nonphysical displaced OO'):
+        tracker.track_isolated_mrsf_hessian_root(1)
+
+
+def test_h2_triplet_metric_retains_only_physical_oo_l(single_point):
+    previous = np.zeros((1, 6))
+    current = np.zeros((1, 6))
+    previous[0, 0] = 1.0
+    current[0, 0] = -3.0
+
+    overlap, physical_dimension = (
+        single_point._mrsf_spin_adapted_response_overlap(
+            current, previous, nalpha=2, nbeta=0, multiplicity=3)
+    )
+
+    assert physical_dimension == 3
+    np.testing.assert_allclose(overlap, [[-1.0]])
+
+    current[0, 1] = 1.0e-4
+    with pytest.raises(RuntimeError, match='nonphysical displaced OO'):
+        single_point._mrsf_spin_adapted_response_overlap(
+            current, previous, nalpha=2, nbeta=0, multiplicity=3)
 
 
 def test_near_degenerate_root_requires_projector_treatment(tracker):

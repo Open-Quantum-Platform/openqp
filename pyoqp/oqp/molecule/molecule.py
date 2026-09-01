@@ -13,7 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
-from oqp.utils.json_utils import json_array
+from oqp.utils.json_utils import json_array, tag_array_from_json
 from oqp.utils.state_labels import is_mrsf, public_state_label
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
@@ -3329,7 +3329,7 @@ class Molecule:
         self._state_tracking_fresh = False
         for key in self.tag:
             try:
-                self.data[key] = np.array(data[key])
+                self.data[key] = tag_array_from_json(key, data[key])
 
             except KeyError:
                 continue
