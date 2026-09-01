@@ -9,8 +9,189 @@ module tdhf_hessian_response_mod
   public :: solve_tdhf_z_response
   public :: complete_rhf_orbital_response
   public :: assemble_tdhf_sigma_derivative
+  public :: solve_mrsf_tda_response_dense
+  public :: assemble_mrsf_tda_eigenvalue_hessian
 
 contains
+
+!###############################################################################
+
+  subroutine assemble_mrsf_tda_eigenvalue_hessian(x0,dax,dx,d2a_expect, &
+                                                    hessian,asymmetry,status)
+    ! Assemble the electronic-state eigenvalue part of the MRSF-TDA Hessian,
+    !
+    ! d2omega(K,L) = X^T d2A(K,L) X + 2 (dX(L))^T dA(K) X.
+    !
+    ! dax(:,K) is the differentiated response-operator action dA(K)X and
+    ! d2a_expect(K,L) is the explicit fixed-X expectation X^T d2A(K,L)X.
+    ! For an exact response the raw matrix is symmetric.  We report its
+    ! antisymmetric diagnostic before returning the symmetrized Hessian.
+
+    real(kind=dp), intent(in) :: x0(:),dax(:,:),dx(:,:),d2a_expect(:,:)
+    real(kind=dp), intent(out) :: hessian(:,:),asymmetry
+    integer, intent(out) :: status
+
+    real(kind=dp), allocatable :: raw(:,:)
+    integer :: k,l,n,ncoord
+
+    n = size(x0)
+    ncoord = size(dax,2)
+    status = 0
+    hessian = 0.0_dp
+    asymmetry = 0.0_dp
+    if (n <= 0 .or. ncoord <= 0 .or. size(dax,1) /= n .or. &
+        any(shape(dx) /= [n,ncoord]) .or. &
+        any(shape(d2a_expect) /= [ncoord,ncoord]) .or. &
+        any(shape(hessian) /= [ncoord,ncoord])) then
+      status = -1
+      return
+    end if
+    if (abs(dot_product(x0,x0)-1.0_dp) > 1.0e-10_dp .or. &
+        maxval(abs(matmul(x0,dx))) > 1.0e-10_dp) then
+      status = -2
+      return
+    end if
+    allocate(raw(ncoord,ncoord))
+    do l=1,ncoord
+      do k=1,ncoord
+        raw(k,l) = d2a_expect(k,l)+2.0_dp*dot_product(dx(:,l),dax(:,k))
+      end do
+    end do
+    asymmetry = maxval(abs(raw-transpose(raw)))
+    hessian = 0.5_dp*(raw+transpose(raw))
+    deallocate(raw)
+  end subroutine assemble_mrsf_tda_eigenvalue_hessian
+
+!###############################################################################
+
+  subroutine solve_mrsf_tda_response_dense(a, omega, x0, dax, dx, domega, &
+                                             residual_max, status, pivot_tol)
+    ! Dense reference solution of the differentiated symmetric MRSF-TDA
+    ! eigenproblem for an isolated state,
+    !
+    !   (A-omega I) dX = -(dA-domega I) X,   X^T dX = 0.
+    !
+    ! The bordered equation fixes the otherwise undetermined component along
+    ! X.  It is intentionally retained as an independent small-system
+    ! reference.  Molecular calculations use the same projected equation with
+    ! a matrix-vector product and an indefinite iterative solver.
+
+    real(kind=dp), intent(in) :: a(:,:), omega, x0(:), dax(:,:)
+    real(kind=dp), intent(out) :: dx(:,:), domega(:), residual_max
+    integer, intent(out) :: status
+    real(kind=dp), intent(in), optional :: pivot_tol
+
+    real(kind=dp), allocatable :: bordered(:,:), rhs(:), solution(:), check(:)
+    real(kind=dp) :: norm2, threshold
+    integer :: coord, n, ncoord, solve_status
+
+    n = size(x0)
+    ncoord = size(dax,2)
+    status = 0
+    residual_max = 0.0_dp
+    dx = 0.0_dp
+    domega = 0.0_dp
+    threshold = 1.0e-12_dp
+    if (present(pivot_tol)) threshold = pivot_tol
+
+    if (n <= 0 .or. any(shape(a) /= [n,n]) .or. size(dax,1) /= n .or. &
+        any(shape(dx) /= [n,ncoord]) .or. size(domega) /= ncoord .or. &
+        threshold <= 0.0_dp) then
+      status = -1
+      return
+    end if
+    norm2 = dot_product(x0,x0)
+    if (abs(norm2-1.0_dp) > 1.0e-10_dp .or. &
+        maxval(abs(matmul(a,x0)-omega*x0)) > 1.0e-9_dp .or. &
+        maxval(abs(a-transpose(a))) > 1.0e-10_dp) then
+      status = -2
+      return
+    end if
+
+    allocate(bordered(n+1,n+1),rhs(n+1),solution(n+1),check(n))
+    bordered = 0.0_dp
+    bordered(1:n,1:n) = a
+    do coord = 1,n
+      bordered(coord,coord) = bordered(coord,coord)-omega
+    end do
+    bordered(1:n,n+1) = x0
+    bordered(n+1,1:n) = x0
+
+    do coord = 1,ncoord
+      domega(coord) = dot_product(x0,dax(:,coord))
+      rhs(1:n) = -dax(:,coord)+domega(coord)*x0
+      rhs(n+1) = 0.0_dp
+      call solve_linear_pivot(bordered,rhs,solution,threshold,solve_status)
+      if (solve_status /= 0) then
+        status = coord
+        exit
+      end if
+      dx(:,coord) = solution(1:n)
+      check = matmul(a,dx(:,coord))-omega*dx(:,coord) &
+        +dax(:,coord)-domega(coord)*x0
+      residual_max = max(residual_max,maxval(abs(check)), &
+        abs(dot_product(x0,dx(:,coord))))
+    end do
+    deallocate(bordered,rhs,solution,check)
+
+  end subroutine solve_mrsf_tda_response_dense
+
+!###############################################################################
+
+  subroutine solve_linear_pivot(matrix, rhs, solution, threshold, status)
+    ! Partial-pivoting Gaussian elimination used only by the dense reference
+    ! response above.  Keeping it local avoids linking a production BLAS/LAPACK
+    ! implementation into the standalone algebraic verification program.
+
+    real(kind=dp), intent(in) :: matrix(:,:), rhs(:), threshold
+    real(kind=dp), intent(out) :: solution(:)
+    integer, intent(out) :: status
+
+    real(kind=dp), allocatable :: work(:,:), vector(:), row(:)
+    real(kind=dp) :: factor, scale
+    integer :: i, k, n, pivot
+
+    n = size(rhs)
+    status = 0
+    solution = 0.0_dp
+    if (n <= 0 .or. any(shape(matrix) /= [n,n]) .or. &
+        size(solution) /= n) then
+      status = -1
+      return
+    end if
+    allocate(work(n,n),vector(n),row(n))
+    work = matrix
+    vector = rhs
+    scale = max(1.0_dp,maxval(abs(work)))
+    do k = 1,n-1
+      pivot = k-1+maxloc(abs(work(k:n,k)),dim=1)
+      if (abs(work(pivot,k)) <= threshold*scale) then
+        status = k
+        exit
+      end if
+      if (pivot /= k) then
+        row = work(k,:)
+        work(k,:) = work(pivot,:)
+        work(pivot,:) = row
+        factor = vector(k)
+        vector(k) = vector(pivot)
+        vector(pivot) = factor
+      end if
+      do i = k+1,n
+        factor = work(i,k)/work(k,k)
+        work(i,k:n) = work(i,k:n)-factor*work(k,k:n)
+        vector(i) = vector(i)-factor*vector(k)
+      end do
+    end do
+    if (status == 0 .and. abs(work(n,n)) <= threshold*scale) status = n
+    if (status == 0) then
+      do i = n,1,-1
+        solution(i) = (vector(i)-dot_product(work(i,i+1:n), &
+          solution(i+1:n)))/work(i,i)
+      end do
+    end if
+    deallocate(work,vector,row)
+  end subroutine solve_linear_pivot
 
 !###############################################################################
 

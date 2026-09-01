@@ -75,6 +75,19 @@ def test_partition_weight_hessian_selftest(gfortran: str, tmp_path: Path) -> Non
     assert "dft partition Hessian selftest passed" in output
 
 
+def test_mrsf_physical_response_space(gfortran: str, tmp_path: Path) -> None:
+    _compile_and_run(
+        gfortran,
+        tmp_path,
+        [
+            ROOT / "source" / "precision.F90",
+            ROOT / "source" / "modules" / "tdhf_mrsf_conventions.F90",
+            ROOT / "source" / "modules" / "tdhf_mrsf_hessian_space.F90",
+            FORTRAN_TESTS / "test_mrsf_hessian_space.F90",
+        ],
+    )
+
+
 def _aoval_test_module() -> str:
     source = (ROOT / "source" / "basis_tools.F90").read_text()
     match = re.search(

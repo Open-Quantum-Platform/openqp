@@ -1,8 +1,11 @@
-"""Independent determinant and response checks for an MRSF nuclear Hessian.
+"""Independent second-quantized audit of an MRSF nuclear Hessian.
 
-The dense Hamiltonian is assembled by applying the second-quantized operator.
-The comparison matrix-vector product uses separate Slater--Condon expressions.
-No OpenQP response routine is imported here.
+The production method is *not* represented or solved in a determinant space;
+it uses the spin-adapted CO/OV/CV/OO response amplitudes and seven transition
+densities.  This deliberately isolated tiny-system audit expands those
+spin-adapted functions only to compare a dense second-quantized Hamiltonian
+with separate Slater--Condon expressions.  No OpenQP response routine imports
+or consumes this representation.
 """
 
 from __future__ import annotations
@@ -393,7 +396,9 @@ class TestMRSFHessianReference(unittest.TestCase):
 
     def test_singlet_and_triplet_eigenvalue_hessians(self):
         h0, h1, h2 = self.full_hamiltonian
-        for spin, spc_sign in (("singlet", 1.0), ("triplet", -1.0)):
+        # Nakata et al., founding SI Eqs. S8.9--S8.10: the physical triplet
+        # response contains A+C and the physical singlet response A-C.
+        for spin, spc_sign in (("singlet", -1.0), ("triplet", 1.0)):
             labels, transform = self.model[spin]
             c0, c1, c2 = _spc_coefficients(labels)
             a0 = transform.T @ h0 @ transform + spc_sign * c0

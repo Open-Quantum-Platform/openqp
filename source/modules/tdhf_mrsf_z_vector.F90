@@ -8,6 +8,7 @@ module tdhf_mrsf_z_vector_mod
   use mod_dft_molgrid, only: dft_grid_t
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
   use zvector_common, only: sanitize_zvector_preconditioner
+  use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
@@ -2228,8 +2229,9 @@ contains
               mu = infos%tddft%cam_mu)
         fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
 
-      ! Scaling factor if triplet
-        if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
+      ! K_raw=-C_SPC^physical for the six special channels; ball is A0.
+        if (mrsf_raw_spc_multiplier(mrst)<0) &
+          fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
 
         ! Spin pair coupling
         if (infos%tddft%spc_coco /= infos%tddft%hfscale) &

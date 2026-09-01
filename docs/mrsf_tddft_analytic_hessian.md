@@ -69,9 +69,20 @@ For spin multiplicity (k\in\{S,T\}), the symmetric MRSF eigenproblem is
  X^{(k)\mathsf T}X^{(k)}=1,
 \]
 
-where (A^{(S)}=A^{(0)}+C_{\mathrm{SPC}}) and
-(A^{(T)}=A^{(0)}-C_{\mathrm{SPC}}) in the OpenQP convention.  The stationary
-Lagrangian is
+where the physical spin-pairing convention of Nakata *et al.* is
+(A^{(T)}=A^{(0)}+C_{\mathrm{SPC}}) and
+(A^{(S)}=A^{(0)}-C_{\mathrm{SPC}}).  An implementation may store a response
+channel with the opposite sign, but that internal channel must then be named
+and converted explicitly; it does not change this physical definition.
+
+OpenQP defines the special-channel action
+(K_{\mathrm{raw}}[X]\equiv
+\mathcal M[f_{1:6}[d_{1:6}(X)]]=-C_{\mathrm{SPC}}[X]).  Channel 7, conventionally
+called `ball`, contributes to (A^{(0)}) and is not an SPC channel.  Hence the
+raw special-channel multiplier is +1 for a singlet and -1 for a triplet.  All
+first- and second-order derivatives retain this conversion.
+
+The stationary Lagrangian is
 
 \[
  \mathcal L_k = X^{\mathsf T}A^{(k)}X
@@ -174,8 +185,9 @@ finite differences of the analytic MRSF gradient.
 Molecular calculations begin only after the following finite model criteria
 are satisfied:
 
-1. explicit determinant enumeration recovers the complete seven-part response
-   topology, with no duplicate CSFs and with the stated L/R phases;
+1. an isolated second-quantized audit recovers the complete spin-adapted
+   seven-part response topology, with no duplicate CSFs and with the stated
+   L/R phases; this audit is not the production representation;
 2. an independently constructed Slater--Condon Hamiltonian and the MRSF
    matrix-vector product agree for every unit-vector column to
    (10^{-10}\ E_h);

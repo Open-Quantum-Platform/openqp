@@ -94,6 +94,7 @@ contains
     use oqp_linalg
     use int1, only: multipole_integrals
     use printing, only: print_module_info
+    use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
     use iso_c_binding, only: c_f_pointer, c_int
 
     implicit none
@@ -764,10 +765,14 @@ contains
 
         endif
 
-        ! Scaling factor if triplet
+        ! OpenQP's six special-density contraction is K_raw=-C_SPC^physical;
+        ! channel 7 (ball) belongs to A0.
+        ! mrsf_raw_spc_multiplier therefore gives +1 for the physical singlet
+        ! A0-C_SPC and -1 for the physical triplet A0+C_SPC.  Channel 7 is the
+        ! ordinary MRSF response density and is not a spin-pairing channel.
         if (umrsf .and. mrst==3) then
           fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
-        else if (mrst==3) then
+        else if (mrsf_raw_spc_multiplier(mrst)<0) then
           fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
         endif
 
