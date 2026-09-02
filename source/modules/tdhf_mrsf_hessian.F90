@@ -183,10 +183,10 @@ contains
       intermediate%dab1_b,intermediate%dz_ab1_a, &
       intermediate%dz_ab1_b,intermediate%dtij,intermediate%dtab,drhs, &
       operator_derivative_z,dz,z_residual,status, &
-      ! The differentiated equation is driven by ROHF CPHF quantities whose
-      ! production convergence is 1e-9.  Requiring a matrix-free solve below
-      ! 1e-12 is not meaningful and can reject an otherwise converged response.
-      tol=max(1.0e-10_dp,infos%tddft%zvconv), &
+      ! Use the requested orbital-adjoint tolerance, with a numerical floor at
+      ! 1e-12.  The ROHF CPHF quantities driving this equation are themselves
+      ! certified to 1e-13 in the production nuclear-response path.
+      tol=max(1.0e-12_dp,infos%tddft%zvconv), &
       maxit=max(200,int(infos%control%maxit_zv)), &
       restart=lzdim, &
       apply_orbital_hessian_batch=orbital_hessian_action_batch, &

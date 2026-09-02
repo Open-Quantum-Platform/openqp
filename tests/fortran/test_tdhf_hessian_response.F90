@@ -121,6 +121,29 @@ program test_tdhf_hessian_response
   if(batch_operator_width/=2) &
     error stop 'batched-GMRES MRSF Z solve did not share a two-RHS operator call'
 
+  ! A one-step GMRES residual between 1e-10 and 1e-8 must not pass a hidden
+  ! relaxed certificate.  The second RHS is a scaled copy, so pass/fail must
+  ! depend on the relative L2 residual rather than an absolute residual floor.
+  zorb=0.0_dp
+  zorb(1,1)=1.0_dp
+  zorb(2,2)=1.0_dp+1.0e-8_dp
+  zorb(3,3)=1.0_dp+2.0e-8_dp
+  zdhz=0.0_dp
+  zrhs(:,1)=[1.0_dp,1.0_dp,1.0_dp]
+  zrhs(:,2)=1.0e6_dp*zrhs(:,1)
+  call solve_mrsf_z_response_batch_matrix_free( &
+    apply_test_z_orbital_hessian_batch,zrhs,zdhz,zdz,residual,status, &
+    tol=1.0e-10_dp,maxit=1)
+  if(status==0) &
+    error stop 'batched MRSF Z solve accepted a residual above tolerance'
+  call solve_mrsf_z_response_batch_matrix_free( &
+    apply_test_z_orbital_hessian_batch,zrhs,zdhz,zdz,residual,status, &
+    tol=1.0e-10_dp,maxit=3)
+  if(status/=0) &
+    error stop 'batched MRSF Z solve did not converge with a complete space'
+  if(residual>1.0e-4_dp) &
+    error stop 'scaled batched MRSF Z residual is too large after convergence'
+
   mo = 0.0_dp
   mo(1,1) = 1.0_dp; mo(2,2) = 1.0_dp; mo(3,3) = 1.0_dp
   sx = reshape([0.2_dp, 0.1_dp, -0.2_dp, &

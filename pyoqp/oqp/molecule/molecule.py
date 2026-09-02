@@ -2214,14 +2214,20 @@ class Molecule:
         }
 
     def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8,
-                           reference_gradient=None):
+                           reference_gradient=None,
+                           producer_stage=None,
+                           upstream_symmetrization_applied=False,
+                           translation_projection_applied=False,
+                           rotation_projection_applied=False):
         """
         Store a final Cartesian Hessian in OpenQP frequency conventions.
 
         Native analytic Hessian kernels should hand one square ``(3N, 3N)``
-        matrix to this helper. The helper records the pre-symmetrization
-        asymmetry for diagnostics and stores the symmetrized matrix used by
-        normal-mode analysis; it does not compute a numerical fallback.
+        matrix to this helper. By default the helper records a genuinely raw
+        pre-symmetrization matrix. A producer that already symmetrized or
+        projected its matrix must declare that stage explicitly so the stored
+        invariance diagnostics are not mislabeled as independent raw tests.
+        The helper performs no numerical fallback.
         """
 
         hessian = np.asarray(raw_hessian, dtype=float)
@@ -2237,6 +2243,17 @@ class Molecule:
 
         diagnostics = self._hessian_invariance_diagnostics(
             hessian, reference_gradient=reference_gradient)
+        if producer_stage is not None:
+            diagnostics['stage'] = str(producer_stage)
+        diagnostics.update({
+            'upstream_symmetrization_applied': bool(
+                upstream_symmetrization_applied),
+            'translation_projection_applied': bool(
+                translation_projection_applied),
+            'rotation_projection_applied': bool(rotation_projection_applied),
+            'rigid_motion_projection_applied': bool(
+                translation_projection_applied or rotation_projection_applied),
+        })
         max_asymmetry = diagnostics['max_abs_asymmetry']
         if max_asymmetry > asymmetry_tol:
             warnings.warn(
@@ -2244,12 +2261,27 @@ class Molecule:
                 RuntimeWarning,
             )
 
+        python_symmetrization_applied = bool(max_asymmetry > 0.0)
         self.hessian = 0.5 * (hessian + hessian.T)
         self.hessian_metadata = {
             'max_asymmetry': max_asymmetry,
-            'symmetrized': bool(max_asymmetry > 0.0),
-            'pre_symmetrization_invariance': diagnostics,
+            'symmetrized': bool(
+                upstream_symmetrization_applied or
+                python_symmetrization_applied),
+            'upstream_symmetrization_applied': bool(
+                upstream_symmetrization_applied),
+            'python_symmetrization_applied': python_symmetrization_applied,
+            'translation_projection_applied': bool(
+                translation_projection_applied),
+            'rotation_projection_applied': bool(rotation_projection_applied),
         }
+        if (producer_stage is None and
+                not upstream_symmetrization_applied and
+                not translation_projection_applied and
+                not rotation_projection_applied):
+            self.hessian_metadata['pre_symmetrization_invariance'] = diagnostics
+        else:
+            self.hessian_metadata['stored_matrix_invariance'] = diagnostics
         return self.hessian
 
     def _read_mrsf_ekt_records(self):

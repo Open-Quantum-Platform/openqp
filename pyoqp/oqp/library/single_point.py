@@ -2466,7 +2466,15 @@ class Hessian(Calculator):
             raise RuntimeError(
                 'Native oqp.tdhf_mrsf_hessian did not store OQP::tdhf_hessian.'
             ) from exc
-        hessian = self.mol.set_hessian_result(raw_hessian)
+        hessian = self.mol.set_hessian_result(
+            raw_hessian,
+            producer_stage=(
+                'native_mrsf_after_response_row_symmetrization_and_'
+                'translation_projection'),
+            upstream_symmetrization_applied=True,
+            translation_projection_applied=True,
+            rotation_projection_applied=False,
+        )
         disp_hessian = self._dispersion_hessian()
         d4_added = np.ndim(disp_hessian) != 0
         if d4_added:

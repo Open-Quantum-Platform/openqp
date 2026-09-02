@@ -1723,8 +1723,8 @@ contains
       active_images(:,:),work(:),norm_rhs(:)
     integer, allocatable :: active_columns(:),used(:)
     logical, allocatable :: converged(:),cycle_done(:)
-    real(kind=dp) :: beta,component_residual,denominator,orthogonal_norm, &
-      residual_scale,temp
+    real(kind=dp) :: beta,component_residual,current_norm,denominator, &
+      orthogonal_norm,residual_scale,temp
     integer :: active_index,coordinate,cycle_start,i,iteration,j,k,m,n, &
       nactive,ncoord,operator_status,pass
 
@@ -1767,10 +1767,10 @@ contains
       end if
       residual=rhs-applied
       do coordinate=1,ncoord
-        component_residual=maxval(abs(residual(:,coordinate)))
-        converged(coordinate)=component_residual<= &
-          max(1.0e-8_dp,100.0_dp*tolerance)* &
-          max(1.0_dp,norm_rhs(coordinate))
+        current_norm=sqrt(dot_product(residual(:,coordinate), &
+          residual(:,coordinate)))
+        converged(coordinate)=current_norm<= &
+          tolerance*max(1.0_dp,norm_rhs(coordinate))
       end do
       if(all(converged)) exit
 
@@ -1927,10 +1927,13 @@ contains
     end if
     residual_max=0.0_dp
     do coordinate=1,ncoord
-      component_residual=maxval(abs(applied(:,coordinate)-rhs(:,coordinate)))
+      residual(:,coordinate)=applied(:,coordinate)-rhs(:,coordinate)
+      current_norm=sqrt(dot_product(residual(:,coordinate), &
+        residual(:,coordinate)))
+      component_residual=maxval(abs(residual(:,coordinate)))
       residual_max=max(residual_max,component_residual)
-      if(component_residual>max(1.0e-8_dp,100.0_dp*tolerance)* &
-         max(1.0_dp,norm_rhs(coordinate))) then
+      if(.not.ieee_is_finite(current_norm) .or. &
+         current_norm>tolerance*max(1.0_dp,norm_rhs(coordinate))) then
         status=coordinate
         go to 900
       end if

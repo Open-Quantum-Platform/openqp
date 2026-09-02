@@ -468,3 +468,37 @@ def test_raw_asymmetry_is_recorded_before_the_final_average():
         'max_abs_asymmetry'] == pytest.approx(0.2)
     assert final[0, 1] == pytest.approx(0.1)
     assert final[1, 0] == pytest.approx(0.1)
+
+
+def test_native_mrsf_processed_hessian_metadata_is_not_labeled_raw():
+    mol = _diagnostic_molecule()
+    Molecule = type(mol)
+    hessian = np.zeros((6, 6))
+    hessian[0, 0] = hessian[3, 3] = 2.0
+    hessian[0, 3] = hessian[3, 0] = -2.0
+
+    final = Molecule.set_hessian_result(
+        mol,
+        hessian,
+        producer_stage=(
+            'native_mrsf_after_response_row_symmetrization_and_'
+            'translation_projection'),
+        upstream_symmetrization_applied=True,
+        translation_projection_applied=True,
+        rotation_projection_applied=False,
+    )
+
+    np.testing.assert_allclose(final, hessian)
+    metadata = mol.hessian_metadata
+    assert metadata['upstream_symmetrization_applied'] is True
+    assert metadata['python_symmetrization_applied'] is False
+    assert metadata['translation_projection_applied'] is True
+    assert metadata['rotation_projection_applied'] is False
+    assert 'pre_symmetrization_invariance' not in metadata
+    stored = metadata['stored_matrix_invariance']
+    assert stored['stage'] == (
+        'native_mrsf_after_response_row_symmetrization_and_'
+        'translation_projection')
+    assert stored['upstream_symmetrization_applied'] is True
+    assert stored['translation_projection_applied'] is True
+    assert stored['rotation_projection_applied'] is False
