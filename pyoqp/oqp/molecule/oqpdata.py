@@ -751,6 +751,9 @@ OQP_CONFIG_SCHEMA = {
         'temperature': {'type': farray, 'default': '298.15'},
         'clean': {'type': bool, 'default': 'False'},
         'symmetry_unique': {'type': bool, 'default': 'False'},
+        # Keep harmonic analysis available while allowing production Hessian
+        # calculations to omit the separate finite-difference IR/Raman stage.
+        'vibrational_intensities': {'type': bool, 'default': 'True'},
         # Target-state MRSF vibrational property derivatives.  These controls
         # never authorize a generic ROHF/CPHF fallback.
         'property_dx': {'type': float, 'default': '1.0e-3'},

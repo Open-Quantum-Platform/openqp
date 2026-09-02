@@ -422,6 +422,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     # section-ownership gate catches.
     "hess": _keys("""
         type state dx nproc read restart temperature clean symmetry_unique
+        vibrational_intensities
         property_dx property_min_overlap property_min_margin
         property_fd_relative_tolerance property_fd_absolute_tolerance raman_backend
         raman_sos_tail_states raman_sos_tail_tolerance raman_sos_min_gap
@@ -665,7 +666,7 @@ DRIVER_OPTIONS = {
     # symmetry_unique (#319) selects the symmetry-unique displacement set, so
     # it is a hess driver option like dx/nproc rather than a generic key.
     "hess": {"type", "dx", "nproc", "read", "restart", "temperature", "clean",
-             "symmetry_unique", "property_dx", "property_min_overlap",
+             "symmetry_unique", "vibrational_intensities", "property_dx", "property_min_overlap",
              "property_min_margin", "property_fd_relative_tolerance",
              "property_fd_absolute_tolerance", "raman_backend", "raman_sos_tail_states",
              "raman_sos_tail_tolerance", "raman_sos_min_gap"},

@@ -2132,6 +2132,22 @@ class Hessian(Calculator):
     def _compute_vibrational_intensities(self, modes):
         """Compute IR/Raman intensities using native OpenQP property kernels."""
 
+        hess_config = self.mol.config.get('hess', {})
+        if not bool(hess_config.get('vibrational_intensities', True)):
+            self.mol.infrared_intensities = np.zeros(0)
+            self.mol.raman_activities = np.zeros(0)
+            self.mol.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+            self.mol.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
+            self.mol.vibrational_intensity_metadata = {
+                'status': 'not_computed',
+                'reason': (
+                    'Disabled by [hess] vibrational_intensities=False; '
+                    'harmonic frequencies and normal modes remain available.'
+                ),
+                'replacement_used': False,
+            }
+            return
+
         modes = np.ascontiguousarray(np.asarray(modes, dtype=np.float64))
         coord0 = np.asarray(self.mol.get_system(), dtype=float).reshape((-1, 3))
         ncoord = coord0.size
@@ -2174,7 +2190,6 @@ class Hessian(Calculator):
                 )
 
                 state_label = public_state_label(self.mol.config, int(self.state))
-                hess_config = self.mol.config.get('hess', {})
                 result = run_openqp_mrsf_spectroscopy_fd(
                     self.mol,
                     modes,

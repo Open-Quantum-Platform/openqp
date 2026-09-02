@@ -202,6 +202,34 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         self.assertTrue(np.array_equal(result, expected))
         self.assertTrue(np.array_equal(hessian.mol.hessian, expected))
 
+    def test_vibrational_intensity_opt_out_keeps_harmonic_analysis_separate(self):
+        class Mol:
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "analytical", "state": 1, "read": False,
+                         "restart": False, "temperature": [298.15], "clean": True,
+                         "vibrational_intensities": False},
+                "input": {"method": "tdhf"},
+                "scf": {"multiplicity": 3},
+                "tdhf": {"type": "mrsf", "multiplicity": 1},
+            }
+
+        hessian = self.single_point.Hessian(Mol())
+        hessian._compute_vibrational_intensities(np.ones((1, 3)))
+
+        self.assertEqual(
+            hessian.mol.vibrational_intensity_metadata["status"],
+            "not_computed",
+        )
+        self.assertIn(
+            "vibrational_intensities=False",
+            hessian.mol.vibrational_intensity_metadata["reason"],
+        )
+        self.assertEqual(hessian.mol.infrared_intensities.size, 0)
+        self.assertEqual(hessian.mol.raman_activities.size, 0)
+
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
