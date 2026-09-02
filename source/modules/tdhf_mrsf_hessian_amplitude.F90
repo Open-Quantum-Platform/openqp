@@ -85,7 +85,8 @@ contains
     end if
     dax_physical=matmul(transpose(transform),dax_packed)
     call tagarray_get_data(infos%dat,OQP_E_MO_A,mo_energy)
-    call mrinivec(infos,mo_energy,mo_energy,seed_vector,packed_diagonal,1)
+    call mrinivec(infos,mo_energy,mo_energy,seed_vector,packed_diagonal,1, &
+      report_symmetry_coverage=.false.)
     physical_diagonal=0.0_dp
     do component=1,physical
       physical_diagonal(component)=sum(packed_diagonal* &

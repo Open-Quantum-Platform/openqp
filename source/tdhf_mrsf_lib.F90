@@ -440,7 +440,8 @@ contains
 !> spin-averaged input is closer to the exact operator diagonal than the
 !> alpha/beta Fock diagonals on 45 of 45 amplitudes.  See the long comment at
 !> the call site in tdhf_mrsf_energy.F90 and issue #328 before changing this.
-  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep)
+  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep, &
+                      report_symmetry_coverage)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -460,14 +461,21 @@ contains
     !> mrsf_check_block_representation), so the caller needs this count to
     !> tell "was never asked for" from "was asked for and did not arrive".
     integer, allocatable, optional, intent(out) :: seeds_per_irrep(:)
+    !> Disable the Davidson seed-coverage diagnostic when the routine is used
+    !> only to construct its diagonal preconditioner.  The default preserves
+    !> the fail-loud spectrum diagnostic at every eigensolver call site.
+    logical, optional, intent(in) :: report_symmetry_coverage
 
-    logical :: debug_mode
+    logical :: debug_mode, check_symmetry_coverage
     real(kind=dp) :: xmj
     integer :: nocca, nbf, i, ij, j, k, xvec_dim, lr1, lr2, mrst
     integer :: itmp(nvec)
     real(kind=dp) :: xtmp(nvec)
 
     debug_mode = infos%tddft%debug_mode
+    check_symmetry_coverage = .true.
+    if (present(report_symmetry_coverage)) &
+      check_symmetry_coverage = report_symmetry_coverage
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
     xvec_dim = ubound(xm, 1)
@@ -582,6 +590,11 @@ contains
       integer(4) :: ta_status
       integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
       integer :: nstates_req
+
+      ! The analytical-Hessian amplitude solver reuses mrinivec only for xm,
+      ! not to start a Davidson spectrum.  In that context nvec=1 is a dummy
+      ! workspace dimension and a missing-block warning would be false.
+      if (.not. check_symmetry_coverage) exit seed_coverage
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
                              status=ta_status)

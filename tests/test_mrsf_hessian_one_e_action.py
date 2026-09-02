@@ -11,6 +11,7 @@ TOTAL_ACTION = ROOT / "source/modules/tdhf_mrsf_hessian_operator_derivative.F90"
 TWO_E_ACTION = ROOT / "source/modules/tdhf_mrsf_hessian_two_e_action.F90"
 STATE_RESPONSE = ROOT / "source/modules/tdhf_mrsf_hessian_state_response.F90"
 AMPLITUDE_RESPONSE = ROOT / "source/modules/tdhf_mrsf_hessian_amplitude.F90"
+MRSF_RESPONSE_LIBRARY = ROOT / "source/tdhf_mrsf_lib.F90"
 
 
 def _analytic_mo_derivative(c, dc, f, df):
@@ -84,3 +85,11 @@ def test_production_amplitude_solver_uses_batched_projected_response():
     assert "solve_mrsf_tda_response_batch_matrix_free" in compact
     assert "apply_preconditioner=apply_physical_preconditioner_batch" in compact
     assert "mrsf_hessian_amplitude_restart_cap" not in compact
+
+
+def test_amplitude_preconditioner_does_not_emit_davidson_seed_warning():
+    amplitude = "".join(AMPLITUDE_RESPONSE.read_text().lower().split())
+    library = "".join(MRSF_RESPONSE_LIBRARY.read_text().lower().split())
+    assert "report_symmetry_coverage=.false." in amplitude
+    assert "if(.not.check_symmetry_coverage)exitseed_coverage" in library
+    assert "check_symmetry_coverage=.true." in library
