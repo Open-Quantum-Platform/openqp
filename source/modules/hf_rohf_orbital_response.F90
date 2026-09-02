@@ -6,8 +6,6 @@ module hf_rohf_orbital_response_mod
 
   private
 
-  integer, parameter :: derivative_probe_block_size=64
-
   type, public :: rohf_nuclear_response_t
     integer :: nbf = 0
     integer :: nocca = 0
@@ -45,8 +43,9 @@ contains
     ! The returned dS and dHcore are explicit AO integral derivatives.  A total
     ! dF/dR is deliberately not returned: its production construction additionally
     ! requires a full open-shell derivative-ERI matrix and, for ROKS, the moving-
-    ! grid XC contribution.  The available scalar-probe contraction would require
-    ! O(nbf**2) complete derivative-integral evaluations per spin and coordinate.
+    ! grid XC contribution.  The fixed-density two-electron right-hand side below
+    ! does build that open-shell derivative Fock matrix, once for both spins, and
+    ! contracts it into the occupied-virtual block by matrix multiplication.
 
     use types, only: information
     use basis_tools, only: basis_set
@@ -55,7 +54,7 @@ contains
     use mathlib, only: unpack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, &
       der_nucattr_matrix
-    use fock_deriv_mod, only: fock_deriv_contract_os_batch
+    use fock_deriv_mod, only: fock_deriv_matrix_os_batch
     use int2_compute, only: int2_compute_t
     use tdhf_lib, only: int2_tdgrd_data_t
     use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, &
@@ -82,10 +81,9 @@ contains
     real(dp), allocatable :: d0a_all(:,:,:),d0b_all(:,:,:), &
       dvxc_a(:,:,:),dvxc_b(:,:,:),sxmo_all(:,:,:),hxmo_all(:,:,:)
     real(dp), allocatable, target :: response_density(:,:,:)
-    real(dp), allocatable, target :: probe_batch(:,:,:), &
-      pcoul_batch(:,:,:),pexch_batch(:,:,:)
-    real(dp), allocatable :: gx_batch(:,:,:)
-    integer, allocatable :: probe_spin(:),probe_virtual(:),probe_occupied(:)
+    real(dp), allocatable :: pcoul_pair(:,:,:),pexch_pair(:,:,:)
+    real(dp), allocatable :: fock_deriv_os(:,:,:,:,:)
+    real(dp), allocatable :: cvirt(:,:),fmo_block(:,:)
     real(dp), allocatable :: gfull(:,:),gd0(:,:),ba(:,:),bb(:,:)
     real(dp), allocatable :: bvec(:,:),uvec(:,:),xa(:,:),xb(:,:)
     real(dp), allocatable :: connection(:,:),connection_alpha(:,:), &
@@ -94,7 +92,7 @@ contains
     real(dp) :: hfscale
     integer :: nbf,natom,ncart,nocca,noccb,nvira,nvirb
     integer :: offset,ltot,alloc_status
-    integer :: a,i,j,mu,nu,kc,cc,x,nprobe,probe_index,first,nactive,slot
+    integer :: a,i,j,mu,nu,kc,cc,x
     logical :: two_somo_only,dft
 
     call response%clean()
@@ -219,75 +217,57 @@ contains
       status=-5
       return
     end if
-    nprobe=nvira*nocca+nvirb*noccb
-    allocate(probe_batch(nbf,nbf,derivative_probe_block_size), &
-      pcoul_batch(nbf,nbf,derivative_probe_block_size), &
-      pexch_batch(nbf,nbf,derivative_probe_block_size), &
-      gx_batch(3,natom,derivative_probe_block_size), &
-      probe_spin(nprobe),probe_virtual(nprobe),probe_occupied(nprobe), &
-      stat=alloc_status)
+    ! Exact fixed-density derivative-Fock right-hand side.
+    !
+    !   B2e(a,i,x) = sum_{mu,nu} C(mu,a) [dG/dx]_{mu,nu} C(nu,i)
+    !
+    ! The historical construction obtained each B2e element from its own
+    ! derivative-ERI probe contraction, so the derivative-integral list was
+    ! traversed nvira*nocca+nvirb*noccb times.  That count grows as O(N^2)
+    ! while each traversal already costs O(N^3)-O(N^4), which made the
+    ! nuclear orbital response the dominant Hessian expense.
+    !
+    ! dG/dx is a single AO tensor per spin and perturbation, so the identical
+    ! quantity follows from one derivative-integral traversal that accumulates
+    ! both open-shell derivative Fock matrices directly, after which the
+    ! occupied-virtual block is recovered by two matrix products.  This is an
+    ! exact reorganisation: no integral approximation, no fitting, and no
+    ! change to the screening envelope.  Both spins share the traversal.
+    allocate(pcoul_pair(nbf,nbf,2),pexch_pair(nbf,nbf,2), &
+      fock_deriv_os(nbf,nbf,3,natom,2),cvirt(nbf,max(nvira,nvirb)), &
+      fmo_block(nbf,max(nocca,noccb)),stat=alloc_status)
     if(alloc_status/=0) then
       call response%clean()
       status=-5
       return
     end if
-    probe_index=0
-    do a=1,nvira
-      do i=1,nocca
-        probe_index=probe_index+1
-        probe_spin(probe_index)=1
-        probe_virtual(probe_index)=a
-        probe_occupied(probe_index)=i
-      end do
+    pcoul_pair(:,:,1)=ptot
+    pcoul_pair(:,:,2)=ptot
+    pexch_pair(:,:,1)=pa
+    pexch_pair(:,:,2)=pb
+    call fock_deriv_matrix_os_batch(infos,basis,pcoul_pair,pexch_pair, &
+      hfscale,fock_deriv_os)
+
+    cvirt(:,1:nvira)=mo(:,nocca+1:nocca+nvira)
+    do x=1,ncart
+      cc=mod(x-1,3)+1
+      kc=(x-1)/3+1
+      ! fmo_block = dG_alpha/dx . C_occ ; then C_virt^T . fmo_block
+      call dgemm('n','n',nbf,nocca,nbf,1.0_dp, &
+        fock_deriv_os(1,1,cc,kc,1),nbf,mo,nbf,0.0_dp,fmo_block,nbf)
+      call dgemm('t','n',nvira,nocca,nbf,1.0_dp,cvirt,nbf, &
+        fmo_block,nbf,0.0_dp,ga2e(1,1,x),nvira)
     end do
-    do a=1,nvirb
-      do i=1,noccb
-        probe_index=probe_index+1
-        probe_spin(probe_index)=2
-        probe_virtual(probe_index)=a
-        probe_occupied(probe_index)=i
-      end do
+    cvirt(:,1:nvirb)=mo(:,noccb+1:noccb+nvirb)
+    do x=1,ncart
+      cc=mod(x-1,3)+1
+      kc=(x-1)/3+1
+      call dgemm('n','n',nbf,noccb,nbf,1.0_dp, &
+        fock_deriv_os(1,1,cc,kc,2),nbf,mo,nbf,0.0_dp,fmo_block,nbf)
+      call dgemm('t','n',nvirb,noccb,nbf,1.0_dp,cvirt,nbf, &
+        fmo_block,nbf,0.0_dp,gb2e(1,1,x),nvirb)
     end do
-    do first=1,nprobe,derivative_probe_block_size
-      nactive=min(derivative_probe_block_size,nprobe-first+1)
-      probe_batch=0.0_dp
-      do slot=1,nactive
-        probe_index=first+slot-1
-        a=probe_virtual(probe_index)
-        i=probe_occupied(probe_index)
-        pcoul_batch(:,:,slot)=ptot
-        if(probe_spin(probe_index)==1) then
-          pexch_batch(:,:,slot)=pa
-          do nu=1,nbf
-            do mu=1,nbf
-              probe_batch(mu,nu,slot)=0.5_dp*( &
-                mo(mu,nocca+a)*mo(nu,i)+mo(mu,i)*mo(nu,nocca+a))
-            end do
-          end do
-        else
-          pexch_batch(:,:,slot)=pb
-          do nu=1,nbf
-            do mu=1,nbf
-              probe_batch(mu,nu,slot)=0.5_dp*( &
-                mo(mu,noccb+a)*mo(nu,i)+mo(mu,i)*mo(nu,noccb+a))
-            end do
-          end do
-        end if
-      end do
-      call fock_deriv_contract_os_batch(infos,basis, &
-        pcoul_batch(:,:,1:nactive),pexch_batch(:,:,1:nactive), &
-        probe_batch(:,:,1:nactive),hfscale,gx_batch(:,:,1:nactive))
-      do slot=1,nactive
-        probe_index=first+slot-1
-        a=probe_virtual(probe_index)
-        i=probe_occupied(probe_index)
-        if(probe_spin(probe_index)==1) then
-          ga2e(a,i,:)=reshape(gx_batch(:,:,slot),[ncart])
-        else
-          gb2e(a,i,:)=reshape(gx_batch(:,:,slot),[ncart])
-        end if
-      end do
-    end do
+    deallocate(pcoul_pair,pexch_pair,fock_deriv_os,cvirt,fmo_block)
 
     allocate(d0a(nbf,nbf),d0b(nbf,nbf), &
              gfull(nbf,nbf),gd0(nbf,nbf),ba(nvira,nocca), &
