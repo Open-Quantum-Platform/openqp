@@ -62,6 +62,7 @@ contains
     use tdhf_mrsf_hessian_mo_response_mod, only: &
       build_mrsf_mo_fock_derivatives
     use messages, only: WITH_ABORT
+    use io_constants, only: iw
 
     type(information), target, intent(inout) :: infos
     type(int2_compute_t), intent(inout) :: int2_driver
@@ -216,6 +217,8 @@ contains
       reference_spin(:,:,1),reference_spin(:,:,2), &
       dreference_spin(:,:,1,:),dreference_spin(:,:,2,:),local_status)
     if(local_status/=0) then
+      write(iw,'(A,I0,A)') 'MRSF two-probe response-Fock construction failed '// &
+        'with status ',local_status,'.'
       status=-6
       call data%clean()
       call cleanup_local()
@@ -257,6 +260,8 @@ contains
       response_scale,infos%tddft%spc_coco,infos%tddft%spc_ovov, &
       infos%tddft%spc_coov,infos%tddft%mult,explicit_fock,local_status)
     if(local_status/=0) then
+      write(iw,'(A,I0,A)') 'MRSF seven-density/explicit-ERI reconstruction '// &
+        'failed with status ',local_status,'.'
       status=-8
       call data%clean()
       call cleanup_local()
@@ -332,6 +337,9 @@ contains
     baseline_error_b=maxval(abs(data%z_rhs_hxb(:,noccb+1:nbf)-( &
       stored_hxb(:,noccb+1:nbf)-2.0_dp* &
       matmul(data%fb(:,noccb+1:nbf),data%tab))))
+    write(iw,'(A,1P,E15.7,A,E15.7,A)') &
+      'MRSF Hx reconstruction errors: alpha=',baseline_error_a, &
+      ', beta=',baseline_error_b,'.'
     if(max(baseline_error_a,baseline_error_b)>1.0e-8_dp) then
       status=-9
       call data%clean()

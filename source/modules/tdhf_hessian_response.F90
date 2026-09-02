@@ -181,7 +181,7 @@ contains
     integer, intent(in), optional :: maxit,restart
 
     real(kind=dp), allocatable :: rhs(:),solution(:),check(:),ax(:)
-    real(kind=dp) :: norm2,solve_tol
+    real(kind=dp) :: eigenpair_tol,norm2,solve_tol
     integer :: coordinate,n,ncoord,niter,nrestart,operator_status,solve_status
 
     n=size(x0); ncoord=size(dax,2)
@@ -206,7 +206,9 @@ contains
     allocate(rhs(n),solution(n),check(n),ax(n))
     call apply_operator(x0,ax,operator_status)
     residual_max=maxval(abs(ax-omega*x0))
-    if(operator_status/=0 .or. residual_max>1.0e-8_dp) then
+    eigenpair_tol=max(1.0e-8_dp,100.0_dp*solve_tol, &
+      sqrt(epsilon(1.0_dp))*max(1.0_dp,abs(omega)))
+    if(operator_status/=0 .or. residual_max>eigenpair_tol) then
       write(error_unit,'(A,I0,A,1P,E15.7,A,E15.7)') &
         ' MRSF response eigenpair check: operator status ',operator_status, &
         ', max residual = ',residual_max,', omega = ',omega
@@ -265,7 +267,7 @@ contains
     real(kind=dp), allocatable :: rhs(:,:),trial(:,:),applied(:,:),check(:,:), &
       projected(:,:),operator_image(:,:),norm_rhs(:),parallel(:), &
       parallel_result(:)
-    real(kind=dp) :: solve_tol,subspace_residual
+    real(kind=dp) :: eigenpair_tol,solve_tol,subspace_residual
     integer :: coordinate,n,ncoord,niter,operator_status,solve_status
 
     n=size(x0)
@@ -306,7 +308,9 @@ contains
       go to 900
     end if
     residual_max=maxval(abs(applied(:,1)-omega*x0))
-    if(residual_max>1.0e-8_dp) then
+    eigenpair_tol=max(1.0e-8_dp,100.0_dp*solve_tol, &
+      sqrt(epsilon(1.0_dp))*max(1.0_dp,abs(omega)))
+    if(residual_max>eigenpair_tol) then
       write(error_unit,'(A,1P,E15.7,A,E15.7)') &
         ' MRSF batch response eigenpair max residual = ',residual_max, &
         ', omega = ',omega

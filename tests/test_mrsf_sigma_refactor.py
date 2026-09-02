@@ -89,6 +89,25 @@ def test_grouped_contraction_releases_result_pointer_before_cleaning_target():
     assert "size(data%f3,2)/=7" in contraction
 
 
+def test_nonzero_exchange_preserves_the_common_seven_density_screening_batch():
+    contraction = _compact(DENSITY_CONTRACTION)
+    coupled = contraction.index("if(abs(response_scale)>epsilon(1.0_dp))then")
+    grouped = contraction.index("callrun_group(1,4,spc_coov)", coupled)
+    assert contraction.index("callrun_coupled(response_scale)", coupled) < grouped
+    for scaling in (
+        "contracted(:,1:4,:,:)=contracted(:,1:4,:,:)*spc_coov/response_scale",
+        "contracted(:,5:5,:,:)=contracted(:,5:5,:,:)*spc_ovov/response_scale",
+        "contracted(:,6:6,:,:)=contracted(:,6:6,:,:)*spc_coco/response_scale",
+    ):
+        assert scaling in contraction
+
+
+def test_semilocal_grouped_contractions_keep_the_full_screening_envelope():
+    contraction = _compact(DENSITY_CONTRACTION)
+    assert "envelope=maxval(abs(density),dim=2)" in contraction
+    assert "group_density(:,7,:,:)=envelope" in contraction
+
+
 def test_sigma_validates_dimensions_and_cleans_pointer_targets():
     sigma = _compact(SIGMA)
     for guard in (

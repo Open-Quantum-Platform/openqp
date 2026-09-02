@@ -17,10 +17,14 @@ contains
 
   subroutine contract_mrsf_seven_density_batch(infos,int2_driver,density, &
       response_scale,spc_coco,spc_ovov,spc_coov,contracted,status)
-    ! Contract the seven spin-adapted AO response densities with independent
-    ! channel scales.  Four integral batches avoid every spc/HFscale division:
-    ! CO--OV (1:4), OV--OV (5), CO--CO (6), and ordinary A0 (7).  This remains
-    ! finite for pure semilocal DFT with explicitly requested SPC coefficients.
+    ! Contract the seven spin-adapted AO response densities.  For nonzero
+    ! response exchange, all seven densities must enter one coupled MRSF
+    ! contraction, exactly as in the stationary-gradient and Davidson paths.
+    ! Keeping the complete density batch gives every channel the same
+    ! conservative shell-screening envelope; splitting it changes the screened
+    ! operator even though the seven algebraic contractions are channelwise.
+    ! Only the zero-exchange semilocal fallback uses four separately scaled
+    ! contractions, avoiding an SPC/response-scale division by zero.
 
     type(information), target, intent(inout) :: infos
     type(int2_compute_t), intent(inout) :: int2_driver
@@ -51,35 +55,80 @@ contains
       return
     end if
 
-    call run_group(1,4,spc_coov)
-    if(status==0) call run_group(5,5,spc_ovov)
-    if(status==0) call run_group(6,6,spc_coco)
-    if(status==0) call run_group(7,7,response_scale)
-    if(status==0 .and. spin_multiplier<0) &
-      contracted(:,1:6,:,:)=-contracted(:,1:6,:,:)
+    if(abs(response_scale)>epsilon(1.0_dp)) then
+      call run_coupled(response_scale)
+      if(status==0 .and. spin_multiplier<0) &
+        contracted(:,1:6,:,:)=-contracted(:,1:6,:,:)
+      if(status==0) then
+        contracted(:,1:4,:,:)=contracted(:,1:4,:,:)*spc_coov/response_scale
+        contracted(:,5:5,:,:)=contracted(:,5:5,:,:)*spc_ovov/response_scale
+        contracted(:,6:6,:,:)=contracted(:,6:6,:,:)*spc_coco/response_scale
+      end if
+    else
+      envelope=maxval(abs(density),dim=2)
+      call run_group(1,4,spc_coov)
+      if(status==0) call run_group(5,5,spc_ovov)
+      if(status==0) call run_group(6,6,spc_coco)
+      if(status==0 .and. spin_multiplier<0) &
+        contracted(:,1:6,:,:)=-contracted(:,1:6,:,:)
+    end if
     deallocate(group_density,envelope)
 
   contains
+
+    subroutine run_coupled(scale)
+      real(kind=dp), intent(in) :: scale
+      type(int2_mrsf_data_t), allocatable, target :: data
+      real(kind=dp), pointer :: result(:,:,:,:)
+      integer :: local_status
+
+      allocate(data,source=int2_mrsf_data_t(d3=density, &
+        tamm_dancoff=.true.,scale_exchange=scale,scale_coulomb=scale), &
+        stat=local_status)
+      if(local_status/=0) then
+        status=-3
+        return
+      end if
+      call int2_driver%run(data,cam=infos%control%hamilton==20 .and. &
+        infos%dft%cam_flag,alpha=infos%tddft%cam_alpha, &
+        alpha_coulomb=infos%tddft%cam_alpha,beta=infos%tddft%cam_beta, &
+        beta_coulomb=infos%tddft%cam_beta,mu=infos%tddft%cam_mu)
+      if(.not.allocated(data%f3)) then
+        nullify(data%d3)
+        deallocate(data)
+        status=-4
+        return
+      end if
+      if(size(data%f3,1)/=nvec .or. size(data%f3,2)/=7 .or. &
+         size(data%f3,3)/=nbf .or. size(data%f3,4)/=nbf .or. &
+         size(data%f3,5)<1) then
+        call data%clean()
+        deallocate(data)
+        status=-4
+        return
+      end if
+      result=>data%f3(:,:,:,:,1)
+      contracted=result
+      nullify(result)
+      call data%clean()
+      deallocate(data)
+    end subroutine run_coupled
 
     subroutine run_group(first_channel,last_channel,scale)
       integer, intent(in) :: first_channel,last_channel
       real(kind=dp), intent(in) :: scale
       type(int2_mrsf_data_t), allocatable, target :: data
       real(kind=dp), pointer :: result(:,:,:,:)
-      integer :: channel,local_status
+      integer :: local_status
 
       if(status/=0 .or. abs(scale)<=epsilon(1.0_dp)) return
       group_density=0.0_dp
       group_density(:,first_channel:last_channel,:,:)= &
         density(:,first_channel:last_channel,:,:)
       if(last_channel<7) then
-        envelope=0.0_dp
-        do channel=first_channel,last_channel
-          envelope=max(envelope,abs(density(:,channel,:,:)))
-        end do
-        ! int2_mrsf_data_t screens shell pairs using its final density channel.
-        ! A positive envelope is used only for screening; its channel-7 output
-        ! is discarded below and cannot enter the requested group.
+        ! Retain the complete seven-density shell-screening envelope in every
+        ! separately scaled semilocal contraction.  Its channel-7 output is
+        ! discarded and cannot enter the requested group.
         group_density(:,7,:,:)=envelope
       end if
       allocate(data,source=int2_mrsf_data_t(d3=group_density, &
