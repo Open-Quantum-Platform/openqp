@@ -324,6 +324,27 @@ contains
       maxval(abs(intermediate%dseven))
     write(iw,'(A,1P,E12.4)') &
       'MRSF Hessian unsymmetrized response-row asymmetry: ',row_asymmetry
+    ! Reference-response validity guard.  Every response-derived quantity
+    ! above carries a 1/lambda amplification from the smallest eigenvalue of
+    ! the reference orbital Hessian.  A healthy reference gives max|dZ| of
+    ! order 10 and relaxed-density derivatives of order 1 (benzene: 16.7 and
+    ! 1.3).  Values two or more orders larger mean the ROHF reference sits
+    ! near an orbital (symmetry-breaking) instability; the Hessian then
+    ! faithfully differentiates a surface that is itself unreliable, and the
+    ! resulting frequencies are not physically meaningful (naphthalene
+    ! idealized D2h: max|dZ|=1.1e4 produced a spurious 64,500 cm-1 mode while
+    ! TDDFT and SA-CASSCF give ordinary curvature along the same direction).
+    if(maxval(abs(dz))>1.0e3_dp .or. &
+       max(maxval(abs(drelaxed_a)),maxval(abs(drelaxed_b)))>1.0e2_dp) then
+      write(iw,'(/,A)') repeat('*',78)
+      write(iw,'(A)') ' WARNING: MRSF Hessian response magnitudes are anomalously large.'
+      write(iw,'(A)') ' The ROHF reference is likely near an orbital (symmetry-breaking)'
+      write(iw,'(A)') ' instability. The Hessian faithfully differentiates the computed'
+      write(iw,'(A)') ' surface, but the surface itself is unreliable at this geometry.'
+      write(iw,'(A)') ' Do NOT use these frequencies. Verify the reference with'
+      write(iw,'(A)') ' [scf] stability=True and cross-check curvature with TDDFT/CASSCF.'
+      write(iw,'(A)') repeat('*',78)
+    end if
     write(iw,'(A,1P,E12.4)') &
       'MRSF Hessian maximum fixed-density element: ',maxval(abs(hfixed))
     write(iw,'(A,1P,E12.4)') &

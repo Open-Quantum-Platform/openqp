@@ -2031,6 +2031,31 @@ class Hessian(Calculator):
             dump_log(self.mol, title='PyOQP: Hessian Matrix Ready')
             return np.asarray(hessian, dtype=float)
 
+        # Physical-ceiling guard.  No molecular fundamental can exceed the H2
+        # harmonic frequency (4401 cm-1): the lightest oscillator carrying the
+        # strongest bond already sets the ceiling.  A real frequency above it is
+        # not a vibration.  With an ROHF/spin-flip reference this signature
+        # means the reference orbital response is near-singular (at a
+        # symmetry-breaking instability threshold), and every state built on
+        # that reference inherits the pathology: the analytic Hessian
+        # faithfully differentiates a surface that is itself unreliable there
+        # (naphthalene idealized D2h gave 64,500 cm-1 while TDDFT and
+        # SA-CASSCF give ordinary curvature along the same direction).  Warn
+        # loudly; leave the stored numbers untouched.
+        _ceiling = 4500.0
+        _bad = np.asarray(freqs, dtype=float)
+        _bad = _bad[_bad > _ceiling]
+        if _bad.size:
+            dump_log(self.mol, title=(
+                'PyOQP: WARNING - %d frequencies exceed the physical ceiling '
+                '(max %.1f cm-1 > %.0f; the H2 harmonic ceiling is 4401 cm-1). '
+                'These are not vibrations. Suspect a near-singular reference '
+                'orbital response: check the MRSF Hessian response-magnitude '
+                'diagnostics, run [scf] stability=True, and cross-check the '
+                'curvature with TDDFT or CASSCF before using ANY frequency '
+                'from this geometry.' % (_bad.size, float(_bad.max()), _ceiling)),
+                section='')
+
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
         dump_log(
             self.mol,
