@@ -94,8 +94,11 @@ module fock_deriv_mod
   public :: fock_deriv_matrix_general
   public :: fock_deriv_matrix_general_scaled
   public :: fock_deriv_matrix_mrsf_scaled
+  public :: fock_deriv_matrix_mrsf_scaled_batch
   public :: fock_deriv_contract_os
+  public :: fock_deriv_contract_os_batch
   public :: fock_deriv_matrix_os
+  public :: fock_deriv_matrix_os_batch
 
 contains
 
@@ -285,9 +288,11 @@ contains
     real(kind=dp), intent(in) :: coulscale,exchangescale
     real(kind=dp), intent(out) :: fmat(:,:,:,:)
 
-    real(kind=dp), allocatable, target :: probe(:,:)
-    real(kind=dp), allocatable :: gx(:,:)
-    integer :: mu,nu,natom,nbf
+    integer, parameter :: probe_block_size=64
+    real(kind=dp), allocatable, target :: pmat_batch(:,:,:),probe_batch(:,:,:)
+    real(kind=dp), allocatable :: gx_batch(:,:,:),coul_batch(:),exch_batch(:)
+    integer, allocatable :: mu_index(:),nu_index(:)
+    integer :: mu,nu,natom,nbf,nordered,probe,first,nactive,slot
 
     nbf=basis%nbf
     natom=size(basis%atoms%xyz,2)
@@ -295,19 +300,153 @@ contains
       error stop 'fock_deriv_matrix_mrsf_scaled: density shape mismatch'
     if(any(shape(fmat)/=[nbf,nbf,3,natom])) &
       error stop 'fock_deriv_matrix_mrsf_scaled: output shape mismatch'
-    allocate(probe(nbf,nbf),gx(3,natom))
+    nordered=nbf*nbf
+    allocate(pmat_batch(nbf,nbf,probe_block_size), &
+      probe_batch(nbf,nbf,probe_block_size), &
+      gx_batch(3,natom,probe_block_size), &
+      coul_batch(probe_block_size),exch_batch(probe_block_size), &
+      mu_index(nordered),nu_index(nordered))
     fmat=0.0_dp
+    probe=0
     do nu=1,nbf
       do mu=1,nbf
-        probe=0.0_dp
-        probe(mu,nu)=1.0_dp
-        call fock_deriv_contract_mrsf_scaled(infos,basis,pmat,probe, &
-          coulscale,exchangescale,gx)
-        fmat(mu,nu,:,:)=gx
+        probe=probe+1
+        mu_index(probe)=mu
+        nu_index(probe)=nu
       end do
     end do
-    deallocate(probe,gx)
+    do first=1,nordered,probe_block_size
+      nactive=min(probe_block_size,nordered-first+1)
+      probe_batch=0.0_dp
+      do slot=1,nactive
+        mu=mu_index(first+slot-1)
+        nu=nu_index(first+slot-1)
+        pmat_batch(:,:,slot)=pmat
+        probe_batch(mu,nu,slot)=1.0_dp
+        coul_batch(slot)=coulscale
+        exch_batch(slot)=exchangescale
+      end do
+      call fock_deriv_contract_mrsf_scaled_batch(infos,basis, &
+        pmat_batch(:,:,1:nactive),probe_batch(:,:,1:nactive), &
+        coul_batch(1:nactive),exch_batch(1:nactive), &
+        gx_batch(:,:,1:nactive))
+      do slot=1,nactive
+        mu=mu_index(first+slot-1)
+        nu=nu_index(first+slot-1)
+        fmat(mu,nu,:,:)=gx_batch(:,:,slot)
+      end do
+    end do
+    deallocate(pmat_batch,probe_batch,gx_batch,coul_batch,exch_batch, &
+      mu_index,nu_index)
   end subroutine fock_deriv_matrix_mrsf_scaled
+
+!###############################################################################
+
+!> Exact direct derivative Fock matrices for ordered MRSF density channels.
+!> This is the AO-target adjoint of the production MRSF quartet contraction;
+!> no dense AO probe basis is formed.
+  subroutine fock_deriv_matrix_mrsf_scaled_batch(infos,basis,pmat,coulscale, &
+      exchangescale,fmat)
+    use grd2, only: grd2_fock_deriv_mrsf_driver_batch
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: pmat(:,:,:),coulscale(:),exchangescale(:)
+    real(kind=dp), intent(out) :: fmat(:,:,:,:,:)
+
+    real(kind=dp), allocatable :: pmat_cart(:,:,:),pmat_one(:,:), &
+      fcart(:,:,:,:,:)
+    integer, allocatable :: cart_off(:),off_one(:)
+    integer :: natom,nbf,ncart,ncart_one,nprobe,probe
+
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    nprobe=size(pmat,3)
+    if(nprobe<=0 .or. any(shape(pmat)/=[nbf,nbf,nprobe]) .or. &
+       size(coulscale)/=nprobe .or. size(exchangescale)/=nprobe .or. &
+       any(shape(fmat)/=[nbf,nbf,3,natom,nprobe])) error stop &
+      'fock_deriv_matrix_mrsf_scaled_batch: inconsistent dimensions'
+    fmat=0.0_dp
+    if(.not.HARMONIC_ACTIVE) then
+      ncart=nbf
+      allocate(pmat_cart(ncart,ncart,nprobe),cart_off(basis%nshell))
+      pmat_cart=pmat
+      cart_off=basis%ao_offset
+    else
+      do probe=1,nprobe
+        call fockprobe_cart(basis,pmat(:,:,probe),pmat_one,off_one,ncart_one)
+        if(probe==1) then
+          ncart=ncart_one
+          allocate(pmat_cart(ncart,ncart,nprobe),cart_off(size(off_one)))
+          cart_off=off_one
+        else if(ncart_one/=ncart .or. any(off_one/=cart_off)) then
+          error stop 'fock_deriv_matrix_mrsf_scaled_batch: layout changed'
+        end if
+        pmat_cart(:,:,probe)=pmat_one
+        deallocate(pmat_one,off_one)
+      end do
+    end if
+    allocate(fcart(ncart,ncart,3,natom,nprobe),source=0.0_dp)
+    call grd2_fock_deriv_mrsf_driver_batch(infos,basis,pmat_cart,cart_off, &
+      coulscale,exchangescale,fcart)
+    if(HARMONIC_ACTIVE) then
+      do probe=1,nprobe
+        call reduce_cart_fock_deriv(basis,cart_off,fcart(:,:,:,:,probe), &
+          fmat(:,:,:,:,probe))
+      end do
+    else
+      fmat=fcart
+    end if
+    deallocate(pmat_cart,fcart,cart_off)
+  end subroutine fock_deriv_matrix_mrsf_scaled_batch
+
+!###############################################################################
+
+!> Exact simultaneous MRSF derivative contractions.  The response channels
+!> and ordered AO probes share each derivative-integral shell traversal while
+!> retaining their independent Coulomb and exchange coefficients.
+  subroutine fock_deriv_contract_mrsf_scaled_batch(infos,basis,pmat,mmat, &
+      coulscale,exchangescale,gx)
+    use grd2, only: grd2_driver_batch
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:,:),mmat(:,:,:)
+    real(kind=dp), intent(in) :: coulscale(:),exchangescale(:)
+    real(kind=dp), intent(out) :: gx(:,:,:)
+
+    type(grd2_mrsf_fockprobe_data_t), allocatable :: gcomp(:)
+    integer, allocatable :: off_dummy(:)
+    integer :: nbf,natom,nprobe,probe,ncart
+
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    nprobe=size(pmat,3)
+    if(any(shape(pmat)/=[nbf,nbf,nprobe]) .or. &
+       any(shape(mmat)/=[nbf,nbf,nprobe]) .or. &
+       size(coulscale)/=nprobe .or. size(exchangescale)/=nprobe .or. &
+       any(shape(gx)/=[3,natom,nprobe])) &
+      error stop 'fock_deriv_contract_mrsf_scaled_batch: inconsistent dimensions'
+    allocate(gcomp(nprobe))
+    do probe=1,nprobe
+      gcomp(probe)%pmat=>pmat(:,:,probe)
+      gcomp(probe)%mmat=>mmat(:,:,probe)
+      gcomp(probe)%nbf=nbf
+      gcomp(probe)%coulscale=coulscale(probe)
+      gcomp(probe)%hfscale=exchangescale(probe)
+      gcomp(probe)%hfscale2=exchangescale(probe)
+      if(HARMONIC_ACTIVE) then
+        call fockprobe_cart(basis,pmat(:,:,probe), &
+          gcomp(probe)%pmat_cart,gcomp(probe)%cart_off,ncart)
+        call fockprobe_cart(basis,mmat(:,:,probe), &
+          gcomp(probe)%mmat_cart,off_dummy,ncart)
+      end if
+    end do
+    gx=0.0_dp
+    call grd2_driver_batch(infos,basis,gx,gcomp,preserve_scales=.true.)
+    do probe=1,nprobe
+      call gcomp(probe)%clean()
+    end do
+    deallocate(gcomp)
+  end subroutine fock_deriv_contract_mrsf_scaled_batch
 
 !###############################################################################
 
@@ -578,6 +717,57 @@ contains
 
 !###############################################################################
 
+!> Exact simultaneous open-shell derivative-Fock contractions.  All probes
+!> share one derivative-integral shell traversal and one Rys recurrence per
+!> shell quartet; the final density contractions remain independent.
+  subroutine fock_deriv_contract_os_batch(infos,basis,pcoul,pexch,mmat, &
+      hfscale,gx)
+    use grd2, only: grd2_driver_batch
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pcoul(:,:,:),pexch(:,:,:),mmat(:,:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: gx(:,:,:)
+
+    type(grd2_fockprobe_os_data_t), allocatable :: gcomp(:)
+    integer, allocatable :: off_dummy(:)
+    integer :: nbf,natom,nprobe,probe,ncart
+
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    nprobe=size(mmat,3)
+    if(any(shape(pcoul)/=[nbf,nbf,nprobe]) .or. &
+       any(shape(pexch)/=[nbf,nbf,nprobe]) .or. &
+       any(shape(gx)/=[3,natom,nprobe])) &
+      error stop 'fock_deriv_contract_os_batch: inconsistent batch dimensions'
+    allocate(gcomp(nprobe))
+    do probe=1,nprobe
+      gcomp(probe)%pcoul=>pcoul(:,:,probe)
+      gcomp(probe)%pexch=>pexch(:,:,probe)
+      gcomp(probe)%mmat=>mmat(:,:,probe)
+      gcomp(probe)%nbf=nbf
+      gcomp(probe)%coulscale=1.0_dp
+      gcomp(probe)%hfscale=hfscale
+      gcomp(probe)%hfscale2=hfscale
+      if(HARMONIC_ACTIVE) then
+        call fockprobe_cart(basis,pcoul(:,:,probe), &
+          gcomp(probe)%pcoul_cart,gcomp(probe)%cart_off,ncart)
+        call fockprobe_cart(basis,pexch(:,:,probe), &
+          gcomp(probe)%pexch_cart,off_dummy,ncart)
+        call fockprobe_cart(basis,mmat(:,:,probe), &
+          gcomp(probe)%mmat_cart,off_dummy,ncart)
+      end if
+    end do
+    gx=0.0_dp
+    call grd2_driver_batch(infos,basis,gx,gcomp)
+    do probe=1,nprobe
+      call gcomp(probe)%clean()
+    end do
+    deallocate(gcomp)
+  end subroutine fock_deriv_contract_os_batch
+
+!###############################################################################
+
 !> @brief Build the full symmetric explicit derivative of an open-shell spin
 !>        Fock matrix J^x[P_alpha+P_beta]-c_x K^x[P_spin].
 !>
@@ -588,15 +778,20 @@ contains
 !>          avoids reconstructing derivative four-index integrals and is used
 !>          by the first MRSF Hessian driver for modest molecular systems.
   subroutine fock_deriv_matrix_os(infos,basis,pcoul,pexch,hfscale,fmat)
+    use grd2, only: grd2_fock_deriv_os_driver
     type(information), target, intent(inout) :: infos
     type(basis_set), intent(in) :: basis
     real(kind=dp), target, intent(in) :: pcoul(:,:),pexch(:,:)
     real(kind=dp), intent(in) :: hfscale
     real(kind=dp), intent(out) :: fmat(:,:,:,:)
 
-    real(kind=dp), allocatable, target :: probe(:,:)
-    real(kind=dp), allocatable :: gx(:,:)
-    integer :: mu,nu,natom,nbf
+    integer, parameter :: probe_block_size=64
+    real(kind=dp), allocatable, target :: pcoul_batch(:,:,:), &
+      pexch_batch(:,:,:),probe_batch(:,:,:)
+    real(kind=dp), allocatable :: gx_batch(:,:,:),pcoul_cart(:,:), &
+      pexch_cart(:,:),fcart(:,:,:,:)
+    integer, allocatable :: mu_index(:),nu_index(:),cart_off(:),off_dummy(:)
+    integer :: mu,nu,natom,nbf,nunique,probe,first,nactive,slot,ncart
 
     nbf=basis%nbf
     natom=size(basis%atoms%xyz,2)
@@ -604,24 +799,178 @@ contains
       error stop 'fock_deriv_matrix_os: density shape does not match the basis'
     if(any(shape(fmat)/=[nbf,nbf,3,natom])) &
       error stop 'fock_deriv_matrix_os: output shape does not match the system'
-    allocate(probe(nbf,nbf),gx(3,natom))
+
+    if(HARMONIC_ACTIVE) then
+      call fockprobe_cart(basis,pcoul,pcoul_cart,cart_off,ncart)
+      call fockprobe_cart(basis,pexch,pexch_cart,off_dummy,ncart)
+      allocate(fcart(ncart,ncart,3,natom),source=0.0_dp)
+      call grd2_fock_deriv_os_driver(infos,basis,pcoul_cart,pexch_cart, &
+        cart_off,hfscale,fcart)
+      call reduce_cart_fock_deriv(basis,cart_off,fcart,fmat)
+      deallocate(pcoul_cart,pexch_cart,fcart,cart_off,off_dummy)
+      return
+    end if
+
+    nunique=nbf*(nbf+1)/2
+    allocate(pcoul_batch(nbf,nbf,probe_block_size), &
+      pexch_batch(nbf,nbf,probe_block_size), &
+      probe_batch(nbf,nbf,probe_block_size), &
+      gx_batch(3,natom,probe_block_size),mu_index(nunique),nu_index(nunique))
     fmat=0.0_dp
+    probe=0
     do nu=1,nbf
       do mu=nu,nbf
-        probe=0.0_dp
-        if(mu==nu) then
-          probe(mu,nu)=1.0_dp
-        else
-          probe(mu,nu)=0.5_dp
-          probe(nu,mu)=0.5_dp
-        end if
-        call fock_deriv_contract_os(infos,basis,pcoul,pexch,probe,hfscale,gx)
-        fmat(mu,nu,:,:)=gx
-        fmat(nu,mu,:,:)=gx
+        probe=probe+1
+        mu_index(probe)=mu
+        nu_index(probe)=nu
       end do
     end do
-    deallocate(probe,gx)
+    do first=1,nunique,probe_block_size
+      nactive=min(probe_block_size,nunique-first+1)
+      probe_batch=0.0_dp
+      do slot=1,nactive
+        mu=mu_index(first+slot-1)
+        nu=nu_index(first+slot-1)
+        pcoul_batch(:,:,slot)=pcoul
+        pexch_batch(:,:,slot)=pexch
+        if(mu==nu) then
+          probe_batch(mu,nu,slot)=1.0_dp
+        else
+          probe_batch(mu,nu,slot)=0.5_dp
+          probe_batch(nu,mu,slot)=0.5_dp
+        end if
+      end do
+      call fock_deriv_contract_os_batch(infos,basis, &
+        pcoul_batch(:,:,1:nactive),pexch_batch(:,:,1:nactive), &
+        probe_batch(:,:,1:nactive),hfscale,gx_batch(:,:,1:nactive))
+      do slot=1,nactive
+        mu=mu_index(first+slot-1)
+        nu=nu_index(first+slot-1)
+        fmat(mu,nu,:,:)=gx_batch(:,:,slot)
+        fmat(nu,mu,:,:)=gx_batch(:,:,slot)
+      end do
+    end do
+    deallocate(pcoul_batch,pexch_batch,probe_batch,gx_batch,mu_index,nu_index)
   end subroutine fock_deriv_matrix_os
+
+!###############################################################################
+
+!> Build exact explicit derivative Fock matrices for several open-shell
+!> density pairs in one derivative-ERI traversal.  The single-probe fallback
+!> is retained for non-harmonic builds; production harmonic builds share all
+!> Rys recurrence and derivative-integral work without an integral model.
+  subroutine fock_deriv_matrix_os_batch(infos,basis,pcoul,pexch,hfscale,fmat)
+    use grd2, only: grd2_fock_deriv_os_driver_batch
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: pcoul(:,:,:),pexch(:,:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:,:)
+
+    real(kind=dp), allocatable :: pcoul_cart(:,:,:),pexch_cart(:,:,:), &
+      pcoul_one(:,:),pexch_one(:,:),fcart(:,:,:,:,:)
+    integer, allocatable :: cart_off(:),off_one(:),off_exchange(:)
+    integer :: natom,nbf,ncart,ncart_one,nprobe,probe
+
+    nbf=basis%nbf
+    natom=size(basis%atoms%xyz,2)
+    nprobe=size(pcoul,3)
+    if(nprobe<=0 .or. any(shape(pcoul)/=[nbf,nbf,nprobe]) .or. &
+       any(shape(pexch)/=[nbf,nbf,nprobe]) .or. &
+       any(shape(fmat)/=[nbf,nbf,3,natom,nprobe])) &
+      error stop 'fock_deriv_matrix_os_batch: inconsistent dimensions'
+    fmat=0.0_dp
+    if(.not.HARMONIC_ACTIVE) then
+      do probe=1,nprobe
+        call fock_deriv_matrix_os(infos,basis,pcoul(:,:,probe), &
+          pexch(:,:,probe),hfscale,fmat(:,:,:,:,probe))
+      end do
+      return
+    end if
+
+    do probe=1,nprobe
+      call fockprobe_cart(basis,pcoul(:,:,probe),pcoul_one,off_one,ncart_one)
+      call fockprobe_cart(basis,pexch(:,:,probe),pexch_one,off_exchange, &
+        ncart_one)
+      if(any(off_exchange/=off_one)) &
+        error stop 'fock_deriv_matrix_os_batch: Cartesian layout changed'
+      if(probe==1) then
+        ncart=ncart_one
+        allocate(pcoul_cart(ncart,ncart,nprobe), &
+          pexch_cart(ncart,ncart,nprobe),cart_off(size(off_one)))
+        cart_off=off_one
+      else if(ncart_one/=ncart .or. any(off_one/=cart_off) .or. &
+              any(off_exchange/=cart_off)) then
+        error stop 'fock_deriv_matrix_os_batch: Cartesian layout changed'
+      end if
+      pcoul_cart(:,:,probe)=pcoul_one
+      pexch_cart(:,:,probe)=pexch_one
+      deallocate(pcoul_one,pexch_one,off_one,off_exchange)
+    end do
+    allocate(fcart(ncart,ncart,3,natom,nprobe),source=0.0_dp)
+    call grd2_fock_deriv_os_driver_batch(infos,basis,pcoul_cart,pexch_cart, &
+      cart_off,hfscale,fcart)
+    do probe=1,nprobe
+      call reduce_cart_fock_deriv(basis,cart_off,fcart(:,:,:,:,probe), &
+        fmat(:,:,:,:,probe))
+    end do
+    deallocate(pcoul_cart,pexch_cart,fcart,cart_off)
+  end subroutine fock_deriv_matrix_os_batch
+
+!###############################################################################
+
+!> Transform a Cartesian derivative Fock matrix back to the native AO basis.
+!> This is the covariant counterpart of fockprobe_cart and is applied to every
+!> nuclear coordinate after the direct derivative-ERI build.
+  subroutine reduce_cart_fock_deriv(basis,cart_off,cart,sph)
+    use cart2sph, only: cart2sph_mat
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: cart_off(:)
+    real(kind=dp), intent(in) :: cart(:,:,:,:)
+    real(kind=dp), intent(out) :: sph(:,:,:,:)
+
+    real(kind=dp), allocatable :: blk(:)
+    integer :: atom,axis,si,sj,ii,jj,nci,ncj,nsi,nsj
+    integer :: coi,coj,soi,soj,idx
+
+    sph=0.0_dp
+    do atom=1,size(sph,4)
+      do axis=1,3
+        do sj=1,basis%nshell
+          ncj=NUM_CART_BF(basis%am(sj))
+          nsj=basis%naos(sj)
+          coj=cart_off(sj)
+          soj=basis%ao_offset(sj)
+          do si=1,basis%nshell
+            nci=NUM_CART_BF(basis%am(si))
+            nsi=basis%naos(si)
+            coi=cart_off(si)
+            soi=basis%ao_offset(si)
+            allocate(blk(nci*ncj))
+            idx=0
+            do jj=1,ncj
+              do ii=1,nci
+                idx=idx+1
+                blk(idx)=cart(coi+ii-1,coj+jj-1,axis,atom)
+              end do
+            end do
+            if(basis%harmonic(si)==1 .or. basis%harmonic(sj)==1) &
+              call cart2sph_mat(blk,basis%am(si),basis%harmonic(si), &
+                basis%am(sj),basis%harmonic(sj))
+            idx=0
+            do jj=1,nsj
+              do ii=1,nsi
+                idx=idx+1
+                sph(soi+ii-1,soj+jj-1,axis,atom)=blk(idx)
+              end do
+            end do
+            deallocate(blk)
+          end do
+        end do
+        call bas_norm_matrix(sph(:,:,axis,atom),basis%bfnrm,basis%nbf)
+      end do
+    end do
+  end subroutine reduce_cart_fock_deriv
 
 !###############################################################################
 

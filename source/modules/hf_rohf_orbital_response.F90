@@ -6,6 +6,8 @@ module hf_rohf_orbital_response_mod
 
   private
 
+  integer, parameter :: derivative_probe_block_size=64
+
   type, public :: rohf_nuclear_response_t
     integer :: nbf = 0
     integer :: nocca = 0
@@ -50,13 +52,16 @@ contains
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
-    use mathlib, only: unpack_matrix, pack_matrix
+    use mathlib, only: unpack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, &
       der_nucattr_matrix
-    use fock_deriv_mod, only: fock_deriv_contract_os
-    use scf_addons, only: fock_jk
+    use fock_deriv_mod, only: fock_deriv_contract_os_batch
+    use int2_compute, only: int2_compute_t
+    use tdhf_lib, only: int2_tdgrd_data_t
     use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, &
       rohf_unpack_trial
+    use mrsf_xc_fock_total_derivative_mod, only: &
+      mrsf_xc_fock_total_derivative
 
     type(information), target, intent(inout) :: infos
     type(rohf_nuclear_response_t), intent(inout) :: response
@@ -64,23 +69,32 @@ contains
     logical, intent(in), optional :: require_two_somo
 
     type(basis_set), pointer :: basis
+    type(int2_compute_t) :: int2_driver
+    type(int2_tdgrd_data_t) :: int2_data
     real(dp), contiguous, pointer :: dma(:),dmb(:),mo(:,:)
     real(dp), contiguous, pointer :: focka(:),fockb(:)
     real(dp), allocatable :: pa(:,:),pb(:,:),ptot(:,:)
     real(dp), allocatable :: dsa(:,:,:,:),dta(:,:,:,:),dva(:,:,:,:)
     real(dp), allocatable :: famo(:,:),fbmo(:,:),scr(:,:),tmp(:,:)
-    real(dp), allocatable :: sxmo(:,:),hxmo(:,:),probe(:,:)
+    real(dp), allocatable :: sxmo(:,:),hxmo(:,:)
     real(dp), allocatable :: ga2e(:,:,:),gb2e(:,:,:)
-    real(dp), allocatable :: d0a(:,:),d0b(:,:),dpck(:,:),fpck(:,:)
+    real(dp), allocatable :: d0a(:,:),d0b(:,:)
+    real(dp), allocatable :: d0a_all(:,:,:),d0b_all(:,:,:), &
+      dvxc_a(:,:,:),dvxc_b(:,:,:),sxmo_all(:,:,:),hxmo_all(:,:,:)
+    real(dp), allocatable, target :: response_density(:,:,:)
+    real(dp), allocatable, target :: probe_batch(:,:,:), &
+      pcoul_batch(:,:,:),pexch_batch(:,:,:)
+    real(dp), allocatable :: gx_batch(:,:,:)
+    integer, allocatable :: probe_spin(:),probe_virtual(:),probe_occupied(:)
     real(dp), allocatable :: gfull(:,:),gd0(:,:),ba(:,:),bb(:,:)
     real(dp), allocatable :: bvec(:,:),uvec(:,:),xa(:,:),xb(:,:)
     real(dp), allocatable :: connection(:,:),connection_alpha(:,:), &
       connection_common(:,:)
     real(dp), allocatable :: dvecp(:,:,:,:)
-    real(dp) :: hfscale,gx(3,size(infos%atoms%xyz,2))
-    integer :: nbf,nbf2,natom,ncart,nocca,noccb,nvira,nvirb
+    real(dp) :: hfscale
+    integer :: nbf,natom,ncart,nocca,noccb,nvira,nvirb
     integer :: offset,ltot,alloc_status
-    integer :: a,i,j,mu,nu,kc,cc,x
+    integer :: a,i,j,mu,nu,kc,cc,x,nprobe,probe_index,first,nactive,slot
     logical :: two_somo_only,dft
 
     call response%clean()
@@ -99,7 +113,6 @@ contains
     nvirb=nbf-noccb
     offset=nocca-noccb
     ltot=noccb*(offset+nvira)+offset*nvira
-    nbf2=nbf*(nbf+1)/2
     dft=infos%control%hamilton==20
 
     if(infos%control%scftype/=3 .or. offset<=0) then
@@ -153,7 +166,7 @@ contains
              dsa(nbf,nbf,3,natom),dta(nbf,nbf,3,natom), &
              dva(nbf,nbf,3,natom),dvecp(nbf,nbf,3,natom), &
              famo(nbf,nbf),fbmo(nbf,nbf),scr(nbf,nbf),tmp(nbf,nbf), &
-             sxmo(nbf,nbf),hxmo(nbf,nbf),probe(nbf,nbf), &
+             sxmo(nbf,nbf),hxmo(nbf,nbf), &
              stat=alloc_status)
     if(alloc_status/=0) then
       call response%clean()
@@ -206,40 +219,85 @@ contains
       status=-5
       return
     end if
+    nprobe=nvira*nocca+nvirb*noccb
+    allocate(probe_batch(nbf,nbf,derivative_probe_block_size), &
+      pcoul_batch(nbf,nbf,derivative_probe_block_size), &
+      pexch_batch(nbf,nbf,derivative_probe_block_size), &
+      gx_batch(3,natom,derivative_probe_block_size), &
+      probe_spin(nprobe),probe_virtual(nprobe),probe_occupied(nprobe), &
+      stat=alloc_status)
+    if(alloc_status/=0) then
+      call response%clean()
+      status=-5
+      return
+    end if
+    probe_index=0
     do a=1,nvira
       do i=1,nocca
-        do nu=1,nbf
-          do mu=1,nbf
-            probe(mu,nu)=0.5_dp*(mo(mu,nocca+a)*mo(nu,i)+ &
-              mo(mu,i)*mo(nu,nocca+a))
-          end do
-        end do
-        gx=0.0_dp
-        call fock_deriv_contract_os(infos,basis,ptot,pa,probe, &
-          hfscale,gx)
-        ga2e(a,i,:)=reshape(gx,[ncart])
+        probe_index=probe_index+1
+        probe_spin(probe_index)=1
+        probe_virtual(probe_index)=a
+        probe_occupied(probe_index)=i
       end do
     end do
     do a=1,nvirb
       do i=1,noccb
-        do nu=1,nbf
-          do mu=1,nbf
-            probe(mu,nu)=0.5_dp*(mo(mu,noccb+a)*mo(nu,i)+ &
-              mo(mu,i)*mo(nu,noccb+a))
+        probe_index=probe_index+1
+        probe_spin(probe_index)=2
+        probe_virtual(probe_index)=a
+        probe_occupied(probe_index)=i
+      end do
+    end do
+    do first=1,nprobe,derivative_probe_block_size
+      nactive=min(derivative_probe_block_size,nprobe-first+1)
+      probe_batch=0.0_dp
+      do slot=1,nactive
+        probe_index=first+slot-1
+        a=probe_virtual(probe_index)
+        i=probe_occupied(probe_index)
+        pcoul_batch(:,:,slot)=ptot
+        if(probe_spin(probe_index)==1) then
+          pexch_batch(:,:,slot)=pa
+          do nu=1,nbf
+            do mu=1,nbf
+              probe_batch(mu,nu,slot)=0.5_dp*( &
+                mo(mu,nocca+a)*mo(nu,i)+mo(mu,i)*mo(nu,nocca+a))
+            end do
           end do
-        end do
-        gx=0.0_dp
-        call fock_deriv_contract_os(infos,basis,ptot,pb,probe, &
-          hfscale,gx)
-        gb2e(a,i,:)=reshape(gx,[ncart])
+        else
+          pexch_batch(:,:,slot)=pb
+          do nu=1,nbf
+            do mu=1,nbf
+              probe_batch(mu,nu,slot)=0.5_dp*( &
+                mo(mu,noccb+a)*mo(nu,i)+mo(mu,i)*mo(nu,noccb+a))
+            end do
+          end do
+        end if
+      end do
+      call fock_deriv_contract_os_batch(infos,basis, &
+        pcoul_batch(:,:,1:nactive),pexch_batch(:,:,1:nactive), &
+        probe_batch(:,:,1:nactive),hfscale,gx_batch(:,:,1:nactive))
+      do slot=1,nactive
+        probe_index=first+slot-1
+        a=probe_virtual(probe_index)
+        i=probe_occupied(probe_index)
+        if(probe_spin(probe_index)==1) then
+          ga2e(a,i,:)=reshape(gx_batch(:,:,slot),[ncart])
+        else
+          gb2e(a,i,:)=reshape(gx_batch(:,:,slot),[ncart])
+        end if
       end do
     end do
 
-    allocate(d0a(nbf,nbf),d0b(nbf,nbf),dpck(nbf2,2),fpck(nbf2,2), &
+    allocate(d0a(nbf,nbf),d0b(nbf,nbf), &
              gfull(nbf,nbf),gd0(nbf,nbf),ba(nvira,nocca), &
              bb(nvirb,noccb),bvec(ltot,ncart),uvec(ltot,ncart), &
              xa(nvira,nocca),xb(nvirb,noccb),connection(nbf,nbf), &
              connection_alpha(nbf,nbf),connection_common(nbf,nbf), &
+             d0a_all(nbf,nbf,ncart),d0b_all(nbf,nbf,ncart), &
+             dvxc_a(nbf,nbf,ncart),dvxc_b(nbf,nbf,ncart), &
+             sxmo_all(nbf,nbf,ncart),hxmo_all(nbf,nbf,ncart), &
+             response_density(nbf,nbf,2*ncart), &
              source=0.0_dp,stat=alloc_status)
     if(alloc_status/=0) then
       call response%clean()
@@ -247,9 +305,14 @@ contains
       return
     end if
 
+    ! Form the overlap-metric density response for every perturbation first.
+    ! The semilocal ROKS contribution is then one exact analytic all-coordinate
+    ! grid contraction, replacing the historical +/- displaced-grid loop.
     do x=1,ncart
       call transform_ao_to_mo(mo,response%ds_ao(:,:,x),scr,tmp,sxmo)
       call transform_ao_to_mo(mo,response%dhcore_ao(:,:,x),scr,tmp,hxmo)
+      sxmo_all(:,:,x)=sxmo
+      hxmo_all(:,:,x)=hxmo
 
       d0a=0.0_dp
       d0b=0.0_dp
@@ -271,12 +334,47 @@ contains
           end do
         end do
       end do
-      call pack_matrix(d0a,dpck(:,1))
-      call pack_matrix(d0b,dpck(:,2))
-      fpck=0.0_dp
-      call fock_jk(basis,d=dpck,f=fpck,scale_exch=hfscale,infos=infos)
+      d0a_all(:,:,x)=d0a
+      d0b_all(:,:,x)=d0b
+      response_density(:,:,2*x-1)=d0a
+      response_density(:,:,2*x)=d0b
+    end do
 
-      call unpack_matrix(fpck(:,1),gfull)
+    ! Apply the exact open-shell Coulomb/exchange operator to every metric
+    ! density derivative during one shell-quartet traversal.  This is the
+    ! multi-right-hand-side analogue of the former coordinate-wise fock_jk
+    ! loop; no density fitting, integral approximation, or changed screening
+    ! threshold is introduced.
+    call int2_driver%init(basis,infos)
+    call int2_driver%set_screening()
+    int2_data=int2_tdgrd_data_t(d2=response_density,int_apb=.true., &
+      int_amb=.false.,tamm_dancoff=.false.,scale_exchange=hfscale)
+    call int2_driver%run(int2_data)
+    if(dft) then
+      block
+        use mod_dft, only: dft_initialize,dftclean
+        use mod_dft_molgrid, only: dft_grid_t
+        type(dft_grid_t) :: grid
+        call dft_initialize(infos,basis,grid)
+        call mrsf_xc_fock_total_derivative(basis,grid,pa,pb,d0a_all, &
+          d0b_all,dvxc_a,dvxc_b,infos,status,threshold=0.0_dp)
+        call dftclean(infos)
+      end block
+      if(status/=0) then
+        call response%clean()
+        return
+      end if
+    end if
+
+    do x=1,ncart
+      sxmo=sxmo_all(:,:,x)
+      hxmo=hxmo_all(:,:,x)
+      d0a=d0a_all(:,:,x)
+      d0b=d0b_all(:,:,x)
+      ! int2_tdgrd_data_t acts on D+D^T.  The metric density derivatives
+      ! above are symmetric, so divide the returned A+B image by two to
+      ! recover the ordinary open-shell Fock response G[D^x].
+      gfull=0.5_dp*int2_data%apb(:,:,2*x-1,1)
       call transform_ao_to_mo(mo,gfull,scr,tmp,gd0)
       do i=1,nocca
         do a=1,nvira
@@ -286,7 +384,7 @@ contains
             +dot_product(famo(nocca+a,1:nocca),sxmo(1:nocca,i))
         end do
       end do
-      call unpack_matrix(fpck(:,2),gfull)
+      gfull=0.5_dp*int2_data%apb(:,:,2*x,1)
       call transform_ao_to_mo(mo,gfull,scr,tmp,gd0)
       do i=1,noccb
         do a=1,nvirb
@@ -297,20 +395,34 @@ contains
         end do
       end do
 
-      if(dft) call add_semilocal_roks_rhs(infos,basis,mo,sxmo,x,ba,bb, &
-        scr,tmp,status)
-      if(status/=0) then
-        call response%clean()
-        return
+      if(dft) then
+        call transform_ao_to_mo(mo,dvxc_a(:,:,x),scr,tmp,gd0)
+        do i=1,nocca
+          do a=1,nvira
+            ba(a,i)=ba(a,i)-gd0(i,nocca+a)
+          end do
+        end do
+        call transform_ao_to_mo(mo,dvxc_b(:,:,x),scr,tmp,gd0)
+        do i=1,noccb
+          do a=1,nvirb
+            bb(a,i)=bb(a,i)-gd0(i,noccb+a)
+          end do
+        end do
       end if
       call rohf_pack_trial(bvec(:,x),ba,bb,nbf,nocca,noccb)
     end do
+    call int2_data%clean()
+    call int2_driver%clean()
 
     ! Hessian rows differentiate this response once more.  The ordinary
     ! gradient tolerance leaves a few microhartree/bohr**2 of antisymmetric
     ! noise in the unsymmetrized matrix, so solve the nuclear response to the
     ! tighter accuracy required by the second derivative.
-    call cphf_solve_rohf(infos,ncart,bvec,uvec,tol=1.0d-13)
+    call cphf_solve_rohf(infos,ncart,bvec,uvec,tol=1.0d-13,status=status)
+    if(status/=0) then
+      call response%clean()
+      return
+    end if
 
     if(dft) then
       block
@@ -352,114 +464,6 @@ contains
       response%dmo_common(:,:,x)=matmul(mo,connection_common)
     end do
   end subroutine build_rohf_nuclear_response
-
-!###############################################################################
-
-  subroutine add_semilocal_roks_rhs(infos,basis,mo,sxmo,x,ba,bb, &
-      scr,tmp,status)
-    ! Preserve the existing ROKS CPKS perturbation: a central difference of the
-    ! spin XC Fock at R+/-h with the occupied orbitals reorthonormalized by dS.
-    use types, only: information
-    use basis_tools, only: basis_set
-    use mathlib, only: unpack_matrix
-    use mod_dft, only: dft_initialize,dftclean,dftexcor
-    use mod_dft_molgrid, only: dft_grid_t
-
-    type(information), target, intent(inout) :: infos
-    type(basis_set), intent(inout) :: basis
-    real(dp), intent(in) :: mo(:,:),sxmo(:,:)
-    integer, intent(in) :: x
-    real(dp), intent(inout) :: ba(:,:),bb(:,:)
-    real(dp), intent(inout) :: scr(:,:),tmp(:,:)
-    integer, intent(out) :: status
-
-    type(dft_grid_t) :: grid
-    real(dp), allocatable :: dmoa(:,:),dmob(:,:),mopa(:,:),mopb(:,:)
-    real(dp), allocatable :: frap(:),frbp(:),fram(:),frbm(:)
-    real(dp), allocatable :: dvx(:,:),hxc(:,:)
-    real(dp) :: step,exr,telr,tknr
-    integer :: nbf,nbf2,nocca,noccb,nvira,nvirb,natom
-    integer :: cc,kc,i,j,a,alloc_status
-
-    status=0
-    nbf=size(mo,1)
-    nbf2=nbf*(nbf+1)/2
-    natom=size(basis%atoms%xyz,2)
-    nocca=infos%mol_prop%nelec_a
-    noccb=infos%mol_prop%nelec_b
-    nvira=nbf-nocca
-    nvirb=nbf-noccb
-    cc=mod(x-1,3)+1
-    kc=(x-1)/3+1
-    if(x<1 .or. x>3*natom .or. infos%dft%cam_flag) then
-      status=-3
-      return
-    end if
-    allocate(dmoa(nbf,nocca),dmob(nbf,noccb),mopa(nbf,nbf), &
-             mopb(nbf,nbf),frap(nbf2),frbp(nbf2),fram(nbf2), &
-             frbm(nbf2),dvx(nbf,nbf),hxc(nbf,nbf), &
-             stat=alloc_status)
-    if(alloc_status/=0) then
-      status=-5
-      return
-    end if
-    dmoa=0.0_dp
-    do i=1,nocca
-      do j=1,nocca
-        dmoa(:,i)=dmoa(:,i)-0.5_dp*sxmo(j,i)*mo(:,j)
-      end do
-    end do
-    dmob=0.0_dp
-    do i=1,noccb
-      do j=1,noccb
-        dmob(:,i)=dmob(:,i)-0.5_dp*sxmo(j,i)*mo(:,j)
-      end do
-    end do
-
-    step=1.0d-3
-    basis%atoms%xyz(cc,kc)=basis%atoms%xyz(cc,kc)+step
-    call basis%init_shell_centers()
-    call dft_initialize(infos,basis,grid)
-    mopa=mo
-    mopb=mo
-    mopa(:,1:nocca)=mo(:,1:nocca)+step*dmoa
-    mopb(:,1:noccb)=mo(:,1:noccb)+step*dmob
-    frap=0.0_dp
-    frbp=0.0_dp
-    call dftexcor(basis,grid,int(infos%control%scftype),frap,frbp, &
-      mopa,mopb,nbf,nbf2,exr,telr,tknr,infos)
-    call dftclean(infos)
-
-    basis%atoms%xyz(cc,kc)=basis%atoms%xyz(cc,kc)-2.0_dp*step
-    call basis%init_shell_centers()
-    call dft_initialize(infos,basis,grid)
-    mopa=mo
-    mopb=mo
-    mopa(:,1:nocca)=mo(:,1:nocca)-step*dmoa
-    mopb(:,1:noccb)=mo(:,1:noccb)-step*dmob
-    fram=0.0_dp
-    frbm=0.0_dp
-    call dftexcor(basis,grid,int(infos%control%scftype),fram,frbm, &
-      mopa,mopb,nbf,nbf2,exr,telr,tknr,infos)
-    call dftclean(infos)
-
-    basis%atoms%xyz(cc,kc)=basis%atoms%xyz(cc,kc)+step
-    call basis%init_shell_centers()
-    call unpack_matrix((frap-fram)/(2.0_dp*step),dvx)
-    call transform_ao_to_mo(mo,dvx,scr,tmp,hxc)
-    do i=1,nocca
-      do a=1,nvira
-        ba(a,i)=ba(a,i)-hxc(i,nocca+a)
-      end do
-    end do
-    call unpack_matrix((frbp-frbm)/(2.0_dp*step),dvx)
-    call transform_ao_to_mo(mo,dvx,scr,tmp,hxc)
-    do i=1,noccb
-      do a=1,nvirb
-        bb(a,i)=bb(a,i)-hxc(i,noccb+a)
-      end do
-    end do
-  end subroutine add_semilocal_roks_rhs
 
 !###############################################################################
 

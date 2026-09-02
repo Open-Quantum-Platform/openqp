@@ -7,10 +7,164 @@ module mod_dft_partition_hessian
   implicit none
   private
 
+  type, public :: partition_derivative_workspace_t
+    integer :: nat=0
+    real(fp), allocatable :: cell(:),gcell(:,:),hcell(:,:,:)
+    real(fp), allocatable :: rho(:),grho(:,:),hrho(:,:,:)
+    real(fp), allocatable :: gpair(:),hpair(:,:),gmu(:),hmu(:,:)
+    real(fp), allocatable :: gf(:),hf(:,:),gsum(:),hsum(:,:)
+  contains
+    procedure :: ensure => partition_workspace_ensure
+    procedure :: clean => partition_workspace_clean
+  end type partition_derivative_workspace_t
+
   public :: partition_weight_nuclear_derivatives
+  public :: partition_weight_nuclear_first_derivatives
   public :: partition_function_second_derivative
 
 contains
+
+  subroutine partition_workspace_ensure(self,nat)
+    class(partition_derivative_workspace_t), intent(inout) :: self
+    integer, intent(in) :: nat
+    integer :: nq
+    if(self%nat==nat .and. allocated(self%cell)) return
+    call self%clean()
+    nq=3*nat
+    allocate(self%cell(nat),self%gcell(nq,nat),self%hcell(nq,nq,nat), &
+      self%rho(nat),self%grho(nq,nat),self%hrho(nq,nq,nat), &
+      self%gpair(nq),self%hpair(nq,nq),self%gmu(nq),self%hmu(nq,nq), &
+      self%gf(nq),self%hf(nq,nq),self%gsum(nq),self%hsum(nq,nq))
+    self%nat=nat
+  end subroutine partition_workspace_ensure
+
+  subroutine partition_workspace_clean(self)
+    class(partition_derivative_workspace_t), intent(inout) :: self
+    if(allocated(self%cell)) then
+      deallocate(self%cell,self%gcell,self%hcell,self%rho,self%grho, &
+        self%hrho,self%gpair,self%hpair,self%gmu,self%hmu,self%gf,self%hf, &
+        self%gsum,self%hsum)
+    end if
+    self%nat=0
+  end subroutine partition_workspace_clean
+
+!> Return normalized atom-centred partition weights and first nuclear
+!> derivatives for a grid point rigidly attached to owner.
+!>
+!> This is the exact first-order subset of
+!> partition_weight_nuclear_derivatives.  It avoids constructing second-order
+!> jets when a Fock or XC-kernel first derivative needs only dweight.
+  subroutine partition_weight_nuclear_first_derivatives(atom_xyz,point,owner, &
+      dummy_atom,part_fun_type,has_surface_shift,surface_shift,weight, &
+      dweight,status)
+    real(fp), intent(in) :: atom_xyz(:,:),point(3),surface_shift(:,:)
+    integer, intent(in) :: owner,part_fun_type
+    logical, intent(in) :: dummy_atom(:),has_surface_shift
+    real(fp), intent(out) :: weight(:),dweight(:,:,:)
+    integer, intent(out) :: status
+
+    type(partition_function) :: partfunc
+    real(fp) :: cell(size(atom_xyz,2))
+    real(fp) :: gcell(3*size(atom_xyz,2),size(atom_xyz,2))
+    real(fp) :: rho(size(atom_xyz,2))
+    real(fp) :: grho(3*size(atom_xyz,2),size(atom_xyz,2))
+    real(fp) :: gpair(3*size(atom_xyz,2)),gmu(3*size(atom_xyz,2))
+    real(fp) :: gf(3*size(atom_xyz,2)),gsum(3*size(atom_xyz,2))
+    real(fp) :: old_gradient(3*size(atom_xyz,2))
+    real(fp) :: rvec(3),unit(3),rijvec(3),rhat(3)
+    real(fp) :: rij,mu0,mu,aij,fac,f,fp1,sumc,old_value
+    integer :: nat,nq,i,j,b,alpha,ib
+
+    status=0
+    nat=size(atom_xyz,2)
+    nq=3*nat
+    if(size(atom_xyz,1)/=3 .or. owner<1 .or. owner>nat .or. &
+       size(dummy_atom)/=nat .or. any(shape(surface_shift)/=[nat,nat]) .or. &
+       size(weight)/=nat .or. any(shape(dweight)/=[3,nat,nat])) then
+      status=1
+      return
+    end if
+    cell=1.0_fp
+    where(dummy_atom) cell=0.0_fp
+    gcell=0.0_fp
+    grho=0.0_fp
+
+    do i=1,nat
+      rvec=point-atom_xyz(:,i)
+      rho(i)=norm2(rvec)
+      if(rho(i)<=sqrt(tiny(1.0_fp))) then
+        status=2
+        return
+      end if
+      unit=rvec/rho(i)
+      do b=1,nat
+        fac=real(merge(1,0,b==owner)-merge(1,0,b==i),fp)
+        do alpha=1,3
+          ib=3*(b-1)+alpha
+          grho(ib,i)=fac*unit(alpha)
+        end do
+      end do
+    end do
+
+    call partfunc%set(part_fun_type)
+    do i=2,nat
+      if(dummy_atom(i)) cycle
+      do j=1,i-1
+        if(dummy_atom(j)) cycle
+        rijvec=atom_xyz(:,i)-atom_xyz(:,j)
+        rij=norm2(rijvec)
+        if(rij<=sqrt(tiny(1.0_fp))) then
+          status=3
+          return
+        end if
+        rhat=rijvec/rij
+        gpair=0.0_fp
+        do b=1,nat
+          fac=real(merge(1,0,b==i)-merge(1,0,b==j),fp)
+          do alpha=1,3
+            ib=3*(b-1)+alpha
+            gpair(ib)=fac*rhat(alpha)
+          end do
+        end do
+        mu0=(rho(i)-rho(j))/rij
+        gmu=(grho(:,i)-grho(:,j)-mu0*gpair)/rij
+        mu=mu0
+        if(has_surface_shift) then
+          aij=surface_shift(j,i)
+          mu=mu0+aij*(1.0_fp-mu0*mu0)
+          gmu=(1.0_fp-2.0_fp*aij*mu0)*gmu
+        end if
+        f=partfunc%eval(mu)
+        fp1=partfunc%deriv(mu)
+        gf=fp1*gmu
+        old_value=cell(i)
+        old_gradient=gcell(:,i)
+        cell(i)=old_value*f
+        gcell(:,i)=f*old_gradient+old_value*gf
+        old_value=cell(j)
+        old_gradient=gcell(:,j)
+        cell(j)=old_value*(1.0_fp-f)
+        gcell(:,j)=(1.0_fp-f)*old_gradient-old_value*gf
+      end do
+    end do
+
+    sumc=sum(cell)
+    if(sumc<=tiny(1.0_fp)) then
+      status=4
+      return
+    end if
+    gsum=sum(gcell,dim=2)
+    do i=1,nat
+      weight(i)=cell(i)/sumc
+      do b=1,nat
+        do alpha=1,3
+          ib=3*(b-1)+alpha
+          dweight(alpha,b,i)=gcell(ib,i)/sumc- &
+            cell(i)*gsum(ib)/(sumc*sumc)
+        end do
+      end do
+    end do
+  end subroutine partition_weight_nuclear_first_derivatives
 
 !> Return all normalized atom-centred partition weights and their first and
 !> second nuclear derivatives for a grid point rigidly attached to owner.
@@ -20,19 +174,24 @@ contains
 !> surface_shift(j,i) follows dft_fuzzycell/dft_gridint_grad for the pair i>j.
   subroutine partition_weight_nuclear_derivatives(atom_xyz, point, owner, &
       dummy_atom, part_fun_type, has_surface_shift, surface_shift, weight, &
-      dweight, d2weight, status)
+      dweight, d2weight, status, workspace)
 
     real(fp), intent(in) :: atom_xyz(:,:), point(3), surface_shift(:,:)
     integer, intent(in) :: owner, part_fun_type
     logical, intent(in) :: dummy_atom(:), has_surface_shift
     real(fp), intent(out) :: weight(:), dweight(:,:,:), d2weight(:,:,:,:,:)
     integer, intent(out) :: status
+    type(partition_derivative_workspace_t), target, intent(inout), optional :: &
+      workspace
 
     type(partition_function) :: partfunc
-    real(fp), allocatable :: cell(:), gcell(:,:), hcell(:,:,:)
-    real(fp), allocatable :: rho(:), grho(:,:), hrho(:,:,:)
-    real(fp), allocatable :: gpair(:), hpair(:,:), gmu(:), hmu(:,:)
-    real(fp), allocatable :: gf(:), hf(:,:), gsum(:), hsum(:,:)
+    real(fp), allocatable, target :: cell_store(:),gcell_store(:,:), &
+      hcell_store(:,:,:),rho_store(:),grho_store(:,:),hrho_store(:,:,:), &
+      gpair_store(:),hpair_store(:,:),gmu_store(:),hmu_store(:,:), &
+      gf_store(:),hf_store(:,:),gsum_store(:),hsum_store(:,:)
+    real(fp), pointer :: cell(:),gcell(:,:),hcell(:,:,:),rho(:),grho(:,:), &
+      hrho(:,:,:),gpair(:),hpair(:,:),gmu(:),hmu(:,:),gf(:),hf(:,:), &
+      gsum(:),hsum(:,:)
     real(fp) :: rvec(3), unit(3), rijvec(3), rhat(3)
     real(fp) :: rij, mu0, mu, aij, fac, f, fp1, fp2, sumc
     integer :: nat, nq, i, j, b, c, alpha, beta, ib, ic
@@ -48,9 +207,23 @@ contains
       return
     end if
 
-    allocate(cell(nat), gcell(nq,nat), hcell(nq,nq,nat), rho(nat), &
-      grho(nq,nat), hrho(nq,nq,nat), gpair(nq), hpair(nq,nq), &
-      gmu(nq), hmu(nq,nq), gf(nq), hf(nq,nq), gsum(nq), hsum(nq,nq))
+    if(present(workspace)) then
+      call workspace%ensure(nat)
+      cell=>workspace%cell;gcell=>workspace%gcell;hcell=>workspace%hcell
+      rho=>workspace%rho;grho=>workspace%grho;hrho=>workspace%hrho
+      gpair=>workspace%gpair;hpair=>workspace%hpair
+      gmu=>workspace%gmu;hmu=>workspace%hmu;gf=>workspace%gf
+      hf=>workspace%hf;gsum=>workspace%gsum;hsum=>workspace%hsum
+    else
+      allocate(cell_store(nat),gcell_store(nq,nat),hcell_store(nq,nq,nat), &
+        rho_store(nat),grho_store(nq,nat),hrho_store(nq,nq,nat), &
+        gpair_store(nq),hpair_store(nq,nq),gmu_store(nq),hmu_store(nq,nq), &
+        gf_store(nq),hf_store(nq,nq),gsum_store(nq),hsum_store(nq,nq))
+      cell=>cell_store;gcell=>gcell_store;hcell=>hcell_store
+      rho=>rho_store;grho=>grho_store;hrho=>hrho_store
+      gpair=>gpair_store;hpair=>hpair_store;gmu=>gmu_store;hmu=>hmu_store
+      gf=>gf_store;hf=>hf_store;gsum=>gsum_store;hsum=>hsum_store
+    end if
     cell = 1.0_fp
     where (dummy_atom) cell = 0.0_fp
     gcell = 0.0_fp

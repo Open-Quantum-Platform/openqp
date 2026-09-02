@@ -5,8 +5,10 @@ program test_tdhf_hessian_response
     solve_tdhf_z_response, complete_rhf_orbital_response, &
     assemble_tdhf_sigma_derivative, solve_mrsf_tda_response_dense, &
     solve_mrsf_tda_response_matrix_free, &
+    solve_mrsf_tda_response_batch_matrix_free, &
     solve_mrsf_tda_cluster_response_matrix_free, &
     solve_mrsf_z_response_matrix_free, &
+    solve_mrsf_z_response_batch_matrix_free, &
     assemble_mrsf_tda_eigenvalue_hessian
 
   implicit none
@@ -30,7 +32,7 @@ program test_tdhf_hessian_response
   real(kind=dp) :: isolated_x(3,1),isolated_dax(3,1),isolated_z(3,1)
   real(kind=dp) :: isolated_w(1,1),angle,c,s
   real(kind=dp) :: zorb(3,3),zrhs(3,2),zdhz(3,2),zdz(3,2),zexpected(3,2)
-  integer :: i,j,status
+  integer :: batch_operator_calls,batch_operator_width,i,j,status
 
   amb(1,1) = 2.0_dp
   apb(1,1) = 8.0_dp
@@ -82,6 +84,42 @@ program test_tdhf_hessian_response
     error stop 'matrix-free MRSF derivative Z is incorrect'
   if(residual>1.0e-11_dp) &
     error stop 'matrix-free MRSF derivative Z residual is too large'
+
+  batch_operator_calls=0
+  batch_operator_width=0
+  zdz=0.0_dp; residual=0.0_dp
+  call solve_mrsf_z_response_batch_matrix_free( &
+    apply_test_z_orbital_hessian_batch,zrhs,zdhz,zdz,residual,status, &
+    tol=1.0e-13_dp,maxit=40)
+  if(status/=0) error stop 'batched MRSF derivative Z solve failed'
+  if(maxval(abs(zdz-zexpected))>1.0e-11_dp) &
+    error stop 'batched MRSF derivative Z is incorrect'
+  if(residual>1.0e-11_dp) &
+    error stop 'batched MRSF derivative Z residual is too large'
+  if(batch_operator_width/=2) &
+    error stop 'batched MRSF Z solve did not share a two-RHS operator call'
+
+  ! A stable ROHF orbital Hessian also uses simultaneous GMRES: the two
+  ! coordinate equations keep independent recurrences, but every Hessian
+  ! application must still contain both active search directions.
+  zorb=reshape([4.0_dp,1.0_dp,0.2_dp, &
+                1.0_dp,3.0_dp,0.4_dp, &
+                0.2_dp,0.4_dp,2.0_dp],[3,3])
+  zrhs=matmul(zorb,zexpected)+zdhz
+  batch_operator_calls=0
+  batch_operator_width=0
+  zdz=0.0_dp; residual=0.0_dp
+  call solve_mrsf_z_response_batch_matrix_free( &
+    apply_test_z_orbital_hessian_batch,zrhs,zdhz,zdz,residual,status, &
+    tol=1.0e-13_dp,maxit=40, &
+    apply_preconditioner=apply_test_z_diagonal_preconditioner_batch)
+  if(status/=0) error stop 'batched-GMRES MRSF derivative Z solve failed'
+  if(maxval(abs(zdz-zexpected))>1.0e-11_dp) &
+    error stop 'batched-GMRES MRSF derivative Z is incorrect'
+  if(residual>1.0e-11_dp) &
+    error stop 'batched-GMRES MRSF derivative Z residual is too large'
+  if(batch_operator_width/=2) &
+    error stop 'batched-GMRES MRSF Z solve did not share a two-RHS operator call'
 
   mo = 0.0_dp
   mo(1,1) = 1.0_dp; mo(2,2) = 1.0_dp; mo(3,3) = 1.0_dp
@@ -149,19 +187,25 @@ program test_tdhf_hessian_response
   if (residual > 1.0e-11_dp) &
     error stop 'matrix-free MRSF response residual is too large'
 
-  ! Force the iterative path to stop before convergence.  The bounded dense
-  ! projected fallback must recover the same spin-adapted response without
-  ! introducing a determinant representation.
+  ! The production response advances every nuclear perturbation through one
+  ! shared sigma call per CR step, matching the batched AO-response strategy
+  ! of the GAMESS analytic TDHF/TDDFT Hessian without forming a dense matrix.
+  batch_operator_calls=0
+  batch_operator_width=0
   mrsf_dx=0.0_dp; mrsf_domega=0.0_dp; residual=0.0_dp
-  call solve_mrsf_tda_response_matrix_free(apply_test_mrsf_operator,2.0_dp, &
-    mrsf_x,mrsf_dax,mrsf_dx,mrsf_domega,residual,status,tol=1.0e-13_dp, &
-    maxit=1,restart=1)
-  if(status/=0) error stop 'dense projected MRSF fallback failed'
+  call solve_mrsf_tda_response_batch_matrix_free( &
+    apply_test_mrsf_batch_operator,2.0_dp,mrsf_x,mrsf_dax,mrsf_dx, &
+    mrsf_domega,residual,status,tol=1.0e-13_dp,maxit=30)
+  if(status/=0) error stop 'batched matrix-free MRSF response failed'
   if(maxval(abs(mrsf_dx(:,1)-[0.3_dp,0.0_dp,0.25_dp]))>1.0e-12_dp .or. &
      maxval(abs(mrsf_dx(:,2)-[0.4_dp,0.0_dp,-0.1_dp]))>1.0e-12_dp) &
-    error stop 'dense projected MRSF fallback is incorrect'
+    error stop 'batched matrix-free MRSF response is incorrect'
   if(residual>1.0e-11_dp) &
-    error stop 'dense projected MRSF fallback residual is too large'
+    error stop 'batched matrix-free MRSF response residual is too large'
+  if(batch_operator_width/=2) &
+    error stop 'batched MRSF response did not share a two-RHS sigma call'
+  if(batch_operator_calls>6) &
+    error stop 'batched MRSF response used too many operator calls'
 
   mrsf_d2a = reshape([0.7_dp,0.11_dp,0.11_dp,-0.4_dp],[2,2])
   call assemble_mrsf_tda_eigenvalue_hessian(mrsf_x,mrsf_dax,mrsf_dx, &
@@ -274,6 +318,14 @@ program test_tdhf_hessian_response
     rotated_z,rotated_w,residual,status)
   if(status/=-5) error stop 'inconsistent MRSF cluster spectrum was not rejected'
 
+  ! Force the iterative path to stop before convergence.  Production must
+  ! fail closed rather than constructing a dense response matrix.
+  mrsf_dx=0.0_dp; mrsf_domega=0.0_dp; residual=0.0_dp
+  call solve_mrsf_tda_response_matrix_free(apply_test_mrsf_operator,2.0_dp, &
+    mrsf_x,mrsf_dax,mrsf_dx,mrsf_domega,residual,status,tol=1.0e-13_dp, &
+    maxit=1,restart=1)
+  if(status==0) error stop 'matrix-free MRSF response did not fail closed'
+
 contains
 
   subroutine apply_test_mrsf_operator(vector,result,operator_status)
@@ -288,6 +340,22 @@ contains
     result=matmul(mrsf_a,vector)
     operator_status=0
   end subroutine apply_test_mrsf_operator
+
+  subroutine apply_test_mrsf_batch_operator(vectors,results,operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    if(size(vectors,1)/=3 .or. &
+       any(shape(results)/=[3,size(vectors,2)]) .or. size(vectors,2)<=0) then
+      operator_status=-1
+      results=0.0_dp
+      return
+    end if
+    batch_operator_calls=batch_operator_calls+1
+    batch_operator_width=max(batch_operator_width,size(vectors,2))
+    results=matmul(mrsf_a,vectors)
+    operator_status=0
+  end subroutine apply_test_mrsf_batch_operator
 
   subroutine apply_test_cluster_operator(vector,result,operator_status)
     real(kind=dp), intent(in) :: vector(:)
@@ -314,5 +382,39 @@ contains
     result=matmul(zorb,vector)
     operator_status=0
   end subroutine apply_test_z_orbital_hessian
+
+  subroutine apply_test_z_orbital_hessian_batch(vectors,results,operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    if(size(vectors,1)/=3 .or. &
+       any(shape(results)/=[3,size(vectors,2)]) .or. size(vectors,2)<=0) then
+      operator_status=-1
+      results=0.0_dp
+      return
+    end if
+    batch_operator_calls=batch_operator_calls+1
+    batch_operator_width=max(batch_operator_width,size(vectors,2))
+    results=matmul(zorb,vectors)
+    operator_status=0
+  end subroutine apply_test_z_orbital_hessian_batch
+
+  subroutine apply_test_z_diagonal_preconditioner_batch( &
+      vectors,results,operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    integer :: row
+    if(size(vectors,1)/=3 .or. &
+       any(shape(results)/=[3,size(vectors,2)]) .or. size(vectors,2)<=0) then
+      operator_status=-1
+      results=0.0_dp
+      return
+    end if
+    do row=1,3
+      results(row,:)=vectors(row,:)/zorb(row,row)
+    end do
+    operator_status=0
+  end subroutine apply_test_z_diagonal_preconditioner_batch
 
 end program test_tdhf_hessian_response

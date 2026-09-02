@@ -3,7 +3,7 @@ module tdhf_mrsf_hessian_eri_derivative_mod
   use precision, only: dp
   use types, only: information
   use basis_tools, only: basis_set
-  use fock_deriv_mod, only: fock_deriv_matrix_mrsf_scaled
+  use fock_deriv_mod, only: fock_deriv_matrix_mrsf_scaled_batch
   use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
 
   implicit none
@@ -31,8 +31,9 @@ contains
     integer, intent(out) :: status
 
     type(basis_set), pointer :: basis
-    real(kind=dp), allocatable :: matrix4(:,:,:,:)
-    real(kind=dp) :: channel_scale,coulomb_scale,spin_multiplier
+    real(kind=dp), allocatable :: matrix5(:,:,:,:,:), &
+      channel_scale(:),coulomb_scale(:)
+    real(kind=dp) :: spin_multiplier
     integer :: atom,cart,channel,natom,nbf,ncoord
 
     basis=>infos%basis
@@ -49,32 +50,45 @@ contains
       status=-1
       return
     end if
-    allocate(matrix4(nbf,nbf,3,natom))
+    allocate(matrix5(nbf,nbf,3,natom,7),channel_scale(7), &
+      coulomb_scale(7),source=0.0_dp)
     do channel=1,7
       select case(channel)
       case(1:4)
-        channel_scale=spc_coov
-        coulomb_scale=channel_scale
+        channel_scale(channel)=spc_coov
+        coulomb_scale(channel)=channel_scale(channel)
       case(5)
-        channel_scale=spc_ovov
-        coulomb_scale=0.0_dp
+        channel_scale(channel)=spc_ovov
       case(6)
-        channel_scale=spc_coco
-        coulomb_scale=0.0_dp
+        channel_scale(channel)=spc_coco
       case(7)
-        channel_scale=response_scale
-        coulomb_scale=0.0_dp
+        channel_scale(channel)=response_scale
       end select
-      call fock_deriv_matrix_mrsf_scaled(infos,basis,density(channel,:,:), &
-        coulomb_scale,channel_scale,matrix4)
-      if(channel<=6) matrix4=spin_multiplier*matrix4
+    end do
+    call fock_deriv_matrix_mrsf_scaled_batch(infos,basis, &
+      transpose_density_channels(density),coulomb_scale,channel_scale,matrix5)
+    do channel=1,7
+      if(channel<=6) matrix5(:,:,:,:,channel)= &
+        spin_multiplier*matrix5(:,:,:,:,channel)
       do atom=1,natom
         do cart=1,3
-          derivative_fock(channel,:,:,3*(atom-1)+cart)=matrix4(:,:,cart,atom)
+          derivative_fock(channel,:,:,3*(atom-1)+cart)= &
+            matrix5(:,:,cart,atom,channel)
         end do
       end do
     end do
-    deallocate(matrix4)
+    deallocate(matrix5,channel_scale,coulomb_scale)
+
+  contains
+
+    function transpose_density_channels(channels) result(batch)
+      real(kind=dp), intent(in) :: channels(:,:,:)
+      real(kind=dp) :: batch(size(channels,2),size(channels,3),size(channels,1))
+      integer :: channel_index
+      do channel_index=1,size(channels,1)
+        batch(:,:,channel_index)=channels(channel_index,:,:)
+      end do
+    end function transpose_density_channels
   end subroutine build_mrsf_explicit_eri_derivative
 
 end module tdhf_mrsf_hessian_eri_derivative_mod

@@ -166,7 +166,8 @@ contains
     integer, intent(out) :: status
 
     real(fp) :: dmu,dnu,dgmu(3),dgnu(3),factor_mu,factor_nu
-    integer :: atom,cart,index,nat,ncoord,space
+    integer :: atom,cart,index,nat,ncoord,space,center_index,ncenter
+    integer :: centers(3)
 
     ncoord=size(dpair)
     nat=ncoord/3
@@ -185,7 +186,18 @@ contains
     end if
     pair=aov_mu*aov_nu
     grad_pair=aog1_mu*aov_nu+aov_mu*aog1_nu
-    do atom=1,nat
+    centers(1)=owner
+    ncenter=1
+    if(atom_mu/=owner) then
+      ncenter=ncenter+1
+      centers(ncenter)=atom_mu
+    end if
+    if(atom_nu/=owner .and. atom_nu/=atom_mu) then
+      ncenter=ncenter+1
+      centers(ncenter)=atom_nu
+    end if
+    do center_index=1,ncenter
+      atom=centers(center_index)
       factor_mu=real(merge(1,0,atom==owner)-merge(1,0,atom==atom_mu),fp)
       factor_nu=real(merge(1,0,atom==owner)-merge(1,0,atom==atom_nu),fp)
       do cart=1,3
@@ -216,7 +228,7 @@ contains
     real(fp), intent(out) :: drho(:),dgrad_rho(:,:)
     integer, intent(out) :: status
 
-    real(fp) :: pair,grad_pair(3),dpair(size(drho))
+    real(fp) :: pair,grad_pair(3),dpair(size(drho)),pair_density
     real(fp) :: dgrad_pair(3,size(drho))
     integer :: mu,nu,nao,ncoord,pair_status
 
@@ -232,8 +244,10 @@ contains
       return
     end if
     do nu=1,nao
-      do mu=1,nao
-        if(abs(density(mu,nu))<=tiny(1.0_fp)) cycle
+      do mu=1,nu
+        pair_density=density(mu,nu)
+        if(mu/=nu) pair_density=pair_density+density(nu,mu)
+        if(abs(pair_density)<=tiny(1.0_fp)) cycle
         call moving_ao_pair_derivative(owner,ao_atom(mu),ao_atom(nu), &
           aov(mu),aov(nu),aog1(mu,:),aog1(nu,:),aog2(mu,:),aog2(nu,:), &
           pair,grad_pair,dpair,dgrad_pair,pair_status)
@@ -241,9 +255,9 @@ contains
           status=-2
           return
         end if
-        drho=drho+density(mu,nu)*dpair
+        drho=drho+pair_density*dpair
         if(need_gradient) &
-          dgrad_rho=dgrad_rho+density(mu,nu)*dgrad_pair
+          dgrad_rho=dgrad_rho+pair_density*dgrad_pair
       end do
     end do
   end subroutine moving_density_derivative

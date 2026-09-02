@@ -5,21 +5,47 @@ module mod_dft_gridint_mrsf_xc_hessian
   use precision, only: fp
   use mod_dft_gridint, only: xc_engine_t,xc_consumer_t,xc_options_t,run_xc, &
     xc_der1,xc_der2_contr,xc_der3_contr
-  use mod_dft_gga_nuclear_point, only: gga_density_nuclear_point
+  use mod_dft_gga_nuclear_point, only: gga_density_nuclear_point_batch, &
+    gga_density_nuclear_point_first_batch
   use mod_dft_gridint_tdgga_hessian, only: gga_add_owner_motion
   use mod_dft_gridint_tdgga_response, only: &
-    gga_density_nuclear_point_first,gga_add_owner_motion_first
-  use mod_dft_partition_hessian, only: partition_weight_nuclear_derivatives
+    gga_add_owner_motion_first
+  use mod_dft_partition_hessian, only: partition_weight_nuclear_derivatives, &
+    partition_derivative_workspace_t
   use mod_dft_gridint_mrsf_xc_hessian_point, only: &
-    mrsf_xc_weighted_fixed_hessian,mrsf_xc_weighted_response_row
+    mrsf_xc_weighted_fixed_hessian,mrsf_xc_weighted_response_rows
 
   implicit none
   private
 
+  type :: mrsf_xc_point_workspace_t
+    type(partition_derivative_workspace_t) :: partition
+    real(fp), allocatable :: fixed_d1(:,:,:),fixed_g1(:,:,:,:)
+    real(fp), allocatable :: fixed_d2(:,:,:,:,:),fixed_g2(:,:,:,:,:,:)
+    real(fp), allocatable :: d1(:,:,:),g1(:,:,:,:)
+    real(fp), allocatable :: d2(:,:,:,:,:),g2(:,:,:,:,:,:)
+    real(fp), allocatable :: weights(:),dweights(:,:,:),d2weights(:,:,:,:,:)
+    real(fp), allocatable :: ug(:),up(:),dug(:,:,:),dup(:,:,:)
+    real(fp), allocatable :: d2ug(:,:,:,:,:),d2up(:,:,:,:,:)
+    real(fp), allocatable :: first(:),second(:,:),third(:,:,:)
+    real(fp), allocatable :: response_value(:,:,:)
+    real(fp), allocatable :: response_gradient(:,:,:,:)
+    real(fp), allocatable :: response_fixed_d(:,:,:,:,:)
+    real(fp), allocatable :: response_fixed_g(:,:,:,:,:,:)
+    real(fp), allocatable :: response_d1(:,:,:,:,:)
+    real(fp), allocatable :: response_g1(:,:,:,:,:,:)
+    real(fp), allocatable :: rg(:,:),rp(:,:),drg(:,:,:,:),drp(:,:,:,:), &
+      row(:,:,:)
+  contains
+    procedure :: init => mrsf_xc_workspace_init
+    procedure :: clean => mrsf_xc_workspace_clean
+  end type mrsf_xc_point_workspace_t
+
   type, extends(xc_consumer_t) :: mrsf_xc_hessian_consumer_t
     real(fp), allocatable :: hessian(:,:,:,:,:),rows(:,:,:,:)
-    real(fp), allocatable :: density_p(:,:,:)
-    real(fp), allocatable :: density_d(:,:,:,:),density_u(:,:,:,:)
+    type(mrsf_xc_point_workspace_t), allocatable :: workspace(:)
+    real(fp), allocatable :: base_density(:,:,:)
+    real(fp), allocatable :: response_density(:,:,:,:)
     real(fp), allocatable :: atom_xyz(:,:),surface_shift(:,:)
     integer, allocatable :: ao_atom(:)
     logical, allocatable :: dummy_atom(:)
@@ -84,23 +110,25 @@ contains
       status=-2
       return
     end if
-    allocate(da(nbf,nbf),db(nbf,nbf),dat%density_p(nbf,nbf,2), &
-      dat%density_d(nbf,nbf,2,ncart),dat%density_u(nbf,nbf,2,ncart), &
-      dat%ao_atom(nbf))
+    allocate(da(nbf,nbf),db(nbf,nbf),dat%base_density(4,nbf,nbf), &
+      dat%response_density(2*ncart,2,nbf,nbf),dat%ao_atom(nbf))
     do i=1,nbf
       da(:,i)=density_d(:,i,1)*basis%bfnrm(:)*basis%bfnrm(i)
       db(:,i)=density_d(:,i,2)*basis%bfnrm(:)*basis%bfnrm(i)
-      do k=1,2
-        dat%density_p(:,i,k)=density_p(:,i,k)*basis%bfnrm(:)*basis%bfnrm(i)
-      end do
+      dat%base_density(1,:,i)=da(:,i)
+      dat%base_density(2,:,i)=db(:,i)
+      dat%base_density(3,:,i)=density_p(:,i,1)* &
+        basis%bfnrm(:)*basis%bfnrm(i)
+      dat%base_density(4,:,i)=density_p(:,i,2)* &
+        basis%bfnrm(:)*basis%bfnrm(i)
       do k=1,ncart
-        dat%density_d(:,i,1,k)=response_d(:,i,1,k)* &
+        dat%response_density(k,1,:,i)=response_d(:,i,1,k)* &
           basis%bfnrm(:)*basis%bfnrm(i)
-        dat%density_d(:,i,2,k)=response_d(:,i,2,k)* &
+        dat%response_density(k,2,:,i)=response_d(:,i,2,k)* &
           basis%bfnrm(:)*basis%bfnrm(i)
-        dat%density_u(:,i,1,k)=response_p(:,i,1,k)* &
+        dat%response_density(ncart+k,1,:,i)=response_p(:,i,1,k)* &
           basis%bfnrm(:)*basis%bfnrm(i)
-        dat%density_u(:,i,2,k)=response_p(:,i,2,k)* &
+        dat%response_density(ncart+k,2,:,i)=response_p(:,i,2,k)* &
           basis%bfnrm(:)*basis%bfnrm(i)
       end do
     end do
@@ -176,13 +204,70 @@ contains
 
 !-----------------------------------------------------------------------------
 
+  subroutine mrsf_xc_workspace_init(self,nat,is_gga)
+    class(mrsf_xc_point_workspace_t), intent(inout) :: self
+    integer, intent(in) :: nat
+    logical, intent(in) :: is_gga
+    integer :: ncart,nvar
+
+    call self%clean()
+    ncart=3*nat
+    nvar=merge(5,2,is_gga)
+    allocate(self%fixed_d1(3,nat,4),self%fixed_g1(3,3,nat,4), &
+      self%fixed_d2(3,3,nat,nat,4), &
+      self%fixed_g2(3,3,3,nat,nat,4), &
+      self%d1(3,nat,4),self%g1(3,3,nat,4), &
+      self%d2(3,3,nat,nat,4),self%g2(3,3,3,nat,nat,4), &
+      self%weights(nat),self%dweights(3,nat,nat), &
+      self%d2weights(3,nat,3,nat,nat),self%ug(nvar),self%up(nvar), &
+      self%dug(nvar,3,nat),self%dup(nvar,3,nat), &
+      self%d2ug(nvar,3,3,nat,nat),self%d2up(nvar,3,3,nat,nat), &
+      self%first(nvar),self%second(nvar,nvar),self%third(nvar,nvar,nvar), &
+      self%response_value(2,2,ncart), &
+      self%response_gradient(3,2,2,ncart), &
+      self%response_fixed_d(3,nat,2,2,ncart), &
+      self%response_fixed_g(3,3,nat,2,2,ncart), &
+      self%response_d1(3,nat,2,2,ncart), &
+      self%response_g1(3,3,nat,2,2,ncart), &
+      self%rg(nvar,ncart),self%rp(nvar,ncart), &
+      self%drg(nvar,3,nat,ncart),self%drp(nvar,3,nat,ncart), &
+      self%row(3,nat,ncart))
+  end subroutine mrsf_xc_workspace_init
+
+  subroutine mrsf_xc_workspace_clean(self)
+    class(mrsf_xc_point_workspace_t), intent(inout) :: self
+    call self%partition%clean()
+    if(allocated(self%fixed_d1)) &
+      deallocate(self%fixed_d1,self%fixed_g1,self%fixed_d2,self%fixed_g2)
+    if(allocated(self%d1)) deallocate(self%d1,self%g1,self%d2,self%g2)
+    if(allocated(self%weights)) &
+      deallocate(self%weights,self%dweights,self%d2weights)
+    if(allocated(self%ug)) &
+      deallocate(self%ug,self%up,self%dug,self%dup,self%d2ug,self%d2up)
+    if(allocated(self%first)) &
+      deallocate(self%first,self%second,self%third)
+    if(allocated(self%response_value)) &
+      deallocate(self%response_value,self%response_gradient, &
+        self%response_fixed_d,self%response_fixed_g,self%response_d1, &
+        self%response_g1)
+    if(allocated(self%rg)) &
+      deallocate(self%rg,self%rp,self%drg,self%drp,self%row)
+  end subroutine mrsf_xc_workspace_clean
+
+!-----------------------------------------------------------------------------
+
   subroutine mrsf_xc_start(self,xce,nthreads)
     class(mrsf_xc_hessian_consumer_t), target, intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: nthreads
+    integer :: thread
     allocate(self%hessian(3,3,xce%numAtoms,xce%numAtoms,nthreads), &
       self%rows(3,xce%numAtoms,3*xce%numAtoms,nthreads), &
       self%worker_error(nthreads),source=0.0_fp)
+    allocate(self%workspace(nthreads))
+    do thread=1,nthreads
+      call self%workspace(thread)%init(xce%numAtoms,self%is_gga)
+    end do
   end subroutine mrsf_xc_start
 
   subroutine mrsf_xc_stop(self)
@@ -207,16 +292,22 @@ contains
 
   subroutine mrsf_xc_clean(self)
     class(mrsf_xc_hessian_consumer_t), intent(inout) :: self
+    integer :: thread
     if(allocated(self%hessian)) deallocate(self%hessian)
     if(allocated(self%rows)) deallocate(self%rows)
-    if(allocated(self%density_p)) deallocate(self%density_p)
-    if(allocated(self%density_d)) deallocate(self%density_d)
-    if(allocated(self%density_u)) deallocate(self%density_u)
+    if(allocated(self%base_density)) deallocate(self%base_density)
+    if(allocated(self%response_density)) deallocate(self%response_density)
     if(allocated(self%atom_xyz)) deallocate(self%atom_xyz)
     if(allocated(self%surface_shift)) deallocate(self%surface_shift)
     if(allocated(self%ao_atom)) deallocate(self%ao_atom)
     if(allocated(self%dummy_atom)) deallocate(self%dummy_atom)
     if(allocated(self%worker_error)) deallocate(self%worker_error)
+    if(allocated(self%workspace)) then
+      do thread=1,size(self%workspace)
+        call self%workspace(thread)%clean()
+      end do
+      deallocate(self%workspace)
+    end if
   end subroutine mrsf_xc_clean
 
 !-----------------------------------------------------------------------------
@@ -226,69 +317,67 @@ contains
     class(xc_engine_t), intent(in) :: xce
     integer :: mythread
 
-    real(fp), allocatable :: ground(:,:,:),probe(:,:,:)
-    real(fp), allocatable :: response_ground(:,:,:,:),response_probe(:,:,:,:)
+    real(fp), allocatable :: base_density(:,:,:),response_combined(:,:,:,:), &
+      response_fixed_combined(:,:,:,:),response_fixed_gradient_combined(:,:,:,:,:)
     integer, allocatable :: atoms(:)
-    integer :: n,ipt,status
+    integer :: n,ncart,ipt,status
 
     n=xce%numAOs_p
-    allocate(ground(n,n,2),probe(n,n,2), &
-      response_ground(n,n,2,3*xce%numAtoms), &
-      response_probe(n,n,2,3*xce%numAtoms),atoms(n))
-    ground(:,:,1)=xce%wfAlpha_p
-    ground(:,:,2)=xce%wfBeta_p
+    ncart=3*xce%numAtoms
+    allocate(response_fixed_combined(3,xce%numAtoms,2,2*ncart), &
+      response_fixed_gradient_combined(3,3,xce%numAtoms,2,2*ncart),atoms(n))
     if(xce%skip_p) then
-      probe=self%density_p
-      response_ground=self%density_d
-      response_probe=self%density_u
       atoms=self%ao_atom
+      do ipt=1,xce%numPts
+        call accumulate_point(self,xce,mythread,ipt,self%base_density, &
+          self%response_density,response_fixed_combined, &
+          response_fixed_gradient_combined,atoms, &
+          self%workspace(mythread),status)
+        if(status/=0) then
+          self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
+          exit
+        end if
+      end do
     else
-      probe=self%density_p(xce%indices_p(1:n),xce%indices_p(1:n),:)
-      response_ground=self%density_d(xce%indices_p(1:n), &
-        xce%indices_p(1:n),:,:)
-      response_probe=self%density_u(xce%indices_p(1:n), &
-        xce%indices_p(1:n),:,:)
+      allocate(base_density(4,n,n),response_combined(2*ncart,2,n,n))
+      base_density=self%base_density(:,xce%indices_p(1:n), &
+        xce%indices_p(1:n))
+      response_combined=self%response_density(:,:,xce%indices_p(1:n), &
+        xce%indices_p(1:n))
       atoms=self%ao_atom(xce%indices_p(1:n))
+      do ipt=1,xce%numPts
+        call accumulate_point(self,xce,mythread,ipt,base_density, &
+          response_combined,response_fixed_combined, &
+          response_fixed_gradient_combined,atoms, &
+          self%workspace(mythread),status)
+        if(status/=0) then
+          self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
+          exit
+        end if
+      end do
+      deallocate(base_density,response_combined)
     end if
-    do ipt=1,xce%numPts
-      call accumulate_point(self,xce,mythread,ipt,ground,probe, &
-        response_ground,response_probe,atoms,status)
-      if(status/=0) then
-        self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
-        exit
-      end if
-    end do
-    deallocate(ground,probe,response_ground,response_probe,atoms)
+    deallocate(response_fixed_combined,response_fixed_gradient_combined,atoms)
   end subroutine mrsf_xc_update
 
 !-----------------------------------------------------------------------------
 
-  subroutine accumulate_point(self,xce,mythread,ipt,ground,probe, &
-      response_ground,response_probe,atoms,status)
+  subroutine accumulate_point(self,xce,mythread,ipt,base_density, &
+      response_combined, &
+      response_fixed_combined,response_fixed_gradient_combined,atoms, &
+      workspace,status)
     class(mrsf_xc_hessian_consumer_t), intent(inout) :: self
     class(xc_engine_t), intent(in) :: xce
     integer, intent(in) :: mythread,ipt,atoms(:)
-    real(fp), intent(in) :: ground(:,:,:),probe(:,:,:)
-    real(fp), intent(in) :: response_ground(:,:,:,:),response_probe(:,:,:,:)
+    real(fp), intent(in) :: base_density(:,:,:),response_combined(:,:,:,:)
+    real(fp), intent(inout) :: response_fixed_combined(:,:,:,:), &
+      response_fixed_gradient_combined(:,:,:,:,:)
+    type(mrsf_xc_point_workspace_t), intent(inout) :: workspace
     integer, intent(out) :: status
 
-    integer :: nat,ncart,nvar,field,spin,k,owner,local_status
+    integer :: nat,ncart,nvar,field,spin,k,matrix,owner,local_status
     real(fp) :: finite_weight,quadrature_scale,exc
     real(fp) :: value(2,2),gradient(3,2,2)
-    real(fp), allocatable :: fixed_d1(:,:,:,:),fixed_g1(:,:,:,:,:)
-    real(fp), allocatable :: fixed_d2(:,:,:,:,:,:),fixed_g2(:,:,:,:,:,:,:)
-    real(fp), allocatable :: d1(:,:,:,:),g1(:,:,:,:,:)
-    real(fp), allocatable :: d2(:,:,:,:,:,:),g2(:,:,:,:,:,:,:)
-    real(fp), allocatable :: weights(:),dweights(:,:,:),d2weights(:,:,:,:,:)
-    real(fp), allocatable :: ug(:),up(:),dug(:,:,:),dup(:,:,:)
-    real(fp), allocatable :: d2ug(:,:,:,:,:),d2up(:,:,:,:,:)
-    real(fp), allocatable :: first(:),second(:,:),third(:,:,:)
-    real(fp), allocatable :: response_value(:,:,:),response_gradient(:,:,:,:)
-    real(fp), allocatable :: response_fixed_d(:,:,:,:,:)
-    real(fp), allocatable :: response_fixed_g(:,:,:,:,:,:)
-    real(fp), allocatable :: response_d1(:,:,:,:,:)
-    real(fp), allocatable :: response_g1(:,:,:,:,:,:)
-    real(fp), allocatable :: rg(:),rp(:),drg(:,:,:),drp(:,:,:),row(:,:)
 
     nat=xce%numAtoms
     ncart=3*nat
@@ -297,58 +386,47 @@ contains
     status=0
     finite_weight=xce%xyzw(ipt,4)
     if(abs(finite_weight)<=tiny(1.0_fp)) return
-    allocate(fixed_d1(3,nat,2,2),fixed_g1(3,3,nat,2,2), &
-      fixed_d2(3,3,nat,nat,2,2),fixed_g2(3,3,3,nat,nat,2,2), &
-      d1(3,nat,2,2),g1(3,3,nat,2,2),d2(3,3,nat,nat,2,2), &
-      g2(3,3,3,nat,nat,2,2),weights(nat),dweights(3,nat,nat), &
-      d2weights(3,nat,3,nat,nat),ug(nvar),up(nvar), &
-      dug(nvar,3,nat),dup(nvar,3,nat),d2ug(nvar,3,3,nat,nat), &
-      d2up(nvar,3,3,nat,nat),first(nvar),second(nvar,nvar), &
-      third(nvar,nvar,nvar),response_value(2,2,ncart), &
-      response_gradient(3,2,2,ncart), &
-      response_fixed_d(3,nat,2,2,ncart), &
-      response_fixed_g(3,3,nat,2,2,ncart), &
-      response_d1(3,nat,2,2,ncart),response_g1(3,3,nat,2,2,ncart), &
-      rg(nvar),rp(nvar),drg(nvar,3,nat),drp(nvar,3,nat),row(3,nat))
+    associate(fixed_d1=>workspace%fixed_d1,fixed_g1=>workspace%fixed_g1, &
+      fixed_d2=>workspace%fixed_d2,fixed_g2=>workspace%fixed_g2, &
+      d1=>workspace%d1,g1=>workspace%g1,d2=>workspace%d2,g2=>workspace%g2, &
+      weights=>workspace%weights,dweights=>workspace%dweights, &
+      d2weights=>workspace%d2weights,ug=>workspace%ug,up=>workspace%up, &
+      dug=>workspace%dug,dup=>workspace%dup,d2ug=>workspace%d2ug, &
+      d2up=>workspace%d2up,first=>workspace%first,second=>workspace%second, &
+      third=>workspace%third,response_value=>workspace%response_value, &
+      response_gradient=>workspace%response_gradient, &
+      response_fixed_d=>workspace%response_fixed_d, &
+      response_fixed_g=>workspace%response_fixed_g, &
+      response_d1=>workspace%response_d1,response_g1=>workspace%response_g1, &
+      rg=>workspace%rg,rp=>workspace%rp,drg=>workspace%drg, &
+      drp=>workspace%drp,row=>workspace%row)
     fixed_d1=0.0_fp;fixed_g1=0.0_fp;fixed_d2=0.0_fp;fixed_g2=0.0_fp
     d1=0.0_fp;g1=0.0_fp;d2=0.0_fp;g2=0.0_fp
+    call gga_density_nuclear_point_batch(base_density,atoms,xce%aoV(:,ipt), &
+      xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:),xce%aoG3(:,ipt,:), &
+      fixed_d1,fixed_g1,fixed_d2,fixed_g2)
+    call field_value_gradient_batch(base_density,xce%aoV(:,ipt), &
+      xce%aoG1(:,ipt,:),value,gradient)
     do field=1,2
       do spin=1,2
-        if(field==1) then
-          call field_value_gradient(ground(:,:,spin),xce%aoV(:,ipt), &
-            xce%aoG1(:,ipt,:),value(spin,field),gradient(:,spin,field))
-          call gga_density_nuclear_point(ground(:,:,spin),atoms, &
-            xce%aoV(:,ipt),xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:), &
-            xce%aoG3(:,ipt,:),fixed_d1(:,:,spin,field), &
-            fixed_g1(:,:,:,spin,field),fixed_d2(:,:,:,:,spin,field), &
-            fixed_g2(:,:,:,:,:,spin,field))
-        else
-          call field_value_gradient(probe(:,:,spin),xce%aoV(:,ipt), &
-            xce%aoG1(:,ipt,:),value(spin,field),gradient(:,spin,field))
-          call gga_density_nuclear_point(probe(:,:,spin),atoms, &
-            xce%aoV(:,ipt),xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:), &
-            xce%aoG3(:,ipt,:),fixed_d1(:,:,spin,field), &
-            fixed_g1(:,:,:,spin,field),fixed_d2(:,:,:,:,spin,field), &
-            fixed_g2(:,:,:,:,:,spin,field))
-        end if
-        call gga_add_owner_motion(owner,fixed_d1(:,:,spin,field), &
-          fixed_g1(:,:,:,spin,field),fixed_d2(:,:,:,:,spin,field), &
-          fixed_g2(:,:,:,:,:,spin,field),d1(:,:,spin,field), &
-          g1(:,:,:,spin,field),d2(:,:,:,:,spin,field), &
-          g2(:,:,:,:,:,spin,field))
+        matrix=spin+2*(field-1)
+        call gga_add_owner_motion(owner,fixed_d1(:,:,matrix), &
+          fixed_g1(:,:,:,matrix),fixed_d2(:,:,:,:,matrix), &
+          fixed_g2(:,:,:,:,:,matrix),d1(:,:,matrix), &
+          g1(:,:,:,matrix),d2(:,:,:,:,matrix),g2(:,:,:,:,:,matrix))
       end do
     end do
     call build_variables(self%is_gga,value(:,1),gradient(:,:,1), &
-      value(:,2),gradient(:,:,2),d1(:,:,:,1),g1(:,:,:,:,1), &
-      d1(:,:,:,2),g1(:,:,:,:,2),d2(:,:,:,:,:,1),g2(:,:,:,:,:,:,1), &
-      d2(:,:,:,:,:,2),g2(:,:,:,:,:,:,2),ug,up,dug,dup,d2ug,d2up)
+      value(:,2),gradient(:,:,2),d1(:,:,1:2),g1(:,:,:,1:2), &
+      d1(:,:,3:4),g1(:,:,:,3:4),d2(:,:,:,:,1:2), &
+      g2(:,:,:,:,:,1:2),d2(:,:,:,:,3:4),g2(:,:,:,:,:,3:4), &
+      ug,up,dug,dup,d2ug,d2up)
     call partition_weight_nuclear_derivatives(self%atom_xyz, &
       xce%xyzw(ipt,1:3),owner,self%dummy_atom,self%part_fun_type, &
       self%has_surface_shift,self%surface_shift,weights,dweights,d2weights, &
-      local_status)
+      local_status,workspace%partition)
     if(local_status/=0 .or. weights(owner)<=sqrt(tiny(1.0_fp))) then
       status=-1
-      call cleanup()
       return
     end if
     quadrature_scale=finite_weight/weights(owner)
@@ -360,72 +438,42 @@ contains
       d2weights(:,:,:,:,owner),self%hessian(:,:,:,:,mythread),local_status)
     if(local_status/=0) then
       status=-2
-      call cleanup()
       return
     end if
+    call response_field_value_gradient_batch(response_combined, &
+      xce%aoV(:,ipt),xce%aoG1(:,ipt,:),response_value,response_gradient)
+    call gga_density_nuclear_point_first_batch(response_combined,atoms, &
+      xce%aoV(:,ipt),xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:), &
+      response_fixed_combined,response_fixed_gradient_combined)
     do k=1,ncart
       do field=1,2
         do spin=1,2
-          if(field==1) then
-            call field_value_gradient(response_ground(:,:,spin,k), &
-              xce%aoV(:,ipt),xce%aoG1(:,ipt,:), &
-              response_value(spin,field,k), &
-              response_gradient(:,spin,field,k))
-            call gga_density_nuclear_point_first( &
-              response_ground(:,:,spin,k),atoms,xce%aoV(:,ipt), &
-              xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:), &
-              response_fixed_d(:,:,spin,field,k), &
-              response_fixed_g(:,:,:,spin,field,k))
-          else
-            call field_value_gradient(response_probe(:,:,spin,k), &
-              xce%aoV(:,ipt),xce%aoG1(:,ipt,:), &
-              response_value(spin,field,k), &
-              response_gradient(:,spin,field,k))
-            call gga_density_nuclear_point_first(response_probe(:,:,spin,k), &
-              atoms,xce%aoV(:,ipt),xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:), &
-              response_fixed_d(:,:,spin,field,k), &
-              response_fixed_g(:,:,:,spin,field,k))
-          end if
+          matrix=k+(field-1)*ncart
           call gga_add_owner_motion_first(owner, &
-            response_fixed_d(:,:,spin,field,k), &
-            response_fixed_g(:,:,:,spin,field,k), &
+            response_fixed_combined(:,:,spin,matrix), &
+            response_fixed_gradient_combined(:,:,:,spin,matrix), &
             response_d1(:,:,spin,field,k), &
             response_g1(:,:,:,spin,field,k))
         end do
       end do
       call build_response_variables(self%is_gga,value(:,1),gradient(:,:,1), &
-        value(:,2),gradient(:,:,2),d1(:,:,:,1),g1(:,:,:,:,1), &
-        d1(:,:,:,2),g1(:,:,:,:,2),response_value(:,1,k), &
+        value(:,2),gradient(:,:,2),d1(:,:,1:2),g1(:,:,:,1:2), &
+        d1(:,:,3:4),g1(:,:,:,3:4),response_value(:,1,k), &
         response_gradient(:,:,1,k),response_value(:,2,k), &
         response_gradient(:,:,2,k),response_d1(:,:,:,1,k), &
         response_g1(:,:,:,:,1,k),response_d1(:,:,:,2,k), &
-        response_g1(:,:,:,:,2,k),rg,rp,drg,drp)
-      row=0.0_fp
-      call mrsf_xc_weighted_response_row(first,second,third,up,dug,dup,rg, &
-        rp,drg,drp,quadrature_scale,weights(owner),dweights(:,:,owner),row, &
-        local_status)
-      if(local_status/=0) then
-        status=-3
-        call cleanup()
-        return
-      end if
-      self%rows(:,:,k,mythread)=self%rows(:,:,k,mythread)+row
+        response_g1(:,:,:,:,2,k),rg(:,k),rp(:,k),drg(:,:,:,k),drp(:,:,:,k))
     end do
-    call cleanup()
-
-  contains
-
-    subroutine cleanup()
-      if(allocated(fixed_d1)) deallocate(fixed_d1,fixed_g1,fixed_d2,fixed_g2)
-      if(allocated(d1)) deallocate(d1,g1,d2,g2)
-      if(allocated(weights)) deallocate(weights,dweights,d2weights)
-      if(allocated(ug)) deallocate(ug,up,dug,dup,d2ug,d2up)
-      if(allocated(first)) deallocate(first,second,third)
-      if(allocated(response_value)) deallocate(response_value, &
-        response_gradient,response_fixed_d,response_fixed_g,response_d1, &
-        response_g1)
-      if(allocated(rg)) deallocate(rg,rp,drg,drp,row)
-    end subroutine cleanup
+    row=0.0_fp
+    call mrsf_xc_weighted_response_rows(first,second,third,up,dug,dup,rg, &
+      rp,drg,drp,quadrature_scale,weights(owner),dweights(:,:,owner),row, &
+      local_status)
+    if(local_status/=0) then
+      status=-3
+      return
+    end if
+    self%rows(:,:,:,mythread)=self%rows(:,:,:,mythread)+row
+    end associate
 
   end subroutine accumulate_point
 
@@ -447,6 +495,83 @@ contains
   end subroutine field_value_gradient
 
 !-----------------------------------------------------------------------------
+
+  pure subroutine field_value_gradient_batch(density,aov,aog1,value,gradient)
+    real(fp), intent(in) :: density(:,:,:),aov(:),aog1(:,:)
+    real(fp), intent(out) :: value(:,:),gradient(:,:,:)
+    real(fp) :: pair,grad_pair(3),pair_density(4)
+    integer :: field,matrix,mu,nu,spin,nao
+
+    nao=size(aov)
+    if(any(shape(density)/=[4,nao,nao]) .or. &
+       any(shape(aog1)/=[nao,3]) .or. any(shape(value)/=[2,2]) .or. &
+       any(shape(gradient)/=[3,2,2])) &
+      error stop 'field_value_gradient_batch: shape mismatch'
+    value=0.0_fp
+    gradient=0.0_fp
+    do nu=1,nao
+      do mu=1,nu
+        pair=aov(mu)*aov(nu)
+        grad_pair=aog1(mu,:)*aov(nu)+aov(mu)*aog1(nu,:)
+        pair_density=density(:,mu,nu)
+        if(mu/=nu) pair_density=pair_density+density(:,nu,mu)
+        do field=1,2
+          do spin=1,2
+            matrix=spin+2*(field-1)
+            value(spin,field)=value(spin,field)+pair_density(matrix)*pair
+            gradient(:,spin,field)=gradient(:,spin,field)+ &
+              pair_density(matrix)*grad_pair
+          end do
+        end do
+      end do
+    end do
+  end subroutine field_value_gradient_batch
+
+!-----------------------------------------------------------------------------
+
+  pure subroutine response_field_value_gradient_batch(density,aov,aog1, &
+      value,gradient)
+    real(fp), intent(in) :: density(:,:,:,:)
+    real(fp), intent(in) :: aov(:),aog1(:,:)
+    real(fp), intent(out) :: value(:,:,:),gradient(:,:,:,:)
+    real(fp) :: qvalue,qgradient(3), &
+      pair_ground(size(density,1)/2,2),pair_probe(size(density,1)/2,2)
+    integer :: mu,nu,spin,space,nao,ncart
+
+    nao=size(aov)
+    ncart=size(density,1)/2
+    if(any(shape(density)/=[2*ncart,2,nao,nao]) .or. &
+       any(shape(aog1)/=[nao,3]) .or. &
+       any(shape(value)/=[2,2,ncart]) .or. &
+       any(shape(gradient)/=[3,2,2,ncart])) &
+      error stop 'response_field_value_gradient_batch: shape mismatch'
+    value=0.0_fp
+    gradient=0.0_fp
+    do nu=1,nao
+      do mu=1,nu
+        qvalue=aov(mu)*aov(nu)
+        qgradient=aog1(mu,:)*aov(nu)+aov(mu)*aog1(nu,:)
+        pair_ground=density(1:ncart,:,mu,nu)
+        pair_probe=density(ncart+1:2*ncart,:,mu,nu)
+        if(mu/=nu) then
+          pair_ground=pair_ground+density(1:ncart,:,nu,mu)
+          pair_probe=pair_probe+density(ncart+1:2*ncart,:,nu,mu)
+        end if
+        do spin=1,2
+          value(spin,1,:)=value(spin,1,:)+ &
+            pair_ground(:,spin)*qvalue
+          value(spin,2,:)=value(spin,2,:)+ &
+            pair_probe(:,spin)*qvalue
+          do space=1,3
+            gradient(space,spin,1,:)=gradient(space,spin,1,:)+ &
+              pair_ground(:,spin)*qgradient(space)
+            gradient(space,spin,2,:)=gradient(space,spin,2,:)+ &
+              pair_probe(:,spin)*qgradient(space)
+          end do
+        end do
+      end do
+    end do
+  end subroutine response_field_value_gradient_batch
 
   pure subroutine build_variables(is_gga,rho,grad_rho,prho,grad_prho, &
       drho,dgrad_rho,dprho,dgrad_prho,d2rho,d2grad_rho,d2prho, &
@@ -648,7 +773,7 @@ contains
     real(fp), intent(out) :: first(:),second(:,:),third(:,:,:)
     real(fp) :: dr(2),ds(3),dt(2),fr(2),fs(3),ft(2),ffs(3)
     real(fp) :: gr(2),gs(3),gt(2)
-    real(fp), allocatable :: square(:,:),mixed(:)
+    real(fp) :: square(5,5),mixed(5)
     integer :: j,k
 
     call xc_der1(xce,.true.,ipt,dr,ds,dt)
@@ -662,29 +787,30 @@ contains
       call join_direction(nvar,fr,fs,second(:,j))
     end do
     second=0.5_fp*(second+transpose(second))/finite_weight
-    allocate(square(nvar,nvar),mixed(nvar))
+    square=0.0_fp
+    mixed=0.0_fp
     do j=1,nvar
       call split_basis(nvar,j,dr,ds)
       dt=0.0_fp
       call xc_der3_contr(xce,ipt,dr,ds,dt,[0.0_fp,0.0_fp,0.0_fp], &
         ffs,gr,gs,gt)
-      call join_direction(nvar,gr,gs,square(:,j))
+      call join_direction(nvar,gr,gs,square(1:nvar,j))
     end do
     third=0.0_fp
     do j=1,nvar
-      third(:,j,j)=square(:,j)/finite_weight
+      third(:,j,j)=square(1:nvar,j)/finite_weight
       do k=j+1,nvar
         call split_pair(nvar,j,k,dr,ds)
         dt=0.0_fp
         call xc_der3_contr(xce,ipt,dr,ds,dt,[0.0_fp,0.0_fp,0.0_fp], &
           ffs,gr,gs,gt)
-        call join_direction(nvar,gr,gs,mixed)
-        mixed=0.5_fp*(mixed-square(:,j)-square(:,k))/finite_weight
-        third(:,j,k)=mixed
-        third(:,k,j)=mixed
+        call join_direction(nvar,gr,gs,mixed(1:nvar))
+        mixed(1:nvar)=0.5_fp*(mixed(1:nvar)-square(1:nvar,j)- &
+          square(1:nvar,k))/finite_weight
+        third(:,j,k)=mixed(1:nvar)
+        third(:,k,j)=mixed(1:nvar)
       end do
     end do
-    deallocate(square,mixed)
   end subroutine build_unweighted_kernels
 
   pure subroutine split_basis(nvar,index,dr,ds)

@@ -50,6 +50,7 @@ contains
     use mrsf_xc_fock_total_derivative_mod, only: &
       mrsf_xc_fock_total_derivative
     use messages, only: WITH_ABORT
+    use io_constants, only: iw
 
     type(information), target, intent(inout) :: infos
     type(mrsf_hessian_first_response_t), intent(inout) :: response
@@ -64,7 +65,9 @@ contains
     real(kind=dp), contiguous, pointer :: stored_mo_a(:,:),stored_mo_b(:,:), &
       packed_fock_a(:),packed_fock_b(:),state_vectors(:,:),energies(:)
     real(kind=dp), allocatable :: pa(:,:),pb(:,:),dvxc_a(:,:,:),dvxc_b(:,:,:)
-    integer :: nbf,nocca,noccb,ncoord,packed,target,local_status
+    integer :: nbf,nocca,noccb,ncoord,packed,target,local_status, &
+      clock_start,clock_now,clock_rate
+    real(kind=dp) :: time_orbital,time_xc_derivative,time_state
     logical :: dft
 
     call response%clean()
@@ -127,8 +130,12 @@ contains
     call unpack_matrix(packed_fock_a,response%fock_a)
     call unpack_matrix(packed_fock_b,response%fock_b)
 
+    time_orbital=0.0_dp;time_xc_derivative=0.0_dp;time_state=0.0_dp
+    call system_clock(clock_start,clock_rate)
     call build_rohf_nuclear_response(infos,orbital_response,local_status, &
       require_two_somo=.true.)
+    call system_clock(clock_now)
+    time_orbital=real(clock_now-clock_start,dp)/real(clock_rate,dp)
     if(local_status/=0) then
       status=-4
       call response%clean()
@@ -152,6 +159,7 @@ contains
       response%mo_b,response%dmo_b,noccb,response%dpb,local_status)
 
     if(dft .and. local_status==0) then
+      call system_clock(clock_start)
       block
         use mod_dft, only: dft_initialize,dftclean
         use mod_dft_molgrid, only: dft_grid_t
@@ -163,9 +171,12 @@ contains
           response%dpb,dvxc_a,dvxc_b,infos,local_status,threshold=0.0_dp)
         call dftclean(infos)
       end block
+      call system_clock(clock_now)
+      time_xc_derivative=real(clock_now-clock_start,dp)/real(clock_rate,dp)
     end if
 
     if(local_status==0) then
+      call system_clock(clock_start)
       call int2_driver%init(basis,infos)
       call int2_driver%set_screening()
       if(dft) then
@@ -187,12 +198,18 @@ contains
           dfock_b_out=response%dfock_b)
       end if
       call int2_driver%clean()
+      call system_clock(clock_now)
+      time_state=real(clock_now-clock_start,dp)/real(clock_rate,dp)
     end if
     if(allocated(dvxc_a)) deallocate(dvxc_a,dvxc_b)
     deallocate(pa,pb)
     if(local_status/=0) then
       status=local_status
       call response%clean()
+    else
+      write(iw,'(A,3(F10.3,1X))') &
+        'MRSF first-response substage wall times (s): orbital, XC-Fock, state = ', &
+        time_orbital,time_xc_derivative,time_state
     end if
   end subroutine prepare_mrsf_hessian_first_response
 

@@ -1067,6 +1067,135 @@ contains
     
   end subroutine apply_z_operator
 
+  ! Apply the MRSF orbital Z-vector operator to a batch of trial vectors.
+  ! Alpha/beta response densities are stored as consecutive pairs so the
+  ! generalized int2_tdgrd_data_t update evaluates every pair during one
+  ! shell-quartet traversal.  The XC kernel already accepts nMtx>1 and is
+  ! likewise evaluated once for the full active batch.
+  subroutine apply_z_operator_batch(x_in,x_out,infos,basis,molGrid, &
+                                    int2_driver,nocca,noccb,nbf,mo_a,mo_b, &
+                                    mo_energy_a,fa,fb,scale_exch,dft)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int2_compute, only: int2_compute_t
+    use tdhf_lib, only: int2_tdgrd_data_t
+    use tdhf_sf_lib, only: sfrogen, sfrolhs
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    use mathlib, only: symmetrize_matrix, orthogonal_transform
+    use mod_dft_molgrid, only: dft_grid_t
+    use tdhf_lib, only: mntoia
+    use, intrinsic :: iso_fortran_env, only: error_unit
+
+    real(kind=dp), intent(in) :: x_in(:,:)
+    real(kind=dp), intent(out) :: x_out(:,:)
+    type(information), intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    type(dft_grid_t), intent(inout) :: molGrid
+    type(int2_compute_t), intent(inout) :: int2_driver
+    integer, intent(in) :: nocca,noccb,nbf
+    real(kind=dp), intent(in) :: mo_a(:,:),mo_b(:,:),mo_energy_a(:)
+    real(kind=dp), intent(in) :: fa(:,:),fb(:,:),scale_exch
+    logical, intent(in) :: dft
+
+    type(int2_tdgrd_data_t), allocatable, target :: int2_data
+    real(kind=dp), pointer :: ab1(:,:,:)
+    real(kind=dp), allocatable, target :: pa(:,:,:)
+    real(kind=dp), allocatable :: wrk1(:,:),wrk2(:,:),wrk3(:,:), &
+      ab1_mo_a(:,:,:),ab1_mo_b(:,:,:),density_a(:,:,:), &
+      density_b(:,:,:),fock_a(:,:,:),fock_b(:,:,:)
+    integer :: alpha_slot,beta_slot,ivec,lzdim,nvec,nvira,nvirb
+
+    nvec=size(x_in,2)
+    lzdim=size(x_in,1)
+    nvira=nbf-nocca
+    nvirb=nbf-noccb
+    x_out=0.0_dp
+    if(nvec<=0 .or. lzdim<=0 .or. any(shape(x_out)/=[lzdim,nvec]) .or. &
+       any(.not.ieee_is_finite(x_in))) then
+      x_out=ieee_value(0.0_dp,ieee_quiet_nan)
+      return
+    end if
+
+    allocate(wrk1(nbf,nbf),wrk2(nbf,nbf),wrk3(nbf,nbf), &
+      pa(nbf,nbf,2*nvec),ab1_mo_a(nocca,nvira,nvec), &
+      ab1_mo_b(noccb,nvirb,nvec),source=0.0_dp)
+    do ivec=1,nvec
+      alpha_slot=2*ivec-1
+      beta_slot=alpha_slot+1
+      wrk1=0.0_dp
+      wrk2=0.0_dp
+      call sfrogen(wrk1,wrk2,x_in(:,ivec),nocca,noccb)
+      call orthogonal_transform('t',nbf,mo_a,wrk1,pa(:,:,alpha_slot),wrk3)
+      call orthogonal_transform('t',nbf,mo_b,wrk2,pa(:,:,beta_slot),wrk3)
+    end do
+
+    allocate(int2_data,source=int2_tdgrd_data_t(d2=pa,int_apb=.true., &
+      int_amb=.false.,tamm_dancoff=.false.,scale_exchange=scale_exch))
+    int2_data%fixed_linear_screening=.true.
+    call int2_driver%run(int2_data,cam=dft.and.infos%dft%cam_flag, &
+      alpha=infos%dft%cam_alpha,beta=infos%dft%cam_beta, &
+      mu=infos%dft%cam_mu)
+    ab1=>int2_data%apb(:,:,:,1)
+    if(any(.not.ieee_is_finite(ab1))) then
+      write(error_unit,'(A,I0)') &
+        'MRSF batch Z operator produced non-finite two-electron response; width ', &
+        nvec
+      x_out=ieee_value(0.0_dp,ieee_quiet_nan)
+      nullify(ab1)
+      call int2_data%clean()
+      deallocate(int2_data,pa,wrk1,wrk2,wrk3,ab1_mo_a,ab1_mo_b)
+      return
+    end if
+
+    do ivec=1,nvec
+      call symmetrize_matrix(pa(:,:,2*ivec-1),nbf)
+      call symmetrize_matrix(pa(:,:,2*ivec),nbf)
+    end do
+    if(dft) then
+      allocate(density_a(nbf,nbf,nvec),density_b(nbf,nbf,nvec), &
+        fock_a(nbf,nbf,nvec),fock_b(nbf,nbf,nvec),source=0.0_dp)
+      do ivec=1,nvec
+        density_a(:,:,ivec)=pa(:,:,2*ivec-1)
+        density_b(:,:,ivec)=pa(:,:,2*ivec)
+        fock_a(:,:,ivec)=ab1(:,:,2*ivec-1)
+        fock_b(:,:,ivec)=ab1(:,:,2*ivec)
+      end do
+      call utddft_fxc(basis=basis,molGrid=molGrid,isVecs=.true., &
+        wfa=mo_a,wfb=mo_b,fxa=fock_a,fxb=fock_b,dxa=density_a, &
+        dxb=density_b,nmtx=nvec,threshold=1.0d-15,infos=infos)
+      do ivec=1,nvec
+        ab1(:,:,2*ivec-1)=fock_a(:,:,ivec)
+        ab1(:,:,2*ivec)=fock_b(:,:,ivec)
+      end do
+      deallocate(density_a,density_b,fock_a,fock_b)
+      if(any(.not.ieee_is_finite(ab1))) then
+        write(error_unit,'(A,I0)') &
+          'MRSF batch Z operator produced non-finite XC response; width ',nvec
+        x_out=ieee_value(0.0_dp,ieee_quiet_nan)
+        nullify(ab1)
+        call int2_data%clean()
+        deallocate(int2_data,pa,wrk1,wrk2,wrk3,ab1_mo_a,ab1_mo_b)
+        return
+      end if
+    end if
+
+    do ivec=1,nvec
+      call mntoia(ab1(:,:,2*ivec-1),ab1_mo_a(:,:,ivec), &
+        mo_a,mo_a,nocca,nocca)
+      call mntoia(ab1(:,:,2*ivec),ab1_mo_b(:,:,ivec), &
+        mo_b,mo_b,noccb,noccb)
+      call sfrolhs(x_out(:,ivec),x_in(:,ivec),mo_energy_a,fa,fb, &
+        ab1_mo_a(:,:,ivec),ab1_mo_b(:,:,ivec),nocca,noccb)
+    end do
+    if(any(.not.ieee_is_finite(x_out))) &
+      x_out=ieee_value(0.0_dp,ieee_quiet_nan)
+    nullify(ab1)
+    call int2_data%clean()
+    deallocate(int2_data,pa,wrk1,wrk2,wrk3,ab1_mo_a,ab1_mo_b)
+
+  end subroutine apply_z_operator_batch
+
   ! Apply preconditioner (simple diagonal preconditioner)
   subroutine apply_z_precond(x_in, x_out, xminv)
     use precision, only: dp

@@ -6,10 +6,14 @@ module mrsf_xc_fock_total_derivative_mod
   use mod_dft_gridint, only: xc_engine_t,xc_consumer_t,xc_options_t,run_xc, &
     xc_der1,xc_der2_contr
   use mod_dft_gridint_fxc, only: utddft_fxc
-  use mod_dft_partition_hessian, only: partition_weight_nuclear_derivatives
+  use mod_dft_partition_hessian, only: &
+    partition_weight_nuclear_first_derivatives
   use mod_dft_gridint_mrsf_xc_fock_deriv_point, only: &
     lda_spin_fock_point_derivative,gga_spin_fock_point_derivative, &
-    moving_ao_pair_derivative,moving_density_derivative
+    moving_ao_pair_derivative
+  use mod_dft_gga_nuclear_point, only: &
+    gga_density_nuclear_point_first_batch
+  use mod_dft_gridint_tdgga_response, only: gga_add_owner_motion_first
 
   implicit none
   private
@@ -312,15 +316,17 @@ contains
     integer :: mythread
 
     real(fp), allocatable :: pa(:,:),pb(:,:),drho(:,:),dgrad_rho(:,:,:)
+    real(fp), allocatable :: density(:,:,:,:),fixed_d(:,:,:,:), &
+      fixed_g(:,:,:,:,:),total_d(:,:,:,:),total_g(:,:,:,:,:)
     real(fp), allocatable :: dweight_flat(:),dvr(:,:),dvs(:,:)
     real(fp), allocatable :: dpair(:),dgrad_pair(:,:),point_derivative(:,:)
-    real(fp), allocatable :: weights(:),dweights(:,:,:),d2weights(:,:,:,:,:)
+    real(fp), allocatable :: weights(:),dweights(:,:,:)
     integer, allocatable :: atoms(:)
     real(fp) :: dr(2),ds(3),dt(2),fr(2),fs(3),ft(2)
     real(fp) :: vr(2),vs(3),vt(2),grad_rho(3,2)
     real(fp) :: pair,grad_pair(3),quadrature_scale,finite_weight
     integer :: atom,cart,coordinate,global_mu,global_nu,ipt,mu,n,nat,ncart
-    integer :: nu,owner,pair_status,partition_status,spin_status
+    integer :: nu,owner,pair_status,partition_status,spin,spin_status
 
     n=xce%numAOs_p
     nat=xce%numAtoms
@@ -330,11 +336,12 @@ contains
       self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
       return
     end if
-    allocate(pa(n,n),pb(n,n),atoms(n),drho(2,ncart), &
+    allocate(pa(n,n),pb(n,n),density(1,2,n,n),atoms(n),drho(2,ncart), &
       dgrad_rho(3,2,ncart),dweight_flat(ncart),dvr(2,ncart), &
       dvs(3,ncart),dpair(ncart),dgrad_pair(3,ncart), &
       point_derivative(2,ncart),weights(nat),dweights(3,nat,nat), &
-      d2weights(3,nat,3,nat,nat))
+      fixed_d(3,nat,2,1),fixed_g(3,3,nat,2,1), &
+      total_d(3,nat,2,1),total_g(3,3,nat,2,1))
     if(xce%skip_p) then
       pa=xce%wfAlpha_p
       pb=xce%wfBeta_p
@@ -344,14 +351,16 @@ contains
       pb=xce%wfBeta_p
       atoms=self%ao_atom(xce%indices_p(1:n))
     end if
+    density(1,1,:,:)=pa
+    density(1,2,:,:)=pb
 
     do ipt=1,xce%numPts
       finite_weight=xce%xyzw(ipt,4)
       if(abs(finite_weight)<=tiny(1.0_fp)) cycle
-      call partition_weight_nuclear_derivatives(self%atom_xyz, &
+      call partition_weight_nuclear_first_derivatives(self%atom_xyz, &
         xce%xyzw(ipt,1:3),owner,self%dummy_atom,self%part_fun_type, &
         self%has_surface_shift,self%surface_shift,weights,dweights, &
-        d2weights,partition_status)
+        partition_status)
       if(partition_status/=0 .or. &
          weights(owner)<=sqrt(tiny(1.0_fp))) then
         self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
@@ -365,20 +374,20 @@ contains
         end do
       end do
 
-      call moving_density_derivative(pa,atoms,owner,xce%aoV(:,ipt), &
-        xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:),self%is_gga,drho(1,:), &
-        dgrad_rho(:,1,:),spin_status)
-      if(spin_status/=0) then
-        self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
-        return
-      end if
-      call moving_density_derivative(pb,atoms,owner,xce%aoV(:,ipt), &
-        xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:),self%is_gga,drho(2,:), &
-        dgrad_rho(:,2,:),spin_status)
-      if(spin_status/=0) then
-        self%worker_error(mythread)=self%worker_error(mythread)+1.0_fp
-        return
-      end if
+      call gga_density_nuclear_point_first_batch(density,atoms, &
+        xce%aoV(:,ipt),xce%aoG1(:,ipt,:),xce%aoG2(:,ipt,:),fixed_d,fixed_g)
+      do spin=1,2
+        call gga_add_owner_motion_first(owner,fixed_d(:,:,spin,1), &
+          fixed_g(:,:,:,spin,1),total_d(:,:,spin,1), &
+          total_g(:,:,:,spin,1))
+      end do
+      do atom=1,nat
+        do cart=1,3
+          coordinate=3*(atom-1)+cart
+          drho(:,coordinate)=total_d(cart,atom,:,1)
+          dgrad_rho(:,:,coordinate)=total_g(:,cart,atom,:,1)
+        end do
+      end do
 
       call xc_der1(xce,.true.,ipt,vr,vs,vt)
       vr=vr/finite_weight
@@ -405,7 +414,7 @@ contains
       do nu=1,n
         global_nu=nu
         if(.not.xce%skip_p) global_nu=xce%indices_p(nu)
-        do mu=1,n
+        do mu=1,nu
           global_mu=mu
           if(.not.xce%skip_p) global_mu=xce%indices_p(mu)
           call moving_ao_pair_derivative(owner,atoms(mu),atoms(nu), &
@@ -436,6 +445,14 @@ contains
           self%derivative_b(global_mu,global_nu,:,mythread)= &
             self%derivative_b(global_mu,global_nu,:,mythread) &
             +point_derivative(2,:)
+          if(global_mu/=global_nu) then
+            self%derivative_a(global_nu,global_mu,:,mythread)= &
+              self%derivative_a(global_nu,global_mu,:,mythread) &
+              +point_derivative(1,:)
+            self%derivative_b(global_nu,global_mu,:,mythread)= &
+              self%derivative_b(global_nu,global_mu,:,mythread) &
+              +point_derivative(2,:)
+          end if
         end do
       end do
     end do

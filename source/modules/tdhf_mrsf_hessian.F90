@@ -53,12 +53,13 @@ contains
     use tdhf_mrsf_hessian_rows_mod, only: build_tdhf_mrsf_response_rows
     use mod_dft_gridint_mrsf_xc_hessian, only: &
       mrsf_tddft_xc_hessian_rows
-    use tdhf_mrsf_z_vector_mod, only: apply_z_operator
+    use tdhf_mrsf_z_vector_mod, only: apply_z_operator,apply_z_operator_batch
+    use tdhf_sf_lib, only: sfromcal
+    use zvector_common, only: sanitize_zvector_preconditioner
     use parallel, only: par_env_t
     use mod_dft, only: dft_initialize,dftclean
     use messages, only: show_message,WITH_ABORT
     use io_constants, only: iw
-!$  use omp_lib, only: omp_get_max_threads,omp_set_num_threads
 
     type(information), target, intent(inout) :: infos
 
@@ -79,16 +80,15 @@ contains
       dreference_fock(:,:,:,:),drelaxed_spin(:,:,:,:),hfixed(:,:), &
       hxc(:,:),xc_rows(:,:),rows(:,:),rows_one(:,:),rows_two(:,:), &
       rows_xc(:,:),htotal(:,:)
+    real(kind=dp), allocatable :: z_diagonal(:),z_preconditioner(:)
     real(kind=dp) :: amplitude_residual,z_residual,row_asymmetry,w_error, &
-      orbital_exchange_scale
+      orbital_exchange_scale,time_first_response,time_z_intermediates, &
+      time_z_response,time_w_response,time_fixed_density,time_xc,time_rows
     integer :: nbf,nbf2,natom,ncoord,nocca,noccb,lzdim,status,local_status
-    integer :: omp_saved_threads
+    integer(kind=8) :: clock_start,clock_now,clock_rate
     character(len=160) :: error_message
     logical :: is_dft
 
-    omp_saved_threads=1
-!$  omp_saved_threads=omp_get_max_threads()
-!$  call omp_set_num_threads(1)
     call pe%init(infos%mpiinfo%comm,infos%mpiinfo%usempi)
     nbf=infos%basis%nbf
     nbf2=nbf*(nbf+1)/2
@@ -121,7 +121,11 @@ contains
     if(size(z)/=lzdim) call show_message( &
       'Stored MRSF Z-vector has the wrong dimension.',WITH_ABORT)
 
+    call system_clock(clock_start,clock_rate)
     call prepare_mrsf_hessian_first_response(infos,response,status)
+    call system_clock(clock_now)
+    time_first_response=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
     if(status/=0) then
       write(error_message,'(A,I0,A)') &
         'MRSF first nuclear response failed with status ',status,'.'
@@ -153,11 +157,19 @@ contains
       response%mo_b,response%dmo_common,response%dmo_common,response%fock_a, &
       response%fock_b,response%dfock_a,response%dfock_b,response%x, &
       response%dx,z,reference_spin,dreference_spin,intermediate,status)
+    call system_clock(clock_now)
+    time_z_intermediates=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
     if(status/=0) call show_message( &
       'MRSF Z-response intermediates could not be built.',WITH_ABORT)
 
     allocate(drhs(lzdim,ncoord),operator_derivative_z(lzdim,ncoord), &
-      dz(lzdim,ncoord),source=0.0_dp)
+      dz(lzdim,ncoord),z_diagonal(lzdim),z_preconditioner(lzdim), &
+      source=0.0_dp)
+    call sfromcal(z_diagonal,z_preconditioner,intermediate%mo_energy, &
+      intermediate%fa,intermediate%fb,nocca,noccb)
+    call sanitize_zvector_preconditioner(z_diagonal,z_preconditioner,iw, &
+      1.0e-10_dp,'MRSF Hessian')
     if(is_dft) call dft_initialize(infos,basis,unused_grid)
     call solve_mrsf_z_response_from_mo_derivatives(orbital_hessian_action, &
       infos%tddft%mult,logical(infos%tddft%umrsf,kind=kind(.false.)), &
@@ -176,8 +188,19 @@ contains
       ! 1e-12 is not meaningful and can reject an otherwise converged response.
       tol=max(1.0e-10_dp,infos%tddft%zvconv), &
       maxit=max(200,int(infos%control%maxit_zv)), &
-      restart=lzdim)
+      restart=lzdim, &
+      apply_orbital_hessian_batch=orbital_hessian_action_batch, &
+      apply_orbital_preconditioner_batch=orbital_preconditioner_batch)
     if(is_dft) call dftclean(infos)
+    call system_clock(clock_now)
+    time_z_response=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
+    if(status/=0) then
+      write(iw,'(A,I0,A,1P,E15.7)') &
+        'MRSF differentiated Z-vector block solve status ',status, &
+        ', residual ',z_residual
+      call flush(iw)
+    end if
     if(status/=0) call show_message( &
       'MRSF differentiated Z-vector did not converge.',WITH_ABORT)
     if(.not.ieee_is_finite(z_residual) .or. z_residual>1.0e-6_dp .or. &
@@ -222,6 +245,9 @@ contains
       intermediate%ppijb,intermediate%dppijb,nocca,noccb,.true.,3, &
       infos%tddft%mult,.false.,.false.,dw,status)
     if(status/=0) call show_message('MRSF W response failed.',WITH_ABORT)
+    call system_clock(clock_now)
+    time_w_response=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
 
     allocate(relaxed_spin(nbf,nbf,2), &
       drelaxed_spin(nbf,nbf,2,ncoord),source=0.0_dp)
@@ -233,6 +259,9 @@ contains
       rows(ncoord,ncoord),rows_one(ncoord,ncoord),rows_two(ncoord,ncoord), &
       rows_xc(ncoord,ncoord),htotal(ncoord,ncoord),source=0.0_dp)
     call build_mrsf_fixed_density_hessian(infos,hfixed,status)
+    call system_clock(clock_now)
+    time_fixed_density=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
     if(status/=0) call show_message('MRSF fixed-density Hessian failed.', &
       WITH_ABORT)
     if(infos%control%hamilton==20) then
@@ -248,6 +277,9 @@ contains
       if(status/=0) call show_message( &
         'MRSF-TDDFT semilocal XC Hessian integration failed.',WITH_ABORT)
     end if
+    call system_clock(clock_now)
+    time_xc=real(clock_now-clock_start,dp)/real(clock_rate,dp)
+    clock_start=clock_now
     call build_tdhf_mrsf_response_rows(infos,reference_spin,reference_fock, &
       relaxed_spin,seven,dreference_spin,dreference_fock,drelaxed_spin,dw, &
       intermediate%dseven, &
@@ -258,6 +290,8 @@ contains
         'MRSF Cartesian response rows failed with status ',status,'.'
       call show_message(trim(error_message),WITH_ABORT)
     end if
+    call system_clock(clock_now)
+    time_rows=real(clock_now-clock_start,dp)/real(clock_rate,dp)
     call assemble_mrsf_cartesian_hessian(hfixed,hxc,rows,htotal, &
       row_asymmetry,status)
     if(status/=0) call show_message('MRSF Hessian assembly failed.',WITH_ABORT)
@@ -310,12 +344,15 @@ contains
     write(iw,'(A,1P,E12.4)') &
       'MRSF Hessian two-electron response-row asymmetry: ', &
       maxval(abs(rows_two-transpose(rows_two)))
+    write(iw,'(A,7(F10.3,1X))') &
+      'MRSF Hessian stage wall times (s): first-response, Z-intermediates, '// &
+      'Z-response, W-response, fixed-density, XC, response-rows = ', &
+      time_first_response,time_z_intermediates,time_z_response, &
+      time_w_response,time_fixed_density,time_xc,time_rows
     close(iw)
     call int2_driver%clean()
     call response%clean()
     call intermediate%clean()
-!$  call omp_set_num_threads(omp_saved_threads)
-
   contains
 
     subroutine orbital_hessian_action(vector,result,callback_status)
@@ -329,6 +366,36 @@ contains
       callback_status=0
       if(any(.not.ieee_is_finite(result))) callback_status=-1
     end subroutine orbital_hessian_action
+
+    subroutine orbital_hessian_action_batch(vectors,results,callback_status)
+      real(kind=dp), intent(in) :: vectors(:,:)
+      real(kind=dp), intent(out) :: results(:,:)
+      integer, intent(out) :: callback_status
+      call apply_z_operator_batch(vectors,results,infos,basis,unused_grid, &
+        int2_driver,nocca,noccb,nbf,response%mo_a,response%mo_b, &
+        intermediate%mo_energy,intermediate%fa,intermediate%fb, &
+        orbital_exchange_scale,is_dft)
+      callback_status=0
+      if(any(.not.ieee_is_finite(results))) callback_status=-1
+    end subroutine orbital_hessian_action_batch
+
+    subroutine orbital_preconditioner_batch(vectors,results,callback_status)
+      real(kind=dp), intent(in) :: vectors(:,:)
+      real(kind=dp), intent(out) :: results(:,:)
+      integer, intent(out) :: callback_status
+      integer :: nvec
+
+      nvec=size(vectors,2)
+      callback_status=0
+      if(size(vectors,1)/=lzdim .or. &
+         any(shape(results)/=[lzdim,nvec]) .or. nvec<=0) then
+        results=0.0_dp
+        callback_status=-1
+        return
+      end if
+      results=vectors*spread(z_preconditioner,2,nvec)
+      if(any(.not.ieee_is_finite(results))) callback_status=-1
+    end subroutine orbital_preconditioner_batch
 
   end subroutine tdhf_mrsf_hessian
 

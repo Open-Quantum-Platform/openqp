@@ -20,10 +20,11 @@ module cphf_mod
 
   use precision, only: dp
   use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use types, only: information
   use basis_tools, only: basis_set
   use int2_compute, only: int2_compute_t, int2_fock_data_t
-  use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
+  use tdhf_lib, only: int2_td_data_t, int2_tdgrd_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
   use io_constants, only: iw
@@ -833,7 +834,7 @@ contains
 !>   Fvv x - x Foo (full MO Fock blocks, so non-canonical orbitals are handled)
 !>   plus the response Fock from the trial rotation density (get_response_packed,
 !>   scftype>=2 -> Coulomb from the spin-summed density, exchange same-spin).
-  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit)
+  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit, status)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix
@@ -845,22 +846,28 @@ contains
     real(kind=dp), intent(out) :: uvec(:,:)
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
+    integer, intent(out), optional :: status
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
     type(cphf_cg_data_rohf), target :: cgdata
-    type(pcg_t) :: pcg
-
     real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
     real(kind=dp), allocatable, target :: famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable, target :: xminv(:)
     real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
+    real(kind=dp), allocatable :: residual(:,:), zvec(:,:), pvec(:,:), apvec(:,:)
+    real(kind=dp), allocatable :: pactive(:,:), apactive(:,:)
+    real(kind=dp), allocatable :: rz(:), rz_new(:), error(:)
+    logical, allocatable :: active(:), failed(:)
+    integer, allocatable :: active_rhs(:), iterations(:)
     integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
-    integer :: i, a, k, irhs, iter, mxit
+    integer :: i, a, k, irhs, iter, mxit, nactive, iact
     logical :: dft
-    real(kind=dp) :: cnv, scale_exch, d
+    real(kind=dp) :: cnv, scale_exch, d, target, pap, alpha, beta
+    real(kind=dp), parameter :: denominator_floor = 1.0d-24
 
     basis => infos%basis
+    if (present(status)) status = 0
     basis%atoms => infos%atoms
     nbf = basis%nbf
     nocca = infos%mol_prop%nelec_A
@@ -940,21 +947,134 @@ contains
     write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
     write(iw,'(3x,60("-"))')
 
+    ! Solve every right-hand side with algebraically independent PCG recurrences,
+    ! but share each expensive orbital-Hessian application across all currently
+    ! active RHSs.  The four-centre ERIs and the XC quadrature are therefore each
+    ! traversed once per CG iteration rather than once per nuclear coordinate.
+    ! This is an exact multi-RHS evaluation: no density fitting, truncated
+    ! exchange, altered grid, or cross-RHS approximation is introduced.
+    allocate(residual(ltot,nrhs), zvec(ltot,nrhs), pvec(ltot,nrhs), &
+             apvec(ltot,nrhs), pactive(ltot,nrhs), apactive(ltot,nrhs), &
+             rz(nrhs), rz_new(nrhs), error(nrhs), source=0.0_dp)
+    allocate(active(nrhs), failed(nrhs), source=.false.)
+    allocate(active_rhs(nrhs), iterations(nrhs), source=0)
+    uvec = 0.0_dp
+    residual = bvec
+    target = sqrt(abs(cnv))
+    active = .false.
+    failed = .false.
+    iterations = 0
+
     do irhs = 1, nrhs
-      call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
-                    dat=cgdata, tol=sqrt(abs(cnv)))
-      do iter = 1, mxit
-        if (pcg%errcode /= PCG_OK) exit
-        call pcg%step()
-      end do
-      write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
-              irhs, iter - 1, pcg%error**2
-      call flush(iw)
-      uvec(:,irhs) = pcg%x
-      call pcg%clean()
+      if (.not. all(ieee_is_finite(residual(:,irhs)))) then
+        failed(irhs) = .true.
+        error(irhs) = huge(1.0_dp)
+        cycle
+      end if
+      zvec(:,irhs) = xminv*residual(:,irhs)
+      pvec(:,irhs) = zvec(:,irhs)
+      rz(irhs) = dot_product(residual(:,irhs),zvec(:,irhs))
+      error(irhs) = norm2(residual(:,irhs))
+      if (.not. ieee_is_finite(rz(irhs)) .or. .not. ieee_is_finite(error(irhs))) then
+        failed(irhs) = .true.
+      else
+        active(irhs) = error(irhs) > target
+      end if
     end do
 
-    deallocate(famo, fbmo, xminv, fao, w2, w3)
+    do iter = 1, mxit
+      nactive = 0
+      do irhs = 1, nrhs
+        if (active(irhs)) then
+          nactive = nactive + 1
+          active_rhs(nactive) = irhs
+          pactive(:,nactive) = pvec(:,irhs)
+        end if
+      end do
+      if (nactive == 0) exit
+
+      call cphf_apbx_rohf_batch(apactive(:,1:nactive),pactive(:,1:nactive),cgdata)
+      do iact = 1, nactive
+        irhs = active_rhs(iact)
+        apvec(:,irhs) = apactive(:,iact)
+        iterations(irhs) = iter
+
+        pap = dot_product(pvec(:,irhs),apvec(:,irhs))
+        if (.not. ieee_is_finite(pap) .or. .not. ieee_is_finite(rz(irhs)) .or. &
+            abs(pap) < denominator_floor .or. abs(rz(irhs)) < denominator_floor) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+        alpha = rz(irhs)/pap
+        if (.not. ieee_is_finite(alpha)) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+
+        uvec(:,irhs) = uvec(:,irhs) + alpha*pvec(:,irhs)
+        residual(:,irhs) = residual(:,irhs) - alpha*apvec(:,irhs)
+        error(irhs) = norm2(residual(:,irhs))
+        if (.not. ieee_is_finite(error(irhs))) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+        if (error(irhs) < target) then
+          active(irhs) = .false.
+          if (.not. all(ieee_is_finite(uvec(:,irhs)))) failed(irhs) = .true.
+          cycle
+        end if
+        if (abs(error(irhs)) < denominator_floor) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+
+        zvec(:,irhs) = xminv*residual(:,irhs)
+        rz_new(irhs) = dot_product(residual(:,irhs),zvec(:,irhs))
+        if (.not. ieee_is_finite(rz_new(irhs)) .or. &
+            abs(rz_new(irhs)) < denominator_floor) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+        beta = rz_new(irhs)/rz(irhs)
+        if (.not. ieee_is_finite(beta)) then
+          active(irhs) = .false.
+          failed(irhs) = .true.
+          cycle
+        end if
+        pvec(:,irhs) = zvec(:,irhs) + beta*pvec(:,irhs)
+        rz(irhs) = rz_new(irhs)
+      end do
+    end do
+
+    do irhs = 1, nrhs
+      write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+              irhs, iterations(irhs), error(irhs)**2
+      if (failed(irhs)) then
+        write(iw,'(" ROHF CPHF RHS",I5," encountered a PCG breakdown")') irhs
+      else if (active(irhs)) then
+        write(iw,'(" ROHF CPHF RHS",I5," did not converge within the iteration limit")') irhs
+      end if
+    end do
+    call flush(iw)
+
+    ! A second derivative may not consume a partially converged orbital
+    ! response.  Preserve the historical logging-only interface for callers
+    ! that do not request a status, but let Hessian callers fail closed when
+    ! any right-hand side breaks down, reaches the iteration limit, or returns
+    ! a non-finite rotation.
+    if (present(status)) then
+      if (any(failed) .or. any(active) .or. &
+          any(.not. ieee_is_finite(uvec))) status = -1
+    end if
+
+    deallocate(famo, fbmo, xminv, fao, w2, w3, residual, zvec, pvec, apvec, &
+               pactive, apactive, rz, rz_new, error, active, failed, &
+               active_rhs, iterations)
   end subroutine cphf_solve_rohf
 
 !###############################################################################
@@ -1049,6 +1169,140 @@ contains
 
     deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat, ck)
   end subroutine cphf_apbx_rohf
+
+!###############################################################################
+
+!> @brief Exact multi-RHS ROHF orbital-Hessian action.
+!>
+!> Each column is mathematically identical to cphf_apbx_rohf.  The response
+!> densities are kept as consecutive alpha/beta pairs so one four-centre ERI
+!> traversal and one UKS XC-grid traversal evaluate all columns.
+  subroutine cphf_apbx_rohf_batch(y,x,p)
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    real(kind=dp), intent(out) :: y(:,:)
+    real(kind=dp), intent(in) :: x(:,:)
+    type(cphf_cg_data_rohf), target, intent(inout) :: p
+
+    type(int2_compute_t) :: int2_driver
+    type(int2_tdgrd_data_t) :: int2_data
+    real(kind=dp), allocatable, target :: density(:,:,:)
+    real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:), ga(:,:,:), gb(:,:,:)
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
+    real(kind=dp), allocatable :: x2a_all(:,:,:), x2b_all(:,:,:)
+    real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), kmat(:,:), ck(:,:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, offset, nrhs
+    integer :: irhs, i, j, a, s
+
+    nbf = p%nbf
+    nocca = p%nocca; noccb = p%noccb
+    nvira = p%nvira; nvirb = p%nvirb
+    offset = p%offset
+    nrhs = ubound(x,2)
+    y = 0.0_dp
+    if (nrhs == 0) return
+
+    allocate(density(nbf,nbf,2*nrhs), dxa(nbf,nbf,nrhs), dxb(nbf,nbf,nrhs), &
+             ga(nbf,nbf,nrhs), gb(nbf,nbf,nrhs), &
+             xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb), &
+             x2a_all(nvira,nocca,nrhs), x2b_all(nvirb,noccb,nrhs), &
+             work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), kmat(nbf,nbf), ck(nbf,nbf), &
+             source=0.0_dp)
+
+    do irhs = 1, nrhs
+      call rohf_unpack_trial(x(:,irhs),xa,xb,nbf,nocca,noccb)
+
+      ! Full non-canonical commutator contribution for each spin.
+      kmat = 0.0_dp
+      do i = 1, nocca
+        do a = 1, nvira
+          kmat(nocca+a,i) = xa(a,i)
+          kmat(i,nocca+a) = -xa(a,i)
+        end do
+      end do
+      do j = 1, noccb
+        do s = 1, offset
+          kmat(noccb+s,j) = kmat(noccb+s,j) + xb(s,j)
+          kmat(j,noccb+s) = kmat(j,noccb+s) - xb(s,j)
+        end do
+      end do
+      call dgemm('n','n',nbf,nbf,nbf, 1.0_dp,p%famo,nbf,kmat,nbf,0.0_dp,ck,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,-1.0_dp,kmat,nbf,p%famo,nbf,1.0_dp,ck,nbf)
+      x2a = ck(nocca+1:nbf,1:nocca)
+      call dgemm('n','n',nbf,nbf,nbf, 1.0_dp,p%fbmo,nbf,kmat,nbf,0.0_dp,ck,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,-1.0_dp,kmat,nbf,p%fbmo,nbf,1.0_dp,ck,nbf)
+      x2b = ck(noccb+1:nbf,1:noccb)
+      x2a_all(:,:,irhs) = x2a
+      x2b_all(:,:,irhs) = x2b
+
+      ! Symmetric alpha AO response density.
+      work2 = 0.0_dp
+      call dgemm('n','n',nbf,nocca,nvira,1.0_dp,p%mo(:,nocca+1:nbf),nbf,xa,nvira,0.0_dp,work2,nbf)
+      call dgemm('n','t',nbf,nbf,nocca,1.0_dp,work2,nbf,p%mo(:,1:nocca),nbf,0.0_dp,work3,nbf)
+      do i = 1, nbf
+        do j = 1, nbf
+          dm(i,j) = work3(i,j) + work3(j,i)
+        end do
+      end do
+      density(:,:,2*irhs-1) = dm
+      dxa(:,:,irhs) = dm
+
+      ! Symmetric beta AO response density.
+      work2 = 0.0_dp
+      call dgemm('n','n',nbf,noccb,nvirb,1.0_dp,p%mo(:,noccb+1:nbf),nbf,xb,nvirb,0.0_dp,work2,nbf)
+      call dgemm('n','t',nbf,nbf,noccb,1.0_dp,work2,nbf,p%mo(:,1:noccb),nbf,0.0_dp,work3,nbf)
+      do i = 1, nbf
+        do j = 1, nbf
+          dm(i,j) = work3(i,j) + work3(j,i)
+        end do
+      end do
+      density(:,:,2*irhs) = dm
+      dxb(:,:,irhs) = dm
+
+    end do
+
+    ! Exact four-centre open-shell J/K response for every alpha/beta density
+    ! pair during one shell-quartet pass.  The fixed Schwarz bound keeps the
+    ! linear operator independent of the trial-vector norms and block content.
+    call int2_driver%init(p%basis,p%infos)
+    call int2_driver%set_screening()
+    int2_data = int2_tdgrd_data_t(d2=density,int_apb=.true.,int_amb=.false., &
+      tamm_dancoff=.false.,scale_exchange=p%scale_exch,fixed_linear_screening=.true.)
+    if (p%dft .and. p%infos%dft%cam_flag) then
+      call int2_driver%run(int2_data,cam=.true.,alpha=p%infos%dft%cam_alpha, &
+        beta=p%infos%dft%cam_beta,mu=p%infos%dft%cam_mu)
+    else
+      call int2_driver%run(int2_data)
+    end if
+    do irhs = 1, nrhs
+      ! int2_tdgrd_data_t applies the operator to D+D^T.  The response
+      ! densities are symmetric, so one half is the ordinary G[D].
+      ga(:,:,irhs) = 0.5_dp*int2_data%apb(:,:,2*irhs-1,1)
+      gb(:,:,irhs) = 0.5_dp*int2_data%apb(:,:,2*irhs,1)
+    end do
+    call int2_driver%clean()
+
+    ! Exact spin-resolved XC kernel for the complete active RHS batch.
+    if (p%dft) then
+      call utddft_fxc(basis=p%infos%basis,molGrid=p%molgrid,isVecs=.true., &
+        wfa=p%mo,wfb=p%mo,fxa=ga,fxb=gb,dxa=dxa,dxb=dxb,nMtx=nrhs, &
+        threshold=0.0d0,infos=p%infos)
+    end if
+
+    do irhs = 1, nrhs
+      x2a = x2a_all(:,:,irhs)
+      x2b = x2b_all(:,:,irhs)
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,p%mo,nbf,ga(:,:,irhs),nbf,0.0_dp,work2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,work2,nbf,p%mo,nbf,0.0_dp,work3,nbf)
+      x2a = x2a + work3(nocca+1:nbf,1:nocca)
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,p%mo,nbf,gb(:,:,irhs),nbf,0.0_dp,work2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,work2,nbf,p%mo,nbf,0.0_dp,work3,nbf)
+      x2b = x2b + work3(noccb+1:nbf,1:noccb)
+      call rohf_pack_trial(y(:,irhs),x2a,x2b,nbf,nocca,noccb)
+    end do
+
+    deallocate(density,dxa,dxb,ga,gb,xa,xb,x2a,x2b,x2a_all,x2b_all, &
+      work2,work3,dm,kmat,ck)
+  end subroutine cphf_apbx_rohf_batch
 
 !###############################################################################
 

@@ -3,7 +3,8 @@ module tdhf_mrsf_hessian_z_response_mod
   use precision, only: dp
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use tdhf_sf_lib, only: sfrorhs, sfrolhs
-  use tdhf_hessian_response_mod, only: solve_mrsf_z_response_matrix_free
+  use tdhf_hessian_response_mod, only: solve_mrsf_z_response_matrix_free, &
+    solve_mrsf_z_response_batch_matrix_free
 
   implicit none
 
@@ -35,6 +36,13 @@ module tdhf_mrsf_hessian_z_response_mod
       real(kind=dp), intent(out) :: result(:)
       integer, intent(out) :: status
     end subroutine mrsf_z_orbital_hessian_action
+
+    subroutine mrsf_z_orbital_hessian_batch_action(vectors, results, status)
+      import dp
+      real(kind=dp), intent(in) :: vectors(:,:)
+      real(kind=dp), intent(out) :: results(:,:)
+      integer, intent(out) :: status
+    end subroutine mrsf_z_orbital_hessian_batch_action
   end interface
 
 contains
@@ -334,8 +342,13 @@ contains
       rhs_ab1_mo_b, z_ab1_mo_a, z_ab1_mo_b, tij, tab, z, dmo_energy, &
       dfa, dfb, dhxa, dhxb, drhs_ab1_mo_a, drhs_ab1_mo_b, &
       dz_ab1_mo_a, dz_ab1_mo_b, dtij, dtab, drhs, &
-      operator_derivative_z, dz, residual_max, status, tol, maxit, restart)
+      operator_derivative_z, dz, residual_max, status, tol, maxit, restart, &
+      apply_orbital_hessian_batch,apply_orbital_preconditioner_batch)
     procedure(mrsf_z_orbital_hessian_action) :: apply_orbital_hessian
+    procedure(mrsf_z_orbital_hessian_batch_action), optional :: &
+      apply_orbital_hessian_batch
+    procedure(mrsf_z_orbital_hessian_batch_action), optional :: &
+      apply_orbital_preconditioner_batch
     integer, intent(in) :: target_multiplicity, nocca, noccb
     logical, intent(in) :: is_umrsf, cam_flag
     real(kind=dp), intent(in) :: mo_energy(:), fa(:,:), fb(:,:)
@@ -379,9 +392,22 @@ contains
     if (present(maxit)) solve_iterations = maxit
     solve_restart = min(max(12, size(z)/4), max(1, size(z)))
     if (present(restart)) solve_restart = restart
-    call solve_mrsf_z_response_matrix_free(apply_orbital_hessian, drhs, &
-      operator_derivative_z, dz, residual_max, status, &
-      tol=solve_tolerance, maxit=solve_iterations, restart=solve_restart)
+    if(present(apply_orbital_hessian_batch)) then
+      if(present(apply_orbital_preconditioner_batch)) then
+        call solve_mrsf_z_response_batch_matrix_free( &
+          apply_orbital_hessian_batch,drhs,operator_derivative_z,dz, &
+          residual_max,status,tol=solve_tolerance,maxit=solve_iterations, &
+          apply_preconditioner=apply_orbital_preconditioner_batch)
+      else
+        call solve_mrsf_z_response_batch_matrix_free( &
+          apply_orbital_hessian_batch,drhs,operator_derivative_z,dz, &
+          residual_max,status,tol=solve_tolerance,maxit=solve_iterations)
+      end if
+    else
+      call solve_mrsf_z_response_matrix_free(apply_orbital_hessian, drhs, &
+        operator_derivative_z, dz, residual_max, status, &
+        tol=solve_tolerance, maxit=solve_iterations, restart=solve_restart)
+    end if
   end subroutine solve_mrsf_z_response_from_mo_derivatives
 
 end module tdhf_mrsf_hessian_z_response_mod

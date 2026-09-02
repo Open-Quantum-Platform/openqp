@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
@@ -394,24 +395,25 @@ def production_result(tmp_path_factory: pytest.TempPathFactory) -> ProductionRes
     extracted = work / "production_mrsf_extract.F90"
     extracted.write_text(_production_extract_source())
     executable = work / "mrsf_spin_adapted_oracle"
-    subprocess.run(
-        [
-            compiler,
-            "-std=f2018",
-            "-O0",
-            "-Wall",
-            "-Wextra",
-            "-J",
-            str(work),
-            str(extracted),
-            str(CONVENTION_SOURCE),
-            str(FORTRAN_DRIVER),
-            "-o",
-            str(executable),
-        ],
-        cwd=work,
-        check=True,
-    )
+    command = [
+        compiler,
+        "-std=f2018",
+        "-O0",
+        "-Wall",
+        "-Wextra",
+        "-J",
+        str(work),
+        str(extracted),
+        str(CONVENTION_SOURCE),
+        str(FORTRAN_DRIVER),
+        "-o",
+        str(executable),
+    ]
+    if platform.system() == "Darwin":
+        command.extend(["-framework", "Accelerate"])
+    else:
+        command.append("-lblas")
+    subprocess.run(command, cwd=work, check=True)
     output = subprocess.check_output([str(executable)], cwd=work, text=True)
     return _parse_fortran_output(output)
 

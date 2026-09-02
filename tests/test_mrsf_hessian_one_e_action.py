@@ -78,11 +78,9 @@ def test_first_nuclear_response_connects_orbitals_fock_operator_and_amplitudes()
     assert "numericalnucleardisplacement" in compact
 
 
-def test_production_amplitude_solver_uses_bounded_full_krylov_for_small_spaces():
+def test_production_amplitude_solver_uses_batched_projected_response():
     compact = "".join(AMPLITUDE_RESPONSE.read_text().lower().split())
-    assert "mrsf_hessian_amplitude_restart_cap=256" in compact
-    assert (
-        "solve_restart=min(mrsf_hessian_amplitude_restart_cap,physical)"
-        in compact
-    )
     assert "build_mrsf_packed_transform" in compact
+    assert "solve_mrsf_tda_response_batch_matrix_free" in compact
+    assert "apply_preconditioner=apply_physical_preconditioner_batch" in compact
+    assert "mrsf_hessian_amplitude_restart_cap" not in compact

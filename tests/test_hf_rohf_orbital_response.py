@@ -10,6 +10,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 RESPONSE = ROOT / "source/modules/hf_rohf_orbital_response.F90"
 HESSIAN = ROOT / "source/modules/hf_hessian.F90"
+CPHF = ROOT / "source/modules/cphf.F90"
 
 
 def _compact(path: Path) -> str:
@@ -50,6 +51,16 @@ def test_two_somo_default_and_cam_are_fail_closed():
     assert "if(infos%control%hamilton>20)thenstatus=-7" in source
 
 
+def test_roks_rhs_uses_all_coordinate_analytic_xc_derivative():
+    source = _compact(RESPONSE)
+    assert "callmrsf_xc_fock_total_derivative" in source
+    assert "d0a_all(nbf,nbf,ncart)" in source
+    assert "d0b_all(nbf,nbf,ncart)" in source
+    assert "add_semilocal_roks_rhs" not in source
+    assert "basis%atoms%xyz(cc,kc)=" not in source
+    assert "step=1.0d-3" not in source
+
+
 def test_hf_hessian_reuses_response_without_a_second_rohf_cphf_prepass():
     source = HESSIAN.read_text().lower()
     rohf = source.split("subroutine hf_hessian_rohf", 1)[1].split(
@@ -63,6 +74,16 @@ def test_hf_hessian_reuses_response_without_a_second_rohf_cphf_prepass():
     assert "callrohf_unpack_trial" not in compact
     assert "orbital_response%dmo_alpha(:,1:nocca,x)" in compact
     assert "orbital_response%dmo_beta(:,1:noccb,x)" in compact
+
+
+def test_rohf_hessian_response_fails_closed_on_any_cphf_rhs_failure():
+    response = _compact(RESPONSE)
+    solver = _compact(CPHF)
+    assert "tol=1.0d-13,status=status" in response
+    assert "if(status/=0)thencallresponse%clean()returnendif" in response
+    assert "integer,intent(out),optional::status" in solver
+    assert "if(any(failed).or.any(active).or.&" in solver
+    assert "any(.not.ieee_is_finite(uvec)))status=-1" in solver
 
 
 def test_origin_and_scope_are_explicit_without_forbidden_representation():

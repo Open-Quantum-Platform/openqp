@@ -17,6 +17,7 @@ module mod_dft_gridint_mrsf_xc_hessian_point
 
   public :: mrsf_xc_weighted_fixed_hessian
   public :: mrsf_xc_weighted_response_row
+  public :: mrsf_xc_weighted_response_rows
   public :: mrsf_xc_kernel_fock_coefficients
 
 contains
@@ -35,7 +36,8 @@ contains
       dcoefficient(:,:,:)
     integer, intent(out) :: status
 
-    real(fp), allocatable :: kernel(:),dkernel(:,:),dfirst(:,:)
+    real(fp) :: kernel(size(first)),dkernel(size(first),size(dground,2)), &
+      dfirst(size(first),size(dground,2))
     integer :: coordinate,i,j,k,ncoord,nvar
 
     nvar=size(first)
@@ -58,7 +60,6 @@ contains
       status=-1
       return
     end if
-    allocate(kernel(nvar),dkernel(nvar,ncoord),dfirst(nvar,ncoord))
     kernel=matmul(second,probe)
     do coordinate=1,ncoord
       dfirst(:,coordinate)=matmul(second,dground(:,coordinate))
@@ -74,10 +75,7 @@ contains
     end do
     v_r=kernel(1:2)
     dv_r=dkernel(1:2,:)
-    if(.not.is_gga) then
-      deallocate(kernel,dkernel,dfirst)
-      return
-    end if
+    if(.not.is_gga) return
     coefficient(:,1)=2.0_fp*kernel(3)*grad_ground(:,1)+ &
       kernel(5)*grad_ground(:,2)+2.0_fp*first(3)*grad_probe(:,1)+ &
       first(5)*grad_probe(:,2)
@@ -104,7 +102,6 @@ contains
         dfirst(5,coordinate)*grad_probe(:,1)+ &
         first(5)*dgrad_probe(:,1,coordinate)
     end do
-    deallocate(kernel,dkernel,dfirst)
   end subroutine mrsf_xc_kernel_fock_coefficients
 
 !-----------------------------------------------------------------------------
@@ -121,9 +118,14 @@ contains
     real(fp), intent(inout) :: hessian(:,:,:,:)
     integer, intent(out) :: status
 
-    real(fp), allocatable :: first_total(:),second_total(:,:)
-    real(fp) :: value,derivative_a,derivative_b,second_ab
-    integer :: nvar,natom,atom_a,atom_b,cart_a,cart_b,k
+    real(fp) :: first_total(size(first)),second_total(size(first),size(first))
+    real(fp) :: contract_ground(size(first),3,size(dweight,2)), &
+      contract_ground_total(size(first),3,size(dweight,2)), &
+      contract_probe(size(first),3,size(dweight,2)), &
+      derivative(3,size(dweight,2))
+    real(fp) :: value,second_ab,contribution
+    integer :: nvar,natom,atom_a,atom_b,cart_a,cart_b,coordinate_a, &
+      coordinate_b,k
 
     nvar=size(first)
     natom=size(dweight,2)
@@ -140,43 +142,50 @@ contains
       status=-1
       return
     end if
-    allocate(first_total(nvar),second_total(nvar,nvar))
     first_total=first+matmul(second,probe)
     second_total=second
     do k=1,nvar
       second_total=second_total+probe(k)*third(k,:,:)
     end do
     value=exc+dot_product(first,probe)
-    do atom_a=1,natom
-      do cart_a=1,3
-        derivative_a=dot_product(first_total, &
-          dground(:,cart_a,atom_a))+dot_product(first, &
-          dprobe(:,cart_a,atom_a))
-        do atom_b=1,natom
-          do cart_b=1,3
-            derivative_b=dot_product(first_total, &
-              dground(:,cart_b,atom_b))+dot_product(first, &
-              dprobe(:,cart_b,atom_b))
-            second_ab=dot_product(first_total, &
-              d2ground(:,cart_a,cart_b,atom_a,atom_b))+ &
-              dot_product(first, &
-              d2probe(:,cart_a,cart_b,atom_a,atom_b))+ &
-              dot_product(dground(:,cart_a,atom_a),matmul(second_total, &
-              dground(:,cart_b,atom_b)))+ &
-              dot_product(dground(:,cart_a,atom_a),matmul(second, &
-              dprobe(:,cart_b,atom_b)))+ &
-              dot_product(dprobe(:,cart_a,atom_a),matmul(second, &
-              dground(:,cart_b,atom_b)))
-            hessian(cart_a,cart_b,atom_a,atom_b)= &
-              hessian(cart_a,cart_b,atom_a,atom_b)+quadrature_scale*( &
-              weight*second_ab+dweight(cart_a,atom_a)*derivative_b+ &
-              dweight(cart_b,atom_b)*derivative_a+ &
-              d2weight(cart_a,atom_a,cart_b,atom_b)*value)
-          end do
-        end do
+    do atom_b=1,natom
+      do cart_b=1,3
+        derivative(cart_b,atom_b)=dot_product(first_total, &
+          dground(:,cart_b,atom_b))+dot_product(first, &
+          dprobe(:,cart_b,atom_b))
+        contract_ground(:,cart_b,atom_b)= &
+          matmul(second,dground(:,cart_b,atom_b))
+        contract_ground_total(:,cart_b,atom_b)= &
+          matmul(second_total,dground(:,cart_b,atom_b))
+        contract_probe(:,cart_b,atom_b)= &
+          matmul(second,dprobe(:,cart_b,atom_b))
       end do
     end do
-    deallocate(first_total,second_total)
+    do coordinate_a=1,3*natom
+      atom_a=(coordinate_a-1)/3+1
+      cart_a=mod(coordinate_a-1,3)+1
+      do coordinate_b=coordinate_a,3*natom
+        atom_b=(coordinate_b-1)/3+1
+        cart_b=mod(coordinate_b-1,3)+1
+        second_ab=dot_product(first_total, &
+          d2ground(:,cart_a,cart_b,atom_a,atom_b))+ &
+          dot_product(first,d2probe(:,cart_a,cart_b,atom_a,atom_b))+ &
+          dot_product(dground(:,cart_a,atom_a), &
+          contract_ground_total(:,cart_b,atom_b))+ &
+          dot_product(dground(:,cart_a,atom_a), &
+          contract_probe(:,cart_b,atom_b))+ &
+          dot_product(dprobe(:,cart_a,atom_a), &
+          contract_ground(:,cart_b,atom_b))
+        contribution=quadrature_scale*(weight*second_ab+ &
+          dweight(cart_a,atom_a)*derivative(cart_b,atom_b)+ &
+          dweight(cart_b,atom_b)*derivative(cart_a,atom_a)+ &
+          d2weight(cart_a,atom_a,cart_b,atom_b)*value)
+        hessian(cart_a,cart_b,atom_a,atom_b)= &
+          hessian(cart_a,cart_b,atom_a,atom_b)+contribution
+        if(coordinate_b/=coordinate_a) hessian(cart_b,cart_a,atom_b,atom_a)= &
+          hessian(cart_b,cart_a,atom_b,atom_a)+contribution
+      end do
+    end do
   end subroutine mrsf_xc_weighted_fixed_hessian
 
 !> Add one density-response direction to the derivative of the XC gradient.
@@ -193,8 +202,8 @@ contains
     real(fp), intent(inout) :: row(:,:)
     integer, intent(out) :: status
 
-    real(fp), allocatable :: first_total(:),delta_first_total(:), &
-      second_ground(:)
+    real(fp) :: first_total(size(first)),delta_first_total(size(first)), &
+      second_ground(size(first))
     real(fp) :: delta_value,delta_derivative
     integer :: nvar,natom,atom,cart,i,j,k
 
@@ -213,8 +222,6 @@ contains
       status=-1
       return
     end if
-    allocate(first_total(nvar),delta_first_total(nvar), &
-      second_ground(nvar))
     first_total=first+matmul(second,probe)
     second_ground=matmul(second,response_ground)
     delta_first_total=matmul(second,response_ground+response_probe)
@@ -239,7 +246,74 @@ contains
           dweight(cart,atom)*delta_value+weight*delta_derivative)
       end do
     end do
-    deallocate(first_total,delta_first_total,second_ground)
   end subroutine mrsf_xc_weighted_response_row
+
+!> Add all density-response directions in one algebraic block.  This is the
+!> exact multi-right-hand-side form of mrsf_xc_weighted_response_row: common
+!> contractions with the fixed ground and relaxed densities are evaluated
+!> once per quadrature point instead of once per nuclear coordinate.
+  pure subroutine mrsf_xc_weighted_response_rows(first,second,third,probe, &
+      dground,dprobe,response_ground,response_probe,dresponse_ground, &
+      dresponse_probe,quadrature_scale,weight,dweight,rows,status)
+    real(fp), intent(in) :: first(:),second(:,:),third(:,:,:),probe(:)
+    real(fp), intent(in) :: dground(:,:,:),dprobe(:,:,:)
+    real(fp), intent(in) :: response_ground(:,:),response_probe(:,:)
+    real(fp), intent(in) :: dresponse_ground(:,:,:,:), &
+      dresponse_probe(:,:,:,:)
+    real(fp), intent(in) :: quadrature_scale,weight,dweight(:,:)
+    real(fp), intent(inout) :: rows(:,:,:)
+    integer, intent(out) :: status
+
+    real(fp) :: first_total(size(first)),second_total(size(first),size(first))
+    real(fp) :: delta_first(size(first),size(response_ground,2)), &
+      second_ground(size(first),size(response_ground,2))
+    real(fp) :: delta_value(size(response_ground,2)),delta_derivative
+    integer :: nvar,natom,nresponse,response,atom,cart,k
+
+    nvar=size(first)
+    natom=size(dweight,2)
+    nresponse=size(response_ground,2)
+    status=0
+    if(nvar<=0 .or. natom<=0 .or. nresponse<=0 .or. &
+       size(probe)/=nvar .or. any(shape(second)/=[nvar,nvar]) .or. &
+       any(shape(third)/=[nvar,nvar,nvar]) .or. &
+       any(shape(dground)/=[nvar,3,natom]) .or. &
+       any(shape(dprobe)/=[nvar,3,natom]) .or. &
+       any(shape(response_ground)/=[nvar,nresponse]) .or. &
+       any(shape(response_probe)/=[nvar,nresponse]) .or. &
+       any(shape(dresponse_ground)/=[nvar,3,natom,nresponse]) .or. &
+       any(shape(dresponse_probe)/=[nvar,3,natom,nresponse]) .or. &
+       any(shape(rows)/=[3,natom,nresponse])) then
+      status=-1
+      return
+    end if
+    first_total=first+matmul(second,probe)
+    second_total=second
+    do k=1,nvar
+      second_total=second_total+probe(k)*third(:,:,k)
+    end do
+    second_ground=matmul(second,response_ground)
+    delta_first=matmul(second_total,response_ground)+ &
+      matmul(second,response_probe)
+    do response=1,nresponse
+      delta_value(response)=dot_product(first_total, &
+        response_ground(:,response))+dot_product(first, &
+        response_probe(:,response))
+    end do
+    do response=1,nresponse
+      do atom=1,natom
+        do cart=1,3
+          delta_derivative=dot_product(delta_first(:,response), &
+            dground(:,cart,atom))+dot_product(first_total, &
+            dresponse_ground(:,cart,atom,response))+ &
+            dot_product(second_ground(:,response),dprobe(:,cart,atom))+ &
+            dot_product(first,dresponse_probe(:,cart,atom,response))
+          rows(cart,atom,response)=rows(cart,atom,response)+ &
+            quadrature_scale*(dweight(cart,atom)*delta_value(response)+ &
+            weight*delta_derivative)
+        end do
+      end do
+    end do
+  end subroutine mrsf_xc_weighted_response_rows
 
 end module mod_dft_gridint_mrsf_xc_hessian_point
