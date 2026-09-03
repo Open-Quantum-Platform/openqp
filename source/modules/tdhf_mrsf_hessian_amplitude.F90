@@ -102,9 +102,15 @@ contains
       preconditioner(component)=1.0_dp/ &
         sign(max(abs(denominator),1.0e-8_dp),denominator)
     end do
-    solve_tolerance=1.0e-10_dp
+    ! The certification threshold below is max(1e-8, 100*solve_tol, ...),
+    ! so it floors at 1e-8 for small |omega| (the MRSF S0 negative root).
+    ! Solve an order tighter than that floor so the certification has margin.
+    solve_tolerance=1.0e-12_dp
     if(present(tolerance)) solve_tolerance=tolerance
-    solve_iterations=max(200,4*physical)
+    ! Dense excited-state manifolds (e.g. azulene: 18 roots below 6.8 eV)
+    ! need more shared-subspace iterations than the historical floor before
+    ! the final differentiated-eigenvalue certification can pass.
+    solve_iterations=max(600,12*physical)
     if(present(max_iterations)) solve_iterations=max_iterations
     call solve_mrsf_tda_response_batch_matrix_free( &
       apply_physical_sigma_batch,omega,x_physical,dax_physical, &

@@ -207,7 +207,12 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,:,minj:maxj,mini:maxi)))
+        ! The digestion kernel reads both orientations of a non-symmetric
+        ! density (d3(:,:,j,l) and d3(:,:,l,j)), so the bound must cover the
+        ! (jsh,ish) AND (ish,jsh) blocks; co12/o21v are not symmetric.
+        ! Matches upstream PR #393 change 2.
+        dsh(ish,jsh) = max(maxval(abs(da(:,:,minj:maxj,mini:maxi))), &
+                           maxval(abs(da(:,:,mini:maxi,minj:maxj))))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
