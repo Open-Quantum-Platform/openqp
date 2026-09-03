@@ -81,6 +81,7 @@ contains
       hxc(:,:),xc_rows(:,:),rows(:,:),rows_one(:,:),rows_two(:,:), &
       rows_xc(:,:),htotal(:,:)
     real(kind=dp), allocatable :: z_diagonal(:),z_preconditioner(:)
+    real(kind=dp) :: z_rhs_scale,z_tolerance
     real(kind=dp) :: amplitude_residual,z_residual,row_asymmetry,w_error, &
       orbital_exchange_scale,time_first_response,time_z_intermediates, &
       time_z_response,time_w_response,time_fixed_density,time_xc,time_rows
@@ -203,10 +204,28 @@ contains
     end if
     if(status/=0) call show_message( &
       'MRSF differentiated Z-vector did not converge.',WITH_ABORT)
-    if(.not.ieee_is_finite(z_residual) .or. z_residual>1.0e-6_dp .or. &
-       any(.not.ieee_is_finite(dz))) call show_message( &
-      'MRSF differentiated Z-vector contains a non-finite or unconverged '// &
-      'result.',WITH_ABORT)
+    ! Certify the differentiated Z vector on the same relative scale that the
+    ! block solver converges to: tolerance*max(1,|rhs|).  Near a conical
+    ! intersection the amplitude derivatives, and therefore this right-hand
+    ! side, grow as 1/(omega_J-omega_I), and an absolute 1e-6 residual is then
+    ! unattainable even for a fully converged relative solve.
+    z_rhs_scale=max(1.0_dp,maxval(abs(drhs+operator_derivative_z)))
+    z_tolerance=max(1.0e-6_dp,100.0_dp*max(1.0e-12_dp,infos%tddft%zvconv))* &
+      z_rhs_scale
+    if(.not.ieee_is_finite(z_residual) .or. z_residual>z_tolerance .or. &
+       any(.not.ieee_is_finite(dz))) then
+      write(iw,'(A,1P,E15.7,A,E15.7,A,E15.7)') &
+        'MRSF differentiated Z-vector residual ',z_residual, &
+        ' exceeds tolerance ',z_tolerance,' (right-hand-side scale ', &
+        z_rhs_scale,')'
+      call flush(iw)
+      call show_message( &
+        'MRSF differentiated Z-vector contains a non-finite or unconverged '// &
+        'result.',WITH_ABORT)
+    end if
+    write(iw,'(A,1P,E15.7,A,E15.7)') &
+      'MRSF differentiated Z-vector residual ',z_residual, &
+      ' with right-hand-side scale ',z_rhs_scale
 
     allocate(drelaxed_a(nbf,nbf,ncoord),drelaxed_b(nbf,nbf,ncoord), &
       source=0.0_dp)
