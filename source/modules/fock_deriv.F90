@@ -187,7 +187,7 @@ contains
     real(kind=dp), intent(out) :: fmat(:,:,:,:)
 
     real(kind=dp), allocatable, target :: probe(:,:)
-    real(kind=dp), allocatable :: gx(:,:)
+    real(kind=dp), allocatable :: gx(:,:), phalf(:,:)
     integer :: mu, nu, natom, nbf
 
     nbf = basis%nbf
@@ -196,6 +196,22 @@ contains
       error stop 'fock_deriv_matrix: density shape does not match the basis'
     if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
       error stop 'fock_deriv_matrix: output shape does not match the system'
+
+    ! Direct single-traversal assembly.  The closed-shell response Fock
+    !   F^x[P] = J^x[P] - (hfscale/2) K^x[P]
+    ! is the open-shell derivative Fock J^x[pcoul] - hfscale K^x[pexch] with
+    ! pcoul = P and pexch = P/2, so the exact AO-target driver builds every
+    ! matrix element during one derivative-integral shell traversal.  The
+    ! elementwise probe construction below costs nbf(nbf+1)/2 traversals and is
+    ! kept only for the range-separated case, which the direct driver does not
+    ! yet cover.
+    if (.not. infos%dft%cam_flag) then
+      allocate(phalf(nbf,nbf))
+      phalf = 0.5_dp*pmat
+      call fock_deriv_matrix_os(infos, basis, pmat, phalf, hfscale, fmat)
+      deallocate(phalf)
+      return
+    end if
 
     allocate(probe(nbf,nbf), gx(3,natom))
     fmat = 0.0_dp

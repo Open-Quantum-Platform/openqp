@@ -37,7 +37,7 @@ contains
       OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
-    use fock_deriv_mod, only: fock_deriv_contract
+    use fock_deriv_mod, only: fock_deriv_matrix
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
     use io_constants, only: iw
@@ -54,6 +54,7 @@ contains
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
     real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), scr(:,:), col(:,:), hess_native(:,:)
+    real(kind=dp), allocatable :: fx2e(:,:,:,:), gxMO(:,:)
     real(kind=dp), contiguous, pointer :: hess_store(:,:)
     real(kind=dp) :: hfscale
     integer :: nbf, nbf2, nocc, nvir, natom, ncart
@@ -155,9 +156,22 @@ contains
 
     allocate(scr(nbf,nbf), col(nbf,nbf))
     allocate(Sx(nbf,nbf), hx(nbf,nbf), F0x(nbf,nbf), Gd0(nbf,nbf))
-    allocate(probe(nbf,nbf), gx(3,natom))
+    allocate(probe(nbf,nbf), gx(3,natom), gxMO(nbf,nbf))
     allocate(d0(nbf,nbf), d0p(nbf2,1), gp(nbf2,1), gfull(nbf,nbf))
     allocate(bvec(nocc*nvir,ncart), uvec(nocc*nvir,ncart), source=0.0_dp)
+
+    ! --- Two-electron derivative response Fock F^x[P], ALL coordinates -------
+    ! F^x_uv[P] = J^x_uv[P] - (hfscale/2) K^x_uv[P] at the frozen SCF density.
+    ! One derivative-integral shell traversal builds the whole (nbf,nbf,3,natom)
+    ! tensor.  Every two-electron piece of the closed-shell nuclear response is
+    ! a contraction of this one object: the occupied-virtual CPHF right-hand
+    ! side needs its MO occ-vir block, Tr[dP^y G[P]^x] and Tr[M^x G[P]^y] are
+    ! plain matrix dot products with it.  The earlier formulation contracted a
+    ! separate occupied-virtual probe per Cartesian coordinate, which repeated
+    ! the same derivative-ERI sweep 3*natom*nocc*nvir times and dominated the
+    ! whole Hessian.
+    allocate(fx2e(nbf,nbf,3,natom), source=0.0_dp)
+    call fock_deriv_matrix(infos, basis, pfull, hfscale, fx2e)
 
     icart = 0
     do kc = 1, natom
@@ -167,16 +181,11 @@ contains
         scr = dTa(:,:,cc,kc) + dVa(:,:,cc,kc)
         call mo_transform(mo_a, scr, nbf, col, F0x, hx)
 
+        call mo_transform(mo_a, fx2e(:,:,cc,kc), nbf, scr, col, gxMO)
         F0x = hx
         do a = 1, nvir
           do i = 1, nocc
-            do mu = 1, nbf
-              do nu = 1, nbf
-                probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
-              end do
-            end do
-            call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
-            F0x(i,nocc+a) = hx(i,nocc+a) + 2.0_dp*gx(cc,kc)
+            F0x(i,nocc+a) = hx(i,nocc+a) + gxMO(i,nocc+a)
           end do
         end do
 
@@ -273,7 +282,7 @@ contains
     ! (=1/2 Tr[M G[P]^x]) and fock_jk (G[dP^y]).
     allocate(hess_native(ncart,ncart), source=0.0_dp)
     block
-      real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:)
+      real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:), fxflat(:,:,:), Mall(:,:,:)
       real(dp), allocatable :: dCx(:,:,:), dPx(:,:,:), Gdp(:,:,:)
       real(dp), allocatable :: s1oo(:,:,:), hMOoo(:,:,:), GdpMOoo(:,:,:), moe1a(:,:,:)
       real(dp), allocatable :: Mi(:,:), gxy(:,:), A2(:,:), tGP(:,:), hresp(:,:)
@@ -282,11 +291,12 @@ contains
       real(dp) :: a1v, a3v, t3a, dcsx
       integer :: x, yy, ii, jj, kk, ll, aa, ia2, mu2, nu2, ccx, kcx
 
-      allocate(sflat(nbf,nbf,ncart), hflat(nbf,nbf,ncart))
+      allocate(sflat(nbf,nbf,ncart), hflat(nbf,nbf,ncart), fxflat(nbf,nbf,ncart))
       do x = 1, ncart
         ccx = mod(x-1,3)+1; kcx = (x-1)/3+1
         sflat(:,:,x) = dSa(:,:,ccx,kcx)
         hflat(:,:,x) = dTa(:,:,ccx,kcx) + dVa(:,:,ccx,kcx)
+        fxflat(:,:,x) = fx2e(:,:,ccx,kcx)
       end do
       allocate(cocc(nbf,nocc)); cocc = mo_a(:,1:nocc)
 
@@ -345,20 +355,19 @@ contains
       end do
 
       ! 2e traces: A2(x,y)=Tr[dP^y G[P]^x]; tGP(x,y)=Tr[M^x G[P]^y]
-      ! with M^x = sum_kl s1oo^x_kl C_k C_l^T
+      ! with M^x = sum_kl s1oo^x_kl C_k C_l^T.  Both are contractions of the
+      ! derivative response Fock tensor built above, so they add no derivative-
+      ! integral work at all.
       allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
-      do yy = 1, ncart
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, dPx(:,:,yy), hfscale, gxy)
-        A2(:,yy) = 2.0_dp*reshape(gxy, [ncart])
-      end do
+      allocate(Mall(nbf,nbf,ncart), source=0.0_dp)
       do x = 1, ncart
         call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
-        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mi,nbf)
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, Mi, hfscale, gxy)
-        tGP(x,:) = 2.0_dp*reshape(gxy, [ncart])
+        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mall(:,:,x),nbf)
       end do
+      call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,fxflat,nbf*nbf, &
+                 dPx,nbf*nbf,0.0_dp,A2,ncart)
+      call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,Mall,nbf*nbf, &
+                 fxflat,nbf*nbf,0.0_dp,tGP,ncart)
 
       ! assemble response  hresp(x,y) = 4Tr[F^x dm1^y]-4Tr[S^x eps.dm1^y]-2Tr[s1oo^x mo_e1^y]
       !   = (Tr[dP^y h^x] + A2) - 4 A3 - 2 (sum_kl s1oo^x_kl moe1a^y_kl) - 2 tGP
@@ -466,7 +475,7 @@ contains
         end block
       end if
 
-      deallocate(sflat, hflat, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
+      deallocate(sflat, hflat, fxflat, Mall, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
                  Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
     end block
 
@@ -517,7 +526,7 @@ contains
     close(iw)
 
     deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
-               d0, d0p, gp, gfull, bvec, uvec, hess_native)
+               gxMO, fx2e, d0, d0p, gp, gfull, bvec, uvec, hess_native)
   end subroutine hf_hessian
 
 !###############################################################################
@@ -558,7 +567,7 @@ contains
       OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_E_MO_A, OQP_E_MO_B, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
-    use fock_deriv_mod, only: fock_deriv_contract_os
+    use fock_deriv_mod, only: fock_deriv_matrix_os, fock_deriv_contract_os
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve_uhf
     use io_constants, only: iw
@@ -576,6 +585,7 @@ contains
       real(dp), allocatable :: s1oo(:,:,:)        ! occ-occ MO of S^x (nocc,nocc,ncart)
       real(dp), allocatable :: hoo(:,:,:)         ! occ-occ MO of h^x
       real(dp), allocatable :: g2e(:,:)           ! G^{s,x}[P]_ia for all coords (nocc*nvir,ncart)
+      real(dp), allocatable :: fx(:,:,:)          ! G^{s,x}[P] in AO basis (nbf,nbf,ncart)
       real(dp), allocatable :: dCx(:,:,:)         ! relaxed dC (nbf,nocc,ncart)
       real(dp), allocatable :: dPx(:,:,:)         ! relaxed spin density derivative
       real(dp), allocatable :: gdpoo(:,:,:)       ! occ-occ MO of G^s[dP^y]
@@ -591,10 +601,11 @@ contains
     real(dp), allocatable :: scr(:,:), tmp(:,:), gx(:,:), probe(:,:)
     real(dp), allocatable :: SxMO(:,:), hxMO(:,:), d0a(:,:), d0b(:,:)
     real(dp), allocatable :: dpck(:,:), fpck(:,:), gfull(:,:)
-    real(dp), allocatable :: Gd0(:,:), Mi(:,:)
+    real(dp), allocatable :: Gd0(:,:), Mi(:,:), Mall(:,:,:)
     real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
     type(uhf_spin_t) :: sp(2)
     real(dp) :: hfscale, a1v, a3v, t3a, dcsx
+    logical :: use_direct
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, la, lb, ltot
     integer :: s, i, j, a, ia, icart, kc, cc, x, yy, kk, ll, mu, nu
 
@@ -702,24 +713,54 @@ contains
     allocate(d0a(nbf,nbf), d0b(nbf,nbf), gfull(nbf,nbf), Gd0(nbf,nbf))
     allocate(dpck(nbf2,2), fpck(nbf2,2))
 
-    ! 2e response-Fock skeleton  G^{s,x}[P]_ia  for ALL 3N coordinates.  The
-    ! occ-vir probe C^s_a C^s_i^T is geometry-independent, so a single open-shell
-    ! derivative-Fock contraction per occ-vir pair yields every Cartesian
-    ! component at once (avoids an ncart-fold redundant grd2 sweep).
+    ! 2e response-Fock skeleton  G^{s,x}[P] = J^x[P_a+P_b] - c_x K^x[P^s] for ALL
+    ! 3N coordinates, assembled as a full AO matrix in ONE derivative-integral
+    ! traversal per spin.  Every two-electron piece of the open-shell nuclear
+    ! response is then a contraction of this tensor: the occ-vir right-hand side
+    ! is its MO block, and Tr[dP^s,y G^{s,x}[P]] and Tr[Mi^s,x G^{s,y}[P]] are
+    ! matrix dot products.  Contracting one occ-vir probe at a time repeated the
+    ! same derivative-ERI sweep nocc*nvir times per spin.
+    ! The direct AO-target driver has no erfc-attenuated pass, so a range-
+    ! separated functional keeps the historical probe contraction.
+    use_direct = .not. infos%dft%cam_flag
     do s = 1, 2
       allocate(sp(s)%g2e(sp(s)%nocc*sp(s)%nvir, ncart), source=0.0_dp)
-      do a = 1, sp(s)%nvir
-        do i = 1, sp(s)%nocc
-          do mu = 1, nbf
-            do nu = 1, nbf
-              probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
-                                    + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+      if (.not. use_direct) then
+        do a = 1, sp(s)%nvir
+          do i = 1, sp(s)%nocc
+            do mu = 1, nbf
+              do nu = 1, nbf
+                probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
+                                      + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+              end do
             end do
+            gx = 0.0_dp
+            call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
+            ia = (a-1)*sp(s)%nocc + i
+            sp(s)%g2e(ia,:) = reshape(gx, [ncart])
           end do
-          gx = 0.0_dp
-          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
-          ia = (a-1)*sp(s)%nocc + i
-          sp(s)%g2e(ia,:) = reshape(gx, [ncart])
+        end do
+        cycle
+      end if
+      allocate(sp(s)%fx(nbf,nbf,ncart), source=0.0_dp)
+      block
+        real(dp), allocatable :: fx4(:,:,:,:)
+        integer :: ccf, kcf
+        allocate(fx4(nbf,nbf,3,natom), source=0.0_dp)
+        call fock_deriv_matrix_os(infos, basis, ptot, sp(s)%p, hfscale, fx4)
+        do x = 1, ncart
+          ccf = mod(x-1,3)+1; kcf = (x-1)/3+1
+          sp(s)%fx(:,:,x) = fx4(:,:,ccf,kcf)
+        end do
+        deallocate(fx4)
+      end block
+      do x = 1, ncart
+        call mo_transform(sp(s)%mo, sp(s)%fx(:,:,x), nbf, scr, tmp, hxMO)
+        do a = 1, sp(s)%nvir
+          do i = 1, sp(s)%nocc
+            ia = (a-1)*sp(s)%nocc + i
+            sp(s)%g2e(ia,x) = hxMO(i,sp(s)%nocc+a)
+          end do
         end do
       end do
     end do
@@ -906,31 +947,45 @@ contains
     ! 2e response traces, summed over spin:
     !   A2(x,y)  = sum_s Tr[dP^s,y G^{s,x}[P]]
     !   tGP(x,y) = sum_s Tr[Mi^s,x G^{s,y}[P]],  Mi^s,x = sum_kl s1oo^s,x_kl C^s_k C^s_l^T
+    ! Both traces contract the derivative response Fock tensors already built,
+    ! so they need no further derivative-integral traversal.
     allocate(A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
-    do yy = 1, ncart
-      do s = 1, 2
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, sp(s)%dPx(:,:,yy), hfscale, gx)
-        A2(:,yy) = A2(:,yy) + reshape(gx, [ncart])
-      end do
-    end do
-    do x = 1, ncart
-      do s = 1, 2
-        Mi = 0.0_dp
+    allocate(Mall(nbf,nbf,ncart))
+    do s = 1, 2
+      Mall = 0.0_dp
+      do x = 1, ncart
         do ll = 1, sp(s)%nocc
           do kk = 1, sp(s)%nocc
             do mu = 1, nbf
               do nu = 1, nbf
-                Mi(mu,nu) = Mi(mu,nu) + sp(s)%s1oo(kk,ll,x)*sp(s)%mo(mu,kk)*sp(s)%mo(nu,ll)
+                Mall(mu,nu,x) = Mall(mu,nu,x) &
+                  + sp(s)%s1oo(kk,ll,x)*sp(s)%mo(mu,kk)*sp(s)%mo(nu,ll)
               end do
             end do
           end do
         end do
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, Mi, hfscale, gx)
-        tGP(x,:) = tGP(x,:) + reshape(gx, [ncart])
       end do
+      if (use_direct) then
+        call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,sp(s)%fx,nbf*nbf, &
+                   sp(s)%dPx,nbf*nbf,1.0_dp,A2,ncart)
+        call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,Mall,nbf*nbf, &
+                   sp(s)%fx,nbf*nbf,1.0_dp,tGP,ncart)
+      else
+        do yy = 1, ncart
+          gx = 0.0_dp
+          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, &
+                                      sp(s)%dPx(:,:,yy), hfscale, gx)
+          A2(:,yy) = A2(:,yy) + reshape(gx, [ncart])
+        end do
+        do x = 1, ncart
+          gx = 0.0_dp
+          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, &
+                                      Mall(:,:,x), hfscale, gx)
+          tGP(x,:) = tGP(x,:) + reshape(gx, [ncart])
+        end do
+      end if
     end do
+    deallocate(Mall)
 
     ! assemble  H^resp_xy
     allocate(hresp(ncart,ncart), source=0.0_dp)
