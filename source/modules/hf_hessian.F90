@@ -49,7 +49,7 @@ contains
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: dmat_a(:), mo_a(:,:), eps(:)
-    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:)
+    real(kind=dp), allocatable :: pfull(:,:)
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
@@ -156,7 +156,7 @@ contains
 
     allocate(scr(nbf,nbf), col(nbf,nbf))
     allocate(Sx(nbf,nbf), hx(nbf,nbf), F0x(nbf,nbf), Gd0(nbf,nbf))
-    allocate(probe(nbf,nbf), gx(3,natom), gxMO(nbf,nbf))
+    allocate(gxMO(nbf,nbf))
     allocate(d0(nbf,nbf), d0p(nbf2,1), gp(nbf2,1), gfull(nbf,nbf))
     allocate(bvec(nocc*nvir,ncart), uvec(nocc*nvir,ncart), source=0.0_dp)
 
@@ -278,14 +278,14 @@ contains
     ! F^x = h^x + G[P]^x; dC^y from the validated CPHF amplitudes U^y. The first
     ! two terms equal Tr[dP^y F^x] and the eps-weighted overlap term; the third
     ! is the FULL occ-occ energy-weighted term (the off-diagonal part is what a
-    ! diagonal dε approximation misses). 2e traces use fock_deriv_contract
-    ! (=1/2 Tr[M G[P]^x]) and fock_jk (G[dP^y]).
+    ! diagonal dε approximation misses). The 2e traces contract the derivative
+    ! response Fock tensor F^x[P] built once above; G[dP^y] comes from fock_jk.
     allocate(hess_native(ncart,ncart), source=0.0_dp)
     block
       real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:), fxflat(:,:,:), Mall(:,:,:)
       real(dp), allocatable :: dCx(:,:,:), dPx(:,:,:), Gdp(:,:,:)
       real(dp), allocatable :: s1oo(:,:,:), hMOoo(:,:,:), GdpMOoo(:,:,:), moe1a(:,:,:)
-      real(dp), allocatable :: Mi(:,:), gxy(:,:), A2(:,:), tGP(:,:), hresp(:,:)
+      real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
       real(dp), allocatable :: s1(:,:), s2(:,:), bMO(:,:), dpp(:,:), gpp(:,:), gfl(:,:)
       real(dp), allocatable :: cocc(:,:), tmpno(:,:)
       real(dp) :: a1v, a3v, t3a, dcsx
@@ -343,7 +343,7 @@ contains
         call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,GdpMOoo(:,:,yy),nocc)
       end do
 
-      ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
+      ! mo_e1 without the G[P]^y part (added via the M^x probe in term3)
       allocate(moe1a(nocc,nocc,ncart))
       do yy = 1, ncart
         do ll = 1, nocc
@@ -358,7 +358,7 @@ contains
       ! with M^x = sum_kl s1oo^x_kl C_k C_l^T.  Both are contractions of the
       ! derivative response Fock tensor built above, so they add no derivative-
       ! integral work at all.
-      allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
+      allocate(A2(ncart,ncart), tGP(ncart,ncart), source=0.0_dp)
       allocate(Mall(nbf,nbf,ncart), source=0.0_dp)
       do x = 1, ncart
         call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
@@ -476,7 +476,7 @@ contains
       end if
 
       deallocate(sflat, hflat, fxflat, Mall, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
-                 Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
+                 A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
     end block
 
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
@@ -525,7 +525,7 @@ contains
     write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
     close(iw)
 
-    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
+    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, &
                gxMO, fx2e, d0, d0p, gp, gfull, bvec, uvec, hess_native)
   end subroutine hf_hessian
 
@@ -601,7 +601,7 @@ contains
     real(dp), allocatable :: scr(:,:), tmp(:,:), gx(:,:), probe(:,:)
     real(dp), allocatable :: SxMO(:,:), hxMO(:,:), d0a(:,:), d0b(:,:)
     real(dp), allocatable :: dpck(:,:), fpck(:,:), gfull(:,:)
-    real(dp), allocatable :: Gd0(:,:), Mi(:,:), Mall(:,:,:)
+    real(dp), allocatable :: Gd0(:,:), Mall(:,:,:)
     real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
     type(uhf_spin_t) :: sp(2)
     real(dp) :: hfscale, a1v, a3v, t3a, dcsx
@@ -949,7 +949,7 @@ contains
     !   tGP(x,y) = sum_s Tr[Mi^s,x G^{s,y}[P]],  Mi^s,x = sum_kl s1oo^s,x_kl C^s_k C^s_l^T
     ! Both traces contract the derivative response Fock tensors already built,
     ! so they need no further derivative-integral traversal.
-    allocate(A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
+    allocate(A2(ncart,ncart), tGP(ncart,ncart), source=0.0_dp)
     allocate(Mall(nbf,nbf,ncart))
     do s = 1, 2
       Mall = 0.0_dp
@@ -1136,7 +1136,7 @@ contains
 
     deallocate(ptot, dSa, dTa, dVa, sflat, hflat, bvec, uvec, scr, tmp, SxMO, hxMO, &
                probe, gx, d0a, d0b, gfull, Gd0, dpck, fpck, &
-               A2, tGP, Mi, hresp, hess_native)
+               A2, tGP, hresp, hess_native)
   end subroutine hf_hessian_uhf
 
 !###############################################################################
