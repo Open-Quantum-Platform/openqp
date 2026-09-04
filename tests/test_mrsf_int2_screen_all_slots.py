@@ -34,6 +34,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+NATIVE_TESTS_REQUIRED = os.getenv("OQP_REQUIRE_NATIVE_TESTS") == "1"
+_RUNTIME_ERROR = ""
+
 # Same molecule and settings as examples/other/h2o_rohf_mrsf-s_6-31g_* but with
 # a pure-HF reference (no grid noise) and tight thresholds for a clean FD.
 INPUT_TMPL = """[input]
@@ -77,14 +80,39 @@ STATE_RE = re.compile(r"^\s+S(\d+)\s+(-\d+\.\d{8,})\s")
 
 
 def _runtime_available():
+    global _RUNTIME_ERROR
     try:
         os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
         return True
-    except Exception:
+    except Exception as exc:
+        _RUNTIME_ERROR = f"{type(exc).__name__}: {exc}"
         return False
+
+
+RUNTIME_AVAILABLE = _runtime_available()
+
+
+class MrsfInt2ScreenBuildGate(unittest.TestCase):
+    """Turn a native-import failure into a FAILURE, not a silent skip.
+
+    Without this, an ABI break or a missing liboqp would leave only the
+    source-text check running and CI would still be green -- exactly the
+    scenario the live FD repro below exists to catch.  CI exports
+    OQP_REQUIRE_NATIVE_TESTS=1 (.github/workflows/CI.yml).
+    """
+
+    @unittest.skipUnless(
+        NATIVE_TESTS_REQUIRED,
+        "source-only run; set OQP_REQUIRE_NATIVE_TESTS=1 after building OpenQP",
+    )
+    def test_required_runtime(self):
+        self.assertTrue(
+            RUNTIME_AVAILABLE,
+            f"compiled OpenQP runtime is required: {_RUNTIME_ERROR}",
+        )
 
 
 class MrsfInt2ScreenSourceTests(unittest.TestCase):
@@ -107,7 +135,7 @@ class MrsfInt2ScreenSourceTests(unittest.TestCase):
             "shell-density bounds.")
 
 
-@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
 class MrsfGradientFdScreeningRepro(unittest.TestCase):
     def _run(self, workdir, name, h1x, runtype, properties):
         from oqp.pyoqp import Runner
@@ -132,11 +160,18 @@ class MrsfGradientFdScreeningRepro(unittest.TestCase):
 
     @staticmethod
     def _final_gradient(log):
-        """Last 'PyOQP S<k>' gradient block (atoms x 3, Hartree/Bohr)."""
-        grads, cur = [], None
+        """Last 'PyOQP S<k>' gradient block, as (k, atoms x 3) in Hartree/Bohr.
+
+        The label is returned rather than discarded: taking the last block and
+        assuming it is the requested state would quietly compare a different
+        state against TARGET's displaced energies if the log ever grew another
+        block.
+        """
+        grads, cur, label, cur_label = [], None, None, None
         for line in log.read_text().splitlines():
-            if re.search(r"PyOQP S\d+\s*$", line.rstrip()):
-                cur = []
+            m = re.search(r"PyOQP S(\d+)\s*$", line.rstrip())
+            if m:
+                cur, cur_label = [], int(m.group(1))
                 continue
             if cur is not None:
                 f = line.split()
@@ -144,18 +179,33 @@ class MrsfGradientFdScreeningRepro(unittest.TestCase):
                     cur.append([float(x) for x in f[1:]])
                     if len(cur) == 3:
                         grads.append(cur)
+                        label = cur_label
                         cur = None
-        return grads[-1]
+        if not grads:
+            raise AssertionError(f"no gradient block found in {log}")
+        return label, grads[-1]
 
     def test_s3_analytic_gradient_matches_fd_along_h1x(self):
         with tempfile.TemporaryDirectory(prefix="oqp_mrsf_screen_") as td:
             glog = self._run(td, "grad", H1X0, "grad",
                              "\n[properties]\ngrad=4\n")
-            grad = self._final_gradient(glog)
+            label, grad = self._final_gradient(glog)
+            self.assertEqual(
+                label, TARGET,
+                f"expected the S{TARGET} gradient block, read S{label}")
+            e0 = self._state_energies(glog)[TARGET]
             ep = self._state_energies(
                 self._run(td, "ep", H1X0 + H_ANG, "energy", ""))[TARGET]
             em = self._state_energies(
                 self._run(td, "em", H1X0 - H_ANG, "energy", ""))[TARGET]
+
+        # Same root at all three geometries: a swap would make the finite
+        # difference meaningless and the comparison vacuous.
+        self.assertLess(
+            abs(0.5 * (ep + em) - e0), 1.0e-6,
+            f"S{TARGET} midpoint {0.5 * (ep + em):.10f} does not match the "
+            f"undisplaced energy {e0:.10f}; the root probably swapped, so the "
+            "finite difference is not a valid reference")
 
         fd = (ep - em) / (2.0 * H_ANG) * ANGSTROM_PER_BOHR
         diff = abs(fd - grad[1][0])
