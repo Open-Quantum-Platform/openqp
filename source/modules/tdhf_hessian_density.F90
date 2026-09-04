@@ -39,7 +39,14 @@ contains
       call show_message('TDHF relaxed-density derivative arrays have incompatible shapes.',WITH_ABORT)
     call tagarray_get_data(infos%dat,OQP_VEC_MO_A,c)
     call tagarray_get_data(infos%dat,OQP_E_MO_A,eps)
-    allocate(um(nocc,nvir),vm(nocc,nvir),zm(nocc,nvir),tm(nbf,nbf),pm(nbf,nbf),wm(nbf,nbf))
+    ! tm, pm and wm must start at zero: trans_square accumulates into its
+    ! target (t = t - ...), so an uninitialized tm leaves the base relaxed
+    ! density equal to whatever was in memory plus the correct contribution,
+    ! including in the occupied-virtual blocks that trans_square never writes.
+    ! The derivative arrays on the next line were already zeroed, which is why
+    ! the derivative was right while the base was not.
+    allocate(um(nocc,nvir),vm(nocc,nvir),zm(nocc,nvir),tm(nbf,nbf),pm(nbf,nbf), &
+             wm(nbf,nbf),source=0.0_dp)
     allocate(dum(nocc,nvir),dvm(nocc,nvir),dzm(nocc,nvir),dtm(nbf,nbf,ncoord), &
              dpm(nbf,nbf,ncoord),dwm(nbf,nbf,ncoord),source=0.0_dp)
     um=reshape(u0,[nocc,nvir]); vm=reshape(v0,[nocc,nvir]); zm=reshape(z0,[nocc,nvir])
