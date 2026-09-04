@@ -53,6 +53,16 @@ def test_energy_weighted_density_uses_same_xpy_channel():
     )
 
 
+def test_relaxed_density_accumulator_is_initialized_before_updates():
+    """The OO/VV accumulator must not inherit platform-specific heap data."""
+    lines = [line.strip() for line in DENSITY.splitlines()]
+    first_update = lines.index(
+        "call trans_square(tm,um,um,0.5_dp); "
+        "call trans_square(tm,vm,vm,0.5_dp)"
+    )
+    assert lines[first_update - 1] == "tm=0.0_dp"
+
+
 def test_every_gxc_accumulator_is_zeroed_immediately_before_use():
     calls = [
         "call tddft_gxc(basis,grid,.true.,c,gp,xao,1,0.0_dp,infos)",
