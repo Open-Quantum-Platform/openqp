@@ -37,7 +37,7 @@ contains
       OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
-    use fock_deriv_mod, only: fock_deriv_contract
+    use fock_deriv_mod, only: fock_deriv_matrix
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
     use io_constants, only: iw
@@ -49,11 +49,12 @@ contains
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: dmat_a(:), mo_a(:,:), eps(:)
-    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:)
+    real(kind=dp), allocatable :: pfull(:,:)
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
     real(kind=dp), allocatable :: bvec(:,:), uvec(:,:), scr(:,:), col(:,:), hess_native(:,:)
+    real(kind=dp), allocatable :: fx2e(:,:,:,:), gxMO(:,:)
     real(kind=dp), contiguous, pointer :: hess_store(:,:)
     real(kind=dp) :: hfscale
     integer :: nbf, nbf2, nocc, nvir, natom, ncart
@@ -64,11 +65,10 @@ contains
     ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, libecpint
     ! deriv order 2) plus the ECP core-derivative in the CPHF response; ROHF folds
     ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.
-    ! Range-separated (CAM/LC) functionals are also supported: the 2e derivative
-    ! integrals are erfc-attenuation capable, so grd2_hess_driver (skeleton),
-    ! grd2_driver (fock_deriv_contract response) and fock_jk (cphf) all run the
-    ! long-range Coulomb + short-range erfc-exchange two-pass split when
-    ! infos%dft%cam_flag is set.
+    ! Range-separated (CAM/LC) functionals remain available in the validated
+    ! closed-shell and UHF paths.  The reusable ROHF/ROKS nuclear response fails
+    ! closed for CAM until its non-canonical CPKS right-hand side and moving-grid
+    ! response have an independent reference.
 
     ! Open-shell (UHF/ROHF) dispatch.  The body below is the closed-shell
     ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)
@@ -156,9 +156,22 @@ contains
 
     allocate(scr(nbf,nbf), col(nbf,nbf))
     allocate(Sx(nbf,nbf), hx(nbf,nbf), F0x(nbf,nbf), Gd0(nbf,nbf))
-    allocate(probe(nbf,nbf), gx(3,natom))
+    allocate(gxMO(nbf,nbf))
     allocate(d0(nbf,nbf), d0p(nbf2,1), gp(nbf2,1), gfull(nbf,nbf))
     allocate(bvec(nocc*nvir,ncart), uvec(nocc*nvir,ncart), source=0.0_dp)
+
+    ! --- Two-electron derivative response Fock F^x[P], ALL coordinates -------
+    ! F^x_uv[P] = J^x_uv[P] - (hfscale/2) K^x_uv[P] at the frozen SCF density.
+    ! One derivative-integral shell traversal builds the whole (nbf,nbf,3,natom)
+    ! tensor.  Every two-electron piece of the closed-shell nuclear response is
+    ! a contraction of this one object: the occupied-virtual CPHF right-hand
+    ! side needs its MO occ-vir block, Tr[dP^y G[P]^x] and Tr[M^x G[P]^y] are
+    ! plain matrix dot products with it.  The earlier formulation contracted a
+    ! separate occupied-virtual probe per Cartesian coordinate, which repeated
+    ! the same derivative-ERI sweep 3*natom*nocc*nvir times and dominated the
+    ! whole Hessian.
+    allocate(fx2e(nbf,nbf,3,natom), source=0.0_dp)
+    call fock_deriv_matrix(infos, basis, pfull, hfscale, fx2e)
 
     icart = 0
     do kc = 1, natom
@@ -168,16 +181,11 @@ contains
         scr = dTa(:,:,cc,kc) + dVa(:,:,cc,kc)
         call mo_transform(mo_a, scr, nbf, col, F0x, hx)
 
+        call mo_transform(mo_a, fx2e(:,:,cc,kc), nbf, scr, col, gxMO)
         F0x = hx
         do a = 1, nvir
           do i = 1, nocc
-            do mu = 1, nbf
-              do nu = 1, nbf
-                probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
-              end do
-            end do
-            call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
-            F0x(i,nocc+a) = hx(i,nocc+a) + 2.0_dp*gx(cc,kc)
+            F0x(i,nocc+a) = hx(i,nocc+a) + gxMO(i,nocc+a)
           end do
         end do
 
@@ -270,24 +278,25 @@ contains
     ! F^x = h^x + G[P]^x; dC^y from the validated CPHF amplitudes U^y. The first
     ! two terms equal Tr[dP^y F^x] and the eps-weighted overlap term; the third
     ! is the FULL occ-occ energy-weighted term (the off-diagonal part is what a
-    ! diagonal dε approximation misses). 2e traces use fock_deriv_contract
-    ! (=1/2 Tr[M G[P]^x]) and fock_jk (G[dP^y]).
+    ! diagonal dε approximation misses). The 2e traces contract the derivative
+    ! response Fock tensor F^x[P] built once above; G[dP^y] comes from fock_jk.
     allocate(hess_native(ncart,ncart), source=0.0_dp)
     block
-      real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:)
+      real(dp), allocatable :: sflat(:,:,:), hflat(:,:,:), fxflat(:,:,:), Mall(:,:,:)
       real(dp), allocatable :: dCx(:,:,:), dPx(:,:,:), Gdp(:,:,:)
       real(dp), allocatable :: s1oo(:,:,:), hMOoo(:,:,:), GdpMOoo(:,:,:), moe1a(:,:,:)
-      real(dp), allocatable :: Mi(:,:), gxy(:,:), A2(:,:), tGP(:,:), hresp(:,:)
+      real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
       real(dp), allocatable :: s1(:,:), s2(:,:), bMO(:,:), dpp(:,:), gpp(:,:), gfl(:,:)
       real(dp), allocatable :: cocc(:,:), tmpno(:,:)
       real(dp) :: a1v, a3v, t3a, dcsx
       integer :: x, yy, ii, jj, kk, ll, aa, ia2, mu2, nu2, ccx, kcx
 
-      allocate(sflat(nbf,nbf,ncart), hflat(nbf,nbf,ncart))
+      allocate(sflat(nbf,nbf,ncart), hflat(nbf,nbf,ncart), fxflat(nbf,nbf,ncart))
       do x = 1, ncart
         ccx = mod(x-1,3)+1; kcx = (x-1)/3+1
         sflat(:,:,x) = dSa(:,:,ccx,kcx)
         hflat(:,:,x) = dTa(:,:,ccx,kcx) + dVa(:,:,ccx,kcx)
+        fxflat(:,:,x) = fx2e(:,:,ccx,kcx)
       end do
       allocate(cocc(nbf,nocc)); cocc = mo_a(:,1:nocc)
 
@@ -334,7 +343,7 @@ contains
         call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,GdpMOoo(:,:,yy),nocc)
       end do
 
-      ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
+      ! mo_e1 without the G[P]^y part (added via the M^x probe in term3)
       allocate(moe1a(nocc,nocc,ncart))
       do yy = 1, ncart
         do ll = 1, nocc
@@ -346,20 +355,19 @@ contains
       end do
 
       ! 2e traces: A2(x,y)=Tr[dP^y G[P]^x]; tGP(x,y)=Tr[M^x G[P]^y]
-      ! with M^x = sum_kl s1oo^x_kl C_k C_l^T
-      allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
-      do yy = 1, ncart
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, dPx(:,:,yy), hfscale, gxy)
-        A2(:,yy) = 2.0_dp*reshape(gxy, [ncart])
-      end do
+      ! with M^x = sum_kl s1oo^x_kl C_k C_l^T.  Both are contractions of the
+      ! derivative response Fock tensor built above, so they add no derivative-
+      ! integral work at all.
+      allocate(A2(ncart,ncart), tGP(ncart,ncart), source=0.0_dp)
+      allocate(Mall(nbf,nbf,ncart), source=0.0_dp)
       do x = 1, ncart
         call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
-        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mi,nbf)
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, Mi, hfscale, gxy)
-        tGP(x,:) = 2.0_dp*reshape(gxy, [ncart])
+        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mall(:,:,x),nbf)
       end do
+      call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,fxflat,nbf*nbf, &
+                 dPx,nbf*nbf,0.0_dp,A2,ncart)
+      call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,Mall,nbf*nbf, &
+                 fxflat,nbf*nbf,0.0_dp,tGP,ncart)
 
       ! assemble response  hresp(x,y) = 4Tr[F^x dm1^y]-4Tr[S^x eps.dm1^y]-2Tr[s1oo^x mo_e1^y]
       !   = (Tr[dP^y h^x] + A2) - 4 A3 - 2 (sum_kl s1oo^x_kl moe1a^y_kl) - 2 tGP
@@ -467,8 +475,8 @@ contains
         end block
       end if
 
-      deallocate(sflat, hflat, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
-                 Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
+      deallocate(sflat, hflat, fxflat, Mall, dCx, dPx, Gdp, s1oo, hMOoo, GdpMOoo, moe1a, &
+                 A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
     end block
 
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
@@ -517,8 +525,8 @@ contains
     write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
     close(iw)
 
-    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
-               d0, d0p, gp, gfull, bvec, uvec, hess_native)
+    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, &
+               gxMO, fx2e, d0, d0p, gp, gfull, bvec, uvec, hess_native)
   end subroutine hf_hessian
 
 !###############################################################################
@@ -559,7 +567,7 @@ contains
       OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_E_MO_A, OQP_E_MO_B, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
-    use fock_deriv_mod, only: fock_deriv_contract_os
+    use fock_deriv_mod, only: fock_deriv_matrix_os, fock_deriv_contract_os
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve_uhf
     use io_constants, only: iw
@@ -577,6 +585,7 @@ contains
       real(dp), allocatable :: s1oo(:,:,:)        ! occ-occ MO of S^x (nocc,nocc,ncart)
       real(dp), allocatable :: hoo(:,:,:)         ! occ-occ MO of h^x
       real(dp), allocatable :: g2e(:,:)           ! G^{s,x}[P]_ia for all coords (nocc*nvir,ncart)
+      real(dp), allocatable :: fx(:,:,:)          ! G^{s,x}[P] in AO basis (nbf,nbf,ncart)
       real(dp), allocatable :: dCx(:,:,:)         ! relaxed dC (nbf,nocc,ncart)
       real(dp), allocatable :: dPx(:,:,:)         ! relaxed spin density derivative
       real(dp), allocatable :: gdpoo(:,:,:)       ! occ-occ MO of G^s[dP^y]
@@ -592,10 +601,11 @@ contains
     real(dp), allocatable :: scr(:,:), tmp(:,:), gx(:,:), probe(:,:)
     real(dp), allocatable :: SxMO(:,:), hxMO(:,:), d0a(:,:), d0b(:,:)
     real(dp), allocatable :: dpck(:,:), fpck(:,:), gfull(:,:)
-    real(dp), allocatable :: Gd0(:,:), Mi(:,:)
+    real(dp), allocatable :: Gd0(:,:), Mall(:,:,:)
     real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
     type(uhf_spin_t) :: sp(2)
     real(dp) :: hfscale, a1v, a3v, t3a, dcsx
+    logical :: use_direct
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, la, lb, ltot
     integer :: s, i, j, a, ia, icart, kc, cc, x, yy, kk, ll, mu, nu
 
@@ -703,24 +713,54 @@ contains
     allocate(d0a(nbf,nbf), d0b(nbf,nbf), gfull(nbf,nbf), Gd0(nbf,nbf))
     allocate(dpck(nbf2,2), fpck(nbf2,2))
 
-    ! 2e response-Fock skeleton  G^{s,x}[P]_ia  for ALL 3N coordinates.  The
-    ! occ-vir probe C^s_a C^s_i^T is geometry-independent, so a single open-shell
-    ! derivative-Fock contraction per occ-vir pair yields every Cartesian
-    ! component at once (avoids an ncart-fold redundant grd2 sweep).
+    ! 2e response-Fock skeleton  G^{s,x}[P] = J^x[P_a+P_b] - c_x K^x[P^s] for ALL
+    ! 3N coordinates, assembled as a full AO matrix in ONE derivative-integral
+    ! traversal per spin.  Every two-electron piece of the open-shell nuclear
+    ! response is then a contraction of this tensor: the occ-vir right-hand side
+    ! is its MO block, and Tr[dP^s,y G^{s,x}[P]] and Tr[Mi^s,x G^{s,y}[P]] are
+    ! matrix dot products.  Contracting one occ-vir probe at a time repeated the
+    ! same derivative-ERI sweep nocc*nvir times per spin.
+    ! The direct AO-target driver has no erfc-attenuated pass, so a range-
+    ! separated functional keeps the historical probe contraction.
+    use_direct = .not. infos%dft%cam_flag
     do s = 1, 2
       allocate(sp(s)%g2e(sp(s)%nocc*sp(s)%nvir, ncart), source=0.0_dp)
-      do a = 1, sp(s)%nvir
-        do i = 1, sp(s)%nocc
-          do mu = 1, nbf
-            do nu = 1, nbf
-              probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
-                                    + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+      if (.not. use_direct) then
+        do a = 1, sp(s)%nvir
+          do i = 1, sp(s)%nocc
+            do mu = 1, nbf
+              do nu = 1, nbf
+                probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
+                                      + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+              end do
             end do
+            gx = 0.0_dp
+            call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
+            ia = (a-1)*sp(s)%nocc + i
+            sp(s)%g2e(ia,:) = reshape(gx, [ncart])
           end do
-          gx = 0.0_dp
-          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
-          ia = (a-1)*sp(s)%nocc + i
-          sp(s)%g2e(ia,:) = reshape(gx, [ncart])
+        end do
+        cycle
+      end if
+      allocate(sp(s)%fx(nbf,nbf,ncart), source=0.0_dp)
+      block
+        real(dp), allocatable :: fx4(:,:,:,:)
+        integer :: ccf, kcf
+        allocate(fx4(nbf,nbf,3,natom), source=0.0_dp)
+        call fock_deriv_matrix_os(infos, basis, ptot, sp(s)%p, hfscale, fx4)
+        do x = 1, ncart
+          ccf = mod(x-1,3)+1; kcf = (x-1)/3+1
+          sp(s)%fx(:,:,x) = fx4(:,:,ccf,kcf)
+        end do
+        deallocate(fx4)
+      end block
+      do x = 1, ncart
+        call mo_transform(sp(s)%mo, sp(s)%fx(:,:,x), nbf, scr, tmp, hxMO)
+        do a = 1, sp(s)%nvir
+          do i = 1, sp(s)%nocc
+            ia = (a-1)*sp(s)%nocc + i
+            sp(s)%g2e(ia,x) = hxMO(i,sp(s)%nocc+a)
+          end do
         end do
       end do
     end do
@@ -907,31 +947,45 @@ contains
     ! 2e response traces, summed over spin:
     !   A2(x,y)  = sum_s Tr[dP^s,y G^{s,x}[P]]
     !   tGP(x,y) = sum_s Tr[Mi^s,x G^{s,y}[P]],  Mi^s,x = sum_kl s1oo^s,x_kl C^s_k C^s_l^T
-    allocate(A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
-    do yy = 1, ncart
-      do s = 1, 2
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, sp(s)%dPx(:,:,yy), hfscale, gx)
-        A2(:,yy) = A2(:,yy) + reshape(gx, [ncart])
-      end do
-    end do
-    do x = 1, ncart
-      do s = 1, 2
-        Mi = 0.0_dp
+    ! Both traces contract the derivative response Fock tensors already built,
+    ! so they need no further derivative-integral traversal.
+    allocate(A2(ncart,ncart), tGP(ncart,ncart), source=0.0_dp)
+    allocate(Mall(nbf,nbf,ncart))
+    do s = 1, 2
+      Mall = 0.0_dp
+      do x = 1, ncart
         do ll = 1, sp(s)%nocc
           do kk = 1, sp(s)%nocc
             do mu = 1, nbf
               do nu = 1, nbf
-                Mi(mu,nu) = Mi(mu,nu) + sp(s)%s1oo(kk,ll,x)*sp(s)%mo(mu,kk)*sp(s)%mo(nu,ll)
+                Mall(mu,nu,x) = Mall(mu,nu,x) &
+                  + sp(s)%s1oo(kk,ll,x)*sp(s)%mo(mu,kk)*sp(s)%mo(nu,ll)
               end do
             end do
           end do
         end do
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, Mi, hfscale, gx)
-        tGP(x,:) = tGP(x,:) + reshape(gx, [ncart])
       end do
+      if (use_direct) then
+        call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,sp(s)%fx,nbf*nbf, &
+                   sp(s)%dPx,nbf*nbf,1.0_dp,A2,ncart)
+        call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,Mall,nbf*nbf, &
+                   sp(s)%fx,nbf*nbf,1.0_dp,tGP,ncart)
+      else
+        do yy = 1, ncart
+          gx = 0.0_dp
+          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, &
+                                      sp(s)%dPx(:,:,yy), hfscale, gx)
+          A2(:,yy) = A2(:,yy) + reshape(gx, [ncart])
+        end do
+        do x = 1, ncart
+          gx = 0.0_dp
+          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, &
+                                      Mall(:,:,x), hfscale, gx)
+          tGP(x,:) = tGP(x,:) + reshape(gx, [ncart])
+        end do
+      end if
     end do
+    deallocate(Mall)
 
     ! assemble  H^resp_xy
     allocate(hresp(ncart,ncart), source=0.0_dp)
@@ -1082,13 +1136,13 @@ contains
 
     deallocate(ptot, dSa, dTa, dVa, sflat, hflat, bvec, uvec, scr, tmp, SxMO, hxMO, &
                probe, gx, d0a, d0b, gfull, Gd0, dpck, fpck, &
-               A2, tGP, Mi, hresp, hess_native)
+               A2, tGP, hresp, hess_native)
   end subroutine hf_hessian_uhf
 
 !###############################################################################
 
   subroutine hf_hessian_rohf(infos)
-    ! Native open-shell (ROHF) analytic HF Hessian (HF only).
+    ! Native open-shell ROHF/ROKS analytic Hessian.
     !
     ! ROHF uses a SINGLE MO set with a docc/socc/virt partition, so the orbital
     ! response is solved over the ROHF rotation space (cphf_solve_rohf) rather
@@ -1115,16 +1169,16 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
-      OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, OQP_Hcore, OQP_hf_hessian, TA_TYPE_REAL64
-    use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
-    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn, &
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, &
+      OQP_hf_hessian, TA_TYPE_REAL64
+    use mathlib, only: pack_matrix,orthogonal_transform_sym
+    use grd1, only: hess_nn, &
       grad_ee_overlap, grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
     use grd2, only: grd2_driver, grd2_compute_data_t
     use hf_gradient_mod, only: grd2_uhf_compute_data_t
-    use fock_deriv_mod, only: fock_deriv_contract_os
     use scf_addons, only: fock_jk
-    use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
+    use hf_rohf_orbital_response_mod, only: rohf_nuclear_response_t, &
+      build_rohf_nuclear_response,rohf_response_status_message
     use io_constants, only: iw
     use messages, only: show_message, WITH_ABORT
 
@@ -1133,22 +1187,16 @@ contains
     type(information), target, intent(inout) :: infos
 
     type(basis_set), pointer :: basis
-    real(dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), focka(:), fockb(:), hcore(:)
+    real(dp), contiguous, pointer :: mo(:,:)
     real(dp), contiguous, pointer :: hess_store(:,:)
-    real(dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
-    real(dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
-    real(dp), allocatable :: faMO(:,:), fbMO(:,:)
-    real(dp), allocatable :: scr(:,:), tmp(:,:), SxMO(:,:), hxMO(:,:), probe(:,:)
-    real(dp), allocatable :: ga2e(:,:,:), gb2e(:,:,:)
-    real(dp), allocatable :: d0a(:,:), d0b(:,:), dpck(:,:), fpck(:,:), gfull(:,:), Gd0(:,:)
-    real(dp), allocatable :: ba(:,:), bb(:,:), bvec(:,:), uvec(:,:)
-    real(dp), allocatable :: xa(:,:), xb(:,:), dCa(:,:), dCb(:,:), gp(:,:), gm(:,:)
+    real(dp), allocatable :: dpck(:,:),fpck(:,:),gp(:,:),gm(:,:)
     real(dp), allocatable :: zneff(:), hess_native(:,:), hresp(:,:)
     real(dp), allocatable :: faop(:), fbop(:)
     integer, allocatable :: iecp_atom(:)
-    real(dp) :: hfscale, hstep, gx(3, size(infos%atoms%xyz,2))
+    type(rohf_nuclear_response_t) :: orbital_response
+    real(dp) :: hfscale,hstep
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, offset, ltot
-    integer :: i, j, a, icart, kc, cc, x, mu, nu, ie, nec
+    integer :: i,kc,cc,x,ie,nec,response_status
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1176,15 +1224,7 @@ contains
       return
     end if
 
-    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
-    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
-    call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
-    call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
-    call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
-
-    allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf))
-    call unpack_matrix(dma, pa); call unpack_matrix(dmb, pb); ptot = pa + pb
     allocate(zneff(natom)); zneff = basis%atoms%zn - basis%ecp_zn_num
 
     ! Map each atom to its ECP-centre index in ecp_coord (which is sized
@@ -1214,251 +1254,19 @@ contains
       end if
     end if
 
-    ! derivative integrals (normalized into the bfnrm/MO convention)
-    allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
-    call der_overlap_matrix(basis, dSa)
-    call der_kinetic_matrix(basis, dTa)
-    call der_nucattr_matrix(basis, basis%atoms%xyz, &
-                            basis%atoms%zn - basis%ecp_zn_num, dVa)  ! ECP-screened point charge
-    block
-      integer :: kc2, cc2, mu2, nu2
-      do kc2 = 1, natom
-        do cc2 = 1, 3
-          do nu2 = 1, nbf
-            do mu2 = 1, nbf
-              dSa(mu2,nu2,cc2,kc2) = dSa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-              dTa(mu2,nu2,cc2,kc2) = dTa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-              dVa(mu2,nu2,cc2,kc2) = dVa(mu2,nu2,cc2,kc2)*basis%bfnrm(mu2)*basis%bfnrm(nu2)
-            end do
-          end do
-        end do
-      end do
-    end block
+    ! Reuse the production ROHF/ROKS nuclear response.  The Hessian supports the
+    ! general open-shell restricted partition; two-SOMO consumers omit the
+    ! optional argument and therefore receive the stricter default validation.
+    call build_rohf_nuclear_response(infos,orbital_response,response_status, &
+      require_two_somo=.false.)
+    if(response_status/=0) call show_message( &
+      trim(rohf_response_status_message(response_status)),WITH_ABORT)
 
-    ! ECP first-derivative integrals -> core-Hamiltonian derivative dHcore/dR,
-    ! feeding the non-canonical CPHF RHS (hxMO below).  The ECP skeleton + response
-    ! is then completed by add_ecpder inside resp_grad (semi-numerical).  Already
-    ! normalized, so added after the bfnrm scaling.  No-op for non-ECP bases.
-    block
-      use ecp_tool, only: ecp_deriv_ints
-      real(dp), allocatable :: dVecp(:,:,:,:)
-      allocate(dVecp(nbf,nbf,3,natom))
-      call ecp_deriv_ints(basis, basis%atoms%xyz, dVecp)
-      dVa = dVa + dVecp
-      deallocate(dVecp)
-    end block
-
-    ! occ-occ Fock blocks (MO) of the converged spin Fock matrices (non-canonical)
-    allocate(scr(nbf,nbf), tmp(nbf,nbf), SxMO(nbf,nbf), hxMO(nbf,nbf))
-    allocate(faMO(nbf,nbf), fbMO(nbf,nbf))
-    call unpack_matrix(focka, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, faMO)
-    call unpack_matrix(fockb, scr); call mo_transform(mo, scr, nbf, tmp, hxMO, fbMO)
-
-    ! 2e response-Fock skeleton  G^{s,x}[P]_ai  for all coordinates (per spin)
-    allocate(ga2e(nvira,nocca,ncart), gb2e(nvirb,noccb,ncart), source=0.0_dp)
-    allocate(probe(nbf,nbf))
-    do a = 1, nvira
-      do i = 1, nocca
-        do mu = 1, nbf
-          do nu = 1, nbf
-            probe(mu,nu) = 0.5_dp*( mo(mu,nocca+a)*mo(nu,i) + mo(mu,i)*mo(nu,nocca+a) )
-          end do
-        end do
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
-        ga2e(a,i,:) = reshape(gx, [ncart])
-      end do
-    end do
-    do a = 1, nvirb
-      do i = 1, noccb
-        do mu = 1, nbf
-          do nu = 1, nbf
-            probe(mu,nu) = 0.5_dp*( mo(mu,noccb+a)*mo(nu,i) + mo(mu,i)*mo(nu,noccb+a) )
-          end do
-        end do
-        gx = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, pb, probe, hfscale, gx)
-        gb2e(a,i,:) = reshape(gx, [ncart])
-      end do
-    end do
-
-    ! ===== CPHF right-hand sides (non-canonical Pulay form), packed =====
-    allocate(d0a(nbf,nbf), d0b(nbf,nbf), gfull(nbf,nbf), Gd0(nbf,nbf))
-    allocate(dpck(nbf2,2), fpck(nbf2,2))
-    allocate(ba(nvira,nocca), bb(nvirb,noccb))
-    allocate(bvec(ltot,ncart), uvec(ltot,ncart), source=0.0_dp)
-    icart = 0
-    do kc = 1, natom
-      do cc = 1, 3
-        icart = icart + 1
-        call mo_transform(mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMO)
-        call mo_transform(mo, dTa(:,:,cc,kc)+dVa(:,:,cc,kc), nbf, scr, tmp, hxMO)
-
-        ! reorthonormalization densities d0^s = -sum_ij S^x_ij C_i C_j (per spin occ)
-        d0a = 0.0_dp; d0b = 0.0_dp
-        do i = 1, nocca
-          do j = 1, nocca
-            do mu = 1, nbf
-              do nu = 1, nbf
-                d0a(mu,nu) = d0a(mu,nu) - SxMO(i,j)*mo(mu,i)*mo(nu,j)
-              end do
-            end do
-          end do
-        end do
-        do i = 1, noccb
-          do j = 1, noccb
-            do mu = 1, nbf
-              do nu = 1, nbf
-                d0b(mu,nu) = d0b(mu,nu) - SxMO(i,j)*mo(mu,i)*mo(nu,j)
-              end do
-            end do
-          end do
-        end do
-        call pack_matrix(d0a, dpck(:,1)); call pack_matrix(d0b, dpck(:,2))
-        fpck = 0.0_dp
-        call fock_jk(basis, d=dpck, f=fpck, scale_exch=hfscale, infos=infos)
-
-        ! Non-canonical Pulay RHS.  The reorthonormalization Fock-coupling is the
-        ! occupied-projected anticommutator of S^x and the spin Fock:
-        !   B^s_ai = -(h^x + G2e + G[d0])_ai
-        !            + sum_{j in occ} ( S^x_aj F^s_ji + F^s_aj S^x_ji ) .
-        ! The first sum is the usual eps_i S^x_ai in the canonical (diagonal-Fock)
-        ! limit; the second vanishes there (F^s_aj is a vir-occ Fock element) and
-        ! supplies the non-canonical correction needed for the socc rotations.
-        call unpack_from_packed(fpck(:,1), gfull, nbf)
-        call mo_transform(mo, gfull, nbf, scr, tmp, Gd0)
-        do i = 1, nocca
-          do a = 1, nvira
-            ba(a,i) = -(hxMO(i,nocca+a) + ga2e(a,i,icart) + Gd0(i,nocca+a)) &
-                    + dot_product(SxMO(nocca+a,1:nocca), faMO(1:nocca,i)) &
-                    + dot_product(faMO(nocca+a,1:nocca), SxMO(1:nocca,i))
-          end do
-        end do
-        ! beta block
-        call unpack_from_packed(fpck(:,2), gfull, nbf)
-        call mo_transform(mo, gfull, nbf, scr, tmp, Gd0)
-        do i = 1, noccb
-          do a = 1, nvirb
-            bb(a,i) = -(hxMO(i,noccb+a) + gb2e(a,i,icart) + Gd0(i,noccb+a)) &
-                    + dot_product(SxMO(noccb+a,1:noccb), fbMO(1:noccb,i)) &
-                    + dot_product(fbMO(noccb+a,1:noccb), SxMO(1:noccb,i))
-          end do
-        end do
-
-        ! --- XC contribution to the CPKS right-hand side (ROKS only) -----------
-        ! Central FD of the spin XC Fock (open-shell dftexcor) along R +/- h AND
-        ! occupied MOs reorthonormalized by dmoR^s = -1/2 sum_j C_j S^x_ji; the XC
-        ! skeleton dVxc/dR + f_xc[d0], subtracted from B (which carries -F0x).
-        if (infos%control%hamilton >= 20) then
-          block
-            use mod_dft, only: dft_initialize, dftclean, dftexcor
-            use mod_dft_molgrid, only: dft_grid_t
-            type(dft_grid_t) :: mgr
-            real(dp), allocatable :: dmoa(:,:), dmob(:,:), mopa(:,:), mopb(:,:)
-            real(dp), allocatable :: frap(:), frbp(:), fram(:), frbm(:), dvx(:,:), hxc(:,:)
-            real(dp) :: hxr, exr, telr, tknr
-            integer :: ir, jr
-            allocate(dmoa(nbf,nocca), dmob(nbf,noccb), mopa(nbf,nbf), mopb(nbf,nbf))
-            allocate(frap(nbf2), frbp(nbf2), fram(nbf2), frbm(nbf2), dvx(nbf,nbf), hxc(nbf,nbf))
-            hxr = 1.0d-3
-            dmoa = 0.0_dp
-            do ir = 1, nocca
-              do jr = 1, nocca
-                dmoa(:,ir) = dmoa(:,ir) - 0.5_dp*SxMO(jr,ir)*mo(:,jr)
-              end do
-            end do
-            dmob = 0.0_dp
-            do ir = 1, noccb
-              do jr = 1, noccb
-                dmob(:,ir) = dmob(:,ir) - 0.5_dp*SxMO(jr,ir)*mo(:,jr)
-              end do
-            end do
-            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
-            call basis%init_shell_centers()
-            call dft_initialize(infos, basis, mgr)
-            mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) + hxr*dmoa
-            mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) + hxr*dmob
-            frap = 0.0_dp; frbp = 0.0_dp
-            call dftexcor(basis, mgr, int(infos%control%scftype), frap, frbp, mopa, mopb, &
-                          nbf, nbf2, exr, telr, tknr, infos)
-            call dftclean(infos)
-            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - 2*hxr
-            call basis%init_shell_centers()
-            call dft_initialize(infos, basis, mgr)
-            mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) - hxr*dmoa
-            mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) - hxr*dmob
-            fram = 0.0_dp; frbm = 0.0_dp
-            call dftexcor(basis, mgr, int(infos%control%scftype), fram, frbm, mopa, mopb, &
-                          nbf, nbf2, exr, telr, tknr, infos)
-            call dftclean(infos)
-            basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
-            call basis%init_shell_centers()
-            call unpack_from_packed((frap - fram)/(2*hxr), dvx, nbf)
-            call mo_transform(mo, dvx, nbf, scr, tmp, hxc)
-            do i = 1, nocca
-              do a = 1, nvira
-                ba(a,i) = ba(a,i) - hxc(i,nocca+a)
-              end do
-            end do
-            call unpack_from_packed((frbp - frbm)/(2*hxr), dvx, nbf)
-            call mo_transform(mo, dvx, nbf, scr, tmp, hxc)
-            do i = 1, noccb
-              do a = 1, nvirb
-                bb(a,i) = bb(a,i) - hxc(i,noccb+a)
-              end do
-            end do
-            deallocate(dmoa, dmob, mopa, mopb, frap, frbp, fram, frbm, dvx, hxc)
-          end block
-        end if
-
-        call rohf_pack_trial(bvec(:,icart), ba, bb, nbf, nocca, noccb)
-      end do
-    end do
-
-    call cphf_solve_rohf(infos, ncart, bvec, uvec)
-
-    ! ===== semi-numerical orbital-relaxation response =====
-    ! Build the relaxed alpha/beta orbital derivatives independently, UHF-style:
-    !   dCa_i = sum_a C^{vir_a}_a xa(a,i) - 1/2 sum_{j in docc+socc} S^x_ji C_j
-    !   dCb_i = sum_a C^{vir_b}_a xb(a,i) - 1/2 sum_{j in docc}      S^x_ji C_j
-    ! The socc-docc rotation lives in xb (socc is beta-virtual), so it relaxes Pb
-    ! and leaves Pa invariant (it is an alpha occ-occ rotation) -- exactly the
-    ! ROHF physics, with no socc-docc cross term needed in dCa.
-    allocate(xa(nvira,nocca), xb(nvirb,noccb), dCa(nbf,nocca), dCb(nbf,noccb))
+    allocate(dpck(nbf2,2),fpck(nbf2,2))
     allocate(gp(3,natom), gm(3,natom), hresp(ncart,ncart), source=0.0_dp)
     allocate(faop(nbf2), fbop(nbf2))
-    if (infos%control%hamilton >= 20) then   ! flush stale grid state from the CPHF solver
-      block
-        use mod_dft, only: dft_initialize, dftclean
-        use mod_dft_molgrid, only: dft_grid_t
-        type(dft_grid_t) :: mgw
-        call dft_initialize(infos, basis, mgw); call dftclean(infos)
-      end block
-    end if
     do x = 1, ncart
       cc = mod(x-1,3)+1; kc = (x-1)/3+1
-      call rohf_unpack_trial(uvec(:,x), xa, xb, nbf, nocca, noccb)
-      call mo_transform(mo, dSa(:,:,cc,kc), nbf, scr, tmp, SxMO)
-
-      dCa = 0.0_dp
-      do i = 1, nocca
-        do a = 1, nvira
-          dCa(:,i) = dCa(:,i) + mo(:,nocca+a)*xa(a,i)
-        end do
-        do j = 1, nocca
-          dCa(:,i) = dCa(:,i) - 0.5_dp*SxMO(j,i)*mo(:,j)
-        end do
-      end do
-      dCb = 0.0_dp
-      do i = 1, noccb
-        do a = 1, nvirb
-          dCb(:,i) = dCb(:,i) + mo(:,noccb+a)*xb(a,i)
-        end do
-        do j = 1, noccb
-          dCb(:,i) = dCb(:,i) - 0.5_dp*SxMO(j,i)*mo(:,j)
-        end do
-      end do
-
       call resp_grad( 1.0_dp, gp)
       call resp_grad(-1.0_dp, gm)
       hresp(:,x) = reshape((gp - gm)/(2.0_dp*hstep), [ncart])
@@ -1477,10 +1285,9 @@ contains
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
 
-    deallocate(pa, pb, ptot, dSa, dTa, dVa, faMO, fbMO, scr, tmp, &
-               SxMO, hxMO, probe, ga2e, gb2e, d0a, d0b, dpck, fpck, gfull, Gd0, &
-               ba, bb, bvec, uvec, xa, xb, dCa, dCb, gp, gm, hresp, zneff, &
-               hess_native, faop, fbop, iecp_atom)
+    call orbital_response%clean()
+    deallocate(dpck,fpck,gp,gm,hresp,zneff,hess_native,faop,fbop, &
+      iecp_atom)
 
   contains
 
@@ -1528,9 +1335,11 @@ contains
       ! gives ~2e-5).
 
       ! relaxed orbitals -> perturbed densities and spin Fock matrices
-      cocc(:,1:nocca) = mo(:,1:nocca) + sgn*hstep*dCa
+      cocc(:,1:nocca)=mo(:,1:nocca)+sgn*hstep* &
+        orbital_response%dmo_alpha(:,1:nocca,x)
       call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, cocc, nbf, cocc, nbf, 0.0_dp, pap, nbf)
-      cocc(:,1:noccb) = mo(:,1:noccb) + sgn*hstep*dCb
+      cocc(:,1:noccb)=mo(:,1:noccb)+sgn*hstep* &
+        orbital_response%dmo_beta(:,1:noccb,x)
       call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, cocc, nbf, cocc, nbf, 0.0_dp, pbp, nbf)
       call pack_matrix(pap, paP_tri); call pack_matrix(pbp, pbP_tri)
       ptP_tri = paP_tri + pbP_tri
@@ -1557,8 +1366,12 @@ contains
           allocate(mopa(nbf,nbf), mopb(nbf,nbf), fra(nbf2), frb(nbf2), dedft(3,natom))
           nang = maxval(basis%am) + 2
           call dft_initialize(infos, basis, mg)
-          mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) + sgn*hstep*dCa
-          mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) + sgn*hstep*dCb
+          mopa=mo
+          mopb=mo
+          mopa(:,1:nocca)=mo(:,1:nocca)+sgn*hstep* &
+            orbital_response%dmo_alpha(:,1:nocca,x)
+          mopb(:,1:noccb)=mo(:,1:noccb)+sgn*hstep* &
+            orbital_response%dmo_beta(:,1:noccb,x)
           fra = 0.0_dp; frb = 0.0_dp
           call dftexcor(basis, mg, int(infos%control%scftype), fra, frb, mopa, mopb, &
                         nbf, nbf2, exr, telr, tknr, infos)

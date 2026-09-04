@@ -150,19 +150,15 @@ def _candidate_roots(package_root=None):
     package_root = Path(package_root or Path(__file__).resolve().parent)
     roots = []
 
-    # Prefer the runtime files shipped with the current Python package (and the
-    # inferred source tree in a dev checkout) so a stale OPENQP_ROOT pointing at
-    # another OpenQP build cannot shadow the matching liboqp/data of THIS
-    # package. OPENQP_ROOT is only a compatibility fallback (see resolve_oqp_root).
+    # OpenQP is installed with `pip install .`, so the runtime files always sit
+    # under the Python package (or, in a dev checkout, the inferred source tree).
+    # There is no OPENQP_ROOT fallback: an environment variable pointing at some
+    # other build could only ever shadow the matching liboqp/data of THIS package.
     roots.append(package_root)
 
     source_root = _source_root_from_package(package_root)
     if source_root is not None:
         roots.append(source_root)
-
-    env_root = os.environ.get("OPENQP_ROOT")
-    if env_root:
-        roots.append(Path(env_root).expanduser())
 
     seen = set()
     unique_roots = []
@@ -180,25 +176,32 @@ def resolve_oqp_root(package_root=None):
     Installed wheels keep the Python package, header, native library, and data
     files together under the package directory. Source-tree development usually
     keeps the Python package under pyoqp/oqp and runtime files under the repo
-    root. OPENQP_ROOT is retained only as a compatibility fallback for layouts
-    that cannot be inferred from the package location.
+    root. There is no environment-variable override: OpenQP is installed with
+    `pip install .`, so the runtime files are always locatable from the package.
     """
     suffix = library_suffix()
     for root in _candidate_roots(package_root):
-        if _is_oqp_root(root, suffix):
-            return str(root), suffix
-
-    env_root = os.environ.get("OPENQP_ROOT")
-    if env_root:
-        raise RuntimeError(
-            "OPENQP_ROOT does not contain matching include/oqp.h and "
-            f"liboqp.{suffix} in its configured library directory: {env_root}"
-        )
+        if not _is_oqp_root(root, suffix):
+            continue
+        # The package must load ITS OWN native library.  A resolved path that
+        # escapes the root means a system-wide OpenQP install is shadowing this
+        # one; loading it would run a different, possibly years-old, binary and
+        # still exit 0.  Fail loudly instead.
+        resolved_lib = Path(library_path(root, suffix)).resolve()
+        try:
+            resolved_lib.relative_to(Path(root).resolve())
+        except ValueError:
+            raise RuntimeError(
+                f"OpenQP runtime root {root} resolved liboqp.{suffix} to "
+                f"{resolved_lib}, which is outside that root. Remove the "
+                "system-wide OpenQP install that is shadowing this package."
+            ) from None
+        return str(root), suffix
 
     searched = ", ".join(str(root) for root in _candidate_roots(package_root))
     raise RuntimeError(
-        "Cannot locate OpenQP runtime files. Install OpenQP as a package, run "
-        "from a built source tree, or set OPENQP_ROOT to a tree containing "
+        "Cannot locate OpenQP runtime files. Install OpenQP with `pip install .` "
+        "into this environment, or run from a built source tree containing "
         f"include/oqp.h and liboqp.{suffix}. Searched: {searched}"
     )
 

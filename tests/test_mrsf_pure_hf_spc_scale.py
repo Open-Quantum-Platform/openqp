@@ -16,20 +16,21 @@ the coupling gradient terms came out with the wrong sign/magnitude, so the
 pure-HF MRSF analytic gradient disagreed with finite differences by ~1e-2
 (both singlet and triplet) even though the excitation energy was correct.
 
-Fix: tdhf_mrsf_energy resolves the response HF-exchange scale to 1.0 for a
-pure-HF (non-DFT) reference, so the spin-pair coupling defaults to +1.0.
+Fix: the shared native MRSF sigma scaling routine resolves the response
+HF-exchange scale to 1.0 for a pure-HF (non-DFT) reference, so both Davidson
+and Hessian operator applications use spin-pair coupling +1.0.
 
 Validation at the time of the fix (H2O/6-31G*, central FD): mrsf-s/mrsf-t hf
 analytic-vs-FD max|diff| dropped from ~1.0e-2 to ~5e-6; all DFT-functional MRSF
 gradients and the MRSF energy were unchanged.
 """
 
-import re
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+SIGMA_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_sigma.F90"
 
 
 class MrsfPureHfSpcScaleTests(unittest.TestCase):
@@ -37,28 +38,16 @@ class MrsfPureHfSpcScaleTests(unittest.TestCase):
         """Non-DFT (pure HF) reference must resolve tddft%HFscale to 1.0
         before the spin-pair-coupling defaults are assigned, so the coupling
         does not inherit the -1.0 sentinel that breaks the MRSF gradient."""
-        text = ENERGY_SRC.read_text()
+        sigma = "".join(SIGMA_SRC.read_text().lower().split())
+        energy = "".join(ENERGY_SRC.read_text().lower().split())
 
-        resolve = re.search(
-            r"\.not\.\s*dft\s*\)\s*infos%tddft%HFscale\s*=\s*1\.0_dp",
-            text,
-        )
-        self.assertIsNotNone(
-            resolve,
-            "tdhf_mrsf_energy must set infos%tddft%HFscale = 1.0_dp for a "
-            "non-DFT (pure HF) reference so the spin-pair coupling resolves "
-            "to +1.0 instead of the -1.0 sentinel.",
-        )
-
-        # It must come before the spc_coco default assignment.
-        spc_default = text.find("infos%tddft%spc_coco==-1.0_dp")
-        self.assertNotEqual(spc_default, -1, "spc_coco default not found")
-        self.assertLess(
-            resolve.start(),
-            spc_default,
-            "The HFscale resolution must precede the spin-pair-coupling "
-            "defaults so spc_coco/ovov/coov pick up the resolved 1.0.",
-        )
+        self.assertIn("elseresponse_scale=1.0_dp", sigma)
+        self.assertIn("infos%tddft%hfscale=response_scale", sigma)
+        resolve = sigma.index("response_scale=1.0_dp")
+        spc_default = sigma.index("infos%tddft%spc_coco=response_scale")
+        self.assertLess(resolve, spc_default)
+        self.assertIn("callprepare_mrsf_response_scaling", energy)
+        self.assertIn("callprepare_mrsf_response_scaling", sigma)
 
 
 if __name__ == "__main__":

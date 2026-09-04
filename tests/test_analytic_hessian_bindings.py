@@ -17,9 +17,9 @@ class TestAnalyticHessianBindings(unittest.TestCase):
             "hf_hessian",
             "tdhf_hessian",
             "tdhf_sf_hessian",
+            "tdhf_mrsf_hessian",
         ]:
             self.assertIn(f"void {symbol}(struct oqp_handle_t *inf);", header)
-        self.assertNotIn("tdhf_mrsf_hessian", header)
 
     def test_python_dispatch_mentions_native_hessian_entry_points(self):
         source = read("pyoqp/oqp/library/single_point.py")
@@ -67,31 +67,41 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("hess_store = hess_native", source)
         self.assertNotIn("implementation is not available yet", source)
 
-    def test_tdhf_hessian_fortran_scaffolds_export_c_abi_without_claiming_support(self):
-        expected = {
-            "tdhf_hessian.F90": [
-                "module tdhf_hessian_mod",
-                'bind(C, name="tdhf_hessian")',
-                "subroutine tdhf_hessian_C",
-                "subroutine tdhf_hessian",
-                "Analytic TDDFT Hessian kernel scaffold reached",
-            ],
-            "tdhf_sf_hessian.F90": [
-                "module tdhf_sf_hessian_mod",
-                'bind(C, name="tdhf_sf_hessian")',
-                "subroutine tdhf_sf_hessian_C",
-                "subroutine tdhf_sf_hessian",
-                "Analytic SF-TDDFT Hessian kernel scaffold reached",
-            ],
-        }
+    def test_tdhf_hessian_fortran_exports_native_kernel_while_sf_remains_closed(self):
+        source = read("source/modules/tdhf_hessian.F90")
+        for needle in (
+            "module tdhf_hessian_mod",
+            'bind(C, name="tdhf_hessian")',
+            "subroutine tdhf_hessian_C",
+            "subroutine tdhf_hessian",
+            "solve_tdhf_amplitude_response",
+            "solve_tdhf_z_response",
+            "build_tdhf_response_rows_hf",
+            "alloc_or_die(OQP_tdhf_hessian",
+        ):
+            self.assertIn(needle, source)
+        self.assertNotIn("Analytic TDDFT Hessian kernel scaffold reached", source)
 
-        for filename, needles in expected.items():
-            with self.subTest(filename=filename):
-                source = read(f"source/modules/{filename}")
-                for needle in needles:
-                    self.assertIn(needle, source)
-                self.assertIn("WITH_ABORT", source)
-        self.assertFalse((ROOT / "source/modules/tdhf_mrsf_hessian.F90").exists())
+        sf_source = read("source/modules/tdhf_sf_hessian.F90")
+        for needle in (
+            "module tdhf_sf_hessian_mod",
+            'bind(C, name="tdhf_sf_hessian")',
+            "subroutine tdhf_sf_hessian_C",
+            "subroutine tdhf_sf_hessian",
+            "Analytic SF-TDDFT Hessian kernel scaffold reached",
+            "WITH_ABORT",
+        ):
+            self.assertIn(needle, sf_source)
+        mrsf_source = read("source/modules/tdhf_mrsf_hessian.F90")
+        for needle in (
+            "module tdhf_mrsf_hessian_mod",
+            "bind(C,name='tdhf_mrsf_hessian')",
+            "solve_mrsf_z_response_from_mo_derivatives",
+            "build_mrsf_w_ao_derivative",
+            "build_tdhf_mrsf_response_rows",
+            "alloc_or_die(OQP_tdhf_hessian",
+        ):
+            self.assertIn(needle, mrsf_source)
 
     def test_molecule_has_single_hessian_storage_helper_with_asymmetry_metadata(self):
         source = read("pyoqp/oqp/molecule/molecule.py")
@@ -142,6 +152,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);", header)
         self.assertIn("bind(C, name=\"electric_dipole_au\")", electric)
         self.assertIn("bind(C, name=\"vibrational_intensities_native\")", vib)
+        self.assertIn("IR_INTENSITY_CONVERSION = 974.88011d0", vib)
         self.assertIn("void vibrational_intensities_native(struct oqp_handle_t *inf, int64_t nmode, int64_t ncoord,", header)
         self.assertIn("oqp.vibrational_intensities_native", single_point)
         self.assertNotIn("vibrational_intensities_from_pyscf", single_point)

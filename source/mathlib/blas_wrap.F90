@@ -1386,7 +1386,32 @@ contains
     double precision :: c(ldc,*)
 
     integer(blas_int) :: m_, n_, k_, lda_, ldb_, ldc_
+    integer :: i, j
     logical :: ok
+
+    ! A product with no output elements is a no-op.  Some BLAS backends
+    ! validate LDC before applying this quick return and reject LDC=0.
+    if (m >= 0 .and. n >= 0 .and. k >= 0) then
+      if (m == 0 .or. n == 0) return
+      ! For K=0, apply the BLAS beta*C semantics without presenting empty A
+      ! or B storage (and a possible zero leading dimension) to the backend.
+      if (k == 0 .and. ldc >= max(1,m)) then
+        if (beta == 0.0d0) then
+          do j = 1, n
+            do i = 1, m
+              c(i,j) = 0.0d0
+            end do
+          end do
+        else if (beta /= 1.0d0) then
+          do j = 1, n
+            do i = 1, m
+              c(i,j) = beta*c(i,j)
+            end do
+          end do
+        end if
+        return
+      end if
+    end if
 
     if (ARG_CHECK) then
       ok = .true.

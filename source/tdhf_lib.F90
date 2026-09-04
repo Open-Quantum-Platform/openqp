@@ -25,8 +25,14 @@ module tdhf_lib
     end type
 
     type, extends(int2_td_data_t) :: int2_tdgrd_data_t
+      ! Matrix-free response solvers require a linear operator.  When enabled,
+      ! use a density-independent Schwarz bound so the screened quartet set
+      ! does not change with the norm or block composition of a trial vector.
+      logical :: fixed_linear_screening = .false.
     contains
       procedure :: update => int2_tdgrd_data_t_update
+      procedure :: screen_ij => int2_tdgrd_data_t_screen_ij
+      procedure :: screen_ijkl => int2_tdgrd_data_t_screen_ijkl
     end type
 
     type, extends(int2_fock_data_t) :: int2_rpagrd_data_t
@@ -232,7 +238,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, xval2, &
                      val, val1, val2
-    integer :: mythread
+    integer :: ifock,jfock,mythread
 
     xval1 = 1 * this%scale_exchange
     xval2 = 2 * this%scale_coulomb
@@ -254,38 +260,49 @@ contains
         val1 = val*xval1
         val2 = val*xval2
 
+        ! Spin densities are stored as consecutive alpha/beta pairs.  Looping
+        ! over every pair lets one shell-quartet pass apply the open-shell
+        ! response operator to an arbitrary batch of trial vectors.  The
+        ! historical two-density path is the single-pair special case.
+        do ifock=1,this%nfocks-1,2
+          jfock=ifock+1
         if (this%int_apb) then
           ! A+B
           ! Coulomb
-          apb(i,j,1) = apb(i,j,1)+val2*(d2(k,l,1)+d2(l,k,1)+d2(k,l,2)+d2(l,k,2))
-          apb(k,l,1) = apb(k,l,1)+val2*(d2(i,j,1)+d2(j,i,1)+d2(i,j,2)+d2(j,i,2))
+          apb(i,j,ifock) = apb(i,j,ifock)+val2*(d2(k,l,ifock)+ &
+            d2(l,k,ifock)+d2(k,l,jfock)+d2(l,k,jfock))
+          apb(k,l,ifock) = apb(k,l,ifock)+val2*(d2(i,j,ifock)+ &
+            d2(j,i,ifock)+d2(i,j,jfock)+d2(j,i,jfock))
 
-          apb(i,j,2) = apb(i,j,2)+val2*(d2(k,l,1)+d2(l,k,1)+d2(k,l,2)+d2(l,k,2))
-          apb(k,l,2) = apb(k,l,2)+val2*(d2(i,j,1)+d2(j,i,1)+d2(i,j,2)+d2(j,i,2))
+          apb(i,j,jfock) = apb(i,j,jfock)+val2*(d2(k,l,ifock)+ &
+            d2(l,k,ifock)+d2(k,l,jfock)+d2(l,k,jfock))
+          apb(k,l,jfock) = apb(k,l,jfock)+val2*(d2(i,j,ifock)+ &
+            d2(j,i,ifock)+d2(i,j,jfock)+d2(j,i,jfock))
 
 !         ! Exchange
-          apb(i,k,1) = apb(i,k,1)-val1*(d2(j,l,1)+d2(l,j,1))
-          apb(i,l,1) = apb(i,l,1)-val1*(d2(j,k,1)+d2(k,j,1))
-          apb(j,k,1) = apb(j,k,1)-val1*(d2(i,l,1)+d2(l,i,1))
-          apb(j,l,1) = apb(j,l,1)-val1*(d2(i,k,1)+d2(k,i,1))
+          apb(i,k,ifock) = apb(i,k,ifock)-val1*(d2(j,l,ifock)+d2(l,j,ifock))
+          apb(i,l,ifock) = apb(i,l,ifock)-val1*(d2(j,k,ifock)+d2(k,j,ifock))
+          apb(j,k,ifock) = apb(j,k,ifock)-val1*(d2(i,l,ifock)+d2(l,i,ifock))
+          apb(j,l,ifock) = apb(j,l,ifock)-val1*(d2(i,k,ifock)+d2(k,i,ifock))
 !
-          apb(i,k,2) = apb(i,k,2)-val1*(d2(j,l,2)+d2(l,j,2))
-          apb(i,l,2) = apb(i,l,2)-val1*(d2(j,k,2)+d2(k,j,2))
-          apb(j,k,2) = apb(j,k,2)-val1*(d2(i,l,2)+d2(l,i,2))
-          apb(j,l,2) = apb(j,l,2)-val1*(d2(i,k,2)+d2(k,i,2))
+          apb(i,k,jfock) = apb(i,k,jfock)-val1*(d2(j,l,jfock)+d2(l,j,jfock))
+          apb(i,l,jfock) = apb(i,l,jfock)-val1*(d2(j,k,jfock)+d2(k,j,jfock))
+          apb(j,k,jfock) = apb(j,k,jfock)-val1*(d2(i,l,jfock)+d2(l,i,jfock))
+          apb(j,l,jfock) = apb(j,l,jfock)-val1*(d2(i,k,jfock)+d2(k,i,jfock))
         end if
 
         if (this%int_amb) then
           ! A-B
-          amb(i,k,1) = amb(i,k,1)+val1*(d2(l,j,1)-d2(j,l,1))
-          amb(i,l,1) = amb(i,l,1)+val1*(d2(k,j,1)-d2(j,k,1))
-          amb(j,k,1) = amb(j,k,1)+val1*(d2(l,i,1)-d2(i,l,1))
-          amb(j,l,1) = amb(j,l,1)+val1*(d2(k,i,1)-d2(i,k,1))
-          amb(k,i,1) = amb(k,i,1)-val1*(d2(l,j,1)-d2(j,l,1))
-          amb(l,i,1) = amb(l,i,1)-val1*(d2(k,j,1)-d2(j,k,1))
-          amb(k,j,1) = amb(k,j,1)-val1*(d2(l,i,1)-d2(i,l,1))
-          amb(l,j,1) = amb(l,j,1)-val1*(d2(k,i,1)-d2(i,k,1))
+          amb(i,k,ifock) = amb(i,k,ifock)+val1*(d2(l,j,ifock)-d2(j,l,ifock))
+          amb(i,l,ifock) = amb(i,l,ifock)+val1*(d2(k,j,ifock)-d2(j,k,ifock))
+          amb(j,k,ifock) = amb(j,k,ifock)+val1*(d2(l,i,ifock)-d2(i,l,ifock))
+          amb(j,l,ifock) = amb(j,l,ifock)+val1*(d2(k,i,ifock)-d2(i,k,ifock))
+          amb(k,i,ifock) = amb(k,i,ifock)-val1*(d2(l,j,ifock)-d2(j,l,ifock))
+          amb(l,i,ifock) = amb(l,i,ifock)-val1*(d2(k,j,ifock)-d2(j,k,ifock))
+          amb(k,j,ifock) = amb(k,j,ifock)-val1*(d2(l,i,ifock)-d2(i,l,ifock))
+          amb(l,j,ifock) = amb(l,j,ifock)-val1*(d2(k,i,ifock)-d2(i,k,ifock))
         end if
+        end do
       end do
 
     end associate
@@ -293,6 +310,38 @@ contains
     buf%ncur = 0
 
   end subroutine
+
+!###############################################################################
+
+  function int2_tdgrd_data_t_screen_ij(this,xints,i,j) result(res)
+    implicit none
+    class(int2_tdgrd_data_t), intent(in) :: this
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
+    real(kind=dp) :: res
+    integer, intent(in) :: i,j
+
+    if(this%fixed_linear_screening) then
+      res=xints(i,j)
+    else
+      res=xints(i,j)*this%max_den
+    end if
+  end function int2_tdgrd_data_t_screen_ij
+
+!###############################################################################
+
+  function int2_tdgrd_data_t_screen_ijkl(this,xints,i,j,k,l) result(res)
+    implicit none
+    class(int2_tdgrd_data_t), intent(in) :: this
+    real(kind=dp), contiguous, intent(in) :: xints(:,:)
+    real(kind=dp) :: res
+    integer, intent(in) :: i,j,k,l
+
+    res=xints(i,j)*xints(k,l)
+    if(.not.this%fixed_linear_screening .and. allocated(this%dsh)) then
+      res=res*max(4*this%dsh(i,j),4*this%dsh(k,l),this%dsh(j,l), &
+        this%dsh(j,k),this%dsh(i,l),this%dsh(i,k))
+    end if
+  end function int2_tdgrd_data_t_screen_ijkl
 
 !###############################################################################
 !###############################################################################
@@ -512,6 +561,10 @@ contains
     real(kind=dp), pointer :: vap(:,:), vbp(:,:)
 
     nbf = ubound(pao, 1)
+
+    ! A zero-dimensional occupied or virtual response block has no MO
+    ! elements.  Do not pass its zero leading dimension to BLAS.
+    if (nocca == 0 .or. noccb == nbf) return
 
     allocate(scr(nocca,nbf))
 

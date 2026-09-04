@@ -6694,6 +6694,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    scf_multiplicity = int(_get(config, "scf", "multiplicity", 1))
+    td_multiplicity = int(_get(config, "tdhf", "multiplicity", 1))
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
@@ -6714,13 +6716,58 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     if method == "tdhf":
         if td_type == "mrsf":
-            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+            verified_mrsf_semilocal = {
+                "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5",
+                "bhhlyp", "pbe0",
+            }
+            if functional and functional not in verified_mrsf_semilocal:
+                return (
+                    "unsupported_feature",
+                    "MRSF-TDDFT analytic Hessians currently support the "
+                    "spin-polarized LDA/GGA and global-hybrid paths; meta-GGA "
+                    "and range-separated/CAM functionals remain fail-closed.",
+                )
+            if scf_type != "rohf" or scf_multiplicity != 3:
+                return (
+                    "unsupported_scf_type",
+                    "MRSF analytic Hessians require a triplet ROHF two-SOMO reference.",
+                )
+            if td_multiplicity not in (1, 3):
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians support singlet and triplet target states only.",
+                )
+            if state <= 0:
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians require a positive excited-state index.",
+                )
+            method_name = "MRSF-TDDFT" if functional else "MRSF-TDHF"
+            return (
+                "supported",
+                f"Native OpenQP spin-adapted two-SOMO {method_name} analytic Hessian dispatch is enabled.",
+            )
         if td_type == "umrsf":
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if td_type == "rpa" and scf_type == "rhf" and state > 0:
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            verified_semilocal = {"svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5"}
+            if functional and functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."

@@ -1,6 +1,7 @@
 module tdhf_mrsf_gradient_mod
 
   use precision, only: dp
+  use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
   use grd2, only: grd2_driver, grd2_compute_data_t
   use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
   use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
@@ -486,8 +487,10 @@ contains
     qfspcp2 = this%spcscale(2)
     qfspcp3 = this%spcscale(3)
 
-    sgnk = 1.0_dp
-    if (this%mrst==3) sgnk = -1.0_dp
+    ! The six special-density contraction is K_raw=-C_SPC^physical; ball is
+    ! part of A0.  Thus +K_raw realizes the physical singlet A0-C_SPC and
+    ! -K_raw realizes the physical triplet A0+C_SPC.
+    sgnk = real(mrsf_raw_spc_multiplier(this%mrst),kind=dp)
     dabmax = 0
 
     usecart = HARMONIC_ACTIVE

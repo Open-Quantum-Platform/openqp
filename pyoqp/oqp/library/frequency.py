@@ -5,10 +5,11 @@ from oqp.utils.constants import SPEED_OF_LIGHT, ATMOS, BOHR
 from oqp.utils.constants import FREQ_TO_INV_CM, AMU_to_KG, J_TO_AU
 from oqp.utils.constants import GAS_CONSTANT, PLANCK_CONSTANT, BOLTZMANN_CONSTANT, AVOGADRO_CONSTANT
 
-# Common atomic-unit IR conversion used by quantum-chemistry frequency analyses:
-# (d dipole / d normal coordinate)^2 -> km/mol.  Dipole derivatives are in
-# e*Bohr and normal coordinates use amu-normalized Cartesian modes.
-IR_INTENSITY_CONVERSION_KM_MOL = 42.255
+# Integrated harmonic IR intensity for a normal-coordinate dipole derivative
+# in e*Bohr/(sqrt(amu)*Bohr) = e/sqrt(amu).  The commonly quoted 42.255 factor
+# applies after converting the derivative to Debye/(Angstrom*sqrt(amu)); the
+# corresponding factor in the native atomic-unit convention is 974.88011.
+IR_INTENSITY_CONVERSION_KM_MOL = 974.88011
 
 
 def infrared_intensities(dipole_derivatives, modes):

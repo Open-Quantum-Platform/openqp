@@ -174,12 +174,13 @@ contains
 
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
-    integer :: sized
 
-    sized = ubound(this%d3,2)
-
-!   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
+!   Form a conservative shell-density envelope over every trial vector and
+!   every spin-adapted density component.  Coulomb and exchange contractions
+!   use all components of d3; screening from only the final component makes
+!   the response operator depend on the number and composition of vectors in
+!   a Davidson batch.
+    call shell_den_screen_mrsf(this%dsh, this%d3, basis)
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -195,7 +196,7 @@ contains
 
     type(basis_set), intent(in) :: basis
     real(kind=dp), intent(out) :: dsh(:,:)
-    real(kind=dp), intent(in), dimension(:,:,:) :: da
+    real(kind=dp), intent(in), dimension(:,:,:,:) :: da
 
     integer :: ish, jsh, maxi, maxj, mini, minj
 
@@ -206,7 +207,12 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        ! The digestion kernel reads both orientations of a non-symmetric
+        ! density (d3(:,:,j,l) and d3(:,:,l,j)), so the bound must cover the
+        ! (jsh,ish) AND (ish,jsh) blocks; co12/o21v are not symmetric.
+        ! Matches upstream PR #393 change 2.
+        dsh(ish,jsh) = max(maxval(abs(da(:,:,minj:maxj,mini:maxi))), &
+                           maxval(abs(da(:,:,mini:maxi,minj:maxj))))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
@@ -439,7 +445,8 @@ contains
 !> spin-averaged input is closer to the exact operator diagonal than the
 !> alpha/beta Fock diagonals on 45 of 45 amplitudes.  See the long comment at
 !> the call site in tdhf_mrsf_energy.F90 and issue #328 before changing this.
-  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep)
+  subroutine mrinivec(infos,ea,eb,bvec_mo,xm,nvec,seeds_per_irrep, &
+                      report_symmetry_coverage)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -459,14 +466,21 @@ contains
     !> mrsf_check_block_representation), so the caller needs this count to
     !> tell "was never asked for" from "was asked for and did not arrive".
     integer, allocatable, optional, intent(out) :: seeds_per_irrep(:)
+    !> Disable the Davidson seed-coverage diagnostic when the routine is used
+    !> only to construct its diagonal preconditioner.  The default preserves
+    !> the fail-loud spectrum diagnostic at every eigensolver call site.
+    logical, optional, intent(in) :: report_symmetry_coverage
 
-    logical :: debug_mode
+    logical :: debug_mode, check_symmetry_coverage
     real(kind=dp) :: xmj
     integer :: nocca, nbf, i, ij, j, k, xvec_dim, lr1, lr2, mrst
     integer :: itmp(nvec)
     real(kind=dp) :: xtmp(nvec)
 
     debug_mode = infos%tddft%debug_mode
+    check_symmetry_coverage = .true.
+    if (present(report_symmetry_coverage)) &
+      check_symmetry_coverage = report_symmetry_coverage
     nbf = infos%basis%nbf
     nocca = infos%mol_prop%nelec_A
     xvec_dim = ubound(xm, 1)
@@ -581,6 +595,11 @@ contains
       integer(4) :: ta_status
       integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
       integer :: nstates_req
+
+      ! The analytical-Hessian amplitude solver reuses mrinivec only for xm,
+      ! not to start a Davidson spectrum.  In that context nvec=1 is a dummy
+      ! workspace dimension and a missing-block warning would be false.
+      if (.not. check_symmetry_coverage) exit seed_coverage
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
                              status=ta_status)
@@ -1472,12 +1491,14 @@ contains
     type(information), intent(in) :: infos
     real(kind=dp), intent(in), target, dimension(:,:,:) :: &
       fmrsf
-    real(kind=dp), intent(out), dimension(:,:) :: pmo
+    ! Only column IVEC is defined below.  Batch callers retain columns already
+    ! transformed on earlier calls, so the whole array is an in/out object.
+    real(kind=dp), intent(inout), dimension(:,:) :: pmo
     real(kind=dp), intent(in), dimension(:,:) :: va, vb
     integer, intent(in) :: ivec
 
     real(kind=dp), allocatable :: &
-      scr(:,:), tmp(:), wrk(:,:)
+      scr(:,:), tmp(:), tmp_virtual(:), wrk(:,:)
     real(kind=dp), pointer, dimension(:,:) :: &
       adco1, adco2, ado1v, ado2v, agdlr, aco12, ao21v
     integer :: noca, nocb, mrst, i, ij, &
@@ -1493,7 +1514,8 @@ contains
     nocb = infos%mol_prop%nelec_b
     debug_mode = infos%tddft%debug_mode
 
-    allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf),tmp_virtual(nbf-noca),scr(nbf,nbf),wrk(nbf,nbf), &
+      source=0.0_dp,stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
     agdlr => fmrsf(7,:,:)
@@ -1638,10 +1660,9 @@ contains
                one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO-1,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
-    call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
-                    tmp, nbf, &
-               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+    call dgemv('t',nbf,nbf-noca,one,vb(:,noca+1),nbf,tmp,1, &
+      zero,tmp_virtual,1)
+    wrk(lr1,noca+1:nbf)=wrk(lr1,noca+1:nbf)+tmp_virtual
     !-----------------------------------------------------------------------
     ! Section 6: Corrections for O2(HOMO, alpha) -> V(beta) response element
     !-----------------------------------------------------------------------
@@ -1672,10 +1693,9 @@ contains
               -one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
-    call dgemm('t','n',nbf-noca,1,nbf, &
-               one, vb(:,noca+1), nbf, &
-                    tmp, nbf, &
-               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+    call dgemv('t',nbf,nbf-noca,one,vb(:,noca+1),nbf,tmp,1, &
+      zero,tmp_virtual,1)
+    wrk(lr2,noca+1:nbf)=wrk(lr2,noca+1:nbf)+tmp_virtual
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1,O1) diagonal element (OO block)
@@ -2180,7 +2200,12 @@ contains
     use messages, only: show_message, with_abort
     implicit none
 
-    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    ! These matrices already contain the ordinary (channel-7) response terms
+    ! on entry.  This routine adds only the six spin-pairing contributions.
+    ! Declaring them INTENT(OUT) made their incoming values undefined by the
+    ! Fortran standard and caused optimization- and memory-layout-dependent
+    ! corruption in differentiated MRSF calculations.
+    real(kind=dp), intent(inout), dimension(:,:) :: xhxa, xhxb
     real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
     real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
     integer, intent(in) :: noca, nocb

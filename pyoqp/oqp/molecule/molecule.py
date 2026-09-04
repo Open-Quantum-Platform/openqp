@@ -13,7 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
-from oqp.utils.json_utils import json_array
+from oqp.utils.json_utils import json_array, tag_array_from_json
 from oqp.utils.state_labels import is_mrsf, public_state_label
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
@@ -24,6 +24,27 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 # written by default so the ``guess=json`` restart workflow keeps working.
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
 HESSIAN_CACHE_VERSION = 2
+
+_ACCELERATE_MATMUL_WARNING = (
+    r'(divide by zero|overflow|invalid value) encountered in matmul'
+)
+
+
+def _finite_matmul(left, right, quantity):
+    """Return a finite matrix product without leaking stale Accelerate flags."""
+    if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+        raise FloatingPointError(f'inputs to {quantity} contain non-finite values')
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message=_ACCELERATE_MATMUL_WARNING,
+            category=RuntimeWarning,
+        )
+        with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+            product = np.matmul(left, right)
+    if not np.all(np.isfinite(product)):
+        raise FloatingPointError(f'{quantity} contains non-finite values')
+    return product
 
 
 def _env_wants_lean_json():
@@ -115,6 +136,7 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
+            'OQP::td_xpy', 'OQP::td_xmy', 'OQP::td_z', 'OQP::td_p',
             'OQP::td_trans_density_mo', 'OQP::td_trans_dipole', 'OQP::td_dip_ao',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
@@ -402,9 +424,17 @@ class Molecule:
                 # Functions transform with T as columns, so invariance of the
                 # metric reads T^T S T = S -- not T S T^T, which is the
                 # signed-permutation convention the integral path uses.
+                transformed_metric = _finite_matmul(
+                    transform.T, smat, 'partially transformed AO overlap'
+                )
+                transformed_metric = _finite_matmul(
+                    transformed_metric, transform, 'symmetry-transformed AO overlap'
+                )
                 worst = max(worst, float(np.max(np.abs(
-                    transform.T @ smat @ transform - smat))))
+                    transformed_metric - smat))))
             return worst
+        except FloatingPointError:
+            raise
         except Exception:
             # A guard that cannot be evaluated must not block labelling.
             return None
@@ -2108,14 +2138,96 @@ class Molecule:
 
         return copy.deepcopy(self.hessian)
 
-    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8):
+    def _hessian_invariance_diagnostics(self, raw_hessian,
+                                        reference_gradient=None):
+        """Rigid-motion residuals of a raw Cartesian Hessian.
+
+        OpenQP's derivative builders assemble one nuclear-displacement row at
+        a time, so ``raw_hessian[i,j] = d g_j / d R_i`` before the final
+        symmetry operation. Consequently the physical Hessian action used for
+        the translation and rotation identities is ``raw_hessian.T @ mode``.
+        No symmetry operation or rigid-motion projection is applied here.
+        """
+
+        hessian = np.asarray(raw_hessian, dtype=float)
+        natom = int(np.asarray(self.data['natom']).reshape(-1)[0])
+        ncoord = 3 * natom
+        if hessian.shape != (ncoord, ncoord):
+            raise ValueError(
+                f'Expected Hessian shape ({ncoord}, {ncoord}), got {hessian.shape}')
+        coordinates = np.asarray(self.get_system(), dtype=float).reshape(natom, 3)
+        try:
+            masses = np.asarray(self.get_mass(), dtype=float).reshape(natom)
+            if not np.all(np.isfinite(masses)) or np.any(masses <= 0.0):
+                raise ValueError
+            origin = np.average(coordinates, axis=0, weights=masses)
+            origin_kind = 'center_of_mass'
+        except (AttributeError, TypeError, ValueError):
+            origin = np.mean(coordinates, axis=0)
+            origin_kind = 'geometric_centroid'
+        centered = coordinates - origin
+
+        translations = np.zeros((ncoord, 3), dtype=float)
+        for atom in range(natom):
+            translations[3 * atom:3 * atom + 3, :] = np.eye(3)
+        translation_image = hessian.T @ translations
+
+        axes = np.eye(3)
+        rotations = np.column_stack([
+            np.cross(axis, centered).reshape(-1) for axis in axes
+        ])
+        rotation_image = hessian.T @ rotations
+        gradient_correction = False
+        if reference_gradient is not None:
+            gradient = np.asarray(reference_gradient, dtype=float).reshape(-1)
+            if gradient.size != ncoord or not np.all(np.isfinite(gradient)):
+                raise ValueError(
+                    f'Expected finite reference gradient with {ncoord} elements')
+            gradient = gradient.reshape(natom, 3)
+            rotation_gradient = np.column_stack([
+                np.cross(axis, gradient).reshape(-1) for axis in axes
+            ])
+            rotation_image = rotation_image - rotation_gradient
+            gradient_correction = True
+
+        asymmetry = hessian - hessian.T
+        return {
+            'stage': 'raw_cartesian_before_symmetrization_or_rigid_motion_projection',
+            'matrix_convention': 'rows_displacement_columns_gradient',
+            'asymmetry_units': 'hartree/bohr^2',
+            'max_abs_asymmetry': (
+                float(np.max(np.abs(asymmetry))) if hessian.size else 0.0),
+            'frobenius_asymmetry': float(np.linalg.norm(asymmetry)),
+            'translation_max_abs_residual': (
+                float(np.max(np.abs(translation_image)))
+                if translation_image.size else 0.0),
+            'translation_frobenius_residual': float(np.linalg.norm(translation_image)),
+            'translation_residual_units': 'hartree/bohr^2',
+            'rotation_max_abs_residual': (
+                float(np.max(np.abs(rotation_image)))
+                if rotation_image.size else 0.0),
+            'rotation_frobenius_residual': float(np.linalg.norm(rotation_image)),
+            'rotation_residual_units': 'hartree/bohr',
+            'rotation_origin': origin_kind,
+            'rotation_gradient_covariance_correction': gradient_correction,
+            'rigid_motion_projection_applied': False,
+        }
+
+    def set_hessian_result(self, raw_hessian, asymmetry_tol=1.0e-8,
+                           reference_gradient=None,
+                           producer_stage=None,
+                           upstream_symmetrization_applied=False,
+                           translation_projection_applied=False,
+                           rotation_projection_applied=False):
         """
         Store a final Cartesian Hessian in OpenQP frequency conventions.
 
         Native analytic Hessian kernels should hand one square ``(3N, 3N)``
-        matrix to this helper. The helper records the pre-symmetrization
-        asymmetry for diagnostics and stores the symmetrized matrix used by
-        normal-mode analysis; it does not compute a numerical fallback.
+        matrix to this helper. By default the helper records a genuinely raw
+        pre-symmetrization matrix. A producer that already symmetrized or
+        projected its matrix must declare that stage explicitly so the stored
+        invariance diagnostics are not mislabeled as independent raw tests.
+        The helper performs no numerical fallback.
         """
 
         hessian = np.asarray(raw_hessian, dtype=float)
@@ -2129,18 +2241,47 @@ class Molecule:
                 f"Expected Hessian shape ({expected}, {expected}) for {natom} atoms, got {hessian.shape}"
             )
 
-        max_asymmetry = float(np.max(np.abs(hessian - hessian.T))) if hessian.size else 0.0
+        diagnostics = self._hessian_invariance_diagnostics(
+            hessian, reference_gradient=reference_gradient)
+        if producer_stage is not None:
+            diagnostics['stage'] = str(producer_stage)
+        diagnostics.update({
+            'upstream_symmetrization_applied': bool(
+                upstream_symmetrization_applied),
+            'translation_projection_applied': bool(
+                translation_projection_applied),
+            'rotation_projection_applied': bool(rotation_projection_applied),
+            'rigid_motion_projection_applied': bool(
+                translation_projection_applied or rotation_projection_applied),
+        })
+        max_asymmetry = diagnostics['max_abs_asymmetry']
         if max_asymmetry > asymmetry_tol:
             warnings.warn(
-                f"Analytic Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
+                f"Hessian asymmetry {max_asymmetry:.3e} exceeds tolerance {asymmetry_tol:.3e}; symmetrizing final matrix.",
                 RuntimeWarning,
             )
 
+        python_symmetrization_applied = bool(max_asymmetry > 0.0)
         self.hessian = 0.5 * (hessian + hessian.T)
         self.hessian_metadata = {
             'max_asymmetry': max_asymmetry,
-            'symmetrized': bool(max_asymmetry > 0.0),
+            'symmetrized': bool(
+                upstream_symmetrization_applied or
+                python_symmetrization_applied),
+            'upstream_symmetrization_applied': bool(
+                upstream_symmetrization_applied),
+            'python_symmetrization_applied': python_symmetrization_applied,
+            'translation_projection_applied': bool(
+                translation_projection_applied),
+            'rotation_projection_applied': bool(rotation_projection_applied),
         }
+        if (producer_stage is None and
+                not upstream_symmetrization_applied and
+                not translation_projection_applied and
+                not rotation_projection_applied):
+            self.hessian_metadata['pre_symmetrization_invariance'] = diagnostics
+        else:
+            self.hessian_metadata['stored_matrix_invariance'] = diagnostics
         return self.hessian
 
     def _read_mrsf_ekt_records(self):
@@ -3249,7 +3390,7 @@ class Molecule:
         self._state_tracking_fresh = False
         for key in self.tag:
             try:
-                self.data[key] = np.array(data[key])
+                self.data[key] = tag_array_from_json(key, data[key])
 
             except KeyError:
                 continue

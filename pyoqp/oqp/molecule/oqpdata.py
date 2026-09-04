@@ -751,6 +751,20 @@ OQP_CONFIG_SCHEMA = {
         'temperature': {'type': farray, 'default': '298.15'},
         'clean': {'type': bool, 'default': 'False'},
         'symmetry_unique': {'type': bool, 'default': 'False'},
+        # Keep harmonic analysis available while allowing production Hessian
+        # calculations to omit the separate finite-difference IR/Raman stage.
+        'vibrational_intensities': {'type': bool, 'default': 'True'},
+        # Target-state MRSF vibrational property derivatives.  These controls
+        # never authorize a generic ROHF/CPHF fallback.
+        'property_dx': {'type': float, 'default': '1.0e-3'},
+        'property_min_overlap': {'type': float, 'default': '0.99'},
+        'property_min_margin': {'type': float, 'default': '0.05'},
+        'property_fd_relative_tolerance': {'type': float, 'default': '0.05'},
+        'property_fd_absolute_tolerance': {'type': float, 'default': '1.0e-6'},
+        'raman_backend': {'type': string, 'default': 'truncated_sos'},
+        'raman_sos_tail_states': {'type': int, 'default': '2'},
+        'raman_sos_tail_tolerance': {'type': float, 'default': '0.05'},
+        'raman_sos_min_gap': {'type': float, 'default': '1.0e-5'},
     },
     'nac': {
         'type': {'type': string, 'default': 'numerical'},

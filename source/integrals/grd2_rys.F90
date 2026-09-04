@@ -122,6 +122,9 @@ type soc2e_int_data_t
     private
     public :: grd2_int_data_t
     public :: grd2_rys_compute
+    public :: grd2_rys_compute_batch
+    public :: grd2_rys_fock_deriv_os_compute
+    public :: grd2_rys_fock_deriv_os_compute_batch
     public :: soc2e_int_data_t
     public :: soc2e_rys_compute
     public :: soc2e_driver
@@ -419,6 +422,334 @@ contains
 
   end subroutine grd2_rys_compute
 
+!> Evaluate one derivative-ERI shell block against an arbitrary number of
+!> two-particle-density contractions.  The Rys roots, recurrence coefficients,
+!> Cartesian integrals, and center derivatives are formed once; only the final
+!> contractions are repeated.  This is algebraically identical to independent
+!> grd2_rys_compute calls and introduces no integral approximation.
+  subroutine grd2_rys_compute_batch(gdat,ppairs,dab,dabmax,fd_batch,mu2)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    type(grd2_int_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(in) :: dab(:,:),dabmax(:)
+    real(kind=dp), intent(out) :: fd_batch(:,:,:)
+    real(kind=dp), intent(in), optional :: mu2
+
+    integer :: ijg,klg,maxgg,mmax,ng
+    integer :: nimax,njmax,nkmax,nlmax,nmax
+    integer :: id1,id2,ppid_p,ppid_q,npp_p,npp_q
+    real(kind=dp) :: aa,ab,aandb1,bb,da,db,test,pfac,rho
+    real(kind=dp) :: p(3),q(3),mu2_1,max_dab
+    logical :: last
+
+    call set_shells(gdat)
+    if(size(dab,1)<product(gdat%nbf) .or. &
+       size(dab,2)/=size(dabmax) .or. &
+       any(shape(fd_batch)/=[3,4,size(dab,2)])) &
+      error stop 'grd2_rys_compute_batch: inconsistent batch dimensions'
+
+    mu2_1=0.0_dp
+    if(present(mu2)) mu2_1=1.0_dp/mu2
+    id1=maxval(gdat%id(1:2)); id2=minval(gdat%id(1:2))
+    npp_p=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    id1=maxval(gdat%id(3:4)); id2=minval(gdat%id(3:4))
+    npp_q=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    fd_batch=0.0_dp
+    if(npp_p*npp_q==0) return
+
+    nimax=gdat%am(1)+gdat%der(1)+1
+    njmax=gdat%am(2)+gdat%der(2)+1
+    nkmax=gdat%am(3)+gdat%der(3)+1
+    nlmax=gdat%am(4)+gdat%der(4)+1
+    nmax=gdat%am(1)+gdat%am(2)+1+ &
+      min(gdat%der(1)+gdat%der(2),gdat%nder)
+    mmax=gdat%am(3)+gdat%am(4)+1+ &
+      min(gdat%der(3)+gdat%der(4),gdat%nder)
+    maxgg=MAXCONTR/gdat%nroots
+    max_dab=maxval(abs(dabmax))
+    ng=0
+
+    do klg=1,npp_q
+      db=ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb=ppairs%g(ppid_q-1+klg)
+      q=ppairs%P(:,ppid_q-1+klg)
+      do ijg=1,npp_p
+        da=ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa=ppairs%g(ppid_p-1+ijg)
+        p=ppairs%P(:,ppid_p-1+ijg)
+        ab=(aa+bb)+aa*bb*mu2_1
+        pfac=da*db
+        test=pfac*pfac
+        if(test<gdat%dtol*ab) cycle
+        if(test*max_dab*max_dab<gdat%dabcut*ab) cycle
+
+        aandb1=1.0_dp/ab
+        rho=aa*bb*aandb1
+        ng=ng+1
+        gdat%abv(1,ng)=ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng)=ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng)=rho
+        gdat%abv(4,ng)=pfac*sqrt(aandb1)
+        gdat%abv(5,ng)=aandb1
+        gdat%abv(6,ng)=rho*sum((p-q)**2)
+        gdat%ai(ng)=2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng)=2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng)=2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng)=2*ppairs%alpha_b(ppid_q-1+klg)
+        gdat%PQ(:,ng)=p-q
+        if(nmax>1) gdat%pb(:,ng)=ppairs%PB(:,ppid_p-1+ijg)
+        if(mmax>1) gdat%qd(:,ng)=ppairs%PB(:,ppid_q-1+klg)
+        gdat%dij(:,ng)=ppairs%PA(:,ppid_p-1+ijg)- &
+          ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng)=ppairs%PA(:,ppid_q-1+klg)- &
+          ppairs%PB(:,ppid_q-1+klg)
+        last=klg==npp_q .and. ijg==npp_p
+        if(ng==maxgg .or. last) then
+          call compute_grd_ints_batch(gdat,dab,ng,nmax,mmax,nimax,njmax, &
+            nkmax,nlmax,fd_batch)
+          ng=0
+        end if
+      end do
+    end do
+    call apply_translation_invariance_batch(gdat,fd_batch)
+  end subroutine grd2_rys_compute_batch
+
+!> Form one complete open-shell derivative Fock matrix directly from a
+!> derivative-ERI shell block.
+  subroutine grd2_rys_fock_deriv_os_compute(gdat,ppairs,pcoul,pexch,loc, &
+      coulscale,hfscale,density_bound,fmat,mu2)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    type(grd2_int_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(in) :: pcoul(:,:),pexch(:,:)
+    integer, intent(in) :: loc(4)
+    real(kind=dp), intent(in) :: coulscale,hfscale,density_bound
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:)
+    real(kind=dp), intent(in), optional :: mu2
+
+    integer :: ijg,klg,maxgg,mmax,ng
+    integer :: nimax,njmax,nkmax,nlmax,nmax
+    integer :: id1,id2,ppid_p,ppid_q,npp_p,npp_q
+    real(kind=dp) :: aa,ab,aandb1,bb,da,db,test,pfac,rho
+    real(kind=dp) :: p(3),q(3),mu2_1
+
+    call set_shells(gdat)
+    mu2_1=0.0_dp
+    if(present(mu2)) mu2_1=1.0_dp/mu2
+    id1=maxval(gdat%id(1:2)); id2=minval(gdat%id(1:2))
+    npp_p=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    id1=maxval(gdat%id(3:4)); id2=minval(gdat%id(3:4))
+    npp_q=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    if(npp_p*npp_q==0) return
+
+    nimax=gdat%am(1)+gdat%der(1)+1
+    njmax=gdat%am(2)+gdat%der(2)+1
+    nkmax=gdat%am(3)+gdat%der(3)+1
+    nlmax=gdat%am(4)+gdat%der(4)+1
+    nmax=gdat%am(1)+gdat%am(2)+1+ &
+      min(gdat%der(1)+gdat%der(2),gdat%nder)
+    mmax=gdat%am(3)+gdat%am(4)+1+ &
+      min(gdat%der(3)+gdat%der(4),gdat%nder)
+    maxgg=MAXCONTR/gdat%nroots
+    ng=0
+
+    do klg=1,npp_q
+      db=ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb=ppairs%g(ppid_q-1+klg)
+      q=ppairs%P(:,ppid_q-1+klg)
+      do ijg=1,npp_p
+        da=ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa=ppairs%g(ppid_p-1+ijg)
+        p=ppairs%P(:,ppid_p-1+ijg)
+        ab=(aa+bb)+aa*bb*mu2_1
+        pfac=da*db
+        test=pfac*pfac
+        if(test<gdat%dtol*ab) cycle
+        if(test*density_bound*density_bound<gdat%dabcut*ab) cycle
+
+        aandb1=1.0_dp/ab
+        rho=aa*bb*aandb1
+        ng=ng+1
+        gdat%abv(1,ng)=ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng)=ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng)=rho
+        gdat%abv(4,ng)=pfac*sqrt(aandb1)
+        gdat%abv(5,ng)=aandb1
+        gdat%abv(6,ng)=rho*sum((p-q)**2)
+        gdat%ai(ng)=2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng)=2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng)=2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng)=2*ppairs%alpha_b(ppid_q-1+klg)
+        gdat%PQ(:,ng)=p-q
+        if(nmax>1) gdat%pb(:,ng)=ppairs%PB(:,ppid_p-1+ijg)
+        if(mmax>1) gdat%qd(:,ng)=ppairs%PB(:,ppid_q-1+klg)
+        gdat%dij(:,ng)=ppairs%PA(:,ppid_p-1+ijg)- &
+          ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng)=ppairs%PA(:,ppid_q-1+klg)- &
+          ppairs%PB(:,ppid_q-1+klg)
+        if(ng==maxgg) then
+          call compute_grd_ints_fock_os(gdat,ng,nmax,mmax,nimax,njmax, &
+            nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat)
+          ng=0
+        end if
+      end do
+    end do
+    if(ng>0) call compute_grd_ints_fock_os(gdat,ng,nmax,mmax,nimax, &
+      njmax,nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat)
+  end subroutine grd2_rys_fock_deriv_os_compute
+
+!> Form the complete open-shell derivative Fock matrix directly from one
+!> derivative-ERI shell block.  This is the exact adjoint of the symmetric
+!> probe contraction used by grd2_fockprobe_os_get_density: the Rys recurrence
+!> is evaluated once and every AO target is accumulated during that traversal.
+!> No density fitting, integral truncation, or coordinate finite difference is
+!> introduced.
+  subroutine grd2_rys_fock_deriv_os_compute_batch(gdat,ppairs,pcoul,pexch,loc, &
+      coulscale,hfscale,density_bound,fmat,symmetric_target,mu2)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    type(grd2_int_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(in) :: pcoul(:,:,:),pexch(:,:,:)
+    integer, intent(in) :: loc(4)
+    real(kind=dp), intent(in) :: coulscale(:),hfscale(:),density_bound
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:,:)
+    logical, intent(in) :: symmetric_target
+    real(kind=dp), intent(in), optional :: mu2
+
+    integer :: ijg,klg,maxgg,mmax,ng
+    integer :: nimax,njmax,nkmax,nlmax,nmax
+    integer :: id1,id2,ppid_p,ppid_q,npp_p,npp_q
+    real(kind=dp) :: aa,ab,aandb1,bb,da,db,test,pfac,rho
+    real(kind=dp) :: p(3),q(3),mu2_1
+
+    call set_shells(gdat)
+    mu2_1=0.0_dp
+    if(present(mu2)) mu2_1=1.0_dp/mu2
+    id1=maxval(gdat%id(1:2)); id2=minval(gdat%id(1:2))
+    npp_p=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    id1=maxval(gdat%id(3:4)); id2=minval(gdat%id(3:4))
+    npp_q=ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q=ppairs%ppid(2,id1*(id1-1)/2+id2)
+    if(npp_p*npp_q==0) return
+
+    nimax=gdat%am(1)+gdat%der(1)+1
+    njmax=gdat%am(2)+gdat%der(2)+1
+    nkmax=gdat%am(3)+gdat%der(3)+1
+    nlmax=gdat%am(4)+gdat%der(4)+1
+    nmax=gdat%am(1)+gdat%am(2)+1+ &
+      min(gdat%der(1)+gdat%der(2),gdat%nder)
+    mmax=gdat%am(3)+gdat%am(4)+1+ &
+      min(gdat%der(3)+gdat%der(4),gdat%nder)
+    maxgg=MAXCONTR/gdat%nroots
+    ng=0
+
+    do klg=1,npp_q
+      db=ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb=ppairs%g(ppid_q-1+klg)
+      q=ppairs%P(:,ppid_q-1+klg)
+      do ijg=1,npp_p
+        da=ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa=ppairs%g(ppid_p-1+ijg)
+        p=ppairs%P(:,ppid_p-1+ijg)
+        ab=(aa+bb)+aa*bb*mu2_1
+        pfac=da*db
+        test=pfac*pfac
+        if(test<gdat%dtol*ab) cycle
+        if(test*density_bound*density_bound<gdat%dabcut*ab) cycle
+
+        aandb1=1.0_dp/ab
+        rho=aa*bb*aandb1
+        ng=ng+1
+        gdat%abv(1,ng)=ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng)=ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng)=rho
+        gdat%abv(4,ng)=pfac*sqrt(aandb1)
+        gdat%abv(5,ng)=aandb1
+        gdat%abv(6,ng)=rho*sum((p-q)**2)
+        gdat%ai(ng)=2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng)=2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng)=2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng)=2*ppairs%alpha_b(ppid_q-1+klg)
+        gdat%PQ(:,ng)=p-q
+        if(nmax>1) gdat%pb(:,ng)=ppairs%PB(:,ppid_p-1+ijg)
+        if(mmax>1) gdat%qd(:,ng)=ppairs%PB(:,ppid_q-1+klg)
+        gdat%dij(:,ng)=ppairs%PA(:,ppid_p-1+ijg)- &
+          ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng)=ppairs%PA(:,ppid_q-1+klg)- &
+          ppairs%PB(:,ppid_q-1+klg)
+        if(ng==maxgg) then
+          call compute_grd_ints_fock_os_batch(gdat,ng,nmax,mmax,nimax,njmax, &
+            nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat,symmetric_target)
+          ng=0
+        end if
+      end do
+    end do
+    if(ng>0) call compute_grd_ints_fock_os_batch(gdat,ng,nmax,mmax,nimax, &
+      njmax,nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat,symmetric_target)
+  end subroutine grd2_rys_fock_deriv_os_compute_batch
+
+  subroutine compute_grd_ints_fock_os(gdat,ng,nmax,mmax,nimax,njmax, &
+      nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat)
+    type(grd2_int_data_t), intent(inout) :: gdat
+    integer, intent(in) :: ng,nmax,mmax,nimax,njmax,nkmax,nlmax,loc(4)
+    real(kind=dp), intent(in) :: pcoul(:,:),pexch(:,:),coulscale,hfscale
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:)
+
+    call compute_rys_rw(gdat,gdat%rw,ng)
+    call compute_coefficients(gdat%b00,gdat%b01,gdat%b10,gdat%c00, &
+      gdat%d00,gdat%f00,gdat%abv,gdat%pq,gdat%pb,gdat%qd,gdat%rw, &
+      nmax,mmax,ng,gdat%nroots)
+    call compute_xyz_p0q0(gdat%gnm,ng*gdat%nroots,nmax,mmax,gdat%b00, &
+      gdat%b01,gdat%b10,gdat%c00,gdat%d00,gdat%f00)
+    call compute_xyz_ijkl(gdat%gijkl,gdat%gnkl,gdat%gnm,ng,gdat%nroots, &
+      nmax,mmax,nimax,njmax,nkmax,nlmax,gdat%dij,gdat%dkl)
+    call compute_der_xyz_ijkl(gdat,gdat%gijkl,ng,gdat%nroots*3,nimax, &
+      njmax,nkmax,nlmax,gdat%ai,gdat%aj,gdat%ak,gdat%al,gdat%fi, &
+      gdat%fj,gdat%fk,gdat%fl)
+    call compute_der_ijkl_fock_os(gdat,ng*gdat%nroots,gdat%ijklxyz, &
+      gdat%gijkl,gdat%fi,gdat%fj,gdat%fk,gdat%fl,pcoul,pexch,loc, &
+      coulscale,hfscale,fmat)
+  end subroutine compute_grd_ints_fock_os
+
+  subroutine compute_grd_ints_fock_os_batch(gdat,ng,nmax,mmax,nimax,njmax, &
+      nkmax,nlmax,pcoul,pexch,loc,coulscale,hfscale,fmat,symmetric_target)
+    type(grd2_int_data_t), intent(inout) :: gdat
+    integer, intent(in) :: ng,nmax,mmax,nimax,njmax,nkmax,nlmax,loc(4)
+    real(kind=dp), intent(in) :: pcoul(:,:,:),pexch(:,:,:), &
+      coulscale(:),hfscale(:)
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:,:)
+    logical, intent(in) :: symmetric_target
+
+    call compute_rys_rw(gdat,gdat%rw,ng)
+    call compute_coefficients(gdat%b00,gdat%b01,gdat%b10,gdat%c00, &
+      gdat%d00,gdat%f00,gdat%abv,gdat%pq,gdat%pb,gdat%qd,gdat%rw, &
+      nmax,mmax,ng,gdat%nroots)
+    call compute_xyz_p0q0(gdat%gnm,ng*gdat%nroots,nmax,mmax,gdat%b00, &
+      gdat%b01,gdat%b10,gdat%c00,gdat%d00,gdat%f00)
+    call compute_xyz_ijkl(gdat%gijkl,gdat%gnkl,gdat%gnm,ng,gdat%nroots, &
+      nmax,mmax,nimax,njmax,nkmax,nlmax,gdat%dij,gdat%dkl)
+    call compute_der_xyz_ijkl(gdat,gdat%gijkl,ng,gdat%nroots*3,nimax, &
+      njmax,nkmax,nlmax,gdat%ai,gdat%aj,gdat%ak,gdat%al,gdat%fi, &
+      gdat%fj,gdat%fk,gdat%fl)
+    call compute_der_ijkl_fock_os_batch(gdat,ng*gdat%nroots,gdat%ijklxyz, &
+      gdat%gijkl,gdat%fi,gdat%fj,gdat%fk,gdat%fl,pcoul,pexch,loc, &
+      coulscale,hfscale,fmat,symmetric_target)
+  end subroutine compute_grd_ints_fock_os_batch
+
   subroutine compute_grd_ints(gdat, dab, ng, nmax, mmax, nimax, njmax, nkmax, nlmax)
 
     type(grd2_int_data_t), intent(inout) :: gdat
@@ -453,6 +784,31 @@ contains
     call compute_der_ijkl(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, &
                 gdat%fi, gdat%fj, gdat%fk, gdat%fl, dab, gdat%fd)
   end subroutine
+
+  subroutine compute_grd_ints_batch(gdat,dab,ng,nmax,mmax,nimax,njmax, &
+      nkmax,nlmax,fd_batch)
+    type(grd2_int_data_t), intent(inout) :: gdat
+    real(kind=dp), intent(in) :: dab(:,:)
+    integer, intent(in) :: ng,nmax,mmax,nimax,njmax,nkmax,nlmax
+    real(kind=dp), intent(inout) :: fd_batch(:,:,:)
+    integer :: probe
+
+    call compute_rys_rw(gdat,gdat%rw,ng)
+    call compute_coefficients(gdat%b00,gdat%b01,gdat%b10,gdat%c00, &
+      gdat%d00,gdat%f00,gdat%abv,gdat%pq,gdat%pb,gdat%qd,gdat%rw, &
+      nmax,mmax,ng,gdat%nroots)
+    call compute_xyz_p0q0(gdat%gnm,ng*gdat%nroots,nmax,mmax,gdat%b00, &
+      gdat%b01,gdat%b10,gdat%c00,gdat%d00,gdat%f00)
+    call compute_xyz_ijkl(gdat%gijkl,gdat%gnkl,gdat%gnm,ng,gdat%nroots, &
+      nmax,mmax,nimax,njmax,nkmax,nlmax,gdat%dij,gdat%dkl)
+    call compute_der_xyz_ijkl(gdat,gdat%gijkl,ng,gdat%nroots*3,nimax, &
+      njmax,nkmax,nlmax,gdat%ai,gdat%aj,gdat%ak,gdat%al,gdat%fi, &
+      gdat%fj,gdat%fk,gdat%fl)
+    do probe=1,size(dab,2)
+      call compute_der_ijkl(gdat,ng*gdat%nroots,gdat%ijklxyz,gdat%gijkl, &
+        gdat%fi,gdat%fj,gdat%fk,gdat%fl,dab(:,probe),fd_batch(:,:,probe))
+    end do
+  end subroutine compute_grd_ints_batch
 
   subroutine set_shells(gdat)
 
@@ -936,6 +1292,290 @@ contains
 
   end subroutine compute_der_ijkl
 
+!> Contract one primitive-batch derivative shell block into every element of
+!> the symmetric open-shell derivative Fock matrix.  The coefficients are the
+!> exact derivatives of grd2_fockprobe_os_get_density with respect to its probe
+!> matrix.  Symmetric off-diagonal targets receive the arithmetic mean of the
+!> two ordered coefficients, matching a half-weighted symmetric AO probe.
+  subroutine compute_der_ijkl_fock_os(gdat,ngnr,ijklxyz,g0,fi,fj,fk,fl, &
+      pcoul,pexch,loc,coulscale,hfscale,fmat)
+
+    implicit none
+
+    type(grd2_int_data_t), intent(in) :: gdat
+    integer, intent(in) :: ngnr,ijklxyz(:,:,:),loc(4)
+    real(kind=dp), intent(in) :: g0(ngnr,3,*)
+    real(kind=dp), intent(in) :: fi(ngnr,3,*),fj(ngnr,3,*)
+    real(kind=dp), intent(in) :: fk(ngnr,3,*),fl(ngnr,3,*)
+    real(kind=dp), intent(in) :: pcoul(:,:),pexch(:,:),coulscale,hfscale
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:)
+
+    integer :: i,j,k,l,i1,j1,k1,l1,nx,ny,nz,center
+    real(kind=dp) :: yz(ngnr),xz(ngnr),xy(ngnr),deriv(3,4)
+    real(kind=dp) :: ccoef,xcoef
+
+    ccoef=4.0_dp*coulscale
+    xcoef=2.0_dp*hfscale
+    do i=1,gdat%nbf(1)
+      i1=loc(1)+i
+      do j=1,gdat%nbf(2)
+        j1=loc(2)+j
+        do k=1,gdat%nbf(3)
+          k1=loc(3)+k
+          do l=1,gdat%nbf(4)
+            l1=loc(4)+l
+            nx=ijklxyz(1,i,1)+ijklxyz(1,j,2)+ &
+              ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny=ijklxyz(2,i,1)+ijklxyz(2,j,2)+ &
+              ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz=ijklxyz(3,i,1)+ijklxyz(3,j,2)+ &
+              ijklxyz(3,k,3)+ijklxyz(3,l,4)
+            yz=g0(:,2,ny)*g0(:,3,nz)
+            xz=g0(:,1,nx)*g0(:,3,nz)
+            xy=g0(:,1,nx)*g0(:,2,ny)
+            deriv=0.0_dp
+            if(.not.gdat%skip(1)) then
+              deriv(1,1)=sum(fi(:,1,nx)*yz)
+              deriv(2,1)=sum(fi(:,2,ny)*xz)
+              deriv(3,1)=sum(fi(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(2)) then
+              deriv(1,2)=sum(fj(:,1,nx)*yz)
+              deriv(2,2)=sum(fj(:,2,ny)*xz)
+              deriv(3,2)=sum(fj(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(3)) then
+              deriv(1,3)=sum(fk(:,1,nx)*yz)
+              deriv(2,3)=sum(fk(:,2,ny)*xz)
+              deriv(3,3)=sum(fk(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(4)) then
+              deriv(1,4)=sum(fl(:,1,nx)*yz)
+              deriv(2,4)=sum(fl(:,2,ny)*xz)
+              deriv(3,4)=sum(fl(:,3,nz)*xy)
+            end if
+
+            if(gdat%iandj) deriv=0.5_dp*deriv
+            if(gdat%kandl) deriv=0.5_dp*deriv
+            if(gdat%same) deriv=0.5_dp*deriv
+            select case(gdat%invtyp)
+            case(2); deriv(:,1)=-deriv(:,4)
+            case(3); deriv(:,1)=-deriv(:,3)
+            case(4,5); deriv(:,1)=-(deriv(:,3)+deriv(:,4))
+            case(6); deriv(:,1)=-deriv(:,2)
+            case(7,8); deriv(:,1)=-(deriv(:,2)+deriv(:,4))
+            case(9,10); deriv(:,1)=-(deriv(:,2)+deriv(:,3))
+            case(11); deriv(:,2)=-deriv(:,1)
+            case(12); deriv(:,2)=-(deriv(:,1)+deriv(:,4))
+            case(13); deriv(:,2)=-(deriv(:,1)+deriv(:,3))
+            case(14); deriv(:,3)=-(deriv(:,1)+deriv(:,2))
+            case(15); deriv(:,4)=-(deriv(:,1)+deriv(:,2)+deriv(:,3))
+            end select
+
+            do center=1,4
+              call add_symmetric_fock(fmat,i1,j1,gdat%at(center), &
+                ccoef*pcoul(k1,l1)*deriv(:,center))
+              call add_symmetric_fock(fmat,k1,l1,gdat%at(center), &
+                ccoef*pcoul(i1,j1)*deriv(:,center))
+              if(xcoef/=0.0_dp) then
+                call add_symmetric_fock(fmat,i1,k1,gdat%at(center), &
+                  -xcoef*pexch(j1,l1)*deriv(:,center))
+                call add_symmetric_fock(fmat,i1,l1,gdat%at(center), &
+                  -xcoef*pexch(j1,k1)*deriv(:,center))
+                call add_symmetric_fock(fmat,j1,l1,gdat%at(center), &
+                  -xcoef*pexch(i1,k1)*deriv(:,center))
+                call add_symmetric_fock(fmat,j1,k1,gdat%at(center), &
+                  -xcoef*pexch(i1,l1)*deriv(:,center))
+              end if
+            end do
+          end do
+        end do
+      end do
+    end do
+  end subroutine compute_der_ijkl_fock_os
+
+  subroutine compute_der_ijkl_fock_os_batch(gdat,ngnr,ijklxyz,g0,fi,fj,fk,fl, &
+      pcoul,pexch,loc,coulscale,hfscale,fmat,symmetric_target)
+
+    implicit none
+
+    type(grd2_int_data_t), intent(in) :: gdat
+    integer, intent(in) :: ngnr,ijklxyz(:,:,:),loc(4)
+    real(kind=dp), intent(in) :: g0(ngnr,3,*)
+    real(kind=dp), intent(in) :: fi(ngnr,3,*),fj(ngnr,3,*)
+    real(kind=dp), intent(in) :: fk(ngnr,3,*),fl(ngnr,3,*)
+    real(kind=dp), intent(in) :: pcoul(:,:,:),pexch(:,:,:), &
+      coulscale(:),hfscale(:)
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:,:)
+    logical, intent(in) :: symmetric_target
+
+    integer :: i,j,k,l,i1,j1,k1,l1,nx,ny,nz,center,probe
+    real(kind=dp) :: yz(ngnr),xz(ngnr),xy(ngnr),deriv(3,4)
+    real(kind=dp) :: ccoef,xcoef
+    do i=1,gdat%nbf(1)
+      i1=loc(1)+i
+      do j=1,gdat%nbf(2)
+        j1=loc(2)+j
+        do k=1,gdat%nbf(3)
+          k1=loc(3)+k
+          do l=1,gdat%nbf(4)
+            l1=loc(4)+l
+            nx=ijklxyz(1,i,1)+ijklxyz(1,j,2)+ &
+              ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny=ijklxyz(2,i,1)+ijklxyz(2,j,2)+ &
+              ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz=ijklxyz(3,i,1)+ijklxyz(3,j,2)+ &
+              ijklxyz(3,k,3)+ijklxyz(3,l,4)
+            yz=g0(:,2,ny)*g0(:,3,nz)
+            xz=g0(:,1,nx)*g0(:,3,nz)
+            xy=g0(:,1,nx)*g0(:,2,ny)
+            deriv=0.0_dp
+            if(.not.gdat%skip(1)) then
+              deriv(1,1)=sum(fi(:,1,nx)*yz)
+              deriv(2,1)=sum(fi(:,2,ny)*xz)
+              deriv(3,1)=sum(fi(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(2)) then
+              deriv(1,2)=sum(fj(:,1,nx)*yz)
+              deriv(2,2)=sum(fj(:,2,ny)*xz)
+              deriv(3,2)=sum(fj(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(3)) then
+              deriv(1,3)=sum(fk(:,1,nx)*yz)
+              deriv(2,3)=sum(fk(:,2,ny)*xz)
+              deriv(3,3)=sum(fk(:,3,nz)*xy)
+            end if
+            if(.not.gdat%skip(4)) then
+              deriv(1,4)=sum(fl(:,1,nx)*yz)
+              deriv(2,4)=sum(fl(:,2,ny)*xz)
+              deriv(3,4)=sum(fl(:,3,nz)*xy)
+            end if
+
+            if(gdat%iandj) deriv=0.5_dp*deriv
+            if(gdat%kandl) deriv=0.5_dp*deriv
+            if(gdat%same) deriv=0.5_dp*deriv
+            select case(gdat%invtyp)
+            case(2); deriv(:,1)=-deriv(:,4)
+            case(3); deriv(:,1)=-deriv(:,3)
+            case(4,5); deriv(:,1)=-(deriv(:,3)+deriv(:,4))
+            case(6); deriv(:,1)=-deriv(:,2)
+            case(7,8); deriv(:,1)=-(deriv(:,2)+deriv(:,4))
+            case(9,10); deriv(:,1)=-(deriv(:,2)+deriv(:,3))
+            case(11); deriv(:,2)=-deriv(:,1)
+            case(12); deriv(:,2)=-(deriv(:,1)+deriv(:,4))
+            case(13); deriv(:,2)=-(deriv(:,1)+deriv(:,3))
+            case(14); deriv(:,3)=-(deriv(:,1)+deriv(:,2))
+            case(15); deriv(:,4)=-(deriv(:,1)+deriv(:,2)+deriv(:,3))
+            end select
+
+            do probe=1,size(pcoul,3)
+              if(symmetric_target) then
+                ! Adjoint of the ordinary symmetric open-shell probe.
+                ccoef=4.0_dp*coulscale(probe)
+                xcoef=2.0_dp*hfscale(probe)
+                do center=1,4
+                  call add_target_fock(fmat(:,:,:,:,probe),i1,j1, &
+                    gdat%at(center),ccoef*pcoul(k1,l1,probe)*deriv(:,center), &
+                    .true.)
+                  call add_target_fock(fmat(:,:,:,:,probe),k1,l1, &
+                    gdat%at(center),ccoef*pcoul(i1,j1,probe)*deriv(:,center), &
+                    .true.)
+                  if(xcoef/=0.0_dp) then
+                    call add_target_fock(fmat(:,:,:,:,probe),i1,k1, &
+                      gdat%at(center),-xcoef*pexch(j1,l1,probe)*deriv(:,center), &
+                      .true.)
+                    call add_target_fock(fmat(:,:,:,:,probe),i1,l1, &
+                      gdat%at(center),-xcoef*pexch(j1,k1,probe)*deriv(:,center), &
+                      .true.)
+                    call add_target_fock(fmat(:,:,:,:,probe),j1,l1, &
+                      gdat%at(center),-xcoef*pexch(i1,k1,probe)*deriv(:,center), &
+                      .true.)
+                    call add_target_fock(fmat(:,:,:,:,probe),j1,k1, &
+                      gdat%at(center),-xcoef*pexch(i1,l1,probe)*deriv(:,center), &
+                      .true.)
+                  end if
+                end do
+              else
+                ! Exact ordered-density adjoint of
+                ! grd2_mrsf_fockprobe_get_density.  Both orientations are
+                ! distinct targets; repeated indices intentionally receive
+                ! every contribution present in the scalar expression.
+                ccoef=coulscale(probe)
+                xcoef=hfscale(probe)
+                do center=1,4
+                  call add_target_fock(fmat(:,:,:,:,probe),i1,j1, &
+                    gdat%at(center),ccoef*(pcoul(k1,l1,probe)+ &
+                    pcoul(l1,k1,probe))*deriv(:,center),.false.)
+                  call add_target_fock(fmat(:,:,:,:,probe),j1,i1, &
+                    gdat%at(center),ccoef*(pcoul(k1,l1,probe)+ &
+                    pcoul(l1,k1,probe))*deriv(:,center),.false.)
+                  call add_target_fock(fmat(:,:,:,:,probe),k1,l1, &
+                    gdat%at(center),ccoef*(pcoul(i1,j1,probe)+ &
+                    pcoul(j1,i1,probe))*deriv(:,center),.false.)
+                  call add_target_fock(fmat(:,:,:,:,probe),l1,k1, &
+                    gdat%at(center),ccoef*(pcoul(i1,j1,probe)+ &
+                    pcoul(j1,i1,probe))*deriv(:,center),.false.)
+                  if(xcoef/=0.0_dp) then
+                    call add_target_fock(fmat(:,:,:,:,probe),i1,k1, &
+                      gdat%at(center),-xcoef*pexch(j1,l1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),k1,i1, &
+                      gdat%at(center),-xcoef*pexch(l1,j1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),i1,l1, &
+                      gdat%at(center),-xcoef*pexch(j1,k1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),l1,i1, &
+                      gdat%at(center),-xcoef*pexch(k1,j1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),j1,k1, &
+                      gdat%at(center),-xcoef*pexch(i1,l1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),k1,j1, &
+                      gdat%at(center),-xcoef*pexch(l1,i1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),j1,l1, &
+                      gdat%at(center),-xcoef*pexch(i1,k1,probe)* &
+                      deriv(:,center),.false.)
+                    call add_target_fock(fmat(:,:,:,:,probe),l1,j1, &
+                      gdat%at(center),-xcoef*pexch(k1,i1,probe)* &
+                      deriv(:,center),.false.)
+                  end if
+                end do
+              end if
+            end do
+          end do
+        end do
+      end do
+    end do
+  end subroutine compute_der_ijkl_fock_os_batch
+
+  subroutine add_target_fock(fmat,mu,nu,atom,value,symmetric_target)
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:)
+    integer, intent(in) :: mu,nu,atom
+    real(kind=dp), intent(in) :: value(3)
+    logical, intent(in) :: symmetric_target
+
+    if(symmetric_target) then
+      call add_symmetric_fock(fmat,mu,nu,atom,value)
+    else
+      fmat(mu,nu,:,atom)=fmat(mu,nu,:,atom)+value
+    end if
+  end subroutine add_target_fock
+
+  subroutine add_symmetric_fock(fmat,mu,nu,atom,value)
+    real(kind=dp), intent(inout) :: fmat(:,:,:,:)
+    integer, intent(in) :: mu,nu,atom
+    real(kind=dp), intent(in) :: value(3)
+
+    if(mu==nu) then
+      fmat(mu,nu,:,atom)=fmat(mu,nu,:,atom)+value
+    else
+      fmat(mu,nu,:,atom)=fmat(mu,nu,:,atom)+0.5_dp*value
+      fmat(nu,mu,:,atom)=fmat(nu,mu,:,atom)+0.5_dp*value
+    end if
+  end subroutine add_symmetric_fock
+
 !###############################################################################
 !   Second-derivative (Hessian) skeleton: analytic 2e ERI second derivatives
 !###############################################################################
@@ -1361,6 +2001,34 @@ contains
 end associate
 
   end subroutine apply_translation_invariance
+
+  subroutine apply_translation_invariance_batch(gdat,fd_batch)
+    type(grd2_int_data_t), intent(in) :: gdat
+    real(kind=dp), intent(inout) :: fd_batch(:,:,:)
+    integer :: probe
+
+    if(gdat%nder==0) return
+    do probe=1,size(fd_batch,3)
+      associate(fd=>fd_batch(:,:,probe))
+        if(gdat%iandj) fd=0.5_dp*fd
+        if(gdat%kandl) fd=0.5_dp*fd
+        if(gdat%same) fd=0.5_dp*fd
+        select case(gdat%invtyp)
+        case(2); fd(:,1)=-fd(:,4)
+        case(3); fd(:,1)=-fd(:,3)
+        case(4,5); fd(:,1)=-(fd(:,3)+fd(:,4))
+        case(6); fd(:,1)=-fd(:,2)
+        case(7,8); fd(:,1)=-(fd(:,2)+fd(:,4))
+        case(9,10); fd(:,1)=-(fd(:,2)+fd(:,3))
+        case(11); fd(:,2)=-fd(:,1)
+        case(12); fd(:,2)=-(fd(:,1)+fd(:,4))
+        case(13); fd(:,2)=-(fd(:,1)+fd(:,3))
+        case(14); fd(:,3)=-(fd(:,1)+fd(:,2))
+        case(15); fd(:,4)=-(fd(:,1)+fd(:,2)+fd(:,3))
+        end select
+      end associate
+    end do
+  end subroutine apply_translation_invariance_batch
 
 !> @brief Allocate and initialise the 2e SOC integral data structure
 !> @details

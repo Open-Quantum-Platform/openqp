@@ -420,7 +420,13 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     # symmetry_unique arrives with #319 (symmetry-unique displacement set);
     # the schema gained it without the concise language, which this PR's
     # section-ownership gate catches.
-    "hess": _keys("type state dx nproc read restart temperature clean symmetry_unique"),
+    "hess": _keys("""
+        type state dx nproc read restart temperature clean symmetry_unique
+        vibrational_intensities
+        property_dx property_min_overlap property_min_margin
+        property_fd_relative_tolerance property_fd_absolute_tolerance raman_backend
+        raman_sos_tail_states raman_sos_tail_tolerance raman_sos_min_gap
+    """),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
         nstep dt active substep decoherence edc_c thrshe tdc trivial
@@ -660,7 +666,10 @@ DRIVER_OPTIONS = {
     # symmetry_unique (#319) selects the symmetry-unique displacement set, so
     # it is a hess driver option like dx/nproc rather than a generic key.
     "hess": {"type", "dx", "nproc", "read", "restart", "temperature", "clean",
-             "symmetry_unique"},
+             "symmetry_unique", "vibrational_intensities", "property_dx", "property_min_overlap",
+             "property_min_margin", "property_fd_relative_tolerance",
+             "property_fd_absolute_tolerance", "raman_backend", "raman_sos_tail_states",
+             "raman_sos_tail_tolerance", "raman_sos_min_gap"},
     "nac": {"type", "dx", "nproc", "restart", "clean", "align"},
     "bp": {"type", "dx", "nproc", "restart", "clean", "align"},
     "nacme": {"dt", "align"},
