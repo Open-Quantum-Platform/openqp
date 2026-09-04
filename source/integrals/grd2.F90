@@ -128,6 +128,12 @@ contains
       call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
     else
+      ! This is a single full-range pass: say so explicitly rather than
+      ! inheriting whatever a previous CAM call left behind. A digest that keys
+      ! off `attenuated` (the MRSF one drops its spin-pair-coupling terms in the
+      ! short-range pass) would otherwise mis-evaluate a reused compute object.
+      gcomp%attenuated = .false.
+      gcomp%cur_pass = 1
       ! Only adopt the DFT hybrid mixing here for actual DFT calculations
       ! (hamilton>=20).  For pure Hartree-Fock the caller already set the
       ! correct hfscale (=1.0); infos%dft%hfscale is not meaningful in that
