@@ -486,6 +486,27 @@ contains
     qfspcp2 = this%spcscale(2)
     qfspcp3 = this%spcscale(3)
 
+!   The spin-pair-coupling channels belong to the FULL-ERI pass only.
+!   With a range-separated (CAM) functional grd2_driver runs this digest
+!   twice: pass 1 over the full operator, pass 2 over the erf-attenuated
+!   short-range one.  It re-points coulscale/hfscale/hfscale2/mu per pass,
+!   but spcscale is ours and it does not touch it -- so without this guard
+!   the six SPC contractions (co12, o21v, bco1*bo2v, bco2*bo1v) are added in
+!   BOTH passes.  The energy adds them in pass 1 ONLY: int2_mrsf_data_t_update's
+!   cur_pass==2 branch digests slot 7 (ball) alone, so slots 1-6 never receive
+!   an attenuated-pass contribution.  Adding them again against the attenuated
+!   derivative integrals therefore puts a term in the gradient that has no
+!   counterpart in the energy, and MRSF analytic gradients disagreed with
+!   finite differences by up to ~1e-3 Hartree/Bohr for any range-separated
+!   functional -- state-dependently, in proportion to the state's
+!   closed->open (spin-pair) character.  Global hybrids never run pass 2,
+!   which is why only CAM-type functionals were affected.
+    if (this%attenuated) then
+      qfspcp1 = 0.0_dp
+      qfspcp2 = 0.0_dp
+      qfspcp3 = 0.0_dp
+    end if
+
     sgnk = 1.0_dp
     if (this%mrst==3) sgnk = -1.0_dp
     dabmax = 0

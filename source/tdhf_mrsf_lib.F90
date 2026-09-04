@@ -178,8 +178,29 @@ contains
 
     sized = ubound(this%d3,2)
 
-!   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
+!   Form shell density.
+!   The Schwarz density bound must majorize EVERY density slot this data
+!   type's update kernel contracts (all seven: bo2v/bo1v/bco1/bco2/o21v/
+!   co12/ball), because one screening decision skips a shell quartet for all
+!   of them at once.  A bound built from the summed `ball` alone is NOT a
+!   majorant: its internal cancellations can be small exactly where the
+!   mixed spin-pair densities (co12/o21v) are large, and the driver then
+!   drops real aco12/ao21v contributions.  The Davidson energy stage largely
+!   hid this behind multi-trial-vector union bounds, but the single-density
+!   Z-vector RHS build did not: the spin-pair Lagrangian went wrong and MRSF
+!   analytic gradients disagreed with finite differences by up to ~4e-3
+!   Hartree/Bohr (state-dependently) while every energy stayed exact.
+!   Fold the per-slot bounds with an elementwise max instead.
+    block
+      real(kind=dp), allocatable :: dsh_tmp(:,:)
+      integer :: c
+      allocate(dsh_tmp, mold=this%dsh)
+      this%dsh = 0.0_dp
+      do c = 1, sized
+        call shell_den_screen_mrsf(dsh_tmp, this%d3(:,c,:,:), basis)
+        this%dsh = max(this%dsh, dsh_tmp)
+      end do
+    end block
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -206,7 +227,11 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        ! The digestion kernel reads both orientations of a non-symmetric
+        ! density (d3(:,:,j,l) and d3(:,:,l,j)), so the bound must cover the
+        ! (jsh,ish) AND (ish,jsh) blocks; co12/o21v are not symmetric.
+        dsh(ish,jsh) = max(maxval(abs(da(:,minj:maxj,mini:maxi))), &
+                           maxval(abs(da(:,mini:maxi,minj:maxj))))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
