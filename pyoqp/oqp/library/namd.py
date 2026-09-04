@@ -574,6 +574,14 @@ class NAMD:
             raise ValueError(
                 "[md] rescale must be isotropic, analytic_nac, or "
                 "hop_analytic_nac")
+        # Carry the converged orbitals of the previous geometry into the SCF
+        # of the next geometry (guess type 'previous' after the first step).
+        # The default re-runs the configured guess (e.g. Huckel) at every
+        # step, which can converge to a different ROHF solution or orbital
+        # ordering and collapse the TLF state overlap.
+        self.mo_reuse = str(md.get('mo_reuse', 'false')).strip().lower() in (
+            'true', '1', 'on', 'yes')
+        self._overlap_collapse_steps = 0
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
@@ -1590,6 +1598,10 @@ class NAMD:
     def _electronic(self, with_overlap):
         """Run SCF + (optional overlap) + MRSF excitation at the current geometry."""
         mol = self.mol
+        if self.mo_reuse and with_overlap:
+            # Resident orbitals exist once the first geometry has converged;
+            # reuse them instead of restarting from the configured guess.
+            mol.config['guess']['type'] = 'previous'
         sp = SinglePoint(mol)
         ref_energy = sp.reference()
         if with_overlap:
@@ -1616,6 +1628,19 @@ class NAMD:
             self.mol.data["OQP::td_states_overlap"]
         )
         self._last_state_overlap = np.array(state_overlap, copy=True)
+        # Diagnose a collapsed retained-manifold overlap (every column of the
+        # old->new state overlap nearly zero).  A collapsed matrix cannot
+        # describe continuous states; NPI in particular then returns a large
+        # spurious coupling.  Report it so the trajectory can be audited.
+        column_norm = np.linalg.norm(np.asarray(state_overlap, dtype=float), axis=0)
+        if np.all(np.isfinite(column_norm)) and column_norm.max() < 0.5:
+            self._overlap_collapse_steps += 1
+            dump_log(
+                self.mol,
+                title=('NAMD WARNING: collapsed state overlap at step %s '
+                       '(max column norm %.3f, %d collapsed steps so far)'
+                       % (istep, column_norm.max(), self._overlap_collapse_steps)),
+                section='nacm', info=state_overlap)
         self._last_overlap_tdc = np.array(self._compute_tdc(state_overlap), copy=True)
         self._update_baeck_an_check(istep, state_overlap)
         if update_analytic and self._needs_analytic_nac():
