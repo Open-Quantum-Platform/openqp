@@ -609,6 +609,30 @@ class NAMD:
         self.ref_switch_rescale = str(md.get('ref_switch_rescale', 'false')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self.somo_tol = float(md.get('somo_tol', 0.5))
+        # Frustrated-hop treatment for derivative-coupling (directional)
+        # rescaling: 'none' leaves the velocity unchanged (Tully 1990);
+        # 'reflect' reverses the momentum component along d_IJ
+        # (Hammes-Schiffer & Tully 1994).
+        self.frustrated = str(md.get('frustrated', 'none')).strip().lower()
+        if self.frustrated not in ('none', 'reflect'):
+            raise ValueError("[md] frustrated must be none or reflect")
+        self._frustrated_reflect_count = 0
+        # Total-energy discontinuity bookkeeping: when the active-state
+        # energy jumps between two consecutive geometries by more than the
+        # Verlet integration can account for (|E_tot(now) - E_tot(prev)| >
+        # disc_tol, no hop involved), the jump is treated like an accepted
+        # hop: the velocities are rescaled isotropically so that the total
+        # energy is conserved and the event is logged and recorded.  This
+        # covers ROHF reference changes that the SOMO test does not see,
+        # retained-window leakage and hot-hydrogen kinks of the MRSF surface.
+        self.disc_rescale = str(md.get('disc_rescale', 'false')).strip().lower() in (
+            'true', '1', 'on', 'yes')
+        self.disc_tol = float(md.get('disc_tol', 0.002))
+        if not np.isfinite(self.disc_tol) or self.disc_tol <= 0.0:
+            raise ValueError("[md] disc_tol must be positive")
+        self._disc_event_count = 0
+        self._disc_energy_absorbed = 0.0
+        self._window_leak_step = False
         self._somo_switch_step = False
         self._somo_switch_count = 0
         self._window_leak_count = 0
@@ -1790,6 +1814,7 @@ class NAMD:
         # below somo_tol means the ROHF reference changed its open-shell
         # configuration (reference switch event).
         self._somo_switch_step = False
+        self._window_leak_step = False
         try:
             mo_ov = np.abs(np.asarray(
                 self.mol.data['OQP::mo_tracking_overlap'], dtype=float).ravel())
@@ -1817,6 +1842,7 @@ class NAMD:
             leak = np.nan
         if np.isfinite(leak) and leak < 0.7:
             self._window_leak_count += 1
+            self._window_leak_step = True
             dump_log(
                 self.mol,
                 title=('NAMD WARNING: active-state overlap column norm %.3f < 0.7 '
@@ -3938,7 +3964,8 @@ class NAMD:
         occurred in the native kernel.  This routine performs no second random
         draw and no second electronic propagation.
         """
-        self._update_analytic_nac(istep, compare_overlap=False)
+        if self.rescale_provider == 'hop_analytic_nac':
+            self._update_analytic_nac(istep, compare_overlap=False)
         direction = np.ascontiguousarray(
             np.asarray(self._last_analytic_dcv, dtype=np.float64)[
                 active - 1, target - 1])
@@ -3957,10 +3984,24 @@ class NAMD:
             oqp.ffi.cast("double *", gamma.ctypes.data),
             oqp.ffi.cast("double *", discriminant.ctypes.data),
         )
-        self._last_rescale_source = 2
+        self._last_rescale_source = 1 if self.rescale_provider == 'analytic_nac' else 2
         self._last_rescale_gamma = float(gamma[0])
         self._last_rescale_discriminant = float(discriminant[0])
         if int(status) != 0:
+            if self.frustrated == 'reflect':
+                # Frustrated hop: reverse the momentum component along d_IJ
+                # (p_a -> p_a - 2 (b/a) d_a with a = sum d_a^2/m_a,
+                # b = sum v_a.d_a); the kinetic energy is unchanged.
+                avec = float(np.sum(direction**2 / mass[:, None]))
+                bvec = float(np.sum(self.vel * direction))
+                if avec > 0.0 and np.isfinite(bvec):
+                    self.vel = self.vel - 2.0 * (bvec / avec) * direction / mass[:, None]
+                    self._frustrated_reflect_count += 1
+                    dump_log(self.mol, title=(
+                        'NAMD: frustrated hop %d -> %d at step %d (discriminant %.3e); '
+                        'velocity component along d_IJ reversed (reflection %d)'
+                        % (active, target, istep, float(discriminant[0]),
+                           self._frustrated_reflect_count)), section='input')
             return active, False
         self.vel = velocity
         self._last_hop_direction = np.array(direction, copy=True)
@@ -4005,7 +4046,11 @@ class NAMD:
         params[_P_TRIV_THR] = self.trivial_thresh
         params[_P_NSTATE] = float(n)
         params[_P_ALLOW_HOP] = 1.0 if allow_hop else -1.0
-        params[_P_RESCALE] = float({
+        deferred_directional = (
+            self.rescale_provider == 'hop_analytic_nac'
+            or (self.rescale_provider == 'analytic_nac'
+                and self.frustrated == 'reflect'))
+        params[_P_RESCALE] = float(2 if deferred_directional else {
             'isotropic': 0, 'analytic_nac': 1,
             'hop_analytic_nac': 2,
         }[self.rescale_provider])
@@ -4065,7 +4110,7 @@ class NAMD:
         self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
         target = int(round(results[n*n + 1]))
         blocked = int(round(results[n*n + 2])) == 1
-        if (allow_hop and self.rescale_provider == 'hop_analytic_nac'
+        if (allow_hop and deferred_directional
                 and target != active_before and not blocked):
             new_active, hopped = self._hop_triggered_analytic_rescale(
                 active_before, target, istep)
@@ -4164,26 +4209,42 @@ class NAMD:
             # jump of the active-state energy by an isotropic velocity rescale
             # (the same treatment as an accepted hop), and record the jump.
             self._ref_switch_jump = np.nan
-            if (self._somo_switch_step and self.ref_switch_rescale
-                    and self._etot_prev is not None):
+            if self._etot_prev is not None:
                 epot_now = (float(np.asarray(mol.energies)[self.active])
                             + bias_energy + self._conservative_restraint_energy)
                 ke_now = 0.5*np.sum(self.mass[:, None]*self.vel**2)
-                ke_target = self._etot_prev - epot_now
-                self._ref_switch_jump = (epot_now + ke_now) - self._etot_prev
-                if ke_target > 0.0 and ke_now > 0.0:
-                    self.vel = self.vel*np.sqrt(ke_target/ke_now)
-                    dump_log(mol, title=('NAMD: reference switch at step %d; '
-                                         'active-state energy jump %+.4f Hartree '
-                                         'absorbed by isotropic velocity rescaling'
-                                         % (istep, self._ref_switch_jump)),
-                             section='input')
-                else:
-                    dump_log(mol, title=('NAMD: reference switch at step %d; '
-                                         'energy jump %+.4f Hartree exceeds the '
-                                         'kinetic energy, velocities unchanged'
-                                         % (istep, self._ref_switch_jump)),
-                             section='input')
+                jump = (epot_now + ke_now) - self._etot_prev
+                somo_case = self._somo_switch_step and self.ref_switch_rescale
+                disc_case = self.disc_rescale and abs(jump) > self.disc_tol
+                if somo_case or disc_case:
+                    ke_target = self._etot_prev - epot_now
+                    self._ref_switch_jump = jump
+                    if self._somo_switch_step:
+                        kind = 'reference switch'
+                    elif self._window_leak_step:
+                        kind = 'window-leak discontinuity'
+                    else:
+                        kind = 'energy discontinuity'
+                    if not self._somo_switch_step:
+                        self._disc_event_count += 1
+                    if ke_target > 0.0 and ke_now > 0.0:
+                        self.vel = self.vel*np.sqrt(ke_target/ke_now)
+                        self._disc_energy_absorbed += jump
+                        dump_log(mol, title=('NAMD: %s at step %d; '
+                                             'active-state energy jump %+.4f Hartree '
+                                             'absorbed by isotropic velocity rescaling '
+                                             '(events: switch %d, other %d; absorbed %+.4f Ha)'
+                                             % (kind, istep, jump,
+                                                self._somo_switch_count,
+                                                self._disc_event_count,
+                                                self._disc_energy_absorbed)),
+                                 section='input')
+                    else:
+                        dump_log(mol, title=('NAMD: %s at step %d; '
+                                             'energy jump %+.4f Hartree exceeds the '
+                                             'kinetic energy, velocities unchanged'
+                                             % (kind, istep, jump)),
+                                 section='input')
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 + float(np.asarray(mol.energies)[active_old])
@@ -4252,7 +4313,14 @@ class NAMD:
         if (mol.config['guess']['save_mol']
                 or self._gradient_nac_fusion_enabled()):
             mol.save_data()
-        dump_log(mol, title='PyOQP: NAMD trajectory complete')
+        dump_log(mol, title=('PyOQP: NAMD trajectory complete '
+                             '(reference switches %d, window leaks %d, other energy '
+                             'discontinuities %d, absorbed %+.4f Ha, frustrated-hop '
+                             'reflections %d, SCF fallbacks %d)'
+                             % (self._somo_switch_count, self._window_leak_count,
+                                self._disc_event_count, self._disc_energy_absorbed,
+                                self._frustrated_reflect_count,
+                                self._scf_fallback_steps)))
 
     # ------------------------------------------------------------------ #
     # helpers

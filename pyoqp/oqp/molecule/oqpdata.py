@@ -833,6 +833,9 @@ OQP_CONFIG_SCHEMA = {
         'ref_follow': {'type': str, 'default': 'off'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
         'ref_switch_rescale': {'type': bool, 'default': 'false'},  # conserve total energy across a reference switch
         'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
+        'frustrated': {'type': str, 'default': 'none'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
+        'disc_rescale': {'type': bool, 'default': 'false'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
+        'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
         'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
         'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
