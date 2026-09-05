@@ -594,6 +594,26 @@ class NAMD:
             raise ValueError("[md] scf_fail must be escalate or restart")
         self._restart_boundary = False
         self._scf_restart_steps = 0
+        # Reference (SOMO) continuity controls.  ref_follow selects the SCF
+        # continuation converger for steps after the first: SOSCF or DIIS
+        # with a 0.2 Hartree level shift both keep the previous-step SOMO
+        # configuration where plain C-DIIS can jump to a different ROHF
+        # triplet configuration.  The SOMO block of the aligned MO overlap
+        # detects a configuration change (reference switch event).  With
+        # ref_switch_rescale the velocities are rescaled isotropically at such
+        # a step so that the total energy is conserved across the jump of the
+        # active-state MRSF energy, and the jump is recorded.
+        self.ref_follow = str(md.get('ref_follow', 'off')).strip().lower().replace('-', '_')
+        if self.ref_follow not in ('off', 'soscf', 'diis_vshift'):
+            raise ValueError("[md] ref_follow must be off, soscf, or diis_vshift")
+        self.ref_switch_rescale = str(md.get('ref_switch_rescale', 'false')).strip().lower() in (
+            'true', '1', 'on', 'yes')
+        self.somo_tol = float(md.get('somo_tol', 0.5))
+        self._somo_switch_step = False
+        self._somo_switch_count = 0
+        self._window_leak_count = 0
+        self._etot_prev = None
+        self._ref_switch_jump = np.nan
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
@@ -1615,6 +1635,21 @@ class NAMD:
             # Resident orbitals exist once the first geometry has converged;
             # reuse them instead of restarting from the configured guess.
             mol.config['guess']['type'] = 'previous'
+        if self.ref_follow != 'off' and with_overlap:
+            scf_cfg = mol.config['scf']
+            if self.ref_follow == 'soscf':
+                scf_cfg['converger_type'] = 'soscf'
+                scf_cfg['escalation'] = 'soscf'
+                mol.data.set_scf_converger_type('soscf')
+            else:
+                scf_cfg['converger_type'] = 'diis'
+                scf_cfg['escalation'] = 'soscf'
+                if float(scf_cfg.get('vshift', 0.0) or 0.0) <= 0.0:
+                    scf_cfg['vshift'] = 0.2
+                setter = getattr(mol.data, 'set_scf_vshift', None)
+                if setter is not None:
+                    setter(float(scf_cfg['vshift']))
+                mol.data.set_scf_converger_type('diis')
         if self.scf_fail == 'restart' and with_overlap:
             sp, ref_energy = self._reference_with_restart()
         else:
@@ -1709,6 +1744,45 @@ class NAMD:
                        % (istep, column_norm.max(), self._overlap_collapse_steps)),
                 section='nacm', info=state_overlap)
         self._last_overlap_tdc = np.array(self._compute_tdc(state_overlap), copy=True)
+        # SOMO identity check: the aligned MO overlap of the two singly
+        # occupied orbitals with their previous-step counterparts.  A value
+        # below somo_tol means the ROHF reference changed its open-shell
+        # configuration (reference switch event).
+        self._somo_switch_step = False
+        try:
+            mo_ov = np.abs(np.asarray(
+                self.mol.data['OQP::mo_tracking_overlap'], dtype=float).ravel())
+            nocc = int(self.mol.data['nelec_A'])
+            somo = mo_ov[nocc - 2:nocc]
+        except Exception:
+            somo = None
+        if somo is not None and somo.size == 2 and np.all(np.isfinite(somo)) \
+                and somo.min() < self.somo_tol:
+            self._somo_switch_step = True
+            self._somo_switch_count += 1
+            dump_log(
+                self.mol,
+                title=('NAMD WARNING: SOMO identity change at step %s '
+                       '(SOMO overlaps with the previous step %.3f %.3f < %.2f; '
+                       'reference switch event %d)'
+                       % (istep, somo[0], somo[1], self.somo_tol,
+                          self._somo_switch_count)),
+                section='input')
+        # Retained-window leakage of the active state
+        try:
+            col = np.asarray(state_overlap, dtype=float)[:, self.active - 1]
+            leak = float(np.linalg.norm(col))
+        except Exception:
+            leak = np.nan
+        if np.isfinite(leak) and leak < 0.7:
+            self._window_leak_count += 1
+            dump_log(
+                self.mol,
+                title=('NAMD WARNING: active-state overlap column norm %.3f < 0.7 '
+                       'at step %s; %.0f%% of the state lies outside the retained '
+                       'window (consider a larger nstate); event %d'
+                       % (leak, istep, 100.0*(1.0 - leak**2), self._window_leak_count)),
+                section='input')
         self._update_baeck_an_check(istep, state_overlap)
         if update_analytic and self._needs_analytic_nac():
             self._update_analytic_nac(istep, compare_overlap=True)
@@ -3989,6 +4063,10 @@ class NAMD:
             accel = (-self._active_gradient() + restraint_force) / self.mass[:, None]
             if self._needs_analytic_nac():
                 self._update_analytic_nac(0, compare_overlap=False)
+            self._etot_prev = (
+                0.5*np.sum(self.mass[:, None]*self.vel**2)
+                + float(np.asarray(mol.energies)[self.active])
+                + self._conservative_restraint_energy)
             self._record_previous(r)
             self._log_step(0, r)
             self._save_restart(0, r, self.vel, accel)
@@ -4041,6 +4119,30 @@ class NAMD:
             active_old = self.active
             odp = self._evaluate_odp(r)
             bias_energy = 0.0 if odp is None else odp['energy']
+            # Reference switch event: conserve the total energy across the
+            # jump of the active-state energy by an isotropic velocity rescale
+            # (the same treatment as an accepted hop), and record the jump.
+            self._ref_switch_jump = np.nan
+            if (self._somo_switch_step and self.ref_switch_rescale
+                    and self._etot_prev is not None):
+                epot_now = (float(np.asarray(mol.energies)[self.active])
+                            + bias_energy + self._conservative_restraint_energy)
+                ke_now = 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                ke_target = self._etot_prev - epot_now
+                self._ref_switch_jump = (epot_now + ke_now) - self._etot_prev
+                if ke_target > 0.0 and ke_now > 0.0:
+                    self.vel = self.vel*np.sqrt(ke_target/ke_now)
+                    dump_log(mol, title=('NAMD: reference switch at step %d; '
+                                         'active-state energy jump %+.4f Hartree '
+                                         'absorbed by isotropic velocity rescaling'
+                                         % (istep, self._ref_switch_jump)),
+                             section='input')
+                else:
+                    dump_log(mol, title=('NAMD: reference switch at step %d; '
+                                         'energy jump %+.4f Hartree exceeds the '
+                                         'kinetic energy, velocities unchanged'
+                                         % (istep, self._ref_switch_jump)),
+                             section='input')
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 + float(np.asarray(mol.energies)[active_old])
@@ -4085,9 +4187,15 @@ class NAMD:
                     energy_after_transition - energy_before_transition)
             else:
                 transition_energy_jump = np.nan
+            if np.isnan(transition_energy_jump) and not np.isnan(self._ref_switch_jump):
+                transition_energy_jump = self._ref_switch_jump
 
             self._apply_thermostat(istep)
             accel = accel_new
+            self._etot_prev = (
+                0.5*np.sum(self.mass[:, None]*self.vel**2)
+                + float(np.asarray(mol.energies)[self.active])
+                + bias_energy + self._conservative_restraint_energy)
             self._record_previous(r)
             self._log_step(
                 istep, r, hopped=hopped,

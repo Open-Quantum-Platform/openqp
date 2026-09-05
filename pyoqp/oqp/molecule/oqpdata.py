@@ -830,6 +830,9 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_consecutive': {'type': int, 'default': '3'},
         'mo_reuse': {'type': bool, 'default': 'false'},  # reuse previous-step orbitals as the SCF guess
         'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
+        'ref_follow': {'type': str, 'default': 'off'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
+        'ref_switch_rescale': {'type': bool, 'default': 'false'},  # conserve total energy across a reference switch
+        'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
         'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
         'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
