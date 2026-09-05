@@ -437,7 +437,12 @@ OQP_CONFIG_SCHEMA = {
         'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
-        'tlf': {'type': int, 'default': '2'},
+        # State-overlap minor determinants for NACME/NAMD: 0 = exact
+        # (Gaussian-elimination minors, no truncation; default), 1/2 =
+        # first/second-order truncated Leibniz formula (JCTC 15, 882).  The
+        # truncation assumes nearly orthonormal consecutive MOs and collapses
+        # when near-degenerate occupied orbitals rotate between steps.
+        'tlf': {'type': int, 'default': '0'},
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},

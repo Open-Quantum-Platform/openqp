@@ -1102,11 +1102,21 @@ contains
     ndtlf = infos%tddft%tlf
     nstates = infos%tddft%nstate
 
-    write (iw, fmt='(/5x,40(1h-)/&
-               &5x,"state overlap integral between different"/ &
-               &5x,"   time steps by using TLF(",i0,") approx"/ &
-               &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
-               &5x,40(1h-))') ndtlf
+    if (ndtlf == 0) then
+      write (iw, fmt='(/5x,40(1h-)/&
+                 &5x,"state overlap integral between different"/ &
+                 &5x,"   time steps: exact minor determinants"/ &
+                 &5x,"   (tlf=0, no TLF truncation; default)"/ &
+                 &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
+                 &5x,40(1h-))')
+    else
+      write (iw, fmt='(/5x,40(1h-)/&
+                 &5x,"state overlap integral between different"/ &
+                 &5x,"   time steps by using TLF(",i0,") approx"/ &
+                 &5x,"   (truncated Leibniz minors; tlf=0 is exact)"/ &
+                 &5x,"     (<phi^{i}(t-dt)|phi^{j}(t)>)"/ &
+                 &5x,40(1h-))') ndtlf
+    end if
     max = 10
     imax = 0
     do

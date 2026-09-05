@@ -3060,7 +3060,16 @@ class NACME(BasisOverlap):
 
         Currently, adapted only for MRSF-TDDFT approach
         """
-        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation')
+        tlf_order = int(self.mol.config.get('tdhf', {}).get('tlf', 0))
+        if tlf_order == 0:
+            overlap_note = ('exact minor determinants (tlf=0, default; '
+                            'no truncated-Leibniz approximation)')
+        else:
+            overlap_note = ('TLF(%d) truncated-Leibniz minors; assumes nearly '
+                            'orthonormal consecutive MOs, set tlf=0 for exact '
+                            'minors' % tlf_order)
+        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation '
+                                 '[state-overlap minors: %s]' % overlap_note)
 
         # align X amplitudes
         if align:
