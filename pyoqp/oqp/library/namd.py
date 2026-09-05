@@ -1616,7 +1616,7 @@ class NAMD:
             # reuse them instead of restarting from the configured guess.
             mol.config['guess']['type'] = 'previous'
         if self.scf_fail == 'restart' and with_overlap:
-            ref_energy = self._reference_with_restart()
+            sp, ref_energy = self._reference_with_restart()
         else:
             sp = SinglePoint(mol)
             ref_energy = sp.reference()
@@ -1647,7 +1647,8 @@ class NAMD:
         primary = str(saved['converger_type'] or 'diis')
         scf_cfg['escalation'] = primary      # chain minus primary == empty
         try:
-            return SinglePoint(mol).reference()
+            sp = SinglePoint(mol)
+            return sp, sp.reference()
         except SCFnotConverged:
             pass
         except RuntimeError as err:
@@ -1666,14 +1667,15 @@ class NAMD:
         scf_cfg['converger_type'] = 'soscf'
         scf_cfg['escalation'] = 'soscf'       # again no further escalation
         try:
-            ref_energy = SinglePoint(mol).reference()
+            sp = SinglePoint(mol)
+            ref_energy = sp.reference()
         finally:
             guess_cfg['type'] = saved['guess_type']
             scf_cfg['converger_type'] = saved['converger_type']
             scf_cfg['escalation'] = saved['escalation']
             mol.data.set_scf_converger_type(saved['converger_type'])
         self._restart_boundary = True
-        return ref_energy
+        return sp, ref_energy
 
     def _active_gradient(self):
         """Compute and return the gradient (natom,3) on the current active state."""
