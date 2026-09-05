@@ -1635,8 +1635,14 @@ class NAMD:
             # Resident orbitals exist once the first geometry has converged;
             # reuse them instead of restarting from the configured guess.
             mol.config['guess']['type'] = 'previous'
+        scf_saved = None
         if self.ref_follow != 'off' and with_overlap:
+            # Temporarily select the SOMO-preserving continuation converger.
+            # The user configuration is restored after the SCF so that the
+            # trajectory/restart signature (which echoes the scf section)
+            # stays identical to the one written at step 0.
             scf_cfg = mol.config['scf']
+            scf_saved = {k: scf_cfg.get(k) for k in ('converger_type', 'escalation', 'vshift')}
             if self.ref_follow == 'soscf':
                 scf_cfg['converger_type'] = 'soscf'
                 scf_cfg['escalation'] = 'soscf'
@@ -1650,11 +1656,20 @@ class NAMD:
                 if setter is not None:
                     setter(float(scf_cfg['vshift']))
                 mol.data.set_scf_converger_type('diis')
-        if self.scf_fail == 'restart' and with_overlap:
-            sp, ref_energy = self._reference_with_restart()
-        else:
-            sp = SinglePoint(mol)
-            ref_energy = sp.reference()
+        try:
+            if self.scf_fail == 'restart' and with_overlap:
+                sp, ref_energy = self._reference_with_restart()
+            else:
+                sp = SinglePoint(mol)
+                ref_energy = sp.reference()
+        finally:
+            if scf_saved is not None:
+                scf_cfg = mol.config['scf']
+                for k, v in scf_saved.items():
+                    if v is None:
+                        scf_cfg.pop(k, None)
+                    else:
+                        scf_cfg[k] = v
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
