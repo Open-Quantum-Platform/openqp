@@ -612,6 +612,7 @@ class NAMD:
         self._somo_switch_step = False
         self._somo_switch_count = 0
         self._window_leak_count = 0
+        self._scf_fallback_steps = 0
         self._etot_prev = None
         self._ref_switch_jump = np.nan
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
@@ -1643,13 +1644,18 @@ class NAMD:
             # stays identical to the one written at step 0.
             scf_cfg = mol.config['scf']
             scf_saved = {k: scf_cfg.get(k) for k in ('converger_type', 'escalation', 'vshift')}
+            # The SOMO-preserving converger is the primary; if it stalls the
+            # SinglePoint ladder escalates to TRAH (warm-started from the same
+            # resident orbitals).  A TRAH solution that changes the SOMO
+            # configuration is caught by the SOMO check below and handled as
+            # a reference switch event rather than aborting the trajectory.
             if self.ref_follow == 'soscf':
                 scf_cfg['converger_type'] = 'soscf'
-                scf_cfg['escalation'] = 'soscf'
+                scf_cfg['escalation'] = 'soscf,trah'
                 mol.data.set_scf_converger_type('soscf')
             else:
                 scf_cfg['converger_type'] = 'diis'
-                scf_cfg['escalation'] = 'soscf'
+                scf_cfg['escalation'] = 'soscf,trah'
                 if float(scf_cfg.get('vshift', 0.0) or 0.0) <= 0.0:
                     scf_cfg['vshift'] = 0.2
                 setter = getattr(mol.data, 'set_scf_vshift', None)
@@ -1660,8 +1666,28 @@ class NAMD:
             if self.scf_fail == 'restart' and with_overlap:
                 sp, ref_energy = self._reference_with_restart()
             else:
-                sp = SinglePoint(mol)
-                ref_energy = sp.reference()
+                try:
+                    sp = SinglePoint(mol)
+                    ref_energy = sp.reference()
+                except RuntimeError as exc:
+                    if not (self.mo_reuse and with_overlap):
+                        raise
+                    # Last resort for a continuation step: re-solve from a
+                    # fresh Huckel guess with the full DIIS->SOSCF->TRAH
+                    # ladder.  A changed SOMO configuration is detected by
+                    # the SOMO check and treated as a reference switch.
+                    self._scf_fallback_steps += 1
+                    dump_log(mol, title='PyOQP: NAMD SCF continuation from the '
+                             'previous-step orbitals failed (%s); re-solving the '
+                             'reference from a fresh Huckel guess (fallback %d)'
+                             % (exc, self._scf_fallback_steps), section='input')
+                    mol.config['guess']['type'] = 'huckel'
+                    scf_cfg = mol.config['scf']
+                    scf_cfg['converger_type'] = 'diis'
+                    scf_cfg['escalation'] = 'soscf,trah'
+                    mol.data.set_scf_converger_type('diis')
+                    sp = SinglePoint(mol)
+                    ref_energy = sp.reference()
         finally:
             if scf_saved is not None:
                 scf_cfg = mol.config['scf']
