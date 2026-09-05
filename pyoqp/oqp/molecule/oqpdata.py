@@ -836,6 +836,7 @@ OQP_CONFIG_SCHEMA = {
         'frustrated': {'type': str, 'default': 'none'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
         'disc_rescale': {'type': bool, 'default': 'false'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
         'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
+        'disc_substeps': {'type': int, 'default': '0'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
         'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
         'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},

@@ -430,7 +430,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
         nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
         nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
-        nve_gate_consecutive mo_reuse scf_fail ref_follow ref_switch_rescale somo_tol frustrated disc_rescale disc_tol
+        nve_gate_consecutive mo_reuse scf_fail ref_follow ref_switch_rescale somo_tol frustrated disc_rescale disc_tol disc_substeps
         trajectory_interval restart_interval trajectory_file
         restart_file restart ensemble thermostat thermostat_temperature
         thermostat_friction soc soc_basis
@@ -684,7 +684,7 @@ DRIVER_OPTIONS = {
         "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
         "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
         "nve_gate_transition_tol", "nve_gate_consecutive", "mo_reuse", "scf_fail",
-        "ref_follow", "ref_switch_rescale", "somo_tol", "frustrated", "disc_rescale", "disc_tol",
+        "ref_follow", "ref_switch_rescale", "somo_tol", "frustrated", "disc_rescale", "disc_tol", "disc_substeps",
         "trajectory_interval", "restart_interval", "trajectory_file",
         "restart_file", "restart", "soc", "soc_basis",
         "ensemble", "thermostat", "thermostat_temperature",

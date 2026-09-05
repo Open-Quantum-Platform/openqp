@@ -632,6 +632,18 @@ class NAMD:
             raise ValueError("[md] disc_tol must be positive")
         self._disc_event_count = 0
         self._disc_energy_absorbed = 0.0
+        # Energy-guarded nuclear substepping: when the pre-hop total-energy
+        # jump of a step exceeds disc_tol, the step is repeated from the
+        # previous phase point and electronic state with disc_substeps
+        # velocity-Verlet substeps (electronic structure and active-state
+        # force at every substep, orbitals carried along).  The state overlap,
+        # couplings and hop decision are then evaluated once between the
+        # start and the end of the full step as usual.  Only the residual jump
+        # (a genuine reference-branch change) is left to disc_rescale.
+        self.disc_substeps = int(md.get('disc_substeps', 0))
+        if self.disc_substeps < 0:
+            raise ValueError("[md] disc_substeps must be >= 0")
+        self._disc_substep_events = 0
         self._window_leak_step = False
         self._somo_switch_step = False
         self._somo_switch_count = 0
@@ -1652,16 +1664,22 @@ class NAMD:
     # ------------------------------------------------------------------ #
     # electronic structure for one geometry
     # ------------------------------------------------------------------ #
-    def _electronic(self, with_overlap):
-        """Run SCF + (optional overlap) + MRSF excitation at the current geometry."""
+    def _electronic(self, with_overlap, continuation=False):
+        """Run SCF + (optional overlap) + MRSF excitation at the current geometry.
+
+        ``continuation`` requests the previous-orbital guess and the
+        reference-following converger without the state overlap (used for
+        the intermediate points of an energy-guarded substep).
+        """
         mol = self.mol
         self._restart_boundary = False
-        if self.mo_reuse and with_overlap:
+        cont = with_overlap or continuation
+        if self.mo_reuse and cont:
             # Resident orbitals exist once the first geometry has converged;
             # reuse them instead of restarting from the configured guess.
             mol.config['guess']['type'] = 'previous'
         scf_saved = None
-        if self.ref_follow != 'off' and with_overlap:
+        if self.ref_follow != 'off' and cont:
             # Temporarily select the SOMO-preserving continuation converger.
             # The user configuration is restored after the SCF so that the
             # trajectory/restart signature (which echoes the scf section)
@@ -1694,7 +1712,7 @@ class NAMD:
                     sp = SinglePoint(mol)
                     ref_energy = sp.reference()
                 except RuntimeError as exc:
-                    if not (self.mo_reuse and with_overlap):
+                    if not (self.mo_reuse and cont):
                         raise
                     # Last resort for a continuation step: re-solve from a
                     # fresh Huckel guess with the full DIIS->SOSCF->TRAH
@@ -4133,6 +4151,36 @@ class NAMD:
         return new_active, hopped
 
     # ------------------------------------------------------------------ #
+    # one nuclear (sub)step: electronic structure, active force, Verlet kick
+    # ------------------------------------------------------------------ #
+    def _advance_electronic_and_kick(self, istep, r, vel, accel, dt,
+                                     with_overlap, continuation):
+        """Electronic structure at the installed geometry ``r``, active-state
+        force and the velocity-Verlet velocity update over ``dt``.  Returns
+        (vel, accel_new, fused) where ``fused`` tells the caller that the
+        fused gradient/NAC path was used (its velocity contraction is done by
+        the caller after the kick)."""
+        mol = self.mol
+        if getattr(self, '_nacme_reference_source', 0) == 127:
+            self._nacme_reference_source = 0
+        self._electronic(with_overlap=with_overlap, continuation=continuation)
+        # HT-NAC is evaluated only after the native FSSH kernel selects a
+        # stochastic candidate.  Clear the preceding candidate's exact
+        # vector so a no-candidate step cannot publish stale NAC data.
+        self._clear_hop_triggered_analytic_record()
+        fused = self._gradient_nac_fusion_enabled() and with_overlap
+        if fused:
+            # Fix root identity and phase before constructing the fused
+            # gradient/NAC right-hand sides. The analytic velocity
+            # contraction is deferred until after the Verlet half kick.
+            self._state_overlap(istep, update_analytic=False)
+        restraint_force, _ = self._evaluate_conservative_restraints(
+            r, self.mass)
+        accel_new = (-self._active_gradient() + restraint_force) / self.mass[:, None]
+        vel = vel + 0.5 * (accel + accel_new) * dt
+        return vel, accel_new, fused
+
+    # ------------------------------------------------------------------ #
     # main loop
     # ------------------------------------------------------------------ #
     def run(self):
@@ -4165,36 +4213,71 @@ class NAMD:
             start_step = restart['step']
 
         for istep in range(start_step + 1, self.nstep + 1):
+            # phase point at the start of the step (for an energy-guarded retry)
+            r_start = np.array(r, copy=True)
+            vel_start = np.array(self.vel, copy=True)
+            accel_start = np.array(accel, copy=True)
+
             # velocity-Verlet position update
             r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
             mol.update_system(r.reshape(-1))
 
-            # electronic structure at the new geometry (with overlap vs previous)
-            if getattr(self, '_nacme_reference_source', 0) == 127:
-                self._nacme_reference_source = 0
-            self._electronic(with_overlap=True)
-            # HT-NAC is evaluated only after the native FSSH kernel selects a
-            # stochastic candidate.  Clear the preceding candidate's exact
-            # vector so a no-candidate step cannot publish stale NAC data.
-            self._clear_hop_triggered_analytic_record()
-            fused_gradient_nac = self._gradient_nac_fusion_enabled()
-            if fused_gradient_nac:
-                # Fix root identity and phase before constructing the fused
-                # gradient/NAC right-hand sides. The analytic velocity
-                # contraction is deferred until after the Verlet half kick.
-                self._state_overlap(istep, update_analytic=False)
-            restraint_force, _ = self._evaluate_conservative_restraints(
-                r, self.mass)
-            accel_new = (-self._active_gradient() + restraint_force) / self.mass[:, None]
-
-            # velocity-Verlet velocity update
-            self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
+            # electronic structure at the new geometry (with overlap vs
+            # previous), active-state force and velocity update
+            self.vel, accel_new, fused_gradient_nac = (
+                self._advance_electronic_and_kick(
+                    istep, r, self.vel, accel, self.dt, True, False))
 
             # state overlap (couplings) and FSSH hop
             if fused_gradient_nac:
                 self._update_analytic_nac(istep, compare_overlap=True)
             else:
                 self._state_overlap(istep)
+
+            # Energy-guarded substepping: repeat the step from the stored
+            # phase point and electronic state with finer nuclear substeps
+            # when the total energy jumped by more than disc_tol.
+            if self.disc_substeps > 0 and self._etot_prev is not None:
+                odp0 = self._evaluate_odp(r)
+                bias0 = 0.0 if odp0 is None else odp0['energy']
+                epot0 = (float(np.asarray(mol.energies)[self.active])
+                         + bias0 + self._conservative_restraint_energy)
+                jump0 = (epot0 + 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                         - self._etot_prev)
+                if abs(jump0) > self.disc_tol and self.prev_data is not None:
+                    nsub = self.disc_substeps
+                    dts = self.dt / nsub
+                    mol.put_data(self.prev_data)
+                    r = np.array(r_start, copy=True)
+                    self.vel = np.array(vel_start, copy=True)
+                    accel = np.array(accel_start, copy=True)
+                    for k in range(1, nsub + 1):
+                        r = r + self.vel * dts + 0.5 * accel * dts ** 2
+                        mol.update_system(r.reshape(-1))
+                        last = (k == nsub)
+                        self.vel, accel_new, fused_gradient_nac = (
+                            self._advance_electronic_and_kick(
+                                istep, r, self.vel, accel, dts, last, True))
+                        if not last:
+                            accel = accel_new
+                    if fused_gradient_nac:
+                        self._update_analytic_nac(istep, compare_overlap=True)
+                    else:
+                        self._state_overlap(istep)
+                    odp1 = self._evaluate_odp(r)
+                    bias1 = 0.0 if odp1 is None else odp1['energy']
+                    epot1 = (float(np.asarray(mol.energies)[self.active])
+                             + bias1 + self._conservative_restraint_energy)
+                    jump1 = (epot1 + 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                             - self._etot_prev)
+                    self._disc_substep_events += 1
+                    dump_log(mol, title=('NAMD: total-energy jump %+.4f Hartree at step %d '
+                                         'exceeded disc_tol; step repeated with %d '
+                                         'substeps of %.3f fs -> residual %+.4f Hartree '
+                                         '(substep events %d)'
+                                         % (jump0, istep, nsub, dts/FS_TO_AU,
+                                            jump1, self._disc_substep_events)),
+                             section='input')
             self._last_rescale_source = {
                 'isotropic': 0, 'analytic_nac': 1,
                 'hop_analytic_nac': 2,
