@@ -35,6 +35,17 @@ def parray(strng):
     return list([int(s.split()[0]), int(s.split()[1])] for s in strng.split(',')) if strng else ()
 
 
+def tlf_order(value):
+    """State-overlap minor evaluation: 0/notlf/exact = exact minors, 1/2 = TLF order."""
+    text = str(value).strip().lower()
+    if text in ('notlf', 'no_tlf', 'no-tlf', 'exact', 'none', 'no', 'off'):
+        return 0
+    order = int(text)
+    if order not in (0, 1, 2):
+        raise ValueError("tdhf.tlf must be 0 (notlf/exact), 1 or 2")
+    return order
+
+
 def string(strng):
     """Handle string parameters"""
     return strng.lower()
@@ -442,7 +453,7 @@ OQP_CONFIG_SCHEMA = {
         # first/second-order truncated Leibniz formula (JCTC 15, 882).  The
         # truncation assumes nearly orthonormal consecutive MOs and collapses
         # when near-degenerate occupied orbitals rotate between steps.
-        'tlf': {'type': int, 'default': '0'},
+        'tlf': {'type': tlf_order, 'default': '0'},
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},

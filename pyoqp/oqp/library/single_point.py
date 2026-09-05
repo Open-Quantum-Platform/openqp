@@ -3062,7 +3062,7 @@ class NACME(BasisOverlap):
         """
         tlf_order = int(self.mol.config.get('tdhf', {}).get('tlf', 0))
         if tlf_order == 0:
-            overlap_note = ('exact minor determinants (tlf=0, default; '
+            overlap_note = ('exact minor determinants (tlf=0 = notlf, default; '
                             'no truncated-Leibniz approximation)')
         else:
             overlap_note = ('TLF(%d) truncated-Leibniz minors; assumes nearly '

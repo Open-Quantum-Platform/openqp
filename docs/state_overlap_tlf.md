@@ -12,7 +12,7 @@ exact):
 
 | `tlf` | minors | notes |
 | --- | --- | --- |
-| `0` (default) | exact Gaussian-elimination minors, no truncation | independent of orbital rotations between steps |
+| `0` = `notlf` = `exact` (default) | exact Gaussian-elimination minors, no truncation | independent of orbital rotations between steps; this is *not* the paper's zeroth-order TLF(0), which is not implemented |
 | `1` | first-order truncated Leibniz formula, TLF(1) | JCTC 15, 882 (2019) |
 | `2` | second-order truncated Leibniz formula, TLF(2) | most accurate TLF approximation; KNU-GAMESS `ndtlf=2` |
 
