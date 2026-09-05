@@ -813,6 +813,7 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
         'mo_reuse': {'type': bool, 'default': 'false'},  # reuse previous-step orbitals as the SCF guess
+        'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
         'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
         'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},

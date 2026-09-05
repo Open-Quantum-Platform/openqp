@@ -43,7 +43,7 @@ import numpy as np
 
 import oqp
 from oqp.library.ints_1e import ints_1e
-from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
+from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME, SCFnotConverged
 from oqp.library.nac_utils import canonical_state_overlap
 from oqp.library.odp import odp_from_config
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_section_name
@@ -582,6 +582,18 @@ class NAMD:
         self.mo_reuse = str(md.get('mo_reuse', 'false')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self._overlap_collapse_steps = 0
+        # scf_fail=restart: no in-step converger escalation.  When the primary
+        # converger fails from the previous-step orbitals, re-solve the
+        # reference from a fresh guess with SOSCF (the KNU-GAMESS restart
+        # procedure) and treat the step as a restart boundary: the electronic
+        # coefficients are frozen and no hop is attempted for that step, so a
+        # bra from the old SCF branch is never combined with a ket from the new
+        # one.  scf_fail=escalate keeps the SinglePoint SOSCF/TRAH ladder.
+        self.scf_fail = str(md.get('scf_fail', 'escalate')).strip().lower()
+        if self.scf_fail not in ('escalate', 'restart'):
+            raise ValueError("[md] scf_fail must be escalate or restart")
+        self._restart_boundary = False
+        self._scf_restart_steps = 0
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
@@ -1598,17 +1610,70 @@ class NAMD:
     def _electronic(self, with_overlap):
         """Run SCF + (optional overlap) + MRSF excitation at the current geometry."""
         mol = self.mol
+        self._restart_boundary = False
         if self.mo_reuse and with_overlap:
             # Resident orbitals exist once the first geometry has converged;
             # reuse them instead of restarting from the configured guess.
             mol.config['guess']['type'] = 'previous'
-        sp = SinglePoint(mol)
-        ref_energy = sp.reference()
+        if self.scf_fail == 'restart' and with_overlap:
+            ref_energy = self._reference_with_restart()
+        else:
+            sp = SinglePoint(mol)
+            ref_energy = sp.reference()
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
         sp.excitation(ref_energy)
         LastStep(mol).compute(mol)
+
+    def _reference_with_restart(self):
+        """Primary converger only; on failure perform a GAMESS-style restart.
+
+        The SinglePoint escalation ladder is disabled by naming the primary
+        converger as the whole chain.  If the primary converger does not
+        converge from the resident (previous-step) orbitals, the reference is
+        re-solved from a fresh Huckel guess with SOSCF, exactly as the archived
+        KNU-GAMESS restart inputs do (``diis=.f. soscf=.t.``).  The step is
+        then marked as a restart boundary.
+        """
+        mol = self.mol
+        scf_cfg = mol.config['scf']
+        guess_cfg = mol.config['guess']
+        saved = {
+            'escalation': scf_cfg.get('escalation', ''),
+            'converger_type': scf_cfg.get('converger_type', 'diis'),
+            'guess_type': guess_cfg.get('type', 'huckel'),
+        }
+        primary = str(saved['converger_type'] or 'diis')
+        scf_cfg['escalation'] = primary      # chain minus primary == empty
+        try:
+            return SinglePoint(mol).reference()
+        except SCFnotConverged:
+            pass
+        except RuntimeError as err:
+            if 'SCF did not converge' not in str(err):
+                raise
+        finally:
+            scf_cfg['escalation'] = saved['escalation']
+        self._scf_restart_steps += 1
+        dump_log(
+            mol,
+            title=('NAMD: %s did not converge from the previous-step orbitals; '
+                   'restarting the reference from a Huckel guess with SOSCF '
+                   '(restart boundary %d)' % (primary, self._scf_restart_steps)),
+            section='input')
+        guess_cfg['type'] = 'huckel'
+        scf_cfg['converger_type'] = 'soscf'
+        scf_cfg['escalation'] = 'soscf'       # again no further escalation
+        try:
+            ref_energy = SinglePoint(mol).reference()
+        finally:
+            guess_cfg['type'] = saved['guess_type']
+            scf_cfg['converger_type'] = saved['converger_type']
+            scf_cfg['escalation'] = saved['escalation']
+            mol.data.set_scf_converger_type(saved['converger_type'])
+        self._restart_boundary = True
+        return ref_energy
 
     def _active_gradient(self):
         """Compute and return the gradient (natom,3) on the current active state."""
@@ -3939,6 +4004,8 @@ class NAMD:
             mol.update_system(r.reshape(-1))
 
             # electronic structure at the new geometry (with overlap vs previous)
+            if getattr(self, '_nacme_reference_source', 0) == 127:
+                self._nacme_reference_source = 0
             self._electronic(with_overlap=True)
             # HT-NAC is evaluated only after the native FSSH kernel selects a
             # stochastic candidate.  Clear the preceding candidate's exact
@@ -3979,7 +4046,18 @@ class NAMD:
                 + self._conservative_restraint_energy
             )
             hop_ready = self._prepare_hop_step(istep)
-            if getattr(self, '_pending_nacme_gate_error', None) is not None:
+            if getattr(self, '_restart_boundary', False):
+                # Restart boundary (GAMESS FIRST-step behaviour): the
+                # previous-step states belong to another SCF branch, so the
+                # overlap-derived coupling is meaningless.  Freeze the
+                # electronic coefficients and attempt no hop on this step.
+                new_active, hopped = self.active, False
+                self._nacme_reference_source = 127
+                dump_log(mol, title=('NAMD: restart boundary at step %d; '
+                                     'coefficient propagation and hopping '
+                                     'skipped for this step' % istep),
+                         section='input')
+            elif getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
             else:
                 new_active, hopped = self._hop(
