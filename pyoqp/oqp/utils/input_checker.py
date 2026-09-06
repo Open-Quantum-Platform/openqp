@@ -6873,6 +6873,45 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
 
+        # The analytic TDDFT Hessian is far more grid-sensitive than the rest
+        # of the derivative stack, so the default grid is not enough for it.
+        # Measured on H2O/STO-3G SVWN S1 (this geometry is examples/HESS/
+        # H2O_SVWN_RPA_ANA_HESS.inp): the analytic frequencies move 6.03 cm-1
+        # between the default pruned SG2 96x302 grid and an unpruned 128x590
+        # grid, while the finite-difference Hessian is identical to 0.01 cm-1
+        # on both, i.e. already converged at the default grid. The gap is not
+        # finite-difference noise: it is unchanged (3.2698e-3 Hartree/bohr^2)
+        # for dx from 0.0005 to 0.004 bohr and survives Richardson
+        # extrapolation to dx->0. Warn rather than reject: the result is still
+        # usable and converges correctly, and the committed HESS examples are
+        # deliberately small runtime smoke cases.
+        if capability == "supported" and _as_lower(
+            _get(config, "input", "functional", "")
+        ):
+            pruned = _as_lower(_get(config, "dftgrid", "pruned", "SG2"))
+            try:
+                rad_npts = int(_get(config, "dftgrid", "rad_npts", 96))
+                ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
+            except (TypeError, ValueError):
+                rad_npts, ang_npts = 96, 302
+            is_pruned = pruned not in {"", "none"}
+            if is_pruned or rad_npts < 128 or ang_npts < 590:
+                report.add(
+                    "WARNING",
+                    "dftgrid",
+                    "Analytic TDDFT Hessians need a finer, unpruned DFT grid than "
+                    "the default. Measured on H2O/STO-3G SVWN, the analytic S1 "
+                    "frequencies move 6.0 cm-1 between the default pruned SG2 "
+                    "96x302 grid and an unpruned 128x590 grid, while the "
+                    "finite-difference Hessian is converged to 0.01 cm-1 on both.",
+                    value=f"pruned={pruned or 'none'}, rad_npts={rad_npts}, ang_npts={ang_npts}",
+                    expected="pruned= (unpruned) with rad_npts>=128 and ang_npts>=590",
+                    action="For production frequencies set [dftgrid] pruned= , "
+                           "rad_npts=128, ang_npts=590 (or finer), or use "
+                           "[hess] type=numerical, which is converged at the "
+                           "default grid and was measured faster here.",
+                )
+
     if method == "hf" and state > 0:
         report.add(
             "ERROR",

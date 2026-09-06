@@ -304,6 +304,62 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
                 self.assertEqual(status, "unsupported_feature")
                 self.assertIn("LDA/GGA and global-hybrid paths", reason)
 
+    def _hess_grid_report(self, functional, pruned, rad_npts, ang_npts,
+                          hess_type="analytical"):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g", "functional": functional},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 2, "multiplicity": 1},
+            "hess": {"type": hess_type, "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+            "dftgrid": {"pruned": pruned, "rad_npts": rad_npts,
+                        "ang_npts": ang_npts},
+        }
+        return self.input_checker.check_input_values(
+            config, raise_error=False, emit=False
+        )
+
+    @staticmethod
+    def _grid_warnings(report):
+        return [d for d in report.diagnostics
+                if d.severity == "WARNING" and d.path == "dftgrid"]
+
+    def test_analytic_tddft_hessian_warns_on_a_grid_too_coarse_for_it(self):
+        # The analytic TDDFT Hessian needs a finer, unpruned grid than the rest
+        # of the derivative stack. Measured on H2O/STO-3G SVWN S1: the analytic
+        # frequencies move 6.03 cm-1 between the default pruned SG2 96x302 grid
+        # and an unpruned 128x590 grid, while the finite-difference Hessian is
+        # identical to 0.01 cm-1 on both. The warning must fire wherever that
+        # error is still of that size, and must stay silent once the grid is
+        # good enough -- otherwise it is either useless or noise.
+        for pruned, rad, ang, why in (
+            ("SG2", 96, 302, "the shipped default grid: 6.0 cm-1 error"),
+            ("", 96, 302, "unpruned but still coarse: 1.5 cm-1 error"),
+            ("SG1", 200, 974, "pruned, however fine the nominal counts"),
+        ):
+            report = self._hess_grid_report("svwn", pruned, rad, ang)
+            with self.subTest(pruned=pruned, rad=rad, ang=ang):
+                self.assertTrue(self._grid_warnings(report), why)
+                # A warning, never an error: the number is usable and converges.
+                self.assertTrue(report.ok, report.to_text())
+
+    def test_analytic_tddft_hessian_is_quiet_on_an_adequate_grid(self):
+        for pruned, rad, ang in (("", 128, 590), ("", 155, 974)):
+            report = self._hess_grid_report("svwn", pruned, rad, ang)
+            with self.subTest(rad=rad, ang=ang):
+                self.assertFalse(self._grid_warnings(report))
+
+    def test_grid_warning_is_scoped_to_the_analytic_dft_hessian(self):
+        # Pure TDHF has no quadrature at all, and the numerical Hessian is
+        # already converged on the default grid, so neither may be warned about.
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("", "SG2", 96, 302)))
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("svwn", "SG2", 96, 302,
+                                   hess_type="numerical")))
+
     def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess",
