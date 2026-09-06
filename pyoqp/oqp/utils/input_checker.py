@@ -6885,8 +6885,13 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
         # extrapolation to dx->0. Warn rather than reject: the result is still
         # usable and converges correctly, and the committed HESS examples are
         # deliberately small runtime smoke cases.
-        if capability == "supported" and _as_lower(
-            _get(config, "input", "functional", "")
+        # Scoped to the excited-state path, which is what was measured. The
+        # ground-state HF/DFT analytic Hessian is a separate, older kernel and
+        # is not characterised here, so it must not inherit this warning.
+        if (
+            capability == "supported"
+            and method == "tdhf"
+            and _as_lower(_get(config, "input", "functional", ""))
         ):
             pruned = _as_lower(_get(config, "dftgrid", "pruned", "SG2"))
             try:
@@ -6894,7 +6899,12 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
             except (TypeError, ValueError):
                 rad_npts, ang_npts = 96, 302
-            is_pruned = pruned not in {"", "none"}
+            # source/dftlib/dft.F90 selects a pruning scheme with
+            # `select case (trim(pruned_name))` over SG0/SG1/SG2/SG3 and has no
+            # `case default`, so every other spelling -- "", none, off, false --
+            # leaves the grid unpruned. Match that, rather than guessing at a
+            # list of "off" synonyms.
+            is_pruned = pruned in {"sg0", "sg1", "sg2", "sg3"}
             if is_pruned or rad_npts < 128 or ang_npts < 590:
                 report.add(
                     "WARNING",

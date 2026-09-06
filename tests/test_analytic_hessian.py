@@ -305,14 +305,14 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
                 self.assertIn("LDA/GGA and global-hybrid paths", reason)
 
     def _hess_grid_report(self, functional, pruned, rad_npts, ang_npts,
-                          hess_type="analytical"):
+                          hess_type="analytical", method="tdhf", state=1):
         config = {
-            "input": {"method": "tdhf", "runtype": "hess",
+            "input": {"method": method, "runtype": "hess",
                       "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
                       "basis": "sto-3g", "functional": functional},
             "scf": {"type": "rhf", "multiplicity": 1},
             "tdhf": {"type": "rpa", "nstate": 2, "multiplicity": 1},
-            "hess": {"type": hess_type, "state": 1, "nproc": 1,
+            "hess": {"type": hess_type, "state": state, "nproc": 1,
                      "temperature": [298.15]},
             "dftgrid": {"pruned": pruned, "rad_npts": rad_npts,
                         "ang_npts": ang_npts},
@@ -359,6 +359,25 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(self._grid_warnings(
             self._hess_grid_report("svwn", "SG2", 96, 302,
                                    hess_type="numerical")))
+        # The ground-state HF/DFT analytic Hessian is a different, older kernel
+        # whose grid behaviour was not measured here, so it must not pick up an
+        # excited-state warning it knows nothing about.
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("pbe", "SG2", 96, 302,
+                                   method="hf", state=0)))
+
+    def test_only_real_pruning_schemes_count_as_pruned(self):
+        # source/dftlib/dft.F90 pruning is `select case` over SG0/SG1/SG2/SG3
+        # with no `case default`, so any other spelling leaves the grid
+        # unpruned and must not be reported as pruned.
+        for pruned in ("SG0", "SG1", "SG2", "SG3"):
+            with self.subTest(pruned=pruned, expect="warn"):
+                self.assertTrue(self._grid_warnings(
+                    self._hess_grid_report("svwn", pruned, 128, 590)))
+        for pruned in ("", "none", "off", "false", "no"):
+            with self.subTest(pruned=pruned, expect="quiet"):
+                self.assertFalse(self._grid_warnings(
+                    self._hess_grid_report("svwn", pruned, 128, 590)))
 
     def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
         config = {
