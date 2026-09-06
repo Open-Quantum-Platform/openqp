@@ -68,12 +68,18 @@ CASES = {
 def _runtime_available() -> bool:
     if not RUN_LIVE:
         return False
+    os.environ.setdefault("OPENQP_ROOT", str(ROOT))
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
-        os.environ.setdefault("OMP_NUM_THREADS", "1")
         from oqp.pyoqp import Runner  # noqa: F401
     except Exception:
-        return False
+        # Setting OPENQP_RUN_TDHF_HESSIAN_REGRESSION=1 is an explicit request
+        # to run the live comparison, and CI sets it. Swallowing an import
+        # failure here would report every Hessian comparison as skipped and
+        # leave the suite green with the gate never having run -- the exact
+        # failure mode this gate exists to prevent. Fail loudly instead; the
+        # same reasoning as OQP_REQUIRE_NATIVE_TESTS in .github/workflows/CI.yml.
+        raise
     return True
 
 
