@@ -149,7 +149,13 @@ def _run_hessian(case: Case, hess_type: str, workdir: Path) -> np.ndarray:
 @pytest.mark.parametrize("name", CASES)
 def test_live_tdhf_analytic_hessian_matches_numerical(name, tmp_path, monkeypatch):
     """Compare the production analytic result with its gradient finite difference."""
-    monkeypatch.setenv("OPENQP_ROOT", str(ROOT))
+    # Respect an OPENQP_ROOT supplied by the environment: CI points it at the
+    # *installed* package directory (see .github/workflows/CI.yml), which is
+    # where liboqp lives there. Hard-overriding it to the source tree, which
+    # carries no lib/, would break the run in exactly the job that can execute
+    # it. Falling back to the repo root keeps source-tree runs working. This
+    # matches tests/test_cam_hessian.py and tests/test_rhf_hessian_dfunc.py.
+    monkeypatch.setenv("OPENQP_ROOT", os.environ.get("OPENQP_ROOT", str(ROOT)))
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     case = CASES[name]
     workdir = tmp_path / name
