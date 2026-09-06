@@ -97,12 +97,24 @@ contains
     real(kind=dp), allocatable :: de_internal(:,:)
 
     logical :: do_cam = .false.
+!<  Saved pass state, so a CAM call leaves the caller's compute object exactly
+!<  as it found it (see the restore below).
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(de_internal, mold=de)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
     ! Regular Coulomb and exchange
@@ -127,6 +139,21 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
+
+      ! Put the object back the way it arrived. The two passes above rewrite
+      ! every pass-specific field, and pass 2 in particular leaves
+      ! attenuated=.true. and coulscale=0. Restoring here -- rather than
+      ! papering over it in the non-CAM branch -- keeps a compute object that
+      ! is reused across calls correct: otherwise a later full-range call
+      ! silently drops all Coulomb, keeps the CAM exchange scales, and (for the
+      ! MRSF digest, which skips its spin-pair-coupling terms when attenuated)
+      ! drops those too.
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
     else
       ! Only adopt the DFT hybrid mixing here for actual DFT calculations
       ! (hamilton>=20).  For pure Hartree-Fock the caller already set the
@@ -436,12 +463,23 @@ contains
     type(par_env_t) :: pe
 
     logical :: do_cam = .false.
+!<  Saved pass state -- see the matching restore, and the note in grd2_driver.
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(hess_internal, mold=hess)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
       ! Regular Coulomb and exchange.
@@ -466,6 +504,13 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_hess_driver(infos, basis, hess_internal, gcomp, cam=.false.)
       hess = hess + hess_internal
+
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
 
       deallocate(hess_internal)
       return
