@@ -6960,9 +6960,12 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                     "kernel aborts with more.",
                     value=f"{mpi_size} MPI ranks",
                     expected="1 rank",
-                    action="Run the analytic TD Hessian on a single rank (use "
-                           "OpenMP threads for parallelism), or set [hess] "
-                           "type=numerical, which parallelises over displacements.",
+                    # Deliberately not recommending OpenMP as the fallback:
+                    # tdhf_hessian does omp_set_num_threads(1) for the whole
+                    # kernel, so threads do not help this path either.
+                    action="Run the analytic TD Hessian on a single rank, or "
+                           "set [hess] type=numerical, which parallelises over "
+                           "displacements via [hess] nproc.",
                 )
 
     if method == "hf" and state > 0:
