@@ -23,7 +23,7 @@ contains
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use tdhf_response_operator_mod, only: apply_tdhf_ao_operators
-    use tdhf_hessian_z_rhs_mod, only: explicit_channel_derivative_matrix
+    use tdhf_hessian_z_rhs_mod, only: explicit_channel_derivative_matrix, BLK_OV
     use tdhf_hessian_response_mod, only: assemble_tdhf_sigma_derivative
     use messages, only: show_message, WITH_ABORT
 
@@ -87,8 +87,9 @@ contains
     call ao_to_mo(amb_ao(:,:,1), mo, gminus, work)
     call ao_to_mo(apb_ao(:,:,2), mo, gplus, work)
     allocate(deri_full_m(nbf,nbf,ncart),deri_full_p(nbf,nbf,ncart))
-    call explicit_channel_derivative_matrix(infos,mo,pu,-1,deri_full_m)
-    call explicit_channel_derivative_matrix(infos,mo,pv,+1,deri_full_p)
+    ! Only the occupied-virtual block is read (deri_m/deri_p below).
+    call explicit_channel_derivative_matrix(infos,mo,pu,-1,deri_full_m,blocks=BLK_OV)
+    call explicit_channel_derivative_matrix(infos,mo,pv,+1,deri_full_p,blocks=BLK_OV)
     if (infos%control%hamilton == 20 .and. enable_tddft_kxc_ground_response) then
       block
         use mod_dft, only: dft_initialize,dftclean

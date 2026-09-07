@@ -34,7 +34,8 @@ contains
     use tdhf_hessian_orbital_mod, only: build_tdhf_ground_orbital_response
     use tdhf_hessian_rhs_mod, only: build_tdhf_amplitude_derivative_actions
     use tdhf_hessian_response_mod, only: solve_tdhf_amplitude_response, solve_tdhf_z_response
-    use tdhf_hessian_z_rhs_mod, only: build_tdhf_z_rhs_derivative
+    use tdhf_hessian_z_rhs_mod, only: build_tdhf_z_rhs_derivative, &
+      reset_channel_derivative_cache
     use tdhf_hessian_density_mod, only: build_tdhf_relaxed_density_derivatives
     use tdhf_hessian_rows_mod, only: build_tdhf_response_rows_hf
     use tdhf_hessian_xc_mod, only: build_tdhf_xc_fixed_hessian, &
@@ -44,7 +45,6 @@ contains
     use parallel, only: par_env_t
     use messages, only: show_message, WITH_ABORT
     use, intrinsic :: iso_c_binding, only: c_null_char
-!$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads
 
     implicit none
 
@@ -60,13 +60,11 @@ contains
     logical::zero_orbital_connection
     logical::verified_functional
     character(len=size(infos%dft%xc_functional_name))::functional_name
-    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,omp_saved_threads,i
+    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,i
     type(par_env_t) :: pe
 
-    omp_saved_threads=1
-!$  omp_saved_threads=omp_get_max_threads()
-!$  call omp_set_num_threads(1)
     call pe%init(infos%mpiinfo%comm,infos%mpiinfo%usempi)
+    call reset_channel_derivative_cache()
     verified_functional=.true.
     if(infos%control%hamilton==20) then
       ! XC_functional_name is a fixed-size C buffer and may occupy all twenty
@@ -188,12 +186,12 @@ contains
     call infos%dat%alloc_or_die(OQP_tdhf_hessian,(/ncart,ncart/),hstore, &
       description='Native OpenQP analytic TDHF Hessian matrix')
     hstore=htotal
+    call reset_channel_derivative_cache()
     open(unit=iw,file=infos%log_filename,position='append')
     write(iw,'(/,A,1P,E12.4)') 'TDHF Hessian maximum amplitude-response residual: ',amp_res
     write(iw,'(A,1P,E12.4)') 'TDHF Hessian maximum Z-response residual: ',z_res
     write(iw,'(A,1P,E12.4)') 'TDHF Hessian unsymmetrized response-row asymmetry: ',asym
     close(iw)
-!$  call omp_set_num_threads(omp_saved_threads)
   end subroutine tdhf_hessian
 
 end module tdhf_hessian_mod

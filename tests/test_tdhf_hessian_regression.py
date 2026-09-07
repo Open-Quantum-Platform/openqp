@@ -152,6 +152,43 @@ def _run_hessian(case: Case, hess_type: str, workdir: Path) -> np.ndarray:
         "runtime to run TDHF Hessians"
     ),
 )
+def test_live_dft_hessian_consumers_stay_inside_their_probed_blocks(tmp_path, monkeypatch):
+    """Pin the block bookkeeping in explicit_channel_derivative_matrix.
+
+    The XC polarization loop probes only the MO block each consumer declares it
+    reads (occ-virt for the amplitude RHS, occ-occ|virt-virt for the Z RHS,
+    occ-occ for the relaxed density). With OQP_TDHESS_POISON_UNPROBED=1 every
+    unprobed element is NaN, so a consumer that reads outside its declared
+    block cannot produce a finite Hessian. A pure-TDHF case would not exercise
+    this: the XC loop only runs with a functional.
+    """
+    monkeypatch.setenv("OPENQP_ROOT", os.environ.get("OPENQP_ROOT", str(ROOT)))
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setenv("OQP_TDHESS_POISON_UNPROBED", "1")
+    from oqp.pyoqp import Runner
+
+    workdir = tmp_path / "poison"
+    workdir.mkdir()
+    inp = workdir / "svwn.inp"
+    inp.write_text(
+        INPUT.format(system=CASES["h2o"].system, charge=0, hess_type="analytical")
+        .replace("functional=\n", "functional=svwn\n")
+    )
+    assert "functional=svwn" in inp.read_text()
+    runner = Runner(project="svwn", input_file=str(inp), log=str(workdir / "svwn.log"))
+    runner.run()
+    hessian = np.asarray(runner.mol.hessian, dtype=float)
+    assert hessian.shape == (9, 9)
+    assert np.all(np.isfinite(hessian)), "a consumer read an unprobed (NaN) block"
+
+
+@pytest.mark.skipif(
+    not RUNTIME_AVAILABLE,
+    reason=(
+        "set OPENQP_RUN_TDHF_HESSIAN_REGRESSION=1 and use a built OpenQP "
+        "runtime to run TDHF Hessians"
+    ),
+)
 @pytest.mark.parametrize("name", CASES)
 def test_live_tdhf_analytic_hessian_matches_numerical(name, tmp_path, monkeypatch):
     """Compare the production analytic result with its gradient finite difference."""
