@@ -1,0 +1,78 @@
+# MRSF-TDDFT surface-hopping (FSSH) NAMD with ESPF QM/MM in a PERIODIC solvent
+# box, across a covalent QM/MM boundary (hydrogen link atom).
+#
+# System: the alanine dipeptide solvated by 106 TIP3P waters in a 16 A cubic
+# box (ala_box.pdb, AMBER-14 + TIP3P).  QM = the C-terminal amide (ALA C,O +
+# NH2) + the link H on the cut ALA C-CA bond, MRSF-TDDFT/BHHLYP/6-31G.
+#
+# `cutoff = PME` selects the periodic branch: the QM/MM electrostatics are
+# evaluated by Ewald summation (MM potential and forces at every QM centre,
+# plus the interaction of the QM charges with their own periodic images, made
+# self-consistent with the ESPF charges; see docs/qmmm_ewald.md).  The four
+# periodic/embedding controls of the [qmmm] section are all exercised here:
+#   ewald_tol       OpenMM PME error tolerance for the MM-MM part (1e-6 for
+#                   energy-conservation work; OpenMM's default is 5e-4),
+#   lj_switch       switched Lennard-Jones cutoff (a plain cutoff drifts in NVE),
+#   h_lj            Lennard-Jones parameters on MM hydrogens that have none
+#                   (TIP3P H), a Pauli wall against the QM density,
+#   mm_charge_width Gaussian-smeared MM charges (width in Angstrom): the QM-MM
+#                   Coulomb kernel becomes erf(mu r)/r, mu = 1/(sqrt(2) w).
+#
+# Minimal two-step demonstration; part of `openqp --run_tests all`, reported
+# SKIPPED when the optional OpenMM backend is not installed.
+[input]
+system=ala_box.pdb 9 10 17 18 19
+charge=0
+runtype=namd
+basis=6-31g
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1e-9
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=1
+
+[properties]
+grad=1
+
+[md]
+nstep=2
+dt=0.5
+active=1
+substep=50
+init_temp=300
+velocity=maxwell
+seed=11
+rng_stream=1
+first_hop_step=1
+nacme_check=baeck_an
+nacme_gate=warn
+nve_gate=warn
+trajectory_interval=1
+restart_interval=2
+trajectory_file=ala-box.namd.trj
+restart_file=ala-box.namd.restart.npz
+decoherence=edc
+trivial=False
+soc=False
+
+[qmmm]
+pdb_file=ala_box.pdb
+forcefield_files=amber14-all.xml amber14/tip3p.xml
+qm_atoms=8,9,16,17,18
+cutoff=PME
+embedding=electrostatic
+ewald_tol=1e-6
+lj_switch=true
+h_lj=true
+mm_charge_width=0.7

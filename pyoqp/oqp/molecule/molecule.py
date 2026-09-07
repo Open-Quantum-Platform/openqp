@@ -2537,6 +2537,28 @@ class Molecule:
         """Deallocate oqp data object"""
         self.data = None
 
+    def _resolve_system_pdb_path(self):
+        """``[input] system = file.pdb <QM indices>``: when the PDB is not
+        found relative to the working directory, look next to the input file
+        (the rule the ``[qmmm]`` auxiliary files already follow), so a QM/MM
+        deck can be run from any directory, e.g. by ``openqp --run_tests``."""
+        try:
+            system = self.config['input'].get('system', '')
+        except (KeyError, TypeError, AttributeError):
+            return
+        if not isinstance(system, str) or '.pdb' not in system.lower():
+            return
+        stripped = system.strip()
+        end = stripped.lower().find('.pdb') + 4
+        pdb_path, suffix = stripped[:end].strip(), stripped[end:]
+        input_file = getattr(self, 'input_file', None)
+        if (os.path.isabs(pdb_path) or os.path.exists(pdb_path)
+                or not isinstance(input_file, str) or not input_file):
+            return
+        candidate = os.path.join(os.path.dirname(os.path.abspath(input_file)), pdb_path)
+        if os.path.exists(candidate):
+            self.config['input']['system'] = candidate + suffix
+
     @mpi_get_attr
     def get_config(self, input_source):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
@@ -2567,6 +2589,7 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
+        self._resolve_system_pdb_path()
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz

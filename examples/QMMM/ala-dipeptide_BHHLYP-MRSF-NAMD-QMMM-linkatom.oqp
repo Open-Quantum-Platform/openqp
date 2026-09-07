@@ -1,0 +1,4 @@
+mrsf(nstate=2)/bhhlyp/6-31g
+namd(S0,nstep=2,substep=50,seed=3,nacme_gate=warn,trajectory_interval=1,restart_interval=2,trajectory_file="ala-linkatom.namd.trj",restart_file="ala-linkatom.namd.restart.npz")
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18")
+geom="ala.pdb 9 10 17 18 19"

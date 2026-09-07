@@ -31,7 +31,9 @@ The QM charges interact with their own images, `E_img = 1/2 q^T psi_img q`,
 and `q` depends on the field. The driver solves this from outside the SCF:
 the embedded SCF runs in `phi_eff = Phi^MM + psi_img q` and is repeated until
 the ESPF charges are stable to 1e-7 e (3-4 iterations; the previous MD step's
-charges seed the loop). The total energy is
+charges seed the loop). If the loop has not converged after 50 iterations the
+run stops with a `RuntimeError` rather than continuing with an inconsistent
+energy/force pair (`OpenQpQMMM.IMAGE_MAXITER` / `IMAGE_TOL`). The total energy is
 
     E = E_QM[phi_eff] + Z.phi_eff - 1/2 q^T psi_img q + E_MM
 
@@ -66,6 +68,16 @@ kJ/mol/nm) and must not be used for dynamics.
 Note: `OpenQpQMMM` in config mode used to write the QM geometry with six
 decimals (Angstrom); the 5e-7 A rounding was a 0.3-0.9 kJ/mol/nm floor in
 every finite-difference force test. It now writes twelve decimals.
+
+## When the branch is used
+
+The Ewald branch is entered for the periodic OpenMM nonbonded methods only
+(`[qmmm] cutoff = PME`, `Ewald`, `LJPME`, `CutoffPeriodic`); `NoCutoff` and
+`CutoffNonPeriodic` are treated as a finite cluster with the direct Coulomb
+sum even when the PDB carries a `CRYST1` record. A periodic method with no box
+vectors is an error, and only orthorhombic boxes are accepted. The
+tight-binding NAMD path (`method=dftb/xtb`) has no ESPF charge operator to
+iterate on and raises `NotImplementedError` under a periodic cutoff.
 
 ## Keys
 

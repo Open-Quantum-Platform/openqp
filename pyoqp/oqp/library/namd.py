@@ -3802,7 +3802,8 @@ class NAMD_QMMM(NAMD):
         hamiltonian_options = {
             key: qmmm_config.get(key)
             for key in ('embedding', 'frontier_scheme', 'cutoff',
-                        'nonbondedmethod')
+                        'nonbondedmethod', 'ewald_tol', 'lj_switch', 'h_lj',
+                        'mm_charge_width')
             if key in qmmm_config
         }
         digest = _restart_identity_digest(
@@ -4002,6 +4003,16 @@ class NAMD_QMMM(NAMD):
         full-system velocity array; link rows are discarded."""
         self.v_all[self.qm_atoms] = np.asarray(vel)[:self.nqm]
 
+    def _fold_link_charges(self, pchg):
+        """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
+        to its QM host so the total QM charge is conserved when the QM region
+        is represented by point charges on the real QM atoms only."""
+        pchg = np.asarray(pchg, dtype=float)
+        q = pchg[:self.nqm].copy()
+        for a, l in enumerate(self.link_atoms):
+            q[l.host_row] += pchg[self.nqm + a]
+        return q
+
     def _project_link_rows(self, g):
         """Chain-rule a (natom, 3) QM-centre gradient/force onto the real QM
         atoms: returns (g_qm (nqm,3), mm_host contributions {mm_index: (3,)})."""
@@ -4033,7 +4044,18 @@ class NAMD_QMMM(NAMD):
                 raise NotImplementedError(
                     "NAMD QM/MM with method=dftb/xtb requires [qmmm] embedding="
                     "electrostatic/espf (full-ESPF scheme).")
+            if self.driver._ewald() is not None:
+                # The periodic QM-image self-consistency below needs the ESPF
+                # charge operator of the native path; the tight-binding backend
+                # exposes no equivalent, so a periodic DFTB/xTB NAMD would
+                # silently drop the image term and its energy correction.
+                raise NotImplementedError(
+                    "NAMD QM/MM with method=dftb/xtb is implemented for non-"
+                    "periodic clusters only ([qmmm] cutoff=NoCutoff); the "
+                    "periodic (PME/Ewald) QM-image self-consistency is not "
+                    "available for the tight-binding backend.")
             mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            self._e_img, self._f_img = 0.0, None
             sp = SinglePoint(mol)
             ref = sp.reference()
             if with_overlap:
@@ -4063,7 +4085,8 @@ class NAMD_QMMM(NAMD):
         else:
             psi_img = dpsi_img = None
             q_prev = None
-        for it in range(50):
+        converged = psi_img is None
+        for it in range(self.driver.IMAGE_MAXITER):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
             mol.data["OQP::POTQM"] = np.zeros((nat, nat))
@@ -4077,11 +4100,20 @@ class NAMD_QMMM(NAMD):
                 break
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
-            if np.abs(q_new - q_prev).max() < 1e-7:
+            delta = float(np.abs(q_new - q_prev).max())
+            if delta < self.driver.IMAGE_TOL:
                 q_prev = q_new
+                converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
             sp._prep_guess()
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
+                f"did not converge in {self.driver.IMAGE_MAXITER} iterations "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                "energy/force would be inconsistent.  Tighten [scf] conv or "
+                "check the QM/MM contacts.")
         if psi_img is not None:
             self._q_img = q_prev.copy()
             self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
@@ -4182,8 +4214,11 @@ class NAMD_QMMM(NAMD):
             force, epot = self._total_force_espf(potmm, gqm, pchg)
             return self._apply_odp_to_force_energy(force, epot)
 
-        # MM forces with embedded QM charges (OpenMM units)
-        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        # MM forces with embedded QM charges (OpenMM units).  Link atoms are
+        # not MM particles: fold each link charge onto its QM host so the
+        # charge the QM region presents to the MM electrostatics is conserved
+        # (same rule as OpenQpQMMM.compute_force).
+        emm_q, gmm_q = self.driver.forces_mm(self._fold_link_charges(pchg))
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
 
@@ -5422,7 +5457,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         else:
             psi_img = dpsi_img = None
             q_prev = None
-        for it in range(50):
+        converged = psi_img is None
+        for it in range(self.driver.IMAGE_MAXITER):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
             mol.data["OQP::POTQM"] = np.zeros((nat, nat))
@@ -5436,11 +5472,20 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 break
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
-            if np.abs(q_new - q_prev).max() < 1e-7:
+            delta = float(np.abs(q_new - q_prev).max())
+            if delta < self.driver.IMAGE_TOL:
                 q_prev = q_new
+                converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
             sp._prep_guess()
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
+                f"did not converge in {self.driver.IMAGE_MAXITER} iterations "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                "energy/force would be inconsistent.  Tighten [scf] conv or "
+                "check the QM/MM contacts.")
         if psi_img is not None:
             self._q_img = q_prev.copy()
             self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
@@ -5563,6 +5608,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             eqm -= float(getattr(self, "_e_img", 0.0))          # image double counting
             return f_all, eqm + emm
 
+        if len(self.driver.link_atoms):
+            raise NotImplementedError(
+                "SOC-NAMD across a covalent QM/MM boundary is supported only in "
+                "the full-ESPF scheme ([qmmm] embedding=electrostatic); the "
+                "legacy split scheme does not project the link-atom rows.")
         emm_q, gmm_q = self.driver.forces_mm(pchg)
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE

@@ -140,8 +140,15 @@ class OpenQpQMMM:
         # ESPF code applies the same erf damping (its ERFMU keyword).  Energy and
         # force are modified consistently (direct sum and Ewald real-space part);
         # MM-MM interactions and the QM-image term are untouched.
-        self.mm_damp_mu = (None if mm_charge_width in (None, 0, 0.0)
-                           else 1.0 / (np.sqrt(2.0) * float(mm_charge_width) * 1.8897259886))
+        if mm_charge_width in (None, 0, 0.0):
+            self.mm_damp_mu = None
+        else:
+            w = float(mm_charge_width)
+            if not np.isfinite(w) or w <= 0.0:
+                raise ValueError(
+                    f"[qmmm] mm_charge_width must be a finite positive width in "
+                    f"Angstrom (or 0/unset for point charges); got {mm_charge_width!r}")
+            self.mm_damp_mu = 1.0 / (np.sqrt(2.0) * w * 1.8897259886)
         # Give Lennard-Jones parameters to MM hydrogens that have none (TIP3P
         # water H: sigma 1 nm / epsilon 0 in the AMBER XML).  Without them
         # nothing keeps a water hydrogen from collapsing onto a QM oxygen (the
@@ -159,6 +166,11 @@ class OpenQpQMMM:
         # default 5e-4).  Tighten (1e-6) for force/energy consistency checks and
         # NVE validation: the default's force error (~0.5 kJ/mol/nm) is the
         # floor of any finite-difference test on a periodic box.
+        if ewald_tol is not None:
+            ewald_tol = float(ewald_tol)
+            if not np.isfinite(ewald_tol) or ewald_tol <= 0.0:
+                raise ValueError(
+                    f"[qmmm] ewald_tol must be a finite positive tolerance; got {ewald_tol!r}")
         self.ewald_tol = ewald_tol
         if oqp_cfg is None and mol is None:
             raise ValueError("Either 'oqp_cfg' or 'mol' must be provided.")
@@ -623,15 +635,25 @@ class OpenQpQMMM:
             n = len(potmm)
             q_prev = (self._q_prev if getattr(self, "_q_prev", None) is not None
                       and len(self._q_prev) == n else np.zeros(n))
-            for it in range(50):
+            converged = False
+            for it in range(self.IMAGE_MAXITER):
                 phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
                 eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
                 q_new = np.array(pchg_qm, dtype=float)
-                if np.abs(q_new - q_prev).max() < 1e-7:
+                delta = float(np.abs(q_new - q_prev).max())
+                if delta < self.IMAGE_TOL:
+                    converged = True
                     break
                 q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
             self._q_prev = q_new.copy()
             self._image_iterations = it + 1
+            if not converged:
+                raise RuntimeError(
+                    f"Periodic ESPF QM/MM: the QM-image charge self-consistency "
+                    f"did not converge in {self.IMAGE_MAXITER} iterations "
+                    f"(max |dq| = {delta:.2e} e > {self.IMAGE_TOL:.0e}); the "
+                    "energy/force would be inconsistent.  Tighten the SCF "
+                    "convergence or check the QM/MM contacts.")
             e_img = 0.5 * float(q_new @ psi_img @ q_new)                    # Hartree
             f_img = -np.einsum("a,b,abc->ac", q_new, q_new, dpsi)           # Hartree/bohr
             return self._assemble_force_espf(
@@ -739,6 +761,8 @@ class OpenQpQMMM:
             for atom in topology.atoms():
                 if atom.element is None or atom.element.atomic_number != 1:
                     continue
+                if int(atom.index) in qm_set:
+                    continue          # QM hydrogens keep their own LJ parameters
                 q, sig, eps = nonbonded.getParticleParameters(atom.index)
                 if eps.value_in_unit(unit.kilojoule_per_mole) == 0.0:
                     nonbonded.setParticleParameters(atom.index, q, sig_h, eps_h)
@@ -915,17 +939,40 @@ class OpenQpQMMM:
         return assemble_embedding_sites(
             mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals)
 
+    #: OpenMM nonbonded methods that impose periodic boundary conditions; the
+    #: QM/MM electrostatics go through the Ewald branch only for these.
+    _PERIODIC_METHODS = tuple(m for m in (
+        getattr(app, "PME", None), getattr(app, "Ewald", None),
+        getattr(app, "LJPME", None), getattr(app, "CutoffPeriodic", None))
+        if m is not None)
+
+    def _is_periodic(self):
+        """True when the MM nonbonded method is a periodic one (PME, Ewald,
+        LJPME, CutoffPeriodic).  NoCutoff and CutoffNonPeriodic are treated as
+        a finite cluster even if the topology carries box vectors."""
+        return any(self.Cutoff is m for m in self._PERIODIC_METHODS)
+
+    #: QM-image charge self-consistency loop (periodic full-ESPF): iteration
+    #: cap and convergence threshold on the ESPF charges (e).
+    IMAGE_MAXITER = 50
+    IMAGE_TOL = 1e-7
+
     def _box_lengths_bohr(self):
         """Orthorhombic periodic box lengths (bohr), or None when the QM/MM
-        electrostatics are non-periodic (NoCutoff). Used for the minimum-image
-        real-space QM-MM electrostatics under PBC."""
-        if self.Cutoff is app.NoCutoff:
+        electrostatics are non-periodic (NoCutoff / CutoffNonPeriodic). Used
+        for the Ewald / minimum-image QM-MM electrostatics under PBC."""
+        if not self._is_periodic():
             return None
         vecs = self.topology.getPeriodicBoxVectors()
         if vecs is None:
-            return None
+            raise ValueError(
+                f"[qmmm] cutoff={self.Cutoff} is periodic but the PDB topology "
+                "carries no box vectors (CRYST1 record).")
         box = np.array([[c.value_in_unit(unit.angstrom) for c in v] for v in vecs])
-        # orthorhombic diagonal (water-box QM/MM); off-diagonal ignored
+        if np.abs(box - np.diag(np.diag(box))).max() > 1e-8:
+            raise NotImplementedError(
+                "Periodic ESPF QM/MM supports orthorhombic boxes only; the PDB "
+                "box vectors are not diagonal.")
         return np.diag(box) * self._ANG2BOHR
 
     def _min_image(self, d, box):
