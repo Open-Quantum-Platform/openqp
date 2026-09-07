@@ -97,6 +97,19 @@ def read_xyz(filepath):
 #: box vectors.  (LJPME is not accepted by the [qmmm] cutoff parser.)
 PERIODIC_METHODS = (app.PME, app.Ewald, app.CutoffPeriodic)
 
+#: Accepted [qmmm] embedding spellings (ported from PR #274).
+_VALID_EMBEDDINGS = {"mechanical", "electrostatic", "espf", "espf_full", "split"}
+
+
+def _normalize_embedding(value):
+    """Lower-cased, stripped embedding keyword; rejects unknown spellings so a
+    typo cannot silently select a different scheme."""
+    embedding = str(value).strip().lower()
+    if embedding not in _VALID_EMBEDDINGS:
+        choices = ", ".join(sorted(_VALID_EMBEDDINGS))
+        raise ValueError(f"Unknown QM/MM embedding '{value}'. Choices: {choices}")
+    return embedding
+
 
 def is_periodic_method(cutoff):
     """True when ``cutoff`` (an OpenMM nonbonded-method constant) is periodic."""
@@ -206,7 +219,7 @@ class OpenQpQMMM:
         # calculation (the engine already sees the atoms in topology order).
         self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
         self.Cutoff = Cutoff
-        self.Embedding = Embedding
+        self.Embedding = _normalize_embedding(Embedding)
 
         self.use_mol = mol is not None
 
@@ -225,7 +238,7 @@ class OpenQpQMMM:
         # whole-molecule and covalent-boundary QM regions, so it is the default
         # for electrostatic embedding. ("split" selects the legacy scheme that
         # routes QM charges through OpenMM point charges -- kept for reference.)
-        self.espf_full = str(Embedding).lower() in (
+        self.espf_full = self.Embedding in (
             "espf", "espf_full", "electrostatic")
 
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
@@ -340,7 +353,11 @@ class OpenQpQMMM:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
             if is_tb_method(str(self.mol.config['input']['method'])):
-                return self._forces_qm_dftb(self.mol, potmm)
+                # Native AO-based methods need explicit zero POTMM/POTQM
+                # records in mechanical QM/MM, but the tight-binding adapter
+                # uses ``None`` as its gas-phase/mechanical contract.
+                tb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.mol, tb_potmm)
             sp = SinglePoint(self.mol)
             sp._prep_guess()
 
@@ -386,7 +403,8 @@ class OpenQpQMMM:
             self.oqp_cfg_base["input.system"] = xyz_atoms
             self.op = OPENQP(self.oqp_cfg_base, True)
             if is_tb_method(str(self.op.mol.config['input']['method'])):
-                return self._forces_qm_dftb(self.op.mol, potmm)
+                tb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.op.mol, tb_potmm)
             self.op.sp._prep_guess()
 
             self.op.mol.data["OQP::POTMM"] = potmm
@@ -633,6 +651,19 @@ class OpenQpQMMM:
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
+        elif self.Embedding == "mechanical":
+            # Mechanical embedding (PR #274): the QM subsystem sees no MM
+            # field, so the SCF is gas-phase and the QM-MM electrostatics is
+            # left to OpenMM (QM ESP charges in forces_mm).  The embedding
+            # arrays must still exist and be ZERO rather than absent:
+            # scf.F90 calls add_potqm_contributions on every SCF iteration
+            # whenever qmmm_flag is set and aborts on a missing OQP::POTQM
+            # record ("Record `OQP::POTQM` not found!"); grad_esp_qmmm needs
+            # OQP::POTMM the same way.  A zero field reproduces gas-phase QM
+            # exactly (adds 0 to hcore, 0 to the ESPF gradient, 0 to eqm).
+            potmm, potqm = self._zero_embedding()
+        else:   # guarded in __init__; keep a local invariant
+            raise ValueError(f"Unknown QM/MM embedding '{self.Embedding}'")
 
         if (self.espf_full and self._ewald() is not None
                 and os.environ.get("OQP_EWALD_NO_IMAGE", "").strip() not in ("1", "on")):
@@ -878,6 +909,12 @@ class OpenQpQMMM:
          "simor": simor,
         }
 
+
+    def _zero_embedding(self):
+        """Zero MM potential over every QM centre (real QM atoms + link
+        atoms), sized like the arrays the ESPF path builds (nqm + nlink)."""
+        n = len(self.qm_atoms) + len(self.link_atoms)
+        return np.zeros(n), np.zeros((n, n))
 
     def _pad_potential_for_link_atoms(self, potmm, potqm):
        """Extend the ESPF embedding arrays to cover hydrogen link atoms.
