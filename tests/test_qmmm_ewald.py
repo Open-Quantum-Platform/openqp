@@ -36,6 +36,21 @@ class TestEwaldQMMM(unittest.TestCase):
         self.r_qm = np.array([[7.0, 8.0, 7.5], [8.4, 8.2, 7.1], [6.9, 9.3, 8.0]])
         self.q_qm = np.array([0.3, -0.5, 0.2])
 
+    def test_damping_width_bound(self):
+        ang = 1.8897259886
+        ew = EwaldQMMM(np.array([16.0, 16.0, 16.0]) * ang)     # the example box
+        w_max = ew.max_damping_width()
+        # a 0.7 A Gaussian (the Tinker default) is fine in a 16 A box (bound
+        # 1.26 A); the bound scales with the real-space cutoff (half the
+        # shortest edge), so the 14-bohr test box of setUp rejects 0.7 A
+        self.assertGreater(w_max, 0.7 * ang)
+        self.assertLess(self.ew.max_damping_width(), 0.7 * ang)
+        self.assertAlmostEqual(w_max, ew.rc / (np.sqrt(2.0) * 4.5), places=12)
+        ew.check_damping(None)
+        ew.check_damping(1.0 / (np.sqrt(2.0) * 0.7 * ang))
+        with self.assertRaisesRegex(ValueError, 'mm_charge_width'):
+            ew.check_damping(1.0 / (np.sqrt(2.0) * 1.05 * w_max))
+
     def test_potential_matches_explicit_lattice_sum(self):
         # The Ewald (tin-foil, zero-average) potential and a direct sum over a
         # block of images differ by a constant fixed by the second moment of the

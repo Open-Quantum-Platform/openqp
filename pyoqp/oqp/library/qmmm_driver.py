@@ -91,6 +91,18 @@ def read_xyz(filepath):
     return symbols, np.array(coords)
 
 
+#: OpenMM nonbonded methods that impose periodic boundary conditions.  The
+#: QM/MM electrostatics go through the Ewald branch only for these; NoCutoff
+#: and CutoffNonPeriodic are a finite cluster even when the topology carries
+#: box vectors.  (LJPME is not accepted by the [qmmm] cutoff parser.)
+PERIODIC_METHODS = (app.PME, app.Ewald, app.CutoffPeriodic)
+
+
+def is_periodic_method(cutoff):
+    """True when ``cutoff`` (an OpenMM nonbonded-method constant) is periodic."""
+    return any(cutoff is m for m in PERIODIC_METHODS)
+
+
 def _periodic_nonbonded_cutoff(topology, cutoff_method):
     """Return a safe OpenMM nonbonded cutoff for the current periodic box."""
     if cutoff_method is app.NoCutoff:
@@ -636,7 +648,8 @@ class OpenQpQMMM:
             q_prev = (self._q_prev if getattr(self, "_q_prev", None) is not None
                       and len(self._q_prev) == n else np.zeros(n))
             converged = False
-            for it in range(self.IMAGE_MAXITER):
+            delta, it = float("inf"), -1
+            for it in range(int(self.IMAGE_MAXITER)):
                 phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
                 eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
                 q_new = np.array(pchg_qm, dtype=float)
@@ -645,15 +658,15 @@ class OpenQpQMMM:
                     converged = True
                     break
                 q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
-            self._q_prev = q_new.copy()
-            self._image_iterations = it + 1
             if not converged:
                 raise RuntimeError(
                     f"Periodic ESPF QM/MM: the QM-image charge self-consistency "
-                    f"did not converge in {self.IMAGE_MAXITER} iterations "
+                    f"did not converge in {it + 1} iterations "
                     f"(max |dq| = {delta:.2e} e > {self.IMAGE_TOL:.0e}); the "
                     "energy/force would be inconsistent.  Tighten the SCF "
                     "convergence or check the QM/MM contacts.")
+            self._q_prev = q_new.copy()
+            self._image_iterations = it + 1
             e_img = 0.5 * float(q_new @ psi_img @ q_new)                    # Hartree
             f_img = -np.einsum("a,b,abc->ac", q_new, q_new, dpsi)           # Hartree/bohr
             return self._assemble_force_espf(
@@ -745,7 +758,7 @@ class OpenQpQMMM:
         Cutoff=self.Cutoff
         nb_cutoff = _periodic_nonbonded_cutoff(topology, Cutoff)
 
-        _ew = {} if (self.ewald_tol is None or Cutoff is app.NoCutoff) else {
+        _ew = {} if (self.ewald_tol is None or not is_periodic_method(Cutoff)) else {
             "ewaldErrorTolerance": float(self.ewald_tol)}
         system=forcefield.createSystem(
             topology, nonbondedMethod=Cutoff, nonbondedCutoff=nb_cutoff,
@@ -842,7 +855,7 @@ class OpenQpQMMM:
            else:
               if not isinstance(f, mm.CMMotionRemover): exit(f"Force not found")
 
-        if Cutoff is not app.NoCutoff:
+        if is_periodic_method(Cutoff):
            sysew=forcefield.createSystem(
                topology, nonbondedMethod=app.Ewald, nonbondedCutoff=nb_cutoff,
                constraints=None, rigidWater=False, **_ew)
@@ -939,18 +952,11 @@ class OpenQpQMMM:
         return assemble_embedding_sites(
             mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals)
 
-    #: OpenMM nonbonded methods that impose periodic boundary conditions; the
-    #: QM/MM electrostatics go through the Ewald branch only for these.
-    _PERIODIC_METHODS = tuple(m for m in (
-        getattr(app, "PME", None), getattr(app, "Ewald", None),
-        getattr(app, "LJPME", None), getattr(app, "CutoffPeriodic", None))
-        if m is not None)
-
     def _is_periodic(self):
         """True when the MM nonbonded method is a periodic one (PME, Ewald,
-        LJPME, CutoffPeriodic).  NoCutoff and CutoffNonPeriodic are treated as
-        a finite cluster even if the topology carries box vectors."""
-        return any(self.Cutoff is m for m in self._PERIODIC_METHODS)
+        CutoffPeriodic).  NoCutoff and CutoffNonPeriodic are treated as a
+        finite cluster even if the topology carries box vectors."""
+        return is_periodic_method(self.Cutoff)
 
     #: QM-image charge self-consistency loop (periodic full-ESPF): iteration
     #: cap and convergence threshold on the ESPF charges (e).
@@ -1009,6 +1015,7 @@ class OpenQpQMMM:
         cached = getattr(self, "_ewald_obj", None)
         if cached is None or not np.allclose(cached.box, box):
             self._ewald_obj = EwaldQMMM(box)
+            self._ewald_obj.check_damping(self.mm_damp_mu)
         return self._ewald_obj
 
     def _full_field_potmm(self):
@@ -1111,7 +1118,7 @@ class OpenQpQMMM:
        # Non-periodic embedding has no Ewald QM-QM self-interaction, so the
        # QM-QM correction potential is identically zero. Return a zero matrix
        # (not None) so the Fortran add_potqm_contributions has a valid record.
-       if self.Cutoff == app.NoCutoff:
+       if not self._is_periodic():
            return self._pad_potential_for_link_atoms(
                potmm, np.zeros((len(self.qm_atoms), len(self.qm_atoms)))
            )

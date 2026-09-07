@@ -35,6 +35,7 @@ class EwaldQMMM:
             raise ValueError("EwaldQMMM needs an orthorhombic box with positive edges")
         self.box = box
         self.volume = float(np.prod(box))
+        self.tol = float(tol)
         self.rc = 0.5 * float(box.min())
         # erfc(beta*rc) ~ tol  ->  beta = x/rc with erfc(x)=tol
         x = 4.5 if tol <= 1e-9 else 4.0
@@ -57,6 +58,29 @@ class EwaldQMMM:
     # ------------------------------------------------------------------ #
     def _min_image(self, d):
         return d - self.box * np.round(d / self.box)
+
+    def max_damping_width(self):
+        """Largest Gaussian MM-charge width (bohr) for which the erf-damping
+        correction -erfc(mu r)/r, evaluated for the minimum image inside the
+        real-space cutoff only, is converged to the lattice-sum tolerance:
+        erfc(mu rc) <= tol  with  mu = 1/(sqrt(2) w)."""
+        x = 4.5 if self.tol <= 1e-9 else 4.0        # erfc(x) ~ tol, as for beta
+        return self.rc / (np.sqrt(2.0) * x)
+
+    def check_damping(self, mu):
+        """Raise unless the damping parameter ``mu`` (1/bohr) is short-ranged
+        on the real-space cutoff scale (see max_damping_width)."""
+        if mu is None:
+            return
+        w = 1.0 / (np.sqrt(2.0) * float(mu))
+        w_max = self.max_damping_width()
+        if w > w_max:
+            raise ValueError(
+                f"[qmmm] mm_charge_width = {w / 1.8897259886:.3f} A is too large "
+                f"for this box: the erf-damping correction is summed for the "
+                f"minimum image inside the real-space cutoff rc = "
+                f"{self.rc / 1.8897259886:.2f} A only, which needs a width <= "
+                f"{w_max / 1.8897259886:.3f} A (erfc(mu rc) <= {self.tol:.0e}).")
 
     def _real_pair(self, d, mu=None):
         """erfc(beta r)/r and its radial derivative for displacement(s) d.

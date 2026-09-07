@@ -5,7 +5,7 @@ import numpy as np
 import os
 from copy import deepcopy
 from sys import stdout
-from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz
+from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
 # ======================================================================
@@ -246,7 +246,7 @@ class QMMM_MD:
         self.pressure = float(qmmm_cfg.get("pressure", 1.0)) * unit.bar
         self.barostat_interval = int(qmmm_cfg.get("barostat_interval", 25))
 
-        if self.ensemble == "npt" and self.cutoff is app.NoCutoff:
+        if self.ensemble == "npt" and not is_periodic_method(self.cutoff):
             raise ValueError(
                 "NPT requires a periodic cutoff method "
                 "(PME / Ewald / CutoffPeriodic)."
@@ -518,7 +518,7 @@ class QMMM_MD:
         state_pre = self.simulation_md.context.getState(getPositions=True)
         pos_pre = state_pre.getPositions()
         sim0.context.setPositions(pos_pre)
-        if self.cutoff is not app.NoCutoff:
+        if is_periodic_method(self.cutoff):
             self.mm_systems["simew"].context.setPositions(pos_pre)
             self.mm_systems["simor"].context.setPositions(pos_pre)
         self._update_qmmm_force(pos_pre)
@@ -529,7 +529,7 @@ class QMMM_MD:
         pos0 = state_md.getPositions()
 
         sim0.context.setPositions(pos0)
-        if self.cutoff is not app.NoCutoff:
+        if is_periodic_method(self.cutoff):
             self.mm_systems["simew"].context.setPositions(pos0)
             self.mm_systems["simor"].context.setPositions(pos0)
 

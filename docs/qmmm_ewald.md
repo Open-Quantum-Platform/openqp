@@ -92,7 +92,11 @@ iterate on and raises `NotImplementedError` under a periodic cutoff.
   erf(mu r)/r with mu = 1/(sqrt(2) w), consistently in energy, QM and MM
   forces, direct sum and Ewald real-space part (MM-MM and the QM-image term
   are untouched). This is the erf damping (ERFMU) of the reference Tinker
-  ESPF code; w = 0.7 A corresponds to its default mu = 1/A. Point-charge
+  ESPF code; w = 0.7 A corresponds to its default mu = 1/A. Under PBC the
+  damping correction -erfc(mu r)/r is summed for the minimum image inside
+  the real-space cutoff rc = L_min/2 only, so the width is limited to
+  w <= rc/(4.5 sqrt 2) (1.26 A for a 16 A box); larger values are rejected
+  (`EwaldQMMM.check_damping`). Point-charge
   embedding otherwise lets a TIP3P hydrogen collapse onto a QM carbonyl
   oxygen (2.25 -> 1.45 A in 90 fs of MRSF dynamics) through a polarisation
   runaway of the ESPF charges, after which the MRSF Z-vector equations

@@ -3675,7 +3675,8 @@ class NAMD_QMMM(NAMD):
         self._qmmm_restart_identity_cache = None
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
-        self.periodic = self.cutoff is not app.NoCutoff
+        from oqp.library.qmmm_driver import is_periodic_method
+        self.periodic = is_periodic_method(self.cutoff)   # PME / Ewald / CutoffPeriodic
         _validate_odp_boundary_conditions(self.odp, self.periodic)
         embedding = str(q['embedding']).strip()
         frontier_scheme = str(q.get('frontier_scheme', 'none')).strip()
@@ -3744,8 +3745,35 @@ class NAMD_QMMM(NAMD):
         self._setup_qmmm_restraint_targets()
 
     # ------------------------------------------------------------------ #
+    # [qmmm] keys added with the periodic/embedding controls.  They enter the
+    # restart and WHAM identities only when set to a non-default value, so
+    # checkpoints written before these keys existed keep validating.
+    _QMMM_OPTIONAL_HAMILTONIAN_KEYS = ('ewald_tol', 'lj_switch', 'h_lj', 'mm_charge_width')
+
+    @classmethod
+    def _qmmm_identity_config(cls, qmmm_config):
+        """Copy of ``qmmm_config`` with the optional Hamiltonian keys dropped
+        when at their default and normalised (bool / float) otherwise."""
+        cfg = dict(qmmm_config)
+        for key in cls._QMMM_OPTIONAL_HAMILTONIAN_KEYS:
+            if key not in cfg:
+                continue
+            value = cfg.pop(key)
+            if key in ('lj_switch', 'h_lj'):
+                on = value if isinstance(value, bool) else (
+                    str(value).strip().lower() in ('1', 'true', 'yes', 'on', 't'))
+                if on:
+                    cfg[key] = True
+            else:
+                text = '' if value is None else str(value).strip()
+                if text.lower() in ('', 'none', '0', '0.0'):
+                    continue
+                cfg[key] = float(text)
+        return cfg
+
     def _qmmm_restart_system_identity(self, system, qmmm_config):
         """Bind QM/MM restarts to atoms, topology, selection, and force field."""
+        qmmm_config = self._qmmm_identity_config(qmmm_config)
         atoms = list(self.pdb.topology.atoms())
         atomic_numbers = [
             0 if atom.element is None else atom.element.atomic_number
@@ -3785,6 +3813,7 @@ class NAMD_QMMM(NAMD):
 
     def _qmmm_wham_system_identity(self, system, qmmm_config):
         """Hash QM/MM topology and Hamiltonian without initial coordinates."""
+        qmmm_config = self._qmmm_identity_config(qmmm_config)
         atoms = list(self.pdb.topology.atoms())
         atomic_numbers = [
             0 if atom.element is None else atom.element.atomic_number
@@ -4086,7 +4115,8 @@ class NAMD_QMMM(NAMD):
             psi_img = dpsi_img = None
             q_prev = None
         converged = psi_img is None
-        for it in range(self.driver.IMAGE_MAXITER):
+        delta, it = float("inf"), -1
+        for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
             mol.data["OQP::POTQM"] = np.zeros((nat, nat))
@@ -4110,7 +4140,7 @@ class NAMD_QMMM(NAMD):
         if not converged:
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
-                f"did not converge in {self.driver.IMAGE_MAXITER} iterations "
+                f"did not converge in {it + 1} iterations "
                 f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
@@ -5458,7 +5488,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             psi_img = dpsi_img = None
             q_prev = None
         converged = psi_img is None
-        for it in range(self.driver.IMAGE_MAXITER):
+        delta, it = float("inf"), -1
+        for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
             mol.data["OQP::POTQM"] = np.zeros((nat, nat))
@@ -5482,7 +5513,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         if not converged:
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
-                f"did not converge in {self.driver.IMAGE_MAXITER} iterations "
+                f"did not converge in {it + 1} iterations "
                 f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
@@ -5608,18 +5639,19 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             eqm -= float(getattr(self, "_e_img", 0.0))          # image double counting
             return f_all, eqm + emm
 
-        if len(self.driver.link_atoms):
-            raise NotImplementedError(
-                "SOC-NAMD across a covalent QM/MM boundary is supported only in "
-                "the full-ESPF scheme ([qmmm] embedding=electrostatic); the "
-                "legacy split scheme does not project the link-atom rows.")
-        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        # Split scheme: link-atom charges folded onto their QM hosts for the MM
+        # electrostatics, link-row gradients chain-ruled onto both hosts (same
+        # bookkeeping as NAMD_QMMM._total_force).
+        emm_q, gmm_q = self.driver.forces_mm(self._fold_link_charges(pchg))
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
 
         f_all = gmm.copy()
+        g_real, g_mm_host = self._project_link_rows(g_qm)
         for k, i in enumerate(self.qm_atoms):
-            f_all[i] = f_all[i] - g_qm[k]
+            f_all[i] = f_all[i] - g_real[k]
+        for m, gl in g_mm_host.items():
+            f_all[m] = f_all[m] - gl
         # No POTQM force: the QM-QM periodic image self-interaction is neglected
         # (POTQM zeroed in the embedded SCF; see _electronic_qmmm). Adding the
         # _potqm_force here without the matching energy term would reintroduce a

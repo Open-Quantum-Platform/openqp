@@ -5,7 +5,7 @@ for the review fixes around them:
 * lj_switch / h_lj are boolean schema keys (checked from the schema source, no
   runtime needed);
 * the Ewald branch is entered only for genuinely periodic OpenMM nonbonded
-  methods (PME / Ewald / LJPME / CutoffPeriodic), never for NoCutoff or
+  methods (PME / Ewald / CutoffPeriodic), never for NoCutoff or
   CutoffNonPeriodic even when the topology carries box vectors;
 * mm_charge_width / ewald_tol must be finite and positive;
 * h_lj assigns Lennard-Jones parameters to MM hydrogens only, never to QM atoms;
@@ -38,7 +38,8 @@ except Exception:  # pragma: no cover - no compiled runtime / no OpenMM
 
 
 def _schema_qmmm_types():
-    tree = ast.parse(open(_SCHEMA).read())
+    with open(_SCHEMA) as fh:
+        tree = ast.parse(fh.read())
     node = next(n.value for n in ast.walk(tree)
                 if isinstance(n, ast.Assign)
                 and any(getattr(t, 'id', '') == 'OQP_CONFIG_SCHEMA' for t in n.targets))
@@ -62,7 +63,8 @@ class TestSchema(unittest.TestCase):
         self.assertEqual(t['mm_charge_width'][0], 'str')
 
     def test_examples_exercise_the_options(self):
-        deck = open(os.path.join(_EXAMPLES, 'ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp')).read()
+        with open(os.path.join(_EXAMPLES, 'ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp')) as fh:
+            deck = fh.read()
         for key in ('ewald_tol', 'lj_switch', 'h_lj', 'mm_charge_width'):
             self.assertRegex(deck, r'(?m)^\s*%s\s*=\s*\S' % key)
         self.assertRegex(deck, r'(?m)^\s*cutoff\s*=\s*PME')
@@ -90,7 +92,7 @@ class TestDriverGates(unittest.TestCase):
             d = self._bare(cut, self.box.topology)
             self.assertFalse(d._is_periodic())
             self.assertIsNone(d._box_lengths_bohr())     # box vectors present, still a cluster
-        for cut in (app.PME, app.Ewald, app.CutoffPeriodic, app.LJPME):
+        for cut in (app.PME, app.Ewald, app.CutoffPeriodic):
             d = self._bare(cut, self.box.topology)
             self.assertTrue(d._is_periodic())
             np.testing.assert_allclose(d._box_lengths_bohr(), 16.0 * 1.8897259886 * np.ones(3), rtol=1e-9)
@@ -182,10 +184,60 @@ class TestNamdLinkAtoms(unittest.TestCase):
         base = {'embedding': 'electrostatic', 'cutoff': 'NoCutoff'}
         ref = n._qmmm_wham_system_identity(system, dict(base))['sha256']
         self.assertEqual(n._qmmm_wham_system_identity(system, dict(base))['sha256'], ref)
-        for key, value in (('mm_charge_width', '0.7'), ('h_lj', True),
+        # default-valued new keys (as the schema fills them in) leave the digest
+        # unchanged, so checkpoints written before the keys existed still validate
+        defaults = dict(base, ewald_tol='', lj_switch=False, h_lj='false', mm_charge_width='')
+        self.assertEqual(n._qmmm_wham_system_identity(system, defaults)['sha256'], ref)
+        for key, value in (('mm_charge_width', '0.7'), ('h_lj', True), ('h_lj', 'true'),
                            ('lj_switch', True), ('ewald_tol', '1e-6')):
             cfg = dict(base); cfg[key] = value
             self.assertNotEqual(n._qmmm_wham_system_identity(system, cfg)['sha256'], ref, key)
+        # bool and string spellings of the same setting hash identically
+        self.assertEqual(n._qmmm_wham_system_identity(system, dict(base, h_lj=True))['sha256'],
+                         n._qmmm_wham_system_identity(system, dict(base, h_lj='true'))['sha256'])
+
+    def test_restart_identity_default_keys_are_invisible(self):
+        n = object.__new__(NAMD_QMMM)
+        cfg = {'embedding': 'electrostatic', 'ewald_tol': '', 'lj_switch': False,
+               'h_lj': 'False', 'mm_charge_width': '0', 'pdb_file': 'x.pdb'}
+        self.assertEqual(n._qmmm_identity_config(cfg), {'embedding': 'electrostatic', 'pdb_file': 'x.pdb'})
+        cfg.update(lj_switch='true', mm_charge_width='0.7', ewald_tol='1e-6')
+        self.assertEqual(n._qmmm_identity_config(cfg),
+                         {'embedding': 'electrostatic', 'pdb_file': 'x.pdb',
+                          'lj_switch': True, 'mm_charge_width': 0.7, 'ewald_tol': 1e-6})
+
+
+@unittest.skipUnless(_HAVE_OQP, 'needs the oqp package')
+class TestSystemPdbFallback(unittest.TestCase):
+    """[input] system = file.pdb <indices>: the PDB is looked up next to the
+    input file when it is not found relative to the working directory."""
+
+    def _mol(self, system, input_file):
+        from oqp.molecule import Molecule
+        m = object.__new__(Molecule)
+        m.config = {'input': {'system': system}}
+        m.input_file = input_file
+        return m
+
+    def test_relative_pdb_resolved_next_to_input(self):
+        deck = os.path.join(_EXAMPLES, 'ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp')
+        cwd = os.getcwd()
+        os.chdir(_HERE)                       # ala.pdb does not exist here
+        try:
+            m = self._mol('ala.pdb 9 10 17 18 19', deck)
+            m._resolve_system_pdb_path()
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(m.config['input']['system'],
+                         os.path.join(_EXAMPLES, 'ala.pdb') + ' 9 10 17 18 19')
+
+    def test_absolute_or_missing_paths_untouched(self):
+        deck = os.path.join(_EXAMPLES, 'ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp')
+        for system in ('/abs/nowhere/ala.pdb 1 2', 'no_such_file.pdb 1 2',
+                       '  8 0.0 0.0 0.0\n  1 0.0 0.0 1.0'):
+            m = self._mol(system, deck)
+            m._resolve_system_pdb_path()
+            self.assertEqual(m.config['input']['system'], system)
 
 
 if __name__ == '__main__':
