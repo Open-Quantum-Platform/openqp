@@ -230,6 +230,14 @@ jobs:
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
+            # Opt the analytic-TDHF-Hessian end-to-end gate in. Without this the
+            # only test that actually compares an analytic Hessian against its
+            # finite-difference reference never runs, and the file's remaining
+            # test just re-asserts recorded constants against fixed tolerances,
+            # so a broken or absent Hessian kernel leaves the suite green.
+            # Cost: three analytic + three numerical Hessians on 2-3 atom
+            # STO-3G systems, measured at ~105 s total.
+            OPENQP_RUN_TDHF_HESSIAN_REGRESSION: "1"
            run: |
             # --forked is not optional here: 39 test files mutate sys.modules,
             # and tests/test_analytic_hessian.py replaces the whole `oqp`

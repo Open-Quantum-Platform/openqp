@@ -409,12 +409,15 @@ contains
 
       end if
 
-      if (self%do_weight_derivative .and. .not. self%do_fxc) then
+      if (self%do_weight_derivative) then
         call add_partition_weight_gradient(self, xce, mythread)
         ! Differentiate the discrete atom-centred quadrature consistently:
         ! the grid point moves with the atom that owns the current slice.
+        ! tmpGrad contains both spin contributions in the unrestricted path,
+        ! but only the alpha contribution in the restricted path.
         self%nucgrad(:,xce%currAtom,mythread) = &
-          self%nucgrad(:,xce%currAtom,mythread) + sum(tmpGrad, dim=1)
+          self%nucgrad(:,xce%currAtom,mythread) + &
+          merge(1.0_fp,2.0_fp,xce%hasBeta)*sum(tmpGrad, dim=1)
       end if
 
    end associate
@@ -664,18 +667,15 @@ contains
                 f_r, f_s, f_t)
 
         if (dat%do_weight_derivative) then
-          if (dat%do_ground_state) then
-            dat%probe_value(i,mythread) = &
-              xc%exc(i)*xce%xyzw(i,4)
-          else
-            dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
-            if (xce%funTyp /= OQP_FUNTYP_LDA) &
-              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
-                                          + dot_product(d_s, sigma)
-            if (xce%funTyp == OQP_FUNTYP_MGGA) &
-              dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
-                                          + dot_product(d_t, tauab)
-          end if
+          dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                        + dot_product(d_s, sigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                        + dot_product(d_t, tauab)
+          if (dat%do_ground_state) dat%probe_value(i,mythread) = &
+            dat%probe_value(i,mythread) + xc%exc(i)*xce%xyzw(i,4)
         end if
 
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
@@ -917,6 +917,17 @@ contains
                 ssigma, &
                 ff_s, &
                 g_r, g_s, g_t)
+
+        if (dat%do_weight_derivative) then
+          dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                      + dot_product(f_r,rhoab)
+          if (xce%funTyp /= OQP_FUNTYP_LDA) &
+            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                        + dot_product(f_s,sigma)
+          if (xce%funTyp == OQP_FUNTYP_MGGA) &
+            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+                                        + dot_product(f_t,tauab)
+        end if
 
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
 !          f_s = 0
@@ -1316,7 +1327,8 @@ contains
 !> @author Vladimir Mironov
   subroutine tddft_xc_gradient(basis, molGrid, dedft, &
                   da, pa, xa, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, include_weight_derivative, &
+                  include_ground_state)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -1327,7 +1339,7 @@ contains
 
     type(information), target, intent(in) :: infos
     type(dft_grid_t), target, intent(in) :: molGrid
-    real(kind=fp), intent(out) :: dedft(:,:)
+    real(kind=fp), intent(inout) :: dedft(:,:)
 
     type(basis_set) :: basis
     integer, intent(in) :: nMtx
@@ -1335,15 +1347,16 @@ contains
     real(kind=fp), intent(inout), target :: pa(:,:,:)
     real(kind=fp), intent(inout), optional, target :: xa(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    logical, intent(in), optional :: include_weight_derivative
+    logical, intent(in), optional :: include_ground_state
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf, nxcder
-    logical :: doFxc
+    logical :: doFxc, doWeight
 
     nbf = ubound(da,1)
-
     ! Scale densities by B.F. norms
       do i = 1, nbf
         da(:,i) = da(:,i) &
@@ -1359,6 +1372,8 @@ contains
     end do
 
     doFxc = present(xa)
+    doWeight = .false.
+    if (present(include_weight_derivative)) doWeight = include_weight_derivative
 
     if (doFxc) then
       do j = 1, nMtx
@@ -1397,6 +1412,17 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    dat%do_ground_state = .true.
+    if (present(include_ground_state)) &
+      dat%do_ground_state = include_ground_state
+    dat%do_weight_derivative = doWeight
+    if (doWeight) then
+      dat%part_fun_type = molGrid%partFunType
+      dat%has_surface_shift = molGrid%hasSurfaceShift
+      dat%atom_xyz = infos%atoms%xyz
+      dat%dummy_atom = molGrid%dummyAtom
+      dat%surface_shift = molGrid%surfaceShift
+    end if
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
@@ -1437,6 +1463,11 @@ contains
         dedft(3, atom) = dedft(3, atom)-2*sum(dat%bfGrad(offset:offset+naos-1, 3, 1))
       end associate
     end do
+
+    ! The partition-weight probe is already spin summed by grad_v_xc_np and
+    ! grad_f_xc_np.  The restricted factor for owner motion is applied where
+    ! that one-spin AO contribution enters nucGrad.
+    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
 
     call dat%clean()
   end subroutine
