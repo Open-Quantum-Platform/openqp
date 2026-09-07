@@ -727,6 +727,8 @@ module qmmm_mod
     real(kind=dp), allocatable :: wt(:), dens(:)
     real(kind=dp), allocatable :: xyz(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:)
+    integer, allocatable :: parent(:)
+    real(kind=dp), allocatable :: gpt(:,:)
 
     integer :: nat, npt, nptcur
     integer :: i, j, k
@@ -775,10 +777,12 @@ module qmmm_mod
              wt(npt), &
              ttt(nat,npt), &
              dens(nbf2), &
+             parent(npt), &
+             gpt(3,nat), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur)
+    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur,parent)
 
 ! ESP gradient contribution
 !   Tagarray
@@ -805,9 +809,16 @@ module qmmm_mod
     end do
 
 !   Add integral gradient term, mm_potential*[(T^+T)^-1*T^+]*V^x
+!   The grid point g_i rides rigidly on its parent atom.  grad_elpot returns the
+!   basis-centre (Pulay-type) derivatives of Tr[P V(g_i)]; by translational
+!   invariance of the integral, the derivative with respect to g_i itself is
+!   minus their sum, and it is charged to the parent atom.
     do i=1,nptcur
        wt(i)=-dot_product(ttt(:,i),mm_potential)
-       call grad_elpot(basis, xyz(i,:), wt(i), dens, espf_grad_ta)
+       gpt = 0.0_dp
+       call grad_elpot(basis, xyz(i,:), wt(i), dens, gpt)
+       espf_grad_ta = espf_grad_ta + gpt
+       espf_grad_ta(:,parent(i)) = espf_grad_ta(:,parent(i)) - sum(gpt, dim=2)
     end do
 
 !   Add overlap derivative correction for the total charge conservation
@@ -834,7 +845,7 @@ module qmmm_mod
 !   Complete pseudoinverse-weight derivative dZ/dR (a_i = phi_i-<phi> = -mm_potential)
     call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
                           ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
-                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)), parent)
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -869,6 +880,8 @@ module qmmm_mod
     real(kind=dp), allocatable :: wt(:), dens(:)
     real(kind=dp), allocatable :: xyz(:,:)
     real(kind=dp), target, allocatable :: ttt(:,:)
+    integer, allocatable :: parent(:)
+    real(kind=dp), allocatable :: gpt(:,:)
 
     integer :: nat, npt, nptcur
     integer :: i, j, k
@@ -931,10 +944,12 @@ module qmmm_mod
              wt(npt), &
              ttt(nat,npt), &
              dens(nbf2), &
+             parent(npt), &
+             gpt(3,nat), &
              stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur)
+    call form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,infos%atoms%zn,infos%atoms%xyz,xyz,ttt,nptcur,parent)
 
 ! ESP gradient contribution
 !   Tagarray
@@ -973,9 +988,16 @@ module qmmm_mod
     end do
 
 !   Add integral gradient term, mm_potential*[(T^+T)^-1*T^+]*V^x
+!   The grid point g_i rides rigidly on its parent atom.  grad_elpot returns the
+!   basis-centre (Pulay-type) derivatives of Tr[P V(g_i)]; by translational
+!   invariance of the integral, the derivative with respect to g_i itself is
+!   minus their sum, and it is charged to the parent atom.
     do i=1,nptcur
        wt(i)=-dot_product(ttt(:,i),mm_potential)
-       call grad_elpot(basis, xyz(i,:), wt(i), dens, espf_grad_ta)
+       gpt = 0.0_dp
+       call grad_elpot(basis, xyz(i,:), wt(i), dens, gpt)
+       espf_grad_ta = espf_grad_ta + gpt
+       espf_grad_ta(:,parent(i)) = espf_grad_ta(:,parent(i)) - sum(gpt, dim=2)
     end do
 
 !   Add overlap derivative correction for the total charge conservation
@@ -1004,7 +1026,7 @@ module qmmm_mod
 !   a_i = phi_i - <phi> = -mm_potential.
     call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
                           ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
-                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)), parent)
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -1083,7 +1105,7 @@ module qmmm_mod
 !>          an s_k factor), an extra weight-derivative term:
 !>            dE/dR += sum_k ds_k/dR * B_k (u_k - G_k),
 !>          with ds_k/dR_{J} = [prod_{b/=J} S_b] S'_J (1/delta) (R_J-g_k)/|g_k-R_J|.
-  subroutine espf_grad_weight(basis, nat, nptcur, at, gxyz, zmat, amm, dens, grad, logtol, rvdw)
+  subroutine espf_grad_weight(basis, nat, nptcur, at, gxyz, zmat, amm, dens, grad, logtol, rvdw, parent)
     use precision, only: dp
     use basis_tools, only: basis_set
     use int1, only: electrostatic_potential_unweighted
@@ -1099,6 +1121,14 @@ module qmmm_mod
     real(kind=dp), intent(inout)         :: grad(:,:)      ! (3,nat) accumulated dE/dR
     real(kind=dp), intent(in)            :: logtol
     real(kind=dp), intent(in)            :: rvdw(:)        ! (nat) base VDW radii
+    !> Parent atom of each grid point.  Every term below depends on the grid
+    !> point position g_k only through differences (g_k - R_i), so the derivative
+    !> with respect to g_k is minus the sum over atoms of the (g_k - R_i)
+    !> derivatives; since g_k rides rigidly on its parent atom that counter-term
+    !> is charged to the parent.  Without it the atom-centred grid is treated as
+    !> fixed in space and the gradient is neither translationally invariant nor
+    !> the derivative of the energy.
+    integer, intent(in), optional        :: parent(:)
 
     real(kind=dp), allocatable :: gx(:), gy(:), gz(:), u(:)
     real(kind=dp), allocatable :: tmat(:,:), minv(:,:), bvec(:), gvec(:), &
@@ -1199,6 +1229,11 @@ module qmmm_mod
         grad(1,i) = grad(1,i) + fac*dx
         grad(2,i) = grad(2,i) + fac*dy
         grad(3,i) = grad(3,i) + fac*dz
+        if (present(parent)) then
+          grad(1,parent(k)) = grad(1,parent(k)) - fac*dx
+          grad(2,parent(k)) = grad(2,parent(k)) - fac*dy
+          grad(3,parent(k)) = grad(3,parent(k)) - fac*dz
+        end if
       end do
     end do
 
@@ -1220,6 +1255,11 @@ module qmmm_mod
           grad(1,j) = grad(1,j) - coef*dx
           grad(2,j) = grad(2,j) - coef*dy
           grad(3,j) = grad(3,j) - coef*dz
+          if (present(parent)) then
+            grad(1,parent(k)) = grad(1,parent(k)) + coef*dx
+            grad(2,parent(k)) = grad(2,parent(k)) + coef*dy
+            grad(3,parent(k)) = grad(3,parent(k)) + coef*dz
+          end if
         end do
       end do
     end if
@@ -1389,7 +1429,7 @@ module qmmm_mod
 !
 !     REVISION HISTORY:
 !> @date _Oct, 2024_ Initial release
-  subroutine form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,zn,atoms_xyz,xyz,ttt,nptcur)
+  subroutine form_espf_grid(nat,npt,nlayers,layers,npt_layer,typ_layer,zn,atoms_xyz,xyz,ttt,nptcur,parent)
     use precision, only: dp
     use lebedev, only: lebedev_get_grid
     use elements, only: ELEMENTS_VDW_RADII
@@ -1402,6 +1442,10 @@ module qmmm_mod
     integer, intent(in) :: npt_layer(nlayers),typ_layer(nlayers)
     real(kind=dp), intent(inout) :: xyz(npt,3),ttt(nat,npt)
     integer, intent(inout) :: nptcur
+    !> Optional: parent atom of every kept grid point.  The grid is atom-centred
+    !> and translates rigidly with its atom, so the analytic gradient needs to
+    !> know which atom each point rides on (see espf_grad_weight / grad_esp_qmmm).
+    integer, intent(inout), optional :: parent(:)
 
     real(kind=dp), allocatable :: leb(:,:), lebw(:)
     real(kind=dp), allocatable :: vdwrad(:), excl_vdw(:), wt(:)
@@ -1600,6 +1644,7 @@ module qmmm_mod
             neighbours=neigh, &
             excl_rad=excl_vdw)
         end if
+        if (present(parent)) parent(nptcur+1:nptcur+nadd) = i
         nptcur = nptcur + nadd
       end do
     end do
@@ -1622,6 +1667,7 @@ module qmmm_mod
             nkeep = nkeep + 1
             xyz(nkeep,:) = xyz(kk,:)
             s(nkeep) = s(kk)
+            if (present(parent)) parent(nkeep) = parent(kk)
           end if
         end do
         nptcur = nkeep

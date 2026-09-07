@@ -449,7 +449,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("self._rng_step >= self.first_hop_step", src)
         self.assertNotIn("np.random.default_rng", src)
         self.assertIn("cfg['properties']['back_door'] = True", src)
-        self.assertIn("NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)", src)
+        self.assertIn("NAMD_SOC._store_prev(self, self._qm_positions_bohr(), u, eval_ha)", src)
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
 

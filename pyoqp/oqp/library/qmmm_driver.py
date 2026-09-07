@@ -13,6 +13,7 @@ from oqp.library.single_point import (
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.tb_backends import is_tb_method
 from oqp.utils.state_labels import is_mrsf, public_state_label
+from oqp.library.qmmm_ewald import EwaldQMMM
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
@@ -127,7 +128,38 @@ class OpenQpQMMM:
         Cutoff=app.NoCutoff,
         Embedding='mechanical',
         frontier_scheme='none',
+        ewald_tol=None,
+        lj_switch=False,
+        h_lj=False,
+        mm_charge_width=None,
     ):
+        # Gaussian-smeared MM charges for the QM-MM electrostatics (width in
+        # Angstrom; None = point charges).  The QM-MM pair potential becomes
+        # erf(mu r)/r with mu = 1/(sqrt(2) w), which removes the 1/r singularity
+        # a bare MM charge presents to the QM density -- the reference Tinker
+        # ESPF code applies the same erf damping (its ERFMU keyword).  Energy and
+        # force are modified consistently (direct sum and Ewald real-space part);
+        # MM-MM interactions and the QM-image term are untouched.
+        self.mm_damp_mu = (None if mm_charge_width in (None, 0, 0.0)
+                           else 1.0 / (np.sqrt(2.0) * float(mm_charge_width) * 1.8897259886))
+        # Give Lennard-Jones parameters to MM hydrogens that have none (TIP3P
+        # water H: sigma 1 nm / epsilon 0 in the AMBER XML).  Without them
+        # nothing keeps a water hydrogen from collapsing onto a QM oxygen (the
+        # QM density has no Pauli wall against a bare point charge), which
+        # produces unphysical 1.4-1.5 A contacts that destabilise the MRSF
+        # response.  Uses the CHARMM TIP3P HT values (Rmin/2 = 0.2245 A,
+        # eps = 0.046 kcal/mol).  Off by default; [qmmm] h_lj=true.
+        self.h_lj = bool(h_lj)
+        # Smooth (switched) Lennard-Jones truncation for the MM systems: a
+        # plain cutoff makes the MM energy discontinuous when pairs cross it,
+        # which shows up as a drift in NVE tests.  Off by default (OpenMM's
+        # createSystem default); switched on by [qmmm] lj_switch=true.
+        self.lj_switch = bool(lj_switch)
+        # OpenMM PME/Ewald error tolerance for the MM-MM systems (None = OpenMM
+        # default 5e-4).  Tighten (1e-6) for force/energy consistency checks and
+        # NVE validation: the default's force error (~0.5 kJ/mol/nm) is the
+        # floor of any finite-difference test on a periodic box.
+        self.ewald_tol = ewald_tol
         if oqp_cfg is None and mol is None:
             raise ValueError("Either 'oqp_cfg' or 'mol' must be provided.")
         if oqp_cfg is not None and mol is not None:
@@ -248,11 +280,11 @@ class OpenQpQMMM:
                 x = self.positions[at_index][0].value_in_unit(unit.angstrom)
                 y = self.positions[at_index][1].value_in_unit(unit.angstrom)
                 z = self.positions[at_index][2].value_in_unit(unit.angstrom)
-                xyz_atoms.append(f"{sym} {x:.6f} {y:.6f} {z:.6f}")
+                xyz_atoms.append(f"{sym} {x:.12f} {y:.12f} {z:.12f}")
         # Cap severed QM–MM bonds with hydrogen link atoms (appended last so the
         # QM-atom ordering above is preserved).
         for pos in self._link_positions_angstrom(self.positions):
-            xyz_atoms.append(f"H {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
+            xyz_atoms.append(f"H {pos[0]:.12f} {pos[1]:.12f} {pos[2]:.12f}")
         return '; '.join(xyz_atoms)
 
     def _update_mol_positions(self):
@@ -578,6 +610,34 @@ class OpenQpQMMM:
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
 
+        if (self.espf_full and self._ewald() is not None
+                and os.environ.get("OQP_EWALD_NO_IMAGE", "").strip() not in ("1", "on")):
+            # Periodic full-ESPF: the QM charges also interact with their own
+            # periodic images (paper eq 8).  Solve for the QM charges self-
+            # consistently in the total field  phi_eff = Phi^MM + psi_img q :
+            # with E = E_QM[phi_eff] + Z.phi_eff - 1/2 q psi_img q the charge
+            # response terms cancel at self-consistency, so the force needs only
+            # the explicit derivatives (embedded QM gradient at fixed phi_eff,
+            # classical Ewald coupling force, image force at fixed q).
+            psi_img, dpsi = self._ewald().qm_image_matrix(self._qm_center_positions_bohr())
+            n = len(potmm)
+            q_prev = (self._q_prev if getattr(self, "_q_prev", None) is not None
+                      and len(self._q_prev) == n else np.zeros(n))
+            for it in range(50):
+                phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
+                eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
+                q_new = np.array(pchg_qm, dtype=float)
+                if np.abs(q_new - q_prev).max() < 1e-7:
+                    break
+                q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
+            self._q_prev = q_new.copy()
+            self._image_iterations = it + 1
+            e_img = 0.5 * float(q_new @ psi_img @ q_new)                    # Hartree
+            f_img = -np.einsum("a,b,abc->ac", q_new, q_new, dpsi)           # Hartree/bohr
+            return self._assemble_force_espf(
+                eqm, q_new, f_qm_extra=f_img,
+                e_extra=-e_img * 2625.499639 * unit.kilojoule_per_mole)
+
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
         nqm = len(self.qm_atoms)
 
@@ -613,20 +673,26 @@ class OpenQpQMMM:
 
         return total_energy, total_forces
 
-    def _assemble_force_espf(self, eqm, pchg_qm):
+    def _assemble_force_espf(self, eqm, pchg_qm, f_qm_extra=None, e_extra=None):
         """Assemble the total force in the full-ESPF scheme:
           F = F_MM(pure)  -  grad_QM(HF+ESPF charge-fluctuation)  +  F_coupling
         where F_coupling is the analytic QM-charge <-> MM-charge Coulomb force
         (field-fluctuation term), applied to both QM and MM atoms.
+        ``f_qm_extra`` (Hartree/bohr, per QM centre incl. link atoms) and
+        ``e_extra`` (OpenMM energy) carry the periodic QM-image term.
         """
         FCONV = 49614.75  # Hartree/bohr -> kJ/mol/nm
         nqm = len(self.qm_atoms)
 
         emm, gmm = self.forces_mm(pchg_qm)   # pure MM-MM (QM charges zeroed)
         total_energy = eqm + emm
+        if e_extra is not None:
+            total_energy = total_energy + e_extra
         total_forces = gmm.copy()
 
         f_qm, f_mm, mm_idx = self._coupling_forces(np.asarray(pchg_qm, dtype=float))
+        if f_qm_extra is not None:
+            f_qm = f_qm + np.asarray(f_qm_extra, dtype=float)
         f_qm = f_qm * FCONV
         f_mm = f_mm * FCONV
 
@@ -657,10 +723,27 @@ class OpenQpQMMM:
         Cutoff=self.Cutoff
         nb_cutoff = _periodic_nonbonded_cutoff(topology, Cutoff)
 
+        _ew = {} if (self.ewald_tol is None or Cutoff is app.NoCutoff) else {
+            "ewaldErrorTolerance": float(self.ewald_tol)}
         system=forcefield.createSystem(
             topology, nonbondedMethod=Cutoff, nonbondedCutoff=nb_cutoff,
-            constraints=None, rigidWater=False)
+            constraints=None, rigidWater=False, **_ew)
         nonbonded = next(f for f in system.getForces() if isinstance(f, mm.NonbondedForce))
+        if self.lj_switch and Cutoff is not app.NoCutoff:
+            nonbonded.setUseSwitchingFunction(True)
+            nonbonded.setSwitchingDistance(0.85 * nb_cutoff)
+        if self.h_lj:
+            sig_h = 2.0 * 0.02245 / (2.0 ** (1.0 / 6.0)) * unit.nanometer      # CHARMM HT Rmin/2 = 0.2245 A
+            eps_h = 0.046 * 4.184 * unit.kilojoule_per_mole
+            n_set = 0
+            for atom in topology.atoms():
+                if atom.element is None or atom.element.atomic_number != 1:
+                    continue
+                q, sig, eps = nonbonded.getParticleParameters(atom.index)
+                if eps.value_in_unit(unit.kilojoule_per_mole) == 0.0:
+                    nonbonded.setParticleParameters(atom.index, q, sig_h, eps_h)
+                    n_set += 1
+            print(f"[QM/MM] h_lj: Lennard-Jones parameters assigned to {n_set} MM hydrogen(s) that had none")
 
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chgProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
@@ -738,7 +821,7 @@ class OpenQpQMMM:
         if Cutoff is not app.NoCutoff:
            sysew=forcefield.createSystem(
                topology, nonbondedMethod=app.Ewald, nonbondedCutoff=nb_cutoff,
-               constraints=None, rigidWater=False)
+               constraints=None, rigidWater=False, **_ew)
            intew=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
            simew=app.Simulation(topology, sysew, intew)
            simew.context.setPositions(positions)
@@ -870,18 +953,36 @@ class OpenQpQMMM:
             idx.append(i)
         return np.asarray(q), np.asarray(xyz, dtype=float), np.asarray(idx, dtype=int)
 
+    def _ewald(self):
+        """Ewald summation object for the current orthorhombic box, or None
+        when the QM/MM electrostatics are non-periodic (NoCutoff)."""
+        box = self._box_lengths_bohr()
+        if box is None:
+            return None
+        cached = getattr(self, "_ewald_obj", None)
+        if cached is None or not np.allclose(cached.box, box):
+            self._ewald_obj = EwaldQMMM(box)
+        return self._ewald_obj
+
     def _full_field_potmm(self):
         """MM electrostatic potential at every QM centre from the (frontier-
-        redistributed) embedding charge set: phi_A = sum_s Q_s / |r_A - r_s|
-        (Hartree/e)."""
+        redistributed) embedding charge set (Hartree/e): a direct Coulomb sum
+        for a non-periodic system, the Ewald lattice sum (all images, tin-foil
+        boundary) for a periodic one."""
         qm_xyz = self._qm_center_positions_bohr()
         q_s, xyz_s, _ = self._embedding_sites()
+        ew = self._ewald()
+        if ew is not None:
+            phi, _ = ew.mm_potential(qm_xyz, xyz_s, q_s, mu=self.mm_damp_mu)
+            return phi
         box = self._box_lengths_bohr()
         potmm = np.zeros(len(qm_xyz))
+        from scipy.special import erf
         for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)
             r = np.linalg.norm(d, axis=1)
-            potmm[a] = np.sum(q_s / r)
+            damp = 1.0 if self.mm_damp_mu is None else erf(self.mm_damp_mu * r)
+            potmm[a] = np.sum(q_s * damp / r)
         return potmm
 
     def _coupling_forces(self, pchg):
@@ -896,10 +997,23 @@ class OpenQpQMMM:
         box = self._box_lengths_bohr()
         f_qm = np.zeros_like(qm_xyz)
         f_site = np.zeros_like(xyz_s)
-        for a in range(len(qm_xyz)):
+        ew = self._ewald()
+        if ew is not None:
+            # Ewald: F_A = -q_A dPhi^MM_A/dr_A ; F_s from the QM charges' images
+            _, dphi = ew.mm_potential(qm_xyz, xyz_s, q_s, mu=self.mm_damp_mu)
+            f_qm = -np.asarray(pchg, dtype=float)[:, None] * dphi
+            f_site = ew.mm_forces(qm_xyz, pchg, xyz_s, q_s, mu=self.mm_damp_mu)
+        else:
+          from scipy.special import erf
+          mu = self.mm_damp_mu
+          for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)   # r_A - r_s
             r = np.linalg.norm(d, axis=1)
-            coeff = pchg[a] * q_s / r ** 3                # q_A Q_s / r^3
+            if mu is None:
+                coeff = pchg[a] * q_s / r ** 3            # q_A Q_s / r^3
+            else:                                         # -q_A Q_s d/dr[erf(mu r)/r] / r
+                coeff = pchg[a] * q_s * (erf(mu * r) / r ** 3
+                                         - 2.0 * mu / np.sqrt(np.pi) * np.exp(-(mu * r) ** 2) / r ** 2)
             f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
             f_site -= coeff[:, None] * d                  # Newton's third law
         # Scatter each site force onto the real MM atoms it is built from

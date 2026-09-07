@@ -225,6 +225,12 @@ class QMMM_MD:
         self.cutoff    = _resolve_cutoff(qmmm_cfg.get("cutoff", "PME"))
         self.embedding = str(qmmm_cfg.get("embedding", "electrostatic"))
         self.frontier_scheme = str(qmmm_cfg.get("frontier_scheme", "none"))
+        _et = qmmm_cfg.get("ewald_tol", None)
+        self.ewald_tol = None if _et in (None, "", "none", "None") else float(_et)
+        self.lj_switch = str(qmmm_cfg.get("lj_switch", "false")).strip().lower() in ("1", "true", "yes", "on")
+        self.h_lj = str(qmmm_cfg.get("h_lj", "false")).strip().lower() in ("1", "true", "yes", "on")
+        _w = qmmm_cfg.get("mm_charge_width", None)
+        self.mm_charge_width = None if _w in (None, "", "none", "None", 0, 0.0, "0") else float(_w)
         self.n_steps   = int(qmmm_cfg.get("n_steps", 1000))
         self.timestep  = float(qmmm_cfg.get("timestep", 1.0)) * unit.femtoseconds
         self.temperature = float(qmmm_cfg.get("temperature", 300.0)) * unit.kelvin
@@ -356,6 +362,10 @@ class QMMM_MD:
             Cutoff=self.cutoff,
             Embedding=self.embedding,
             frontier_scheme=self.frontier_scheme,
+            ewald_tol=self.ewald_tol,
+            lj_switch=self.lj_switch,
+            h_lj=self.h_lj,
+            mm_charge_width=self.mm_charge_width,
         )
         self.mm_systems = self.oqp_driver.mm_systems
 

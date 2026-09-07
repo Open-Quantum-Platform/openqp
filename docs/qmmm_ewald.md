@@ -1,0 +1,103 @@
+# Periodic full-ESPF QM/MM: Ewald electrostatics
+
+`pyoqp/oqp/library/qmmm_ewald.py` provides the lattice-summed electrostatics
+of the periodic ESPF QM/MM model (Bonfrate, Ferre, Huix-Rotllant, JCTC 2024,
+20, 4338, eqs 7-8) for orthorhombic cells with tin-foil boundary conditions,
+using standard Ewald sums (real-space erfc within half the shortest box edge,
+reciprocal sum truncated at 1e-9). The full-ESPF QM/MM driver
+(`OpenQpQMMM`, `embedding=electrostatic`) uses it whenever the OpenMM cutoff
+is periodic (`cutoff=PME`, `Ewald`, ...); non-periodic systems keep the direct
+Coulomb sum. It replaces the earlier minimum-image real-space sum, which was
+conservative but had no long-range part.
+
+## What is computed
+
+* `Phi^MM_A`: MM potential (all MM charges and all their images) at every QM
+  centre including link hydrogens, plus its gradient with respect to the QM
+  centre. The frontier-charge redistribution (`frontier_scheme`) is applied to
+  the MM charge set before the sum, as in the non-periodic case.
+* Force on every MM atom from the QM ESPF charges and their images.
+* `psi_img(A,B)`: the Ewald pair potential between QM centre A and the images
+  of centre B (in-cell 1/r removed; diagonal = self-image term
+  `sum_k w_k - 2 beta/sqrt(pi)`) with its gradient.
+* A uniform neutralising background `-pi Q/(beta^2 V)` for non-neutral charge
+  sets (a cut bond leaves the MM set non-neutral). It is a constant, so it
+  carries no force. The paper's uniform charge correction `q_corr` (its eqs
+  25-26) is **not** applied.
+
+## Self-consistent QM-image term
+
+The QM charges interact with their own images, `E_img = 1/2 q^T psi_img q`,
+and `q` depends on the field. The driver solves this from outside the SCF:
+the embedded SCF runs in `phi_eff = Phi^MM + psi_img q` and is repeated until
+the ESPF charges are stable to 1e-7 e (3-4 iterations; the previous MD step's
+charges seed the loop). The total energy is
+
+    E = E_QM[phi_eff] + Z.phi_eff - 1/2 q^T psi_img q + E_MM
+
+and since dE_QM/dphi_A = -q_A the charge-response terms cancel at
+self-consistency, so the force is the embedded QM gradient at fixed `phi_eff`
++ the Ewald coupling force (QM and MM sides) + the image force at fixed charges
+`F_A = -q_A sum_B q_B grad_A psi_img(A,B)`. The earlier route through
+`OQP::POTQM` / `add_potqm_contributions` inside the Fock build is not used
+(its energy bookkeeping was never verified and it had no force).
+
+The NAMD driver (`NAMD_QMMM` and the SOC variants) runs the same loop with the
+**ground-state** ESPF charges before the excitation step. This is exact for
+ground-state dynamics and an approximation for excited states (their charges
+differ slightly from the ground-state ones); making it exact needs the
+relaxed excited-state charges inside the loop, i.e. the Z-vector per
+iteration.
+
+## Validation
+
+`tests/test_qmmm_ewald.py` (pure numpy) checks the potential against an
+explicit lattice sum and every analytic derivative against finite
+differences. Driver level, alanine dipeptide with a link atom in a 1.6 nm
+TIP3P box (337 atoms, HF/6-31G, AMBER-14, PME, OpenMM double precision,
+PME tolerance 1e-6): the total force agrees with the finite difference of the
+total energy to 0.023 kJ/mol/nm (5e-7 Ha/bohr) on QM, boundary and water
+atoms; the QM-image self-consistency converges in 3-4 iterations. The ground-
+state NVE in the box conserves energy at the same level as a pure-MM run of
+the box with the same OpenMM Verlet integrator (flexible water, 0.5 fs). The
+`split` embedding is not force-consistent under PBC (residuals of 1e3-1e4
+kJ/mol/nm) and must not be used for dynamics.
+
+Note: `OpenQpQMMM` in config mode used to write the QM geometry with six
+decimals (Angstrom); the 5e-7 A rounding was a 0.3-0.9 kJ/mol/nm floor in
+every finite-difference force test. It now writes twelve decimals.
+
+## Keys
+
+* `[qmmm] ewald_tol` -- OpenMM PME/Ewald error tolerance for the MM-MM
+  systems (default: OpenMM's 5e-4). Use 1e-6 for NVE validation.
+* `[qmmm] lj_switch` -- switch the Lennard-Jones interactions smoothly to
+  zero over the last 15% of the cutoff (default false = plain truncation).
+* `[qmmm] h_lj` -- CHARMM TIP3P Lennard-Jones parameters on MM hydrogens that
+  have none (default false). Too weak on its own to stop the collapse below.
+* `[qmmm] mm_charge_width` (Angstrom, default off) -- Gaussian-smeared MM
+  charges in the QM-MM electrostatics: the pair potential 1/r becomes
+  erf(mu r)/r with mu = 1/(sqrt(2) w), consistently in energy, QM and MM
+  forces, direct sum and Ewald real-space part (MM-MM and the QM-image term
+  are untouched). This is the erf damping (ERFMU) of the reference Tinker
+  ESPF code; w = 0.7 A corresponds to its default mu = 1/A. Point-charge
+  embedding otherwise lets a TIP3P hydrogen collapse onto a QM carbonyl
+  oxygen (2.25 -> 1.45 A in 90 fs of MRSF dynamics) through a polarisation
+  runaway of the ESPF charges, after which the MRSF Z-vector equations
+  diverge; with w = 0.7 A the Z-vector converges at that geometry and the
+  spectrum is restored. Also used by the NAMD driver.
+
+With both set, a periodic MRSF-TDDFT FSSH trajectory of the solvated alanine
+link-atom system conserves energy to 0.05 kJ/mol fluctuation and -0.2
+kJ/mol/ps drift over 88 fs (0.33 kJ/mol and +11 kJ/mol/ps with the OpenMM
+defaults); the residual drift in solution is the classical truncation, not the
+QM/MM coupling. The MRSF Z-vector divergence
+seen after 60-90 fs in this solvated system with point charges is the
+polarisation runaway described under `mm_charge_width`.
+
+## Not implemented
+
+* Lattice-parameter derivatives (pressure / NPT).
+* Particle-mesh (PME) evaluation; the sums scale as N_QM*N_MM + N*n_k.
+* The paper's non-neutral-cell charge correction.
+* Non-orthorhombic cells.
