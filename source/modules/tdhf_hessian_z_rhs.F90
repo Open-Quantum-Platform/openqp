@@ -22,21 +22,23 @@ module tdhf_hessian_z_rhs_mod
     procedure :: accumulate => accumulate_tdhf_channel_operator
   end type tdhf_channel_operator_consumer_t
 
-  ! Exact-match memo for explicit_channel_derivative_matrix. The driver asks
-  ! for the same (coeff, base, channel) more than once per Hessian: the
-  ! amplitude-response RHS and the relaxed-density derivatives both build
-  ! the (u,+1) and (v,-1) operator derivatives from bit-identical inputs.
-  ! Each such call is one ERI-derivative traversal plus, for DFT, nbf(nbf+1)
-  ! full grid passes, so reuse is worth a few dense copies. A hit requires
-  ! every element of coeff and base to compare equal, which makes the reused
-  ! result bit-identical to a recomputation. The cache lives only for the
-  ! duration of one tdhf_hessian call (see reset_channel_derivative_cache).
+  ! Exact-match memo for explicit_channel_derivative_matrix. The Z-vector RHS
+  ! and the relaxed-density derivatives both build the (u,+1) operator
+  ! derivative from bit-identical inputs, and for DFT that call is one
+  ! ERI-derivative traversal plus a block of full grid passes. Only channel +1
+  ! results are cached: a -1 result is a single ERI traversal with no grid
+  ! work, cheaper to recompute than to hold. Three slots suffice -- between
+  ! the (u,+1) store and its reuse the driver stores (tm,+1) and (pz,+1) --
+  ! so retained memory is bounded by 3*nbf**2*(ncart+2) doubles, e.g. ~195 MB
+  ! for nbf=300 and 30 atoms, against the kernel's own 8 nbf**2*ncart arrays.
+  ! A hit requires every element of coeff and base to compare equal. The
+  ! cache lives only for one tdhf_hessian call (reset_channel_derivative_cache).
   ! Which MO blocks of the operator derivative a caller will read. The XC
   ! polarization loop probes only those; see explicit_channel_derivative_matrix.
   integer, parameter, public :: BLK_OO = 1, BLK_OV = 2, BLK_VV = 4
   integer, parameter, public :: BLK_ALL = BLK_OO + BLK_OV + BLK_VV
 
-  integer, parameter :: channel_cache_slots = 6
+  integer, parameter :: channel_cache_slots = 3
   type :: channel_cache_entry_t
     logical :: used = .false.
     integer :: channel = 0, blocks = 0
@@ -232,7 +234,7 @@ contains
       call dftclean(infos)
       deallocate(p,xp,dxc,probe,quse,gp,gm,xcval)
     end if
-    call channel_cache_store(coeff, base, channel, blk, result)
+    if (channel > 0) call channel_cache_store(coeff, base, channel, blk, result)
     nullify(consumer%base,consumer%operator)
     deallocate(buse,bwork,base_cart,operator_cart,operator_ao,work)
   end subroutine explicit_channel_derivative_matrix
