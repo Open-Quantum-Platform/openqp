@@ -43,6 +43,25 @@ class TestQMAtomsOrder(unittest.TestCase):
         )
         self.assertEqual(list(drv.qm_atoms), sorted(shuffled))
 
+    def test_compute_force_restores_topology_order(self):
+        """compute_force() receives a caller-supplied qm_atoms (QMMM_MD passes
+        its own config-order list) and must re-sort it before scattering forces.
+        Ported from PR #270 (mock-based, no OpenMM system needed)."""
+        from unittest import mock
+        drv = object.__new__(OpenQpQMMM)
+        drv.Embedding = "electrostatic"
+        drv.espf_full = True
+        drv.Cutoff = app.NoCutoff                      # non-periodic: no Ewald branch
+        drv.electrostatic_potential = mock.Mock(return_value=(None, None))
+        drv.forces_qm_openqp = mock.Mock(return_value=(0.0, None, object()))
+        drv._assemble_force_espf = mock.Mock(return_value=(0.0, None))
+
+        shuffled = [16, 8, 18, 9, 17]
+        drv.compute_force(None, None, None, shuffled)
+
+        self.assertEqual(list(drv.qm_atoms), sorted(shuffled))
+        drv._assemble_force_espf.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
