@@ -108,6 +108,29 @@ class TestDriverGates(unittest.TestCase):
         self.assertIsNotNone(self.cluster.topology.getPeriodicBoxVectors())
         self.assertIsNone(d._box_lengths_bohr())
 
+    def test_link_atom_follows_the_minimum_image_bond(self):
+        """A frame whose bonded QM and MM hosts are wrapped to opposite sides
+        of the box must place the link hydrogen on the short (bonded) image."""
+        import openmm.unit as unit
+        import types
+        app = self.app
+        d = self._bare(app.PME, self.box.topology)
+        d.link_atoms = [types.SimpleNamespace(qm_index=8, mm_index=7, g=0.7)]
+        pos = [np.array(p.value_in_unit(unit.angstrom), dtype=float) for p in self.box.positions]
+        ref = np.asarray(d._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in pos])[0])
+        wrapped = [p.copy() for p in pos]
+        wrapped[7] = wrapped[7] + np.array([16.0, 0.0, -16.0])   # MM host shifted by box vectors
+        got = np.asarray(d._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in wrapped])[0])
+        np.testing.assert_allclose(got, ref, atol=1e-10)
+        # non-periodic driver: raw bond vector (no imaging)
+        d2 = self._bare(app.NoCutoff, self.box.topology)
+        d2.link_atoms = d.link_atoms
+        raw = np.asarray(d2._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in wrapped])[0])
+        self.assertGreater(np.linalg.norm(raw - ref), 5.0)
+
     def test_option_validation(self):
         common = dict(positions=None, topology=None, forcefield=None, qm_atoms=[0])
         for bad in (-0.5, 0.0 + float('nan'), float('inf')):
@@ -121,6 +144,18 @@ class TestDriverGates(unittest.TestCase):
             OpenQpQMMM(mm_charge_width=0.7, ewald_tol=1e-6, **common)
         with self.assertRaisesRegex(ValueError, 'oqp_cfg'):
             OpenQpQMMM(mm_charge_width=0, ewald_tol=None, **common)
+
+    def test_charge_smearing_only_with_full_espf(self):
+        # mol=object() passes the mode check; the guard sits before the
+        # topology-dependent link-atom detection, which then fails on the
+        # None topology for the accepted embedding (any error but ours).
+        common = dict(positions=None, topology=None, forcefield=None, qm_atoms=[0], mol=object())
+        for emb in ('split', 'mechanical'):
+            with self.assertRaisesRegex(ValueError, 'full-ESPF'):
+                OpenQpQMMM(mm_charge_width=0.7, Embedding=emb, **common)
+        with self.assertRaises(Exception) as cm:
+            OpenQpQMMM(mm_charge_width=0.7, Embedding='electrostatic', **common)
+        self.assertNotIn('full-ESPF', str(cm.exception))
 
     def test_h_lj_leaves_qm_hydrogens_alone(self):
         import openmm as mm

@@ -240,6 +240,14 @@ class OpenQpQMMM:
         # routes QM charges through OpenMM point charges -- kept for reference.)
         self.espf_full = self.Embedding in (
             "espf", "espf_full", "electrostatic")
+        if self.mm_damp_mu is not None and not self.espf_full:
+            # Only _full_field_potmm / _coupling_forces apply the erf damping;
+            # the split and mechanical schemes route the QM-MM electrostatics
+            # through OpenMM point charges and would silently ignore it.
+            raise ValueError(
+                "[qmmm] mm_charge_width (Gaussian-smeared MM charges) is "
+                "implemented for the full-ESPF electrostatic embedding only "
+                f"(embedding=electrostatic); got embedding={self.Embedding!r}.")
 
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
         # bond that the QM/MM partition cuts.  Empty when the QM region is a set
@@ -300,12 +308,18 @@ class OpenQpQMMM:
         return detect_link_atoms(bonds, self.qm_atoms, lambda i: z_by_index[i])
 
     def _link_positions_angstrom(self, positions):
-        """Link-atom Cartesian positions (Angstrom) for the given frame."""
+        """Link-atom Cartesian positions (Angstrom) for the given frame.  In a
+        periodic box the QM->MM bond vector is taken as the minimum image, so
+        a frame whose bonded hosts are wrapped to opposite sides of the cell
+        still places the link hydrogen on the short (bonded) image."""
+        box = self._box_lengths_bohr()
+        box_ang = None if box is None else np.asarray(box) / self._ANG2BOHR
         coords = []
         for link in self.link_atoms:
-            qm_p = positions[link.qm_index].value_in_unit(unit.angstrom)
-            mm_p = positions[link.mm_index].value_in_unit(unit.angstrom)
-            coords.append(link_atom_position(qm_p, mm_p, link.g))
+            qm_p = np.asarray(positions[link.qm_index].value_in_unit(unit.angstrom), dtype=float)
+            mm_p = np.asarray(positions[link.mm_index].value_in_unit(unit.angstrom), dtype=float)
+            bond = self._min_image(mm_p - qm_p, box_ang)
+            coords.append(link_atom_position(qm_p, qm_p + bond, link.g))
         return coords
 
     def _build_xyz_string(self):
@@ -380,21 +394,7 @@ class OpenQpQMMM:
             sp.scf()
             self.eqm = self.mol.get_scf_energy()
 
-            oqp.form_esp_charges(self.mol)
-            self.pchg_qm = self.mol.data["OQP::partial_charges"]
-
-            if potqm is not None and potmm is not None:
-                potmm -= np.einsum(
-                    "ij,j->i", potqm,
-                    self.pchg_qm - self.mol.get_atoms2("charge")
-                )
-                self.mol.data["OQP::POTMM"] = potmm
-
-            if potmm is not None:
-                self.eqm -= np.dot(
-                    self.pchg_qm - self.mol.get_atoms2("charge"), potmm
-                )
-
+            self._native_embedded_energy_gradient(self.mol, sp, potmm, potqm)
             self._sp = sp
 
         else:
@@ -426,104 +426,112 @@ class OpenQpQMMM:
             self.op.sp.scf()
             self.eqm = self.op.mol.get_scf_energy()
 
-            oqp.form_esp_charges(self.op.mol)
-            self.pchg_qm = self.op.mol.data["OQP::partial_charges"]
-
-            # The embedded SCF contains only the electronic QM-MM coupling
-            # (dEqm/dphi_A = -Q_A, verified by finite differences). In the
-            # full-ESPF scheme OpenMM carries no QM charge, so add the
-            # nuclear-MM interaction sum_A Z_A phi_A to complete the QM-MM
-            # electrostatic energy; its field derivative Z_A dphi/dx together
-            # with the electronic response gives the net-charge coupling force
-            # already supplied by the analytic coupling term.
-            if self.espf_full and potmm is not None:
-                self.eqm += float(
-                    np.dot(self.op.mol.get_atoms2("charge"), potmm)
-                )
-
-            if potqm is not None and potmm is not None:
-                potmm -= np.einsum(
-                    "ij,j->i", potqm,
-                    self.pchg_qm - self.op.mol.get_atoms2("charge")
-                )
-                self.op.mol.data["OQP::POTMM"] = potmm
-
-            # In the full-ESPF scheme the QM-MM coupling lives entirely in the
-            # embedded SCF energy (and OpenMM carries no QM charges), so there is
-            # no double count to remove. The split scheme subtracts it here
-            # because OpenMM re-adds the coupling via the QM point charges.
-            if potmm is not None and not self.espf_full:
-                self.eqm -= np.dot(
-                    self.pchg_qm - self.op.mol.get_atoms2("charge"), potmm
-                )
-
-            # --- Gradients: pure QM + ESPF contribution -----------------------
-            gradient = Gradient(self.op.mol)
-            if gradient.method == 'hf':
-                # Use the common wrapper: an active petite-list build leaves a
-                # skeleton in the native buffer, and Gradient.gradient()
-                # reconstructs it in the correct frame before returning and
-                # writing the projected result back. Reading get_grad()
-                # directly here used to bypass both operations.
-                gqm = np.asarray(gradient.gradient(), dtype=float).reshape(
-                    (1, self.op.mol.get_atoms2("natom"), 3))
-                oqp.grad_esp_qmmm(self.op.mol)
-                # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
-                # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
-                # gradient. Reshape the flat buffer to (natom, 3). Adding the
-                # (3, natom) view directly only works when natom == 3 (a square
-                # coincidence), which is why non-3-atom QM regions - e.g.
-                # link-atom-capped fragments - previously broke.
-                natom_qm = self.op.mol.get_atoms2("natom")
-                esp_grad = np.asarray(
-                    self.op.mol.data["OQP::ESPF_GRAD"]
-                ).reshape(natom_qm, 3)
-                gqm += esp_grad
-                # --- Unit conversion to OpenMM conventions ------------------------
-                self.eqm *= 2625.499639 * unit.kilojoule_per_mole
-                self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
-            if gradient.method == 'tdhf':
-                energies = self.op.sp.excitation([self.eqm])
-                grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
-                for i in gradient.grads:
-                    target = (public_state_label(gradient.mol.config, i)
-                              if is_mrsf(gradient.mol.config) else 'Root %s' % i)
-                    dump_log(gradient.mol, title='PyOQP: Gradient of %s' % target)
-                    gradient.mol.data.set_tdhf_target(i)
-                    gradient.zvec_func[gradient.td](gradient.mol)
-
-                    # check convergence
-                    z_flag = gradient.mol.mol_energy.Z_Vector_converged
-
-                    if not z_flag:
-                        dump_log(gradient.mol, title='PyOQP: TD Z-vector is not converged', section='end')
-
-                        if gradient.exception is True:
-                            raise ZVnotConverged()
-                        else:
-                            exit()
-
-                    gradient.grad_func[gradient.td](gradient.mol)
-                    gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
-                    # This state-by-state QM/MM path cannot call the common
-                    # wrapper as a batch because ESPF_GRAD is state-specific.
-                    # Apply the same reconstruction here before the force is
-                    # assembled, and keep the public native buffer consistent.
-                    gqm = np.asarray(
-                        gradient.mol.symmetrize_gradient(gqm), dtype=float
-                    ).reshape((gradient.natom, 3))
-                    gradient.mol.set_grad(gqm)
-                    oqp.grad_esp_qmmm_excited(self.op.mol)
-                    # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
-                    gqm += np.asarray(
-                        self.op.mol.data["OQP::ESPF_GRAD"]
-                    ).reshape(gradient.natom, 3)
-                    grads[i] = gqm.copy()
-                    self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
-                    self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
+            self._native_embedded_energy_gradient(self.op.mol, self.op.sp, potmm, potqm)
             self.op.mol.save_data()
 
         return self.eqm, self.gqm, self.pchg_qm
+
+    def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm):
+        """Post-SCF part of the native (AO-based) embedded QM step, shared by
+        the mol and config modes: ESP charges, QM-MM energy bookkeeping
+        (full-ESPF: + sum_A Z_A phi_A; split: - (q - Z).phi) and the analytic
+        gradient with the ESPF terms, in OpenMM units.  Sets self.pchg_qm,
+        self.eqm and self.gqm."""
+        oqp.form_esp_charges(mol)
+        self.pchg_qm = mol.data["OQP::partial_charges"]
+
+        # The embedded SCF contains only the electronic QM-MM coupling
+        # (dEqm/dphi_A = -Q_A, verified by finite differences). In the
+        # full-ESPF scheme OpenMM carries no QM charge, so add the
+        # nuclear-MM interaction sum_A Z_A phi_A to complete the QM-MM
+        # electrostatic energy; its field derivative Z_A dphi/dx together
+        # with the electronic response gives the net-charge coupling force
+        # already supplied by the analytic coupling term.
+        if self.espf_full and potmm is not None:
+            self.eqm += float(
+                np.dot(mol.get_atoms2("charge"), potmm)
+            )
+
+        if potqm is not None and potmm is not None:
+            potmm -= np.einsum(
+                "ij,j->i", potqm,
+                self.pchg_qm - mol.get_atoms2("charge")
+            )
+            mol.data["OQP::POTMM"] = potmm
+
+        # In the full-ESPF scheme the QM-MM coupling lives entirely in the
+        # embedded SCF energy (and OpenMM carries no QM charges), so there is
+        # no double count to remove. The split scheme subtracts it here
+        # because OpenMM re-adds the coupling via the QM point charges.
+        if potmm is not None and not self.espf_full:
+            self.eqm -= np.dot(
+                self.pchg_qm - mol.get_atoms2("charge"), potmm
+            )
+
+        # --- Gradients: pure QM + ESPF contribution -----------------------
+        gradient = Gradient(mol)
+        if gradient.method == 'hf':
+            # Use the common wrapper: an active petite-list build leaves a
+            # skeleton in the native buffer, and Gradient.gradient()
+            # reconstructs it in the correct frame before returning and
+            # writing the projected result back. Reading get_grad()
+            # directly here used to bypass both operations.
+            gqm = np.asarray(gradient.gradient(), dtype=float).reshape(
+                (1, mol.get_atoms2("natom"), 3))
+            oqp.grad_esp_qmmm(mol)
+            # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
+            # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
+            # gradient. Reshape the flat buffer to (natom, 3). Adding the
+            # (3, natom) view directly only works when natom == 3 (a square
+            # coincidence), which is why non-3-atom QM regions - e.g.
+            # link-atom-capped fragments - previously broke.
+            natom_qm = mol.get_atoms2("natom")
+            esp_grad = np.asarray(
+                mol.data["OQP::ESPF_GRAD"]
+            ).reshape(natom_qm, 3)
+            gqm += esp_grad
+            # --- Unit conversion to OpenMM conventions ------------------------
+            self.eqm *= 2625.499639 * unit.kilojoule_per_mole
+            self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
+        if gradient.method == 'tdhf':
+            energies = sp.excitation([self.eqm])
+            grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
+            for i in gradient.grads:
+                target = (public_state_label(gradient.mol.config, i)
+                          if is_mrsf(gradient.mol.config) else 'Root %s' % i)
+                dump_log(gradient.mol, title='PyOQP: Gradient of %s' % target)
+                gradient.mol.data.set_tdhf_target(i)
+                gradient.zvec_func[gradient.td](gradient.mol)
+
+                # check convergence
+                z_flag = gradient.mol.mol_energy.Z_Vector_converged
+
+                if not z_flag:
+                    dump_log(gradient.mol, title='PyOQP: TD Z-vector is not converged', section='end')
+
+                    if gradient.exception is True:
+                        raise ZVnotConverged()
+                    else:
+                        exit()
+
+                gradient.grad_func[gradient.td](gradient.mol)
+                gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
+                # This state-by-state QM/MM path cannot call the common
+                # wrapper as a batch because ESPF_GRAD is state-specific.
+                # Apply the same reconstruction here before the force is
+                # assembled, and keep the public native buffer consistent.
+                gqm = np.asarray(
+                    gradient.mol.symmetrize_gradient(gqm), dtype=float
+                ).reshape((gradient.natom, 3))
+                gradient.mol.set_grad(gqm)
+                oqp.grad_esp_qmmm_excited(mol)
+                # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
+                gqm += np.asarray(
+                    mol.data["OQP::ESPF_GRAD"]
+                ).reshape(gradient.natom, 3)
+                grads[i] = gqm.copy()
+                self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
+                self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
 
     def _forces_qm_dftb(self, mol, potmm):
         """QM energy/gradient/charges for the TB backends (method=dftb/xtb).

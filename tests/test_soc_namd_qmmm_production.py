@@ -892,10 +892,15 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("gradient.mol.symmetrize_gradient(gqm)", src)
         self.assertIn("gradient.mol.set_grad(gqm)", src)
 
+        # The native post-SCF energy/gradient block is shared by the mol and
+        # config modes (_native_embedded_energy_gradient); it ends at the next
+        # method definition.
         native_start = src.index("# --- Gradients: pure QM + ESPF contribution")
-        native_end = src.index("self.op.mol.save_data()", native_start)
+        native_end = src.index("\n    def ", native_start)
         native_path = src[native_start:native_end]
-        self.assertNotIn("oqp.hf_gradient(self.op.mol)", native_path)
+        self.assertNotIn("oqp.hf_gradient(", native_path)
+        self.assertIn("def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm)", src)
+        self.assertEqual(src.count("self._native_embedded_energy_gradient("), 2)   # mol + config modes
 
     def test_trivial_crossing_active_state_updates_are_applied(self):
         src = NAMD.read_text()

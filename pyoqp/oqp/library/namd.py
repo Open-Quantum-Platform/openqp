@@ -3673,7 +3673,11 @@ class NAMD_QMMM(NAMD):
         self._qmmm_pdb_file = pdb_file
         self._qmmm_forcefield_files = ff_files
         self._qmmm_restart_identity_cache = None
-        self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
+        # Topology (ascending) order: the embedded driver sorts its own copy and
+        # numbers link-atom host rows in that order, and the QM molecule built
+        # from the PDB is in topology order, so every per-row array here (QM
+        # geometry, gradients, charges, hop velocities) must use the same order.
+        self.qm_atoms = np.array(sorted(_parse_int_list(q['qm_atoms'])), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         from oqp.library.qmmm_driver import is_periodic_method
         self.periodic = is_periodic_method(self.cutoff)   # PME / Ewald / CutoffPeriodic
@@ -4011,8 +4015,11 @@ class NAMD_QMMM(NAMD):
         r = self.r_all[self.qm_atoms]
         if not self.link_atoms:
             return r
-        links = [self.r_all[l.qm_index] + l.g * (self.r_all[l.mm_index] - self.r_all[l.qm_index])
-                 for l in self.link_atoms]
+        box = self.driver._box_lengths_bohr()       # None for a cluster
+        links = []
+        for l in self.link_atoms:
+            bond = self.driver._min_image(self.r_all[l.mm_index] - self.r_all[l.qm_index], box)
+            links.append(self.r_all[l.qm_index] + l.g * bond)
         return np.vstack([r, np.asarray(links, dtype=float)])
 
     def _qm_velocities(self, kinematic=False):
@@ -4031,6 +4038,15 @@ class NAMD_QMMM(NAMD):
         """Write the (possibly rescaled) real QM-atom velocities back into the
         full-system velocity array; link rows are discarded."""
         self.v_all[self.qm_atoms] = np.asarray(vel)[:self.nqm]
+
+    def _embedding_field(self):
+        """(potmm, potqm) the embedded SCF sees: the MM electrostatic potential
+        at every QM centre, or a zero field for [qmmm] embedding=mechanical
+        (gas-phase QM Hamiltonian; the QM-MM electrostatics is then left to
+        OpenMM with the QM ESP charges, as in OpenQpQMMM.compute_force)."""
+        if getattr(self.driver, "Embedding", "") == "mechanical":
+            return self.driver._zero_embedding()
+        return self.driver.electrostatic_potential()
 
     def _fold_link_charges(self, pchg):
         """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
@@ -4059,7 +4075,7 @@ class NAMD_QMMM(NAMD):
         from oqp.library.qmmm_driver import (
             unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
         mol = self.mol
-        potmm, potqm = self.driver.electrostatic_potential()
+        potmm, potqm = self._embedding_field()
 
         if is_tb_method(str(mol.config['input']['method'])):
             # DFTB electrostatic embedding: the openqp-dftb library folds the
@@ -4083,7 +4099,11 @@ class NAMD_QMMM(NAMD):
                     "periodic clusters only ([qmmm] cutoff=NoCutoff); the "
                     "periodic (PME/Ewald) QM-image self-consistency is not "
                     "available for the tight-binding backend.")
-            mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            # Mechanical embedding: the tight-binding adapter takes None as
+            # its gas-phase contract (native methods take the zero field).
+            mol.dftb_external_potential = (
+                None if self.driver.Embedding == "mechanical"
+                else np.asarray(potmm, dtype=float))
             self._e_img, self._f_img = 0.0, None
             sp = SinglePoint(mol)
             ref = sp.reference()
@@ -5465,7 +5485,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         from oqp.library.qmmm_driver import (
             unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
         mol = self.mol
-        potmm, potqm = self.driver.electrostatic_potential()
+        potmm, potqm = self._embedding_field()
 
         sp = SinglePoint(mol)
         sp._prep_guess()
