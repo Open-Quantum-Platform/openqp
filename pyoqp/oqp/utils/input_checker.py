@@ -327,6 +327,13 @@ def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
 
 
+def _is_true(value: Any) -> bool:
+    """Truth of a schema boolean that may still arrive as a string."""
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "on", "yes"}
+    return bool(value)
+
+
 def _check_choice_literal(
     value: Any,
     path: str,
@@ -6745,6 +6752,19 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
                     "functionals require a numerical Hessian.",
                 )
+            # [dftgrid] cam_flag turns on range separation independently of the
+            # functional name, and tdhf_hessian_is_applicable is handed
+            # infos%dft%cam_flag and aborts on it. Checking only the name lets
+            # e.g. functional=pbe with cam_flag=true validate here and then die
+            # in Fortran. Scoped to this excited-state branch: the ground-state
+            # analytic Hessian supports CAM (tests/test_cam_hessian.py).
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the "
+                    "native gate. Use a numerical Hessian.",
+                )
             return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
         if td_type == "rpa":
             if scf_type != "rhf":
@@ -6920,6 +6940,29 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                            "rad_npts=128, ang_npts=590 (or finer), or use "
                            "[hess] type=numerical, which is converged at the "
                            "default grid and was measured faster here.",
+                )
+
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so a multi-rank launch of an otherwise supported analytic
+        # TD Hessian dies in Fortran after the SCF and response have already
+        # run. Catch it here instead. Scoped to the excited-state path: the
+        # ground-state Hessian has no such restriction.
+        if capability == "supported" and method == "tdhf":
+            try:
+                mpi_size = int(MPIManager().size)
+            except Exception:
+                mpi_size = 1
+            if mpi_size > 1:
+                report.add(
+                    "ERROR",
+                    "hess.type",
+                    "Analytic TD Hessians run on one MPI rank only; the native "
+                    "kernel aborts with more.",
+                    value=f"{mpi_size} MPI ranks",
+                    expected="1 rank",
+                    action="Run the analytic TD Hessian on a single rank (use "
+                           "OpenMP threads for parallelism), or set [hess] "
+                           "type=numerical, which parallelises over displacements.",
                 )
 
     if method == "hf" and state > 0:

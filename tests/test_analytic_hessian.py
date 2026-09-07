@@ -379,6 +379,72 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
                 self.assertFalse(self._grid_warnings(
                     self._hess_grid_report("svwn", pruned, 128, 590)))
 
+    def test_cam_mode_is_rejected_for_the_excited_state_analytic_hessian(self):
+        # [dftgrid] cam_flag switches on range separation independently of the
+        # functional name, and the native gate aborts on it, so a name-only
+        # check lets functional=pbe + cam_flag=true validate and then die in
+        # Fortran after the SCF and response have run.
+        base = {
+            "input": {"method": "tdhf", "functional": "pbe"},
+            "scf": {"type": "rhf"},
+            "tdhf": {"type": "rpa", "nstate": 2},
+            "hess": {"state": 1},
+        }
+        for cam, expected in ((False, "supported"),
+                              (True, "unsupported_feature"),
+                              ("true", "unsupported_feature")):
+            config = {k: v.copy() for k, v in base.items()}
+            config["dftgrid"] = {"cam_flag": cam}
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(cam_flag=cam):
+                self.assertEqual(status, expected, reason)
+
+    def test_cam_rejection_does_not_touch_paths_that_support_it(self):
+        # Pure TDHF has no XC at all, and the ground-state analytic Hessian
+        # supports CAM (tests/test_cam_hessian.py), so neither may be rejected.
+        for method, functional, state in (("tdhf", "", 1), ("hf", "pbe", 0)):
+            config = {
+                "input": {"method": method, "functional": functional},
+                "scf": {"type": "rhf"},
+                "tdhf": {"type": "rpa", "nstate": 2},
+                "hess": {"state": state},
+                "dftgrid": {"cam_flag": True},
+            }
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(method=method, functional=functional):
+                self.assertEqual(status, "supported", reason)
+
+    def _hess_errors_with_ranks(self, ranks, method="tdhf", hess_type="analytical"):
+        real = self.input_checker.MPIManager
+        self.input_checker.MPIManager = lambda: types.SimpleNamespace(
+            size=ranks, use_mpi=int(ranks > 1), rank=0
+        )
+        try:
+            config = {
+                "input": {"method": method, "functional": "svwn"},
+                "scf": {"type": "rhf", "multiplicity": 1},
+                "tdhf": {"type": "rpa", "multiplicity": 1, "nstate": 2},
+                "hess": {"type": hess_type,
+                         "state": 1 if method == "tdhf" else 0, "nproc": 1},
+                "dftgrid": {"pruned": "", "rad_npts": 128, "ang_npts": 590},
+            }
+            report = self.input_checker.CheckReport()
+            self.input_checker._check_hess(config, report)
+            return [d for d in report.diagnostics
+                    if d.severity == "ERROR" and "one MPI rank" in d.message]
+        finally:
+            self.input_checker.MPIManager = real
+
+    def test_multi_rank_excited_state_analytic_hessian_is_rejected(self):
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so validation must catch this rather than letting the run
+        # die in Fortran after the SCF and response are already done.
+        self.assertFalse(self._hess_errors_with_ranks(1))
+        self.assertTrue(self._hess_errors_with_ranks(4))
+        # The ground-state Hessian and the numerical path have no such limit.
+        self.assertFalse(self._hess_errors_with_ranks(4, method="hf"))
+        self.assertFalse(self._hess_errors_with_ranks(4, hess_type="numerical"))
+
     def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess",
