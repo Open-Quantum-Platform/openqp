@@ -232,15 +232,22 @@ contains
     ! differentiation leaves a small owner-atom residual in these quantities;
     ! restore the exact acoustic sum rule on the first atom.  This is applied
     ! only after every independently evaluated nuclear derivative is present.
+    ! dp_ao is built from umat above, so it must be corrected with it: the
+    ! amplitude, relaxed-density and XC response-row builders consume the two
+    ! together as (umat, dground), and repairing only umat leaves them
+    ! describing different orbital responses. The AO-basis density matrix is
+    ! invariant under a rigid translation, so it obeys the same sum rule.
     do c = 1, 3
       umat(:,:,c) = 0.0_dp
       eps_deriv(:,c) = 0.0_dp
       dxc_skeleton(:,:,c) = 0.0_dp
+      dp_ao(:,:,c) = 0.0_dp
       do k = 2, natom
         ia = 3*(k-1)+c
         umat(:,:,c) = umat(:,:,c)-umat(:,:,ia)
         eps_deriv(:,c) = eps_deriv(:,c)-eps_deriv(:,ia)
         dxc_skeleton(:,:,c) = dxc_skeleton(:,:,c)-dxc_skeleton(:,:,ia)
+        dp_ao(:,:,c) = dp_ao(:,:,c)-dp_ao(:,:,ia)
       end do
     end do
 
