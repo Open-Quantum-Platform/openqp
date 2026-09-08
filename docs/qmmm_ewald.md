@@ -95,6 +95,18 @@ the box with the same OpenMM Verlet integrator (flexible water, 0.5 fs). The
 kJ/mol/nm) and must not be used for dynamics; the input checker rejects
 `embedding=split` with a periodic cutoff for `runtype=md/namd`.
 
+In the full-ESPF scheme the MM system carries no QM-MM electrostatics at
+all: `forces_mm` zeroes the QM particle charges, and `prepare_mm` also zeroes
+the charge product of every OpenMM exception with a QM endpoint (OpenMM
+stores 1-4 exception charge products independently of the particle
+charges). Without the latter, a covalent boundary kept its scaled QM-MM 1-4
+Coulomb pairs in the "pure MM" energy and force on top of the ESPF coupling
+that already contains those pairs: 13 pairs and 0.16 Hartree at the shipped
+alanine-dipeptide geometry. The shift is exactly that 1-4 sum (checked
+independently against the OpenMM exception list), it is conservative, so
+finite-difference and energy-conservation tests could not see it; the
+example energies of the two link-atom decks moved accordingly.
+
 Note: `OpenQpQMMM` in config mode used to write the QM geometry with six
 decimals (Angstrom); the 5e-7 A rounding was a 0.3-0.9 kJ/mol/nm floor in
 every finite-difference force test. It now writes twelve decimals.

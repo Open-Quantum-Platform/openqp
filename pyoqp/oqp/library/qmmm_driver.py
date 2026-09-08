@@ -942,10 +942,25 @@ class OpenQpQMMM:
                     n_set += 1
             print(f"[QM/MM] h_lj: Lennard-Jones parameters assigned to {n_set} MM hydrogen(s) that had none")
 
+        n_14 = 0
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chgProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
             if (int(p1) in qm_set) or (int(p2) in qm_set):
+               if self.espf_full and chgProd.value_in_unit(unit.elementary_charge ** 2) != 0.0:
+                   # Full ESPF routes the ENTIRE QM-MM electrostatics through
+                   # the embedded SCF + coupling force, and forces_mm zeroes
+                   # the QM particle charges -- but OpenMM keeps the 1-4
+                   # exception charge products independently of the particle
+                   # charges, so a scaled QM-MM 1-4 Coulomb pair across a
+                   # covalent boundary would stay in the "pure MM" energy and
+                   # force on top of the ESPF term.  Drop it here; the LJ part
+                   # of QM-involving exceptions is handled as before.
+                   chgProd = 0.0 * unit.elementary_charge ** 2
+                   n_14 += 1
                nonbonded.setExceptionParameters(i, p1, p2, chgProd, 0.0, 0.0)
+        if n_14:
+            print(f"[QM/MM] full ESPF: {n_14} QM-MM 1-4 exception charge product(s) removed "
+                  "from the MM system (the QM-MM electrostatics is carried by ESPF)")
 
         for p1 in qm_atoms:
            for p2 in qm_atoms:

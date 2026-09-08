@@ -43,6 +43,38 @@ class TestQMAtomsOrder(unittest.TestCase):
         )
         self.assertEqual(list(drv.qm_atoms), sorted(shuffled))
 
+    def test_full_espf_mm_system_has_no_qm_mm_exception_charges(self):
+        """Full ESPF carries the whole QM-MM electrostatics; the MM system must
+        not keep the scaled 1-4 Coulomb pairs across the covalent boundary
+        (OpenMM stores exception charge products independently of the
+        particle charges that forces_mm zeroes).  The split scheme keeps them."""
+        import openmm as mm
+        import openmm.unit as unit
+        pdb_path = ROOT / "examples" / "QMMM" / "ala.pdb"
+        if not pdb_path.exists():
+            self.skipTest("examples/QMMM/ala.pdb missing")
+        pdb = app.PDBFile(str(pdb_path))
+        try:
+            ff = app.ForceField("amber14-all.xml")
+        except Exception as err:  # pragma: no cover
+            self.skipTest(f"amber14-all.xml unavailable: {err}")
+        qm = [8, 9, 16, 17, 18]
+        seen = {}
+        for embedding in ("electrostatic", "split"):
+            drv = OpenQpQMMM(pdb.positions, pdb.topology, ff, qm, oqp_cfg={},
+                             Cutoff=app.NoCutoff, Embedding=embedding)
+            nb = next(f for f in drv.mm_systems["sys0"].getForces()
+                      if isinstance(f, mm.NonbondedForce))
+            qm_set = set(qm)
+            cross = []
+            for i in range(nb.getNumExceptions()):
+                p1, p2, cp, _, _ = nb.getExceptionParameters(i)
+                if (p1 in qm_set) != (p2 in qm_set):
+                    cross.append(cp.value_in_unit(unit.elementary_charge ** 2))
+            seen[embedding] = sum(1 for c in cross if c != 0.0)
+        self.assertEqual(seen["electrostatic"], 0)
+        self.assertEqual(seen["split"], 13)        # the alanine partition has 13 QM-MM 1-4 pairs
+
     def test_compute_force_restores_topology_order(self):
         """compute_force() receives a caller-supplied qm_atoms (QMMM_MD passes
         its own config-order list) and must re-sort it before scattering forces.
