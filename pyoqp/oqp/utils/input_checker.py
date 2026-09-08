@@ -7199,6 +7199,40 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> None:
+    """The periodic/embedding controls of the OpenQpQMMM driver (runtype=md /
+    namd) are not consumed by the legacy single-point QM/MM path; reject them
+    there instead of silently running a NoCutoff point-charge job."""
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if not bool(_get(config, "input", "qmmm_flag", False)) or runtype in ("md", "namd"):
+        return
+    def _truthy(v):
+        return (v is True) or (str(v).strip().lower() in ("1", "true", "on", "yes", "t"))
+    def _set(v):
+        return str(v or "").strip().lower() not in ("", "none", "0", "0.0")
+    ignored = []
+    cutoff = str(_get(config, "qmmm", "cutoff", "NoCutoff") or "NoCutoff").strip().lower()
+    if cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        ignored.append(f"cutoff={cutoff}")
+    for key in ("ewald_tol", "mm_charge_width"):
+        if _set(_get(config, "qmmm", key, "")):
+            ignored.append(key)
+    for key in ("lj_switch", "h_lj"):
+        if _truthy(_get(config, "qmmm", key, False)):
+            ignored.append(key)
+    if ignored:
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic/embedding QM/MM controls are only used by runtype=md and "
+            "runtype=namd; the single-point QM/MM path would silently ignore them.",
+            value=", ".join(ignored),
+            expected="runtype=md or namd, or a NoCutoff single point without these keys",
+            action="Use runtype=md/namd for periodic (PME/Ewald) or smeared-charge "
+                   "QM/MM, or remove these [qmmm] keys for a single-point energy.",
+        )
+
+
 def check_input_values(
     config: dict[str, Any],
     *,
@@ -7238,6 +7272,7 @@ def check_input_values(
     _check_guess(config, report)
     _check_pcm(config, report)
     _check_dftb(config, report)
+    _check_qmmm_driver_options(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
     _check_scf(config, report)

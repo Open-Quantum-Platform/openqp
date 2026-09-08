@@ -1054,8 +1054,10 @@ class OpenQpQMMM:
             self._frontier_hosts(), lambda a: q_of.get(a, 0.0),
             self.frontier_scheme,
         )
+        box = self._box_lengths_bohr()
         return assemble_embedding_sites(
-            mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals)
+            mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals,
+            min_image=None if box is None else (lambda d: self._min_image(d, box)))
 
     def _is_periodic(self):
         """True when the MM nonbonded method is a periodic one (PME, Ewald,

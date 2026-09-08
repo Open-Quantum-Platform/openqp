@@ -65,7 +65,7 @@ _TRAJ_REPORTERS = {
     "dcd": app.DCDReporter,
 }
 
-_VALID_ENSEMBLES = ("nve", "nvt", "npt")
+_VALID_ENSEMBLES = ("nve", "nvt")   # npt: no QM/MM lattice derivative (rejected)
 
 
 def _parse_int_list(value):
@@ -140,7 +140,8 @@ def _extract_qmmm_config(oqp_cfg=None, mol=None):
 
 class QMMM_MD:
     """
-    QM/MM Molecular Dynamics with NVE / NVT / NPT support.
+    QM/MM Molecular Dynamics with NVE / NVT support (NPT is rejected: the
+    QM/MM electrostatics carry no lattice derivative).
 
     All parameters are read from the configuration. Provide **exactly one** of:
 
@@ -161,7 +162,7 @@ class QMMM_MD:
     n_steps            : int            default 1000
     timestep           : float (fs)     default 1.0
     temperature        : float (K)      default 300.0
-    ensemble           : str            nve | nvt | npt   (default nve)
+    ensemble           : str            nve | nvt         (default nve; npt rejected)
     friction           : float (ps^-1)  default 1.0      (NVT/NPT only)
     pressure           : float (bar)    default 1.0      (NPT only)
     barostat_interval  : int            default 25       (NPT only)
@@ -237,6 +238,11 @@ class QMMM_MD:
 
         # ------ ensemble settings -----------------------------------------
         self.ensemble = str(qmmm_cfg.get("ensemble", "nve")).lower()
+        if self.ensemble == "npt":
+            raise NotImplementedError(
+                "ensemble=npt is not available for QM/MM MD: the QM/MM "
+                "electrostatics have no lattice derivative and would be "
+                "evaluated with the initial box.  Use nve or nvt.")
         if self.ensemble not in _VALID_ENSEMBLES:
             raise ValueError(
                 f"Unknown ensemble '{self.ensemble}'. "
@@ -246,16 +252,6 @@ class QMMM_MD:
         self.pressure = float(qmmm_cfg.get("pressure", 1.0)) * unit.bar
         self.barostat_interval = int(qmmm_cfg.get("barostat_interval", 25))
 
-        if self.ensemble == "npt":
-            # The QM/MM electrostatics (Ewald branch) take the box from the
-            # topology and carry no lattice derivative, so a barostat would
-            # rescale the MM box while the QM/MM coupling keeps the initial
-            # lattice and contributes nothing to the pressure.
-            raise NotImplementedError(
-                "ensemble=npt is not available for QM/MM MD: the QM/MM "
-                "electrostatics have no lattice derivative and would be "
-                "evaluated with the initial box.  Use nve or nvt."
-            )
 
         # ------ trajectory format -----------------------------------------
         fmt = str(qmmm_cfg.get("trajectory_format", "pdb")).lower()
