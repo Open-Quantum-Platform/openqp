@@ -51,6 +51,23 @@ class TestEwaldQMMM(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'mm_charge_width'):
             ew.check_damping(1.0 / (np.sqrt(2.0) * 1.05 * w_max))
 
+    def test_chunked_reciprocal_sums_are_exact(self):
+        """The block-wise reciprocal sums (CHUNK atoms at a time) reproduce the
+        single-block result to round-off for a set larger than one block."""
+        rng = np.random.default_rng(3)
+        n = 700
+        r_mm = rng.uniform(0, 1, (n, 3)) * self.box
+        q_mm = rng.normal(size=n); q_mm -= q_mm.mean()
+        ew = EwaldQMMM(self.box, tol=1e-8)
+        ref_phi, ref_grad = ew.mm_potential(self.r_qm, r_mm, q_mm)
+        ref_f = ew.mm_forces(self.r_qm, self.q_qm, r_mm, q_mm)
+        ew.CHUNK = 128
+        phi, grad = ew.mm_potential(self.r_qm, r_mm, q_mm)
+        f = ew.mm_forces(self.r_qm, self.q_qm, r_mm, q_mm)
+        np.testing.assert_allclose(phi, ref_phi, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(grad, ref_grad, rtol=0, atol=1e-12)
+        np.testing.assert_allclose(f, ref_f, rtol=0, atol=1e-12)
+
     def test_potential_matches_explicit_lattice_sum(self):
         # The Ewald (tin-foil, zero-average) potential and a direct sum over a
         # block of images differ by a constant fixed by the second moment of the

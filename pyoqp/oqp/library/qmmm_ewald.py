@@ -103,9 +103,17 @@ class EwaldQMMM:
             dpsi = dpsi + (em / r ** 2 + 2.0 * mu / np.sqrt(np.pi) * gm / r)
         return r, psi, dpsi
 
+    #: atoms per block in the reciprocal-space sums; bounds the (n, nk) work
+    #: arrays to a few hundred MB for solvated proteins (a 16 A water box fits
+    #: in one block, so small systems are summed exactly as before)
+    CHUNK = 2048
+
     def _structure_factor(self, pos, q):
-        phase = pos @ self.k.T                          # (n, nk)
-        return (q[:, None] * np.exp(1j * phase)).sum(axis=0)   # (nk,)
+        s = np.zeros(len(self.k), dtype=complex)
+        for i0 in range(0, len(pos), self.CHUNK):
+            phase = pos[i0:i0 + self.CHUNK] @ self.k.T                 # (n, nk)
+            s += (q[i0:i0 + self.CHUNK, None] * np.exp(1j * phase)).sum(axis=0)
+        return s                                                       # (nk,)
 
     # ------------------------------------------------------------------ #
     def mm_potential(self, r_qm, r_mm, q_mm, mu=None):
@@ -147,10 +155,12 @@ class EwaldQMMM:
             # dE/dr_i = q_A q_i dpsi * (r_i - r_A)/r = -q_A q_i dpsi d/r ; F = -dE/dr_i
             f[mask] += (q_qm[a] * q_mm[mask] * dpsi[mask] / r[mask])[:, None] * d[mask]
         s_qm = self._structure_factor(r_qm, q_qm)
-        phase = r_mm @ self.k.T
-        z = s_qm[None, :] * np.exp(-1j * phase)                    # S_QM e^{-ik.r_i}
-        # dE/dr_i = q_i sum_k w_k k Im[S_QM e^{-ik r_i}]  -> F = -that
-        f -= q_mm[:, None] * ((self.w[None, :] * z.imag) @ self.k)
+        for i0 in range(0, len(r_mm), self.CHUNK):
+            sl = slice(i0, i0 + self.CHUNK)
+            phase = r_mm[sl] @ self.k.T
+            z = s_qm[None, :] * np.exp(-1j * phase)                # S_QM e^{-ik.r_i}
+            # dE/dr_i = q_i sum_k w_k k Im[S_QM e^{-ik r_i}]  -> F = -that
+            f[sl] -= q_mm[sl, None] * ((self.w[None, :] * z.imag) @ self.k)
         return f
 
     def qm_image_matrix(self, r_qm):
