@@ -185,6 +185,40 @@ class TestDriverGates(unittest.TestCase):
         out3 = d.unwrap_qm(lambda i: raw[i], None)
         for i in raw:
             np.testing.assert_allclose(out3[i], raw[i])
+        # three single-atom fragments at x = 0, 4.9, -4.9 (wrapped to 5.1): the
+        # last two are neighbours across the face (0.2 A apart), each already at
+        # minimum image from the first; placement against the nearest placed
+        # fragment keeps them together instead of 9.8 A apart
+        d3 = object.__new__(OpenQpQMMM)
+        d3.qm_atoms = np.array([0, 1, 2])
+        d3._qm_bond_adjacency = lambda: {0: [], 1: [], 2: []}
+        raw3 = {0: np.array([0.0, 5.0, 5.0]), 1: np.array([4.9, 5.0, 5.0]), 2: np.array([5.1, 5.0, 5.0])}
+        out4 = d3.unwrap_qm(lambda i: raw3[i], box)
+        np.testing.assert_allclose(out4[1], [4.9, 5.0, 5.0])
+        np.testing.assert_allclose(out4[2], [5.1, 5.0, 5.0])
+        raw3[2] = np.array([-4.9, 5.0, 5.0])          # same fragment stored on the other face
+        out5 = d3.unwrap_qm(lambda i: raw3[i], box)
+        np.testing.assert_allclose(out5[2], [5.1, 5.0, 5.0])
+
+    def test_anderson_step_accelerates_a_slow_charge_fixed_point(self):
+        from oqp.library.qmmm_driver import anderson_step
+        rng = np.random.default_rng(1); n = 18
+        Q, _ = np.linalg.qr(rng.normal(size=(n, n)))
+        lam = np.full(n, 0.2); lam[:2] = [0.9, 0.8]        # two slow modes, as for the indole side chain
+        A = Q @ np.diag(lam) @ Q.T; b = 0.05 * rng.normal(size=n)
+        q_star = np.linalg.solve(np.eye(n) - A, b)
+        q = np.zeros(n); qh, fh = [], []
+        for k in range(30):
+            g = A @ q + b; f = g - q; qh.append(q.copy()); fh.append(f)
+            if np.abs(f).max() < 1e-4:
+                break
+            q = g if k == 0 else anderson_step(qh, fh)
+        self.assertLess(k + 1, 10)                          # damped 0.5 mixing needs > 100
+        self.assertLess(np.abs(q - q_star).max(), 1e-6)
+        # short history / oversized extrapolation fall back to the damped step
+        np.testing.assert_allclose(anderson_step([q], [f]), q + 0.5 * f)
+        big = anderson_step([np.zeros(2), np.ones(2)], [np.array([5.0, 5.0]), np.array([4.0, 4.0])], max_step=0.5)
+        np.testing.assert_allclose(big, np.ones(2) + 0.5 * np.array([4.0, 4.0]))
 
     def test_smeared_kernel_is_finite_at_zero_separation(self):
         from oqp.library.qmmm_driver import smeared_coulomb

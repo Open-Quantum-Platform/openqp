@@ -4291,22 +4291,43 @@ class NAMD_QMMM(NAMD):
         sp, potmm_mm, psi_img, dpsi_img = ctx["sp"], ctx["potmm_mm"], ctx["psi_img"], ctx["dpsi_img"]
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
+        from oqp.library.qmmm_driver import anderson_step
         q_prev = np.array(q_prev, dtype=float)
         potmm = potmm_mm + psi_img @ q_prev
         self._grad_cache = None
         converged = False
         delta = float("inf")
+        q_hist, f_hist, e_hist = [], [], []
         for k in range(int(self.driver.IMAGE_MAXITER_ACTIVE)):
             g = self._qm_gradient()
             q_act = np.array(mol.data["OQP::partial_charges"], dtype=float)
             delta = float(np.abs(q_act - q_prev).max())
+            e_act = float(mol.energies[self.active])
             dump_log(mol, title=(f"PyOQP: QM-image field, active-state iteration {k + 1}: "
                                  f"max |dq| = {delta:.2e} e, E({self.active}) = "
-                                 f"{float(mol.energies[self.active]):.10f} Hartree"), section='')
+                                 f"{e_act:.10f} Hartree"), section='')
             if delta < self.driver.IMAGE_TOL_ACTIVE:
                 converged = True
                 break
-            q_prev = 0.5 * (q_act + q_prev) if k > 2 else q_act
+            # The relaxed charges carry the Z-vector residual (about 1e-4 e at
+            # the default zvconv for an 18-atom indole), so |dq| can settle at
+            # a noise floor above the tolerance while the state energy no
+            # longer moves: accept when the residual is within ten times the
+            # tolerance and the energy has been stationary over three
+            # iterations.  A tighter [tdhf] zvconv lowers the floor.
+            if (delta < 10.0 * self.driver.IMAGE_TOL_ACTIVE and len(e_hist) >= 2
+                    and max(abs(e_act - e) for e in e_hist[-2:]) < self.driver.IMAGE_ETOL_ACTIVE):
+                dump_log(mol, title=(f"PyOQP: QM-image field accepted on energy stagnation "
+                                     f"(|dE| < {self.driver.IMAGE_ETOL_ACTIVE:.0e} Hartree over three "
+                                     f"iterations, max |dq| = {delta:.2e} e)"), section='')
+                converged = True
+                break
+            if len(f_hist) >= 2 and delta > np.abs(f_hist[-1]).max() > np.abs(f_hist[-2]).max():
+                # residual grew twice in a row: the history is dominated by
+                # noise, restart the extrapolation from the current point
+                q_hist, f_hist = [], []
+            q_hist.append(q_prev.copy()); f_hist.append(q_act - q_prev); e_hist.append(e_act)
+            q_prev = q_act if k == 0 else anderson_step(q_hist, f_hist)
             ints_1e(mol)                                   # bare hcore, orbitals kept
             potmm = potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm

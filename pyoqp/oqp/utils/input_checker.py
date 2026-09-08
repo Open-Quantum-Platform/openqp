@@ -7231,6 +7231,28 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
         return
     if runtype in ("md", "namd"):
         embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
+        method = _as_lower(_get(config, "input", "method", "hf"))
+        if method == "tdhf" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            try:
+                zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
+            except (TypeError, ValueError):
+                zvconv = 1.0e-6
+            if zvconv > 1.0e-8:
+                # The periodic QM-image field is iterated with the RELAXED
+                # ESPF charges of the target state; their noise floor follows
+                # the Z-vector residual (about 1e-4 e at zvconv=1e-6 for an
+                # 18-atom indole, i.e. at the loop tolerance, which then needs
+                # 4-5 gradient evaluations per step; 2 at zvconv=1e-8).
+                report.add(
+                    "WARNING",
+                    "tdhf.zvconv",
+                    "Periodic (PME/Ewald) dynamics on a TDHF/MRSF state iterates the QM-image "
+                    "field with the relaxed ESPF charges, whose precision is set by the "
+                    "Z-vector convergence; the default leaves them at the loop tolerance.",
+                    value=f"{zvconv:g}",
+                    expected="zvconv <= 1e-8",
+                    action="Set [tdhf] zvconv=1e-8 (two image iterations per step instead of four or five).",
+                )
         if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
             # The legacy split scheme routes the QM charges through OpenMM
             # point charges; under PBC its force is not the derivative of

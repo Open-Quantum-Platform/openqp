@@ -41,6 +41,8 @@ conv=1e-9
 type=mrsf
 nstate=2
 multiplicity=1
+# relaxed ESPF charges drive the periodic QM-image loop: tighten the Z-vector
+zvconv=1e-8
 
 [properties]
 grad=1

@@ -131,6 +131,28 @@ def _normalize_embedding(value):
     return embedding
 
 
+def anderson_step(q_hist, f_hist, m=3, beta=1.0, max_step=0.5):
+    """Anderson-accelerated update for a charge fixed point q = g(q).
+
+    ``q_hist`` holds the last iterates q_k and ``f_hist`` the residuals
+    f_k = g(q_k) - q_k (same length, newest last).  Returns the next iterate
+    q_k + beta f_k - (dQ + beta dF) gamma with gamma the least-squares
+    combination of the last ``m`` residual differences; falls back to the
+    plain damped step (beta/2) when the history is too short, the
+    least-squares problem is degenerate, or the extrapolated move exceeds
+    ``max_step`` electrons on any atom."""
+    q_k, f_k = np.asarray(q_hist[-1], dtype=float), np.asarray(f_hist[-1], dtype=float)
+    n = min(m, len(q_hist) - 1)
+    if n >= 1:
+        dQ = np.column_stack([np.asarray(q_hist[-1 - i]) - np.asarray(q_hist[-2 - i]) for i in range(n)])
+        dF = np.column_stack([np.asarray(f_hist[-1 - i]) - np.asarray(f_hist[-2 - i]) for i in range(n)])
+        gamma, *_ = np.linalg.lstsq(dF, f_k, rcond=1e-10)
+        q_new = q_k + beta * f_k - (dQ + beta * dF) @ gamma
+        if np.all(np.isfinite(q_new)) and float(np.abs(q_new - q_k).max()) <= max_step:
+            return q_new
+    return q_k + 0.5 * f_k
+
+
 def is_periodic_method(cutoff):
     """True when ``cutoff`` (an OpenMM nonbonded-method constant) is periodic."""
     return any(cutoff is m for m in PERIODIC_METHODS)
@@ -354,7 +376,7 @@ class OpenQpQMMM:
             return {int(i): np.asarray(get_xyz(int(i)), dtype=float) for i in self.qm_atoms}
         adj = self._qm_bond_adjacency()
         box = np.asarray(box, dtype=float)
-        anchor = None
+        placed = []
         for root in sorted(int(i) for i in self.qm_atoms):
             if root in out:
                 continue
@@ -373,16 +395,26 @@ class OpenQpQMMM:
             # fragments that neighbour each other across a box face would be
             # handed to the QM code a box length apart.  Translate every
             # fragment after the first by the lattice vector that puts its
-            # centroid at the minimum image from the first fragment's centroid.
+            # centroid at the minimum image of the NEAREST already placed
+            # fragment (greedy spanning tree: imaging only against the first
+            # fragment leaves two later fragments on opposite sides of it a
+            # box length apart even when they are neighbours across a face).
             centroid = np.mean([out[k] for k in members], axis=0)
-            if anchor is None:
-                anchor = centroid
+            if not placed:
+                placed.append(centroid)
             else:
-                d = centroid - anchor
-                shift = self._min_image(d, box) - d
+                best = None
+                for c in placed:
+                    d = centroid - c
+                    dm = self._min_image(d, box)
+                    r = float(np.linalg.norm(dm))
+                    if best is None or r < best[0]:
+                        best = (r, dm - d)
+                shift = best[1]
                 if np.any(shift != 0.0):
                     for k in members:
                         out[k] = out[k] + shift
+                placed.append(centroid + shift)
         return out
 
     def _qm_xyz_angstrom(self, positions):
@@ -713,6 +745,17 @@ class OpenQpQMMM:
         forces = { force.__class__.__name__ : force for force in system.getForces() }
         nonbonded = forces['NonbondedForce']
 
+        if self.Embedding == "mechanical":
+            # Mechanical embedding: the QM atoms keep their FIXED force-field
+            # charges in the MM electrostatics (the system is used as built by
+            # prepare_mm, intra-QM pairs excluded).  Injecting the fitted ESPF
+            # charges of the gas-phase QM density here would make E_MM depend
+            # on the geometry through q(R) while OpenMM differentiates it at
+            # fixed charges, so the force would not be the derivative of the
+            # energy; ``pchg_qm`` is therefore ignored on this path.
+            state = simulation.context.getState(getEnergy=True, getForces=True)
+            return state.getPotentialEnergy(), state.getForces(asNumpy=True)
+
         if self.espf_full:
             # Pure MM-MM: QM atoms carry no charge; all QM-MM electrostatics are
             # handled analytically by ESPF + the coupling force. vdW and bonded
@@ -773,7 +816,10 @@ class OpenQpQMMM:
         elif self.Embedding == "mechanical":
             # Mechanical embedding (PR #274): the QM subsystem sees no MM
             # field, so the SCF is gas-phase and the QM-MM electrostatics is
-            # left to OpenMM (QM ESP charges in forces_mm).  The embedding
+            # left to OpenMM with the fixed force-field charges of the QM
+            # atoms (forces_mm ignores the ESP charges on this path, so the
+            # MM energy is differentiated at the charges it was built with).
+            # The embedding
             # arrays must still exist and be ZERO rather than absent:
             # scf.F90 calls add_potqm_contributions on every SCF iteration
             # whenever qmmm_flag is set and aborts on a missing OQP::POTQM
@@ -1160,7 +1206,8 @@ class OpenQpQMMM:
     #: self-consistent at 1e-4 e; the state energy is then stable to ~1e-7 Ha
     #: and the loop typically needs 3 gradient evaluations.
     IMAGE_TOL_ACTIVE = 1e-4
-    IMAGE_MAXITER_ACTIVE = 12
+    IMAGE_MAXITER_ACTIVE = 20
+    IMAGE_ETOL_ACTIVE = 1e-7      # Hartree: energy-stagnation acceptance (with |dq| < 10 IMAGE_TOL_ACTIVE)
 
     def _box_lengths_bohr(self):
         """Orthorhombic periodic box lengths (bohr), or None when the QM/MM

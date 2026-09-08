@@ -12,6 +12,8 @@ load), so it is skipped in environments without them.
 """
 
 import unittest
+
+import numpy as np
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +76,29 @@ class TestQMAtomsOrder(unittest.TestCase):
             seen[embedding] = sum(1 for c in cross if c != 0.0)
         self.assertEqual(seen["electrostatic"], 0)
         self.assertEqual(seen["split"], 13)        # the alanine partition has 13 QM-MM 1-4 pairs
+
+    def test_mechanical_embedding_keeps_force_field_charges(self):
+        """Mechanical embedding differentiates the MM energy at the charges it
+        was built with: forces_mm must ignore fitted QM charges (the same MM
+        energy for any charge vector), while the split scheme injects them."""
+        import openmm.unit as unit
+        pdb_path = ROOT / "examples" / "QMMM" / "ala.pdb"
+        if not pdb_path.exists():
+            self.skipTest("examples/QMMM/ala.pdb missing")
+        pdb = app.PDBFile(str(pdb_path))
+        try:
+            ff = app.ForceField("amber14-all.xml")
+        except Exception as err:  # pragma: no cover
+            self.skipTest(f"amber14-all.xml unavailable: {err}")
+        qm = [8, 9, 16, 17, 18]
+        q1 = np.array([0.5, -0.5, -0.3, 0.2, 0.1, 0.05]); q2 = 0.5 * q1   # zero charges would change the exclusion set
+        e = {}
+        for embedding in ("mechanical", "split"):
+            drv = OpenQpQMMM(pdb.positions, pdb.topology, ff, qm, oqp_cfg={},
+                             Cutoff=app.NoCutoff, Embedding=embedding)
+            e[embedding] = [drv.forces_mm(q)[0].value_in_unit(unit.kilojoule_per_mole) for q in (q1, q2)]
+        self.assertAlmostEqual(e["mechanical"][0], e["mechanical"][1], places=8)
+        self.assertGreater(abs(e["split"][0] - e["split"][1]), 1.0)
 
     def test_compute_force_restores_topology_order(self):
         """compute_force() receives a caller-supplied qm_atoms (QMMM_MD passes

@@ -49,7 +49,13 @@ the field, then iterates SCF -> MRSF -> active-state gradient until the
 **relaxed ESPF charges of the propagated state** reproduce the field they
 were computed in (`IMAGE_TOL_ACTIVE` = 1e-4 e, the Z-vector precision;
 typically three gradient evaluations per step, the last of which is reused
-as the force). The field the SCF sees therefore belongs to the state whose
+as the force). The charge iterates are Anderson-mixed (three-vector history,
+plain damped fallback), because a larger QM region such as the indole side
+chain in Trp-cage has slow modes for which the damped iteration crept from
+2.0e-4 to 1.3e-4 e over twelve gradient evaluations while the state energy
+had been stationary to 1e-8 Hartree since the second; a residual below ten
+times the tolerance with the energy stationary over two iterations is also
+accepted (`IMAGE_ETOL_ACTIVE`, 1e-7 Hartree, with the residual within ten times the tolerance); a tighter `[tdhf] zvconv` lowers the charge noise floor. The field the SCF sees therefore belongs to the state whose
 force is integrated, and the response-term cancellation above holds for that
 state. For the dipeptide box this moves the ESPF charges by 0.4 e and the
 S0 energy by 6e-3 Ha relative to a field built from the ROHF reference

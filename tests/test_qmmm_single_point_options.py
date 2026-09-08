@@ -74,6 +74,21 @@ class TestSinglePointQMMMOptions(unittest.TestCase):
             self.assertFalse(self._errors({"cutoff": "PME", "embedding": "electrostatic"}, runtype=rt))
             self.assertFalse(self._errors({"cutoff": "PME", "embedding": "mechanical"}, runtype=rt))
 
+    def test_periodic_tdhf_dynamics_warns_about_zvector_convergence(self):
+        def warns(cfg_extra, runtype="namd"):
+            cfg = {"input": {"runtype": runtype, "qmmm_flag": True, "method": "tdhf", "basis": "6-31g",
+                             "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+                   "scf": {"type": "rohf", "multiplicity": 3}, "qmmm": {"cutoff": "PME"}}
+            cfg.update(cfg_extra)
+            report = self.chk.CheckReport()
+            self.chk._check_qmmm_driver_options(cfg, report)
+            return [d for d in report.diagnostics if d.path == "tdhf.zvconv"]
+        self.assertEqual([d.severity for d in warns({})], ["WARNING"])              # default 1e-6
+        self.assertEqual([d.severity for d in warns({"tdhf": {"zvconv": "1e-6"}})], ["WARNING"])
+        self.assertFalse(warns({"tdhf": {"zvconv": "1e-8"}}))
+        self.assertFalse(warns({"qmmm": {"cutoff": "NoCutoff"}}))
+        self.assertFalse(warns({"input": {"runtype": "namd", "qmmm_flag": True, "method": "hf"}}))
+
     def test_md_and_namd_keep_the_controls(self):
         for rt in ("md", "namd"):
             self.assertFalse(self._errors({"cutoff": "PME", "mm_charge_width": "0.7"}, runtype=rt))
