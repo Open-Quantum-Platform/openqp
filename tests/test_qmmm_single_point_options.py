@@ -36,11 +36,13 @@ class TestSinglePointQMMMOptions(unittest.TestCase):
     def setUpClass(cls):
         cls.chk = _load_checker()
 
-    def _errors(self, qmmm, runtype="energy"):
+    def _errors(self, qmmm, runtype="energy", md=None):
         cfg = {"input": {"runtype": runtype, "qmmm_flag": True, "method": "hf", "basis": "6-31g",
                          "system": "ala.pdb 9 10 17 18 19", "charge": 0},
                "scf": {"type": "rhf", "multiplicity": 1},
                "qmmm": dict(qmmm)}
+        if md is not None:
+            cfg["md"] = dict(md)
         report = self.chk.CheckReport()
         self.chk._check_qmmm_driver_options(cfg, report)
         return [d for d in report.diagnostics
@@ -53,6 +55,15 @@ class TestSinglePointQMMMOptions(unittest.TestCase):
 
     def test_single_point_accepts_plain_nocutoff(self):
         self.assertFalse(self._errors({"cutoff": "NoCutoff", "mm_charge_width": "0", "lj_switch": False}))
+
+    def test_soc_namd_rejects_periodic_cutoff(self):
+        for cutoff in ("PME", "Ewald", "CutoffPeriodic"):
+            errs = self._errors({"cutoff": cutoff}, runtype="namd", md={"soc": True})
+            self.assertEqual(len(errs), 1, cutoff)
+            self.assertIn("SOC-NAMD", errs[0].message)
+        # same-spin FSSH keeps the periodic box; SOC-NAMD keeps a cluster
+        self.assertFalse(self._errors({"cutoff": "PME"}, runtype="namd", md={"soc": False}))
+        self.assertFalse(self._errors({"cutoff": "NoCutoff"}, runtype="namd", md={"soc": True}))
 
     def test_md_and_namd_keep_the_controls(self):
         for rt in ("md", "namd"):

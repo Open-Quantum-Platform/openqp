@@ -7204,14 +7204,34 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
     namd) are not consumed by the legacy single-point QM/MM path; reject them
     there instead of silently running a NoCutoff point-charge job."""
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
-    if not bool(_get(config, "input", "qmmm_flag", False)) or runtype in ("md", "namd"):
+    if not bool(_get(config, "input", "qmmm_flag", False)):
         return
     def _truthy(v):
         return (v is True) or (str(v).strip().lower() in ("1", "true", "on", "yes", "t"))
     def _set(v):
         return str(v or "").strip().lower() not in ("", "none", "0", "0.0")
-    ignored = []
     cutoff = str(_get(config, "qmmm", "cutoff", "NoCutoff") or "NoCutoff").strip().lower()
+    if runtype == "namd" and _truthy(_get(config, "md", "soc", False)) \
+            and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        # The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose
+        # relaxed ESPF charges are not available per image-field iteration, so
+        # the periodic QM-image term cannot be made self-consistent with the
+        # propagated state (NAMD_SOC_QMMM raises NotImplementedError).
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic QM/MM (PME/Ewald/CutoffPeriodic) is not available for SOC-NAMD; "
+            "the periodic QM-image field needs the relaxed charges of the propagated "
+            "state, which the spin-mixed SOC state does not provide.",
+            value=f"cutoff={cutoff} with [md] soc=true",
+            expected="cutoff=NoCutoff for SOC-NAMD, or [md] soc=false for a periodic box",
+            action="Run SOC-NAMD QM/MM as an isolated cluster (cutoff=NoCutoff), or use "
+                   "same-spin FSSH ([md] soc=false) for the periodic box.",
+        )
+        return
+    if runtype in ("md", "namd"):
+        return
+    ignored = []
     if cutoff not in ("nocutoff", "cutoffnonperiodic"):
         ignored.append(f"cutoff={cutoff}")
     for key in ("ewald_tol", "mm_charge_width"):
