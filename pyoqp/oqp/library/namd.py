@@ -3770,9 +3770,16 @@ class NAMD_QMMM(NAMD):
                     cfg[key] = True
             else:
                 text = '' if value is None else str(value).strip()
-                if text.lower() in ('', 'none', '0', '0.0'):
+                if text.lower() in ('', 'none'):
                     continue
-                cfg[key] = float(text)
+                try:
+                    number = float(text)
+                except ValueError:
+                    cfg[key] = text            # let the run's own validation complain
+                    continue
+                if number == 0.0:              # '0', '0.0', '0.00', '0e0': point charges
+                    continue
+                cfg[key] = number
         return cfg
 
     def _qmmm_restart_system_identity(self, system, qmmm_config):
@@ -4099,11 +4106,9 @@ class NAMD_QMMM(NAMD):
                     "periodic clusters only ([qmmm] cutoff=NoCutoff); the "
                     "periodic (PME/Ewald) QM-image self-consistency is not "
                     "available for the tight-binding backend.")
-            # Mechanical embedding: the tight-binding adapter takes None as
-            # its gas-phase contract (native methods take the zero field).
-            mol.dftb_external_potential = (
-                None if self.driver.Embedding == "mechanical"
-                else np.asarray(potmm, dtype=float))
+            # (embedding=mechanical is rejected above and by the input
+            # checker for the tight-binding NAMD path, so potmm is the field.)
+            mol.dftb_external_potential = np.asarray(potmm, dtype=float)
             self._e_img, self._f_img = 0.0, None
             sp = SinglePoint(mol)
             ref = sp.reference()

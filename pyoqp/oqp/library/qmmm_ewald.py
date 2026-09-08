@@ -72,7 +72,10 @@ class EwaldQMMM:
         on the real-space cutoff scale (see max_damping_width)."""
         if mu is None:
             return
-        w = 1.0 / (np.sqrt(2.0) * float(mu))
+        mu = float(mu)
+        if not np.isfinite(mu) or mu <= 0.0:
+            raise ValueError(f"damping parameter mu must be finite and positive; got {mu!r}")
+        w = 1.0 / (np.sqrt(2.0) * mu)
         w_max = self.max_damping_width()
         if w > w_max:
             raise ValueError(

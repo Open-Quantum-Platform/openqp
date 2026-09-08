@@ -390,7 +390,7 @@ def openmm_system():
          if g_factor >= 1.0 or g_factor <=0:
              if not linkatom_error:
                  print("Error!! You should reconsider your QM/MM partitioning between:")
-             print(f"     - QM({qm_atoms[i]}) and MM({mm_index})")
+             print(f"     - QM({qm_index}) and MM({mm_index})")
              linkatom_error = True
          x.append(qm_position[0]+g_factor*(mm_position[0]-qm_position[0]))
          y.append(qm_position[1]+g_factor*(mm_position[1]-qm_position[1]))

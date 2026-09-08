@@ -236,6 +236,9 @@ class TestNamdLinkAtoms(unittest.TestCase):
         cfg = {'embedding': 'electrostatic', 'ewald_tol': '', 'lj_switch': False,
                'h_lj': 'False', 'mm_charge_width': '0', 'pdb_file': 'x.pdb'}
         self.assertEqual(n._qmmm_identity_config(cfg), {'embedding': 'electrostatic', 'pdb_file': 'x.pdb'})
+        for zero in ('0.0', '0.00', '0e0', 0, 0.0):
+            self.assertEqual(n._qmmm_identity_config(dict(cfg, mm_charge_width=zero)),
+                             {'embedding': 'electrostatic', 'pdb_file': 'x.pdb'}, zero)
         cfg.update(lj_switch='true', mm_charge_width='0.7', ewald_tol='1e-6')
         self.assertEqual(n._qmmm_identity_config(cfg),
                          {'embedding': 'electrostatic', 'pdb_file': 'x.pdb',
