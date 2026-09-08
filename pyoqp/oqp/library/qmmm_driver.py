@@ -353,10 +353,13 @@ class OpenQpQMMM:
         if box is None:
             return {int(i): np.asarray(get_xyz(int(i)), dtype=float) for i in self.qm_atoms}
         adj = self._qm_bond_adjacency()
+        box = np.asarray(box, dtype=float)
+        anchor = None
         for root in sorted(int(i) for i in self.qm_atoms):
             if root in out:
                 continue
             out[root] = np.asarray(get_xyz(root), dtype=float)
+            members = [root]
             stack = [root]
             while stack:
                 i = stack.pop()
@@ -364,6 +367,22 @@ class OpenQpQMMM:
                     if j not in out:
                         out[j] = out[i] + self._min_image(np.asarray(get_xyz(j), dtype=float) - np.asarray(get_xyz(i), dtype=float), box)
                         stack.append(j)
+                        members.append(j)
+            # Disconnected QM fragments (several QM molecules): each one is
+            # whole now, but its root kept the raw wrapped coordinate, so two
+            # fragments that neighbour each other across a box face would be
+            # handed to the QM code a box length apart.  Translate every
+            # fragment after the first by the lattice vector that puts its
+            # centroid at the minimum image from the first fragment's centroid.
+            centroid = np.mean([out[k] for k in members], axis=0)
+            if anchor is None:
+                anchor = centroid
+            else:
+                d = centroid - anchor
+                shift = self._min_image(d, box) - d
+                if np.any(shift != 0.0):
+                    for k in members:
+                        out[k] = out[k] + shift
         return out
 
     def _qm_xyz_angstrom(self, positions):

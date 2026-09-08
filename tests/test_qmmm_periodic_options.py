@@ -162,6 +162,30 @@ class TestDriverGates(unittest.TestCase):
         d2.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
         self.assertGreater(np.abs(d2._qm_center_positions_bohr() - ref).max(), 20.0)
 
+    def test_unwrap_places_disconnected_fragments_by_minimum_image(self):
+        # two QM molecules (0-1 and 2-3) in a 10 A box: fragment B is stored
+        # across the +x face (atom 3 wrapped to x=0.4), and the whole fragment
+        # sits a box length from fragment A in the raw frame
+        d = object.__new__(OpenQpQMMM)
+        d.qm_atoms = np.array([0, 1, 2, 3])
+        d._qm_bond_adjacency = lambda: {0: [1], 1: [0], 2: [3], 3: [2]}
+        raw = {0: np.array([0.5, 5.0, 5.0]), 1: np.array([1.5, 5.0, 5.0]),
+               2: np.array([9.4, 5.0, 5.0]), 3: np.array([0.4, 5.0, 5.0])}
+        box = np.array([10.0, 10.0, 10.0])
+        out = d.unwrap_qm(lambda i: raw[i], box)
+        np.testing.assert_allclose(out[0], raw[0]); np.testing.assert_allclose(out[1], raw[1])
+        np.testing.assert_allclose(out[3] - out[2], [1.0, 0.0, 0.0])      # B whole
+        np.testing.assert_allclose(out[2], [-0.6, 5.0, 5.0])              # B at minimum image from A
+        np.testing.assert_allclose(out[3], [0.4, 5.0, 5.0])
+        # fragments already at minimum image are left alone; no box: raw frame
+        raw2 = dict(raw); raw2[2] = np.array([3.0, 5.0, 5.0]); raw2[3] = np.array([4.0, 5.0, 5.0])
+        out2 = d.unwrap_qm(lambda i: raw2[i], box)
+        for i in raw2:
+            np.testing.assert_allclose(out2[i], raw2[i])
+        out3 = d.unwrap_qm(lambda i: raw[i], None)
+        for i in raw:
+            np.testing.assert_allclose(out3[i], raw[i])
+
     def test_smeared_kernel_is_finite_at_zero_separation(self):
         from oqp.library.qmmm_driver import smeared_coulomb
         mu = 0.53
