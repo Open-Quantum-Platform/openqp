@@ -453,7 +453,7 @@ class OpenQpQMMM:
                 hcore_full += np.einsum("ijk,i->jk", espf_op_corr_f, potmm)
                 self.mol.set_hcore(pack_lower_tri_single(hcore_full))
 
-            sp.scf()
+            self._embedded_scf(sp)
             self.eqm = self.mol.get_scf_energy()
 
             self._native_embedded_energy_gradient(self.mol, sp, potmm, potqm)
@@ -485,13 +485,24 @@ class OpenQpQMMM:
                 hcore_full += np.einsum("ijk,i->jk", espf_op_corr_f, potmm)
                 self.op.mol.set_hcore(pack_lower_tri_single(hcore_full))
 
-            self.op.sp.scf()
+            self._embedded_scf(self.op.sp)
             self.eqm = self.op.mol.get_scf_energy()
 
             self._native_embedded_energy_gradient(self.op.mol, self.op.sp, potmm, potqm)
             self.op.mol.save_data()
 
         return self.eqm, self.gqm, self.pchg_qm
+
+    @staticmethod
+    def _embedded_scf(sp):
+        """Embedded SCF through the robustness ladder (primary converger, then
+        SOSCF/TRAH escalation from the current orbitals); stop if it still
+        does not converge rather than assemble forces on a partial SCF."""
+        if not sp._run_scf():
+            raise RuntimeError(
+                "QM/MM: the embedded SCF did not converge (primary converger and "
+                "the SOSCF/TRAH escalation).  Raise [scf] maxit, loosen [scf] "
+                "conv, or check the QM/MM contacts.")
 
     def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm):
         """Post-SCF part of the native (AO-based) embedded QM step, shared by

@@ -4063,6 +4063,22 @@ class NAMD_QMMM(NAMD):
             return self.driver._zero_embedding()
         return self.driver.electrostatic_potential()
 
+    @staticmethod
+    def _embedded_scf(sp):
+        """Run the embedded SCF (the ESPF term is already in hcore) through the
+        same robustness ladder as a gas-phase reference: primary converger,
+        then SOSCF/TRAH escalation warm-started from the current orbitals.
+        A reference that still does not converge stops the run: propagating
+        on an unconverged SCF gives an inconsistent energy/force pair, and a
+        DIIS loop that stops at its iteration limit even leaves the density
+        records in an intermediate state."""
+        converged = sp._run_scf()
+        if not converged:
+            raise RuntimeError(
+                "NAMD QM/MM: the embedded SCF did not converge (primary "
+                "converger and the SOSCF/TRAH escalation).  Raise [scf] maxit, "
+                "loosen [scf] conv, or check the QM/MM contacts.")
+
     def _fold_link_charges(self, pchg):
         """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
         to its QM host so the total QM charge is conserved when the QM region
@@ -4158,7 +4174,7 @@ class NAMD_QMMM(NAMD):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            sp.scf()
+            self._embedded_scf(sp)
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)
@@ -5537,7 +5553,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            sp.scf()
+            self._embedded_scf(sp)
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)
