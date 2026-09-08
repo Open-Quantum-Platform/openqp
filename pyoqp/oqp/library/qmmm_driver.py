@@ -22,6 +22,7 @@ from oqp.library.qmmm_connectivity import (
 )
 
 import oqp
+from oqp.library.ints_1e import ints_1e
 
 
 def unpack_lower_tri_single(packed_atom, nbf):
@@ -435,7 +436,12 @@ class OpenQpQMMM:
                 tb_potmm = None if self.Embedding == "mechanical" else potmm
                 return self._forces_qm_dftb(self.mol, tb_potmm)
             sp = SinglePoint(self.mol)
-            sp._prep_guess()
+            if getattr(self, "_image_warm", False):
+                # image iteration > 1: same geometry, keep the converged
+                # orbitals and only rebuild the bare one-electron integrals
+                ints_1e(self.mol)
+            else:
+                sp._prep_guess()
 
             self.mol.data["OQP::POTMM"] = potmm
             self.mol.data["OQP::POTQM"] = potqm
@@ -461,13 +467,18 @@ class OpenQpQMMM:
 
         else:
             # ---- Config mode ---------------------------------------------
-            xyz_atoms = self._build_xyz_string()
-            self.oqp_cfg_base["input.system"] = xyz_atoms
-            self.op = OPENQP(self.oqp_cfg_base, True)
-            if is_tb_method(str(self.op.mol.config['input']['method'])):
-                tb_potmm = None if self.Embedding == "mechanical" else potmm
-                return self._forces_qm_dftb(self.op.mol, tb_potmm)
-            self.op.sp._prep_guess()
+            if getattr(self, "_image_warm", False) and getattr(self, "op", None) is not None:
+                # image iteration > 1: same geometry, keep the converged
+                # orbitals and only rebuild the bare one-electron integrals
+                ints_1e(self.op.mol)
+            else:
+                xyz_atoms = self._build_xyz_string()
+                self.oqp_cfg_base["input.system"] = xyz_atoms
+                self.op = OPENQP(self.oqp_cfg_base, True)
+                if is_tb_method(str(self.op.mol.config['input']['method'])):
+                    tb_potmm = None if self.Embedding == "mechanical" else potmm
+                    return self._forces_qm_dftb(self.op.mol, tb_potmm)
+                self.op.sp._prep_guess()
 
             self.op.mol.data["OQP::POTMM"] = potmm
             self.op.mol.data["OQP::POTQM"] = potqm
@@ -761,9 +772,13 @@ class OpenQpQMMM:
                       and len(self._q_prev) == n else np.zeros(n))
             converged = False
             delta, it = float("inf"), -1
+            self._image_warm = False
             for it in range(int(self.IMAGE_MAXITER)):
                 phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
-                eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
+                try:
+                    eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
+                finally:
+                    self._image_warm = True      # later iterations reuse the orbitals
                 q_new = np.array(pchg_qm, dtype=float)
                 delta = float(np.abs(q_new - q_prev).max())
                 if delta < self.IMAGE_TOL:
@@ -777,6 +792,7 @@ class OpenQpQMMM:
                     f"(max |dq| = {delta:.2e} e > {self.IMAGE_TOL:.0e}); the "
                     "energy/force would be inconsistent.  Tighten the SCF "
                     "convergence or check the QM/MM contacts.")
+            self._image_warm = False
             self._q_prev = q_new.copy()
             self._image_iterations = it + 1
             e_img = 0.5 * float(q_new @ psi_img @ q_new)                    # Hartree

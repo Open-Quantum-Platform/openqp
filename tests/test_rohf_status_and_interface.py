@@ -258,7 +258,10 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             "form_rohf_fock",
             "Guest-Saunders ROHF Fock",
             "mo_b = mo_a",
-            "dmat_a = pdmat(:,1) - pdmat(:,2)",
+            # final ROHF densities are rebuilt from the converged orbitals on
+            # every exit path (the former pdmat(:,1) - pdmat(:,2) formula only
+            # held the alpha density after a converged DIIS iteration)
+            "call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)",
         ):
             self.assertIn(required, scf)
 
