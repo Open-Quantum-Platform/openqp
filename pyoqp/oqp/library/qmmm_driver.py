@@ -97,6 +97,25 @@ def read_xyz(filepath):
 #: box vectors.  (LJPME is not accepted by the [qmmm] cutoff parser.)
 PERIODIC_METHODS = (app.PME, app.Ewald, app.CutoffPeriodic)
 
+def smeared_coulomb(r, mu):
+    """Pair kernel of a QM point charge with a Gaussian-smeared MM charge of
+    damping parameter ``mu`` (1/bohr): returns (phi_kernel, force_kernel) with
+    phi_kernel = erf(mu r)/r and force_kernel = -d(phi_kernel)/dr / r, so that
+    the force on the QM centre is q_A Q_M * force_kernel * d.  ``mu=None`` is
+    the point-charge limit 1/r and 1/r^3.  Both kernels are finite at r = 0
+    (phi -> 2 mu/sqrt(pi), force -> 0), which is the point of the smearing."""
+    from scipy.special import erf
+    r = np.asarray(r, dtype=float)
+    if mu is None:
+        return 1.0 / r, 1.0 / r ** 3
+    tiny = r < 1e-8
+    rs = np.where(tiny, 1.0, r)
+    phi = np.where(tiny, 2.0 * mu / np.sqrt(np.pi), erf(mu * rs) / rs)
+    force = np.where(tiny, 0.0, erf(mu * rs) / rs ** 3
+                     - 2.0 * mu / np.sqrt(np.pi) * np.exp(-(mu * rs) ** 2) / rs ** 2)
+    return phi, force
+
+
 #: Accepted [qmmm] embedding spellings (ported from PR #274).
 _VALID_EMBEDDINGS = {"mechanical", "electrostatic", "espf", "espf_full", "split"}
 
@@ -307,47 +326,90 @@ class OpenQpQMMM:
         bonds = [(b[0].index, b[1].index) for b in self.topology.bonds()]
         return detect_link_atoms(bonds, self.qm_atoms, lambda i: z_by_index[i])
 
-    def _link_positions_angstrom(self, positions):
+    def _qm_bond_adjacency(self):
+        """{qm_index: [bonded qm_index, ...]} from the topology (cached)."""
+        adj = getattr(self, "_qm_adj", None)
+        if adj is None:
+            qm_set = set(int(i) for i in self.qm_atoms)
+            adj = {i: [] for i in qm_set}
+            for b in self.topology.bonds():
+                i, j = int(b[0].index), int(b[1].index)
+                if i in qm_set and j in qm_set:
+                    adj[i].append(j); adj[j].append(i)
+            self._qm_adj = adj
+        return adj
+
+    def unwrap_qm(self, get_xyz, box):
+        """Positions of the QM atoms with every bonded QM fragment made whole:
+        starting from the lowest-index atom of each connected fragment, each
+        neighbour is placed at the minimum-image bond vector from the atom it
+        was reached from.  ``get_xyz(i)`` returns the raw (possibly wrapped)
+        coordinate of atom i and ``box`` the orthorhombic box in the same
+        units (None: no imaging, raw coordinates are returned).  A periodic
+        frame that stores bonded atoms on opposite sides of the cell would
+        otherwise hand the QM code a bond stretched by a box length."""
+        out = {}
+        if box is None:
+            return {int(i): np.asarray(get_xyz(int(i)), dtype=float) for i in self.qm_atoms}
+        adj = self._qm_bond_adjacency()
+        for root in sorted(int(i) for i in self.qm_atoms):
+            if root in out:
+                continue
+            out[root] = np.asarray(get_xyz(root), dtype=float)
+            stack = [root]
+            while stack:
+                i = stack.pop()
+                for j in adj[i]:
+                    if j not in out:
+                        out[j] = out[i] + self._min_image(np.asarray(get_xyz(j), dtype=float) - np.asarray(get_xyz(i), dtype=float), box)
+                        stack.append(j)
+        return out
+
+    def _qm_xyz_angstrom(self, positions):
+        """Unwrapped QM-atom positions (Angstrom) keyed by atom index."""
+        box = self._box_lengths_bohr()
+        box_ang = None if box is None else np.asarray(box) / self._ANG2BOHR
+        return self.unwrap_qm(lambda i: np.asarray(positions[i].value_in_unit(unit.angstrom), dtype=float), box_ang)
+
+    def _link_positions_angstrom(self, positions, qm_xyz=None):
         """Link-atom Cartesian positions (Angstrom) for the given frame.  In a
         periodic box the QM->MM bond vector is taken as the minimum image, so
         a frame whose bonded hosts are wrapped to opposite sides of the cell
         still places the link hydrogen on the short (bonded) image."""
         box = self._box_lengths_bohr()
         box_ang = None if box is None else np.asarray(box) / self._ANG2BOHR
+        if qm_xyz is None:
+            qm_xyz = self._qm_xyz_angstrom(positions)
         coords = []
         for link in self.link_atoms:
-            qm_p = np.asarray(positions[link.qm_index].value_in_unit(unit.angstrom), dtype=float)
+            qm_raw = np.asarray(positions[link.qm_index].value_in_unit(unit.angstrom), dtype=float)
             mm_p = np.asarray(positions[link.mm_index].value_in_unit(unit.angstrom), dtype=float)
-            bond = self._min_image(mm_p - qm_p, box_ang)
+            bond = self._min_image(mm_p - qm_raw, box_ang)
+            qm_p = qm_xyz[int(link.qm_index)]           # unwrapped host
             coords.append(link_atom_position(qm_p, qm_p + bond, link.g))
         return coords
 
     def _build_xyz_string(self):
         xyz_atoms = []
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
         for atom in self.topology.atoms():
             at_index = atom.index
             if at_index in self.qm_atoms:
                 sym = atom.element.symbol
-                x = self.positions[at_index][0].value_in_unit(unit.angstrom)
-                y = self.positions[at_index][1].value_in_unit(unit.angstrom)
-                z = self.positions[at_index][2].value_in_unit(unit.angstrom)
+                x, y, z = qm_xyz[at_index]
                 xyz_atoms.append(f"{sym} {x:.12f} {y:.12f} {z:.12f}")
         # Cap severed QM–MM bonds with hydrogen link atoms (appended last so the
         # QM-atom ordering above is preserved).
-        for pos in self._link_positions_angstrom(self.positions):
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
             xyz_atoms.append(f"H {pos[0]:.12f} {pos[1]:.12f} {pos[2]:.12f}")
         return '; '.join(xyz_atoms)
 
     def _update_mol_positions(self):
-        coords = []
-        for atom in self.topology.atoms():
-            if atom.index in self.qm_atoms:
-                x = self.positions[atom.index][0].value_in_unit(unit.angstrom)
-                y = self.positions[atom.index][1].value_in_unit(unit.angstrom)
-                z = self.positions[atom.index][2].value_in_unit(unit.angstrom)
-                coords.append([x, y, z])
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
+        coords = [list(qm_xyz[atom.index]) for atom in self.topology.atoms()
+                  if atom.index in self.qm_atoms]
         # Append hydrogen link atoms capping severed QM–MM bonds.
-        for pos in self._link_positions_angstrom(self.positions):
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
             coords.append([pos[0], pos[1], pos[2]])
         coords = np.array(coords)
         ang2bohr = 1.8897259886
@@ -952,12 +1014,10 @@ class OpenQpQMMM:
         """Cartesian positions (bohr) of every QM centre (real QM atoms in
         topology order, then hydrogen link atoms), matching the QM geometry
         order used to build the QM system and the POTMM array."""
-        coords = []
-        for atom in self.topology.atoms():
-            if atom.index in self.qm_atoms:
-                p = self.positions[atom.index].value_in_unit(unit.angstrom)
-                coords.append([c * self._ANG2BOHR for c in p])
-        for pos in self._link_positions_angstrom(self.positions):
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
+        coords = [[c * self._ANG2BOHR for c in qm_xyz[atom.index]]
+                  for atom in self.topology.atoms() if atom.index in self.qm_atoms]
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
             coords.append([c * self._ANG2BOHR for c in pos])
         return np.asarray(coords, dtype=float)
 
@@ -1080,8 +1140,8 @@ class OpenQpQMMM:
         for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)
             r = np.linalg.norm(d, axis=1)
-            damp = 1.0 if self.mm_damp_mu is None else erf(self.mm_damp_mu * r)
-            potmm[a] = np.sum(q_s * damp / r)
+            phi_kernel, _ = smeared_coulomb(r, self.mm_damp_mu)
+            potmm[a] = np.sum(q_s * phi_kernel)
         return potmm
 
     def _coupling_forces(self, pchg):
@@ -1108,11 +1168,8 @@ class OpenQpQMMM:
           for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)   # r_A - r_s
             r = np.linalg.norm(d, axis=1)
-            if mu is None:
-                coeff = pchg[a] * q_s / r ** 3            # q_A Q_s / r^3
-            else:                                         # -q_A Q_s d/dr[erf(mu r)/r] / r
-                coeff = pchg[a] * q_s * (erf(mu * r) / r ** 3
-                                         - 2.0 * mu / np.sqrt(np.pi) * np.exp(-(mu * r) ** 2) / r ** 2)
+            _, force_kernel = smeared_coulomb(r, mu)      # 1/r^3, or the smeared analogue
+            coeff = pchg[a] * q_s * force_kernel          # q_A Q_s * kernel
             f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
             f_site -= coeff[:, None] * d                  # Newton's third law
         # Scatter each site force onto the real MM atoms it is built from

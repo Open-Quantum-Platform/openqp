@@ -51,6 +51,13 @@ class TestEwaldQMMM(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'mm_charge_width'):
             ew.check_damping(1.0 / (np.sqrt(2.0) * 1.05 * w_max))
 
+    def test_damped_real_pair_finite_at_zero(self):
+        mu = 0.7
+        r, psi, dpsi = self.ew._real_pair(np.zeros((1, 3)), mu)
+        self.assertTrue(np.isfinite(psi[0]) and np.isfinite(dpsi[0]))
+        self.assertAlmostEqual(psi[0], 2.0 * (mu - self.ew.beta) / np.sqrt(np.pi), places=12)
+        self.assertEqual(dpsi[0], 0.0)
+
     def test_chunked_reciprocal_sums_are_exact(self):
         """The block-wise reciprocal sums (CHUNK atoms at a time) reproduce the
         single-block result to round-off for a set larger than one block."""

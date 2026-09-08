@@ -40,6 +40,7 @@ from importlib import resources
 import numpy as np
 
 import oqp
+from oqp.library.ints_1e import ints_1e
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
 from oqp.library.nac_utils import canonical_state_overlap
 from oqp.library.odp import odp_from_config
@@ -4019,14 +4020,21 @@ class NAMD_QMMM(NAMD):
     def _qm_positions_bohr(self):
         """(natom, 3) QM-centre coordinates (bohr): real QM atoms in topology
         order, then the hydrogen link atoms on their cut bonds."""
-        r = self.r_all[self.qm_atoms]
+        box = self.driver._box_lengths_bohr()       # None for a cluster
+        if box is None:
+            r = self.r_all[self.qm_atoms]
+            qm_xyz = None
+        else:
+            # bonded QM fragments made whole under PBC (minimum-image bonds)
+            qm_xyz = self.driver.unwrap_qm(lambda i: self.r_all[i], box)
+            r = np.asarray([qm_xyz[int(i)] for i in self.qm_atoms], dtype=float)
         if not self.link_atoms:
             return r
-        box = self.driver._box_lengths_bohr()       # None for a cluster
         links = []
         for l in self.link_atoms:
             bond = self.driver._min_image(self.r_all[l.mm_index] - self.r_all[l.qm_index], box)
-            links.append(self.r_all[l.qm_index] + l.g * bond)
+            host = self.r_all[l.qm_index] if qm_xyz is None else qm_xyz[int(l.qm_index)]
+            links.append(host + l.g * bond)
         return np.vstack([r, np.asarray(links, dtype=float)])
 
     def _qm_velocities(self, kinematic=False):
@@ -4161,7 +4169,13 @@ class NAMD_QMMM(NAMD):
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
-            sp._prep_guess()
+            # Warm start: keep the converged orbitals as the guess for the next
+            # image iteration and only rebuild the bare one-electron integrals
+            # (the ESPF term is re-added above).  A fresh Hueckel guess every
+            # iteration lets a reference with two nearby SCF solutions flip
+            # between them as the image field changes, and the loop then
+            # oscillates instead of converging.
+            ints_1e(mol)
         if not converged:
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
@@ -5534,7 +5548,13 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
-            sp._prep_guess()
+            # Warm start: keep the converged orbitals as the guess for the next
+            # image iteration and only rebuild the bare one-electron integrals
+            # (the ESPF term is re-added above).  A fresh Hueckel guess every
+            # iteration lets a reference with two nearby SCF solutions flip
+            # between them as the image field changes, and the loop then
+            # oscillates instead of converging.
+            ints_1e(mol)
         if not converged:
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "

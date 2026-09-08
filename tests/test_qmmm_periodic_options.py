@@ -84,6 +84,8 @@ class TestDriverGates(unittest.TestCase):
         d = object.__new__(OpenQpQMMM)
         d.Cutoff = cutoff
         d.topology = topology
+        d.qm_atoms = np.array([8, 9, 16, 17, 18])       # ALA C, O, NH2 of the dipeptide
+        d.link_atoms = []
         return d
 
     def test_periodic_branch_only_for_periodic_methods(self):
@@ -130,6 +132,49 @@ class TestDriverGates(unittest.TestCase):
         raw = np.asarray(d2._link_positions_angstrom(
             [unit.Quantity(p, unit.angstrom) for p in wrapped])[0])
         self.assertGreater(np.linalg.norm(raw - ref), 5.0)
+
+    def test_qm_fragment_made_whole_across_the_boundary(self):
+        """A periodic frame that stores bonded QM atoms on opposite sides of
+        the cell must reach the QM code as a whole molecule."""
+        import openmm.unit as unit
+        import types
+        app = self.app
+        d = self._bare(app.PME, self.box.topology)
+        d.qm_atoms = np.array([8, 9, 16, 17, 18])          # ALA C, O, NH2 (bonded chain)
+        d.link_atoms = [types.SimpleNamespace(qm_index=8, mm_index=7, g=0.7)]
+        pos = [np.array(p.value_in_unit(unit.angstrom), dtype=float) for p in self.box.positions]
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in pos]
+        ref = d._qm_center_positions_bohr()
+        wrapped = [p.copy() for p in pos]
+        for i in (16, 17, 18):                              # NH2 group shifted by a box vector
+            wrapped[i] = wrapped[i] + np.array([0.0, 16.0, 0.0])
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        got = d._qm_center_positions_bohr()
+        np.testing.assert_allclose(got, ref, atol=1e-9)
+        # config-mode geometry string uses the same unwrapped coordinates
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        s_wrapped = d._build_xyz_string()
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in pos]
+        self.assertEqual(s_wrapped, d._build_xyz_string())
+        # a cluster driver leaves the raw coordinates alone
+        d2 = self._bare(app.NoCutoff, self.box.topology)
+        d2.qm_atoms, d2.link_atoms = d.qm_atoms, d.link_atoms
+        d2.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        self.assertGreater(np.abs(d2._qm_center_positions_bohr() - ref).max(), 20.0)
+
+    def test_smeared_kernel_is_finite_at_zero_separation(self):
+        from oqp.library.qmmm_driver import smeared_coulomb
+        mu = 0.53
+        r = np.array([0.0, 1e-10, 0.5, 2.0])
+        phi, force = smeared_coulomb(r, mu)
+        self.assertTrue(np.all(np.isfinite(phi)) and np.all(np.isfinite(force)))
+        self.assertAlmostEqual(phi[0], 2 * mu / np.sqrt(np.pi), places=12)
+        self.assertEqual(force[0], 0.0)
+        from scipy.special import erf
+        self.assertAlmostEqual(phi[2], erf(mu * 0.5) / 0.5, places=12)
+        # point-charge limit
+        phi0, f0 = smeared_coulomb(np.array([2.0]), None)
+        self.assertAlmostEqual(phi0[0], 0.5); self.assertAlmostEqual(f0[0], 0.125)
 
     def test_option_validation(self):
         common = dict(positions=None, topology=None, forcefield=None, qm_atoms=[0])

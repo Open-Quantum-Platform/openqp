@@ -101,6 +101,12 @@ class EwaldQMMM:
             gm = np.exp(-(mu * r) ** 2)
             psi = psi - em / r
             dpsi = dpsi + (em / r ** 2 + 2.0 * mu / np.sqrt(np.pi) * gm / r)
+            # the smeared kernel is finite at r = 0: [erfc(beta r) - erfc(mu r)]/r
+            # -> 2 (mu - beta)/sqrt(pi), with zero slope
+            tiny = r < 1e-8
+            if np.any(tiny):
+                psi = np.where(tiny, 2.0 * (mu - self.beta) / np.sqrt(np.pi), psi)
+                dpsi = np.where(tiny, 0.0, dpsi)
         return r, psi, dpsi
 
     #: atoms per block in the reciprocal-space sums; bounds the (n, nk) work

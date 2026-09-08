@@ -246,10 +246,15 @@ class QMMM_MD:
         self.pressure = float(qmmm_cfg.get("pressure", 1.0)) * unit.bar
         self.barostat_interval = int(qmmm_cfg.get("barostat_interval", 25))
 
-        if self.ensemble == "npt" and not is_periodic_method(self.cutoff):
-            raise ValueError(
-                "NPT requires a periodic cutoff method "
-                "(PME / Ewald / CutoffPeriodic)."
+        if self.ensemble == "npt":
+            # The QM/MM electrostatics (Ewald branch) take the box from the
+            # topology and carry no lattice derivative, so a barostat would
+            # rescale the MM box while the QM/MM coupling keeps the initial
+            # lattice and contributes nothing to the pressure.
+            raise NotImplementedError(
+                "ensemble=npt is not available for QM/MM MD: the QM/MM "
+                "electrostatics have no lattice derivative and would be "
+                "evaluated with the initial box.  Use nve or nvt."
             )
 
         # ------ trajectory format -----------------------------------------
