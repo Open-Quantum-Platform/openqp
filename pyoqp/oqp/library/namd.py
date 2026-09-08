@@ -4200,6 +4200,7 @@ class NAMD_QMMM(NAMD):
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
         self._grad_cache = None
+        self._img_ctx = None
         ref = [mol.get_scf_energy()]
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
@@ -4209,13 +4210,37 @@ class NAMD_QMMM(NAMD):
         if psi_img is None:
             self._e_img, self._f_img = 0.0, None
             return potmm, potqm
-        # The reference-density loop above only seeds the field.  The force
-        # is the derivative of the energy only if the image field is self-
-        # consistent with the charges of the state that is propagated, so
-        # iterate SCF -> excitation -> active-state gradient (which publishes
-        # the relaxed ESPF charges of the active state) until those charges
-        # reproduce the field they were computed in.  The converged gradient
-        # is cached for _total_force.
+        # The reference-density loop above only seeds the field; the state
+        # that is propagated gets its own self-consistent field below (and
+        # again after a surface hop, see _total_force).
+        self._img_ctx = dict(sp=sp, potmm_mm=potmm_mm, psi_img=psi_img, dpsi_img=dpsi_img,
+                             with_overlap=with_overlap, geom=self._geometry_key())
+        return self._refine_image_field(q_prev), potqm
+
+    def _geometry_key(self):
+        """Full-system coordinates the current electronic state belongs to."""
+        return np.array(self.r_all, dtype=float, copy=True)
+
+    def _refine_image_field(self, q_prev):
+        """Make the periodic QM-image field self-consistent with the relaxed
+        ESPF charges of the ACTIVE state (the force is the derivative of the
+        energy only if the field the SCF saw belongs to the propagated state):
+        iterate SCF -> excitation -> active-state gradient (which publishes
+        the relaxed charges) until those charges reproduce the field they were
+        computed in.  Seeds from ``q_prev`` (the reference-density charges at a
+        new geometry, or the previous state's field after a surface hop),
+        stores the image energy/force terms and caches the converged gradient
+        for _qm_gradient; returns the MM potential incl. the image field."""
+        from oqp.library.qmmm_driver import (
+            unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
+        mol = self.mol
+        ctx = self._img_ctx
+        sp, potmm_mm, psi_img, dpsi_img = ctx["sp"], ctx["potmm_mm"], ctx["psi_img"], ctx["dpsi_img"]
+        nat = mol.data["natom"]
+        nbf = mol.data.get_basis()["nbf"]
+        q_prev = np.array(q_prev, dtype=float)
+        potmm = potmm_mm + psi_img @ q_prev
+        self._grad_cache = None
         converged = False
         delta = float("inf")
         for k in range(int(self.driver.IMAGE_MAXITER_ACTIVE)):
@@ -4240,7 +4265,7 @@ class NAMD_QMMM(NAMD):
             mol.set_hcore(pack_lower_tri_single(hcore))
             self._embedded_scf(sp)
             ref = [mol.get_scf_energy()]
-            if with_overlap:
+            if ctx["with_overlap"]:
                 mol.back_door = (self.prev_xyz, self.prev_data)
                 BasisOverlap(mol).overlap()
             sp.excitation(ref)
@@ -4253,20 +4278,22 @@ class NAMD_QMMM(NAMD):
         self._q_img = q_prev.copy()
         self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
         self._f_img = -np.einsum("a,b,abc->ac", q_prev, q_prev, dpsi_img)
-        self._grad_cache = (int(self.active), np.array(g, dtype=float), q_act.copy())
-        return potmm, potqm
+        self._grad_cache = (int(self.active), np.array(g, dtype=float), q_act.copy(), ctx["geom"])
+        return potmm
 
     def _qm_gradient(self):
         """Embedded active-state gradient (Hartree/bohr) incl. ESPF force."""
         import os
         mol = self.mol
         cache = getattr(self, "_grad_cache", None)
-        if cache is not None and cache[0] == int(self.active):
+        if cache is not None and cache[0] == int(self.active) \
+                and np.array_equal(cache[3], self.r_all):
             # gradient already evaluated by the image self-consistency loop
             # for this state at this geometry; restore its relaxed charges
             self._grad_cache = None
             mol.data["OQP::partial_charges"] = cache[2].copy()
             return cache[1].copy()
+        self._grad_cache = None
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
@@ -4339,6 +4366,21 @@ class NAMD_QMMM(NAMD):
         """Assemble full-system force (a.u.) and total potential energy (Ha)."""
         mol = self.mol
         u = self._u
+        ctx = getattr(self, "_img_ctx", None)
+        if ctx is not None:
+            # Periodic full-ESPF: the image field stored by _electronic_qmmm
+            # belongs to the state it was refined for.  After a surface hop
+            # the new active state must get its own self-consistent field
+            # (seeded from the previous state's charges) before its force is
+            # integrated; a geometry change needs a new electronic step.
+            if not np.array_equal(ctx["geom"], self.r_all):
+                raise RuntimeError("NAMD_QMMM._total_force: the geometry changed since the "
+                                   "last electronic step; call _electronic_qmmm first.")
+            cache = getattr(self, "_grad_cache", None)
+            if cache is None or cache[0] != int(self.active):
+                dump_log(mol, title=(f"PyOQP: QM-image field re-iterated for the new active "
+                                     f"state {self.active} (surface hop)"), section='')
+                potmm = self._refine_image_field(self._q_img)
         # active-state embedded QM gradient (Ha/bohr). The z-vector step inside
         # the gradient already forms the excited-state ESPF charges, so
         # OQP::partial_charges holds the active state's QM charges afterwards.
@@ -5570,22 +5612,23 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         from oqp.library.qmmm_driver import (
             unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
         mol = self.mol
-        potmm, potqm = self._embedding_field()
-
-        sp = SinglePoint(mol)
-        sp._prep_guess()
-        nat = mol.data["natom"]
-        nbf = mol.data.get_basis()["nbf"]
         ewald = self.driver._ewald() if getattr(self.driver, "espf_full", False) else None
         if ewald is not None:
             # The periodic QM-image term must be self-consistent with the
             # charges of the propagated state; the spin-adiabatic SOC state is
             # a weighted mixture of MCH states whose relaxed charges are not
             # available per iteration, so periodic SOC-NAMD is not offered.
+            # (The input checker reports the same restriction at parse time.)
             raise NotImplementedError(
                 "SOC-NAMD QM/MM is implemented for non-periodic clusters only "
-                "([qmmm] cutoff=NoCutoff); the periodic QM-image term is not "
-                "available for the spin-mixed active state.")
+                "([qmmm] cutoff=NoCutoff or CutoffNonPeriodic); the periodic "
+                "QM-image term is not available for the spin-mixed active state.")
+        potmm, potqm = self._embedding_field()
+
+        sp = SinglePoint(mol)
+        sp._prep_guess()
+        nat = mol.data["natom"]
+        nbf = mol.data.get_basis()["nbf"]
         potmm_mm = np.asarray(potmm, dtype=float).copy()
         if ewald is not None:
             psi_img, dpsi_img = ewald.qm_image_matrix(self.driver._qm_center_positions_bohr())

@@ -55,8 +55,12 @@ state. For the dipeptide box this moves the ESPF charges by 0.4 e and the
 S0 energy by 6e-3 Ha relative to a field built from the ROHF reference
 charges, and the NAMD force residual against finite differences improves
 from 3.4 to 1.2 kJ/mol/nm at the same energy-conservation level (0.10 kJ/mol
-over 50 fs). At a surface hop the force of the new state is evaluated in the
-field of the previous state for that one step; the next step re-iterates.
+over 50 fs). After a surface hop the force assembly re-iterates the field
+for the new active state before its force is integrated (seeded from the
+previous state's charges, logged as `QM-image field re-iterated for the new
+active state`); in the dipeptide box the S1 force evaluated in the S0 field
+would differ from a self-consistent S1 force by 8 kJ/mol/nm, after the
+re-iteration by 0.001 kJ/mol/nm.
 The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose relaxed
 charges are not available per iteration, so periodic SOC-NAMD QM/MM is not
 offered (`NotImplementedError`; use `NoCutoff`).
