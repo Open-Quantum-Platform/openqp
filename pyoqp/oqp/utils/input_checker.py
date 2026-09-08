@@ -327,6 +327,13 @@ def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
 
 
+def _is_true(value: Any) -> bool:
+    """Truth of a schema boolean that may still arrive as a string."""
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "on", "yes"}
+    return bool(value)
+
+
 def _check_choice_literal(
     value: Any,
     path: str,
@@ -6692,6 +6699,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
+    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
@@ -6719,8 +6728,66 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if (td_type == "rpa" and scf_type == "rhf"
+                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            functional_aliases = {
+                "svwn": "svwn5",
+                "svwn5": "svwn5",
+                "lda": "svwn5",
+                "blyp": "blyp",
+                "pbe": "pbe",
+                "pbepbe": "pbe",
+                "b3lyp5": "b3lyp5",
+                "b3lypv5": "b3lyp5",
+            }
+            canonical_functional = functional_aliases.get(functional, functional)
+            verified_semilocal = {"svwn5", "blyp", "pbe", "b3lyp5"}
+            if functional and canonical_functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            # [dftgrid] cam_flag turns on range separation independently of the
+            # functional name, and tdhf_hessian_is_applicable is handed
+            # infos%dft%cam_flag and aborts on it. Checking only the name lets
+            # e.g. functional=pbe with cam_flag=true validate here and then die
+            # in Fortran. Scoped to this excited-state branch: the ground-state
+            # analytic Hessian supports CAM (tests/test_cam_hessian.py).
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the "
+                    "native gate. Use a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            if scf_type != "rhf":
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+            if td_multiplicity != 1:
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently support singlet targets only (tdhf.multiplicity=1)."
+            if state != 1:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians currently support only the lowest "
+                    "excited root (hess.state=1); higher roots require an "
+                    "indefinite-safe projected amplitude-response solver.",
+                )
+            if td_nstate < 2:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
+                    "lowest excited root can be verified as isolated from "
+                    "the next computed root.",
+                )
+            return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
@@ -6825,6 +6892,81 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="max L <= 3",
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
+
+        # The analytic TDDFT Hessian is far more grid-sensitive than the rest
+        # of the derivative stack, so the default grid is not enough for it.
+        # Measured on H2O/STO-3G SVWN S1 (this geometry is examples/HESS/
+        # H2O_SVWN_RPA_ANA_HESS.inp): the analytic frequencies move 6.03 cm-1
+        # between the default pruned SG2 96x302 grid and an unpruned 128x590
+        # grid, while the finite-difference Hessian is identical to 0.01 cm-1
+        # on both, i.e. already converged at the default grid. The gap is not
+        # finite-difference noise: it is unchanged (3.2698e-3 Hartree/bohr^2)
+        # for dx from 0.0005 to 0.004 bohr and survives Richardson
+        # extrapolation to dx->0. Warn rather than reject: the result is still
+        # usable and converges correctly, and the committed HESS examples are
+        # deliberately small runtime smoke cases.
+        # Scoped to the excited-state path, which is what was measured. The
+        # ground-state HF/DFT analytic Hessian is a separate, older kernel and
+        # is not characterised here, so it must not inherit this warning.
+        if (
+            capability == "supported"
+            and method == "tdhf"
+            and _as_lower(_get(config, "input", "functional", ""))
+        ):
+            pruned = _as_lower(_get(config, "dftgrid", "pruned", "SG2"))
+            try:
+                rad_npts = int(_get(config, "dftgrid", "rad_npts", 96))
+                ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
+            except (TypeError, ValueError):
+                rad_npts, ang_npts = 96, 302
+            # source/dftlib/dft.F90 selects a pruning scheme with
+            # `select case (trim(pruned_name))` over SG0/SG1/SG2/SG3 and has no
+            # `case default`, so every other spelling -- "", none, off, false --
+            # leaves the grid unpruned. Match that, rather than guessing at a
+            # list of "off" synonyms.
+            is_pruned = pruned in {"sg0", "sg1", "sg2", "sg3"}
+            if is_pruned or rad_npts < 128 or ang_npts < 590:
+                report.add(
+                    "WARNING",
+                    "dftgrid",
+                    "Analytic TDDFT Hessians need a finer, unpruned DFT grid than "
+                    "the default. Measured on H2O/STO-3G SVWN, the analytic S1 "
+                    "frequencies move 6.0 cm-1 between the default pruned SG2 "
+                    "96x302 grid and an unpruned 128x590 grid, while the "
+                    "finite-difference Hessian is converged to 0.01 cm-1 on both.",
+                    value=f"pruned={pruned or 'none'}, rad_npts={rad_npts}, ang_npts={ang_npts}",
+                    expected="pruned= (unpruned) with rad_npts>=128 and ang_npts>=590",
+                    action="For production frequencies set [dftgrid] pruned= , "
+                           "rad_npts=128, ang_npts=590 (or finer), or use "
+                           "[hess] type=numerical, which is converged at the "
+                           "default grid and was measured faster here.",
+                )
+
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so a multi-rank launch of an otherwise supported analytic
+        # TD Hessian dies in Fortran after the SCF and response have already
+        # run. Catch it here instead. Scoped to the excited-state path: the
+        # ground-state Hessian has no such restriction.
+        if capability == "supported" and method == "tdhf":
+            try:
+                mpi_size = int(MPIManager().size)
+            except Exception:
+                mpi_size = 1
+            if mpi_size > 1:
+                report.add(
+                    "ERROR",
+                    "hess.type",
+                    "Analytic TD Hessians run on one MPI rank only; the native "
+                    "kernel aborts with more.",
+                    value=f"{mpi_size} MPI ranks",
+                    expected="1 rank",
+                    # Deliberately not recommending OpenMP as the fallback:
+                    # tdhf_hessian does omp_set_num_threads(1) for the whole
+                    # kernel, so threads do not help this path either.
+                    action="Run the analytic TD Hessian on a single rank, or "
+                           "set [hess] type=numerical, which parallelises over "
+                           "displacements via [hess] nproc.",
+                )
 
     if method == "hf" and state > 0:
         report.add(

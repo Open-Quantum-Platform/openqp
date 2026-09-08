@@ -5,6 +5,8 @@ module mod_dft_gridint_gxc
   use mod_dft_gridint, only: X__, Y__, Z__
   use mod_dft_gridint, only: OQP_FUNTYP_LDA, OQP_FUNTYP_GGA, OQP_FUNTYP_MGGA
   use mod_dft_gridint_fxc, only: xc_consumer_tde_t
+  use mod_dft_gridint_tdxc_deriv, only: gga_tdxc_kernel_t, &
+    gga_x3_coefficients
   use oqp_linalg
 
   implicit none
@@ -77,7 +79,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
@@ -138,7 +140,7 @@ contains
               dsab = dot_product(drrho(:,1,i,j), drrho(:,2,i,j))
               dsbb = dot_product(drrho(:,2,i,j), drrho(:,2,i,j))
               dsba = dot_product(drrho(:,2,i,j), drrho(:,1,i,j))
-              sigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
+              ssigma = [2*dsaa, 2*dsbb, (dsab+dsba)]
             end if
             if (xce%funTyp == OQP_FUNTYP_MGGA) tauab = rtau(1:2,i,j)
 
@@ -203,10 +205,13 @@ contains
     integer :: mythread
 
     integer :: i, j, k
-    real(kind=fp) :: c3(3)
+    real(kind=fp) :: c3_old(3)
     real(kind=fp) :: f_s(3)
     real(kind=fp) :: g_r(2), g_s(3), g_t(2)
     real(kind=fp) :: rhoab(2), tauab(2), sigma(3), ssigma(3)
+    real(kind=fp) :: grad_r_total(3), grad_p_total(3)
+    real(kind=fp) :: a3, c2, c3, b3(3)
+    type(gga_tdxc_kernel_t) :: kernel
     real(kind=fp), pointer :: focks(:,:,:,:)
     real(kind=fp), pointer :: tmp(:,:,:)
 
@@ -241,17 +246,32 @@ contains
                     f_s, &
                     g_r, g_s, g_t)
 
-            ! LDA
-            tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
-            if (xce%funTyp /= OQP_FUNTYP_LDA) then
-              ! GGA
-              c3 =   (2*g_s(1)+g_s(3)) * drho(1:3,i) &
-                 + 2*(2*f_s(1)+f_s(3)) * drrho(1:3,1,i,j)
-
+            if (xce%funTyp == OQP_FUNTYP_LDA) then
+              ! Keep the validated LDA operation order bit-for-bit unchanged.
+              tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
+            else if (xce%funTyp == OQP_FUNTYP_GGA) then
+              ! GAMESS S130 / TDHXGPG KORD=3 in total-density notation.
+              ! A restricted input density is one-spin; the point algebra uses
+              ! rho_alpha+rho_beta and therefore carries a factor two here.
+              call restricted_gga_total_kernel(xce, i, kernel)
+              grad_r_total = 2.0_fp*drho(1:3,i)
+              grad_p_total = 2.0_fp*drrho(1:3,1,i,j)
+              call gga_x3_coefficients(kernel, grad_r_total, &
+                2.0_fp*rrho(1,i,j), grad_p_total, a3, c2, c3, b3)
+              tmp(:,i,1) = 0.5_fp*a3*aoV(:,i) &
+                   + b3(X__)*aoG1(:,i,X__) &
+                   + b3(Y__)*aoG1(:,i,Y__) &
+                   + b3(Z__)*aoG1(:,i,Z__)
+            else
+              ! Preserve the existing meta-GGA expression; analytic TDDFT
+              ! Hessians reject this family before reaching this routine.
+              tmp(:,i,1) = 0.5_fp*g_r(1)*aoV(:,i)
+              c3_old = (2*g_s(1)+g_s(3))*drho(1:3,i) &
+                     + 2*(2*f_s(1)+f_s(3))*drrho(1:3,1,i,j)
               tmp(:,i,1) = tmp(:,i,1) &
-                   +   c3(X__)*aoG1(:,i,X__) &
-                   +   c3(Y__)*aoG1(:,i,Y__) &
-                   +   c3(Z__)*aoG1(:,i,Z__)
+                   + c3_old(X__)*aoG1(:,i,X__) &
+                   + c3_old(Y__)*aoG1(:,i,Y__) &
+                   + c3_old(Z__)*aoG1(:,i,Z__)
             end if
 
             if (xce%funTyp == OQP_FUNTYP_MGGA) then
@@ -281,6 +301,44 @@ contains
     end associate
 
  end subroutine
+
+!-------------------------------------------------------------------------------
+
+! Build GAMESS TDHXKG total-density derivatives without depending on Libxc's
+! packed-index layout.  Unit total-rho and total-sigma directions correspond
+! to (1/2,1/2) and (1/4,1/4,1/4) in restricted spin variables.  The XC arrays
+! have already been multiplied by the quadrature weight; all coefficient
+! formulas are linear in a kernel derivative, so that common weight is retained.
+ subroutine restricted_gga_total_kernel(xce, ipt, kernel)
+    use mod_dft_gridint, only: xc_der1, xc_der2_contr, xc_der3_contr
+    class(xc_engine_t) :: xce
+    integer, intent(in) :: ipt
+    type(gga_tdxc_kernel_t), intent(out) :: kernel
+    real(kind=fp), parameter :: cr(2) = [0.5_fp, 0.5_fp]
+    real(kind=fp), parameter :: cs(3) = [0.25_fp, 0.25_fp, 0.25_fp]
+    real(kind=fp) :: zr(2), zs(3), zt(2), d_r(2), d_s(3), d_t(2)
+    real(kind=fp) :: f_r(2), f_s(3), f_t(2), ff_s(3)
+    real(kind=fp) :: g_r(2), g_s(3), g_t(2)
+
+    zr = 0.0_fp; zs = 0.0_fp; zt = 0.0_fp
+    kernel = gga_tdxc_kernel_t()
+    call xc_der1(xce, .true., ipt, d_r, d_s, d_t)
+    kernel%fr = dot_product(cr, d_r)
+    kernel%fs = dot_product(cs, d_s)
+
+    call xc_der2_contr(xce, .true., ipt, cr, zs, zt, f_r, f_s, f_t)
+    kernel%frr = dot_product(cr, f_r)
+    kernel%frs = dot_product(cs, f_s)
+    call xc_der2_contr(xce, .true., ipt, zr, cs, zt, f_r, f_s, f_t)
+    kernel%fss = dot_product(cs, f_s)
+
+    call xc_der3_contr(xce, ipt, cr, zs, zt, zs, ff_s, g_r, g_s, g_t)
+    kernel%frrr = dot_product(cr, g_r)
+    kernel%frrs = dot_product(cs, g_s)
+    call xc_der3_contr(xce, ipt, zr, cs, zt, zs, ff_s, g_r, g_s, g_t)
+    kernel%frss = dot_product(cr, g_r)
+    kernel%fsss = dot_product(cs, g_s)
+ end subroutine restricted_gga_total_kernel
 
 !-------------------------------------------------------------------------------
 
