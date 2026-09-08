@@ -1289,10 +1289,18 @@ contains
       fock_a = rohf_bak(:,1)
       fock_b = rohf_bak(:,2)
 !      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
-      dmat_a = pdmat(:,1) - pdmat(:,2)
-      dmat_b = pdmat(:,2)
       mo_b = mo_a
       mo_energy_b = mo_energy_a
+      ! Rebuild the alpha and beta densities from the final orbitals.  The
+      ! working array pdmat(:,1) holds the TOTAL density only after the
+      ! ROHF combination step (start of a DIIS iteration, or the SOSCF/TRAH
+      ! convergence handler); on every other exit -- SOSCF/TRAH paths, and a
+      ! DIIS loop leaving through the iteration limit right after a density
+      ! rebuild -- it holds the ALPHA density, and the former formula
+      ! pdmat(:,1) - pdmat(:,2) then stored the spin density as DM_A.  Every
+      ! post-SCF consumer (ESPF charges, Mulliken populations, MRSF relaxed
+      ! densities, gradients) expects DM_A = alpha and DM_B = beta.
+      call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)
       
     end select
 !  Construct ESPF partial charges and print MM energy in output (only done if QM/MM run)
