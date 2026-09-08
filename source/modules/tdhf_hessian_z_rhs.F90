@@ -1,21 +1,122 @@
 module tdhf_hessian_z_rhs_mod
 
   use precision, only: dp
+  use grd2_rys, only: grd2_operator_consumer_t
 
   implicit none
   private
   public :: build_tdhf_z_rhs_derivative
   public :: differentiated_channel
   public :: explicit_channel_derivative_matrix
+  public :: accumulate_tdhf_channel_quartet
   logical, parameter :: enable_tddft_explicit_gxc = .true.
+
+  type, extends(grd2_operator_consumer_t) :: tdhf_channel_operator_consumer_t
+    real(dp), pointer :: base(:,:) => null()
+    real(dp), pointer :: operator(:,:,:) => null()
+    integer, allocatable :: cart_off(:)
+    integer :: channel = 0
+    real(dp) :: coulscale = 1.0_dp
+    real(dp) :: hfscale = 1.0_dp
+  contains
+    procedure :: accumulate => accumulate_tdhf_channel_operator
+  end type tdhf_channel_operator_consumer_t
+
+  ! Exact-match memo for explicit_channel_derivative_matrix. The Z-vector RHS
+  ! and the relaxed-density derivatives both build the (u,+1) operator
+  ! derivative from bit-identical inputs, and for DFT that call is one
+  ! ERI-derivative traversal plus a block of full grid passes. Only channel +1
+  ! results are cached: a -1 result is a single ERI traversal with no grid
+  ! work, cheaper to recompute than to hold. Three slots suffice -- between
+  ! the (u,+1) store and its reuse the driver stores (tm,+1) and (pz,+1) --
+  ! so retained memory is bounded by 3*nbf**2*(ncart+2) doubles, e.g. ~195 MB
+  ! for nbf=300 and 30 atoms, against the kernel's own 8 nbf**2*ncart arrays.
+  ! A hit requires every element of coeff and base to compare equal. The
+  ! cache lives only for one tdhf_hessian call (reset_channel_derivative_cache).
+  ! Which MO blocks of the operator derivative a caller will read. The XC
+  ! polarization loop probes only those; see explicit_channel_derivative_matrix.
+  integer, parameter, public :: BLK_OO = 1, BLK_OV = 2, BLK_VV = 4
+  integer, parameter, public :: BLK_ALL = BLK_OO + BLK_OV + BLK_VV
+
+  integer, parameter :: channel_cache_slots = 3
+  type :: channel_cache_entry_t
+    logical :: used = .false.
+    integer :: channel = 0, blocks = 0
+    real(dp), allocatable :: coeff(:,:), base(:,:), result(:,:,:)
+  end type channel_cache_entry_t
+  type(channel_cache_entry_t), save :: channel_cache(channel_cache_slots)
+  integer, save :: channel_cache_next = 1
+  public :: reset_channel_derivative_cache
 
 contains
 
-  subroutine explicit_channel_derivative_matrix(infos, coeff, base, channel, result)
+  subroutine reset_channel_derivative_cache()
+    integer :: i
+    do i = 1, channel_cache_slots
+      channel_cache(i)%used = .false.
+      channel_cache(i)%channel = 0
+      if (allocated(channel_cache(i)%coeff)) deallocate(channel_cache(i)%coeff)
+      if (allocated(channel_cache(i)%base)) deallocate(channel_cache(i)%base)
+      if (allocated(channel_cache(i)%result)) deallocate(channel_cache(i)%result)
+    end do
+    channel_cache_next = 1
+  end subroutine reset_channel_derivative_cache
+
+  logical function channel_cache_lookup(coeff, base, channel, blocks, result) result(hit)
+    real(dp), intent(in) :: coeff(:,:), base(:,:)
+    integer, intent(in) :: channel, blocks
+    real(dp), intent(out) :: result(:,:,:)
+    integer :: i
+    hit = .false.
+    do i = 1, channel_cache_slots
+      associate(e => channel_cache(i))
+        if (.not. e%used) cycle
+        if (e%channel /= channel .or. e%blocks /= blocks) cycle
+        if (any(shape(e%coeff) /= shape(coeff)) .or. any(shape(e%base) /= shape(base)) &
+            .or. any(shape(e%result) /= shape(result))) cycle
+        if (.not. all(e%base == base)) cycle
+        if (.not. all(e%coeff == coeff)) cycle
+        result = e%result
+        hit = .true.
+        return
+      end associate
+    end do
+  end function channel_cache_lookup
+
+  subroutine channel_cache_store(coeff, base, channel, blocks, result)
+    real(dp), intent(in) :: coeff(:,:), base(:,:), result(:,:,:)
+    integer, intent(in) :: channel, blocks
+    associate(e => channel_cache(channel_cache_next))
+      if (allocated(e%coeff)) deallocate(e%coeff)
+      if (allocated(e%base)) deallocate(e%base)
+      if (allocated(e%result)) deallocate(e%result)
+      allocate(e%coeff, source=coeff)
+      allocate(e%base, source=base)
+      allocate(e%result, source=result)
+      e%channel = channel
+      e%blocks = blocks
+      e%used = .true.
+    end associate
+    channel_cache_next = mod(channel_cache_next, channel_cache_slots) + 1
+  end subroutine channel_cache_store
+
+  pure logical function xc_block_needed(i, j, nocc, blocks) result(needed)
+    ! (i,j) with i<=j: occ-occ, occ-virt, or virt-virt.
+    integer, intent(in) :: i, j, nocc, blocks
+    if (j <= nocc) then
+      needed = iand(blocks, BLK_OO) /= 0
+    else if (i <= nocc) then
+      needed = iand(blocks, BLK_OV) /= 0
+    else
+      needed = iand(blocks, BLK_VV) /= 0
+    end if
+  end function xc_block_needed
+
+  subroutine explicit_channel_derivative_matrix(infos, coeff, base, channel, result, blocks)
     use types, only: information
-    use basis_tools, only: basis_set
-    use grd2, only: grd2_driver
-    use tdhf_gradient_mod, only: grd2_tdhf_compute_data_t
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
+    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+    use grd2, only: grd2_operator_driver
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A
     use mathlib, only: unpack_matrix
     use mod_dft, only: dft_initialize, dftclean
@@ -25,60 +126,220 @@ contains
     real(dp),intent(in)::coeff(:,:),base(:,:)
     integer,intent(in)::channel
     real(dp),intent(out)::result(:,:,:)
+    integer,intent(in),optional::blocks
     type(basis_set),pointer::basis
-    type(grd2_tdhf_compute_data_t)::gc
+    type(tdhf_channel_operator_consumer_t)::consumer
     type(dft_grid_t)::grid
     real(dp),contiguous,pointer::dpk(:)
-    real(dp),allocatable,target::d(:,:,:),p(:,:,:),xp(:,:,:),xm(:,:,:),dxc(:,:)
-    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),gp(:,:),gm(:,:),gxcp(:,:),gxcm(:,:)
-    integer::i,j,nbf,ncart
+    real(dp),allocatable,target::p(:,:,:),xp(:,:,:),dxc(:,:)
+    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
+    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),operator_ao(:,:,:), &
+      work(:,:),gp(:,:),gm(:,:),xcval(:)
+    integer::i,j,k,nbf,ncart,nwork,nocc,blk
+    logical::poison
+    character(len=8)::envs
     real(dp)::scale_exch
     basis=>infos%basis; basis%atoms=>infos%atoms
     nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
+    ! The operator derivative is linear in `base`, so an all-zero base gives an
+    ! all-zero result: every quartet contribution carries a factor of a base
+    ! element, and the XC polarization difference G[q]-G[-q] vanishes exactly
+    ! because G is even in its argument. The driver's second amplitude call
+    ! passes u0*0 for its minus channel, so this skips one full ERI traversal
+    ! and 2*nbf**2 grid passes whose output is discarded anyway.
+    if (maxval(abs(base)) == 0.0_dp) then
+      result = 0.0_dp
+      return
+    end if
+    blk = BLK_ALL
+    if (present(blocks)) blk = blocks
+    nocc = infos%mol_prop%nocc
+    if (channel_cache_lookup(coeff, base, channel, blk, result)) return
     scale_exch=1.0_dp
     if(infos%control%hamilton>=20) scale_exch=infos%dft%hfscale
-    allocate(d(nbf,nbf,1),p(nbf,nbf,1),xp(nbf,nbf,1),xm(nbf,nbf,1),dxc(nbf,nbf), &
-      probe(nbf,nbf),buse(nbf,nbf),quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3), &
-      gxcp(3,ncart/3),gxcm(3,ncart/3),source=0.0_dp)
-    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-      call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call unpack_matrix(dpk,dxc)
-      call dft_initialize(infos,basis,grid)
-    end if
-    result=0.0_dp
+    allocate(buse(nbf,nbf),source=base)
     if(channel>0) then
       buse=0.5_dp*(base+transpose(base))
-    else
-      buse=base
     end if
-    do j=1,nbf; do i=1,nbf
-      probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+
+    ! Match the exact density convention consumed by grd2 under pure
+    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
+    ! Cartesian effective densities.
+    bwork=buse
+    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
+    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
+    consumer%base=>base_cart
+    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
+    consumer%operator=>operator_cart
+    consumer%channel=channel
+    consumer%coulscale=1.0_dp
+    consumer%hfscale=scale_exch
+    call grd2_operator_driver(infos,basis,consumer)
+
+    do k=1,ncart
       if(channel>0) then
-        quse=0.5_dp*(probe+transpose(probe))
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
       else
-        quse=probe
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
       end if
-      xp=0.0_dp; xm=0.0_dp
-      if(channel>0) then; xp(:,:,1)=buse+quse; else; xm(:,:,1)=buse+quse; end if
-      gp=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
-      call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gp,gc); call gc%clean()
-      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-        gxcp=0.0_dp
-        call tddft_xc_gradient(basis,grid,gxcp,dxc,p,xp,1,1.0e-14_dp,infos)
-      end if
-      if(channel>0) then; xp(:,:,1)=buse-quse; else; xm(:,:,1)=buse-quse; end if
-      gm=0.0_dp; gc=grd2_tdhf_compute_data_t(d2=d,p2=p,xpy2=xp,xmy2=xm,hfscale=scale_exch,nbf=nbf)
-      call gc%init(); call gc%build_cart(basis); call grd2_driver(infos,basis,gm,gc); call gc%clean()
-      if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
-        gxcm=0.0_dp
-        call tddft_xc_gradient(basis,grid,gxcm,dxc,p,xp,1,1.0e-14_dp,infos)
-        gp=gp+gxcp; gm=gm+gxcm
-      end if
-      result(i,j,:)=reshape(0.25_dp*(gp-gm),[ncart])
-    end do; end do
-    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) &
+    end do
+    allocate(operator_ao(nbf,nbf,ncart))
+    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
+    allocate(work(nbf,nbf))
+    do k=1,ncart
+      work=matmul(operator_ao(:,:,k),coeff)
+      result(:,:,k)=matmul(transpose(coeff),work)
+    end do
+
+    ! The ERI term above is now one blocked quartet traversal.  The XC grid
+    ! contribution uses its existing finite-difference oracle independently;
+    ! it does not invoke grd2 and therefore cannot reintroduce derivative-ERI
+    ! traversals.
+    if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
+      allocate(p(nbf,nbf,1),xp(nbf,nbf,1),dxc(nbf,nbf),probe(nbf,nbf), &
+        quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3),xcval(ncart),source=0.0_dp)
+      call tagarray_get_data(infos%dat,OQP_DM_A,dpk); call unpack_matrix(dpk,dxc)
+      call dft_initialize(infos,basis,grid)
+      ! quse is symmetric in (i,j) -- 0.5*(probe+probe^T) is the same matrix
+      ! for (i,j) and (j,i) bit for bit, since addition commutes -- and the
+      ! ERI part of `result` was symmetrized above, so result(j,i,:) receives
+      ! exactly the value result(i,j,:) does. Probe the upper triangle only and
+      ! mirror: half the grid passes, identical output.
+      ! Every consumer of this matrix reads a fixed MO block (see the callers),
+      ! so probe only the pairs inside that block: nocc*nvir pairs for an
+      ! occupied-virtual consumer instead of nbf(nbf+1)/2. Skipped elements are
+      ! left ERI-only and are never read. OQP_TDHESS_POISON_UNPROBED=1 fills
+      ! them with NaN instead, so a caller reading past its block fails loudly.
+      poison=.false.
+      call get_environment_variable('OQP_TDHESS_POISON_UNPROBED',envs,status=k)
+      if(k==0) poison=(trim(adjustl(envs))=='1')
+      do j=1,nbf; do i=1,j
+        if(.not.xc_block_needed(i,j,nocc,blk)) then
+          if(poison) then
+            result(i,j,:)=ieee_value(1.0_dp,ieee_quiet_nan)
+            if(i/=j) result(j,i,:)=ieee_value(1.0_dp,ieee_quiet_nan)
+          end if
+          cycle
+        end if
+        probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+        quse=0.5_dp*(probe+transpose(probe))
+        xp(:,:,1)=buse+quse; gp=0.0_dp
+        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos)
+        xp(:,:,1)=buse-quse; gm=0.0_dp
+        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos)
+        xcval=reshape(0.25_dp*(gp-gm),[ncart])
+        result(i,j,:)=result(i,j,:)+xcval
+        if(i/=j) result(j,i,:)=result(j,i,:)+xcval
+      end do; end do
       call dftclean(infos)
-    deallocate(d,p,xp,xm,dxc,probe,buse,quse,gp,gm,gxcp,gxcm)
+      deallocate(p,xp,dxc,probe,quse,gp,gm,xcval)
+    end if
+    if (channel > 0) call channel_cache_store(coeff, base, channel, blk, result)
+    nullify(consumer%base,consumer%operator)
+    deallocate(buse,bwork,base_cart,operator_cart,operator_ao,work)
   end subroutine explicit_channel_derivative_matrix
+
+  subroutine accumulate_tdhf_channel_operator(this,basis,shell_ids,atom_ids, &
+                                               local_ids,derivative)
+    use basis_tools, only: basis_set
+    class(tdhf_channel_operator_consumer_t),intent(inout)::this
+    type(basis_set),intent(in)::basis
+    integer,intent(in)::shell_ids(4),atom_ids(4),local_ids(4)
+    real(dp),intent(in)::derivative(3,4)
+    integer::gi,gj,gk,gl,center,axis,coord
+    real(dp)::value
+
+    gi=this%cart_off(shell_ids(1))+local_ids(1)-1
+    gj=this%cart_off(shell_ids(2))+local_ids(2)-1
+    gk=this%cart_off(shell_ids(3))+local_ids(3)-1
+    gl=this%cart_off(shell_ids(4))+local_ids(4)-1
+    ! A shell quartet can place more than one derivative center on the same
+    ! atom.  Accumulate each center explicitly so those contributions add
+    ! rather than being lost through a repeated vector subscript.
+    do center=1,4
+      do axis=1,3
+        value=derivative(axis,center)
+        if(value==0.0_dp) cycle
+        coord=3*(atom_ids(center)-1)+axis
+        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord), &
+          [gi,gj,gk,gl],this%channel,this%coulscale,this%hfscale,value)
+      end do
+    end do
+  end subroutine accumulate_tdhf_channel_operator
+
+  pure subroutine accumulate_tdhf_channel_quartet(base,operator,ids,channel, &
+                                                   coulscale,hfscale,value)
+    real(dp),intent(in)::base(:,:),coulscale,hfscale,value
+    real(dp),intent(inout)::operator(:,:)
+    integer,intent(in)::ids(4),channel
+    integer::gi,gj,gk,gl
+    real(dp)::ail,ajk,ajl,aik
+    gi=ids(1);gj=ids(2);gk=ids(3);gl=ids(4)
+    if(channel>0) then
+      operator(gk,gl)=operator(gk,gl)+16.0_dp*coulscale*base(gi,gj)*value
+      operator(gi,gj)=operator(gi,gj)+16.0_dp*coulscale*base(gk,gl)*value
+      operator(gl,gj)=operator(gl,gj)-4.0_dp*hfscale*base(gk,gi)*value
+      operator(gk,gi)=operator(gk,gi)-4.0_dp*hfscale*base(gl,gj)*value
+      operator(gk,gj)=operator(gk,gj)-4.0_dp*hfscale*base(gl,gi)*value
+      operator(gl,gi)=operator(gl,gi)-4.0_dp*hfscale*base(gk,gj)*value
+    else
+      ail=base(gi,gl)-base(gl,gi)
+      ajk=base(gj,gk)-base(gk,gj)
+      ajl=base(gj,gl)-base(gl,gj)
+      aik=base(gi,gk)-base(gk,gi)
+      call add_antisymmetric(operator,gj,gk,-hfscale*ail*value)
+      call add_antisymmetric(operator,gi,gl,-hfscale*ajk*value)
+      call add_antisymmetric(operator,gi,gk,-hfscale*ajl*value)
+      call add_antisymmetric(operator,gj,gl,-hfscale*aik*value)
+    end if
+  end subroutine accumulate_tdhf_channel_quartet
+
+  pure subroutine add_antisymmetric(matrix,row,col,value)
+    real(dp),intent(inout)::matrix(:,:)
+    integer,intent(in)::row,col
+    real(dp),intent(in)::value
+    matrix(row,col)=matrix(row,col)+value
+    matrix(col,row)=matrix(col,row)-value
+  end subroutine add_antisymmetric
+
+  subroutine reduce_cartesian_operator(basis,cart_off,cart,sph)
+    use basis_tools, only: basis_set,bas_norm_matrix
+    use cart2sph, only: cart2sph_mat
+    use constants, only: NUM_CART_BF
+    type(basis_set),intent(in)::basis
+    integer,intent(in)::cart_off(:)
+    real(dp),intent(in)::cart(:,:,:)
+    real(dp),intent(out)::sph(:,:,:)
+    real(dp),allocatable::block(:)
+    integer::coord,si,sj,ii,jj,nci,ncj,nsi,nsj,coi,coj,soi,soj,idx
+
+    sph=0.0_dp
+    do coord=1,size(cart,3)
+      do sj=1,basis%nshell
+        ncj=NUM_CART_BF(basis%am(sj));nsj=basis%naos(sj)
+        coj=cart_off(sj);soj=basis%ao_offset(sj)
+        do si=1,basis%nshell
+          nci=NUM_CART_BF(basis%am(si));nsi=basis%naos(si)
+          coi=cart_off(si);soi=basis%ao_offset(si)
+          allocate(block(nci*ncj));idx=0
+          do jj=1,ncj;do ii=1,nci
+            idx=idx+1
+            block(idx)=cart(coi+ii-1,coj+jj-1,coord)
+          end do;end do
+          if(basis%harmonic(si)==1 .or. basis%harmonic(sj)==1) &
+            call cart2sph_mat(block,basis%am(si),basis%harmonic(si), &
+              basis%am(sj),basis%harmonic(sj))
+          idx=0
+          do jj=1,nsj;do ii=1,nsi
+            idx=idx+1
+            sph(soi+ii-1,soj+jj-1,coord)=block(idx)
+          end do;end do
+          deallocate(block)
+        end do
+      end do
+      call bas_norm_matrix(sph(:,:,coord),basis%bfnrm,basis%nbf)
+    end do
+  end subroutine reduce_cartesian_operator
 
   subroutine build_tdhf_z_rhs_derivative(infos, umat, u0, v0, du, dv, drhs)
     ! Nuclear derivative of the closed-shell TDHF Z-vector right-hand side.
@@ -137,11 +398,15 @@ contains
     allocate(hp(nbf,nbf), hm(nbf,nbf), ht(nbf,nbf))
     allocate(dhp(nbf,nbf,ncoord), dhm(nbf,nbf,ncoord), &
              dht(nbf,nbf,ncoord), block(nocc,nvir))
+    ! Blocks read below: dhp/dhm occ-occ and virt-virt, dht occ-virt.
     call differentiated_channel(infos, mo, umat, ov_matrix(um,nbf,nocc), &
-                                ov_derivatives(du,nbf,nocc), +1, hp, dhp)
+                                ov_derivatives(du,nbf,nocc), +1, hp, dhp, &
+                                blocks=ior(BLK_OO,BLK_VV))
     call differentiated_channel(infos, mo, umat, ov_matrix(vm,nbf,nocc), &
-                                ov_derivatives(dv,nbf,nocc), -1, hm, dhm)
-    call differentiated_channel(infos, mo, umat, tm, dtm, +1, ht, dht)
+                                ov_derivatives(dv,nbf,nocc), -1, hm, dhm, &
+                                blocks=ior(BLK_OO,BLK_VV))
+    call differentiated_channel(infos, mo, umat, tm, dtm, +1, ht, dht, &
+                                blocks=BLK_OV)
     allocate(gxp(nbf,nbf), dgxp(nbf,nbf,ncoord), source=0.0_dp)
     if (infos%control%hamilton == 20) &
       call build_gxc_and_derivative(infos, mo, umat, um, du, gxp, dgxp)
@@ -171,7 +436,7 @@ contains
 
 !###############################################################################
 
-  subroutine differentiated_channel(infos, coeff, umat, m0, dm, sign_channel, gmo, dgmo)
+  subroutine differentiated_channel(infos, coeff, umat, m0, dm, sign_channel, gmo, dgmo, blocks)
     use types, only: information
     use basis_tools, only: basis_set
 
@@ -179,6 +444,7 @@ contains
     real(kind=dp), intent(in) :: coeff(:,:), umat(:,:,:), m0(:,:), dm(:,:,:)
     integer, intent(in) :: sign_channel
     real(kind=dp), intent(out) :: gmo(:,:), dgmo(:,:,:)
+    integer, intent(in), optional :: blocks
 
     type(basis_set), pointer :: basis
     real(kind=dp), allocatable, target :: p0(:,:), pt(:,:)
@@ -207,7 +473,7 @@ contains
     end do
 
     allocate(deri(nbf,nbf,ncoord))
-    call explicit_channel_derivative_matrix(infos,coeff,p0,sign_channel,deri)
+    call explicit_channel_derivative_matrix(infos,coeff,p0,sign_channel,deri,blocks)
     allocate(kxc_ground(nbf,nbf,ncoord),source=0.0_dp)
     if (infos%control%hamilton==20 .and. sign_channel>0) then
       block

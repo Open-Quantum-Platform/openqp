@@ -310,24 +310,222 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         base = {
             "input": {"method": "tdhf"},
             "scf": {"type": "rhf"},
-            "tdhf": {"type": "rpa"},
+            "tdhf": {"type": "rpa", "nstate": 2},
             "hess": {"state": 1},
         }
 
-        for functional in ("", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "B3LYP", "b3lyp5"):
+        for functional in (
+            "", "SVWN", "svwn5", "LDA", "BLYP", "PBE", "PBEPBE",
+            "b3lyp5", "B3LYPV5",
+        ):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "supported", reason)
 
-        for functional in ("M06-L", "CAM-B3LYP", "TETER"):
+        for functional in ("B3LYP", "M06-L", "CAM-B3LYP", "TETER"):
             config = {section: values.copy() for section, values in base.items()}
             config["input"]["functional"] = functional
             status, reason = self.input_checker.analytic_hessian_capability(config)
             with self.subTest(functional=functional):
                 self.assertEqual(status, "unsupported_feature")
                 self.assertIn("LDA/GGA and global-hybrid paths", reason)
+
+    def _hess_grid_report(self, functional, pruned, rad_npts, ang_npts,
+                          hess_type="analytical", method="tdhf", state=1):
+        config = {
+            "input": {"method": method, "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g", "functional": functional},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 2, "multiplicity": 1},
+            "hess": {"type": hess_type, "state": state, "nproc": 1,
+                     "temperature": [298.15]},
+            "dftgrid": {"pruned": pruned, "rad_npts": rad_npts,
+                        "ang_npts": ang_npts},
+        }
+        return self.input_checker.check_input_values(
+            config, raise_error=False, emit=False
+        )
+
+    @staticmethod
+    def _grid_warnings(report):
+        return [d for d in report.diagnostics
+                if d.severity == "WARNING" and d.path == "dftgrid"]
+
+    def test_analytic_tddft_hessian_warns_on_a_grid_too_coarse_for_it(self):
+        # The analytic TDDFT Hessian needs a finer, unpruned grid than the rest
+        # of the derivative stack. Measured on H2O/STO-3G SVWN S1: the analytic
+        # frequencies move 6.03 cm-1 between the default pruned SG2 96x302 grid
+        # and an unpruned 128x590 grid, while the finite-difference Hessian is
+        # identical to 0.01 cm-1 on both. The warning must fire wherever that
+        # error is still of that size, and must stay silent once the grid is
+        # good enough -- otherwise it is either useless or noise.
+        for pruned, rad, ang, why in (
+            ("SG2", 96, 302, "the shipped default grid: 6.0 cm-1 error"),
+            ("", 96, 302, "unpruned but still coarse: 1.5 cm-1 error"),
+            ("SG1", 200, 974, "pruned, however fine the nominal counts"),
+        ):
+            report = self._hess_grid_report("svwn", pruned, rad, ang)
+            with self.subTest(pruned=pruned, rad=rad, ang=ang):
+                self.assertTrue(self._grid_warnings(report), why)
+                # A warning, never an error: the number is usable and converges.
+                self.assertTrue(report.ok, report.to_text())
+
+    def test_analytic_tddft_hessian_is_quiet_on_an_adequate_grid(self):
+        for pruned, rad, ang in (("", 128, 590), ("", 155, 974)):
+            report = self._hess_grid_report("svwn", pruned, rad, ang)
+            with self.subTest(rad=rad, ang=ang):
+                self.assertFalse(self._grid_warnings(report))
+
+    def test_grid_warning_is_scoped_to_the_analytic_dft_hessian(self):
+        # Pure TDHF has no quadrature at all, and the numerical Hessian is
+        # already converged on the default grid, so neither may be warned about.
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("", "SG2", 96, 302)))
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("svwn", "SG2", 96, 302,
+                                   hess_type="numerical")))
+        # The ground-state HF/DFT analytic Hessian is a different, older kernel
+        # whose grid behaviour was not measured here, so it must not pick up an
+        # excited-state warning it knows nothing about.
+        self.assertFalse(self._grid_warnings(
+            self._hess_grid_report("pbe", "SG2", 96, 302,
+                                   method="hf", state=0)))
+
+    def test_only_real_pruning_schemes_count_as_pruned(self):
+        # source/dftlib/dft.F90 pruning is `select case` over SG0/SG1/SG2/SG3
+        # with no `case default`, so any other spelling leaves the grid
+        # unpruned and must not be reported as pruned.
+        for pruned in ("SG0", "SG1", "SG2", "SG3"):
+            with self.subTest(pruned=pruned, expect="warn"):
+                self.assertTrue(self._grid_warnings(
+                    self._hess_grid_report("svwn", pruned, 128, 590)))
+        for pruned in ("", "none", "off", "false", "no"):
+            with self.subTest(pruned=pruned, expect="quiet"):
+                self.assertFalse(self._grid_warnings(
+                    self._hess_grid_report("svwn", pruned, 128, 590)))
+
+    def test_cam_mode_is_rejected_for_the_excited_state_analytic_hessian(self):
+        # [dftgrid] cam_flag switches on range separation independently of the
+        # functional name, and the native gate aborts on it, so a name-only
+        # check lets functional=pbe + cam_flag=true validate and then die in
+        # Fortran after the SCF and response have run.
+        base = {
+            "input": {"method": "tdhf", "functional": "pbe"},
+            "scf": {"type": "rhf"},
+            "tdhf": {"type": "rpa", "nstate": 2},
+            "hess": {"state": 1},
+        }
+        for cam, expected in ((False, "supported"),
+                              (True, "unsupported_feature"),
+                              ("true", "unsupported_feature")):
+            config = {k: v.copy() for k, v in base.items()}
+            config["dftgrid"] = {"cam_flag": cam}
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(cam_flag=cam):
+                self.assertEqual(status, expected, reason)
+
+    def test_cam_rejection_does_not_touch_paths_that_support_it(self):
+        # Pure TDHF has no XC at all, and the ground-state analytic Hessian
+        # supports CAM (tests/test_cam_hessian.py), so neither may be rejected.
+        for method, functional, state in (("tdhf", "", 1), ("hf", "pbe", 0)):
+            config = {
+                "input": {"method": method, "functional": functional},
+                "scf": {"type": "rhf"},
+                "tdhf": {"type": "rpa", "nstate": 2},
+                "hess": {"state": state},
+                "dftgrid": {"cam_flag": True},
+            }
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            with self.subTest(method=method, functional=functional):
+                self.assertEqual(status, "supported", reason)
+
+    def _hess_errors_with_ranks(self, ranks, method="tdhf", hess_type="analytical"):
+        real = self.input_checker.MPIManager
+        self.input_checker.MPIManager = lambda: types.SimpleNamespace(
+            size=ranks, use_mpi=int(ranks > 1), rank=0
+        )
+        try:
+            config = {
+                "input": {"method": method, "functional": "svwn"},
+                "scf": {"type": "rhf", "multiplicity": 1},
+                "tdhf": {"type": "rpa", "multiplicity": 1, "nstate": 2},
+                "hess": {"type": hess_type,
+                         "state": 1 if method == "tdhf" else 0, "nproc": 1},
+                "dftgrid": {"pruned": "", "rad_npts": 128, "ang_npts": 590},
+            }
+            report = self.input_checker.CheckReport()
+            self.input_checker._check_hess(config, report)
+            return [d for d in report.diagnostics
+                    if d.severity == "ERROR" and "one MPI rank" in d.message]
+        finally:
+            self.input_checker.MPIManager = real
+
+    def test_multi_rank_excited_state_analytic_hessian_is_rejected(self):
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so validation must catch this rather than letting the run
+        # die in Fortran after the SCF and response are already done.
+        self.assertFalse(self._hess_errors_with_ranks(1))
+        self.assertTrue(self._hess_errors_with_ranks(4))
+        # The ground-state Hessian and the numerical path have no such limit.
+        self.assertFalse(self._hess_errors_with_ranks(4, method="hf"))
+        self.assertFalse(self._hess_errors_with_ranks(4, hess_type="numerical"))
+
+    def test_excited_state_analytic_hessian_rejects_triplet_rpa_during_input_check(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 3},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("singlet targets only", report.to_text())
+
+    def test_excited_state_analytic_hessian_rejects_higher_roots_until_indefinite_solver(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 3, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 2, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("only the lowest excited root", report.to_text())
+
+    def test_excited_state_analytic_hessian_requires_two_computed_roots(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "hess",
+                      "system": "\nH 0 0 -0.37\nH 0 0 0.37",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("tdhf.nstate>=2", report.to_text())
 
     def test_mrsf_tdhf_analytical_hessian_is_supported_without_fallback(self):
         config = {
@@ -419,6 +617,19 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertIn("runtype=hess", text)
         self.assertIn("type=analytical", text)
         self.assertIn("state=0", text)
+
+    def test_analytic_rpa_hessian_examples_compute_an_isolation_root(self):
+        examples = sorted((ROOT / "examples/HESS").glob("*_RPA_ANA_HESS.inp"))
+
+        self.assertTrue(examples)
+        for example in examples:
+            nstate_lines = [
+                line for line in example.read_text().splitlines()
+                if line.strip().lower().startswith("nstate=")
+            ]
+            with self.subTest(example=example.name):
+                self.assertEqual(len(nstate_lines), 1)
+                self.assertGreaterEqual(int(nstate_lines[0].split("=", 1)[1]), 2)
 
 
 if __name__ == "__main__":

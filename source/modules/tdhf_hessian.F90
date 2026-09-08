@@ -27,13 +27,15 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_TD_XPY, OQP_TD_XMY, &
       OQP_TD_Z, OQP_TD_ENERGIES, OQP_hf_hessian, OQP_tdhf_hessian
     use tdhf_hessian_components_mod, only: assemble_tdhf_cartesian_hessian, &
-      tdhf_hessian_is_applicable
+      tdhf_hessian_is_applicable,tdhf_hessian_functional_is_verified, &
+      tdhf_hessian_target_is_supported,tdhf_hessian_lowest_root_is_isolated
     use tdhf_hessian_fixed_density_mod, only: build_tdhf_fixed_density_hessian
     use tdhf_response_operator_mod, only: build_tdhf_response_matrices
     use tdhf_hessian_orbital_mod, only: build_tdhf_ground_orbital_response
     use tdhf_hessian_rhs_mod, only: build_tdhf_amplitude_derivative_actions
     use tdhf_hessian_response_mod, only: solve_tdhf_amplitude_response, solve_tdhf_z_response
-    use tdhf_hessian_z_rhs_mod, only: build_tdhf_z_rhs_derivative
+    use tdhf_hessian_z_rhs_mod, only: build_tdhf_z_rhs_derivative, &
+      reset_channel_derivative_cache
     use tdhf_hessian_density_mod, only: build_tdhf_relaxed_density_derivatives
     use tdhf_hessian_rows_mod, only: build_tdhf_response_rows_hf
     use tdhf_hessian_xc_mod, only: build_tdhf_xc_fixed_hessian, &
@@ -42,7 +44,7 @@ contains
     use io_constants, only: iw
     use parallel, only: par_env_t
     use messages, only: show_message, WITH_ABORT
-!$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads
+    use, intrinsic :: iso_c_binding, only: c_null_char
 
     implicit none
 
@@ -56,17 +58,29 @@ contains
     real(dp),allocatable::rows(:,:),rowsxc(:,:),rows_one(:,:),rows_two(:,:),htotal(:,:)
     real(dp)::amp_res,z_res,asym,omega,projection_mean
     logical::zero_orbital_connection
-    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,omp_saved_threads
+    logical::verified_functional
+    character(len=size(infos%dft%xc_functional_name))::functional_name
+    integer::nbf,nocc,nvir,nexc,ncart,natom,target,status,cart,atom,i
     type(par_env_t) :: pe
 
-    omp_saved_threads=1
-!$  omp_saved_threads=omp_get_max_threads()
-!$  call omp_set_num_threads(1)
     call pe%init(infos%mpiinfo%comm,infos%mpiinfo%usempi)
+    call reset_channel_derivative_cache()
+    verified_functional=.true.
+    if(infos%control%hamilton==20) then
+      ! XC_functional_name is a fixed-size C buffer and may occupy all twenty
+      ! bytes without a terminating NUL.  Decode it within its declared bound
+      ! instead of letting the unbounded C-string helper read adjacent fields.
+      functional_name=' '
+      do i=1,size(infos%dft%xc_functional_name)
+        if(infos%dft%xc_functional_name(i)==c_null_char) exit
+        functional_name(i:i)=infos%dft%xc_functional_name(i)
+      end do
+      verified_functional=tdhf_hessian_functional_is_verified(functional_name)
+    end if
     if (.not.tdhf_hessian_is_applicable(infos%control%scftype,infos%tddft%mult, &
         logical(infos%tddft%tda,kind=kind(.false.)), &
         infos%control%hamilton==20, &
-        .true., &
+        verified_functional, &
         logical(infos%functional%needGrd,kind=kind(.false.)), &
         logical(infos%functional%needTau,kind=kind(.false.)), &
         logical(infos%dft%cam_flag,kind=kind(.false.)), int(pe%size))) then
@@ -76,8 +90,17 @@ contains
     end if
     nbf=infos%basis%nbf; nocc=infos%mol_prop%nocc; nvir=nbf-nocc; nexc=nocc*nvir
     natom=size(infos%atoms%xyz,2); ncart=3*natom; target=infos%tddft%target_state
+    if (.not.tdhf_hessian_target_is_supported(target)) then
+      call show_message('Analytic TD Hessian currently supports only the lowest '// &
+                        'excited root (target state 1).', WITH_ABORT)
+    end if
     call tagarray_get_data(infos%dat,OQP_TD_XPY,xpy); call tagarray_get_data(infos%dat,OQP_TD_XMY,xmy)
     call tagarray_get_data(infos%dat,OQP_TD_Z,zstore); call tagarray_get_data(infos%dat,OQP_TD_ENERGIES,energies)
+    if(.not.tdhf_hessian_lowest_root_is_isolated(energies,1.0e-10_dp)) then
+      call show_message('Analytic TD Hessian requires at least two computed excited '// &
+                        'roots and an isolated lowest root; use tdhf.nstate>=2 or a '// &
+                        'numerical Hessian.',WITH_ABORT)
+    end if
     ! The coupled solver stores its first block in the A-B channel and its
     ! second block in the A+B channel.  OpenQP tags these as X-Y and X+Y,
     ! respectively.
@@ -163,12 +186,12 @@ contains
     call infos%dat%alloc_or_die(OQP_tdhf_hessian,(/ncart,ncart/),hstore, &
       description='Native OpenQP analytic TDHF Hessian matrix')
     hstore=htotal
+    call reset_channel_derivative_cache()
     open(unit=iw,file=infos%log_filename,position='append')
     write(iw,'(/,A,1P,E12.4)') 'TDHF Hessian maximum amplitude-response residual: ',amp_res
     write(iw,'(A,1P,E12.4)') 'TDHF Hessian maximum Z-response residual: ',z_res
     write(iw,'(A,1P,E12.4)') 'TDHF Hessian unsymmetrized response-row asymmetry: ',asym
     close(iw)
-!$  call omp_set_num_threads(omp_saved_threads)
   end subroutine tdhf_hessian
 
 end module tdhf_hessian_mod

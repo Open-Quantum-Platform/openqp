@@ -10,6 +10,7 @@ program test_tdhf_hessian_response
     solve_mrsf_z_response_matrix_free, &
     solve_mrsf_z_response_batch_matrix_free, &
     assemble_mrsf_tda_eigenvalue_hessian
+    assemble_tdhf_sigma_derivative, tdhf_reference_has_degenerate_subspace
 
   implicit none
 
@@ -33,6 +34,25 @@ program test_tdhf_hessian_response
   real(kind=dp) :: isolated_w(1,1),angle,c,s
   real(kind=dp) :: zorb(3,3),zrhs(3,2),zdhz(3,2),zdz(3,2),zexpected(3,2)
   integer :: batch_operator_calls,batch_operator_width,i,j,status
+
+  if (.not. tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -1.0_dp, 0.5_dp, 0.8_dp], 2, 1.0e-10_dp)) &
+    error stop 'occupied-space degeneracy was not detected'
+  if (.not. tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -0.7_dp, 0.5_dp, 0.5_dp], 2, 1.0e-10_dp)) &
+    error stop 'virtual-space degeneracy was not detected'
+  if (tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -0.7_dp, 0.5_dp, 0.8_dp], 2, 1.0e-10_dp)) &
+    error stop 'nondegenerate reference was rejected'
+  if (.not. tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -1.0_dp+1.0e-10_dp, 0.5_dp, 0.8_dp], 2, 1.0e-10_dp)) &
+    error stop 'degeneracy at the exact tolerance was not detected'
+  if (tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -1.0_dp+1.01e-10_dp, 0.5_dp, 0.8_dp], 2, 1.0e-10_dp)) &
+    error stop 'separation above the degeneracy tolerance was rejected'
+  if (.not. tdhf_reference_has_degenerate_subspace( &
+      [-1.0_dp, -0.7_dp, 0.5_dp, 0.8_dp], 0, 1.0e-10_dp)) &
+    error stop 'invalid occupied-space boundary did not fail closed'
 
   amb(1,1) = 2.0_dp
   apb(1,1) = 8.0_dp

@@ -11,7 +11,7 @@ contains
       omega, domega, u0, v0, du, dv, z0, dz, dp_relaxed, dw_ao, du_ao, dv_ao)
     use types, only: information
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
-    use tdhf_hessian_z_rhs_mod, only: differentiated_channel
+    use tdhf_hessian_z_rhs_mod, only: differentiated_channel, BLK_OO, BLK_VV
     use tdhf_hessian_gxc_derivative_mod, only: build_gxc_and_derivative
     use messages, only: show_message, WITH_ABORT
 
@@ -43,6 +43,7 @@ contains
     allocate(dum(nocc,nvir),dvm(nocc,nvir),dzm(nocc,nvir),dtm(nbf,nbf,ncoord), &
              dpm(nbf,nbf,ncoord),dwm(nbf,nbf,ncoord),source=0.0_dp)
     um=reshape(u0,[nocc,nvir]); vm=reshape(v0,[nocc,nvir]); zm=reshape(z0,[nocc,nvir])
+    tm=0.0_dp
     call trans_square(tm,um,um,0.5_dp); call trans_square(tm,vm,vm,0.5_dp)
     do k=1,ncoord
       dum=reshape(du(:,k),[nocc,nvir]); dvm=reshape(dv(:,k),[nocc,nvir])
@@ -69,9 +70,12 @@ contains
     end do
     allocate(hp(nbf,nbf),hm(nbf,nbf),ht(nbf,nbf),dhp(nbf,nbf,ncoord), &
              dhm(nbf,nbf,ncoord),dht(nbf,nbf,ncoord))
-    call differentiated_channel(infos,c,umat,mu,dm_u,+1,hp,dhp)
-    call differentiated_channel(infos,c,umat,mv,dm_v,-1,hm,dhm)
-    call differentiated_channel(infos,c,umat,pm,dpm,+1,ht,dht)
+    ! form_w_and_derivative reads only the occupied-occupied blocks. The u and
+    ! v calls request occ-occ|virt-virt anyway: they are bit-identical to the
+    ! ones build_tdhf_z_rhs_derivative already made, so the memo returns them.
+    call differentiated_channel(infos,c,umat,mu,dm_u,+1,hp,dhp,blocks=ior(BLK_OO,BLK_VV))
+    call differentiated_channel(infos,c,umat,mv,dm_v,-1,hm,dhm,blocks=ior(BLK_OO,BLK_VV))
+    call differentiated_channel(infos,c,umat,pm,dpm,+1,ht,dht,blocks=BLK_OO)
     allocate(gxp(nbf,nbf),dgxp(nbf,nbf,ncoord),source=0.0_dp)
     if (infos%control%hamilton==20) &
       call build_gxc_and_derivative(infos,c,umat,um,du,gxp,dgxp)
