@@ -7230,6 +7230,22 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
         )
         return
     if runtype in ("md", "namd"):
+        embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
+        if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            # The legacy split scheme routes the QM charges through OpenMM
+            # point charges; under PBC its force is not the derivative of
+            # its energy (docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # so a periodic trajectory must use the full-ESPF scheme.
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                "embedding=split is not force-consistent in a periodic box; periodic "
+                "dynamics needs the full-ESPF scheme.",
+                value=f"embedding=split with cutoff={cutoff}",
+                expected="embedding=electrostatic (full ESPF) for PME/Ewald/CutoffPeriodic, "
+                         "or cutoff=NoCutoff for the split scheme",
+                action="Use embedding=electrostatic for the periodic box, or NoCutoff for split.",
+            )
         return
     ignored = []
     if cutoff not in ("nocutoff", "cutoffnonperiodic"):

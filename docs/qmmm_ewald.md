@@ -66,6 +66,16 @@ re-iteration (0.16 kJ/mol in that example) is absorbed into the QM kinetic
 energy afterwards (`_absorb_hop_field_shift`, logged), keeping the total
 energy continuous across the hop; a shift larger than the available kinetic
 energy raises an error instead of continuing on an inconsistent surface.
+The converged image-field charges are part of the NAMD restart checkpoint
+(`qmmm_q_img`), so a resumed trajectory seeds the image iteration exactly
+like an uninterrupted one.
+
+The MD driver (`OpenQpQMMM.compute_force`, `runtype=md`) iterates the same
+loop with whatever charges its QM step publishes: the reference density for
+HF/DFT, and for a TDHF/MRSF target state (`[properties] grad`) the relaxed
+charges of that state, which the Z-vector step writes into
+`OQP::partial_charges`; the loop then converges to `IMAGE_TOL_ACTIVE`
+(Z-vector precision) instead of `IMAGE_TOL`.
 The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose relaxed
 charges are not available per iteration, so periodic SOC-NAMD QM/MM is not
 offered (`NotImplementedError`; use `NoCutoff`).
@@ -82,7 +92,8 @@ atoms; the QM-image self-consistency converges in 3-4 iterations. The ground-
 state NVE in the box conserves energy at the same level as a pure-MM run of
 the box with the same OpenMM Verlet integrator (flexible water, 0.5 fs). The
 `split` embedding is not force-consistent under PBC (residuals of 1e3-1e4
-kJ/mol/nm) and must not be used for dynamics.
+kJ/mol/nm) and must not be used for dynamics; the input checker rejects
+`embedding=split` with a periodic cutoff for `runtype=md/namd`.
 
 Note: `OpenQpQMMM` in config mode used to write the QM geometry with six
 decimals (Angstrom); the 5e-7 A rounding was a 0.3-0.9 kJ/mol/nm floor in

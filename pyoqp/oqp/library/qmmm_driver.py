@@ -616,6 +616,14 @@ class OpenQpQMMM:
                 grads[i] = gqm.copy()
                 self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
                 self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
+                # The Z-vector step has replaced OQP::partial_charges by the
+                # RELAXED ESPF charges of this state: they drive the classical
+                # coupling forces and, in a periodic box, the QM-image
+                # self-consistency loop in compute_force (which then converges
+                # the field to the propagated state, not to the reference
+                # density).  Publish them explicitly rather than through the
+                # live view taken above.
+                self.pchg_qm = np.array(mol.data["OQP::partial_charges"], dtype=float)
 
     def _forces_qm_dftb(self, mol, potmm):
         """QM energy/gradient/charges for the TB backends (method=dftb/xtb).
@@ -773,6 +781,11 @@ class OpenQpQMMM:
             converged = False
             delta, it = float("inf"), -1
             self._image_warm = False
+            # Reference-density charges converge to IMAGE_TOL; the relaxed
+            # charges of a TDHF/MRSF target state carry the Z-vector residual
+            # and converge to IMAGE_TOL_ACTIVE (as in NAMD_QMMM).
+            tol = (self.IMAGE_TOL_ACTIVE if self._image_uses_relaxed_charges()
+                   else self.IMAGE_TOL)
             for it in range(int(self.IMAGE_MAXITER)):
                 phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
                 try:
@@ -781,7 +794,7 @@ class OpenQpQMMM:
                     self._image_warm = True      # later iterations reuse the orbitals
                 q_new = np.array(pchg_qm, dtype=float)
                 delta = float(np.abs(q_new - q_prev).max())
-                if delta < self.IMAGE_TOL:
+                if delta < tol:
                     converged = True
                     break
                 q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
@@ -789,7 +802,7 @@ class OpenQpQMMM:
                 raise RuntimeError(
                     f"Periodic ESPF QM/MM: the QM-image charge self-consistency "
                     f"did not converge in {it + 1} iterations "
-                    f"(max |dq| = {delta:.2e} e > {self.IMAGE_TOL:.0e}); the "
+                    f"(max |dq| = {delta:.2e} e > {tol:.0e}); the "
                     "energy/force would be inconsistent.  Tighten the SCF "
                     "convergence or check the QM/MM contacts.")
             self._image_warm = False
@@ -1085,6 +1098,17 @@ class OpenQpQMMM:
         return assemble_embedding_sites(
             mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals,
             min_image=None if box is None else (lambda d: self._min_image(d, box)))
+
+    def _image_uses_relaxed_charges(self):
+        """True when the QM step publishes the RELAXED ESPF charges of a
+        response (TDHF/MRSF) target state, which carry the Z-vector residual
+        and converge the QM-image loop to IMAGE_TOL_ACTIVE instead of the
+        reference-density IMAGE_TOL."""
+        if self.use_mol:
+            method = self.mol.config.get("input", {}).get("method", "hf")
+        else:
+            method = (self.oqp_cfg_base or {}).get("input.method", "hf")
+        return str(method).strip().lower() == "tdhf"
 
     def _is_periodic(self):
         """True when the MM nonbonded method is a periodic one (PME, Ewald,

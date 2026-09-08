@@ -46,7 +46,7 @@ class TestSinglePointQMMMOptions(unittest.TestCase):
         report = self.chk.CheckReport()
         self.chk._check_qmmm_driver_options(cfg, report)
         return [d for d in report.diagnostics
-                if d.severity == "ERROR" and d.path == "qmmm.cutoff"]
+                if d.severity == "ERROR" and d.path in ("qmmm.cutoff", "qmmm.embedding")]
 
     def test_single_point_rejects_driver_only_controls(self):
         for qmmm in ({"cutoff": "PME"}, {"mm_charge_width": "0.7"}, {"ewald_tol": "1e-6"},
@@ -64,6 +64,15 @@ class TestSinglePointQMMMOptions(unittest.TestCase):
         # same-spin FSSH keeps the periodic box; SOC-NAMD keeps a cluster
         self.assertFalse(self._errors({"cutoff": "PME"}, runtype="namd", md={"soc": False}))
         self.assertFalse(self._errors({"cutoff": "NoCutoff"}, runtype="namd", md={"soc": True}))
+
+    def test_periodic_dynamics_rejects_split_embedding(self):
+        for rt in ("md", "namd"):
+            for cutoff in ("PME", "Ewald", "CutoffPeriodic"):
+                errs = self._errors({"cutoff": cutoff, "embedding": "split"}, runtype=rt)
+                self.assertEqual([e.path for e in errs], ["qmmm.embedding"], (rt, cutoff))
+            self.assertFalse(self._errors({"cutoff": "NoCutoff", "embedding": "split"}, runtype=rt))
+            self.assertFalse(self._errors({"cutoff": "PME", "embedding": "electrostatic"}, runtype=rt))
+            self.assertFalse(self._errors({"cutoff": "PME", "embedding": "mechanical"}, runtype=rt))
 
     def test_md_and_namd_keep_the_controls(self):
         for rt in ("md", "namd"):

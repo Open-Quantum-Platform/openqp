@@ -4217,6 +4217,32 @@ class NAMD_QMMM(NAMD):
                              with_overlap=with_overlap, geom=self._geometry_key())
         return self._refine_image_field(q_prev), potqm
 
+    # -- restart: the periodic image-field seed --------------------------- #
+    def _restart_extra_payload(self):
+        """Checkpoint the converged active-state ESPF charges of the periodic
+        image field, so a resumed trajectory warm-starts the image iteration
+        exactly like an uninterrupted one (a zero seed can settle on a
+        different SCF/image branch when two nearby solutions exist)."""
+        q = getattr(self, "_q_img", None)
+        if q is None:
+            return {}
+        return {"qmmm_q_img": np.asarray(q, dtype=np.float64).reshape(-1)}
+
+    def _load_restart_extra(self, saved, prev_data=None):
+        del prev_data
+        if "qmmm_q_img" not in saved:
+            return {}
+        q = np.asarray(saved["qmmm_q_img"], dtype=float).reshape(-1)
+        if q.shape != (self.natom,) or not np.all(np.isfinite(q)):
+            raise RuntimeError(
+                "NAMD restart checkpoint has an invalid periodic QM-image charge seed "
+                f"(shape {q.shape}, expected ({self.natom},))")
+        return {"q_img": q.copy()}
+
+    def _restore_restart_extra(self, extra):
+        if extra:
+            self._q_img = np.array(extra["q_img"], dtype=float, copy=True)
+
     def _absorb_hop_field_shift(self, jump):
         """Periodic full-ESPF, after an accepted hop: the potential energy of
         the new state moved by ``jump`` (Hartree) when its image field was

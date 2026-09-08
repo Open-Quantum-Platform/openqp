@@ -109,6 +109,24 @@ class TestImageFieldCache(unittest.TestCase):
                 nd._absorb_hop_field_shift(10.0 * ke_all)
             self.assertEqual(nd._absorb_hop_field_shift(-1e-3), 0.0)   # downward shift: speed up
 
+    def test_restart_payload_round_trips_the_image_seed(self):
+        nd = _bare(1, np.zeros((3, 3)))
+        nd.natom = 3
+        nd._q_img = None
+        self.assertEqual(nd._restart_extra_payload(), {})          # non-periodic: nothing added
+        self.assertEqual(nd._load_restart_extra({}), {})
+        nd._restore_restart_extra({})
+        nd._q_img = np.array([0.25, -0.5, 0.25])
+        payload = nd._restart_extra_payload()
+        self.assertEqual(list(payload), ["qmmm_q_img"])
+        saved = {k: np.array(v) for k, v in payload.items()}
+        other = _bare(1, np.zeros((3, 3))); other.natom = 3; other._q_img = None
+        other._restore_restart_extra(other._load_restart_extra(saved))
+        np.testing.assert_array_equal(other._q_img, nd._q_img)
+        for bad in (np.zeros(4), np.array([0.0, np.nan, 0.0])):
+            with self.assertRaises(RuntimeError):
+                other._load_restart_extra({"qmmm_q_img": bad})
+
 
 if __name__ == "__main__":
     unittest.main()
