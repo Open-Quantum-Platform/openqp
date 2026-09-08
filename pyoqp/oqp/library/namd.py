@@ -4199,24 +4199,74 @@ class NAMD_QMMM(NAMD):
                 f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
-        if psi_img is not None:
-            self._q_img = q_prev.copy()
-            self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
-            self._f_img = -np.einsum("a,b,abc->ac", q_prev, q_prev, dpsi_img)
-        else:
-            self._e_img, self._f_img = 0.0, None
+        self._grad_cache = None
         ref = [mol.get_scf_energy()]
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
         sp.excitation(ref)
         LastStep(mol).compute(mol)
+        if psi_img is None:
+            self._e_img, self._f_img = 0.0, None
+            return potmm, potqm
+        # The reference-density loop above only seeds the field.  The force
+        # is the derivative of the energy only if the image field is self-
+        # consistent with the charges of the state that is propagated, so
+        # iterate SCF -> excitation -> active-state gradient (which publishes
+        # the relaxed ESPF charges of the active state) until those charges
+        # reproduce the field they were computed in.  The converged gradient
+        # is cached for _total_force.
+        converged = False
+        delta = float("inf")
+        for k in range(int(self.driver.IMAGE_MAXITER_ACTIVE)):
+            g = self._qm_gradient()
+            q_act = np.array(mol.data["OQP::partial_charges"], dtype=float)
+            delta = float(np.abs(q_act - q_prev).max())
+            dump_log(mol, title=(f"PyOQP: QM-image field, active-state iteration {k + 1}: "
+                                 f"max |dq| = {delta:.2e} e, E({self.active}) = "
+                                 f"{float(mol.energies[self.active]):.10f} Hartree"), section='')
+            if delta < self.driver.IMAGE_TOL_ACTIVE:
+                converged = True
+                break
+            q_prev = 0.5 * (q_act + q_prev) if k > 2 else q_act
+            ints_1e(mol)                                   # bare hcore, orbitals kept
+            potmm = potmm_mm + psi_img @ q_prev
+            mol.data["OQP::POTMM"] = potmm
+            mol.data["OQP::POTQM"] = np.zeros((nat, nat))
+            oqp.espf_op_corr(mol)
+            espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+            hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+            hcore += np.einsum("ijk,i->jk", espf, potmm)
+            mol.set_hcore(pack_lower_tri_single(hcore))
+            self._embedded_scf(sp)
+            ref = [mol.get_scf_energy()]
+            if with_overlap:
+                mol.back_door = (self.prev_xyz, self.prev_data)
+                BasisOverlap(mol).overlap()
+            sp.excitation(ref)
+            LastStep(mol).compute(mol)
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image field did not become "
+                f"self-consistent with the active-state charges in "
+                f"{self.driver.IMAGE_MAXITER_ACTIVE} iterations (max |dq| = {delta:.2e} e).")
+        self._q_img = q_prev.copy()
+        self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
+        self._f_img = -np.einsum("a,b,abc->ac", q_prev, q_prev, dpsi_img)
+        self._grad_cache = (int(self.active), np.array(g, dtype=float), q_act.copy())
         return potmm, potqm
 
     def _qm_gradient(self):
         """Embedded active-state gradient (Hartree/bohr) incl. ESPF force."""
         import os
         mol = self.mol
+        cache = getattr(self, "_grad_cache", None)
+        if cache is not None and cache[0] == int(self.active):
+            # gradient already evaluated by the image self-consistency loop
+            # for this state at this geometry; restore its relaxed charges
+            self._grad_cache = None
+            mol.data["OQP::partial_charges"] = cache[2].copy()
+            return cache[1].copy()
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
@@ -5526,14 +5576,16 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         sp._prep_guess()
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
-        # Periodic full-ESPF: the QM charges also interact with their own images
-        # (Bonfrate et al. JCTC 2024, eq 8).  The image field psi_img q is added to
-        # the MM potential and made self-consistent with the ground-state ESPF
-        # charges; the energy carries the double-counting correction
-        # -1/2 q psi_img q (see _total_force_espf).  With ground-state charges
-        # the force is exact for the ground state and an approximation for
-        # excited states (their charges differ slightly from the ground state).
         ewald = self.driver._ewald() if getattr(self.driver, "espf_full", False) else None
+        if ewald is not None:
+            # The periodic QM-image term must be self-consistent with the
+            # charges of the propagated state; the spin-adiabatic SOC state is
+            # a weighted mixture of MCH states whose relaxed charges are not
+            # available per iteration, so periodic SOC-NAMD is not offered.
+            raise NotImplementedError(
+                "SOC-NAMD QM/MM is implemented for non-periodic clusters only "
+                "([qmmm] cutoff=NoCutoff); the periodic QM-image term is not "
+                "available for the spin-mixed active state.")
         potmm_mm = np.asarray(potmm, dtype=float).copy()
         if ewald is not None:
             psi_img, dpsi_img = ewald.qm_image_matrix(self.driver._qm_center_positions_bohr())

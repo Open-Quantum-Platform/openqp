@@ -1096,6 +1096,13 @@ class OpenQpQMMM:
     #: cap and convergence threshold on the ESPF charges (e).
     IMAGE_MAXITER = 50
     IMAGE_TOL = 1e-7
+    #: Active-state refinement in NAMD (each iteration costs a Z-vector
+    #: gradient).  The relaxed charges carry the Z-vector residual (1e-5 to
+    #: 1e-4 e at the default Z-vector convergence), so the field is taken as
+    #: self-consistent at 1e-4 e; the state energy is then stable to ~1e-7 Ha
+    #: and the loop typically needs 3 gradient evaluations.
+    IMAGE_TOL_ACTIVE = 1e-4
+    IMAGE_MAXITER_ACTIVE = 12
 
     def _box_lengths_bohr(self):
         """Orthorhombic periodic box lengths (bohr), or None when the QM/MM

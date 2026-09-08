@@ -44,12 +44,22 @@ self-consistency, so the force is the embedded QM gradient at fixed `phi_eff`
 `OQP::POTQM` / `add_potqm_contributions` inside the Fock build is not used
 (its energy bookkeeping was never verified and it had no force).
 
-The NAMD driver (`NAMD_QMMM` and the SOC variants) runs the same loop with the
-**ground-state** ESPF charges before the excitation step. This is exact for
-ground-state dynamics and an approximation for excited states (their charges
-differ slightly from the ground-state ones); making it exact needs the
-relaxed excited-state charges inside the loop, i.e. the Z-vector per
-iteration.
+The NAMD driver (`NAMD_QMMM`) runs the reference-density loop only to seed
+the field, then iterates SCF -> MRSF -> active-state gradient until the
+**relaxed ESPF charges of the propagated state** reproduce the field they
+were computed in (`IMAGE_TOL_ACTIVE` = 1e-4 e, the Z-vector precision;
+typically three gradient evaluations per step, the last of which is reused
+as the force). The field the SCF sees therefore belongs to the state whose
+force is integrated, and the response-term cancellation above holds for that
+state. For the dipeptide box this moves the ESPF charges by 0.4 e and the
+S0 energy by 6e-3 Ha relative to a field built from the ROHF reference
+charges, and the NAMD force residual against finite differences improves
+from 3.4 to 1.2 kJ/mol/nm at the same energy-conservation level (0.10 kJ/mol
+over 50 fs). At a surface hop the force of the new state is evaluated in the
+field of the previous state for that one step; the next step re-iterates.
+The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose relaxed
+charges are not available per iteration, so periodic SOC-NAMD QM/MM is not
+offered (`NotImplementedError`; use `NoCutoff`).
 
 ## Validation
 
