@@ -45,6 +45,35 @@ contains
 
 !###############################################################################
 
+!> Evaluate the analytic coupling for one selected physical state pair.
+!>
+!> Used by the hop-triggered (TDC+NAC) FSSH rescaling, which needs only
+!> d_IJ between the active state and the stochastic candidate.  The complete
+!> [I,J] output layout is preserved: the selected pair and its reverse are
+!> filled, every other entry is zero and must be treated as "not evaluated".
+  subroutine mrsf_nac_lagrangian_pair_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_lagrangian_pair")
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    integer(c_int32_t), intent(in), value :: istate, jstate
+    type(information), pointer :: inf
+    logical :: log_was_open
+
+    inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
+    call mrsf_nac_lagrangian(inf, only_istate=int(istate), &
+                             only_jstate=int(jstate))
+    if (.not. log_was_open) close(iw)
+  end subroutine mrsf_nac_lagrangian_pair_C
+
+!###############################################################################
+
   subroutine mrsf_nac_lagrangian_fused_buffered(infos)
     use types, only: information
     use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_get_rhs, &
@@ -68,7 +97,8 @@ contains
 
 !###############################################################################
 
-  subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)
+  subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution, &
+                                only_istate, only_jstate)
     use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_get_tolerance
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use, intrinsic :: iso_c_binding, only: c_int64_t
@@ -129,6 +159,8 @@ contains
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in), optional :: gradient_rhs(:)
     real(kind=dp), intent(out), optional :: gradient_solution(:)
+    ! Optional physical pair restriction (hop-triggered TDC+NAC rescaling).
+    integer, intent(in), optional :: only_istate, only_jstate
     real(kind=dp), contiguous, pointer :: bvec_mo(:,:), energies(:)
     real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
       pair_overlap(:,:)
@@ -165,6 +197,7 @@ contains
       hf_first, hf_last, xc_first, xc_last
     integer :: wpair_first, wpair_last, wpair_count, wpair_index, batch_pair
     integer :: istate, jstate, redundant_index, atom, cart, coord
+    integer :: selected_i, selected_j, metric_i, z_pair_offset
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
     character(len=16) :: profile_value, audit_value
@@ -174,6 +207,15 @@ contains
     if (present(gradient_rhs) .neqv. present(gradient_solution)) then
       call show_message('Gradient/NAC fusion requires both RHS and solution arrays.', &
                         WITH_ABORT)
+    end if
+    if (present(only_istate) .neqv. present(only_jstate)) then
+      call show_message('Selected MRSF NAC requires both state indices.', &
+                        WITH_ABORT)
+    end if
+    if (present(only_istate) .and. present(gradient_rhs)) then
+      call show_message( &
+        'Gradient/NAC fusion evaluates every pair; no pair selection.', &
+        WITH_ABORT)
     end if
 
     profile_value = ''
@@ -289,6 +331,25 @@ contains
     offset = noca - nocb
     ltot = nocb*(offset + nvira) + offset*nvira
     npair = nstate*(nstate - 1)/2
+    ! A selected pair keeps the complete state set for every normalized
+    ! overlap-derivative term and restricts only the direct source, adjoint
+    ! solve and HF/XC contractions to that one physical pair.
+    selected_i = 0
+    selected_j = 0
+    if (present(only_istate)) then
+      if (only_istate < 1 .or. only_istate > nstate .or. &
+          only_jstate < 1 .or. only_jstate > nstate .or. &
+          only_istate == only_jstate) then
+        call show_message( &
+          'Selected MRSF NAC requires two distinct states in 1..nstate.', &
+          WITH_ABORT)
+      end if
+      selected_i = min(only_istate, only_jstate)
+      selected_j = max(only_istate, only_jstate)
+      npair = 1
+      write(iw,'(A,2(1X,I0),1X,A,I0)') 'NAC_SELECTED_PAIR', selected_i, &
+        selected_j, 'of nstate=', nstate
+    end if
     call data_has_tags(infos%dat, tags_required, module_name, &
                        subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
@@ -347,11 +408,18 @@ contains
     ipair = 0
     do jstate = 2, nstate
       do istate = 1, jstate - 1
+        if (selected_i /= 0) then
+          if (istate /= selected_i .or. jstate /= selected_j) cycle
+        end if
         ipair = ipair + 1
         pair_i(ipair) = istate
         pair_j(ipair) = jstate
       end do
     end do
+    if (ipair /= npair) then
+      call show_message('MRSF NAC pair list disagrees with the pair count.', &
+                        WITH_ABORT)
+    end if
 
     call infos%dat%erase((/ character(len=80) :: &
       tag_ytil, tag_xstate, tag_gamma, tag_z /))
@@ -369,16 +437,34 @@ contains
     ! A fixed target column J shares its normalized-overlap denominator.  Build
     ! that O(nstate*nbf**2) metric column once, then consume each I immediately.
     do jstate = 1, nstate
+      metric_i = 0
+      if (selected_i /= 0) then
+        ! Both ordered members of the selected pair are still visited: the
+        ! direct source for I<J and the metric-only reverse for J>I.  The
+        ! metric column keeps every state K in its normalization.
+        if (jstate /= selected_i .and. jstate /= selected_j) cycle
+        metric_i = merge(selected_j, selected_i, jstate == selected_i)
+      end if
       ! Ensure the metric always sees unmodified resident eigenvectors.
       call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
       bvec_mo = bvec_saved
       if (profile_enabled) call system_clock(profile_stop)
-      call mrsf_nac_metric_column(infos, jstate, gamma_column)
+      if (metric_i /= 0) then
+        call mrsf_nac_metric_column(infos, jstate, gamma_column, &
+                                    only_istate=metric_i)
+      else
+        call mrsf_nac_metric_column(infos, jstate, gamma_column)
+      end if
       if (profile_enabled) call profile_add(profile_metric, profile_stop)
 
       do istate = 1, nstate
         if (istate == jstate) cycle
-        ipair = unordered_pair_index(istate, jstate)
+        if (metric_i /= 0) then
+          if (istate /= metric_i) cycle
+          ipair = 1
+        else
+          ipair = unordered_pair_index(istate, jstate)
+        end if
         pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)
         gamma_pair = pair_sign*gamma_column(:,istate)
 
@@ -572,9 +658,13 @@ contains
     else
       do z_first = 1, npair, z_batch_width
         z_last = min(npair, z_first + z_batch_width - 1)
+        ! The predictor cache is indexed by the physical unordered pair, so
+        ! a selected pair keeps its own history across candidate hops.
+        z_pair_offset = unordered_pair_index(pair_i(z_first), &
+                                             pair_j(z_first)) - 1
         call mrsf_nac_rohf_zvector_batch( &
           infos, rhs_batch(:,z_first:z_last), &
-          solution_batch(:,z_first:z_last), pair_offset=z_first-1, &
+          solution_batch(:,z_first:z_last), pair_offset=z_pair_offset, &
           predictor=predictor_batch(:,z_first:z_last), &
           predictor_available=predictor_available(z_first:z_last), &
           predictor_accepted=predictor_accepted(z_first:z_last), &

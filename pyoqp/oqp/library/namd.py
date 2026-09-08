@@ -828,6 +828,8 @@ class NAMD:
         self._last_overlap_tdc = None
         self._last_analytic_dcv = None
         self._last_analytic_tdc = None
+        self._last_analytic_pair = None
+        self._last_analytic_step = None
         self._analytic_tdc_previous = None
         self._analytic_tdc_centered = None
         self._last_rescale_source = {
@@ -1897,23 +1899,34 @@ class NAMD:
             .strip().lower() in ('1', 'y', 'yes', 't', 'true', 'on')
         )
 
-    def _update_analytic_nac(self, istep=None, *, compare_overlap=False):
+    def _update_analytic_nac(self, istep=None, *, compare_overlap=False,
+                             pair=None):
         """Evaluate phase-aligned analytic d and contract it with velocity.
 
         The endpoint value is used when ``tdc=analytic``.  A trapezoidal value
         is retained separately for comparison with the overlap integrated over
         the preceding nuclear interval.
+
+        ``pair=(I, J)`` (1-based) evaluates only that physical pair; the
+        reference mask then marks every other pair as not evaluated and no
+        trapezoidal history is kept, because the selected vector serves one
+        hop candidate only.
         """
         from oqp.library.nac_analytic import analytic_nac, _resident_pair_cartesian
 
+        if pair is not None and compare_overlap:
+            raise ValueError('an overlap NAC check requires every analytic pair')
         if getattr(self.mol, '_nac_fused_gradient_ready', False):
             _nacv = _resident_pair_cartesian(
                 self.mol.data['OQP::nac_nacv'], self.nstate, self.natom)
             dcv = _resident_pair_cartesian(
                 self.mol.data['OQP::nac_dcv'], self.nstate, self.natom)
             self.mol._nac_fused_gradient_ready = False
-        else:
+            pair = None   # the fused solve already evaluated every pair
+        elif pair is None:
             _nacv, dcv = analytic_nac(self.mol)
+        else:
+            _nacv, dcv = analytic_nac(self.mol, pair=pair)
         dcv = np.asarray(dcv, dtype=np.float64).reshape(
             (self.nstate, self.nstate, self.natom, 3))
         try:
@@ -1930,22 +1943,40 @@ class NAMD:
             self._write_zpredict_audit_row(
                 istep, dcv, predictor_dcv,
                 np.asarray(_nacv, dtype=np.float64).reshape(dcv.shape),
-                predictor_nacv)
+                predictor_nacv, pair=pair)
         endpoint = np.einsum('ijac,ac->ij', dcv, self.vel, optimize=True)
         self._last_analytic_dcv = np.array(dcv, copy=True)
         self._last_analytic_tdc = np.array(endpoint, copy=True)
+        self._last_analytic_pair = None if pair is None else (
+            int(pair[0]), int(pair[1]))
+        self._last_analytic_step = None if istep is None else int(istep)
 
-        previous = self._analytic_tdc_previous
-        centered = None if previous is None else 0.5*(previous + endpoint)
-        self._analytic_tdc_centered = (
-            None if centered is None else np.array(centered, copy=True))
-        self._analytic_tdc_previous = np.array(endpoint, copy=True)
+        if pair is None:
+            previous = self._analytic_tdc_previous
+            centered = None if previous is None else 0.5*(previous + endpoint)
+            self._analytic_tdc_centered = (
+                None if centered is None else np.array(centered, copy=True))
+            self._analytic_tdc_previous = np.array(endpoint, copy=True)
+        else:
+            # A single-pair vector is not a step-to-step series; keep no
+            # trapezoidal history so a later full evaluation cannot center
+            # against an incomplete matrix.
+            centered = None
+            self._analytic_tdc_centered = None
+            self._analytic_tdc_previous = None
 
         # Preserve the analytic quantity in the dense trajectory even when it
         # is the production provider rather than a validation reference.
         reference = endpoint if centered is None else centered
-        mask = np.ones((self.nstate, self.nstate), dtype=np.int32)
-        np.fill_diagonal(mask, 0)
+        if pair is None:
+            mask = np.ones((self.nstate, self.nstate), dtype=np.int32)
+            np.fill_diagonal(mask, 0)
+        else:
+            # Only the selected pair was evaluated; every other zero entry is
+            # "not evaluated", never a computed zero.
+            mask = np.zeros((self.nstate, self.nstate), dtype=np.int32)
+            i, j = pair[0] - 1, pair[1] - 1
+            mask[i, j] = mask[j, i] = 1
         self._nacme_reference_tdc = np.array(reference, copy=True)
         self._nacme_reference_mask = mask
         self._nacme_reference_source = 2
@@ -1970,13 +2001,15 @@ class NAMD:
         return None
 
     def _write_zpredict_audit_row(self, istep, exact_dcv, predictor_dcv,
-                                  exact_nacv, predictor_nacv):
+                                  exact_nacv, predictor_nacv, *, pair=None):
         """Append gauge-aligned full-vector and velocity-contraction errors."""
         if not self._is_io_rank():
             self._io_barrier()
             return
         n = self.nstate
         pairs = np.triu_indices(n, 1)
+        if pair is not None:
+            pairs = (np.array([min(pair) - 1]), np.array([max(pair) - 1]))
         exact_d = np.asarray(exact_dcv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
         pred_d = np.asarray(predictor_dcv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
         exact_h = np.asarray(exact_nacv, dtype=float)[pairs].reshape(len(pairs[0]), -1)
@@ -3983,7 +4016,24 @@ class NAMD:
         draw and no second electronic propagation.
         """
         if self.rescale_provider == 'hop_analytic_nac':
-            self._update_analytic_nac(istep, compare_overlap=False)
+            if self._hop_candidate_nac_is_resident(istep):
+                # Every pair was already evaluated at this geometry for the
+                # TDC/overlap-check consumer; reuse that vector.
+                dump_log(self.mol, title=(
+                    'NAMD: hop candidate %d -> %d at step %d uses the '
+                    'all-pair analytic NAC already evaluated at this step'
+                    % (active, target, istep)), section='input')
+            else:
+                pair = None if self._hop_nac_all_pairs() else (active, target)
+                self._update_analytic_nac(istep, compare_overlap=False,
+                                          pair=pair)
+                dump_log(self.mol, title=(
+                    'NAMD: hop candidate %d -> %d at step %d; analytic NAC '
+                    'evaluated for %s' % (active, target, istep,
+                                          'every state pair (all-pair mode)'
+                                          if pair is None else
+                                          'the selected pair %d-%d only'
+                                          % pair)), section='input')
         direction = np.ascontiguousarray(
             np.asarray(self._last_analytic_dcv, dtype=np.float64)[
                 active - 1, target - 1])
@@ -4025,11 +4075,44 @@ class NAMD:
         self._last_hop_direction = np.array(direction, copy=True)
         return target, True
 
+    @staticmethod
+    def _hop_nac_all_pairs():
+        """Return whether hop-candidate NAC evaluation is forced to all pairs.
+
+        ``OQP_NAMD_HOP_NAC_PAIRS=all`` reproduces the pre-2026-09-08
+        behaviour (every pair at each candidate hop), which is how the
+        published uracil TDC+NAC ensembles were generated.  The default
+        ``selected`` evaluates only the active-candidate pair.
+        """
+        mode = os.environ.get('OQP_NAMD_HOP_NAC_PAIRS', 'selected')
+        mode = str(mode).strip().lower()
+        if mode not in ('selected', 'all'):
+            raise ValueError(
+                "OQP_NAMD_HOP_NAC_PAIRS must be 'selected' or 'all'")
+        return mode == 'all'
+
+    def _hop_candidate_nac_is_resident(self, istep):
+        """Return whether a complete analytic NAC from this step is resident.
+
+        True only when another consumer (``tdc=analytic``, ``rescale=
+        analytic_nac`` or ``nacme_check=analytic``) evaluated every pair at
+        this same step, so the candidate pair needs no second evaluation.
+        """
+        return (
+            self._needs_analytic_nac()
+            and self._last_analytic_dcv is not None
+            and self._last_analytic_pair is None
+            and istep is not None
+            and self._last_analytic_step == int(istep)
+        )
+
     def _clear_hop_triggered_analytic_record(self):
         """Clear exact-NAC fields before a step without a known hop candidate."""
         if self.rescale_provider != 'hop_analytic_nac':
             return
         self._last_analytic_dcv = None
+        self._last_analytic_pair = None
+        self._last_analytic_step = None
         self._last_analytic_tdc = None
         self._analytic_tdc_previous = None
         self._analytic_tdc_centered = None

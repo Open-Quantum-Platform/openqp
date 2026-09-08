@@ -19,6 +19,7 @@ contraction, antisymmetrization, and gap scaling.  Python only validates the
 public calculation scope and reshapes the final records.  The computational
 adjoint zeta is minus the Lee-gradient multiplier convention.
 """
+import operator
 import os
 from functools import wraps
 
@@ -84,8 +85,34 @@ def _resident_pair_cartesian(raw, nstate, natom):
     return flat.reshape(nstate, nstate, natom, 3).transpose(1, 0, 2, 3).copy()
 
 
+def _validated_state_pair(pair, nstate):
+    """Return ``pair`` as two distinct 1-based state indices in 1..nstate."""
+    try:
+        istate, jstate = pair
+        if isinstance(istate, (bool, np.bool_)) or isinstance(
+                jstate, (bool, np.bool_)):
+            raise TypeError
+        istate, jstate = operator.index(istate), operator.index(jstate)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            'NAC pair must contain two integer 1-based state indices') from exc
+    if not (1 <= istate <= nstate and 1 <= jstate <= nstate) or istate == jstate:
+        raise ValueError(
+            f'NAC pair must contain two distinct states in 1..{nstate}')
+    return istate, jstate
+
+
 @_with_temporary_nac_state
-def analytic_nac(mol):
+def analytic_nac(mol, *, pair=None):
+    """Return analytic (h, d) for all pairs or for one selected pair.
+
+    ``pair=None`` evaluates every physical state pair.  ``pair=(I, J)`` (1-based)
+    restricts the direct source, the ROHF/ROKS adjoint solve and the HF/XC
+    contractions to that single physical pair; the normalized exact-overlap
+    metric still sees every retained state.  The output keeps the complete
+    [I,J,atom,xyz] layout with d_JI = -d_IJ and h_JI = h_IJ filled for the
+    selected pair; every other entry is zero and means "not evaluated".
+    """
     import oqp
 
     debug_path = os.environ.get('NAC_ANALYTIC_DEBUG')
@@ -129,7 +156,11 @@ def analytic_nac(mol):
 
     # Production has no nuclear-coordinate forward CPHF branch.  The separate
     # tools/nac_lagrangian/rohf_response_gate.py diagnostic owns that 3N solve.
-    oqp.mrsf_nac_lagrangian(mol)
+    if pair is None:
+        oqp.mrsf_nac_lagrangian(mol)
+    else:
+        istate, jstate = _validated_state_pair(pair, nstate)
+        oqp.mrsf_nac_lagrangian_pair(mol, istate, jstate)
 
     if debug_path:
         # Debug export is deliberately observational: it copies resident

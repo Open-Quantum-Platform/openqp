@@ -238,7 +238,7 @@ contains
 !> driver.  Only R_KJ and dR_KJ (K=1..nstate) are resident at once, reducing
 !> the metric workspace from O(nstate**2*nbf**2) to O(nstate*nbf**2).
 !> gamma_column(:,I) contains gamma^(I,J); the diagonal column is zero.
-  subroutine mrsf_nac_metric_column(infos, jstate, gamma_column)
+  subroutine mrsf_nac_metric_column(infos, jstate, gamma_column, only_istate)
     use types, only: information
     use oqp_tagarray_driver, only: tagarray_reserve_data, data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo
@@ -254,6 +254,9 @@ contains
 
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: jstate
+    !> Optional: build gamma^(I,J) for this single I only.  The raw overlap
+    !> sensitivities and the normalization still run over every state K.
+    integer, intent(in), optional :: only_istate
     real(kind=dp), intent(out) :: gamma_column(:,:)
     real(kind=dp), contiguous, pointer :: bvec_mo(:,:)
     real(kind=dp), allocatable :: xvec(:,:), coeff(:,:,:), coeff_generic(:,:,:)
@@ -275,6 +278,13 @@ contains
 
     if (jstate < 1 .or. jstate > nstate) then
       call show_message('Invalid state in MRSF NAC metric column.', WITH_ABORT)
+    end if
+    if (present(only_istate)) then
+      if (only_istate < 1 .or. only_istate > nstate .or. &
+          only_istate == jstate) then
+        call show_message('Invalid selected state in MRSF NAC metric column.', &
+                          WITH_ABORT)
+      end if
     end if
     if (noca - nocb /= 2 .or. nocb < 0) then
       call show_message( &
@@ -337,6 +347,9 @@ contains
     gamma_column = 0.0_dp
     do istate = 1, nstate
       if (istate == jstate) cycle
+      if (present(only_istate)) then
+        if (istate /= only_istate) cycle
+      end if
       normalized_sij = 0.0_dp
       normalized_sab = 0.0_dp
       normalized_sia = 0.0_dp

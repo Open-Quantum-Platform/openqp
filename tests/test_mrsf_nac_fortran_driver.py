@@ -61,7 +61,7 @@ def test_driver_uses_actual_resident_state_count_and_streamed_metric():
 def test_driver_batches_one_adjoint_per_unordered_pair():
     driver = DRIVER.read_text()
     body = driver.split(
-        "subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)", 1
+        "subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution, &", 1
     )[1].split("end subroutine mrsf_nac_lagrangian", 1)[0]
     ordered_source_sequence = (
         "call mrsf_nac_wpair_batch_impl(",
@@ -276,6 +276,50 @@ def test_python_production_call_cannot_enable_forward_cphf(monkeypatch):
     assert calls == ["mrsf_nac_lagrangian"]
     assert nacv.shape == (3, 3, 1, 3)
     assert dcv.shape == (3, 3, 1, 3)
+
+
+def test_selected_pair_entry_keeps_full_metric_and_physical_pair_indexing():
+    """One physical pair for TDC+NAC hops: sources, Z solve and HF/XC only."""
+    driver = DRIVER.read_text()
+    metric = METRIC.read_text()
+    header = HEADER.read_text()
+    production = PYTHON.read_text()
+    assert 'bind(C, name="mrsf_nac_lagrangian_pair")' in driver
+    assert ("void mrsf_nac_lagrangian_pair(struct oqp_handle_t *inf, "
+            "int32_t istate, int32_t jstate);") in header
+    assert production.count("oqp.mrsf_nac_lagrangian_pair(mol, istate, jstate)") == 1
+    body = driver.split(
+        "subroutine mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution, &", 1
+    )[1].split("end subroutine mrsf_nac_lagrangian", 1)[0]
+    # Selection reduces the pair count to one and lists that physical pair.
+    assert "integer, intent(in), optional :: only_istate, only_jstate" in body
+    assert "selected_i = min(only_istate, only_jstate)" in body
+    assert "selected_j = max(only_istate, only_jstate)" in body
+    assert "npair = 1" in body
+    assert "if (istate /= selected_i .or. jstate /= selected_j) cycle" in body
+    assert "if (ipair /= npair) then" in body
+    # Fusion is all-pair only.
+    assert "present(only_istate) .and. present(gradient_rhs)" in body
+    # Both ordered members of the selected pair are visited (direct source
+    # for I<J, metric-only reverse for J>I) with the other state as I.
+    assert "if (jstate /= selected_i .and. jstate /= selected_j) cycle" in body
+    assert "metric_i = merge(selected_j, selected_i, jstate == selected_i)" in body
+    assert "only_istate=metric_i)" in body
+    assert "if (istate /= metric_i) cycle" in body
+    # The Z-vector predictor cache stays indexed by the physical pair.
+    assert "z_pair_offset = unordered_pair_index(pair_i(z_first), &" in body
+    assert "pair_offset=z_pair_offset" in body
+    assert "pair_offset=z_first-1" not in body
+    # The metric column restricts only the I loop; every K still enters the
+    # normalization of the exact-overlap derivative.
+    column = metric.split(
+        "subroutine mrsf_nac_metric_column(infos, jstate, gamma_column, only_istate)",
+        1)[1].split("end subroutine mrsf_nac_metric_column", 1)[0]
+    kloop = column.index("do kstate = 1, nstate")
+    normalization = column.index("normalization_weight = -raw_overlap(istate)*raw_overlap(kstate)")
+    skip = column.index("if (istate /= only_istate) cycle")
+    assert kloop < skip < normalization
+    assert "only_istate == jstate" in column
 
 
 def test_driver_guards_scope_gaps_and_restores_mutated_state():

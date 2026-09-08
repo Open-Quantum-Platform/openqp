@@ -247,10 +247,13 @@ def _hop_triggered_driver():
     driver.tdc_scheme = 0
     driver.tdc_provider = 'fd'
     driver.rescale_provider = 'hop_analytic_nac'
+    driver.nacme_check = 'off'
     driver.trivial = 0
     driver.trivial_thresh = 0.5
     driver._last_analytic_tdc = None
     driver._last_analytic_dcv = None
+    driver._last_analytic_pair = None
+    driver._last_analytic_step = None
     driver._analytic_tdc_previous = None
     driver._analytic_tdc_centered = None
     driver._nacme_reference_tdc = None
@@ -261,6 +264,12 @@ def _hop_triggered_driver():
     driver._last_rescale_discriminant = np.nan
     driver._last_hop_direction = np.zeros((1, 3))
     return driver
+
+
+def _silence_dump_log(monkeypatch):
+    """The hop path logs through dump_log, which needs a full molecule."""
+    import oqp.library.namd as namd_module
+    monkeypatch.setattr(namd_module, 'dump_log', lambda *a, **k: None)
 
 
 def _fake_native_hop_result(mol, *, target):
@@ -293,13 +302,17 @@ def test_hop_triggered_analytic_evaluates_exact_nac_once_for_candidate(monkeypat
         assert mol.data['OQP::namd_params'][_P_RESCALE] == 2.0
         _fake_native_hop_result(mol, target=2)
 
-    def fake_exact(_istep, *, compare_overlap=False):
+    def fake_exact(_istep, *, compare_overlap=False, pair=None):
         assert compare_overlap is False
+        # TDC+NAC evaluates only the active-candidate pair.
+        assert pair == (1, 2)
         calls['exact'] += 1
         dcv = np.zeros((2, 2, 1, 3))
         dcv[0, 1, 0] = [1.0, 0.0, 0.0]
         dcv[1, 0, 0] = -dcv[0, 1, 0]
         driver._last_analytic_dcv = dcv
+        driver._last_analytic_pair = pair
+        driver._last_analytic_step = _istep
 
     def fake_rescale(_natom, velocity_ptr, _mass_ptr, direction_ptr,
                      _delta_e, gamma_ptr, discriminant_ptr):
@@ -319,6 +332,8 @@ def test_hop_triggered_analytic_evaluates_exact_nac_once_for_candidate(monkeypat
     driver._update_analytic_nac = fake_exact
     monkeypatch.setattr(oqp, 'mrsf_namd_hop', fake_native)
     monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional', fake_rescale)
+    _silence_dump_log(monkeypatch)
+    monkeypatch.delenv('OQP_NAMD_HOP_NAC_PAIRS', raising=False)
 
     new_active, hopped = driver._hop(allow_hop=True, istep=7)
     assert (new_active, hopped) == (2, True)
@@ -328,6 +343,147 @@ def test_hop_triggered_analytic_evaluates_exact_nac_once_for_candidate(monkeypat
     assert driver._last_rescale_gamma == pytest.approx(0.125)
     assert driver._last_rescale_discriminant == pytest.approx(0.5)
     np.testing.assert_allclose(driver._last_hop_direction, [[1.0, 0.0, 0.0]])
+
+
+def _selected_pair_hop_fixture(monkeypatch, driver, *, expected_pair):
+    import oqp
+
+    calls = {'exact': 0}
+
+    def fake_exact(_istep, *, compare_overlap=False, pair=None):
+        assert compare_overlap is False
+        assert pair == expected_pair
+        calls['exact'] += 1
+        dcv = np.zeros((2, 2, 1, 3))
+        dcv[0, 1, 0] = [0.0, 1.0, 0.0]
+        dcv[1, 0, 0] = -dcv[0, 1, 0]
+        driver._last_analytic_dcv = dcv
+        driver._last_analytic_pair = pair
+        driver._last_analytic_step = _istep
+
+    def fake_rescale(_natom, _velocity_ptr, _mass_ptr, direction_ptr,
+                     _delta_e, gamma_ptr, discriminant_ptr):
+        direction = np.frombuffer(oqp.ffi.buffer(direction_ptr, 3*8), dtype=np.float64)
+        np.testing.assert_allclose(direction, [0.0, 1.0, 0.0])
+        np.frombuffer(oqp.ffi.buffer(gamma_ptr, 8), dtype=np.float64)[0] = 0.0
+        np.frombuffer(oqp.ffi.buffer(discriminant_ptr, 8), dtype=np.float64)[0] = 1.0
+        return 0
+
+    driver._hop_random = lambda: 0.25
+    driver._update_analytic_nac = fake_exact
+    monkeypatch.setattr(
+        oqp, 'mrsf_namd_hop', lambda mol: _fake_native_hop_result(mol, target=2))
+    monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional', fake_rescale)
+    _silence_dump_log(monkeypatch)
+    return calls
+
+
+def test_hop_triggered_all_pair_mode_is_an_explicit_environment_choice(monkeypatch):
+    """OQP_NAMD_HOP_NAC_PAIRS=all reproduces the published all-pair runs."""
+    driver = _hop_triggered_driver()
+    monkeypatch.setenv('OQP_NAMD_HOP_NAC_PAIRS', 'all')
+    calls = _selected_pair_hop_fixture(monkeypatch, driver, expected_pair=None)
+    assert driver._hop(allow_hop=True, istep=3) == (2, True)
+    assert calls['exact'] == 1
+
+    monkeypatch.setenv('OQP_NAMD_HOP_NAC_PAIRS', 'bogus')
+    with pytest.raises(ValueError):
+        driver._hop(allow_hop=True, istep=4)
+
+
+def test_hop_triggered_reuses_same_step_all_pair_vector_without_recompute(monkeypatch):
+    """A complete NAC evaluated at this step by another consumer is reused."""
+    import oqp
+
+    driver = _hop_triggered_driver()
+    driver.nacme_check = 'analytic'          # _needs_analytic_nac() is True
+    dcv = np.zeros((2, 2, 1, 3))
+    dcv[0, 1, 0] = [0.0, 0.0, 1.0]
+    dcv[1, 0, 0] = -dcv[0, 1, 0]
+    driver._last_analytic_dcv = dcv
+    driver._last_analytic_pair = None
+    driver._last_analytic_step = 9
+    driver._update_analytic_nac = lambda *a, **k: pytest.fail(
+        'the candidate pair was recomputed although every pair is resident')
+
+    def fake_rescale(_natom, _velocity_ptr, _mass_ptr, direction_ptr,
+                     _delta_e, gamma_ptr, discriminant_ptr):
+        direction = np.frombuffer(oqp.ffi.buffer(direction_ptr, 3*8), dtype=np.float64)
+        np.testing.assert_allclose(direction, [0.0, 0.0, 1.0])
+        np.frombuffer(oqp.ffi.buffer(gamma_ptr, 8), dtype=np.float64)[0] = 0.0
+        np.frombuffer(oqp.ffi.buffer(discriminant_ptr, 8), dtype=np.float64)[0] = 1.0
+        return 0
+
+    driver._hop_random = lambda: 0.25
+    monkeypatch.setattr(
+        oqp, 'mrsf_namd_hop', lambda mol: _fake_native_hop_result(mol, target=2))
+    monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional', fake_rescale)
+    _silence_dump_log(monkeypatch)
+    monkeypatch.delenv('OQP_NAMD_HOP_NAC_PAIRS', raising=False)
+    assert driver._hop(allow_hop=True, istep=9) == (2, True)
+
+    # A vector from an earlier step, or a single-pair vector, is not reused.
+    driver._last_analytic_step = 8
+    assert driver._hop_candidate_nac_is_resident(9) is False
+    driver._last_analytic_step = 9
+    driver._last_analytic_pair = (1, 2)
+    assert driver._hop_candidate_nac_is_resident(9) is False
+    driver._last_analytic_pair = None
+    driver.nacme_check = 'off'
+    assert driver._hop_candidate_nac_is_resident(9) is False
+
+
+def test_selected_pair_update_masks_unevaluated_pairs_and_keeps_no_history(monkeypatch):
+    """Only the selected pair is marked evaluated; other zeros are not data."""
+    import oqp.library.nac_analytic as nac_analytic
+
+    driver = _hop_triggered_driver()
+    driver.nstate = 3
+    driver.natom = 2
+    driver.vel = np.array([[0.1, 0.0, 0.0], [0.0, 0.2, 0.0]])
+    driver.mol.data['OQP::td_energies'] = np.array([-0.5, -0.4, -0.3])
+    driver._analytic_tdc_previous = np.ones((3, 3))
+    driver._analytic_tdc_centered = np.ones((3, 3))
+    driver._is_io_rank = lambda: True
+    seen = {}
+
+    def fake_analytic_nac(_mol, *, pair=None):
+        seen['pair'] = pair
+        dcv = np.zeros((3, 3, 2, 3))
+        dcv[1, 2] = [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
+        dcv[2, 1] = -dcv[1, 2]
+        return np.zeros_like(dcv), dcv
+
+    monkeypatch.setattr(nac_analytic, 'analytic_nac', fake_analytic_nac)
+    _silence_dump_log(monkeypatch)
+    driver._update_analytic_nac(11, compare_overlap=False, pair=(3, 2))
+    assert seen['pair'] == (3, 2)
+    assert driver._last_analytic_pair == (3, 2)
+    assert driver._last_analytic_step == 11
+    expected_mask = np.zeros((3, 3), dtype=np.int32)
+    expected_mask[1, 2] = expected_mask[2, 1] = 1
+    np.testing.assert_array_equal(driver._nacme_reference_mask, expected_mask)
+    assert driver._nacme_reference_source == 2
+    # The endpoint contraction is stored for the selected pair, antisymmetric.
+    tdc = driver._nacme_reference_tdc
+    assert tdc[1, 2] == pytest.approx(0.1*1.0 + 0.2*2.0)
+    assert tdc[2, 1] == pytest.approx(-tdc[1, 2])
+    assert tdc[0, 1] == 0.0 and expected_mask[0, 1] == 0
+    # No trapezoidal history survives a single-pair evaluation.
+    assert driver._analytic_tdc_previous is None
+    assert driver._analytic_tdc_centered is None
+    with pytest.raises(ValueError):
+        driver._update_analytic_nac(11, compare_overlap=True, pair=(3, 2))
+
+
+def test_analytic_nac_pair_argument_is_validated_before_the_native_call():
+    from oqp.library.nac_analytic import _validated_state_pair
+
+    assert _validated_state_pair((2, 1), 3) == (2, 1)
+    assert _validated_state_pair(np.array([1, 3]), 3) == (1, 3)
+    for bad in ((1, 1), (0, 2), (1, 4), (True, 2), (1.5, 2), (1,), 'ab'):
+        with pytest.raises(ValueError):
+            _validated_state_pair(bad, 3)
 
 
 def test_hop_triggered_analytic_skips_exact_nac_without_candidate(monkeypatch):

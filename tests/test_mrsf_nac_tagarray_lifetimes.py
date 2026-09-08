@@ -58,7 +58,7 @@ def test_amp_and_esum_own_inputs_that_survive_record_mutation():
 def test_driver_owns_energy_record_and_guards_integer_products_before_cast():
     body = _body(
         DRIVER.read_text(),
-        "mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution)",
+        "mrsf_nac_lagrangian(infos, gradient_rhs, gradient_solution, &",
     )
     assert "energies_saved = energies" in body
     assert "gap = energies_saved(pair_j(batch_pair))" in body

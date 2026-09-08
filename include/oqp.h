@@ -773,6 +773,7 @@ void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 void mrsf_nac_lagrangian(struct oqp_handle_t *inf);
+void mrsf_nac_lagrangian_pair(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
 void mrsf_nac_metric_data(struct oqp_handle_t *inf);
 void mrsf_nac_metric_column(struct oqp_handle_t *inf, int32_t jstate);
 void mrsf_nac_overlap(struct oqp_handle_t *inf);
