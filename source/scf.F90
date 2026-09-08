@@ -1300,7 +1300,11 @@ contains
       ! pdmat(:,1) - pdmat(:,2) then stored the spin density as DM_A.  Every
       ! post-SCF consumer (ESPF charges, Mulliken populations, MRSF relaxed
       ! densities, gradients) expects DM_A = alpha and DM_B = beta.
-      call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)
+      if (do_pfon) then
+        call pfon%build_density(dmat_a, mo_a, work1, work2, do_pfon, dmat_b, mo_b)
+      else
+        call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)
+      end if
       
     end select
 !  Construct ESPF partial charges and print MM energy in output (only done if QM/MM run)
