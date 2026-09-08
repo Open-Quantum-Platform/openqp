@@ -4217,6 +4217,33 @@ class NAMD_QMMM(NAMD):
                              with_overlap=with_overlap, geom=self._geometry_key())
         return self._refine_image_field(q_prev), potqm
 
+    def _absorb_hop_field_shift(self, jump):
+        """Periodic full-ESPF, after an accepted hop: the potential energy of
+        the new state moved by ``jump`` (Hartree) when its image field was
+        refined, after the hop kernel had already rescaled the velocities.
+        Rescale the real QM-atom velocities uniformly (the hop kernel's own
+        degrees of freedom) so the kinetic energy changes by -jump; if they
+        do not carry enough kinetic energy, rescale all atoms (uniform scaling
+        keeps the rigid-water constraints satisfied).  Returns the residual
+        total-energy jump."""
+        mol = self.mol
+        jump = float(jump)
+        if not np.isfinite(jump) or abs(jump) < 1e-14:
+            return jump
+        for label, idx in (("QM", np.asarray(self.qm_atoms, dtype=int)),
+                           ("all", np.arange(self.natom_all))):
+            ke = 0.5 * float(np.sum(self.m_all[idx, None] * self.v_all[idx] ** 2))
+            if ke > jump and ke > 0.0:
+                self.v_all[idx] *= np.sqrt(1.0 - jump / ke)
+                dump_log(mol, title=(f"PyOQP: QM-image field refinement after the hop shifted "
+                                     f"E({self.active}) by {jump:+.3e} Hartree; absorbed into "
+                                     f"the {label}-atom kinetic energy"), section='')
+                return 0.0
+        raise RuntimeError(
+            f"NAMD_QMMM: the QM-image field refinement after the hop raised the energy of "
+            f"state {self.active} by {jump:.3e} Hartree, more than the available kinetic "
+            f"energy; the hop is not allowed under the refined Hamiltonian.")
+
     def _geometry_key(self):
         """Full-system coordinates the current electronic state belongs to."""
         return np.array(self.r_all, dtype=float, copy=True)
@@ -4560,6 +4587,15 @@ class NAMD_QMMM(NAMD):
                     0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
                 transition_energy_jump = (
                     energy_after_transition - energy_before_transition)
+                if getattr(self, "_img_ctx", None) is not None:
+                    # The hop kernel rescaled the velocities with the target
+                    # energy evaluated in the previous state's image field;
+                    # _total_force has since refined the field for the new
+                    # state, shifting its energy.  Absorb that shift into the
+                    # QM kinetic energy so the total energy is continuous
+                    # across the hop.
+                    transition_energy_jump = self._absorb_hop_field_shift(
+                        transition_energy_jump)
             else:
                 transition_energy_jump = np.nan
 

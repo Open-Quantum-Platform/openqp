@@ -60,7 +60,12 @@ for the new active state before its force is integrated (seeded from the
 previous state's charges, logged as `QM-image field re-iterated for the new
 active state`); in the dipeptide box the S1 force evaluated in the S0 field
 would differ from a self-consistent S1 force by 8 kJ/mol/nm, after the
-re-iteration by 0.001 kJ/mol/nm.
+re-iteration by 0.001 kJ/mol/nm. The hop kernel has rescaled the velocities
+with the new state's energy in the old field, so the energy shift of the
+re-iteration (0.16 kJ/mol in that example) is absorbed into the QM kinetic
+energy afterwards (`_absorb_hop_field_shift`, logged), keeping the total
+energy continuous across the hop; a shift larger than the available kinetic
+energy raises an error instead of continuing on an inconsistent surface.
 The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose relaxed
 charges are not available per iteration, so periodic SOC-NAMD QM/MM is not
 offered (`NotImplementedError`; use `NoCutoff`).

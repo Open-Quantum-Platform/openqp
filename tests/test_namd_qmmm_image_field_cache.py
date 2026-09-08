@@ -84,6 +84,31 @@ class TestImageFieldCache(unittest.TestCase):
         nd_np._apply_odp_to_force_energy = lambda f, e: (f, e)
         nd_np._total_force(np.zeros(3))
 
+    def test_hop_field_shift_is_absorbed_by_qm_kinetic_energy(self):
+        r = np.zeros((4, 3))
+        nd = _bare(2, r)
+        nd.qm_atoms = np.array([1, 2]); nd.natom_all = 4
+        nd.m_all = np.array([1000.0, 2000.0, 2000.0, 1000.0])
+        nd.v_all = np.full((4, 3), 1e-3)
+        ke_qm = 0.5 * np.sum(nd.m_all[[1, 2], None] * nd.v_all[[1, 2]] ** 2)
+        ke_all = 0.5 * np.sum(nd.m_all[:, None] * nd.v_all ** 2)
+        with mock.patch.object(namd_mod, "dump_log"):
+            v_mm = nd.v_all[[0, 3]].copy()
+            self.assertEqual(nd._absorb_hop_field_shift(0.0), 0.0)
+            jump = 0.25 * ke_qm                     # field shift smaller than the QM kinetic energy
+            self.assertEqual(nd._absorb_hop_field_shift(jump), 0.0)
+            ke_qm_new = 0.5 * np.sum(nd.m_all[[1, 2], None] * nd.v_all[[1, 2]] ** 2)
+            self.assertAlmostEqual(ke_qm_new, ke_qm - jump, places=14)
+            np.testing.assert_array_equal(nd.v_all[[0, 3]], v_mm)   # MM atoms untouched
+            jump = 1.2 * ke_qm_new                  # more than the QM atoms carry: all atoms
+            ke_before = 0.5 * np.sum(nd.m_all[:, None] * nd.v_all ** 2)
+            self.assertEqual(nd._absorb_hop_field_shift(jump), 0.0)
+            ke_after = 0.5 * np.sum(nd.m_all[:, None] * nd.v_all ** 2)
+            self.assertAlmostEqual(ke_after, ke_before - jump, places=14)
+            with self.assertRaises(RuntimeError):   # more than the whole system carries
+                nd._absorb_hop_field_shift(10.0 * ke_all)
+            self.assertEqual(nd._absorb_hop_field_shift(-1e-3), 0.0)   # downward shift: speed up
+
 
 if __name__ == "__main__":
     unittest.main()
