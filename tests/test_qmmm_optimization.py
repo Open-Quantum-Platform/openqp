@@ -466,6 +466,23 @@ class TestConstraintsOnMovableAtoms(unittest.TestCase):
         self.assertTrue(all(i not in qm and j not in qm for i, j in pairs))
         self.assertTrue(all(i in o.movable and j in o.movable for i, j in pairs))
 
+    def test_constrained_group_split_across_the_cell_is_made_whole(self):
+        import types
+        L = 1.8                                                      # nm
+        o = QMMM_Opt.__new__(QMMM_Opt)
+        o.driver = types.SimpleNamespace(_box_lengths_bohr=lambda: [L / 0.052917721067] * 3)
+        X = np.zeros((4, 3))
+        X[0] = [1.75, 0.5, 0.5]                                     # O at the +x face
+        X[1] = [1.75 + 0.09572 - L, 0.5, 0.5]                       # its H stored on the -x face
+        X[2] = [1.75 - 0.024, 0.5 + 0.0927, 0.5]                    # the other H, whole
+        X[3] = [0.3, 0.3, 0.3]                                      # unconstrained
+        pairs = [(0, 1), (0, 2), (1, 2)]
+        Y = o._unwrap_constrained(X, pairs)
+        self.assertAlmostEqual(np.linalg.norm(Y[1] - Y[0]), 0.09572, places=9)
+        np.testing.assert_allclose(Y[[0, 2, 3]], X[[0, 2, 3]], atol=0)
+        o.driver = types.SimpleNamespace(_box_lengths_bohr=lambda: None)   # no cell: unchanged
+        np.testing.assert_allclose(o._unwrap_constrained(X, pairs), X, atol=0)
+
     def test_unknown_constraint_name_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "HBonds"):
             self._opt(self.QM, {"constraints": "bonds-please", "rigidwater": False})
@@ -542,6 +559,28 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
         nqm = len(o.qm_atoms)
         mol_xyz = np.asarray(r.mol.get_system(), dtype=float).reshape(-1, 3)[:nqm]
         np.testing.assert_allclose(mol_xyz, o.history[-1]["x"].reshape(-1, 3), atol=1e-8)
+
+    def test_same_coordinates_different_evaluation_is_reevaluated(self):
+        # maxit=1 then a recovery restart from the best (= first) geometry: the
+        # second evaluation is at identical coordinates but reports 1e-7 more,
+        # so the first entry is reported while the driver holds the second;
+        # the third (re-)evaluation returns E + 3e-7, which must be published
+        real = QMMM_Opt._energy_force
+        calls = [0]
+
+        def shifted(self, X):
+            calls[0] += 1
+            e, f = real(self, X)
+            return (e + 1e-7, f) if calls[0] == 2 else ((e + 3e-7, f) if calls[0] == 3 else (e, f))
+
+        text = (self._deck().replace("maxit=12", "maxit=1")
+                .replace("auto_recovery=false", "auto_recovery=true\nrecovery_maxit=1"))
+        r = self._run(text, patch_energy=shifted)
+        o, info = r.qmmm_opt, r.mol.qmmm_optimization
+        self.assertTrue(info["recovery"])
+        self.assertTrue(np.array_equal(o.history[0]["x"], o.history[1]["x"]))   # the same coordinates
+        self.assertEqual(calls[0], 3)
+        self.assertAlmostEqual(info["energy_hartree"] - o.history[0]["e"], 3e-7, delta=1e-9)
 
     def test_published_energy_is_the_reevaluated_one(self):
         # force 'best is not last': the second evaluation reports +1 Hartree, so
@@ -635,6 +674,26 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
         self.assertIn(("ERROR", "optimize.istate"), self._report(method="tdhf", istate=-1))
         self.assertNotIn(("ERROR", "optimize.istate"), self._report(istate=0))
         self.assertNotIn(("ERROR", "optimize.istate"), self._report(method="tdhf", istate=2))
+
+    def test_checker_and_driver_reject_swapmo(self):
+        from oqp.utils import input_checker as chk
+        cfg = {"input": {"runtype": "optimize", "qmmm_flag": True, "method": "hf", "basis": "6-31g",
+                         "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+               "optimize": {"lib": "oqp", "istate": 0}, "guess": {"swapmo": "5 6"},
+               "qmmm": {"pdb_file": "ala.pdb", "qm_atoms": "8,9,16,17,18", "forcefield_files": "amber14-all.xml"}}
+        report = chk.CheckReport()
+        chk._check_optimize(cfg, report)
+        self.assertIn(("ERROR", "guess.swapmo"), [(d.severity, d.path) for d in report.diagnostics])
+        cfg["guess"]["swapmo"] = ""
+        report = chk.CheckReport()
+        chk._check_optimize(cfg, report)
+        self.assertNotIn(("ERROR", "guess.swapmo"), [(d.severity, d.path) for d in report.diagnostics])
+        if _HAVE:
+            for bad in ("5 6", [5, 6]):
+                with self.assertRaisesRegex(ValueError, "swapmo"):
+                    QMMM_Opt._reject_swapmo(bad)
+            for ok in ("", [], None):
+                QMMM_Opt._reject_swapmo(ok)
 
     def test_checker_rejects_dlc_and_ric(self):
         for cs in ("dlc", "ric", "internal"):

@@ -5950,6 +5950,17 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",
                 )
+            _swapmo_q = _get(config, "guess", "swapmo", "")
+            if (len(_swapmo_q) > 0) if isinstance(_swapmo_q, (list, tuple)) else bool(str(_swapmo_q or "").strip()):
+                report.add(
+                    "ERROR",
+                    "guess.swapmo",
+                    "Orbital swaps are applied by the single-point reference, which the QM/MM optimisation's "
+                    "embedded SCF does not use; a requested non-Aufbau occupation would be silently lost.",
+                    value=str(_swapmo_q),
+                    expected="empty",
+                    action="Remove [guess] swapmo, or optimise without qmmm_flag.",
+                )
             _istate_raw = _get(config, "optimize", "istate", 0)
             try:
                 _istate_q = int(_istate_raw)

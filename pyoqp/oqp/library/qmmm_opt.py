@@ -79,6 +79,7 @@ class QMMM_Opt:
         # driver reads the root it differentiates from [properties] grad.
         self.istate = int(opt.get("istate", 0))
         self._validate_istate(self.istate, mol.config["input"].get("method", "hf"))
+        self._reject_swapmo(mol.config.get("guess", {}).get("swapmo", ""))
         mol.config.setdefault("properties", {})["grad"] = [self.istate]
 
         # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
@@ -125,6 +126,16 @@ class QMMM_Opt:
                          "move against the fixed MM atoms; use auto (Cartesian), cartesian or tric.")
 
     @staticmethod
+    def _reject_swapmo(value):
+        """[guess] swapmo is applied by SinglePoint.reference(); the embedded
+        SCF of this driver builds its guesses directly, so a requested
+        non-Aufbau occupation would be silently lost."""
+        given = (len(value) > 0) if isinstance(value, (list, tuple)) else bool(str(value or "").strip())
+        if given:
+            raise ValueError("[guess] swapmo is not applied by the QM/MM optimisation's embedded SCF; "
+                             "remove it, or optimise without qmmm_flag.")
+
+    @staticmethod
     def _validate_istate(istate, method):
         """[optimize] istate: >= 0, and >= 1 for TDHF/MRSF (a response root,
         1 = the lowest); a negative root would index the state arrays from the end."""
@@ -155,6 +166,39 @@ class QMMM_Opt:
                 f"{z_expected} ({len(self.qm_atoms)} QM atoms in topology order + {nlink} link "
                 "hydrogen(s)). '[input] system = file.pdb ...' indices are 1-based while "
                 "[qmmm] qm_atoms are 0-based.")
+
+    def _unwrap_constrained(self, X_nm, pairs):
+        """Coordinates (nm) with every group of constrained atoms made whole
+        under the periodic cell: from the lowest index of each connected
+        group, each partner is placed at the minimum-image vector from the
+        atom it was reached from, so the engine's frozen distances start from
+        bond lengths even for atoms stored on opposite faces of the cell.
+        Without a cell the coordinates are returned unchanged."""
+        box = self.driver._box_lengths_bohr()
+        if box is None or not pairs:
+            return X_nm
+        L = np.asarray(box, dtype=float) * BOHR_TO_NM
+        adj = {}
+        for i, j in pairs:
+            adj.setdefault(int(i), []).append(int(j))
+            adj.setdefault(int(j), []).append(int(i))
+        X = np.array(X_nm, dtype=float)
+        seen = set()
+        for root in sorted(adj):
+            if root in seen:
+                continue
+            seen.add(root)
+            stack = [root]
+            while stack:
+                a = stack.pop()
+                for b in adj[a]:
+                    if b in seen:
+                        continue
+                    d = X[b] - X[a]
+                    X[b] = X[a] + d - L * np.round(d / L)
+                    seen.add(b)
+                    stack.append(b)
+        return X
 
     def _constraint_pairs(self, qmmm_cfg):
         """[qmmm] rigidwater / constraints for the movable MM atoms, as
@@ -326,6 +370,7 @@ class QMMM_Opt:
             X[mv] = np.asarray(x_bohr, dtype=float).reshape(-1, 3) * BOHR_TO_NM
             # the driver and mol move to this geometry even if the solve fails
             self._attempted_x = np.array(x_bohr, dtype=float)
+            self._last_attempt_ok = False
             try:
                 e, f = self._energy_force(X)
             except Exception as error:
@@ -339,6 +384,7 @@ class QMMM_Opt:
                                      "at the trial geometry; rejecting it.\n   %s" % error))
                 raise StopIteration from error
             self.driver._reuse_orbitals = not self.init_scf   # later steps start from these orbitals
+            self._last_attempt_ok = True
             g = -f[mv].reshape(-1)
             if engine_pairs:
                 # as the native optimizer: the constrained gradient drives the
@@ -353,7 +399,7 @@ class QMMM_Opt:
             else:
                 rms_step = max_step = de = float("inf")
             self.history.append({"x": np.array(x_bohr, dtype=float), "e": e, "rms": rms, "max": mx,
-                                 "rms_step": rms_step, "max_step": max_step, "de": de})
+                                 "rms_step": rms_step, "max_step": max_step, "de": de, "id": it[0]})
             dump_log(mol, title=(f"PyOQP: QM/MM optimisation step {it[0]}: E = {e:.10f} Hartree, "
                                  f"dE {de:+.2e}, rms/max grad {rms:.2e}/{mx:.2e} Hartree/bohr, "
                                  f"rms/max step {rms_step:.2e}/{max_step:.2e} bohr"), section="")
@@ -368,6 +414,8 @@ class QMMM_Opt:
             if converged_at(self.history[-1]):
                 raise StopIteration
 
+        if self.frozen_pairs:
+            X0 = self._unwrap_constrained(X0, self.frozen_pairs)
         x0 = (X0[mv] / BOHR_TO_NM).reshape(-1)
         engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=trust_max,
                            maxiter=self.maxit, coordsys=self.coordsys, frozen_distances=engine_pairs)
@@ -397,11 +445,13 @@ class QMMM_Opt:
         converged = converged_at(last)
         final = last if converged else best
         X = X0.copy(); X[mv] = final["x"].reshape(-1, 3) * BOHR_TO_NM
-        if not np.array_equal(getattr(self, "_attempted_x", final["x"]), final["x"]):
-            # the driver and mol hold the last attempted geometry (a later
-            # trial, possibly a rejected one): bring them back to the geometry
-            # we report, and report what this evaluation returns (orbital reuse
-            # or the periodic image loop can move the value within tolerance)
+        held_is_final = bool(getattr(self, "_last_attempt_ok", False)) and last.get("id") == final.get("id")
+        if not held_is_final:
+            # the driver and mol hold the last attempted evaluation, which is not
+            # the one we report (a later trial, a rejected one, or another
+            # evaluation at the same coordinates, as a recovery restart makes):
+            # bring them back to the reported geometry, and report what this
+            # evaluation returns, so energy, metrics and gradient belong together
             e_re, f_re = self._energy_force(X)
             g_re = -f_re[mv].reshape(-1)
             if engine_pairs:
