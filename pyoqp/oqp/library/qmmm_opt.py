@@ -306,16 +306,20 @@ class QMMM_Opt:
         return np.array(sorted(movable), dtype=int)
 
     # ------------------------------------------------------------------ #
-    def _with_virtual_sites(self, positions_nm):
-        """Positions (nm) with every virtual site placed from its parent atoms
-        by OpenMM, since the optimiser moves only real atoms."""
-        X = np.array(positions_nm, dtype=float)
+    def _virtual_site_indices(self):
         vs = getattr(self, "_virtual_sites", None)
         if vs is None:
             sys0 = self.driver.mm_systems.get("sys0")
             vs = ([i for i in range(sys0.getNumParticles()) if sys0.isVirtualSite(i)]
                   if sys0 is not None else [])
             self._virtual_sites = vs
+        return vs
+
+    def _with_virtual_sites(self, positions_nm):
+        """Positions (nm) with every virtual site placed from its parent atoms
+        by OpenMM, since the optimiser moves only real atoms."""
+        X = np.array(positions_nm, dtype=float)
+        vs = self._virtual_site_indices()
         if vs:
             ctx = self.driver.mm_systems["sim0"].context
             ctx.setPositions(unit.Quantity(X, unit.nanometer))
@@ -340,6 +344,9 @@ class QMMM_Opt:
         e = e_q.value_in_unit(unit.kilojoule_per_mole) / HARTREE_TO_KJMOL
         f = (f_q.value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
              if hasattr(f_q, "value_in_unit") else np.asarray(f_q)) * FORCE_KJMOLNM_TO_HABOHR
+        # the driver has already folded every virtual-site force (MM and ESPF
+        # coupling) onto the atoms that place the site, so the real-atom rows
+        # are the whole gradient and the site rows are zero
         f = np.asarray(f, dtype=float)
         self._last_gradient = -f
         return float(e), f

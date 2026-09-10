@@ -5931,6 +5931,26 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # [optimize] qmmm_radius / qmmm_output are read only by the QM/MM optimiser
+        _rad_v = _get(config, "optimize", "qmmm_radius", 0.0)
+        try:
+            _rad_set = float(_rad_v) != 0.0
+        except (TypeError, ValueError):
+            _rad_set = True
+        _out_v = _get(config, "optimize", "qmmm_output", "")
+        for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
+                                    ("qmmm_output", bool(str(_out_v or "").strip()), _out_v)):
+            if _is_set:
+                report.add(
+                    "ERROR",
+                    f"optimize.{_key}",
+                    "This option is used only by a QM/MM optimisation (qmmm_flag=true); "
+                    "an all-QM optimisation would silently ignore it.",
+                    value=str(_val),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [optimize] {_key}, or run a QM/MM optimisation.",
+                )
     if bool(_get(config, "input", "qmmm_flag", False)):
         if runtype == "optimize":
             # Plain minimisation goes to the QM/MM optimiser (qmmm_opt.py),

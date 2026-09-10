@@ -101,7 +101,8 @@ class TestRigidWaterIsWired(unittest.TestCase):
         self.assertIn('qmmm_cfg.get("rigidwater", True)', src)
         self.assertIn("rigidWater=True", src)
         self.assertIn("self.system_md.addConstraint(p1, p2, dist)", src)
-        self.assertIn("3 * self.system_md.getNumParticles() - self.n_constraints", src)
+        self.assertIn("dof = 3 * massive - self.n_constraints", src)                # massless virtual sites excluded
+        self.assertIn("self.system_md.setVirtualSite(i, _copy_virtual_site(sys0.getVirtualSite(i)))", src)
 
 
 @unittest.skipUnless(_HAVE, "OpenMM unavailable")
@@ -357,6 +358,64 @@ class TestLoggedEnergyIsTheBackendEnergy(unittest.TestCase):
                 d._log_handle.close()
             finally:
                 os.chdir(cwd)
+
+
+@unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
+class TestVirtualSitesInQmmmMd(unittest.TestCase):
+    """Formaldehyde in five TIP4P-Ew waters: the MD system carries the M sites
+    as virtual sites (they follow their O/H parents), forces on them reach O and
+    H once, and the temperature does not count them as degrees of freedom."""
+
+    def test_tip4p_sites_follow_parents_and_carry_no_dof(self):
+        import tempfile
+        import openmm as mm
+        import openmm.app as app
+        import openmm.unit as u
+        from oqp.library.qmmm_md import QMMM_MD
+        pdb = app.PDBFile(str(EXAMPLES / "formaldehyde_water.pdb"))
+        ff = app.ForceField(str(EXAMPLES / "formaldehyde.xml"), "amber14/tip4pew.xml")
+        mod = app.Modeller(pdb.topology, pdb.positions)
+        mod.addExtraParticles(ff)
+        with tempfile.TemporaryDirectory() as tmp:
+            box = Path(tmp) / "box4.pdb"
+            with open(box, "w") as fh:
+                app.PDBFile.writeFile(mod.topology, mod.positions, fh, keepIds=True)
+            deck = Path(tmp) / "md.inp"
+            deck.write_text(DECK.format(pdb=box, ff=EXAMPLES / "formaldehyde.xml", tip="amber14/tip4pew.xml")
+                            .replace("n_steps=6", "n_steps=2"))
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                d = QMMM_MD(oqp_cfg=str(deck))
+                d.setup()
+                atoms = list(d.pdb.topology.atoms())
+                ep = [a.index for a in atoms if a.element is None]
+                d.step(); d.step()
+                st = d.simulation_md.context.getState(getPositions=True, getForces=True)
+                applied = np.array([list(d.qmmm_ext.getParticleParameters(i)[1]) for i in range(len(atoms))])
+                d._log_handle.close()
+            finally:
+                os.chdir(cwd)
+        self.assertEqual(len(ep), 5)
+        self.assertTrue(all(d.system_md.isVirtualSite(i) for i in ep))
+        ref = ff.createSystem(d.pdb.topology, nonbondedMethod=app.NoCutoff, rigidWater=False)
+        ctx = mm.Context(ref, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+        ctx.setPositions(st.getPositions())
+        ctx.computeVirtualSites()
+        X = np.asarray(st.getPositions(asNumpy=True).value_in_unit(u.nanometer))
+        P = np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(u.nanometer))
+        np.testing.assert_allclose(X[ep], P[ep], atol=1e-6)
+        # the driver folds every M-site force onto O and H itself, so the MD
+        # system's own virtual-site distribution has nothing left to add: the
+        # force on each real atom is exactly the QM/MM force given to it
+        self.assertGreater(np.abs(applied).max(), 1.0)
+        np.testing.assert_array_equal(applied[ep], 0.0)
+        real = [i for i in range(len(atoms)) if i not in set(ep)]
+        F = np.asarray(st.getForces(asNumpy=True).value_in_unit(u.kilojoule_per_mole / u.nanometer))
+        np.testing.assert_allclose(F[real], applied[real], rtol=1e-5, atol=1e-3)
+        massive = len(atoms) - len(ep)
+        kB = u.MOLAR_GAS_CONSTANT_R.value_in_unit(u.kilojoule_per_mole / u.kelvin)
+        self.assertAlmostEqual(d._instantaneous_temperature(100.0),
+                               200.0 / ((3 * massive - d.n_constraints) * kB), places=9)
 
 
 if __name__ == "__main__":

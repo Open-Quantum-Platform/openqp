@@ -9,6 +9,20 @@ import sys
 from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
+def _copy_virtual_site(site):
+    """A new OpenMM virtual site with the same definition (a System owns the
+    sites it is given, so sys0's cannot be shared)."""
+    name = type(site).__name__
+    p = [site.getParticle(k) for k in range(site.getNumParticles())]
+    if name == "TwoParticleAverageSite":
+        return mm.TwoParticleAverageSite(p[0], p[1], site.getWeight(0), site.getWeight(1))
+    if name == "ThreeParticleAverageSite":
+        return mm.ThreeParticleAverageSite(p[0], p[1], p[2], site.getWeight(0), site.getWeight(1), site.getWeight(2))
+    if name == "OutOfPlaneSite":
+        return mm.OutOfPlaneSite(p[0], p[1], p[2], site.getWeight12(), site.getWeight13(), site.getWeightCross())
+    raise NotImplementedError(f"virtual site type {name} is not supported by the QM/MM MD driver")
+
+
 def _rigid_water_constraints(forcefield, topology, qm_atoms):
     """(i, j, distance) water constraints of an OpenMM rigidWater system of
     this topology, QM atoms excluded.  Built without a cutoff: constraints do
@@ -459,6 +473,11 @@ class QMMM_MD:
         self.system_md = mm.System()
         for i in range(sys0.getNumParticles()):
             self.system_md.addParticle(sys0.getParticleMass(i))
+        # virtual sites (e.g. the TIP4P M site) must follow their parents, as in
+        # sys0; OpenMM then also moves forces applied to them onto the parents
+        for i in range(sys0.getNumParticles()):
+            if sys0.isVirtualSite(i):
+                self.system_md.setVirtualSite(i, _copy_virtual_site(sys0.getVirtualSite(i)))
 
         # MM rigid-water constraints (O-H, O-H, H-H per TIP3P water), as the
         # NAMD driver's _build_constraints: taken from a rigidWater system of
@@ -587,7 +606,10 @@ class QMMM_MD:
 
     def _instantaneous_temperature(self, E_kin_kJmol):
         """Compute T from kinetic energy: T = 2 * E_kin / (dof * k_B)."""
-        dof = 3 * self.system_md.getNumParticles() - self.n_constraints
+        # massless particles (virtual sites) carry no kinetic degrees of freedom
+        massive = sum(1 for i in range(self.system_md.getNumParticles())
+                      if self.system_md.getParticleMass(i).value_in_unit(unit.dalton) > 0.0)
+        dof = 3 * massive - self.n_constraints
         if dof <= 0:
             return 0.0
         kB_kJ = unit.MOLAR_GAS_CONSTANT_R.value_in_unit(

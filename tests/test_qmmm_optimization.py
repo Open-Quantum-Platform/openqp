@@ -670,6 +670,110 @@ class TestVirtualSites(unittest.TestCase):
         self.assertTrue(all(atoms[i].element is not None for i in mv))
         self.assertEqual([int(atoms[i].element.atomic_number) for i in mv][:1], [8])   # symbols build
 
+    def test_folded_site_force_does_the_same_virtual_work(self):
+        """A force F_v on a virtual site, folded onto its parents by the QM/MM
+        driver, does the same work for any small parent displacement as F_v on
+        the site that OpenMM moves (two- and three-particle average sites and an
+        out-of-plane site).  The site row ends at zero, the total force is kept,
+        and a fold that ignores the out-of-plane cross term fails the check."""
+        import openmm as mm
+        import openmm.unit as unit
+        from oqp.library.qmmm_driver import fold_virtual_site_forces
+        rng = np.random.default_rng(7)
+        X = np.array([[0.0, 0.0, 0.0], [0.0957, 0.0, 0.0], [-0.024, 0.0927, 0.0],
+                      [0.3, 0.2, 0.1], [0.0, 0.0, 0.0]])
+        w12, w13, wc = -0.344908, -0.344908, -6.4437903        # TIP5P lone pair, 1/nm
+        sites = {"two": lambda: mm.TwoParticleAverageSite(0, 1, 0.3, 0.7),
+                 "three": lambda: mm.ThreeParticleAverageSite(0, 1, 2, 0.786646558, 0.106676721, 0.106676721),
+                 "out-of-plane": lambda: mm.OutOfPlaneSite(0, 1, 2, w12, w13, wc)}
+        for label, make in sites.items():
+            with self.subTest(site=label):
+                system = mm.System()
+                for m in (16.0, 1.0, 1.0, 12.0, 0.0):
+                    system.addParticle(m)
+                system.setVirtualSite(4, make())
+                ctx = mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+
+                def site_at(Y):
+                    ctx.setPositions(unit.Quantity(Y, unit.nanometer))
+                    ctx.computeVirtualSites()
+                    return np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True)
+                                      .value_in_unit(unit.nanometer))[4]
+
+                f = rng.normal(size=(5, 3)); fv = f[4].copy()
+                g = fold_virtual_site_forces(system, f, positions=X)
+                np.testing.assert_array_equal(g[4], 0.0)
+                np.testing.assert_array_equal(g[3], f[3])                           # not a parent
+                np.testing.assert_allclose(g.sum(axis=0), f.sum(axis=0), atol=1e-12)
+                naive = f.copy()                                                     # cross term ignored
+                for k, w in enumerate((1.0 - w12 - w13, w12, w13)):
+                    naive[k] += w * fv
+                for _ in range(3):
+                    d = rng.normal(size=(5, 3)) * 1e-5; d[4] = 0.0
+                    work_site = float(fv @ (0.5 * (site_at(X + d) - site_at(X - d))))
+                    work_parents = float(np.sum((g - f)[:4] * d[:4]))
+                    self.assertAlmostEqual(work_parents, work_site, delta=1e-6 * abs(work_site) + 1e-15)
+                    if label == "out-of-plane":
+                        self.assertGreater(abs(float(np.sum((naive - f)[:3] * d[:3])) - work_site),
+                                           1e-2 * abs(work_site))
+
+    def test_openmm_site_copy_is_dropped_before_folding(self):
+        """OpenMM's State forces already add each M site's force to its O and H
+        and keep a copy on the site row; the driver relies on that convention.
+        Dropping the copy and folding what is left gives the exact derivative
+        of the OpenMM energy on every parent, while folding without the drop
+        counts the site force twice."""
+        import openmm.unit as unit
+        from oqp.library.qmmm_driver import OpenQpQMMM
+        mod, system, sim = self._water4()
+        ctx = sim.context
+        kj = unit.kilojoule_per_mole / unit.nanometer
+
+        def place(Y):
+            ctx.setPositions(unit.Quantity(Y, unit.nanometer))
+            ctx.computeVirtualSites()
+            return np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True)
+                              .value_in_unit(unit.nanometer))
+
+        def energy(Y):
+            place(Y)
+            return ctx.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+
+        X = place(np.array(mod.positions.value_in_unit(unit.nanometer)))
+        F = np.asarray(ctx.getState(getForces=True).getForces(asNumpy=True).value_in_unit(kj))
+        drv = object.__new__(OpenQpQMMM)
+        drv.mm_systems = {"sys0": system}
+        drv.positions = unit.Quantity(X, unit.nanometer)
+        vs = drv._virtual_site_rows()
+        self.assertEqual(len(vs), 5)
+        G = drv._fold_virtual_site_forces(drv._drop_openmm_site_rows(F.copy()))
+        G_twice = drv._fold_virtual_site_forces(F.copy())
+        np.testing.assert_array_equal(G[vs], 0.0)
+        ep = max(vs, key=lambda i: np.abs(F[i]).max())
+        c = int(np.argmax(np.abs(F[ep])))
+        self.assertGreater(abs(F[ep, c]), 10.0)                            # the site force is real
+        site = system.getVirtualSite(ep)
+        h = 1e-5
+        for k in range(site.getNumParticles()):
+            p = site.getParticle(k)
+            Xp = X.copy(); Xp[p, c] += h
+            Xm = X.copy(); Xm[p, c] -= h
+            fd = -(energy(Xp) - energy(Xm)) / (2 * h)
+            tol = 1e-5 * max(1.0, abs(fd))
+            self.assertAlmostEqual(G[p, c], fd, delta=tol)
+            self.assertGreater(abs(G_twice[p, c] - fd), 100 * tol)
+
+    def test_local_coordinates_site_is_rejected(self):
+        import openmm as mm
+        from oqp.library.qmmm_driver import fold_virtual_site_forces
+        system = mm.System()
+        for m in (16.0, 1.0, 1.0, 0.0):
+            system.addParticle(m)
+        system.setVirtualSite(3, mm.LocalCoordinatesSite(0, 1, 2, mm.Vec3(1, 0, 0), mm.Vec3(-1, 1, 0),
+                                                         mm.Vec3(-1, 0, 1), mm.Vec3(0.01, 0.0, 0.0)))
+        with self.assertRaises(NotImplementedError):
+            fold_virtual_site_forces(system, np.ones((4, 3)), positions=np.zeros((4, 3)))
+
     def test_virtual_site_follows_its_parents(self):
         import openmm.unit as unit
         mod, system, sim = self._water4()
@@ -738,6 +842,19 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
                     QMMM_Opt._reject_continue_geom(bad)
             for ok in (False, "false", "", None):
                 QMMM_Opt._reject_continue_geom(ok)
+
+    def test_qmmm_only_options_rejected_without_qmmm(self):
+        from oqp.utils import input_checker as chk
+        def diags(optimize):
+            cfg = {"input": {"runtype": "optimize", "qmmm_flag": False, "method": "hf", "basis": "6-31g",
+                             "system": "h2o.xyz", "charge": 0}, "optimize": {"lib": "oqp", "istate": 0, **optimize}}
+            r = chk.CheckReport(); chk._check_optimize(cfg, r)
+            return [(d.severity, d.path) for d in r.diagnostics]
+        self.assertIn(("ERROR", "optimize.qmmm_radius"), diags({"qmmm_radius": 3.0}))
+        self.assertIn(("ERROR", "optimize.qmmm_output"), diags({"qmmm_output": "x.pdb"}))
+        clean = diags({"qmmm_radius": 0.0, "qmmm_output": ""})
+        self.assertNotIn(("ERROR", "optimize.qmmm_radius"), clean)
+        self.assertNotIn(("ERROR", "optimize.qmmm_output"), clean)
 
     def test_checker_rejects_dlc_and_ric(self):
         for cs in ("dlc", "ric", "internal"):
@@ -829,6 +946,176 @@ embedding=electrostatic
         P = np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(unit.nanometer))
         np.testing.assert_allclose(X[ep], P[ep], atol=1e-9)
 
+    def _fd_run(self, tmp, box_writer, ff_files, embedding="electrostatic"):
+        """One-evaluation QM/MM optimisation of formaldehyde in water with a 3 A
+        movable shell, on OpenMM's double-precision Reference platform (the CPU
+        platform's mixed-precision energies are too coarse for finite
+        differences); returns the optimiser object."""
+        import os, shutil
+        from oqp.pyoqp import Runner
+        ex = ROOT / "examples" / "QMMM"
+        box_writer(Path(tmp) / "box.pdb")
+        for f in ("formaldehyde.xml", "tip3p.xml"):
+            shutil.copy(ex / f, Path(tmp) / f)
+        (Path(tmp) / "fd.inp").write_text(
+            "[input]\nsystem=box.pdb 1 2 3 4\ncharge=0\nruntype=optimize\nbasis=sto-3g\nmethod=hf\nqmmm_flag=True\n"
+            "[scf]\ntype=rhf\nmultiplicity=1\nconv=1e-10\n[optimize]\nistate=0\nmaxit=1\nqmmm_radius=3.0\n"
+            "[oqp]\nauto_recovery=false\n[qmmm]\npdb_file=box.pdb\nforcefield_files=" + ff_files +
+            "\nqm_atoms=0-3\ncutoff=NoCutoff\nembedding=" + embedding + "\n")
+        r = Runner(project="fd", input_file="fd.inp", log="fd.log", silent=1, usempi=False)
+        r.run()
+        return r.qmmm_opt
+
+    def _fd(self, o, X0, i, k, h=5.0e-4):
+        from oqp.library.qmmm_opt import BOHR_TO_NM
+        Xp = X0.copy(); Xp[i, k] += h
+        Xm = X0.copy(); Xm[i, k] -= h
+        return (o._energy_force(Xp)[0] - o._energy_force(Xm)[0]) / (2 * h / BOHR_TO_NM)     # Hartree/bohr
+
+    def test_gradient_includes_the_coupling_force_on_m_sites(self):
+        """TIP4P-Ew: the ESPF coupling puts a force on each charged M site, and
+        OpenMM's own forces already carry each site's MM force on O and H.  On
+        the oxygen component where the M-site coupling matters most, the
+        optimiser's gradient equals the finite difference of its energy.  Two
+        controls fail the same check: leaving the coupling force on the M site
+        (the parents miss it), and folding OpenMM's copy of the site's MM force
+        a second time."""
+        import os, tempfile
+        import openmm.app as app
+        ex = ROOT / "examples" / "QMMM"
+        pdb = app.PDBFile(str(ex / "formaldehyde_water.pdb"))
+        ff = app.ForceField(str(ex / "formaldehyde.xml"), "amber14/tip4pew.xml")
+        mod = app.Modeller(pdb.topology, pdb.positions)
+        mod.addExtraParticles(ff)
+        def write(path):
+            with open(path, "w") as fh:
+                app.PDBFile.writeFile(mod.topology, mod.positions, fh, keepIds=True)
+        old_platform = os.environ.get("OPENMM_DEFAULT_PLATFORM")
+        os.environ["OPENMM_DEFAULT_PLATFORM"] = "Reference"
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                o = self._fd_run(tmp, write, "formaldehyde.xml amber14/tip4pew.xml")
+                drv = o.driver
+                sys0 = drv.mm_systems["sys0"]
+                vs = list(o._virtual_site_indices())
+                mv = set(int(i) for i in o.movable)
+                X0 = np.asarray(o.positions_nm)
+                e0, f0 = o._energy_force(X0)
+                drv._fold_virtual_site_forces = lambda f: f             # control 1: coupling left on M
+                try:
+                    _, f_unfolded = o._energy_force(X0)
+                finally:
+                    del drv._fold_virtual_site_forces
+                drv._drop_openmm_site_rows = lambda f: f                # control 2: OpenMM's copy folded again
+                try:
+                    _, f_twice = o._energy_force(X0)
+                finally:
+                    del drv._drop_openmm_site_rows
+                cands = []
+                for ep in vs:
+                    site = sys0.getVirtualSite(ep)
+                    k = max(range(site.getNumParticles()), key=lambda j: site.getWeight(j))
+                    if site.getParticle(k) in mv:
+                        comp = int(np.argmax(np.abs(f_unfolded[ep])))
+                        cands.append((abs(site.getWeight(k) * f_unfolded[ep, comp]), site.getParticle(k), comp, ep))
+                self.assertTrue(cands)
+                _, io, comp, ep = max(cands)
+                g_fd = self._fd(o, X0, io, comp)
+            finally:
+                os.chdir(cwd)
+                if old_platform is None:
+                    os.environ.pop("OPENMM_DEFAULT_PLATFORM", None)
+                else:
+                    os.environ["OPENMM_DEFAULT_PLATFORM"] = old_platform
+        self.assertGreater(abs(f_unfolded[ep, comp]), 1e-4)                  # the M-site coupling force is real
+        np.testing.assert_array_equal(f0[vs], 0.0)
+        tol = max(2e-6, 2e-3 * abs(g_fd))
+        self.assertAlmostEqual(-f0[io, comp], g_fd, delta=tol)
+        self.assertGreater(abs(-f_unfolded[io, comp] - g_fd), 10 * tol)
+        self.assertGreater(abs(-f_twice[io, comp] - g_fd), 10 * tol)
+
+    def test_mechanical_embedding_gradient_counts_the_m_site_force_once(self):
+        """Mechanical embedding on the same TIP4P-Ew box, where OpenMM carries
+        all QM/MM electrostatics and the driver returns through its other
+        assembly point: on the oxygen whose M-site force matters most, the
+        optimiser's gradient equals the finite difference of the energy, and
+        folding OpenMM's copy of the site force a second time fails."""
+        import os, tempfile
+        import openmm.app as app
+        ex = ROOT / "examples" / "QMMM"
+        pdb = app.PDBFile(str(ex / "formaldehyde_water.pdb"))
+        ff = app.ForceField(str(ex / "formaldehyde.xml"), "amber14/tip4pew.xml")
+        mod = app.Modeller(pdb.topology, pdb.positions)
+        mod.addExtraParticles(ff)
+        def write(path):
+            with open(path, "w") as fh:
+                app.PDBFile.writeFile(mod.topology, mod.positions, fh, keepIds=True)
+        old_platform = os.environ.get("OPENMM_DEFAULT_PLATFORM")
+        os.environ["OPENMM_DEFAULT_PLATFORM"] = "Reference"
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                o = self._fd_run(tmp, write, "formaldehyde.xml amber14/tip4pew.xml", embedding="mechanical")
+                drv = o.driver
+                self.assertEqual(drv.Embedding, "mechanical")
+                sys0 = drv.mm_systems["sys0"]
+                vs = list(o._virtual_site_indices())
+                mv = set(int(i) for i in o.movable)
+                X0 = np.asarray(o.positions_nm)
+                e0, f0 = o._energy_force(X0)
+                drv._drop_openmm_site_rows = lambda f: f                # control: OpenMM's copy folded again
+                try:
+                    _, f_twice = o._energy_force(X0)
+                finally:
+                    del drv._drop_openmm_site_rows
+                cands = []
+                for ep in vs:
+                    site = sys0.getVirtualSite(ep)
+                    k = max(range(site.getNumParticles()), key=lambda j: site.getWeight(j))
+                    io = site.getParticle(k)
+                    if io in mv:
+                        comp = int(np.argmax(np.abs(f_twice[io] - f0[io])))
+                        cands.append((abs(f_twice[io, comp] - f0[io, comp]), io, comp))
+                self.assertTrue(cands)
+                _, io, comp = max(cands)
+                g_fd = self._fd(o, X0, io, comp)
+            finally:
+                os.chdir(cwd)
+                if old_platform is None:
+                    os.environ.pop("OPENMM_DEFAULT_PLATFORM", None)
+                else:
+                    os.environ["OPENMM_DEFAULT_PLATFORM"] = old_platform
+        np.testing.assert_array_equal(f0[vs], 0.0)
+        tol = max(2e-6, 2e-3 * abs(g_fd))
+        self.assertAlmostEqual(-f0[io, comp], g_fd, delta=tol)
+        self.assertGreater(abs(-f_twice[io, comp] - g_fd), 10 * tol)
+
+    def test_gradient_on_movable_tip3p_water_matches_finite_difference(self):
+        """TIP3P (no virtual sites): the largest gradient component on a
+        movable water atom equals the finite difference of the QM/MM energy."""
+        import os, shutil, tempfile
+        ex = ROOT / "examples" / "QMMM"
+        old_platform = os.environ.get("OPENMM_DEFAULT_PLATFORM")
+        os.environ["OPENMM_DEFAULT_PLATFORM"] = "Reference"
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                o = self._fd_run(tmp, lambda p: shutil.copy(ex / "formaldehyde_water.pdb", p), "formaldehyde.xml tip3p.xml")
+                atoms = list(o.pdb.topology.atoms())
+                water = [a.index for a in atoms if a.index in set(int(i) for i in o.movable) and a.residue.name == "HOH"]
+                X0 = np.asarray(o.positions_nm)
+                e0, f0 = o._energy_force(X0)
+                i, k = max(((i, k) for i in water for k in range(3)), key=lambda t: abs(f0[t[0], t[1]]))
+                g_fd = self._fd(o, X0, i, k)
+            finally:
+                os.chdir(cwd)
+                if old_platform is None:
+                    os.environ.pop("OPENMM_DEFAULT_PLATFORM", None)
+                else:
+                    os.environ["OPENMM_DEFAULT_PLATFORM"] = old_platform
+        self.assertGreater(abs(f0[i, k]), 1e-4)                            # a component that is not zero by symmetry
+        self.assertAlmostEqual(-f0[i, k], g_fd, delta=max(2e-6, 2e-3 * abs(g_fd)))
 
 @unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
 class TestEcpCentresFollowTheGeometry(unittest.TestCase):

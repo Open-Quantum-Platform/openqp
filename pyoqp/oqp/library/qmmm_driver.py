@@ -173,6 +173,54 @@ def _periodic_nonbonded_cutoff(topology, cutoff_method):
     return min(1.0, 0.4 * min_len) * unit.nanometer
 
 
+def fold_virtual_site_forces(system, forces, positions=None, sites=None):
+    """Move the force on every virtual site of ``system`` onto the particles
+    that place it and zero the site row: the chain rule of the site position,
+    so the real particles carry the whole derivative.  ``forces`` is (N, 3) in
+    any force unit; ``positions`` (nm) are needed only for out-of-plane sites.
+
+    An average site r_v = sum_k w_k r_k gives F_k += w_k F_v.  An out-of-plane
+    site r_v = r_1 + w12 r_12 + w13 r_13 + wc (r_12 x r_13) gives
+    F_2 += w12 F_v + wc (r_13 x F_v), F_3 += w13 F_v - wc (r_12 x F_v) and
+    F_1 += F_v - (the other two), so the total force is kept.  A
+    local-coordinates site raises NotImplementedError."""
+    q_unit = None
+    if unit.is_quantity(forces):
+        q_unit = forces.unit
+        forces = forces.value_in_unit(q_unit)
+    f = np.array(forces, dtype=float)
+    if sites is None:
+        sites = [i for i in range(system.getNumParticles()) if system.isVirtualSite(i)]
+    X = None
+    for i in sites:
+        site = system.getVirtualSite(i)
+        name = type(site).__name__
+        fv = f[i].copy()
+        if name in ("TwoParticleAverageSite", "ThreeParticleAverageSite"):
+            for k in range(site.getNumParticles()):
+                f[site.getParticle(k)] += site.getWeight(k) * fv
+        elif name == "OutOfPlaneSite":
+            if X is None:
+                if positions is None:
+                    raise ValueError("positions are required to fold forces on an out-of-plane site")
+                X = np.asarray(positions.value_in_unit(unit.nanometer)
+                               if unit.is_quantity(positions) else positions, dtype=float)
+            p1, p2, p3 = (site.getParticle(k) for k in range(3))
+            r12, r13 = X[p2] - X[p1], X[p3] - X[p1]
+            wc = site.getWeightCross()
+            f2 = site.getWeight12() * fv + wc * np.cross(r13, fv)
+            f3 = site.getWeight13() * fv - wc * np.cross(r12, fv)
+            f[p1] += fv - f2 - f3
+            f[p2] += f2
+            f[p3] += f3
+        else:
+            raise NotImplementedError(
+                f"virtual site {i} is a {name}; QM/MM forces are folded for average "
+                "and out-of-plane sites (e.g. TIP4P, TIP5P) only.")
+        f[i] = 0.0
+    return f * q_unit if q_unit is not None else f
+
+
 class OpenQpQMMM:
     """
     Low-level QM/MM driver using OpenMM (MM) + OpenQP (QM).
@@ -815,7 +863,45 @@ class OpenQpQMMM:
         state = simulation.context.getState(getEnergy=True,getForces=True)
         return state.getPotentialEnergy(), state.getForces(asNumpy=True)
 
+    def _virtual_site_rows(self):
+        """Indices of the virtual sites of sys0 (cached per System); empty
+        when no OpenMM system is attached."""
+        systems = getattr(self, "mm_systems", None)
+        sys0 = systems.get("sys0") if isinstance(systems, dict) else None
+        if sys0 is None or not hasattr(sys0, "isVirtualSite"):
+            return []
+        cache = getattr(self, "_vsite_cache", None)
+        if cache is None or cache[0] is not sys0:
+            self._vsite_cache = (sys0, [i for i in range(sys0.getNumParticles())
+                                        if sys0.isVirtualSite(i)])
+        return self._vsite_cache[1]
+
+    def _drop_openmm_site_rows(self, forces):
+        """OpenMM's State forces already add each virtual site's force to the
+        particles that place it and also keep a copy on the site row.  Zero
+        that copy, so that ``_fold_virtual_site_forces`` moves only the forces
+        this driver adds on a site (the ESPF coupling force on a charged TIP4P
+        M site) and nothing is counted twice."""
+        idx = self._virtual_site_rows()
+        if idx:
+            forces[idx] = 0.0
+        return forces
+
+    def _fold_virtual_site_forces(self, forces):
+        """Fold every force left on a virtual site onto its parents (site rows
+        end at zero).  The real particles then carry the whole derivative: the
+        optimiser takes their rows as the gradient, and an integrator that
+        distributes site forces itself (the QM/MM MD system) adds nothing
+        twice.  No-op without virtual sites."""
+        idx = self._virtual_site_rows()
+        if not idx:
+            return forces
+        return fold_virtual_site_forces(self.mm_systems["sys0"], forces,
+                                        positions=self.positions, sites=idx)
+
     def compute_force(self, positions, topology, mm_systems, qm_atoms):
+        """QM/MM energy and the force on every particle.  Forces on virtual
+        sites are folded onto the particles that place them (site rows zero)."""
         self.positions = positions
         self.topology = topology
         self.mm_systems = mm_systems
@@ -910,7 +996,7 @@ class OpenQpQMMM:
         emm, gmm = self.forces_mm(pchg_mm)
 
         total_energy = eqm + emm
-        total_forces = gmm.copy()
+        total_forces = self._drop_openmm_site_rows(gmm.copy())
 
         # Redistribute link-atom gradients onto their real host atoms by the
         # chain rule of the scaled capping position R_L = R_QM + g(R_MM-R_QM).
@@ -927,7 +1013,7 @@ class OpenQpQMMM:
         for i in range(len(total_forces)):
             total_forces[i]-=cmm/float(len(total_forces))
 
-        return total_energy, total_forces
+        return total_energy, self._fold_virtual_site_forces(total_forces)
 
     def _assemble_force_espf(self, eqm, pchg_qm, f_qm_extra=None, e_extra=None):
         """Assemble the total force in the full-ESPF scheme:
@@ -944,7 +1030,7 @@ class OpenQpQMMM:
         total_energy = eqm + emm
         if e_extra is not None:
             total_energy = total_energy + e_extra
-        total_forces = gmm.copy()
+        total_forces = self._drop_openmm_site_rows(gmm.copy())
 
         f_qm, f_mm, mm_idx = self._coupling_forces(np.asarray(pchg_qm, dtype=float))
         if f_qm_extra is not None:
@@ -967,7 +1053,8 @@ class OpenQpQMMM:
         for j, m in enumerate(mm_idx):
             total_forces[m] = total_forces[m] + f_mm[j]
 
-        return total_energy, total_forces
+        # the coupling force on a charged virtual site (TIP4P M) goes to its parents
+        return total_energy, self._fold_virtual_site_forces(total_forces)
 
 
     def prepare_mm(self):
