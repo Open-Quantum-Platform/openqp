@@ -148,7 +148,7 @@ def test_full_state_dipole_contracts_complete_mrsf_density_and_nuclei(fd):
     )
 
 
-def _hbr_like_ecp_case(ecp_record):
+def _hbr_like_ecp_case(ecp_record, owners=()):
     # Br (Z=35) with a 28-electron core and H: 8 explicit electrons.  Equal
     # masses put the centre of mass at the origin.
     states = types.SimpleNamespace(
@@ -163,17 +163,21 @@ def _hbr_like_ecp_case(ecp_record):
         get_atoms=lambda: np.array([35, 1]),
         get_mass=lambda: np.array([1.0, 1.0]),
         get_system=lambda: np.array([[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        _ffi_buffer_refs=list(owners),
     )
     return states, mol
 
 
 def test_full_state_dipole_decodes_the_openqp_ecp_pointer(fd):
-    # set_basis installs ecp_zn as a raw CFFI int* (one count per atom), not
-    # an array; the dipole must use effective charges 35-28=7 and 1.
+    # set_basis installs ecp_zn as a raw CFFI int* over an array it keeps in
+    # mol._ffi_buffer_refs; the dipole must use effective charges 35-28=7 and 1.
     cffi = pytest.importorskip("cffi")
     ffi = cffi.FFI()
     counts = np.array([28, 0], dtype=np.int32)
-    states, mol = _hbr_like_ecp_case(ffi.cast("int *", ffi.from_buffer(counts)))
+    unrelated = np.array([7, 7, 7], dtype=np.int32)
+    states, mol = _hbr_like_ecp_case(
+        ffi.cast("int *", ffi.from_buffer(counts)), owners=[unrelated, counts]
+    )
     # Nuclear moment about the COM: 7*(-1) + 1*(+1) = -6; electrons: -8*0.2.
     np.testing.assert_allclose(
         fd.full_mrsf_state_dipole(states, 0, mol), [-7.6, 0.0, 0.0]
@@ -184,6 +188,23 @@ def test_full_state_dipole_still_fails_closed_without_ecp_counts(fd):
     cffi = pytest.importorskip("cffi")
     ffi = cffi.FFI()
     states, mol = _hbr_like_ecp_case(ffi.cast("int *", 0))
+    with pytest.raises(RuntimeError, match="one ECP core-electron count per atom"):
+        fd.full_mrsf_state_dipole(states, 0, mol)
+
+
+def test_ecp_pointer_without_a_matching_owner_is_not_read_past_its_end(fd):
+    # A bare int* has no length: with no owning array (or a short one) the
+    # counts are "not exposed", and the ECP system fails closed.
+    cffi = pytest.importorskip("cffi")
+    ffi = cffi.FFI()
+    short = ffi.new("int[1]", [28])
+    states, mol = _hbr_like_ecp_case(ffi.cast("int *", short))
+    with pytest.raises(RuntimeError, match="one ECP core-electron count per atom"):
+        fd.full_mrsf_state_dipole(states, 0, mol)
+    one_count = np.array([28], dtype=np.int32)
+    states, mol = _hbr_like_ecp_case(
+        ffi.cast("int *", ffi.from_buffer(one_count)), owners=[one_count]
+    )
     with pytest.raises(RuntimeError, match="one ECP core-electron count per atom"):
         fd.full_mrsf_state_dipole(states, 0, mol)
 

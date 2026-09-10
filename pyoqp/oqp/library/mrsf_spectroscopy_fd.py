@@ -455,12 +455,18 @@ def response_block_weights(states: object, root_index: int) -> dict[str, float]:
     return {key: value / total for key, value in raw.items()}
 
 
-def _ecp_core_electrons(raw: object, natom: int) -> FloatArray:
+def _ecp_core_electrons(
+    raw: object, natom: int, owners: Sequence[object] = ()
+) -> FloatArray:
     """Per-atom ECP core-electron counts from ``mol.data["ecp_zn"]``.
 
-    ``set_basis`` stores that record as a raw CFFI ``int *`` over one count per
-    atom (zero for all-electron atoms).  NumPy cannot convert a CFFI pointer,
-    so read it element by element; array-like records are taken as they are.
+    ``set_basis`` stores that record as a raw CFFI ``int *`` over a NumPy
+    array it keeps alive in ``mol._ffi_buffer_refs``.  A bare pointer has no
+    length, so it is decoded only through that owning array (matched by
+    address), which must hold one count per atom.  A pointer of unknown
+    provenance is reported as not exposed rather than read past its end.
+    CFFI arrays, which carry their length, and array-like records are taken
+    as they are.
     """
 
     if raw is None:
@@ -473,15 +479,28 @@ def _ecp_core_electrons(raw: object, natom: int) -> FloatArray:
         ffi = FFI()
         if isinstance(raw, ffi.CData):
             ctype = ffi.typeof(raw)
+            if ctype.kind == "array" and ctype.item.kind == "primitive":
+                return _finite_real("OpenQP ECP core electrons", list(raw))
             if ctype.kind != "pointer" or ctype.item.kind != "primitive":
                 raise TypeError(
                     f"OpenQP ECP core electrons have unsupported C type {ctype.cname}"
                 )
             if not raw:
                 return np.zeros(0)
-            return _finite_real(
-                "OpenQP ECP core electrons", [raw[i] for i in range(int(natom))]
-            )
+            address = int(ffi.cast("uintptr_t", raw))
+            for owner in owners:
+                if (
+                    isinstance(owner, np.ndarray)
+                    and owner.ndim == 1
+                    and owner.size > 0
+                    and np.issubdtype(owner.dtype, np.integer)
+                    and owner.dtype.itemsize == ffi.sizeof(ctype.item)
+                    and owner.ctypes.data == address
+                ):
+                    if owner.size != int(natom):
+                        return np.zeros(0)
+                    return _finite_real("OpenQP ECP core electrons", owner)
+            return np.zeros(0)
     return _finite_real("OpenQP ECP core electrons", raw).reshape(-1)
 
 
@@ -529,7 +548,11 @@ def full_mrsf_state_dipole(states: object, root_index: int, mol: object) -> Floa
         raise ValueError("nuclei, charge, and MRSF electron count are inconsistent")
     total_ecp_electrons = float(round(total_ecp_electrons))
     try:
-        exposed_ecp = _ecp_core_electrons(getattr(mol, "data")["ecp_zn"], atoms.size)
+        exposed_ecp = _ecp_core_electrons(
+            getattr(mol, "data")["ecp_zn"],
+            atoms.size,
+            getattr(mol, "_ffi_buffer_refs", ()),
+        )
     except (AttributeError, KeyError, TypeError):
         exposed_ecp = np.zeros(0)
     if exposed_ecp.shape == atoms.shape:
