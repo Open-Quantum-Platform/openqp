@@ -207,7 +207,11 @@ class QMMM_Opt:
             return np.linalg.norm(d, axis=2).min(axis=1)     # per atom: nearest QM atom
 
         for res in self.pdb.topology.residues():
-            idx = [a.index for a in res.atoms()]
+            # virtual sites (element None, e.g. the TIP4P M site) are not
+            # independent coordinates: OpenMM places them from their parents
+            idx = [a.index for a in res.atoms() if a.element is not None]
+            if not idx:
+                continue
             if qm.intersection(idx):
                 # A covalent cut inside a residue: its MM atoms (the link host
                 # and beyond) are selected one by one, otherwise the residue
@@ -220,9 +224,28 @@ class QMMM_Opt:
         return np.array(sorted(movable), dtype=int)
 
     # ------------------------------------------------------------------ #
+    def _with_virtual_sites(self, positions_nm):
+        """Positions (nm) with every virtual site placed from its parent atoms
+        by OpenMM, since the optimiser moves only real atoms."""
+        X = np.array(positions_nm, dtype=float)
+        vs = getattr(self, "_virtual_sites", None)
+        if vs is None:
+            sys0 = self.driver.mm_systems.get("sys0")
+            vs = ([i for i in range(sys0.getNumParticles()) if sys0.isVirtualSite(i)]
+                  if sys0 is not None else [])
+            self._virtual_sites = vs
+        if vs:
+            ctx = self.driver.mm_systems["sim0"].context
+            ctx.setPositions(unit.Quantity(X, unit.nanometer))
+            ctx.computeVirtualSites()
+            P = np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True)
+                           .value_in_unit(unit.nanometer))
+            X[vs] = P[vs]
+        return X
+
     def _energy_force(self, positions_nm):
         """QM/MM energy (Hartree) and force on every atom (Hartree/bohr)."""
-        pos = unit.Quantity(np.asarray(positions_nm, dtype=float), unit.nanometer)
+        pos = unit.Quantity(self._with_virtual_sites(positions_nm), unit.nanometer)
         # compute_force takes the QM geometry from ``positions`` but the MM
         # energy and forces from the OpenMM contexts, which the caller owns
         # (the MD driver moves them with its integrator).  Move every context
@@ -276,6 +299,8 @@ class QMMM_Opt:
         def energy_gradient(x_bohr):
             X = X0.copy()
             X[mv] = np.asarray(x_bohr, dtype=float).reshape(-1, 3) * BOHR_TO_NM
+            # the driver and mol move to this geometry even if the solve fails
+            self._attempted_x = np.array(x_bohr, dtype=float)
             try:
                 e, f = self._energy_force(X)
             except Exception as error:
@@ -347,16 +372,18 @@ class QMMM_Opt:
         converged = converged_at(last)
         final = last if converged else best
         X = X0.copy(); X[mv] = final["x"].reshape(-1, 3) * BOHR_TO_NM
-        if final is not last:
-            # leave mol/driver on the geometry we report, and report what this
-            # evaluation returns (orbital reuse or the periodic image loop can
-            # move the value within tolerance)
+        if not np.array_equal(getattr(self, "_attempted_x", final["x"]), final["x"]):
+            # the driver and mol hold the last attempted geometry (a later
+            # trial, possibly a rejected one): bring them back to the geometry
+            # we report, and report what this evaluation returns (orbital reuse
+            # or the periodic image loop can move the value within tolerance)
             e_re, f_re = self._energy_force(X)
             g_re = -f_re[mv].reshape(-1)
             if engine_pairs:
                 g_re = engine._project_constraint_tangent(g_re, final["x"])
             final = dict(final, e=float(e_re), rms=float(np.sqrt(np.mean(g_re * g_re))),
                          max=float(np.abs(g_re).max()))
+        X = self._with_virtual_sites(X)
         with open(self.output, "w") as fh:
             app.PDBFile.writeFile(self.pdb.topology, unit.Quantity(X, unit.nanometer), fh, keepIds=True)
         dump_log(mol, title=(f"PyOQP: QM/MM optimisation {'converged' if converged else 'NOT converged'} "

@@ -423,8 +423,17 @@ class Runner:
                      info={"build": _openqp_build_label()})
         # Always: besides the banner, this hands the native side its log file
         # name (OQP::log_filename -> infos%log_filename); skipping it leaves
-        # every native write of the evaluation without a log unit.
+        # every native write of the evaluation without a log unit.  On an
+        # appended evaluation the banner text itself is cut back off (the
+        # native routine closes its unit before returning, and every native
+        # writer reopens the log with position="append"), so a trajectory log
+        # carries it once.
+        banner_log = log if (append_log and isinstance(log, str) and os.path.isfile(log)) else None
+        banner_offset = os.path.getsize(banner_log) if banner_log else None
         oqp.oqp_banner(self.mol)
+        if banner_log is not None:
+            with open(banner_log, "r+b") as fh:
+                fh.truncate(banner_offset)
         if not append_log:
             dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
             dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')

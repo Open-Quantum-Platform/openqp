@@ -516,6 +516,28 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
         for i, j in o.frozen_pairs:
             self.assertAlmostEqual(np.linalg.norm(X1[i] - X1[j]), np.linalg.norm(X0[i] - X0[j]), delta=1e-7)
 
+    def test_rejected_final_trial_restores_the_reported_geometry(self):
+        # auto_recovery off; the second trial moves mol, then the SCF 'fails':
+        # the first geometry is reported, so mol must be brought back to it
+        real = QMMM_Opt._energy_force
+        calls = [0]
+
+        def failing(self, X):
+            calls[0] += 1
+            if calls[0] == 2:
+                real(self, X)                           # the driver/mol move to the trial
+                raise RuntimeError("SCF did not converge in 200 iterations")
+            return real(self, X)
+
+        text = self._deck().replace("maxit=12", "maxit=3")
+        r = self._run(text, patch_energy=failing)
+        o, info = r.qmmm_opt, r.mol.qmmm_optimization
+        self.assertTrue(info["electronic_failure"])
+        self.assertEqual(calls[0], 3)                    # the re-evaluation at the reported geometry
+        nqm = len(o.qm_atoms)
+        mol_xyz = np.asarray(r.mol.get_system(), dtype=float).reshape(-1, 3)[:nqm]
+        np.testing.assert_allclose(mol_xyz, o.history[-1]["x"].reshape(-1, 3), atol=1e-8)
+
     def test_published_energy_is_the_reevaluated_one(self):
         # force 'best is not last': the second evaluation reports +1 Hartree, so
         # the first geometry is reported and re-evaluated; the re-evaluation
@@ -538,6 +560,57 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
         self.assertEqual(calls[0], 3)
         self.assertAlmostEqual(info["energy_hartree"] - hist[0]["e"], 5e-7, delta=1e-9)
         self.assertEqual(r.mol.energies[0], info["energy_hartree"])
+
+
+@unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
+class TestVirtualSites(unittest.TestCase):
+    """TIP4P-Ew water: the M site (element None) is not an optimisation
+    coordinate, and its position is rebuilt from the moved O and H atoms."""
+
+    def _water4(self):
+        import openmm as mm
+        import openmm.app as app
+        pdb = app.PDBFile(str(ROOT / "examples" / "QMMM" / "formaldehyde_water.pdb"))
+        mod = app.Modeller(pdb.topology, pdb.positions)
+        mod.delete([r for r in mod.topology.residues() if r.name != "HOH"])
+        ff = app.ForceField("amber14/tip4pew.xml")
+        mod.addExtraParticles(ff)
+        system = ff.createSystem(mod.topology, nonbondedMethod=app.NoCutoff, rigidWater=False)
+        sim = app.Simulation(mod.topology, system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+        return mod, system, sim
+
+    def _opt(self, mod, system, sim, qm):
+        import types
+        o = QMMM_Opt.__new__(QMMM_Opt)
+        o.pdb = types.SimpleNamespace(topology=mod.topology, positions=mod.positions)
+        o.qm_atoms = np.array(qm, dtype=int)
+        o.driver = types.SimpleNamespace(mm_systems={"sys0": system, "sim0": sim},
+                                         _box_lengths_bohr=lambda: None)
+        return o
+
+    def test_movable_set_has_no_virtual_site(self):
+        mod, system, sim = self._water4()
+        atoms = list(mod.topology.atoms())
+        self.assertTrue(any(a.element is None for a in atoms))
+        qm = [a.index for a in list(mod.topology.residues())[0].atoms() if a.element is not None]
+        o = self._opt(mod, system, sim, qm)
+        mv = o._movable_atoms(20.0)                       # every water within reach
+        self.assertGreater(len(mv), len(qm))
+        self.assertTrue(all(atoms[i].element is not None for i in mv))
+        self.assertEqual([int(atoms[i].element.atomic_number) for i in mv][:1], [8])   # symbols build
+
+    def test_virtual_site_follows_its_parents(self):
+        import openmm.unit as unit
+        mod, system, sim = self._water4()
+        atoms = list(mod.topology.atoms())
+        o = self._opt(mod, system, sim, [0, 1, 2])
+        X = np.array(mod.positions.value_in_unit(unit.nanometer))
+        ep = next(a.index for a in atoms if a.element is None)
+        parents = [a.index for a in atoms[ep].residue.atoms() if a.element is not None]
+        X2 = X.copy(); X2[parents] += np.array([0.05, -0.02, 0.01])   # translate the real atoms
+        Y = o._with_virtual_sites(X2)
+        np.testing.assert_allclose(Y[ep] - X[ep], [0.05, -0.02, 0.01], atol=1e-9)
+        np.testing.assert_allclose(Y[parents], X2[parents], atol=0)
 
 
 class TestNativeControlsCheckedForQmmmOptimisation(unittest.TestCase):

@@ -315,6 +315,7 @@ class TestLoggedEnergyIsTheBackendEnergy(unittest.TestCase):
         # (it used to be truncated at every new geometry, so an MD log only
         # ever held the last step)
         self.assertEqual(qm_log.count("OpenQP calculation"), 1)
+        self.assertEqual(qm_log.count("Open Quantum Platform"), 1)       # the native banner, once
         self.assertGreaterEqual(qm_log.count("next QM/MM evaluation"), 4)
         self.assertGreaterEqual(qm_log.count("SCF"), 5)
         self.assertEqual(list(z["step"]), [0, 1, 2, 3, 4])

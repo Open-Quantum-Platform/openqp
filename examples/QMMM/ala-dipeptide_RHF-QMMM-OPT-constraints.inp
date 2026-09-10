@@ -1,0 +1,41 @@
+# QM/MM geometry optimisation with MM atoms free to move and their X-H bond
+# lengths held ([qmmm] constraints=HBonds).
+#
+# Same alanine dipeptide, QM region and N-C covalent boundary (hydrogen link
+# atom) as ala-dipeptide_RHF-QMMM-OPT-linkatom, but [optimize] qmmm_radius=3.0
+# also lets every MM atom within 3 A of the QM atoms move.  The X-H bonds among
+# those MM atoms are held at their starting lengths by the native optimizer's
+# frozen distances (tangent projection plus a SHAKE-like correction); QM atoms
+# are never constrained.  Six steps with the recovery stage off keep this a
+# short, fixed pin; the reference records the geometry reached.
+[input]
+system=ala.pdb 9 10 17 18 19
+charge=0
+runtype=optimize
+basis=6-31g
+method=hf
+qmmm_flag=True
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-9
+
+[optimize]
+istate=0
+maxit=6
+qmmm_radius=3.0
+[oqp]
+auto_recovery=false
+
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic
+constraints=HBonds
