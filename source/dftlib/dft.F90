@@ -5,6 +5,7 @@ module mod_dft
   use io_constants, only: iw
   use basis_tools, only: basis_set
   use mod_dft_molgrid, only: dft_grid_t
+  use dft_radial_grid_types, only: dft_radial_grid_none
 
   implicit none
 
@@ -41,6 +42,12 @@ module mod_dft
 !>   sphere is used at ALL radii (heavy-atom fallback).
   type dft_grid_pruned_t
     integer :: nrad = 0
+    !> Radial grid type this pruned scheme is DEFINED on, when the
+    !> scheme pins one (SG-1 is defined on the MHL/Euler-Maclaurin
+    !> map).  `dft_radial_grid_none` = no override: use the radial
+    !> type the user configured.  Applied only while this grid is
+    !> being built, so it never mutates the user's settings.
+    integer :: rad_grid_type = dft_radial_grid_none
     integer :: ngrids = 1
     integer, allocatable :: nang(:,:)    !< (region, atom type)
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
@@ -743,7 +750,7 @@ contains
       case ("SG1")
         pruned%ngrids = 5
         pruned%nrad = SG1_NRAD
-        infos%dft%rad_grid_type = dft_radial_grid_mhl
+        pruned%rad_grid_type = dft_radial_grid_mhl
         ntyps = 4
         allocate(pruned%nang(pruned%ngrids, ntyps), &
                  pruned%radii(pruned%ngrids, ntyps), &
@@ -1013,6 +1020,11 @@ contains
       nrad = int(infos%dft%grid_rad_size)
       ! A pruned grid may prescribe its own radial grid size
       if (pruned%nrad > 0) nrad = pruned%nrad
+      ! ...and its own radial map (SG-1 is defined on the MHL grid).
+      ! Local to this build: infos is left as the user configured it,
+      ! so a later grid build is unaffected by this one.
+      if (pruned%rad_grid_type /= dft_radial_grid_none) &
+        rad_grid_type = pruned%rad_grid_type
       maxpt_per_atom = nrad*max_ang_pts
 
       allocate(&
