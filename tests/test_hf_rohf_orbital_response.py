@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -63,9 +64,7 @@ def test_roks_rhs_uses_all_coordinate_analytic_xc_derivative():
 
 def test_hf_hessian_reuses_response_without_a_second_rohf_cphf_prepass():
     source = HESSIAN.read_text().lower()
-    rohf = source.split("subroutine hf_hessian_rohf", 1)[1].split(
-        "end subroutine hf_hessian_rohf", 1
-    )[0]
+    rohf = _routine(source, "hf_hessian_rohf")
     compact = "".join(rohf.split())
     assert "callbuild_rohf_nuclear_response" in compact
     assert "require_two_somo=.false." in compact
@@ -74,6 +73,67 @@ def test_hf_hessian_reuses_response_without_a_second_rohf_cphf_prepass():
     assert "callrohf_unpack_trial" not in compact
     assert "orbital_response%dmo_alpha(:,1:nocca,x)" in compact
     assert "orbital_response%dmo_beta(:,1:noccb,x)" in compact
+
+
+def _routine(source, name):
+    """Body of `subroutine <name>(infos)` in lower-cased source, exact name only."""
+    match = re.search(
+        rf"subroutine {name}\(infos\)(.*?)end subroutine {name}[ \t]*\n",
+        source, re.S)
+    return match.group(1) if match else ""
+
+
+def cam_fallback_problems(source):
+    """Return how lower-cased hf_hessian.F90 breaks the CAM fallback contract.
+
+    The analytic ROHF nuclear response declines CAM/range-separated CPKS with
+    status -3.  origin/main runs those ROKS Hessians through its
+    semi-numerical response, so hf_hessian_rohf must hand over to that routine
+    instead of aborting -- and only for status -3: every other response
+    status still aborts, the handover returns immediately, it happens in
+    exactly one place, and the analytic routine never calls the legacy CPHF
+    solver itself.  The fallback must pass status= to cphf_solve_rohf and
+    abort when the solve fails: without status the solver only logs the
+    failure and returns partial amplitudes.
+    """
+    rohf = "".join(_routine(source, "hf_hessian_rohf").split())
+    legacy = "".join(_routine(source, "hf_hessian_rohf_semi_numerical").split())
+    problems = []
+    if not rohf:
+        return ["hf_hessian_rohf not found"]
+    if not legacy:
+        problems.append("the semi-numerical fallback routine is missing")
+    elif "callcphf_solve_rohf" not in legacy:
+        problems.append("the fallback routine no longer solves the ROHF CPHF")
+    elif "callcphf_solve_rohf(infos,ncart,bvec,uvec,status=cphf_status)" not in legacy:
+        problems.append("the fallback ignores the CPHF solver status")
+    else:
+        # Bound the check to this one call: in whitespace-free text a regex
+        # would run on to some later WITH_ABORT in the legacy routine.
+        parts = legacy.split("if(cphf_status/=0)callshow_message(", 1)
+        call = parts[1].split("endblock", 1)[0] if len(parts) == 2 else ""
+        if not call.endswith("with_abort)"):
+            problems.append("a failed fallback CPHF solve does not abort")
+    guard = "if(response_status==-3)then"
+    if guard not in rohf:
+        problems.append("no fallback guarded on response_status==-3")
+    else:
+        block = rohf.split(guard, 1)[1].split("endif", 1)[0]
+        if "callhf_hessian_rohf_semi_numerical(infos)" not in block:
+            problems.append("the status -3 branch does not call the fallback")
+        if "return" not in block:
+            problems.append("the status -3 branch does not return after the fallback")
+    if rohf.count("callhf_hessian_rohf_semi_numerical(") != 1:
+        problems.append("the fallback is called outside the status -3 branch")
+    if "if(response_status/=0)callshow_message(" not in rohf:
+        problems.append("other response failures no longer abort")
+    if "callcphf_solve_rohf" in rohf:
+        problems.append("the analytic routine calls the legacy CPHF solver")
+    return problems
+
+
+def test_cam_rohf_hessian_falls_back_only_when_the_analytic_response_declines():
+    assert cam_fallback_problems(HESSIAN.read_text().lower()) == []
 
 
 def test_rohf_hessian_response_fails_closed_on_any_cphf_rhs_failure():
