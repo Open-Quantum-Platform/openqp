@@ -495,8 +495,13 @@ class OpenQpQMMM:
             if getattr(self, "_image_warm", False) or getattr(self, "_reuse_orbitals", False):
                 # image iteration > 1 (same geometry), or a caller that moves
                 # the geometry in small steps (the QM/MM optimiser): keep the
-                # converged orbitals as the guess and only rebuild the bare
-                # one-electron integrals.
+                # converged orbitals as the guess and rebuild the bare
+                # one-electron integrals.  At a new geometry the basis is
+                # rebuilt first: ECP centres are copied into the native basis
+                # only by set_basis, so an ECP would otherwise stay at the
+                # previous geometry (an iodide step gave -3e15 Hartree).
+                if getattr(self, "_reuse_orbitals", False) and not getattr(self, "_image_warm", False):
+                    oqp.library.set_basis(self.mol)
                 ints_1e(self.mol)
             else:
                 sp._prep_guess()

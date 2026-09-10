@@ -582,6 +582,29 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
         self.assertEqual(calls[0], 3)
         self.assertAlmostEqual(info["energy_hartree"] - o.history[0]["e"], 3e-7, delta=1e-9)
 
+    def test_recovery_measures_its_first_step_from_the_restart_point(self):
+        # the second evaluation is made uphill (+1 Hartree), so recovery restarts
+        # from the first point; its first evaluation is that point again and
+        # must show a zero step and ~zero energy change against it, not against
+        # the uphill point the first search ended on
+        real = QMMM_Opt._energy_force
+        calls = [0]
+
+        def uphill(self, X):
+            calls[0] += 1
+            e, f = real(self, X)
+            return (e + 1.0, f) if calls[0] == 2 else (e, f)
+
+        text = (self._deck().replace("maxit=12", "maxit=2")
+                .replace("auto_recovery=false", "auto_recovery=true\nrecovery_maxit=1"))
+        r = self._run(text, patch_energy=uphill)
+        h = r.qmmm_opt.history
+        self.assertTrue(r.mol.qmmm_optimization["recovery"])
+        self.assertEqual(len(h), 3)
+        self.assertTrue(np.array_equal(h[2]["x"], h[0]["x"]))
+        self.assertEqual(h[2]["max_step"], 0.0)
+        self.assertLess(abs(h[2]["de"]), 1e-6)
+
     def test_published_energy_is_the_reevaluated_one(self):
         # force 'best is not last': the second evaluation reports +1 Hartree, so
         # the first geometry is reported and re-evaluated; the re-evaluation
@@ -695,6 +718,23 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
             for ok in ("", [], None):
                 QMMM_Opt._reject_swapmo(ok)
 
+    def test_checker_and_driver_reject_continue_geom(self):
+        from oqp.utils import input_checker as chk
+        cfg = {"input": {"runtype": "optimize", "qmmm_flag": True, "method": "hf", "basis": "6-31g",
+                         "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+               "optimize": {"lib": "oqp", "istate": 0}, "guess": {"type": "json", "continue_geom": True},
+               "qmmm": {"pdb_file": "ala.pdb", "qm_atoms": "8,9,16,17,18", "forcefield_files": "amber14-all.xml"}}
+        diags = lambda c: [(d.severity, d.path) for d in (lambda r: (chk._check_optimize(c, r), r)[1])(chk.CheckReport()).diagnostics]
+        self.assertIn(("ERROR", "guess.continue_geom"), diags(cfg))
+        cfg["guess"]["continue_geom"] = False
+        self.assertNotIn(("ERROR", "guess.continue_geom"), diags(cfg))
+        if _HAVE:
+            for bad in (True, "true", "True"):
+                with self.assertRaisesRegex(ValueError, "continue_geom"):
+                    QMMM_Opt._reject_continue_geom(bad)
+            for ok in (False, "false", "", None):
+                QMMM_Opt._reject_continue_geom(ok)
+
     def test_checker_rejects_dlc_and_ric(self):
         for cs in ("dlc", "ric", "internal"):
             self.assertIn(("ERROR", "oqp.coordsys"), self._report(coordsys=cs), cs)
@@ -784,6 +824,83 @@ embedding=electrostatic
         ctx.computeVirtualSites()
         P = np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(unit.nanometer))
         np.testing.assert_allclose(X[ep], P[ep], atol=1e-9)
+
+
+@unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
+class TestEcpCentresFollowTheGeometry(unittest.TestCase):
+    """Iodide (def2-SVP puts an ECP on iodine) in five TIP3P waters.  With
+    orbital reuse the second evaluation must see the ECP at the new geometry:
+    its energy equals a fresh SCF there (it used to be about -3e15 Hartree,
+    because only set_basis copies ECP centres into the native basis)."""
+
+    def _build(self, tmp):
+        import openmm.app as app
+        import openmm.unit as unit
+        ff = app.ForceField("amber14-all.xml", "amber14/tip3p.xml")
+        src = app.PDBFile(str(ROOT / "examples" / "QMMM" / "formaldehyde_water.pdb"))
+        pos = src.getPositions(asNumpy=True).value_in_unit(unit.nanometer)
+        top = app.Topology(); ch = top.addChain()
+        r = top.addResidue("IOD", ch); top.addAtom("I", app.element.iodine, r)
+        xyz = [pos[0]]
+        for res in src.topology.residues():
+            if res.name != "HOH":
+                continue
+            rr = top.addResidue("HOH", ch); atoms = list(res.atoms())
+            new = {a: top.addAtom(a.name, a.element, rr) for a in atoms}
+            for a in atoms:
+                xyz.append(pos[a.index])
+            o = [a for a in atoms if a.element.symbol == "O"][0]
+            for a in atoms:
+                if a is not o:
+                    top.addBond(new[o], new[a])
+        with open(Path(tmp) / "ion.pdb", "w") as fh:
+            app.PDBFile.writeFile(top, unit.Quantity(np.array(xyz), unit.nanometer), fh)
+
+    def test_reused_orbitals_give_the_fresh_energy(self):
+        import os, tempfile
+        from oqp.pyoqp import Runner
+        deck = """[input]
+system=ion.pdb 1
+charge=-1
+runtype=optimize
+basis=def2-svp
+method=hf
+qmmm_flag=True
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-9
+[optimize]
+istate=0
+maxit=2
+qmmm_radius=0.0
+init_scf=INIT
+[oqp]
+auto_recovery=false
+[qmmm]
+pdb_file=ion.pdb
+forcefield_files=amber14-all.xml amber14/tip3p.xml
+qm_atoms=0
+cutoff=NoCutoff
+embedding=electrostatic
+"""
+        hist = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            self._build(tmp)
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                for init in ("false", "true"):
+                    Path(f"ion_{init}.inp").write_text(deck.replace("INIT", init))
+                    r = Runner(project=f"ion_{init}", input_file=f"ion_{init}.inp", log=f"ion_{init}.log",
+                               silent=1, usempi=False)
+                    r.run()
+                    hist[init] = r.qmmm_opt.history
+            finally:
+                os.chdir(cwd)
+        reuse, fresh = hist["false"], hist["true"]
+        np.testing.assert_allclose(reuse[1]["x"], fresh[1]["x"], atol=1e-10)      # same second geometry
+        self.assertAlmostEqual(reuse[1]["e"], fresh[1]["e"], delta=1e-8)
+        self.assertGreater(reuse[1]["e"], -1000.0)
 
 
 class TestNativeControlsCheckedForQmmmOptimisation(unittest.TestCase):

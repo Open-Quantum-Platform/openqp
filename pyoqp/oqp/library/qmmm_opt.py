@@ -80,6 +80,7 @@ class QMMM_Opt:
         self.istate = int(opt.get("istate", 0))
         self._validate_istate(self.istate, mol.config["input"].get("method", "hf"))
         self._reject_swapmo(mol.config.get("guess", {}).get("swapmo", ""))
+        self._reject_continue_geom(mol.config.get("guess", {}).get("continue_geom", False))
         mol.config.setdefault("properties", {})["grad"] = [self.istate]
 
         # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
@@ -124,6 +125,17 @@ class QMMM_Opt:
         raise ValueError(f"[oqp] coordsys={value!r} is not available for a QM/MM optimisation: DLC/RIC "
                          "remove the collective translations and rotations of the movable atoms, which "
                          "move against the fixed MM atoms; use auto (Cartesian), cartesian or tric.")
+
+    @staticmethod
+    def _reject_continue_geom(value):
+        """[guess] continue_geom restores a saved QM-fragment geometry, but this
+        driver starts from [qmmm] pdb_file, so the restart would silently rerun
+        from the original structure."""
+        on = value if isinstance(value, bool) else str(value or "").strip().lower() in ("1", "true", "yes", "on", "t")
+        if on:
+            raise ValueError("[guess] continue_geom is not used by the QM/MM optimisation, which starts from "
+                             "[qmmm] pdb_file; to continue, use the optimised full-system PDB "
+                             "([optimize] qmmm_output) as the new pdb_file.")
 
     @staticmethod
     def _reject_swapmo(value):
@@ -364,6 +376,7 @@ class QMMM_Opt:
                              f"maxit {self.maxit}"))
         it = [0]
         electronic_failure = [None]
+        self._prev_eval = None          # the point the next step and energy change are measured from
 
         def energy_gradient(x_bohr):
             X = X0.copy()
@@ -392,14 +405,16 @@ class QMMM_Opt:
                 g = engine._project_constraint_tangent(g, np.asarray(x_bohr, dtype=float))
             it[0] += 1
             rms = float(np.sqrt(np.mean(g * g))); mx = float(np.abs(g).max())
-            if self.history:
-                dx = np.asarray(x_bohr, dtype=float) - self.history[-1]["x"]
+            prev = self._prev_eval
+            if prev is not None:
+                dx = np.asarray(x_bohr, dtype=float) - prev["x"]
                 rms_step, max_step = float(np.sqrt(np.mean(dx * dx))), float(np.abs(dx).max())
-                de = e - self.history[-1]["e"]
+                de = e - prev["e"]
             else:
                 rms_step = max_step = de = float("inf")
             self.history.append({"x": np.array(x_bohr, dtype=float), "e": e, "rms": rms, "max": mx,
                                  "rms_step": rms_step, "max_step": max_step, "de": de, "id": it[0]})
+            self._prev_eval = self.history[-1]
             dump_log(mol, title=(f"PyOQP: QM/MM optimisation step {it[0]}: E = {e:.10f} Hartree, "
                                  f"dE {de:+.2e}, rms/max grad {rms:.2e}/{mx:.2e} Hartree/bohr, "
                                  f"rms/max step {rms_step:.2e}/{max_step:.2e} bohr"), section="")
@@ -434,6 +449,7 @@ class QMMM_Opt:
                                      f"Hartree) with {self.coordsys} coordinates, trust={r_trust:.3f}, "
                                      f"and a fresh model Hessian for up to {steps} steps"))
                 recovered = True
+                self._prev_eval = best      # the restarted search measures its first step from here
                 engine = OQPEngine(symbols, best["x"].copy(), mode="min", trust=r_trust,
                                    trust_max=r_trust_max, maxiter=steps, coordsys=self.coordsys,
                                    frozen_distances=engine_pairs)

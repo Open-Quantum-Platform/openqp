@@ -5950,6 +5950,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",
                 )
+            _cg = _get(config, "guess", "continue_geom", False)
+            if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+                report.add(
+                    "ERROR",
+                    "guess.continue_geom",
+                    "A QM/MM optimisation starts from [qmmm] pdb_file, not from a saved QM-fragment "
+                    "geometry, so continue_geom would silently rerun from the original structure.",
+                    value=str(_get(config, "guess", "continue_geom", False)),
+                    expected="false",
+                    action="Set [guess] continue_geom=false and use the optimised full-system PDB "
+                           "([optimize] qmmm_output) as the new [qmmm] pdb_file.",
+                )
             _swapmo_q = _get(config, "guess", "swapmo", "")
             if (len(_swapmo_q) > 0) if isinstance(_swapmo_q, (list, tuple)) else bool(str(_swapmo_q or "").strip()):
                 report.add(
