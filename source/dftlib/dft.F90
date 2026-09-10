@@ -33,10 +33,13 @@ module mod_dft
 !>   Several radial grids may coexist: `radial_id` maps each atom to
 !>   one of `nrad_types` radial grids.  Radial type 1 is always the
 !>   standard unit-radius grid (scaled by the Bragg-Slater radius);
-!>   types >= 2 are element-specific grids in absolute bohr: DE2
+!>   types >= 2 are element-specific grids in absolute bohr -- DE2
 !>   (`de2_alpha`/`de2_rmax` give alpha and the outermost node) or,
 !>   when `me_rscale` is allocated and positive, MultiExp with
-!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0).
+!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0) -- unless
+!>   `rad_map` marks the type as another standard grid: its own map
+!>   and `rad_npts` nodes, scaled by the Bragg-Slater radius like
+!>   type 1 (SG-1 uses this for atoms above Ar).
 !>   If `nang_override` is allocated and non-zero for an atom type,
 !>   that type is unpruned: a single `nang_override(t)`-point Lebedev
 !>   sphere is used at ALL radii (heavy-atom fallback).
