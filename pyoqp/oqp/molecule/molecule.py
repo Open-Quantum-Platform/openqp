@@ -2572,6 +2572,8 @@ class Molecule:
         else:
             raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
 
+        self._quiet_orbitals_in_dynamics(parser)
+
         # Print configuration if not in silent mode
         if not self.silent:
             parser.print_config()
@@ -2600,6 +2602,34 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    @staticmethod
+    def _quiet_orbitals_in_dynamics(parser):
+        """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
+
+        A dynamics run calls the SCF at least once per step and the SCF prints
+        the whole MO coefficient table on every call, so the table is repeated
+        for every step of the trajectory: a 100-step QM/MM NAMD run of an
+        18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+        which the 101 lines that report the dynamics are impossible to find.
+        ``verbose = 0`` suppresses the table (``source/printing.F90``); an
+        explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
+        of any single frame remain available from the Molden file, the restart
+        record and the trajectory file, none of which this touches.
+
+        Runs on the parser before the configuration is echoed, so what is
+        printed is what the run will use.  ``QMMM_MD`` in config mode rewrites
+        ``runtype`` to ``energy`` before the molecule is built and therefore
+        applies the same default itself.
+        """
+        runtype = str(parser.get("input", "runtype", fallback="")).strip().lower()
+        if runtype not in ("md", "namd"):
+            return
+        # The parser is seeded with every schema default, so an option is
+        # always present; only the default value is overridden, and a deck
+        # asking for more detail (verbose >= 2) or already silent keeps it.
+        if str(parser.get("scf", "verbose", fallback="1")).strip() == "1":
+            parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control

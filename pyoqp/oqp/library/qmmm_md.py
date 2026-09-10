@@ -288,6 +288,20 @@ class QMMM_MD:
             for _k in list(qm_cfg):
                 if str(_k).split('.')[-1].strip().lower() == 'runtype':
                     qm_cfg[_k] = 'energy'
+            # That rewrite hides the dynamics from Molecule.get_config, which
+            # would otherwise default [scf] verbose to 0 and stop the SCF from
+            # printing one MO coefficient table per step (see
+            # Molecule._quiet_orbitals_in_dynamics).  This IS a dynamics run,
+            # so apply the same default here; an explicit verbose >= 2 in the
+            # deck still prints, and verbose = 0 was already silent.
+            _vkeys = [k for k in qm_cfg
+                      if str(k).split('.')[-1].strip().lower() == 'verbose'
+                      and str(k).split('.')[0].strip().lower() in ('scf', 'qm_cfg')]
+            if not _vkeys:
+                qm_cfg['scf.verbose'] = '0'
+            elif all(str(qm_cfg[k]).strip() == '1' for k in _vkeys):
+                for k in _vkeys:
+                    qm_cfg[k] = '0'
         self.oqp_cfg = qm_cfg
         self.mol     = mol
 
