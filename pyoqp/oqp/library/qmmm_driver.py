@@ -465,7 +465,10 @@ class OpenQpQMMM:
             coords.append([pos[0], pos[1], pos[2]])
         coords = np.array(coords)
         ang2bohr = 1.8897259886
-        self.mol.set_atoms2("xyz", (coords * ang2bohr).ravel())
+        # Molecule has no set_atoms2 (this branch was unreachable until the
+        # QM/MM optimiser used mol mode); update_system writes the bohr
+        # coordinates straight into the Fortran xyz buffer.
+        self.mol.update_system((coords * ang2bohr).ravel())
 
     def forces_qm_openqp(self, potmm=None, potqm=None):
 
@@ -487,9 +490,11 @@ class OpenQpQMMM:
                 tb_potmm = None if self.Embedding == "mechanical" else potmm
                 return self._forces_qm_dftb(self.mol, tb_potmm)
             sp = SinglePoint(self.mol)
-            if getattr(self, "_image_warm", False):
-                # image iteration > 1: same geometry, keep the converged
-                # orbitals and only rebuild the bare one-electron integrals
+            if getattr(self, "_image_warm", False) or getattr(self, "_reuse_orbitals", False):
+                # image iteration > 1 (same geometry), or a caller that moves
+                # the geometry in small steps (the QM/MM optimiser): keep the
+                # converged orbitals as the guess and only rebuild the bare
+                # one-electron integrals.
                 ints_1e(self.mol)
             else:
                 sp._prep_guess()

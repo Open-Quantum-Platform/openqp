@@ -1,0 +1,35 @@
+# QM/MM geometry optimisation across a covalent boundary (hydrogen link atom).
+# The C-terminal amide of the alanine dipeptide is the QM region (RHF/6-31G);
+# the rest of the dipeptide is MM (AMBER-14).  The objective is the embedded
+# QM/MM energy that the dynamics drivers integrate; the QM atoms move, the MM
+# atoms are fixed (qmmm_radius=0).  maxit=12 keeps the example short: the run
+# reports the lowest-energy geometry visited and writes it as a full-system
+# PDB (ala-dipeptide_RHF-QMMM-OPT-linkatom_opt.pdb).
+[input]
+system=ala.pdb 9 10 17 18 19
+charge=0
+runtype=optimize
+basis=6-31g
+method=hf
+qmmm_flag=True
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-9
+
+[optimize]
+istate=0
+maxit=12
+qmmm_radius=0.0
+
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic

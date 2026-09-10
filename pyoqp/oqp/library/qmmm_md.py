@@ -93,7 +93,11 @@ def _parse_str_list(value):
     """Comma-separated string or list -> list of stripped strings."""
     if isinstance(value, list):
         return value
-    return [s.strip() for s in str(value).split(",") if s.strip()]
+    # Accept commas or whitespace: the namd driver has always accepted
+    # "amber14-all.xml amber14/tip3p.xml", and a deck written for it silently
+    # produced one bogus file name here.
+    import re as _re
+    return [s for s in _re.split(r"[,\s]+", str(value)) if s]
 
 
 def _resolve_cutoff(value):

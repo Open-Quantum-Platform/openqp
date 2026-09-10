@@ -487,6 +487,15 @@ class Runner:
             from oqp.library.qmmm_md import QMMM_MD
             self.qmmm_md = QMMM_MD(mol=self.mol)
             self.qmmm_md.run()
+        elif qmmm_flag and str(run_type).strip().lower() == "optimize":
+            # Minimise the embedded QM/MM energy over the movable atoms; the
+            # all-QM optimizer below would move the QM fragment in vacuum.
+            if self.mol.usempi and self.mpi_manager.use_mpi > 0:
+                raise RuntimeError(
+                    "QM/MM geometry optimisation cannot run under MPI; create Runner with usempi=False"
+                )
+            from oqp.library.qmmm_opt import run_qmmm_optimization
+            self.qmmm_opt = run_qmmm_optimization(self.mol)
         else:
             self.run_func[run_type](self.mol)
 

@@ -659,6 +659,12 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
+        # QM/MM optimisation (qmmm_flag=true): MM residues with an atom within
+        # this distance (angstrom) of a QM atom move with the QM region; 0 =
+        # QM atoms only.  qmmm_output: optimised full-system PDB (default
+        # <project>_opt.pdb).
+        'qmmm_radius': {'type': float, 'default': '0.0'},
+        'qmmm_output': {'type': str, 'default': ''},
         # MECP objective.  ``auto`` selects SQP on the native optimizer, which
         # it replaces outright, and the augmented Lagrangian on the backends
         # that supply their own optimizer.  Both converge the energy gap; the

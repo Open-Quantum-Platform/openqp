@@ -410,6 +410,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
         pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
+        qmmm_radius qmmm_output
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -597,6 +598,9 @@ TOP_OPTION_ALIASES = {
 _GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
     "energy_shift", "init_scf",
+    # QM/MM optimisation (qmmm_flag=true): movable-shell radius and the
+    # full-system output file; ignored by every other geometry driver.
+    "qmmm_radius", "qmmm_output",
 }
 _CROSSING_SEARCH_OPTIONS = {
     "energy_gap", "meci_search", "pen_sigma",
@@ -772,7 +776,7 @@ SF_STATE_AWARE_DRIVERS = {
     "md", "namd", "data",
 }
 
-ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd"}
+ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd", "optimize"}
 
 _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
@@ -1939,7 +1943,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("md(...) is the QM/MM molecular-dynamics driver and requires qmmm(...)")
     if has_qmmm and driver.name not in ACTIVE_QMMM_DRIVERS:
         raise OQPInputError(
-            "The active QM/MM backend supports energy, md, and namd. "
+            "The active QM/MM backend supports energy, optimize, md, and namd. "
             "%s is not connected and would otherwise run without the requested QM/MM forces."
             % driver.name
         )

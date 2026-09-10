@@ -5932,14 +5932,43 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
     if bool(_get(config, "input", "qmmm_flag", False)):
-        report.add(
-            "ERROR",
-            "input.qmmm_flag",
-            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
-            value=f"qmmm_flag=true/runtype={runtype}",
-            expected="a supported QM/MM energy, md, or namd workflow",
-            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
-        )
+        if runtype == "optimize":
+            # Plain minimisation goes to the QM/MM optimiser (qmmm_opt.py),
+            # which minimises the embedded QM/MM energy over the QM atoms plus
+            # the MM residues within [optimize] qmmm_radius; only the plain
+            # optimizer is connected, the reaction-path drivers are not.
+            try:
+                radius = float(_get(config, "optimize", "qmmm_radius", 0.0))
+            except (TypeError, ValueError):
+                radius = -1.0
+            if radius < 0.0:
+                report.add(
+                    "ERROR",
+                    "optimize.qmmm_radius",
+                    "The movable-shell radius of a QM/MM optimisation must be >= 0 angstrom.",
+                    value=str(_get(config, "optimize", "qmmm_radius", 0.0)),
+                    expected="0 (QM atoms only) or a positive distance in angstrom",
+                    action="Set [optimize] qmmm_radius to 0 or a positive number.",
+                )
+            if str(_get(config, "optimize", "lib", "oqp")).strip().lower() != "oqp":
+                report.add(
+                    "WARNING",
+                    "optimize.lib",
+                    "A QM/MM optimisation uses its own L-BFGS driver; [optimize] lib is ignored.",
+                    value=str(_get(config, "optimize", "lib", "oqp")),
+                    expected="oqp",
+                    action="Remove [optimize] lib for a QM/MM optimisation.",
+                )
+        else:
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "Reaction-path and crossing drivers are not connected to the QM/MM force backend "
+                "(only runtype=optimize, md and namd are).",
+                value=f"qmmm_flag=true/runtype={runtype}",
+                expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
+                action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+            )
 
     if lib not in OPT_LIBS:
         report.add(
