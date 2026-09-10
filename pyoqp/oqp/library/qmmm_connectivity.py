@@ -25,6 +25,8 @@ identically.
 
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -352,3 +354,52 @@ def assemble_embedding_sites(mm_idx, mm_charges, mm_positions,
     return (np.asarray(charges, dtype=float),
             np.asarray(positions, dtype=float),
             scatter)
+
+
+# --- ESPF switching-width selection (issue #260) ---------------------------
+
+#: Grid switching width for a QM region made of whole molecules. Also the
+#: value the native default falls back to when nothing selects otherwise.
+SWSCALE_WHOLE_MOLECULE = 1.8
+#: ... and across a covalent cut, where the shipped whole-molecule value
+#: over-smooths and concentrates the gradient residual on the MM host atom.
+SWSCALE_COVALENT_BOUNDARY = 1.5
+#: Companion variable recording the value the driver itself wrote into
+#: ESPF_SWSCALE, so a later driver in the same process can tell a
+#: predecessor's automatic choice apart from a user-supplied override.
+SWSCALE_AUTO_MARKER = '_OQP_ESPF_SWSCALE_AUTO'
+
+
+def select_boundary_switching(covalent: bool) -> float | None:
+    """Pick ESPF_SWSCALE from whether the QM/MM cut is covalent.
+
+    The knob lives in the native ESPF gradient, which is handed a grid and a
+    density and has no way to know whether a bond was cut. The QM/MM driver
+    does -- it just built the link atoms -- so the choice is made from its
+    boundary information and passed down the way the native code already
+    reads it.
+
+    1.8 over-smooths at a covalent boundary -- 1.5 cuts the boundary-host
+    gradient residual 5-13x on both measured link-atom systems -- while 1.5
+    is about 20% worse without a cut bond. Neither is a safe global default,
+    which is why this is selected per system rather than changed outright.
+    See docs/espf_qmmm_switching.md and issue #260.
+
+    An explicit ESPF_SWSCALE always wins: someone who set it is running a
+    sweep or reproducing a number, and silently overriding that would be
+    worse than any default. A value this function wrote for an earlier
+    system in the same process is not user configuration, though: it is
+    re-selected for the new system instead of freezing the first system's
+    choice.
+
+    Returns the value selected, or ``None`` when a user setting stands.
+    """
+    current = os.environ.get('ESPF_SWSCALE', '').strip()
+    auto_marker = os.environ.get(SWSCALE_AUTO_MARKER, '').strip()
+    if current and current != auto_marker:
+        return None                       # user-set; nothing to select
+    value = float(SWSCALE_COVALENT_BOUNDARY if covalent
+                  else SWSCALE_WHOLE_MOLECULE)
+    os.environ['ESPF_SWSCALE'] = repr(value)
+    os.environ[SWSCALE_AUTO_MARKER] = repr(value)
+    return value

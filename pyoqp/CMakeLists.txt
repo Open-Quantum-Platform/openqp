@@ -43,6 +43,22 @@ execute_process(
 #    VERSION_VAR _cffi_version
 #    )
 
+# The compiled cffi extension (_oqp) is the optional API-mode binding.  The
+# default runtime (OQP_RTLD=1) dlopen()s liboqp in ABI mode and never needs it,
+# and building it on Windows would require the MSVC toolchain plus an import
+# library for liboqp, so skip the extension there.  Everything else in this
+# directory -- the basis-set and example data installs -- is platform-neutral
+# and must still run.
+if(NOT WIN32)
+# API mode compiles a real reference for every declaration in oqp.h, so a
+# liboqp built without the DFT-D4 backend must not be described as having it:
+# the extension would fail to link, or import with an undefined symbol.
+if(ENABLE_DFTD4)
+  set(_OQP_CFFI_DFTD4_ARG "")
+else()
+  set(_OQP_CFFI_DFTD4_ARG "--without-dftd4")
+endif()
+
 add_custom_command(
     OUTPUT
         ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
@@ -50,6 +66,7 @@ add_custom_command(
     ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/oqp_cffi_build.py -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
                         -L ${CMAKE_CURRENT_BINARY_DIR}/../source
                         -loqp
+                        ${_OQP_CFFI_DFTD4_ARG}
     DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/oqp_cffi_build.py
         ${CMAKE_CURRENT_SOURCE_DIR}/../include/oqp.h
@@ -94,6 +111,7 @@ install(
     #FILES ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
+endif()  # NOT WIN32 (cffi API-mode extension)
 
 #install(
 #PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/oqp/oqp_runner.py  ${CMAKE_CURRENT_SOURCE_DIR}/oqp_nac.py

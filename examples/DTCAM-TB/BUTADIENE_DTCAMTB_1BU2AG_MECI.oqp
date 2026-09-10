@@ -1,4 +1,0 @@
-mrsf-tddftb(nstate=3)
-meci(S1,S2,algorithm=baeka,gap=1e-05,maxit=50,sigma=10)
-dftb(model=dtcam)
-geom="../geometries/C4H6-0a16c9927c8c.xyz"

@@ -1,7 +1,3 @@
-mrsf(nstate=12)/bhhlyp/6-31g(2df,p)
-ispher=false
-soc
-guess(save_mol=true)
-scf(converger_type=diis,maxit=200)
-dftgrid(rad_npts=90,ang_npts=302)
+mrsf(nstate=12)/bhhlyp/6-31g(2df,p) ispher=false soc guess(save_mol=true) scf(maxit=200)
+dftgrid(rad_npts=90)
 geom="../geometries/H2O-a5185d3fce44.xyz"

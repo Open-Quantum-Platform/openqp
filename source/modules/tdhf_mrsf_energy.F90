@@ -62,6 +62,7 @@ contains
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
+    use tagarray, only: TA_OK
 
     use types, only: information
     use strings, only: cstring, fstring
@@ -85,7 +86,7 @@ contains
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density, get_umrsf_transition_dipole, &
-      get_jacobi, umrsfssqu, mrsf_set_fp32
+      get_jacobi, umrsfssqu, mrsf_set_fp32, mrsf_check_block_representation
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use routec_sig, only: routec_sig_available, routec_sig_begin, &
@@ -107,6 +108,10 @@ contains
     real(kind=dp), allocatable :: scr2(:),scr3(:)
     real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
     real(kind=dp), allocatable :: sym_ritz(:,:)
+    !> Trial vectors mrinivec handed to each symmetry block.  Left unallocated
+    !> for a quintet solve (inivec) or when no pair-irrep table is staged, and
+    !> the post-solve representation check is then inert.
+    integer, allocatable :: seeds_per_irrep(:)
     real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
     real(kind=dp), allocatable :: squared_S(:)
     real(kind=dp), allocatable :: amb(:,:), apb(:,:), smat_full(:,:)
@@ -133,6 +138,12 @@ contains
     integer :: nbf, nbf2, xvec_dim
     integer :: mxvec, ist, jst, iend, nvec, novec
     integer :: iter, nv, iv, ivec
+    !> Deterministic-phase pinning for the reported response vectors.
+    integer :: iphase_pin, iphase_pair
+    real(kind=dp) :: phase_amax
+    !> Two amplitudes this close in magnitude are treated as tied and the lower
+    !> index wins.  Same value as FCI_PHASE_TIE_RTOL / _CI_PHASE_TIE_RTOL.
+    real(kind=dp), parameter :: MRSF_PHASE_TIE_RTOL = 1.0e-8_dp
     integer :: diag_index, i
     integer :: mxiter
     logical :: tamm_dancoff
@@ -143,6 +154,11 @@ contains
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
+    !> Reported states (nstates) and the strictly wider window the Davidson
+    !> actually tracks and expands on (nsolve = nstates + nextra).
+    integer :: nsolve, nextra
+    integer(8), contiguous, pointer :: pair_irrep_probe(:)
+    integer(4) :: pair_irrep_stat
     logical :: roref = .false.
     logical :: uhfref = .false.
     logical :: debug_mode
@@ -252,16 +268,69 @@ contains
 
     if (mrst==1 ) then
       nstates = min(nstates, xvec_dim-1)
-      mxvec = min(maxvec*nstates, xvec_dim-1, infos%control%maxit_dav*nstates)
     else if (mrst==3) then
       nstates = min(nstates, xvec_dim-3)
-      mxvec = min(maxvec*nstates, xvec_dim-3, infos%control%maxit_dav*nstates)
     else if (mrst==5) then
       nstates = min(nstates, xvec_dim)
-      mxvec = min(maxvec*nstates, xvec_dim, infos%control%maxit_dav*nstates)
     end if
 
     infos%tddft%nstate = nstates
+
+    ! The Davidson expands only on the residuals of the roots it TRACKS.  When
+    ! the tracked set is the reported set, a symmetry block whose crude
+    ! diagonal estimate starts just above the reported window is never enriched:
+    ! its subspace stays at the dimension it was seeded with, its Rayleigh
+    ! quotient never descends, and a root that physically belongs inside the
+    ! window is simply absent while the run converges and exits 0 (issue #327).
+    !
+    ! Separating the two removes the mechanism: track nsolve = nstates + nextra
+    ! roots, expand on all of them, and report the lowest nstates.  Convergence
+    ! is still tested on the reported roots only, so the extra window costs
+    ! subspace but cannot turn a converging run into a non-converging one.
+    !
+    ! Measured minimum window needed for a correct reported set (GCC/OpenBLAS,
+    ! this tree): CH2O 6-31G MRSF singlet nstate=3 needs 4; the same deck as a
+    ! triplet at nstate=6 needs 8; CH3Br-BHHLYP-SOC nstate=8 needs 10.  The
+    ! default below covers all three with margin.
+    nextra = max(3, nstates/4)
+
+    ! Two independent mechanisms lose a root, and they need different remedies.
+    ! A block that is SEEDED but starts above the reported window is fixed by
+    ! the window slack above.  A block that is never seeded at all is not: the
+    ! guess picks the nvec smallest diagonal estimates, and a block whose
+    ! diagonal estimates are all large gets nothing, however wide the window.
+    ! mrinivec repairs that from the pair-irrep table, so when the repair does
+    ! not run the window has to absorb the job instead, and it takes a wider
+    ! one.  The table being staged is NOT the same as the repair running -- it
+    ! is staged by pyoqp whenever symmetry detection produced usable labels,
+    ! independently of this solve.  The repair is skipped in three cases:
+    !
+    !   * no table at all              -- [symmetry] enabled=false;
+    !   * ixcore_len /= 0              -- mrinivec exits its seed-coverage
+    !                                     block outright for an XAS solve;
+    !   * mrst == 5                    -- the quintet path goes through inivec,
+    !                                     which never sees the table.
+    !
+    ! Measured on CH2O 6-31G MRSF with symmetry off: a slack of 6 is the
+    ! smallest that recovers the 1B1 root at every nstate from 3 upward; 5
+    ! still loses it at nstate=3.
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep_probe, &
+                           status=pair_irrep_stat)
+    if (pair_irrep_stat /= TA_OK &
+        .or. infos%tddft%ixcore_len /= 0 &
+        .or. mrst == 5) nextra = max(nextra, 6)
+
+    if (mrst==1 ) then
+      nsolve = min(nstates + nextra, xvec_dim-1)
+      mxvec = min(maxvec*nsolve, xvec_dim-1, infos%control%maxit_dav*nsolve)
+    else if (mrst==3) then
+      nsolve = min(nstates + nextra, xvec_dim-3)
+      mxvec = min(maxvec*nsolve, xvec_dim-3, infos%control%maxit_dav*nsolve)
+    else if (mrst==5) then
+      nsolve = min(nstates + nextra, xvec_dim)
+      mxvec = min(maxvec*nsolve, xvec_dim, infos%control%maxit_dav*nsolve)
+    end if
+    nsolve = max(nstates, min(nsolve, mxvec))
 
     ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
     ! Every attempt to enlarge it perturbed converged results.  Raising the
@@ -280,7 +349,7 @@ contains
     ! outright under the restriction and reports all six correctly without it,
     ! while both SOC anchors reproduce their references either way (CH3Br
     ! 9.8e-10, H2O 1.6e-13).  See the victim-selection comment in mrinivec.
-    nvec = min(max(nstates,6), mxvec)
+    nvec = min(max(nsolve,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
     call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
@@ -324,8 +393,8 @@ contains
              bvec_mo_tmp(xvec_dim), &
              scr2(mxvec*mxvec), &
              scr3(nocca), &
-             qvec(xvec_dim,nstates), &
-             RNORM(nstates), &
+             qvec(xvec_dim,nsolve), &
+             RNORM(nsolve), &
              source=0.0_dp,stat=ok)
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
     allocate(trans(xvec_dim,2), &
@@ -491,36 +560,80 @@ contains
 
   ! Construct TD trial vector
     !
-    ! KNOWN DEFECT, left in place deliberately -- do not "fix" this in one line.
-    ! On the ROHF path the SAME array goes in as both ea and eb, and it holds
-    ! the ROHF canonical eigenvalues, i.e. the Guest-Saunders 0.5/0.5 average
-    ! 0.5*(fa(p,p)+fb(p,p)) -- not the alpha and beta Fock diagonals the sigma
-    ! actually uses. UMRSF above does it correctly from fa(i,i)/fb(i,i).
-    ! So mrinivec's xm, which orders the seeds and preconditions the residuals,
-    ! is not the diagonal of the operator being solved. The clearest symptom:
-    ! with ea == eb the open-open entry xm = 0.5*(eb(lr1)-ea(lr1)
-    ! +eb(lr2)-ea(lr2)) is IDENTICALLY ZERO for every ROHF MRSF run, while the
-    ! true one-electron value is not. Instrumented on CH2O 6-31G: the folded
-    ! open-open seed came out at exactly 0.00000000 and its two partners at
-    ! -0.19359070 / +0.19359070, perfectly antisymmetric, which is what ea == eb
-    ! forces. (xm also omits the two-electron part of the sigma entirely, on
-    ! every path -- that part is a preconditioner approximation, not a bug.)
+    ! PASSING THE SAME ARRAY AS BOTH ea AND eb ON THE ROHF PATH IS DELIBERATE
+    ! AND IS THE BETTER CHOICE.  Issue #328 proposed replacing it with the
+    ! alpha/beta Fock diagonals, as the UMRSF branch above does; measurement
+    ! rejects that.  Do not apply it.  What follows is the measurement.
     !
-    ! Correcting it MEASURABLY HELPS AND MEASURABLY HURTS. Filling both arrays
-    ! from fa/fb on the ROHF path makes H2O_BHHLYP_SOC at nstate=12 return
-    ! 0.60340877 as its 11th singlet -- a genuine root, stable at nstate=20 and
-    ! 30, that the shipped reference skips (already noted in 908496c0). The same
-    ! change also breaks six shipped tests, including SOC couplings by 9694 on
-    ! that very deck, numerical frequencies by 0.133, and it makes triplet MRSF
-    ! fail to converge outright on h2o_rohf_mrsf-t with bhhlyp and cam-b3lyp.
+    ! xm both orders the seeds and preconditions the Davidson residuals, so
+    ! what it has to approximate is the DIAGONAL OF THE OPERATOR, A(ij,ij) --
+    ! not the one-electron part of it.  The two candidates are
     !
-    ! So a real repair has to come with the reference regeneration and the
-    ! triplet convergence failure understood, not as a swap of two arguments.
+    !   xm_1e(i,j) = fb(j,j) - fa(i,i)                    [exact 1e diagonal]
+    !   xm_rohf    = eps(j) - eps(i)
+    !              = xm_1e - 0.5*[ (fb-fa)(i,i) + (fb-fa)(j,j) ]
+    !
+    ! because the ROHF canonical eigenvalues ARE the Guest-Saunders average,
+    ! eps(p) = 0.5*(fa(p,p) + fb(p,p)); fitting eps(j)-eps(i) to an additive
+    ! a(i)+b(j) form over all 53 (H2O) and 134 (CH2O) non-open-open amplitudes
+    ! reproduces it to 1e-10.
+    !
+    ! xm_1e really is the exact one-electron diagonal of mrsfesum: contraction
+    ! 1 there contributes fb(j,j)*X(i,j), contraction 2 contributes
+    ! -fa(i,i)*X(i,j), and the folded open-open branch contributes
+    ! 0.5*[(fb-fa)(O1,O1) + (fb-fa)(O2,O2)]*X(O1,O1) -- exactly mrinivec's two
+    ! formulas.  But the full diagonal also carries the spin-flip exchange
+    ! -c_H*(ij|ji) (JCP 149, 104101 Eq. 2.25), which xm omits on every path,
+    ! and that omitted term is NOT a small correction: hole and particle both
+    ! sit on or next to the two SOMOs, and at the folded open-open slot they
+    ! are the SAME spatial orbital, making it the SOMO self-repulsion, O(1 Eh).
+    !
+    ! The Guest-Saunders subtraction is a surrogate for precisely that omitted
+    ! exchange -- (fb-fa)(p,p) = c_H*[K(p,O1) + K(p,O2)] + dVxc(p,p) -- and a
+    ! good one.  Applying the production sigma to unit vectors gives the exact
+    ! A(ij,ij) (sigma = A e_ij on iteration 1); over 45 of the 54 amplitudes of
+    ! H2O/6-31G, triplet ROHF reference, triplet target:
+    !
+    !                    |xm_rohf - A_diag|        |xm_1e - A_diag|
+    !     MRSF-TDHF      MAE 0.315  max 0.685     MAE 0.542  max 1.133
+    !     MRSF/BHHLYP    MAE 0.142  max 0.311     MAE 0.272  max 0.567
+    !
+    ! and xm_rohf is closer on 45 amplitudes out of 45, in both.  At the folded
+    ! open-open slot it is not merely closer, it is EXACT for pure HF: the
+    ! one-electron part c_H*[0.5*(K11+K22) + K12] is cancelled term by term by
+    ! the response exchange, leaving 0.5*[dVxc(O1,O1) + dVxc(O2,O2)], which is
+    ! identically zero without a functional.  Measured A(OO,OO) = 0.0000000000
+    ! (HF) and 0.0317175663 (BHHLYP), against xm_rohf = 0 and xm_1e = 0.609 /
+    ! 0.337.  The "identically zero" open-open entry is the right answer, not
+    ! an artefact of ea == eb.
+    !
+    ! Measured consequences of substituting xm_1e:
+    !   - examples/MRSF-TDDFT/CH2O_MRSFTDDFT_SYMMETRY_BLOCK_COVERAGE LOSES its
+    !     2.039974 eV triplet.  The reordered xm drops the seed that reaches
+    !     that block and T1 is reported as 4.782 eV -- converged, silent, wrong.
+    !   - h2o_rohf_mrsf-t_6-31g_{bhhlyp,cam-b3lyp} stop converging.  Not a
+    !     divergence: the residual reaches 5.9e-08 / 8.5e-08 against a 1e-08
+    !     threshold and the run exits on "nvec = mxvec".  Both decks have
+    !     xvec_dim = 54, so mxvec = xvec_dim-3 = 51 caps the subspace and the
+    !     auto-restart above cannot rescue it -- the degraded preconditioner
+    !     needs more expansion vectors than the whole space has.
+    !
+    ! The other observation in #328 is real but belongs to a different
+    ! mechanism: H2O_BHHLYP_SOC at nstate=12 is missing the physical root at
+    ! 0.60340875 Eh (1A'', dark).  That is a trial-set COVERAGE limit, not a
+    ! diagonal one -- the shipped diagonal finds that root, unchanged, at
+    ! nstate=20 and nstate=30 (energies equal to 4.6e-14, eigenvector overlap
+    ! 1 - 7.2e-10 at conv=1e-10).  See the seed-coverage block in mrinivec.
     if (mrst==1 .or. mrst==3) then
       if (.not. umrsf) then
-        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
+        ! ROHF: mo_energy_work_a holds the Guest-Saunders spin average and goes
+        ! in as BOTH ea and eb on purpose -- see the measurement above.
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
       else
-        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
+        ! UHF reference: genuine alpha/beta eigenvalues, no spin average to undo.
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
       end if
 
     else if (mrst==5) then
@@ -753,19 +866,35 @@ contains
       call rparedms(bvec_mo,amo,amo,apb,amb,nvec,tamm_dancoff=.true.)
       call rpaeig(eex,vl_p,vr_p,apb,amb,scr2,tamm_dancoff=.true.)
       call rpavnorm(vr_p,vl_p,tamm_dancoff=.true.)
-      call rpaechk(eex,nvec,nstates,imax,tamm_dancoff=.true.)
+      call rpaechk(eex,nvec,nsolve,imax,tamm_dancoff=.true.)
 
       for_trnsf_b_vec = vr_p
-      call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nstates)
-      call sfqvec(qvec,xm,eex,nstates)
+!     Residuals and preconditioned corrections for the whole TRACKED window,
+!     not just the reported one: this is what keeps a block that starts above
+!     the reported window being enriched until its root descends into it.
+      call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nsolve)
+      call sfqvec(qvec,xm,eex,nsolve)
 
 !     Response-space symmetry blocking (no-op unless staged by pyoqp):
 !     confine each root's update to the dominant irrep of its Ritz vector.
-      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
-      call sym_response_project(infos, sym_ritz, qvec, nstates)
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nsolve))
+      call sym_response_project(infos, sym_ritz, qvec, nsolve)
+      call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
 
-      mxerr = maxval(rnorm)
+!     Convergence is judged on the REPORTED roots -- demanding that every extra
+!     tracked root converge too would turn a converging run into a
+!     non-converging one for no gain.  But an extra pair sitting above the
+!     reporting boundary may still descend past it, and exiting while it can
+!     would recreate exactly the loss this change removes.  For a symmetric
+!     operator the eigenvalue a Ritz pair approximates lies within ||r|| of its
+!     Ritz value, so a pair whose Ritz value is further than ||r|| above the
+!     boundary cannot cross it; anything closer keeps the loop alive.
+!     rnorm holds ||r||^2 (sfresvec stores dot_product(q,q)).
+      mxerr = maxval(rnorm(1:nstates))
+      do ivec = nstates + 1, nsolve
+        if (eex(ivec) - sqrt(rnorm(ivec)) <= eex(nstates)) &
+          mxerr = max(mxerr, rnorm(ivec))
+      end do
 
 !     Check convergence
       converged = mxerr<=cnvtol
@@ -775,7 +904,7 @@ contains
       if (nvec==mxvec) ierr = 1
       if (ierr/=0) exit
 
-      call rpanewb(nstates,bvec_mo,qvec,novec,nvec,ierr,tamm_dancoff=.true.)
+      call rpanewb(nsolve,bvec_mo,qvec,novec,nvec,ierr,tamm_dancoff=.true.)
 
   !   ierr=1 nvec over mxvec: not converged case
       if (ierr/=0) exit
@@ -805,9 +934,74 @@ contains
       write(*,'(/,2x,"..something is wrong.. No vectors were added")')
       infos%mol_energy%Davidson_converged=.false.
     end select
+
+    ! A converged spectrum can still be missing a root whose symmetry block
+    ! WAS seeded -- mrinivec's nmiss counter cannot see that case, because it
+    ! counts blocks that got no seed at all.  sym_ritz holds the converged
+    ! Ritz vectors (it is rebuilt every iteration, and the loop exits right
+    ! after).  Only checked on a converged solve: an unconverged one already
+    ! says so, louder.
+    if (ierr == 0 .and. allocated(sym_ritz)) &
+      call mrsf_check_block_representation(infos, sym_ritz, nstates, &
+                                           seeds_per_irrep)
+
+    ! The reported window can still cut a near-degenerate manifold in half.
+    ! That is not a solver defect, but "state N" is then not a well-separated
+    ! label: any change to the guess can swap which member lands in slot N
+    ! while both stay converged.  CH3Br-BHHLYP-SOC nstate=6 is exactly this --
+    ! its 6th and 7th singlets sit 9.4 meV apart.  Say so rather than let a
+    ! single scalar be treated as a stable reference.
+    if (ierr == 0 .and. nsolve > nstates .and. nstates >= 1) then
+      if (abs(eex(nstates+1) - eex(nstates)) < 1.0e-3_dp) then
+        write(iw,'(/,2X,"MRSF WARNING: the reported window ends inside a ", &
+          &"near-degenerate manifold: state ",I0," (",F14.8,") and the first ", &
+          &"unreported root (",F14.8,") differ by ",ES10.3," Hartree.  Which ", &
+          &"member occupies slot ",I0," is not robust against a change of ", &
+          &"initial guess; request more states, or match this manifold by ", &
+          &"overlap or irrep rather than by root index.",/)') &
+          nstates, eex(nstates), eex(nstates+1), &
+          abs(eex(nstates+1)-eex(nstates)), nstates
+      end if
+    end if
+
     call flush(iw)
 
     call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)
+
+!   Give each reported response vector a deterministic sign.  Nothing in the
+!   solve fixes the sign of an eigenvector, so every quantity built from one --
+!   transition dipoles, NACs, SOC matrix elements -- carries a sign that is not
+!   a property of the calculation: it changes with the BLAS, the thread count
+!   and the machine.  Measured on C4H6_BHHLYP_UMRSFTDDFT_ENERGY, where rerunning
+!   an unmodified tree reproduces every |mu| to 1e-9 while the stored vectors
+!   come back sign-flipped (max|d mu| = 4.658 against the committed file).
+!
+!   The rule is the largest-magnitude amplitude positive, with near-ties
+!   resolved by the LOWEST index: an exact tie is measure-zero, but two
+!   amplitudes agreeing to round-off are not, and picking by index keeps the
+!   choice stable across platforms where argmax alone would not be.
+!
+!   The tie window matches MRSF_PHASE_TIE_RTOL below, which is the value the CI
+!   convention already uses (FCI_PHASE_TIE_RTOL in fci_driver.F90,
+!   _CI_PHASE_TIE_RTOL in fci.py).  A narrower window was tried first and is not
+!   enough: at 1e-10 the same deck built against MKL ILP64 and against
+!   OpenBLAS64 -- same compiler, BLAS the only difference -- picked different
+!   largest amplitudes and so fixed opposite signs, magnitudes agreeing to
+!   4.2e-11 while the raw vectors differed by 4.651.
+    do ist = 1, nstates
+      phase_amax = maxval(abs(bvec_mo(:,ist)))
+      if (phase_amax <= 0.0_dp) cycle
+      iphase_pin = 0
+      do iphase_pair = 1, xvec_dim
+        if (abs(bvec_mo(iphase_pair,ist)) >= phase_amax*(1.0_dp - MRSF_PHASE_TIE_RTOL)) then
+          iphase_pin = iphase_pair
+          exit
+        end if
+      end do
+      if (iphase_pin > 0) then
+        if (bvec_mo(iphase_pin,ist) < 0.0_dp) bvec_mo(:,ist) = -bvec_mo(:,ist)
+      end if
+    end do
 
     select case (mrst)
       case(1)

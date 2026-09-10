@@ -653,10 +653,11 @@ def test_gradient_is_continuous_along_a_bond_scan(tmp_path):
 # --------------------------------------------------------------------------
 @needs_backend
 @pytest.mark.parametrize("pt2_override,needle", [
-    ({"contraction": "none"}, "STRONGLY CONTRACTED"),
+    # These are dyall+strong runs -- calculations this route OWNS -- that it
+    # cannot differentiate.  `gradient=analytic` asked for THIS derivative, so
+    # it gets the reason rather than a quietly different quantity.
     ({"reference": "casci"}, "CASSCF reference"),
     ({"level_shift": "0.1"}, "level_shift"),
-    ({"h0": "fock", "contraction": "none"}, "STRONGLY CONTRACTED"),
 ])
 def test_out_of_scope_calculations_are_refused_not_approximated(
         tmp_path, pt2_override, needle):
@@ -672,7 +673,36 @@ def test_out_of_scope_calculations_are_refused_not_approximated(
 
 @needs_backend
 @pytest.mark.parametrize("pt2_override", [
+    # A different h0/contraction is a different analytic PT2 derivative's
+    # calculation, not a refusal: `[pt2] gradient` is one key shared with the
+    # CASPT2 route, so `analytic` means "AN analytic derivative".  Raising
+    # here aborted every analytic CASPT2 run before its own route was
+    # consulted, so the verdict must be OTHER_ROUTE whatever gradient says.
     {"contraction": "none"},
+    {"h0": "fock", "contraction": "none"},
+    {"contraction": "none", "gradient": "analytic"},
+    {"h0": "fock", "contraction": "none", "gradient": "analytic"},
+])
+def test_another_routes_calculation_is_declined_not_refused(
+        tmp_path, pt2_override):
+    """OTHER_ROUTE never raises, whatever ``[pt2] gradient`` demands."""
+    from oqp.library.nevpt2_gradient import (
+        OTHER_ROUTE, sc_nevpt2_gradient_route,
+    )
+
+    # update(), not dict(**override): two of these cases override `gradient`
+    # itself, which is the whole point of them.
+    pt2 = dict(_SC_NEVPT2, gradient="auto")
+    pt2.update(pt2_override)
+    runner = _runner(tmp_path, "scnevpt2_other_route", system=_H4,
+                     basis="sto-3g", cas=_H4_CAS22, pt2=pt2)
+    route, reason = sc_nevpt2_gradient_route(runner.mol)
+    assert route == OTHER_ROUTE
+    assert reason == ""
+
+
+@needs_backend
+@pytest.mark.parametrize("pt2_override", [
     {"reference": "casci"},
 ])
 def test_auto_falls_back_to_central_differences_out_of_scope(
@@ -1197,3 +1227,56 @@ def test_pt2_gradient_is_a_recognized_input_keyword():
         'caspt2/sto-3g geom="h4.xyz" grad pt2(gradient=analytic)')
     legacy = oqp_input.lower_to_legacy(spec, source_dir=".")
     assert legacy["pt2"]["gradient"] == "analytic"
+
+
+# --------------------------------------------------------------------------
+# 6. the method name and the option spelling are ONE calculation
+# --------------------------------------------------------------------------
+@needs_backend
+@pytest.mark.parametrize("method,pt2_extra,expect", [
+    ("nevpt2", {}, ("dyall", "none")),
+    ("sc-nevpt2", {}, ("dyall", "strong")),
+    ("scnevpt2", {}, ("dyall", "strong")),
+    # The option spelling every existing input uses.
+    ("caspt2", {"h0": "dyall"}, ("dyall", "none")),
+    ("caspt2", {"h0": "dyall", "contraction": "strong"}, ("dyall", "strong")),
+    # A method that names nothing still reads its options.
+    ("caspt2", {}, ("fock", "none")),
+])
+def test_the_method_name_and_the_option_spelling_agree(method, pt2_extra, expect):
+    """Naming NEVPT2 must not have created a second, subtly different route.
+
+    The whole point of giving NEVPT2 its own method name is that the dispatch
+    can read the method instead of inspecting options.  That is only safe if
+    the two spellings resolve to the SAME zeroth-order Hamiltonian and
+    contraction -- otherwise every existing input silently becomes a slightly
+    different calculation, which no gradient comparison would reveal because
+    both numbers would be correct for their own functional.
+    """
+    from oqp.library.caspt2_dyall import _caspt2_options
+
+    config = {"input": {"method": method}, "pt2": dict(pt2_extra)}
+    options = _caspt2_options(config)
+    assert (options.h0, options.contraction) == expect
+
+
+@needs_backend
+@pytest.mark.parametrize("method,pt2_extra,needle", [
+    ("nevpt2", {"h0": "fock"}, "h0"),
+    ("sc-nevpt2", {"h0": "fock"}, "h0"),
+    ("nevpt2", {"contraction": "strong"}, "contraction"),
+    ("sc-nevpt2", {"contraction": "none"}, "contraction"),
+])
+def test_a_method_name_contradicting_its_options_is_refused(
+        method, pt2_extra, needle):
+    """`method=nevpt2` with `h0=fock` is a contradiction, not a preference.
+
+    Silently letting one win would answer a request for one theory with
+    another -- and both answers are internally consistent numbers, so nothing
+    downstream could catch it.
+    """
+    from oqp.library.caspt2_dyall import _caspt2_options
+
+    config = {"input": {"method": method}, "pt2": dict(pt2_extra)}
+    with pytest.raises(ValueError, match=needle):
+        _caspt2_options(config)

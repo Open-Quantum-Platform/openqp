@@ -1,6 +1,2 @@
-uhf/6-31g*
-mult=3
-grad
-guess(type=huckel)
-scf(stability=true)
+uhf/6-31g* mult=3 grad scf(stability=true)
 geom="../geometries/H2O-0381125c86f2.xyz"

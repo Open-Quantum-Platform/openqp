@@ -1,8 +1,4 @@
-casscf/sto-3g
-guess(type=hcore)
-scf(maxit=80,forced_attempt=3,save_molden=false)
-properties(scf_prop="")
-cas(active_electrons=4,active_orbitals=4,frozen_core=3,orbital_source=rhf,sort_orbitals=energy,max_det=5000,max_memory=512)
-casscf(max_macro_iterations=50,optimizer=newton,root=0,gradient_norm_tol=1e-07,energy_decrease_tol=1e-10,step_norm_tol=1e-08,max_rotation_norm=0.2,level_shift=0.001,canonicalize=true)
-ci(nroot=1,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=any,root_tracking=energy)
+casscf/sto-3g guess(type=hcore) scf(maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=4,active_orbitals=4,frozen_core=3,max_memory=512)
+casscf(max_macro_iterations=50,gradient_norm_tol=1e-07) ci(solver=dense)
 geom="../geometries/H2O-95fa99c614ed.xyz"

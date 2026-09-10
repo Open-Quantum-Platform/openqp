@@ -1,9 +1,5 @@
-casscf/sto-3g
-grad
-guess(type=hcore)
-scf(maxit=80,forced_attempt=3,save_molden=false)
-properties(scf_prop="")
-cas(active_electrons=2,active_orbitals=2,frozen_core=1,orbital_source=rhf,max_det=5000,max_memory=512)
-ci(nroot=1,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=singlet)
-casscf(max_macro_iterations=50,root=0,converger=trah,gradient_norm_tol=1e-10,energy_decrease_tol=1e-12,step_norm_tol=1e-10,max_rotation_norm=0.2,canonicalize=true)
+casscf/sto-3g grad(S0) guess(type=hcore) scf(maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,max_memory=512)
+casscf(max_macro_iterations=50,gradient_norm_tol=1e-10,energy_decrease_tol=1e-12,step_norm_tol=1e-10)
+ci(solver=dense,target_spin=singlet)
 geom="../geometries/HLi-14ffe169c3ad.xyz"

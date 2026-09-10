@@ -20,6 +20,11 @@ set(_oqp_package_libraries
     "@DFTD4_MCTC_RUNTIME_NAME@"
     "@DFTD4_MULTICHARGE_RUNTIME_NAME@"
     "@DFTD4_DFTD4_RUNTIME_NAME@")
+# With ENABLE_DFTD4=OFF the three D4 names are unset and expand to empty
+# strings; liboqp itself still needs normalizing, so drop the empties rather
+# than skipping the whole script -- otherwise the loop below would demand a
+# packaged library called "" and abort the install.
+list(REMOVE_ITEM _oqp_package_libraries "")
 
 function(_oqp_read_macos_rpaths output_var library)
   execute_process(

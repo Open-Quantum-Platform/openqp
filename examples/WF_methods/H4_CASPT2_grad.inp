@@ -1,17 +1,23 @@
-# RHF/STO-3G/CASPT2 central-difference GRADIENT of linear H4.
+# RHF/STO-3G/CASPT2 ANALYTIC nuclear GRADIENT of linear H4.
 #
-# The PT2 family has no analytic gradient: oqp.library.pt2_numgrad differentiates
-# the PT2 energy by central differences, and that is what every gradient-driven
-# runtype (grad, optimize, ts, mep, irc) consumes.  This example pins that path
-# and the [pt2] grad_* controls; the energy at this geometry is the one checked
-# by H4_CASPT2.inp.
+# The default [pt2] gradient=auto takes the analytic derivative
+# (oqp.library.caspt2_gradient + source/modules/caspt2_gradient.F90) for the PT2
+# variants that have one -- single-state CASPT2/MRMP2, MCQDPT2, and
+# XMS-CASPT2/XMCQDPT2 -- and falls back to central differences for the rest.
+# This example pins the analytic route for single-state CASPT2 with a CASCI
+# (RHF-orbital) reference.
 #
-# 2 * 3 * natom = 24 displaced PT2 energies at grad_step = 1e-3 Bohr.
+# The analytic gradient is one CASPT2 evaluation plus one pass of derivative
+# integrals, independent of the number of nuclei; the central-difference
+# alternative that H4_CASPT2_numgrad.inp exercises costs 2 * 3 * natom = 24
+# displaced PT2 energies.
 #
-# The SCF is converged to 1e-10 for the same reason as the energy example, and
-# it matters more here: a central difference divides by 2*step, so a 1e-6
-# wobble in the reference orbitals would be amplified into the third digit of
-# the gradient.
+# Every non-variational parameter carries its own multiplier: the first-order
+# amplitudes (a shifted Hylleraas functional), the reference CI vector (a
+# projected linear solve), and the reference ORBITALS -- here the constraint is
+# that they diagonalize the RHF Fock, so the response is a CPHF-type Z-vector.
+#
+# The SCF is converged to 1e-10 for the same reason as the energy example.
 [input]
 system=
    H   0.000000000   0.000000000   0.000000000
@@ -76,9 +82,8 @@ ipea_shift=0.0
 level_shift=0.0
 imaginary_shift=0.0
 semi_canonical=true
-# --- central-difference gradient controls (pt2_numgrad) ---
-# Step in Bohr.  1e-3 balances truncation error against the 1e-10 SCF floor.
-grad_step=1.0e-3
-# cold = re-run the configured SCF/CASCI pipeline at each displaced geometry
-# (reproducible); warm re-uses the previous MOs as the guess.
-grad_guess=cold
+# --- nuclear-gradient route ---
+# auto     = analytic where the variant has one, central differences otherwise
+# analytic = refuse rather than fall back
+# numerical= always central differences (see H4_CASPT2_numgrad.inp)
+gradient=analytic

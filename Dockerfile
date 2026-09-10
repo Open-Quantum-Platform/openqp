@@ -12,13 +12,13 @@
 # docs/openqp-dev-buildenv-hardening-plan.md.
 FROM openqp/openqp-buildenv:1@sha256:83a2ba2108bc2bb1123e7dfac31320833817242681ee41f36e5ee950dfb22a3e AS builder
 
-ARG OPENQP_VERSION=1.3.0
+ARG OPENQP_VERSION=1.3.1
 ARG OPENQP_REVISION
 
 ENV CC=gcc-14 \
     CXX=g++-14 \
     FC=gfortran-14 \
-    CMAKE_ARGS="-DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DENABLE_MPI=OFF -DENABLE_DDX=OFF -DENABLE_OPENQP_DFTB=OFF -DOQP_ALLOW_REFERENCE_BLAS=OFF -DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals -DOQP_SOURCE_REVISION=${OPENQP_REVISION}"
+    CMAKE_ARGS="-DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DENABLE_MPI=OFF -DENABLE_DDX=OFF -DOQP_ALLOW_REFERENCE_BLAS=OFF -DLINALG_LIB=OpenBLAS -DCMAKE_PREFIX_PATH=/opt/openblas -DOQP_EXTERNALS_ROOT=/root/.cache/openqp/externals -DOQP_SOURCE_REVISION=${OPENQP_REVISION}"
 ARG NINJA_JOBS=
 
 WORKDIR /opt/openqp
@@ -108,7 +108,7 @@ RUN python3 .github/scripts/collect_docker_runtime.py \
 
 FROM python:3.12.13-slim-trixie@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS runtime
 
-ARG OPENQP_VERSION=1.3.0
+ARG OPENQP_VERSION=1.3.1
 ARG OPENQP_REVISION
 LABEL org.opencontainers.image.title="OpenQP" \
       org.opencontainers.image.description="Open Quantum Platform research software" \

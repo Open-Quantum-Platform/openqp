@@ -1691,8 +1691,6 @@ contains
 
     INTEGER :: ig
 
-!dir$ assume_aligned sblk : 64
-!dir$ assume_aligned tblk : 64
 
     DO ig = 1, cntp%numpairs
         CALL comp_kin_ovl_int1_prim(cntp, ig, dokinetic, sblk, tblk)
@@ -1724,7 +1722,6 @@ contains
 
     INTEGER :: ig
 
-!dir$ assume_aligned blk : 64
 
 !   Interaction with point charge
     DO ig = 1, cntp%numpairs
@@ -1758,7 +1755,6 @@ contains
 
     INTEGER :: ig, iat
 
-!dir$ assume_aligned blk : 64
 
 !   Interaction with point charge
     DO iat = 1, nat
@@ -1794,7 +1790,6 @@ contains
 
     integer :: ig, iat
     real(real64) :: c(3), znuc
-!dir$ assume_aligned blk : 64
 
 !   Interaction with point charge
     do iat = 1, nat
@@ -1835,7 +1830,6 @@ contains
 
     INTEGER :: ig, iat
     REAL(REAL64) :: crd(3)
-!dir$ assume_aligned blk : 64
 
 !   Interaction with point charge
     DO iat = 1, nat
@@ -1880,7 +1874,6 @@ contains
 
     INTEGER :: ig, iat
     REAL(REAL64) :: crd(3)
-!dir$ assume_aligned blk : 64
 
 !   Interaction with point charge
     DO iat = 1, nat
@@ -1950,7 +1943,6 @@ contains
     REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:)
 
     INTEGER :: ig
-!dir$ assume_aligned blk : 64
 
     DO ig = 1, cntp%numpairs
         CALL comp_lz_int1_prim(cntp, ig, blk)
@@ -1980,7 +1972,6 @@ contains
 
     integer :: ig
 
-!dir$ assume_aligned blk : 64
 
     do ig = 1, cntp%numpairs
         call comp_mult_int1_prim(cntp, ig, r, mom, blk)
@@ -2061,7 +2052,6 @@ contains
     real(real64), contiguous, intent(inout) :: blk(:,:)
 
     integer :: ig
-!dir$ assume_aligned blk : 64
 
     do ig = 1, cntp%numpairs
         call comp_amom_int1_prim(cntp, ig, o, blk)
@@ -2122,7 +2112,6 @@ contains
     real(real64), contiguous, intent(inout) :: blk(:,:)
 
     integer :: ig
-!dir$ assume_aligned blk : 64
 
     do ig = 1, cntp%numpairs
         call comp_giao_overlap_deriv_prim(cntp, ig, blk)
@@ -2192,8 +2181,6 @@ contains
 
     integer :: ig
     real(real64), dimension(BLOCKSIZE,3) :: amom_blk
-!dir$ assume_aligned blk : 64
-!dir$ assume_aligned amom_blk : 64
 
     amom_blk = 0.0_real64
     do ig = 1, cntp%numpairs
@@ -2236,7 +2223,6 @@ contains
 
     integer :: ig
 
-!dir$ assume_aligned blk : 64
 
     do ig = 1, cntp%numpairs
         call comp_allmult_int1_prim(cntp, ig, r, mxmom, blk)

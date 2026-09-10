@@ -39,6 +39,13 @@ contains
   ! We are getting lot file name from Python via tagarray
 
     character(len=1,kind=c_char), contiguous, pointer :: log_filename(:)
+! The version the build was configured as (CMake PROJECT_VERSION), so the log
+! banner cannot drift from pyproject.toml the way a hard-coded string did --
+! the banner said "1.0 Aug, 2024" for two years of releases.
+#ifndef OQP_VERSION_STRING
+#define OQP_VERSION_STRING 'unknown'
+#endif
+    character(len=57) :: version_line
     character(len=*), parameter :: subroutine_name = "oqp_banner"
     character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
           OQP_log_filename /)
@@ -65,7 +72,10 @@ contains
     write(iw, '(10x,   "*                                                         *")')
     write(iw, '(10x,   "*             OpenQP: Open Quantum Platform               *")')
     write(iw, '(10x,   "*                                                         *")')
-    write(iw, '(10x,   "*                Version: 1.0 Aug, 2024                   *")')
+    version_line = ''
+    version_line((57 - len('Version: '//OQP_VERSION_STRING)) / 2 + 1:) = &
+        'Version: '//OQP_VERSION_STRING
+    write(iw, '(10x,"*",a,"*")') version_line
     write(iw, '(10x,   "*                                                         *")')
     write(iw, '(10x,   "***********************************************************")')
     write(iw, '(10x,   "*     The most efficient implementation of MRSF-TDDFT.    *")')

@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from itertools import combinations
 import math
+import warnings
 from math import comb
 
 import numpy as np
@@ -69,6 +70,13 @@ class FCISettings:
     orbital_source: str = "rhf"
     orbital_file: str = ""
     target_spin: str = "any"
+    #: Spatial-symmetry filter on the returned roots. "any" (the default)
+    #: leaves root selection exactly as it was; a point-group irrep name keeps
+    #: only roots whose dominant irrep is that one.
+    target_irrep: str = "any"
+    #: Weight a root must carry in its dominant irrep to count as a symmetry
+    #: eigenstate at all.
+    irrep_min_purity: float = 0.5
 
 
 def _annihilate(det: int, orb: int) -> tuple[int, int] | None:
@@ -348,7 +356,117 @@ def compute_s2(
 
     if det_index is None:
         det_index = {det: idx for idx, det in enumerate(dets)}
-    spin_flip = 0.0
+    flipped = _apply_spin_flip(coeff, dets, norb, det_index)
+    return float(s2 + float(coeff @ flipped))
+
+
+#: How far the spin variance <S^4> - <S^2>^2 may sit from zero before the
+#: multiplicity label derived from <S^2> stops being trustworthy.  The variance
+#: of a two-state mixture with weights w and 1-w is w(1-w)(a-b)^2, so for a
+#: singlet/triplet pair (a-b = 2) this threshold corresponds to a contaminant
+#: weight of about 2.5e-5 -- far below anything of physical interest, and far
+#: above the numerical floor of a converged eigenvector.
+SPIN_VARIANCE_TOLERANCE = 1.0e-4
+
+
+def apply_s2(coeff, dets, norb, nelec, det_index=None):
+    """Return ``S^2`` applied to one CI vector, in the determinant basis."""
+    coeff = _real_array(coeff, "CI vector").reshape(-1)
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ms = 0.5 * (nalpha - nbeta)
+    if det_index is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+    return ms * (ms + 1.0) * coeff + _apply_spin_flip(coeff, dets, norb, det_index)
+
+
+def compute_s2_variance(ci_vector, determinants, norb, nelec, *, det_index=None):
+    """Return ``(<S^2>, <S^4> - <S^2>^2)`` for one CI vector.
+
+    The variance vanishes if and only if the vector is an ``S^2`` eigenstate,
+    which ``<S^2>`` on its own cannot establish: an average is reproduced
+    exactly by mixtures that contain none of the state it names.  For four
+    electrons a 2/3 : 1/3 mixture of a degenerate S=0 and S=2 pair gives
+    ``<S^2>`` = 2.000000 and so is labelled a triplet, with no triplet
+    component at all; its variance is 8.
+
+    One extra application of ``S^2`` over :func:`compute_s2`, which is the same
+    cost again.
+    """
+    dets = list(determinants)
+    coeff = _real_array(ci_vector, "CI vector").reshape(-1)
+    if coeff.size != len(dets):
+        raise ValueError("CI vector length must match the determinant count")
+    norm = np.linalg.norm(coeff)
+    if norm <= 0.0:
+        raise ValueError("CI vector norm must be non-zero")
+    coeff = coeff / norm
+    if det_index is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+    s2c = apply_s2(coeff, dets, norb, nelec, det_index=det_index)
+    s2 = float(coeff @ s2c)
+    s4 = float(s2c @ s2c)
+    return s2, max(0.0, s4 - s2 * s2)
+
+
+def spin_variance_for_clusters(energies, ci_vectors, determinants, norb, nelec,
+                               tol=None):
+    """``<S^4> - <S^2>^2`` for roots inside a degenerate cluster, NaN elsewhere.
+
+    Applying ``S^2`` is why ``_lib_spin_square`` exists: the Python path costs
+    O(ndet * norb^2) per root, so computing the variance for every root would
+    undo that.  A spin mixture needs degenerate partners to mix with, which is
+    the same gate :func:`spin_purify_degenerate_clusters` uses, so the cost is
+    paid only where a mixture can arise -- nothing in the common case.
+
+    Roots left as NaN are reported as "not computed" rather than as clean, and
+    :func:`spin_label_diagnosis` skips the variance test for them.
+    """
+    # DEGENERACY_TOLERANCE is defined below this point, so it is resolved here
+    # rather than as a default argument, which would be evaluated at import.
+    if tol is None:
+        tol = DEGENERACY_TOLERANCE
+    coeffs = _real_array(ci_vectors, "CI vectors")
+    if coeffs.ndim == 1:
+        coeffs = coeffs[:, None]
+    out = np.full(coeffs.shape[1], np.nan, dtype=np.float64)
+    clusters = [c for c in degenerate_clusters(energies, tol=tol) if len(c) > 1]
+    if not clusters:
+        return out
+    dets = list(determinants)
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    for cluster in clusters:
+        for root in cluster:
+            if root < coeffs.shape[1]:
+                out[root] = compute_s2_variance(
+                    coeffs[:, root], dets, norb, nelec, det_index=det_index)[1]
+    return out
+
+
+def fci_spin_variance(ci_vectors, determinants, norb, nelec):
+    """Per-root ``<S^4> - <S^2>^2`` for a set of CI vectors."""
+    dets = list(determinants)
+    coeffs = _real_array(ci_vectors, "CI vectors")
+    if coeffs.ndim == 1:
+        coeffs = coeffs[:, None]
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    return np.array(
+        [compute_s2_variance(coeffs[:, r], dets, norb, nelec,
+                             det_index=det_index)[1]
+         for r in range(coeffs.shape[1])],
+        dtype=np.float64,
+    )
+
+
+def _apply_spin_flip(coeff, dets, norb, det_index):
+    """Return the spin-flip part of ``S^2`` applied to one CI vector.
+
+    ``<a|S^2|b> = ms(ms+1) <a|b> + a . _apply_spin_flip(b)``, so factoring the
+    application out of :func:`compute_s2` is what makes the OFF-diagonal
+    elements reachable. Only the diagonal was ever needed while a root's
+    multiplicity was read from its own expectation value; resolving a
+    spin-mixed degenerate subspace needs the whole matrix.
+    """
+    out = np.zeros(len(dets), dtype=float)
     for col, det in enumerate(dets):
         c_col = coeff[col]
         if c_col == 0.0:
@@ -373,16 +491,115 @@ def compute_s2(
                 det_beta_p, phase_beta_p = cre_beta_p
                 row = det_index.get(det_beta_p)
                 if row is not None:
-                    spin_flip += (
-                        coeff[row]
-                        * phase_q
-                        * phase_alpha_q
-                        * phase_p
-                        * phase_beta_p
-                        * c_col
+                    out[row] += (
+                        phase_q * phase_alpha_q * phase_p * phase_beta_p * c_col
                     )
+    return out
 
-    return float(s2 + spin_flip)
+
+def s2_matrix(vectors, determinants, norb, nelec):
+    """``<a|S^2|b>`` over the columns of ``vectors``, in the determinant basis."""
+    dets = list(determinants)
+    vecs = _real_array(vectors, "CI vectors")
+    if vecs.ndim == 1:
+        vecs = vecs[:, None]
+    if vecs.shape[0] != len(dets):
+        raise ValueError("CI vectors must have one row per determinant")
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ms = 0.5 * (nalpha - nbeta)
+    det_index = {det: idx for idx, det in enumerate(dets)}
+    applied = np.column_stack([
+        _apply_spin_flip(vecs[:, k], dets, norb, det_index)
+        for k in range(vecs.shape[1])
+    ])
+    mat = vecs.T @ applied + ms * (ms + 1.0) * (vecs.T @ vecs)
+    # S^2 is Hermitian; symmetrise away the round-off so the eigensolver
+    # cannot return complex pairs from an asymmetric input.
+    return 0.5 * (mat + mat.T)
+
+
+#: Energies closer than this are treated as one degenerate cluster. A CI solve
+#: converges eigenpairs to eig_tol (1e-10 by default), so 1e-8 is loose enough
+#: to catch a genuine degeneracy resolved only to solver precision and tight
+#: enough not to merge two physically distinct states.
+DEGENERACY_TOLERANCE = 1.0e-8
+
+
+def degenerate_clusters(energies, tol=DEGENERACY_TOLERANCE):
+    """Indices of the energy-ordered roots, grouped into degenerate clusters."""
+    e = np.atleast_1d(np.asarray(energies, dtype=float))
+    clusters = []
+    current = [0] if e.size else []
+    for k in range(1, e.size):
+        if abs(e[k] - e[current[0]]) <= tol:
+            current.append(k)
+        else:
+            clusters.append(current)
+            current = [k]
+    if current:
+        clusters.append(current)
+    return clusters
+
+
+def spin_purify_degenerate_clusters(energies, coeffs, determinants, norb, nelec,
+                                    *, tol=DEGENERACY_TOLERANCE):
+    """Re-express each degenerate cluster in the S^2 eigenbasis.
+
+    Within a degenerate -- or numerically near-degenerate -- energy subspace the
+    eigensolver is free to return any orthogonal mixture of the degenerate
+    states, and a mixture of different-spin states is not an S^2 eigenstate at
+    all. Its <S^2> is then a weighted average, and the multiplicity read from it
+    can be one no electron count admits.
+
+    Rotating WITHIN a degenerate subspace leaves every vector an eigenvector of
+    H with the same eigenvalue, so this changes no energy. What it changes is
+    which combination each root is -- and therefore its <S^2>, its multiplicity
+    label, and whether a target_spin filter picks it.
+
+    Returns ``(coeffs, s2, multiplicity, changed)``. ``changed`` is False when
+    every cluster was already spin-pure, in which case the vectors are returned
+    untouched rather than re-expressed in a numerically equivalent basis.
+    """
+    e = np.atleast_1d(np.asarray(energies, dtype=float))
+    vecs = _real_array(coeffs, "CI vectors")
+    if vecs.ndim == 1:
+        vecs = vecs[:, None]
+    dets = list(determinants)
+    out = np.array(vecs, dtype=float, copy=True)
+    changed = False
+
+    for cluster in degenerate_clusters(e, tol=tol):
+        if len(cluster) < 2:
+            continue
+        block = vecs[:, cluster]
+        mat = s2_matrix(block, dets, norb, nelec)
+        # Already diagonal to solver precision: leave the vectors alone rather
+        # than rotate them by an arbitrary eigenvector convention.
+        off = mat - np.diag(np.diag(mat))
+        if np.max(np.abs(off)) <= 1.0e-8:
+            continue
+        vals, vecs_sub = _symmetric_eigh(mat)
+        # Deterministic order inside the cluster: ascending S^2. The previous
+        # order was whatever the eigensolver happened to produce, so there is
+        # nothing to preserve, and a stable rule keeps references reproducible.
+        order = np.argsort(vals, kind="stable")
+        rotated = block @ vecs_sub[:, order]
+        # A rotated eigenvector's sign is arbitrary, so pin it with the SAME
+        # convention every other CI vector carries -- canonicalize_ci_phase,
+        # which canonical_phase() in fci_driver.F90 mirrors. Rolling a local
+        # "largest coefficient positive" here would disagree with it exactly
+        # where it matters: ties are the rule in a symmetric molecule, and a
+        # degenerate cluster is where symmetry-equivalent determinants carry
+        # equal weight, so the tie-break is what decides the sign.
+        canonicalize_ci_phase(rotated)
+        out[:, cluster] = rotated
+        changed = True
+
+    # Relabel through the shared diagnostics so the engine's fast <S^2> path is
+    # used where it is available; the Python reference is O(ndet * norb^2) per
+    # root and this runs on every root, not just the rotated ones.
+    s2, multiplicity = fci_spin_diagnostics(out, dets, norb, nelec)
+    return out, s2, multiplicity, changed
 
 
 def _lib_spin_square(coeffs, dets, norb, nelec):
@@ -458,6 +675,124 @@ def fci_spin_diagnostics(
         multiplicity,
         dtype=np.int64,
     )
+
+
+#: How far <S^2> may sit from the nearest S(S+1) before the multiplicity label
+#: derived from it stops being trustworthy.  A converged spin eigenstate lands
+#: on S(S+1) to solver precision; a mixture of two spin states in a degenerate
+#: subspace is off by O(1), so anything in between is generous.
+SPIN_LABEL_TOLERANCE = 1.0e-2
+
+
+class SpinLabelAmbiguityError(RuntimeError):
+    """A CI root's <S^2> is not that of any spin eigenstate.
+
+    Deliberately NOT a ValueError: the target_spin call sites retry with more
+    roots when the filter raises ValueError, and for a mixed root whose full
+    degenerate manifold is already inside the window purification has run and
+    failed, so more roots cannot help.  The ONE case where widening does help
+    -- the window boundary cut a degenerate manifold, so purification saw a
+    truncated cluster -- is recognized at the call site by the mixed root
+    lying at the window's edge, and retried there explicitly.
+    """
+
+
+def _total_electrons(nelec) -> int:
+    if isinstance(nelec, (tuple, list, np.ndarray)):
+        return int(sum(int(x) for x in nelec))
+    return int(nelec)
+
+
+def spin_label_diagnosis(s2, multiplicity, nelec, tol: float = SPIN_LABEL_TOLERANCE,
+                         variance=None,
+                         var_tol: float = SPIN_VARIANCE_TOLERANCE):
+    """Roots whose multiplicity label cannot be trusted, as (root, s2, mult, why).
+
+    The label comes from rounding ``sqrt(1 + 4*<S^2>)``, which identifies the
+    spin only when the eigenvector IS an S^2 eigenstate.  Inside a degenerate --
+    or numerically near-degenerate -- energy subspace the eigensolver may return
+    an arbitrary orthogonal mixture of the degenerate states, and a mixture of
+    different-spin states is not an S^2 eigenstate at all.  Two things then give
+    it away:
+
+    * the implied <S^2> does not match S(S+1) for the rounded label, and
+    * the label can be impossible for the electron count -- an open-shell
+      two-electron Ms=0 determinant has <S^2> = 1, so the formula reports
+      sqrt(5) = 2.236 -> a "doublet", which two electrons cannot form.
+    """
+    s2 = np.atleast_1d(np.asarray(s2, dtype=float))
+    mult = np.atleast_1d(np.asarray(multiplicity, dtype=np.int64))
+    var = None if variance is None else np.atleast_1d(np.asarray(variance, dtype=float))
+    total = _total_electrons(nelec)
+    problems = []
+    for root in range(s2.size):
+        m = int(mult[root])
+        value = float(s2[root])
+        spin = 0.5 * (m - 1)
+        pure = spin * (spin + 1.0)
+        v = None if var is None or root >= var.size else float(var[root])
+        if v is not None and not np.isfinite(v):
+            v = None      # not computed for this root; see spin_variance_for_clusters
+        if m > total + 1:
+            problems.append((root, value, m,
+                             f"multiplicity {m} exceeds the maximum {total + 1} "
+                             f"for {total} electrons"))
+        elif (m % 2) != ((total + 1) % 2):
+            problems.append((root, value, m,
+                             f"multiplicity {m} has the wrong parity for "
+                             f"{total} electrons (allowed: "
+                             f"{'odd' if (total + 1) % 2 else 'even'})"))
+        elif v is not None and v > var_tol:
+            problems.append((root, value, m,
+                             f"the state is not an S^2 eigenstate: "
+                             f"<S^4> - <S^2>^2 = {v:.3e}, which is a mixture of "
+                             f"at least two spins even though <S^2> = {value:.6f} "
+                             f"reads as multiplicity {m}"))
+        elif abs(value - pure) > tol:
+            problems.append((root, value, m,
+                             f"<S^2> = {value:.6f} is {abs(value - pure):.2e} "
+                             f"away from S(S+1) = {pure:.6f} for multiplicity {m}"))
+    return problems
+
+
+def _impossible_multiplicity(multiplicity: int, nelec) -> str:
+    """Why ``multiplicity`` cannot occur for this electron count, or ``''``.
+
+    Parity and magnitude are fixed by the electron count alone, so this is
+    decidable before any root is looked at.
+    """
+    total = _total_electrons(nelec)
+    if multiplicity > total + 1:
+        return (f"multiplicity {multiplicity} exceeds the maximum {total + 1} "
+                f"for {total} electrons")
+    if (multiplicity % 2) != ((total + 1) % 2):
+        return (f"multiplicity {multiplicity} has the wrong parity for "
+                f"{total} electrons (allowed: "
+                f"{'odd' if (total + 1) % 2 else 'even'})")
+    return ""
+
+
+def _format_spin_problems(problems, ci_label: str) -> str:
+    detail = "; ".join(f"root {root}: {why}" for root, _s2, _m, why in problems)
+    return (
+        f"{ci_label} spin labels are unreliable for {len(problems)} root(s): "
+        f"{detail}. The multiplicity is read from <S^2>, which identifies the "
+        f"spin only for an S^2 eigenstate; within a degenerate energy subspace "
+        f"the solver may return a spin-mixed combination. Reported energies are "
+        f"then the energies of mixtures, not of spin-pure states."
+    )
+
+
+def warn_unreliable_spin_labels(s2, multiplicity, nelec, *, ci_label: str,
+                                tol: float = SPIN_LABEL_TOLERANCE,
+                                variance=None) -> list:
+    """Emit a warning for any root whose spin label cannot be trusted."""
+    problems = spin_label_diagnosis(s2, multiplicity, nelec, tol=tol,
+                                    variance=variance)
+    if problems:
+        warnings.warn(_format_spin_problems(problems, ci_label), RuntimeWarning,
+                      stacklevel=2)
+    return problems
 
 
 def _target_spin_multiplicity(target_spin: str) -> int | None:
@@ -576,6 +911,46 @@ def _state_average_integer_vector(values, label: str) -> np.ndarray:
     return np.ascontiguousarray(raw, dtype=np.int64)
 
 
+def _spin_problems_can_decide_selection(
+    problems,
+    keep: np.ndarray,
+    energies: np.ndarray,
+    target_multiplicity: int,
+    requested_nroot: int,
+    nelec,
+    *,
+    degeneracy_tol: float = 1.0e-8,
+) -> bool:
+    """Whether an unreliable spin label could change the target-spin answer.
+
+    A mislabelled root is harmless when it cannot enter or displace the
+    selection: the selection takes the ``requested_nroot`` lowest roots whose
+    label matches the target, so a mixed root strictly above that energy
+    window, carrying a non-target label, decides nothing.  It does matter when
+
+    * the target multiplicity is achievable for the electron count AND
+    * its own label claims the target multiplicity (it may be selected), or
+      there are not enough matching labels anyway (the missing roots may be
+      hiding inside the mixtures), or it lies at or below the energy of the
+      last selected root (the true ordering may differ).
+    """
+    total = _total_electrons(nelec)
+    achievable = (target_multiplicity <= total + 1
+                  and (target_multiplicity % 2) == ((total + 1) % 2))
+    if not achievable:
+        return False
+    if keep.size < requested_nroot:
+        return True
+    cutoff = float(energies[keep[requested_nroot - 1]])
+    scale = max(1.0, abs(cutoff))
+    for root, _s2_value, label, _why in problems:
+        if int(label) == int(target_multiplicity):
+            return True
+        if float(energies[int(root)]) <= cutoff + degeneracy_tol * scale:
+            return True
+    return False
+
+
 def _filter_roots_by_target_spin(
     energies: np.ndarray,
     coeffs: np.ndarray,
@@ -586,14 +961,40 @@ def _filter_roots_by_target_spin(
     requested_nroot: int,
     ci_label: str,
     ci_section: str,
+    nelec=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return root arrays filtered to the requested spin multiplicity."""
+    """Return root arrays filtered to the requested spin multiplicity.
+
+    When ``nelec`` is supplied the labels are checked before they are used to
+    select anything: filtering on a label that is not a spin eigenvalue picks
+    the wrong root, or reports none, without saying so.  Warn either way;
+    refuse only when a label is actually about to decide the answer.
+    """
     target_multiplicity = _target_spin_multiplicity(target_spin)
     root_indices = np.arange(np.asarray(energies).shape[0], dtype=np.int64)
+    problems = []
+    if nelec is not None:
+        problems = warn_unreliable_spin_labels(
+            s2, multiplicity, nelec, ci_label=ci_label)
     if target_multiplicity is None:
         return energies, coeffs, s2, multiplicity, root_indices
 
+    # A target the electron count cannot form is answered as unsatisfiable
+    # rather than as bad labels -- two electrons have no quintet -- by
+    # _spin_problems_can_decide_selection declining to refuse for an
+    # unachievable target, which lets the "no matching roots" error below
+    # speak.
     keep = np.flatnonzero(np.asarray(multiplicity, dtype=np.int64) == target_multiplicity)
+    if problems and _spin_problems_can_decide_selection(
+            problems, keep, np.asarray(energies, dtype=float),
+            target_multiplicity, int(requested_nroot), nelec):
+        raise SpinLabelAmbiguityError(
+            _format_spin_problems(problems, ci_label)
+            + f" Refusing to apply {ci_section} target_spin={target_spin} "
+              "to labels that are not spin eigenvalues; run with "
+              "target_spin=any and select the root yourself, or lift the "
+              "degeneracy."
+        )
     if keep.size == 0:
         raise ValueError(
             f"{ci_label} target_spin={target_spin} found no matching roots among "
@@ -612,7 +1013,6 @@ def _filter_roots_by_target_spin(
         np.asarray(multiplicity)[keep],
         root_indices[keep],
     )
-
 
 def _electron_count_component(value, label: str) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
@@ -1592,6 +1992,61 @@ def resolve_ci_solve(
     )
 
 
+#: Relative window that decides which amplitudes count as "the largest" when
+#: :func:`canonicalize_ci_phase` picks the amplitude whose sign it fixes.
+#: Symmetry-equivalent determinants carry mathematically equal weights that a
+#: floating-point solve reproduces only to ~1e-14 relative, so an exact
+#: ``argmax`` over ``|c|`` would let round-off elect a different representative
+#: -- and therefore a different sign -- from one run to the next, which is the
+#: whole freedom this convention exists to remove.  Mirrored by
+#: ``FCI_PHASE_TIE_RTOL`` in ``source/modules/fci_driver.F90``.
+_CI_PHASE_TIE_RTOL = 1.0e-8
+
+
+def canonicalize_ci_phase(civecs: np.ndarray) -> np.ndarray:
+    """Fix the arbitrary overall sign of each CI vector, in place.
+
+    An eigenvector is determined only up to ``|Psi> -> -|Psi>``, and which of
+    the two a diagonalization hands back is not a property of the calculation:
+    it follows the Davidson start vector, the LAPACK implementation, and the
+    order the OpenMP reductions happen to accumulate in.  H4_MCQDPT2 returned
+    ``+6.085296e-03`` for the same Heff off-diagonal on one and two threads of
+    one build and ``-6.085296e-03`` on four, with the energies identical to
+    1e-10.  Everything LINEAR in the CI vector inherits that freedom; the
+    multistate CASPT2 effective Hamiltonian, whose off-diagonal carries the
+    product of two root phases, is where it surfaced -- as a 2 x 6.085e-03
+    Hartree "regression" on a calculation that had not moved.
+
+    Convention: the amplitude of largest magnitude is positive.  Ties -- the
+    rule rather than the exception in a symmetric molecule, where
+    symmetry-equivalent determinants carry equal weight -- go to the lowest
+    determinant index, selected within :data:`_CI_PHASE_TIE_RTOL` so that
+    round-off between two mathematically equal amplitudes cannot elect a
+    different representative from one run to the next.  ``canonical_phase()``
+    in ``source/modules/fci_driver.F90`` applies the identical rule to the
+    vectors the native engine returns, and
+    ``tests/test_fci_solve.py::test_native_solve_matches_python_driver`` pins
+    the two together by requiring a SIGNED overlap of +1.
+
+    ``civecs`` is ``(ndet, nroot)``.  The convention is idempotent, so applying
+    it to already-canonical vectors is a no-op.
+    """
+    vecs = np.asarray(civecs)
+    if vecs.ndim != 2 or vecs.size == 0:
+        return civecs
+    if not vecs.flags.writeable:
+        vecs = vecs.copy()
+    magnitudes = np.abs(vecs)
+    # A wholly zero column falls out of the same expression: its window admits
+    # every row, the leading amplitude is 0, and 0 is not negative.
+    window = magnitudes.max(axis=0) * (1.0 - _CI_PHASE_TIE_RTOL)
+    lead = np.argmax(magnitudes >= window, axis=0)
+    flip = vecs[lead, np.arange(vecs.shape[1])] < 0.0
+    if flip.any():
+        vecs[:, flip] *= -1.0
+    return vecs
+
+
 def solve_fci(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -1749,6 +2204,7 @@ def solve_fci(
                         requested_nroot=nroot,
                         ci_label="FCI",
                         ci_section=ci_section,
+                        nelec=(nalpha, nbeta),
                     )
                     break
                 except ValueError:
@@ -1822,6 +2278,7 @@ def solve_fci(
                         requested_nroot=nroot,
                         ci_label="FCI",
                         ci_section=ci_section,
+                        nelec=(nalpha, nbeta),
                     )
                 )
                 break
@@ -1830,7 +2287,7 @@ def solve_fci(
                     raise
                 solve_nroot = min(ndet, max(solve_nroot + 1, 2 * solve_nroot))
 
-    return selected_eigvals + ecore, selected_eigvecs
+    return selected_eigvals + ecore, canonicalize_ci_phase(selected_eigvecs)
 
 
 def _unpack_lower_triangle(packed: np.ndarray, n: int) -> np.ndarray:
@@ -2052,6 +2509,8 @@ def _settings_from_config(config: dict) -> FCISettings:
         ),
         save_rdm=_bool_setting(raw.get("save_rdm", False), "fci.save_rdm"),
         target_spin=_target_spin_setting(raw.get("target_spin", "any"), "fci.target_spin"),
+        target_irrep=str(raw.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(raw.get("irrep_min_purity", 0.5)),
     )
     return _validate_ci_settings(settings, ci_section="fci")
 
@@ -2175,6 +2634,8 @@ def settings_from_casci_config(config: dict) -> FCISettings:
         ),
         orbital_file=_string_setting(cas.get("orbital_file", ""), "cas.orbital_file"),
         target_spin=_target_spin_setting(ci.get("target_spin", "any"), "ci.target_spin"),
+        target_irrep=str(ci.get("irrep", "any")).strip() or "any",
+        irrep_min_purity=float(ci.get("irrep_min_purity", 0.5)),
     )
     if settings.orbital_source == "json" and not settings.orbital_file:
         raise ValueError("cas.orbital_file is required when cas.orbital_source=json")
@@ -2505,8 +2966,20 @@ def _active_space(
 _FCI_IOPT = (
     "norb", "nact", "ncore", "nalpha", "nbeta", "nroot", "solver", "maxiter",
     "subspace", "mult", "maxmemory", "nthreads", "want_s2", "guess",
+    # Correlated-state irrep selection.  0 = any, which is what a caller that
+    # never heard of this leaves in the slot, so the native root selection is
+    # byte-identical without it.  When it is non-zero the per-irrep and
+    # per-active-orbital XOR codes ride in the tail of the same array.
+    "irrep", "nirrep",
 )
-_FCI_DOPT = ("ecore", "eig_tol", "cutoff")
+_FCI_DOPT = ("ecore", "eig_tol", "cutoff", "min_purity")
+#: The lengths the RELEASED ``fci_solve`` reads, mirroring FCI_NIOPT_V1 /
+#: FCI_NDOPT_V1 in fci_driver.F90 and include/oqp.h.  Everything added after
+#: v1.3.x is reached through ``fci_solve_ex``, which is told how much the
+#: caller allocated; a binary built against the v1.3.1 header allocates only
+#: this much, so the old symbol must never read past it.
+_FCI_NIOPT_V1 = 14
+_FCI_NDOPT_V1 = 3
 _FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}
 _FCI_DOPT_INDEX = {name: i for i, name in enumerate(_FCI_DOPT)}
 _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
@@ -2515,13 +2988,87 @@ _FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
 _FCI_MAX_NSPIN = 62
 
 
+class IrrepSelectionUnavailable(RuntimeError):
+    """An irrep was requested but the symmetry data to honour it is missing."""
+
+
+def resolve_irrep_selection(mol, plan, target_irrep, min_purity=0.5):
+    """Resolve ``[ci] irrep`` into the tables the native selector needs.
+
+    Returns ``None`` when no irrep was requested. Otherwise returns
+    ``(index, xor_codes, active_orbital_codes, min_purity)`` where the codes are
+    the bitmask encoding ``Molecule.stage_mo_irreps`` writes, so the direct
+    product of orbital irreps is a bitwise XOR.
+
+    Raises rather than falling back: silently ignoring a symmetry request would
+    return roots of the wrong symmetry with no diagnostic, which is the failure
+    this is meant to prevent.
+    """
+    name = str(target_irrep or "any").strip()
+    if not name or name.lower() == "any":
+        return None
+
+    meta = (getattr(mol, "symmetry_metadata", None) or {}).get("mo_irreps") or {}
+    if meta.get("status") != "active":
+        raise IrrepSelectionUnavailable(
+            f"[ci] irrep={name} needs MO irrep labels, which are not available "
+            f"(mo_irreps status: {meta.get('status', 'not staged')}). Enable "
+            "[symmetry] and use a geometry whose point group is detected."
+        )
+
+    irreps = list(meta.get("irreps") or ())
+    lowered = {str(n).strip().lower(): i + 1 for i, n in enumerate(irreps)}
+    index = lowered.get(name.lower())
+    if index is None:
+        raise ValueError(
+            f"[ci] irrep={name} is not an irrep of the detected point group; "
+            f"available: {', '.join(irreps)}"
+        )
+
+    xor_codes = [int(c) for c in (meta.get("xor_codes") or ())]
+    if len(xor_codes) != len(irreps):
+        raise IrrepSelectionUnavailable(
+            "staged irrep table is inconsistent with its XOR codes")
+
+    try:
+        mo_index = np.asarray(mol.data["OQP::sym_mo_irrep_a"], dtype=int).ravel()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise IrrepSelectionUnavailable(
+            "OQP::sym_mo_irrep_a is not staged; cannot classify determinants"
+        ) from exc
+
+    codes = [0] + xor_codes                     # slot 0 = unclassified
+    orb_codes = []
+    for p in plan.active:
+        p = int(p)
+        if p < 0 or p >= mo_index.size:
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} is outside the staged MO irrep table")
+        idx = int(mo_index[p])
+        if idx <= 0:
+            # An unclassified orbital would be given code 0, which is also the
+            # totally symmetric code -- every determinant containing it would
+            # be mislabelled rather than declined.
+            raise IrrepSelectionUnavailable(
+                f"active orbital {p} has no irrep label (the SCF returned a "
+                "mixed or near-degenerate orbital), so determinant irreps "
+                "cannot be assigned; run without [ci] irrep")
+        orb_codes.append(codes[idx])
+
+    return (index, tuple(xor_codes), tuple(orb_codes), float(min_purity))
+
+
 def _fci_solve_backend():
     """liboqp ``(lib, ffi)`` for the one-call CI driver, or ``None``."""
     backend = _lib_backend()
     if backend is None:
         return None
     lib, ffi = backend
-    if not hasattr(lib, "fci_solve"):
+    # fci_solve_ex is what the driver calls: it is the length-negotiated entry
+    # point, and the only one that reports root provenance.  A library old
+    # enough to lack it is treated as no backend at all, which is the existing
+    # "engine declined" path into the Python driver.
+    if not hasattr(lib, "fci_solve_ex"):
         return None
     return lib, ffi
 
@@ -2549,7 +3096,16 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
         return None
 
-    iopt = np.zeros(len(_FCI_IOPT), dtype=np.int32)
+    # An irrep request rides in plan.metadata: it is resolved once at the
+    # driver, where the Molecule (and therefore the staged symmetry tables) is
+    # in scope, rather than threaded through every solver signature.
+    irrep = (plan.metadata or {}).get("irrep")
+    tail = 0
+    if irrep is not None:
+        _idx, _xor, _orb, _pure = irrep
+        tail = len(_xor) + len(_orb)
+
+    iopt = np.zeros(len(_FCI_IOPT) + tail, dtype=np.int32)
     iopt[_FCI_IOPT_INDEX["norb"]] = plan.norb
     iopt[_FCI_IOPT_INDEX["nact"]] = nact
     iopt[_FCI_IOPT_INDEX["ncore"]] = plan.ncore
@@ -2565,10 +3121,19 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     iopt[_FCI_IOPT_INDEX["nthreads"]] = nthreads
     iopt[_FCI_IOPT_INDEX["want_s2"]] = 1 if want_s2 else 0
 
+    if irrep is not None:
+        iopt[_FCI_IOPT_INDEX["irrep"]] = _idx
+        iopt[_FCI_IOPT_INDEX["nirrep"]] = len(_xor)
+        base = len(_FCI_IOPT)
+        iopt[base:base + len(_xor)] = np.asarray(_xor, dtype=np.int32)
+        iopt[base + len(_xor):] = np.asarray(_orb, dtype=np.int32)
+
     dopt = np.zeros(len(_FCI_DOPT), dtype=np.float64)
     dopt[_FCI_DOPT_INDEX["ecore"]] = spec.ecore
     dopt[_FCI_DOPT_INDEX["eig_tol"]] = spec.eig_tol
     dopt[_FCI_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+    if irrep is not None:
+        dopt[_FCI_DOPT_INDEX["min_purity"]] = _pure
 
     active = np.ascontiguousarray(plan.active, dtype=np.int32)
     # cffi will not cast an empty buffer; the engine reads none of it anyway
@@ -2581,7 +3146,11 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
     civecs = np.zeros((ndet, spec.nroot), dtype=np.float64)
     s2 = np.zeros(spec.nroot, dtype=np.float64)
 
-    status = int(lib.fci_solve(
+    roots = np.zeros(spec.nroot, dtype=np.int32)
+
+    status = int(lib.fci_solve_ex(
+        np.int32(iopt.size),
+        np.int32(dopt.size),
         ffi.cast("int32_t *", iopt.ctypes.data),
         ffi.cast("double *", dopt.ctypes.data),
         ffi.cast("int32_t *", active.ctypes.data),
@@ -2590,10 +3159,15 @@ def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
         ffi.cast("double *", vv.ctypes.data),
         ffi.cast("double *", energies.ctypes.data),
         ffi.cast("double *", civecs.ctypes.data),
-        ffi.cast("double *", s2.ctypes.data)))
+        ffi.cast("double *", s2.ctypes.data),
+        ffi.cast("int32_t *", roots.ctypes.data)))
     if status < 0:
         return None
-    return energies, civecs, (s2 if want_s2 else None)
+    # No canonicalize_ci_phase() here: fci_driver.F90 applies the convention on
+    # its own copy-out, and repeating it in Python would hide a regression on
+    # the Fortran side from the very test that checks for one.
+    return (energies, civecs, (s2 if want_s2 else None),
+            np.ascontiguousarray(roots, dtype=np.int64))
 
 
 def solve_active_ci(
@@ -2609,6 +3183,7 @@ def solve_active_ci(
     integral_cutoff: float = 0.0,
     active_section: str = "[fci]",
     ci_section: str = "[fci]",
+    want_roots: bool = False,
 ):
     """One complete CI solve from the FULL MO integrals.
 
@@ -2623,7 +3198,11 @@ def solve_active_ci(
     indices *within the unfiltered window*, which is a reporting concern rather
     than a compute one.
 
-    Returns ``(energies, civecs, s2 | None)``.
+    Returns ``(energies, civecs, s2 | None)``, or, with ``want_roots``, a
+    fourth element: each returned root's 0-based index among the roots the
+    solve computed, or ``None`` when this path cannot know it.  An irrep filter
+    runs inside the engine, so without that the caller would have to invent
+    ``0, 1, 2, ...`` -- and publish a B1 root that is really state 1 as root 0.
     """
     spec = resolve_ci_solve(
         plan.nact,
@@ -2651,30 +3230,69 @@ def solve_active_ci(
         use_target_spin=use_target_spin,
     )
     if native is not None:
-        return native
+        energies, coeffs, s2, roots = native
+        active_nelec = (spec.nalpha, spec.nbeta)
+    else:
+        # The Python driver has no irrep classification, so honouring an irrep
+        # request here is impossible.  Refuse rather than silently return the
+        # lowest roots of any symmetry: the two paths disagreeing about which
+        # root a run returns is worse than not offering the feature on the
+        # fallback.
+        if (plan.metadata or {}).get("irrep") is not None:
+            raise IrrepSelectionUnavailable(
+                "[ci] irrep selection requires the native CI engine, which "
+                "declined this solve (missing symbol, active space wider than a "
+                "64-bit determinant key, allocation failure, or no root of that "
+                "irrep). Re-run without [ci] irrep to use the Python driver."
+            )
 
-    h_act, eri_act, active_nelec, ecore_act = apply_active_space(
-        h1e, eri, plan, ecore)
-    energies, coeffs = solve_fci(
-        h_act, eri_act, active_nelec,
-        ecore=ecore_act,
-        nroot=spec.nroot,
-        max_det=spec.max_det,
-        max_memory=spec.max_memory,
-        eig_tol=spec.eig_tol,
-        integral_cutoff=spec.integral_cutoff,
-        solver=settings.solver,
-        davidson_maxiter=spec.davidson_maxiter,
-        davidson_subspace=spec.davidson_subspace,
-        target_spin=spec.target_spin,
-        active_section=active_section,
-        ci_section=ci_section,
-    )
-    s2 = None
-    if want_s2:
+        h_act, eri_act, active_nelec, ecore_act = apply_active_space(
+            h1e, eri, plan, ecore)
+        energies, coeffs = solve_fci(
+            h_act, eri_act, active_nelec,
+            ecore=ecore_act,
+            nroot=spec.nroot,
+            max_det=spec.max_det,
+            max_memory=spec.max_memory,
+            eig_tol=spec.eig_tol,
+            integral_cutoff=spec.integral_cutoff,
+            solver=settings.solver,
+            davidson_maxiter=spec.davidson_maxiter,
+            davidson_subspace=spec.davidson_subspace,
+            target_spin=spec.target_spin,
+            active_section=active_section,
+            ci_section=ci_section,
+        )
+        s2 = None
+        # The Python driver returns the lowest roots of the window it solved,
+        # so the identity map is the truth here -- EXCEPT when it did its own
+        # spin filtering, where it drops the indices it selected on.  Say so
+        # rather than hand back a plausible-looking lie.
+        roots = (None if use_target_spin
+                 else np.arange(len(energies), dtype=np.int64))
+
+    # Both engines converge here, so this is the one place a spin-mixed
+    # degenerate subspace can be resolved once and have the native and Python
+    # paths agree by construction rather than by keeping two implementations in
+    # step.  The native civecs are in the same determinant order _determinants
+    # produces (pinned by tests/test_fci_solve.py), so one purification serves
+    # both.  Skipped entirely when no two roots are degenerate, which is the
+    # common case and costs one pass over the energies.
+    dets_active = None
+    if any(len(c) > 1 for c in degenerate_clusters(energies)):
+        dets_active = _determinants(plan.nact, active_nelec)
+        coeffs, purified_s2, _mult, changed = spin_purify_degenerate_clusters(
+            energies, coeffs, dets_active, plan.nact, active_nelec)
+        if changed:
+            s2 = purified_s2 if want_s2 else None
+    if want_s2 and s2 is None:
+        if dets_active is None:
+            dets_active = _determinants(plan.nact, active_nelec)
         s2, _multiplicity = fci_spin_diagnostics(
-            coeffs, _determinants(plan.nact, active_nelec), plan.nact, active_nelec)
-    return energies, coeffs, s2
+            coeffs, dets_active, plan.nact, active_nelec)
+    if not want_roots:
+        return energies, coeffs, (s2 if want_s2 else None)
+    return energies, coeffs, (s2 if want_s2 else None), roots
 
 
 class FCI:
@@ -2725,7 +3343,7 @@ class FCI:
             # The spin filter stays here rather than in the engine: the root
             # indices reported below are positions in the UNFILTERED window, so
             # this is a reporting concern, not part of the compute path.
-            window_energies, window_coeffs, window_s2 = solve_active_ci(
+            window_energies, window_coeffs, window_s2, window_roots = solve_active_ci(
                 h1e_mo,
                 eri_mo,
                 plan,
@@ -2737,21 +3355,48 @@ class FCI:
                 integral_cutoff=self.settings.integral_cutoff,
                 active_section=self.active_section,
                 ci_section=self.ci_section,
+                want_roots=True,
             )
             window_multiplicity = np.maximum(
                 np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * window_s2))).astype(np.int64),
                 1,
             )
+            if window_roots is None:
+                window_roots = np.arange(len(window_energies), dtype=np.int64)
             return (window_energies, window_coeffs, _as_f64c(window_s2),
-                    np.ascontiguousarray(window_multiplicity, dtype=np.int64))
+                    np.ascontiguousarray(window_multiplicity, dtype=np.int64),
+                    np.ascontiguousarray(window_roots, dtype=np.int64))
 
         if target_multiplicity is None:
-            energies, coeffs, s2, multiplicity = solve_and_diagnose(self.settings.nroot)
-            root_indices = np.arange(len(energies), dtype=np.int64)
+            energies, coeffs, s2, multiplicity, root_indices = solve_and_diagnose(
+                self.settings.nroot)
+            # target_spin=any skips the filter, so nothing else would look at
+            # these labels -- but they are still reported, and a label that is
+            # not a spin eigenvalue must not be reported silently.  <S^2> alone
+            # cannot establish that: it is an average, and a mixture reproduces
+            # the average of a state it contains none of.  The variance settles
+            # it, and is computed only inside degenerate clusters, where a
+            # mixture can actually arise.
+            warn_unreliable_spin_labels(
+                s2, multiplicity, nelec, ci_label=self.data_prefix,
+                variance=spin_variance_for_clusters(
+                    energies, coeffs,
+                    _determinants(plan.nact, nelec), plan.nact, nelec))
         else:
+            # Checked before the retry loop, not inside it: widening the window
+            # cannot conjure a multiplicity the electron count forbids, and the
+            # loop would grow to the full determinant space to find that out.
+            impossible = _impossible_multiplicity(target_multiplicity, nelec)
+            if impossible:
+                raise ValueError(
+                    f"{self.data_prefix} {self.ci_section} "
+                    f"target_spin={self.settings.target_spin} is impossible "
+                    f"here: {impossible}."
+                )
             solve_nroot = min(determinant_count, max(1, int(self.settings.nroot)))
             while True:
-                energies, coeffs, s2, multiplicity = solve_and_diagnose(solve_nroot)
+                energies, coeffs, s2, multiplicity, window_roots = solve_and_diagnose(
+                    solve_nroot)
                 try:
                     energies, coeffs, s2, multiplicity, root_indices = _filter_roots_by_target_spin(
                         energies,
@@ -2762,8 +3407,31 @@ class FCI:
                         requested_nroot=self.settings.nroot,
                         ci_label=self.data_prefix,
                         ci_section=self.ci_section,
+                        nelec=nelec,
                     )
+                    # _filter_roots_by_target_spin reports positions inside the
+                    # window; map them back onto the solve's own root numbering,
+                    # which an irrep filter may already have made non-contiguous.
+                    root_indices = np.ascontiguousarray(
+                        np.asarray(window_roots, dtype=np.int64)[root_indices],
+                        dtype=np.int64)
                     break
+                except SpinLabelAmbiguityError:
+                    # A mixed root strictly inside the window means its whole
+                    # degenerate manifold was solved and purification still
+                    # failed -- more roots cannot help.  A mixed root AT the
+                    # window's edge means the window may have cut the manifold,
+                    # so purification saw a truncated cluster; widening closes
+                    # it.
+                    problems = spin_label_diagnosis(s2, multiplicity, nelec)
+                    at_edge = any(
+                        abs(float(energies[root]) - float(energies[-1]))
+                        <= DEGENERACY_TOLERANCE
+                        for root, _s2v, _m, _why in problems
+                    )
+                    if not at_edge or solve_nroot >= determinant_count:
+                        raise
+                    solve_nroot = min(determinant_count, max(solve_nroot + 1, 2 * solve_nroot))
                 except ValueError:
                     if solve_nroot >= determinant_count:
                         raise
@@ -3009,6 +3677,25 @@ class FCI:
         """Guard the dense AO ERI allocation (nbf**4 doubles) before building it."""
         check_ao_eri_budget(nbf, self.settings.max_memory, self.active_section)
 
+    def _stage_irrep_selection(self, plan):
+        """Resolve an ``[ci] irrep`` request onto ``plan.metadata``.
+
+        Done here, in the driver, because this is where the Molecule -- and so
+        the tables ``stage_mo_irreps`` wrote -- is in scope.  Riding in
+        ``plan.metadata`` keeps it out of every solver signature between here
+        and ``_lib_fci_solve``.
+
+        Inherited by CASCI, which builds its own plan from its own orbitals.
+        """
+        selection = resolve_irrep_selection(
+            self.mol, plan,
+            getattr(self.settings, "target_irrep", "any"),
+            getattr(self.settings, "irrep_min_purity", 0.5),
+        )
+        if selection is not None:
+            plan.metadata["irrep"] = selection
+        return selection
+
     def _native_mo_integrals(self):
         nbf = int(self.mol.data.get_basis()["nbf"])
         self._check_ao_eri_budget(nbf)
@@ -3028,6 +3715,7 @@ class FCI:
         # frozen-core fold now happen inside the native CI driver, so doing
         # them here would only be work thrown away.
         plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        self._stage_irrep_selection(plan)
         metadata = dict(plan.metadata)
         metadata["orbital_source"] = "rhf"
         return h1e, eri, plan, ecore, metadata

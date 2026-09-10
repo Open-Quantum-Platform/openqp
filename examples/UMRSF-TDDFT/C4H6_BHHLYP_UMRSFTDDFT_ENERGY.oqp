@@ -1,6 +1,2 @@
-umrsf(nstate=10)/bhhlyp/6-31g*
-energy(S0)
-guess(save_mol=false)
-scf(converger_type=diis,maxit=200)
-dftgrid(rad_npts=90,ang_npts=302)
+umrsf(nstate=10)/bhhlyp/6-31g* energy(S0) scf(maxit=200) dftgrid(rad_npts=90)
 geom="../geometries/C4H6-0a0dabfd2a8a.xyz"

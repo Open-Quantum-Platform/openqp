@@ -1,4 +1,2 @@
-tdhf(nstate=3)/6-31g*
-energy(S0)
-guess(type=huckel)
+tdhf(nstate=3)/6-31g* energy(S0)
 geom="../geometries/H2O-0381125c86f2.xyz"

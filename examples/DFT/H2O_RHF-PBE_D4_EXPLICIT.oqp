@@ -1,6 +1,3 @@
-rks/pbe/6-31g
-guess(type=huckel,save_mol=true)
-scf(maxit=30,maxdiis=7,diis_type=cdiis,conv=1e-06)
-dftgrid(rad_npts=96,ang_npts=302,pruned="")
+rks/pbe/6-31g guess(save_mol=true) dftgrid(pruned=none)
 d4(s6=1.0,s8=0.95948085,s9=1.0,a1=0.38574991,a2=4.80688534,alp=16.0)
 geom="../geometries/H2O-0381125c86f2.xyz"

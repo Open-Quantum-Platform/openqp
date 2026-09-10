@@ -1,1 +1,2 @@
-ccsd_t(reference=rohf)/sto-3g oh.xyz mult=2 energy() cc(nfzc=1)
+ccsd_t(reference=rohf)/sto-3g mult=2 cc(nfzc=1)
+geom="oh.xyz"

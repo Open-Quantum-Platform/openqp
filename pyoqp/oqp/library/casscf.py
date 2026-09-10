@@ -1260,7 +1260,17 @@ class CASSCF:
 
     def _canonicalize(self, coeff, hcore_ao, eri_ao, enuc, ncore, nact, active_nelec, settings):
         """Diagonalize the (inactive, active, virtual) blocks of the generalized
-        Fock so inactive/virtual carry orbital energies; active stays natural."""
+        Fock so inactive/virtual carry orbital energies; active stays natural.
+
+        The density is the ROOT-0 CI density with weight 1.0 even for
+        casscf.root>0 and for SA-CASSCF with any weights; the native driver
+        (casscf_driver.F90::canonicalize) mirrors that deliberately, and the two
+        must move together.  No energy depends on the choice, and OpenQP's own
+        PT2 does not inherit these orbitals -- it semicanonicalizes from the
+        density its H0 is defined against.  What the convention does decide is
+        what the published orbitals and orbital energies mean.  See
+        docs/casscf_orbital_conventions.md and issue #338.
+        """
         h1e, eri = _transform_integrals(hcore_ao, eri_ao, coeff)
         energies, coeffs, dets, D, G = _solve_active(
             h1e, eri, ncore, nact, active_nelec, enuc, settings,

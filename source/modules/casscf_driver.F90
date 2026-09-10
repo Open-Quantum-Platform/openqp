@@ -2347,6 +2347,11 @@ contains
   !>
   !> Note the density: the Python uses the ROOT-0 CI density with weight 1.0
   !> even for SA-CASSCF (`_solve_active(..., [1.0], [0])`), so this does too.
+  !> The two paths must move together or the default native converger and the
+  !> Python fallback would publish different orbitals.  No energy depends on
+  !> the choice and the PT2 modules semicanonicalize for themselves; it decides
+  !> only what the published orbitals mean.  Documented for users in
+  !> docs/casscf_orbital_conventions.md (issue #338).
   subroutine canonicalize(ctx, cbuf, status)
     type(cas_ctx_t), intent(inout) :: ctx
     real(dp), contiguous, intent(inout) :: cbuf(0:,0:)

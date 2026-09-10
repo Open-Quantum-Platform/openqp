@@ -1,1 +1,2 @@
-ccsd_t(reference=uhf)/sto-3g ch2.xyz mult=3 energy()
+ccsd_t/sto-3g mult=3
+geom="ch2.xyz"

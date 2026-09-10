@@ -104,6 +104,32 @@ class IntegralSymmetryInvalidationTests(unittest.TestCase):
         runner.run()
         return runner.mol
 
+    def test_clearing_absent_tags_does_not_create_fort_6(self):
+        """Missing optional tags are normal and must not reach Fortran unit 6."""
+        from oqp.pyoqp import Runner
+
+        case = os.path.join(self.workdir, 'sym_absent_silent')
+        os.makedirs(case, exist_ok=True)
+        path = os.path.join(case, 'sym_absent_silent.inp')
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write(INPUT.format(use='false'))
+
+        previous = os.getcwd()
+        try:
+            os.chdir(case)
+            runner = Runner(
+                project='sym_absent_silent', input_file=path,
+                log=os.path.join(case, 'sym_absent_silent.log'), usempi=False,
+            )
+            runner.mol.clear_integral_symmetry_state()
+        finally:
+            os.chdir(previous)
+
+        self.assertFalse(
+            os.path.exists(os.path.join(case, 'fort.6')),
+            'deleting absent optional symmetry tags created fort.6',
+        )
+
     def test_the_reduction_stages_its_tags_when_enabled(self):
         """Control. Without this the OFF assertion below proves nothing --
         every tag would be absent whether or not invalidation works."""

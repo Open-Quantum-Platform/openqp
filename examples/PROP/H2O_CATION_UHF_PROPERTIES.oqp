@@ -1,6 +1,2 @@
-uhf/6-31g*
-charge=1
-mult=2
-guess(type=huckel)
-properties(scf_prop="el_mom,mulliken,lowdin,resp")
+uhf/6-31g* charge=1 mult=2 properties(scf_prop="el_mom,mulliken,lowdin,resp")
 geom="../geometries/H2O-0381125c86f2.xyz"

@@ -83,6 +83,11 @@ class Molecule:
             self.log_path = os.path.dirname(os.path.abspath(__file__))
         self.energies = None
         self.grads = None
+        # False until a gradient kernel (native or Python) actually writes the
+        # native ``data._data.grad`` buffer.  The buffer is allocated but never
+        # zeroed, so reading it after a runtype that computes no gradient
+        # returns uninitialised memory; see get_results().
+        self._grad_valid = False
         self.dcm = []  # Nstate, Nstate
         self.nac = []  # Npairs, 3, Natom,
         self.soc = []  # Npairs, 1,
@@ -110,6 +115,8 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
+            'OQP::td_xpy', 'OQP::td_xmy', 'OQP::td_z', 'OQP::td_p',
+            'OQP::td_trans_density_mo', 'OQP::td_trans_dipole', 'OQP::td_dip_ao',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
             'OQP::hf_hessian',
@@ -2040,6 +2047,37 @@ class Molecule:
         )
         view.setflags(write=True)
         view[:] = flat
+        self._grad_valid = True
+
+    def has_grad(self):
+        """True when the native gradient buffer holds a computed gradient.
+
+        ``data._data.grad`` is allocated once and never cleared, so "is there a
+        gradient?" cannot be answered from its contents: an energy-only run
+        leaves whatever the allocation happened to contain, which is sometimes
+        denormal noise and sometimes a plausible-looking number.  Track the
+        write instead.
+        """
+        return bool(getattr(self, '_grad_valid', False))
+
+    def invalidate_grad(self):
+        """Forget that any gradient in the native buffer belongs to this run.
+
+        The buffer itself is allocated once and never cleared, so a reused
+        Molecule -- the legacy ``OPENQP`` API runs several calculations through
+        one -- carries the previous run's derivatives in it.  ``Runner.run``
+        calls this at the start of every calculation so an energy-only run
+        after a gradient run does not republish them.
+        """
+        self._grad_valid = False
+
+    def mark_grad_valid(self):
+        """Record that a native kernel wrote the gradient buffer in place.
+
+        The Fortran kernels write ``data._data.grad`` directly, so they cannot
+        go through ``set_grad``; their Python caller declares the write here.
+        """
+        self._grad_valid = True
 
     def get_nac(self):
         """
@@ -2291,6 +2329,46 @@ class Molecule:
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
+        # Multi-root wavefunction results.  The correlated drivers publish
+        # every root and its decomposition into OQP:: tags, but only the
+        # lowest scalar reached the public payload, so a committed MS/XMS
+        # reference covered one mixed root and nothing compared the others.
+        # The CI drivers' <S^2> is published for the same reason: in a
+        # degenerate cluster the energies of a singlet and a triplet are equal
+        # to solver precision, so an energy-only reference cannot tell which
+        # one a target_spin request actually selected.
+        for key, tag in (
+                ('casscf_energies', 'OQP::CASSCF_ENERGIES'),
+                ('caspt2_energies', 'OQP::CASPT2_ENERGIES'),
+                ('caspt2_reference_energies', 'OQP::CASPT2_REFERENCE_ENERGIES'),
+                ('caspt2_ss_energies', 'OQP::CASPT2_SS_ENERGIES'),
+                ('caspt2_state_specific_corrections',
+                 'OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS'),
+                ('fci_energies', 'OQP::FCI_ENERGIES'),
+                ('fci_s2', 'OQP::FCI_S2'),
+                ('casci_energies', 'OQP::CASCI_ENERGIES'),
+                ('casci_s2', 'OQP::CASCI_S2')):
+            try:
+                arr = np.asarray(self.data[tag], dtype=float).ravel()
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            if arr.size:
+                data[key] = arr.tolist()
+
+        # The multistate effective Hamiltonian is the object the MS/XMS mixing
+        # is read from; its eigenvalues are caspt2_energies, so comparing only
+        # those leaves the off-diagonal couplings untested.
+        try:
+            heff = np.asarray(self.data['OQP::CASPT2_EFFECTIVE_HAMILTONIAN'],
+                              dtype=float)
+            if heff.size:
+                nroot = int(round(heff.size ** 0.5))
+                if nroot * nroot == heff.size:
+                    data['caspt2_effective_hamiltonian'] = \
+                        heff.reshape((nroot, nroot)).tolist()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+
         # save NMR isotropic shielding if available (CGO or GIAO).
         # Flat atom-major array -> (natom, 5) in ppm; columns =
         # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].
@@ -2324,11 +2402,22 @@ class Molecule:
             except Exception:
                 pass
 
-        # save gradients if available
-        data['grad'] = np.array(self.get_grad()).tolist()
-        data['nac'] = np.array(self.get_nac()).tolist()
-        data['soc'] = np.array(self.get_soc()).tolist()
-        data['hess'] = np.array(self.get_hess()).tolist()
+        # Derivative results are emitted only when they were actually
+        # computed.  ``grad`` in particular used to be read unconditionally
+        # from the native buffer, which no kernel writes on an energy-only
+        # run: every such reference shipped uninitialised memory as a public
+        # numeric field -- denormal noise in most cases, but also values like
+        # 1.7e+243 and 2.18 that a consumer cannot tell from a real gradient.
+        # An absent key is the honest answer; ``nac``/``soc``/``hess`` follow
+        # the same rule rather than publishing an empty list.
+        if self.has_grad():
+            data['grad'] = np.array(self.get_grad()).tolist()
+        for _key, _value in (('nac', self.get_nac()),
+                             ('soc', self.get_soc()),
+                             ('hess', self.get_hess())):
+            _arr = np.array(_value)
+            if _arr.size:
+                data[_key] = _arr.tolist()
         data.update(self.get_mrsf_ekt_results())
 
         # Keep the programmatic API and the on-disk JSON on the same public
@@ -2461,6 +2550,8 @@ class Molecule:
         else:
             raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
 
+        self._quiet_orbitals_in_dynamics(parser)
+
         # Print configuration if not in silent mode
         if not self.silent:
             parser.print_config()
@@ -2488,6 +2579,34 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    @staticmethod
+    def _quiet_orbitals_in_dynamics(parser):
+        """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
+
+        A dynamics run calls the SCF at least once per step and the SCF prints
+        the whole MO coefficient table on every call, so the table is repeated
+        for every step of the trajectory: a 100-step QM/MM NAMD run of an
+        18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+        which the 101 lines that report the dynamics are impossible to find.
+        ``verbose = 0`` suppresses the table (``source/printing.F90``); an
+        explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
+        of any single frame remain available from the Molden file, the restart
+        record and the trajectory file, none of which this touches.
+
+        Runs on the parser before the configuration is echoed, so what is
+        printed is what the run will use.  ``QMMM_MD`` in config mode rewrites
+        ``runtype`` to ``energy`` before the molecule is built and therefore
+        applies the same default itself.
+        """
+        runtype = str(parser.get("input", "runtype", fallback="")).strip().lower()
+        if runtype not in ("md", "namd"):
+            return
+        # The parser is seeded with every schema default, so an option is
+        # always present; only the default value is overridden, and a deck
+        # asking for more detail (verbose >= 2) or already silent keeps it.
+        if str(parser.get("scf", "verbose", fallback="1")).strip() == "1":
+            parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control

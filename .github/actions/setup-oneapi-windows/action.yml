@@ -1,0 +1,58 @@
+name: Set up Intel oneAPI on Windows
+description: >-
+  Install (or restore from cache) the Intel oneAPI Fortran/C++ compilers and
+  MKL, then export the oneAPI + MSVC environment to $GITHUB_ENV.  GitHub's
+  hosted runners are fresh VMs, so the toolchain cannot be installed once and
+  kept; it is cached instead, and saved immediately after a successful install
+  so that a later build failure does not lose it.
+
+inputs:
+  url:
+    description: Unified oneAPI offline installer URL.
+    required: false
+    default: https://registrationcenter-download.intel.com/akdlm/IRC_NAS/4144bec3-82ce-4672-bd71-5c93a79cd5e7/intel-oneapi-toolkit-2026.1.0.191_offline.exe
+  components:
+    description: Colon-separated component list for the bootstrapper.
+    required: false
+    default: intel.oneapi.win.ifort-compiler:intel.oneapi.win.cpp-dpcpp-common:intel.oneapi.win.mkl.devel
+  cache-version:
+    description: Bump to invalidate the toolchain cache.
+    required: false
+    default: v1
+
+runs:
+  using: composite
+  steps:
+    - name: Restore oneAPI install from cache
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: C:\Program Files (x86)\Intel\oneAPI
+        key: oneapi-win-${{ inputs.url }}-${{ inputs.components }}-${{ inputs.cache-version }}
+
+    - name: Install Intel oneAPI
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: cmd
+      env:
+        ONEAPI_URL: ${{ inputs.url }}
+        ONEAPI_COMPONENTS: ${{ inputs.components }}
+      run: |
+        curl.exe -sSL --retry 5 --retry-delay 5 --output %RUNNER_TEMP%\oneapi.exe %ONEAPI_URL%
+        start /b /wait %RUNNER_TEMP%\oneapi.exe -s -x -f %RUNNER_TEMP%\oneapi_ex --log %RUNNER_TEMP%\extract.log
+        %RUNNER_TEMP%\oneapi_ex\bootstrapper.exe -s --action install --components=%ONEAPI_COMPONENTS% --eula=accept -p=NEED_VS2017_INTEGRATION=0 -p=NEED_VS2019_INTEGRATION=0 -p=NEED_VS2022_INTEGRATION=0 --log-dir=%RUNNER_TEMP%\oneapi_log
+        set rc=%ERRORLEVEL%
+        rd /s /q %RUNNER_TEMP%\oneapi_ex
+        exit /b %rc%
+
+    - name: Save oneAPI install to cache
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: C:\Program Files (x86)\Intel\oneAPI
+        key: oneapi-win-${{ inputs.url }}-${{ inputs.components }}-${{ inputs.cache-version }}
+
+    - name: Export oneAPI + MSVC environment
+      shell: cmd
+      run: |
+        call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" --force
+        set >> %GITHUB_ENV%

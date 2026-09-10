@@ -29,7 +29,7 @@ contains
     use parallel, only: par_env_t
     use iso_c_binding, only: c_char, c_null_char
     use mod_dft_molgrid, only: dft_grid_t
-    use dft, only: dft_initialize
+    use mod_dft, only: dft_initialize
     use sap_lut, only: sap_table_t
     use mod_dft_gridint_sap, only: sap_potential_matrix
 

@@ -85,6 +85,7 @@ from oqp.library.fci import (
     fci_spin_diagnostics,
     settings_from_casci_config,
     _symmetric_eigh,
+    canonicalize_ci_phase,
 )
 from oqp.library.casscf import CASSCF, _solve_active
 from oqp.utils.file_utils import print_module_banner
@@ -156,6 +157,23 @@ def _as_int_tuple(value):
     return tuple(int(v) for v in items if str(v).strip() != "")
 
 
+#: The PT2 methods that name their own zeroth-order Hamiltonian and
+#: contraction, rather than leaving them to `[pt2] h0` / `contraction`.
+#:
+#: NEVPT2 was the one member of the family without its own method name:
+#: MS-CASPT2, XMS-CASPT2, MRMP2, MCQDPT2 and XMCQDPT2 each have one, while
+#: NEVPT2 had to be spelled `method=caspt2` plus two options.  Two different
+#: theories then arrived at the gradient dispatch under one name, which is
+#: what made routing them a matter of inspecting options instead of reading
+#: the method.  The old spelling keeps working -- it is what every existing
+#: input says -- and is simply the same calculation.
+_METHOD_IMPLIED_PT2 = {
+    "nevpt2": ("dyall", "none"),
+    "sc-nevpt2": ("dyall", "strong"),
+    "scnevpt2": ("dyall", "strong"),
+}
+
+
 def _caspt2_options(config: dict) -> CASPT2Options:
     raw = config.get("pt2", {}) or {}
     reference = str(raw.get("reference", "casscf")).strip().lower()
@@ -183,25 +201,43 @@ def _caspt2_options(config: dict) -> CASPT2Options:
     else:
         raise ValueError("pt2.variant must be auto, caspt2, ms-caspt2, xms-caspt2, "
                          "mrmp2, mcqdpt2 or xmcqdpt2")
-    h0_raw = str(raw.get("h0", "fock")).strip().lower()
-    if h0_raw in {"fock", "caspt2", ""}:
+    implied_h0, implied_contraction = _METHOD_IMPLIED_PT2.get(method, (None, None))
+    h0_raw = str(raw.get("h0", "")).strip().lower()
+    if h0_raw in {"fock", "caspt2"}:
         h0 = "fock"
     elif h0_raw in {"dyall", "nevpt2", "nevpt"}:
         h0 = "dyall"
+    elif h0_raw == "":
+        h0 = implied_h0 or "fock"
     else:
         raise ValueError("pt2.h0 must be 'fock' (CASPT2) or 'dyall' (NEVPT2)")
+    if implied_h0 is not None and h0 != implied_h0:
+        # Contradiction, not a preference: `method=nevpt2` names the Dyall H0.
+        raise ValueError(
+            f"[input] method={method} is defined for h0='{implied_h0}', but "
+            f"[pt2] h0='{h0_raw}' was requested.  Drop [pt2] h0, or select the "
+            "method that matches it.")
     if family == "qdpt" and h0 != "fock":
         raise ValueError(
             "MRMP2/MCQDPT2/XMCQDPT2 are defined for the diagonal-Fock (MP-like) "
             "zeroth order only; drop [pt2] h0 or set h0=fock."
         )
-    contraction_raw = str(raw.get("contraction", "none")).strip().lower()
-    if contraction_raw in {"none", "uncontracted", "full", ""}:
+    contraction_raw = str(raw.get("contraction", "")).strip().lower()
+    if contraction_raw in {"none", "uncontracted", "full"}:
         contraction = "none"
     elif contraction_raw in {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}:
         contraction = "strong"
+    elif contraction_raw == "":
+        contraction = implied_contraction or "none"
     else:
         raise ValueError("pt2.contraction must be 'none' (uncontracted) or 'strong' (SC-NEVPT2)")
+    if implied_contraction is not None and contraction != implied_contraction:
+        raise ValueError(
+            f"[input] method={method} is the "
+            f"{'strongly contracted' if implied_contraction == 'strong' else 'uncontracted'}"
+            f" variant, but [pt2] contraction='{contraction_raw}' was requested."
+            "  Drop [pt2] contraction, or select the method that matches it "
+            "(nevpt2 = uncontracted, sc-nevpt2 = strongly contracted).")
     if contraction == "strong" and h0 != "dyall":
         raise ValueError(
             "pt2.contraction='strong' (SC-NEVPT2) requires h0='dyall'; "
@@ -1171,7 +1207,15 @@ def _xms_rotation(h1e, eri, D_sa, coeffs, dets, ncore, nact, norb, roots, det_in
         for j in range(nstate):
             fmodel[i, j] = refs[j] @ fi
     _w, R = np.linalg.eigh(0.5 * (fmodel + fmodel.T))
-    return R
+    # eigh fixes each rotated reference only up to a column sign, and that sign
+    # reaches Heff exactly as the CI-root phases do -- a rotated reference IS a
+    # linear combination of the roots, so an off-diagonal of the rotated Heff
+    # carries the product of two rotation-column signs.  Canonicalizing the CI
+    # vectors alone would therefore leave XMCQDPT2/XMS-CASPT2 free to flip
+    # where MCQDPT2/MS-CASPT2 no longer does; C2H4_XMCQDPT2_CCPVDZ is the
+    # shipped example that reported it (2 x 7.038e-02 Hartree).  The rotation
+    # columns are vectors over the model space, so the same convention applies.
+    return canonicalize_ci_phase(R)
 
 
 def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
@@ -1230,9 +1274,35 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     }
 
 
-# --------------------------------------------------------------------------- driver
-def native_caspt2_energy(mol, ref_energy=None):
-    """CASPT2 / MS-CASPT2 / XMS-CASPT2 energy (uncontracted Dyall H0)."""
+# --------------------------------------------------------------------------- shared setup
+@dataclass
+class CASPT2Setup:
+    """Everything the CASPT2 energy and the CASPT2 gradient need before the
+    perturbation itself starts.
+
+    Extracted from :func:`native_caspt2_energy` so the analytic gradient
+    (:mod:`oqp.library.caspt2_gradient`) differentiates the state the energy
+    path actually produced rather than a re-derivation of it: one place resolves
+    the options, the active space, the reference orbitals and the AO integrals,
+    and both consumers read the same object.
+    """
+    options: CASPT2Options
+    settings: object
+    nbf: int
+    ncore: int
+    nact: int
+    active_nelec: tuple
+    roots: list
+    weights: np.ndarray
+    hcore_ao: np.ndarray
+    eri_ao: np.ndarray
+    coeff: np.ndarray            # reference orbitals, BEFORE semicanonicalization
+    orbital_source: str          # 'casscf', 'rhf', or 'json:<path>' etc.
+    enuc: float
+
+
+def _caspt2_setup(mol, ref_energy=None, run_reference=True) -> CASPT2Setup:
+    """Validate the run, resolve the active space and load the AO integrals."""
     options = _caspt2_options(mol.config)
     settings = settings_from_casci_config(mol.config)
 
@@ -1253,14 +1323,6 @@ def native_caspt2_energy(mol, ref_energy=None):
     if int(mol.data["nelec_A"]) != int(mol.data["nelec_B"]):
         raise ValueError("CASPT2 currently supports closed-shell singlets")
 
-    # Public gradient-driven calculations ask for an energy followed by its
-    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
-    # supplies both, so use it as the energy pass and retain its complete
-    # gradient for the immediately following public gradient request.
-    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
-    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
-        return mol.energies
-
     nbf = int(mol.data.get_basis()["nbf"])
     # Same shared planner CASCI/CASSCF use: deriving the active electron count
     # from frozen_core alone ignored [cas] active_electrons, so an explicit
@@ -1273,10 +1335,9 @@ def native_caspt2_energy(mol, ref_energy=None):
     roots = _reference_roots(options)
     weights = np.full(len(roots), 1.0 / len(roots))
 
-    t0 = time.time()
     # Reference orbitals: optimize for a CASSCF reference (state-averaged when
     # several roots are requested), else use the supplied RHF orbitals.
-    if options.reference == "casscf":
+    if options.reference == "casscf" and run_reference:
         _run_casscf_reference(mol, ref_energy, roots, weights)
 
     _mem, _mem_label = _pt2_memory(options, settings)
@@ -1296,11 +1357,12 @@ def native_caspt2_energy(mol, ref_energy=None):
         # the file here would throw that optimisation away and leave PT2
         # correlating the UNoptimised file orbitals.
         coeff = _default
+        orb_source = "casscf"
     else:
         from oqp.library.cas_orbitals import load_cas_mo_coeff
         _ovl = _unpack_lower_triangle(
             np.asarray(mol.data["OQP::SM"], dtype=float), nbf)
-        coeff, _orb_source = load_cas_mo_coeff(
+        coeff, orb_source = load_cas_mo_coeff(
             mol.config, nbf, _default, overlap=_ovl,
             input_dir=os.path.dirname(os.path.abspath(mol.input_file or '.')))
         coeff = np.asarray(coeff, dtype=float)
@@ -1308,6 +1370,73 @@ def native_caspt2_energy(mol, ref_energy=None):
         (nbf, nbf, nbf, nbf), order="F"
     )
     enuc = float(mol.mol_energy.nenergy)
+    return CASPT2Setup(options=options, settings=settings, nbf=nbf, ncore=ncore,
+                       nact=nact, active_nelec=active_nelec, roots=roots,
+                       weights=weights, hcore_ao=hcore_ao, eri_ao=eri_ao,
+                       coeff=coeff, orbital_source=orb_source, enuc=enuc)
+
+
+def _pt2_frozen_count(mol, options, ncore):
+    """Resolve ``[pt2] frozen`` against the available inactive orbitals."""
+    if options.frozen < 0:
+        # Automatic atomic-core choice: clamping is correct here, the count is
+        # derived rather than requested.
+        return max(0, min(_standard_core_count(mol), ncore))
+    # An EXPLICIT count is documented as "freeze exactly N".  Silently
+    # clamping an impossible request changed the correlated-electron space
+    # out from under a comparison that depended on it.
+    nfrozen = int(options.frozen)
+    if nfrozen > ncore:
+        raise ValueError(
+            "[pt2] frozen=%d exceeds the %d inactive orbital(s) available "
+            "([cas] frozen_core=%d): only inactive orbitals can be frozen "
+            "out of the first-order space.  Lower [pt2] frozen, raise "
+            "[cas] frozen_core, or use frozen=auto for the standard deep "
+            "cores." % (nfrozen, ncore, ncore))
+    return max(0, nfrozen)
+
+
+# --------------------------------------------------------------------------- driver
+def native_caspt2_energy(mol, ref_energy=None):
+    """CASPT2 / MS-CASPT2 / XMS-CASPT2 energy (uncontracted Dyall H0)."""
+    t0 = time.time()
+    # Public gradient-driven calculations ask for an energy followed by its
+    # derivative at the same coordinates.  The analytic SC-NEVPT2 adjoint
+    # supplies both, so use it as the energy pass and retain its complete
+    # gradient for the immediately following public gradient request.
+    #
+    # This belongs to the ENERGY driver, not to _caspt2_setup.  _caspt2_setup
+    # is declared `-> CASPT2Setup` and is also the setup builder the analytic
+    # CASPT2 gradient reconstructs its state from; returning mol.energies (a
+    # list) from there gave that caller `'list' object has no attribute
+    # 'options'`, and made merely BUILDING the setup run a whole SC-NEVPT2
+    # evaluation as a side effect.
+    from oqp.library.nevpt2_gradient import prepare_sc_nevpt2_energy_gradient
+    if prepare_sc_nevpt2_energy_gradient(mol, ref_energy=ref_energy):
+        return mol.energies
+
+    setup = _caspt2_setup(mol, ref_energy)
+    options = setup.options
+    settings = setup.settings
+    nbf = setup.nbf
+    ncore = setup.ncore
+    nact = setup.nact
+    active_nelec = setup.active_nelec
+    roots = setup.roots
+    weights = setup.weights
+    hcore_ao = setup.hcore_ao
+    eri_ao = setup.eri_ao
+    coeff = setup.coeff
+    enuc = setup.enuc
+
+    # Publish the PT2 REFERENCE orbitals (RHF canonical, or the (SA-)CASSCF
+    # solution) before the semicanonicalization overwrites OQP::VEC_MO_A with a
+    # within-block rotation of them.  The analytic gradient
+    # (oqp.library.caspt2_gradient) needs them: its orbital constraint --
+    # RHF canonicality or CASSCF stationarity -- holds for THESE orbitals, not
+    # for the semicanonical set, and there is no way to recover them afterwards.
+    mol.data["OQP::CASPT2_REFERENCE_MO"] = np.ascontiguousarray(
+        np.asarray(coeff, dtype=np.float64))
 
     # MS-CASPT2 with the Fock H0 uses the MULTI-SET construction (per-state
     # orbitals = the OpenMolcas state-specific Fock): each root's first-order
@@ -1343,23 +1472,7 @@ def native_caspt2_energy(mol, ref_energy=None):
     # PT2 frozen core: fold the deepest atomic cores out of the first-order space.
     # Default (frozen<0) = the standard deep cores, matching OpenMolcas and removing the
     # spurious deep-core over-correlation; frozen=0 correlates all; frozen=N freezes N.
-    if options.frozen < 0:
-        # Automatic atomic-core choice: clamping is correct here, the count is
-        # derived rather than requested.
-        nfrozen = max(0, min(_standard_core_count(mol), ncore))
-    else:
-        # An EXPLICIT count is documented as "freeze exactly N".  Silently
-        # clamping an impossible request changed the correlated-electron space
-        # out from under a comparison that depended on it.
-        nfrozen = int(options.frozen)
-        if nfrozen > ncore:
-            raise ValueError(
-                "[pt2] frozen=%d exceeds the %d inactive orbital(s) available "
-                "([cas] frozen_core=%d): only inactive orbitals can be frozen "
-                "out of the first-order space.  Lower [pt2] frozen, raise "
-                "[cas] frozen_core, or use frozen=auto for the standard deep "
-                "cores." % (nfrozen, ncore, ncore))
-        nfrozen = max(0, nfrozen)
+    nfrozen = _pt2_frozen_count(mol, options, ncore)
     options._pt2_nfrozen = nfrozen
     if nfrozen:
         h1e, eri, eps, D_sa, ncore, nbf, enuc = _freeze_core(

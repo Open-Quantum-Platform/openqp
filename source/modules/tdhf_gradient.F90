@@ -71,7 +71,7 @@ contains
     use util, only: measure_time
     use tdhf_lib, only: &
       iatogen, mntoia
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: tddft_xc_gradient
@@ -316,13 +316,14 @@ contains
 
     if(ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
 
-    gcomp =  grd2_tdhf_compute_data_t( d2 = d &
+    if (allocated(gcomp)) deallocate(gcomp)
+    allocate(gcomp, source=grd2_tdhf_compute_data_t( d2 = d &
                                      , p2 = p &
                                      , xpy2 = xpy &
                                      , xmy2 = xmy &
                                      , hfscale = hfscale &
                                      , nbf = basis%nbf &
-      )
+      ))
 
     call gcomp%init()
 

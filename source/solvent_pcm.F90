@@ -79,7 +79,7 @@ module solvent_pcm
   use mod_dft_molgrid, only: dft_grid_t
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t, xc_options_t, run_grid_aos
   use mod_dft_partfunc, only: PTYPE_BECKE3
-  use dft, only: dft_initialize
+  use mod_dft, only: dft_initialize
   ! ddX's own harmonic routines (external, dynamically-linked LGPL library):
   ! ylmscale builds the real-spherical-harmonic scaling factors and ylmbas
   ! evaluates the normalised real solid harmonics in ddX's exact convention.

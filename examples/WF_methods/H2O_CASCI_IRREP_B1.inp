@@ -1,0 +1,63 @@
+# CAS(4,4) CASCI of H2O in C2v, returning the lowest root of a REQUESTED
+# spatial irrep instead of the lowest root overall.
+#
+# [ci] irrep is the only way to ask a correlated method for a state by its
+# spatial symmetry.  Nothing else in examples/ exercises it.
+#
+# This example has an independently predicted reference.  The same deck with
+# [ci] irrep=any and nroot=6 returns
+#
+#     state 0  -75.9853016234   state 3  -75.5770927195
+#     state 1  -75.6514247530   state 4  -75.5629775934
+#     state 2  -75.6256994654   state 5  -75.5466444922
+#
+# and the B1 root of that spectrum is state 1.  So irrep=b1 with nroot=1 must
+# reproduce -75.6514247530 exactly -- a filter that silently did nothing would
+# return state 0 (-75.9853016234) instead, and one that mislabelled would land
+# on a different member of the list.
+#
+# The active orbitals are 4(a1) 5(b1) 6(a1) 7(b2), so all four C2v irreps are
+# reachable; a1/a2/b2 select -75.9853016234 / -75.5629775934 / -75.4976189680.
+[input]
+system=
+   O   0.000000000   0.000000000  -0.041061554
+   H  -0.533194329   0.533194329  -0.614469223
+   H   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g
+method=casci
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-10
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=3
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+irrep=b1
+# Explicit rather than left at the 0.5 default: these roots are exact symmetry
+# eigenstates, so a demanding threshold is met, and the keyword gets covered by
+# a run instead of by a unit test alone.
+irrep_min_purity=0.9
+
+[symmetry]
+enabled=true

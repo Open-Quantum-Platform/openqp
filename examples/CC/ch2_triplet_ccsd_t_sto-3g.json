@@ -16,18 +16,6 @@
     0.6236096211265042
   ],
   "energy": -38.464128331673116,
-  "grad": [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0
-  ],
-  "hess": [],
   "json": {
     "scf_type": "uhf",
     "basis": "sto-3g",
@@ -37,8 +25,6 @@
     "nbf_cartesian": 7,
     "spherical_harmonics": false
   },
-  "nac": [],
-  "soc": [],
   "symmetry_metadata": {
     "status": "disabled",
     "enabled": false,

@@ -1,1 +1,2 @@
-ccsd_t/sto-3g h2o.xyz energy() cc(nfzc=1,cholesky=true,cholesky_tol=1e-10,cholesky_direct=false)
+ccsd_t/sto-3g cc(nfzc=1,cholesky=true,cholesky_direct=false)
+geom="h2o.xyz"

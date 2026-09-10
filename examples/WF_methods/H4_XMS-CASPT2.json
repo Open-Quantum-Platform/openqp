@@ -19,7 +19,7 @@
     0.0,
     4.195191996669211
   ],
-  "energy": -2.1343414453811924,
+  "energy": -2.134341445381433,
   "symmetry_metadata": {
     "status": "enabled",
     "enabled": true,
@@ -32,7 +32,7 @@
     "label_mo": true,
     "label_states": true,
     "label_modes": true,
-    "use_integral_symmetry": false,
+    "use_integral_symmetry": true,
     "use_response_symmetry": false,
     "strict": false,
     "tolerance": 1e-05,
@@ -43,7 +43,7 @@
       "label_mo": true,
       "label_states": true,
       "label_modes": true,
-      "use_integral_symmetry": "false",
+      "use_integral_symmetry": "true",
       "use_response_symmetry": false,
       "strict": false,
       "tolerance": 1e-05
@@ -515,68 +515,13 @@
       "n_atoms": 4
     },
     "requested_matches_detected": true,
-    "mo_labels": {
-      "status": "ok",
-      "alpha": {
-        "labels": [
-          "ag",
-          "b1u",
-          "ag",
-          "b1u"
-        ],
-        "characters": [
-          [
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.0
-          ],
-          [
-            1.0,
-            1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            -1.0,
-            1.0,
-            1.0
-          ]
-        ],
-        "max_deviation": 0.0,
-        "status": "label_only_no_reductions"
-      },
-      "scf_state": {
-        "irrep": "ag",
-        "nelec_alpha": 2,
-        "nelec_beta": 2,
-        "multiplicity": 1,
-        "term": "1AG"
-      },
-      "geometry_key": "89e0634113c3215f1494941d60e72657"
+    "integral_symmetry": {
+      "status": "active",
+      "group": "d2h",
+      "n_operations": 8,
+      "full_group": false,
+      "reoriented": false,
+      "frame": "input"
     },
     "reduction_maps": {
       "n_operations": 8,
@@ -755,28 +700,129 @@
       "n_shells": 4,
       "n_ao": 4,
       "status": "metadata_only_no_reductions"
+    },
+    "mo_labels": {
+      "status": "ok",
+      "alpha": {
+        "labels": [
+          "ag",
+          "b1u",
+          "ag",
+          "b1u"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "max_deviation": 0.0,
+        "status": "label_only_no_reductions"
+      },
+      "scf_state": {
+        "irrep": "ag",
+        "nelec_alpha": 2,
+        "nelec_beta": 2,
+        "multiplicity": 1,
+        "term": "1AG"
+      },
+      "geometry_key": "26fdede6e3b24525093cde29e84a1fb4"
+    },
+    "mo_irreps": {
+      "status": "active",
+      "irreps": [
+        "ag",
+        "b1g",
+        "b2g",
+        "b3g",
+        "au",
+        "b1u",
+        "b2u",
+        "b3u"
+      ],
+      "xor_codes": [
+        0,
+        204,
+        170,
+        102,
+        240,
+        60,
+        90,
+        150
+      ],
+      "spins": {
+        "alpha": {
+          "n_mo": 4,
+          "n_unclassified": 0
+        }
+      }
     }
   },
   "td_energies": [
     0
   ],
-  "grad": [
-    1.18148467e-316,
-    0.0,
-    6.94745104849645e-310,
-    6.94745622443567e-310,
-    6.9474448595535e-310,
-    6.94744485955666e-310,
-    6.94745620035056e-310,
-    6.94745074013625e-310,
-    6.9474448597535e-310,
-    6.9474562163725e-310,
-    6.9474448595693e-310,
-    6.94744485029747e-310
+  "caspt2_energies": [
+    -2.134341445381433,
+    -1.436869884597992
   ],
-  "nac": [],
-  "soc": [],
-  "hess": [],
+  "caspt2_reference_energies": [
+    -2.1147334915321663,
+    -1.4095269957958143
+  ],
+  "caspt2_ss_energies": [
+    -2.134341445381433,
+    -1.436869884597992
+  ],
+  "caspt2_state_specific_corrections": [
+    -0.01960795384926686,
+    -0.027342888802177612
+  ],
+  "caspt2_effective_hamiltonian": [
+    [
+      -2.134341445381433,
+      -9.839117230821445e-19
+    ],
+    [
+      -9.839117230821445e-19,
+      -1.436869884597992
+    ]
+  ],
   "json": {
     "scf_type": "rhf",
     "basis": "sto-3g",

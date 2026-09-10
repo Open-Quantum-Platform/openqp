@@ -53,6 +53,33 @@ class TestJsonTdLayout(unittest.TestCase):
         self.assertEqual(get_data_calls, [])
         self.assertEqual(len(save_data_calls), 1)
 
+    def test_full_json_preserves_mrsf_state_interaction_data(self):
+        source = (ROOT / "pyoqp/oqp/molecule/molecule.py").read_text()
+        tree = ast.parse(source)
+        molecule = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "Molecule"
+        )
+        init = next(
+            node for node in molecule.body
+            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+        )
+        tag_assignment = next(
+            node for node in ast.walk(init)
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Attribute) and target.attr == "tag"
+                for target in node.targets
+            )
+        )
+        tags = {item.value for item in tag_assignment.value.elts}
+
+        self.assertTrue({
+            "OQP::td_trans_density_mo",
+            "OQP::td_trans_dipole",
+            "OQP::td_dip_ao",
+        }.issubset(tags))
+
 
 if __name__ == "__main__":
     unittest.main()

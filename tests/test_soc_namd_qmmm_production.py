@@ -398,6 +398,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     "tests": {"exception": False},
                 },
                 usempi=False,
+                # Runner.run drops any gradient left by a previous run through
+                # the same Molecule before it dispatches.
+                invalidate_grad=lambda: None,
             )
             runner = pyoqp.Runner.__new__(pyoqp.Runner)
             runner.mol = mol

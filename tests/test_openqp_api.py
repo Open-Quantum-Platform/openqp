@@ -244,6 +244,7 @@ SCHEMA = {
         "imaginary_shift": {"type": float, "default": "0.0"},
         "level_shift": {"type": float, "default": "0.0"},
         "edshft": {"type": float, "default": "0.0"},
+        "gradient": {"type": _string, "default": "auto"},
     },
 }
 
@@ -1672,21 +1673,28 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
         self.assertEqual(config["state_average"]["weights"], "0.7,0.3")
         self.assertEqual(config["state_average"]["equal_weights"], "False")
 
-    def test_nevpt2_is_caspt2_with_the_dyall_h0(self):
+    def test_nevpt2_names_its_own_method_and_states_its_h0(self):
+        """NEVPT2 is a method name now, and the block still SAYS what it is.
+
+        The emitted [pt2] block keeps h0/contraction rather than leaving them
+        implied: _PT2_OWNED_KEYS seeds every block with h0=fock, so a helper
+        that omitted them would emit a block contradicting its own method
+        name -- which the option reader rejects outright.
+        """
         openqp = load_openqp_module()
         config = (self._job(openqp, "h4_nevpt2")
                   .nevpt2(active_electrons=4, active_orbitals=4)
                   .to_input_dict())
-        self.assertEqual(config["input"]["method"], "caspt2")
+        self.assertEqual(config["input"]["method"], "nevpt2")
         self.assertEqual(config["pt2"]["h0"], "dyall")
-        self.assertEqual(config["pt2"]["contraction"], "uncontracted")
+        self.assertEqual(config["pt2"]["contraction"], "none")
 
     def test_sc_nevpt2_selects_strong_contraction(self):
         openqp = load_openqp_module()
         config = (self._job(openqp, "h4_scnevpt2")
                   .theory("sc-nevpt2", active_electrons=4, active_orbitals=4)
                   .to_input_dict())
-        self.assertEqual(config["input"]["method"], "caspt2")
+        self.assertEqual(config["input"]["method"], "sc-nevpt2")
         self.assertEqual(config["pt2"]["h0"], "dyall")
         self.assertEqual(config["pt2"]["contraction"], "strong")
 
@@ -1727,8 +1735,9 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
                    contraction="strong", gradient="analytic")
         config = job.nevpt2(active_electrons=4, active_orbitals=4
                             ).to_input_dict()
+        self.assertEqual(config["input"]["method"], "nevpt2")
         self.assertEqual(config["pt2"]["gradient"], "auto")
-        self.assertEqual(config["pt2"]["contraction"], "uncontracted")
+        self.assertEqual(config["pt2"]["contraction"], "none")
 
     def test_multistate_helpers_derive_at_least_two_ci_roots(self):
         """A default multistate PT2 helper call must produce an input its own
@@ -1773,6 +1782,23 @@ class TestOpenQPWavefunctionAPI(unittest.TestCase):
                   .to_input_dict())
         self.assertEqual(config["pt2"]["ipea_shift"], "0.25")
         self.assertEqual(config["pt2"]["imaginary_shift"], "0.1")
+
+    def test_caspt2_gradient_route_reaches_the_pt2_section(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_caspt2_grad")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          gradient="analytic", runtype="grad")
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["gradient"], "analytic")
+        self.assertEqual(config["input"]["runtype"], "grad")
+
+    def test_caspt2_gradient_route_defaults_to_auto_and_does_not_leak(self):
+        """A later helper call must not inherit the previous one's route."""
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_caspt2_leak")
+        job.caspt2(active_electrons=4, active_orbitals=4, gradient="numerical")
+        config = job.caspt2(active_electrons=4, active_orbitals=4).to_input_dict()
+        self.assertEqual(config["pt2"]["gradient"], "auto")
 
     def test_qdpt2_variant_and_isa_shift(self):
         openqp = load_openqp_module()

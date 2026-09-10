@@ -1,4 +1,3 @@
 mrsf(nstate=2)/bhhlyp/6-31g*
-opt(S0,maxit=1,energy_shift=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1)
-tdhf(maxit=30)
+opt(S0,maxit=1,energy_shift=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1) tdhf(maxit=30)
 geom="../geometries/H2O-781cba5cd72b.xyz"

@@ -362,18 +362,46 @@ enum {
   FCI_I_NTHREADS  = 11, /* OpenMP threads for the kernels                 */
   FCI_I_WANT_S2   = 12, /* 1 = also return <S^2> per returned root        */
   FCI_I_GUESS     = 13, /* 1 = civecs holds nroot Davidson start vectors  */
-  FCI_NIOPT       = 14
+  FCI_NIOPT_V1    = 14, /* what fci_solve() reads -- the v1.3.x layout    */
+  FCI_I_IRREP     = 14, /* target irrep index (1-based), 0 = any          */
+  FCI_I_NIRREP    = 15, /* irreps in the staged table, 0 = no symmetry    */
+  FCI_NIOPT       = 16  /* what fci_solve_ex() reads                      */
+  /* When iopt[FCI_I_IRREP] != 0 the symmetry tables follow the fixed
+   * options in the same array:
+   *
+   *   iopt[FCI_NIOPT        .. FCI_NIOPT+nirrep-1]      XOR code per irrep
+   *   iopt[FCI_NIOPT+nirrep .. +nirrep+nact-1]          XOR code per active MO
+   *
+   * so niopt is FCI_NIOPT + nirrep + nact for such a call.
+   */
 };
 enum {
   FCI_D_ECORE     = 0,  /* scalar added to every returned root            */
   FCI_D_EIG_TOL   = 1,  /* eigenpair residual tolerance                   */
   FCI_D_CUTOFF    = 2,  /* integral screening cutoff                      */
-  FCI_NDOPT       = 3
+  FCI_NDOPT_V1    = 3,  /* what fci_solve() reads -- the v1.3.x layout    */
+  FCI_D_MIN_PURITY = 3, /* min weight in the dominant irrep to accept root */
+  FCI_NDOPT       = 4   /* what fci_solve_ex() reads                      */
 };
+/* The v1.3.0/v1.3.1 entry point, unchanged. Reads exactly FCI_NIOPT_V1 integer
+ * and FCI_NDOPT_V1 real options and nothing past them, so a binary compiled
+ * against those headers keeps working against a newer liboqp. Options added
+ * after v1.3.x are reachable only through fci_solve_ex below. */
 int64_t fci_solve(const int32_t *iopt, const double *dopt,
     const int32_t *active, const int32_t *core,
     const double *h1e, const double *eri,
     double *energies, double *civecs, double *s2);
+/* Length-negotiated entry point. `niopt`/`ndopt` are how many entries the
+ * CALLER allocated, so the library never reads past them; a request whose
+ * symmetry tables do not fit inside `niopt` is refused rather than read.
+ * `roots` receives, for each returned root, its 0-based index among the roots
+ * the solve computed -- the provenance a spin or irrep filter would otherwise
+ * discard. Pass nroot entries. */
+int64_t fci_solve_ex(int32_t niopt, int32_t ndopt,
+    const int32_t *iopt, const double *dopt,
+    const int32_t *active, const int32_t *core,
+    const double *h1e, const double *eri,
+    double *energies, double *civecs, double *s2, int32_t *roots);
 /* Spin-orbital determinant RDMs (rdm_kernel.F90). rdm2_spinorb returns 0 on
  * success and -1 when `cap` was too small for the reachable intermediates,
  * in which case the caller falls back to the Python enumeration. */
@@ -632,6 +660,43 @@ enum {
 int64_t casscf_gradient(struct oqp_handle_t *inf, const int32_t *iopt,
     const double *dopt, const double *weights, const int32_t *roots,
     double *info);
+/* ------------------------------------------------------------------------
+ * Analytic CASPT2 / XMS-CASPT2 NUCLEAR gradient, derivative-integral half
+ * (caspt2_gradient.F90).
+ *
+ * The theory half lives in oqp.library.caspt2_gradient, which rebuilds the
+ * CASPT2 state, solves the amplitude, CI, XMS-rotation and orbital-response
+ * equations, and reduces the whole Lagrangian to three AO-basis objects.  This
+ * entry point contracts them with the derivative integrals:
+ *
+ *   dE/dx = sum D^AO h^x + 1/2 sum Gamma^AO (..|..)^x - sum X^AO S^x + dV_NN/dx
+ *
+ * `dm_packed` is the relaxed one-particle density and `wm_packed` is MINUS the
+ * energy-weighted density, both as packed triangles of length nbf*(nbf+1)/2
+ * (the overlap-derivative kernel adds its argument, so the caller negates).
+ * The two-particle density arrives factorized,
+ *
+ *   Gamma^AO_{mu nu la si} = sum_k lam[k] A^k_{mu nu} A^k_{la si},
+ *
+ * with `avec` the C-order tensor [nbf][nbf][nvec] holding A^k_{mu nu} and
+ * `lam` the nvec eigenvalues.  The factorization is exact (it is the
+ * eigendecomposition of the eight-fold-symmetrized Gamma over the composite
+ * index), so this is a change of storage, not an approximation.
+ *
+ * Writes infos%atoms%grad.  Returns 0, or a negative status: -21 a
+ * non-Hartree-Fock Hamiltonian, -22 allocation failure, -25 inconsistent
+ * nbf/nvec.  `nbf` MUST equal the handle's basis size: it sizes the packed
+ * densities and the factorization vectors while the basis routines size
+ * themselves from the handle, so a mismatch would index one against the other.
+ * That is checked, not assumed. */
+enum {
+  PT2_G_NVEC  = 0,  /* factorization rank actually contracted     */
+  PT2_G_TRACE = 1,  /* trace of the relaxed AO density            */
+  PT2_G_NINFO = 2
+};
+int64_t caspt2_gradient(struct oqp_handle_t *inf, int32_t nbf,
+    const double *dm_packed, const double *wm_packed, int32_t nvec,
+    const double *avec, const double *lam, double *info);
 /* ------------------------------------------------------------------------
  * Nuclear gradient from a FACTORIZED AO two-particle density
  * (casscf_ao_gradient.F90).

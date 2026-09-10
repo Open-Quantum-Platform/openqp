@@ -14,6 +14,8 @@ import json
 import os
 import sys
 import time
+import re
+import signal
 import subprocess
 from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -36,6 +38,50 @@ def _test_timeout():
     except ValueError:
         return 1800.0
     return val if val > 0 else None
+
+# Lines a dead child prints when a runtime -- not PyOQP -- ended the run.
+# The first match is hoisted into the ERROR message so a CI log names the
+# failure instead of only its exit code.
+_RUNTIME_ABORT_PATTERNS = (
+    re.compile(r"forrtl: severe \(\d+\).*", re.I),
+    re.compile(r"forrtl: error \(\d+\).*", re.I),
+    re.compile(r"Fortran runtime error:.*", re.I),
+    re.compile(r"Program received signal.*", re.I),
+    re.compile(r"ERROR STOP.*"),
+    re.compile(r"Segmentation fault.*", re.I),
+    re.compile(r"double free or corruption.*", re.I),
+    re.compile(r"Intel MKL ERROR:.*"),
+    re.compile(r"terminate called after throwing.*"),
+)
+
+
+def _first_runtime_abort(*texts):
+    """First runtime-abort line found in the given texts, or ''.
+
+    Searched in argument order, so a caller passes stderr before stdout before
+    the run log: the Fortran runtime writes its diagnosis to stderr, while the
+    log holds ordinary progress output that would otherwise crowd it out of a
+    3-line excerpt.
+    """
+    for text in texts:
+        for line in (text or "").splitlines():
+            for pattern in _RUNTIME_ABORT_PATTERNS:
+                match = pattern.search(line)
+                if match:
+                    return match.group(0).strip()
+    return ""
+
+
+def _exit_status_text(rc):
+    """Human-readable form of a subprocess return code."""
+    if rc is None:
+        return "no exit status"
+    if rc < 0:
+        name = signal.Signals(-rc).name if -rc in set(
+            int(sig) for sig in signal.Signals) else f"signal {-rc}"
+        return f"killed by {name}"
+    return f"exit {rc}"
+
 
 class OQPTester:
     """
@@ -480,12 +526,13 @@ class OQPTester:
         # optional feature the example needs (e.g. the ddX/PCM backend when
         # ENABLE_DDX is OFF), report SKIPPED rather than ERROR so an
         # intentionally-trimmed build still produces a green suite.
-        combined = (stdout or "") + (stderr or "")
+        log_text = ""
         try:
             with open(log, "r", encoding="utf-8", errors="ignore") as fh:
-                combined += fh.read()
+                log_text = fh.read()
         except OSError:
             pass
+        combined = (stdout or "") + (stderr or "") + log_text
         for feature in self._OPTIONAL_FEATURE_SENTINELS:
             if feature in combined:
                 self.log(f"Skipping test {project_name}: build lacks {feature}")
@@ -497,13 +544,45 @@ class OQPTester:
                     "execution_time": time.perf_counter() - start_time,
                 }
 
+        # A child that dies inside the native backend says why on ITS stderr,
+        # and nothing used to keep that: the parent reported the exit code
+        # alone, which is how an intermittent `forrtl: severe (184)` reached
+        # CI as the uninformative "subprocess exit 184". Persist both streams
+        # as artifacts and hoist the runtime's own diagnosis into the message.
+        crash_paths = []
+        for name, text in (("stderr", stderr), ("stdout", stdout)):
+            if not (text or "").strip():
+                continue
+            path = os.path.join(case_output_dir, f"{project_name}.crash-{name}.txt")
+            try:
+                with open(path, "w", encoding="utf-8", errors="replace") as fh:
+                    fh.write(text)
+                crash_paths.append(path)
+            except OSError:
+                pass
+
+        # stderr first, then stdout, then the run log: the runtime writes its
+        # diagnosis to stderr, while the log is ordinary progress output that
+        # would otherwise fill a short excerpt.
+        abort_line = _first_runtime_abort(stderr, stdout, log_text)
         tail = combined.strip().splitlines()[-3:]
-        self.log(f"Error in test {project_name}: subprocess exit {rc}")
+
+        parts = [f"PyOQP test crashed ({_exit_status_text(rc)})"]
+        if abort_line:
+            parts.append(f"runtime abort: {abort_line}")
+        if tail:
+            parts.append("last output: " + " | ".join(ln.strip() for ln in tail))
+        if crash_paths:
+            parts.append("captured streams: "
+                         + ", ".join(os.path.basename(q) for q in crash_paths)
+                         + f" in {case_output_dir}")
+        message = "; ".join(parts)
+
+        self.log(f"Error in test {project_name}: {message}")
         return {
             "project": project_name, "input_file": input_file,
             "log_file": log, "status": "ERROR",
-            "message": f"PyOQP test crashed (subprocess exit {rc}): "
-                       + " | ".join(tail),
+            "message": message,
             "execution_time": time.perf_counter() - start_time,
         }
 

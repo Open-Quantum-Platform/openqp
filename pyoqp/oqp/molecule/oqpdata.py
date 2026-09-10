@@ -469,6 +469,8 @@ OQP_CONFIG_SCHEMA = {
         'save_ci_vectors': {'type': bool, 'default': 'False'},
         'save_rdm': {'type': bool, 'default': 'False'},
         'target_spin': {'type': string, 'default': 'any'},
+        'irrep': {'type': string, 'default': 'any'},
+        'irrep_min_purity': {'type': float, 'default': '0.5'},
     },
     'cas': {
         'active_electrons': {'type': int, 'default': '0'},
@@ -498,6 +500,11 @@ OQP_CONFIG_SCHEMA = {
         'ci_print_threshold': {'type': float, 'default': '5.0e-2'},
         'save_ci_vectors': {'type': bool, 'default': 'False'},
         'save_rdm': {'type': bool, 'default': 'False'},
+        # Spatial-symmetry filter on the returned roots. 'any' leaves root
+        # selection exactly as it was; an irrep name of the detected point
+        # group keeps only roots whose dominant irrep is that one.
+        'irrep': {'type': string, 'default': 'any'},
+        'irrep_min_purity': {'type': float, 'default': '0.5'},
     },
     'casscf': {
         'max_macro_iterations': {'type': int, 'default': '20'},
@@ -1658,7 +1665,8 @@ class OQPData:
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
         pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
-        if pruned != "":
+        # "", none, off, false, no: use the unpruned (rad_npts x ang_npts) grid.
+        if pruned.strip().lower() not in ("", "none", "off", "false", "no"):
             pruned = pruned.upper()
             if pruned in pruned_list:
                 self._data.dft.grid_pruned = True

@@ -118,20 +118,26 @@ def test_native_workflows_use_public_concise_options():
         run, "OPT/C2H4_BHHLYP-MRSFTDDFT_MEP.inp"
     ).text
 
-    assert "\nopt(" in constrained
+    assert " opt(" in constrained or "\nopt(" in constrained
     assert "opt(S0" not in constrained
     assert 'freeze="distance(1,2)"' in constrained
     assert "geometric" not in constrained.lower()
+    # Three states already select BaekA, and the legacy deck's sigma, alpha,
+    # delta_beta, beta_schedule and gap values equal the runtime defaults, so
+    # the concise twin carries only the non-default controls.
     assert "meci(S0,S1,S2," in baeka
-    assert "algorithm=baeka" in baeka
-    assert "delta_beta=0.025" in baeka
-    assert "beta_schedule=" in baeka
+    assert "algorithm=" not in baeka
+    assert "delta_beta=" not in baeka
+    assert "beta_schedule=" not in baeka
+    assert converter.oqp_input.lower_to_legacy(
+        converter.oqp_input.parse_canonical_oqp(baeka)
+    )["optimize"]["meci_search"] == "baeka"
     assert "tci(S0,S1,S2," in legacy_tci
     assert "pen_incre=1.2" in legacy_tci
     assert "algorithm=baeka" not in legacy_tci
     assert "delta_beta=" not in legacy_tci
     assert "beta_schedule=" not in legacy_tci
-    assert "mep(S1,maxit=2,step=0.1,gtol=0.003)" in mep
+    assert "mep(S1,maxit=2,gtol=0.003)" in mep  # step=0.1 is the default
     assert "scipy" not in mep.lower()
 
 
@@ -196,7 +202,7 @@ def test_ump2_reference_survives_example_conversion():
     run = _run()
     ump2 = _result(run, "MP2/h2o_ump2_6-31g.inp")
 
-    assert ump2.text.startswith("mp2(reference=uhf)/6-31g\n")
+    assert ump2.text.startswith("mp2(reference=uhf)/6-31g ")
     lowered = converter.oqp_input.lower_to_legacy(
         converter.oqp_input.parse_canonical_oqp(ump2.text),
         source_dir=ump2.target.parent,

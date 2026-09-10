@@ -1,8 +1,4 @@
-xmcqdpt2/sto-3g
-guess(type=hcore)
-scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
-properties(scf_prop="")
-cas(active_electrons=2,active_orbitals=2,frozen_core=1,orbital_source=rhf,sort_orbitals=energy,max_det=5000,max_memory=512)
-ci(nroot=2,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=singlet)
-pt2(reference=casci,target_roots="0,1",nroot=2,ipea_shift=0.0,edshft=0.0,semi_canonical=true)
+xmcqdpt2/sto-3g guess(type=hcore) scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,max_memory=512)
+ci(nroot=2,solver=dense,target_spin=singlet) pt2(reference=casci,target_roots="0,1",nroot=2)
 geom="../geometries/H4-b9005833d66d.xyz"

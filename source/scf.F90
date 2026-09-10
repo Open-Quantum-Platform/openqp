@@ -50,7 +50,7 @@ contains
     use types, only: information
     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
                             int2_rhf_data_t, int2_urohf_data_t
-    use dft, only: dftexcor
+    use mod_dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use messages, only: show_message, WITH_ABORT
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
@@ -197,7 +197,7 @@ contains
     !==============================================================================
     logical :: do_pfon        ! Flag to use pFON method
     logical :: do_pfon_final  ! Flag to trigger extra iteration at 1K
-    type(pfon_t), pointer :: pfon  ! pFON handler object
+    type(pfon_t), pointer :: pfon => null()  ! pFON handler object
     real(kind=dp), allocatable, target :: occ_a(:), occ_b(:) ! Orbital occupations for alpha/beta
 
     !==============================================================================
@@ -476,17 +476,17 @@ contains
     select case (scf_type)
     case (scf_rhf)
       pdmat(:,1) = dmat_a
-      allocate(int2_rhf_data_t :: int2_data)
-      int2_data = int2_rhf_data_t(nfocks=1, &
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, &
                                   d=pdmat, &
-                                  scale_exchange=scalefactor)
+                                  scale_exchange=scalefactor))
     case (scf_uhf, scf_rohf)
       pdmat(:,1) = dmat_a
       pdmat(:,2) = dmat_b
-      allocate(int2_urohf_data_t :: int2_data)
-      int2_data = int2_urohf_data_t(nfocks=2, &
+      if (allocated(int2_data)) deallocate(int2_data)
+      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, &
                                     d=pdmat, &
-                                    scale_exchange=scalefactor)
+                                    scale_exchange=scalefactor))
     end select
 
     ! Convert overlap matrix to full format for DIIS/SOSCF
@@ -693,7 +693,7 @@ contains
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
 
-      call pfon%adjust_temperature(iter, maxit, diis_error, infos%control%conv, do_pfon ,do_pfon_final)
+      if (do_pfon) call pfon%adjust_temperature(iter, maxit, diis_error, infos%control%conv, do_pfon, do_pfon_final)
 
       !----------------------------------------------------------------------------
       ! Initialize Fock Matrices for Current Iteration
@@ -1167,7 +1167,7 @@ contains
       !----------------------------------------------------------------------------
       ! Calculate pFON Occupations (if enabled)
       !----------------------------------------------------------------------------
-      call pfon%compute_occupations(mo_energy_a, do_pfon, mo_energy_b)
+      if (do_pfon) call pfon%compute_occupations(mo_energy_a, do_pfon, mo_energy_b)
 
       !----------------------------------------------------------------------------
       ! Apply MOM (Maximum Overlap Method) if enabled
@@ -1190,7 +1190,7 @@ contains
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-        call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
+        if (do_pfon) call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
         if (.not. do_pfon) &
         call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
       end if

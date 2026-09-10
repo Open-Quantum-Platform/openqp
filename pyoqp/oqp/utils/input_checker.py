@@ -23,6 +23,7 @@ METHODS = {
     "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
     "fci", "casci", "casscf", "sa-casscf", "sacasscf",
     "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+    "nevpt2", "sc-nevpt2", "scnevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 CC_METHODS = {"ccsd", "ccsd(t)"}
@@ -176,11 +177,14 @@ PT2_METHOD_ALIASES = {
     "mrmp2": "mrmp2",
     "mcqdpt2": "mcqdpt2",
     "xmcqdpt2": "xmcqdpt2",
+    "nevpt2": "nevpt2",
+    "sc-nevpt2": "sc-nevpt2",
+    "scnevpt2": "sc-nevpt2",
 }
 PT2_VARIANTS = {"auto", "caspt2", "ms-caspt2", "xms-caspt2",
                 "mrmp2", "mcqdpt2", "xmcqdpt2"}
 # QDPT (GAMESS-convention) family groupings used by the consistency checks
-PT2_SINGLE_STATE_METHODS = {"caspt2", "mrmp2"}
+PT2_SINGLE_STATE_METHODS = {"caspt2", "mrmp2", "nevpt2", "sc-nevpt2"}
 PT2_MS_METHODS = {"ms-caspt2", "mcqdpt2"}
 PT2_XMS_METHODS = {"xms-caspt2", "xmcqdpt2"}
 PT2_QDPT_METHODS = {"mrmp2", "mcqdpt2", "xmcqdpt2"}
@@ -188,6 +192,11 @@ PT2_REFERENCES = {"casci", "casscf"}
 PT2_CONTRACTIONS = {"uncontracted", "none", "full", "strong", "sc", "sc-nevpt2",
                     "ic", "internally-contracted"}
 PT2_STRONG_CONTRACTIONS = {"strong", "sc", "sc-nevpt2", "ic", "internally-contracted"}
+
+#: [pt2] gradient -- the nuclear-gradient route.  Checked here rather than only
+#: at dispatch: a misspelling would otherwise be discovered after the PT2 energy
+#: (and, with reference=casscf, a whole CASSCF) had already been computed.
+PT2_GRADIENT_ROUTES = {"auto", "analytic", "numerical"}
 PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
 STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
 STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
@@ -316,6 +325,13 @@ def _get(config: dict[str, Any], section: str, option: str, default: Any = None)
 
 def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
+
+
+def _is_true(value: Any) -> bool:
+    """Truth of a schema boolean that may still arrive as a string."""
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "on", "yes"}
+    return bool(value)
 
 
 def _check_choice_literal(
@@ -2595,6 +2611,7 @@ def _check_fci(config: dict[str, Any], report: CheckReport) -> None:
     )
     davidson_maxiter = _get(config, "fci", "davidson_maxiter", 100)
     davidson_subspace = _get(config, "fci", "davidson_subspace", 0)
+    _check_irrep_min_purity(config, "fci", report)
     _validate_bool_literal(
         _get(config, "fci", "print_ci_vectors", False),
         "fci.print_ci_vectors",
@@ -2844,11 +2861,63 @@ def _target_spin_is_valid(target_spin: Any) -> bool:
     return valid and parsed >= 1
 
 
+def _check_irrep_min_purity(config: dict[str, Any], section: str,
+                            report: CheckReport) -> None:
+    """Reject an irrep purity threshold the selector cannot act on.
+
+    The value is the fraction of a root's weight that must sit in its dominant
+    irrep.  Every out-of-range value fails silently rather than loudly:
+    ``<= 0`` is replaced by the 0.5 default inside ``fci_solve``, ``> 1`` makes
+    every valid root look absent, and ``NaN`` disables the test altogether
+    because ``purity < NaN`` is false.  Catch all three here, where there is a
+    keyword to name.
+    """
+    raw = _get(config, section, "irrep_min_purity", None)
+    if raw is None or isinstance(raw, bool):
+        if isinstance(raw, bool):
+            report.add(
+                "ERROR",
+                f"{section}.irrep_min_purity",
+                f"[{section}] irrep_min_purity must be a fraction, not a boolean.",
+                value=raw,
+                expected="0 < value <= 1",
+                action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                       "and at most 1 (default 0.5).",
+            )
+        return
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a number.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+        return
+    if not math.isfinite(value) or value <= 0.0 or value > 1.0:
+        report.add(
+            "ERROR",
+            f"{section}.irrep_min_purity",
+            f"[{section}] irrep_min_purity must be a finite fraction above 0 "
+            "and at most 1; outside that range the irrep filter either accepts "
+            "everything or nothing without reporting it.",
+            value=raw,
+            expected="0 < value <= 1",
+            action=f"Set [{section}] irrep_min_purity to a fraction above 0 "
+                   "and at most 1 (default 0.5).",
+        )
+
+
 def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method not in {
         "casci", "casscf", "sa-casscf", "sacasscf",
         "caspt2", "ms-caspt2", "mscaspt2", "xms-caspt2", "xmscaspt2",
+        "nevpt2", "sc-nevpt2", "scnevpt2",
         "mrmp2", "mcqdpt2", "xmcqdpt2",
     }:
         return
@@ -2894,6 +2963,49 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
     )
     max_det = _get(config, "cas", "max_det", 5000)
     max_memory = _get(config, "cas", "max_memory", 2048)
+
+    # Irrep selection is meaningful for a fixed-orbital CI. A CASSCF that
+    # optimizes orbitals would additionally have to FOLLOW the selected root
+    # across macroiterations; the orbital optimizer does not do that, so the
+    # request would be honoured for the final CI and ignored by everything
+    # that produced the orbitals. Refuse rather than half-apply it.
+    _irrep = str(_get(config, "ci", "irrep", "any")).strip().lower()
+    _check_irrep_min_purity(config, "ci", report)
+    if _irrep and _irrep != "any":
+        _method = _as_lower(_get(config, "input", "method", "hf"))
+        # Every CASSCF method is rejected, including the zero-update scaffold.
+        # An optimizing run would have to FOLLOW the selected root across
+        # macroiterations, which the orbital optimizer does not do.  A
+        # max_macro_iterations=0 run has no such problem in principle, but
+        # neither _pack_cas_wavefunction_arrays nor the Python
+        # _solve_active_rdms path stages resolve_irrep_selection, so it runs
+        # the ordinary unfiltered CI and returns the lowest root of any
+        # symmetry.  Accepting that deck -- and, worse, recommending it here --
+        # is the silent wrong answer this keyword exists to prevent.
+        if _method in {"sa-casscf", "sacasscf", "casscf"}:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "Irrep selection is not implemented for CASSCF: the orbital "
+                "optimizer does not follow a symmetry-selected root across "
+                "macroiterations, and the fixed-orbital CASSCF path does not "
+                "stage the selection at all.",
+                value=_irrep,
+                expected="any",
+                action="Use method=casci for [ci] irrep, or drop [ci] irrep.",
+            )
+        _sym = _get(config, "symmetry", "enabled", False)
+        _sym_on = (_sym is True) or (str(_sym).lower() in ("true", "1", "on", "yes"))
+        if not _sym_on:
+            report.add(
+                "ERROR",
+                "ci.irrep",
+                "[ci] irrep needs MO irrep labels, which are only produced "
+                "when symmetry detection is enabled.",
+                value=_irrep,
+                expected="[symmetry] enabled=true",
+                action="Set [symmetry] enabled=true, or drop [ci] irrep.",
+            )
 
     nroot = _get(config, "ci", "nroot", 1)
     eig_tol = _get(config, "ci", "eig_tol", 1.0e-10)
@@ -4776,6 +4888,19 @@ def _check_pt2(config: dict[str, Any], report: CheckReport) -> None:
         report,
         action="Set [pt2] xms=true only for XMS-CASPT2, otherwise false.",
     )
+    _check_choice_literal(
+        _get(config, "pt2", "gradient", "auto"),
+        "pt2.gradient",
+        PT2_GRADIENT_ROUTES,
+        report,
+        message="Unknown PT2 nuclear-gradient route.",
+        action="Use gradient=auto (analytic where the variant has one, central "
+               "differences otherwise), gradient=analytic (refuse rather than "
+               "fall back), or gradient=numerical.",
+        fallback="auto",
+        default_if_none=True,
+        default_if_blank=True,
+    )
     ipea_shift = _get(config, "pt2", "ipea_shift", 0.0)
     imaginary_shift = _get(config, "pt2", "imaginary_shift", 0.0)
     level_shift = _get(config, "pt2", "level_shift", 0.0)
@@ -6574,6 +6699,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
+    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
@@ -6601,8 +6728,66 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if (td_type == "rpa" and scf_type == "rhf"
+                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            functional_aliases = {
+                "svwn": "svwn5",
+                "svwn5": "svwn5",
+                "lda": "svwn5",
+                "blyp": "blyp",
+                "pbe": "pbe",
+                "pbepbe": "pbe",
+                "b3lyp5": "b3lyp5",
+                "b3lypv5": "b3lyp5",
+            }
+            canonical_functional = functional_aliases.get(functional, functional)
+            verified_semilocal = {"svwn5", "blyp", "pbe", "b3lyp5"}
+            if functional and canonical_functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            # [dftgrid] cam_flag turns on range separation independently of the
+            # functional name, and tdhf_hessian_is_applicable is handed
+            # infos%dft%cam_flag and aborts on it. Checking only the name lets
+            # e.g. functional=pbe with cam_flag=true validate here and then die
+            # in Fortran. Scoped to this excited-state branch: the ground-state
+            # analytic Hessian supports CAM (tests/test_cam_hessian.py).
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the "
+                    "native gate. Use a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            if scf_type != "rhf":
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+            if td_multiplicity != 1:
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently support singlet targets only (tdhf.multiplicity=1)."
+            if state != 1:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians currently support only the lowest "
+                    "excited root (hess.state=1); higher roots require an "
+                    "indefinite-safe projected amplitude-response solver.",
+                )
+            if td_nstate < 2:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
+                    "lowest excited root can be verified as isolated from "
+                    "the next computed root.",
+                )
+            return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
@@ -6707,6 +6892,81 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="max L <= 3",
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
+
+        # The analytic TDDFT Hessian is far more grid-sensitive than the rest
+        # of the derivative stack, so the default grid is not enough for it.
+        # Measured on H2O/STO-3G SVWN S1 (this geometry is examples/HESS/
+        # H2O_SVWN_RPA_ANA_HESS.inp): the analytic frequencies move 6.03 cm-1
+        # between the default pruned SG2 96x302 grid and an unpruned 128x590
+        # grid, while the finite-difference Hessian is identical to 0.01 cm-1
+        # on both, i.e. already converged at the default grid. The gap is not
+        # finite-difference noise: it is unchanged (3.2698e-3 Hartree/bohr^2)
+        # for dx from 0.0005 to 0.004 bohr and survives Richardson
+        # extrapolation to dx->0. Warn rather than reject: the result is still
+        # usable and converges correctly, and the committed HESS examples are
+        # deliberately small runtime smoke cases.
+        # Scoped to the excited-state path, which is what was measured. The
+        # ground-state HF/DFT analytic Hessian is a separate, older kernel and
+        # is not characterised here, so it must not inherit this warning.
+        if (
+            capability == "supported"
+            and method == "tdhf"
+            and _as_lower(_get(config, "input", "functional", ""))
+        ):
+            pruned = _as_lower(_get(config, "dftgrid", "pruned", "SG2"))
+            try:
+                rad_npts = int(_get(config, "dftgrid", "rad_npts", 96))
+                ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
+            except (TypeError, ValueError):
+                rad_npts, ang_npts = 96, 302
+            # source/dftlib/dft.F90 selects a pruning scheme with
+            # `select case (trim(pruned_name))` over SG0/SG1/SG2/SG3 and has no
+            # `case default`, so every other spelling -- "", none, off, false --
+            # leaves the grid unpruned. Match that, rather than guessing at a
+            # list of "off" synonyms.
+            is_pruned = pruned in {"sg0", "sg1", "sg2", "sg3"}
+            if is_pruned or rad_npts < 128 or ang_npts < 590:
+                report.add(
+                    "WARNING",
+                    "dftgrid",
+                    "Analytic TDDFT Hessians need a finer, unpruned DFT grid than "
+                    "the default. Measured on H2O/STO-3G SVWN, the analytic S1 "
+                    "frequencies move 6.0 cm-1 between the default pruned SG2 "
+                    "96x302 grid and an unpruned 128x590 grid, while the "
+                    "finite-difference Hessian is converged to 0.01 cm-1 on both.",
+                    value=f"pruned={pruned or 'none'}, rad_npts={rad_npts}, ang_npts={ang_npts}",
+                    expected="pruned= (unpruned) with rad_npts>=128 and ang_npts>=590",
+                    action="For production frequencies set [dftgrid] pruned= , "
+                           "rad_npts=128, ang_npts=590 (or finer), or use "
+                           "[hess] type=numerical, which is converged at the "
+                           "default grid and was measured faster here.",
+                )
+
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so a multi-rank launch of an otherwise supported analytic
+        # TD Hessian dies in Fortran after the SCF and response have already
+        # run. Catch it here instead. Scoped to the excited-state path: the
+        # ground-state Hessian has no such restriction.
+        if capability == "supported" and method == "tdhf":
+            try:
+                mpi_size = int(MPIManager().size)
+            except Exception:
+                mpi_size = 1
+            if mpi_size > 1:
+                report.add(
+                    "ERROR",
+                    "hess.type",
+                    "Analytic TD Hessians run on one MPI rank only; the native "
+                    "kernel aborts with more.",
+                    value=f"{mpi_size} MPI ranks",
+                    expected="1 rank",
+                    # Deliberately not recommending OpenMP as the fallback:
+                    # tdhf_hessian does omp_set_num_threads(1) for the whole
+                    # kernel, so threads do not help this path either.
+                    action="Run the analytic TD Hessian on a single rank, or "
+                           "set [hess] type=numerical, which parallelises over "
+                           "displacements via [hess] nproc.",
+                )
 
     if method == "hf" and state > 0:
         report.add(

@@ -18,8 +18,8 @@ The `.oqp` form takes the reference as a model option and the solver controls
 in a `cc(...)` call:
 
 ```
-ccsd_t/6-31g h2o.xyz energy() cc(nfzc=1)
-ccsd_t(reference=uhf)/sto-3g ch2.xyz mult=3 energy()
+ccsd_t/6-31g h2o.xyz cc(nfzc=1)
+ccsd_t(reference=uhf)/sto-3g ch2.xyz mult=3
 ```
 
 `ccsd_t`, `ccsd-t` and `ccsdt` all select CCSD(T); `ccsd` selects plain CCSD.

@@ -174,6 +174,45 @@ REGISTRY = (
     # above, is sensitive to the SCF convergence path well beyond the energy;
     # compare with a small relative tolerance (a real regression is far larger).
     RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
+    # Multi-root wavefunction results.  Not `required`: the correlated
+    # references predate these keys and are skipped until regenerated, exactly
+    # as td_trans_dipole above.  Without them a multistate reference pins only
+    # the lowest mixed root, so a regression in any higher root, in a
+    # state-specific correction, or in the off-diagonal couplings of the
+    # effective Hamiltonian is invisible.
+    RegKey('casscf_energies', runtypes='*', required=False),
+    RegKey('caspt2_energies', runtypes='*', required=False),
+    RegKey('caspt2_reference_energies', runtypes='*', required=False),
+    RegKey('caspt2_ss_energies', runtypes='*', required=False),
+    RegKey('caspt2_state_specific_corrections', runtypes='*', required=False),
+    # Compared ABSOLUTELY, unlike the other response-path quantities above: the
+    # symmetry-forbidden off-diagonals of Heff are exact zeros carrying only
+    # round-off, so a relative test on them is meaningless -- 6.5e-18 against
+    # -2.9e-16 is a factor of 45 and a green run looks like a regression. The
+    # elements that mean anything are O(1) Hartree, where the default
+    # round(diff, 4) gate sits far above the ~4e-12 run-to-run noise and far
+    # below any real regression.
+    # Compared WITH its sign, unlike nac and td_trans_dipole. An off-diagonal
+    # H_IJ does carry the product of two CI-root phases, and those phases used
+    # to be whatever the diagonalization happened to return -- H4_MCQDPT2 gave
+    # +6.085e-03 on one and two OpenMP threads of one build and -6.085e-03 on
+    # four, a 2x6.085e-03 "regression" on a calculation that had not moved.
+    # That is now fixed where it arises rather than hidden here: the canonical
+    # CI phase (canonical_phase in fci_driver.F90, canonicalize_ci_phase in
+    # fci.py) pins every root, and _xms_rotation pins the XMS rotation columns.
+    # The sign is therefore a property of the calculation again, and a flip is
+    # a real regression rather than a coin toss.
+    RegKey('caspt2_effective_hamiltonian', runtypes='*', required=False),
+    # Determinant-CI roots and their <S^2>.  Not `required`, as above: the
+    # existing FCI/CASCI references predate the keys.  <S^2> is compared
+    # because inside a degenerate cluster it is the ONLY thing that separates
+    # the roots -- a singlet and a triplet there have the same energy to
+    # solver precision, so an energy-only reference passes whichever one a
+    # target_spin request returns.
+    RegKey('fci_energies', runtypes='*', required=False),
+    RegKey('fci_s2', runtypes='*', required=False),
+    RegKey('casci_energies', runtypes='*', required=False),
+    RegKey('casci_s2', runtypes='*', required=False),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
@@ -377,6 +416,14 @@ EXEMPT_FLAGS = {
     'dftb.response_global_hybrid': 'DTCAM development diagnostic (decoupled full-range response '
                                    'gamma); production operator selection goes through [dftb] '
                                    'model presets and is covered by the openqp-dftb golden suite',
+    # The tight-binding routes run entirely inside the openqp-dftb / openqp-xtb
+    # backends, which are not distributed with OpenQP, so this repository cannot
+    # carry an example that exercises them; their coverage lives in those
+    # backends' own suites (same rationale as response_global_hybrid above).
+    'dftb.lc_ground_state': 'long-range-corrected DFTB ground state; runs inside the '
+                            'non-distributed openqp-dftb backend and is covered by its suite',
+    'xtb.lc_ground_state': 'long-range-corrected xTB ground state; runs inside the '
+                           'non-distributed openqp-xtb backend and is covered by its suite',
 }
 
 # section.option -> reason. Real capability, tracked gap (needs an example).

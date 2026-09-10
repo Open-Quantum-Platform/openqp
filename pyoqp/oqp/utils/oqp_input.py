@@ -149,9 +149,21 @@ class OQPResolution:
     resolved_path: Optional[Path] = None
 
 
+# Spellings of "no pruned grid" for ``dftgrid(pruned=...)``.  The legacy
+# keyword uses an empty string; ``none`` is the readable canonical spelling.
+UNPRUNED_GRID_SPELLINGS = {"", "none", "off", "false", "no"}
+
+
 def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
     """Remove concise section options whose runtime defaults say the same thing."""
 
+    if call.name == "dftgrid" and "pruned" in call.kwargs:
+        value = call.kwargs["pruned"]
+        if value is None or str(value).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+            kwargs = dict(call.kwargs)
+            kwargs["pruned"] = "none"
+            return CallSpec(call.name, call.args, kwargs, call.explicit)
+        return call
     if call.name != "dftb":
         return call
     kwargs = dict(call.kwargs)
@@ -197,6 +209,7 @@ DEFAULT_SINGLET_MODELS = {
     # user asks for another one; see WF_MODELS below.
     "fci", "casci", "casscf", "sa-casscf",
     "caspt2", "ms-caspt2", "xms-caspt2",
+    "nevpt2", "sc-nevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
@@ -237,6 +250,11 @@ PRIMARY_ALIASES = {
 # ``nmr`` and ``pcm`` just as we accept ``opt`` and ``soc``; rendering still
 # has one deterministic spelling for every accepted form.
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
+
+# Modifiers that lower to no configuration at all: Hessian workflows always
+# compute IR and Raman intensities, so ``ir``/``raman`` only record the user's
+# intent.  Canonical rendering keeps them verbatim.
+INTENT_ONLY_MODIFIERS = {"ir", "raman"}
 
 SECTION_NAMES = {
     "input", "d4", "mp2", "cc", "guess", "pcm", "dftb", "symmetry", "scf",
@@ -355,13 +373,13 @@ GENERIC_SCHEMA_KEYS = {
         nroot solver eig_tol davidson_maxiter davidson_subspace
         integral_backend integral_cutoff spin_adapted target_spin
         root_tracking print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm
+        save_rdm irrep irrep_min_purity
     """),
     "fci": _keys("""
         nroot active_electrons active_orbitals frozen_core max_det max_memory
         eig_tol integral_backend integral_cutoff solver davidson_maxiter
         davidson_subspace print_ci_vectors ci_print_threshold save_ci_vectors
-        save_rdm target_spin
+        save_rdm target_spin irrep irrep_min_purity
     """),
     "pt2": _keys("""
         variant reference h0 contraction frozen multistate xms ipea_shift
@@ -509,9 +527,9 @@ MODEL_ALIASES = {
     "mrsf-dftb": "mrsf-dftb",
     # Native multiconfigurational stack.  Every target below is a literal
     # ``input.method`` value accepted by oqp.utils.input_checker.METHODS, so
-    # the route name and the lowered method never diverge.  NEVPT2 is
-    # deliberately absent: it is not an input.method but the Dyall zeroth-order
-    # Hamiltonian of the CASPT2 driver (``caspt2 ... pt2(h0=dyall)``).
+    # the route name and the lowered method never diverge.  NEVPT2 now has
+    # its own method name like the rest of the family; the older spelling
+    # (``caspt2 ... pt2(h0=dyall)``) is the same calculation and still parses.
     "fci": "fci",
     "full-ci": "fci",
     "fullci": "fci",
@@ -533,6 +551,10 @@ MODEL_ALIASES = {
     "mcqdpt": "mcqdpt2",
     "xmcqdpt2": "xmcqdpt2",
     "xmcqdpt": "xmcqdpt2",
+    "nevpt2": "nevpt2",
+    "nev-pt2": "nevpt2",
+    "sc-nevpt2": "sc-nevpt2",
+    "scnevpt2": "sc-nevpt2",
 }
 
 # Multiconfigurational models are their own ``input.method``: unlike the
@@ -542,6 +564,7 @@ MODEL_ALIASES = {
 WF_MODELS = {
     "fci", "casci", "casscf", "sa-casscf",
     "caspt2", "ms-caspt2", "xms-caspt2",
+    "nevpt2", "sc-nevpt2",
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
@@ -570,11 +593,15 @@ TOP_OPTION_ALIASES = {
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
 # workflow options that may live directly in the primary call.
-_OPT_OPTIONS = {
+_GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
-    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
+    "energy_shift", "init_scf",
 }
+_CROSSING_SEARCH_OPTIONS = {
+    "energy_gap", "meci_search", "pen_sigma",
+    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
+}
+_OPT_OPTIONS = _GEOMETRY_CONVERGENCE_OPTIONS | _CROSSING_SEARCH_OPTIONS
 # gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
 # mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
 # route-driver manifest still owns them, but the driver option sets keep them
@@ -587,13 +614,6 @@ _NATIVE_ENGINE_OPTIONS = {
     "auto_recovery", "recovery_maxit", "recovery_trust",
 }
 _NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
-_GEOMETRIC_ENGINE_OPTIONS = {
-    "coordsys", "trust", "tmax", "convergence_set", "hessian",
-}
-_OPTIMIZER_BACKEND_OPTIONS = (
-    {"lib"} | _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS
-    | _GEOMETRIC_ENGINE_OPTIONS
-)
 _MECI_PUBLIC_OPTIONS = {
     "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
 }
@@ -616,7 +636,9 @@ _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
+    "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+                 | set(_NATIVE_ENGINE_OPTIONS)
+                 | set(_NATIVE_CONSTRAINT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.
@@ -626,7 +648,8 @@ DRIVER_OPTIONS = {
              | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
-    "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
+    "ts": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
+           | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"}),
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
     "neb": {
         "maxit",
@@ -666,9 +689,9 @@ DRIVER_OPTIONS = {
     "data": {"scf_prop", "nmr_gauge", "td_prop", "export", "title"},
 }
 
-# Exact ``oqp(...)`` section calls are accepted only when every key is consumed
-# by the selected native workflow.  This prevents valid-looking but ignored
-# controls such as ``energy oqp(init_hessian=analytical)``.
+# ``oqp(...)`` was an early concise spelling for options consumed by the native
+# geometry engine. It remains a read-time compatibility alias only: parsing
+# folds it into the primary driver and canonical rendering never writes it.
 OQP_DRIVER_OPTIONS = {
     "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
     "meci": set(_NATIVE_ENGINE_OPTIONS),
@@ -682,6 +705,49 @@ OQP_DRIVER_OPTIONS = {
         "maxmove", "align", "opt_ends", "end_fmax", "neb_output",
     },
 }
+
+
+def _fold_native_section_into_driver(
+    driver: CallSpec, modifiers: Sequence[CallSpec],
+) -> Tuple[CallSpec, Tuple[CallSpec, ...]]:
+    """Convert an old ``oqp(...)`` call into its public driver spelling."""
+
+    native_calls = [call for call in modifiers if call.name == "oqp"]
+    if not native_calls:
+        return driver, tuple(modifiers)
+    if len(native_calls) > 1:
+        raise OQPInputError("Duplicate modifier/section call: oqp")
+
+    native = native_calls[0]
+    if native.args:
+        raise OQPInputError("Section call oqp accepts keyword arguments only")
+    allowed = OQP_DRIVER_OPTIONS.get(driver.name, set())
+    unsupported = set(native.kwargs) - allowed
+    if unsupported:
+        key = sorted(unsupported)[0]
+        raise OQPInputError(
+            "oqp.%s is not used by the native %s workflow; place only "
+            "workflow options in %s(...)" % (key, driver.name, driver.name)
+        )
+
+    rename = {
+        "init_hessian": "hessian",
+        "path_gtol": "gtol",
+        "irc_direction": "direction",
+        "neb_dt": "dt",
+        "neb_output": "output",
+    }
+    options = dict(driver.kwargs)
+    for key, value in native.kwargs.items():
+        public_key = rename.get(key, key)
+        if public_key in options:
+            raise OQPInputError(
+                "Option '%s' is specified in both %s(...) and oqp(...)"
+                % (public_key, driver.name)
+            )
+        options[public_key] = value
+    retained = tuple(call for call in modifiers if call.name != "oqp")
+    return CallSpec(driver.name, driver.args, options, driver.explicit), retained
 
 # Route parentheses describe the electronic model, not an alternate spelling
 # for every legacy section.  Keeping this surface deliberately small prevents
@@ -949,8 +1015,36 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
-def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    parts = _split_top_level(route, "/")
+def _split_route_token(token: str) -> List[str]:
+    """Split route separators while preserving slash-bearing component names."""
+
+    raw_parts = _split_top_level(token, "/")
+    parts: List[str] = []
+    index = 0
+    while index < len(raw_parts):
+        if (
+            index + 1 < len(raw_parts)
+            and raw_parts[index].lower() == "pbe-3"
+            and raw_parts[index + 1].lower() == "8"
+        ):
+            parts.append(raw_parts[index] + "/" + raw_parts[index + 1])
+            index += 2
+        else:
+            parts.append(raw_parts[index])
+            index += 1
+    return parts
+
+
+def _parse_route_components(
+    parts: Sequence[str], route: str
+) -> Tuple[str, Dict[str, Any], str, str]:
+    """Parse already-separated route components.
+
+    Keeping this separate from the slash spelling is important for functional
+    names such as ``PBE-3/8``: whitespace supplies an unambiguous component
+    boundary that must not be lost by joining the tokens with ``/`` first.
+    """
+
     if not parts or len(parts) > 3:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
@@ -1000,6 +1094,10 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "%s is not a route option for %s; use the exact section call %s(%s=...)"
             % (key, alias, section, key)
         )
+    component_values: List[str] = []
+    for part in parts[1:]:
+        parsed = _parse_value(part)
+        component_values.append(parsed if isinstance(parsed, str) else part)
     functional = ""
     basis = ""
     if model in {
@@ -1017,15 +1115,128 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
-            basis = parts[1]
+            basis = component_values[0]
         else:
-            functional = parts[1]
+            functional = component_values[0]
     elif len(parts) == 3:
-        functional, basis = parts[1], parts[2]
+        functional, basis = component_values
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
     normalized_basis = _normalize_basis_value(basis)
     return model, model_options, functional.lower(), normalized_basis
+
+
+def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
+    return _parse_route_components(_split_route_token(route), route)
+
+
+def _starts_post_route_syntax(token: str) -> bool:
+    """Return whether *token* cannot be another route component."""
+
+    if "=" in token:
+        return True
+    token_value = _parse_value(token)
+    if (
+        isinstance(token_value, str)
+        and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
+    ):
+        return True
+    raw_name = token.split("(", 1)[0].lower()
+    name = raw_name.replace("-", "_")
+    known_call = (
+        name in PRIMARY_ALIASES
+        or name in BARE_MODIFIER_CALLS
+        or name in SECTION_NAMES
+        or name in {"nmr", "ir", "raman", "d4"}
+    )
+    if known_call:
+        return True
+    call_shape = re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
+    )
+    if call_shape:
+        call_names = (
+            list(PRIMARY_ALIASES)
+            + list(SECTION_NAMES)
+            + ["nmr", "ir", "raman", "d4"]
+        )
+        if "(" not in token:
+            return (
+                len(name) > 1
+                and name[-1] == name[-2]
+                and name[:-1] in call_names
+            )
+        # Parenthesized route components have a digit or hyphen in their family
+        # name (for example CAM-QTP(00), 6-31g(2df,p), and
+        # def2-svp(jkfit)). Other identifier-shaped calls must reach normal
+        # call validation even when their name is not close enough for a
+        # spelling suggestion.
+        probable_route_component = any(
+            char.isdigit() or char == "-" for char in raw_name
+        )
+        if probable_route_component:
+            return False
+        return True
+    return False
+
+
+def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
+    """Return route-component interpretations without losing token boundaries."""
+
+    variants: List[List[str]] = [[]]
+    for token in tokens:
+        choices = [[token]]
+        split = _split_route_token(token)
+        if len(split) > 1:
+            choices.append(split)
+        variants = [
+            prefix + choice
+            for prefix in variants
+            for choice in choices
+            if len(prefix) + len(choice) <= 3
+        ]
+    # Prefer interpretations that fill all route components.  For equal
+    # lengths, the construction order preserves whitespace-delimited tokens.
+    return sorted(variants, key=len, reverse=True)
+
+
+def _parse_route_prefix(
+    tokens: Sequence[str],
+) -> Tuple[str, Dict[str, Any], str, str, int]:
+    """Parse a slash- or whitespace-separated route at the token prefix.
+
+    A route contains at most three components.  Joining only the leading
+    non-driver tokens lets ``mrsf bhhlyp 6-31g*`` and mixed spellings denote
+    the same calculation as ``mrsf/bhhlyp/6-31g*`` without consuming a bare
+    driver, a geometry file, or an explicit ``basis=...`` option.
+    """
+
+    candidates: List[Tuple[int, List[str], str]] = []
+    for count in range(1, min(len(tokens), 3) + 1):
+        if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
+            break
+        display = " ".join(tokens[:count])
+        for parts in _route_component_variants(tokens[:count]):
+            candidates.append((count, parts, display))
+
+    errors: List[OQPInputError] = []
+    for count, parts, display in sorted(
+        candidates, key=lambda candidate: candidate[0], reverse=True
+    ):
+        try:
+            model, model_options, functional, basis = _parse_route_components(
+                parts, display
+            )
+        except OQPInputError as exc:
+            errors.append(exc)
+            continue
+        return model, model_options, functional, basis, count
+
+    if errors:
+        # Candidates are ordered from the most complete interpretation to the
+        # least.  Preserve the diagnostic from that best interpretation.
+        raise errors[0]
+    raise OQPInputError("Missing electronic-structure route")
 
 
 def looks_canonical(text: str) -> bool:
@@ -1087,12 +1298,20 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
-    model, model_options, functional, basis = _parse_route(tokens[0])
+    model, model_options, functional, basis, route_token_count = (
+        _parse_route_prefix(tokens)
+    )
     options: Dict[str, Any] = {}
     calls: List[CallSpec] = []
-    for token_index, token in enumerate(tokens[1:], start=1):
+    for token_index, token in enumerate(
+        tokens[route_token_count:], start=route_token_count
+    ):
         assignment = _split_assignment(token)
-        if token_index == 1 and assignment is None and "(" not in token:
+        if (
+            token_index == route_token_count
+            and assignment is None
+            and "(" not in token
+        ):
             positional_geom = _parse_value(token)
             if (
                 isinstance(positional_geom, str)
@@ -1183,6 +1402,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         )
     driver = primary[0] if primary else CallSpec("energy", explicit=False)
     driver = _normalize_driver_defaults(model, driver)
+    driver, modifiers = _fold_native_section_into_driver(driver, modifiers)
     spec = CalculationSpec(
         model=model,
         functional=functional,
@@ -1190,7 +1410,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         model_options=model_options,
         options=options,
         driver=driver,
-        modifiers=tuple(modifiers),
+        modifiers=modifiers,
         source_text=text,
     )
     _validate_semantics(spec)
@@ -1486,15 +1706,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "algorithm=auto or algorithm=baeka"
             )
     legacy_backend_options = {
+        "lib",
         "optimizer", "step_size", "step_tol", "mep_maxit",
         "k", "maxg", "avgg", "optep",
     }.intersection(options)
     if legacy_backend_options:
         key = sorted(legacy_backend_options)[0]
+        if key == "lib":
+            raise OQPInputError(
+                "lib is available only in traditional sectioned .inp files; "
+                "concise .oqp geometry drivers always use the native OpenQP engine"
+            )
         if key in {"optimizer", "step_size", "step_tol", "mep_maxit"}:
             raise OQPInputError(
                 "%s is a legacy SciPy-backend option. Concise .oqp workflows "
-                "support lib=oqp or lib=geometric." % key
+                "always use the native OpenQP engine." % key
             )
         replacement = {
             "k": "spring", "maxg": "fmax", "avgg": "frms", "optep": "opt_ends",
@@ -1508,35 +1734,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if unknown_driver_options:
         key = sorted(unknown_driver_options)[0]
         raise OQPInputError(
-            "%s does not define option '%s'; use the exact legacy section call for advanced options"
+            "%s does not define option '%s'; use the concise section that owns advanced options"
             % (driver.name, key)
         )
-    backend = str(options.get("lib", "oqp")).strip().lower()
-    if driver.name == "optimize":
-        if backend not in {"oqp", "geometric"}:
-            raise OQPInputError(
-                "opt lib must be oqp or geometric in concise .oqp input"
-            )
-        if backend == "geometric":
-            native_only = {
-                "trust_max", "auto_recovery", "recovery_maxit",
-                "recovery_trust", "freeze",
-            }.intersection(options)
-            if native_only:
-                raise OQPInputError(
-                    "%s is a native lib=oqp option; use geomeTRIC tmax or a "
-                    "traditional constraints file as appropriate"
-                    % sorted(native_only)[0]
-                )
-        else:
-            geometric_only = {
-                "tmax", "convergence_set", "hessian",
-            }.intersection(options)
-            if geometric_only:
-                raise OQPInputError(
-                    "%s is available only with opt(...,lib=geometric)"
-                    % sorted(geometric_only)[0]
-                )
     if driver.name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         if "maxit" in options:
             if not _is_positive_integer(options["maxit"]):
@@ -1548,20 +1748,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
             )
-        if driver.name == "optimize" and backend == "geometric":
-            try:
-                trust = float(options.get("trust", 0.1))
-                tmax = float(options.get("tmax", 0.3))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax must be positive numbers"
-                ) from exc
-            if (not math.isfinite(trust) or not math.isfinite(tmax)
-                    or trust <= 0 or tmax <= 0 or trust > tmax):
-                raise OQPInputError(
-                    "geomeTRIC trust and tmax require 0 < trust <= tmax"
-                )
-        elif {"trust", "trust_max"}.intersection(options):
+        if {"trust", "trust_max"}.intersection(options):
             try:
                 trust = float(options.get("trust", 0.2))
                 trust_max = float(options.get("trust_max", 0.5))
@@ -2020,106 +2207,6 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "Option '%s' is specified in both %s(...) and %s(...)"
                 % (sorted(overlap)[0], driver.name, call.name)
             )
-
-    oqp_call = modifier_by_name.get("oqp")
-    if oqp_call is not None:
-        allowed_oqp = OQP_DRIVER_OPTIONS.get(driver.name, set())
-        ignored = set(oqp_call.kwargs) - allowed_oqp
-        if ignored:
-            key = sorted(ignored)[0]
-            raise OQPInputError(
-                "oqp.%s is not used by the native %s workflow"
-                % (key, driver.name)
-            )
-        if "init_hessian" in oqp_call.kwargs:
-            policy = str(oqp_call.kwargs["init_hessian"]).strip().lower()
-            if policy not in {"model", "numerical", "analytical"}:
-                raise OQPInputError(
-                    "oqp.init_hessian must be model, numerical, or analytical"
-                )
-        if "irc_direction" in oqp_call.kwargs:
-            direction = str(oqp_call.kwargs["irc_direction"]).strip().lower()
-            if direction not in {"forward", "backward", "reverse"}:
-                raise OQPInputError(
-                    "oqp.irc_direction must be forward or backward"
-                )
-        if "coordsys" in oqp_call.kwargs:
-            coordsys = str(oqp_call.kwargs["coordsys"]).strip().lower()
-            if coordsys not in {
-                "auto", "tric", "dlc", "ric", "internal", "cart", "cartesian",
-            }:
-                raise OQPInputError(
-                    "oqp.coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
-                )
-        if {"trust", "trust_max"}.intersection(oqp_call.kwargs):
-            try:
-                trust = float(oqp_call.kwargs.get("trust", 0.2))
-                trust_max = float(oqp_call.kwargs.get("trust_max", 0.5))
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.trust and oqp.trust_max must be positive numbers") from exc
-            if (not math.isfinite(trust) or not math.isfinite(trust_max)
-                    or trust <= 0 or trust_max <= 0 or trust > trust_max):
-                raise OQPInputError("oqp trust controls require 0 < trust <= trust_max")
-        if "freeze" in oqp_call.kwargs:
-            _validate_freeze_spec(oqp_call.kwargs["freeze"])
-        if "follow" in oqp_call.kwargs:
-            if not _is_non_negative_integer(oqp_call.kwargs["follow"]):
-                raise OQPInputError("oqp.follow must be a non-negative mode index")
-        for key in {
-            "spring", "fmax", "frms", "climb_fmax", "neb_dt", "maxmove",
-            "end_fmax", "irc_step", "mep_step", "path_gtol",
-        }.intersection(oqp_call.kwargs):
-            try:
-                value = float(oqp_call.kwargs[key])
-                if not math.isfinite(value) or value <= 0:
-                    raise ValueError
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.%s must be a positive number" % key) from exc
-        for key in {"climb", "align", "opt_ends"}.intersection(oqp_call.kwargs):
-            if not isinstance(oqp_call.kwargs[key], bool):
-                raise OQPInputError("oqp.%s must be true or false" % key)
-        native_aliases = {
-            "coordsys": "coordsys", "trust": "trust", "trust_max": "trust_max",
-        }
-        if driver.name == "optimize":
-            native_aliases.update({"freeze": "freeze"})
-        elif driver.name == "ts":
-            native_aliases.update({"follow": "follow", "hessian": "init_hessian"})
-        elif driver.name == "mep":
-            native_aliases.update({"step": "mep_step", "mep_step": "mep_step"})
-        elif driver.name == "irc":
-            native_aliases.update({
-                "direction": "irc_direction", "step": "irc_step", "irc_step": "irc_step",
-            })
-        elif driver.name == "neb":
-            native_aliases.update({
-                "spring": "spring", "climb": "climb", "fmax": "fmax",
-                "frms": "frms", "climb_fmax": "climb_fmax", "dt": "neb_dt",
-                "neb_dt": "neb_dt", "maxmove": "maxmove", "align": "align",
-                "opt_ends": "opt_ends", "end_fmax": "end_fmax",
-                "output": "neb_output",
-            })
-        for public_key, section_key in native_aliases.items():
-            if public_key in options and section_key in oqp_call.kwargs:
-                raise OQPInputError(
-                    "%s and oqp.%s specify the same native control; use one form"
-                    % (public_key, section_key)
-                )
-        if driver.name == "neb":
-            effective_climb = oqp_call.kwargs.get(
-                "climb", options.get("climb", True)
-            )
-            effective_fmax = float(oqp_call.kwargs.get(
-                "fmax", options.get("fmax", 2.0e-3)
-            ))
-            effective_climb_fmax = float(oqp_call.kwargs.get(
-                "climb_fmax", options.get("climb_fmax", 0.05)
-            ))
-            if effective_climb and effective_climb_fmax < effective_fmax:
-                raise OQPInputError(
-                    "neb climb_fmax must be greater than or equal to fmax when climb=true"
-                )
-
 
 def _internal_root(model: str, state: StateRef) -> int:
     if state.root is not None:
@@ -2613,16 +2700,8 @@ def lower_to_legacy(
             put("properties", key, value)
     elif name in {"optimize", "mep", "ts", "irc", "neb"}:
         put("optimize", "istate", roots[0] if roots else 0)
-        optimizer_backend = str(
-            driver_options.get("lib", "oqp")
-        ).strip().lower()
         for key, value in driver_options.items():
-            if name == "optimize" and key == "lib":
-                put("optimize", "lib", optimizer_backend)
-            elif (name == "optimize" and optimizer_backend == "geometric"
-                  and key in _GEOMETRIC_ENGINE_OPTIONS):
-                put("geometric", key, value)
-            elif name == "neb" and key in {"product", "images", "nimage"}:
+            if name == "neb" and key in {"product", "images", "nimage"}:
                 target_key = "nimage" if key in {"images", "nimage"} else "product"
                 if target_key == "product":
                     value = _resolve_path(value, source_dir)
@@ -2653,7 +2732,8 @@ def lower_to_legacy(
                     put("oqp", "mep_step", value)
                 elif key == "gtol":
                     put("oqp", "path_gtol", value)
-            elif name == "ts" and key in {"coordsys", "trust", "trust_max", "follow", "hessian"}:
+            elif name == "ts" and key in (
+                    _NATIVE_ENGINE_OPTIONS | {"follow", "hessian"}):
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
             elif name == "optimize" and key in (
                     _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
@@ -2783,15 +2863,258 @@ def _render_call(call: CallSpec) -> str:
     return "%s(%s)" % (display_name, ",".join(args))
 
 
-def render_canonical_oqp(spec: CalculationSpec) -> str:
-    """Render stable, readable canonical input that reparses identically.
+_SCHEMA_DEFAULTS_CACHE: Dict[str, Any] = {}
 
-    The route, options, driver, and modifiers are written as separate logical
-    lines. Geometry is deliberately last; inline coordinates use a
-    triple-quoted block with one atom per source line. The parser also accepts
-    the equivalent single-line spelling.
+
+def _load_schema_defaults() -> Optional[Dict[str, Dict[str, Tuple[str, Any]]]]:
+    """Read the runtime keyword defaults without initializing liboqp.
+
+    ``oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA`` is the single source of truth
+    for legacy-section defaults, but importing it loads the native library.
+    This module must stay loadable without it, so the schema literal is read
+    from the source file with :mod:`ast` and reduced to
+    ``{section: {key: (type_name, default_text)}}``.  ``None`` means the
+    schema could not be located; callers then keep every explicit option.
     """
 
+    if "schema" in _SCHEMA_DEFAULTS_CACHE:
+        return _SCHEMA_DEFAULTS_CACHE["schema"]
+    path = Path(__file__).resolve().parent.parent / "molecule" / "oqpdata.py"
+    schema: Optional[Dict[str, Dict[str, Tuple[str, Any]]]] = None
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError):
+        tree = None
+    if tree is not None:
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "OQP_CONFIG_SCHEMA"
+                and isinstance(node.value, ast.Dict)
+            ):
+                schema = {}
+                for sec_key, sec_val in zip(node.value.keys, node.value.values):
+                    if not isinstance(sec_key, ast.Constant) or not isinstance(sec_val, ast.Dict):
+                        continue
+                    entries: Dict[str, Tuple[str, Any]] = {}
+                    for opt_key, opt_val in zip(sec_val.keys, sec_val.values):
+                        if not isinstance(opt_key, ast.Constant) or not isinstance(opt_val, ast.Dict):
+                            continue
+                        type_name = ""
+                        default: Any = None
+                        have_default = False
+                        for k, v in zip(opt_val.keys, opt_val.values):
+                            if not isinstance(k, ast.Constant):
+                                continue
+                            if k.value == "type":
+                                if isinstance(v, ast.Name):
+                                    type_name = v.id
+                                elif isinstance(v, ast.Attribute):
+                                    type_name = v.attr
+                            elif k.value == "default":
+                                try:
+                                    default = ast.literal_eval(v)
+                                    have_default = True
+                                except ValueError:
+                                    have_default = False
+                        if have_default:
+                            entries[str(opt_key.value)] = (type_name, default)
+                    schema[str(sec_key.value)] = entries
+                break
+    _SCHEMA_DEFAULTS_CACHE["schema"] = schema
+    return schema
+
+
+def _normalize_typed_value(type_name: str, value: Any) -> Any:
+    """Normalize a config string the way the runtime converter would."""
+
+    text = "" if value is None else str(value).strip()
+    try:
+        if type_name == "int":
+            return int(text)
+        if type_name == "float":
+            return float(text.lower().replace("d", "e"))
+        if type_name == "bool":
+            low = text.lower()
+            if low in {"1", "yes", "true", "on", "y", "t", ".true."}:
+                return True
+            if low in {"0", "no", "false", "off", "n", "f", ".false."}:
+                return False
+            return low
+        if type_name in {"iarray", "farray", "barray"}:
+            parts = [p for p in re.split(r"[,\s]+", text) if p]
+            return tuple(_normalize_typed_value(
+                {"iarray": "int", "farray": "float", "barray": "bool"}[type_name], p
+            ) for p in parts)
+    except ValueError:
+        return text.lower()
+    if type_name == "str" or type_name == "path":
+        return text
+    return text.lower()
+
+
+def _effective_config(
+    config: Mapping[str, Mapping[str, str]],
+    schema: Mapping[str, Mapping[str, Tuple[str, Any]]],
+) -> Dict[Tuple[str, str], Any]:
+    """Overlay runtime defaults on a lowered config and normalize types."""
+
+    effective: Dict[Tuple[str, str], Any] = {}
+    for section, entries in schema.items():
+        values = config.get(section, {})
+        for key, (type_name, default) in entries.items():
+            raw = values[key] if key in values else default
+            if (section, key) == ("dftgrid", "pruned") and str(raw).strip().lower() in UNPRUNED_GRID_SPELLINGS:
+                raw = "none"
+            effective[(section, key)] = _normalize_typed_value(type_name, raw)
+    for section, values in config.items():
+        for key, raw in values.items():
+            if section not in schema or key not in schema[section]:
+                effective[(section, key)] = ("explicit", str(raw))
+    return effective
+
+
+def strip_default_options(spec: CalculationSpec) -> CalculationSpec:
+    """Drop explicit options that only restate the runtime defaults.
+
+    Every candidate (model option, top-level option, driver option, modifier
+    call or modifier option) is removed tentatively; the removal is kept only
+    when the request still validates and lowers to the same *effective*
+    legacy configuration, i.e. the same values after the runtime has filled in
+    its keyword defaults.  Geometry and state selectors are never touched.
+    The comparison uses the lowering code itself, so this cannot change what a
+    calculation does; it only removes noise such as ``guess(type=huckel)`` or
+    ``scf(maxit=30)`` from rendered input.
+    """
+
+    schema = _load_schema_defaults()
+    if schema is None:
+        return spec
+
+    def effective(candidate: CalculationSpec) -> Optional[Dict[Tuple[str, str], Any]]:
+        try:
+            _validate_semantics(candidate)
+            return _effective_config(lower_to_legacy(candidate), schema)
+        except (OQPInputError, KeyError, ValueError, TypeError):
+            return None
+
+    reference = effective(spec)
+    if reference is None:
+        return spec
+
+    def accept(candidate: CalculationSpec) -> bool:
+        return effective(candidate) == reference
+
+    current = spec
+
+    # Top-level options (never geometry, basis/functional live in the route).
+    for key in list(current.options):
+        if key in {"geom", "geom2"}:
+            continue
+        options = dict(current.options)
+        options.pop(key)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            options, current.driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Route options such as mrsf(nstate=...).
+    for key in list(current.model_options):
+        model_options = dict(current.model_options)
+        model_options.pop(key)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, model_options,
+            current.options, current.driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Driver options; positional state labels and state keywords stay.
+    state_keys = set(current.driver.kwargs) - set(_driver_options(current.driver))
+    for key in list(current.driver.kwargs):
+        if key in state_keys:
+            continue
+        kwargs = dict(current.driver.kwargs)
+        kwargs.pop(key)
+        driver = CallSpec(current.driver.name, current.driver.args, kwargs, current.driver.explicit)
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            current.options, driver, current.modifiers, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+
+    # Modifier calls: first the whole call, then each keyword.  Intent-only
+    # modifiers lower to nothing on purpose and are kept to document the
+    # requested analysis, so they are never candidates for removal.
+    index = 0
+    while index < len(current.modifiers):
+        call = current.modifiers[index]
+        if call.name in INTENT_ONLY_MODIFIERS:
+            index += 1
+            continue
+        without = current.modifiers[:index] + current.modifiers[index + 1:]
+        candidate = CalculationSpec(
+            current.model, current.functional, current.basis, current.model_options,
+            current.options, current.driver, without, current.source_text,
+        )
+        if accept(candidate):
+            current = candidate
+            continue
+        for key in list(call.kwargs):
+            kwargs = dict(call.kwargs)
+            kwargs.pop(key)
+            trimmed = CallSpec(call.name, call.args, kwargs, call.explicit)
+            modifiers = current.modifiers[:index] + (trimmed,) + current.modifiers[index + 1:]
+            candidate = CalculationSpec(
+                current.model, current.functional, current.basis, current.model_options,
+                current.options, current.driver, modifiers, current.source_text,
+            )
+            if accept(candidate):
+                current = candidate
+                call = trimmed
+        index += 1
+    return current
+
+
+# Rendered lines are filled greedily up to this width before wrapping; the
+# geometry always ends the file on its own line.
+RENDER_LINE_WIDTH = 100
+
+
+def _pack_tokens(tokens: Sequence[str], width: int = RENDER_LINE_WIDTH) -> List[str]:
+    lines: List[str] = []
+    current = ""
+    for token in tokens:
+        if not current:
+            current = token
+        elif len(current) + 1 + len(token) <= width:
+            current += " " + token
+        else:
+            lines.append(current)
+            current = token
+    if current:
+        lines.append(current)
+    return lines
+
+
+def render_canonical_oqp(spec: CalculationSpec, *, strip_defaults: bool = True) -> str:
+    """Render stable, readable canonical input that reparses identically.
+
+    The route, top-level options, driver, and modifiers are packed onto one
+    line (wrapping only past :data:`RENDER_LINE_WIDTH`), so a typical job reads
+    ``dft/pbe0/def2-svp opt``.  Geometry is deliberately last on its own line;
+    inline coordinates use a triple-quoted block with one atom per source
+    line.  Options that merely restate runtime defaults are dropped first (see
+    :func:`strip_default_options`).  The parser accepts any line layout.
+    """
+
+    if strip_defaults:
+        spec = strip_default_options(spec)
     model_args = ",".join(
         "%s=%s" % (key, _render_value(value)) for key, value in spec.model_options.items()
     )
@@ -2856,7 +3179,8 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         for key in ("geom", "geom2")
         if key in spec.options
     ]
-    return "\n".join([route] + option_parts + calls + geometry_parts) + "\n"
+    lines = _pack_tokens([route] + option_parts + calls)
+    return "\n".join(lines + geometry_parts) + "\n"
 
 
 def _natural_model(text: str) -> Optional[str]:

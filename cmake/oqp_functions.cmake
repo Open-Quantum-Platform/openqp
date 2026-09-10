@@ -281,6 +281,18 @@ endmacro()
 
 macro(findBlasLapack)
     cleanBlasVars()
+    # CMake's FindBLAS passes $MKLROOT to find_library() as PATHS, which is
+    # searched AFTER the system library directories.  On a host that also has
+    # a distribution MKL (for example Ubuntu's libmkl-* 2020 packages in
+    # /usr/lib/x86_64-linux-gnu) that stale copy silently wins over the
+    # oneAPI MKL the user loaded with setvars.sh.  Put MKLROOT first so that
+    # the loaded oneAPI MKL is the one that is found.
+    if(BLA_VENDOR MATCHES "^Intel" AND DEFINED ENV{MKLROOT})
+        file(TO_CMAKE_PATH "$ENV{MKLROOT}" _oqp_mklroot)
+        list(PREPEND CMAKE_LIBRARY_PATH
+             "${_oqp_mklroot}/lib" "${_oqp_mklroot}/lib/intel64")
+        unset(_oqp_mklroot)
+    endif()
     find_package(BLAS)
     find_package(LAPACK)
     if(BLAS_FOUND AND DEFINED BLAS_SIZEOF_INTEGER AND NOT BLAS_SIZEOF_INTEGER EQUAL ${BLA_SIZEOF_INTEGER})
@@ -321,6 +333,13 @@ macro(findLinearAlgebra)
         set(_oqp_linalg_mandated TRUE)
       elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
         set(linalg_lib OpenBLAS)
+        set(_oqp_linalg_mandated TRUE)
+      elseif(WIN32)
+        # Same MKL ILP64 the Windows wheels and the standalone archive use.
+        # Naming it here keeps `auto` off the mkl_rt path below, whose single
+        # dynamic library defaults to the LP64 interface at RUN time -- an
+        # 8-byte-integer build calling 4-byte routines, silently.
+        set(linalg_lib Intel10_64ilp)
         set(_oqp_linalg_mandated TRUE)
       endif()
       if(_oqp_linalg_mandated)
@@ -444,6 +463,12 @@ macro(findLinearAlgebra)
       if(TARGET oqp)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
+      # NOTE: nothing reads this.  mkl_rt picks its interface layer at run
+      # time and defaults to LP64; making ILP64 stick would require
+      # MKL_INTERFACE_LAYER in the environment or mkl_set_interface_layer()
+      # before the first BLAS call.  Every platform in the mandated table
+      # above avoids this branch; leaving the variable here so the gap is
+      # visible rather than implied.
       set(_MKL_INTERFACE_LAYER "ILP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
     elseif(linalg_lib STREQUAL Apple)
       set(_LINALG_LIB_TYPE "Accelerate_ILP64" CACHE INTERNAL "_LIANLG_LIB_TYPE")
@@ -464,5 +489,28 @@ macro(findLinearAlgebra)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
     endif()
+    # Publish the backend actually in use.  LINALG_LIB keeps the user's
+    # spelling, so anything deciding on the real provider -- Fortran symbol
+    # mangling, for one -- must read this instead.
+    #
+    # `auto` is only rewritten for the platforms in the mandated table above;
+    # everywhere else (Windows included) it stays "auto" and the generic
+    # FindBLAS probe picks the provider.  Naming that provider is the whole
+    # point here, so read it back off the libraries FindBLAS returned.
+    set(_oqp_selected_linalg "${linalg_lib}")
+    if(_oqp_selected_linalg STREQUAL auto)
+      string(TOLOWER "${BLAS_LIBRARIES};${LAPACK_LIBRARIES}" _oqp_found_blas)
+      if(_oqp_found_blas MATCHES "openblas")
+        set(_oqp_selected_linalg OpenBLAS)
+      elseif(_oqp_found_blas MATCHES "mkl")
+        set(_oqp_selected_linalg Intel10_64ilp)
+      endif()
+      message(STATUS "LINALG_LIB=auto: FindBLAS selected "
+                     "'${_oqp_selected_linalg}' (${BLAS_LIBRARIES})")
+    endif()
+    set(_LINALG_LIB_SELECTED "${_oqp_selected_linalg}"
+        CACHE INTERNAL "LINALG_LIB after auto resolution")
+    unset(_oqp_selected_linalg)
+    unset(_oqp_found_blas)
     unset(linalg_lib)
 endmacro()

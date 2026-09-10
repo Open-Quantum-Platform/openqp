@@ -194,7 +194,7 @@ contains
         ! density/spin scale factors internally, so no manual convention factors.
         if (infos%control%hamilton == 20) then
           block
-            use dft, only: dft_initialize, dftclean, dftexcor
+            use mod_dft, only: dft_initialize, dftclean, dftexcor
             use mod_dft_molgrid, only: dft_grid_t
             type(dft_grid_t) :: mgr
             real(dp), allocatable :: dmoR(:,:), mop(:,:), frp(:), frm(:), dVxcR(:,:), hxcR(:,:)
@@ -399,7 +399,7 @@ contains
       ! supplies the remaining DFT exchange-correlation functional.
       if (infos%control%hamilton == 20) then
         block
-          use dft, only: dft_initialize, dftclean, dftexcor
+          use mod_dft, only: dft_initialize, dftclean, dftexcor
           use mod_dft_gridint_grad, only: derexc_blk
           use mod_dft_molgrid, only: dft_grid_t
           type(dft_grid_t) :: mg
@@ -777,7 +777,7 @@ contains
         ! (which carries -F0x).
         if (infos%control%hamilton >= 20) then
           block
-            use dft, only: dft_initialize, dftclean, dftexcor
+            use mod_dft, only: dft_initialize, dftclean, dftexcor
             use mod_dft_molgrid, only: dft_grid_t
             type(dft_grid_t) :: mgr
             real(dp), allocatable :: dmoa(:,:), dmob(:,:), mopa(:,:), mopb(:,:)
@@ -972,7 +972,7 @@ contains
     ! The HF-exchange fraction is already in the Coulomb/exchange terms (hfscale).
     if (infos%control%hamilton >= 20) then
       block
-        use dft, only: dft_initialize, dftclean, dftexcor
+        use mod_dft, only: dft_initialize, dftclean, dftexcor
         use mod_dft_gridint_grad, only: derexc_blk
         use mod_dft_molgrid, only: dft_grid_t
         type(dft_grid_t) :: mg
@@ -1351,7 +1351,7 @@ contains
         ! skeleton dVxc/dR + f_xc[d0], subtracted from B (which carries -F0x).
         if (infos%control%hamilton >= 20) then
           block
-            use dft, only: dft_initialize, dftclean, dftexcor
+            use mod_dft, only: dft_initialize, dftclean, dftexcor
             use mod_dft_molgrid, only: dft_grid_t
             type(dft_grid_t) :: mgr
             real(dp), allocatable :: dmoa(:,:), dmob(:,:), mopa(:,:), mopb(:,:)
@@ -1429,7 +1429,7 @@ contains
     allocate(faop(nbf2), fbop(nbf2))
     if (infos%control%hamilton >= 20) then   ! flush stale grid state from the CPHF solver
       block
-        use dft, only: dft_initialize, dftclean
+        use mod_dft, only: dft_initialize, dftclean
         use mod_dft_molgrid, only: dft_grid_t
         type(dft_grid_t) :: mgw
         call dft_initialize(infos, basis, mgw); call dftclean(infos)
@@ -1547,7 +1547,7 @@ contains
       ! with no separate analytic XC term.
       if (infos%control%hamilton >= 20) then
         block
-          use dft, only: dft_initialize, dftclean, dftexcor
+          use mod_dft, only: dft_initialize, dftclean, dftexcor
           use mod_dft_gridint_grad, only: derexc_blk
           use mod_dft_molgrid, only: dft_grid_t
           type(dft_grid_t) :: mg

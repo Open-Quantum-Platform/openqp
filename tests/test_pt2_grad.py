@@ -1,5 +1,10 @@
 """End-to-end tests for the PT2-family central-difference numerical gradients.
 
+The route is pinned with ``[pt2] gradient=numerical``: the default ``auto``
+sends every variant that has an analytic derivative to
+:mod:`oqp.library.caspt2_gradient` instead, which is a different quantity from
+the one this file measures.
+
 The native PT2 family (mrmp2/mcqdpt2/xmcqdpt2/caspt2/ms-/xms-caspt2) is
 energy-only in the kernels; ``oqp.library.pt2_numgrad`` supplies
 central-difference gradients over Cartesian displacements and
@@ -44,7 +49,15 @@ def _make_runner(tmp_path, project, system, *, method="mrmp2", nroot=1,
 
     ci = {"nroot": str(max(nroot, 1)), "solver": "dense", "eig_tol": "1.0e-10",
           "integral_backend": "native", "integral_cutoff": "5.0e-11"}
-    pt2 = {"reference": "casci"}
+    # This file tests the CENTRAL-DIFFERENCE route, so it pins it.  Since the
+    # analytic CASPT2 gradient landed, [pt2] gradient=auto sends caspt2, mrmp2,
+    # mcqdpt2 and the XMS variants to the analytic derivative instead, and these
+    # tests would then be measuring a different quantity: comparing an analytic
+    # gradient against a two-point difference at atol=1e-8 fails on the
+    # difference's own O(h^2) truncation error, and the numerical driver's log
+    # line and task-group layout do not exist on the analytic path at all.
+    # The analytic route has its own file, tests/test_caspt2_analytic_grad.py.
+    pt2 = {"reference": "casci", "gradient": "numerical"}
     if nroot > 1:
         ci["target_spin"] = "singlet"
         pt2.update({"nroot": str(nroot),

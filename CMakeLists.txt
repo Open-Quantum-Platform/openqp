@@ -64,7 +64,7 @@ unset(_oqp_env_cc)
 unset(_oqp_env_cxx)
 
 project(Open-Quantum-Package
-  VERSION 1.3.0
+  VERSION 1.3.1
   LANGUAGES C CXX Fortran)
 
 include(GNUInstallDirs)
@@ -75,15 +75,18 @@ include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
-option(ENABLE_OPENQP_DFTB
-    "Convenience hook: also build openqp-dftb and stage its libopenqp_dftb_c shared library (never linked into liboqp)" OFF)
-set(OPENQP_DFTB_GIT_REPOSITORY "https://github.com/Open-Quantum-Platform/openqp-dftb.git"
-    CACHE STRING "Git repository used when ENABLE_OPENQP_DFTB builds openqp-dftb.")
-set(OPENQP_DFTB_GIT_TAG "main"
-    CACHE STRING "Git ref used when ENABLE_OPENQP_DFTB builds openqp-dftb.")
-set(OPENQP_DFTB_SOURCE_DIR "" CACHE PATH
-    "Optional local openqp-dftb source checkout for ENABLE_OPENQP_DFTB builds.")
-mark_as_advanced(OPENQP_DFTB_GIT_REPOSITORY OPENQP_DFTB_GIT_TAG OPENQP_DFTB_SOURCE_DIR)
+if(WIN32 AND ENABLE_DDX)
+    # The ddX ExternalProject models DDX_LIBRARY as the runtime artifact and
+    # links consumers against it directly.  On Windows a consumer links the
+    # import library while the DLL is a separate file, and unlike the DFT-D4
+    # stack ddX records neither path, so this configuration cannot link.
+    # Rejected rather than half-supported: it is off by default and untested
+    # here.
+    message(FATAL_ERROR
+        "ENABLE_DDX is not supported on Windows: the ddX build models only a "
+        "single library artifact, and Windows needs the import library and "
+        "the DLL modelled separately.  Configure with -DENABLE_DDX=OFF.")
+endif()
 option(OQP_REUSE_EXTERNALS
        "Reuse bundled external dependency builds across fresh OpenQP build directories"
        ON)
@@ -105,6 +108,42 @@ if(ENABLE_MPI)
 endif()
 
 option(BUILD_SHARED_LIBS "Enable shared build"               ON)
+
+# Native DFT-D4 dispersion.  Kept as an option so a build can drop the whole
+# stack (external projects, the bind(C) shim, links and installs); with it OFF
+# oqp_dftd4_disp is simply absent from liboqp and the Python layer reports
+# dispersion as unavailable.  On every supported platform the default is ON.
+option(ENABLE_DFTD4 "Build the native DFT-D4 dispersion backend" ON)
+if(WIN32 AND NOT BUILD_SHARED_LIBS)
+    # Two independent reasons, so this is rejected regardless of ENABLE_DFTD4:
+    #  * upstream dftd4 exports its API with !DEC$ ATTRIBUTES DLLEXPORT, which
+    #    marks the symbols __declspec(dllimport) for consumers; a static link
+    #    leaves unresolved __imp_* references.
+    #  * the static branch below forces CMAKE_FIND_LIBRARY_SUFFIXES to ".a",
+    #    which finds nothing on Windows -- MKL and the rest are ".lib" -- so
+    #    BLAS discovery fails before anything is compiled.
+    # Turning the backend off would only move the failure, so do not offer it
+    # as a workaround.  Windows is built and tested shared.
+    message(FATAL_ERROR
+        "On Windows OpenQP must be built shared: static Windows builds are "
+        "not supported (DFT-D4 exports through DLLEXPORT, and static library "
+        "discovery here looks for Unix '.a' names).  Configure with "
+        "-DBUILD_SHARED_LIBS=ON.")
+endif()
+
+get_property(_oqp_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(WIN32 AND ENABLE_DFTD4 AND _oqp_multi_config)
+    # The DFT-D4 DLLs are taken from the top of each ExternalProject build
+    # directory.  A multi-config generator puts them in a per-configuration
+    # subdirectory (Release\, Debug\) instead, so the recorded paths would
+    # match nothing: the external cache would never be reused, and the install
+    # would fail copying a file that is not where it was expected.  Ninja is
+    # the generator this platform is built and tested with.
+    message(FATAL_ERROR
+        "On Windows OpenQP needs a single-configuration generator: the "
+        "DFT-D4 runtime paths are resolved without a per-config "
+        "subdirectory.  Configure with -G Ninja, or -DENABLE_DFTD4=OFF.")
+endif()
 
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 
@@ -243,10 +282,38 @@ endif()
 set(BLA_SIZEOF_INTEGER 8)
 set(OTR_SUFFIX "_64")
 set(OTR_DEFS "-DUSE_ILP64")
+if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
+              OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM"))
+  # Intel Fortran on Windows links the STATIC Fortran runtime by default, so
+  # liboqp.dll and each DFT-D4 DLL would carry their own runtime state and
+  # their own heap.  An allocatable allocated in one and released in another
+  # then corrupts the heap (STATUS_HEAP_CORRUPTION, 0xC0000374).  Select the
+  # shared runtime for every Fortran object in the process.  Set through
+  # CMAKE_Fortran_FLAGS rather than add_compile_options() so that
+  # external/CMakeLists.txt forwards it to the DFT-D4 subprojects too.
+  string(APPEND CMAKE_Fortran_FLAGS " /libs:dll /threads")
+endif()
+
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
 elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
+    # Intel Fortran represents .TRUE. as -1 (all bits set) by default.  OpenQP
+    # exports logical(c_bool) fields through the C API (include/oqp.h) and the
+    # Python layer reads them as C _Bool, which only admits 0 or 1.
+    # -fpscomp logicals selects the 1/0 representation that the Fortran
+    # standard requires for C interoperability.
+    add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-fpscomp logicals>")
+    # ifx places automatic arrays and array temporaries on the stack, gfortran
+    # on the heap.  liboqp runs inside a Python process with the default 8 MB
+    # main-thread stack (and smaller OpenMP worker stacks), so large automatic
+    # arrays (e.g. in the MRSF-TDDFT response driver) segfault with ifx unless
+    # the user raises ulimit -s.  -heap-arrays gives ifx the gfortran
+    # behaviour: arrays larger than 64 KB (or of run-time size) go on the heap.
+    add_compile_options("$<$<COMPILE_LANGUAGE:Fortran>:SHELL:-heap-arrays 64>")
+    # Symbolic tracebacks on Fortran runtime errors (negligible cost; the
+    # runtime prints routine/line instead of a bare "forrtl: severe").
+    add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-traceback>)
 endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
@@ -308,6 +375,21 @@ endif()
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
 
+# Fortran symbol naming must match the BLAS actually selected.  Intel Fortran
+# on Windows emits UPPERCASE names with no trailing underscore, which is what
+# MKL's Windows libraries export; OpenBLAS keeps the Unix convention (`dgemm_`)
+# even on Windows, so a build against it must switch or every BLAS/LAPACK call
+# goes unresolved -- including the ones inside the DFT-D4 stack, which inherits
+# these flags.  Decide AFTER findLinearAlgebra(): with the public default
+# LINALG_LIB=auto the request says nothing about the backend, and auto resolves
+# to OpenBLAS whenever MKL is absent.  Both add_subdirectory() calls below
+# still see CMAKE_Fortran_FLAGS, so this is early enough.
+if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
+              OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+         AND _LINALG_LIB_SELECTED STREQUAL "OpenBLAS")
+  string(APPEND CMAKE_Fortran_FLAGS " /names:lowercase /assume:underscore")
+endif()
+
 # Prebuilt ddX (find_package(DDX) above) created the DDX::ddx imported target in
 # cmake/FindDDX.cmake BEFORE findLinearAlgebra() resolved BLAS/LAPACK, so it
 # could not record ddX's BLAS dependency. Now that the libraries are known,
@@ -330,7 +412,9 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
-  if(BUILD_SHARED_LIBS)
+  # The dependency check inspects ELF/Mach-O load commands; it has no Windows
+  # equivalent (the DLLs are found by search path, not by recorded SONAME).
+  if(BUILD_SHARED_LIBS AND ENABLE_DFTD4 AND NOT WIN32)
     add_test(NAME oqp_dftd4_dynamic_dependencies
       COMMAND ${CMAKE_COMMAND}
         "-DOQP_LIBRARY=$<TARGET_FILE:oqp>"

@@ -79,8 +79,8 @@ prove that a particular binary artifact preserved this arrangement.
 
 ## Optional configurations
 
-The default PyPI wheel disables Libint, ddX, OpenTrustRegion, MPI, and the
-OpenQP-DFTB staging hook. Enabling any optional component can add further
-third-party license and redistribution requirements. A distributor of a
+The default PyPI wheel disables Libint, ddX, OpenTrustRegion, and MPI.
+Enabling any optional component can add further third-party license and
+redistribution requirements. A distributor of a
 non-default build must audit that artifact separately and include the
 corresponding notices and license texts.

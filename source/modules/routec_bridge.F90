@@ -118,7 +118,26 @@ module routec_bridge
     end subroutine
   end interface
 #else
-  ! Runtime dlopen path.
+  ! Runtime dynamic-loader path.
+#ifdef OQP_DL_WIN32
+  ! Windows has no libdl.  kernel32's LoadLibraryA/GetProcAddress are the
+  ! equivalents (and are always available to the link), so bind those and wrap
+  ! them below in c_dlopen/c_dlsym so every call site stays platform-neutral.
+  ! LoadLibraryA has no counterpart to dlopen's mode, which is ignored.
+  interface
+    function c_loadlibrary(file) bind(C, name="LoadLibraryA")
+      import :: c_ptr, c_char
+      character(kind=c_char), intent(in) :: file(*)
+      type(c_ptr) :: c_loadlibrary
+    end function
+    function c_getprocaddress(handle, name) bind(C, name="GetProcAddress")
+      import :: c_ptr, c_char, c_funptr
+      type(c_ptr), value :: handle
+      character(kind=c_char), intent(in) :: name(*)
+      type(c_funptr) :: c_getprocaddress
+    end function
+  end interface
+#else
   interface
     function c_dlopen(file, mode) bind(C, name="dlopen")
       import :: c_ptr, c_char, c_int
@@ -133,6 +152,7 @@ module routec_bridge
       type(c_funptr) :: c_dlsym
     end function
   end interface
+#endif
   integer(c_int), parameter :: RTLD_NOW = 2_c_int
 #endif
 
@@ -307,5 +327,24 @@ contains
                         hfscale, hfscale2, coulscale, spcscale, int(mrst,c_int), info)
     done = (info == 0_c_int)
   end function routec_try_grad2_mrsf
+
+#ifdef OQP_DL_WIN32
+  !> dlopen/dlsym shims over the Win32 loader (see the interface block above).
+  function c_dlopen(file, mode) result(handle)
+    character(kind=c_char, len=*), intent(in) :: file
+    integer(c_int), intent(in) :: mode
+    type(c_ptr) :: handle
+    integer(c_int) :: ignored
+    ignored = mode
+    handle = c_loadlibrary(file)
+  end function c_dlopen
+
+  function c_dlsym(handle, name) result(fp)
+    type(c_ptr), intent(in) :: handle
+    character(kind=c_char, len=*), intent(in) :: name
+    type(c_funptr) :: fp
+    fp = c_getprocaddress(handle, name)
+  end function c_dlsym
+#endif
 
 end module routec_bridge

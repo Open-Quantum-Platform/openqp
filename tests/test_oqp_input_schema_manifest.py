@@ -206,7 +206,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 section, key, _value_text(default, converter)
             )
             first = oqp_input.parse_canonical_oqp(text)
-            canonical = oqp_input.render_canonical_oqp(first)
+            # This checks representability, so keep default-valued keywords
+            # instead of letting the canonical renderer drop them.
+            canonical = oqp_input.render_canonical_oqp(first, strip_defaults=False)
             reparsed = oqp_input.parse_canonical_oqp(canonical)
             lowered = oqp_input.lower_to_legacy(reparsed)
             if (section, key) in concise_dftb_defaults:
@@ -220,11 +222,12 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # This includes the native multiconfigurational sections plus the DFTB,
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
     # gradient (the PT2 nuclear-gradient route selector: analytic derivative
-    # vs central differences).
-    assert len(checked) == 353
+    # vs central differences).  357 since correlated-state irrep selection added
+    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity.
+    assert len(checked) == 357
 
 
-def test_geometric_backend_is_canonical_only_through_opt_driver_options():
+def test_concise_geometry_drivers_reject_legacy_backend_selectors():
     oqp_input = _load_oqp_input()
 
     assert oqp_input.LEGACY_ONLY_SCHEMA_KEYS == {
@@ -235,10 +238,15 @@ def test_geometric_backend_is_canonical_only_through_opt_driver_options():
         }),
         "neb": frozenset({"k", "maxg", "avgg", "climb", "align", "optep"}),
     }
-    spec = oqp_input.parse_canonical_oqp(
-        'dft/pbe0/def2-svp opt(S0,lib=geometric,coordsys=dlc) geom="h2o.xyz"'
-    )
-    assert oqp_input.lower_to_legacy(spec)["optimize"]["lib"] == "geometric"
+    for selector in ("lib=oqp", "lib=geometric"):
+        try:
+            oqp_input.parse_canonical_oqp(
+                f'dft/pbe0/def2-svp opt(S0,{selector}) geom="h2o.xyz"'
+            )
+        except oqp_input.OQPInputError as exc:
+            assert "traditional sectioned .inp" in str(exc)
+        else:
+            raise AssertionError("concise .oqp must not expose optimizer backends")
     try:
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp opt(S0) geometric(coordsys=tric) geom="h2o.xyz"'

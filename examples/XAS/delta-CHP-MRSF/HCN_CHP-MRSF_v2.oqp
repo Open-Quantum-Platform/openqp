@@ -1,7 +1,2 @@
-mrsf(nstate=25)/bhhlyp/6-31g*
-energy(S0)
-guess(type=huckel,save_mol=false,continue_geom=false,swapmo="2,7,8,21")
-scf(save_molden=true,rstctmo=true)
-dftgrid(rad_npts=96,ang_npts=302)
-tdhf(ixcore=7)
+mrsf(nstate=25)/bhhlyp/6-31g* energy(S0) guess(swapmo="2,7,8,21") scf(rstctmo=true) tdhf(ixcore=7)
 geom="../../geometries/CHN-cef1bbffc7f3.xyz"

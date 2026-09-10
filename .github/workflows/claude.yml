@@ -40,6 +40,15 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
+          # Authenticate to GitHub with the workflow token. Without this input the
+          # action exchanges the Actions OIDC token for a Claude GitHub App token,
+          # and that exchange returns "401 Unauthorized - Invalid OIDC token" here
+          # because the app installation is not linked to an Anthropic account
+          # (anthropics/claude-code-action#873), so the review never ran. Cost of
+          # the workaround: comments come from github-actions[bot], not claude[bot],
+          # and use_sticky_comment is unavailable. Drop this line once the app
+          # installation is linked.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
@@ -67,10 +76,14 @@ jobs:
                  (a linked openqp-docs PR).
             For each rule, state PASS, or explain what is missing.
 
+      # The review step is continue-on-error so that this step can report the
+      # failure in its own words, but the job must still go red: a review gate
+      # that reports success while no review ran is worse than no gate at all.
       - name: Claude review unavailable
         if: steps.claude_review.outcome == 'failure'
         run: |
-          echo "::warning::Claude automatic review did not complete. Check CLAUDE_CODE_OAUTH_TOKEN and the Claude workflow logs."
+          echo "::error::Claude automatic review did not complete, so this pull request has not been reviewed by Claude. Open the 'Claude PR Review' step log above for the underlying error."
+          exit 1
 
   claude-mention:
     name: Claude mention handler
@@ -91,7 +104,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          # Leave no write-scoped GITHUB_TOKEN in the git config. Withholding the
+          # action's github_token input alone does not stop a `git push` here,
+          # because checkout persists that credential for subsequent git commands
+          # by default. See the note on the action step below.
+          persist-credentials: false
 
+      # This job is deliberately NOT given github_token, unlike the review job
+      # above. It holds contents: write and can push commits to a pull request
+      # branch, and a push authenticated with GITHUB_TOKEN does not start another
+      # workflow run (GitHub's recursion protection). The pull request would then
+      # display CI results belonging to the previous commit. Every check in this
+      # repository - CI.yml, pr-policy.yml, build_wheels.yml, docker-build.yml,
+      # windows-intel.yml - runs on push/pull_request and would be affected.
+      # Making this handler work needs a token that can trigger workflows, i.e. a
+      # GitHub App token or a PAT, which is a separate decision from the review
+      # gate. Until then it keeps failing the app-token exchange as before.
       - name: Claude Code Action Official
         uses: anthropics/claude-code-action@v1
         with:

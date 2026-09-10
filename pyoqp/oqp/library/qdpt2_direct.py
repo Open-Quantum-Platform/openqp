@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from oqp.library.fci import canonicalize_ci_phase
+
 
 # --------------------------------------------------------------------------- bit utilities
 # `np.bitwise_count` is NumPy 2.0 and later.  pyproject declares numpy>=1.20,
@@ -433,6 +435,11 @@ def direct_qdpt2(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
         F = _effective_fock(h1e, eri, D_sa)
         fmodel = _support_one_electron_model(F, sup_a, sup_b, norb, C)
         _w, R = np.linalg.eigh(0.5 * (fmodel + fmodel.T))
+        # Same canonical column phase _xms_rotation applies on the Dyall path:
+        # eigh fixes each rotated reference only up to a sign, and that sign
+        # reaches the off-diagonal of heff below, which carries the product of
+        # two of them.  This is the branch xmcqdpt2 and xms-caspt2 actually take.
+        R = canonicalize_ci_phase(R)
         C = C @ R
         hmodel = R.T @ np.diag(E_ref_in) @ R
     else:

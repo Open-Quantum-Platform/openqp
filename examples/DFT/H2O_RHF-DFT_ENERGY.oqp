@@ -1,5 +1,2 @@
-rks/bhhlyp/6-31g*
-guess(type=huckel)
-scf(pscreen=true)
-dftgrid(rad_type=becke)
+rks/bhhlyp/6-31g* scf(pscreen=true) dftgrid(rad_type=becke)
 geom="../geometries/H2O-0381125c86f2.xyz"
