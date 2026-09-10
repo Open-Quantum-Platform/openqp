@@ -2,12 +2,14 @@
 
 The preflight must agree with the native MRSF Hessian gates: accept the LibXC
 spellings OpenQP maps to a verified functional, and reject range separation
-before any SCF or response work is done.
+before any SCF or response work is done.  For runtype=hess it must also
+reject property requests that cannot run at all, and only warn about ones
+that complete partially.
 """
 
 import unittest
 
-from oqp.utils.input_checker import analytic_hessian_capability
+from oqp.utils.input_checker import analytic_hessian_capability, check_input_values
 
 
 def _mrsf_request(functional, **dftgrid):
@@ -21,6 +23,18 @@ def _mrsf_request(functional, **dftgrid):
         config["dftgrid"] = dict(dftgrid)
     return config
 
+
+
+def _checked_request(nstate, **hess):
+    # A complete runtype=hess request that passes the whole input checker.
+    return {
+        "input": {"method": "tdhf", "runtype": "hess", "basis": "sto-3g",
+                  "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3"},
+        "scf": {"type": "rohf", "multiplicity": 3},
+        "tdhf": {"type": "mrsf", "nstate": nstate, "multiplicity": 3},
+        "hess": dict({"type": "analytical", "state": 1, "nproc": 1,
+                      "temperature": [298.15]}, **hess),
+    }
 
 class MrsfHessianPreflight(unittest.TestCase):
     def test_libxc_aliases_of_verified_functionals_are_accepted(self):
@@ -53,16 +67,40 @@ class MrsfHessianPreflight(unittest.TestCase):
         request["hess"]["vibrational_intensities"] = False
         self.assertEqual(analytic_hessian_capability(request)[0], "supported")
 
-    def test_truncated_sos_raman_needs_its_tail_roots(self):
+    def test_short_sos_tail_only_warns_because_ir_still_runs(self):
+        # truncated_sos_polarizability's ValueError is caught per displacement:
+        # IR intensities are published and Raman is marked unavailable.
+        request = _checked_request(nstate=4)
+        self.assertEqual(analytic_hessian_capability(request)[0], "supported")
+        report = check_input_values(request, raise_error=False, emit=False)
+        self.assertTrue(report.ok, report.to_text())
+        self.assertIn("raman_sos_tail_states", report.to_text())
+
+    def test_finite_field_raman_is_rejected_because_it_cannot_run(self):
         request = _mrsf_request("bhhlyp")
         request["input"]["runtype"] = "hess"
-        request["tdhf"]["nstate"] = 4
-        request["hess"]["state"] = 1
+        request["hess"]["raman_backend"] = "finite_field"
         status, reason = analytic_hessian_capability(request)
         self.assertEqual(status, "unsupported_feature")
-        self.assertIn("raman_sos_tail_states", reason)
-        request["hess"]["raman_backend"] = "finite_field"
+        self.assertIn("finite_field", reason)
+        request["hess"]["vibrational_intensities"] = False
         self.assertEqual(analytic_hessian_capability(request)[0], "supported")
+
+    def test_cached_hessian_reads_skip_the_property_requirements(self):
+        request = _mrsf_request("bhhlyp")
+        request["input"]["runtype"] = "hess"
+        request["hess"]["state"] = request["tdhf"]["nstate"]
+        request["hess"]["read"] = True
+        self.assertEqual(analytic_hessian_capability(request)[0], "supported")
+
+    def test_numerical_mrsf_hessians_get_the_same_root_check(self):
+        request = _checked_request(nstate=1, type="numerical")
+        report = check_input_values(request, raise_error=False, emit=False)
+        self.assertFalse(report.ok)
+        self.assertIn("tdhf.nstate", report.to_text())
+        request["tdhf"]["nstate"] = 6
+        report = check_input_values(request, raise_error=False, emit=False)
+        self.assertTrue(report.ok, report.to_text())
 
     def test_shipped_analytic_mrsf_decks_still_pass(self):
         # examples/HESS/*MRSF_ANALYTIC_HESSIAN*.inp: runtype=hess, state=3, nstate=6.

@@ -6688,6 +6688,70 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
+def _mrsf_property_stage_scope(config: dict[str, Any]) -> tuple[int, int] | None:
+    """(hess.state, tdhf.nstate) when an MRSF Hessian runs its property stage.
+
+    Hessian.hessian() evaluates state-tracked IR/Raman after an MRSF Hessian,
+    analytic or numerical, unless intensities are disabled.  Only runtype=hess
+    computing a new Hessian reaches that stage: hess.read reuses the cached
+    matrix, and the TS/IRC drivers call hessian(analysis=False).
+    """
+    if _as_lower(_get(config, "tdhf", "type", "")) != "mrsf":
+        return None
+    if _as_lower(_get(config, "input", "runtype", "")) != "hess":
+        return None
+    if _is_true(_get(config, "hess", "read", False)):
+        return None
+    if not _is_true(_get(config, "hess", "vibrational_intensities", True)):
+        return None
+    target = int(_get(config, "hess", "state", 0))
+    if target <= 0:
+        return None
+    return target, int(_get(config, "tdhf", "nstate", 1))
+
+
+def _mrsf_property_stage_problem(config: dict[str, Any]) -> str | None:
+    """Why the MRSF property stage would fail at every displacement, or None."""
+    scope = _mrsf_property_stage_scope(config)
+    if scope is None:
+        return None
+    target, nstate = scope
+    if nstate <= target:
+        # track_isolated_mrsf_hessian_root rejects a root with nothing above it.
+        return (
+            f"MRSF vibrational intensities track hess.state={target} against a "
+            f"higher solved root; set tdhf.nstate > {target}, or "
+            "[hess] vibrational_intensities=false."
+        )
+    if _as_lower(_get(config, "hess", "raman_backend", "truncated_sos")) == "finite_field":
+        return (
+            "raman_backend=finite_field is unavailable for MRSF (OpenQP has no "
+            "uniform electric-field MRSF Hamiltonian), so every property step "
+            "would fail; use raman_backend=truncated_sos, or [hess] "
+            "vibrational_intensities=false."
+        )
+    return None
+
+
+def _mrsf_raman_tail_shortfall(config: dict[str, Any]) -> str | None:
+    """Why truncated-SOS Raman will be unavailable while IR still runs, or None."""
+    scope = _mrsf_property_stage_scope(config)
+    if scope is None:
+        return None
+    if _as_lower(_get(config, "hess", "raman_backend", "truncated_sos")) != "truncated_sos":
+        return None
+    target, nstate = scope
+    tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    if nstate >= tail + 3 and target <= nstate - tail:
+        return None
+    return (
+        "truncated-SOS Raman needs tdhf.nstate >= raman_sos_tail_states + 3 "
+        f"(= {tail + 3}) and hess.state <= tdhf.nstate - raman_sos_tail_states "
+        f"(= {nstate - tail}); IR intensities are still computed, but Raman "
+        "activities will be reported as unavailable."
+    )
+
+
 def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     """Return analytic-Hessian capability status and a precise reason.
 
@@ -6768,38 +6832,11 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "unsupported_feature",
                     "MRSF analytic Hessians require a positive excited-state index.",
                 )
-            # Default IR/Raman evaluation transports the target root to displaced
-            # geometries, and track_isolated_mrsf_hessian_root rejects a root with
-            # no solved root above it (hess.state == tdhf.nstate).  The
-            # truncated-SOS Raman backend also needs raman_sos_tail_states + 3
-            # roots with the target below that tail.  Reject such requests here
-            # instead of computing the Hessian and failing every property step.
-            # Only runtype=hess runs that property stage; TS and IRC drivers take
-            # the Cartesian matrix alone (Hessian.hessian(analysis=False)).
-            runs_property_stage = (
-                _as_lower(_get(config, "input", "runtype", "")) == "hess"
-                and _is_true(_get(config, "hess", "vibrational_intensities", True)))
-            if runs_property_stage:
-                target = int(state)
-                if td_nstate <= target:
-                    return (
-                        "unsupported_feature",
-                        f"MRSF vibrational intensities track hess.state={target} against a "
-                        f"higher solved root; set tdhf.nstate > {target}, or "
-                        "[hess] vibrational_intensities=false.",
-                    )
-                backend = _as_lower(_get(config, "hess", "raman_backend", "truncated_sos"))
-                if backend == "truncated_sos":
-                    tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
-                    if td_nstate < tail + 3 or target > td_nstate - tail:
-                        return (
-                            "unsupported_feature",
-                            "truncated-SOS Raman needs tdhf.nstate >= "
-                            f"raman_sos_tail_states + 3 (= {tail + 3}) and hess.state <= "
-                            f"tdhf.nstate - raman_sos_tail_states (= {td_nstate - tail}); "
-                            "increase tdhf.nstate, use raman_backend=finite_field, or set "
-                            "[hess] vibrational_intensities=false.",
-                        )
+            # A fresh runtype=hess Hessian evaluates state-tracked IR/Raman
+            # afterwards; reject requests for which that stage cannot run.
+            problem = _mrsf_property_stage_problem(config)
+            if problem:
+                return "unsupported_feature", problem
             method_name = "MRSF-TDDFT" if functional else "MRSF-TDHF"
             return (
                 "supported",
@@ -6951,6 +6988,30 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
             action="Set [hess] type=numerical or type=analytical.",
         )
         return
+
+    if method == "tdhf" and _as_lower(_get(config, "tdhf", "type", "")) == "mrsf":
+        if hess_type == "numerical":
+            # Analytic requests get this through analytic_hessian_capability.
+            problem = _mrsf_property_stage_problem(config)
+            if problem:
+                report.add(
+                    "ERROR",
+                    "hess.state",
+                    problem,
+                    value=f"state={state}",
+                    expected="a vibrational property stage that can run",
+                    action="Adjust tdhf.nstate or [hess] raman_backend, or set [hess] vibrational_intensities=false.",
+                )
+        shortfall = _mrsf_raman_tail_shortfall(config)
+        if shortfall:
+            report.add(
+                "WARNING",
+                "hess.raman_sos_tail_states",
+                shortfall,
+                value=f"nstate={_get(config, 'tdhf', 'nstate', 1)}, state={state}",
+                expected="enough roots above the target for the truncated-SOS tail",
+                action="Increase tdhf.nstate for Raman activities; IR intensities are unaffected.",
+            )
 
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)

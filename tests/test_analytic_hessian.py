@@ -531,9 +531,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rohf", "multiplicity": 3},
-            # Five roots: the default truncated-SOS Raman stage of a runtype=hess
-            # run needs raman_sos_tail_states + 3 of them.
-            "tdhf": {"type": "mrsf", "nstate": 5, "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "nstate": 3, "multiplicity": 3},
             "hess": {"type": "analytical", "state": 1, "nproc": 1, "temperature": [298.15]},
         }
 
