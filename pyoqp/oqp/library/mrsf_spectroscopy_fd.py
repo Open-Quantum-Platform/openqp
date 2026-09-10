@@ -455,6 +455,36 @@ def response_block_weights(states: object, root_index: int) -> dict[str, float]:
     return {key: value / total for key, value in raw.items()}
 
 
+def _ecp_core_electrons(raw: object, natom: int) -> FloatArray:
+    """Per-atom ECP core-electron counts from ``mol.data["ecp_zn"]``.
+
+    ``set_basis`` stores that record as a raw CFFI ``int *`` over one count per
+    atom (zero for all-electron atoms).  NumPy cannot convert a CFFI pointer,
+    so read it element by element; array-like records are taken as they are.
+    """
+
+    if raw is None:
+        return np.zeros(0)
+    try:
+        from cffi import FFI
+    except ImportError:  # pragma: no cover - cffi is a pyoqp requirement
+        FFI = None
+    if FFI is not None:
+        ffi = FFI()
+        if isinstance(raw, ffi.CData):
+            ctype = ffi.typeof(raw)
+            if ctype.kind != "pointer" or ctype.item.kind != "primitive":
+                raise TypeError(
+                    f"OpenQP ECP core electrons have unsupported C type {ctype.cname}"
+                )
+            if not raw:
+                return np.zeros(0)
+            return _finite_real(
+                "OpenQP ECP core electrons", [raw[i] for i in range(int(natom))]
+            )
+    return _finite_real("OpenQP ECP core electrons", raw).reshape(-1)
+
+
 def full_mrsf_state_dipole(states: object, root_index: int, mol: object) -> FloatArray:
     """Full target-state dipole from nuclei and the complete MRSF state 1-RDM.
 
@@ -499,9 +529,7 @@ def full_mrsf_state_dipole(states: object, root_index: int, mol: object) -> Floa
         raise ValueError("nuclei, charge, and MRSF electron count are inconsistent")
     total_ecp_electrons = float(round(total_ecp_electrons))
     try:
-        exposed_ecp = _finite_real(
-            "OpenQP ECP core electrons", getattr(mol, "data")["ecp_zn"]
-        ).reshape(-1)
+        exposed_ecp = _ecp_core_electrons(getattr(mol, "data")["ecp_zn"], atoms.size)
     except (AttributeError, KeyError, TypeError):
         exposed_ecp = np.zeros(0)
     if exposed_ecp.shape == atoms.shape:

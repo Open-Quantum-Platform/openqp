@@ -148,6 +148,46 @@ def test_full_state_dipole_contracts_complete_mrsf_density_and_nuclei(fd):
     )
 
 
+def _hbr_like_ecp_case(ecp_record):
+    # Br (Z=35) with a 28-electron core and H: 8 explicit electrons.  Equal
+    # masses put the centre of mass at the origin.
+    states = types.SimpleNamespace(
+        n_elec=8,
+        S=np.ones((1, 1)),
+        R=[np.array([[0.2]]), np.zeros((1, 1)), np.zeros((1, 1))],
+        state_density_ao=lambda root: np.array([[8.0]]),
+    )
+    mol = types.SimpleNamespace(
+        config={"input": {"charge": 0}},
+        data={"ecp_zn": ecp_record},
+        get_atoms=lambda: np.array([35, 1]),
+        get_mass=lambda: np.array([1.0, 1.0]),
+        get_system=lambda: np.array([[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+    )
+    return states, mol
+
+
+def test_full_state_dipole_decodes_the_openqp_ecp_pointer(fd):
+    # set_basis installs ecp_zn as a raw CFFI int* (one count per atom), not
+    # an array; the dipole must use effective charges 35-28=7 and 1.
+    cffi = pytest.importorskip("cffi")
+    ffi = cffi.FFI()
+    counts = np.array([28, 0], dtype=np.int32)
+    states, mol = _hbr_like_ecp_case(ffi.cast("int *", ffi.from_buffer(counts)))
+    # Nuclear moment about the COM: 7*(-1) + 1*(+1) = -6; electrons: -8*0.2.
+    np.testing.assert_allclose(
+        fd.full_mrsf_state_dipole(states, 0, mol), [-7.6, 0.0, 0.0]
+    )
+
+
+def test_full_state_dipole_still_fails_closed_without_ecp_counts(fd):
+    cffi = pytest.importorskip("cffi")
+    ffi = cffi.FFI()
+    states, mol = _hbr_like_ecp_case(ffi.cast("int *", 0))
+    with pytest.raises(RuntimeError, match="one ECP core-electron count per atom"):
+        fd.full_mrsf_state_dipole(states, 0, mol)
+
+
 def test_truncated_sos_tensor_and_tail_convergence_gate(fd):
     tensor, diagnostics = fd.truncated_sos_polarizability(
         FakeStates(),
