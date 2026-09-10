@@ -1,0 +1,2 @@
+mrsf-tddftb(nstate=3) dftb(model=dtcam-gap)
+geom="../geometries/CH2-c8bd8087ea23.xyz"

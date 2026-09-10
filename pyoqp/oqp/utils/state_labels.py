@@ -102,7 +102,7 @@ DFTB_CAP_SCC_FINAL_TRUST = 4
 # openqp_dftb_resolved_options record; this tuple only feeds the settings log.
 # Canonical spellings only -- the legacy aliases ("dtcam-tb", "dtcam-tb2",
 # "dtcam-tb-erf", "dftb+") still parse but are no longer advertised.
-DFTB_KNOWN_PRESETS = ("dtcam", "dtcam2", "dtcam-erf", "ob2")
+DFTB_KNOWN_PRESETS = ("dtcam", "dtcam-gap", "dtcam2", "dtcam-erf", "ob2")
 
 
 def _section(config, name):
