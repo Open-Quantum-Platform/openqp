@@ -1,0 +1,40 @@
+# DFT/6-31G/PBE/RHF/ENERGY of H2O on the SG-1 pruned grid.
+#
+# SG-1 (Gill, Johnson, Pople, Chem. Phys. Lett. 209 (1993) 506) is DEFINED on
+# a 50-point Murray-Handy-Laming (Euler-Maclaurin) radial grid, so selecting
+# pruned=SG1 pins both the radial size and the radial map to that definition.
+#
+# The [dftgrid] rad_npts / rad_type below are set to values SG-1 must IGNORE.
+# That is deliberate: this deck is the reference that pins the override.  If
+# the pin is ever dropped, this example builds a 200-point Becke grid instead
+# of the 50-point MHL one and the energy moves in the third decimal, so the
+# committed reference fails loudly rather than drifting quietly.
+#
+# The pin is local to this grid build -- it must not write back into the
+# user's settings, or every grid built later in the same run inherits it.
+# tests/test_sg1_grid_definition.py covers that separately.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+functional=pbe
+basis=6-31g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-8
+
+[dftgrid]
+pruned=SG1
+# Deliberately mismatched -- SG-1 overrides both of these.
+rad_npts=200
+rad_type=becke
+ang_npts=302
