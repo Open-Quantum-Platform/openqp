@@ -123,6 +123,7 @@ SCHEMA = {
         "type": {"type": _string, "default": "rpa"},
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
     },
     "dftb": {
         "backend": {"type": _string, "default": "native"},
@@ -408,6 +409,23 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(len(config["input"]["system"].strip().splitlines()), 5)
         self.assertTrue(config["input"]["system"].startswith("\nC "))
         self.assertEqual(config["input"]["basis"], "6-31g*")
+
+    def test_static_analytical_nac_is_available_through_workflow_and_settings(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_analytic_nac").molecule(geometry="water")
+        job.theory.mrsf(functional="bhhlyp", basis="6-31g", nstate=2)
+        job.settings.scf(conv=1e-10)
+        job.settings.tdhf(conv=1e-10)
+        job.workflow.nac(type="analytical", states="1 2")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "nac")
+        self.assertEqual(config["nac"]["type"], "analytical")
+        self.assertEqual(config["nac"]["states"], "1 2")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+        self.assertEqual(float(config["scf"]["conv"]), 1e-10)
+        self.assertEqual(float(config["tdhf"]["conv"]), 1e-10)
 
     def test_molecule_accepts_second_geometry_and_multiplicity(self):
         openqp = load_openqp_module()

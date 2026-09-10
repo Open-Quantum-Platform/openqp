@@ -1950,11 +1950,57 @@ def test_method_driver_capability_errors_are_early_and_actionable():
         )
 
 
-def test_unavailable_or_misspelled_derivative_types_fail_early():
-    with pytest.raises(OQPInputError, match="analytical NAC is unavailable"):
+@pytest.mark.parametrize("driver", ["nac", "bp"])
+@pytest.mark.parametrize("route", ["mrsf(nstate=3)/bhhlyp/6-31g*", "mrsf-tdhf(nstate=3)/6-31g*"])
+def test_static_analytical_nac_accepts_mrsf_singlets(driver, route):
+    _, config = _parse(
+        f'{route} geom="h2o.xyz" {driver}(S0,S1,type=analytical) '
+        'scf(conv=1e-8) tdhf(conv=1e-10)'
+    )
+    assert config["input"]["runtype"] == "nac"
+    assert config["nac"]["type"] == "analytical"
+    assert config["nac"]["states"] == "1 2"
+    assert config["scf"]["type"] == "rohf"
+    assert config["scf"]["multiplicity"] == "3"
+    assert config["tdhf"]["multiplicity"] == "1"
+    if driver == "bp":
+        assert config["nac"]["bp"] == "True"
+
+
+@pytest.mark.parametrize("section", ["scf", "tdhf"])
+@pytest.mark.parametrize("value", [None, "1e-6", "0", "-1e-10", "nan", "inf", "true"])
+def test_static_analytical_nac_rejects_loose_or_invalid_convergence(section, value):
+    other = "tdhf" if section == "scf" else "scf"
+    control = f"{section}(conv={value})" if value is not None else ""
+    with pytest.raises(OQPInputError, match=rf"0 < {section} conv <= 1e-8"):
+        _parse(
+            'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+            f'nac(S0,S1,type=analytical) {other}(conv=1e-10) {control}'
+        )
+
+
+@pytest.mark.parametrize("route, states, message", [
+    ("mrsf(nstate=3)/bhhlyp/6-31g*", "T0,T1", "requires singlet states"),
+    ("mrsf-tdhf(nstate=3)/6-31g*", "Q0,Q1", "requires singlet states"),
+    ("mrsf-tddftb(nstate=3)", "S0,S1", "requires singlet states"),
+    ("tddft(nstate=3)/bhhlyp/6-31g*", "S1,S2", "requires an MRSF route"),
+    ("umrsf(nstate=3)/bhhlyp/6-31g*", "S0,S1", "UMRSF currently supports"),
+    ("mrsf(nstate=3)/bhhlyp/6-31g*", "S0,S0", "requires distinct states"),
+    ("mrsf(nstate=1)/bhhlyp/6-31g*", "S0,S1", "but nstate=1"),
+])
+def test_static_analytical_nac_rejects_unsupported_states(route, states, message):
+    with pytest.raises(OQPInputError, match=message):
+        _parse(
+            f'{route} geom="h2o.xyz" nac({states},type=analytical) '
+            'scf(conv=1e-10) tdhf(conv=1e-10)'
+        )
+
+
+def test_misspelled_derivative_types_fail_early():
+    with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-            'nac(S0,S1,type=analytical)'
+            'nac(S0,S1,type=analytic)'
         )
     with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
         oqp_input.parse_canonical_oqp(

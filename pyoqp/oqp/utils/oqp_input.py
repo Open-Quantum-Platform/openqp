@@ -1894,12 +1894,11 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         hess_type = str(driver.kwargs["type"]).strip().lower()
         if hess_type not in {"numerical", "analytical"}:
             raise OQPInputError("%s type must be numerical or analytical" % driver.name)
-    if driver.name in {"nac", "bp", "nacme"} and "type" in driver.kwargs:
+    if driver.name in {"nac", "bp"} and "type" in driver.kwargs:
         nac_type = str(driver.kwargs["type"]).strip().lower()
-        if nac_type != "numerical":
+        if nac_type not in {"numerical", "analytical"}:
             raise OQPInputError(
-                "%s currently supports type=numerical only; analytical NAC is unavailable"
-                % driver.name
+                "%s type must be numerical or analytical" % driver.name
             )
     qmmm_section = next(
         (call for call in spec.modifiers if call.name == "qmmm"), None
@@ -1982,6 +1981,35 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             )
         if driver.name == "bp" and model == "mrsf-dftb":
             raise OQPInputError("bp is not available for MRSF-TDDFTB")
+        if str(options.get("type", "numerical")).strip().lower() == "analytical":
+            # The resident Lagrangian driver implements the two-SOMO,
+            # ROHF/ROKS MRSF singlet response, not the DFTB or triplet cases.
+            if model not in {"mrsf", "mrsf-hf"} or any(
+                    state.multiplicity != 1 for state in states):
+                raise OQPInputError(
+                    "Analytical NAC requires singlet states on an MRSF-TDDFT "
+                    "or MRSF-TDHF route"
+                )
+            defaults = _load_schema_defaults() or {}
+            for section in ("scf", "tdhf"):
+                call = next(
+                    (call for call in spec.modifiers if call.name == section), None
+                )
+                default = defaults.get(section, {}).get("conv", ("float", None))[1]
+                value = call.kwargs.get("conv", default) if call else default
+                try:
+                    conv = float(value)
+                    valid = (
+                        not isinstance(value, bool)
+                        and math.isfinite(conv) and 0 < conv <= 1e-8
+                    )
+                except (TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    raise OQPInputError(
+                        "Analytical NAC requires 0 < %s conv <= 1e-8; "
+                        "set %s(conv=1e-10)" % (section, section)
+                    )
     if driver.name == "nacme":
         has_previous = "geom2" in spec.options or any(
             call.name == "guess" and bool(call.kwargs.get("file2"))
