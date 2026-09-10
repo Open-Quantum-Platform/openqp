@@ -325,3 +325,14 @@ def test_dftb_preset_log_does_not_claim_schema_defaults_are_effective():
     assert "dtcam-tb (operator resolved by openqp-dftb backend)" in text
     assert "Mixer:" not in text
     assert "CAM alpha / beta:" not in text
+
+
+def test_dftb_settings_log_advertises_the_dtcam_gap_preset():
+    # No model selected, so the only way dtcam-gap reaches this line is the
+    # advertised preset list itself.
+    config = dftb_config("mrsf", td_type="mrsf", model="")
+    text = state_labels.format_dftb_settings(config, backend="native")
+
+    lines = [line for line in text.splitlines() if "Available presets" in line]
+    assert lines, "settings log has no 'Available presets' line"
+    assert "dtcam-gap" in lines[0]

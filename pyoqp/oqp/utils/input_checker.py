@@ -1542,8 +1542,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                 value=model,
                 expected=", ".join(sorted(DFTB_MODELS)),
                 action="Use model=dtcam (DTCAM-TB paper vector), "
-                       "model=ob2 (conventional OB2/LC-DFTB2 protocol), or "
-                       "omit model and set the operator keys individually.",
+                       "model=dtcam-gap (DTCAM-TB refitted on singlet-triplet "
+                       "gaps), model=ob2 (conventional OB2/LC-DFTB2 "
+                       "protocol), or omit model and set the operator keys "
+                       "individually.",
             )
         if backend == "probe":
             report.add(
