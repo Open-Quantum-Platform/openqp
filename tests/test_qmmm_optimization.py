@@ -281,6 +281,56 @@ class TestForceFieldPaths(unittest.TestCase):
                 os.chdir(here)
 
 
+class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
+    """Molecule.get_results() publishes the QM/MM optimisation objective only
+    for an optimisation; a summary left on a reused Molecule by an earlier
+    optimisation must not replace a later run's energy, and Runner.run()
+    clears it at the start of every calculation."""
+
+    def _get_results(self):
+        import ast
+        from types import SimpleNamespace
+        path = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Molecule")
+        fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "get_results")
+        ns = {"np": np}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), str(path), "exec"), ns)
+
+        def fake(runtype):
+            return SimpleNamespace(
+                config={"input": {"runtype": runtype, "method": "hf"}},
+                mol_energy=SimpleNamespace(energy=-10.0), energies=[-10.0],
+                symmetry_metadata={}, data={"OQP::td_energies": [0.0]},
+                get_atoms=lambda: np.array([1]), get_system=lambda: np.zeros(3),
+                has_grad=lambda: False, get_grad=lambda: [], get_nac=lambda: [],
+                get_soc=lambda: [], get_hess=lambda: [], get_mrsf_ekt_results=lambda: {},
+                get_state_tracking=lambda: None, explicit_scf_props=lambda: [],
+                qmmm_optimization={"converged": True, "energy_hartree": -12.5, "evaluations": 3,
+                                   "recovery": False, "rms_grad": 1e-5, "max_grad": 2e-5,
+                                   "output": "x_opt.pdb", "movable_atoms": [0, 1]})
+        return ns["get_results"], fake
+
+    def test_optimisation_publishes_the_objective(self):
+        get_results, fake = self._get_results()
+        out = get_results(fake("optimize"))
+        self.assertEqual(out["energy"], -12.5)
+        self.assertEqual(out["qmmm_optimization"]["evaluations"], 3)
+        self.assertNotIn("movable_atoms", out["qmmm_optimization"])
+
+    def test_stale_summary_does_not_leak_into_another_runtype(self):
+        get_results, fake = self._get_results()
+        out = get_results(fake("energy"))
+        self.assertEqual(out["energy"], -10.0)
+        self.assertNotIn("qmmm_optimization", out)
+
+    def test_runner_clears_the_summary_each_run(self):
+        src = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
+        run = src[src.index("    def run(self, test_mod=False):"):]
+        run = run[:run.index('run_type = self.mol.config["input"]["runtype"]')]
+        self.assertIn("self.mol.qmmm_optimization = None", run)
+
+
 class TestRecoveryAndGradientAreWired(unittest.TestCase):
     def test_source(self):
         src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()

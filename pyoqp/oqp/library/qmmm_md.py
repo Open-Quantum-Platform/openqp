@@ -210,13 +210,17 @@ class QMMM_MD:
     extrapolation ``E(r0) - F.(r - r0)``, which is what the linear
     CustomExternalForce evaluates to once the atoms have moved), and ``E_kin``
     is the time-centred kinetic energy at the same instant.  Row ``step = s``
-    therefore belongs to the geometry after ``s`` steps, i.e. to trajectory
-    frame ``s``; the geometry after the last step has no energy row.
+    belongs to the geometry after ``s`` steps; the trajectory file starts with
+    the initial geometry as frame 0 and ``run()`` samples the geometry after
+    the last step too, so rows 0..n_steps and frames 0..n_steps pair up.
 
-    ``rigidwater`` (default true, the NAMD driver's behaviour) puts the MM
-    water bond/angle constraints of an OpenMM rigidWater system on the MD
-    system, so OpenMM's Verlet applies SHAKE/RATTLE to them; QM atoms are
-    never constrained.  Without it the stiff O-H stretch is integrated
+    ``rigidwater`` (true unless the deck sets it, the NAMD driver's behaviour)
+    puts the MM water bond/angle constraints of an OpenMM rigidWater system on
+    the MD system, so OpenMM's Verlet applies SHAKE/RATTLE to them; QM atoms
+    are never constrained.  The command line hands this driver the deck itself
+    (config mode), so an omitted key is seen as omitted; the schema default
+    stays false because it also feeds the NAMD restart identity and the
+    legacy qmmm.py builders.  Without it the stiff O-H stretch is integrated
     explicitly and at 0.5 fs the total energy of a solvated box fluctuates by
     ~5 kJ/mol per 1000 atoms (the same figure a pure-MM run gives).
 
@@ -514,6 +518,11 @@ class QMMM_MD:
         self.simulation_md.reporters.append(
             TrajReporter(self.trajectory_file, self.report_interval)
         )
+        # frame 0 = the starting geometry, so that trajectory frame s and
+        # energy row s (sampled before step s+1) describe the same structure
+        state0 = self.simulation_md.context.getState(getPositions=True)
+        for rep in self.simulation_md.reporters:
+            rep.report(self.simulation_md, state0)
 
         # Energies are written by the driver itself (see ``_report_energies``):
         # OpenMM's StateDataReporter would report the potential of the linear
@@ -590,6 +599,24 @@ class QMMM_MD:
         if self.simulation_md is None:
             self.setup()
 
+        E_tot = self._sample_energy()
+
+        self.simulation_md.step(1)
+
+        state_md = self.simulation_md.context.getState(getPositions=True)
+        pos0 = state_md.getPositions()
+
+        sim0 = self.mm_systems["sim0"]
+        sim0.context.setPositions(pos0)
+        if is_periodic_method(self.cutoff):
+            self.mm_systems["simew"].context.setPositions(pos0)
+            self.mm_systems["simor"].context.setPositions(pos0)
+
+        return E_tot
+
+    def _sample_energy(self):
+        """Refresh the QM/MM force at the current positions and record the
+        Hamiltonian there (one energy row).  Returns E_tot (kJ/mol)."""
         sim0 = self.mm_systems["sim0"]
 
         # PR #205 review (M1c): update the QM/MM force at the CURRENT positions
@@ -636,17 +663,6 @@ class QMMM_MD:
         self._traj_data["temperature"].append(T_inst)
         self._traj_data["volume_nm3"].append(vol)
         self._report_energies(step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol)
-
-        self.simulation_md.step(1)
-
-        state_md = self.simulation_md.context.getState(getPositions=True)
-        pos0 = state_md.getPositions()
-
-        sim0.context.setPositions(pos0)
-        if is_periodic_method(self.cutoff):
-            self.mm_systems["simew"].context.setPositions(pos0)
-            self.mm_systems["simor"].context.setPositions(pos0)
-
         return E_tot
 
     def _report_energies(self, step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol):
@@ -710,6 +726,8 @@ class QMMM_MD:
             if (step_i + 1) % self.report_interval == 0:
                 self._save_traj_data()
 
+        # the geometry after the last step gets its energy row too
+        self._sample_energy()
         # Final save (covers n_steps not a multiple of report_interval)
         self._save_traj_data()
         if getattr(self, "_log_handle", None) is not None:

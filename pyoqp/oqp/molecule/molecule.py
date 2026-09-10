@@ -2278,12 +2278,27 @@ class Molecule:
                 # result and regression data must expose that final value.
                 energy = float(np.asarray(final_energies).ravel()[0])
 
+        # A QM/MM optimisation minimised the embedded total energy (QM state +
+        # nuclear-MM + MM terms); that objective, not the fragment SCF scalar
+        # kept in mol_energy, is the result of the run and what the saved
+        # reference must pin.
+        qmmm_opt = getattr(self, 'qmmm_optimization', None)
+        if qmmm_opt and str(self.config.get('input', {}).get('runtype', '')).strip().lower() != 'optimize':
+            qmmm_opt = None                    # a summary left over from an earlier optimisation
+        if qmmm_opt:
+            energy = float(qmmm_opt['energy_hartree'])
+
         data = {
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
             'energy': energy,
             'symmetry_metadata': self.symmetry_metadata,
         }
+        if qmmm_opt:
+            data['qmmm_optimization'] = {
+                k: qmmm_opt[k] for k in ('converged', 'energy_hartree', 'evaluations',
+                                         'recovery', 'rms_grad', 'max_grad', 'output')
+                if k in qmmm_opt}
 
         # A multistate run computes several states and only the scalar was
         # published, so an API consumer had no way to reach the higher roots.

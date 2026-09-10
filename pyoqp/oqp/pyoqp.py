@@ -455,6 +455,9 @@ class Runner:
         # optimisation, NAMD) is exposed.  Invalidate at the start of every
         # top-level calculation; the kernels re-declare it when they write.
         self.mol._grad_valid = False
+        # Likewise the QM/MM optimisation summary, which get_results() turns
+        # into the published energy: it belongs to the run that set it.
+        self.mol.qmmm_optimization = None
 
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
