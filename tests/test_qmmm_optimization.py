@@ -265,9 +265,11 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
                 .replace("auto_recovery=false", "auto_recovery=true\nrecovery_maxit=1"))
         real = QMMM_Opt._energy_force
         calls = [0]
+        reuse_at_call = {}
 
         def flaky(self, X):
             calls[0] += 1
+            reuse_at_call[calls[0]] = bool(getattr(self.driver, "_reuse_orbitals", False))
             if calls[0] == 2:
                 raise RuntimeError("SCF did not converge in 200 iterations")
             return real(self, X)
@@ -291,6 +293,8 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
         self.assertEqual(info["evaluations"], 2)          # the rejected trial geometry is not counted
         self.assertIn("electronic solver did not converge", log)
         self.assertIn("recovery selected after electronic non-convergence", log)
+        self.assertTrue(reuse_at_call[2])                 # the failing trial reused orbitals
+        self.assertFalse(reuse_at_call[3])                # the recovery restart starts from a fresh guess
 
 
 @unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")

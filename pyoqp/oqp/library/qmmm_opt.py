@@ -450,6 +450,10 @@ class QMMM_Opt:
                                      f"and a fresh model Hessian for up to {steps} steps"))
                 recovered = True
                 self._prev_eval = best      # the restarted search measures its first step from here
+                if electronic_failure[0] is not None:
+                    # the failed solve may have left unconverged orbitals behind:
+                    # the restart point gets a fresh guess (reuse resumes after it)
+                    self.driver._reuse_orbitals = False
                 engine = OQPEngine(symbols, best["x"].copy(), mode="min", trust=r_trust,
                                    trust_max=r_trust_max, maxiter=steps, coordsys=self.coordsys,
                                    frozen_distances=engine_pairs)
