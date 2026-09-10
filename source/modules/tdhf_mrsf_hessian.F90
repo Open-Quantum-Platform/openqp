@@ -42,7 +42,7 @@ contains
 
 !###############################################################################
 
-  subroutine tdhf_mrsf_hessian(infos)
+  recursive subroutine tdhf_mrsf_hessian(infos)
     ! Native analytical Hessian of the founding two-SOMO MRSF-TDHF method.
     ! Hiroya Nakata's TDHF/TDDFT analytical Hessian is the methodological
     ! starting point; all state quantities below remain in the physical
