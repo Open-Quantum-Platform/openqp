@@ -460,8 +460,11 @@ def finite_difference_excited_state_property(
         )
     if not 0.0 <= minimum_overlap <= 1.0:
         raise ValueError("minimum_overlap must lie in [0, 1]")
-    if np.any(overlaps < 0.0) or np.any(overlaps > 1.0):
+    # Normalized overlaps can round to just above one.  Accept the same 1e-8
+    # slack as MRSFTrackedPropertySnapshot, then clamp to one.
+    if np.any(overlaps < 0.0) or np.any(overlaps > 1.0 + 1.0e-8):
         raise ValueError("state_tracking_overlaps must lie in [0, 1]")
+    overlaps = np.minimum(overlaps, 1.0)
     observed_minimum = float(np.min(overlaps))
     if observed_minimum < minimum_overlap:
         raise ValueError(
@@ -830,6 +833,7 @@ def harmonic_vibronic_spectrum(
     minimum_franck_condon_completeness: float = 0.999,
     max_states: int = 250000,
     max_transitions: int = 5_000_000,
+    max_grid_points: int = 2_000_000,
 ) -> VibronicSpectrum:
     """Calculate harmonic FC/FC--HT stick and broadened absorption spectra.
 
@@ -841,7 +845,9 @@ def harmonic_vibronic_spectrum(
     ``max_states`` caps each vibrational state set; ``max_transitions`` caps
     the populated-initial x final pair count, checked before any overlap is
     evaluated, because two individually admissible sets can still multiply
-    into billions of transitions.
+    into billions of transitions.  ``max_grid_points`` bounds the automatically
+    generated broadening grid (about 25 points per FWHM over the line span);
+    pass ``grid_cm1`` explicitly for a larger grid.
 
     With a Herzberg--Teller derivative, ``minimum_franck_condon_completeness``
     also bounds the retained share of the exact first-order transition
@@ -890,6 +896,8 @@ def harmonic_vibronic_spectrum(
     dipole, derivative_values = _validate_transition_inputs(
         model, transition, transition_dipole_derivative
     )
+    if not np.isfinite(max_grid_points) or max_grid_points < 2:
+        raise ValueError("max_grid_points must be a finite integer of at least 2")
     if not np.isfinite(max_transitions) or max_transitions <= 0:
         # NaN compares false against every bound and +inf is never exceeded;
         # either would silently disable the cap.
@@ -1017,10 +1025,17 @@ def harmonic_vibronic_spectrum(
     if grid_cm1 is None:
         positions = np.array([line.position_cm1 for line in lines])
         extent = 12.0 * fwhm_cm1 if broadening_kind == "lorentzian" else 5.0 * fwhm_cm1
+        npoints = max(1001, int((np.ptp(positions) + 2.0 * extent) / (fwhm_cm1 / 25.0)) + 1)
+        if npoints > max_grid_points:
+            raise ValueError(
+                f"the automatic broadening grid would need {npoints} points (line span "
+                f"{float(np.ptp(positions)):.1f} cm-1 at fwhm_cm1={fwhm_cm1}); pass grid_cm1 "
+                "explicitly, widen fwhm_cm1, or raise max_grid_points"
+            )
         grid = np.linspace(
             float(np.min(positions) - extent),
             float(np.max(positions) + extent),
-            max(1001, int((np.ptp(positions) + 2.0 * extent) / (fwhm_cm1 / 25.0)) + 1),
+            npoints,
         )
     else:
         grid = _finite_real("grid_cm1", grid_cm1)
