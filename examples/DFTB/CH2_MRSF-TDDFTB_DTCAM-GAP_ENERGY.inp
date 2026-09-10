@@ -4,7 +4,8 @@
 # optional external openqp-dftb library (libopenqp_dftb_c) with the dtcam-gap
 # preset (Open-Quantum-Platform/openqp-dftb#37) and a DFTB parameter set.
 # Neither ships with OpenQP or its CI, so `openqp --run_tests all` skips every
-# method=dftb input.  With openqp-dftb installed, run it explicitly:
+# method=dftb input.  With a compatible openqp-dftb installed (one that
+# includes dtcam-gap), run it explicitly:
 #
 #     openqp examples/DFTB/CH2_MRSF-TDDFTB_DTCAM-GAP_ENERGY.inp
 #
@@ -13,9 +14,10 @@
 # (an .opdftb file or an SKF directory) or export OPENQP_DFTB_PARAMETER_PATH.
 #
 # model=dtcam-gap is the DTCAM-TB operator refitted on singlet-triplet gaps
-# rather than vertical excitation energies.  It differs from model=dtcam only in
-# the response operator (response omega, response cam_beta, the p-p one-centre
-# term and the three spin-pair couplings); the reference SCC is identical.
+# rather than vertical excitation energies (as defined in openqp-dftb#37).  It
+# differs from model=dtcam only in the response operator (response omega,
+# response cam_beta, the p-p one-centre term and the three spin-pair
+# couplings); the reference SCC is identical.
 # Prefer it where state ordering and crossing geometry decide the outcome, such
 # as nonadiabatic dynamics; model=dtcam remains the better choice for
 # individual vertical excitation energies.

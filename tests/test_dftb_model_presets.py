@@ -7,13 +7,15 @@ even when the native library implements it.  These tests drive the real
 spellings) is dropped from the gate, if the settings log advertises a name the
 gate rejects, or if a preset stops locking the operator keys it overrides.
 
-The native library itself is not needed: the model check runs before any
-openqp-dftb call.
+The openqp-dftb library is not needed: the model check runs before any
+openqp-dftb call.  Importing ``oqp`` still loads the compiled OpenQP runtime,
+as it does in CI.
 """
 
 import pytest
 
 from oqp.utils.input_checker import CheckReport, DFTB_MODELS, _check_tb
+from oqp.utils.oqp_input import lower_to_legacy, parse_canonical_oqp
 from oqp.utils.state_labels import DFTB_KNOWN_PRESETS
 
 
@@ -38,7 +40,9 @@ def _model_errors(dftb):
 
 @pytest.mark.parametrize("name", ["dtcam-gap", "dtcam_gap", "dtcamgap", "DTCAM-GAP"])
 def test_dtcam_gap_spellings_pass_the_model_gate(name):
-    # openqp-dftb lower-cases the name and accepts exactly these three spellings.
+    # The three spellings openqp-dftb#37's openqp_dftb_preset_by_name matches
+    # after lower-casing; the upper-case case exercises pyoqp's own gate, which
+    # lower-cases too.
     assert _model_errors({"model": name}) == []
 
 
@@ -48,6 +52,8 @@ def test_unknown_model_is_still_rejected():
     errors = _model_errors({"model": "dtcam-gapx"})
     assert errors
     assert "Unknown OpenQP-DFTB operator model preset" in errors[0].message
+    # The fix-it hint names the new preset alongside dtcam and ob2.
+    assert "model=dtcam-gap" in errors[0].action
 
 
 @pytest.mark.parametrize("name", DFTB_KNOWN_PRESETS)
@@ -63,3 +69,19 @@ def test_dtcam_gap_locks_the_operator_keys_it_overrides():
     # value would be silently discarded inside openqp-dftb, so it is refused.
     errors = _model_errors({"model": "dtcam-gap", "spc_coco": 0.123456})
     assert any("fixes the operator" in d.message for d in errors)
+
+
+@pytest.mark.parametrize("name", ["dtcam-gap", "dtcam_gap", "dtcamgap"])
+def test_concise_input_with_dtcam_gap_reaches_the_model_gate(name):
+    # The .oqp route: concise text lowers to a method=dftb / type=mrsf input
+    # carrying the spelling unchanged, and that model value passes the gate.
+    spec = parse_canonical_oqp(
+        f'mrsf-tddftb(nstate=3) dftb(model={name}) geom="ch2.xyz"'
+    )
+    legacy = lower_to_legacy(spec, source_dir=None)
+    assert legacy["input"]["method"] == "dftb"
+    assert legacy["dftb"]["type"] == "mrsf"
+    assert legacy["dftb"]["model"] == name
+    # lower_to_legacy returns raw strings and the checker runs on the typed
+    # config, so pass the lowered model value through the typed helper.
+    assert _model_errors({"model": legacy["dftb"]["model"]}) == []

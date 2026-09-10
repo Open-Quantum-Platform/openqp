@@ -1487,7 +1487,9 @@ geom="alanine-dipeptide.xyz"
 
 @pytest.mark.parametrize("name", ["dtcam-gap", "dtcam_gap", "dtcamgap"])
 def test_dftb_dtcam_gap_preset_parses_in_concise_syntax(name):
-    """The concise form carries every accepted dtcam-gap spelling to [dftb] model."""
+    """Round trip only: the concise form carries each dtcam-gap spelling to
+    [dftb] model unchanged.  The parser accepts any model string; the preset
+    gate itself is tested in test_dftb_model_presets.py."""
     spec, config = _parse(f"""
 mrsf-tddftb(nstate=3)
 dftb(model={name})

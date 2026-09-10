@@ -7,7 +7,8 @@ set, neither of which OpenQP or its CI ships. `openqp --run_tests all` therefore
 skips every `method=dftb` input; the operator presets themselves are covered by
 the openqp-dftb test suite.
 
-Run one explicitly once openqp-dftb is installed:
+Run one explicitly once a compatible openqp-dftb is installed, meaning one
+that implements the preset the input uses:
 
 ```bash
 openqp examples/DFTB/CH2_MRSF-TDDFTB_DTCAM-GAP_ENERGY.inp
