@@ -9,8 +9,8 @@ program test_tdhf_hessian_response
     solve_mrsf_tda_cluster_response_matrix_free, &
     solve_mrsf_z_response_matrix_free, &
     solve_mrsf_z_response_batch_matrix_free, &
-    assemble_mrsf_tda_eigenvalue_hessian
-    assemble_tdhf_sigma_derivative, tdhf_reference_has_degenerate_subspace
+    assemble_mrsf_tda_eigenvalue_hessian, &
+    tdhf_reference_has_degenerate_subspace
 
   implicit none
 
