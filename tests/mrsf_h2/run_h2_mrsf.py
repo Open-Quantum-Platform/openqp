@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Run the H2 ROHF-MRSF regression inputs and print energies.
-Verifies the zero-closed-shell fix: each must complete without the DGEMM crash.
+"""Run the H2 ROHF-MRSF energy and analytical-Hessian regressions.
+Verifies the zero-closed-shell paths: each must complete without a BLAS crash.
 Run: .venv/bin/python tests/mrsf_h2/run_h2_mrsf.py"""
 import os
 import sys
@@ -8,7 +8,11 @@ import sys
 from oqp.pyoqp import Runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CASES = ["h2_mrsfcis_rohf", "h2_mrsftddft_rohf"]
+CASES = [
+    "h2_mrsfcis_rohf",
+    "h2_mrsftddft_rohf",
+    "h2_mrsftdhf_hessian_rohf",
+]
 
 
 def main():

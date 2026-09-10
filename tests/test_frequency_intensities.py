@@ -53,6 +53,14 @@ def load_frequency_module():
 
 
 class TestVibrationalIntensities(unittest.TestCase):
+    def test_ir_conversion_uses_e_per_sqrt_amu_units(self):
+        frequency = load_frequency_module()
+        self.assertAlmostEqual(
+            frequency.IR_INTENSITY_CONVERSION_KM_MOL,
+            974.88011,
+            places=5,
+        )
+
     def test_infrared_intensities_project_cartesian_dipole_derivatives_onto_modes(self):
         frequency = load_frequency_module()
         modes = np.array([[1.0, 0.0], [0.0, 2.0]])

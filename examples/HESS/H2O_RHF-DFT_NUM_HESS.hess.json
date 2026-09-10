@@ -21,10 +21,10 @@
     1.007825
   ],
   "energy": -76.36778169964671,
-  "hessian_cache_version": 2,
+  "hessian_cache_version": 3,
   "state": 0,
   "hessian_request": {
-    "version": 2,
+    "version": 3,
     "state": 0,
     "model_config": {
       "input": {
@@ -433,9 +433,9 @@
     6.194552304476701
   ],
   "infrared_intensities": [
-    4.095223649535592,
-    0.40009610489232433,
-    1.8554979485622243
+    94.48235905653435,
+    9.230759312460078,
+    42.80885206955663
   ],
   "raman_activities": [
     80.2992763077397,

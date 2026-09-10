@@ -185,8 +185,22 @@ def resolve_oqp_root(package_root=None):
     """
     suffix = library_suffix()
     for root in _candidate_roots(package_root):
-        if _is_oqp_root(root, suffix):
-            return str(root), suffix
+        if not _is_oqp_root(root, suffix):
+            continue
+        # The package must load ITS OWN native library.  A resolved path that
+        # escapes the root means a system-wide OpenQP install is shadowing this
+        # one; loading it would run a different, possibly years-old, binary and
+        # still exit 0.  Fail loudly instead.
+        resolved_lib = Path(library_path(root, suffix)).resolve()
+        try:
+            resolved_lib.relative_to(Path(root).resolve())
+        except ValueError:
+            raise RuntimeError(
+                f"OpenQP runtime root {root} resolved liboqp.{suffix} to "
+                f"{resolved_lib}, which is outside that root. Remove the "
+                "system-wide OpenQP install that is shadowing this package."
+            ) from None
+        return str(root), suffix
 
     env_root = os.environ.get("OPENQP_ROOT")
     if env_root:

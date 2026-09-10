@@ -202,6 +202,34 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         self.assertTrue(np.array_equal(result, expected))
         self.assertTrue(np.array_equal(hessian.mol.hessian, expected))
 
+    def test_vibrational_intensity_opt_out_keeps_harmonic_analysis_separate(self):
+        class Mol:
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "analytical", "state": 1, "read": False,
+                         "restart": False, "temperature": [298.15], "clean": True,
+                         "vibrational_intensities": False},
+                "input": {"method": "tdhf"},
+                "scf": {"multiplicity": 3},
+                "tdhf": {"type": "mrsf", "multiplicity": 1},
+            }
+
+        hessian = self.single_point.Hessian(Mol())
+        hessian._compute_vibrational_intensities(np.ones((1, 3)))
+
+        self.assertEqual(
+            hessian.mol.vibrational_intensity_metadata["status"],
+            "not_computed",
+        )
+        self.assertIn(
+            "vibrational_intensities=False",
+            hessian.mol.vibrational_intensity_metadata["reason"],
+        )
+        self.assertEqual(hessian.mol.infrared_intensities.size, 0)
+        self.assertEqual(hessian.mol.raman_activities.size, 0)
+
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
@@ -499,7 +527,7 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("tdhf.nstate>=2", report.to_text())
 
-    def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
+    def test_mrsf_tdhf_analytical_hessian_is_supported_without_fallback(self):
         config = {
             "input": {"method": "tdhf", "runtype": "hess", "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "basis": "sto-3g"},
             "scf": {"type": "rohf", "multiplicity": 3},
@@ -509,10 +537,27 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         report = self.input_checker.check_input_values(config, raise_error=False, emit=False)
 
-        self.assertFalse(report.ok)
-        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
 
-    def test_mrsf_native_ts_analytical_initial_hessian_is_rejected_in_preflight(self):
+    def test_mrsf_tddft_semilocal_analytical_hessian_is_supported(self):
+        config = {
+            # Bare B3LYP is ambiguous and aborts in LibXC; use the B3LYP5 spelling.
+            "input": {"method": "tdhf", "functional": "B3LYPV5"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "multiplicity": 1},
+            "hess": {"state": 1},
+        }
+        status, reason = self.input_checker.analytic_hessian_capability(config)
+        self.assertEqual(status, "supported", reason)
+        self.assertIn("MRSF-TDDFT", reason)
+
+        for functional in ("M06-L", "CAM-B3LYP"):
+            config["input"]["functional"] = functional
+            status, reason = self.input_checker.analytic_hessian_capability(config)
+            self.assertEqual(status, "unsupported_feature")
+            self.assertIn("remain fail-closed", reason)
+
+    def test_mrsf_native_ts_analytical_initial_hessian_is_supported(self):
         config = {
             "input": {"method": "tdhf", "runtype": "ts",
                       "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
@@ -529,9 +574,8 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
             config, raise_error=False, emit=False,
         )
 
-        self.assertFalse(report.ok)
-        self.assertIn("Analytical native TS initialization is unavailable", report.to_text())
-        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+        self.assertTrue(report.ok, report.to_text())
+        self.assertNotIn("not implemented", report.to_text())
 
     def test_native_ts_analytical_initial_hessian_applies_basis_l_gate(self):
         config = {

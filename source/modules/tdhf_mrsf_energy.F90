@@ -72,7 +72,7 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
+    use tdhf_mrsf_lib, only: int2_umrsf_data_t
     use tdhf_lib, only: sym_response_project, &
       int2_td_data_t
     use tdhf_lib, only: &
@@ -83,7 +83,7 @@ contains
       get_transition_density, get_transitions, &
       get_transition_dipole, print_results, get_spin_square
     use tdhf_mrsf_lib, only: &
-      mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
+      mrinivec, umrsfcbc, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density, get_umrsf_transition_dipole, &
       get_jacobi, umrsfssqu, mrsf_set_fp32, mrsf_check_block_representation
@@ -94,6 +94,9 @@ contains
     use oqp_linalg
     use int1, only: multipole_integrals
     use printing, only: print_module_info
+    use tdhf_mrsf_conventions_mod, only: mrsf_raw_spc_multiplier
+    use tdhf_mrsf_sigma_mod, only: apply_mrsf_tda_sigma, &
+      prepare_mrsf_response_scaling, mrsf_sigma_status_message
     use iso_c_binding, only: c_f_pointer, c_int
 
     implicit none
@@ -164,7 +167,6 @@ contains
     logical :: debug_mode
 
     type(int2_compute_t) :: int2_driver
-    type(int2_mrsf_data_t), target :: int2_data_st
     type(int2_umrsf_data_t), target :: int2_udata_st
 
     type(int2_td_data_t), target :: int2_data_q
@@ -179,7 +181,7 @@ contains
     ! int2 -> mrsfmntoia+mrsfesum) is replaced by a device-resident sigma-session
     ! call that returns amo(:,ist:iend) = (A-B).X directly. Decided ONCE pre-loop.
     logical :: use_sig, sig_done
-    integer :: sig_ierr
+    integer :: sig_ierr, native_sigma_status
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -413,16 +415,10 @@ contains
     ta => td_t(:,1)
     tb => td_t(:,2)
 
-    if (mrst==1 .or. mrst==3 ) then
-      if (umrsf) then
-        allocate(mrsf_density(nvec,11,nbf,nbf), &
-                 source=0.0_dp, &
-                 stat=ok)
-      else
-        allocate(mrsf_density(nvec,7,nbf,nbf), &
-                 source=0.0_dp, &
-                 stat=ok)
-      end if
+    if ((mrst==1 .or. mrst==3) .and. umrsf) then
+      allocate(mrsf_density(nvec,11,nbf,nbf), &
+               source=0.0_dp, &
+               stat=ok)
     else if( mrst==5  )then
 
       allocate(fmrq1(nbf,nbf,nvec), &
@@ -433,34 +429,9 @@ contains
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    scale_exch = 1.0_dp
-    if (infos%tddft%HFscale == -1.0_dp) &
-          infos%tddft%HFscale = infos%dft%HFscale
-
-    if (infos%dft%cam_flag) then
-      if (infos%tddft%cam_alpha == -1.0_dp) &
-            infos%tddft%cam_alpha = infos%dft%cam_alpha
-      infos%tddft%HFscale = infos%tddft%cam_alpha
-      if (infos%tddft%cam_beta == -1.0_dp) &
-            infos%tddft%cam_beta = infos%dft%cam_beta
-      if (infos%tddft%cam_mu == -1.0_dp) &
-            infos%tddft%cam_mu = infos%dft%cam_mu
-    end if
-    if (dft) scale_exch = infos%tddft%HFscale
-    ! Pure HF reference (no DFT functional): the effective exact-exchange scale
-    ! is 1.0. Without a DFT functional infos%dft%HFscale is left at the -1.0
-    ! sentinel, so the response HFscale (and hence the spin-pair coupling below)
-    ! would inherit -1.0. The energy tolerates this (the fmrst2 rescale is
-    ! skipped because spc == HFscale either way), but the MRSF gradient uses the
-    ! spin-pair coupling values directly and needs the correct +1.0.
-    if (.not. dft) infos%tddft%HFscale = 1.0_dp
-    ! set spin-pair coupling
-    if (infos%tddft%spc_coco==-1.0_dp) &
-          infos%tddft%spc_coco = infos%tddft%HFscale
-    if (infos%tddft%spc_ovov==-1.0_dp) &
-          infos%tddft%spc_ovov = infos%tddft%HFscale
-    if (infos%tddft%spc_coov==-1.0_dp) &
-          infos%tddft%spc_coov = infos%tddft%HFscale
+    call prepare_mrsf_response_scaling(infos,scale_exch,native_sigma_status)
+    if (native_sigma_status /= 0) call show_message( &
+      trim(mrsf_sigma_status_message(native_sigma_status)),with_abort)
 
     if(debug_mode)then
       write(*,'(/,5x,"Input parameters:")')
@@ -692,116 +663,77 @@ contains
 
       if (.not. sig_done) then
 
-      if( mrst==1 .or. mrst==3 ) then
+      if ((mrst==1 .or. mrst==3) .and. .not.umrsf) then
+        call apply_mrsf_tda_sigma(infos,int2_driver,mo_a,mo_b,fa,fb, &
+          bvec_mo(:,ist:iend),amo(:,ist:iend),native_sigma_status)
+        if (native_sigma_status /= 0) call show_message( &
+          trim(mrsf_sigma_status_message(native_sigma_status)),with_abort)
 
-        mrsf_density = 0.0_dp   ! bo2v, bo1v, bco1, bco2, o21v, co12, ball
-
-      else if( mrst==5 ) then
-
-        fmrq1 = 0.0_dp
-
-      end if
-
-      do ivec = ist, iend
-
-        iv = ivec-ist+1
-
-        if (mrst==1 .or. mrst==3) then
-
-          call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
-          if (umrsf) then
-            call umrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
-          else
-            call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
-          end if
-
-        else if (mrst==5) then
-
-          call iatogen(bvec_mo(:,ivec), wrk1, noccb, nocca)
-          call orthogonal_transform('t', nbf, mo_a, wrk1, fmrq1(:,:,iv), wrk2)
-
-        end if
-
-      end do
+      else
 
       if (mrst==1 .or. mrst==3) then
+        ! The outer branch excludes ordinary MRSF, so this is exclusively the
+        ! existing UMRSF path.  Keeping that fact explicit prevents the removed
+        ! seven-density implementation from surviving here as unreachable code.
+        mrsf_density = 0.0_dp
+        do ivec = ist, iend
+          iv = ivec-ist+1
+          call iatogen(bvec_mo(:,ivec),wrk1,nocca,noccb)
+          call umrsfcbc(infos,mo_a,mo_b,wrk1,mrsf_density(iv,:,:,:))
+        end do
 
-        if (umrsf) then
-          int2_udata_st = int2_umrsf_data_t( &
-            d3 = mrsf_density(:iv,:,:,:), &
-            tamm_dancoff = tamm_dancoff, &
-            scale_exchange = scale_exch, &
-            scale_coulomb = scale_exch)
-
-          call int2_driver%run( &
-            int2_udata_st, &
-            cam = dft.and.infos%dft%cam_flag, &
-            alpha = infos%tddft%cam_alpha, &
-            alpha_coulomb = infos%tddft%cam_alpha, &
-            beta = infos%tddft%cam_beta, &
-            beta_coulomb = infos%tddft%cam_beta, &
-            mu = infos%tddft%cam_mu)
-
-          fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
-
-        else
-          int2_data_st = int2_mrsf_data_t( &
-            d3 = mrsf_density(:iv,:,:,:), &
-            tamm_dancoff = tamm_dancoff, &
-            scale_exchange = scale_exch, &
-            scale_coulomb = scale_exch)
-
+        int2_udata_st = int2_umrsf_data_t( &
+          d3=mrsf_density(:iv,:,:,:), &
+          tamm_dancoff=tamm_dancoff, &
+          scale_exchange=scale_exch, &
+          scale_coulomb=scale_exch)
         call int2_driver%run( &
-          int2_data_st, &
-          cam = dft.and.infos%dft%cam_flag, &
-          alpha = infos%tddft%cam_alpha, &
-          alpha_coulomb = infos%tddft%cam_alpha, &
-          beta = infos%tddft%cam_beta, &
-          beta_coulomb = infos%tddft%cam_beta, &
-          mu = infos%tddft%cam_mu)
+          int2_udata_st, &
+          cam=dft.and.infos%dft%cam_flag, &
+          alpha=infos%tddft%cam_alpha, &
+          alpha_coulomb=infos%tddft%cam_alpha, &
+          beta=infos%tddft%cam_beta, &
+          beta_coulomb=infos%tddft%cam_beta, &
+          mu=infos%tddft%cam_mu)
+        fmrst2 => int2_udata_st%f3(:,:,:,:,1)
 
-        fmrst2 => int2_data_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
-
-        endif
-
-        ! Scaling factor if triplet
-        if (umrsf .and. mrst==3) then
+        if (mrsf_raw_spc_multiplier(mrst)<0) &
           fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
-        else if (mrst==3) then
-          fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
-        endif
-
-        ! Spin pair coupling
-        if (umrsf) then
-          if (abs(infos%tddft%hfscale) > epsilon(1.0_dp)) then
-            if (infos%tddft%spc_coco /= infos%tddft%hfscale) then
-              spc_scale_coco = infos%tddft%spc_coco / infos%tddft%hfscale
-              fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * spc_scale_coco
-            end if
-            if (infos%tddft%spc_ovov /= infos%tddft%hfscale) then
-              spc_scale_ovov = infos%tddft%spc_ovov / infos%tddft%hfscale
-              fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * spc_scale_ovov
-            end if
-            if (infos%tddft%spc_coov /= infos%tddft%hfscale) then
-              spc_scale_coov = infos%tddft%spc_coov / infos%tddft%hfscale
-              fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * spc_scale_coov
-            end if
-          else if (infos%tddft%spc_coco /= 0.0_dp .or. &
-                   infos%tddft%spc_ovov /= 0.0_dp .or. &
-                   infos%tddft%spc_coov /= 0.0_dp) then
-            call show_message('UMRSF-TDDFT spin-pair coupling overrides require nonzero HFscale.', with_abort)
+        if (abs(infos%tddft%hfscale) > epsilon(1.0_dp)) then
+          if (infos%tddft%spc_coco /= infos%tddft%hfscale) then
+            spc_scale_coco = infos%tddft%spc_coco/infos%tddft%hfscale
+            fmrst2(:,10,:,:) = fmrst2(:,10,:,:)*spc_scale_coco
           end if
-        else
-          if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
-             fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
-          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
-             fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
-          if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-             fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-        endif
+          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) then
+            spc_scale_ovov = infos%tddft%spc_ovov/infos%tddft%hfscale
+            fmrst2(:,9,:,:) = fmrst2(:,9,:,:)*spc_scale_ovov
+          end if
+          if (infos%tddft%spc_coov /= infos%tddft%hfscale) then
+            spc_scale_coov = infos%tddft%spc_coov/infos%tddft%hfscale
+            fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:)*spc_scale_coov
+          end if
+        else if (infos%tddft%spc_coco /= 0.0_dp .or. &
+                 infos%tddft%spc_ovov /= 0.0_dp .or. &
+                 infos%tddft%spc_coov /= 0.0_dp) then
+          call show_message( &
+            'UMRSF-TDDFT spin-pair coupling overrides require nonzero HFscale.', &
+            with_abort)
+        end if
+
+        do ivec = ist, iend
+          iv = ivec-ist+1
+          call umrsfmntoia(infos,fmrst2(iv,:,:,:),amo,mo_a,mo_b,ivec)
+          call iatogen(bvec_mo(:,ivec),wrk1,nocca,noccb)
+          call mrsfesum(infos,wrk1,fa,fb,amo,ivec)
+        end do
 
       else if (mrst==5) then
-
+        fmrq1 = 0.0_dp
+        do ivec = ist, iend
+          iv = ivec-ist+1
+          call iatogen(bvec_mo(:,ivec),wrk1,noccb,nocca)
+          call orthogonal_transform('t',nbf,mo_a,wrk1,fmrq1(:,:,iv),wrk2)
+        end do
         int2_data_q = int2_td_data_t( &
           d2=fmrq1(:,:,:iv), &
           int_apb = .false., &
@@ -814,28 +746,8 @@ contains
           alpha = infos%tddft%cam_alpha, &
           beta = infos%tddft%cam_beta,&
           mu = infos%tddft%cam_mu)
-
-      end if
-
-      do ivec = ist, iend
-
-        iv = ivec-ist+1
-
-        if (mrst==1 .or. mrst==3) then
-
-          ! Product (A-B)*X
-          if (umrsf) then
-            call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
-          else
-            call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
-          end if
-
-          call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
-
-          call mrsfesum(infos, wrk1, fa, fb, amo, ivec)
-
-        else if( mrst==5 )then
-
+        do ivec = ist, iend
+          iv = ivec-ist+1
           call mntoia(int2_data_q%amb(:,:,iv,1), amo(:,ivec), mo_a, mo_b, noccb, nocca)
 
           ! Z(I+,A-)
@@ -855,9 +767,10 @@ contains
 
           call mrsfqroesum(wrk2,amo, &
                            nocca,noccb,nbf,ivec)
+        end do
+      end if
 
-        end if
-      end do
+      end if ! native spin-adapted MRSF sigma / UMRSF or quintet path
 
       end if   ! use_sig / native sigma path
 

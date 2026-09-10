@@ -1,17 +1,23 @@
 program test_dft_gga_nuclear_point
 
   use precision, only: fp
-  use mod_dft_gga_nuclear_point, only: gga_density_nuclear_point
+  use mod_dft_gga_nuclear_point, only: gga_density_nuclear_point, &
+    gga_density_nuclear_point_batch,gga_density_nuclear_point_first_batch
 
   implicit none
 
-  integer, parameter :: nao = 3, nat = 2
+  integer, parameter :: nao = 3, nat = 2, nmat = 2
   real(fp), parameter :: h1 = 1.0e-5_fp, h2 = 1.0e-5_fp
   integer :: ao_atom(nao), a, b, atom_a, atom_b
   real(fp) :: density(nao,nao), centers(3,nat), point(3)
   real(fp) :: aov(nao), g1(nao,3), g2(nao,6), g3(nao,10)
   real(fp) :: drho(3,nat), dgrho(3,3,nat)
   real(fp) :: d2rho(3,3,nat,nat), d2grho(3,3,3,nat,nat)
+  real(fp) :: density_batch(nmat,nao,nao),drho_batch(3,nat,nmat)
+  real(fp) :: dgrho_batch(3,3,nat,nmat),d2rho_batch(3,3,nat,nat,nmat)
+  real(fp) :: d2grho_batch(3,3,3,nat,nat,nmat)
+  real(fp) :: spin_density(nmat,2,nao,nao)
+  real(fp) :: drho_first(3,nat,2,nmat),dgrho_first(3,3,nat,2,nmat)
   real(fp) :: cp(3,nat), cm(3,nat), rp, rm, gp(3), gm(3)
   real(fp) :: drp(3,nat), drm(3,nat), dgp(3,3,nat), dgm(3,3,nat)
   real(fp) :: err1, err2
@@ -26,6 +32,34 @@ program test_dft_gga_nuclear_point
   call ao_data(centers, aov, g1, g2, g3)
   call gga_density_nuclear_point(density, ao_atom, aov, g1, g2, g3, &
                                  drho, dgrho, d2rho, d2grho)
+  density_batch(1,:,:)=density
+  density_batch(2,:,:)=0.37_fp*density
+  call gga_density_nuclear_point_batch(density_batch,ao_atom,aov,g1,g2,g3, &
+    drho_batch,dgrho_batch,d2rho_batch,d2grho_batch)
+  spin_density(1,1,:,:)=density
+  spin_density(1,2,:,:)=0.37_fp*density
+  spin_density(2,1,:,:)=0.19_fp*density
+  spin_density(2,2,:,:)=-0.23_fp*density
+  call gga_density_nuclear_point_first_batch(spin_density,ao_atom,aov,g1,g2, &
+    drho_first,dgrho_first)
+  if(maxval(abs(drho_batch(:,:,1)-drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_batch(:,:,:,1)-dgrho))>1.0e-13_fp .or. &
+     maxval(abs(d2rho_batch(:,:,:,:,1)-d2rho))>1.0e-13_fp .or. &
+     maxval(abs(d2grho_batch(:,:,:,:,:,1)-d2grho))>1.0e-13_fp .or. &
+     maxval(abs(drho_batch(:,:,2)-0.37_fp*drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_batch(:,:,:,2)-0.37_fp*dgrho))>1.0e-13_fp .or. &
+     maxval(abs(d2rho_batch(:,:,:,:,2)-0.37_fp*d2rho))>1.0e-13_fp .or. &
+     maxval(abs(d2grho_batch(:,:,:,:,:,2)-0.37_fp*d2grho))>1.0e-13_fp) &
+    error stop 'batched GGA nuclear derivatives differ from scalar equations'
+  if(maxval(abs(drho_first(:,:,1,1)-drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_first(:,:,:,1,1)-dgrho))>1.0e-13_fp .or. &
+     maxval(abs(drho_first(:,:,2,1)-0.37_fp*drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_first(:,:,:,2,1)-0.37_fp*dgrho))>1.0e-13_fp .or. &
+     maxval(abs(drho_first(:,:,1,2)-0.19_fp*drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_first(:,:,:,1,2)-0.19_fp*dgrho))>1.0e-13_fp .or. &
+     maxval(abs(drho_first(:,:,2,2)+0.23_fp*drho))>1.0e-13_fp .or. &
+     maxval(abs(dgrho_first(:,:,:,2,2)+0.23_fp*dgrho))>1.0e-13_fp) &
+    error stop 'first-derivative spin batch differs from scalar equations'
 
   err1 = 0.0_fp
   do atom_a = 1, nat

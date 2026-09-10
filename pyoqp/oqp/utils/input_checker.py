@@ -6076,6 +6076,33 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 action="Set [hess] restart=False; standalone numerical Hessian restart remains available.",
             )
 
+        # The native TS driver (init_hessian=numerical) and IRC driver compute a
+        # numerical Hessian of optimize.istate, and numerical_hess tracks an MRSF
+        # root at every displacement; with nothing solved above that root every
+        # displacement fails.  TS forces read/restart off; IRC may reuse a
+        # validated hess.read sidecar.
+        native_numerical_mrsf_hessian = (
+            method == "tdhf"
+            and _as_lower(_get(config, "tdhf", "type", "")) == "mrsf"
+            and ((runtype == "ts" and init_hessian == "numerical")
+                 or (runtype == "irc"
+                     and _as_lower(_get(config, "hess", "type", "numerical")) == "numerical"
+                     and not _is_true(_get(config, "hess", "read", False))))
+        )
+        if native_numerical_mrsf_hessian:
+            tracked_root = int(istate or 0)
+            nstate = int(_get(config, "tdhf", "nstate", 1))
+            if tracked_root > 0 and nstate <= tracked_root:
+                report.add(
+                    "ERROR", "optimize.istate",
+                    f"The native {runtype} driver computes a numerical MRSF Hessian of "
+                    f"optimize.istate={tracked_root}, tracking that root at every "
+                    "displacement against a higher solved root.",
+                    value=f"istate={tracked_root}, nstate={nstate}",
+                    expected="tdhf.nstate > optimize.istate",
+                    action=f"Set tdhf.nstate > {tracked_root}.",
+                )
+
         irc_direction = _as_lower(_get(config, "oqp", "irc_direction", "forward"))
         if runtype == "irc" and irc_direction not in {"forward", "backward", "reverse"}:
             report.add(
@@ -6688,6 +6715,126 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
+def _mrsf_property_stage_scope(config: dict[str, Any]) -> tuple[int, int] | None:
+    """(hess.state, tdhf.nstate) when an MRSF Hessian runs its property stage.
+
+    Hessian.hessian() evaluates state-tracked IR/Raman after an MRSF Hessian,
+    analytic or numerical, unless intensities are disabled.  Only runtype=hess
+    computing a new Hessian reaches that stage: hess.read reuses the cached
+    matrix, and the TS/IRC drivers call hessian(analysis=False).
+    """
+    if _as_lower(_get(config, "tdhf", "type", "")) != "mrsf":
+        return None
+    if _as_lower(_get(config, "input", "runtype", "")) != "hess":
+        return None
+    if _is_true(_get(config, "hess", "read", False)):
+        return None
+    if not _is_true(_get(config, "hess", "vibrational_intensities", True)):
+        return None
+    target = int(_get(config, "hess", "state", 0))
+    if target <= 0:
+        return None
+    return target, int(_get(config, "tdhf", "nstate", 1))
+
+
+def _mrsf_property_stage_problem(config: dict[str, Any]) -> str | None:
+    """Why the MRSF property stage would fail at every displacement, or None."""
+    scope = _mrsf_property_stage_scope(config)
+    if scope is None:
+        return None
+    target, nstate = scope
+    if nstate <= target:
+        # track_isolated_mrsf_hessian_root rejects a root with nothing above it.
+        return (
+            f"MRSF vibrational intensities track hess.state={target} against a "
+            f"higher solved root; set tdhf.nstate > {target}, or "
+            "[hess] vibrational_intensities=false."
+        )
+    if _as_lower(_get(config, "hess", "raman_backend", "truncated_sos")) == "finite_field":
+        return (
+            "raman_backend=finite_field is unavailable for MRSF (OpenQP has no "
+            "uniform electric-field MRSF Hamiltonian), so every property step "
+            "would fail; use raman_backend=truncated_sos, or [hess] "
+            "vibrational_intensities=false."
+        )
+    # These two need no property module, so they hold even if it cannot be
+    # imported here: the runtime compares the backend name exactly, and a tail
+    # without states is rejected before any property step.
+    backend = str(_get(config, "hess", "raman_backend", "truncated_sos"))
+    if backend != "truncated_sos":
+        return (
+            f"raman_backend={backend!r} is not a known MRSF Raman backend (the only "
+            "runnable one is truncated_sos), so every property step would fail; "
+            "correct it, or set [hess] vibrational_intensities=false."
+        )
+    try:
+        tail_states = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    except (TypeError, ValueError):
+        tail_states = 0
+    if tail_states < 1:
+        return (
+            "raman_sos_tail_states must be a positive integer; as configured every "
+            "property step would fail. Correct it, or set [hess] "
+            "vibrational_intensities=false."
+        )
+    try:
+        from oqp.library.mrsf_spectroscopy_fd import MRSFPropertyFDRequest  # noqa: PLC0415
+    except Exception:  # pragma: no cover - the remaining checks need that module
+        return None
+    # Validate the options exactly as the property stage will.  The runtime
+    # builds this request only after the Hessian, and a rejection there just
+    # leaves the intensities empty.  Casts mirror _compute_vibrational_intensities.
+    try:
+        MRSFPropertyFDRequest.create(
+            electronic_method="MRSF-TDDFT",
+            electronic_state="preflight",
+            state_index=target,
+            normal_modes=[[1.0, 0.0, 0.0]],
+            displacement=float(_get(config, "hess", "property_dx", 1.0e-3)),
+            coordinate_phase_convention="preflight",
+            minimum_state_overlap=float(_get(config, "hess", "property_min_overlap", 0.99)),
+            minimum_tracking_margin=float(_get(config, "hess", "property_min_margin", 0.05)),
+            fd_relative_tolerance=float(
+                _get(config, "hess", "property_fd_relative_tolerance", 0.05)),
+            fd_absolute_tolerance=float(
+                _get(config, "hess", "property_fd_absolute_tolerance", 1.0e-6)),
+            polarizability_backend=str(_get(config, "hess", "raman_backend", "truncated_sos")),
+            sos_tail_states=int(_get(config, "hess", "raman_sos_tail_states", 2)),
+            sos_tail_relative_tolerance=float(
+                _get(config, "hess", "raman_sos_tail_tolerance", 0.05)),
+            sos_minimum_gap_hartree=float(_get(config, "hess", "raman_sos_min_gap", 1.0e-5)),
+        )
+    except (TypeError, ValueError) as exc:
+        return (
+            f"the [hess] MRSF vibrational-property options are invalid ({exc}), so "
+            "every property step would fail after the Hessian; correct them, or set "
+            "[hess] vibrational_intensities=false."
+        )
+    return None
+
+
+def _mrsf_raman_tail_shortfall(config: dict[str, Any]) -> str | None:
+    """Why truncated-SOS Raman will be unavailable while IR still runs, or None."""
+    scope = _mrsf_property_stage_scope(config)
+    if scope is None:
+        return None
+    if str(_get(config, "hess", "raman_backend", "truncated_sos")) != "truncated_sos":
+        return None
+    target, nstate = scope
+    try:
+        tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    except (TypeError, ValueError):
+        return None
+    if nstate >= tail + 3 and target <= nstate - tail:
+        return None
+    return (
+        "truncated-SOS Raman needs tdhf.nstate >= raman_sos_tail_states + 3 "
+        f"(= {tail + 3}) and hess.state <= tdhf.nstate - raman_sos_tail_states "
+        f"(= {nstate - tail}); IR intensities are still computed, but Raman "
+        "activities will be reported as unavailable."
+    )
+
+
 def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     """Return analytic-Hessian capability status and a precise reason.
 
@@ -6703,6 +6850,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    scf_multiplicity = int(_get(config, "scf", "multiplicity", 1))
+    td_multiplicity = int(_get(config, "tdhf", "multiplicity", 1))
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
@@ -6723,7 +6872,68 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     if method == "tdhf":
         if td_type == "mrsf":
-            return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
+            verified_mrsf_semilocal = {
+                "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp5",
+                "bhhlyp", "pbe0",
+            }
+            # Bare B3LYP is ambiguous: source/dftlib/libxc.F90 aborts on it and
+            # asks for B3LYPV1R, B3LYPV3 or B3LYPV5.
+            if functional == "b3lyp":
+                return (
+                    "unsupported_feature",
+                    "functional=b3lyp is ambiguous and OpenQP's LibXC interface "
+                    "aborts on it; MRSF-TDDFT analytic Hessians are verified with "
+                    "B3LYP5 (functional=b3lyp5 or b3lypv5).",
+                )
+            # Equivalent LibXC spellings (source/dftlib/libxc.F90), mapped the
+            # way the closed-shell RPA branch below maps them; an exact-name
+            # lookup rejected otherwise identical supported calculations.
+            mrsf_functional_aliases = {"pbepbe": "pbe", "b3lypv5": "b3lyp5"}
+            canonical_functional = mrsf_functional_aliases.get(functional, functional)
+            if functional and canonical_functional not in verified_mrsf_semilocal:
+                return (
+                    "unsupported_feature",
+                    "MRSF-TDDFT analytic Hessians currently support the "
+                    "spin-polarized LDA/GGA and global-hybrid paths; meta-GGA "
+                    "and range-separated/CAM functionals remain fail-closed.",
+                )
+            # [dftgrid] cam_flag enables range separation independently of the
+            # functional name, and the native MRSF Hessian gates
+            # (tdhf_mrsf_hessian.F90, tdhf_mrsf_hessian_prepare.F90) reject
+            # infos%dft%cam_flag.  Checking only the name let e.g. pbe with
+            # cam_flag=true pass here and then abort after SCF and response.
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "MRSF-TDDFT analytic Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the native "
+                    "gate. Use [hess] type=numerical.",
+                )
+            if scf_type != "rohf" or scf_multiplicity != 3:
+                return (
+                    "unsupported_scf_type",
+                    "MRSF analytic Hessians require a triplet ROHF two-SOMO reference.",
+                )
+            if td_multiplicity not in (1, 3):
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians support singlet and triplet target states only.",
+                )
+            if state <= 0:
+                return (
+                    "unsupported_feature",
+                    "MRSF analytic Hessians require a positive excited-state index.",
+                )
+            # A fresh runtype=hess Hessian evaluates state-tracked IR/Raman
+            # afterwards; reject requests for which that stage cannot run.
+            problem = _mrsf_property_stage_problem(config)
+            if problem:
+                return "unsupported_feature", problem
+            method_name = "MRSF-TDDFT" if functional else "MRSF-TDHF"
+            return (
+                "supported",
+                f"Native OpenQP spin-adapted two-SOMO {method_name} analytic Hessian dispatch is enabled.",
+            )
         if td_type == "umrsf":
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
@@ -6795,6 +7005,16 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
 def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
+    try:
+        return _basis_max_angular_momentum_inspected(config)
+    except Exception:
+        # basis_set_exchange knows neither a custom "file:" basis, which the
+        # runtime reads from the input directory, nor an unknown name; report
+        # "cannot inspect" instead of crashing the whole input check.
+        return None
+
+
+def _basis_max_angular_momentum_inspected(config: dict[str, Any]) -> int | None:
     try:
         import basis_set_exchange as bse
     except Exception:
@@ -6870,6 +7090,49 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
             action="Set [hess] type=numerical or type=analytical.",
         )
         return
+
+    if method == "tdhf" and _as_lower(_get(config, "tdhf", "type", "")) == "mrsf":
+        blocking = None
+        if hess_type == "numerical":
+            target = int(_get(config, "hess", "state", 0))
+            nstate = int(_get(config, "tdhf", "nstate", 1))
+            if (target > 0 and nstate <= target
+                    and not _is_true(_get(config, "hess", "read", False))):
+                # numerical_hess tracks the target root at every displacement
+                # whether or not intensities are requested.
+                blocking = (
+                    f"a numerical MRSF Hessian tracks hess.state={target} at every "
+                    "displacement against a higher solved root; set "
+                    f"tdhf.nstate > {target}."
+                )
+            else:
+                # Analytic requests get this through analytic_hessian_capability.
+                blocking = _mrsf_property_stage_problem(config)
+            if blocking:
+                report.add(
+                    "ERROR",
+                    "hess.state",
+                    blocking,
+                    value=f"state={state}",
+                    expected="an MRSF Hessian whose root tracking and property stage can run",
+                    action="Adjust tdhf.nstate or the [hess] property options, or set [hess] vibrational_intensities=false.",
+                )
+        elif hess_type == "analytical":
+            capability, reason = analytic_hessian_capability(config)
+            if capability != "supported":
+                blocking = reason  # reported by the analytical branch below
+        # A request that is already rejected gets no Raman-tail warning; its
+        # "IR is still computed" text would be wrong.
+        shortfall = None if blocking else _mrsf_raman_tail_shortfall(config)
+        if shortfall:
+            report.add(
+                "WARNING",
+                "hess.raman_sos_tail_states",
+                shortfall,
+                value=f"nstate={_get(config, 'tdhf', 'nstate', 1)}, state={state}",
+                expected="enough roots above the target for the truncated-SOS tail",
+                action="Increase tdhf.nstate for Raman activities; IR intensities are unaffected.",
+            )
 
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)

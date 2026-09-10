@@ -1,0 +1,37 @@
+[input]
+system=
+ 1   0.000000000   0.000000000   0.000000000
+ 1   0.000000000   0.000000000   0.740848000
+charge=0
+method=tdhf
+basis=cc-pvdz
+runtype=hess
+functional=
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rohf
+maxit=100
+maxdiis=8
+multiplicity=3
+conv=1.0e-10
+save_molden=False
+
+[tdhf]
+type=mrsf
+maxit=100
+multiplicity=1
+conv=1.0e-12
+nstate=4
+zvconv=1.0e-12
+resp_cutoff=5.0e-11
+zv_warmstart=off
+
+[hess]
+type=analytical
+state=1
+clean=True

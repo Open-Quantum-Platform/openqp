@@ -115,8 +115,33 @@ def compute_scf_prop(mol):
 
 
 def compute_grad(mol):
-    # compute energy
-    SinglePoint(mol).energy()
+    numerical_mrsf_hessian_worker = (
+        os.environ.get('OQP_NUM_HESS_WORKER', '') == '1'
+        and str(mol.config.get('input', {}).get('method', '')).lower() == 'tdhf'
+        and str(mol.config.get('tdhf', {}).get('type', '')).lower() == 'mrsf'
+        and int(mol.config.get('hess', {}).get('state', 0)) > 0
+    )
+    if numerical_mrsf_hessian_worker:
+        # A numerical excited-state Hessian must differentiate the same
+        # physical MRSF root on both sides.  Align the central/displaced MOs,
+        # solve the displaced spin-adapted response problem, then transport an
+        # isolated root and its energy together before evaluating its gradient.
+        sp = SinglePoint(mol)
+        ref_energy = sp.reference()
+        BasisOverlap(mol).overlap()
+        sp.excitation(ref_energy)
+        report = NACME(mol).track_isolated_mrsf_hessian_root(
+            int(mol.config['hess']['state']))
+        report['displacement_tag'] = os.environ.get(
+            'OQP_NUM_HESS_DISPLACEMENT_TAG', '')
+        tracking_file = os.environ.get('OQP_NUM_HESS_TRACKING_FILE', '')
+        if not tracking_file:
+            raise RuntimeError('MRSF Hessian worker has no tracking sidecar path')
+        from oqp.library.single_point import _write_mrsf_hessian_tracking
+        _write_mrsf_hessian_tracking(tracking_file, report)
+    else:
+        # compute energy
+        SinglePoint(mol).energy()
 
     # compute gradient
     Gradient(mol).gradient()

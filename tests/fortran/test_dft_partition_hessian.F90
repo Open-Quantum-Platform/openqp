@@ -1,13 +1,15 @@
 program test_dft_partition_hessian
   use precision, only: fp
   use mod_dft_partfunc, only: PTYPE_SSF, PTYPE_BECKE4
-  use mod_dft_partition_hessian, only: partition_weight_nuclear_derivatives
+  use mod_dft_partition_hessian, only: partition_weight_nuclear_derivatives, &
+    partition_weight_nuclear_first_derivatives
   implicit none
 
   integer, parameter :: nat=3, nq=3*nat
   real(fp), parameter :: h=2.0e-4_fp
   real(fp) :: xyz0(3,nat), point0(3), shift(nat,nat)
   real(fp) :: w(nat), dw(3,nat,nat), d2w(3,nat,3,nat,nat)
+  real(fp) :: w_first(nat),dw_first(3,nat,nat)
   logical :: dummy(nat)
   integer :: ptype, status
 
@@ -22,6 +24,11 @@ program test_dft_partition_hessian
     call partition_weight_nuclear_derivatives(xyz0,point0,2,dummy,ptype,.true., &
       shift,w,dw,d2w,status)
     if (status /= 0) error stop 'analytic partition derivative failed'
+    call partition_weight_nuclear_first_derivatives(xyz0,point0,2,dummy,ptype, &
+      .true.,shift,w_first,dw_first,status)
+    if(status/=0 .or. maxval(abs(w_first-w))>2.0e-14_fp .or. &
+       maxval(abs(dw_first-dw))>2.0e-13_fp) &
+      error stop 'first-order partition path differs from full derivative'
     call check_finite_difference(ptype,xyz0,point0,shift,dw,d2w)
     if (abs(sum(w)-1.0_fp) > 2.0e-13_fp) error stop 'weights do not normalize'
     if (maxval(abs(sum(dw,dim=3))) > 2.0e-12_fp) &

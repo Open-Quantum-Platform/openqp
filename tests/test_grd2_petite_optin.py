@@ -43,6 +43,11 @@ NOT_OPTED_IN = (
     'source/modules/hf_hessian.F90',
 )
 
+# An explicit `petite=.false.` is an opt-OUT -- the right thing for a caller
+# whose density is not totally symmetric to write -- so it must not count as
+# opting in.  Anything else (`.true.`, or a runtime variable) does.
+OPTS_IN = re.compile(r'\bpetite\s*=\s*(?!\s|\.false\.)', re.IGNORECASE)
+
 
 def call_arguments(path, callee):
     """Text of every `call <callee>(...)` in a file, continuations joined."""
@@ -99,9 +104,9 @@ class OnlySymmetricDensitiesOptIn(unittest.TestCase):
         for path in NOT_OPTED_IN:
             with self.subTest(path=path):
                 for call in call_arguments(path, 'grd2_driver'):
-                    self.assertNotIn('petite', call,
-                                     f'{path}: this density is not totally '
-                                     f'symmetric, it must not opt in')
+                    self.assertIsNone(OPTS_IN.search(call),
+                                      f'{path}: this density is not totally '
+                                      f'symmetric, it must not opt in')
 
     def test_no_caller_outside_these_files_opts_in(self):
         """A new caller must think about its density, not inherit a default."""
@@ -111,7 +116,7 @@ class OnlySymmetricDensitiesOptIn(unittest.TestCase):
             if rel == 'source/integrals/grd2.F90':
                 continue
             for call in call_arguments(rel, 'grd2_driver'):
-                if 'petite' in call:
+                if OPTS_IN.search(call):
                     opted.append(rel)
         self.assertCountEqual(opted, list(OPTED_IN))
 

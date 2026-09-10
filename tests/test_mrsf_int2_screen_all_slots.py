@@ -115,24 +115,70 @@ class MrsfInt2ScreenBuildGate(unittest.TestCase):
         )
 
 
+def _strip_fortran_comments(text):
+    return "\n".join(line.split("!", 1)[0] for line in text.splitlines())
+
+
+def init_screen_bound_problem(src):
+    """Return None if init_screen bounds every d3 slot, else the reason.
+
+    Two implementations are equivalent and both are accepted.  The per-slot
+    loop calls shell_den_screen_mrsf on this%d3(:,c,:,:) for c = 1..sized and
+    folds the results with an elementwise max.  The fused form hands the whole
+    rank-4 this%d3 to shell_den_screen_mrsf, which takes maxval over every
+    trial vector and every slot in one traversal; the max over c of the
+    per-slot block maxima is the same number.  What must not come back is the
+    pre-#393 form that screened from one slot, this%d3(:,sized,:,:): the summed
+    `ball` density does not majorize co12/o21v, and the driver then drops real
+    aco12/ao21v contributions.
+    """
+    init = re.search(
+        r"subroutine int2_mrsf_data_t_init_screen(.*?)end subroutine",
+        src, re.S)
+    if init is None:
+        return "init_screen not found"
+    body = _strip_fortran_comments(init.group(1))
+
+    loop_form = (
+        re.search(r"do\s+c\s*=\s*1\s*,\s*sized", body)
+        and re.search(r"this%d3\s*\(\s*:\s*,\s*c\s*,", body)
+        and re.search(r"max\s*\(\s*this%dsh\s*,", body))
+    if loop_form:
+        return None
+
+    if not re.search(
+            r"call\s+shell_den_screen_mrsf\s*\(\s*this%dsh\s*,\s*this%d3\s*[,)]",
+            body):
+        return ("init_screen neither loops over every density slot with an "
+                "elementwise max nor passes the whole rank-4 this%d3 to "
+                "shell_den_screen_mrsf; a bound built from one slot (e.g. "
+                "ball) does not majorize co12/o21v.")
+
+    routine = re.search(
+        r"subroutine\s+shell_den_screen_mrsf\s*\((.*?)end\s+subroutine",
+        src, re.S)
+    if routine is None:
+        return "shell_den_screen_mrsf not found"
+    rbody = _strip_fortran_comments(routine.group(1))
+    if not re.search(
+            r"dimension\s*\(\s*:\s*,\s*:\s*,\s*:\s*,\s*:\s*\)\s*::\s*da\b",
+            rbody):
+        return ("init_screen passes the whole this%d3, but "
+                "shell_den_screen_mrsf does not take a rank-4 density.")
+    blocks = re.findall(
+        r"maxval\s*\(\s*abs\s*\(\s*da\s*\(\s*:\s*,\s*:\s*,", rbody)
+    if len(blocks) < 2:
+        return ("shell_den_screen_mrsf must take maxval over every trial "
+                "vector and slot, da(:,:,...), for both the (ish,jsh) and "
+                "(jsh,ish) blocks; co12/o21v are not symmetric.")
+    return None
+
+
 class MrsfInt2ScreenSourceTests(unittest.TestCase):
     def test_init_screen_bounds_every_density_slot(self):
         """init_screen must fold the shell-density bound over ALL d3 slots."""
         src = (ROOT / "source" / "tdhf_mrsf_lib.F90").read_text()
-        blk = re.search(
-            r"subroutine int2_mrsf_data_t_init_screen(.*?)end subroutine",
-            src, re.S)
-        self.assertIsNotNone(blk, "init_screen not found")
-        body = blk.group(1)
-        self.assertRegex(
-            body, r"do\s+c\s*=\s*1\s*,\s*sized",
-            "init_screen must loop over every density slot; a bound built "
-            "from one slot (e.g. ball) does not majorize co12/o21v and lets "
-            "the driver drop real aco12/ao21v contributions.")
-        self.assertRegex(
-            body, r"max\s*\(\s*this%dsh\s*,",
-            "init_screen must keep the elementwise max of the per-slot "
-            "shell-density bounds.")
+        self.assertIsNone(init_screen_bound_problem(src))
 
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")

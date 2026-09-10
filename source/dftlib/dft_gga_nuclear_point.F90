@@ -12,7 +12,8 @@ module mod_dft_gga_nuclear_point
     4,6,10, 6,2,7, 10,7,9, &
     5,10,8, 10,7,9, 8,9,3], [3,3,3])
 
-  public :: gga_density_nuclear_point
+  public :: gga_density_nuclear_point,gga_density_nuclear_point_batch
+  public :: gga_density_nuclear_point_first_batch
 
 contains
 
@@ -141,5 +142,210 @@ contains
     end subroutine check_shapes
 
   end subroutine gga_density_nuclear_point
+
+!> Evaluate the same exact nuclear derivatives for several density matrices.
+!> The leading matrix index is contiguous so all matrices reuse each AO-pair
+!> derivative before the next pair is visited.
+  subroutine gga_density_nuclear_point_batch(density,ao_atom,aov,aog1,aog2, &
+      aog3,drho,dgrho,d2rho,d2grho)
+    real(fp), intent(in) :: density(:,:,:)
+    integer, intent(in) :: ao_atom(:)
+    real(fp), intent(in) :: aov(:),aog1(:,:),aog2(:,:),aog3(:,:)
+    real(fp), intent(out) :: drho(:,:,:),dgrho(:,:,:,:)
+    real(fp), intent(out) :: d2rho(:,:,:,:,:),d2grho(:,:,:,:,:,:)
+
+    integer :: mu,nu,a,b,c,atom_a,atom_b,nao,nat,nmat
+    real(fp) :: pair_density(size(density,1))
+    real(fp) :: contracted_value(size(density,1),size(aov))
+    real(fp) :: contracted_gradient(size(density,1),3,size(aov))
+
+    nao=size(aov)
+    nmat=size(density,1)
+    nat=size(drho,2)
+    if(any(shape(density)/=[nmat,nao,nao]) .or. size(ao_atom)/=nao .or. &
+       any(shape(aog1)/=[nao,3]) .or. any(shape(aog2)/=[nao,6]) .or. &
+       any(shape(aog3)/=[nao,10]) .or. &
+       any(shape(drho)/=[3,nat,nmat]) .or. &
+       any(shape(dgrho)/=[3,3,nat,nmat]) .or. &
+       any(shape(d2rho)/=[3,3,nat,nat,nmat]) .or. &
+       any(shape(d2grho)/=[3,3,3,nat,nat,nmat])) &
+      error stop 'gga_density_nuclear_point_batch: shape mismatch'
+    drho=0.0_fp
+    dgrho=0.0_fp
+    d2rho=0.0_fp
+    d2grho=0.0_fp
+    contracted_value=0.0_fp
+    contracted_gradient=0.0_fp
+
+    ! Contract the symmetrized density with AO values and gradients once.
+    ! The two unconditional target updates preserve the two product-rule
+    ! contributions for diagonal AO pairs.
+    do nu=1,nao
+      do mu=1,nu
+        pair_density=density(:,mu,nu)
+        if(mu/=nu) pair_density=pair_density+density(:,nu,mu)
+        if(all(pair_density==0.0_fp)) cycle
+        contracted_value(:,mu)=contracted_value(:,mu)+pair_density*aov(nu)
+        contracted_value(:,nu)=contracted_value(:,nu)+pair_density*aov(mu)
+        do c=1,3
+          contracted_gradient(:,c,mu)=contracted_gradient(:,c,mu)+ &
+            pair_density*aog1(nu,c)
+          contracted_gradient(:,c,nu)=contracted_gradient(:,c,nu)+ &
+            pair_density*aog1(mu,c)
+        end do
+      end do
+    end do
+
+    ! Terms where one or both nuclear derivatives act on the same AO.
+    do mu=1,nao
+      atom_a=ao_atom(mu)
+      do a=1,3
+        drho(a,atom_a,:)=drho(a,atom_a,:)- &
+          aog1(mu,a)*contracted_value(:,mu)
+        do c=1,3
+          dgrho(c,a,atom_a,:)=dgrho(c,a,atom_a,:)- &
+            aog2(mu,hmap(a,c))*contracted_value(:,mu)- &
+            aog1(mu,a)*contracted_gradient(:,c,mu)
+        end do
+        do b=1,3
+          d2rho(a,b,atom_a,atom_a,:)=d2rho(a,b,atom_a,atom_a,:)+ &
+            aog2(mu,hmap(a,b))*contracted_value(:,mu)
+          do c=1,3
+            d2grho(c,a,b,atom_a,atom_a,:)= &
+              d2grho(c,a,b,atom_a,atom_a,:)+ &
+              aog3(mu,tmap(a,b,c))*contracted_value(:,mu)+ &
+              aog2(mu,hmap(a,b))*contracted_gradient(:,c,mu)
+          end do
+        end do
+      end do
+    end do
+
+    ! Cross terms where the two derivatives act on the two AO factors.
+    do nu=1,nao
+      atom_b=ao_atom(nu)
+      do mu=1,nu
+        atom_a=ao_atom(mu)
+        pair_density=density(:,mu,nu)
+        if(mu/=nu) pair_density=pair_density+density(:,nu,mu)
+        if(all(pair_density==0.0_fp)) cycle
+        do a=1,3
+          do b=1,3
+            d2rho(a,b,atom_a,atom_b,:)=d2rho(a,b,atom_a,atom_b,:)+ &
+              pair_density*aog1(mu,a)*aog1(nu,b)
+            d2rho(a,b,atom_b,atom_a,:)=d2rho(a,b,atom_b,atom_a,:)+ &
+              pair_density*aog1(nu,a)*aog1(mu,b)
+            do c=1,3
+              d2grho(c,a,b,atom_a,atom_b,:)= &
+                d2grho(c,a,b,atom_a,atom_b,:)+pair_density*( &
+                aog2(mu,hmap(a,c))*aog1(nu,b)+ &
+                aog1(mu,a)*aog2(nu,hmap(b,c)))
+              d2grho(c,a,b,atom_b,atom_a,:)= &
+                d2grho(c,a,b,atom_b,atom_a,:)+pair_density*( &
+                aog2(nu,hmap(a,c))*aog1(mu,b)+ &
+                aog1(nu,a)*aog2(mu,hmap(b,c)))
+            end do
+          end do
+        end do
+      end do
+    end do
+
+  contains
+
+    pure real(fp) function center_d1_batch(i,atom,ixyz)
+      integer, intent(in) :: i,atom,ixyz
+      center_d1_batch=0.0_fp
+      if(ao_atom(i)==atom) center_d1_batch=-aog1(i,ixyz)
+    end function center_d1_batch
+
+    pure real(fp) function center_gd1_batch(i,atom,ixyz,cxyz)
+      integer, intent(in) :: i,atom,ixyz,cxyz
+      center_gd1_batch=0.0_fp
+      if(ao_atom(i)==atom) center_gd1_batch=-aog2(i,hmap(ixyz,cxyz))
+    end function center_gd1_batch
+
+    pure real(fp) function center_d2_batch(i,atom1,xyz1,atom2,xyz2)
+      integer, intent(in) :: i,atom1,xyz1,atom2,xyz2
+      center_d2_batch=0.0_fp
+      if(ao_atom(i)==atom1 .and. atom1==atom2) &
+        center_d2_batch=aog2(i,hmap(xyz1,xyz2))
+    end function center_d2_batch
+
+    pure real(fp) function center_gd2_batch(i,atom1,xyz1,atom2,xyz2,cxyz)
+      integer, intent(in) :: i,atom1,xyz1,atom2,xyz2,cxyz
+      center_gd2_batch=0.0_fp
+      if(ao_atom(i)==atom1 .and. atom1==atom2) &
+        center_gd2_batch=aog3(i,tmap(xyz1,xyz2,cxyz))
+    end function center_gd2_batch
+
+  end subroutine gga_density_nuclear_point_batch
+
+!> Compute fixed-grid first nuclear derivatives for a batch of spin pairs.
+!>
+!> The leading density index labels independent right-hand sides.  Only the
+!> one or two AO centers of each AO pair can contribute, which is an exact
+!> property of atom-centred Gaussian basis functions.
+  pure subroutine gga_density_nuclear_point_first_batch(density,ao_atom, &
+      aov,aog1,aog2,drho,dgrho)
+    real(fp), intent(in) :: density(:,:,:,:),aov(:),aog1(:,:),aog2(:,:)
+    integer, intent(in) :: ao_atom(:)
+    real(fp), intent(out) :: drho(:,:,:,:),dgrho(:,:,:,:,:)
+    real(fp) :: pair_density(size(density,1),2)
+    real(fp) :: contracted_value(size(density,1),2,size(aov))
+    real(fp) :: contracted_gradient(size(density,1),3,2,size(aov))
+    integer :: atom,cart,mu,nu,space,spin,nao,nat,nvec
+
+    nao=size(aov)
+    nvec=size(density,1)
+    nat=size(drho,2)
+    if(any(shape(density)/=[nvec,2,nao,nao]) .or. &
+       size(ao_atom)/=nao .or. any(shape(aog1)/=[nao,3]) .or. &
+       any(shape(aog2)/=[nao,6]) .or. &
+       any(shape(drho)/=[3,nat,2,nvec]) .or. &
+       any(shape(dgrho)/=[3,3,nat,2,nvec])) &
+      error stop 'gga_density_nuclear_point_first_batch: shape mismatch'
+    drho=0.0_fp
+    dgrho=0.0_fp
+    contracted_value=0.0_fp
+    contracted_gradient=0.0_fp
+
+    ! First contract every symmetrized density with the AO value and gradient.
+    ! Both target AOs are updated even on the diagonal; this reproduces the
+    ! two product-rule terms for phi_mu*phi_mu exactly.
+    do nu=1,nao
+      do mu=1,nu
+        pair_density=density(:,:,mu,nu)
+        if(mu/=nu) pair_density=pair_density+density(:,:,nu,mu)
+        do spin=1,2
+          contracted_value(:,spin,mu)=contracted_value(:,spin,mu)+ &
+            pair_density(:,spin)*aov(nu)
+          contracted_value(:,spin,nu)=contracted_value(:,spin,nu)+ &
+            pair_density(:,spin)*aov(mu)
+          do space=1,3
+            contracted_gradient(:,space,spin,mu)= &
+              contracted_gradient(:,space,spin,mu)+ &
+              pair_density(:,spin)*aog1(nu,space)
+            contracted_gradient(:,space,spin,nu)= &
+              contracted_gradient(:,space,spin,nu)+ &
+              pair_density(:,spin)*aog1(mu,space)
+          end do
+        end do
+      end do
+    end do
+    do mu=1,nao
+      atom=ao_atom(mu)
+      do cart=1,3
+        do spin=1,2
+          drho(cart,atom,spin,:)=drho(cart,atom,spin,:)- &
+            aog1(mu,cart)*contracted_value(:,spin,mu)
+          do space=1,3
+            dgrho(space,cart,atom,spin,:)= &
+              dgrho(space,cart,atom,spin,:)- &
+              aog2(mu,hmap(cart,space))*contracted_value(:,spin,mu)- &
+              aog1(mu,cart)*contracted_gradient(:,space,spin,mu)
+          end do
+        end do
+      end do
+    end do
+  end subroutine gga_density_nuclear_point_first_batch
 
 end module mod_dft_gga_nuclear_point

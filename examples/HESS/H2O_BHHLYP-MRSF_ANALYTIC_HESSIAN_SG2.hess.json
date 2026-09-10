@@ -1,0 +1,3786 @@
+{
+  "atoms": [
+    8,
+    1,
+    1
+  ],
+  "coord": [
+    0.0,
+    0.0,
+    -0.07759509131153179,
+    -1.007591253013608,
+    1.007591253013608,
+    -1.1611785434815982,
+    1.007591253013608,
+    -1.007591253013608,
+    -1.1611785434815982
+  ],
+  "mass": [
+    15.99491,
+    1.007825,
+    1.007825
+  ],
+  "energy": -75.95370824513701,
+  "hessian_cache_version": 3,
+  "state": 3,
+  "hessian_request": {
+    "version": 3,
+    "state": 3,
+    "model_config": {
+      "input": {
+        "basis": "6-31g",
+        "charge": 0,
+        "d4": false,
+        "functional": "bhhlyp",
+        "ispher": "auto",
+        "library": "",
+        "method": "tdhf",
+        "perf": 1,
+        "qmmm_flag": false,
+        "soc_2e": 1
+      },
+      "mp2": {
+        "opposite_spin_scale": 1.0,
+        "same_spin_scale": 1.0,
+        "variant": "mp2"
+      },
+      "guess": {
+        "continue_geom": false,
+        "file": "",
+        "file2": "",
+        "save_mol": false,
+        "swapmo": "",
+        "type": "huckel"
+      },
+      "pcm": {
+        "backend": "ddx",
+        "enabled": false,
+        "epsilon": 78.3553,
+        "mode": "reference_scf",
+        "model": "ddpcm",
+        "radii": "uff",
+        "solvent": "water"
+      },
+      "dftb": {
+        "backend": "native",
+        "c_mrsf": -1.0,
+        "c_mrsf_oo": -1.0,
+        "cam_alpha": 0.0,
+        "cam_beta": 1.0,
+        "executable": "",
+        "lc_gamma": "yukawa",
+        "lc_ground_state": false,
+        "library_path": "",
+        "max_scc_iterations": 1200,
+        "model": "",
+        "mrsf_shift_co": 0.0,
+        "mrsf_shift_cv": 0.0,
+        "mrsf_shift_oo": 0.0,
+        "mrsf_shift_ov": 0.0,
+        "omega": 0.3,
+        "onsite_exchange_scale": 0.0,
+        "onsite_pp": 0.0,
+        "onsite_sp": 0.0,
+        "onsite_ss": 0.0,
+        "parameter_path": "",
+        "print_level": 1,
+        "reference": "",
+        "reference_multiplicity": 0,
+        "response_cam_alpha": -1.0,
+        "response_cam_beta": -1.0,
+        "response_global_hybrid": false,
+        "response_max_iterations": 50,
+        "response_max_subspace": 100,
+        "response_omega": -1.0,
+        "response_solver": "auto",
+        "response_tolerance": 1e-06,
+        "response_w_scale": -1.0,
+        "scc_history": 12,
+        "scc_max_step": 0.5,
+        "scc_mixer": "auto",
+        "scc_mixing": 0.35,
+        "scc_tolerance": 1e-08,
+        "spc": 0.5,
+        "spc_coco": -999.0,
+        "spc_coov": -999.0,
+        "spc_ovov": -999.0,
+        "spin_complete": true,
+        "state_to_state_spectrum": true,
+        "target_multiplicity": 1,
+        "timeout": 300,
+        "type": "auto",
+        "unpaired": 2,
+        "w_scale": 1.0,
+        "zvector": true
+      },
+      "symmetry": {
+        "enabled": "true",
+        "label_mo": true,
+        "label_modes": true,
+        "label_states": true,
+        "move_to_standard_frame": false,
+        "point_group": "auto",
+        "strict": false,
+        "subgroup": "auto",
+        "tolerance": 1e-05,
+        "use_integral_symmetry": "true",
+        "use_response_symmetry": false
+      },
+      "scf": {
+        "alternative_scf": "trah",
+        "cdiis_switch": 0.3,
+        "conv": 1e-10,
+        "converger_type": "diis",
+        "diis_reset_conv": 0.005,
+        "diis_reset_mod": 10,
+        "diis_type": "cdiis",
+        "escalation": "",
+        "forced_attempt": 2,
+        "grad_cutoff": "1.0d-10",
+        "incremental": true,
+        "init_basis": "none",
+        "init_conv": 0.001,
+        "init_converger": "none",
+        "init_it": 15,
+        "init_library": "",
+        "init_scf": "no",
+        "maxdiis": 7,
+        "maxit": 80,
+        "mom": false,
+        "mom_switch": 0.003,
+        "multiplicity": 3,
+        "pfon": false,
+        "pfon_cooling_rate": 50.0,
+        "pfon_nsmear": 5.0,
+        "pfon_start_temp": 2000.0,
+        "pscreen": false,
+        "pscreen_cap": 1e-08,
+        "pscreen_grid_ang": 0,
+        "pscreen_grid_rad": 0,
+        "pscreen_k": 0.01,
+        "pscreen_tight": 0.0001,
+        "pscreen_xc_aocut": 0.0,
+        "pscreen_xc_dcut": 0.0,
+        "rstctmo": false,
+        "save_molden": true,
+        "scal_rel": 0,
+        "soscf_lvl_shift": 0.0,
+        "stability": false,
+        "trh_gred": 0.001,
+        "trh_impl": "auto",
+        "trh_jd_start": 30,
+        "trh_lred": 0.0001,
+        "trh_ls": false,
+        "trh_nmic": 50,
+        "trh_nrtv": 1,
+        "trh_r0": 0.4,
+        "trh_stab": false,
+        "trh_sub_solver": "davidson",
+        "type": "rohf",
+        "vdiis_vshift_switch": 0.003,
+        "verbose": 1,
+        "vshift": 0.0,
+        "xc_c2f": "off",
+        "xc_incdft": "off",
+        "xc_phi_cache": "off"
+      },
+      "dftgrid": {
+        "ang_npts": 302,
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_flag": false,
+        "cam_mu": -1.0,
+        "grid_ao_pruned": true,
+        "grid_ao_sparsity_ratio": 0.9,
+        "grid_ao_threshold": 1e-15,
+        "hfscale": -1.0,
+        "partfun": "ssf",
+        "pruned": "sg2",
+        "rad_npts": 96,
+        "rad_type": "ta"
+      },
+      "tdhf": {
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_mu": -1.0,
+        "conf_threshold": 0.05,
+        "conv": 1e-12,
+        "fp32": "off",
+        "gmres_dim": 50,
+        "hfscale": -1.0,
+        "ixcore": "-1",
+        "maxit": 80,
+        "maxit_zv": 50,
+        "multiplicity": 1,
+        "nstate": 6,
+        "nstate_s": 0,
+        "nstate_t": 0,
+        "nvdav": 50,
+        "resp_cutoff": "5.0e-11",
+        "spc_coco": -1.0,
+        "spc_coov": -1.0,
+        "spc_ovov": -1.0,
+        "target": 1,
+        "tlf": 2,
+        "type": "mrsf",
+        "z_solver": 0,
+        "zv_warmstart": "on",
+        "zvconv": 1e-12
+      },
+      "qmmm": {
+        "barostat_interval": 25,
+        "constraints": "None",
+        "cutoff": "NoCutoff",
+        "embedding": "electrostatic",
+        "energy_file": "",
+        "ensemble": "nve",
+        "ewald_tol": "",
+        "forcefield": [
+          "amber14-all.xml",
+          "amber14/tip3p.xml"
+        ],
+        "forcefield_files": "",
+        "friction": 1.0,
+        "frontier_scheme": "none",
+        "h_lj": false,
+        "istate": 0,
+        "lj_switch": false,
+        "log_file": "",
+        "mm_charge_width": "",
+        "n_steps": 1000,
+        "nonbondedmethod": "NoCutoff",
+        "nsteps": 1,
+        "pdb_file": "",
+        "pressure": 1.0,
+        "qm_atoms": "",
+        "qm_atoms_xyz": null,
+        "qm_list": null,
+        "report_interval": 1,
+        "rigidwater": false,
+        "temperature": 300.0,
+        "timestep": 1.0,
+        "trajectory_file": "",
+        "trajectory_format": "pdb"
+      }
+    }
+  },
+  "hessian": [
+    [
+      0.24556081945490935,
+      -0.40815226040879693,
+      -2.8416313401366635e-12,
+      -0.12278040972569529,
+      0.20407613020475998,
+      -0.21881529092899094,
+      -0.12278040972921406,
+      0.20407613020403698,
+      0.21881529093183258
+    ],
+    [
+      -0.40815226040879693,
+      0.24556081945491398,
+      2.8405649550198794e-12,
+      0.20407613020475965,
+      -0.12278040972569991,
+      0.2188152909289908,
+      0.2040761302040373,
+      -0.12278040972921407,
+      -0.21881529093183136
+    ],
+    [
+      -2.8416313401366635e-12,
+      2.8405649550198794e-12,
+      0.2817212173514208,
+      -0.16470178116087858,
+      0.16470178116088074,
+      -0.14086060867405792,
+      0.16470178116372025,
+      -0.1647017811637213,
+      -0.1408606086773629
+    ],
+    [
+      -0.12278040972569529,
+      0.20407613020475965,
+      -0.16470178116087858,
+      0.15189863739479478,
+      -0.2364831694543613,
+      0.1917585360451964,
+      -0.029118227669099498,
+      0.03240703924960164,
+      -0.027056754884317812
+    ],
+    [
+      0.20407613020475998,
+      -0.12278040972569991,
+      0.16470178116088074,
+      -0.2364831694543613,
+      0.15189863739480006,
+      -0.19175853604519763,
+      0.032407039249601324,
+      -0.02911822766910016,
+      0.027056754884316865
+    ],
+    [
+      -0.21881529092899094,
+      0.2188152909289908,
+      -0.14086060867405792,
+      0.1917585360451964,
+      -0.19175853604519763,
+      0.14392260385303388,
+      0.027056754883794543,
+      -0.027056754883793166,
+      -0.003061995178975946
+    ],
+    [
+      -0.12278040972921406,
+      0.2040761302040373,
+      0.16470178116372025,
+      -0.029118227669099498,
+      0.032407039249601324,
+      0.027056754883794543,
+      0.15189863739831355,
+      -0.23648316945363862,
+      -0.19175853604751478
+    ],
+    [
+      0.20407613020403698,
+      -0.12278040972921407,
+      -0.1647017811637213,
+      0.03240703924960164,
+      -0.02911822766910016,
+      -0.027056754883793166,
+      -0.23648316945363862,
+      0.15189863739831422,
+      0.1917585360475145
+    ],
+    [
+      0.21881529093183258,
+      -0.21881529093183136,
+      -0.1408606086773629,
+      -0.027056754884317812,
+      0.027056754884316865,
+      -0.003061995178975946,
+      -0.19175853604751478,
+      0.1917585360475145,
+      0.14392260385633882
+    ]
+  ],
+  "hessian_metadata": {
+    "max_asymmetry": 0.0,
+    "symmetrized": true,
+    "upstream_symmetrization_applied": true,
+    "python_symmetrization_applied": false,
+    "translation_projection_applied": true,
+    "rotation_projection_applied": false,
+    "stored_matrix_invariance": {
+      "stage": "native_mrsf_after_response_row_symmetrization_and_translation_projection",
+      "matrix_convention": "rows_displacement_columns_gradient",
+      "asymmetry_units": "hartree/bohr^2",
+      "max_abs_asymmetry": 0.0,
+      "frobenius_asymmetry": 0.0,
+      "translation_max_abs_residual": 2.7755575615628914e-17,
+      "translation_frobenius_residual": 7.88691317713038e-17,
+      "translation_residual_units": "hartree/bohr^2",
+      "rotation_max_abs_residual": 0.1748671058715604,
+      "rotation_frobenius_residual": 0.3934276655399642,
+      "rotation_residual_units": "hartree/bohr",
+      "rotation_origin": "center_of_mass",
+      "rotation_gradient_covariance_correction": false,
+      "rigid_motion_projection_applied": true,
+      "upstream_symmetrization_applied": true,
+      "translation_projection_applied": true,
+      "rotation_projection_applied": false
+    },
+    "backend": "native_openqp",
+    "native_openqp_kernel": true,
+    "native_openqp_spin_adapted_mrsf_response": true,
+    "native_openqp_coupled_mrsf_amplitude_response": true,
+    "native_openqp_mrsf_z_response": true,
+    "native_openqp_final_assembly": true,
+    "native_openqp_d4_dispersion": false,
+    "no_external_hessian_backend": true,
+    "no_numerical_fallback": true,
+    "tdhf_type": "mrsf",
+    "shape": [
+      9,
+      9
+    ]
+  },
+  "freqs": [
+    674.9237202986272,
+    3936.9417612668435,
+    3979.481840637406
+  ],
+  "modes": [
+    [
+      -1.2449209386543848e-13,
+      1.2451427508350696e-13,
+      -0.07262621165616208,
+      -0.24710634001144224,
+      0.24710634001144224,
+      0.5763151931552625,
+      0.247106340013418,
+      -0.2471063400134179,
+      0.5763151931531377
+    ],
+    [
+      1.1628935570624699e-11,
+      -1.1628933069182636e-11,
+      0.041501089714215636,
+      -0.43243195488924085,
+      0.43243195488924085,
+      -0.32932612064636047,
+      0.43243195470468127,
+      -0.4324319547046813,
+      -0.32932612044788145
+    ],
+    [
+      -0.04807729680314991,
+      0.04807729680314996,
+      1.0226285873371578e-11,
+      0.38151069640072943,
+      -0.3815106964007294,
+      0.4102841070127921,
+      0.38151069660864284,
+      -0.381510696608643,
+      -0.4102841071750919
+    ]
+  ],
+  "frequency_modes": {
+    "format": "OpenQP normal modes v1",
+    "frequencies_cm-1": [
+      674.9237202986272,
+      3936.9417612668435,
+      3979.481840637406
+    ],
+    "normal_mode_eigenvectors": [
+      [
+        -1.2449209386543848e-13,
+        1.2451427508350696e-13,
+        -0.07262621165616208,
+        -0.24710634001144224,
+        0.24710634001144224,
+        0.5763151931552625,
+        0.247106340013418,
+        -0.2471063400134179,
+        0.5763151931531377
+      ],
+      [
+        1.1628935570624699e-11,
+        -1.1628933069182636e-11,
+        0.041501089714215636,
+        -0.43243195488924085,
+        0.43243195488924085,
+        -0.32932612064636047,
+        0.43243195470468127,
+        -0.4324319547046813,
+        -0.32932612044788145
+      ],
+      [
+        -0.04807729680314991,
+        0.04807729680314996,
+        1.0226285873371578e-11,
+        0.38151069640072943,
+        -0.3815106964007294,
+        0.4102841070127921,
+        0.38151069660864284,
+        -0.381510696608643,
+        -0.4102841071750919
+      ]
+    ],
+    "normal_mode_eigenvectors_units": "Cartesian displacement, mass-unweighted, row-major by vibrational mode"
+  },
+  "inertia": [
+    2.1018147495702824,
+    4.092737548765711,
+    6.194552298335994
+  ],
+  "infrared_intensities": [
+    21.039914748860397,
+    139.65248825207922,
+    23102.05516771798
+  ],
+  "raman_activities": [
+    32529.01118228835,
+    15440.018328180002,
+    1198.2010009013252
+  ],
+  "vibrational_intensity_metadata": {
+    "status": "computed",
+    "backend": "mrsf_state_tracked_normal_coordinate_fd",
+    "electronic_state_role": "target_excited_state",
+    "state_index_one_based": 3,
+    "electronic_state": "S2",
+    "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+    "minimum_state_overlap": 0.9999998968454495,
+    "minimum_tracking_margin": 0.9996065049206491,
+    "ir_status": "computed_state_density_fd",
+    "ir_intensity_unit": "km/mol",
+    "dipole_derivative_unit": "e*bohr/(sqrt(amu)*bohr)",
+    "raman_status": "computed_truncated_sos",
+    "raman_activity_unit": "bohr^4/amu",
+    "polarizability_derivative_unit": "bohr^3/(sqrt(amu)*bohr)",
+    "raman_scope": "convergence-gated finite-state MRSF SOS; not analytic and not a complete static polarizability",
+    "generic_rohf_cphf_fallback": false,
+    "property_kernels": "complete MRSF state density and state-to-state transition densities; no generic ROHF property kernel",
+    "displacements": [
+      {
+        "mode": 1,
+        "sign": 1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.9999999997866135,
+        "tracking_margin": 0.9999999997865856,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.9536815618684,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.001097882809007784,
+          "CV": 0.0008620912145180789,
+          "OO": 3.0288371469298692e-27,
+          "OV": 0.9980400259764741
+        },
+        "state_dipole_au": [
+          1.7828447052004037e-13,
+          -1.7803987450992764e-13,
+          -0.007563661697957413
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.97028563989121,
+            53.9705816009038,
+            1.4043442102226013e-13
+          ],
+          [
+            53.9705816009038,
+            -53.9702856398911,
+            -1.4043738213345314e-13
+          ],
+          [
+            1.4043442102226013e-13,
+            -1.4043738213345314e-13,
+            9.204352109173551e-28
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.741880996501995e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010846400332287523,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999997866135,
+            "assignment_margin": 0.9999999997865856,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010846400332287523,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 1,
+        "sign": -1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.999999999786461,
+        "tracking_margin": 0.9999999997864042,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95373491116716,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010972628748035275,
+          "CV": 0.0008622409204308236,
+          "OO": 7.022686336480178e-27,
+          "OV": 0.9980404962047656
+        },
+        "state_dipole_au": [
+          5.749914433472725e-14,
+          -5.870477715053113e-14,
+          -0.00785747819634508
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.91822073477668,
+            53.91851682323876,
+            1.1349457095692631e-13
+          ],
+          [
+            53.91851682323876,
+            -53.91822073477666,
+            -1.1347219422709777e-13
+          ],
+          [
+            1.1349457095692631e-13,
+            -1.1347219422709777e-13,
+            8.85457413441991e-28
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.745710495322112e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.01104618606581688,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.999999999786461,
+            "assignment_margin": 0.9999999997864042,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.01104618606581688,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": 1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.9999999981583231,
+        "tracking_margin": 0.9999999981579907,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95392722335019,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0011004348731364314,
+          "CV": 0.0008636871485247735,
+          "OO": 9.420633053635404e-26,
+          "OV": 0.9980358779783388
+        },
+        "state_dipole_au": [
+          -5.768718835952313e-13,
+          5.768562710839475e-13,
+          -0.008088942562073598
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.962197296505195,
+            53.962493107168775,
+            1.4527199126006487e-12
+          ],
+          [
+            53.962493107168775,
+            -53.96219729650517,
+            -1.4527623053159823e-12
+          ],
+          [
+            1.4527199126006487e-12,
+            -1.4527623053159823e-12,
+            -3.8937868971002036e-26
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.740898884919348e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.01099756518740716,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999981583231,
+            "assignment_margin": 0.9999999981579907,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.01099756518740716,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": -1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.9999999981606869,
+        "tracking_margin": 0.9999999981606197,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95348868036818,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010947163902109676,
+          "CV": 0.0008606461983705635,
+          "OO": 9.162560693991259e-27,
+          "OV": 0.9980446374114185
+        },
+        "state_dipole_au": [
+          1.1065627580908455e-12,
+          -1.1070970529214463e-12,
+          -0.007331972829804467
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.92632695954674,
+            53.926623197795735,
+            -8.117160546508369e-13
+          ],
+          [
+            53.926623197795735,
+            -53.92632695954674,
+            8.117028590948825e-13
+          ],
+          [
+            -8.117160546508369e-13,
+            8.117028590948825e-13,
+            -1.2005340805666667e-26
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7466865631180374e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010895019226157848,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999981606869,
+            "assignment_margin": 0.9999999981606197,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010895019226157848,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": 1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.9999998968454495,
+        "tracking_margin": 0.9996065049208721,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370794548606,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.001097569344542662,
+          "CV": 0.0008621825566329695,
+          "OO": 1.5706265500471234e-07,
+          "OV": 0.9980400910361694
+        },
+        "state_dipole_au": [
+          0.0034421876350080906,
+          -0.0034421876350086648,
+          -0.007710420793633377
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94386289868426,
+            53.944161563144135,
+            -0.005341177585321916
+          ],
+          [
+            53.944161563144135,
+            -53.94386289868409,
+            0.005341177585321835
+          ],
+          [
+            -0.005341177585321916,
+            0.005341177585321835,
+            -5.28847907638504e-07
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.743929665094189e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946057795583733,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.9999998968454495,
+            "assignment_margin": 0.9996065049208721,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946057795583733,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": -1,
+        "step_scale": 1.0,
+        "displacement_sqrt_amu_bohr": 0.001,
+        "matched_overlap": 0.9999998968454497,
+        "tracking_margin": 0.9996065049206491,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.953707945486,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.001097569344541216,
+          "CV": 0.000862182556632033,
+          "OO": 1.570626551384516e-07,
+          "OV": 0.9980400910361716
+        },
+        "state_dipole_au": [
+          -0.00344218763429922,
+          0.003442187634298993,
+          -0.0077104207934275415
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94386289868919,
+            53.944161563149194,
+            0.005341177585195674
+          ],
+          [
+            53.944161563149194,
+            -53.94386289868927,
+            -0.005341177585195731
+          ],
+          [
+            0.005341177585195674,
+            -0.005341177585195731,
+            -5.288479076134689e-07
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7439296650948254e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946057795580763,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.9999998968454497,
+            "assignment_margin": 0.9996065049206491,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946057795580763,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 1,
+        "sign": 1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.9999999999466438,
+        "tracking_margin": 0.9999999999465549,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95369490564936,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.001097727288277142,
+          "CV": 0.0008621283741647285,
+          "OO": 3.8639283089611495e-27,
+          "OV": 0.9980401443375582
+        },
+        "state_dipole_au": [
+          2.1031440478047614e-13,
+          -2.0964306679527311e-13,
+          -0.007636981547571531
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.95728096908695,
+            53.957576961931984,
+            1.146763385106764e-13
+          ],
+          [
+            53.957576961931984,
+            -53.95728096908713,
+            -1.146843466480144e-13
+          ],
+          [
+            1.146763385106764e-13,
+            -1.146843466480144e-13,
+            7.037975403497884e-28
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7428368124000472e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.01089634724860758,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999999466438,
+            "assignment_margin": 0.9999999999465549,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.01089634724860758,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 1,
+        "sign": -1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.9999999999466248,
+        "tracking_margin": 0.999999999946605,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95372158031499,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010974173213426266,
+          "CV": 0.0008622032268242291,
+          "OO": 1.4883868955240983e-27,
+          "OV": 0.9980403794518331
+        },
+        "state_dipole_au": [
+          1.683791994722128e-13,
+          -1.6575629757653587e-13,
+          -0.007783889850730419
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.93124850720595,
+            53.931544563775454,
+            8.182529744238378e-15
+          ],
+          [
+            53.931544563775454,
+            -53.93124850720571,
+            -8.197804534318507e-15
+          ],
+          [
+            8.182529744238378e-15,
+            -8.197804534318507e-15,
+            4.024897960123897e-27
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7447515606669194e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010996240117940634,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999999466248,
+            "assignment_margin": 0.999999999946605,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010996240117940634,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": 1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.9999999995397283,
+        "tracking_margin": 0.9999999995396373,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95381780747452,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010990026221205005,
+          "CV": 0.0008629261896461789,
+          "OO": 4.2004166132330894e-27,
+          "OV": 0.9980380711882334
+        },
+        "state_dipole_au": [
+          -2.8394994688873965e-13,
+          2.8475659330506886e-13,
+          -0.007899650144659764
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.95323455911979,
+            53.95353047686015,
+            5.875132825833352e-13
+          ],
+          [
+            53.95353047686015,
+            -53.95323455911954,
+            -5.87536788479656e-13
+          ],
+          [
+            5.875132825833352e-13,
+            -5.87536788479656e-13,
+            -5.650112326577385e-27
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.742346509862539e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010971929930232799,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999995397283,
+            "assignment_margin": 0.9999999995396373,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010971929930232799,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": -1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.999999999540024,
+        "tracking_margin": 0.999999999539978,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95359853616014,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010961433823814316,
+          "CV": 0.0008614057142937054,
+          "OO": 3.4470941540552004e-28,
+          "OV": 0.9980424509033249
+        },
+        "state_dipole_au": [
+          6.244588179882271e-13,
+          -6.266532431853378e-13,
+          -0.007521165128508311
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.935299387505786,
+            53.93559551903923,
+            -8.083631644974683e-13
+          ],
+          [
+            53.93559551903923,
+            -53.93529938750563,
+            8.083875018711372e-13
+          ],
+          [
+            -8.083631644974683e-13,
+            8.083875018711372e-13,
+            -8.870215505152582e-27
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.745240352288297e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010920656940025045,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.999999999540024,
+            "assignment_margin": 0.999999999539978,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010920656940025045,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": 1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.9999999742110015,
+        "tracking_margin": 0.999803276894027,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370817022413,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.001097571430526903,
+          "CV": 0.000862169923038836,
+          "OO": 3.926619780025343e-08,
+          "OV": 0.9980402193802365
+        },
+        "state_dipole_au": [
+          0.0017210943672540703,
+          -0.00172109436725232,
+          -0.007710398378383165
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94416716500854,
+            53.94446384963556,
+            -0.002670604293219455
+          ],
+          [
+            53.94446384963556,
+            -53.94416716500867,
+            0.0026706042932194978
+          ],
+          [
+            -0.002670604293219455,
+            0.0026706042932194978,
+            -1.322127683684155e-07
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.74382766473541e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946234835826796,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.9999999742110015,
+            "assignment_margin": 0.999803276894027,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946234835826796,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": -1,
+        "step_scale": 0.5,
+        "displacement_sqrt_amu_bohr": 0.0005,
+        "matched_overlap": 0.9999999742110013,
+        "tracking_margin": 0.9998032768941432,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370817022399,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010975714305262137,
+          "CV": 0.0008621699230382855,
+          "OO": 3.926619773270671e-08,
+          "OV": 0.9980402193802378
+        },
+        "state_dipole_au": [
+          -0.001721094367310834,
+          0.00172109436731252,
+          -0.0077103983782894625
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94416716501922,
+            53.94446384964622,
+            0.0026706042934820013
+          ],
+          [
+            53.94446384964622,
+            -53.944167165019294,
+            -0.0026706042934820655
+          ],
+          [
+            0.0026706042934820013,
+            -0.0026706042934820655,
+            -1.3221276839438606e-07
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7438276647353193e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946234835833527,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.9999999742110013,
+            "assignment_margin": 0.9998032768941432,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946234835833527,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 1,
+        "sign": 1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.9999999999866597,
+        "tracking_margin": 0.9999999999865055,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370157593081,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010976496622501601,
+          "CV": 0.0008621470204475084,
+          "OO": 3.2936898063104833e-26,
+          "OV": 0.9980402033173025
+        },
+        "state_dipole_au": [
+          -8.792619410336044e-14,
+          8.782731486522977e-14,
+          -0.007673675057891516
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.95077574178503,
+            53.95107175055362,
+            4.727372648171802e-13
+          ],
+          [
+            53.95107175055362,
+            -53.950775741785016,
+            -4.727534002327473e-13
+          ],
+          [
+            4.727372648171802e-13,
+            -4.727534002327473e-13,
+            -4.1151084322118235e-27
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7433151097646807e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010921320586301297,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999999866597,
+            "assignment_margin": 0.9999999999865055,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010921320586301297,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 1,
+        "sign": -1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.9999999999866576,
+        "tracking_margin": 0.9999999999866375,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95371491326574,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010974946788104166,
+          "CV": 0.0008621844468554208,
+          "OO": 4.906646606764231e-29,
+          "OV": 0.9980403208743343
+        },
+        "state_dipole_au": [
+          8.01581023779363e-14,
+          -8.014595931360446e-14,
+          -0.007747129216317483
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.93775950976006,
+            53.938055550391006,
+            1.9423403985663232e-13
+          ],
+          [
+            53.938055550391006,
+            -53.9377595097601,
+            -1.9422915499761015e-13
+          ],
+          [
+            1.9423403985663232e-13,
+            -1.9422915499761015e-13,
+            -3.883224006296668e-28
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7442724837018773e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010971267021672546,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m1_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999999866576,
+            "assignment_margin": 0.9999999999866375,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010971267021672546,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": 1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.9999999998849506,
+        "tracking_margin": 0.9999999998848865,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.9537630446246,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010982871547231213,
+          "CV": 0.0008625458904663752,
+          "OO": 8.281031620560839e-27,
+          "OV": 0.9980391669548104
+        },
+        "state_dipole_au": [
+          -3.100505963082867e-13,
+          3.0946079032645457e-13,
+          -0.007805016384912711
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94875197771159,
+            53.94904794894546,
+            4.926701241997044e-13
+          ],
+          [
+            53.94904794894546,
+            -53.948751977711524,
+            -4.926738132759912e-13
+          ],
+          [
+            4.926701241997044e-13,
+            -4.926738132759912e-13,
+            -4.48441567837724e-27
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7430701470167533e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010959111990383408,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999998849506,
+            "assignment_margin": 0.9999999998848865,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010959111990383408,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 2,
+        "sign": -1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.9999999998849876,
+        "tracking_margin": 0.9999999998849343,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95365340898977,
+        "state_irrep": "a2",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010968575350602766,
+          "CV": 0.0008617856526273528,
+          "OO": 6.579957051169545e-27,
+          "OV": 0.9980413568123123
+        },
+        "state_dipole_au": [
+          1.677130656574377e-13,
+          -1.660685478022117e-13,
+          -0.007615773857975072
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.939784391587104,
+            53.94008046971757,
+            5.848999251991022e-14
+          ],
+          [
+            53.94008046971757,
+            -53.93978439158709,
+            -5.850894826081194e-14
+          ],
+          [
+            5.848999251991022e-14,
+            -5.850894826081194e-14,
+            -5.807535262387424e-29
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7445170686867474e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010933475493918224,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m2_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a2",
+            "symmetry_check": "same_subgroup_same_irrep",
+            "matched_overlap": 0.9999999998849876,
+            "assignment_margin": 0.9999999998849343,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010933475493918224,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": 1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.999999993552729,
+        "tracking_margin": 0.9999016447333988,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370822640575,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010975719517455963,
+          "CV": 0.0008621667645859582,
+          "OO": 9.816581124784493e-09,
+          "OV": 0.9980402514670873
+        },
+        "state_dipole_au": [
+          0.0008605472364016098,
+          -0.0008605472364025066,
+          -0.007710392866627669
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.94424322084377,
+            53.94453941052273,
+            -0.001335304161296583
+          ],
+          [
+            53.94453941052273,
+            -53.9442432208438,
+            0.0013353041612966137
+          ],
+          [
+            -0.001335304161296583,
+            0.0013353041612966137,
+            -3.305324538266927e-08
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7438021665184743e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946279132979395,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_p",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.999999993552729,
+            "assignment_margin": 0.9999016447333988,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946279132979395,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      },
+      {
+        "mode": 3,
+        "sign": -1,
+        "step_scale": 0.25,
+        "displacement_sqrt_amu_bohr": 0.00025,
+        "matched_overlap": 0.999999993552729,
+        "tracking_margin": 0.9999016447334392,
+        "phase_to_central": 1.0,
+        "raw_root_index": 2,
+        "state_energy_hartree": -75.95370822640568,
+        "state_irrep": "a''",
+        "target_multiplicity": 1,
+        "expected_s2": 0.0,
+        "expected_s2_source": "fixed spin-adapted MRSF singlet/triplet sector; not an independent numerical S^2 measurement",
+        "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+        "response_block_weights": {
+          "CO": 0.0010975719517453556,
+          "CV": 0.000862166764585983,
+          "OO": 9.81658110601953e-09,
+          "OV": 0.9980402514670876
+        },
+        "state_dipole_au": [
+          -0.0008605472365097004,
+          0.0008605472365087533,
+          -0.007710392866600357
+        ],
+        "state_dipole_unit": "e*bohr",
+        "polarizability_au": [
+          [
+            -53.944243220824234,
+            53.94453941050308,
+            0.0013353041617056736
+          ],
+          [
+            53.94453941050308,
+            -53.944243220824035,
+            -0.0013353041617056108
+          ],
+          [
+            0.0013353041617056736,
+            -0.0013353041617056108,
+            -3.3053245402931714e-08
+          ]
+        ],
+        "polarizability_unit": "bohr^3",
+        "polarizability": {
+          "backend": "truncated_mrsf_state_sos",
+          "analytic": false,
+          "finite_field": false,
+          "number_of_states": 6,
+          "tail_states": 2,
+          "tail_relative_norm": 2.7438021665204364e-06,
+          "tail_relative_tolerance": 0.05,
+          "minimum_gap_hartree": 0.010946279132961464,
+          "scope": "finite-state spin-adapted MRSF SOS; not a complete static polarizability and not an analytic MRSF response"
+        },
+        "provenance": {
+          "engine": "OpenQP",
+          "engine_version": "unknown",
+          "child_project": "mrsf_vibprop_m3_m",
+          "electronic_method": "MRSF-TDDFT",
+          "state_tracking": "OpenQP cross-geometry MO alignment and response overlap",
+          "root_mapping": "raw current root to central response root",
+          "isolated_root_invariants": {
+            "schema_version": "mrsf_hessian_root_tracking.v1",
+            "status": "accepted",
+            "representation": "spin_adapted_mrsf_co_ov_cv_oo",
+            "response_overlap_metric": "spin_adapted_mrsf_physical_packed",
+            "expanded_response_dimension": 54,
+            "physical_response_dimension": 53,
+            "reference_state": 3,
+            "selected_raw_state": 3,
+            "transported_state": 3,
+            "solved_root_count": 6,
+            "target_multiplicity": 1,
+            "spin_check": "fixed_spin_adapted_mrsf_manifold",
+            "s2_expectation_evaluated": false,
+            "reference_irrep": "a2",
+            "selected_raw_irrep": "a''",
+            "symmetry_check": "pure_reference_subgroup_lowered",
+            "matched_overlap": 0.999999993552729,
+            "assignment_margin": 0.9999016447334392,
+            "central_gap_hartree": 0.010946293844271773,
+            "displaced_gap_hartree": 0.010946279132961464,
+            "overlap_threshold": 0.99,
+            "margin_threshold": 0.05,
+            "gap_threshold_hartree": 1e-05,
+            "degenerate_manifold_solver": false
+          },
+          "state_dipole": "nuclear plus complete MRSF state-density contraction",
+          "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+          "normal_mode_mass_metric_max_residual": 6.661338147750939e-16
+        }
+      }
+    ],
+    "provenance": {
+      "schema_version": 1,
+      "electronic_method": "MRSF-TDDFT",
+      "electronic_state": "S2",
+      "state_index_one_based": 3,
+      "electronic_state_role": "target_excited_state",
+      "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+      "nuclear_derivative": "two-point central finite differences at h, h/2, and h/4",
+      "dipole_fd_convergence": {
+        "step_scales": [
+          1.0,
+          0.5,
+          0.25
+        ],
+        "coarse_to_medium_norm": 1.5636579841141265e-06,
+        "medium_to_fine_norm": 3.0144735678915723e-07,
+        "medium_to_fine_relative_norm": 6.171014700704319e-08,
+        "coarse_to_medium_norm_by_mode": [
+          5.39650601109851e-08,
+          1.5001691869326352e-07,
+          1.5555092374128965e-06
+        ],
+        "medium_to_fine_norm_by_mode": [
+          1.3703531065546516e-08,
+          3.772387432701723e-08,
+          2.9876350422577464e-07
+        ],
+        "medium_to_fine_relative_norm_by_mode": [
+          9.327947769871985e-08,
+          9.967071074740101e-08,
+          6.137306903663226e-08
+        ],
+        "relative_tolerance": 0.05,
+        "absolute_tolerance": 1e-06,
+        "accepted_step_scale": 0.25
+      },
+      "polarizability_fd_convergence": {
+        "step_scales": [
+          1.0,
+          0.5,
+          0.25
+        ],
+        "coarse_to_medium_norm": 6.504926848976772e-05,
+        "medium_to_fine_norm": 1.6740511737240144e-05,
+        "medium_to_fine_relative_norm": 2.610760046153753e-07,
+        "coarse_to_medium_norm_by_mode": [
+          1.8647980941039385e-05,
+          6.269136352734726e-06,
+          6.200288757201023e-05
+        ],
+        "medium_to_fine_norm_by_mode": [
+          4.337376789264192e-06,
+          1.2698255761790832e-06,
+          1.611891555963703e-05
+        ],
+        "medium_to_fine_relative_norm_by_mode": [
+          8.330717541124976e-08,
+          3.540063978607409e-08,
+          1.508917970187078e-06
+        ],
+        "relative_tolerance": 0.05,
+        "absolute_tolerance": 1e-06,
+        "accepted_step_scale": 0.25
+      },
+      "polarizability_fd_failure": null,
+      "dipole_source": "nuclear moment plus complete spin-adapted MRSF state-density contraction at the molecular center of mass",
+      "dipole_origin": "molecular center of mass",
+      "polarizability_source": "convergence-gated finite-state spin-adapted MRSF SOS; not analytic",
+      "analytic_gap": "analytic target-state MRSF dipole and polarizability derivatives and a uniform-field MRSF Hamiltonian are not implemented",
+      "state_phase_use": "response phases are tracked and recorded; permanent dipoles and static SOS polarizabilities are invariant to a unit state phase",
+      "request_sha256": "ff8215dc731c23da40c5b395cf57f35a11613270a4beda0d743532fe6033fb62",
+      "openqp_input": "/bighome/mohsen/CLUADE_PROJECT/manage-pullrequest/openqp-pr394m/examples/HESS/H2O_BHHLYP-MRSF_ANALYTIC_HESSIAN_SG2.inp",
+      "openqp_project": "H2O_BHHLYP-MRSF_ANALYTIC_HESSIAN_SG2"
+    }
+  },
+  "vibrational_property_request": {
+    "vibrational_intensities": true,
+    "property_dx": 0.001,
+    "property_min_overlap": 0.99,
+    "property_min_margin": 0.05,
+    "property_fd_relative_tolerance": 0.05,
+    "property_fd_absolute_tolerance": 1e-06,
+    "raman_backend": "truncated_sos",
+    "raman_sos_tail_states": 2,
+    "raman_sos_tail_tolerance": 0.05,
+    "raman_sos_min_gap": 1e-05
+  },
+  "infrared_mode_dipole_derivatives": [
+    [
+      -3.361685929625935e-10,
+      3.3594654835766846e-10,
+      0.14690831685193473
+    ],
+    [
+      -9.555273239314488e-10,
+      9.510586762573325e-10,
+      -0.3784850538752771
+    ],
+    [
+      3.4421889458226205,
+      -3.4421889458225197,
+      -5.46229728115577e-11
+    ]
+  ],
+  "raman_mode_polarizability_derivatives": [
+    [
+      [
+        -26.032464049933424,
+        26.032400325235017,
+        5.570064499210958e-10
+      ],
+      [
+        26.032400325235017,
+        -26.032464049833948,
+        -5.570484904702741e-10
+      ],
+      [
+        5.570064499210958e-10,
+        -5.570484904702741e-10,
+        -7.453572063164314e-24
+      ]
+    ],
+    [
+      [
+        -17.935172248968456,
+        17.934958455782635,
+        8.683602633595884e-10
+      ],
+      [
+        17.934958455782635,
+        -17.93517224886898,
+        -8.683297300303584e-10
+      ],
+      [
+        8.683602633595884e-10,
+        -8.683297300303584e-10,
+        -8.852680651506731e-24
+      ]
+    ],
+    [
+      [
+        -3.906563961209031e-08,
+        3.929301328753354e-08,
+        -5.341216646004513
+      ],
+      [
+        3.929301328753354e-08,
+        -3.9534597817691974e-08,
+        5.341216646004449
+      ],
+      [
+        -5.341216646004513,
+        5.341216646004449,
+        4.052488846306311e-14
+      ]
+    ]
+  ],
+  "symmetry_metadata": {
+    "status": "enabled",
+    "enabled": true,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "c2v",
+    "subgroup": "c2v",
+    "detected_point_group": "c2v",
+    "detected_subgroup": "c2v",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": true,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "true",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "true",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    },
+    "detection": {
+      "point_group": "c2v",
+      "abelian_subgroup": "c2v",
+      "origin": [
+        0.0,
+        0.0,
+        -0.29431178174554506
+      ],
+      "orientation": [
+        [
+          0.7071067811865476,
+          0.7071067811865476,
+          0.0
+        ],
+        [
+          -0.7071067811865476,
+          0.7071067811865476,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "operations": [
+        {
+          "name": "E",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1,
+            2
+          ],
+          "matrix_input_frame": [
+            [
+              1.0000000000000002,
+              4.266421588589642e-17,
+              0.0
+            ],
+            [
+              4.266421588589642e-17,
+              1.0000000000000002,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "C2z",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            2,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              -1.0000000000000002,
+              -4.266421588589642e-17,
+              0.0
+            ],
+            [
+              -4.266421588589642e-17,
+              -1.0000000000000002,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "sxz",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            2,
+            1
+          ],
+          "matrix_input_frame": [
+            [
+              4.266421588589642e-17,
+              1.0000000000000002,
+              0.0
+            ],
+            [
+              1.0000000000000002,
+              4.266421588589642e-17,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "syz",
+          "matrix": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1,
+            2
+          ],
+          "matrix_input_frame": [
+            [
+              -4.266421588589642e-17,
+              -1.0000000000000002,
+              0.0
+            ],
+            [
+              -1.0000000000000002,
+              -4.266421588589642e-17,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "irreps": [
+        "a1",
+        "a2",
+        "b1",
+        "b2"
+      ],
+      "character_table": {
+        "a1": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "a2": [
+          1,
+          1,
+          -1,
+          -1
+        ],
+        "b1": [
+          1,
+          -1,
+          1,
+          -1
+        ],
+        "b2": [
+          1,
+          -1,
+          -1,
+          1
+        ]
+      },
+      "tolerance": 1e-05,
+      "n_atoms": 3
+    },
+    "requested_matches_detected": true,
+    "integral_symmetry": {
+      "status": "skipped_runtype_hess"
+    },
+    "mo_labels": {
+      "status": "ok",
+      "alpha": {
+        "labels": [
+          "a1",
+          "a1",
+          "b2",
+          "a1",
+          "b1",
+          "a1",
+          "b2",
+          "b2",
+          "b1",
+          "a1",
+          "a1",
+          "b2",
+          "a1"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000002
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000004,
+            -1.0000000000000004
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0000000000000002,
+            -1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0,
+            -1.0,
+            1.0000000000000002
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000004,
+            -1.0000000000000004
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.9999999999999998,
+            0.9999999999999998,
+            1.0
+          ],
+          [
+            1.0,
+            -0.9999999999999996,
+            -0.9999999999999996,
+            1.0
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ]
+        ],
+        "max_deviation": 4.440892098500626e-16,
+        "status": "label_only_no_reductions"
+      },
+      "beta": {
+        "labels": [
+          "a1",
+          "a1",
+          "b2",
+          "a1",
+          "b1",
+          "a1",
+          "b2",
+          "b2",
+          "b1",
+          "a1",
+          "a1",
+          "b2",
+          "a1"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000002
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000004,
+            -1.0000000000000004
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0000000000000002,
+            -1.0000000000000002,
+            1.0
+          ],
+          [
+            1.0000000000000002,
+            -1.0,
+            -1.0,
+            1.0000000000000002
+          ],
+          [
+            1.0000000000000002,
+            -1.0000000000000002,
+            1.0000000000000004,
+            -1.0000000000000004
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.9999999999999998,
+            0.9999999999999998,
+            1.0
+          ],
+          [
+            1.0,
+            -0.9999999999999996,
+            -0.9999999999999996,
+            1.0
+          ],
+          [
+            1.0,
+            1.0000000000000002,
+            1.0000000000000002,
+            1.0
+          ]
+        ],
+        "max_deviation": 4.440892098500626e-16,
+        "status": "label_only_no_reductions"
+      },
+      "scf_state": {
+        "irrep": "b1",
+        "nelec_alpha": 6,
+        "nelec_beta": 4,
+        "multiplicity": 1,
+        "term": "1B1"
+      },
+      "geometry_key": "d8efb4616f142027944a5b5e11237af4"
+    },
+    "reduction_maps": {
+      "n_operations": 4,
+      "operation_names": [
+        "E",
+        "C2z",
+        "sxz",
+        "syz"
+      ],
+      "shell_permutation": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          7,
+          8,
+          5,
+          6
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          7,
+          8,
+          5,
+          6
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      ],
+      "ao_sign": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          -1,
+          -1,
+          1,
+          1,
+          -1,
+          -1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          -1,
+          1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "ao_target": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          9,
+          10
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          9,
+          10
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ]
+      ],
+      "shell_orbit_representative": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        5,
+        6
+      ],
+      "shell_orbit_size": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        0,
+        0
+      ],
+      "n_shells": 9,
+      "n_ao": 13,
+      "status": "metadata_only_no_reductions"
+    },
+    "mo_irreps": {
+      "status": "active",
+      "irreps": [
+        "a1",
+        "a2",
+        "b1",
+        "b2"
+      ],
+      "xor_codes": [
+        0,
+        12,
+        10,
+        6
+      ],
+      "spins": {
+        "alpha": {
+          "n_mo": 13,
+          "n_unclassified": 0
+        },
+        "beta": {
+          "n_mo": 13,
+          "n_unclassified": 0
+        }
+      }
+    },
+    "response_symmetry": {
+      "status": "pair_table_staged",
+      "projection": false,
+      "td_type": "mrsf",
+      "n_pairs": 54,
+      "irreps": [
+        "a1",
+        "a2",
+        "b1",
+        "b2"
+      ]
+    },
+    "state_labels": {
+      "labels": [
+        "a1",
+        "b1",
+        "a2",
+        "a1",
+        "b2",
+        "a1"
+      ],
+      "transition_labels": [
+        "b1",
+        "a1",
+        "b2",
+        "b1",
+        "a2",
+        "b1"
+      ],
+      "reference_labels": [
+        "b1",
+        "a1"
+      ],
+      "characters": [
+        [
+          0.9999999999999998,
+          -0.9999999999999998,
+          0.9999999999999998,
+          -0.9999999999999998
+        ],
+        [
+          1.0000000000000018,
+          1.0000000000000018,
+          1.0000000000000018,
+          1.0000000000000018
+        ],
+        [
+          0.9999999999999999,
+          -0.9999999999999999,
+          -0.9999999999999999,
+          0.9999999999999999
+        ],
+        [
+          0.9999999999999987,
+          -0.9999999999999988,
+          0.9999999999999988,
+          -0.9999999999999987
+        ],
+        [
+          1.000000000000003,
+          1.0000000000000033,
+          -1.0000000000000033,
+          -1.0000000000000033
+        ],
+        [
+          0.9999999999999998,
+          -0.9999999999999998,
+          0.9999999999999998,
+          -0.9999999999999998
+        ]
+      ],
+      "max_deviation": 3.3306690738754696e-15,
+      "status": "ok",
+      "td_type": "mrsf",
+      "terms": [
+        "1A1",
+        "1B1",
+        "1A2",
+        "1A1",
+        "1B2",
+        "1A1"
+      ]
+    },
+    "mode_labels": {
+      "labels": [
+        "a1",
+        "a1",
+        "b2"
+      ],
+      "characters": [
+        [
+          1.0,
+          1.0000000000000002,
+          1.0000000000000002,
+          1.0
+        ],
+        [
+          1.0000000000000002,
+          1.0,
+          1.0000000000000002,
+          1.0000000000000002
+        ],
+        [
+          1.0,
+          -1.0000000000000002,
+          -1.0000000000000002,
+          1.0000000000000002
+        ]
+      ],
+      "max_deviation": 2.220446049250313e-16,
+      "status": "ok"
+    }
+  },
+  "basis_set": {
+    "format": "OpenQP portable basis v1",
+    "coefficient_convention": "molden",
+    "basis_function_order": "molden",
+    "spherical_harmonics": false,
+    "nbf": 13,
+    "shells": [
+      {
+        "atom_index": 0,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          5484.67166,
+          825.234946,
+          188.046958,
+          52.9645,
+          16.8975704,
+          5.79963534
+        ],
+        "coefficients": [
+          0.00183107443,
+          0.013950172199999998,
+          0.0684450781,
+          0.232714336,
+          0.4701928980000001,
+          0.358520853
+        ]
+      },
+      {
+        "atom_index": 0,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          15.53961625,
+          3.599933586,
+          1.01376175
+        ],
+        "coefficients": [
+          -0.11077754949999999,
+          -0.14802626270000002,
+          1.1307670150000002
+        ]
+      },
+      {
+        "atom_index": 0,
+        "angular_momentum": 1,
+        "shell": "p",
+        "exponents": [
+          15.53961625,
+          3.599933586,
+          1.01376175
+        ],
+        "coefficients": [
+          0.07087426822999998,
+          0.3397528391,
+          0.7271585772999999
+        ]
+      },
+      {
+        "atom_index": 0,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          0.2700058226
+        ],
+        "coefficients": [
+          1.0000000000000002
+        ]
+      },
+      {
+        "atom_index": 0,
+        "angular_momentum": 1,
+        "shell": "p",
+        "exponents": [
+          0.2700058226
+        ],
+        "coefficients": [
+          1.0
+        ]
+      },
+      {
+        "atom_index": 1,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          18.73113696,
+          2.825394365,
+          0.6401216923
+        ],
+        "coefficients": [
+          0.03349460434,
+          0.23472695350000003,
+          0.8137573261
+        ]
+      },
+      {
+        "atom_index": 1,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          0.1612777588
+        ],
+        "coefficients": [
+          1.0
+        ]
+      },
+      {
+        "atom_index": 2,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          18.73113696,
+          2.825394365,
+          0.6401216923
+        ],
+        "coefficients": [
+          0.03349460434,
+          0.23472695350000003,
+          0.8137573261
+        ]
+      },
+      {
+        "atom_index": 2,
+        "angular_momentum": 0,
+        "shell": "s",
+        "exponents": [
+          0.1612777588
+        ],
+        "coefficients": [
+          1.0
+        ]
+      }
+    ]
+  },
+  "molecular_orbitals": {
+    "format": "OpenQP portable orbitals v1",
+    "basis_function_order": "molden",
+    "alpha": {
+      "energies_hartree": [
+        -19.864524777405816,
+        -1.2908332946907832,
+        -0.73538568207376,
+        -0.6009912774636743,
+        -0.39685141757646436,
+        0.0022395295911796166,
+        0.15080575083694434,
+        0.8488634131176367,
+        0.8543419868132591,
+        0.8740963128343151,
+        0.9734779625830103,
+        1.0662546427302708,
+        1.4072229528181635
+      ],
+      "occupancies": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "coefficients": [
+        [
+          0.9953684304290517,
+          0.025537601805515536,
+          -1.3630368248792176e-15,
+          8.198503906230449e-16,
+          -0.001426466258590461,
+          -0.011496686708578367,
+          2.766017497372281e-15,
+          -2.052065200724492e-15,
+          0.002227042037036257,
+          0.00017250665459981617,
+          0.0028182240617950285,
+          0.0001725066545997507,
+          0.002818224061789535
+        ],
+        [
+          -0.2170613908595642,
+          0.5045373590493784,
+          6.847909547387563e-15,
+          -6.692748089020027e-15,
+          -0.12270805960220534,
+          0.44907327357843635,
+          3.1108663182600626e-15,
+          -3.2214261580205163e-15,
+          -0.04757933076775304,
+          0.13277115203813727,
+          -0.005691943446980324,
+          0.1327711520381454,
+          -0.0056919434469791955
+        ],
+        [
+          5.456059478863361e-15,
+          -1.3278982116967147e-14,
+          0.40438215786236037,
+          -0.4043821578623586,
+          -1.0207418472209584e-14,
+          -1.3749878458377605e-14,
+          0.19563355254899434,
+          -0.19563355254899428,
+          -5.2824144148103765e-15,
+          -0.2356930007227967,
+          -0.07260610030878108,
+          0.23569300072280097,
+          0.07260610030878471
+        ],
+        [
+          -0.06972108337101553,
+          0.16745821814939155,
+          8.15143356717108e-15,
+          -8.43152346427774e-15,
+          0.6146199758349031,
+          0.2516207203967067,
+          6.866207354055667e-15,
+          -7.112158022344997e-15,
+          0.37881486530884184,
+          -0.12777217966723065,
+          -0.043132626435936496,
+          -0.12777217966722476,
+          -0.04313262643593871
+        ],
+        [
+          -1.422043348661805e-17,
+          -8.902073069754606e-17,
+          0.5042097128325039,
+          0.5042097128325058,
+          2.5145489610084073e-16,
+          -7.320681668692051e-17,
+          0.3036502874987108,
+          0.3036502874987131,
+          1.9845759600338415e-16,
+          -1.511783237178796e-16,
+          -1.7925733827165305e-15,
+          -8.943731154749819e-17,
+          2.317931980880072e-15
+        ],
+        [
+          -0.0939629710253301,
+          0.21565165542992165,
+          1.3896233690787864e-14,
+          -1.4192553307090681e-14,
+          -0.26717936514943763,
+          1.0483005454119885,
+          2.9962581549608236e-14,
+          -2.9274584717661816e-14,
+          -0.3786982846785916,
+          -0.13333890301968743,
+          -0.9111895394238997,
+          -0.1333389030196961,
+          -0.9111895394240441
+        ],
+        [
+          4.894708596428388e-15,
+          -1.6416056935215197e-14,
+          0.2772483031604664,
+          -0.2772483031604638,
+          1.6005742618759455e-14,
+          -4.775410760317833e-14,
+          0.5038531674221693,
+          -0.5038531674221698,
+          1.4675273317741314e-14,
+          0.12044033317953674,
+          1.2953994377023776,
+          -0.12044033317952373,
+          -1.2953994377022855
+        ],
+        [
+          -2.3473706604589273e-15,
+          1.793264098929615e-14,
+          0.05653246818901411,
+          -0.056532468189096796,
+          -2.2874097726957595e-13,
+          -7.534500627680104e-14,
+          0.5222054376344452,
+          -0.5222054376343478,
+          2.087738703335232e-13,
+          0.981393988103905,
+          -0.531716290649423,
+          -0.9813939881041606,
+          0.531716290649706
+        ],
+        [
+          1.0838022704545181e-16,
+          4.323619054385035e-17,
+          -0.6432695877029,
+          -0.6432695877028987,
+          7.066896968337172e-15,
+          -1.305732666755768e-15,
+          0.7588278459511075,
+          0.7588278459511831,
+          -3.185527129816998e-15,
+          -5.447304765324552e-14,
+          2.569941719860013e-14,
+          7.111503656136958e-14,
+          -3.585290697196844e-14
+        ],
+        [
+          0.01548440211814369,
+          -0.1393210227190184,
+          -1.5190684670986342e-14,
+          4.65502624918581e-15,
+          -0.9310445659874352,
+          -0.11983491763645372,
+          -1.2778887942490882e-13,
+          1.4025465435893779e-13,
+          1.0041708032749512,
+          -0.26399607870983244,
+          0.4088997288709449,
+          -0.2639960787093478,
+          0.4088997288706859
+        ],
+        [
+          0.08062483794541705,
+          -0.5529193462739048,
+          -3.5704859736902895e-14,
+          4.3248163417087675e-14,
+          -0.07298176226089433,
+          0.33497361756380395,
+          1.0269317931385542e-13,
+          -1.113210578296219e-13,
+          0.6516952271099262,
+          0.9440787201453885,
+          -0.5101928028045668,
+          0.9440787201452612,
+          -0.5101928028046175
+        ],
+        [
+          -3.878350234252418e-15,
+          -2.4103191095035682e-14,
+          -0.6955671111246073,
+          0.6955671111246023,
+          7.246793799864272e-15,
+          7.415306645322927e-14,
+          1.1515778087084474,
+          -1.1515778087084418,
+          -6.70230228535901e-14,
+          -0.10051678368299437,
+          1.0431533265544832,
+          0.10051678368284075,
+          -1.043153326554456
+        ],
+        [
+          0.04372477594949055,
+          -1.6371667232295384,
+          2.4040523454180335e-14,
+          -2.6287079831689413e-14,
+          0.19445267100583782,
+          2.8445182679839545,
+          -3.736119430854426e-14,
+          3.946037550025677e-14,
+          -0.9251672166663027,
+          -0.5022825485334051,
+          -0.6610186471132207,
+          -0.502282548533428,
+          -0.6610186471131281
+        ]
+      ]
+    },
+    "beta": {
+      "energies_hartree": [
+        -19.864524777405816,
+        -1.2908332946907832,
+        -0.73538568207376,
+        -0.6009912774636743,
+        -0.39685141757646436,
+        0.0022395295911796166,
+        0.15080575083694434,
+        0.8488634131176367,
+        0.8543419868132591,
+        0.8740963128343151,
+        0.9734779625830103,
+        1.0662546427302708,
+        1.4072229528181635
+      ],
+      "occupancies": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "coefficients": [
+        [
+          0.9953684304290517,
+          0.025537601805515536,
+          -1.3630368248792176e-15,
+          8.198503906230449e-16,
+          -0.001426466258590461,
+          -0.011496686708578367,
+          2.766017497372281e-15,
+          -2.052065200724492e-15,
+          0.002227042037036257,
+          0.00017250665459981617,
+          0.0028182240617950285,
+          0.0001725066545997507,
+          0.002818224061789535
+        ],
+        [
+          -0.2170613908595642,
+          0.5045373590493784,
+          6.847909547387563e-15,
+          -6.692748089020027e-15,
+          -0.12270805960220534,
+          0.44907327357843635,
+          3.1108663182600626e-15,
+          -3.2214261580205163e-15,
+          -0.04757933076775304,
+          0.13277115203813727,
+          -0.005691943446980324,
+          0.1327711520381454,
+          -0.0056919434469791955
+        ],
+        [
+          5.456059478863361e-15,
+          -1.3278982116967147e-14,
+          0.40438215786236037,
+          -0.4043821578623586,
+          -1.0207418472209584e-14,
+          -1.3749878458377605e-14,
+          0.19563355254899434,
+          -0.19563355254899428,
+          -5.2824144148103765e-15,
+          -0.2356930007227967,
+          -0.07260610030878108,
+          0.23569300072280097,
+          0.07260610030878471
+        ],
+        [
+          -0.06972108337101553,
+          0.16745821814939155,
+          8.15143356717108e-15,
+          -8.43152346427774e-15,
+          0.6146199758349031,
+          0.2516207203967067,
+          6.866207354055667e-15,
+          -7.112158022344997e-15,
+          0.37881486530884184,
+          -0.12777217966723065,
+          -0.043132626435936496,
+          -0.12777217966722476,
+          -0.04313262643593871
+        ],
+        [
+          -1.422043348661805e-17,
+          -8.902073069754606e-17,
+          0.5042097128325039,
+          0.5042097128325058,
+          2.5145489610084073e-16,
+          -7.320681668692051e-17,
+          0.3036502874987108,
+          0.3036502874987131,
+          1.9845759600338415e-16,
+          -1.511783237178796e-16,
+          -1.7925733827165305e-15,
+          -8.943731154749819e-17,
+          2.317931980880072e-15
+        ],
+        [
+          -0.0939629710253301,
+          0.21565165542992165,
+          1.3896233690787864e-14,
+          -1.4192553307090681e-14,
+          -0.26717936514943763,
+          1.0483005454119885,
+          2.9962581549608236e-14,
+          -2.9274584717661816e-14,
+          -0.3786982846785916,
+          -0.13333890301968743,
+          -0.9111895394238997,
+          -0.1333389030196961,
+          -0.9111895394240441
+        ],
+        [
+          4.894708596428388e-15,
+          -1.6416056935215197e-14,
+          0.2772483031604664,
+          -0.2772483031604638,
+          1.6005742618759455e-14,
+          -4.775410760317833e-14,
+          0.5038531674221693,
+          -0.5038531674221698,
+          1.4675273317741314e-14,
+          0.12044033317953674,
+          1.2953994377023776,
+          -0.12044033317952373,
+          -1.2953994377022855
+        ],
+        [
+          -2.3473706604589273e-15,
+          1.793264098929615e-14,
+          0.05653246818901411,
+          -0.056532468189096796,
+          -2.2874097726957595e-13,
+          -7.534500627680104e-14,
+          0.5222054376344452,
+          -0.5222054376343478,
+          2.087738703335232e-13,
+          0.981393988103905,
+          -0.531716290649423,
+          -0.9813939881041606,
+          0.531716290649706
+        ],
+        [
+          1.0838022704545181e-16,
+          4.323619054385035e-17,
+          -0.6432695877029,
+          -0.6432695877028987,
+          7.066896968337172e-15,
+          -1.305732666755768e-15,
+          0.7588278459511075,
+          0.7588278459511831,
+          -3.185527129816998e-15,
+          -5.447304765324552e-14,
+          2.569941719860013e-14,
+          7.111503656136958e-14,
+          -3.585290697196844e-14
+        ],
+        [
+          0.01548440211814369,
+          -0.1393210227190184,
+          -1.5190684670986342e-14,
+          4.65502624918581e-15,
+          -0.9310445659874352,
+          -0.11983491763645372,
+          -1.2778887942490882e-13,
+          1.4025465435893779e-13,
+          1.0041708032749512,
+          -0.26399607870983244,
+          0.4088997288709449,
+          -0.2639960787093478,
+          0.4088997288706859
+        ],
+        [
+          0.08062483794541705,
+          -0.5529193462739048,
+          -3.5704859736902895e-14,
+          4.3248163417087675e-14,
+          -0.07298176226089433,
+          0.33497361756380395,
+          1.0269317931385542e-13,
+          -1.113210578296219e-13,
+          0.6516952271099262,
+          0.9440787201453885,
+          -0.5101928028045668,
+          0.9440787201452612,
+          -0.5101928028046175
+        ],
+        [
+          -3.878350234252418e-15,
+          -2.4103191095035682e-14,
+          -0.6955671111246073,
+          0.6955671111246023,
+          7.246793799864272e-15,
+          7.415306645322927e-14,
+          1.1515778087084474,
+          -1.1515778087084418,
+          -6.70230228535901e-14,
+          -0.10051678368299437,
+          1.0431533265544832,
+          0.10051678368284075,
+          -1.043153326554456
+        ],
+        [
+          0.04372477594949055,
+          -1.6371667232295384,
+          2.4040523454180335e-14,
+          -2.6287079831689413e-14,
+          0.19445267100583782,
+          2.8445182679839545,
+          -3.736119430854426e-14,
+          3.946037550025677e-14,
+          -0.9251672166663027,
+          -0.5022825485334051,
+          -0.6610186471132207,
+          -0.502282548533428,
+          -0.6610186471131281
+        ]
+      ]
+    }
+  }
+}

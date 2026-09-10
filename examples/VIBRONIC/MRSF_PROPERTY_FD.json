@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "electronic_method": "MRSF-TDDFT",
+  "electronic_state": "MRSF S0",
+  "electronic_state_role": "target_excited_state",
+  "state_index": 1,
+  "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+  "coordinate_basis": "excited_normal",
+  "coordinate_unit": "sqrt(amu)*bohr",
+  "coordinate_phase_convention": "OpenQP Hessian normal modes in stored eigenvector phase",
+  "normal_modes": [
+    [0.0, 0.0, -0.704319, 0.0, 0.0, 0.704319]
+  ],
+  "displacement": 0.001,
+  "minimum_state_overlap": 0.99,
+  "minimum_tracking_margin": 0.05,
+  "finite_difference_step_scales": [1.0, 0.5, 0.25],
+  "fd_relative_tolerance": 0.05,
+  "fd_absolute_tolerance": 1e-06,
+  "polarizability_backend": "truncated_sos",
+  "sos_tail_states": 2,
+  "sos_tail_relative_tolerance": 0.05,
+  "sos_minimum_gap_hartree": 1e-05
+}

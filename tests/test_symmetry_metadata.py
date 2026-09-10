@@ -558,7 +558,175 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertIn('symmetry_metadata', data)
         self.assertEqual(data['symmetry_metadata']['subgroup'], 'c1')
         self.assertIn('hessian_request', data)
-        self.assertEqual(data['hessian_cache_version'], 2)
+        self.assertEqual(data['hessian_cache_version'], 3)
+        self.assertEqual(data['hessian_request']['version'], 3)
+
+    def _intensity_cache_molecule(self, config):
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {'status': 'disabled', 'point_group': 'c1', 'subgroup': 'c1',
+                                      'requested_point_group': 'auto', 'requested_subgroup': 'auto',
+                                      'label_mo': True, 'label_states': True, 'label_modes': True,
+                                      'use_integral_symmetry': False, 'use_response_symmetry': False,
+                                      'strict': False, 'tolerance': 1e-5}
+        molecule.mol_energy = types.SimpleNamespace(energy=-1.23)
+        molecule.idx = 1
+        molecule.config = config
+        molecule.mrsf_ekt_results_by_kind = {}
+
+        class _StubData:
+            def __getitem__(self, key):
+                return np.array([])
+
+        molecule.data = _StubData()
+        molecule.energies = np.array([-1.23])
+        molecule.hessian = np.eye(9)
+        molecule.hessian_metadata = {}
+        molecule.freqs = np.array([1.0])
+        molecule.modes = np.ones((1, 9))
+        molecule.inertia = np.ones(3)
+        molecule.infrared_intensities = np.array([12.5])
+        molecule.raman_activities = np.array([3.25])
+        molecule.vibrational_intensity_metadata = {'status': 'computed'}
+        molecule.infrared_mode_dipole_derivatives = np.array([[0.1, 0.2, 0.3]])
+        molecule.raman_mode_polarizability_derivatives = np.ones((1, 3, 3))
+        molecule.get_atoms = lambda: np.array([1, 1, 8], dtype=int)
+        molecule.get_system = lambda: np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+        molecule.get_mass = lambda: np.array([1.0, 1.0, 16.0])
+        return molecule
+
+    @staticmethod
+    def _read_intensities(molecule, config):
+        molecule.config = config
+        molecule.infrared_intensities = None
+        molecule.read_freqs()
+        return molecule.infrared_intensities, molecule.vibrational_intensity_metadata
+
+    @staticmethod
+    def _drop_property_record(tmp):
+        sidecar = Path(tmp) / 'run.hess.json'
+        data = json.loads(sidecar.read_text())
+        data.pop('vibrational_property_request')
+        sidecar.write_text(json.dumps(data))
+
+    def test_cached_mrsf_intensities_follow_the_property_options(self):
+        # [hess] is outside the Hessian identity, so the MRSF options that
+        # produced cached IR/Raman intensities must be matched on read.
+        def mrsf(**hess):
+            return {'tdhf': {'type': 'mrsf'}, 'hess': hess}
+
+        molecule = self._intensity_cache_molecule(mrsf())
+        with tempfile.TemporaryDirectory() as tmp:
+            molecule.log = str(Path(tmp) / 'run.log')
+            molecule.save_freqs(0)
+
+            infrared, metadata = self._read_intensities(molecule, mrsf())
+            np.testing.assert_array_equal(infrared, [12.5])
+            self.assertEqual(metadata['status'], 'computed')
+            infrared, _ = self._read_intensities(
+                molecule, mrsf(property_dx=1.0e-3, raman_backend='truncated_sos'))
+            np.testing.assert_array_equal(infrared, [12.5])
+
+            infrared, metadata = self._read_intensities(molecule, mrsf(property_dx=2.0e-3))
+            self.assertEqual(infrared.size, 0)
+            self.assertEqual(molecule.raman_activities.size, 0)
+            self.assertEqual(molecule.raman_mode_polarizability_derivatives.shape, (0, 3, 3))
+            self.assertEqual(metadata['status'], 'not_computed')
+            self.assertIn('hess.read=false', metadata['reason'])
+
+            infrared, _ = self._read_intensities(molecule, mrsf(raman_backend='finite_field'))
+            self.assertEqual(infrared.size, 0)
+
+            infrared, metadata = self._read_intensities(molecule, mrsf(vibrational_intensities=False))
+            self.assertEqual(infrared.size, 0)
+            self.assertIn('vibrational_intensities=False', metadata['reason'])
+
+            # An MRSF sidecar that does not record its options is not trusted.
+            self._drop_property_record(tmp)
+            infrared, metadata = self._read_intensities(molecule, mrsf())
+            self.assertEqual(infrared.size, 0)
+            self.assertEqual(metadata['status'], 'not_computed')
+
+    def test_cached_intensities_outside_mrsf_follow_only_the_switch(self):
+        # The native (non-MRSF) backend ignores the MRSF finite-difference and
+        # SOS options, so changing them must not discard valid intensities.
+        molecule = self._intensity_cache_molecule({})
+        with tempfile.TemporaryDirectory() as tmp:
+            molecule.log = str(Path(tmp) / 'run.log')
+            molecule.save_freqs(0)
+
+            for hess in ({}, {'property_dx': 2.0e-3}, {'raman_backend': 'finite_field'}):
+                infrared, metadata = self._read_intensities(molecule, {'hess': hess})
+                np.testing.assert_array_equal(infrared, [12.5])
+                self.assertEqual(metadata['status'], 'computed')
+            infrared, metadata = self._read_intensities(
+                molecule, {'hess': {'vibrational_intensities': False}})
+            self.assertEqual(infrared.size, 0)
+            self.assertIn('vibrational_intensities=False', metadata['reason'])
+
+            # Sidecars written before the record existed stay usable.
+            self._drop_property_record(tmp)
+            infrared, _ = self._read_intensities(molecule, {})
+            np.testing.assert_array_equal(infrared, [12.5])
+            infrared, _ = self._read_intensities(
+                molecule, {'hess': {'vibrational_intensities': False}})
+            self.assertEqual(infrared.size, 0)
+    def test_put_data_decodes_td_vectors_only_from_the_json_layout(self):
+        # get_data() snapshots (BasisOverlap) and NAMD checkpoints hold the
+        # native tag-array layout; only save_data's JSON uses DRF x state axes.
+        molecule_module = load_molecule_module()
+        spec = importlib.util.spec_from_file_location(
+            'openqp_json_utils_put_data',
+            Path(__file__).resolve().parents[1] / 'pyoqp' / 'oqp' / 'utils' / 'json_utils.py')
+        json_utils = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(json_utils)
+        molecule_module.json_array = json_utils.json_array
+        molecule_module.tag_array_from_json = json_utils.tag_array_from_json
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.tag = ['OQP::td_bvec_mo', 'OQP::SM']
+        molecule.config_tag = {}
+        molecule.config = {}
+        molecule.data = {}
+        # Three DRFs and two states in the native state-major buffer layout.
+        native = np.array([[11.0, 12.0], [13.0, 21.0], [22.0, 23.0]])
+        overlap = np.array([[1.0, 2.0], [3.0, 4.0]])
+
+        molecule.put_data({'OQP::td_bvec_mo': native.tolist(), 'OQP::SM': overlap.tolist()})
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
+        np.testing.assert_array_equal(molecule.data['OQP::SM'], overlap)
+
+        documented = json_utils.json_array('OQP::td_bvec_mo', native)
+        molecule.put_data({'OQP::td_bvec_mo': documented}, json_layout=True)
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
+
+    def test_load_data_decodes_td_vectors_from_a_json_restart(self):
+        # Through the real loader: a restart JSON written by save_data uses
+        # DRF x state axes and must come back in the native layout.
+        molecule_module = load_molecule_module()
+        spec = importlib.util.spec_from_file_location(
+            'openqp_json_utils_load_data',
+            Path(__file__).resolve().parents[1] / 'pyoqp' / 'oqp' / 'utils' / 'json_utils.py')
+        json_utils = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(json_utils)
+        molecule_module.json_array = json_utils.json_array
+        molecule_module.tag_array_from_json = json_utils.tag_array_from_json
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.tag = ['OQP::td_bvec_mo']
+        molecule.config_tag = {}
+        molecule.data = {}
+        molecule.get_atoms = lambda: np.array([1, 1, 8])
+        molecule.update_config_json = lambda: None
+        molecule.update_system = lambda *_args, **_kwargs: None
+        native = np.array([[11.0, 12.0], [13.0, 21.0], [22.0, 23.0]])
+        with tempfile.TemporaryDirectory() as tmp:
+            restart = Path(tmp) / 'restart.json'
+            restart.write_text(json.dumps({
+                'atoms': [1, 1, 8],
+                'OQP::td_bvec_mo': json_utils.json_array('OQP::td_bvec_mo', native),
+            }))
+            molecule.config = {'guess': {'continue_geom': False, 'file': str(restart)}}
+            molecule.load_data()
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
 
 
 if __name__ == '__main__':
