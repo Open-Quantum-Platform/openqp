@@ -415,8 +415,12 @@ class Runner:
         # append_log: a further QM evaluation of a run whose log is already
         # open (the ESPF QM/MM driver builds one Runner per geometry); the
         # banner and the request are written once, by the first evaluation.
-        dump_log(self.mol, title='', section='start',
-                 info={"build": _openqp_build_label(), "append": bool(append_log)})
+        if append_log:
+            dump_log(self.mol, title='', section='start',
+                     info={"build": _openqp_build_label(), "append": True})
+        else:
+            dump_log(self.mol, title='', section='start',
+                     info={"build": _openqp_build_label()})
         # Always: besides the banner, this hands the native side its log file
         # name (OQP::log_filename -> infos%log_filename); skipping it leaves
         # every native write of the evaluation without a log unit.
