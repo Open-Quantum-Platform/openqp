@@ -2550,6 +2550,8 @@ class Molecule:
         else:
             raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
 
+        self._quiet_orbitals_in_dynamics(parser)
+
         # Print configuration if not in silent mode
         if not self.silent:
             parser.print_config()
@@ -2568,7 +2570,6 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
-        self._quiet_orbitals_in_dynamics()
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -2579,7 +2580,8 @@ class Molecule:
 
         return self
 
-    def _quiet_orbitals_in_dynamics(self):
+    @staticmethod
+    def _quiet_orbitals_in_dynamics(parser):
         """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
 
         A dynamics run calls the SCF at least once per step and the SCF prints
@@ -2591,16 +2593,20 @@ class Molecule:
         explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
         of any single frame remain available from the Molden file, the restart
         record and the trajectory file, none of which this touches.
+
+        Runs on the parser before the configuration is echoed, so what is
+        printed is what the run will use.  ``QMMM_MD`` in config mode rewrites
+        ``runtype`` to ``energy`` before the molecule is built and therefore
+        applies the same default itself.
         """
-        runtype = str(self.config.get("input", {}).get("runtype", "")).strip().lower()
+        runtype = str(parser.get("input", "runtype", fallback="")).strip().lower()
         if runtype not in ("md", "namd"):
             return
-        scf = self.config.setdefault("scf", {})
-        # Only the schema default is overridden; a deck that asks for more
-        # detail (verbose >= 2) or already asks for silence keeps its value.
-        if int(scf.get("verbose", 1)) == 1:
-            scf["verbose"] = 0
-            self._orbital_printing_quieted = True
+        # The parser is seeded with every schema default, so an option is
+        # always present; only the default value is overridden, and a deck
+        # asking for more detail (verbose >= 2) or already silent keeps it.
+        if str(parser.get("scf", "verbose", fallback="1")).strip() == "1":
+            parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control
