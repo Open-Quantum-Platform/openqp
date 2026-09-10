@@ -223,8 +223,10 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
     # gradient (the PT2 nuclear-gradient route selector: analytic derivative
     # vs central differences).  357 since correlated-state irrep selection added
-    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity.
-    assert len(checked) == 357
+    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity;
+    # 361 with the periodic/embedding QM/MM controls [qmmm] ewald_tol,
+    # lj_switch, h_lj and mm_charge_width.
+    assert len(checked) == 361
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():

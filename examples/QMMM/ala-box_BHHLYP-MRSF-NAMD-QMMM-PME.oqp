@@ -1,0 +1,5 @@
+mrsf(nstate=2)/bhhlyp/6-31g
+namd(S0,nstep=2,substep=50,seed=11,nacme_gate=warn,trajectory_interval=1,restart_interval=2,trajectory_file="ala-box.namd.trj",restart_file="ala-box.namd.restart.npz")
+scf(conv=1e-09) tdhf(zvconv=1e-08)
+qmmm(forcefield_files="amber14-all.xml amber14/tip3p.xml",qm_atoms="8,9,16,17,18",cutoff=PME,ewald_tol=1e-06,lj_switch=true,h_lj=true,mm_charge_width=0.7)
+geom="ala_box.pdb 9 10 17 18 19"

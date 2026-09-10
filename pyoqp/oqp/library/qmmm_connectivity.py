@@ -293,7 +293,7 @@ def redistribute_frontier_charges(frontier, charge_of, scheme="rcd"):
 
 
 def assemble_embedding_sites(mm_idx, mm_charges, mm_positions,
-                             deleted, delta_q, virtuals):
+                             deleted, delta_q, virtuals, min_image=None):
     """Assemble the embedding point-charge set the QM density is embedded in.
 
     Combines the raw MM atoms with the frontier redistribution from
@@ -348,7 +348,13 @@ def assemble_embedding_sites(mm_idx, mm_charges, mm_positions,
     for v in virtuals:
         m1, m2 = v.hosts
         w0, w1 = v.weights
-        positions.append(w0 * pos_of[m1] + w1 * pos_of[m2])
+        # Under PBC the M1-M2 bond may cross the box boundary: build the
+        # virtual site from the minimum-image displacement so it sits on the
+        # bonded midpoint rather than half a box away.
+        d = np.asarray(pos_of[m2], dtype=float) - np.asarray(pos_of[m1], dtype=float)
+        if min_image is not None:
+            d = min_image(d)
+        positions.append(np.asarray(pos_of[m1], dtype=float) + w1 * d)
         charges.append(v.charge)
         scatter.append(((m1, w0), (m2, w1)))
     return (np.asarray(charges, dtype=float),

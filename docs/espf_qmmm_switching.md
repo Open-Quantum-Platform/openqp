@@ -1,3 +1,14 @@
+> **Superseded (2026-09).** The residual described below was caused by the
+> analytic ESPF gradient treating the atom-centred fitting grid as fixed in
+> space. `grad_esp_qmmm` / `espf_grad_weight` now include the derivative
+> through the grid points moving with their parent atoms (see
+> `docs/espf_moving_grid_gradient.md`). With that term the fixed-potential QM
+> gradient matches finite differences to ~2e-7 Ha/bohr and is translationally
+> invariant, and the total QM/MM force residual at the alanine covalent
+> boundary is the same (~5e-6 Ha/bohr) for `ESPF_SWSCALE` 1.5 and 1.8. The
+> automatic 1.5 selection is kept for reproducibility but no longer affects
+> force/energy consistency.
+
 # ESPF QM/MM grid switching: `ESPF_SWSCALE` at covalent boundaries
 
 The ESPF electrostatic-embedding gradient carries a small finite-difference

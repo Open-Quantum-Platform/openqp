@@ -1,0 +1,70 @@
+# MRSF-TDDFT surface-hopping (FSSH) NAMD with ESPF QM/MM across a COVALENT
+# QM/MM boundary (hydrogen link atom), non-periodic.
+#
+# System: the alanine dipeptide (ACE-ALA-NH2, ala.pdb) with AMBER-14, in vacuum.
+# QM  = the C-terminal amide (ALA C,O + NH2), MRSF-TDDFT/BHHLYP/6-31G on a
+#       triplet ROHF reference; the ALA C-CA backbone bond is cut and capped
+#       with a hydrogen link atom.
+# MM  = the rest of the dipeptide (OpenMM, NoCutoff).
+#
+# The QM molecule is built from the PDB by `[input] system = ala.pdb <indices>`
+# (1-based; `[qmmm] qm_atoms` lists the same atoms 0-based), which appends one
+# link H per cut bond.  The link atom carries no dynamical degrees of freedom:
+# its position follows the two host atoms, its force is chain-ruled onto them,
+# and the hop velocity rescaling acts on the real QM atoms only.  The ESPF
+# gradient accounts for the fitting grid moving with the atoms, so the
+# trajectory conserves the total energy (see docs/espf_moving_grid_gradient.md).
+#
+# Minimal two-step demonstration; part of `openqp --run_tests all`, reported
+# SKIPPED when the optional OpenMM backend is not installed.
+[input]
+system=ala.pdb 9 10 17 18 19
+charge=0
+runtype=namd
+basis=6-31g
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=1
+
+[properties]
+grad=1
+
+[md]
+nstep=2
+dt=0.5
+active=1
+substep=50
+init_temp=300
+velocity=maxwell
+seed=3
+rng_stream=1
+first_hop_step=1
+nacme_check=baeck_an
+nacme_gate=warn
+nve_gate=warn
+trajectory_interval=1
+restart_interval=2
+trajectory_file=ala-linkatom.namd.trj
+restart_file=ala-linkatom.namd.restart.npz
+decoherence=edc
+trivial=False
+soc=False
+
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic
