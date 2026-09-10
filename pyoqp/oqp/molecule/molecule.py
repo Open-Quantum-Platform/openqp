@@ -2461,9 +2461,14 @@ class Molecule:
         # excited state): the minimised QM/MM total is this run's energy.
         if qmmm_opt:
             data['energy'] = float(qmmm_opt['energy_hartree'])
+            if qmmm_opt.get('grad_fragment') is not None:
+                # the objective's gradient for the published atoms, not the
+                # QM-fragment buffer the native gradient code left behind
+                data['grad'] = qmmm_opt['grad_fragment']
             data['qmmm_optimization'] = {
                 k: qmmm_opt[k] for k in ('converged', 'energy_hartree', 'evaluations', 'recovery',
-                                         'electronic_failure', 'rms_grad', 'max_grad', 'output')
+                                         'electronic_failure', 'constraints', 'rms_grad', 'max_grad',
+                                         'output')
                 if k in qmmm_opt}
 
         return data

@@ -5992,7 +5992,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
-    if lib == "oqp":
+    # a QM/MM optimisation always runs the native engine, whatever [optimize] lib says
+    native_engine = lib == "oqp" or (bool(_get(config, "input", "qmmm_flag", False))
+                                     and runtype == "optimize")
+    if native_engine:
         auto_recovery = _get(config, "oqp", "auto_recovery", True)
         if not isinstance(auto_recovery, bool):
             report.add(

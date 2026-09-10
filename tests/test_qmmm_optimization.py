@@ -215,14 +215,17 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
         self.assertEqual(r.mol.qmmm_optimization["evaluations"], 2)
         self.assertFalse(r.mol.qmmm_optimization["recovery"])       # the deck switches it off
         self.assertAlmostEqual(r.mol.qmmm_optimization["energy_hartree"], e[0], places=12)
-        # the gradient published with that energy: full-system QM/MM gradient
-        g = res["grad"]
-        self.assertEqual(len(g), 1)
-        self.assertEqual(np.asarray(g[0]).shape, (natoms, 3))
-        self.assertTrue(np.all(np.isfinite(g[0])))
-        mv = r.mol.qmmm_optimization["movable_atoms"]
-        self.assertAlmostEqual(float(np.abs(np.asarray(g[0])[mv]).max()),
-                               r.mol.qmmm_optimization["max_grad"], places=10)
+        # the gradient published with that energy, shaped like the published
+        # atoms: the objective's derivative for each real QM atom and a zero
+        # row for the link hydrogen; the full-system gradient stays on the driver
+        self.assertEqual(len(res["grad"]), 1)
+        g = np.asarray(res["grad"][0])
+        nqm = len(r.qmmm_opt.qm_atoms)
+        self.assertEqual(g.shape, (len(res["atoms"]), 3))
+        self.assertTrue(np.all(g[nqm:] == 0.0))
+        self.assertAlmostEqual(float(np.abs(g[:nqm]).max()), r.mol.qmmm_optimization["max_grad"], places=10)
+        self.assertEqual(np.asarray(r.qmmm_opt.gradient_full).shape, (natoms, 3))
+        np.testing.assert_allclose(g[:nqm], np.asarray(r.qmmm_opt.gradient_full)[r.qmmm_opt.qm_atoms], rtol=0, atol=0)
 
     def test_recovery_stage_restarts_an_unconverged_search(self):
         """maxit=1 cannot converge; with the default auto_recovery the search
@@ -346,7 +349,8 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
                 get_state_tracking=lambda: None, explicit_scf_props=lambda: [],
                 qmmm_optimization={"converged": True, "energy_hartree": -12.5, "evaluations": 3,
                                    "recovery": False, "rms_grad": 1e-5, "max_grad": 2e-5,
-                                   "output": "x_opt.pdb", "movable_atoms": [0, 1]})
+                                   "output": "x_opt.pdb", "movable_atoms": [0, 1],
+                                   "grad_fragment": [[0.1, 0.2, 0.3]]})
         return ns["get_results"], fake
 
     def test_optimisation_publishes_the_objective(self):
@@ -355,6 +359,8 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
         self.assertEqual(out["energy"], -12.5)
         self.assertEqual(out["qmmm_optimization"]["evaluations"], 3)
         self.assertNotIn("movable_atoms", out["qmmm_optimization"])
+        self.assertEqual(out["grad"], [[0.1, 0.2, 0.3]])            # the objective's gradient
+        self.assertNotIn("grad_fragment", out["qmmm_optimization"])
 
     def test_dftb_excited_state_optimisation_keeps_the_objective(self):
         # istate=1: mol.energies = [nan, objective]; the DFTB block would publish nan
@@ -367,6 +373,7 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
         out = get_results(fake("energy"))
         self.assertEqual(out["energy"], -10.0)
         self.assertNotIn("qmmm_optimization", out)
+        self.assertNotIn("grad", out)
 
     def test_runner_clears_the_summary_each_run(self):
         src = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
@@ -423,6 +430,127 @@ class TestRecoveryAndGradientAreWired(unittest.TestCase):
         self.assertIn("mol.grads = ", src)
         self.assertIn("self._last_gradient = -f", src)
         self.assertIn("math.isfinite(self.radius)", src)
+
+
+@unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
+class TestConstraintsOnMovableAtoms(unittest.TestCase):
+    """[qmmm] rigidwater / constraints hold on the movable MM atoms."""
+
+    QM = [8, 9, 16, 17, 18]
+
+    def _opt(self, movable, cfg):
+        import openmm.app as app
+        o = QMMM_Opt.__new__(QMMM_Opt)
+        o.pdb = app.PDBFile(str(ROOT / "examples" / "QMMM" / "ala.pdb"))
+        o.forcefield = app.ForceField("amber14-all.xml")
+        o.qm_atoms = np.array(self.QM, dtype=int)
+        o.movable = np.array(sorted(movable), dtype=int)
+        return o, o._constraint_pairs(cfg)
+
+    def test_nothing_requested_nothing_held(self):
+        o, pairs = self._opt(self.QM, {"constraints": "None", "rigidwater": False})
+        self.assertEqual(pairs, [])
+
+    def test_hbonds_exclude_qm_and_pull_in_partners(self):
+        import openmm.app as app
+        top = app.PDBFile(str(ROOT / "examples" / "QMMM" / "ala.pdb")).topology
+        qm = set(self.QM)
+        heavy, hyd = next((b[0].index, b[1].index) if b[1].element.symbol == "H" else (b[1].index, b[0].index)
+                          for b in top.bonds()
+                          if {b[0].element.symbol, b[1].element.symbol} >= {"H"} and len({b[0].element.symbol, b[1].element.symbol}) == 2
+                          and b[0].index not in qm and b[1].index not in qm)
+        o, pairs = self._opt(self.QM + [heavy], {"constraints": "HBonds", "rigidwater": False})
+        self.assertIn(tuple(sorted((heavy, hyd))), [tuple(sorted(p)) for p in pairs])
+        self.assertIn(hyd, o.movable)                                  # partner pulled in
+        self.assertTrue(all(i not in qm and j not in qm for i, j in pairs))
+        self.assertTrue(all(i in o.movable and j in o.movable for i, j in pairs))
+
+    def test_unknown_constraint_name_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "HBonds"):
+            self._opt(self.QM, {"constraints": "bonds-please", "rigidwater": False})
+
+
+@unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
+class TestConstrainedAndReevaluatedResults(unittest.TestCase):
+    def _run(self, text, patch_energy=None):
+        import os, tempfile
+        from unittest import mock
+        from oqp.pyoqp import Runner
+        deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
+        text = text.replace("pdb_file=ala.pdb", f"pdb_file={deck.parent / 'ala.pdb'}").replace(
+            "system=ala.pdb", f"system={deck.parent / 'ala.pdb'}")
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "c.inp"
+            inp.write_text(text)
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                ctx = mock.patch.object(QMMM_Opt, "_energy_force", patch_energy) if patch_energy else None
+                if ctx:
+                    ctx.start()
+                try:
+                    r = Runner(project="c", input_file=str(inp), log=str(Path(tmp) / "c.log"), silent=1, usempi=False)
+                    r.run()
+                finally:
+                    if ctx:
+                        ctx.stop()
+            finally:
+                os.chdir(cwd)
+        return r
+
+    def _deck(self):
+        deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
+        return deck.read_text().replace("save_mol=true", "save_mol=false")
+
+    def test_hbond_distances_of_movable_mm_atoms_are_held(self):
+        text = (self._deck().replace("maxit=12", "maxit=3").replace("qmmm_radius=0.0", "qmmm_radius=3.0")
+                .replace("cutoff=NoCutoff", "cutoff=NoCutoff\nconstraints=HBonds"))
+        r = self._run(text)
+        o = r.qmmm_opt
+        self.assertGreater(len(o.frozen_pairs), 0)
+        self.assertEqual(r.mol.qmmm_optimization["constraints"], len(o.frozen_pairs))
+        import openmm.unit as unit
+        X0 = np.array(o.pdb.positions.value_in_unit(unit.nanometer))
+        X1 = np.asarray(o.positions_nm)
+        moved = float(np.abs(X1[o.movable] - X0[o.movable]).max())
+        self.assertGreater(moved, 1e-6)                                 # the search did move atoms
+        for i, j in o.frozen_pairs:
+            self.assertAlmostEqual(np.linalg.norm(X1[i] - X1[j]), np.linalg.norm(X0[i] - X0[j]), delta=1e-7)
+
+    def test_published_energy_is_the_reevaluated_one(self):
+        # force 'best is not last': the second evaluation reports +1 Hartree, so
+        # the first geometry is reported and re-evaluated; the re-evaluation
+        # returns E + 5e-7, and that is what must be published
+        real = QMMM_Opt._energy_force
+        calls = [0]
+
+        def shifted(self, X):
+            calls[0] += 1
+            e, f = real(self, X)
+            if calls[0] == 2:
+                return e + 1.0, f
+            if calls[0] == 3:
+                return e + 5e-7, f
+            return e, f
+
+        text = self._deck().replace("maxit=12", "maxit=2")
+        r = self._run(text, patch_energy=shifted)
+        info, hist = r.mol.qmmm_optimization, r.qmmm_opt.history
+        self.assertEqual(calls[0], 3)
+        self.assertAlmostEqual(info["energy_hartree"] - hist[0]["e"], 5e-7, delta=1e-9)
+        self.assertEqual(r.mol.energies[0], info["energy_hartree"])
+
+
+class TestNativeControlsCheckedForQmmmOptimisation(unittest.TestCase):
+    def test_recovery_controls_validated_whatever_lib_says(self):
+        from oqp.utils import input_checker as chk
+        for lib in ("oqp", "geometric", "scipy"):
+            cfg = {"input": {"runtype": "optimize", "qmmm_flag": True, "method": "hf", "basis": "6-31g",
+                             "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+                   "optimize": {"lib": lib, "istate": 0}, "oqp": {"recovery_trust": -1.0},
+                   "qmmm": {"pdb_file": "ala.pdb", "qm_atoms": "8,9,16,17,18", "forcefield_files": "amber14-all.xml"}}
+            report = chk.CheckReport()
+            chk._check_optimize(cfg, report)
+            self.assertIn(("ERROR", "oqp.recovery_trust"), [(d.severity, d.path) for d in report.diagnostics], lib)
 
 
 if __name__ == "__main__":

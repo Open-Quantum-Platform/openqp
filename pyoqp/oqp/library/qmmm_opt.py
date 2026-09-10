@@ -86,6 +86,9 @@ class QMMM_Opt:
             raise ValueError("'optimize.qmmm_radius' must be a finite distance >= 0 angstrom, "
                              f"got {opt.get('qmmm_radius')!r}.")
         self.movable = self._movable_atoms(self.radius)
+        # [qmmm] rigidwater / constraints, held on the movable MM atoms (may
+        # add constrained partners to the movable set)
+        self.frozen_pairs = self._constraint_pairs(qmmm_cfg)
         self.maxit = max(1, int(opt.get("maxit", 30)))    # the checker rejects < 1; never skip the first evaluation
         # [optimize] init_scf=true asks for a fresh initial SCF at every geometry
         # (the all-QM optimizer's policy); otherwise the converged orbitals of
@@ -126,6 +129,41 @@ class QMMM_Opt:
                 f"{z_expected} ({len(self.qm_atoms)} QM atoms in topology order + {nlink} link "
                 "hydrogen(s)). '[input] system = file.pdb ...' indices are 1-based while "
                 "[qmmm] qm_atoms are 0-based.")
+
+    def _constraint_pairs(self, qmmm_cfg):
+        """[qmmm] rigidwater / constraints for the movable MM atoms, as
+        topology index pairs the engine holds at their starting distance
+        (the native optimizer's frozen distances: tangent projection plus a
+        SHAKE-like correction).  QM atoms are never constrained, as in the
+        MD and NAMD drivers.  A constrained partner of a movable atom joins
+        the movable set, so no constraint ties a moving atom to a fixed one."""
+        rigid = str(qmmm_cfg.get("rigidwater", False)).strip().lower() in ("1", "true", "yes", "on")
+        name = str(qmmm_cfg.get("constraints", "None") or "None").strip().lower()
+        kinds = {"none": None, "": None, "hbonds": app.HBonds, "allbonds": app.AllBonds, "hangles": app.HAngles}
+        if name not in kinds:
+            raise ValueError("[qmmm] constraints must be None, HBonds, AllBonds or HAngles, "
+                             f"got {qmmm_cfg.get('constraints')!r}.")
+        if not rigid and kinds[name] is None:
+            return []
+        ref = self.forcefield.createSystem(self.pdb.topology, nonbondedMethod=app.NoCutoff,
+                                          constraints=kinds[name], rigidWater=rigid)
+        qm = set(int(i) for i in self.qm_atoms)
+        allpairs = []
+        for k in range(ref.getNumConstraints()):
+            p1, p2, _ = ref.getConstraintParameters(k)
+            if int(p1) in qm or int(p2) in qm:
+                continue
+            allpairs.append((int(p1), int(p2)))
+        movable = set(int(i) for i in self.movable)
+        changed = True
+        while changed:
+            changed = False
+            for p1, p2 in allpairs:
+                if (p1 in movable) != (p2 in movable):
+                    movable.update((p1, p2))
+                    changed = True
+        self.movable = np.array(sorted(movable), dtype=int)
+        return [(p1, p2) for p1, p2 in allpairs if p1 in movable]
 
     def _forcefield_paths(self, raw):
         """[qmmm] forcefield_files -> list of paths.  The unsplit value is
@@ -207,6 +245,8 @@ class QMMM_Opt:
         mv = self.movable
         at = list(self.pdb.topology.atoms())
         symbols = [int(at[i].element.atomic_number) for i in mv]   # the engine takes atomic numbers
+        pos = {int(a): k for k, a in enumerate(mv)}
+        engine_pairs = [(pos[i] + 1, pos[j] + 1) for i, j in self.frozen_pairs]   # engine numbering is 1-based
         opt = mol.config.get("optimize", {})
         # the engine controls live in the [oqp] section (concise opt(trust=...)
         # is lowered there too), as for the all-QM native optimizer
@@ -225,7 +265,8 @@ class QMMM_Opt:
         coordsys = str(eng.get("coordsys", "auto") or "auto").strip().lower()
         self.coordsys = "cartesian" if coordsys == "auto" else coordsys
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
-                             f"{len(mv)} movable atoms (radius {self.radius:.1f} A), "
+                             f"{len(mv)} movable atoms (radius {self.radius:.1f} A, "
+                             f"{len(self.frozen_pairs)} constrained distances), "
                              f"{len(X0) - len(mv)} fixed; state {self.istate}; native RFO/BFGS, "
                              f"{self.coordsys} coordinates, trust {trust:.2f} (max {trust_max:.2f}) bohr, "
                              f"maxit {self.maxit}"))
@@ -249,6 +290,10 @@ class QMMM_Opt:
                 raise StopIteration from error
             self.driver._reuse_orbitals = not self.init_scf   # later steps start from these orbitals
             g = -f[mv].reshape(-1)
+            if engine_pairs:
+                # as the native optimizer: the constrained gradient drives the
+                # search and the convergence test
+                g = engine._project_constraint_tangent(g, np.asarray(x_bohr, dtype=float))
             it[0] += 1
             rms = float(np.sqrt(np.mean(g * g))); mx = float(np.abs(g).max())
             if self.history:
@@ -275,7 +320,7 @@ class QMMM_Opt:
 
         x0 = (X0[mv] / BOHR_TO_NM).reshape(-1)
         engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=trust_max,
-                           maxiter=self.maxit, coordsys=self.coordsys)
+                           maxiter=self.maxit, coordsys=self.coordsys, frozen_distances=engine_pairs)
         recovered = False
         try:
             engine.run(energy_gradient, on_converged=on_converged)
@@ -292,7 +337,8 @@ class QMMM_Opt:
                                      f"and a fresh model Hessian for up to {steps} steps"))
                 recovered = True
                 engine = OQPEngine(symbols, best["x"].copy(), mode="min", trust=r_trust,
-                                   trust_max=r_trust_max, maxiter=steps, coordsys=self.coordsys)
+                                   trust_max=r_trust_max, maxiter=steps, coordsys=self.coordsys,
+                                   frozen_distances=engine_pairs)
                 engine.run(energy_gradient, on_converged=on_converged)
         finally:
             self.driver._reuse_orbitals = False
@@ -301,8 +347,16 @@ class QMMM_Opt:
         converged = converged_at(last)
         final = last if converged else best
         X = X0.copy(); X[mv] = final["x"].reshape(-1, 3) * BOHR_TO_NM
-        if final is not last:                          # leave mol/driver on the geometry we report
-            self._energy_force(X)
+        if final is not last:
+            # leave mol/driver on the geometry we report, and report what this
+            # evaluation returns (orbital reuse or the periodic image loop can
+            # move the value within tolerance)
+            e_re, f_re = self._energy_force(X)
+            g_re = -f_re[mv].reshape(-1)
+            if engine_pairs:
+                g_re = engine._project_constraint_tangent(g_re, final["x"])
+            final = dict(final, e=float(e_re), rms=float(np.sqrt(np.mean(g_re * g_re))),
+                         max=float(np.abs(g_re).max()))
         with open(self.output, "w") as fh:
             app.PDBFile.writeFile(self.pdb.topology, unit.Quantity(X, unit.nanometer), fh, keepIds=True)
         dump_log(mol, title=(f"PyOQP: QM/MM optimisation {'converged' if converged else 'NOT converged'} "
@@ -325,17 +379,26 @@ class QMMM_Opt:
         # are left as the last evaluation set them.
         energies = [float("nan")] * self.istate + [float(final["e"])]
         mol.energies = energies
-        # and the gradient that belongs to that energy: the full-system QM/MM
-        # gradient (Hartree/bohr, every atom, fixed ones included) of the
-        # reported geometry, which _energy_force evaluated last
-        grad = np.array(self._last_gradient, dtype=float)
+        # and the gradient that belongs to that energy, shaped like the atoms
+        # and coordinates Runner.results() and the saved JSON publish (the QM
+        # molecule): row k is the derivative of the QM/MM objective with
+        # respect to QM atom k (link-atom forces already carried to their
+        # hosts); the link hydrogens are not independent coordinates and get
+        # zero rows.  The full-system gradient (every PDB atom) of the same
+        # evaluation is kept as self.gradient_full.
+        self.gradient_full = np.array(self._last_gradient, dtype=float)
+        nmol = np.asarray(mol.get_atoms2("charge")).reshape(-1).size
+        grad = np.zeros((nmol, 3))
+        grad[:len(self.qm_atoms)] = self.gradient_full[self.qm_atoms]
         mol.grads = [np.full_like(grad, float("nan"))] * self.istate + [grad]
         mol.qmmm_optimization = {
             "converged": bool(converged), "energy_hartree": float(final["e"]),
             "evaluations": int(it[0]), "recovery": bool(recovered),
             "electronic_failure": electronic_failure[0] is not None,
             "rms_grad": float(final["rms"]), "max_grad": float(final["max"]),
+            "constraints": len(self.frozen_pairs),
             "movable_atoms": [int(i) for i in mv], "output": self.output,
+            "grad_fragment": grad.tolist(),
         }
         return final["e"], X
 
