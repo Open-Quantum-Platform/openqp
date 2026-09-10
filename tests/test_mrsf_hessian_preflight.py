@@ -38,6 +38,29 @@ def _checked_request(nstate, **hess):
                       "temperature": [298.15]}, **hess),
     }
 
+
+def _native_path_request(runtype, nstate, **sections):
+    # A native (lib=oqp) TS or IRC request on the MRSF S1 surface.
+    config = {
+        "input": {"method": "tdhf", "runtype": runtype, "basis": "sto-3g",
+                  "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3"},
+        "scf": {"type": "rohf", "multiplicity": 3},
+        "tdhf": {"type": "mrsf", "nstate": nstate, "multiplicity": 1},
+        "optimize": {"lib": "oqp", "istate": 1},
+        "oqp": {},
+        "hess": {},
+    }
+    for section, values in sections.items():
+        config.setdefault(section, {}).update(values)
+    return config
+
+
+_TRACKED_ROOT_MARKER = "tracking that root at every displacement"
+
+
+def _preflight_text(config):
+    return check_input_values(config, raise_error=False, emit=False).to_text()
+
 class MrsfHessianPreflight(unittest.TestCase):
     def test_libxc_aliases_of_verified_functionals_are_accepted(self):
         for alias, canonical in (("b3lypv5", "b3lyp5"), ("pbepbe", "pbe")):
@@ -153,6 +176,20 @@ class MrsfHessianPreflight(unittest.TestCase):
         report = check_input_values(_checked_request(nstate=1), raise_error=False, emit=False)
         self.assertFalse(report.ok)
         self.assertNotIn("raman_sos_tail_states", report.to_text())
+
+    def test_native_ts_numerical_initial_hessian_needs_a_root_above_istate(self):
+        self.assertIn(_TRACKED_ROOT_MARKER, _preflight_text(
+            _native_path_request("ts", 1, oqp={"init_hessian": "numerical"})))
+        self.assertNotIn(_TRACKED_ROOT_MARKER, _preflight_text(
+            _native_path_request("ts", 3, oqp={"init_hessian": "numerical"})))
+        self.assertNotIn(_TRACKED_ROOT_MARKER, _preflight_text(
+            _native_path_request("ts", 1, oqp={"init_hessian": "model"})))
+
+    def test_native_irc_numerical_hessian_needs_a_root_above_istate(self):
+        self.assertIn(_TRACKED_ROOT_MARKER, _preflight_text(_native_path_request("irc", 1)))
+        self.assertNotIn(_TRACKED_ROOT_MARKER, _preflight_text(_native_path_request("irc", 3)))
+        self.assertNotIn(_TRACKED_ROOT_MARKER, _preflight_text(
+            _native_path_request("irc", 1, hess={"read": True})))
 
     def test_shipped_analytic_mrsf_decks_still_pass(self):
         # examples/HESS/*MRSF_ANALYTIC_HESSIAN*.inp: runtype=hess, state=3, nstate=6.

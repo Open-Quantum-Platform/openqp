@@ -6076,6 +6076,33 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 action="Set [hess] restart=False; standalone numerical Hessian restart remains available.",
             )
 
+        # The native TS driver (init_hessian=numerical) and IRC driver compute a
+        # numerical Hessian of optimize.istate, and numerical_hess tracks an MRSF
+        # root at every displacement; with nothing solved above that root every
+        # displacement fails.  TS forces read/restart off; IRC may reuse a
+        # validated hess.read sidecar.
+        native_numerical_mrsf_hessian = (
+            method == "tdhf"
+            and _as_lower(_get(config, "tdhf", "type", "")) == "mrsf"
+            and ((runtype == "ts" and init_hessian == "numerical")
+                 or (runtype == "irc"
+                     and _as_lower(_get(config, "hess", "type", "numerical")) == "numerical"
+                     and not _is_true(_get(config, "hess", "read", False))))
+        )
+        if native_numerical_mrsf_hessian:
+            tracked_root = int(istate or 0)
+            nstate = int(_get(config, "tdhf", "nstate", 1))
+            if tracked_root > 0 and nstate <= tracked_root:
+                report.add(
+                    "ERROR", "optimize.istate",
+                    f"The native {runtype} driver computes a numerical MRSF Hessian of "
+                    f"optimize.istate={tracked_root}, tracking that root at every "
+                    "displacement against a higher solved root.",
+                    value=f"istate={tracked_root}, nstate={nstate}",
+                    expected="tdhf.nstate > optimize.istate",
+                    action=f"Set tdhf.nstate > {tracked_root}.",
+                )
+
         irc_direction = _as_lower(_get(config, "oqp", "irc_direction", "forward"))
         if runtype == "irc" and irc_direction not in {"forward", "backward", "reverse"}:
             report.add(
