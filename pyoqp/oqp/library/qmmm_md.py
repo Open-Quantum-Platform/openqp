@@ -5,7 +5,7 @@ import numpy as np
 import os
 from copy import deepcopy
 from sys import stdout
-from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz
+from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
 # ======================================================================
@@ -65,7 +65,7 @@ _TRAJ_REPORTERS = {
     "dcd": app.DCDReporter,
 }
 
-_VALID_ENSEMBLES = ("nve", "nvt", "npt")
+_VALID_ENSEMBLES = ("nve", "nvt")   # npt: no QM/MM lattice derivative (rejected)
 
 
 def _parse_int_list(value):
@@ -140,7 +140,8 @@ def _extract_qmmm_config(oqp_cfg=None, mol=None):
 
 class QMMM_MD:
     """
-    QM/MM Molecular Dynamics with NVE / NVT / NPT support.
+    QM/MM Molecular Dynamics with NVE / NVT support (NPT is rejected: the
+    QM/MM electrostatics carry no lattice derivative).
 
     All parameters are read from the configuration. Provide **exactly one** of:
 
@@ -161,7 +162,7 @@ class QMMM_MD:
     n_steps            : int            default 1000
     timestep           : float (fs)     default 1.0
     temperature        : float (K)      default 300.0
-    ensemble           : str            nve | nvt | npt   (default nve)
+    ensemble           : str            nve | nvt         (default nve; npt rejected)
     friction           : float (ps^-1)  default 1.0      (NVT/NPT only)
     pressure           : float (bar)    default 1.0      (NPT only)
     barostat_interval  : int            default 25       (NPT only)
@@ -225,12 +226,23 @@ class QMMM_MD:
         self.cutoff    = _resolve_cutoff(qmmm_cfg.get("cutoff", "PME"))
         self.embedding = str(qmmm_cfg.get("embedding", "electrostatic"))
         self.frontier_scheme = str(qmmm_cfg.get("frontier_scheme", "none"))
+        _et = qmmm_cfg.get("ewald_tol", None)
+        self.ewald_tol = None if _et in (None, "", "none", "None") else float(_et)
+        self.lj_switch = str(qmmm_cfg.get("lj_switch", "false")).strip().lower() in ("1", "true", "yes", "on")
+        self.h_lj = str(qmmm_cfg.get("h_lj", "false")).strip().lower() in ("1", "true", "yes", "on")
+        _w = qmmm_cfg.get("mm_charge_width", None)
+        self.mm_charge_width = None if _w in (None, "", "none", "None", 0, 0.0, "0") else float(_w)
         self.n_steps   = int(qmmm_cfg.get("n_steps", 1000))
         self.timestep  = float(qmmm_cfg.get("timestep", 1.0)) * unit.femtoseconds
         self.temperature = float(qmmm_cfg.get("temperature", 300.0)) * unit.kelvin
 
         # ------ ensemble settings -----------------------------------------
         self.ensemble = str(qmmm_cfg.get("ensemble", "nve")).lower()
+        if self.ensemble == "npt":
+            raise NotImplementedError(
+                "ensemble=npt is not available for QM/MM MD: the QM/MM "
+                "electrostatics have no lattice derivative and would be "
+                "evaluated with the initial box.  Use nve or nvt.")
         if self.ensemble not in _VALID_ENSEMBLES:
             raise ValueError(
                 f"Unknown ensemble '{self.ensemble}'. "
@@ -240,11 +252,6 @@ class QMMM_MD:
         self.pressure = float(qmmm_cfg.get("pressure", 1.0)) * unit.bar
         self.barostat_interval = int(qmmm_cfg.get("barostat_interval", 25))
 
-        if self.ensemble == "npt" and self.cutoff is app.NoCutoff:
-            raise ValueError(
-                "NPT requires a periodic cutoff method "
-                "(PME / Ewald / CutoffPeriodic)."
-            )
 
         # ------ trajectory format -----------------------------------------
         fmt = str(qmmm_cfg.get("trajectory_format", "pdb")).lower()
@@ -281,6 +288,20 @@ class QMMM_MD:
             for _k in list(qm_cfg):
                 if str(_k).split('.')[-1].strip().lower() == 'runtype':
                     qm_cfg[_k] = 'energy'
+            # That rewrite hides the dynamics from Molecule.get_config, which
+            # would otherwise default [scf] verbose to 0 and stop the SCF from
+            # printing one MO coefficient table per step (see
+            # Molecule._quiet_orbitals_in_dynamics).  This IS a dynamics run,
+            # so apply the same default here; an explicit verbose >= 2 in the
+            # deck still prints, and verbose = 0 was already silent.
+            _vkeys = [k for k in qm_cfg
+                      if str(k).split('.')[-1].strip().lower() == 'verbose'
+                      and str(k).split('.')[0].strip().lower() in ('scf', 'qm_cfg')]
+            if not _vkeys:
+                qm_cfg['scf.verbose'] = '0'
+            elif all(str(qm_cfg[k]).strip() == '1' for k in _vkeys):
+                for k in _vkeys:
+                    qm_cfg[k] = '0'
         self.oqp_cfg = qm_cfg
         self.mol     = mol
 
@@ -356,6 +377,10 @@ class QMMM_MD:
             Cutoff=self.cutoff,
             Embedding=self.embedding,
             frontier_scheme=self.frontier_scheme,
+            ewald_tol=self.ewald_tol,
+            lj_switch=self.lj_switch,
+            h_lj=self.h_lj,
+            mm_charge_width=self.mm_charge_width,
         )
         self.mm_systems = self.oqp_driver.mm_systems
 
@@ -508,7 +533,7 @@ class QMMM_MD:
         state_pre = self.simulation_md.context.getState(getPositions=True)
         pos_pre = state_pre.getPositions()
         sim0.context.setPositions(pos_pre)
-        if self.cutoff is not app.NoCutoff:
+        if is_periodic_method(self.cutoff):
             self.mm_systems["simew"].context.setPositions(pos_pre)
             self.mm_systems["simor"].context.setPositions(pos_pre)
         self._update_qmmm_force(pos_pre)
@@ -519,7 +544,7 @@ class QMMM_MD:
         pos0 = state_md.getPositions()
 
         sim0.context.setPositions(pos0)
-        if self.cutoff is not app.NoCutoff:
+        if is_periodic_method(self.cutoff):
             self.mm_systems["simew"].context.setPositions(pos0)
             self.mm_systems["simor"].context.setPositions(pos0)
 

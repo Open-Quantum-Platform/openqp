@@ -75,6 +75,13 @@ contains
     integer, intent(in) :: mostart, moend
     integer :: mo0, mo1
 
+    ! [scf] verbose = 0 suppresses the orbital table altogether.  A molecular
+    ! dynamics run calls the SCF at least once per step, so the table is
+    ! otherwise repeated for every step: a 100-step QM/MM NAMD trajectory of an
+    ! 18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+    ! which the 101 lines that report the dynamics are impossible to find.
+    if (infos%control%verbose < 1) return
+
     if (.not. infos%mol_energy%SCF_converged &
         .and. infos%control%verbose < 2) return
 

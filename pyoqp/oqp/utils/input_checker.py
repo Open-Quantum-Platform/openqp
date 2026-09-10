@@ -7231,6 +7231,98 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> None:
+    """The periodic/embedding controls of the OpenQpQMMM driver (runtype=md /
+    namd) are not consumed by the legacy single-point QM/MM path; reject them
+    there instead of silently running a NoCutoff point-charge job."""
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        return
+    def _truthy(v):
+        return (v is True) or (str(v).strip().lower() in ("1", "true", "on", "yes", "t"))
+    def _set(v):
+        return str(v or "").strip().lower() not in ("", "none", "0", "0.0")
+    cutoff = str(_get(config, "qmmm", "cutoff", "NoCutoff") or "NoCutoff").strip().lower()
+    if runtype == "namd" and _truthy(_get(config, "md", "soc", False)) \
+            and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        # The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose
+        # relaxed ESPF charges are not available per image-field iteration, so
+        # the periodic QM-image term cannot be made self-consistent with the
+        # propagated state (NAMD_SOC_QMMM raises NotImplementedError).
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic QM/MM (PME/Ewald/CutoffPeriodic) is not available for SOC-NAMD; "
+            "the periodic QM-image field needs the relaxed charges of the propagated "
+            "state, which the spin-mixed SOC state does not provide.",
+            value=f"cutoff={cutoff} with [md] soc=true",
+            expected="cutoff=NoCutoff for SOC-NAMD, or [md] soc=false for a periodic box",
+            action="Run SOC-NAMD QM/MM as an isolated cluster (cutoff=NoCutoff), or use "
+                   "same-spin FSSH ([md] soc=false) for the periodic box.",
+        )
+        return
+    if runtype in ("md", "namd"):
+        embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
+        method = _as_lower(_get(config, "input", "method", "hf"))
+        if method == "tdhf" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            try:
+                zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
+            except (TypeError, ValueError):
+                zvconv = 1.0e-6
+            if zvconv > 1.0e-8:
+                # The periodic QM-image field is iterated with the RELAXED
+                # ESPF charges of the target state; their noise floor follows
+                # the Z-vector residual (about 1e-4 e at zvconv=1e-6 for an
+                # 18-atom indole, i.e. at the loop tolerance, which then needs
+                # 4-5 gradient evaluations per step; 2 at zvconv=1e-8).
+                report.add(
+                    "WARNING",
+                    "tdhf.zvconv",
+                    "Periodic (PME/Ewald) dynamics on a TDHF/MRSF state iterates the QM-image "
+                    "field with the relaxed ESPF charges, whose precision is set by the "
+                    "Z-vector convergence; the default leaves them at the loop tolerance.",
+                    value=f"{zvconv:g}",
+                    expected="zvconv <= 1e-8",
+                    action="Set [tdhf] zvconv=1e-8 (two image iterations per step instead of four or five).",
+                )
+        if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            # The legacy split scheme routes the QM charges through OpenMM
+            # point charges; under PBC its force is not the derivative of
+            # its energy (docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # so a periodic trajectory must use the full-ESPF scheme.
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                "embedding=split is not force-consistent in a periodic box; periodic "
+                "dynamics needs the full-ESPF scheme.",
+                value=f"embedding=split with cutoff={cutoff}",
+                expected="embedding=electrostatic (full ESPF) for PME/Ewald/CutoffPeriodic, "
+                         "or cutoff=NoCutoff for the split scheme",
+                action="Use embedding=electrostatic for the periodic box, or NoCutoff for split.",
+            )
+        return
+    ignored = []
+    if cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        ignored.append(f"cutoff={cutoff}")
+    for key in ("ewald_tol", "mm_charge_width"):
+        if _set(_get(config, "qmmm", key, "")):
+            ignored.append(key)
+    for key in ("lj_switch", "h_lj"):
+        if _truthy(_get(config, "qmmm", key, False)):
+            ignored.append(key)
+    if ignored:
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic/embedding QM/MM controls are only used by runtype=md and "
+            "runtype=namd; the single-point QM/MM path would silently ignore them.",
+            value=", ".join(ignored),
+            expected="runtype=md or namd, or a NoCutoff single point without these keys",
+            action="Use runtype=md/namd for periodic (PME/Ewald) or smeared-charge "
+                   "QM/MM, or remove these [qmmm] keys for a single-point energy.",
+        )
+
+
 def check_input_values(
     config: dict[str, Any],
     *,
@@ -7270,6 +7362,7 @@ def check_input_values(
     _check_guess(config, report)
     _check_pcm(config, report)
     _check_dftb(config, report)
+    _check_qmmm_driver_options(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
     _check_scf(config, report)

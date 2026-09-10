@@ -2682,6 +2682,28 @@ class Molecule:
         """Deallocate oqp data object"""
         self.data = None
 
+    def _resolve_system_pdb_path(self):
+        """``[input] system = file.pdb <QM indices>``: when the PDB is not
+        found relative to the working directory, look next to the input file
+        (the rule the ``[qmmm]`` auxiliary files already follow), so a QM/MM
+        deck can be run from any directory, e.g. by ``openqp --run_tests``."""
+        try:
+            system = self.config['input'].get('system', '')
+        except (KeyError, TypeError, AttributeError):
+            return
+        if not isinstance(system, str) or '.pdb' not in system.lower():
+            return
+        stripped = system.strip()
+        end = stripped.lower().find('.pdb') + 4
+        pdb_path, suffix = stripped[:end].strip(), stripped[end:]
+        input_file = getattr(self, 'input_file', None)
+        if (os.path.isabs(pdb_path) or os.path.exists(pdb_path)
+                or not isinstance(input_file, str) or not input_file):
+            return
+        candidate = os.path.join(os.path.dirname(os.path.abspath(input_file)), pdb_path)
+        if os.path.exists(candidate):
+            self.config['input']['system'] = candidate + suffix
+
     @mpi_get_attr
     def get_config(self, input_source):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
@@ -2693,6 +2715,8 @@ class Molecule:
             parser.load_dict(input_source)
         else:
             raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
+
+        self._quiet_orbitals_in_dynamics(parser)
 
         # Print configuration if not in silent mode
         if not self.silent:
@@ -2712,6 +2736,7 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
+        self._resolve_system_pdb_path()
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -2721,6 +2746,34 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    @staticmethod
+    def _quiet_orbitals_in_dynamics(parser):
+        """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
+
+        A dynamics run calls the SCF at least once per step and the SCF prints
+        the whole MO coefficient table on every call, so the table is repeated
+        for every step of the trajectory: a 100-step QM/MM NAMD run of an
+        18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+        which the 101 lines that report the dynamics are impossible to find.
+        ``verbose = 0`` suppresses the table (``source/printing.F90``); an
+        explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
+        of any single frame remain available from the Molden file, the restart
+        record and the trajectory file, none of which this touches.
+
+        Runs on the parser before the configuration is echoed, so what is
+        printed is what the run will use.  ``QMMM_MD`` in config mode rewrites
+        ``runtype`` to ``energy`` before the molecule is built and therefore
+        applies the same default itself.
+        """
+        runtype = str(parser.get("input", "runtype", fallback="")).strip().lower()
+        if runtype not in ("md", "namd"):
+            return
+        # The parser is seeded with every schema default, so an option is
+        # always present; only the default value is overridden, and a deck
+        # asking for more detail (verbose >= 2) or already silent keeps it.
+        if str(parser.get("scf", "verbose", fallback="1")).strip() == "1":
+            parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control
