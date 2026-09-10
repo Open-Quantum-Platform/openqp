@@ -6729,12 +6729,29 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                 "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5",
                 "bhhlyp", "pbe0",
             }
-            if functional and functional not in verified_mrsf_semilocal:
+            # Equivalent LibXC spellings (source/dftlib/libxc.F90), mapped the
+            # way the closed-shell RPA branch below maps them; an exact-name
+            # lookup rejected otherwise identical supported calculations.
+            mrsf_functional_aliases = {"pbepbe": "pbe", "b3lypv5": "b3lyp5"}
+            canonical_functional = mrsf_functional_aliases.get(functional, functional)
+            if functional and canonical_functional not in verified_mrsf_semilocal:
                 return (
                     "unsupported_feature",
                     "MRSF-TDDFT analytic Hessians currently support the "
                     "spin-polarized LDA/GGA and global-hybrid paths; meta-GGA "
                     "and range-separated/CAM functionals remain fail-closed.",
+                )
+            # [dftgrid] cam_flag enables range separation independently of the
+            # functional name, and the native MRSF Hessian gates
+            # (tdhf_mrsf_hessian.F90, tdhf_mrsf_hessian_prepare.F90) reject
+            # infos%dft%cam_flag.  Checking only the name let e.g. pbe with
+            # cam_flag=true pass here and then abort after SCF and response.
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "MRSF-TDDFT analytic Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the native "
+                    "gate. Use [hess] type=numerical.",
                 )
             if scf_type != "rohf" or scf_multiplicity != 3:
                 return (
@@ -6751,6 +6768,38 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
                     "unsupported_feature",
                     "MRSF analytic Hessians require a positive excited-state index.",
                 )
+            # Default IR/Raman evaluation transports the target root to displaced
+            # geometries, and track_isolated_mrsf_hessian_root rejects a root with
+            # no solved root above it (hess.state == tdhf.nstate).  The
+            # truncated-SOS Raman backend also needs raman_sos_tail_states + 3
+            # roots with the target below that tail.  Reject such requests here
+            # instead of computing the Hessian and failing every property step.
+            # Only runtype=hess runs that property stage; TS and IRC drivers take
+            # the Cartesian matrix alone (Hessian.hessian(analysis=False)).
+            runs_property_stage = (
+                _as_lower(_get(config, "input", "runtype", "")) == "hess"
+                and _is_true(_get(config, "hess", "vibrational_intensities", True)))
+            if runs_property_stage:
+                target = int(state)
+                if td_nstate <= target:
+                    return (
+                        "unsupported_feature",
+                        f"MRSF vibrational intensities track hess.state={target} against a "
+                        f"higher solved root; set tdhf.nstate > {target}, or "
+                        "[hess] vibrational_intensities=false.",
+                    )
+                backend = _as_lower(_get(config, "hess", "raman_backend", "truncated_sos"))
+                if backend == "truncated_sos":
+                    tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
+                    if td_nstate < tail + 3 or target > td_nstate - tail:
+                        return (
+                            "unsupported_feature",
+                            "truncated-SOS Raman needs tdhf.nstate >= "
+                            f"raman_sos_tail_states + 3 (= {tail + 3}) and hess.state <= "
+                            f"tdhf.nstate - raman_sos_tail_states (= {td_nstate - tail}); "
+                            "increase tdhf.nstate, use raman_backend=finite_field, or set "
+                            "[hess] vibrational_intensities=false.",
+                        )
             method_name = "MRSF-TDDFT" if functional else "MRSF-TDHF"
             return (
                 "supported",
