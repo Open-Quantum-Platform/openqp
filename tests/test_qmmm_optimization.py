@@ -656,6 +656,77 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
                 QMMM_Opt._validate_istate(istate, method)
 
 
+@unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
+class TestTip4pBoxOptimisation(unittest.TestCase):
+    """Formaldehyde in five TIP4P-Ew waters, whose M sites have no element:
+    the QM/MM driver builds (its link-atom scan used to dereference every
+    atom's element), the optimisation with movable waters runs, and each M
+    site it reports sits where OpenMM places it from the moved O and H."""
+
+    def test_optimisation_with_movable_tip4p_waters(self):
+        import os, shutil, tempfile
+        import openmm as mm
+        import openmm.app as app
+        import openmm.unit as unit
+        from oqp.pyoqp import Runner
+        ex = ROOT / "examples" / "QMMM"
+        pdb = app.PDBFile(str(ex / "formaldehyde_water.pdb"))
+        ff = app.ForceField(str(ex / "formaldehyde.xml"), "amber14/tip4pew.xml")
+        mod = app.Modeller(pdb.topology, pdb.positions)
+        mod.addExtraParticles(ff)
+        deck = """[input]
+system=box4.pdb 1 2 3 4
+charge=0
+runtype=optimize
+basis=sto-3g
+method=hf
+qmmm_flag=True
+[scf]
+type=rhf
+multiplicity=1
+[optimize]
+istate=0
+maxit=2
+qmmm_radius=3.0
+[oqp]
+auto_recovery=false
+[qmmm]
+pdb_file=box4.pdb
+forcefield_files=formaldehyde.xml amber14/tip4pew.xml
+qm_atoms=0-3
+cutoff=NoCutoff
+embedding=electrostatic
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(Path(tmp) / "box4.pdb", "w") as fh:
+                app.PDBFile.writeFile(mod.topology, mod.positions, fh, keepIds=True)
+            shutil.copy(ex / "formaldehyde.xml", Path(tmp) / "formaldehyde.xml")
+            (Path(tmp) / "opt4.inp").write_text(deck)
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                r = Runner(project="opt4", input_file="opt4.inp", log="opt4.log", silent=1, usempi=False)
+                r.run()
+            finally:
+                os.chdir(cwd)
+        o = r.qmmm_opt
+        atoms = list(o.pdb.topology.atoms())
+        ep = [a.index for a in atoms if a.element is None]
+        self.assertEqual(len(ep), 5)
+        self.assertTrue(np.isfinite(r.mol.energies[0]))
+        mv = set(r.mol.qmmm_optimization["movable_atoms"])
+        self.assertFalse(mv & set(ep))                                   # M sites are not coordinates
+        moved_waters = [a.residue for a in atoms if a.index in mv and a.residue.name == "HOH"]
+        self.assertTrue(moved_waters)                                    # the 3 A shell reaches some water
+        # every reported M site is OpenMM's placement from the reported O/H
+        system = ff.createSystem(o.pdb.topology, nonbondedMethod=app.NoCutoff, rigidWater=False)
+        ctx = mm.Context(system, mm.VerletIntegrator(0.001), mm.Platform.getPlatformByName("Reference"))
+        X = np.asarray(o.positions_nm)
+        ctx.setPositions(unit.Quantity(X, unit.nanometer))
+        ctx.computeVirtualSites()
+        P = np.asarray(ctx.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(unit.nanometer))
+        np.testing.assert_allclose(X[ep], P[ep], atol=1e-9)
+
+
 class TestNativeControlsCheckedForQmmmOptimisation(unittest.TestCase):
     def test_recovery_controls_validated_whatever_lib_says(self):
         from oqp.utils import input_checker as chk

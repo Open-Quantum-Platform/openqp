@@ -267,7 +267,7 @@ def openmm_info():
 
 # Iterate over all particles and print their masses
    for atom in pdb.topology.atoms():
-      at_num.append(atom.element.atomic_number)
+      at_num.append(0 if atom.element is None else atom.element.atomic_number)   # virtual sites have no element
       mass.append(system.getParticleMass(atom.index).value_in_unit(unit.dalton))
       pos=pdb.positions[atom.index].value_in_unit(unit.bohr)
       xyz.append(pos.x)

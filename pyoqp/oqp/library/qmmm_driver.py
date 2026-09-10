@@ -342,8 +342,10 @@ class OpenQpQMMM:
 
     def _detect_link_atoms(self):
         """Find dangling QM–MM bonds in the topology and build link atoms."""
+        # extra particles (virtual sites such as the TIP4P M site) have no
+        # element and no bonds, so they can never end a cut bond
         z_by_index = {
-            atom.index: atom.element.atomic_number
+            atom.index: (0 if atom.element is None else atom.element.atomic_number)
             for atom in self.topology.atoms()
         }
         bonds = [(b[0].index, b[1].index) for b in self.topology.bonds()]
