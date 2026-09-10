@@ -7274,6 +7274,16 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
                 action="Use one of those methods, or optimise without qmmm_flag.",
             )
         if runtype == "optimize":
+            for key in ("pdb_file", "qm_atoms", "forcefield_files"):
+                if not str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        f"A QM/MM optimisation needs [qmmm] {key}.",
+                        value="(blank)",
+                        expected="a value",
+                        action=f"Set [qmmm] {key}.",
+                    )
             try:
                 maxit = int(_get(config, "optimize", "maxit", 30))
             except (TypeError, ValueError):

@@ -84,6 +84,10 @@ class TestCheckerAdmitsPlainQMMMOptimisation(unittest.TestCase):
             self.assertIn(("ERROR", "input.method"), self._diags("optimize", method=method))
         self.assertIn(("ERROR", "optimize.freeze"), self._diags("optimize", {"freeze": "distance(1,2)"}))
 
+    def test_blank_required_settings_are_missing(self):
+        for key in ("pdb_file", "qm_atoms", "forcefield_files"):
+            self.assertIn(("ERROR", f"qmmm.{key}"), self._diags("optimize", qmmm_extra={key: ""}))
+
     def test_unsupported_options_are_rejected_not_ignored(self):
         self.assertIn(("ERROR", "optimize.maxit"), self._diags("optimize", {"maxit": 0}))
         self.assertIn(("ERROR", "qmmm.qm_atoms_xyz"), self._diags("optimize", qmmm_extra={"qm_atoms_xyz": "qm.xyz"}))
@@ -155,10 +159,57 @@ class TestMovableSetAndState(unittest.TestCase):
         self.assertIn("self.driver._reuse_orbitals = not self.init_scf", src)
         self.assertIn("self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))", src)
         self.assertIn("max(1, int(opt.get(\"maxit\", 30)))", src)
+        self.assertIn('[self._resolve_aux_file(f) for f in _parse_str_list(qmmm_cfg.get("forcefield_files", ""))]', src)
+        self.assertIn('self.coordsys = "cartesian" if coordsys == "auto" else coordsys', src)
 
     def test_istate_is_the_gradient_root(self):
         src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
         self.assertIn('mol.config.setdefault("properties", {})["grad"] = [self.istate]', src)
+
+
+def _runtime_available():
+    import os
+    try:
+        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        import oqp  # noqa: F401
+        from oqp.pyoqp import Runner  # noqa: F401
+        import openmm  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+@unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
+class TestOptimisationPublishesItsResult(unittest.TestCase):
+    """Two evaluations of the shipped example through Runner, from a directory
+    that is not the deck's: the deck-relative PDB and force-field resolution,
+    and Runner.results()['energy'] carrying the QM/MM objective."""
+
+    def test_runner_result_holds_the_qmmm_energy(self):
+        import os, tempfile
+        from oqp.pyoqp import Runner
+        deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
+        text = deck.read_text().replace("maxit=12", "maxit=2").replace("save_mol=true", "save_mol=false")
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "opt.inp"
+            # the deck names ala.pdb relative to itself; run from elsewhere
+            inp.write_text(text.replace("pdb_file=ala.pdb", f"pdb_file={deck.parent / 'ala.pdb'}")
+                               .replace("system=ala.pdb", f"system={deck.parent / 'ala.pdb'}"))
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                r = Runner(project="opt", input_file=str(inp), log=str(Path(tmp) / "opt.log"),
+                           silent=1, usempi=False)
+                r.run()
+                res = r.results()
+            finally:
+                os.chdir(cwd)
+        e = res["energy"]
+        self.assertEqual(len(e), 1)
+        self.assertTrue(np.isfinite(e[0]))
+        self.assertLess(e[0], -168.0)                       # the QM/MM total, not a fragment or MM piece
+        self.assertEqual(r.mol.qmmm_optimization["evaluations"], 2)
+        self.assertAlmostEqual(r.mol.qmmm_optimization["energy_hartree"], e[0], places=12)
 
 
 if __name__ == "__main__":

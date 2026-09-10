@@ -43,16 +43,17 @@ class QMMM_Opt:
         qmmm_cfg, qm_cfg = _extract_qmmm_config(mol=mol)
         opt = mol.config.get("optimize", {})
 
-        pdb_file = qmmm_cfg.get("pdb_file")
-        if pdb_file is None:
+        # the parsed schema supplies "" for an omitted key, so blank == missing
+        pdb_file = str(qmmm_cfg.get("pdb_file") or "").strip()
+        if not pdb_file:
             raise ValueError("'qmmm.pdb_file' is required for a QM/MM optimisation.")
         self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))
-        ff_files = _parse_str_list(qmmm_cfg.get("forcefield_files", ""))
+        ff_files = [self._resolve_aux_file(f) for f in _parse_str_list(qmmm_cfg.get("forcefield_files", ""))]
         if not ff_files:
             raise ValueError("'qmmm.forcefield_files' is required for a QM/MM optimisation.")
         self.forcefield = app.ForceField(*ff_files)
         qm_raw = qmmm_cfg.get("qm_atoms")
-        if qm_raw is None:
+        if qm_raw is None or (isinstance(qm_raw, str) and not qm_raw.strip()):
             raise ValueError("'qmmm.qm_atoms' is required for a QM/MM optimisation.")
         self.qm_atoms = np.array(sorted(_parse_int_list(qm_raw)), dtype=int)
 
@@ -167,10 +168,16 @@ class QMMM_Opt:
         eng = mol.config.get("oqp", {})
         trust = float(eng.get("trust", 0.2))
         trust_max = float(eng.get("trust_max", 0.5))
+        # [oqp] coordsys: 'auto' means Cartesian here (the movable set can be
+        # several disconnected fragments, and Cartesian coordinates are safe
+        # for that); an explicit choice is passed to the engine as requested.
+        coordsys = str(eng.get("coordsys", "auto") or "auto").strip().lower()
+        self.coordsys = "cartesian" if coordsys == "auto" else coordsys
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
                              f"{len(mv)} movable atoms (radius {self.radius:.1f} A), "
                              f"{len(X0) - len(mv)} fixed; state {self.istate}; native RFO/BFGS, "
-                             f"Cartesian, trust {trust:.2f} (max {trust_max:.2f}) bohr, maxit {self.maxit}"))
+                             f"{self.coordsys} coordinates, trust {trust:.2f} (max {trust_max:.2f}) bohr, "
+                             f"maxit {self.maxit}"))
         it = [0]
 
         def energy_gradient(x_bohr):
@@ -205,7 +212,7 @@ class QMMM_Opt:
 
         x0 = (X0[mv] / BOHR_TO_NM).reshape(-1)
         engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=trust_max,
-                           maxiter=self.maxit, coordsys="cartesian")
+                           maxiter=self.maxit, coordsys=self.coordsys)
         try:
             engine.run(energy_gradient, on_converged=on_converged)
         finally:
@@ -232,6 +239,18 @@ class QMMM_Opt:
         self.converged = converged
         self.energy = final["e"]
         self.positions_nm = X
+        # Publish the result the way Runner.results() reads it: index istate of
+        # mol.energies holds the QM/MM total energy (Hartree) of the reported
+        # geometry (the embedded QM state energy + nuclear-MM + MM terms, the
+        # objective that was minimised); the QM-fragment records themselves
+        # are left as the last evaluation set them.
+        energies = [float("nan")] * self.istate + [float(final["e"])]
+        mol.energies = energies
+        mol.qmmm_optimization = {
+            "converged": bool(converged), "energy_hartree": float(final["e"]),
+            "evaluations": int(it[0]), "rms_grad": float(final["rms"]), "max_grad": float(final["max"]),
+            "movable_atoms": [int(i) for i in mv], "output": self.output,
+        }
         return final["e"], X
 
 
