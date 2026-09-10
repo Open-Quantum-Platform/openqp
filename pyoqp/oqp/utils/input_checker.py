@@ -5941,11 +5941,11 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 radius = float(_get(config, "optimize", "qmmm_radius", 0.0))
             except (TypeError, ValueError):
                 radius = -1.0
-            if radius < 0.0:
+            if not math.isfinite(radius) or radius < 0.0:
                 report.add(
                     "ERROR",
                     "optimize.qmmm_radius",
-                    "The movable-shell radius of a QM/MM optimisation must be >= 0 angstrom.",
+                    "The movable-shell radius of a QM/MM optimisation must be a finite number >= 0 angstrom.",
                     value=str(_get(config, "optimize", "qmmm_radius", 0.0)),
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",

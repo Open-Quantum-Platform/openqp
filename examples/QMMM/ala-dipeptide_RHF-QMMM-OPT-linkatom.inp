@@ -26,6 +26,11 @@ conv=1e-9
 istate=0
 maxit=12
 qmmm_radius=0.0
+[oqp]
+# 12 evaluations do not converge this search; the native recovery stage
+# (a restart from the best geometry with a small trust radius, default on)
+# is switched off so the example stays a short, fixed 12-evaluation pin.
+auto_recovery=false
 
 [qmmm]
 pdb_file=ala.pdb

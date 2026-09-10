@@ -19,6 +19,7 @@ Outputs: the optimised full-system PDB (``[optimize] qmmm_output``, default
 ``<project>_opt.pdb``), one log line per iteration, and the usual mol data
 (energies, geometry) for the QM fragment.
 """
+import math
 import os
 import numpy as np
 from openmm import app, unit
@@ -48,7 +49,7 @@ class QMMM_Opt:
         if not pdb_file:
             raise ValueError("'qmmm.pdb_file' is required for a QM/MM optimisation.")
         self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))
-        ff_files = [self._resolve_aux_file(f) for f in _parse_str_list(qmmm_cfg.get("forcefield_files", ""))]
+        ff_files = self._forcefield_paths(qmmm_cfg.get("forcefield_files", ""))
         if not ff_files:
             raise ValueError("'qmmm.forcefield_files' is required for a QM/MM optimisation.")
         self.forcefield = app.ForceField(*ff_files)
@@ -79,6 +80,9 @@ class QMMM_Opt:
 
         # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
         self.radius = float(opt.get("qmmm_radius", 0.0))
+        if not math.isfinite(self.radius) or self.radius < 0.0:
+            raise ValueError("'optimize.qmmm_radius' must be a finite distance >= 0 angstrom, "
+                             f"got {opt.get('qmmm_radius')!r}.")
         self.movable = self._movable_atoms(self.radius)
         self.maxit = max(1, int(opt.get("maxit", 30)))    # the checker rejects < 1; never skip the first evaluation
         # [optimize] init_scf=true asks for a fresh initial SCF at every geometry
@@ -95,8 +99,22 @@ class QMMM_Opt:
         project = os.path.splitext(os.path.basename(str(mol.config["input"].get("system", "qmmm")).split()[0]))[0]
         self.output = str(opt.get("qmmm_output", "") or f"{getattr(mol, 'project_name', project)}_opt.pdb")
         self.history = []
+        self._last_gradient = None      # full-system gradient of the last evaluation
 
     # ------------------------------------------------------------------ #
+    def _forcefield_paths(self, raw):
+        """[qmmm] forcefield_files -> list of paths.  The unsplit value is
+        resolved against the deck first, so a single deck-relative file whose
+        name contains spaces stays one file; only then is it split into a
+        list (commas or whitespace), each entry resolved the same way."""
+        text = str(raw or "").strip()
+        if not text:
+            return []
+        whole = self._resolve_aux_file(text)
+        if os.path.isfile(whole):
+            return [whole]
+        return [self._resolve_aux_file(f) for f in _parse_str_list(text)]
+
     def _resolve_aux_file(self, name):
         """A relative [qmmm] path not found in the working directory is looked
         up next to the input deck, the rule the NAMD driver applies, so a deck
@@ -154,7 +172,9 @@ class QMMM_Opt:
         e = e_q.value_in_unit(unit.kilojoule_per_mole) / HARTREE_TO_KJMOL
         f = (f_q.value_in_unit(unit.kilojoule_per_mole / unit.nanometer)
              if hasattr(f_q, "value_in_unit") else np.asarray(f_q)) * FORCE_KJMOLNM_TO_HABOHR
-        return float(e), np.asarray(f, dtype=float)
+        f = np.asarray(f, dtype=float)
+        self._last_gradient = -f
+        return float(e), f
 
     def optimize(self):
         mol = self.mol
@@ -168,6 +188,12 @@ class QMMM_Opt:
         eng = mol.config.get("oqp", {})
         trust = float(eng.get("trust", 0.2))
         trust_max = float(eng.get("trust_max", 0.5))
+        # the native optimizer's recovery stage: an unconverged search is
+        # restarted from its lowest-energy geometry with a small trust radius,
+        # a fresh model Hessian and a budget of max(maxit - used, recovery_maxit)
+        auto_recovery = bool(eng.get("auto_recovery", True))
+        recovery_maxit = int(eng.get("recovery_maxit", 30))
+        recovery_trust = float(eng.get("recovery_trust", 0.02))
         # [oqp] coordsys: 'auto' means Cartesian here (the movable set can be
         # several disconnected fragments, and Cartesian coordinates are safe
         # for that); an explicit choice is passed to the engine as requested.
@@ -213,8 +239,22 @@ class QMMM_Opt:
         x0 = (X0[mv] / BOHR_TO_NM).reshape(-1)
         engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=trust_max,
                            maxiter=self.maxit, coordsys=self.coordsys)
+        recovered = False
         try:
             engine.run(energy_gradient, on_converged=on_converged)
+            if not converged_at(self.history[-1]) and auto_recovery:
+                best = min(self.history, key=lambda h: h["e"])
+                steps = max(self.maxit - it[0], recovery_maxit)
+                r_trust = min(recovery_trust, trust_max)
+                r_trust_max = min(trust_max, max(r_trust, 2.5 * r_trust))
+                dump_log(mol, title=(f"PyOQP: QM/MM optimisation recovery selected after the iteration "
+                                     f"limit. Restarting the lowest-energy geometry (E = {best['e']:.10f} "
+                                     f"Hartree) with {self.coordsys} coordinates, trust={r_trust:.3f}, "
+                                     f"and a fresh model Hessian for up to {steps} steps"))
+                recovered = True
+                engine = OQPEngine(symbols, best["x"].copy(), mode="min", trust=r_trust,
+                                   trust_max=r_trust_max, maxiter=steps, coordsys=self.coordsys)
+                engine.run(energy_gradient, on_converged=on_converged)
         finally:
             self.driver._reuse_orbitals = False
         best = min(self.history, key=lambda h: h["e"])
@@ -246,9 +286,15 @@ class QMMM_Opt:
         # are left as the last evaluation set them.
         energies = [float("nan")] * self.istate + [float(final["e"])]
         mol.energies = energies
+        # and the gradient that belongs to that energy: the full-system QM/MM
+        # gradient (Hartree/bohr, every atom, fixed ones included) of the
+        # reported geometry, which _energy_force evaluated last
+        grad = np.array(self._last_gradient, dtype=float)
+        mol.grads = [np.full_like(grad, float("nan"))] * self.istate + [grad]
         mol.qmmm_optimization = {
             "converged": bool(converged), "energy_hartree": float(final["e"]),
-            "evaluations": int(it[0]), "rms_grad": float(final["rms"]), "max_grad": float(final["max"]),
+            "evaluations": int(it[0]), "recovery": bool(recovered),
+            "rms_grad": float(final["rms"]), "max_grad": float(final["max"]),
             "movable_atoms": [int(i) for i in mv], "output": self.output,
         }
         return final["e"], X

@@ -97,6 +97,8 @@ class TestCheckerAdmitsPlainQMMMOptimisation(unittest.TestCase):
 
     def test_radius_and_lib_are_validated(self):
         self.assertIn(("ERROR", "optimize.qmmm_radius"), self._diags("optimize", {"qmmm_radius": -1.0}))
+        for bad in (float("nan"), float("inf"), "nan", "inf"):
+            self.assertIn(("ERROR", "optimize.qmmm_radius"), self._diags("optimize", {"qmmm_radius": bad}), bad)
         self.assertNotIn(("ERROR", "optimize.qmmm_radius"), self._diags("optimize", {"qmmm_radius": 4.0}))
         self.assertIn(("WARNING", "optimize.lib"), self._diags("optimize", {"lib": "geometric"}))
 
@@ -159,7 +161,7 @@ class TestMovableSetAndState(unittest.TestCase):
         self.assertIn("self.driver._reuse_orbitals = not self.init_scf", src)
         self.assertIn("self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))", src)
         self.assertIn("max(1, int(opt.get(\"maxit\", 30)))", src)
-        self.assertIn('[self._resolve_aux_file(f) for f in _parse_str_list(qmmm_cfg.get("forcefield_files", ""))]', src)
+        self.assertIn('self._forcefield_paths(qmmm_cfg.get("forcefield_files", ""))', src)
         self.assertIn('self.coordsys = "cartesian" if coordsys == "auto" else coordsys', src)
 
     def test_istate_is_the_gradient_root(self):
@@ -191,6 +193,8 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
         from oqp.pyoqp import Runner
         deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
         text = deck.read_text().replace("maxit=12", "maxit=2").replace("save_mol=true", "save_mol=false")
+        natoms = sum(1 for line in (deck.parent / "ala.pdb").read_text().splitlines()
+                     if line.startswith(("ATOM", "HETATM")))
         with tempfile.TemporaryDirectory() as tmp:
             inp = Path(tmp) / "opt.inp"
             # the deck names ala.pdb relative to itself; run from elsewhere
@@ -209,7 +213,82 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
         self.assertTrue(np.isfinite(e[0]))
         self.assertLess(e[0], -168.0)                       # the QM/MM total, not a fragment or MM piece
         self.assertEqual(r.mol.qmmm_optimization["evaluations"], 2)
+        self.assertFalse(r.mol.qmmm_optimization["recovery"])       # the deck switches it off
         self.assertAlmostEqual(r.mol.qmmm_optimization["energy_hartree"], e[0], places=12)
+        # the gradient published with that energy: full-system QM/MM gradient
+        g = res["grad"]
+        self.assertEqual(len(g), 1)
+        self.assertEqual(np.asarray(g[0]).shape, (natoms, 3))
+        self.assertTrue(np.all(np.isfinite(g[0])))
+        mv = r.mol.qmmm_optimization["movable_atoms"]
+        self.assertAlmostEqual(float(np.abs(np.asarray(g[0])[mv]).max()),
+                               r.mol.qmmm_optimization["max_grad"], places=10)
+
+    def test_recovery_stage_restarts_an_unconverged_search(self):
+        """maxit=1 cannot converge; with the default auto_recovery the search
+        restarts from its best geometry for recovery_maxit more evaluations."""
+        import os, tempfile
+        from oqp.pyoqp import Runner
+        deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
+        text = (deck.read_text().replace("maxit=12", "maxit=1").replace("save_mol=true", "save_mol=false")
+                .replace("auto_recovery=false", "auto_recovery=true\nrecovery_maxit=1\nrecovery_trust=0.02"))
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "rec.inp"
+            inp.write_text(text.replace("pdb_file=ala.pdb", f"pdb_file={deck.parent / 'ala.pdb'}")
+                               .replace("system=ala.pdb", f"system={deck.parent / 'ala.pdb'}"))
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                r = Runner(project="rec", input_file=str(inp), log=str(Path(tmp) / "rec.log"),
+                           silent=1, usempi=False)
+                r.run()
+                log = (Path(tmp) / "rec.log").read_text()
+            finally:
+                os.chdir(cwd)
+        info = r.mol.qmmm_optimization
+        self.assertTrue(info["recovery"])
+        self.assertEqual(info["evaluations"], 2)
+        self.assertIn("recovery selected after the iteration limit", log)
+        self.assertIn("trust=0.020", log)
+
+
+@unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
+class TestForceFieldPaths(unittest.TestCase):
+    """[qmmm] forcefield_files: a deck-relative file whose name contains a
+    space is one file, resolved before any splitting; lists split on commas
+    or whitespace and each entry is resolved the same way."""
+
+    def _opt(self, deck_dir):
+        import types
+        o = QMMM_Opt.__new__(QMMM_Opt)
+        o.mol = types.SimpleNamespace(input_file=str(Path(deck_dir) / "x.inp"))
+        return o
+
+    def test_single_file_with_space_is_kept_whole(self):
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as deck_dir, tempfile.TemporaryDirectory() as cwd:
+            (Path(deck_dir) / "my forcefield.xml").write_text("<ForceField/>")
+            here = os.getcwd(); os.chdir(cwd)
+            try:
+                o = self._opt(deck_dir)
+                self.assertEqual(o._forcefield_paths("my forcefield.xml"),
+                                 [str(Path(deck_dir) / "my forcefield.xml")])
+                self.assertEqual(o._forcefield_paths("amber14-all.xml amber14/tip3p.xml"),
+                                 ["amber14-all.xml", "amber14/tip3p.xml"])
+                self.assertEqual(o._forcefield_paths("amber14-all.xml,amber14/tip3p.xml"),
+                                 ["amber14-all.xml", "amber14/tip3p.xml"])
+                self.assertEqual(o._forcefield_paths(""), [])
+            finally:
+                os.chdir(here)
+
+
+class TestRecoveryAndGradientAreWired(unittest.TestCase):
+    def test_source(self):
+        src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
+        for key in ("auto_recovery", "recovery_maxit", "recovery_trust"):
+            self.assertIn(f'eng.get("{key}"', src)
+        self.assertIn("mol.grads = ", src)
+        self.assertIn("self._last_gradient = -f", src)
+        self.assertIn("math.isfinite(self.radius)", src)
 
 
 if __name__ == "__main__":

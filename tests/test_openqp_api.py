@@ -1093,7 +1093,21 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
         self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "9 10 17 18 19")
+        # the selector after the PDB path is one-based; [qmmm] qm_atoms is the
+        # zero-based OpenMM selection of the same atoms
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")
+
+    def test_qmmm_inferred_selector_is_shifted_to_zero_based_ranges_too(self):
+        openqp = load_openqp_module()
+        job = (openqp.OpenQP(project="qmmm_infer")
+               .molecule("ala.pdb 9-10 17 18-19", basis="6-31g")
+               .qmmm())
+        self.assertEqual(job.to_input_dict()["qmmm"]["qm_atoms"], "8-9 16 17-18")
+        # an explicit qm_atoms is taken as given (already zero-based)
+        job2 = (openqp.OpenQP(project="qmmm_explicit")
+                .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+                .qmmm(qm_atoms=[8, 9, 16, 17, 18]))
+        self.assertEqual(job2.to_input_dict()["qmmm"]["qm_atoms"], "8 9 16 17 18")
 
     def test_qmmm_frontier_scheme_sets_section_key(self):
         openqp = load_openqp_module()
@@ -1130,7 +1144,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="socnamd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="PME")
         )
@@ -1148,7 +1162,7 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
         self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")   # one-based 1-5 -> zero-based
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["md"]["soc"], "True")
         self.assertEqual(config["md"]["soc_basis"], "mch")
@@ -1163,7 +1177,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="droplet_namd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="NoCutoff")
             .droplet(
