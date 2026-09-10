@@ -5963,7 +5963,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             report.add(
                 "ERROR",
                 "input.qmmm_flag",
-                "Reaction-path and crossing drivers are not connected to the QM/MM force backend "
+                "Reaction-path and crossing drivers are not connected to the active QM/MM force backend "
                 "(only runtype=optimize, md and namd are).",
                 value=f"qmmm_flag=true/runtype={runtype}",
                 expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
@@ -7274,6 +7274,41 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
                 action="Use one of those methods, or optimise without qmmm_flag.",
             )
         if runtype == "optimize":
+            try:
+                maxit = int(_get(config, "optimize", "maxit", 30))
+            except (TypeError, ValueError):
+                maxit = 0
+            if maxit < 1:
+                report.add(
+                    "ERROR",
+                    "optimize.maxit",
+                    "A QM/MM optimisation needs at least one evaluation.",
+                    value=str(_get(config, "optimize", "maxit", 30)),
+                    expected=">= 1",
+                    action="Set [optimize] maxit to a positive number.",
+                )
+            for key in ("qm_atoms_xyz", "qm_list"):
+                if str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        "The QM-coordinate override of the MD driver is not applied by the QM/MM "
+                        "optimiser; the run would optimise the PDB geometry instead.",
+                        value=str(_get(config, "qmmm", key, "")),
+                        expected="no override (put the starting geometry in the PDB)",
+                        action="Remove [qmmm] qm_atoms_xyz / qm_list for a QM/MM optimisation.",
+                    )
+            if _truthy(_get(config, "input", "d4", False)):
+                report.add(
+                    "ERROR",
+                    "input.d4",
+                    "D4 dispersion is not part of the QM/MM force the optimiser minimises "
+                    "(compute_force has no LastStep dispersion pass), so the geometry would "
+                    "minimise the non-D4 surface.",
+                    value="d4=true",
+                    expected="d4=false for a QM/MM optimisation",
+                    action="Disable d4, or optimise without qmmm_flag.",
+                )
             for key in ("freeze", "frozen_distances"):
                 if str(_get(config, "optimize", key, "") or "").strip() or str(_get(config, "oqp", key, "") or "").strip():
                     report.add(

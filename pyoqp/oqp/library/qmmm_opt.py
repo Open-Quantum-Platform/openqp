@@ -46,7 +46,7 @@ class QMMM_Opt:
         pdb_file = qmmm_cfg.get("pdb_file")
         if pdb_file is None:
             raise ValueError("'qmmm.pdb_file' is required for a QM/MM optimisation.")
-        self.pdb = app.PDBFile(pdb_file)
+        self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))
         ff_files = _parse_str_list(qmmm_cfg.get("forcefield_files", ""))
         if not ff_files:
             raise ValueError("'qmmm.forcefield_files' is required for a QM/MM optimisation.")
@@ -79,7 +79,11 @@ class QMMM_Opt:
         # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
         self.radius = float(opt.get("qmmm_radius", 0.0))
         self.movable = self._movable_atoms(self.radius)
-        self.maxit = int(opt.get("maxit", 30))
+        self.maxit = max(1, int(opt.get("maxit", 30)))    # the checker rejects < 1; never skip the first evaluation
+        # [optimize] init_scf=true asks for a fresh initial SCF at every geometry
+        # (the all-QM optimizer's policy); otherwise the converged orbitals of
+        # the previous step are the guess.
+        self.init_scf = bool(opt.get("init_scf", False))
         # the same five-part test as the native all-QM optimizer
         # (_native_metrics_converged): energy change, rms/max step, rms/max gradient
         self.rmsd_grad = float(opt.get("rmsd_grad", 1e-4))     # Hartree/bohr
@@ -92,6 +96,18 @@ class QMMM_Opt:
         self.history = []
 
     # ------------------------------------------------------------------ #
+    def _resolve_aux_file(self, name):
+        """A relative [qmmm] path not found in the working directory is looked
+        up next to the input deck, the rule the NAMD driver applies, so a deck
+        can be run from any directory (e.g. by ``openqp --run_tests``)."""
+        value = str(name or "")
+        input_file = getattr(self.mol, "input_file", None)
+        if value and input_file and not os.path.isabs(value) and not os.path.exists(value):
+            candidate = os.path.join(os.path.dirname(os.path.abspath(input_file)), value)
+            if os.path.exists(candidate):
+                return candidate
+        return value
+
     def _movable_atoms(self, radius):
         qm = set(int(i) for i in self.qm_atoms)
         if radius <= 0.0:
@@ -161,7 +177,7 @@ class QMMM_Opt:
             X = X0.copy()
             X[mv] = np.asarray(x_bohr, dtype=float).reshape(-1, 3) * BOHR_TO_NM
             e, f = self._energy_force(X)
-            self.driver._reuse_orbitals = True       # later steps start from these orbitals
+            self.driver._reuse_orbitals = not self.init_scf   # later steps start from these orbitals
             g = -f[mv].reshape(-1)
             it[0] += 1
             rms = float(np.sqrt(np.mean(g * g))); mx = float(np.abs(g).max())

@@ -598,10 +598,11 @@ TOP_OPTION_ALIASES = {
 _GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
     "energy_shift", "init_scf",
-    # QM/MM optimisation (qmmm_flag=true): movable-shell radius and the
-    # full-system output file; ignored by every other geometry driver.
-    "qmmm_radius", "qmmm_output",
 }
+# QM/MM optimisation (qmmm_flag=true) only: the movable-shell radius and the
+# full-system output file.  Exposed on the plain optimize driver alone; the
+# crossing and reaction-path drivers do not consume them.
+_QMMM_OPT_OPTIONS = {"qmmm_radius", "qmmm_output"}
 _CROSSING_SEARCH_OPTIONS = {
     "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
@@ -643,7 +644,8 @@ DRIVER_OPTIONS = {
     "grad": {"td_prop", "export", "title"},
     "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
                  | set(_NATIVE_ENGINE_OPTIONS)
-                 | set(_NATIVE_CONSTRAINT_OPTIONS)),
+                 | set(_NATIVE_CONSTRAINT_OPTIONS)
+                 | set(_QMMM_OPT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.

@@ -40,9 +40,9 @@ class TestCheckerAdmitsPlainQMMMOptimisation(unittest.TestCase):
     def setUpClass(cls):
         cls.chk = _load_checker()
 
-    def _diags(self, runtype, optimize=None, method="hf", qmmm_extra=None):
+    def _diags(self, runtype, optimize=None, method="hf", qmmm_extra=None, input_extra=None):
         cfg = {"input": {"runtype": runtype, "qmmm_flag": True, "method": method, "basis": "6-31g",
-                         "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+                         "system": "ala.pdb 9 10 17 18 19", "charge": 0, **(input_extra or {})},
                "scf": {"type": "rhf", "multiplicity": 1},
                "optimize": {"istate": 0, **(optimize or {})},
                "qmmm": {"pdb_file": "ala.pdb", "qm_atoms": "8,9,16,17,18",
@@ -57,7 +57,8 @@ class TestCheckerAdmitsPlainQMMMOptimisation(unittest.TestCase):
             if hasattr(self.chk, fn):
                 getattr(self.chk, fn)(cfg, report)
         return [(d.severity, d.path) for d in report.diagnostics
-                if "qmmm" in d.path or d.path in ("optimize.lib", "input.method", "optimize.freeze")]
+                if "qmmm" in d.path or d.path in ("optimize.lib", "optimize.maxit", "input.method",
+                                                  "input.d4", "optimize.freeze")]
 
     def test_optimize_is_admitted_and_paths_are_not(self):
         self.assertNotIn(("ERROR", "input.qmmm_flag"), self._diags("optimize"))
@@ -82,6 +83,13 @@ class TestCheckerAdmitsPlainQMMMOptimisation(unittest.TestCase):
         for method in ("casscf", "mp2"):
             self.assertIn(("ERROR", "input.method"), self._diags("optimize", method=method))
         self.assertIn(("ERROR", "optimize.freeze"), self._diags("optimize", {"freeze": "distance(1,2)"}))
+
+    def test_unsupported_options_are_rejected_not_ignored(self):
+        self.assertIn(("ERROR", "optimize.maxit"), self._diags("optimize", {"maxit": 0}))
+        self.assertIn(("ERROR", "qmmm.qm_atoms_xyz"), self._diags("optimize", qmmm_extra={"qm_atoms_xyz": "qm.xyz"}))
+        self.assertIn(("ERROR", "qmmm.qm_list"), self._diags("optimize", qmmm_extra={"qm_list": "0,1,2"}))
+        self.assertIn(("ERROR", "input.d4"), self._diags("optimize", input_extra={"d4": True}))
+        self.assertNotIn(("ERROR", "input.d4"), self._diags("optimize", input_extra={"d4": False}))
 
     def test_radius_and_lib_are_validated(self):
         self.assertIn(("ERROR", "optimize.qmmm_radius"), self._diags("optimize", {"qmmm_radius": -1.0}))
@@ -141,6 +149,12 @@ class TestMovableSetAndState(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "my forcefield.xml"); open(p, "w").close()
             self.assertEqual(_parse_str_list(p), [p])                  # an existing path with a space stays whole
+
+    def test_driver_honours_init_scf_and_resolves_the_deck_path(self):
+        src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
+        self.assertIn("self.driver._reuse_orbitals = not self.init_scf", src)
+        self.assertIn("self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))", src)
+        self.assertIn("max(1, int(opt.get(\"maxit\", 30)))", src)
 
     def test_istate_is_the_gradient_root(self):
         src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()

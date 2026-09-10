@@ -1187,6 +1187,11 @@ def test_md_requires_qmmm_and_physical_state_cannot_be_overridden():
     assert opt["input"]["runtype"] == "optimize"
     assert opt["input"]["qmmm_flag"] == "True"
     assert float(opt["optimize"]["qmmm_radius"]) == 4.0
+    # the two QM/MM-only keys belong to plain optimisation; the crossing and
+    # reaction-path drivers do not consume them and must not accept them
+    for other in ("ts(S0,qmmm_output=\"x.pdb\")", "meci(S0,S1,qmmm_radius=2.0)"):
+        with pytest.raises(OQPInputError):
+            oqp_input.parse_canonical_oqp('dft/pbe0/def2-svp geom="h2o.xyz" %s' % other)
 
     with pytest.raises(OQPInputError, match="not connected"):
         oqp_input.parse_canonical_oqp(
