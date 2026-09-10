@@ -3,9 +3,18 @@ import openmm as mm
 import openmm.unit as unit
 import numpy as np
 import os
+import time
 from copy import deepcopy
-from sys import stdout
+import sys
 from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
+
+
+def _to_kJmol(energy):
+    """Energy from the force backend (a Quantity or a bare float already in
+    kJ/mol) as a float in kJ/mol."""
+    if unit.is_quantity(energy):
+        return float(energy.value_in_unit(unit.kilojoules_per_mole))
+    return float(energy)
 
 
 # ======================================================================
@@ -195,6 +204,22 @@ class QMMM_MD:
     qm_atoms_xyz       : str            optional XYZ file
     qm_list            : str or list    optional index mapping
 
+    Energies are sampled at the START of every step, at the positions the
+    QM/MM force was just computed for: ``E_pot`` is the QM/MM energy returned
+    by the force backend at those positions (not OpenMM's first-order
+    extrapolation ``E(r0) - F.(r - r0)``, which is what the linear
+    CustomExternalForce evaluates to once the atoms have moved), and ``E_kin``
+    is the time-centred kinetic energy at the same instant.  Row ``step = s``
+    therefore belongs to the geometry after ``s`` steps, i.e. to trajectory
+    frame ``s``; the geometry after the last step has no energy row.
+
+    ``rigidwater`` (default true, the NAMD driver's behaviour) puts the MM
+    water bond/angle constraints of an OpenMM rigidWater system on the MD
+    system, so OpenMM's Verlet applies SHAKE/RATTLE to them; QM atoms are
+    never constrained.  Without it the stiff O-H stretch is integrated
+    explicitly and at 0.5 fs the total energy of a solvated box fluctuates by
+    ~5 kJ/mol per 1000 atoms (the same figure a pure-MM run gives).
+
     Saved observables (in ``energy_file`` as ``.npz``)
     --------------------------------------------------
     step          : MD step index
@@ -288,6 +313,8 @@ class QMMM_MD:
         self.log_file        = str(qmmm_cfg.get("log_file",
                                                 "qmmm_trajectory.dat"))
         self.report_interval = int(qmmm_cfg.get("report_interval", 1))
+        self.rigidwater = str(qmmm_cfg.get("rigidwater", True)).strip().lower() in (
+            "1", "true", "yes", "on")
         self.energy_file     = str(qmmm_cfg.get("energy_file",
                                                 "total_energy.npz"))
 
@@ -411,6 +438,26 @@ class QMMM_MD:
         for i in range(sys0.getNumParticles()):
             self.system_md.addParticle(sys0.getParticleMass(i))
 
+        # MM rigid-water constraints (O-H, O-H, H-H per TIP3P water), as the
+        # NAMD driver's _build_constraints: taken from a rigidWater system of
+        # the same topology, QM atoms excluded.  The MM forces still come from
+        # the flexible sys0, whose water bond/angle terms vanish at the
+        # constrained geometry.
+        self.n_constraints = 0
+        if self.rigidwater:
+            ref = self.forcefield.createSystem(
+                self.pdb.topology, nonbondedMethod=self.cutoff,
+                constraints=None, rigidWater=True)
+            qm = set(int(i) for i in self.qm_atoms)
+            for k in range(ref.getNumConstraints()):
+                p1, p2, dist = ref.getConstraintParameters(k)
+                if p1 in qm or p2 in qm:
+                    continue
+                self.system_md.addConstraint(p1, p2, dist)
+                self.n_constraints += 1
+            print(f"[QM/MM MD] rigid water: {self.n_constraints} MM constraints applied "
+                  f"(SHAKE/RATTLE in the integrator); QM atoms unconstrained")
+
         self.qmmm_ext = mm.CustomExternalForce(
             "-grad_x*x - grad_y*y - grad_z*z + qmmm_energy - ecorr"
         )
@@ -423,6 +470,7 @@ class QMMM_MD:
             self.pdb.positions, self.pdb.topology, self.mm_systems, self.qm_atoms
         )
         n_particles = self.system_md.getNumParticles()
+        self._qmmm_energy_kJ = _to_kJmol(qmmm_energy)
         qmmm_energy = qmmm_energy / n_particles
         self.qmmm_ext.addGlobalParameter("qmmm_energy", qmmm_energy)
 
@@ -467,26 +515,22 @@ class QMMM_MD:
             TrajReporter(self.trajectory_file, self.report_interval)
         )
 
-        report_kwargs = dict(
-            time=True, potentialEnergy=True,
-            kineticEnergy=True, totalEnergy=True,
-            temperature=True, speed=True,
-        )
+        # Energies are written by the driver itself (see ``_report_energies``):
+        # OpenMM's StateDataReporter would report the potential of the linear
+        # CustomExternalForce at the post-step positions, which is only a
+        # first-order extrapolation of the QM/MM energy.
+        self._log_columns = ['"Time (ps)"', '"Potential Energy (kJ/mole)"',
+                             '"Kinetic Energy (kJ/mole)"',
+                             '"Total Energy (kJ/mole)"', '"Temperature (K)"']
         if self.ensemble == "npt":
-            report_kwargs["volume"] = True
-            report_kwargs["density"] = True
-
-        self.simulation_md.reporters.append(
-            app.StateDataReporter(
-                self.log_file, self.report_interval, **report_kwargs
-            )
-        )
-        self.simulation_md.reporters.append(
-            app.StateDataReporter(
-                stdout, self.report_interval,
-                step=True, **report_kwargs,
-            )
-        )
+            self._log_columns.append('"Box Volume (nm^3)"')
+        self._log_columns.append('"Speed (ns/day)"')
+        self._log_handle = open(self.log_file, "w")
+        self._log_handle.write("#" + ",".join(self._log_columns) + "\n")
+        self._log_handle.flush()
+        sys.stdout.write("#" + ",".join(['"Step"'] + self._log_columns) + "\n")
+        sys.stdout.flush()
+        self._wall_t0 = None
 
     def setup(self):
         """Full setup: build driver, MD system, and simulation context."""
@@ -503,6 +547,7 @@ class QMMM_MD:
             positions, self.pdb.topology, self.mm_systems, self.qm_atoms
         )
         n_particles = self.system_md.getNumParticles()
+        self._qmmm_energy_kJ = _to_kJmol(qmmm_energy)
         qmmm_energy = qmmm_energy / n_particles
         self.simulation_md.context.setParameter("qmmm_energy", qmmm_energy)
 
@@ -522,7 +567,7 @@ class QMMM_MD:
 
     def _instantaneous_temperature(self, E_kin_kJmol):
         """Compute T from kinetic energy: T = 2 * E_kin / (dof * k_B)."""
-        dof = 3 * self.system_md.getNumParticles()
+        dof = 3 * self.system_md.getNumParticles() - self.n_constraints
         if dof <= 0:
             return 0.0
         kB_kJ = unit.MOLAR_GAS_CONSTANT_R.value_in_unit(
@@ -559,20 +604,12 @@ class QMMM_MD:
             self.mm_systems["simor"].context.setPositions(pos_pre)
         self._update_qmmm_force(pos_pre)
 
-        self.simulation_md.step(1)
-
-        state_md = self.simulation_md.context.getState(getPositions=True)
-        pos0 = state_md.getPositions()
-
-        sim0.context.setPositions(pos0)
-        if is_periodic_method(self.cutoff):
-            self.mm_systems["simew"].context.setPositions(pos0)
-            self.mm_systems["simor"].context.setPositions(pos0)
-
+        # Sample the Hamiltonian HERE, at the positions the force was computed
+        # for: the linear term of the external force cancels identically at
+        # pos_pre, so the potential is the QM/MM energy itself, and OpenMM's
+        # kinetic energy is time-centred with the forces now in the context.
         state_energy = self.simulation_md.context.getState(getEnergy=True)
-        E_pot = state_energy.getPotentialEnergy().value_in_unit(
-            unit.kilojoules_per_mole
-        )
+        E_pot = self._qmmm_energy_kJ
         E_kin = state_energy.getKineticEnergy().value_in_unit(
             unit.kilojoules_per_mole
         )
@@ -581,7 +618,7 @@ class QMMM_MD:
 
         # Box volume (only meaningful for periodic systems / NPT)
         if self.ensemble == "npt":
-            box = self.simulation_md.context.getState().getPeriodicBoxVectors()
+            box = state_pre.getPeriodicBoxVectors()
             vol = (box[0][0] * box[1][1] * box[2][2]).value_in_unit(
                 unit.nanometer ** 3
             )
@@ -598,8 +635,42 @@ class QMMM_MD:
         self._traj_data["E_tot"].append(E_tot)
         self._traj_data["temperature"].append(T_inst)
         self._traj_data["volume_nm3"].append(vol)
+        self._report_energies(step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol)
+
+        self.simulation_md.step(1)
+
+        state_md = self.simulation_md.context.getState(getPositions=True)
+        pos0 = state_md.getPositions()
+
+        sim0.context.setPositions(pos0)
+        if is_periodic_method(self.cutoff):
+            self.mm_systems["simew"].context.setPositions(pos0)
+            self.mm_systems["simor"].context.setPositions(pos0)
 
         return E_tot
+
+    def _report_energies(self, step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol):
+        """Write one energy row to ``log_file`` and to stdout (every
+        ``report_interval`` steps, step 0 included)."""
+        if step_idx % self.report_interval != 0:
+            return
+        now = time.time()
+        if self._wall_t0 is None:
+            self._wall_t0 = (now, t_ps)
+            speed = 0.0
+        else:
+            elapsed = now - self._wall_t0[0]
+            speed = ((t_ps - self._wall_t0[1]) / 1000.0 * 86400.0 / elapsed
+                     if elapsed > 0 else 0.0)
+        cols = [f"{t_ps:.8g}", f"{E_pot:.14g}", f"{E_kin:.14g}",
+                f"{E_tot:.14g}", f"{T_inst:.8g}"]
+        if self.ensemble == "npt":
+            cols.append(f"{vol:.8g}")
+        cols.append(f"{speed:.3g}")
+        self._log_handle.write(",".join(cols) + "\n")
+        self._log_handle.flush()
+        sys.stdout.write(",".join([str(step_idx)] + cols) + "\n")
+        sys.stdout.flush()
 
     # ------------------------------------------------------------------
     #  Persistence
@@ -641,6 +712,9 @@ class QMMM_MD:
 
         # Final save (covers n_steps not a multiple of report_interval)
         self._save_traj_data()
+        if getattr(self, "_log_handle", None) is not None:
+            self._log_handle.close()
+            self._log_handle = None
 
         return {k: np.asarray(v) for k, v in self._traj_data.items()}
 
