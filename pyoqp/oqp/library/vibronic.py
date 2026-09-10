@@ -19,7 +19,6 @@ state MRSF property.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
 import argparse
 import json
 from collections.abc import Mapping
@@ -563,9 +562,18 @@ class HarmonicOverlapEngine:
             + 0.5 * b0 @ solved_b0
         )
         self.zero_zero_overlap = float(exp(log_s00))
+        # Per-engine memo for _derivative_polynomial.  functools.lru_cache on the
+        # method would key on self in a class-wide cache and keep every engine,
+        # with all of its evaluated states, alive for the life of the process.
+        self._polynomial_cache: dict[tuple[int, ...], float] = {}
 
-    @lru_cache(maxsize=None)
     def _derivative_polynomial(self, alpha: tuple[int, ...]) -> float:
+        cached = self._polynomial_cache.get(alpha)
+        if cached is None:
+            cached = self._polynomial_cache[alpha] = self._evaluate_derivative_polynomial(alpha)
+        return cached
+
+    def _evaluate_derivative_polynomial(self, alpha: tuple[int, ...]) -> float:
         if not any(alpha):
             return 1.0
         index = next(i for i, value in enumerate(alpha) if value)
