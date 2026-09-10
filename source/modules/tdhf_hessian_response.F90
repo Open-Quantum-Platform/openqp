@@ -41,7 +41,10 @@ module tdhf_hessian_response_mod
   ! trampoline on the stack: liboqp then requests an executable stack, which
   ! release packaging rejects (.github/scripts/normalize_elf_stack.py), and the
   ! host-associated optional preconditioner failed to link on macOS.  Each
-  ! solver publishes what its callbacks need here for one solve.
+  ! solver publishes what its callbacks need here for one solve.  The solvers
+  ! are therefore not re-entrant: a solve that finds its context already in
+  ! use returns status=-90 instead of overwriting it.  They are declared
+  ! recursive so that such a refused nested call is itself well defined.
   procedure(mrsf_tda_batch_operator), pointer, save :: projected_operator => null()
   procedure(mrsf_tda_batch_operator), pointer, save :: projected_preconditioner => null()
   real(kind=dp), pointer, save :: projected_x0(:) => null()
@@ -266,7 +269,7 @@ contains
 
 !###############################################################################
 
-  subroutine solve_mrsf_tda_response_batch_matrix_free(apply_operator,omega, &
+  recursive subroutine solve_mrsf_tda_response_batch_matrix_free(apply_operator,omega, &
       x0,dax,dx,domega,residual_max,status,tol,maxit,apply_preconditioner)
     ! Matrix-free multi-right-hand-side response in the physical MRSF-TDA
     ! space.  This follows the efficient organization of the GAMESS analytic
@@ -296,6 +299,12 @@ contains
     residual_max=0.0_dp
     dx=0.0_dp
     domega=0.0_dp
+    ! The callbacks read module-scope context.  A nested or overlapping solve
+    ! would overwrite it mid-solve, so refuse one instead (status=-90).
+    if(associated(projected_operator)) then
+      status=-90
+      return
+    end if
     solve_tol=1.0e-10_dp
     if(present(tol)) solve_tol=tol
     niter=max(200,4*n)
@@ -461,7 +470,7 @@ contains
 
 !###############################################################################
 
-  subroutine solve_mrsf_tda_cluster_response_matrix_free(apply_operator, &
+  recursive subroutine solve_mrsf_tda_cluster_response_matrix_free(apply_operator, &
       cluster_energies,cluster_vectors,dax,response,effective_derivative, &
       residual_max,status,tol,maxit,restart)
     ! Gauge-fixed response of a near-degenerate MRSF-TDA root cluster.
@@ -509,6 +518,12 @@ contains
     residual_max=0.0_dp
     response=0.0_dp
     effective_derivative=0.0_dp
+    ! The callbacks read module-scope context.  A nested or overlapping solve
+    ! would overwrite it mid-solve, so refuse one instead (status=-90).
+    if(associated(cluster_operator_action)) then
+      status=-90
+      return
+    end if
     solve_tol=1.0e-11_dp
     if(present(tol)) solve_tol=tol
     niter=max(200,4*n*ncluster)

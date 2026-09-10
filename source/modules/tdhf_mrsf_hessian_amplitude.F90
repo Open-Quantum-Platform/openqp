@@ -33,7 +33,7 @@ contains
 
 !###############################################################################
 
-  subroutine solve_mrsf_tda_amplitude_derivatives(infos,int2_driver,mo_a,mo_b, &
+  recursive subroutine solve_mrsf_tda_amplitude_derivatives(infos,int2_driver,mo_a,mo_b, &
       fa,fb,omega,x_packed,dax_packed,dx_packed,domega,residual_max,status, &
       tolerance,max_iterations,restart)
     ! Solve all nuclear amplitude-response equations in the independent
@@ -59,6 +59,12 @@ contains
       solve_iterations,space_status
 
     status=0; residual_max=0.0_dp; dx_packed=0.0_dp; domega=0.0_dp
+    ! The callbacks read module-scope context.  A nested or overlapping solve
+    ! would overwrite it mid-solve, so refuse one instead (status=-90).
+    if(associated(amplitude_infos)) then
+      status=-90
+      return
+    end if
     nbf=infos%basis%nbf
     nocca=infos%mol_prop%nelec_a
     noccb=infos%mol_prop%nelec_b

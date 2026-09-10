@@ -194,6 +194,9 @@ contains
     call sanitize_zvector_preconditioner(z_diagonal,z_preconditioner,iw, &
       1.0e-10_dp,'MRSF Hessian')
     if(is_dft) call dft_initialize(infos,basis,unused_grid)
+    if(associated(z_infos)) call show_message('tdhf_mrsf_hessian: the Z-vector '// &
+      'callback context is already in use; nested analytic MRSF Hessian '// &
+      'calls are not supported.',WITH_ABORT)
     z_infos=>infos
     z_basis=>basis
     z_grid=>unused_grid

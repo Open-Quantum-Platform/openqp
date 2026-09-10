@@ -34,6 +34,8 @@ program test_tdhf_hessian_response
   real(kind=dp) :: isolated_w(1,1),angle,c,s
   real(kind=dp) :: zorb(3,3),zrhs(3,2),zdhz(3,2),zdz(3,2),zexpected(3,2)
   integer :: batch_operator_calls,batch_operator_width,i,j,status
+  real(kind=dp) :: nested_dx(3,2),nested_domega(2),nested_residual
+  integer :: nested_refused
 
   if (.not. tdhf_reference_has_degenerate_subspace( &
       [-1.0_dp, -1.0_dp, 0.5_dp, 0.8_dp], 2, 1.0e-10_dp)) &
@@ -250,6 +252,21 @@ program test_tdhf_hessian_response
   if(batch_operator_calls>6) &
     error stop 'batched MRSF response used too many operator calls'
 
+  ! The batch solver keeps its callback context at module scope.  Every
+  ! operator call below starts a second solve.  Those made while the outer
+  ! solve's context is in use must be refused, and the outer solve must stay
+  ! intact; overwriting the context used to null it mid-solve.
+  nested_refused=0
+  mrsf_dx=0.0_dp; mrsf_domega=0.0_dp; residual=0.0_dp
+  call solve_mrsf_tda_response_batch_matrix_free( &
+    apply_test_nested_batch_operator,2.0_dp,mrsf_x,mrsf_dax,mrsf_dx, &
+    mrsf_domega,residual,status,tol=1.0e-13_dp,maxit=30)
+  if(nested_refused<1) error stop 'nested MRSF batch solve was not refused'
+  if(status/=0) error stop 'a refused nested solve disturbed the outer MRSF solve'
+  if(maxval(abs(mrsf_dx(:,1)-[0.3_dp,0.0_dp,0.25_dp]))>1.0e-12_dp .or. &
+     maxval(abs(mrsf_dx(:,2)-[0.4_dp,0.0_dp,-0.1_dp]))>1.0e-12_dp) &
+    error stop 'outer MRSF solve is incorrect after a refused nested solve'
+
   mrsf_d2a = reshape([0.7_dp,0.11_dp,0.11_dp,-0.4_dp],[2,2])
   call assemble_mrsf_tda_eigenvalue_hessian(mrsf_x,mrsf_dax,mrsf_dx, &
     mrsf_d2a,mrsf_hess,mrsf_asym,status)
@@ -370,6 +387,18 @@ program test_tdhf_hessian_response
   if(status==0) error stop 'matrix-free MRSF response did not fail closed'
 
 contains
+
+  subroutine apply_test_nested_batch_operator(vectors,results,operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    integer :: inner_status
+    call solve_mrsf_tda_response_batch_matrix_free( &
+      apply_test_mrsf_batch_operator,2.0_dp,mrsf_x,mrsf_dax,nested_dx, &
+      nested_domega,nested_residual,inner_status,tol=1.0e-13_dp,maxit=30)
+    if(inner_status==-90) nested_refused=nested_refused+1
+    call apply_test_mrsf_batch_operator(vectors,results,operator_status)
+  end subroutine apply_test_nested_batch_operator
 
   subroutine apply_test_mrsf_operator(vector,result,operator_status)
     real(kind=dp), intent(in) :: vector(:)
