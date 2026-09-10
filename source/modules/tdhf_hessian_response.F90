@@ -34,6 +34,21 @@ module tdhf_hessian_response_mod
       integer, intent(out) :: status
     end subroutine mrsf_tda_batch_operator
   end interface
+
+  ! Callback context for the projected MRSF-TDA response solvers.  The
+  ! projected operators used to be internal procedures of the solvers, and
+  ! passing an internal procedure as an actual argument makes gfortran build a
+  ! trampoline on the stack: liboqp then requests an executable stack, which
+  ! release packaging rejects (.github/scripts/normalize_elf_stack.py), and the
+  ! host-associated optional preconditioner failed to link on macOS.  Each
+  ! solver publishes what its callbacks need here for one solve.
+  procedure(mrsf_tda_batch_operator), pointer, save :: projected_operator => null()
+  procedure(mrsf_tda_batch_operator), pointer, save :: projected_preconditioner => null()
+  real(kind=dp), pointer, save :: projected_x0(:) => null()
+  real(kind=dp), save :: projected_omega = 0.0_dp
+  procedure(mrsf_tda_operator), pointer, save :: cluster_operator_action => null()
+  real(kind=dp), pointer, save :: cluster_vectors_ctx(:,:) => null()
+  real(kind=dp), pointer, save :: cluster_operator_ctx(:,:) => null()
   public :: tdhf_reference_has_degenerate_subspace
 
 contains
@@ -263,15 +278,15 @@ contains
 
     procedure(mrsf_tda_batch_operator) :: apply_operator
     procedure(mrsf_tda_batch_operator), optional :: apply_preconditioner
-    real(kind=dp), intent(in) :: omega,x0(:),dax(:,:)
+    real(kind=dp), intent(in) :: omega,dax(:,:)
+    real(kind=dp), intent(in), target :: x0(:)
     real(kind=dp), intent(out) :: dx(:,:),domega(:),residual_max
     integer, intent(out) :: status
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
 
     real(kind=dp), allocatable :: rhs(:,:),trial(:,:),applied(:,:),check(:,:), &
-      projected(:,:),operator_image(:,:),norm_rhs(:),parallel(:), &
-      parallel_result(:)
+      norm_rhs(:)
     real(kind=dp) :: solve_tol,subspace_residual
     integer :: coordinate,n,ncoord,niter,operator_status,solve_status
 
@@ -300,8 +315,7 @@ contains
     end if
 
     allocate(rhs(n,ncoord),trial(n,ncoord),applied(n,ncoord), &
-      check(n,ncoord),projected(n,ncoord),operator_image(n,ncoord), &
-      norm_rhs(ncoord),parallel(ncoord),parallel_result(ncoord))
+      check(n,ncoord),norm_rhs(ncoord))
 
     ! Validate the supplied eigenpair through the same production batch
     ! operator that will be used by every response direction.
@@ -328,7 +342,11 @@ contains
       go to 900
     end if
 
+    projected_operator=>apply_operator
+    projected_x0=>x0
+    projected_omega=omega
     if(present(apply_preconditioner)) then
+      projected_preconditioner=>apply_preconditioner
       call solve_shared_block_subspace(apply_projected_batch,rhs,dx, &
         subspace_residual,solve_status,solve_tol,niter, &
         apply_preconditioner=apply_projected_preconditioner)
@@ -336,6 +354,9 @@ contains
       call solve_shared_block_subspace(apply_projected_batch,rhs,dx, &
         subspace_residual,solve_status,solve_tol,niter)
     end if
+    projected_operator=>null()
+    projected_preconditioner=>null()
+    projected_x0=>null()
     if(solve_status/=0) then
       status=solve_status
       go to 900
@@ -371,70 +392,72 @@ contains
     end do
 
 900 continue
-    deallocate(rhs,trial,applied,check,projected,operator_image,norm_rhs, &
-      parallel,parallel_result)
+    deallocate(rhs,trial,applied,check,norm_rhs)
 
-  contains
-
-    subroutine apply_projected_batch(vectors,results,local_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: local_status
-      integer :: nvec
-
-      local_status=0
-      results=0.0_dp
-      nvec=size(vectors,2)
-      if(size(vectors,1)/=n .or. any(shape(results)/=[n,nvec]) .or. &
-         nvec<=0 .or. any(.not.ieee_is_finite(vectors))) then
-        local_status=-1
-        return
-      end if
-      parallel(1:nvec)=matmul(x0,vectors)
-      projected(:,1:nvec)=vectors- &
-        spread(x0,2,nvec)*spread(parallel(1:nvec),1,n)
-      call apply_operator(projected(:,1:nvec),operator_image(:,1:nvec), &
-        local_status)
-      if(local_status/=0 .or. &
-         any(.not.ieee_is_finite(operator_image(:,1:nvec)))) then
-        local_status=-1
-        results=0.0_dp
-        return
-      end if
-      results=operator_image(:,1:nvec)-omega*projected(:,1:nvec)
-      parallel_result(1:nvec)=matmul(x0,results)
-      results=results- &
-        spread(x0,2,nvec)*spread(parallel_result(1:nvec),1,n)+ &
-        spread(x0,2,nvec)*spread(parallel(1:nvec),1,n)
-      if(any(.not.ieee_is_finite(results))) local_status=-1
-    end subroutine apply_projected_batch
-
-    subroutine apply_projected_preconditioner(vectors,results,local_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: local_status
-      integer :: nvec
-
-      nvec=size(vectors,2)
-      local_status=0
-      if(size(vectors,1)/=n .or. any(shape(results)/=[n,nvec]) .or. &
-         nvec<=0 .or. any(.not.ieee_is_finite(vectors))) then
-        results=0.0_dp
-        local_status=-1
-        return
-      end if
-      call apply_preconditioner(vectors,results,local_status)
-      if(local_status/=0 .or. any(.not.ieee_is_finite(results))) then
-        results=0.0_dp
-        local_status=-1
-        return
-      end if
-      parallel_result(1:nvec)=matmul(x0,results)
-      results=results-spread(x0,2,nvec)* &
-        spread(parallel_result(1:nvec),1,n)
-    end subroutine apply_projected_preconditioner
 
   end subroutine solve_mrsf_tda_response_batch_matrix_free
+
+  subroutine apply_projected_batch(vectors,results,local_status)
+    ! (A - omega) on the complement of x0, passing the x0 component through.
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: local_status
+    real(kind=dp), allocatable :: parallel(:),projected(:,:), &
+      operator_image(:,:),parallel_result(:)
+    integer :: n,nvec
+
+    local_status=0
+    results=0.0_dp
+    n=size(projected_x0)
+    nvec=size(vectors,2)
+    if(size(vectors,1)/=n .or. any(shape(results)/=[n,nvec]) .or. &
+       nvec<=0 .or. any(.not.ieee_is_finite(vectors))) then
+      local_status=-1
+      return
+    end if
+    allocate(parallel(nvec),projected(n,nvec),operator_image(n,nvec), &
+      parallel_result(nvec))
+    parallel=matmul(projected_x0,vectors)
+    projected=vectors-spread(projected_x0,2,nvec)*spread(parallel,1,n)
+    call projected_operator(projected,operator_image,local_status)
+    if(local_status/=0 .or. any(.not.ieee_is_finite(operator_image))) then
+      local_status=-1
+      results=0.0_dp
+      return
+    end if
+    results=operator_image-projected_omega*projected
+    parallel_result=matmul(projected_x0,results)
+    results=results-spread(projected_x0,2,nvec)*spread(parallel_result,1,n)+ &
+      spread(projected_x0,2,nvec)*spread(parallel,1,n)
+    if(any(.not.ieee_is_finite(results))) local_status=-1
+  end subroutine apply_projected_batch
+
+  subroutine apply_projected_preconditioner(vectors,results,local_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: local_status
+    real(kind=dp), allocatable :: parallel_result(:)
+    integer :: n,nvec
+
+    n=size(projected_x0)
+    nvec=size(vectors,2)
+    local_status=0
+    if(size(vectors,1)/=n .or. any(shape(results)/=[n,nvec]) .or. &
+       nvec<=0 .or. any(.not.ieee_is_finite(vectors))) then
+      results=0.0_dp
+      local_status=-1
+      return
+    end if
+    call projected_preconditioner(vectors,results,local_status)
+    if(local_status/=0 .or. any(.not.ieee_is_finite(results))) then
+      results=0.0_dp
+      local_status=-1
+      return
+    end if
+    allocate(parallel_result(nvec))
+    parallel_result=matmul(projected_x0,results)
+    results=results-spread(projected_x0,2,nvec)*spread(parallel_result,1,n)
+  end subroutine apply_projected_preconditioner
 
 !###############################################################################
 
@@ -464,15 +487,17 @@ contains
     ! strings; it acts only on the supplied spin-adapted physical vector space.
 
     procedure(mrsf_tda_operator) :: apply_operator
-    real(kind=dp), intent(in) :: cluster_energies(:),cluster_vectors(:,:),dax(:,:)
+    real(kind=dp), intent(in) :: cluster_energies(:),dax(:,:)
+    real(kind=dp), intent(in), target :: cluster_vectors(:,:)
     real(kind=dp), intent(out) :: response(:,:),effective_derivative(:,:),residual_max
     integer, intent(out) :: status
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit,restart
 
-    real(kind=dp), allocatable :: ax(:,:),cluster_operator(:,:),overlap(:,:), &
+    real(kind=dp), allocatable :: ax(:,:),overlap(:,:), &
       projector_work(:,:),rhs_matrix(:,:),rhs(:),solution(:),check(:,:), &
-      trial(:,:),trial_q(:,:),atrial(:,:),result_matrix(:,:),parallel(:,:)
+      atrial(:,:)
+    real(kind=dp), allocatable, target :: cluster_operator(:,:)
     real(kind=dp), allocatable :: computed_energies(:),sorted_energies(:)
     real(kind=dp) :: energy_scale,operator_scale,solve_tol,spectrum_error
     integer :: column,eigensolver_status,n,ncluster,niter,nrestart, &
@@ -503,9 +528,9 @@ contains
     allocate(ax(n,ncluster),cluster_operator(ncluster,ncluster), &
       overlap(ncluster,ncluster),projector_work(n,ncluster), &
       rhs_matrix(n,ncluster),rhs(n*ncluster),solution(n*ncluster), &
-      check(n,ncluster),trial(n,ncluster),trial_q(n,ncluster), &
-      atrial(n,ncluster),result_matrix(n,ncluster), &
-      parallel(ncluster,ncluster),computed_energies(ncluster), &
+      check(n,ncluster), &
+      atrial(n,ncluster), &
+      computed_energies(ncluster), &
       sorted_energies(ncluster))
 
     overlap=matmul(transpose(cluster_vectors),cluster_vectors)
@@ -557,8 +582,14 @@ contains
       matmul(transpose(cluster_vectors),dax))
     rhs=reshape(rhs_matrix,[n*ncluster])
     solution=0.0_dp
+    cluster_operator_action=>apply_operator
+    cluster_vectors_ctx=>cluster_vectors
+    cluster_operator_ctx=>cluster_operator
     call solve_general_gmres(apply_cluster_projected_operator,rhs,solution, &
       solve_tol,niter,nrestart,solve_status)
+    cluster_operator_action=>null()
+    cluster_vectors_ctx=>null()
+    cluster_operator_ctx=>null()
     if(solve_status/=0) then
       status=10+abs(solve_status)
       go to 900
@@ -583,42 +614,47 @@ contains
 
 900 continue
     deallocate(ax,cluster_operator,overlap,projector_work,rhs_matrix,rhs, &
-      solution,check,trial,trial_q,atrial,result_matrix,parallel, &
+      solution,check,atrial, &
       computed_energies,sorted_energies)
 
-  contains
 
-    subroutine apply_cluster_projected_operator(vector,result,local_status)
-      real(kind=dp), intent(in) :: vector(:)
-      real(kind=dp), intent(out) :: result(:)
-      integer, intent(out) :: local_status
-      integer :: local_column
+  end subroutine solve_mrsf_tda_cluster_response_matrix_free
 
-      local_status=0
-      if(size(vector)/=n*ncluster .or. size(result)/=n*ncluster) then
-        local_status=-1
+  subroutine apply_cluster_projected_operator(vector,result,local_status)
+    real(kind=dp), intent(in) :: vector(:)
+    real(kind=dp), intent(out) :: result(:)
+    integer, intent(out) :: local_status
+    real(kind=dp), allocatable :: trial(:,:),parallel(:,:),trial_q(:,:), &
+      atrial(:,:),result_matrix(:,:)
+    integer :: local_column,n,ncluster
+
+    n=size(cluster_vectors_ctx,1)
+    ncluster=size(cluster_vectors_ctx,2)
+    local_status=0
+    if(size(vector)/=n*ncluster .or. size(result)/=n*ncluster) then
+      local_status=-1
+      result=0.0_dp
+      return
+    end if
+    allocate(trial(n,ncluster),parallel(ncluster,ncluster), &
+      trial_q(n,ncluster),atrial(n,ncluster),result_matrix(n,ncluster))
+    trial=reshape(vector,[n,ncluster])
+    parallel=matmul(transpose(cluster_vectors_ctx),trial)
+    trial_q=trial-matmul(cluster_vectors_ctx,parallel)
+    do local_column=1,ncluster
+      call cluster_operator_action(trial_q(:,local_column), &
+        atrial(:,local_column),local_status)
+      if(local_status/=0) then
         result=0.0_dp
         return
       end if
-      trial=reshape(vector,[n,ncluster])
-      parallel=matmul(transpose(cluster_vectors),trial)
-      trial_q=trial-matmul(cluster_vectors,parallel)
-      do local_column=1,ncluster
-        call apply_operator(trial_q(:,local_column), &
-          atrial(:,local_column),local_status)
-        if(local_status/=0) then
-          result=0.0_dp
-          return
-        end if
-      end do
-      result_matrix=atrial-matmul(trial_q,cluster_operator)
-      result_matrix=result_matrix-matmul(cluster_vectors, &
-        matmul(transpose(cluster_vectors),result_matrix)) &
-        +matmul(cluster_vectors,parallel)
-      result=reshape(result_matrix,[n*ncluster])
-    end subroutine apply_cluster_projected_operator
-
-  end subroutine solve_mrsf_tda_cluster_response_matrix_free
+    end do
+    result_matrix=atrial-matmul(trial_q,cluster_operator_ctx)
+    result_matrix=result_matrix-matmul(cluster_vectors_ctx, &
+      matmul(transpose(cluster_vectors_ctx),result_matrix)) &
+      +matmul(cluster_vectors_ctx,parallel)
+    result=reshape(result_matrix,[n*ncluster])
+  end subroutine apply_cluster_projected_operator
 
 !###############################################################################
 

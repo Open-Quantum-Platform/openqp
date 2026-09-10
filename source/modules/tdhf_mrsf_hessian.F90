@@ -1,9 +1,31 @@
 module tdhf_mrsf_hessian_mod
 
+  use precision, only: dp
+  use types, only: information
+  use basis_tools, only: basis_set
+  use int2_compute, only: int2_compute_t
+  use mod_dft_molgrid, only: dft_grid_t
+
   implicit none
 
   private
   public :: tdhf_mrsf_hessian,tdhf_mrsf_hessian_C
+
+  ! Callback context for the MRSF Z-vector response inside tdhf_mrsf_hessian.
+  ! The orbital-Hessian callbacks used to be internal procedures; passing them
+  ! as actual arguments made gfortran build stack trampolines (an
+  ! executable-stack liboqp that release packaging rejects).  The driver
+  ! publishes their inputs here for the duration of the response solve.
+  type(information), pointer, save :: z_infos => null()
+  type(basis_set), pointer, save :: z_basis => null()
+  type(dft_grid_t), pointer, save :: z_grid => null()
+  type(int2_compute_t), pointer, save :: z_int2_driver => null()
+  real(kind=dp), pointer, save :: z_mo_a(:,:) => null(), z_mo_b(:,:) => null(), &
+    z_mo_energy(:) => null(), z_fa(:,:) => null(), z_fb(:,:) => null(), &
+    z_preconditioner_ctx(:) => null()
+  real(kind=dp), save :: z_exchange_scale = 1.0_dp
+  integer, save :: z_nocca = 0, z_noccb = 0, z_nbf = 0, z_lzdim = 0
+  logical, save :: z_is_dft = .false.
 
 contains
 
@@ -68,8 +90,8 @@ contains
     type(basis_set), pointer :: basis
     type(int2_compute_t), target :: int2_driver
     type(dft_grid_t), target :: unused_grid
-    type(mrsf_hessian_first_response_t) :: response
-    type(mrsf_hessian_z_intermediates_t) :: intermediate
+    type(mrsf_hessian_first_response_t), target :: response
+    type(mrsf_hessian_z_intermediates_t), target :: intermediate
     type(par_env_t) :: pe
     real(kind=dp), contiguous, pointer :: dm_a(:),dm_b(:),td_p(:,:), &
       seven(:,:,:),z(:),wao_packed(:),hstore(:,:)
@@ -80,7 +102,7 @@ contains
       dreference_fock(:,:,:,:),drelaxed_spin(:,:,:,:),hfixed(:,:), &
       hxc(:,:),xc_rows(:,:),rows(:,:),rows_one(:,:),rows_two(:,:), &
       rows_xc(:,:),htotal(:,:)
-    real(kind=dp), allocatable :: z_diagonal(:),z_preconditioner(:)
+    real(kind=dp), allocatable, target :: z_diagonal(:),z_preconditioner(:)
     real(kind=dp) :: z_rhs_scale,z_tolerance
     real(kind=dp) :: amplitude_residual,z_residual,row_asymmetry,w_error, &
       orbital_exchange_scale,time_first_response,time_z_intermediates, &
@@ -172,6 +194,22 @@ contains
     call sanitize_zvector_preconditioner(z_diagonal,z_preconditioner,iw, &
       1.0e-10_dp,'MRSF Hessian')
     if(is_dft) call dft_initialize(infos,basis,unused_grid)
+    z_infos=>infos
+    z_basis=>basis
+    z_grid=>unused_grid
+    z_int2_driver=>int2_driver
+    z_mo_a=>response%mo_a
+    z_mo_b=>response%mo_b
+    z_mo_energy=>intermediate%mo_energy
+    z_fa=>intermediate%fa
+    z_fb=>intermediate%fb
+    z_preconditioner_ctx=>z_preconditioner
+    z_exchange_scale=orbital_exchange_scale
+    z_nocca=nocca
+    z_noccb=noccb
+    z_nbf=nbf
+    z_lzdim=lzdim
+    z_is_dft=is_dft
     call solve_mrsf_z_response_from_mo_derivatives(orbital_hessian_action, &
       infos%tddft%mult,logical(infos%tddft%umrsf,kind=kind(.false.)), &
       .false.,nocca,noccb,intermediate%mo_energy,intermediate%fa, &
@@ -192,6 +230,16 @@ contains
       restart=lzdim, &
       apply_orbital_hessian_batch=orbital_hessian_action_batch, &
       apply_orbital_preconditioner_batch=orbital_preconditioner_batch)
+    z_infos=>null()
+    z_basis=>null()
+    z_grid=>null()
+    z_int2_driver=>null()
+    z_mo_a=>null()
+    z_mo_b=>null()
+    z_mo_energy=>null()
+    z_fa=>null()
+    z_fb=>null()
+    z_preconditioner_ctx=>null()
     if(is_dft) call dftclean(infos)
     call system_clock(clock_now)
     time_z_response=real(clock_now-clock_start,dp)/real(clock_rate,dp)
@@ -393,50 +441,51 @@ contains
     call int2_driver%clean()
     call response%clean()
     call intermediate%clean()
-  contains
-
-    subroutine orbital_hessian_action(vector,result,callback_status)
-      real(kind=dp), intent(in) :: vector(:)
-      real(kind=dp), intent(out) :: result(:)
-      integer, intent(out) :: callback_status
-      call apply_z_operator(vector,result,infos,basis,unused_grid,int2_driver, &
-        nocca,noccb,nbf,response%mo_a,response%mo_b, &
-        intermediate%mo_energy,intermediate%fa,intermediate%fb, &
-        orbital_exchange_scale,is_dft)
-      callback_status=0
-      if(any(.not.ieee_is_finite(result))) callback_status=-1
-    end subroutine orbital_hessian_action
-
-    subroutine orbital_hessian_action_batch(vectors,results,callback_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: callback_status
-      call apply_z_operator_batch(vectors,results,infos,basis,unused_grid, &
-        int2_driver,nocca,noccb,nbf,response%mo_a,response%mo_b, &
-        intermediate%mo_energy,intermediate%fa,intermediate%fb, &
-        orbital_exchange_scale,is_dft)
-      callback_status=0
-      if(any(.not.ieee_is_finite(results))) callback_status=-1
-    end subroutine orbital_hessian_action_batch
-
-    subroutine orbital_preconditioner_batch(vectors,results,callback_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: callback_status
-      integer :: nvec
-
-      nvec=size(vectors,2)
-      callback_status=0
-      if(size(vectors,1)/=lzdim .or. &
-         any(shape(results)/=[lzdim,nvec]) .or. nvec<=0) then
-        results=0.0_dp
-        callback_status=-1
-        return
-      end if
-      results=vectors*spread(z_preconditioner,2,nvec)
-      if(any(.not.ieee_is_finite(results))) callback_status=-1
-    end subroutine orbital_preconditioner_batch
-
   end subroutine tdhf_mrsf_hessian
+
+  subroutine orbital_hessian_action(vector,result,callback_status)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    use tdhf_mrsf_z_vector_mod, only: apply_z_operator
+    real(kind=dp), intent(in) :: vector(:)
+    real(kind=dp), intent(out) :: result(:)
+    integer, intent(out) :: callback_status
+    call apply_z_operator(vector,result,z_infos,z_basis,z_grid,z_int2_driver, &
+      z_nocca,z_noccb,z_nbf,z_mo_a,z_mo_b,z_mo_energy,z_fa,z_fb, &
+      z_exchange_scale,z_is_dft)
+    callback_status=0
+    if(any(.not.ieee_is_finite(result))) callback_status=-1
+  end subroutine orbital_hessian_action
+
+  subroutine orbital_hessian_action_batch(vectors,results,callback_status)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    use tdhf_mrsf_z_vector_mod, only: apply_z_operator_batch
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: callback_status
+    call apply_z_operator_batch(vectors,results,z_infos,z_basis,z_grid, &
+      z_int2_driver,z_nocca,z_noccb,z_nbf,z_mo_a,z_mo_b,z_mo_energy, &
+      z_fa,z_fb,z_exchange_scale,z_is_dft)
+    callback_status=0
+    if(any(.not.ieee_is_finite(results))) callback_status=-1
+  end subroutine orbital_hessian_action_batch
+
+  subroutine orbital_preconditioner_batch(vectors,results,callback_status)
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: callback_status
+    integer :: nvec
+
+    nvec=size(vectors,2)
+    callback_status=0
+    if(size(vectors,1)/=z_lzdim .or. &
+       any(shape(results)/=[z_lzdim,nvec]) .or. nvec<=0) then
+      results=0.0_dp
+      callback_status=-1
+      return
+    end if
+    results=vectors*spread(z_preconditioner_ctx,2,nvec)
+    if(any(.not.ieee_is_finite(results))) callback_status=-1
+  end subroutine orbital_preconditioner_batch
 
 end module tdhf_mrsf_hessian_mod

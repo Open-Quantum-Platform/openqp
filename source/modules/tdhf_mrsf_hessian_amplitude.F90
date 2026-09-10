@@ -16,6 +16,19 @@ module tdhf_mrsf_hessian_amplitude_mod
   private
   public :: solve_mrsf_tda_amplitude_derivatives
 
+  ! Callback context for solve_mrsf_tda_amplitude_derivatives.  The physical
+  ! sigma and preconditioner callbacks used to be internal procedures, and
+  ! passing an internal procedure as an actual argument makes gfortran build
+  ! a trampoline on the stack -- an executable-stack liboqp that release
+  ! packaging rejects.  The solver publishes their inputs here for the
+  ! duration of one solve and clears them afterwards.
+  type(information), pointer, save :: amplitude_infos => null()
+  type(int2_compute_t), pointer, save :: amplitude_int2_driver => null()
+  real(kind=dp), pointer, save :: amplitude_mo_a(:,:) => null(), &
+    amplitude_mo_b(:,:) => null(), amplitude_fa(:,:) => null(), &
+    amplitude_fb(:,:) => null(), amplitude_transform(:,:) => null(), &
+    amplitude_preconditioner(:) => null()
+
 contains
 
 !###############################################################################
@@ -29,8 +42,8 @@ contains
     ! enter the Krylov space.
 
     type(information), target, intent(inout) :: infos
-    type(int2_compute_t), intent(inout) :: int2_driver
-    real(kind=dp), intent(in) :: mo_a(:,:),mo_b(:,:),fa(:,:),fb(:,:)
+    type(int2_compute_t), target, intent(inout) :: int2_driver
+    real(kind=dp), intent(in), target :: mo_a(:,:),mo_b(:,:),fa(:,:),fb(:,:)
     real(kind=dp), intent(in) :: omega,x_packed(:),dax_packed(:,:)
     real(kind=dp), intent(out) :: dx_packed(:,:),domega(:),residual_max
     integer, intent(out) :: status
@@ -38,7 +51,7 @@ contains
     integer, intent(in), optional :: max_iterations,restart
 
     real(kind=dp), contiguous, pointer :: mo_energy(:)
-    real(kind=dp), allocatable :: transform(:,:),x_physical(:), &
+    real(kind=dp), allocatable, target :: transform(:,:),x_physical(:), &
       dax_physical(:,:),dx_physical(:,:),packed_diagonal(:), &
       physical_diagonal(:),preconditioner(:),seed_vector(:,:)
     real(kind=dp) :: denominator,solve_tolerance
@@ -112,85 +125,107 @@ contains
     ! the final differentiated-eigenvalue certification can pass.
     solve_iterations=max(600,12*physical)
     if(present(max_iterations)) solve_iterations=max_iterations
+    amplitude_infos=>infos
+    amplitude_int2_driver=>int2_driver
+    amplitude_mo_a=>mo_a
+    amplitude_mo_b=>mo_b
+    amplitude_fa=>fa
+    amplitude_fb=>fb
+    amplitude_transform=>transform
+    amplitude_preconditioner=>preconditioner
     call solve_mrsf_tda_response_batch_matrix_free( &
       apply_physical_sigma_batch,omega,x_physical,dax_physical, &
       dx_physical,domega,residual_max,status,tol=solve_tolerance, &
       maxit=solve_iterations, &
       apply_preconditioner=apply_physical_preconditioner_batch)
+    amplitude_infos=>null()
+    amplitude_int2_driver=>null()
+    amplitude_mo_a=>null()
+    amplitude_mo_b=>null()
+    amplitude_fa=>null()
+    amplitude_fb=>null()
+    amplitude_transform=>null()
+    amplitude_preconditioner=>null()
     if(status/=0) status=-100+status
     if(status==0) dx_packed=matmul(transform,dx_physical)
     deallocate(transform,x_physical,dax_physical,dx_physical, &
       packed_diagonal,physical_diagonal,preconditioner,seed_vector)
 
-  contains
-
-    subroutine apply_physical_sigma(vector,result,operator_status)
-      real(kind=dp), intent(in) :: vector(:)
-      real(kind=dp), intent(out) :: result(:)
-      integer, intent(out) :: operator_status
-      real(kind=dp), allocatable :: packed_vector(:,:),packed_sigma(:,:)
-
-      if(size(vector)/=physical .or. size(result)/=physical) then
-        result=0.0_dp
-        operator_status=-1
-        return
-      end if
-      allocate(packed_vector(packed,1),packed_sigma(packed,1))
-      packed_vector(:,1)=matmul(transform,vector)
-      call apply_mrsf_tda_sigma(infos,int2_driver,mo_a,mo_b,fa,fb, &
-        packed_vector,packed_sigma,operator_status)
-      if(operator_status==0) then
-        result=matmul(transpose(transform),packed_sigma(:,1))
-      else
-        result=0.0_dp
-      end if
-      deallocate(packed_vector,packed_sigma)
-    end subroutine apply_physical_sigma
-
-    subroutine apply_physical_sigma_batch(vectors,results,operator_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: operator_status
-      real(kind=dp), allocatable :: packed_vectors(:,:),packed_sigma(:,:)
-      integer :: nvec
-
-      nvec=size(vectors,2)
-      if(size(vectors,1)/=physical .or. &
-         any(shape(results)/=[physical,nvec]) .or. nvec<=0) then
-        results=0.0_dp
-        operator_status=-1
-        return
-      end if
-      allocate(packed_vectors(packed,nvec),packed_sigma(packed,nvec))
-      packed_vectors=matmul(transform,vectors)
-      call apply_mrsf_tda_sigma(infos,int2_driver,mo_a,mo_b,fa,fb, &
-        packed_vectors,packed_sigma,operator_status)
-      if(operator_status==0) then
-        results=matmul(transpose(transform),packed_sigma)
-      else
-        results=0.0_dp
-      end if
-      deallocate(packed_vectors,packed_sigma)
-    end subroutine apply_physical_sigma_batch
-
-    subroutine apply_physical_preconditioner_batch(vectors,results, &
-                                                   operator_status)
-      real(kind=dp), intent(in) :: vectors(:,:)
-      real(kind=dp), intent(out) :: results(:,:)
-      integer, intent(out) :: operator_status
-      integer :: nvec
-
-      nvec=size(vectors,2)
-      operator_status=0
-      if(size(vectors,1)/=physical .or. &
-         any(shape(results)/=[physical,nvec]) .or. nvec<=0) then
-        results=0.0_dp
-        operator_status=-1
-        return
-      end if
-      results=vectors*spread(preconditioner,2,nvec)
-    end subroutine apply_physical_preconditioner_batch
-
   end subroutine solve_mrsf_tda_amplitude_derivatives
+
+  subroutine apply_physical_sigma(vector,result,operator_status)
+    real(kind=dp), intent(in) :: vector(:)
+    real(kind=dp), intent(out) :: result(:)
+    integer, intent(out) :: operator_status
+    real(kind=dp), allocatable :: packed_vector(:,:),packed_sigma(:,:)
+    integer :: packed,physical
+
+    packed=size(amplitude_transform,1)
+    physical=size(amplitude_transform,2)
+    if(size(vector)/=physical .or. size(result)/=physical) then
+      result=0.0_dp
+      operator_status=-1
+      return
+    end if
+    allocate(packed_vector(packed,1),packed_sigma(packed,1))
+    packed_vector(:,1)=matmul(amplitude_transform,vector)
+    call apply_mrsf_tda_sigma(amplitude_infos,amplitude_int2_driver, &
+      amplitude_mo_a,amplitude_mo_b,amplitude_fa,amplitude_fb, &
+      packed_vector,packed_sigma,operator_status)
+    if(operator_status==0) then
+      result=matmul(transpose(amplitude_transform),packed_sigma(:,1))
+    else
+      result=0.0_dp
+    end if
+    deallocate(packed_vector,packed_sigma)
+  end subroutine apply_physical_sigma
+
+  subroutine apply_physical_sigma_batch(vectors,results,operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    real(kind=dp), allocatable :: packed_vectors(:,:),packed_sigma(:,:)
+    integer :: nvec,packed,physical
+
+    packed=size(amplitude_transform,1)
+    physical=size(amplitude_transform,2)
+    nvec=size(vectors,2)
+    if(size(vectors,1)/=physical .or. &
+       any(shape(results)/=[physical,nvec]) .or. nvec<=0) then
+      results=0.0_dp
+      operator_status=-1
+      return
+    end if
+    allocate(packed_vectors(packed,nvec),packed_sigma(packed,nvec))
+    packed_vectors=matmul(amplitude_transform,vectors)
+    call apply_mrsf_tda_sigma(amplitude_infos,amplitude_int2_driver, &
+      amplitude_mo_a,amplitude_mo_b,amplitude_fa,amplitude_fb, &
+      packed_vectors,packed_sigma,operator_status)
+    if(operator_status==0) then
+      results=matmul(transpose(amplitude_transform),packed_sigma)
+    else
+      results=0.0_dp
+    end if
+    deallocate(packed_vectors,packed_sigma)
+  end subroutine apply_physical_sigma_batch
+
+  subroutine apply_physical_preconditioner_batch(vectors,results, &
+                                                 operator_status)
+    real(kind=dp), intent(in) :: vectors(:,:)
+    real(kind=dp), intent(out) :: results(:,:)
+    integer, intent(out) :: operator_status
+    integer :: nvec,physical
+
+    physical=size(amplitude_transform,2)
+    nvec=size(vectors,2)
+    operator_status=0
+    if(size(vectors,1)/=physical .or. &
+       any(shape(results)/=[physical,nvec]) .or. nvec<=0) then
+      results=0.0_dp
+      operator_status=-1
+      return
+    end if
+    results=vectors*spread(amplitude_preconditioner,2,nvec)
+  end subroutine apply_physical_preconditioner_batch
 
 end module tdhf_mrsf_hessian_amplitude_mod
