@@ -1,7 +1,6 @@
 """Analytic MRSF Z-vector derivative primitives and matrix-free solution."""
 
 from pathlib import Path
-import platform
 import re
 import shutil
 import subprocess
@@ -14,6 +13,8 @@ SOURCE = ROOT / "source/modules/tdhf_mrsf_hessian_z_response.F90"
 SF_SOURCE = ROOT / "source/tdhf_sf_lib.F90"
 RESPONSE_SOURCE = ROOT / "source/modules/tdhf_hessian_response.F90"
 FORTRAN_ORACLE = ROOT / "tests/fortran/test_mrsf_hessian_z_response.F90"
+# Portable DGEMM/DGEMV: CI runners have no LP64 libblas, only ILP64 OpenBLAS.
+REFERENCE_BLAS = ROOT / "tests/fortran/oracle_reference_blas.F90"
 
 
 def _extract_subroutine(source: str, name: str) -> str:
@@ -133,12 +134,9 @@ def test_fortran_directional_oracle_and_matrix_free_solution(tmp_path: Path):
         str(RESPONSE_SOURCE),
         str(SOURCE),
         str(FORTRAN_ORACLE),
+        str(REFERENCE_BLAS),
         "-o",
         str(executable),
     ]
-    if platform.system() == "Darwin":
-        command.extend(["-framework", "Accelerate"])
-    else:
-        command.append("-lblas")
     subprocess.run(command, cwd=tmp_path, check=True)
     subprocess.run([str(executable)], cwd=tmp_path, check=True)

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import platform
 import re
 import shutil
 import subprocess
@@ -31,6 +30,8 @@ FORTRAN_DRIVER = (
 )
 MRSF_SOURCE = ROOT / "source/tdhf_mrsf_lib.F90"
 CONVENTION_SOURCE = ROOT / "source/modules/tdhf_mrsf_conventions.F90"
+# Portable DGEMM/DGEMV: CI runners have no LP64 libblas, only ILP64 OpenBLAS.
+REFERENCE_BLAS = ROOT / "tests/fortran/oracle_reference_blas.F90"
 
 C, O1, O2, V = range(4)
 NBF = 4
@@ -302,37 +303,6 @@ module types
   end type information
 end module types
 
-subroutine dgemm(transa,transb,m,n,k,alpha,a,lda,b,ldb,beta,c,ldc)
-  use precision, only: dp
-  implicit none
-  character(len=1), intent(in) :: transa,transb
-  integer, intent(in) :: m,n,k,lda,ldb,ldc
-  real(kind=dp), intent(in) :: alpha,beta
-  real(kind=dp), intent(in) :: a(lda,*),b(ldb,*)
-  real(kind=dp), intent(inout) :: c(ldc,*)
-  real(kind=dp) :: left,right,total
-  integer :: i,j,l
-  do j=1,n
-    do i=1,m
-      total=0.0_dp
-      do l=1,k
-        if (transa=='n' .or. transa=='N') then
-          left=a(i,l)
-        else
-          left=a(l,i)
-        end if
-        if (transb=='n' .or. transb=='N') then
-          right=b(l,j)
-        else
-          right=b(j,l)
-        end if
-        total=total+left*right
-      end do
-      c(i,j)=alpha*total+beta*c(i,j)
-    end do
-  end do
-end subroutine dgemm
-
 module production_mrsf_extract
   implicit none
 contains
@@ -406,13 +376,10 @@ def production_result(tmp_path_factory: pytest.TempPathFactory) -> ProductionRes
         str(extracted),
         str(CONVENTION_SOURCE),
         str(FORTRAN_DRIVER),
+        str(REFERENCE_BLAS),
         "-o",
         str(executable),
     ]
-    if platform.system() == "Darwin":
-        command.extend(["-framework", "Accelerate"])
-    else:
-        command.append("-lblas")
     subprocess.run(command, cwd=work, check=True)
     output = subprocess.check_output([str(executable)], cwd=work, text=True)
     return _parse_fortran_output(output)
