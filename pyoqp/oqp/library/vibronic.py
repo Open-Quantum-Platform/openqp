@@ -145,8 +145,10 @@ class HarmonicVibronicModel:
             raise ValueError(f"J must have shape ({nmode}, {nmode})")
         if displacement.shape != (nmode,):
             raise ValueError(f"K must have shape ({nmode},)")
-        if orthogonality_tolerance < 0.0:
-            raise ValueError("orthogonality_tolerance must be non-negative")
+        # Written to reject NaN too: every comparison with NaN is false, which
+        # would accept any J against the residual check below.
+        if not np.isfinite(orthogonality_tolerance) or orthogonality_tolerance < 0.0:
+            raise ValueError("orthogonality_tolerance must be non-negative and finite")
         left = rotation @ rotation.T - np.eye(nmode)
         right = rotation.T @ rotation - np.eye(nmode)
         residual = float(
@@ -877,8 +879,10 @@ def harmonic_vibronic_spectrum(
     dipole, derivative_values = _validate_transition_inputs(
         model, transition, transition_dipole_derivative
     )
-    if not max_transitions > 0:  # also rejects NaN, which compares false
-        raise ValueError("max_transitions must be positive")
+    if not np.isfinite(max_transitions) or max_transitions <= 0:
+        # NaN compares false against every bound and +inf is never exceeded;
+        # either would silently disable the cap.
+        raise ValueError("max_transitions must be positive and finite")
     populated_initial = sum(1 for population in populations if population != 0.0)
     transition_count = populated_initial * len(final_states)
     if transition_count > max_transitions:

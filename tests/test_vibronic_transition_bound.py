@@ -61,8 +61,8 @@ class VibronicTransitionBound(unittest.TestCase):
             coordinate_unit="sqrt(me)*bohr",
             coordinate_phase_convention="synthetic one-mode test",
         )
-        # NaN compares false against every bound, so it needs its own case.
-        for bound in (0, float("nan")):
+        # NaN compares false against every bound and +inf is never exceeded.
+        for bound in (0, float("nan"), float("inf")):
             with self.subTest(max_transitions=bound):
                 with self.assertRaisesRegex(ValueError, "max_transitions must be positive"):
                     vibronic.harmonic_vibronic_spectrum(

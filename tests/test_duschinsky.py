@@ -282,6 +282,19 @@ class TestDuschinskyTransformation(unittest.TestCase):
             {(0, 1): 1.1, (0, 2): 1.7, (1, 2): 2.3},
         )
 
+    def test_non_finite_orthogonality_tolerance_is_rejected(self):
+        for tolerance in (float("nan"), float("inf")):
+            with self.subTest(tolerance=tolerance):
+                with self.assertRaisesRegex(ValueError, "orthogonality_tolerance"):
+                    self.duschinsky.compute_duschinsky(
+                        self.ground_geometry,
+                        self.ground_geometry,
+                        self.masses,
+                        self.ground_hessian,
+                        self.ground_hessian,
+                        orthogonality_tolerance=tolerance,
+                    )
+
     def test_identical_surfaces_give_identity_and_zero_shift(self):
         result = self.duschinsky.compute_duschinsky(
             self.ground_geometry,

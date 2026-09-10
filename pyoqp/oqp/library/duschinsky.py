@@ -648,8 +648,9 @@ def compute_duschinsky(
     K = excited.mass_weighted_modes.T @ mass_weighted_shift
     diagnostics = orthogonality_diagnostics(J)
     if orthogonality_tolerance is not None:
-        if orthogonality_tolerance < 0.0:
-            raise ValueError("orthogonality_tolerance must be non-negative")
+        # Reject NaN and +inf too: either would wave any residual through below.
+        if not np.isfinite(orthogonality_tolerance) or orthogonality_tolerance < 0.0:
+            raise ValueError("orthogonality_tolerance must be non-negative and finite")
         if diagnostics.max_abs > orthogonality_tolerance:
             raise ValueError(
                 "Duschinsky matrix orthogonality residual "
