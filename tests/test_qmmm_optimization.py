@@ -162,7 +162,8 @@ class TestMovableSetAndState(unittest.TestCase):
         self.assertIn("self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))", src)
         self.assertIn("max(1, int(opt.get(\"maxit\", 30)))", src)
         self.assertIn('self._forcefield_paths(qmmm_cfg.get("forcefield_files", ""))', src)
-        self.assertIn('self.coordsys = "cartesian" if coordsys == "auto" else coordsys', src)
+        self.assertIn('self.coordsys = self._resolve_coordsys(eng.get("coordsys", "auto"))', src)
+        self.assertIn('return "cartesian"', src)                       # auto means Cartesian
 
     def test_istate_is_the_gradient_root(self):
         src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
@@ -484,12 +485,14 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
             inp.write_text(text)
             cwd = os.getcwd(); os.chdir(tmp)
             try:
+                self._files = []
                 ctx = mock.patch.object(QMMM_Opt, "_energy_force", patch_energy) if patch_energy else None
                 if ctx:
                     ctx.start()
                 try:
                     r = Runner(project="c", input_file=str(inp), log=str(Path(tmp) / "c.log"), silent=1, usempi=False)
                     r.run()
+                    self._files = sorted(os.listdir(tmp))
                 finally:
                     if ctx:
                         ctx.stop()
@@ -502,10 +505,12 @@ class TestConstrainedAndReevaluatedResults(unittest.TestCase):
         return deck.read_text().replace("save_mol=true", "save_mol=false")
 
     def test_hbond_distances_of_movable_mm_atoms_are_held(self):
-        text = (self._deck().replace("maxit=12", "maxit=3").replace("qmmm_radius=0.0", "qmmm_radius=3.0")
+        text = (self._deck().replace("maxit=12", "maxit=3").replace("qmmm_radius=0.0", "qmmm_radius=3.0\nqmmm_output=held.pdb")
                 .replace("cutoff=NoCutoff", "cutoff=NoCutoff\nconstraints=HBonds"))
         r = self._run(text)
         o = r.qmmm_opt
+        self.assertEqual(r.mol.qmmm_optimization["output"], "held.pdb")      # [optimize] qmmm_output honoured
+        self.assertIn("held.pdb", self._files)
         self.assertGreater(len(o.frozen_pairs), 0)
         self.assertEqual(r.mol.qmmm_optimization["constraints"], len(o.frozen_pairs))
         import openmm.unit as unit
@@ -611,6 +616,44 @@ class TestVirtualSites(unittest.TestCase):
         Y = o._with_virtual_sites(X2)
         np.testing.assert_allclose(Y[ep] - X[ep], [0.05, -0.02, 0.01], atol=1e-9)
         np.testing.assert_allclose(Y[parents], X2[parents], atol=0)
+
+
+class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
+    def _report(self, method="hf", istate=0, coordsys="auto"):
+        from oqp.utils import input_checker as chk
+        cfg = {"input": {"runtype": "optimize", "qmmm_flag": True, "method": method, "basis": "6-31g",
+                         "system": "ala.pdb 9 10 17 18 19", "charge": 0},
+               "optimize": {"lib": "oqp", "istate": istate}, "oqp": {"coordsys": coordsys},
+               "qmmm": {"pdb_file": "ala.pdb", "qm_atoms": "8,9,16,17,18", "forcefield_files": "amber14-all.xml"}}
+        report = chk.CheckReport()
+        chk._check_optimize(cfg, report)
+        return [(d.severity, d.path) for d in report.diagnostics]
+
+    def test_checker_rejects_negative_or_ground_tdhf_state(self):
+        self.assertIn(("ERROR", "optimize.istate"), self._report(istate=-1))
+        self.assertIn(("ERROR", "optimize.istate"), self._report(method="tdhf", istate=0))
+        self.assertIn(("ERROR", "optimize.istate"), self._report(method="tdhf", istate=-1))
+        self.assertNotIn(("ERROR", "optimize.istate"), self._report(istate=0))
+        self.assertNotIn(("ERROR", "optimize.istate"), self._report(method="tdhf", istate=2))
+
+    def test_checker_rejects_dlc_and_ric(self):
+        for cs in ("dlc", "ric", "internal"):
+            self.assertIn(("ERROR", "oqp.coordsys"), self._report(coordsys=cs), cs)
+        for cs in ("auto", "cartesian", "cart", "tric"):
+            self.assertNotIn(("ERROR", "oqp.coordsys"), self._report(coordsys=cs), cs)
+
+    @unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
+    def test_driver_guards(self):
+        self.assertEqual(QMMM_Opt._resolve_coordsys("auto"), "cartesian")
+        self.assertEqual(QMMM_Opt._resolve_coordsys("TRIC"), "tric")
+        for cs in ("dlc", "ric"):
+            with self.assertRaisesRegex(ValueError, "translations and rotations"):
+                QMMM_Opt._resolve_coordsys(cs)
+        QMMM_Opt._validate_istate(0, "hf")
+        QMMM_Opt._validate_istate(1, "tdhf")
+        for istate, method in ((-1, "hf"), (0, "tdhf"), (-2, "tdhf")):
+            with self.assertRaises(ValueError):
+                QMMM_Opt._validate_istate(istate, method)
 
 
 class TestNativeControlsCheckedForQmmmOptimisation(unittest.TestCase):

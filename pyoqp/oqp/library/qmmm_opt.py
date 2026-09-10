@@ -78,6 +78,7 @@ class QMMM_Opt:
         # ground state of an HF/DFT run, n = the n-th TDHF/MRSF root); the
         # driver reads the root it differentiates from [properties] grad.
         self.istate = int(opt.get("istate", 0))
+        self._validate_istate(self.istate, mol.config["input"].get("method", "hf"))
         mol.config.setdefault("properties", {})["grad"] = [self.istate]
 
         # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
@@ -107,6 +108,31 @@ class QMMM_Opt:
         self._last_gradient = None      # full-system gradient of the last evaluation
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _resolve_coordsys(value):
+        """[oqp] coordsys for a QM/MM optimisation.  'auto' means Cartesian.
+        Cartesian and TRIC keep the collective translations and rotations of
+        the movable atoms, which are real degrees of freedom against the fixed
+        MM atoms and the periodic cell; DLC/RIC drop them (the engine's
+        isolated-molecule assumption), so they are rejected."""
+        cs = str(value or "auto").strip().lower()
+        if cs == "auto":
+            return "cartesian"
+        if cs in ("cart", "cartesian", "tric"):
+            return cs
+        raise ValueError(f"[oqp] coordsys={value!r} is not available for a QM/MM optimisation: DLC/RIC "
+                         "remove the collective translations and rotations of the movable atoms, which "
+                         "move against the fixed MM atoms; use auto (Cartesian), cartesian or tric.")
+
+    @staticmethod
+    def _validate_istate(istate, method):
+        """[optimize] istate: >= 0, and >= 1 for TDHF/MRSF (a response root,
+        1 = the lowest); a negative root would index the state arrays from the end."""
+        tdhf = str(method or "").strip().lower() == "tdhf"
+        if istate < 0 or (tdhf and istate < 1):
+            raise ValueError(f"[optimize] istate={istate} is not a valid state for a QM/MM optimisation: "
+                             + ("use >= 1 (1 = the lowest MRSF/TDHF root)." if tdhf else "use >= 0."))
+
     def _validate_qm_molecule_layout(self):
         """The QM Molecule was built from [input] system before this driver
         existed.  It must be the [qmmm] selection in topology order followed by
@@ -285,8 +311,7 @@ class QMMM_Opt:
         # [oqp] coordsys: 'auto' means Cartesian here (the movable set can be
         # several disconnected fragments, and Cartesian coordinates are safe
         # for that); an explicit choice is passed to the engine as requested.
-        coordsys = str(eng.get("coordsys", "auto") or "auto").strip().lower()
-        self.coordsys = "cartesian" if coordsys == "auto" else coordsys
+        self.coordsys = self._resolve_coordsys(eng.get("coordsys", "auto"))
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
                              f"{len(mv)} movable atoms (radius {self.radius:.1f} A, "
                              f"{len(self.frozen_pairs)} constrained distances), "

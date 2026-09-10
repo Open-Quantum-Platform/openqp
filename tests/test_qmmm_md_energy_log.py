@@ -105,6 +105,26 @@ class TestRigidWaterIsWired(unittest.TestCase):
 
 
 @unittest.skipUnless(_HAVE, "OpenMM unavailable")
+class TestRigidWaterLookupInASmallBox(unittest.TestCase):
+    """The constraint lookup is built without a cutoff, so a periodic box
+    shorter than 2 nm (below twice OpenMM's default 1 nm cutoff) works."""
+
+    def test_small_periodic_box(self):
+        import openmm as mm
+        import openmm.app as app
+        import openmm.unit as u
+        from oqp.library.qmmm_md import _rigid_water_constraints
+        pdb = app.PDBFile(str(EXAMPLES / "formaldehyde_water.pdb"))
+        top = pdb.topology
+        top.setPeriodicBoxVectors(u.Quantity([mm.Vec3(1.8, 0, 0), mm.Vec3(0, 1.8, 0), mm.Vec3(0, 0, 1.8)], u.nanometer))
+        ff = app.ForceField(str(EXAMPLES / "formaldehyde.xml"), str(EXAMPLES / "tip3p.xml"))
+        cons = _rigid_water_constraints(ff, top, [0, 1, 2, 3])
+        self.assertEqual(len(cons), 15)                              # 5 TIP3P waters x 3
+        self.assertTrue(all(p1 > 3 and p2 > 3 for p1, p2, _ in cons))
+        self.assertIn("_rigid_water_constraints(self.forcefield, self.pdb.topology, self.qm_atoms)", SRC.read_text())
+
+
+@unittest.skipUnless(_HAVE, "OpenMM unavailable")
 class TestReportRow(unittest.TestCase):
     """The driver's own CSV writer: header, step-0 row, cadence, columns."""
 

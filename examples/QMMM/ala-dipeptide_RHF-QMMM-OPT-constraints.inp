@@ -7,7 +7,8 @@
 # those MM atoms are held at their starting lengths by the native optimizer's
 # frozen distances (tangent projection plus a SHAKE-like correction); QM atoms
 # are never constrained.  Six steps with the recovery stage off keep this a
-# short, fixed pin; the reference records the geometry reached.
+# short, fixed pin; the reference records the geometry reached.  The
+# full-system geometry goes to the file named by [optimize] qmmm_output.
 [input]
 system=ala.pdb 9 10 17 18 19
 charge=0
@@ -29,6 +30,7 @@ conv=1e-9
 istate=0
 maxit=6
 qmmm_radius=3.0
+qmmm_output=ala-dipeptide_RHF-QMMM-OPT-constraints.held.pdb
 [oqp]
 auto_recovery=false
 

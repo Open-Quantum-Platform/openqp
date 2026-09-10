@@ -9,6 +9,24 @@ import sys
 from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
+def _rigid_water_constraints(forcefield, topology, qm_atoms):
+    """(i, j, distance) water constraints of an OpenMM rigidWater system of
+    this topology, QM atoms excluded.  Built without a cutoff: constraints do
+    not depend on the nonbonded treatment, and a periodic reference would tie
+    this lookup to OpenMM's default 1 nm cutoff, which a box shorter than
+    2 nm cannot hold."""
+    ref = forcefield.createSystem(topology, nonbondedMethod=app.NoCutoff,
+                                  constraints=None, rigidWater=True)
+    qm = set(int(i) for i in qm_atoms)
+    out = []
+    for k in range(ref.getNumConstraints()):
+        p1, p2, dist = ref.getConstraintParameters(k)
+        if p1 in qm or p2 in qm:
+            continue
+        out.append((p1, p2, dist))
+    return out
+
+
 def _to_kJmol(energy):
     """Energy from the force backend (a Quantity or a bare float already in
     kJ/mol) as a float in kJ/mol."""
@@ -449,14 +467,7 @@ class QMMM_MD:
         # constrained geometry.
         self.n_constraints = 0
         if self.rigidwater:
-            ref = self.forcefield.createSystem(
-                self.pdb.topology, nonbondedMethod=self.cutoff,
-                constraints=None, rigidWater=True)
-            qm = set(int(i) for i in self.qm_atoms)
-            for k in range(ref.getNumConstraints()):
-                p1, p2, dist = ref.getConstraintParameters(k)
-                if p1 in qm or p2 in qm:
-                    continue
+            for p1, p2, dist in _rigid_water_constraints(self.forcefield, self.pdb.topology, self.qm_atoms):
                 self.system_md.addConstraint(p1, p2, dist)
                 self.n_constraints += 1
             print(f"[QM/MM MD] rigid water: {self.n_constraints} MM constraints applied "

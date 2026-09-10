@@ -5950,6 +5950,32 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",
                 )
+            _istate_raw = _get(config, "optimize", "istate", 0)
+            try:
+                _istate_q = int(_istate_raw)
+            except (TypeError, ValueError):
+                _istate_q = -1
+            if _istate_q < 0 or (_as_lower(_get(config, "input", "method", "hf")) == "tdhf" and _istate_q < 1):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "A QM/MM optimisation needs a valid state: istate >= 0, and >= 1 for method=tdhf "
+                    "(an MRSF/TDHF root, 1 = the lowest).",
+                    value=str(_istate_raw),
+                    expected=">= 1 for tdhf, >= 0 otherwise",
+                    action="Set [optimize] istate to the root to optimise.",
+                )
+            _coordsys_q = str(_get(config, "oqp", "coordsys", "auto") or "auto").strip().lower()
+            if _coordsys_q not in ("auto", "cart", "cartesian", "tric"):
+                report.add(
+                    "ERROR",
+                    "oqp.coordsys",
+                    "DLC/RIC coordinates remove the collective translations and rotations of the movable "
+                    "atoms, which move against the fixed MM atoms in a QM/MM optimisation.",
+                    value=_coordsys_q,
+                    expected="auto, cartesian or tric",
+                    action="Set [oqp] coordsys=auto (Cartesian) or tric.",
+                )
             if str(_get(config, "optimize", "lib", "oqp")).strip().lower() != "oqp":
                 report.add(
                     "WARNING",
