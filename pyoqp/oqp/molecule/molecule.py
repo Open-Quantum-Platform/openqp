@@ -3290,7 +3290,7 @@ class Molecule:
         if np.amax(np.abs(in_atoms - ld_atoms)) > 0:
             exit('loading data from json, the types of atoms does not match!')
 
-        self.put_data(data)
+        self.put_data(data, json_layout=True)
         self.update_config_json()
 
         if guess_geom:
@@ -3472,14 +3472,22 @@ class Molecule:
             })
         return merged
 
-    def put_data(self, data):
+    def put_data(self, data, json_layout=False):
         # convert list to data
+        # TD response vectors use the documented DRF x state axes only in the
+        # JSON that save_data writes (json_array).  get_data() snapshots and
+        # NAMD checkpoints keep the native tag-array layout, and decoding them
+        # would permute their elements a second time, so only load_data asks
+        # for the JSON decode.
         # Keep loaded tracking arrays available as history for a subsequent
         # overlap calculation, but never publish them as this run's result.
         self._state_tracking_fresh = False
         for key in self.tag:
             try:
-                self.data[key] = tag_array_from_json(key, data[key])
+                if json_layout:
+                    self.data[key] = tag_array_from_json(key, data[key])
+                else:
+                    self.data[key] = np.array(data[key])
 
             except KeyError:
                 continue

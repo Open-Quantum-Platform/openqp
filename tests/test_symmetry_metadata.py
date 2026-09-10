@@ -671,6 +671,34 @@ class TestSymmetryMetadata(unittest.TestCase):
             infrared, _ = self._read_intensities(
                 molecule, {'hess': {'vibrational_intensities': False}})
             self.assertEqual(infrared.size, 0)
+    def test_put_data_decodes_td_vectors_only_from_the_json_layout(self):
+        # get_data() snapshots (BasisOverlap) and NAMD checkpoints hold the
+        # native tag-array layout; only save_data's JSON uses DRF x state axes.
+        molecule_module = load_molecule_module()
+        spec = importlib.util.spec_from_file_location(
+            'openqp_json_utils_put_data',
+            Path(__file__).resolve().parents[1] / 'pyoqp' / 'oqp' / 'utils' / 'json_utils.py')
+        json_utils = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(json_utils)
+        molecule_module.json_array = json_utils.json_array
+        molecule_module.tag_array_from_json = json_utils.tag_array_from_json
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.tag = ['OQP::td_bvec_mo', 'OQP::SM']
+        molecule.config_tag = {}
+        molecule.config = {}
+        molecule.data = {}
+        # Three DRFs and two states in the native state-major buffer layout.
+        native = np.array([[11.0, 12.0], [13.0, 21.0], [22.0, 23.0]])
+        overlap = np.array([[1.0, 2.0], [3.0, 4.0]])
+
+        molecule.put_data({'OQP::td_bvec_mo': native.tolist(), 'OQP::SM': overlap.tolist()})
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
+        np.testing.assert_array_equal(molecule.data['OQP::SM'], overlap)
+
+        documented = json_utils.json_array('OQP::td_bvec_mo', native)
+        molecule.put_data({'OQP::td_bvec_mo': documented}, json_layout=True)
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
+
 
 if __name__ == '__main__':
     unittest.main()
