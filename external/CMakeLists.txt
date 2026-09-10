@@ -277,7 +277,7 @@ oqp_reuse_or_build(libint2 "${LIBINT2_LIBRARY}" "${LIBINT2_BUILD_DIR}/fortran" "
 if(NOT TARGET libint2)
 ExternalProject_Add(libint2
     PREFIX ${LIBINT2_PREFIX}
-    URL https://qchemlab.knu.ac.kr/vmironov/oqp-libint/-/archive/v${_OQP_LIBINT2_VERSION}/oqp-libint-v${_OQP_LIBINT2_VERSION}.tar.gz
+    URL https://github.com/Open-Quantum-Platform/oqp-libint/archive/refs/tags/v${_OQP_LIBINT2_VERSION}.tar.gz
     TLS_VERIFY TRUE
     SOURCE_DIR ${LIBINT2_SOURCE_DIR}
     BINARY_DIR ${LIBINT2_BUILD_DIR}
