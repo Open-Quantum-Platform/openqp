@@ -541,7 +541,8 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
     def test_mrsf_tddft_semilocal_analytical_hessian_is_supported(self):
         config = {
-            "input": {"method": "tdhf", "functional": "B3LYP"},
+            # Bare B3LYP is ambiguous and aborts in LibXC; use the B3LYP5 spelling.
+            "input": {"method": "tdhf", "functional": "B3LYPV5"},
             "scf": {"type": "rohf", "multiplicity": 3},
             "tdhf": {"type": "mrsf", "multiplicity": 1},
             "hess": {"state": 1},

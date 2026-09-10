@@ -6730,6 +6730,39 @@ def _mrsf_property_stage_problem(config: dict[str, Any]) -> str | None:
             "would fail; use raman_backend=truncated_sos, or [hess] "
             "vibrational_intensities=false."
         )
+    try:
+        from oqp.library.mrsf_spectroscopy_fd import MRSFPropertyFDRequest  # noqa: PLC0415
+    except Exception:  # pragma: no cover - property module unavailable
+        return None
+    # Validate the options exactly as the property stage will.  The runtime
+    # builds this request only after the Hessian, and a rejection there just
+    # leaves the intensities empty.  Casts mirror _compute_vibrational_intensities.
+    try:
+        MRSFPropertyFDRequest.create(
+            electronic_method="MRSF-TDDFT",
+            electronic_state="preflight",
+            state_index=target,
+            normal_modes=[[1.0, 0.0, 0.0]],
+            displacement=float(_get(config, "hess", "property_dx", 1.0e-3)),
+            coordinate_phase_convention="preflight",
+            minimum_state_overlap=float(_get(config, "hess", "property_min_overlap", 0.99)),
+            minimum_tracking_margin=float(_get(config, "hess", "property_min_margin", 0.05)),
+            fd_relative_tolerance=float(
+                _get(config, "hess", "property_fd_relative_tolerance", 0.05)),
+            fd_absolute_tolerance=float(
+                _get(config, "hess", "property_fd_absolute_tolerance", 1.0e-6)),
+            polarizability_backend=str(_get(config, "hess", "raman_backend", "truncated_sos")),
+            sos_tail_states=int(_get(config, "hess", "raman_sos_tail_states", 2)),
+            sos_tail_relative_tolerance=float(
+                _get(config, "hess", "raman_sos_tail_tolerance", 0.05)),
+            sos_minimum_gap_hartree=float(_get(config, "hess", "raman_sos_min_gap", 1.0e-5)),
+        )
+    except (TypeError, ValueError) as exc:
+        return (
+            f"the [hess] MRSF vibrational-property options are invalid ({exc}), so "
+            "every property step would fail after the Hessian; correct them, or set "
+            "[hess] vibrational_intensities=false."
+        )
     return None
 
 
@@ -6738,10 +6771,13 @@ def _mrsf_raman_tail_shortfall(config: dict[str, Any]) -> str | None:
     scope = _mrsf_property_stage_scope(config)
     if scope is None:
         return None
-    if _as_lower(_get(config, "hess", "raman_backend", "truncated_sos")) != "truncated_sos":
+    if str(_get(config, "hess", "raman_backend", "truncated_sos")) != "truncated_sos":
         return None
     target, nstate = scope
-    tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    try:
+        tail = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    except (TypeError, ValueError):
+        return None
     if nstate >= tail + 3 and target <= nstate - tail:
         return None
     return (
@@ -6790,9 +6826,18 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     if method == "tdhf":
         if td_type == "mrsf":
             verified_mrsf_semilocal = {
-                "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp", "b3lyp5",
+                "svwn", "svwn5", "lda", "blyp", "pbe", "b3lyp5",
                 "bhhlyp", "pbe0",
             }
+            # Bare B3LYP is ambiguous: source/dftlib/libxc.F90 aborts on it and
+            # asks for B3LYPV1R, B3LYPV3 or B3LYPV5.
+            if functional == "b3lyp":
+                return (
+                    "unsupported_feature",
+                    "functional=b3lyp is ambiguous and OpenQP's LibXC interface "
+                    "aborts on it; MRSF-TDDFT analytic Hessians are verified with "
+                    "B3LYP5 (functional=b3lyp5 or b3lypv5).",
+                )
             # Equivalent LibXC spellings (source/dftlib/libxc.F90), mapped the
             # way the closed-shell RPA branch below maps them; an exact-name
             # lookup rejected otherwise identical supported calculations.
@@ -6990,19 +7035,38 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
         return
 
     if method == "tdhf" and _as_lower(_get(config, "tdhf", "type", "")) == "mrsf":
+        blocking = None
         if hess_type == "numerical":
-            # Analytic requests get this through analytic_hessian_capability.
-            problem = _mrsf_property_stage_problem(config)
-            if problem:
+            target = int(_get(config, "hess", "state", 0))
+            nstate = int(_get(config, "tdhf", "nstate", 1))
+            if (target > 0 and nstate <= target
+                    and not _is_true(_get(config, "hess", "read", False))):
+                # numerical_hess tracks the target root at every displacement
+                # whether or not intensities are requested.
+                blocking = (
+                    f"a numerical MRSF Hessian tracks hess.state={target} at every "
+                    "displacement against a higher solved root; set "
+                    f"tdhf.nstate > {target}."
+                )
+            else:
+                # Analytic requests get this through analytic_hessian_capability.
+                blocking = _mrsf_property_stage_problem(config)
+            if blocking:
                 report.add(
                     "ERROR",
                     "hess.state",
-                    problem,
+                    blocking,
                     value=f"state={state}",
-                    expected="a vibrational property stage that can run",
-                    action="Adjust tdhf.nstate or [hess] raman_backend, or set [hess] vibrational_intensities=false.",
+                    expected="an MRSF Hessian whose root tracking and property stage can run",
+                    action="Adjust tdhf.nstate or the [hess] property options, or set [hess] vibrational_intensities=false.",
                 )
-        shortfall = _mrsf_raman_tail_shortfall(config)
+        elif hess_type == "analytical":
+            capability, reason = analytic_hessian_capability(config)
+            if capability != "supported":
+                blocking = reason  # reported by the analytical branch below
+        # A request that is already rejected gets no Raman-tail warning; its
+        # "IR is still computed" text would be wrong.
+        shortfall = None if blocking else _mrsf_raman_tail_shortfall(config)
         if shortfall:
             report.add(
                 "WARNING",

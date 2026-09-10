@@ -102,6 +102,40 @@ class MrsfHessianPreflight(unittest.TestCase):
         report = check_input_values(request, raise_error=False, emit=False)
         self.assertTrue(report.ok, report.to_text())
 
+    def test_bare_b3lyp_is_rejected_as_ambiguous(self):
+        # source/dftlib/libxc.F90 aborts on bare B3LYP and asks for a variant.
+        status, reason = analytic_hessian_capability(_mrsf_request("b3lyp"))
+        self.assertEqual(status, "unsupported_feature")
+        self.assertIn("ambiguous", reason)
+        self.assertEqual(analytic_hessian_capability(_mrsf_request("b3lyp5"))[0], "supported")
+
+    def test_numerical_root_check_does_not_depend_on_intensities(self):
+        # numerical_hess tracks the target root at every displacement anyway.
+        request = _checked_request(nstate=1, type="numerical", vibrational_intensities=False)
+        report = check_input_values(request, raise_error=False, emit=False)
+        self.assertFalse(report.ok)
+        self.assertIn("tdhf.nstate", report.to_text())
+
+    def test_invalid_mrsf_property_options_fail_preflight(self):
+        # MRSFPropertyFDRequest.create rejects these, but only after the Hessian.
+        for options in ({"raman_backend": "truncated-SOS"}, {"raman_backend": "TRUNCATED_SOS"},
+                        {"raman_sos_tail_states": 0}, {"property_dx": -1.0e-3},
+                        {"property_min_overlap": 0.5}):
+            with self.subTest(**options):
+                request = _mrsf_request("bhhlyp")
+                request["input"]["runtype"] = "hess"
+                request["hess"].update(options)
+                status, reason = analytic_hessian_capability(request)
+                self.assertEqual(status, "unsupported_feature")
+                self.assertIn("property options are invalid", reason)
+                request["hess"]["vibrational_intensities"] = False
+                self.assertEqual(analytic_hessian_capability(request)[0], "supported")
+
+    def test_rejected_requests_get_no_raman_tail_warning(self):
+        report = check_input_values(_checked_request(nstate=1), raise_error=False, emit=False)
+        self.assertFalse(report.ok)
+        self.assertNotIn("raman_sos_tail_states", report.to_text())
+
     def test_shipped_analytic_mrsf_decks_still_pass(self):
         # examples/HESS/*MRSF_ANALYTIC_HESSIAN*.inp: runtype=hess, state=3, nstate=6.
         for functional in ("bhhlyp", ""):
