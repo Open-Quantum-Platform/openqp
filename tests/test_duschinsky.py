@@ -282,6 +282,19 @@ class TestDuschinskyTransformation(unittest.TestCase):
             {(0, 1): 1.1, (0, 2): 1.7, (1, 2): 2.3},
         )
 
+    def test_non_finite_hessian_symmetry_tolerance_is_rejected(self):
+        asymmetric = np.array(self.ground_hessian, dtype=float, copy=True)
+        asymmetric[0, 1] += 1.0
+        with self.assertRaisesRegex(ValueError, "is not symmetric"):
+            self.duschinsky.projected_normal_modes(
+                self.ground_geometry, self.masses, asymmetric)
+        for tolerance in (float("nan"), float("inf")):
+            with self.subTest(tolerance=tolerance):
+                with self.assertRaisesRegex(ValueError, "hessian_symmetry_tolerance"):
+                    self.duschinsky.projected_normal_modes(
+                        self.ground_geometry, self.masses, asymmetric,
+                        hessian_symmetry_tolerance=tolerance)
+
     def test_non_finite_orthogonality_tolerance_is_rejected(self):
         for tolerance in (float("nan"), float("inf")):
             with self.subTest(tolerance=tolerance):

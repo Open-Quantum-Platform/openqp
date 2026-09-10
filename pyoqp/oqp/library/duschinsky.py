@@ -214,8 +214,10 @@ def _validate_hessian(
         raise ValueError(
             f"{name} must have shape ({ncoord}, {ncoord}), got {array.shape}"
         )
-    if symmetry_tolerance < 0.0:
-        raise ValueError("hessian_symmetry_tolerance must be non-negative")
+    # Reject NaN and +inf too: either would wave any asymmetry through the
+    # residual check below, and the Hessian would then be silently symmetrized.
+    if not np.isfinite(symmetry_tolerance) or symmetry_tolerance < 0.0:
+        raise ValueError("hessian_symmetry_tolerance must be non-negative and finite")
     absolute_residual = float(np.max(np.abs(array - array.T), initial=0.0))
     scale = max(1.0, float(np.max(np.abs(array), initial=0.0)))
     relative_residual = absolute_residual / scale
