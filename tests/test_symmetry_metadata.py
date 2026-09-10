@@ -561,9 +561,7 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertEqual(data['hessian_cache_version'], 3)
         self.assertEqual(data['hessian_request']['version'], 3)
 
-    def test_cached_intensities_follow_the_vibrational_property_options(self):
-        # [hess] is outside the Hessian identity, so the options that produced
-        # cached IR/Raman intensities must be matched separately on read.
+    def _intensity_cache_molecule(self, config):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
         molecule.symmetry_metadata = {'status': 'disabled', 'point_group': 'c1', 'subgroup': 'c1',
@@ -573,7 +571,7 @@ class TestSymmetryMetadata(unittest.TestCase):
                                       'strict': False, 'tolerance': 1e-5}
         molecule.mol_energy = types.SimpleNamespace(energy=-1.23)
         molecule.idx = 1
-        molecule.config = {}
+        molecule.config = config
         molecule.mrsf_ekt_results_by_kind = {}
 
         class _StubData:
@@ -595,46 +593,84 @@ class TestSymmetryMetadata(unittest.TestCase):
         molecule.get_atoms = lambda: np.array([1, 1, 8], dtype=int)
         molecule.get_system = lambda: np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
         molecule.get_mass = lambda: np.array([1.0, 1.0, 16.0])
+        return molecule
 
-        def read_with(config):
-            molecule.config = config
-            molecule.infrared_intensities = None
-            molecule.read_freqs()
-            return molecule.infrared_intensities, molecule.vibrational_intensity_metadata
+    @staticmethod
+    def _read_intensities(molecule, config):
+        molecule.config = config
+        molecule.infrared_intensities = None
+        molecule.read_freqs()
+        return molecule.infrared_intensities, molecule.vibrational_intensity_metadata
 
+    @staticmethod
+    def _drop_property_record(tmp):
+        sidecar = Path(tmp) / 'run.hess.json'
+        data = json.loads(sidecar.read_text())
+        data.pop('vibrational_property_request')
+        sidecar.write_text(json.dumps(data))
+
+    def test_cached_mrsf_intensities_follow_the_property_options(self):
+        # [hess] is outside the Hessian identity, so the MRSF options that
+        # produced cached IR/Raman intensities must be matched on read.
+        def mrsf(**hess):
+            return {'tdhf': {'type': 'mrsf'}, 'hess': hess}
+
+        molecule = self._intensity_cache_molecule(mrsf())
         with tempfile.TemporaryDirectory() as tmp:
             molecule.log = str(Path(tmp) / 'run.log')
             molecule.save_freqs(0)
 
-            infrared, metadata = read_with({})
+            infrared, metadata = self._read_intensities(molecule, mrsf())
             np.testing.assert_array_equal(infrared, [12.5])
             self.assertEqual(metadata['status'], 'computed')
-            # Explicit defaults are the same request.
-            infrared, _ = read_with({'hess': {'property_dx': 1.0e-3, 'raman_backend': 'truncated_sos'}})
+            infrared, _ = self._read_intensities(
+                molecule, mrsf(property_dx=1.0e-3, raman_backend='truncated_sos'))
             np.testing.assert_array_equal(infrared, [12.5])
 
-            infrared, metadata = read_with({'hess': {'property_dx': 2.0e-3}})
+            infrared, metadata = self._read_intensities(molecule, mrsf(property_dx=2.0e-3))
             self.assertEqual(infrared.size, 0)
             self.assertEqual(molecule.raman_activities.size, 0)
             self.assertEqual(molecule.raman_mode_polarizability_derivatives.shape, (0, 3, 3))
             self.assertEqual(metadata['status'], 'not_computed')
             self.assertIn('hess.read=false', metadata['reason'])
 
-            infrared, metadata = read_with({'hess': {'raman_backend': 'finite_field'}})
+            infrared, _ = self._read_intensities(molecule, mrsf(raman_backend='finite_field'))
             self.assertEqual(infrared.size, 0)
 
-            infrared, metadata = read_with({'hess': {'vibrational_intensities': False}})
+            infrared, metadata = self._read_intensities(molecule, mrsf(vibrational_intensities=False))
             self.assertEqual(infrared.size, 0)
             self.assertIn('vibrational_intensities=False', metadata['reason'])
 
-            sidecar = Path(tmp) / 'run.hess.json'
-            data = json.loads(sidecar.read_text())
-            data.pop('vibrational_property_request')
-            sidecar.write_text(json.dumps(data))
-            infrared, metadata = read_with({})
+            # An MRSF sidecar that does not record its options is not trusted.
+            self._drop_property_record(tmp)
+            infrared, metadata = self._read_intensities(molecule, mrsf())
             self.assertEqual(infrared.size, 0)
             self.assertEqual(metadata['status'], 'not_computed')
 
+    def test_cached_intensities_outside_mrsf_follow_only_the_switch(self):
+        # The native (non-MRSF) backend ignores the MRSF finite-difference and
+        # SOS options, so changing them must not discard valid intensities.
+        molecule = self._intensity_cache_molecule({})
+        with tempfile.TemporaryDirectory() as tmp:
+            molecule.log = str(Path(tmp) / 'run.log')
+            molecule.save_freqs(0)
+
+            for hess in ({}, {'property_dx': 2.0e-3}, {'raman_backend': 'finite_field'}):
+                infrared, metadata = self._read_intensities(molecule, {'hess': hess})
+                np.testing.assert_array_equal(infrared, [12.5])
+                self.assertEqual(metadata['status'], 'computed')
+            infrared, metadata = self._read_intensities(
+                molecule, {'hess': {'vibrational_intensities': False}})
+            self.assertEqual(infrared.size, 0)
+            self.assertIn('vibrational_intensities=False', metadata['reason'])
+
+            # Sidecars written before the record existed stay usable.
+            self._drop_property_record(tmp)
+            infrared, _ = self._read_intensities(molecule, {})
+            np.testing.assert_array_equal(infrared, [12.5])
+            infrared, _ = self._read_intensities(
+                molecule, {'hess': {'vibrational_intensities': False}})
+            self.assertEqual(infrared.size, 0)
 
 if __name__ == '__main__':
     unittest.main()

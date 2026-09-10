@@ -3207,13 +3207,19 @@ class Molecule:
         """[hess] options that define cached IR/Raman intensities.
 
         _hessian_request_signature deliberately leaves [hess] out, because those
-        options do not change H(R); they do change the intensities.  The casts
-        and defaults mirror SinglePoint._compute_vibrational_intensities, so the
-        record compares what the property stage would actually run.
+        options do not change H(R); they can change the intensities.  Only the
+        MRSF state-tracked backend reads the finite-difference and SOS options
+        (the native backend for other methods uses a fixed displacement), so
+        outside MRSF the record is just the on/off switch.  Casts and defaults
+        mirror SinglePoint._compute_vibrational_intensities.
         """
         hess = self.config.get('hess', {})
-        return {
+        request = {
             'vibrational_intensities': bool(hess.get('vibrational_intensities', True)),
+        }
+        if str(self.config.get('tdhf', {}).get('type', '')).lower() != 'mrsf':
+            return request
+        request.update({
             'property_dx': float(hess.get('property_dx', 1.0e-3)),
             'property_min_overlap': float(hess.get('property_min_overlap', 0.99)),
             'property_min_margin': float(hess.get('property_min_margin', 0.05)),
@@ -3225,7 +3231,8 @@ class Molecule:
             'raman_sos_tail_states': int(hess.get('raman_sos_tail_states', 2)),
             'raman_sos_tail_tolerance': float(hess.get('raman_sos_tail_tolerance', 0.05)),
             'raman_sos_min_gap': float(hess.get('raman_sos_min_gap', 1.0e-5)),
-        }
+        })
+        return request
 
     @mpi_dump
     def save_freqs(self, state):
@@ -3630,11 +3637,16 @@ class Molecule:
 
         # The Hessian identity above excludes [hess], so cached intensities are
         # reused only for the property options that produced them.  Anything
-        # else -- a different displacement, tracking gate or Raman backend,
-        # intensities now disabled, or a sidecar without the record -- is
-        # reported as not computed instead of publishing stale tensors.
+        # else -- a different MRSF displacement, tracking gate or Raman
+        # backend, intensities now disabled, or an MRSF sidecar without the
+        # record -- is reported as not computed instead of publishing stale
+        # tensors.  Outside MRSF only the switch matters, so a sidecar written
+        # before the record existed stays valid unless intensities are off.
         property_request = self._vibrational_property_request()
-        if data.get('vibrational_property_request') != property_request:
+        cached_property_request = data.get('vibrational_property_request')
+        if cached_property_request is None and list(property_request) == ['vibrational_intensities']:
+            cached_property_request = {'vibrational_intensities': True}
+        if cached_property_request != property_request:
             self.infrared_intensities = np.zeros(0)
             self.raman_activities = np.zeros(0)
             self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
