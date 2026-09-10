@@ -2238,23 +2238,35 @@ contains
       ! The analytic Hessian differentiates these quantities, but its baseline
       ! must be bitwise the same one used by the gradient rather than a second
       ! reconstruction through a nominally equivalent integral path.
-      call infos%dat%alloc_or_die(OQP_td_mrsf_hxa,(/nbf,nocca/),stored_hxa, &
-        description=OQP_td_mrsf_hxa_comment)
-      call infos%dat%alloc_or_die(OQP_td_mrsf_hxb,(/nbf,nbf/),stored_hxb, &
-        description=OQP_td_mrsf_hxb_comment)
-      call infos%dat%alloc_or_die(OQP_td_mrsf_ppija,(/nocca,nocca/), &
-        stored_ppija,description=OQP_td_mrsf_ppija_comment)
-      ! Tagarray cannot represent a zero extent.  Store a zero 1x1 envelope
-      ! only for the empty beta occupied-occupied block; the physical Hessian
-      ! arrays retain their native (0,0) shape.
-      call infos%dat%alloc_or_die(OQP_td_mrsf_ppijb, &
-        (/max(1,noccb),max(1,noccb)/), &
-        stored_ppijb,description=OQP_td_mrsf_ppijb_comment)
-      stored_hxa=hxa
-      stored_hxb=hxb
-      stored_ppija=ppija
-      stored_ppijb=0.0_dp
-      if (noccb > 0) stored_ppijb(1:noccb,1:noccb)=ppijb
+      !
+      ! Only the singlet/triplet response allocates hxa(nbf,nocca) and
+      ! hxb(nbf,nbf); the quintet branch above allocates the transposed pair
+      ! hxa(nbf,nbf) and hxb(nbf,noccb) for a different set of blocks.  Staging
+      ! it under the singlet/triplet shapes copied nbf*nbf elements into an
+      ! nbf*nocca buffer, overrunning the tagarray allocation by nbf*nvira
+      ! doubles and corrupting the heap on every mrst==5 gradient.  The MRSF
+      ! analytic Hessian consumes these tags only in its singlet/triplet form
+      ! (build_mrsf_hf_z_intermediates declares hxa(nbf,nocca), hxb(nbf,nbf)),
+      ! so stage them exactly where the shapes and the consumer agree.
+      if (mrst==1 .or. mrst==3) then
+        call infos%dat%alloc_or_die(OQP_td_mrsf_hxa,(/nbf,nocca/),stored_hxa, &
+          description=OQP_td_mrsf_hxa_comment)
+        call infos%dat%alloc_or_die(OQP_td_mrsf_hxb,(/nbf,nbf/),stored_hxb, &
+          description=OQP_td_mrsf_hxb_comment)
+        call infos%dat%alloc_or_die(OQP_td_mrsf_ppija,(/nocca,nocca/), &
+          stored_ppija,description=OQP_td_mrsf_ppija_comment)
+        ! Tagarray cannot represent a zero extent.  Store a zero 1x1 envelope
+        ! only for the empty beta occupied-occupied block; the physical Hessian
+        ! arrays retain their native (0,0) shape.
+        call infos%dat%alloc_or_die(OQP_td_mrsf_ppijb, &
+          (/max(1,noccb),max(1,noccb)/), &
+          stored_ppijb,description=OQP_td_mrsf_ppijb_comment)
+        stored_hxa=hxa
+        stored_hxb=hxb
+        stored_ppija=ppija
+        stored_ppijb=0.0_dp
+        if (noccb > 0) stored_ppijb(1:noccb,1:noccb)=ppijb
+      end if
 
   !   Calculate W (in MO basis)
       wmo => wrk3
