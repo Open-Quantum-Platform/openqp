@@ -815,6 +815,7 @@ def harmonic_vibronic_spectrum(
     minimum_thermal_population: float = 0.999,
     minimum_franck_condon_completeness: float = 0.999,
     max_states: int = 250000,
+    max_transitions: int = 5_000_000,
 ) -> VibronicSpectrum:
     """Calculate harmonic FC/FC--HT stick and broadened absorption spectra.
 
@@ -822,6 +823,11 @@ def harmonic_vibronic_spectrum(
     With no electronic transition dipole, strengths are thermally weighted
     Franck--Condon factors.  With electronic data, they are squared transition
     moments in ``(e*bohr)^2`` before optional normalization.
+
+    ``max_states`` caps each vibrational state set; ``max_transitions`` caps
+    the populated-initial x final pair count, checked before any overlap is
+    evaluated, because two individually admissible sets can still multiply
+    into billions of transitions.
     """
 
     engine = HarmonicOverlapEngine(model)
@@ -863,6 +869,17 @@ def harmonic_vibronic_spectrum(
     dipole, derivative_values = _validate_transition_inputs(
         model, transition, transition_dipole_derivative
     )
+    if max_transitions <= 0:
+        raise ValueError("max_transitions must be positive")
+    populated_initial = sum(1 for population in populations if population != 0.0)
+    transition_count = populated_initial * len(final_states)
+    if transition_count > max_transitions:
+        raise ValueError(
+            f"{populated_initial} populated initial states x {len(final_states)} "
+            f"final states = {transition_count} vibronic transitions exceeds "
+            f"max_transitions={max_transitions}; lower max_initial_quanta or "
+            "max_final_quanta, or raise max_transitions explicitly"
+        )
     provisional: list[
         tuple[
             tuple[int, ...],
