@@ -2568,6 +2568,7 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
+        self._quiet_orbitals_in_dynamics()
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -2577,6 +2578,29 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    def _quiet_orbitals_in_dynamics(self):
+        """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
+
+        A dynamics run calls the SCF at least once per step and the SCF prints
+        the whole MO coefficient table on every call, so the table is repeated
+        for every step of the trajectory: a 100-step QM/MM NAMD run of an
+        18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+        which the 101 lines that report the dynamics are impossible to find.
+        ``verbose = 0`` suppresses the table (``source/printing.F90``); an
+        explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
+        of any single frame remain available from the Molden file, the restart
+        record and the trajectory file, none of which this touches.
+        """
+        runtype = str(self.config.get("input", {}).get("runtype", "")).strip().lower()
+        if runtype not in ("md", "namd"):
+            return
+        scf = self.config.setdefault("scf", {})
+        # Only the schema default is overridden; a deck that asks for more
+        # detail (verbose >= 2) or already asks for silence keeps its value.
+        if int(scf.get("verbose", 1)) == 1:
+            scf["verbose"] = 0
+            self._orbital_printing_quieted = True
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control
