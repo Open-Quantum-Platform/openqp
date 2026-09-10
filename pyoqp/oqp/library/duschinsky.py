@@ -103,6 +103,18 @@ class DuschinskyResult:
     orthogonality: OrthogonalityDiagnostics
 
 
+def _zip_equal(first, second):
+    """zip() that refuses unequal lengths.
+
+    Same guarantee as zip(strict=True), which needs Python 3.10; this package
+    declares requires-python >= 3.9.
+    """
+    if len(first) != len(second):
+        raise ValueError(
+            f"zip() argument lengths differ: {len(first)} != {len(second)}")
+    return zip(first, second)
+
+
 def _finite_array(name: str, values: ArrayLike) -> FloatArray:
     array = np.asarray(values, dtype=float)
     if not np.all(np.isfinite(array)):
@@ -222,7 +234,7 @@ def _center_of_mass(geometry: FloatArray, masses: FloatArray) -> FloatArray:
 def _inertia_tensor(centered: FloatArray, masses: FloatArray) -> FloatArray:
     tensor = np.zeros((3, 3), dtype=float)
     identity = np.eye(3)
-    for mass, position in zip(masses, centered, strict=True):
+    for mass, position in _zip_equal(masses, centered):
         tensor += mass * (
             np.dot(position, position) * identity - np.outer(position, position)
         )
@@ -249,7 +261,7 @@ def _external_and_vibrational_bases(
 
     axes = np.eye(3)
     for atom, (position, root_mass) in enumerate(
-        zip(centered, sqrt_mass, strict=True)
+        _zip_equal(centered, sqrt_mass)
     ):
         for axis in range(3):
             candidates[3 * atom : 3 * atom + 3, 3 + axis] = (
