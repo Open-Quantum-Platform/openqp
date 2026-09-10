@@ -22,6 +22,11 @@ constructs another grid later still).  A write-back would leave every later
 grid in the run on the MHL radial map and on the Gill Bragg-Slater radii
 instead of the configured ones, with no diagnostic printed anywhere.
 
+SG-1 is only defined for H-Ar.  Heavier atoms fall back to an unpruned
+194-point sphere on the radial grid the user configured -- the pin above
+covers H-Ar only.  Pinning heavy atoms to 50-point MHL as well cost
+2.3e-4 Ha on a lone Kr atom and 1.7e-3 Ha on HBr against a converged grid.
+
 These are behavioural checks: they build real grids through the compiled
 runtime and compare energies and grid sizes.  Skipped unless the compiled
 OpenQP runtime is importable.
@@ -40,11 +45,15 @@ ROOT = Path(__file__).resolve().parents[1]
 # rad_grid_type encoding, from OQPData._rad_grid_types / radial_grid_types.F90
 RAD_MHL, RAD_TA, RAD_BECKE = 0, 2, 3
 
+H2O = ("   8   0.000000000   0.000000000  -0.041061554\n"
+       "   1  -0.533194329   0.533194329  -0.614469223\n"
+       "   1   0.533194329  -0.533194329  -0.614469223")
+# a lone atom above Ar: every atom is SG-1 type 4
+KR = "  36   0.000000000   0.000000000   0.000000000"
+
 INPUT_TMPL = """[input]
 system=
-   8   0.000000000   0.000000000  -0.041061554
-   1  -0.533194329   0.533194329  -0.614469223
-   1   0.533194329  -0.533194329  -0.614469223
+{system}
 charge=0
 runtype=energy
 basis=6-31g
@@ -84,7 +93,8 @@ def _runtime_available():
 class SG1GridDefinition(unittest.TestCase):
     """SG-1 must be SG-1, and must not disturb anything built after it."""
 
-    def _run(self, pruned, rad_npts=96, ang_npts=302, rad_type="ta"):
+    def _run(self, pruned, rad_npts=96, ang_npts=302, rad_type="ta",
+             system=H2O):
         """Run one SCF; return (energy, grid points, rad_type before, after)."""
         import oqp
         import oqp.library
@@ -95,7 +105,8 @@ class SG1GridDefinition(unittest.TestCase):
         log = os.path.join(workdir, "m.log")
         with open(inp, "w") as fh:
             fh.write(INPUT_TMPL.format(pruned=pruned, rad_npts=rad_npts,
-                                       ang_npts=ang_npts, rad_type=rad_type))
+                                       ang_npts=ang_npts, rad_type=rad_type,
+                                       system=system))
 
         # banner/SCF chatter is noise here; only the log file is parsed
         with contextlib.redirect_stdout(io.StringIO()):
@@ -157,6 +168,28 @@ class SG1GridDefinition(unittest.TestCase):
         self.assertAlmostEqual(
             e1, e2, places=10,
             msg="SG-1 energy followed the user's rad_npts/rad_type")
+
+    def test_sg1_heavy_atoms_keep_the_configured_radial_grid(self):
+        """Above Ar, SG-1 is undefined: keep the user's radial grid there.
+
+        A lone Kr atom is all SG-1 type 4, so its SG-1 grid must be exactly
+        the unpruned 194-point grid on the user's own rad_npts / rad_type --
+        and must follow them.  Pinned to SG-1's 50-point MHL grid instead,
+        SG-1 ignores both settings and this fails.
+        """
+        for rad_npts, rad_type in ((96, "ta"), (128, "becke")):
+            with self.subTest(rad_npts=rad_npts, rad_type=rad_type):
+                e_sg1, n_sg1, _, _ = self._run(
+                    "SG1", rad_npts=rad_npts, rad_type=rad_type, system=KR)
+                e_ref, n_ref, _, _ = self._run(
+                    "none", rad_npts=rad_npts, ang_npts=194,
+                    rad_type=rad_type, system=KR)
+                self.assertEqual(
+                    n_sg1, n_ref,
+                    "SG-1 heavy atom is not on the configured radial grid")
+                self.assertAlmostEqual(
+                    e_sg1, e_ref, places=10,
+                    msg="SG-1 heavy atom is not on the configured radial grid")
 
     def test_sg1_is_smaller_than_the_default_grid_it_is_pruned_from(self):
         """Sanity-check the pin is doing something, not silently inert.
