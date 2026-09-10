@@ -558,7 +558,8 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertIn('symmetry_metadata', data)
         self.assertEqual(data['symmetry_metadata']['subgroup'], 'c1')
         self.assertIn('hessian_request', data)
-        self.assertEqual(data['hessian_cache_version'], 2)
+        self.assertEqual(data['hessian_cache_version'], 3)
+        self.assertEqual(data['hessian_request']['version'], 3)
 
 
 if __name__ == '__main__':
