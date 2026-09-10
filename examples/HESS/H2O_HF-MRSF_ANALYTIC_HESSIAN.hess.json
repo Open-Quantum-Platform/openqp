@@ -21,10 +21,10 @@
     1.007825
   ],
   "energy": -75.61097677477545,
-  "hessian_cache_version": 2,
+  "hessian_cache_version": 3,
   "state": 3,
   "hessian_request": {
-    "version": 2,
+    "version": 3,
     "state": 3,
     "model_config": {
       "input": {
@@ -469,22 +469,108 @@
     6.194552298335994
   ],
   "infrared_intensities": [
-    1.0446449959798914,
-    7.336807066983598,
-    2435.21187840749
+    35.44931334083439,
+    180.08463647033693,
+    121915.73045447761
   ],
   "raman_activities": [
-    28328.73617993752,
-    32449.581579146976,
-    2664.6431459655764
+    24705.683314048496,
+    1281.7464281395437,
+    5046.794151419971
   ],
   "vibrational_intensity_metadata": {
     "status": "computed",
-    "backend": "native_openqp_finite_difference",
-    "property_kernels": "electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native",
-    "displacement_bohr": 0.001,
-    "ir_units": "km/mol",
-    "raman_units": "a.u."
+    "backend": "mrsf_state_tracked_normal_coordinate_fd",
+    "electronic_state_role": "target_excited_state",
+    "state_index_one_based": 3,
+    "electronic_state": "S2",
+    "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+    "minimum_state_overlap": 0.999999768629003,
+    "minimum_tracking_margin": 0.9999065495540783,
+    "ir_status": "computed_state_density_fd",
+    "ir_intensity_unit": "km/mol",
+    "dipole_derivative_unit": "e*bohr/(sqrt(amu)*bohr)",
+    "raman_status": "computed_truncated_sos",
+    "raman_activity_unit": "bohr^4/amu",
+    "polarizability_derivative_unit": "bohr^3/(sqrt(amu)*bohr)",
+    "raman_scope": "convergence-gated finite-state MRSF SOS; not analytic and not a complete static polarizability",
+    "generic_rohf_cphf_fallback": false,
+    "property_kernels": "complete MRSF state density and state-to-state transition densities; no generic ROHF property kernel",
+    "provenance": {
+      "schema_version": 1,
+      "electronic_method": "MRSF-TDHF",
+      "electronic_state": "S2",
+      "state_index_one_based": 3,
+      "electronic_state_role": "target_excited_state",
+      "response_representation": "two_somo_spin_adapted_CO_OV_CV_OO",
+      "nuclear_derivative": "two-point central finite differences at h, h/2, and h/4",
+      "dipole_fd_convergence": {
+        "step_scales": [
+          1.0,
+          0.5,
+          0.25
+        ],
+        "coarse_to_medium_norm": 0.00016221444052472332,
+        "medium_to_fine_norm": 3.7760843384110296e-05,
+        "medium_to_fine_relative_norm": 3.3736798240467355e-06,
+        "coarse_to_medium_norm_by_mode": [
+          3.879713911643229e-08,
+          1.54179060521376e-07,
+          0.0001622143626142528
+        ],
+        "medium_to_fine_norm_by_mode": [
+          9.716171334054567e-09,
+          3.8963783097021924e-08,
+          3.776082203155709e-05
+        ],
+        "medium_to_fine_relative_norm_by_mode": [
+          5.0952659338491664e-08,
+          9.065638353577277e-08,
+          3.376658750027366e-06
+        ],
+        "relative_tolerance": 0.05,
+        "absolute_tolerance": 1e-06,
+        "accepted_step_scale": 0.25
+      },
+      "polarizability_fd_convergence": {
+        "step_scales": [
+          1.0,
+          0.5,
+          0.25
+        ],
+        "coarse_to_medium_norm": 0.0007890718171003861,
+        "medium_to_fine_norm": 0.00019512534596688336,
+        "medium_to_fine_relative_norm": 3.793124997928829e-06,
+        "coarse_to_medium_norm_by_mode": [
+          1.90775448789354e-05,
+          4.049708317886366e-06,
+          0.0007888307674565169
+        ],
+        "medium_to_fine_norm_by_mode": [
+          4.694939563797766e-06,
+          9.45945585924614e-07,
+          0.00019506656137876805
+        ],
+        "medium_to_fine_relative_norm_by_mode": [
+          1.0347187121215871e-07,
+          9.152914708223539e-08,
+          8.897534534039383e-06
+        ],
+        "relative_tolerance": 0.05,
+        "absolute_tolerance": 1e-06,
+        "accepted_step_scale": 0.25
+      },
+      "polarizability_fd_failure": null,
+      "dipole_source": "nuclear moment plus complete spin-adapted MRSF state-density contraction at the molecular center of mass",
+      "dipole_origin": "molecular center of mass",
+      "polarizability_source": "convergence-gated finite-state spin-adapted MRSF SOS; not analytic",
+      "analytic_gap": "analytic target-state MRSF dipole and polarizability derivatives and a uniform-field MRSF Hamiltonian are not implemented",
+      "state_phase_use": "response phases are tracked and recorded; permanent dipoles and static SOS polarizabilities are invariant to a unit state phase",
+      "request_sha256": "4d680a7f26fad721cd370633191252498b65928e7d8695390a51f7061d918cb7",
+      "openqp_input": "/tmp/claude-1935200046/-bighome-mohsen-CLUADE-PROJECT-manage-pullrequest/9e2a80bf-e81f-4815-acd7-488d39fb2243/scratchpad/mrsfdet1/H2O_HF-MRSF_ANALYTIC_HESSIAN.inp",
+      "openqp_project": "H2O_HF-MRSF_ANALYTIC_HESSIAN"
+    },
+    "displacements_note": "per-displacement tracking records (18) omitted from the committed reference; they are diagnostics, not compared quantities"
   },
   "infrared_mode_dipole_derivatives": [
     [
@@ -506,53 +592,53 @@
   "raman_mode_polarizability_derivatives": [
     [
       [
-        24.519279669328863,
-        -24.25824188119485,
-        -5.810315461048631e-10
+        22.687078792117177,
+        -22.686987693816718,
+        9.518530067873562e-11
       ],
       [
-        -24.25824188096204,
-        24.519279669056232,
-        -1.378039919286379e-09
+        -22.686987693816718,
+        22.687078791804538,
+        -9.51963920607718e-11
       ],
       [
-        6.791554900917246e-11,
-        -6.767315892323882e-11,
-        -2.1542993469014045
+        9.518530067873562e-11,
+        -9.51963920607718e-11,
+        -9.936264461181508e-25
       ]
     ],
     [
       [
-        -25.311167324165016,
-        26.637574502138904,
-        -2.8743369546109547e-10
+        -5.167807223060095,
+        5.167103719429633,
+        2.945704334645377e-11
       ],
       [
-        26.637574501437186,
-        -25.311167323630404,
-        -8.356936193977809e-10
+        5.167103719429633,
+        -5.1678072229748295,
+        -2.9438587384827307e-11
       ],
       [
-        7.723580658309024e-11,
-        -7.695417206756891e-11,
-        -1.480403249987757
+        2.945704334645377e-11,
+        -2.9438587384827307e-11,
+        3.170094134490725e-25
       ]
     ],
     [
       [
-        -1.026378647445117e-09,
-        1.0728203350930942e-09,
-        7.965166942869257
+        -3.6862957131234e-08,
+        3.672084858408198e-08,
+        10.961832215008505
       ],
       [
-        7.083576109702836e-10,
-        -7.209594406997334e-10,
-        -7.965166942866071
+        3.672084858408198e-08,
+        -3.6564529182214756e-08,
+        -10.9618322150086
       ],
       [
-        8.032299815825224,
-        -8.032299815827761,
-        -1.6496595010377853e-11
+        10.961832215008505,
+        -10.9618322150086,
+        6.101040676218797e-14
       ]
     ]
   ],

@@ -23,7 +23,11 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 # (re)generating committed example *test references*. The full bundle is still
 # written by default so the ``guess=json`` restart workflow keeps working.
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
-HESSIAN_CACHE_VERSION = 2
+# Bumped 2 -> 3 with the IR intensity unit fix: infrared_intensities stored
+# in a v2 sidecar were scaled by 42.255, the (D/Angstrom)^2/amu factor, while
+# the dipole derivatives feeding it are in atomic units and need 974.88011.
+# A v2 cache is therefore 23.07x too small in that field; refuse to reuse it.
+HESSIAN_CACHE_VERSION = 3
 
 _ACCELERATE_MATMUL_WARNING = (
     r'(divide by zero|overflow|invalid value) encountered in matmul'
