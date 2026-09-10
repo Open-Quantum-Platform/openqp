@@ -5931,15 +5931,113 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # [optimize] qmmm_radius / qmmm_output are read only by the QM/MM optimiser
+        _rad_v = _get(config, "optimize", "qmmm_radius", 0.0)
+        try:
+            _rad_set = float(_rad_v) != 0.0
+        except (TypeError, ValueError):
+            _rad_set = True
+        _out_v = _get(config, "optimize", "qmmm_output", "")
+        for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
+                                    ("qmmm_output", bool(str(_out_v or "").strip()), _out_v)):
+            if _is_set:
+                report.add(
+                    "ERROR",
+                    f"optimize.{_key}",
+                    "This option is used only by a QM/MM optimisation (qmmm_flag=true); "
+                    "an all-QM optimisation would silently ignore it.",
+                    value=str(_val),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [optimize] {_key}, or run a QM/MM optimisation.",
+                )
     if bool(_get(config, "input", "qmmm_flag", False)):
-        report.add(
-            "ERROR",
-            "input.qmmm_flag",
-            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
-            value=f"qmmm_flag=true/runtype={runtype}",
-            expected="a supported QM/MM energy, md, or namd workflow",
-            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
-        )
+        if runtype == "optimize":
+            # Plain minimisation goes to the QM/MM optimiser (qmmm_opt.py),
+            # which minimises the embedded QM/MM energy over the QM atoms plus
+            # the MM residues within [optimize] qmmm_radius; only the plain
+            # optimizer is connected, the reaction-path drivers are not.
+            try:
+                radius = float(_get(config, "optimize", "qmmm_radius", 0.0))
+            except (TypeError, ValueError):
+                radius = -1.0
+            if not math.isfinite(radius) or radius < 0.0:
+                report.add(
+                    "ERROR",
+                    "optimize.qmmm_radius",
+                    "The movable-shell radius of a QM/MM optimisation must be a finite number >= 0 angstrom.",
+                    value=str(_get(config, "optimize", "qmmm_radius", 0.0)),
+                    expected="0 (QM atoms only) or a positive distance in angstrom",
+                    action="Set [optimize] qmmm_radius to 0 or a positive number.",
+                )
+            _cg = _get(config, "guess", "continue_geom", False)
+            if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+                report.add(
+                    "ERROR",
+                    "guess.continue_geom",
+                    "A QM/MM optimisation starts from [qmmm] pdb_file, not from a saved QM-fragment "
+                    "geometry, so continue_geom would silently rerun from the original structure.",
+                    value=str(_get(config, "guess", "continue_geom", False)),
+                    expected="false",
+                    action="Set [guess] continue_geom=false and use the optimised full-system PDB "
+                           "([optimize] qmmm_output) as the new [qmmm] pdb_file.",
+                )
+            _swapmo_q = _get(config, "guess", "swapmo", "")
+            if (len(_swapmo_q) > 0) if isinstance(_swapmo_q, (list, tuple)) else bool(str(_swapmo_q or "").strip()):
+                report.add(
+                    "ERROR",
+                    "guess.swapmo",
+                    "Orbital swaps are applied by the single-point reference, which the QM/MM optimisation's "
+                    "embedded SCF does not use; a requested non-Aufbau occupation would be silently lost.",
+                    value=str(_swapmo_q),
+                    expected="empty",
+                    action="Remove [guess] swapmo, or optimise without qmmm_flag.",
+                )
+            _istate_raw = _get(config, "optimize", "istate", 0)
+            try:
+                _istate_q = int(_istate_raw)
+            except (TypeError, ValueError):
+                _istate_q = -1
+            if _istate_q < 0 or (_as_lower(_get(config, "input", "method", "hf")) == "tdhf" and _istate_q < 1):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "A QM/MM optimisation needs a valid state: istate >= 0, and >= 1 for method=tdhf "
+                    "(an MRSF/TDHF root, 1 = the lowest).",
+                    value=str(_istate_raw),
+                    expected=">= 1 for tdhf, >= 0 otherwise",
+                    action="Set [optimize] istate to the root to optimise.",
+                )
+            _coordsys_q = str(_get(config, "oqp", "coordsys", "auto") or "auto").strip().lower()
+            if _coordsys_q not in ("auto", "cart", "cartesian", "tric"):
+                report.add(
+                    "ERROR",
+                    "oqp.coordsys",
+                    "DLC/RIC coordinates remove the collective translations and rotations of the movable "
+                    "atoms, which move against the fixed MM atoms in a QM/MM optimisation.",
+                    value=_coordsys_q,
+                    expected="auto, cartesian or tric",
+                    action="Set [oqp] coordsys=auto (Cartesian) or tric.",
+                )
+            if str(_get(config, "optimize", "lib", "oqp")).strip().lower() != "oqp":
+                report.add(
+                    "WARNING",
+                    "optimize.lib",
+                    "A QM/MM optimisation uses its own L-BFGS driver; [optimize] lib is ignored.",
+                    value=str(_get(config, "optimize", "lib", "oqp")),
+                    expected="oqp",
+                    action="Remove [optimize] lib for a QM/MM optimisation.",
+                )
+        else:
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "Reaction-path and crossing drivers are not connected to the active QM/MM force backend "
+                "(only runtype=optimize, md and namd are).",
+                value=f"qmmm_flag=true/runtype={runtype}",
+                expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
+                action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+            )
 
     if lib not in OPT_LIBS:
         report.add(
@@ -5963,7 +6061,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
-    if lib == "oqp":
+    # a QM/MM optimisation always runs the native engine, whatever [optimize] lib says
+    native_engine = lib == "oqp" or (bool(_get(config, "input", "qmmm_flag", False))
+                                     and runtype == "optimize")
+    if native_engine:
         auto_recovery = _get(config, "oqp", "auto_recovery", True)
         if not isinstance(auto_recovery, bool):
             report.add(
@@ -7229,10 +7330,79 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
                    "same-spin FSSH ([md] soc=false) for the periodic box.",
         )
         return
-    if runtype in ("md", "namd"):
+    if runtype in ("md", "namd", "optimize"):
+        # optimize: the QM/MM optimiser builds the same OpenQpQMMM driver as
+        # runtype=md and passes every periodic/embedding control through.
         embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
         method = _as_lower(_get(config, "input", "method", "hf"))
-        if method == "tdhf" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        if runtype == "optimize" and method not in ("hf", "tdhf", "dftb", "xtb"):
+            report.add(
+                "ERROR",
+                "input.method",
+                "The QM/MM optimiser can differentiate HF/DFT, TDHF/MRSF and the tight-binding "
+                "methods only; other methods reach the driver without an embedded gradient.",
+                value=method,
+                expected="hf, tdhf, dftb or xtb",
+                action="Use one of those methods, or optimise without qmmm_flag.",
+            )
+        if runtype == "optimize":
+            for key in ("pdb_file", "qm_atoms", "forcefield_files"):
+                if not str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        f"A QM/MM optimisation needs [qmmm] {key}.",
+                        value="(blank)",
+                        expected="a value",
+                        action=f"Set [qmmm] {key}.",
+                    )
+            try:
+                maxit = int(_get(config, "optimize", "maxit", 30))
+            except (TypeError, ValueError):
+                maxit = 0
+            if maxit < 1:
+                report.add(
+                    "ERROR",
+                    "optimize.maxit",
+                    "A QM/MM optimisation needs at least one evaluation.",
+                    value=str(_get(config, "optimize", "maxit", 30)),
+                    expected=">= 1",
+                    action="Set [optimize] maxit to a positive number.",
+                )
+            for key in ("qm_atoms_xyz", "qm_list"):
+                if str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        "The QM-coordinate override of the MD driver is not applied by the QM/MM "
+                        "optimiser; the run would optimise the PDB geometry instead.",
+                        value=str(_get(config, "qmmm", key, "")),
+                        expected="no override (put the starting geometry in the PDB)",
+                        action="Remove [qmmm] qm_atoms_xyz / qm_list for a QM/MM optimisation.",
+                    )
+            if _truthy(_get(config, "input", "d4", False)):
+                report.add(
+                    "ERROR",
+                    "input.d4",
+                    "D4 dispersion is not part of the QM/MM force the optimiser minimises "
+                    "(compute_force has no LastStep dispersion pass), so the geometry would "
+                    "minimise the non-D4 surface.",
+                    value="d4=true",
+                    expected="d4=false for a QM/MM optimisation",
+                    action="Disable d4, or optimise without qmmm_flag.",
+                )
+            for key in ("freeze", "frozen_distances"):
+                if str(_get(config, "optimize", key, "") or "").strip() or str(_get(config, "oqp", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "Frozen-distance constraints are not applied by the QM/MM optimiser yet; "
+                        "the run would silently move the constrained bond.",
+                        value=str(_get(config, "optimize", key, "") or _get(config, "oqp", key, "")),
+                        expected="no constraint, or optimise without qmmm_flag",
+                        action="Remove the constraint for a QM/MM optimisation.",
+                    )
+        if method == "tdhf" and runtype == "namd" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
             try:
                 zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
             except (TypeError, ValueError):

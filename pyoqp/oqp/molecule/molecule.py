@@ -2278,6 +2278,14 @@ class Molecule:
                 # result and regression data must expose that final value.
                 energy = float(np.asarray(final_energies).ravel()[0])
 
+        # A QM/MM optimisation minimised the embedded total energy (QM state +
+        # nuclear-MM + MM terms); that objective, not the fragment SCF scalar
+        # kept in mol_energy, is the result of the run and what the saved
+        # reference must pin.
+        qmmm_opt = getattr(self, 'qmmm_optimization', None)
+        if qmmm_opt and str(self.config.get('input', {}).get('runtype', '')).strip().lower() != 'optimize':
+            qmmm_opt = None                    # a summary left over from an earlier optimisation
+
         data = {
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
@@ -2448,6 +2456,21 @@ class Molecule:
                 if value:
                     data[key] = value
 
+        # Last, after every backend-specific block (the DFTB one sets 'energy'
+        # from mol.energies[0], which is NaN for a QM/MM optimisation of an
+        # excited state): the minimised QM/MM total is this run's energy.
+        if qmmm_opt:
+            data['energy'] = float(qmmm_opt['energy_hartree'])
+            if qmmm_opt.get('grad_fragment') is not None:
+                # the objective's gradient for the published atoms, not the
+                # QM-fragment buffer the native gradient code left behind
+                data['grad'] = qmmm_opt['grad_fragment']
+            data['qmmm_optimization'] = {
+                k: qmmm_opt[k] for k in ('converged', 'energy_hartree', 'evaluations', 'recovery',
+                                         'electronic_failure', 'constraints', 'rms_grad', 'max_grad',
+                                         'output')
+                if k in qmmm_opt}
+
         return data
 
     def get_state_tracking(self):
@@ -2593,6 +2616,13 @@ class Molecule:
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
         self._resolve_system_pdb_path()
+        # deck-relative [qmmm] forcefield_files for the PDB-based molecule builder
+        from oqp.utils import qmmm as _qmmm_utils
+        _qmmm_utils.input_dir = (os.path.dirname(os.path.abspath(input_source))
+                                 if isinstance(input_source, str) else
+                                 (os.path.dirname(os.path.abspath(self.input_file))
+                                  if isinstance(getattr(self, 'input_file', None), str) and self.input_file
+                                  else None))
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
