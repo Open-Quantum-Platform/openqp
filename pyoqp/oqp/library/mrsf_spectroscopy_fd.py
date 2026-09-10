@@ -164,6 +164,18 @@ class MRSFPropertyFDRequest:
             raise ValueError(
                 "state_index is the one-based MRSF response root and must be >= 1"
             )
+        for name, value in (
+                ("minimum_state_overlap", minimum_state_overlap),
+                ("minimum_tracking_margin", minimum_tracking_margin),
+                ("fd_relative_tolerance", fd_relative_tolerance),
+                ("fd_absolute_tolerance", fd_absolute_tolerance),
+                ("sos_tail_relative_tolerance", sos_tail_relative_tolerance),
+                ("sos_minimum_gap_hartree", sos_minimum_gap_hartree)):
+            # Every gate below is a comparison, and any comparison with NaN is
+            # false: a NaN threshold would pass validation and then silently
+            # disable the root-tracking or convergence gate it configures.
+            if not np.isfinite(float(value)):
+                raise ValueError(f"{name} must be finite, got {value!r}")
         if not 0.99 <= minimum_state_overlap <= 1.0:
             raise ValueError(
                 "minimum_state_overlap must lie in [0.99, 1]; weaker isolated-root "
@@ -543,6 +555,9 @@ def truncated_sos_polarizability(
         raise ValueError("MRSF excitation energies must be one-dimensional")
     if int(tail_states) < 1:
         raise ValueError("tail_states must be positive")
+    if not (np.isfinite(float(tail_relative_tolerance))
+            and np.isfinite(float(minimum_gap_hartree))):
+        raise ValueError("SOS convergence tolerance and minimum gap must be finite")
     if tail_relative_tolerance <= 0.0 or minimum_gap_hartree <= 0.0:
         raise ValueError("SOS convergence tolerance and minimum gap must be positive")
     if np.any(np.diff(energies) < -1.0e-12):
