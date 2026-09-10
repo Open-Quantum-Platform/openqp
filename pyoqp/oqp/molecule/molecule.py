@@ -3203,6 +3203,30 @@ class Molecule:
             'model_config': model_config,
         }
 
+    def _vibrational_property_request(self):
+        """[hess] options that define cached IR/Raman intensities.
+
+        _hessian_request_signature deliberately leaves [hess] out, because those
+        options do not change H(R); they do change the intensities.  The casts
+        and defaults mirror SinglePoint._compute_vibrational_intensities, so the
+        record compares what the property stage would actually run.
+        """
+        hess = self.config.get('hess', {})
+        return {
+            'vibrational_intensities': bool(hess.get('vibrational_intensities', True)),
+            'property_dx': float(hess.get('property_dx', 1.0e-3)),
+            'property_min_overlap': float(hess.get('property_min_overlap', 0.99)),
+            'property_min_margin': float(hess.get('property_min_margin', 0.05)),
+            'property_fd_relative_tolerance': float(
+                hess.get('property_fd_relative_tolerance', 0.05)),
+            'property_fd_absolute_tolerance': float(
+                hess.get('property_fd_absolute_tolerance', 1.0e-6)),
+            'raman_backend': str(hess.get('raman_backend', 'truncated_sos')),
+            'raman_sos_tail_states': int(hess.get('raman_sos_tail_states', 2)),
+            'raman_sos_tail_tolerance': float(hess.get('raman_sos_tail_tolerance', 0.05)),
+            'raman_sos_min_gap': float(hess.get('raman_sos_min_gap', 1.0e-5)),
+        }
+
     @mpi_dump
     def save_freqs(self, state):
         jsonfile = self.log.replace('.log', '.hess.json')
@@ -3228,6 +3252,7 @@ class Molecule:
             'infrared_intensities': self.infrared_intensities.tolist(),
             'raman_activities': self.raman_activities.tolist(),
             'vibrational_intensity_metadata': self.vibrational_intensity_metadata,
+            'vibrational_property_request': self._vibrational_property_request(),
             'infrared_mode_dipole_derivatives': self.infrared_mode_dipole_derivatives.tolist(),
             'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
             'symmetry_metadata': self.symmetry_metadata,
@@ -3602,6 +3627,30 @@ class Molecule:
         self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
         self.infrared_mode_dipole_derivatives = infrared_derivatives
         self.raman_mode_polarizability_derivatives = raman_derivatives
+
+        # The Hessian identity above excludes [hess], so cached intensities are
+        # reused only for the property options that produced them.  Anything
+        # else -- a different displacement, tracking gate or Raman backend,
+        # intensities now disabled, or a sidecar without the record -- is
+        # reported as not computed instead of publishing stale tensors.
+        property_request = self._vibrational_property_request()
+        if data.get('vibrational_property_request') != property_request:
+            self.infrared_intensities = np.zeros(0)
+            self.raman_activities = np.zeros(0)
+            self.infrared_mode_dipole_derivatives = np.zeros((0, 3))
+            self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
+            if not property_request['vibrational_intensities']:
+                reason = ('Disabled by [hess] vibrational_intensities=False; '
+                          'harmonic frequencies and normal modes remain available.')
+            else:
+                reason = ('The cached vibrational intensities were computed with '
+                          'different [hess] property options, or the cache does not '
+                          'record them; rerun with hess.read=false to recompute them.')
+            self.vibrational_intensity_metadata = {
+                'status': 'not_computed',
+                'reason': reason,
+                'replacement_used': False,
+            }
 
         # Re-derive the normal-mode irreps for the cached modes. The frequency
         # table now carries a Symmetry column, and it is driven by

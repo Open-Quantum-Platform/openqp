@@ -561,6 +561,80 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertEqual(data['hessian_cache_version'], 3)
         self.assertEqual(data['hessian_request']['version'], 3)
 
+    def test_cached_intensities_follow_the_vibrational_property_options(self):
+        # [hess] is outside the Hessian identity, so the options that produced
+        # cached IR/Raman intensities must be matched separately on read.
+        molecule_module = load_molecule_module()
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.symmetry_metadata = {'status': 'disabled', 'point_group': 'c1', 'subgroup': 'c1',
+                                      'requested_point_group': 'auto', 'requested_subgroup': 'auto',
+                                      'label_mo': True, 'label_states': True, 'label_modes': True,
+                                      'use_integral_symmetry': False, 'use_response_symmetry': False,
+                                      'strict': False, 'tolerance': 1e-5}
+        molecule.mol_energy = types.SimpleNamespace(energy=-1.23)
+        molecule.idx = 1
+        molecule.config = {}
+        molecule.mrsf_ekt_results_by_kind = {}
+
+        class _StubData:
+            def __getitem__(self, key):
+                return np.array([])
+
+        molecule.data = _StubData()
+        molecule.energies = np.array([-1.23])
+        molecule.hessian = np.eye(9)
+        molecule.hessian_metadata = {}
+        molecule.freqs = np.array([1.0])
+        molecule.modes = np.ones((1, 9))
+        molecule.inertia = np.ones(3)
+        molecule.infrared_intensities = np.array([12.5])
+        molecule.raman_activities = np.array([3.25])
+        molecule.vibrational_intensity_metadata = {'status': 'computed'}
+        molecule.infrared_mode_dipole_derivatives = np.array([[0.1, 0.2, 0.3]])
+        molecule.raman_mode_polarizability_derivatives = np.ones((1, 3, 3))
+        molecule.get_atoms = lambda: np.array([1, 1, 8], dtype=int)
+        molecule.get_system = lambda: np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+        molecule.get_mass = lambda: np.array([1.0, 1.0, 16.0])
+
+        def read_with(config):
+            molecule.config = config
+            molecule.infrared_intensities = None
+            molecule.read_freqs()
+            return molecule.infrared_intensities, molecule.vibrational_intensity_metadata
+
+        with tempfile.TemporaryDirectory() as tmp:
+            molecule.log = str(Path(tmp) / 'run.log')
+            molecule.save_freqs(0)
+
+            infrared, metadata = read_with({})
+            np.testing.assert_array_equal(infrared, [12.5])
+            self.assertEqual(metadata['status'], 'computed')
+            # Explicit defaults are the same request.
+            infrared, _ = read_with({'hess': {'property_dx': 1.0e-3, 'raman_backend': 'truncated_sos'}})
+            np.testing.assert_array_equal(infrared, [12.5])
+
+            infrared, metadata = read_with({'hess': {'property_dx': 2.0e-3}})
+            self.assertEqual(infrared.size, 0)
+            self.assertEqual(molecule.raman_activities.size, 0)
+            self.assertEqual(molecule.raman_mode_polarizability_derivatives.shape, (0, 3, 3))
+            self.assertEqual(metadata['status'], 'not_computed')
+            self.assertIn('hess.read=false', metadata['reason'])
+
+            infrared, metadata = read_with({'hess': {'raman_backend': 'finite_field'}})
+            self.assertEqual(infrared.size, 0)
+
+            infrared, metadata = read_with({'hess': {'vibrational_intensities': False}})
+            self.assertEqual(infrared.size, 0)
+            self.assertIn('vibrational_intensities=False', metadata['reason'])
+
+            sidecar = Path(tmp) / 'run.hess.json'
+            data = json.loads(sidecar.read_text())
+            data.pop('vibrational_property_request')
+            sidecar.write_text(json.dumps(data))
+            infrared, metadata = read_with({})
+            self.assertEqual(infrared.size, 0)
+            self.assertEqual(metadata['status'], 'not_computed')
+
 
 if __name__ == '__main__':
     unittest.main()
