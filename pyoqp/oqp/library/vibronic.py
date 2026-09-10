@@ -796,6 +796,7 @@ class VibronicSpectrum:
     normalization: str
     retained_thermal_population: float
     franck_condon_completeness: float
+    transition_strength_completeness: float
 
 
 def harmonic_vibronic_spectrum(
@@ -828,6 +829,13 @@ def harmonic_vibronic_spectrum(
     the populated-initial x final pair count, checked before any overlap is
     evaluated, because two individually admissible sets can still multiply
     into billions of transitions.
+
+    With a Herzberg--Teller derivative, ``minimum_franck_condon_completeness``
+    also bounds the retained share of the exact first-order transition
+    strength.  Franck--Condon overlap weight cannot see HT intensity carried
+    into omitted final states; for a linear dipole in ground normal
+    coordinates the closure over final states is, per initial state n,
+    ``|mu0|^2 + sum_k |dmu/dQ_k|^2 (2 n_k + 1) / (2 omega_k)``.
     """
 
     engine = HarmonicOverlapEngine(model)
@@ -946,6 +954,34 @@ def harmonic_vibronic_spectrum(
             "max_final_quanta"
         )
     total_strength = sum(item[-1] for item in provisional)
+    if derivative_values is None:
+        strength_completeness = completeness
+    else:
+        assert dipole is not None
+        ground_omega = model.ground_frequencies_cm1 * CM1_TO_HARTREE
+        mode_strength = np.sum(np.abs(derivative_values) ** 2, axis=0) / (
+            2.0 * ground_omega
+        )
+        condon_strength = float(np.vdot(dipole, dipole).real)
+        complete_strength = sum(
+            population
+            * (
+                condon_strength
+                + float(np.dot(2.0 * np.asarray(initial) + 1.0, mode_strength))
+            )
+            for initial, population in zip(initial_states, populations)
+            if population != 0.0
+        )
+        strength_completeness = (
+            total_strength / complete_strength if complete_strength > 0.0 else 1.0
+        )
+        if strength_completeness + 1.0e-15 < minimum_franck_condon_completeness:
+            raise ValueError(
+                f"Herzberg-Teller transition-strength completeness "
+                f"{strength_completeness:.8f} is below the required "
+                f"{minimum_franck_condon_completeness:.8f}; increase "
+                "max_final_quanta"
+            )
     if normalization == "sum" and total_strength <= 0.0:
         raise ValueError("spectrum cannot be normalized because total strength is zero")
     strength_scale = 1.0 / total_strength if normalization == "sum" else 1.0
@@ -1001,6 +1037,7 @@ def harmonic_vibronic_spectrum(
         normalization=normalization,
         retained_thermal_population=retained_population,
         franck_condon_completeness=completeness,
+        transition_strength_completeness=strength_completeness,
     )
 
 
@@ -1345,6 +1382,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "model": "multidimensional harmonic Franck-Condon",
         "retained_thermal_population": spectrum.retained_thermal_population,
         "franck_condon_completeness": spectrum.franck_condon_completeness,
+        "transition_strength_completeness": spectrum.transition_strength_completeness,
         "normalization": spectrum.normalization,
         "lines": [
             {
