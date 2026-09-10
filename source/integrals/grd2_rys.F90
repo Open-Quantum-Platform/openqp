@@ -466,7 +466,6 @@ contains
     integer :: id1,id2,ppid_p,ppid_q,npp_p,npp_q
     real(kind=dp) :: aa,ab,aandb1,bb,da,db,test,pfac,rho
     real(kind=dp) :: p(3),q(3),mu2_1,max_dab
-    logical :: last
 
     call set_shells(gdat)
     if(size(dab,1)<product(gdat%nbf) .or. &
@@ -531,14 +530,17 @@ contains
           ppairs%PB(:,ppid_p-1+ijg)
         gdat%dkl(:,ng)=ppairs%PA(:,ppid_q-1+klg)- &
           ppairs%PB(:,ppid_q-1+klg)
-        last=klg==npp_q .and. ijg==npp_p
-        if(ng==maxgg .or. last) then
+        if(ng==maxgg) then
           call compute_grd_ints_batch(gdat,dab,ng,nmax,mmax,nimax,njmax, &
             nkmax,nlmax,fd_batch)
           ng=0
         end if
       end do
     end do
+    ! The last primitive pair can be screened after an earlier accepted pair,
+    ! so flush a partial batch here, as grd2_rys_compute_operator does.
+    if(ng>0) call compute_grd_ints_batch(gdat,dab,ng,nmax,mmax,nimax,njmax, &
+      nkmax,nlmax,fd_batch)
     call apply_translation_invariance_batch(gdat,fd_batch)
   end subroutine grd2_rys_compute_batch
 
