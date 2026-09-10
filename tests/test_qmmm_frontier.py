@@ -147,6 +147,23 @@ class TestFrontierCharge(unittest.TestCase):
 
     # -- site assembly --------------------------------------------------
 
+    def test_virtual_site_uses_minimum_image_bond(self):
+        """Under PBC a frontier M1-M2 bond may be stored across the box; the
+        virtual midpoint must sit on the bonded (minimum-image) midpoint."""
+        L = 20.0
+        mm_idx = [10, 11]
+        q = [0.6, -0.2]
+        xyz = np.array([[19.5, 0.0, 0.0], [0.5, 0.0, 0.0]], float)   # bonded across x boundary
+        _, dq, virt = self.c.redistribute_frontier_charges(
+            [(10, [11])], self._charge_of({10: 0.6, 11: -0.2}), "rc")
+        mi = lambda d: d - L * np.round(d / L)
+        _, rs, _ = self.c.assemble_embedding_sites(mm_idx, q, xyz, {10}, dq, virt, min_image=mi)
+        # one virtual site (M1-M2 midpoint): 19.5 + 0.5 * (+1.0) = 20.0, i.e. on the bond
+        self.assertEqual(len(rs), 2)                     # M2 (real) + the midpoint
+        np.testing.assert_allclose(rs[-1], [20.0, 0.0, 0.0])
+        _, rs_raw, _ = self.c.assemble_embedding_sites(mm_idx, q, xyz, {10}, dq, virt)
+        np.testing.assert_allclose(rs_raw[-1], [10.0, 0.0, 0.0])   # raw midpoint, half a box away
+
     def test_assemble_identity_without_frontier(self):
         mm_idx = [3, 4, 5]
         q = [0.1, -0.2, 0.3]

@@ -40,6 +40,7 @@ from importlib import resources
 import numpy as np
 
 import oqp
+from oqp.library.ints_1e import ints_1e
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
 from oqp.library.nac_utils import canonical_state_overlap
 from oqp.library.odp import odp_from_config
@@ -3673,12 +3674,23 @@ class NAMD_QMMM(NAMD):
         self._qmmm_pdb_file = pdb_file
         self._qmmm_forcefield_files = ff_files
         self._qmmm_restart_identity_cache = None
-        self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
+        # Topology (ascending) order: the embedded driver sorts its own copy and
+        # numbers link-atom host rows in that order, and the QM molecule built
+        # from the PDB is in topology order, so every per-row array here (QM
+        # geometry, gradients, charges, hop velocities) must use the same order.
+        self.qm_atoms = np.array(sorted(_parse_int_list(q['qm_atoms'])), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
-        self.periodic = self.cutoff is not app.NoCutoff
+        from oqp.library.qmmm_driver import is_periodic_method
+        self.periodic = is_periodic_method(self.cutoff)   # PME / Ewald / CutoffPeriodic
         _validate_odp_boundary_conditions(self.odp, self.periodic)
         embedding = str(q['embedding']).strip()
         frontier_scheme = str(q.get('frontier_scheme', 'none')).strip()
+        _et = q.get('ewald_tol', None)
+        ewald_tol = None if _et in (None, '', 'none', 'None') else float(_et)
+        lj_switch = str(q.get('lj_switch', 'false')).strip().lower() in ('1', 'true', 'yes', 'on')
+        h_lj = str(q.get('h_lj', 'false')).strip().lower() in ('1', 'true', 'yes', 'on')
+        _w = q.get('mm_charge_width', None)
+        mm_charge_width = None if _w in (None, '', 'none', 'None', 0, 0.0, '0') else float(_w)
 
         self.pdb = app.PDBFile(pdb_file)
         self.forcefield = app.ForceField(*ff_files)
@@ -3691,8 +3703,20 @@ class NAMD_QMMM(NAMD):
             Cutoff=self.cutoff,
             Embedding=embedding,
             frontier_scheme=frontier_scheme,
+            ewald_tol=ewald_tol,
+            lj_switch=lj_switch,
+            h_lj=h_lj,
+            mm_charge_width=mm_charge_width,
         )
         self.mm = self.driver.mm_systems
+
+        # Covalent QM/MM boundary: the QM Molecule must carry the real QM atoms
+        # followed by one hydrogen link atom per cut bond, in the order the
+        # driver detects them (sorted by (QM host, MM host) topology index).
+        # ``[input] system = file.pdb <1-based QM indices>`` builds exactly that.
+        self.link_atoms = list(self.driver.link_atoms)
+        self.nqm = int(len(self.qm_atoms))
+        self._validate_qm_molecule_layout()
 
         # full-system state (atomic units)
         self.natom_all = self.pdb.topology.getNumAtoms()
@@ -3726,8 +3750,42 @@ class NAMD_QMMM(NAMD):
         self._setup_qmmm_restraint_targets()
 
     # ------------------------------------------------------------------ #
+    # [qmmm] keys added with the periodic/embedding controls.  They enter the
+    # restart and WHAM identities only when set to a non-default value, so
+    # checkpoints written before these keys existed keep validating.
+    _QMMM_OPTIONAL_HAMILTONIAN_KEYS = ('ewald_tol', 'lj_switch', 'h_lj', 'mm_charge_width')
+
+    @classmethod
+    def _qmmm_identity_config(cls, qmmm_config):
+        """Copy of ``qmmm_config`` with the optional Hamiltonian keys dropped
+        when at their default and normalised (bool / float) otherwise."""
+        cfg = dict(qmmm_config)
+        for key in cls._QMMM_OPTIONAL_HAMILTONIAN_KEYS:
+            if key not in cfg:
+                continue
+            value = cfg.pop(key)
+            if key in ('lj_switch', 'h_lj'):
+                on = value if isinstance(value, bool) else (
+                    str(value).strip().lower() in ('1', 'true', 'yes', 'on', 't'))
+                if on:
+                    cfg[key] = True
+            else:
+                text = '' if value is None else str(value).strip()
+                if text.lower() in ('', 'none'):
+                    continue
+                try:
+                    number = float(text)
+                except ValueError:
+                    cfg[key] = text            # let the run's own validation complain
+                    continue
+                if number == 0.0:              # '0', '0.0', '0.00', '0e0': point charges
+                    continue
+                cfg[key] = number
+        return cfg
+
     def _qmmm_restart_system_identity(self, system, qmmm_config):
         """Bind QM/MM restarts to atoms, topology, selection, and force field."""
+        qmmm_config = self._qmmm_identity_config(qmmm_config)
         atoms = list(self.pdb.topology.atoms())
         atomic_numbers = [
             0 if atom.element is None else atom.element.atomic_number
@@ -3767,6 +3825,7 @@ class NAMD_QMMM(NAMD):
 
     def _qmmm_wham_system_identity(self, system, qmmm_config):
         """Hash QM/MM topology and Hamiltonian without initial coordinates."""
+        qmmm_config = self._qmmm_identity_config(qmmm_config)
         atoms = list(self.pdb.topology.atoms())
         atomic_numbers = [
             0 if atom.element is None else atom.element.atomic_number
@@ -3784,7 +3843,8 @@ class NAMD_QMMM(NAMD):
         hamiltonian_options = {
             key: qmmm_config.get(key)
             for key in ('embedding', 'frontier_scheme', 'cutoff',
-                        'nonbondedmethod')
+                        'nonbondedmethod', 'ewald_tol', 'lj_switch', 'h_lj',
+                        'mm_charge_width')
             if key in qmmm_config
         }
         digest = _restart_identity_digest(
@@ -3900,7 +3960,7 @@ class NAMD_QMMM(NAMD):
         kinetic_after = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
         self._thermostat_exchange = float(kinetic_after - kinetic_before)
         self._thermostat_exchange_cumulative += self._thermostat_exchange
-        self.vel = self.v_all[self.qm_atoms].copy()
+        self.vel = self._qm_velocities()
 
     # ------------------------------------------------------------------ #
     def _sync_positions(self):
@@ -3915,15 +3975,138 @@ class NAMD_QMMM(NAMD):
                 sim = self.mm.get(key)
                 if sim is not None:
                     sim.context.setPositions(pos_q)
-        # QM Molecule coords (bohr) from the pdb-indexed positions
-        self.mol.update_system(self.r_all[self.qm_atoms].reshape(-1))
+        # QM Molecule coords (bohr): real QM atoms + hydrogen link atoms
+        self.mol.update_system(self._qm_positions_bohr().reshape(-1))
+
+    # ------------------------------------------------------------------ #
+    # covalent-boundary (link-atom) helpers
+    #
+    # The QM Molecule has natom = nqm + nlink centres.  Link atoms have no
+    # dynamical degrees of freedom: their position is the fixed linear
+    # combination r_L = r_QM + g (r_MM - r_QM) of two real atoms, and every
+    # force on them is redistributed onto those hosts by the chain rule (see
+    # _total_force_espf).  The FSSH hop rescales the REAL QM-atom velocities
+    # only, so the velocity vector handed to the kernel carries zeros in the
+    # link rows (kinetic energy = that of the real QM atoms); coupling-derivative
+    # corrections that need the motion of every QM centre get the kinematic
+    # link velocity (1-g) v_QM + g v_MM instead.
+    # ------------------------------------------------------------------ #
+    def _validate_qm_molecule_layout(self):
+        nlink = len(self.link_atoms)
+        if self.natom != self.nqm + nlink:
+            if nlink:
+                raise ValueError(
+                    f"NAMD QM/MM across a covalent boundary: the QM/MM partition "
+                    f"cuts {nlink} bond(s) but the QM molecule has {self.natom} "
+                    f"atoms instead of {self.nqm} QM atoms + {nlink} link "
+                    f"hydrogen(s). Build the QM molecule from the PDB "
+                    f"('[input] system = file.pdb <1-based QM indices>') so the "
+                    f"link atoms are appended automatically.")
+            raise ValueError(
+                f"NAMD QM/MM: the QM molecule has {self.natom} atoms but "
+                f"[qmmm] qm_atoms selects {self.nqm}.")
+        z_mol = np.asarray(self.mol.get_atoms2("charge"), dtype=float).reshape(-1)
+        z_top = {a.index: (0 if a.element is None else a.element.atomic_number)
+                 for a in self.pdb.topology.atoms()}
+        z_expected = [z_top[int(i)] for i in self.qm_atoms] + [1] * nlink
+        if any(abs(z_mol[k] - z_expected[k]) > 0.5 for k in range(self.natom)):
+            raise ValueError(
+                "NAMD QM/MM: the QM molecule's atoms do not match [qmmm] "
+                "qm_atoms (in topology order) followed by the hydrogen link "
+                f"atoms: molecule Z={z_mol.astype(int).tolist()}, expected "
+                f"{z_expected}. Note '[input] system = file.pdb ...' indices are "
+                "1-based while [qmmm] qm_atoms are 0-based.")
+
+    def _qm_positions_bohr(self):
+        """(natom, 3) QM-centre coordinates (bohr): real QM atoms in topology
+        order, then the hydrogen link atoms on their cut bonds."""
+        box = self.driver._box_lengths_bohr()       # None for a cluster
+        if box is None:
+            r = self.r_all[self.qm_atoms]
+            qm_xyz = None
+        else:
+            # bonded QM fragments made whole under PBC (minimum-image bonds)
+            qm_xyz = self.driver.unwrap_qm(lambda i: self.r_all[i], box)
+            r = np.asarray([qm_xyz[int(i)] for i in self.qm_atoms], dtype=float)
+        if not self.link_atoms:
+            return r
+        links = []
+        for l in self.link_atoms:
+            bond = self.driver._min_image(self.r_all[l.mm_index] - self.r_all[l.qm_index], box)
+            host = self.r_all[l.qm_index] if qm_xyz is None else qm_xyz[int(l.qm_index)]
+            links.append(host + l.g * bond)
+        return np.vstack([r, np.asarray(links, dtype=float)])
+
+    def _qm_velocities(self, kinematic=False):
+        """(natom, 3) QM-centre velocities.  Link rows are zero (no dynamical
+        DOF; the hop rescales real QM atoms only) unless ``kinematic`` is set,
+        in which case they carry (1-g) v_QM + g v_MM."""
+        v = np.zeros((self.natom, 3))
+        v[:self.nqm] = self.v_all[self.qm_atoms]
+        if kinematic:
+            for a, l in enumerate(self.link_atoms):
+                v[self.nqm + a] = ((1.0 - l.g) * self.v_all[l.qm_index]
+                                   + l.g * self.v_all[l.mm_index])
+        return v
+
+    def _store_qm_velocities(self, vel):
+        """Write the (possibly rescaled) real QM-atom velocities back into the
+        full-system velocity array; link rows are discarded."""
+        self.v_all[self.qm_atoms] = np.asarray(vel)[:self.nqm]
+
+    def _embedding_field(self):
+        """(potmm, potqm) the embedded SCF sees: the MM electrostatic potential
+        at every QM centre, or a zero field for [qmmm] embedding=mechanical
+        (gas-phase QM Hamiltonian; the QM-MM electrostatics is then left to
+        OpenMM with the QM ESP charges, as in OpenQpQMMM.compute_force)."""
+        if getattr(self.driver, "Embedding", "") == "mechanical":
+            return self.driver._zero_embedding()
+        return self.driver.electrostatic_potential()
+
+    @staticmethod
+    def _embedded_scf(sp):
+        """Run the embedded SCF (the ESPF term is already in hcore) through the
+        same robustness ladder as a gas-phase reference: primary converger,
+        then SOSCF/TRAH escalation warm-started from the current orbitals.
+        A reference that still does not converge stops the run: propagating
+        on an unconverged SCF gives an inconsistent energy/force pair, and a
+        DIIS loop that stops at its iteration limit even leaves the density
+        records in an intermediate state."""
+        converged = sp._run_scf()
+        if not converged:
+            raise RuntimeError(
+                "NAMD QM/MM: the embedded SCF did not converge (primary "
+                "converger and the SOSCF/TRAH escalation).  Raise [scf] maxit, "
+                "loosen [scf] conv, or check the QM/MM contacts.")
+
+    def _fold_link_charges(self, pchg):
+        """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
+        to its QM host so the total QM charge is conserved when the QM region
+        is represented by point charges on the real QM atoms only."""
+        pchg = np.asarray(pchg, dtype=float)
+        q = pchg[:self.nqm].copy()
+        for a, l in enumerate(self.link_atoms):
+            q[l.host_row] += pchg[self.nqm + a]
+        return q
+
+    def _project_link_rows(self, g):
+        """Chain-rule a (natom, 3) QM-centre gradient/force onto the real QM
+        atoms: returns (g_qm (nqm,3), mm_host contributions {mm_index: (3,)})."""
+        g = np.asarray(g, dtype=float)
+        g_qm = g[:self.nqm].copy()
+        mm_part = {}
+        for a, l in enumerate(self.link_atoms):
+            gl = g[self.nqm + a]
+            g_qm[l.host_row] += (1.0 - l.g) * gl
+            mm_part[l.mm_index] = mm_part.get(l.mm_index, 0.0) + l.g * gl
+        return g_qm, mm_part
 
     def _electronic_qmmm(self, with_overlap):
         """Embedded SCF + MRSF excitation; returns (potmm, potqm)."""
         from oqp.library.qmmm_driver import (
             unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
         mol = self.mol
-        potmm, potqm = self.driver.electrostatic_potential()
+        potmm, potqm = self._embedding_field()
 
         if is_tb_method(str(mol.config['input']['method'])):
             # DFTB electrostatic embedding: the openqp-dftb library folds the
@@ -3937,7 +4120,20 @@ class NAMD_QMMM(NAMD):
                 raise NotImplementedError(
                     "NAMD QM/MM with method=dftb/xtb requires [qmmm] embedding="
                     "electrostatic/espf (full-ESPF scheme).")
+            if self.driver._ewald() is not None:
+                # The periodic QM-image self-consistency below needs the ESPF
+                # charge operator of the native path; the tight-binding backend
+                # exposes no equivalent, so a periodic DFTB/xTB NAMD would
+                # silently drop the image term and its energy correction.
+                raise NotImplementedError(
+                    "NAMD QM/MM with method=dftb/xtb is implemented for non-"
+                    "periodic clusters only ([qmmm] cutoff=NoCutoff); the "
+                    "periodic (PME/Ewald) QM-image self-consistency is not "
+                    "available for the tight-binding backend.")
+            # (embedding=mechanical is rejected above and by the input
+            # checker for the tight-binding NAMD path, so potmm is the field.)
             mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            self._e_img, self._f_img = 0.0, None
             sp = SinglePoint(mol)
             ref = sp.reference()
             if with_overlap:
@@ -3951,31 +4147,227 @@ class NAMD_QMMM(NAMD):
         sp._prep_guess()
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
-        mol.data["OQP::POTMM"] = potmm
-        # Zero POTQM: POTMM (PME) already captures the periodic MM embedding and
-        # has the QM self-image removed; the residual QM-QM periodic image term
-        # is negligible for solvation-size boxes, and the OpenMM correction was
-        # buggy (over-corrected E by ~5 Ha, force-inconsistent -- verified by
-        # finite difference). See pme_fd_diag.py.
-        mol.data["OQP::POTQM"] = np.zeros((nat, nat))
-        oqp.espf_op_corr(mol)
-        espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
-        hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
-        hcore += np.einsum("ijk,i->jk", espf, potmm)
-        mol.set_hcore(pack_lower_tri_single(hcore))
-        sp.scf()
+        # Periodic full-ESPF: the QM charges also interact with their own images
+        # (Bonfrate et al. JCTC 2024, eq 8).  The image field psi_img q is added to
+        # the MM potential and made self-consistent with the ground-state ESPF
+        # charges; the energy carries the double-counting correction
+        # -1/2 q psi_img q (see _total_force_espf).  With ground-state charges
+        # the force is exact for the ground state and an approximation for
+        # excited states (their charges differ slightly from the ground state).
+        ewald = self.driver._ewald() if getattr(self.driver, "espf_full", False) else None
+        potmm_mm = np.asarray(potmm, dtype=float).copy()
+        if ewald is not None:
+            psi_img, dpsi_img = ewald.qm_image_matrix(self.driver._qm_center_positions_bohr())
+            q_prev = (self._q_img if getattr(self, "_q_img", None) is not None
+                      and len(self._q_img) == nat else np.zeros(nat))
+        else:
+            psi_img = dpsi_img = None
+            q_prev = None
+        converged = psi_img is None
+        delta, it = float("inf"), -1
+        for it in range(int(self.driver.IMAGE_MAXITER)):
+            potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
+            mol.data["OQP::POTMM"] = potmm
+            mol.data["OQP::POTQM"] = np.zeros((nat, nat))
+            oqp.espf_op_corr(mol)
+            espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+            hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+            hcore += np.einsum("ijk,i->jk", espf, potmm)
+            mol.set_hcore(pack_lower_tri_single(hcore))
+            self._embedded_scf(sp)
+            if psi_img is None:
+                break
+            oqp.form_esp_charges(mol)
+            q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
+            delta = float(np.abs(q_new - q_prev).max())
+            if delta < self.driver.IMAGE_TOL:
+                q_prev = q_new
+                converged = True
+                break
+            q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
+            # Warm start: keep the converged orbitals as the guess for the next
+            # image iteration and only rebuild the bare one-electron integrals
+            # (the ESPF term is re-added above).  A fresh Hueckel guess every
+            # iteration lets a reference with two nearby SCF solutions flip
+            # between them as the image field changes, and the loop then
+            # oscillates instead of converging.
+            ints_1e(mol)
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
+                f"did not converge in {it + 1} iterations "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                "energy/force would be inconsistent.  Tighten [scf] conv or "
+                "check the QM/MM contacts.")
+        self._grad_cache = None
+        self._img_ctx = None
         ref = [mol.get_scf_energy()]
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
         sp.excitation(ref)
         LastStep(mol).compute(mol)
-        return potmm, potqm
+        if psi_img is None:
+            self._e_img, self._f_img = 0.0, None
+            return potmm, potqm
+        # The reference-density loop above only seeds the field; the state
+        # that is propagated gets its own self-consistent field below (and
+        # again after a surface hop, see _total_force).
+        self._img_ctx = dict(sp=sp, potmm_mm=potmm_mm, psi_img=psi_img, dpsi_img=dpsi_img,
+                             with_overlap=with_overlap, geom=self._geometry_key())
+        return self._refine_image_field(q_prev), potqm
+
+    # -- restart: the periodic image-field seed --------------------------- #
+    def _restart_extra_payload(self):
+        """Checkpoint the converged active-state ESPF charges of the periodic
+        image field, so a resumed trajectory warm-starts the image iteration
+        exactly like an uninterrupted one (a zero seed can settle on a
+        different SCF/image branch when two nearby solutions exist)."""
+        q = getattr(self, "_q_img", None)
+        if q is None:
+            return {}
+        return {"qmmm_q_img": np.asarray(q, dtype=np.float64).reshape(-1)}
+
+    def _load_restart_extra(self, saved, prev_data=None):
+        del prev_data
+        if "qmmm_q_img" not in saved:
+            return {}
+        q = np.asarray(saved["qmmm_q_img"], dtype=float).reshape(-1)
+        if q.shape != (self.natom,) or not np.all(np.isfinite(q)):
+            raise RuntimeError(
+                "NAMD restart checkpoint has an invalid periodic QM-image charge seed "
+                f"(shape {q.shape}, expected ({self.natom},))")
+        return {"q_img": q.copy()}
+
+    def _restore_restart_extra(self, extra):
+        if extra:
+            self._q_img = np.array(extra["q_img"], dtype=float, copy=True)
+
+    def _absorb_hop_field_shift(self, jump):
+        """Periodic full-ESPF, after an accepted hop: the potential energy of
+        the new state moved by ``jump`` (Hartree) when its image field was
+        refined, after the hop kernel had already rescaled the velocities.
+        Rescale the real QM-atom velocities uniformly (the hop kernel's own
+        degrees of freedom) so the kinetic energy changes by -jump; if they
+        do not carry enough kinetic energy, rescale all atoms (uniform scaling
+        keeps the rigid-water constraints satisfied).  Returns the residual
+        total-energy jump."""
+        mol = self.mol
+        jump = float(jump)
+        if not np.isfinite(jump) or abs(jump) < 1e-14:
+            return jump
+        for label, idx in (("QM", np.asarray(self.qm_atoms, dtype=int)),
+                           ("all", np.arange(self.natom_all))):
+            ke = 0.5 * float(np.sum(self.m_all[idx, None] * self.v_all[idx] ** 2))
+            if ke > jump and ke > 0.0:
+                self.v_all[idx] *= np.sqrt(1.0 - jump / ke)
+                dump_log(mol, title=(f"PyOQP: QM-image field refinement after the hop shifted "
+                                     f"E({self.active}) by {jump:+.3e} Hartree; absorbed into "
+                                     f"the {label}-atom kinetic energy"), section='')
+                return 0.0
+        raise RuntimeError(
+            f"NAMD_QMMM: the QM-image field refinement after the hop raised the energy of "
+            f"state {self.active} by {jump:.3e} Hartree, more than the available kinetic "
+            f"energy; the hop is not allowed under the refined Hamiltonian.")
+
+    def _geometry_key(self):
+        """Full-system coordinates the current electronic state belongs to."""
+        return np.array(self.r_all, dtype=float, copy=True)
+
+    def _refine_image_field(self, q_prev):
+        """Make the periodic QM-image field self-consistent with the relaxed
+        ESPF charges of the ACTIVE state (the force is the derivative of the
+        energy only if the field the SCF saw belongs to the propagated state):
+        iterate SCF -> excitation -> active-state gradient (which publishes
+        the relaxed charges) until those charges reproduce the field they were
+        computed in.  Seeds from ``q_prev`` (the reference-density charges at a
+        new geometry, or the previous state's field after a surface hop),
+        stores the image energy/force terms and caches the converged gradient
+        for _qm_gradient; returns the MM potential incl. the image field."""
+        from oqp.library.qmmm_driver import (
+            unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
+        mol = self.mol
+        ctx = self._img_ctx
+        sp, potmm_mm, psi_img, dpsi_img = ctx["sp"], ctx["potmm_mm"], ctx["psi_img"], ctx["dpsi_img"]
+        nat = mol.data["natom"]
+        nbf = mol.data.get_basis()["nbf"]
+        from oqp.library.qmmm_driver import anderson_step
+        q_prev = np.array(q_prev, dtype=float)
+        potmm = potmm_mm + psi_img @ q_prev
+        self._grad_cache = None
+        converged = False
+        delta = float("inf")
+        q_hist, f_hist, e_hist = [], [], []
+        for k in range(int(self.driver.IMAGE_MAXITER_ACTIVE)):
+            g = self._qm_gradient()
+            q_act = np.array(mol.data["OQP::partial_charges"], dtype=float)
+            delta = float(np.abs(q_act - q_prev).max())
+            e_act = float(mol.energies[self.active])
+            dump_log(mol, title=(f"PyOQP: QM-image field, active-state iteration {k + 1}: "
+                                 f"max |dq| = {delta:.2e} e, E({self.active}) = "
+                                 f"{e_act:.10f} Hartree"), section='')
+            if delta < self.driver.IMAGE_TOL_ACTIVE:
+                converged = True
+                break
+            # The relaxed charges carry the Z-vector residual (about 1e-4 e at
+            # the default zvconv for an 18-atom indole), so |dq| can settle at
+            # a noise floor above the tolerance while the state energy no
+            # longer moves: accept when the residual is within ten times the
+            # tolerance and the energy has been stationary over three
+            # iterations.  A tighter [tdhf] zvconv lowers the floor.
+            if (delta < 10.0 * self.driver.IMAGE_TOL_ACTIVE and len(e_hist) >= 2
+                    and max(abs(e_act - e) for e in e_hist[-2:]) < self.driver.IMAGE_ETOL_ACTIVE):
+                dump_log(mol, title=(f"PyOQP: QM-image field accepted on energy stagnation "
+                                     f"(|dE| < {self.driver.IMAGE_ETOL_ACTIVE:.0e} Hartree over three "
+                                     f"iterations, max |dq| = {delta:.2e} e)"), section='')
+                converged = True
+                break
+            if len(f_hist) >= 2 and delta > np.abs(f_hist[-1]).max() > np.abs(f_hist[-2]).max():
+                # residual grew twice in a row: the history is dominated by
+                # noise, restart the extrapolation from the current point
+                q_hist, f_hist = [], []
+            q_hist.append(q_prev.copy()); f_hist.append(q_act - q_prev); e_hist.append(e_act)
+            q_prev = q_act if k == 0 else anderson_step(q_hist, f_hist)
+            ints_1e(mol)                                   # bare hcore, orbitals kept
+            potmm = potmm_mm + psi_img @ q_prev
+            mol.data["OQP::POTMM"] = potmm
+            mol.data["OQP::POTQM"] = np.zeros((nat, nat))
+            oqp.espf_op_corr(mol)
+            espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+            hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+            hcore += np.einsum("ijk,i->jk", espf, potmm)
+            mol.set_hcore(pack_lower_tri_single(hcore))
+            self._embedded_scf(sp)
+            ref = [mol.get_scf_energy()]
+            if ctx["with_overlap"]:
+                mol.back_door = (self.prev_xyz, self.prev_data)
+                BasisOverlap(mol).overlap()
+            sp.excitation(ref)
+            LastStep(mol).compute(mol)
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image field did not become "
+                f"self-consistent with the active-state charges in "
+                f"{self.driver.IMAGE_MAXITER_ACTIVE} iterations (max |dq| = {delta:.2e} e).")
+        self._q_img = q_prev.copy()
+        self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
+        self._f_img = -np.einsum("a,b,abc->ac", q_prev, q_prev, dpsi_img)
+        self._grad_cache = (int(self.active), np.array(g, dtype=float), q_act.copy(), ctx["geom"])
+        return potmm
 
     def _qm_gradient(self):
         """Embedded active-state gradient (Hartree/bohr) incl. ESPF force."""
         import os
         mol = self.mol
+        cache = getattr(self, "_grad_cache", None)
+        if cache is not None and cache[0] == int(self.active) \
+                and np.array_equal(cache[3], self.r_all):
+            # gradient already evaluated by the image self-consistency loop
+            # for this state at this geometry; restore its relaxed charges
+            self._grad_cache = None
+            mol.data["OQP::partial_charges"] = cache[2].copy()
+            return cache[1].copy()
+        self._grad_cache = None
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
@@ -4048,6 +4440,21 @@ class NAMD_QMMM(NAMD):
         """Assemble full-system force (a.u.) and total potential energy (Ha)."""
         mol = self.mol
         u = self._u
+        ctx = getattr(self, "_img_ctx", None)
+        if ctx is not None:
+            # Periodic full-ESPF: the image field stored by _electronic_qmmm
+            # belongs to the state it was refined for.  After a surface hop
+            # the new active state must get its own self-consistent field
+            # (seeded from the previous state's charges) before its force is
+            # integrated; a geometry change needs a new electronic step.
+            if not np.array_equal(ctx["geom"], self.r_all):
+                raise RuntimeError("NAMD_QMMM._total_force: the geometry changed since the "
+                                   "last electronic step; call _electronic_qmmm first.")
+            cache = getattr(self, "_grad_cache", None)
+            if cache is None or cache[0] != int(self.active):
+                dump_log(mol, title=(f"PyOQP: QM-image field re-iterated for the new active "
+                                     f"state {self.active} (surface hop)"), section='')
+                potmm = self._refine_image_field(self._q_img)
         # active-state embedded QM gradient (Ha/bohr). The z-vector step inside
         # the gradient already forms the excited-state ESPF charges, so
         # OQP::partial_charges holds the active state's QM charges afterwards.
@@ -4058,15 +4465,22 @@ class NAMD_QMMM(NAMD):
             force, epot = self._total_force_espf(potmm, gqm, pchg)
             return self._apply_odp_to_force_energy(force, epot)
 
-        # MM forces with embedded QM charges (OpenMM units)
-        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        # MM forces with embedded QM charges (OpenMM units).  Link atoms are
+        # not MM particles: fold each link charge onto its QM host so the
+        # charge the QM region presents to the MM electrostatics is conserved
+        # (same rule as OpenQpQMMM.compute_force).
+        emm_q, gmm_q = self.driver.forces_mm(self._fold_link_charges(pchg))
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
 
         # total force = MM forces; on QM atoms subtract the QM gradient
+        # (link-atom rows chain-ruled onto their QM and MM hosts)
         f_all = gmm.copy()
+        gqm, g_mm_host = self._project_link_rows(gqm)
         for k, i in enumerate(self.qm_atoms):
             f_all[i] = f_all[i] - gqm[k]
+        for m, gl in g_mm_host.items():
+            f_all[m] = f_all[m] - gl
         # periodic QM-QM Ewald self-interaction correction force (QM atoms only;
         # physically correct but small for large boxes -- NOT the dominant
         # source of the remaining periodic force-energy drift, which is the PME
@@ -4114,6 +4528,8 @@ class NAMD_QMMM(NAMD):
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
 
         fq, fm, mm_idx = self.driver._coupling_forces(pchg)   # a.u. (Ha/bohr)
+        if getattr(self, "_f_img", None) is not None:
+            fq = fq + self._f_img                               # periodic QM-image force
 
         f_all = gmm.copy()
         for a, link in enumerate(self.driver.link_atoms):
@@ -4140,6 +4556,7 @@ class NAMD_QMMM(NAMD):
         else:
             eqm = float(mol.energies[self.active]) + float(
                 np.dot(np.array(mol.get_atoms2("charge")), potmm))
+        eqm -= float(getattr(self, "_e_img", 0.0))              # image double counting
         return f_all, eqm + emm
 
     # ------------------------------------------------------------------ #
@@ -4160,7 +4577,7 @@ class NAMD_QMMM(NAMD):
             accel = f_all / self.m_all[:, None]
             self._rattle(self.r_all, self.v_all)      # constrained velocities
             self._thermalize_initial()
-            self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
+            self.prev_xyz = copy.deepcopy(self._qm_positions_bohr().reshape(-1))
             self.prev_data = copy.deepcopy(mol.get_data())
             self._log_qmmm(0, epot)
             self._save_restart(0, self.r_all, self.v_all, accel)
@@ -4169,7 +4586,7 @@ class NAMD_QMMM(NAMD):
             self.r_all = restart['coordinates'].reshape((self.natom_all, 3))
             self.v_all = restart['velocities'].reshape((self.natom_all, 3))
             accel = restart['acceleration'].reshape((self.natom_all, 3))
-            self.vel = self.v_all[self.qm_atoms].copy()
+            self.vel = self._qm_velocities()
             self._sync_positions()
             start_step = restart['step']
 
@@ -4196,7 +4613,7 @@ class NAMD_QMMM(NAMD):
 
             # couplings + QM-only FSSH hop
             self._state_overlap(istep)
-            self.vel = self.v_all[self.qm_atoms].copy()       # hop sees QM velocities
+            self.vel = self._qm_velocities()       # hop sees QM velocities
             active_old = self.active
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
@@ -4205,7 +4622,7 @@ class NAMD_QMMM(NAMD):
                 new_active, hopped = self.active, False
             else:
                 new_active, hopped = self._hop(allow_hop=hop_ready)
-            self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
+            self._store_qm_velocities(self.vel)              # write back rescaled QM velocities
             active_changed = new_active != active_old
             if active_changed:
                 self.active = new_active
@@ -4217,12 +4634,21 @@ class NAMD_QMMM(NAMD):
                     0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
                 transition_energy_jump = (
                     energy_after_transition - energy_before_transition)
+                if getattr(self, "_img_ctx", None) is not None:
+                    # The hop kernel rescaled the velocities with the target
+                    # energy evaluated in the previous state's image field;
+                    # _total_force has since refined the field for the new
+                    # state, shifting its energy.  Absorb that shift into the
+                    # QM kinetic energy so the total energy is continuous
+                    # across the hop.
+                    transition_energy_jump = self._absorb_hop_field_shift(
+                        transition_energy_jump)
             else:
                 transition_energy_jump = np.nan
 
             self._apply_thermostat(istep)
             accel = accel_new
-            self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
+            self.prev_xyz = copy.deepcopy(self._qm_positions_bohr().reshape(-1))
             self.prev_data = copy.deepcopy(mol.get_data())
             self._log_qmmm(
                 istep, epot, hopped=hopped,
@@ -5269,25 +5695,73 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         from oqp.library.qmmm_driver import (
             unpack_lower_tri_single, unpack_lower_tri_multi, pack_lower_tri_single)
         mol = self.mol
-        potmm, potqm = self.driver.electrostatic_potential()
+        ewald = self.driver._ewald() if getattr(self.driver, "espf_full", False) else None
+        if ewald is not None:
+            # The periodic QM-image term must be self-consistent with the
+            # charges of the propagated state; the spin-adiabatic SOC state is
+            # a weighted mixture of MCH states whose relaxed charges are not
+            # available per iteration, so periodic SOC-NAMD is not offered.
+            # (The input checker reports the same restriction at parse time.)
+            raise NotImplementedError(
+                "SOC-NAMD QM/MM is implemented for non-periodic clusters only "
+                "([qmmm] cutoff=NoCutoff or CutoffNonPeriodic); the periodic "
+                "QM-image term is not available for the spin-mixed active state.")
+        potmm, potqm = self._embedding_field()
 
         sp = SinglePoint(mol)
         sp._prep_guess()
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
-        mol.data["OQP::POTMM"] = potmm
-        # Zero POTQM: POTMM (PME) already captures the periodic MM embedding and
-        # has the QM self-image removed; the residual QM-QM periodic image term
-        # is negligible for solvation-size boxes, and the OpenMM correction was
-        # buggy (over-corrected E by ~5 Ha, force-inconsistent -- verified by
-        # finite difference). See pme_fd_diag.py.
-        mol.data["OQP::POTQM"] = np.zeros((nat, nat))
-        oqp.espf_op_corr(mol)
-        espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
-        hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
-        hcore += np.einsum("ijk,i->jk", espf, potmm)
-        mol.set_hcore(pack_lower_tri_single(hcore))
-        sp.scf()
+        potmm_mm = np.asarray(potmm, dtype=float).copy()
+        if ewald is not None:
+            psi_img, dpsi_img = ewald.qm_image_matrix(self.driver._qm_center_positions_bohr())
+            q_prev = (self._q_img if getattr(self, "_q_img", None) is not None
+                      and len(self._q_img) == nat else np.zeros(nat))
+        else:
+            psi_img = dpsi_img = None
+            q_prev = None
+        converged = psi_img is None
+        delta, it = float("inf"), -1
+        for it in range(int(self.driver.IMAGE_MAXITER)):
+            potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
+            mol.data["OQP::POTMM"] = potmm
+            mol.data["OQP::POTQM"] = np.zeros((nat, nat))
+            oqp.espf_op_corr(mol)
+            espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
+            hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
+            hcore += np.einsum("ijk,i->jk", espf, potmm)
+            mol.set_hcore(pack_lower_tri_single(hcore))
+            self._embedded_scf(sp)
+            if psi_img is None:
+                break
+            oqp.form_esp_charges(mol)
+            q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
+            delta = float(np.abs(q_new - q_prev).max())
+            if delta < self.driver.IMAGE_TOL:
+                q_prev = q_new
+                converged = True
+                break
+            q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
+            # Warm start: keep the converged orbitals as the guess for the next
+            # image iteration and only rebuild the bare one-electron integrals
+            # (the ESPF term is re-added above).  A fresh Hueckel guess every
+            # iteration lets a reference with two nearby SCF solutions flip
+            # between them as the image field changes, and the loop then
+            # oscillates instead of converging.
+            ints_1e(mol)
+        if not converged:
+            raise RuntimeError(
+                f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
+                f"did not converge in {it + 1} iterations "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                "energy/force would be inconsistent.  Tighten [scf] conv or "
+                "check the QM/MM contacts.")
+        if psi_img is not None:
+            self._q_img = q_prev.copy()
+            self._e_img = 0.5 * float(q_prev @ psi_img @ q_prev)
+            self._f_img = -np.einsum("a,b,abc->ac", q_prev, q_prev, dpsi_img)
+        else:
+            self._e_img, self._f_img = 0.0, None
         ref = [mol.get_scf_energy()]
         self.e_ref = float(ref[0])
 
@@ -5358,9 +5832,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             if (mult, state) == dom_key:
                 pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
         g += NAMD_SOC._du_dt_gradient_correction(
-            self, u, active, eval_ha, self.v_all[self.qm_atoms])
+            self, u, active, eval_ha, self._qm_velocities(kinematic=True))
         g += NAMD_SOC._tdc_gradient_correction(
-            self, u, active, getattr(self, '_last_s_mch', None), self.v_all[self.qm_atoms])
+            self, u, active, getattr(self, '_last_s_mch', None), self._qm_velocities(kinematic=True))
 
         if pchg_dom is None:                                  # dominant below threshold: take last
             pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
@@ -5386,6 +5860,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
             emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
             fq, fm, mm_idx = self.driver._coupling_forces(pchg)
+            if getattr(self, "_f_img", None) is not None:
+                fq = fq + self._f_img                           # periodic QM-image force
             f_all = gmm.copy()
             for a, link in enumerate(self.driver.link_atoms):
                 gl, fl = g_qm[nqm + a], fq[nqm + a]
@@ -5399,15 +5875,22 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             f_all -= f_all.mean(axis=0)
             eqm = float(e_diag) + float(
                 np.dot(np.array(mol.get_atoms2("charge")), potmm))
+            eqm -= float(getattr(self, "_e_img", 0.0))          # image double counting
             return f_all, eqm + emm
 
-        emm_q, gmm_q = self.driver.forces_mm(pchg)
+        # Split scheme: link-atom charges folded onto their QM hosts for the MM
+        # electrostatics, link-row gradients chain-ruled onto both hosts (same
+        # bookkeeping as NAMD_QMMM._total_force).
+        emm_q, gmm_q = self.driver.forces_mm(self._fold_link_charges(pchg))
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
 
         f_all = gmm.copy()
+        g_real, g_mm_host = self._project_link_rows(g_qm)
         for k, i in enumerate(self.qm_atoms):
-            f_all[i] = f_all[i] - g_qm[k]
+            f_all[i] = f_all[i] - g_real[k]
+        for m, gl in g_mm_host.items():
+            f_all[m] = f_all[m] - gl
         # No POTQM force: the QM-QM periodic image self-interaction is neglected
         # (POTQM zeroed in the embedded SCF; see _electronic_qmmm). Adding the
         # _potqm_force here without the matching energy term would reintroduce a
@@ -5441,7 +5924,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             self._ulog = u
             self._trajectory_energies = (
                 self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
-            r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+            r_qm = self._qm_positions_bohr()
             NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
             self._log_soc_qmmm(0, epot, mult, state, w, False)
             self._save_restart(0, self.r_all, self.v_all, accel)
@@ -5450,7 +5933,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             self.r_all = restart['coordinates'].reshape((self.natom_all, 3))
             self.v_all = restart['velocities'].reshape((self.natom_all, 3))
             accel = restart['acceleration'].reshape((self.natom_all, 3))
-            self.vel = self.v_all[self.qm_atoms].copy()
+            self.vel = self._qm_velocities()
             self._sync_positions()
             start_step = restart['step']
         self._e_ref_tot = (
@@ -5487,11 +5970,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             epot_old = epot                                    # total E_pot before hop
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
-            self.vel = self.v_all[self.qm_atoms].copy()
+            self.vel = self._qm_velocities()
             allow_hop = self._prepare_hop_step(istep)
             hopped = NAMD_SOC._propagate_and_hop(
                 self, self.prev_eval, eval_ha, t, allow_hop=allow_hop)
-            self.v_all[self.qm_atoms] = self.vel
+            self._store_qm_velocities(self.vel)
             if hopped:
                 g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
                 f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
@@ -5523,7 +6006,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             self._ulog = u
             self._trajectory_energies = (
                 self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
-            NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
+            NAMD_SOC._store_prev(self, self._qm_positions_bohr(), u, eval_ha)
             self._log_soc_qmmm(
                 istep, epot, mult, state, w, hopped,
                 transition_energy_jump=transition_energy_jump)
@@ -5609,7 +6092,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
             self._rattle(self.r_all, self.v_all)
             self._thermalize_initial()
             self._trajectory_energies = e_mch.copy()
-            r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+            r_qm = self._qm_positions_bohr()
             NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
             self._log_mch_qmmm(0, epot, mult, state, False)
             self._save_restart(0, self.r_all, self.v_all, accel)
@@ -5618,7 +6101,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
             self.r_all = restart['coordinates'].reshape((self.natom_all, 3))
             self.v_all = restart['velocities'].reshape((self.natom_all, 3))
             accel = restart['acceleration'].reshape((self.natom_all, 3))
-            self.vel = self.v_all[self.qm_atoms].copy()
+            self.vel = self._qm_velocities()
             self._sync_positions()
             start_step = restart['step']
         self._e_ref_tot = (
@@ -5648,11 +6131,11 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
             epot_old = epot
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
-            self.vel = self.v_all[self.qm_atoms].copy()
+            self.vel = self._qm_velocities()
             allow_hop = self._prepare_hop_step(istep)
             hopped = self._mch_propagate_and_hop(
                 h_mch, e_mch, allow_hop=allow_hop)
-            self.v_all[self.qm_atoms] = self.vel
+            self._store_qm_velocities(self.vel)
             if hopped:
                 g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
                 f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)
@@ -5676,7 +6159,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                 if ke > 0 and ket > 0:
                     self.v_all *= np.sqrt(ket / ke)
             self._trajectory_energies = e_mch.copy()
-            NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
+            NAMD_SOC._store_prev(self, self._qm_positions_bohr(), u, eval_ha)
             self._log_mch_qmmm(
                 istep, epot, mult, state, hopped,
                 transition_energy_jump=transition_energy_jump)

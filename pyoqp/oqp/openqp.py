@@ -585,10 +585,19 @@ class OpenQP:
         the QM/MM partition cuts a covalent bond in the ESPF path:
         ``'none'`` (default, the validated full-field ESPF baseline), or the
         optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
-        for whole-molecule QM regions. Covalent QM/MM boundaries are handled by
-        the ground-state QM/MM MD path (``QMMM_MD``); the nonadiabatic
-        ``runtype=namd`` path does not yet append link atoms to its QM molecule
-        and raises on a covalent cut.
+        for whole-molecule QM regions. Covalent QM/MM boundaries (hydrogen
+        link atoms) are handled by single-point energies, the ground-state
+        QM/MM MD path (``QMMM_MD``) and the nonadiabatic ``runtype=namd``
+        paths (FSSH and SOC-NAMD); for NAMD the QM molecule must be built from
+        the PDB (``job.molecule("file.pdb <1-based indices>")``) so the link
+        hydrogens are appended.
+
+        Periodic solvated systems (``cutoff='PME'`` / ``'Ewald'``) use Ewald
+        electrostatics with a self-consistent QM-image term. Related
+        ``[qmmm]`` keys: ``ewald_tol`` (OpenMM PME tolerance), ``lj_switch``
+        (switched Lennard-Jones cutoff), ``h_lj`` (Lennard-Jones parameters on
+        MM hydrogens that have none) and ``mm_charge_width`` (Gaussian-smeared
+        MM charges, width in Angstrom).
 
         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
         """

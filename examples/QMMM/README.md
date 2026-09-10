@@ -26,6 +26,8 @@ Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.restart.oqp` | Paired continuation that loads the step-2 checkpoint and advances through step 3. `openqp --run_tests all` schedules it after the producer and reuses the same isolated run directory. |
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NVT.inp` | One-step NVT smoke run with the independent Langevin thermostat and separately recorded energy exchange. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
+| `ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp` | Two-step MRSF-TDDFT FSSH across a **covalent QM/MM boundary** (hydrogen link atom): alanine dipeptide, QM = the C-terminal amide, `NoCutoff`. |
+| `ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp` | The same boundary in a **periodic TIP3P box** (`cutoff=PME`, Ewald QM/MM electrostatics with the self-consistent QM-image term) exercising `ewald_tol`, `lj_switch`, `h_lj` and `mm_charge_width`. |
 
 To exercise checkpoint loading, select the semantic examples in the regression
 runner. It gives the producer and continuation the same project directory and
@@ -37,7 +39,12 @@ openqp --run_tests examples/QMMM --input-format oqp
 
 Auxiliary files: `formaldehyde_water.pdb` (QM+MM coordinates/topology),
 `formaldehyde.xml` (minimal QM-residue force field — only the Lennard-Jones
-parameters matter; QM electrostatics come from ESPF), and `tip3p.xml` (water).
+parameters matter; QM electrostatics come from ESPF), `tip3p.xml` (water),
+`ala.pdb` (alanine dipeptide in vacuum) and `ala_box.pdb` (the dipeptide with
+106 TIP3P waters in a 16 Å cubic box, AMBER-14 + `amber14/tip3p.xml`). A PDB
+named in `[input] system = file.pdb <indices>` is looked up relative to the
+working directory first and then next to the input file, like the `[qmmm]`
+auxiliary files, so every NAMD deck runs from any directory.
 
 NAMD writes a trajectory log (`<project>.log`), not a regression `.json`, so
 these serve as runnable demonstrations rather than numeric regression tests. See
@@ -56,9 +63,15 @@ ground-state OpenMM-integrator QM/MM MD deck.
 When the QM/MM partition cuts a covalent bond, the dangling QM bond is capped
 with a hydrogen link atom and the MM host atom (`M1`) sits ~1.5 Å from the QM
 density. `[qmmm] frontier_scheme` selects how that frontier charge is treated in
-the ESPF electrostatics. Covalent QM/MM boundaries are handled by the
-ground-state QM/MM MD path (`QMMM_MD`); the nonadiabatic `runtype=namd` path does
-not yet append link atoms to its QM molecule and raises on a covalent cut.
+the ESPF electrostatics. Covalent QM/MM boundaries are handled by both the
+ground-state QM/MM MD path (`QMMM_MD`) and the nonadiabatic `runtype=namd`
+paths (FSSH, SOC-NAMD). For NAMD the QM molecule must contain the link
+hydrogens: build it from the PDB with `[input] system = file.pdb <QM indices>`
+(**1-based** indices there; `[qmmm] qm_atoms` stays 0-based), which appends one
+H per cut bond in the order the driver detects them. The link atoms carry no
+dynamical degrees of freedom: their positions follow the two host atoms, their
+forces are chain-ruled onto the hosts, and the surface-hopping velocity
+rescaling acts on the real QM atoms only.
 
 | value | meaning |
 | --- | --- |
@@ -82,9 +95,11 @@ backbone bond, run as ground-state QM/MM MD (`runtype=md`) with
 cd examples/QMMM && openqp ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp
 ```
 
-Like the other ground-state QM/MM decks it is skipped by `openqp --run_tests all`
-(covalent-boundary QM/MM is the ground-state MD path, not `runtype=namd`). The
-same alanine boundary is exercised automatically — link-atom detection +
+Like the other ground-state QM/MM decks it is skipped by `openqp --run_tests all`.
+The nonadiabatic decks `ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp`
+(vacuum) and `ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp` (periodic box) run the
+same covalent boundary with MRSF-TDDFT surface hopping and are part of the
+suite. The same alanine boundary is exercised automatically — link-atom detection +
 frontier-charge conservation on the real AMBER-14 charges — in
 `tests/test_qmmm_frontier_openmm.py` (OpenMM-gated), and the pure redistribution
 math (including a finite-difference gradient check) in

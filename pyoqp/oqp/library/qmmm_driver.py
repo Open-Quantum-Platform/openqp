@@ -13,6 +13,7 @@ from oqp.library.single_point import (
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.tb_backends import is_tb_method
 from oqp.utils.state_labels import is_mrsf, public_state_label
+from oqp.library.qmmm_ewald import EwaldQMMM
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
@@ -21,6 +22,7 @@ from oqp.library.qmmm_connectivity import (
 )
 
 import oqp
+from oqp.library.ints_1e import ints_1e
 
 
 def unpack_lower_tri_single(packed_atom, nbf):
@@ -90,6 +92,72 @@ def read_xyz(filepath):
     return symbols, np.array(coords)
 
 
+#: OpenMM nonbonded methods that impose periodic boundary conditions.  The
+#: QM/MM electrostatics go through the Ewald branch only for these; NoCutoff
+#: and CutoffNonPeriodic are a finite cluster even when the topology carries
+#: box vectors.  (LJPME is not accepted by the [qmmm] cutoff parser.)
+PERIODIC_METHODS = (app.PME, app.Ewald, app.CutoffPeriodic)
+
+def smeared_coulomb(r, mu):
+    """Pair kernel of a QM point charge with a Gaussian-smeared MM charge of
+    damping parameter ``mu`` (1/bohr): returns (phi_kernel, force_kernel) with
+    phi_kernel = erf(mu r)/r and force_kernel = -d(phi_kernel)/dr / r, so that
+    the force on the QM centre is q_A Q_M * force_kernel * d.  ``mu=None`` is
+    the point-charge limit 1/r and 1/r^3.  Both kernels are finite at r = 0
+    (phi -> 2 mu/sqrt(pi), force -> 0), which is the point of the smearing."""
+    from scipy.special import erf
+    r = np.asarray(r, dtype=float)
+    if mu is None:
+        return 1.0 / r, 1.0 / r ** 3
+    tiny = r < 1e-8
+    rs = np.where(tiny, 1.0, r)
+    phi = np.where(tiny, 2.0 * mu / np.sqrt(np.pi), erf(mu * rs) / rs)
+    force = np.where(tiny, 0.0, erf(mu * rs) / rs ** 3
+                     - 2.0 * mu / np.sqrt(np.pi) * np.exp(-(mu * rs) ** 2) / rs ** 2)
+    return phi, force
+
+
+#: Accepted [qmmm] embedding spellings (ported from PR #274).
+_VALID_EMBEDDINGS = {"mechanical", "electrostatic", "espf", "espf_full", "split"}
+
+
+def _normalize_embedding(value):
+    """Lower-cased, stripped embedding keyword; rejects unknown spellings so a
+    typo cannot silently select a different scheme."""
+    embedding = str(value).strip().lower()
+    if embedding not in _VALID_EMBEDDINGS:
+        choices = ", ".join(sorted(_VALID_EMBEDDINGS))
+        raise ValueError(f"Unknown QM/MM embedding '{value}'. Choices: {choices}")
+    return embedding
+
+
+def anderson_step(q_hist, f_hist, m=3, beta=1.0, max_step=0.5):
+    """Anderson-accelerated update for a charge fixed point q = g(q).
+
+    ``q_hist`` holds the last iterates q_k and ``f_hist`` the residuals
+    f_k = g(q_k) - q_k (same length, newest last).  Returns the next iterate
+    q_k + beta f_k - (dQ + beta dF) gamma with gamma the least-squares
+    combination of the last ``m`` residual differences; falls back to the
+    plain damped step (beta/2) when the history is too short, the
+    least-squares problem is degenerate, or the extrapolated move exceeds
+    ``max_step`` electrons on any atom."""
+    q_k, f_k = np.asarray(q_hist[-1], dtype=float), np.asarray(f_hist[-1], dtype=float)
+    n = min(m, len(q_hist) - 1)
+    if n >= 1:
+        dQ = np.column_stack([np.asarray(q_hist[-1 - i]) - np.asarray(q_hist[-2 - i]) for i in range(n)])
+        dF = np.column_stack([np.asarray(f_hist[-1 - i]) - np.asarray(f_hist[-2 - i]) for i in range(n)])
+        gamma, *_ = np.linalg.lstsq(dF, f_k, rcond=1e-10)
+        q_new = q_k + beta * f_k - (dQ + beta * dF) @ gamma
+        if np.all(np.isfinite(q_new)) and float(np.abs(q_new - q_k).max()) <= max_step:
+            return q_new
+    return q_k + 0.5 * f_k
+
+
+def is_periodic_method(cutoff):
+    """True when ``cutoff`` (an OpenMM nonbonded-method constant) is periodic."""
+    return any(cutoff is m for m in PERIODIC_METHODS)
+
+
 def _periodic_nonbonded_cutoff(topology, cutoff_method):
     """Return a safe OpenMM nonbonded cutoff for the current periodic box."""
     if cutoff_method is app.NoCutoff:
@@ -127,7 +195,50 @@ class OpenQpQMMM:
         Cutoff=app.NoCutoff,
         Embedding='mechanical',
         frontier_scheme='none',
+        ewald_tol=None,
+        lj_switch=False,
+        h_lj=False,
+        mm_charge_width=None,
     ):
+        # Gaussian-smeared MM charges for the QM-MM electrostatics (width in
+        # Angstrom; None = point charges).  The QM-MM pair potential becomes
+        # erf(mu r)/r with mu = 1/(sqrt(2) w), which removes the 1/r singularity
+        # a bare MM charge presents to the QM density -- the reference Tinker
+        # ESPF code applies the same erf damping (its ERFMU keyword).  Energy and
+        # force are modified consistently (direct sum and Ewald real-space part);
+        # MM-MM interactions and the QM-image term are untouched.
+        if mm_charge_width in (None, 0, 0.0):
+            self.mm_damp_mu = None
+        else:
+            w = float(mm_charge_width)
+            if not np.isfinite(w) or w <= 0.0:
+                raise ValueError(
+                    f"[qmmm] mm_charge_width must be a finite positive width in "
+                    f"Angstrom (or 0/unset for point charges); got {mm_charge_width!r}")
+            self.mm_damp_mu = 1.0 / (np.sqrt(2.0) * w * 1.8897259886)
+        # Give Lennard-Jones parameters to MM hydrogens that have none (TIP3P
+        # water H: sigma 1 nm / epsilon 0 in the AMBER XML).  Without them
+        # nothing keeps a water hydrogen from collapsing onto a QM oxygen (the
+        # QM density has no Pauli wall against a bare point charge), which
+        # produces unphysical 1.4-1.5 A contacts that destabilise the MRSF
+        # response.  Uses the CHARMM TIP3P HT values (Rmin/2 = 0.2245 A,
+        # eps = 0.046 kcal/mol).  Off by default; [qmmm] h_lj=true.
+        self.h_lj = bool(h_lj)
+        # Smooth (switched) Lennard-Jones truncation for the MM systems: a
+        # plain cutoff makes the MM energy discontinuous when pairs cross it,
+        # which shows up as a drift in NVE tests.  Off by default (OpenMM's
+        # createSystem default); switched on by [qmmm] lj_switch=true.
+        self.lj_switch = bool(lj_switch)
+        # OpenMM PME/Ewald error tolerance for the MM-MM systems (None = OpenMM
+        # default 5e-4).  Tighten (1e-6) for force/energy consistency checks and
+        # NVE validation: the default's force error (~0.5 kJ/mol/nm) is the
+        # floor of any finite-difference test on a periodic box.
+        if ewald_tol is not None:
+            ewald_tol = float(ewald_tol)
+            if not np.isfinite(ewald_tol) or ewald_tol <= 0.0:
+                raise ValueError(
+                    f"[qmmm] ewald_tol must be a finite positive tolerance; got {ewald_tol!r}")
+        self.ewald_tol = ewald_tol
         if oqp_cfg is None and mol is None:
             raise ValueError("Either 'oqp_cfg' or 'mol' must be provided.")
         if oqp_cfg is not None and mol is not None:
@@ -150,7 +261,7 @@ class OpenQpQMMM:
         # calculation (the engine already sees the atoms in topology order).
         self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
         self.Cutoff = Cutoff
-        self.Embedding = Embedding
+        self.Embedding = _normalize_embedding(Embedding)
 
         self.use_mol = mol is not None
 
@@ -169,8 +280,16 @@ class OpenQpQMMM:
         # whole-molecule and covalent-boundary QM regions, so it is the default
         # for electrostatic embedding. ("split" selects the legacy scheme that
         # routes QM charges through OpenMM point charges -- kept for reference.)
-        self.espf_full = str(Embedding).lower() in (
+        self.espf_full = self.Embedding in (
             "espf", "espf_full", "electrostatic")
+        if self.mm_damp_mu is not None and not self.espf_full:
+            # Only _full_field_potmm / _coupling_forces apply the erf damping;
+            # the split and mechanical schemes route the QM-MM electrostatics
+            # through OpenMM point charges and would silently ignore it.
+            raise ValueError(
+                "[qmmm] mm_charge_width (Gaussian-smeared MM charges) is "
+                "implemented for the full-ESPF electrostatic embedding only "
+                f"(embedding=electrostatic); got embedding={self.Embedding!r}.")
 
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
         # bond that the QM/MM partition cuts.  Empty when the QM region is a set
@@ -230,41 +349,119 @@ class OpenQpQMMM:
         bonds = [(b[0].index, b[1].index) for b in self.topology.bonds()]
         return detect_link_atoms(bonds, self.qm_atoms, lambda i: z_by_index[i])
 
-    def _link_positions_angstrom(self, positions):
-        """Link-atom Cartesian positions (Angstrom) for the given frame."""
+    def _qm_bond_adjacency(self):
+        """{qm_index: [bonded qm_index, ...]} from the topology (cached)."""
+        adj = getattr(self, "_qm_adj", None)
+        if adj is None:
+            qm_set = set(int(i) for i in self.qm_atoms)
+            adj = {i: [] for i in qm_set}
+            for b in self.topology.bonds():
+                i, j = int(b[0].index), int(b[1].index)
+                if i in qm_set and j in qm_set:
+                    adj[i].append(j); adj[j].append(i)
+            self._qm_adj = adj
+        return adj
+
+    def unwrap_qm(self, get_xyz, box):
+        """Positions of the QM atoms with every bonded QM fragment made whole:
+        starting from the lowest-index atom of each connected fragment, each
+        neighbour is placed at the minimum-image bond vector from the atom it
+        was reached from.  ``get_xyz(i)`` returns the raw (possibly wrapped)
+        coordinate of atom i and ``box`` the orthorhombic box in the same
+        units (None: no imaging, raw coordinates are returned).  A periodic
+        frame that stores bonded atoms on opposite sides of the cell would
+        otherwise hand the QM code a bond stretched by a box length."""
+        out = {}
+        if box is None:
+            return {int(i): np.asarray(get_xyz(int(i)), dtype=float) for i in self.qm_atoms}
+        adj = self._qm_bond_adjacency()
+        box = np.asarray(box, dtype=float)
+        placed = []
+        for root in sorted(int(i) for i in self.qm_atoms):
+            if root in out:
+                continue
+            out[root] = np.asarray(get_xyz(root), dtype=float)
+            members = [root]
+            stack = [root]
+            while stack:
+                i = stack.pop()
+                for j in adj[i]:
+                    if j not in out:
+                        out[j] = out[i] + self._min_image(np.asarray(get_xyz(j), dtype=float) - np.asarray(get_xyz(i), dtype=float), box)
+                        stack.append(j)
+                        members.append(j)
+            # Disconnected QM fragments (several QM molecules): each one is
+            # whole now, but its root kept the raw wrapped coordinate, so two
+            # fragments that neighbour each other across a box face would be
+            # handed to the QM code a box length apart.  Translate every
+            # fragment after the first by the lattice vector that puts its
+            # centroid at the minimum image of the NEAREST already placed
+            # fragment (greedy spanning tree: imaging only against the first
+            # fragment leaves two later fragments on opposite sides of it a
+            # box length apart even when they are neighbours across a face).
+            centroid = np.mean([out[k] for k in members], axis=0)
+            if not placed:
+                placed.append(centroid)
+            else:
+                best = None
+                for c in placed:
+                    d = centroid - c
+                    dm = self._min_image(d, box)
+                    r = float(np.linalg.norm(dm))
+                    if best is None or r < best[0]:
+                        best = (r, dm - d)
+                shift = best[1]
+                if np.any(shift != 0.0):
+                    for k in members:
+                        out[k] = out[k] + shift
+                placed.append(centroid + shift)
+        return out
+
+    def _qm_xyz_angstrom(self, positions):
+        """Unwrapped QM-atom positions (Angstrom) keyed by atom index."""
+        box = self._box_lengths_bohr()
+        box_ang = None if box is None else np.asarray(box) / self._ANG2BOHR
+        return self.unwrap_qm(lambda i: np.asarray(positions[i].value_in_unit(unit.angstrom), dtype=float), box_ang)
+
+    def _link_positions_angstrom(self, positions, qm_xyz=None):
+        """Link-atom Cartesian positions (Angstrom) for the given frame.  In a
+        periodic box the QM->MM bond vector is taken as the minimum image, so
+        a frame whose bonded hosts are wrapped to opposite sides of the cell
+        still places the link hydrogen on the short (bonded) image."""
+        box = self._box_lengths_bohr()
+        box_ang = None if box is None else np.asarray(box) / self._ANG2BOHR
+        if qm_xyz is None:
+            qm_xyz = self._qm_xyz_angstrom(positions)
         coords = []
         for link in self.link_atoms:
-            qm_p = positions[link.qm_index].value_in_unit(unit.angstrom)
-            mm_p = positions[link.mm_index].value_in_unit(unit.angstrom)
-            coords.append(link_atom_position(qm_p, mm_p, link.g))
+            qm_raw = np.asarray(positions[link.qm_index].value_in_unit(unit.angstrom), dtype=float)
+            mm_p = np.asarray(positions[link.mm_index].value_in_unit(unit.angstrom), dtype=float)
+            bond = self._min_image(mm_p - qm_raw, box_ang)
+            qm_p = qm_xyz[int(link.qm_index)]           # unwrapped host
+            coords.append(link_atom_position(qm_p, qm_p + bond, link.g))
         return coords
 
     def _build_xyz_string(self):
         xyz_atoms = []
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
         for atom in self.topology.atoms():
             at_index = atom.index
             if at_index in self.qm_atoms:
                 sym = atom.element.symbol
-                x = self.positions[at_index][0].value_in_unit(unit.angstrom)
-                y = self.positions[at_index][1].value_in_unit(unit.angstrom)
-                z = self.positions[at_index][2].value_in_unit(unit.angstrom)
-                xyz_atoms.append(f"{sym} {x:.6f} {y:.6f} {z:.6f}")
+                x, y, z = qm_xyz[at_index]
+                xyz_atoms.append(f"{sym} {x:.12f} {y:.12f} {z:.12f}")
         # Cap severed QM–MM bonds with hydrogen link atoms (appended last so the
         # QM-atom ordering above is preserved).
-        for pos in self._link_positions_angstrom(self.positions):
-            xyz_atoms.append(f"H {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
+            xyz_atoms.append(f"H {pos[0]:.12f} {pos[1]:.12f} {pos[2]:.12f}")
         return '; '.join(xyz_atoms)
 
     def _update_mol_positions(self):
-        coords = []
-        for atom in self.topology.atoms():
-            if atom.index in self.qm_atoms:
-                x = self.positions[atom.index][0].value_in_unit(unit.angstrom)
-                y = self.positions[atom.index][1].value_in_unit(unit.angstrom)
-                z = self.positions[atom.index][2].value_in_unit(unit.angstrom)
-                coords.append([x, y, z])
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
+        coords = [list(qm_xyz[atom.index]) for atom in self.topology.atoms()
+                  if atom.index in self.qm_atoms]
         # Append hydrogen link atoms capping severed QM–MM bonds.
-        for pos in self._link_positions_angstrom(self.positions):
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
             coords.append([pos[0], pos[1], pos[2]])
         coords = np.array(coords)
         ang2bohr = 1.8897259886
@@ -284,9 +481,18 @@ class OpenQpQMMM:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
             if is_tb_method(str(self.mol.config['input']['method'])):
-                return self._forces_qm_dftb(self.mol, potmm)
+                # Native AO-based methods need explicit zero POTMM/POTQM
+                # records in mechanical QM/MM, but the tight-binding adapter
+                # uses ``None`` as its gas-phase/mechanical contract.
+                tb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.mol, tb_potmm)
             sp = SinglePoint(self.mol)
-            sp._prep_guess()
+            if getattr(self, "_image_warm", False):
+                # image iteration > 1: same geometry, keep the converged
+                # orbitals and only rebuild the bare one-electron integrals
+                ints_1e(self.mol)
+            else:
+                sp._prep_guess()
 
             self.mol.data["OQP::POTMM"] = potmm
             self.mol.data["OQP::POTQM"] = potqm
@@ -304,34 +510,26 @@ class OpenQpQMMM:
                 hcore_full += np.einsum("ijk,i->jk", espf_op_corr_f, potmm)
                 self.mol.set_hcore(pack_lower_tri_single(hcore_full))
 
-            sp.scf()
+            self._embedded_scf(sp)
             self.eqm = self.mol.get_scf_energy()
 
-            oqp.form_esp_charges(self.mol)
-            self.pchg_qm = self.mol.data["OQP::partial_charges"]
-
-            if potqm is not None and potmm is not None:
-                potmm -= np.einsum(
-                    "ij,j->i", potqm,
-                    self.pchg_qm - self.mol.get_atoms2("charge")
-                )
-                self.mol.data["OQP::POTMM"] = potmm
-
-            if potmm is not None:
-                self.eqm -= np.dot(
-                    self.pchg_qm - self.mol.get_atoms2("charge"), potmm
-                )
-
+            self._native_embedded_energy_gradient(self.mol, sp, potmm, potqm)
             self._sp = sp
 
         else:
             # ---- Config mode ---------------------------------------------
-            xyz_atoms = self._build_xyz_string()
-            self.oqp_cfg_base["input.system"] = xyz_atoms
-            self.op = OPENQP(self.oqp_cfg_base, True)
-            if is_tb_method(str(self.op.mol.config['input']['method'])):
-                return self._forces_qm_dftb(self.op.mol, potmm)
-            self.op.sp._prep_guess()
+            if getattr(self, "_image_warm", False) and getattr(self, "op", None) is not None:
+                # image iteration > 1: same geometry, keep the converged
+                # orbitals and only rebuild the bare one-electron integrals
+                ints_1e(self.op.mol)
+            else:
+                xyz_atoms = self._build_xyz_string()
+                self.oqp_cfg_base["input.system"] = xyz_atoms
+                self.op = OPENQP(self.oqp_cfg_base, True)
+                if is_tb_method(str(self.op.mol.config['input']['method'])):
+                    tb_potmm = None if self.Embedding == "mechanical" else potmm
+                    return self._forces_qm_dftb(self.op.mol, tb_potmm)
+                self.op.sp._prep_guess()
 
             self.op.mol.data["OQP::POTMM"] = potmm
             self.op.mol.data["OQP::POTQM"] = potqm
@@ -349,107 +547,134 @@ class OpenQpQMMM:
                 hcore_full += np.einsum("ijk,i->jk", espf_op_corr_f, potmm)
                 self.op.mol.set_hcore(pack_lower_tri_single(hcore_full))
 
-            self.op.sp.scf()
+            self._embedded_scf(self.op.sp)
             self.eqm = self.op.mol.get_scf_energy()
 
-            oqp.form_esp_charges(self.op.mol)
-            self.pchg_qm = self.op.mol.data["OQP::partial_charges"]
-
-            # The embedded SCF contains only the electronic QM-MM coupling
-            # (dEqm/dphi_A = -Q_A, verified by finite differences). In the
-            # full-ESPF scheme OpenMM carries no QM charge, so add the
-            # nuclear-MM interaction sum_A Z_A phi_A to complete the QM-MM
-            # electrostatic energy; its field derivative Z_A dphi/dx together
-            # with the electronic response gives the net-charge coupling force
-            # already supplied by the analytic coupling term.
-            if self.espf_full and potmm is not None:
-                self.eqm += float(
-                    np.dot(self.op.mol.get_atoms2("charge"), potmm)
-                )
-
-            if potqm is not None and potmm is not None:
-                potmm -= np.einsum(
-                    "ij,j->i", potqm,
-                    self.pchg_qm - self.op.mol.get_atoms2("charge")
-                )
-                self.op.mol.data["OQP::POTMM"] = potmm
-
-            # In the full-ESPF scheme the QM-MM coupling lives entirely in the
-            # embedded SCF energy (and OpenMM carries no QM charges), so there is
-            # no double count to remove. The split scheme subtracts it here
-            # because OpenMM re-adds the coupling via the QM point charges.
-            if potmm is not None and not self.espf_full:
-                self.eqm -= np.dot(
-                    self.pchg_qm - self.op.mol.get_atoms2("charge"), potmm
-                )
-
-            # --- Gradients: pure QM + ESPF contribution -----------------------
-            gradient = Gradient(self.op.mol)
-            if gradient.method == 'hf':
-                # Use the common wrapper: an active petite-list build leaves a
-                # skeleton in the native buffer, and Gradient.gradient()
-                # reconstructs it in the correct frame before returning and
-                # writing the projected result back. Reading get_grad()
-                # directly here used to bypass both operations.
-                gqm = np.asarray(gradient.gradient(), dtype=float).reshape(
-                    (1, self.op.mol.get_atoms2("natom"), 3))
-                oqp.grad_esp_qmmm(self.op.mol)
-                # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
-                # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
-                # gradient. Reshape the flat buffer to (natom, 3). Adding the
-                # (3, natom) view directly only works when natom == 3 (a square
-                # coincidence), which is why non-3-atom QM regions - e.g.
-                # link-atom-capped fragments - previously broke.
-                natom_qm = self.op.mol.get_atoms2("natom")
-                esp_grad = np.asarray(
-                    self.op.mol.data["OQP::ESPF_GRAD"]
-                ).reshape(natom_qm, 3)
-                gqm += esp_grad
-                # --- Unit conversion to OpenMM conventions ------------------------
-                self.eqm *= 2625.499639 * unit.kilojoule_per_mole
-                self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
-            if gradient.method == 'tdhf':
-                energies = self.op.sp.excitation([self.eqm])
-                grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
-                for i in gradient.grads:
-                    target = (public_state_label(gradient.mol.config, i)
-                              if is_mrsf(gradient.mol.config) else 'Root %s' % i)
-                    dump_log(gradient.mol, title='PyOQP: Gradient of %s' % target)
-                    gradient.mol.data.set_tdhf_target(i)
-                    gradient.zvec_func[gradient.td](gradient.mol)
-
-                    # check convergence
-                    z_flag = gradient.mol.mol_energy.Z_Vector_converged
-
-                    if not z_flag:
-                        dump_log(gradient.mol, title='PyOQP: TD Z-vector is not converged', section='end')
-
-                        if gradient.exception is True:
-                            raise ZVnotConverged()
-                        else:
-                            exit()
-
-                    gradient.grad_func[gradient.td](gradient.mol)
-                    gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
-                    # This state-by-state QM/MM path cannot call the common
-                    # wrapper as a batch because ESPF_GRAD is state-specific.
-                    # Apply the same reconstruction here before the force is
-                    # assembled, and keep the public native buffer consistent.
-                    gqm = np.asarray(
-                        gradient.mol.symmetrize_gradient(gqm), dtype=float
-                    ).reshape((gradient.natom, 3))
-                    gradient.mol.set_grad(gqm)
-                    oqp.grad_esp_qmmm_excited(self.op.mol)
-                    # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
-                    gqm += np.asarray(
-                        self.op.mol.data["OQP::ESPF_GRAD"]
-                    ).reshape(gradient.natom, 3)
-                    grads[i] = gqm.copy()
-                    self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
-                    self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
+            self._native_embedded_energy_gradient(self.op.mol, self.op.sp, potmm, potqm)
             self.op.mol.save_data()
 
         return self.eqm, self.gqm, self.pchg_qm
+
+    @staticmethod
+    def _embedded_scf(sp):
+        """Embedded SCF through the robustness ladder (primary converger, then
+        SOSCF/TRAH escalation from the current orbitals); stop if it still
+        does not converge rather than assemble forces on a partial SCF."""
+        if not sp._run_scf():
+            raise RuntimeError(
+                "QM/MM: the embedded SCF did not converge (primary converger and "
+                "the SOSCF/TRAH escalation).  Raise [scf] maxit, loosen [scf] "
+                "conv, or check the QM/MM contacts.")
+
+    def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm):
+        """Post-SCF part of the native (AO-based) embedded QM step, shared by
+        the mol and config modes: ESP charges, QM-MM energy bookkeeping
+        (full-ESPF: + sum_A Z_A phi_A; split: - (q - Z).phi) and the analytic
+        gradient with the ESPF terms, in OpenMM units.  Sets self.pchg_qm,
+        self.eqm and self.gqm."""
+        oqp.form_esp_charges(mol)
+        self.pchg_qm = mol.data["OQP::partial_charges"]
+
+        # The embedded SCF contains only the electronic QM-MM coupling
+        # (dEqm/dphi_A = -Q_A, verified by finite differences). In the
+        # full-ESPF scheme OpenMM carries no QM charge, so add the
+        # nuclear-MM interaction sum_A Z_A phi_A to complete the QM-MM
+        # electrostatic energy; its field derivative Z_A dphi/dx together
+        # with the electronic response gives the net-charge coupling force
+        # already supplied by the analytic coupling term.
+        if self.espf_full and potmm is not None:
+            self.eqm += float(
+                np.dot(mol.get_atoms2("charge"), potmm)
+            )
+
+        if potqm is not None and potmm is not None:
+            potmm -= np.einsum(
+                "ij,j->i", potqm,
+                self.pchg_qm - mol.get_atoms2("charge")
+            )
+            mol.data["OQP::POTMM"] = potmm
+
+        # In the full-ESPF scheme the QM-MM coupling lives entirely in the
+        # embedded SCF energy (and OpenMM carries no QM charges), so there is
+        # no double count to remove. The split scheme subtracts it here
+        # because OpenMM re-adds the coupling via the QM point charges.
+        if potmm is not None and not self.espf_full:
+            self.eqm -= np.dot(
+                self.pchg_qm - mol.get_atoms2("charge"), potmm
+            )
+
+        # --- Gradients: pure QM + ESPF contribution -----------------------
+        gradient = Gradient(mol)
+        if gradient.method == 'hf':
+            # Use the common wrapper: an active petite-list build leaves a
+            # skeleton in the native buffer, and Gradient.gradient()
+            # reconstructs it in the correct frame before returning and
+            # writing the projected result back. Reading get_grad()
+            # directly here used to bypass both operations.
+            gqm = np.asarray(gradient.gradient(), dtype=float).reshape(
+                (1, mol.get_atoms2("natom"), 3))
+            oqp.grad_esp_qmmm(mol)
+            # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
+            # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
+            # gradient. Reshape the flat buffer to (natom, 3). Adding the
+            # (3, natom) view directly only works when natom == 3 (a square
+            # coincidence), which is why non-3-atom QM regions - e.g.
+            # link-atom-capped fragments - previously broke.
+            natom_qm = mol.get_atoms2("natom")
+            esp_grad = np.asarray(
+                mol.data["OQP::ESPF_GRAD"]
+            ).reshape(natom_qm, 3)
+            gqm += esp_grad
+            # --- Unit conversion to OpenMM conventions ------------------------
+            self.eqm *= 2625.499639 * unit.kilojoule_per_mole
+            self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
+        if gradient.method == 'tdhf':
+            energies = sp.excitation([self.eqm])
+            grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
+            for i in gradient.grads:
+                target = (public_state_label(gradient.mol.config, i)
+                          if is_mrsf(gradient.mol.config) else 'Root %s' % i)
+                dump_log(gradient.mol, title='PyOQP: Gradient of %s' % target)
+                gradient.mol.data.set_tdhf_target(i)
+                gradient.zvec_func[gradient.td](gradient.mol)
+
+                # check convergence
+                z_flag = gradient.mol.mol_energy.Z_Vector_converged
+
+                if not z_flag:
+                    dump_log(gradient.mol, title='PyOQP: TD Z-vector is not converged', section='end')
+
+                    if gradient.exception is True:
+                        raise ZVnotConverged()
+                    else:
+                        exit()
+
+                gradient.grad_func[gradient.td](gradient.mol)
+                gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
+                # This state-by-state QM/MM path cannot call the common
+                # wrapper as a batch because ESPF_GRAD is state-specific.
+                # Apply the same reconstruction here before the force is
+                # assembled, and keep the public native buffer consistent.
+                gqm = np.asarray(
+                    gradient.mol.symmetrize_gradient(gqm), dtype=float
+                ).reshape((gradient.natom, 3))
+                gradient.mol.set_grad(gqm)
+                oqp.grad_esp_qmmm_excited(mol)
+                # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
+                gqm += np.asarray(
+                    mol.data["OQP::ESPF_GRAD"]
+                ).reshape(gradient.natom, 3)
+                grads[i] = gqm.copy()
+                self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
+                self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
+                # The Z-vector step has replaced OQP::partial_charges by the
+                # RELAXED ESPF charges of this state: they drive the classical
+                # coupling forces and, in a periodic box, the QM-image
+                # self-consistency loop in compute_force (which then converges
+                # the field to the propagated state, not to the reference
+                # density).  Publish them explicitly rather than through the
+                # live view taken above.
+                self.pchg_qm = np.array(mol.data["OQP::partial_charges"], dtype=float)
 
     def _forces_qm_dftb(self, mol, potmm):
         """QM energy/gradient/charges for the TB backends (method=dftb/xtb).
@@ -520,6 +745,17 @@ class OpenQpQMMM:
         forces = { force.__class__.__name__ : force for force in system.getForces() }
         nonbonded = forces['NonbondedForce']
 
+        if self.Embedding == "mechanical":
+            # Mechanical embedding: the QM atoms keep their FIXED force-field
+            # charges in the MM electrostatics (the system is used as built by
+            # prepare_mm, intra-QM pairs excluded).  Injecting the fitted ESPF
+            # charges of the gas-phase QM density here would make E_MM depend
+            # on the geometry through q(R) while OpenMM differentiates it at
+            # fixed charges, so the force would not be the derivative of the
+            # energy; ``pchg_qm`` is therefore ignored on this path.
+            state = simulation.context.getState(getEnergy=True, getForces=True)
+            return state.getPotentialEnergy(), state.getForces(asNumpy=True)
+
         if self.espf_full:
             # Pure MM-MM: QM atoms carry no charge; all QM-MM electrostatics are
             # handled analytically by ESPF + the coupling force. vdW and bonded
@@ -577,6 +813,71 @@ class OpenQpQMMM:
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
+        elif self.Embedding == "mechanical":
+            # Mechanical embedding (PR #274): the QM subsystem sees no MM
+            # field, so the SCF is gas-phase and the QM-MM electrostatics is
+            # left to OpenMM with the fixed force-field charges of the QM
+            # atoms (forces_mm ignores the ESP charges on this path, so the
+            # MM energy is differentiated at the charges it was built with).
+            # The embedding
+            # arrays must still exist and be ZERO rather than absent:
+            # scf.F90 calls add_potqm_contributions on every SCF iteration
+            # whenever qmmm_flag is set and aborts on a missing OQP::POTQM
+            # record ("Record `OQP::POTQM` not found!"); grad_esp_qmmm needs
+            # OQP::POTMM the same way.  A zero field reproduces gas-phase QM
+            # exactly (adds 0 to hcore, 0 to the ESPF gradient, 0 to eqm).
+            potmm, potqm = self._zero_embedding()
+        else:   # guarded in __init__; keep a local invariant
+            raise ValueError(f"Unknown QM/MM embedding '{self.Embedding}'")
+
+        if (self.espf_full and self._ewald() is not None
+                and os.environ.get("OQP_EWALD_NO_IMAGE", "").strip() not in ("1", "on")):
+            # Periodic full-ESPF: the QM charges also interact with their own
+            # periodic images (paper eq 8).  Solve for the QM charges self-
+            # consistently in the total field  phi_eff = Phi^MM + psi_img q :
+            # with E = E_QM[phi_eff] + Z.phi_eff - 1/2 q psi_img q the charge
+            # response terms cancel at self-consistency, so the force needs only
+            # the explicit derivatives (embedded QM gradient at fixed phi_eff,
+            # classical Ewald coupling force, image force at fixed q).
+            psi_img, dpsi = self._ewald().qm_image_matrix(self._qm_center_positions_bohr())
+            n = len(potmm)
+            q_prev = (self._q_prev if getattr(self, "_q_prev", None) is not None
+                      and len(self._q_prev) == n else np.zeros(n))
+            converged = False
+            delta, it = float("inf"), -1
+            self._image_warm = False
+            # Reference-density charges converge to IMAGE_TOL; the relaxed
+            # charges of a TDHF/MRSF target state carry the Z-vector residual
+            # and converge to IMAGE_TOL_ACTIVE (as in NAMD_QMMM).
+            tol = (self.IMAGE_TOL_ACTIVE if self._image_uses_relaxed_charges()
+                   else self.IMAGE_TOL)
+            for it in range(int(self.IMAGE_MAXITER)):
+                phi_eff = np.asarray(potmm, dtype=float) + psi_img @ q_prev
+                try:
+                    eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=phi_eff.copy(), potqm=potqm)
+                finally:
+                    self._image_warm = True      # later iterations reuse the orbitals
+                q_new = np.array(pchg_qm, dtype=float)
+                delta = float(np.abs(q_new - q_prev).max())
+                if delta < tol:
+                    converged = True
+                    break
+                q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
+            if not converged:
+                raise RuntimeError(
+                    f"Periodic ESPF QM/MM: the QM-image charge self-consistency "
+                    f"did not converge in {it + 1} iterations "
+                    f"(max |dq| = {delta:.2e} e > {tol:.0e}); the "
+                    "energy/force would be inconsistent.  Tighten the SCF "
+                    "convergence or check the QM/MM contacts.")
+            self._image_warm = False
+            self._q_prev = q_new.copy()
+            self._image_iterations = it + 1
+            e_img = 0.5 * float(q_new @ psi_img @ q_new)                    # Hartree
+            f_img = -np.einsum("a,b,abc->ac", q_new, q_new, dpsi)           # Hartree/bohr
+            return self._assemble_force_espf(
+                eqm, q_new, f_qm_extra=f_img,
+                e_extra=-e_img * 2625.499639 * unit.kilojoule_per_mole)
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
         nqm = len(self.qm_atoms)
@@ -613,20 +914,26 @@ class OpenQpQMMM:
 
         return total_energy, total_forces
 
-    def _assemble_force_espf(self, eqm, pchg_qm):
+    def _assemble_force_espf(self, eqm, pchg_qm, f_qm_extra=None, e_extra=None):
         """Assemble the total force in the full-ESPF scheme:
           F = F_MM(pure)  -  grad_QM(HF+ESPF charge-fluctuation)  +  F_coupling
         where F_coupling is the analytic QM-charge <-> MM-charge Coulomb force
         (field-fluctuation term), applied to both QM and MM atoms.
+        ``f_qm_extra`` (Hartree/bohr, per QM centre incl. link atoms) and
+        ``e_extra`` (OpenMM energy) carry the periodic QM-image term.
         """
         FCONV = 49614.75  # Hartree/bohr -> kJ/mol/nm
         nqm = len(self.qm_atoms)
 
         emm, gmm = self.forces_mm(pchg_qm)   # pure MM-MM (QM charges zeroed)
         total_energy = eqm + emm
+        if e_extra is not None:
+            total_energy = total_energy + e_extra
         total_forces = gmm.copy()
 
         f_qm, f_mm, mm_idx = self._coupling_forces(np.asarray(pchg_qm, dtype=float))
+        if f_qm_extra is not None:
+            f_qm = f_qm + np.asarray(f_qm_extra, dtype=float)
         f_qm = f_qm * FCONV
         f_mm = f_mm * FCONV
 
@@ -657,15 +964,49 @@ class OpenQpQMMM:
         Cutoff=self.Cutoff
         nb_cutoff = _periodic_nonbonded_cutoff(topology, Cutoff)
 
+        _ew = {} if (self.ewald_tol is None or not is_periodic_method(Cutoff)) else {
+            "ewaldErrorTolerance": float(self.ewald_tol)}
         system=forcefield.createSystem(
             topology, nonbondedMethod=Cutoff, nonbondedCutoff=nb_cutoff,
-            constraints=None, rigidWater=False)
+            constraints=None, rigidWater=False, **_ew)
         nonbonded = next(f for f in system.getForces() if isinstance(f, mm.NonbondedForce))
+        if self.lj_switch and Cutoff is not app.NoCutoff:
+            nonbonded.setUseSwitchingFunction(True)
+            nonbonded.setSwitchingDistance(0.85 * nb_cutoff)
+        if self.h_lj:
+            sig_h = 2.0 * 0.02245 / (2.0 ** (1.0 / 6.0)) * unit.nanometer      # CHARMM HT Rmin/2 = 0.2245 A
+            eps_h = 0.046 * 4.184 * unit.kilojoule_per_mole
+            n_set = 0
+            for atom in topology.atoms():
+                if atom.element is None or atom.element.atomic_number != 1:
+                    continue
+                if int(atom.index) in qm_set:
+                    continue          # QM hydrogens keep their own LJ parameters
+                q, sig, eps = nonbonded.getParticleParameters(atom.index)
+                if eps.value_in_unit(unit.kilojoule_per_mole) == 0.0:
+                    nonbonded.setParticleParameters(atom.index, q, sig_h, eps_h)
+                    n_set += 1
+            print(f"[QM/MM] h_lj: Lennard-Jones parameters assigned to {n_set} MM hydrogen(s) that had none")
 
+        n_14 = 0
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chgProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
             if (int(p1) in qm_set) or (int(p2) in qm_set):
+               if self.espf_full and chgProd.value_in_unit(unit.elementary_charge ** 2) != 0.0:
+                   # Full ESPF routes the ENTIRE QM-MM electrostatics through
+                   # the embedded SCF + coupling force, and forces_mm zeroes
+                   # the QM particle charges -- but OpenMM keeps the 1-4
+                   # exception charge products independently of the particle
+                   # charges, so a scaled QM-MM 1-4 Coulomb pair across a
+                   # covalent boundary would stay in the "pure MM" energy and
+                   # force on top of the ESPF term.  Drop it here; the LJ part
+                   # of QM-involving exceptions is handled as before.
+                   chgProd = 0.0 * unit.elementary_charge ** 2
+                   n_14 += 1
                nonbonded.setExceptionParameters(i, p1, p2, chgProd, 0.0, 0.0)
+        if n_14:
+            print(f"[QM/MM] full ESPF: {n_14} QM-MM 1-4 exception charge product(s) removed "
+                  "from the MM system (the QM-MM electrostatics is carried by ESPF)")
 
         for p1 in qm_atoms:
            for p2 in qm_atoms:
@@ -735,10 +1076,10 @@ class OpenQpQMMM:
            else:
               if not isinstance(f, mm.CMMotionRemover): exit(f"Force not found")
 
-        if Cutoff is not app.NoCutoff:
+        if is_periodic_method(Cutoff):
            sysew=forcefield.createSystem(
                topology, nonbondedMethod=app.Ewald, nonbondedCutoff=nb_cutoff,
-               constraints=None, rigidWater=False)
+               constraints=None, rigidWater=False, **_ew)
            intew=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
            simew=app.Simulation(topology, sysew, intew)
            simew.context.setPositions(positions)
@@ -758,6 +1099,12 @@ class OpenQpQMMM:
          "simor": simor,
         }
 
+
+    def _zero_embedding(self):
+        """Zero MM potential over every QM centre (real QM atoms + link
+        atoms), sized like the arrays the ESPF path builds (nqm + nlink)."""
+        n = len(self.qm_atoms) + len(self.link_atoms)
+        return np.zeros(n), np.zeros((n, n))
 
     def _pad_potential_for_link_atoms(self, potmm, potqm):
        """Extend the ESPF embedding arrays to cover hydrogen link atoms.
@@ -787,12 +1134,10 @@ class OpenQpQMMM:
         """Cartesian positions (bohr) of every QM centre (real QM atoms in
         topology order, then hydrogen link atoms), matching the QM geometry
         order used to build the QM system and the POTMM array."""
-        coords = []
-        for atom in self.topology.atoms():
-            if atom.index in self.qm_atoms:
-                p = self.positions[atom.index].value_in_unit(unit.angstrom)
-                coords.append([c * self._ANG2BOHR for c in p])
-        for pos in self._link_positions_angstrom(self.positions):
+        qm_xyz = self._qm_xyz_angstrom(self.positions)
+        coords = [[c * self._ANG2BOHR for c in qm_xyz[atom.index]]
+                  for atom in self.topology.atoms() if atom.index in self.qm_atoms]
+        for pos in self._link_positions_angstrom(self.positions, qm_xyz):
             coords.append([c * self._ANG2BOHR for c in pos])
         return np.asarray(coords, dtype=float)
 
@@ -829,20 +1174,57 @@ class OpenQpQMMM:
             self._frontier_hosts(), lambda a: q_of.get(a, 0.0),
             self.frontier_scheme,
         )
+        box = self._box_lengths_bohr()
         return assemble_embedding_sites(
-            mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals)
+            mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals,
+            min_image=None if box is None else (lambda d: self._min_image(d, box)))
+
+    def _image_uses_relaxed_charges(self):
+        """True when the QM step publishes the RELAXED ESPF charges of a
+        response (TDHF/MRSF) target state, which carry the Z-vector residual
+        and converge the QM-image loop to IMAGE_TOL_ACTIVE instead of the
+        reference-density IMAGE_TOL."""
+        if self.use_mol:
+            method = self.mol.config.get("input", {}).get("method", "hf")
+        else:
+            method = (self.oqp_cfg_base or {}).get("input.method", "hf")
+        return str(method).strip().lower() == "tdhf"
+
+    def _is_periodic(self):
+        """True when the MM nonbonded method is a periodic one (PME, Ewald,
+        CutoffPeriodic).  NoCutoff and CutoffNonPeriodic are treated as a
+        finite cluster even if the topology carries box vectors."""
+        return is_periodic_method(self.Cutoff)
+
+    #: QM-image charge self-consistency loop (periodic full-ESPF): iteration
+    #: cap and convergence threshold on the ESPF charges (e).
+    IMAGE_MAXITER = 50
+    IMAGE_TOL = 1e-7
+    #: Active-state refinement in NAMD (each iteration costs a Z-vector
+    #: gradient).  The relaxed charges carry the Z-vector residual (1e-5 to
+    #: 1e-4 e at the default Z-vector convergence), so the field is taken as
+    #: self-consistent at 1e-4 e; the state energy is then stable to ~1e-7 Ha
+    #: and the loop typically needs 3 gradient evaluations.
+    IMAGE_TOL_ACTIVE = 1e-4
+    IMAGE_MAXITER_ACTIVE = 20
+    IMAGE_ETOL_ACTIVE = 1e-7      # Hartree: energy-stagnation acceptance (with |dq| < 10 IMAGE_TOL_ACTIVE)
 
     def _box_lengths_bohr(self):
         """Orthorhombic periodic box lengths (bohr), or None when the QM/MM
-        electrostatics are non-periodic (NoCutoff). Used for the minimum-image
-        real-space QM-MM electrostatics under PBC."""
-        if self.Cutoff is app.NoCutoff:
+        electrostatics are non-periodic (NoCutoff / CutoffNonPeriodic). Used
+        for the Ewald / minimum-image QM-MM electrostatics under PBC."""
+        if not self._is_periodic():
             return None
         vecs = self.topology.getPeriodicBoxVectors()
         if vecs is None:
-            return None
+            raise ValueError(
+                f"[qmmm] cutoff={self.Cutoff} is periodic but the PDB topology "
+                "carries no box vectors (CRYST1 record).")
         box = np.array([[c.value_in_unit(unit.angstrom) for c in v] for v in vecs])
-        # orthorhombic diagonal (water-box QM/MM); off-diagonal ignored
+        if np.abs(box - np.diag(np.diag(box))).max() > 1e-8:
+            raise NotImplementedError(
+                "Periodic ESPF QM/MM supports orthorhombic boxes only; the PDB "
+                "box vectors are not diagonal.")
         return np.diag(box) * self._ANG2BOHR
 
     def _min_image(self, d, box):
@@ -870,18 +1252,37 @@ class OpenQpQMMM:
             idx.append(i)
         return np.asarray(q), np.asarray(xyz, dtype=float), np.asarray(idx, dtype=int)
 
+    def _ewald(self):
+        """Ewald summation object for the current orthorhombic box, or None
+        when the QM/MM electrostatics are non-periodic (NoCutoff)."""
+        box = self._box_lengths_bohr()
+        if box is None:
+            return None
+        cached = getattr(self, "_ewald_obj", None)
+        if cached is None or not np.allclose(cached.box, box):
+            self._ewald_obj = EwaldQMMM(box)
+            self._ewald_obj.check_damping(self.mm_damp_mu)
+        return self._ewald_obj
+
     def _full_field_potmm(self):
         """MM electrostatic potential at every QM centre from the (frontier-
-        redistributed) embedding charge set: phi_A = sum_s Q_s / |r_A - r_s|
-        (Hartree/e)."""
+        redistributed) embedding charge set (Hartree/e): a direct Coulomb sum
+        for a non-periodic system, the Ewald lattice sum (all images, tin-foil
+        boundary) for a periodic one."""
         qm_xyz = self._qm_center_positions_bohr()
         q_s, xyz_s, _ = self._embedding_sites()
+        ew = self._ewald()
+        if ew is not None:
+            phi, _ = ew.mm_potential(qm_xyz, xyz_s, q_s, mu=self.mm_damp_mu)
+            return phi
         box = self._box_lengths_bohr()
         potmm = np.zeros(len(qm_xyz))
+        from scipy.special import erf
         for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)
             r = np.linalg.norm(d, axis=1)
-            potmm[a] = np.sum(q_s / r)
+            phi_kernel, _ = smeared_coulomb(r, self.mm_damp_mu)
+            potmm[a] = np.sum(q_s * phi_kernel)
         return potmm
 
     def _coupling_forces(self, pchg):
@@ -896,10 +1297,20 @@ class OpenQpQMMM:
         box = self._box_lengths_bohr()
         f_qm = np.zeros_like(qm_xyz)
         f_site = np.zeros_like(xyz_s)
-        for a in range(len(qm_xyz)):
+        ew = self._ewald()
+        if ew is not None:
+            # Ewald: F_A = -q_A dPhi^MM_A/dr_A ; F_s from the QM charges' images
+            _, dphi = ew.mm_potential(qm_xyz, xyz_s, q_s, mu=self.mm_damp_mu)
+            f_qm = -np.asarray(pchg, dtype=float)[:, None] * dphi
+            f_site = ew.mm_forces(qm_xyz, pchg, xyz_s, q_s, mu=self.mm_damp_mu)
+        else:
+          from scipy.special import erf
+          mu = self.mm_damp_mu
+          for a in range(len(qm_xyz)):
             d = self._min_image(qm_xyz[a] - xyz_s, box)   # r_A - r_s
             r = np.linalg.norm(d, axis=1)
-            coeff = pchg[a] * q_s / r ** 3                # q_A Q_s / r^3
+            _, force_kernel = smeared_coulomb(r, mu)      # 1/r^3, or the smeared analogue
+            coeff = pchg[a] * q_s * force_kernel          # q_A Q_s * kernel
             f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
             f_site -= coeff[:, None] * d                  # Newton's third law
         # Scatter each site force onto the real MM atoms it is built from
@@ -950,7 +1361,7 @@ class OpenQpQMMM:
        # Non-periodic embedding has no Ewald QM-QM self-interaction, so the
        # QM-QM correction potential is identically zero. Return a zero matrix
        # (not None) so the Fortran add_potqm_contributions has a valid record.
-       if self.Cutoff == app.NoCutoff:
+       if not self._is_periodic():
            return self._pad_potential_for_link_atoms(
                potmm, np.zeros((len(self.qm_atoms), len(self.qm_atoms)))
            )

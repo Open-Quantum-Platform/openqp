@@ -35,6 +35,8 @@ import os
 import unittest
 
 import numpy as np
+from types import SimpleNamespace
+from unittest import mock
 
 # Minimal DFTB parameter fixtures shipped with the openqp-dftb repo. Overridable
 # so the test is not pinned to one checkout; skipped when they are missing.
@@ -57,7 +59,7 @@ except Exception:  # pragma: no cover - optional dependency
     _HAVE_OPENMM = False
 
 try:
-    from oqp.library.qmmm_driver import OpenQpQMMM
+    from oqp.library.qmmm_driver import OpenQpQMMM, _normalize_embedding
     _HAVE_OQP = True
 except Exception:  # pragma: no cover - uncompiled backend / missing OPENQP_ROOT
     _HAVE_OQP = False
@@ -338,6 +340,87 @@ class TestQMMMDFTB(unittest.TestCase):
                     f"loose tol {tol:.4g} (|F|={fmag:.4g})",
                 )
             self.assertTrue(np.isfinite(worst))
+
+
+@unittest.skipUnless(_HAVE_OQP, "compiled OpenQP backend unavailable")
+class TestEmbeddingNormalization(unittest.TestCase):
+    """`_normalize_embedding` is a pure function (ported from PR #274)."""
+
+    def test_unknown_embedding_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown QM/MM embedding"):
+            _normalize_embedding("electrostatc")
+
+    def test_embedding_is_case_normalized(self):
+        self.assertEqual(_normalize_embedding(" Mechanical "), "mechanical")
+
+    def test_every_dispatched_embedding_is_accepted(self):
+        for embedding in ("mechanical", "electrostatic", "espf", "espf_full", "split"):
+            self.assertEqual(_normalize_embedding(embedding), embedding)
+
+
+@unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP,
+                     "OpenMM or compiled OpenQP backend unavailable")
+class TestQMMMEmbeddingDispatch(unittest.TestCase):
+    """Mechanical embedding = zero field for the native path, ``None`` for the
+    tight-binding adapter (ported from PR #274)."""
+
+    def _bare(self, embedding):
+        driver = object.__new__(OpenQpQMMM)
+        driver.use_mol = True
+        driver.Embedding = embedding
+        driver.mol = SimpleNamespace(config={"input": {"method": "dftb"}})
+        driver._update_mol_positions = mock.Mock()
+        return driver
+
+    def test_mechanical_embedding_passes_none_to_dftb(self):
+        driver = self._bare("mechanical")
+        expected = object()
+        driver._forces_qm_dftb = mock.Mock(return_value=expected)
+        result = driver.forces_qm_openqp(potmm=np.zeros(2), potqm=np.zeros((2, 2)))
+        self.assertIs(result, expected)
+        driver._forces_qm_dftb.assert_called_once_with(driver.mol, None)
+
+    def test_electrostatic_embedding_forwards_the_field_to_dftb(self):
+        driver = self._bare("electrostatic")
+        driver._forces_qm_dftb = mock.Mock(return_value=object())
+        potmm = np.arange(2, dtype=float)
+        driver.forces_qm_openqp(potmm=potmm, potqm=np.zeros((2, 2)))
+        forwarded = driver._forces_qm_dftb.call_args[0][1]
+        self.assertIsNotNone(forwarded)
+        np.testing.assert_allclose(forwarded, potmm)
+
+    def test_zero_embedding_matches_the_electrostatic_array_shapes(self):
+        driver = object.__new__(OpenQpQMMM)
+        driver.qm_atoms = np.array([0, 1, 2])
+        driver.link_atoms = [object(), object()]
+        potmm, potqm = driver._zero_embedding()
+        n = 5
+        self.assertEqual(potmm.shape, (n,))
+        self.assertEqual(potqm.shape, (n, n))
+        self.assertEqual(potmm.dtype, np.float64)
+        self.assertFalse(potmm.any())
+        self.assertFalse(potqm.any())
+
+    def test_compute_force_builds_a_zero_field_for_mechanical(self):
+        import openmm.app as app
+        driver = object.__new__(OpenQpQMMM)
+        driver.Embedding, driver.espf_full = "mechanical", False
+        driver.Cutoff = app.NoCutoff
+        driver.qm_atoms, driver.link_atoms = np.array([0, 1]), []
+        driver.electrostatic_potential = mock.Mock(side_effect=AssertionError("not for mechanical"))
+        seen = {}
+        def fake_forces(potmm=None, potqm=None):
+            seen["potmm"], seen["potqm"] = potmm, potqm
+            return 0.0, np.zeros((2, 3)), np.zeros(2)
+        driver.forces_qm_openqp = fake_forces
+        driver.gqm = np.zeros((2, 3))
+        driver.forces_mm = mock.Mock(return_value=(0.0, np.zeros((4, 3))))
+        driver.compute_force(None, None, None, [0, 1])
+        self.assertIsNotNone(seen["potmm"])
+        self.assertEqual(seen["potmm"].shape, (2,))
+        self.assertFalse(seen["potmm"].any())
+        self.assertFalse(seen["potqm"].any())
+
 
 
 if __name__ == "__main__":
