@@ -699,6 +699,35 @@ class TestSymmetryMetadata(unittest.TestCase):
         molecule.put_data({'OQP::td_bvec_mo': documented}, json_layout=True)
         np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
 
+    def test_load_data_decodes_td_vectors_from_a_json_restart(self):
+        # Through the real loader: a restart JSON written by save_data uses
+        # DRF x state axes and must come back in the native layout.
+        molecule_module = load_molecule_module()
+        spec = importlib.util.spec_from_file_location(
+            'openqp_json_utils_load_data',
+            Path(__file__).resolve().parents[1] / 'pyoqp' / 'oqp' / 'utils' / 'json_utils.py')
+        json_utils = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(json_utils)
+        molecule_module.json_array = json_utils.json_array
+        molecule_module.tag_array_from_json = json_utils.tag_array_from_json
+        molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
+        molecule.tag = ['OQP::td_bvec_mo']
+        molecule.config_tag = {}
+        molecule.data = {}
+        molecule.get_atoms = lambda: np.array([1, 1, 8])
+        molecule.update_config_json = lambda: None
+        molecule.update_system = lambda *_args, **_kwargs: None
+        native = np.array([[11.0, 12.0], [13.0, 21.0], [22.0, 23.0]])
+        with tempfile.TemporaryDirectory() as tmp:
+            restart = Path(tmp) / 'restart.json'
+            restart.write_text(json.dumps({
+                'atoms': [1, 1, 8],
+                'OQP::td_bvec_mo': json_utils.json_array('OQP::td_bvec_mo', native),
+            }))
+            molecule.config = {'guess': {'continue_geom': False, 'file': str(restart)}}
+            molecule.load_data()
+        np.testing.assert_array_equal(molecule.data['OQP::td_bvec_mo'], native)
+
 
 if __name__ == '__main__':
     unittest.main()

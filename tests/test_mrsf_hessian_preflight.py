@@ -7,7 +7,9 @@ reject property requests that cannot run at all, and only warn about ones
 that complete partially.
 """
 
+import sys
 import unittest
+from unittest import mock
 
 from oqp.utils.input_checker import analytic_hessian_capability, check_input_values
 
@@ -118,18 +120,34 @@ class MrsfHessianPreflight(unittest.TestCase):
 
     def test_invalid_mrsf_property_options_fail_preflight(self):
         # MRSFPropertyFDRequest.create rejects these, but only after the Hessian.
-        for options in ({"raman_backend": "truncated-SOS"}, {"raman_backend": "TRUNCATED_SOS"},
-                        {"raman_sos_tail_states": 0}, {"property_dx": -1.0e-3},
-                        {"property_min_overlap": 0.5}):
+        cases = (
+            ({"raman_backend": "truncated-SOS"}, "raman_backend"),
+            ({"raman_backend": "TRUNCATED_SOS"}, "raman_backend"),
+            ({"raman_sos_tail_states": 0}, "raman_sos_tail_states"),
+            ({"property_dx": -1.0e-3}, "property options are invalid"),
+            ({"property_min_overlap": 0.5}, "property options are invalid"),
+        )
+        for options, expected in cases:
             with self.subTest(**options):
                 request = _mrsf_request("bhhlyp")
                 request["input"]["runtype"] = "hess"
                 request["hess"].update(options)
                 status, reason = analytic_hessian_capability(request)
                 self.assertEqual(status, "unsupported_feature")
-                self.assertIn("property options are invalid", reason)
+                self.assertIn(expected, reason)
                 request["hess"]["vibrational_intensities"] = False
                 self.assertEqual(analytic_hessian_capability(request)[0], "supported")
+
+    def test_backend_and_tail_checks_survive_a_missing_property_module(self):
+        # Without the property module the create() checks are skipped, but the
+        # backend name and tail size must still be rejected before the Hessian.
+        with mock.patch.dict(sys.modules, {"oqp.library.mrsf_spectroscopy_fd": None}):
+            for options in ({"raman_backend": "truncated-SOS"}, {"raman_sos_tail_states": 0}):
+                with self.subTest(**options):
+                    request = _mrsf_request("bhhlyp")
+                    request["input"]["runtype"] = "hess"
+                    request["hess"].update(options)
+                    self.assertEqual(analytic_hessian_capability(request)[0], "unsupported_feature")
 
     def test_rejected_requests_get_no_raman_tail_warning(self):
         report = check_input_values(_checked_request(nstate=1), raise_error=False, emit=False)

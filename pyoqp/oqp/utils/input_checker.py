@@ -6730,9 +6730,29 @@ def _mrsf_property_stage_problem(config: dict[str, Any]) -> str | None:
             "would fail; use raman_backend=truncated_sos, or [hess] "
             "vibrational_intensities=false."
         )
+    # These two need no property module, so they hold even if it cannot be
+    # imported here: the runtime compares the backend name exactly, and a tail
+    # without states is rejected before any property step.
+    backend = str(_get(config, "hess", "raman_backend", "truncated_sos"))
+    if backend != "truncated_sos":
+        return (
+            f"raman_backend={backend!r} is not a known MRSF Raman backend (the only "
+            "runnable one is truncated_sos), so every property step would fail; "
+            "correct it, or set [hess] vibrational_intensities=false."
+        )
+    try:
+        tail_states = int(_get(config, "hess", "raman_sos_tail_states", 2))
+    except (TypeError, ValueError):
+        tail_states = 0
+    if tail_states < 1:
+        return (
+            "raman_sos_tail_states must be a positive integer; as configured every "
+            "property step would fail. Correct it, or set [hess] "
+            "vibrational_intensities=false."
+        )
     try:
         from oqp.library.mrsf_spectroscopy_fd import MRSFPropertyFDRequest  # noqa: PLC0415
-    except Exception:  # pragma: no cover - property module unavailable
+    except Exception:  # pragma: no cover - the remaining checks need that module
         return None
     # Validate the options exactly as the property stage will.  The runtime
     # builds this request only after the Hessian, and a rejection there just
