@@ -162,8 +162,11 @@ def _validate_state_correspondence(
     mass_relative_tolerance: float,
     mass_absolute_tolerance: float,
 ) -> FloatArray:
-    if mass_relative_tolerance < 0.0 or mass_absolute_tolerance < 0.0:
-        raise ValueError("mass tolerances must be non-negative")
+    # NaN and +inf pass "< 0" and would let np.allclose accept any masses.
+    if (not np.isfinite(mass_relative_tolerance)
+            or not np.isfinite(mass_absolute_tolerance)
+            or mass_relative_tolerance < 0.0 or mass_absolute_tolerance < 0.0):
+        raise ValueError("mass tolerances must be non-negative and finite")
 
     ground_mass = _validate_masses(
         ground_masses, natom, name="ground_masses"
@@ -248,8 +251,9 @@ def _external_and_vibrational_bases(
     masses: FloatArray,
     rank_tolerance: float,
 ) -> tuple[FloatArray, FloatArray, FloatArray, int, bool]:
-    if rank_tolerance <= 0.0:
-        raise ValueError("external_rank_tolerance must be positive")
+    # NaN or +inf would drop every rotational vector in the rank test below.
+    if not np.isfinite(rank_tolerance) or rank_tolerance <= 0.0:
+        raise ValueError("external_rank_tolerance must be positive and finite")
 
     natom = geometry.shape[0]
     ncoord = 3 * natom
@@ -445,8 +449,10 @@ def _degenerate_blocks(
     relative_tolerance: float,
     absolute_tolerance: float,
 ) -> tuple[tuple[int, int], ...]:
-    if relative_tolerance < 0.0 or absolute_tolerance < 0.0:
-        raise ValueError("degeneracy tolerances must be non-negative")
+    # NaN or +inf would merge every adjacent pair of modes into one block.
+    if (not np.isfinite(relative_tolerance) or not np.isfinite(absolute_tolerance)
+            or relative_tolerance < 0.0 or absolute_tolerance < 0.0):
+        raise ValueError("degeneracy tolerances must be non-negative and finite")
     if values.size == 0:
         return ()
     blocks: list[tuple[int, int]] = []

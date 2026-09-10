@@ -648,8 +648,10 @@ def enumerate_vibrational_states(
 ) -> tuple[tuple[int, ...], ...]:
     """Enumerate product states with a bounded total quantum number."""
 
-    if nmode <= 0 or max_total_quanta < 0 or max_states <= 0:
-        raise ValueError("state-enumeration bounds must be non-negative")
+    # A NaN or +inf max_states is never exceeded below and removes the cap.
+    if (not np.isfinite(max_states)
+            or nmode <= 0 or max_total_quanta < 0 or max_states <= 0):
+        raise ValueError("state-enumeration bounds must be non-negative and finite")
     count = 1
     for numerator in range(nmode + 1, nmode + max_total_quanta + 1):
         count = count * numerator // (numerator - nmode)
@@ -681,8 +683,9 @@ def _thermal_populations(
     states: Sequence[tuple[int, ...]],
     temperature_kelvin: float,
 ) -> tuple[FloatArray, float]:
-    if temperature_kelvin < 0.0:
-        raise ValueError("temperature_kelvin must be non-negative")
+    # NaN passes "< 0" and yields NaN populations and a NaN spectrum.
+    if not np.isfinite(temperature_kelvin) or temperature_kelvin < 0.0:
+        raise ValueError("temperature_kelvin must be non-negative and finite")
     if temperature_kelvin == 0.0:
         populations = np.array(
             [1.0 if not any(state) else 0.0 for state in states], dtype=float

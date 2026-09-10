@@ -282,6 +282,29 @@ class TestDuschinskyTransformation(unittest.TestCase):
             {(0, 1): 1.1, (0, 2): 1.7, (1, 2): 2.3},
         )
 
+    def test_non_finite_mass_rank_and_degeneracy_tolerances_are_rejected(self):
+        # NaN and +inf pass "< 0": mismatched masses were accepted, the rank
+        # test dropped the rotations of a valid molecule, and every mode was
+        # merged into one degenerate block.
+        excited_masses = np.array(self.masses, dtype=float, copy=True)
+        excited_masses[2] += 0.01
+        cases = (
+            ("mass_relative_tolerance", "mass tolerances must be non-negative and finite"),
+            ("mass_absolute_tolerance", "mass tolerances must be non-negative and finite"),
+            ("external_rank_tolerance", "external_rank_tolerance must be positive and finite"),
+            ("degeneracy_relative_tolerance", "degeneracy tolerances must be non-negative and finite"),
+            ("degeneracy_absolute_tolerance", "degeneracy tolerances must be non-negative and finite"),
+        )
+        for name, message in cases:
+            masses = excited_masses if name.startswith("mass") else self.masses
+            for value in (float("nan"), float("inf")):
+                with self.subTest(parameter=name, value=value):
+                    with self.assertRaisesRegex(ValueError, message):
+                        self.duschinsky.compute_duschinsky_from_arrays(
+                            self.ground_geometry, self.masses, self.ground_hessian,
+                            self.ground_geometry, masses, self.ground_hessian,
+                            **{name: value})
+
     def test_non_finite_hessian_symmetry_tolerance_is_rejected(self):
         asymmetric = np.array(self.ground_hessian, dtype=float, copy=True)
         asymmetric[0, 1] += 1.0
