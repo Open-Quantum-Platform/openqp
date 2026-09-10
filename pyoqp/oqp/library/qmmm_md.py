@@ -75,29 +75,46 @@ def _parse_int_list(value):
     Accepts:
       - a list / ndarray  -> returned as-is (cast to int)
       - an int            -> [value]
-      - a string          -> comma-separated ints, or ``start-end`` range
-        e.g. ``"0,1,2"``  or  ``"0-2"``  or  ``"0, 1, 2"``
+      - a string          -> ints separated by commas and/or whitespace, each
+        item optionally a ``start-end`` range
+        e.g. ``"0,1,2"``  ``"0 1 2"`` (the Python API's form)  ``"0-2"``  ``"0-3, 8 9"``
     """
+    import re as _re
     if isinstance(value, (list, np.ndarray)):
         return [int(v) for v in value]
     if isinstance(value, (int, np.integer)):
         return [int(value)]
-    value = str(value).strip()
-    if "-" in value and "," not in value:
-        parts = value.split("-")
-        return list(range(int(parts[0]), int(parts[1]) + 1))
-    return [int(v) for v in value.split(",")]
+    out = []
+    for item in _re.split(r"[,\s]+", str(value).strip()):
+        if not item:
+            continue
+        if "-" in item[1:]:                       # a range; a leading '-' would be a sign
+            a, b = item.split("-", 1)
+            out.extend(range(int(a), int(b) + 1))
+        else:
+            out.append(int(item))
+    return out
 
 
 def _parse_str_list(value):
-    """Comma-separated string or list -> list of stripped strings."""
+    """Force-field file list -> list of strings.
+
+    Accepts a list, a comma-separated string (the legacy form), or a
+    whitespace-separated string (the form the NAMD driver has always taken).
+    A single path that contains spaces is kept whole when it names an
+    existing file, so ``/data/my forcefield.xml`` still works.
+    """
+    import re as _re
     if isinstance(value, list):
         return value
-    # Accept commas or whitespace: the namd driver has always accepted
-    # "amber14-all.xml amber14/tip3p.xml", and a deck written for it silently
-    # produced one bogus file name here.
-    import re as _re
-    return [s for s in _re.split(r"[,\s]+", str(value)) if s]
+    text = str(value).strip()
+    if not text:
+        return []
+    if "," in text:
+        return [s.strip() for s in text.split(",") if s.strip()]
+    if os.path.exists(text):
+        return [text]
+    return [s for s in _re.split(r"\s+", text) if s]
 
 
 def _resolve_cutoff(value):

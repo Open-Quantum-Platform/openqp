@@ -7258,10 +7258,34 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
                    "same-spin FSSH ([md] soc=false) for the periodic box.",
         )
         return
-    if runtype in ("md", "namd"):
+    if runtype in ("md", "namd", "optimize"):
+        # optimize: the QM/MM optimiser builds the same OpenQpQMMM driver as
+        # runtype=md and passes every periodic/embedding control through.
         embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
         method = _as_lower(_get(config, "input", "method", "hf"))
-        if method == "tdhf" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        if runtype == "optimize" and method not in ("hf", "tdhf", "dftb", "xtb"):
+            report.add(
+                "ERROR",
+                "input.method",
+                "The QM/MM optimiser can differentiate HF/DFT, TDHF/MRSF and the tight-binding "
+                "methods only; other methods reach the driver without an embedded gradient.",
+                value=method,
+                expected="hf, tdhf, dftb or xtb",
+                action="Use one of those methods, or optimise without qmmm_flag.",
+            )
+        if runtype == "optimize":
+            for key in ("freeze", "frozen_distances"):
+                if str(_get(config, "optimize", key, "") or "").strip() or str(_get(config, "oqp", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "Frozen-distance constraints are not applied by the QM/MM optimiser yet; "
+                        "the run would silently move the constrained bond.",
+                        value=str(_get(config, "optimize", key, "") or _get(config, "oqp", key, "")),
+                        expected="no constraint, or optimise without qmmm_flag",
+                        action="Remove the constraint for a QM/MM optimisation.",
+                    )
+        if method == "tdhf" and runtype == "namd" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
             try:
                 zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
             except (TypeError, ValueError):

@@ -80,9 +80,13 @@ class QMMM_Opt:
         self.radius = float(opt.get("qmmm_radius", 0.0))
         self.movable = self._movable_atoms(self.radius)
         self.maxit = int(opt.get("maxit", 30))
+        # the same five-part test as the native all-QM optimizer
+        # (_native_metrics_converged): energy change, rms/max step, rms/max gradient
         self.rmsd_grad = float(opt.get("rmsd_grad", 1e-4))     # Hartree/bohr
         self.max_grad = float(opt.get("max_grad", 3e-4))
-        self.max_step_tol = float(opt.get("max_step", 2e-3))   # bohr, informational
+        self.rmsd_step = float(opt.get("rmsd_step", 1e-3))     # bohr
+        self.max_step = float(opt.get("max_step", 2e-3))
+        self.energy_shift = float(opt.get("energy_shift", 1e-6))   # Hartree
         project = os.path.splitext(os.path.basename(str(mol.config["input"].get("system", "qmmm")).split()[0]))[0]
         self.output = str(opt.get("qmmm_output", "") or f"{getattr(mol, 'project_name', project)}_opt.pdb")
         self.history = []
@@ -142,11 +146,15 @@ class QMMM_Opt:
         at = list(self.pdb.topology.atoms())
         symbols = [int(at[i].element.atomic_number) for i in mv]   # the engine takes atomic numbers
         opt = mol.config.get("optimize", {})
-        trust = float(opt.get("trust", 0.2)) if "trust" in opt else 0.2
+        # the engine controls live in the [oqp] section (concise opt(trust=...)
+        # is lowered there too), as for the all-QM native optimizer
+        eng = mol.config.get("oqp", {})
+        trust = float(eng.get("trust", 0.2))
+        trust_max = float(eng.get("trust_max", 0.5))
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
                              f"{len(mv)} movable atoms (radius {self.radius:.1f} A), "
                              f"{len(X0) - len(mv)} fixed; state {self.istate}; native RFO/BFGS, "
-                             f"Cartesian, trust {trust:.2f} bohr, maxit {self.maxit}"))
+                             f"Cartesian, trust {trust:.2f} (max {trust_max:.2f}) bohr, maxit {self.maxit}"))
         it = [0]
 
         def energy_gradient(x_bohr):
@@ -157,21 +165,30 @@ class QMMM_Opt:
             g = -f[mv].reshape(-1)
             it[0] += 1
             rms = float(np.sqrt(np.mean(g * g))); mx = float(np.abs(g).max())
-            step = (0.0 if not self.history else
-                    float(np.abs(np.asarray(x_bohr) - self.history[-1]["x"]).max()))
-            self.history.append({"x": np.array(x_bohr, dtype=float), "e": e, "rms": rms, "max": mx})
+            if self.history:
+                dx = np.asarray(x_bohr, dtype=float) - self.history[-1]["x"]
+                rms_step, max_step = float(np.sqrt(np.mean(dx * dx))), float(np.abs(dx).max())
+                de = e - self.history[-1]["e"]
+            else:
+                rms_step = max_step = de = float("inf")
+            self.history.append({"x": np.array(x_bohr, dtype=float), "e": e, "rms": rms, "max": mx,
+                                 "rms_step": rms_step, "max_step": max_step, "de": de})
             dump_log(mol, title=(f"PyOQP: QM/MM optimisation step {it[0]}: E = {e:.10f} Hartree, "
-                                 f"rms grad {rms:.2e}, max grad {mx:.2e} Hartree/bohr, "
-                                 f"max step {step:.2e} bohr"), section="")
+                                 f"dE {de:+.2e}, rms/max grad {rms:.2e}/{mx:.2e} Hartree/bohr, "
+                                 f"rms/max step {rms_step:.2e}/{max_step:.2e} bohr"), section="")
             return e, g
 
+        def converged_at(h):
+            return (h["max"] <= self.max_grad and h["rms"] <= self.rmsd_grad
+                    and h["max_step"] <= self.max_step and h["rms_step"] <= self.rmsd_step
+                    and abs(h["de"]) <= self.energy_shift)
+
         def on_converged():
-            h = self.history[-1]
-            if h["max"] < self.max_grad and h["rms"] < self.rmsd_grad:
+            if converged_at(self.history[-1]):
                 raise StopIteration
 
         x0 = (X0[mv] / BOHR_TO_NM).reshape(-1)
-        engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=0.5,
+        engine = OQPEngine(symbols, x0, mode="min", trust=trust, trust_max=trust_max,
                            maxiter=self.maxit, coordsys="cartesian")
         try:
             engine.run(energy_gradient, on_converged=on_converged)
@@ -179,7 +196,7 @@ class QMMM_Opt:
             self.driver._reuse_orbitals = False
         best = min(self.history, key=lambda h: h["e"])
         last = self.history[-1]
-        converged = last["max"] < self.max_grad and last["rms"] < self.rmsd_grad
+        converged = converged_at(last)
         final = last if converged else best
         X = X0.copy(); X[mv] = final["x"].reshape(-1, 3) * BOHR_TO_NM
         if final is not last:                          # leave mol/driver on the geometry we report
@@ -192,8 +209,10 @@ class QMMM_Opt:
                              f"full-system geometry written to {self.output}"))
         if not converged:
             dump_log(mol, title=(f"PyOQP: QM/MM optimisation reached maxit={self.maxit} without meeting "
-                                 f"max_grad={self.max_grad:.0e} / rmsd_grad={self.rmsd_grad:.0e}; "
-                                 f"the lowest-energy geometry visited is written"), section="")
+                                 f"max_grad={self.max_grad:.0e} rmsd_grad={self.rmsd_grad:.0e} "
+                                 f"max_step={self.max_step:.0e} rmsd_step={self.rmsd_step:.0e} "
+                                 f"energy_shift={self.energy_shift:.0e}; the lowest-energy geometry "
+                                 f"visited is written"), section="")
         self.converged = converged
         self.energy = final["e"]
         self.positions_nm = X
