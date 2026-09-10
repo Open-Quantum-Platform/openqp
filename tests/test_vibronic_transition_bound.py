@@ -55,17 +55,20 @@ class VibronicTransitionBound(unittest.TestCase):
         )
         self.assertEqual(len(result.lines), 5)
 
-    def test_nonpositive_bound_is_rejected(self):
+    def test_nonpositive_or_nan_bound_is_rejected(self):
         model = vibronic.HarmonicVibronicModel.create(
             [1000.0], [900.0], [[1.0]], [0.0],
             coordinate_unit="sqrt(me)*bohr",
             coordinate_phase_convention="synthetic one-mode test",
         )
-        with self.assertRaisesRegex(ValueError, "max_transitions must be positive"):
-            vibronic.harmonic_vibronic_spectrum(
-                model, electronic_origin_cm1=20000.0, origin_kind="zero_zero",
-                max_final_quanta=1, max_transitions=0,
-            )
+        # NaN compares false against every bound, so it needs its own case.
+        for bound in (0, float("nan")):
+            with self.subTest(max_transitions=bound):
+                with self.assertRaisesRegex(ValueError, "max_transitions must be positive"):
+                    vibronic.harmonic_vibronic_spectrum(
+                        model, electronic_origin_cm1=20000.0, origin_kind="zero_zero",
+                        max_final_quanta=1, max_transitions=bound,
+                    )
 
 
 if __name__ == "__main__":

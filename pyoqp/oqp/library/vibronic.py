@@ -877,7 +877,7 @@ def harmonic_vibronic_spectrum(
     dipole, derivative_values = _validate_transition_inputs(
         model, transition, transition_dipole_derivative
     )
-    if max_transitions <= 0:
+    if not max_transitions > 0:  # also rejects NaN, which compares false
         raise ValueError("max_transitions must be positive")
     populated_initial = sum(1 for population in populations if population != 0.0)
     transition_count = populated_initial * len(final_states)
