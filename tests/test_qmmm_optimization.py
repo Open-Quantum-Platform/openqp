@@ -250,6 +250,44 @@ class TestOptimisationPublishesItsResult(unittest.TestCase):
         self.assertIn("recovery selected after the iteration limit", log)
         self.assertIn("trust=0.020", log)
 
+    def test_electronic_failure_restarts_from_the_best_geometry(self):
+        """An SCF that does not converge at the second trial geometry rejects
+        it and enters the recovery stage from the first (best) geometry."""
+        import os, tempfile
+        from unittest import mock
+        from oqp.pyoqp import Runner
+        deck = ROOT / "examples" / "QMMM" / "ala-dipeptide_RHF-QMMM-OPT-linkatom.inp"
+        text = (deck.read_text().replace("maxit=12", "maxit=2").replace("save_mol=true", "save_mol=false")
+                .replace("auto_recovery=false", "auto_recovery=true\nrecovery_maxit=1"))
+        real = QMMM_Opt._energy_force
+        calls = [0]
+
+        def flaky(self, X):
+            calls[0] += 1
+            if calls[0] == 2:
+                raise RuntimeError("SCF did not converge in 200 iterations")
+            return real(self, X)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "ef.inp"
+            inp.write_text(text.replace("pdb_file=ala.pdb", f"pdb_file={deck.parent / 'ala.pdb'}")
+                               .replace("system=ala.pdb", f"system={deck.parent / 'ala.pdb'}"))
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                with mock.patch.object(QMMM_Opt, "_energy_force", flaky):
+                    r = Runner(project="ef", input_file=str(inp), log=str(Path(tmp) / "ef.log"),
+                               silent=1, usempi=False)
+                    r.run()
+                log = (Path(tmp) / "ef.log").read_text()
+            finally:
+                os.chdir(cwd)
+        info = r.mol.qmmm_optimization
+        self.assertTrue(info["electronic_failure"])
+        self.assertTrue(info["recovery"])
+        self.assertEqual(info["evaluations"], 2)          # the rejected trial geometry is not counted
+        self.assertIn("electronic solver did not converge", log)
+        self.assertIn("recovery selected after electronic non-convergence", log)
+
 
 @unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
 class TestForceFieldPaths(unittest.TestCase):
@@ -297,10 +335,10 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
         ns = {"np": np}
         exec(compile(ast.Module(body=[fn], type_ignores=[]), str(path), "exec"), ns)
 
-        def fake(runtype):
+        def fake(runtype, method="hf", energies=(-10.0,)):
             return SimpleNamespace(
-                config={"input": {"runtype": runtype, "method": "hf"}},
-                mol_energy=SimpleNamespace(energy=-10.0), energies=[-10.0],
+                config={"input": {"runtype": runtype, "method": method}},
+                mol_energy=SimpleNamespace(energy=-10.0), energies=list(energies),
                 symmetry_metadata={}, data={"OQP::td_energies": [0.0]},
                 get_atoms=lambda: np.array([1]), get_system=lambda: np.zeros(3),
                 has_grad=lambda: False, get_grad=lambda: [], get_nac=lambda: [],
@@ -318,6 +356,12 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
         self.assertEqual(out["qmmm_optimization"]["evaluations"], 3)
         self.assertNotIn("movable_atoms", out["qmmm_optimization"])
 
+    def test_dftb_excited_state_optimisation_keeps_the_objective(self):
+        # istate=1: mol.energies = [nan, objective]; the DFTB block would publish nan
+        get_results, fake = self._get_results()
+        out = get_results(fake("optimize", method="dftb", energies=(float("nan"), -12.5)))
+        self.assertEqual(out["energy"], -12.5)
+
     def test_stale_summary_does_not_leak_into_another_runtype(self):
         get_results, fake = self._get_results()
         out = get_results(fake("energy"))
@@ -329,6 +373,46 @@ class TestPublishedEnergyBelongsToThisRun(unittest.TestCase):
         run = src[src.index("    def run(self, test_mod=False):"):]
         run = run[:run.index('run_type = self.mol.config["input"]["runtype"]')]
         self.assertIn("self.mol.qmmm_optimization = None", run)
+
+
+@unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")
+class TestSelectionMatchesMolecule(unittest.TestCase):
+    """The QM Molecule (from [input] system) must be the [qmmm] selection in
+    topology order plus the link hydrogens."""
+
+    def _opt(self, z_mol, qm, nlink):
+        import types
+        import openmm.app as app
+        o = QMMM_Opt.__new__(QMMM_Opt)
+        o.pdb = app.PDBFile(str(ROOT / "examples" / "QMMM" / "ala.pdb"))
+        o.qm_atoms = np.array(qm, dtype=int)
+        o.driver = types.SimpleNamespace(link_atoms=[object()] * nlink)
+        o.mol = types.SimpleNamespace(get_atoms2=lambda what: np.array(z_mol, dtype=float))
+        return o
+
+    def _z(self, idx):
+        import openmm.app as app
+        atoms = list(app.PDBFile(str(ROOT / "examples" / "QMMM" / "ala.pdb")).topology.atoms())
+        return [atoms[i].element.atomic_number for i in idx]
+
+    def test_matching_layout_passes(self):
+        qm = [8, 9, 16, 17, 18]
+        self._opt(self._z(qm) + [1], qm, 1)._validate_qm_molecule_layout()
+
+    def test_one_based_copy_of_the_selection_is_rejected(self):
+        qm = [8, 9, 16, 17, 18]
+        wrong = self._z([7, 8, 15, 16, 17]) + [1]           # ala.pdb has 19 atoms: shift down, not up
+        if wrong == self._z(qm) + [1]:
+            self.skipTest("shifted selection happens to have the same elements")
+        with self.assertRaisesRegex(ValueError, "1-based"):
+            self._opt(wrong, qm, 1)._validate_qm_molecule_layout()
+
+    def test_wrong_atom_count_is_rejected(self):
+        qm = [8, 9, 16, 17, 18]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self._opt(self._z(qm), qm, 1)._validate_qm_molecule_layout()      # link H missing
+        with self.assertRaisesRegex(ValueError, "beyond"):
+            self._opt(self._z(qm) + [1], [8, 9, 16, 17, 100000], 1)._validate_qm_molecule_layout()
 
 
 class TestRecoveryAndGradientAreWired(unittest.TestCase):

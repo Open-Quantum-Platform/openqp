@@ -1399,6 +1399,30 @@ $$$$
         self.assertTrue(runner.ran)
 
 
+    def test_legacy_wrapper_forwards_append_log_only_when_set(self):
+        # the ESPF QM/MM driver builds one OPENQP per geometry; the later ones
+        # append to the run's log instead of truncating it
+        openqp = load_openqp_module()
+        seen = []
+        base = openqp.Runner
+
+        class Capture(base):
+            def __init__(self, **kwargs):
+                seen.append(dict(kwargs))
+                kwargs.pop("append_log", None)
+                super().__init__(**kwargs)
+
+        openqp.Runner = Capture
+        try:
+            cfg = {"input.system": "H 0 0 0; H 0 0 0.74", "input.basis": "sto-3g",
+                   "input.method": "hf", "input.runtype": "energy", "scf.type": "rhf"}
+            openqp.OPENQP(cfg)
+            openqp.OPENQP(cfg, True, append_log=True)
+        finally:
+            openqp.Runner = base
+        self.assertNotIn("append_log", seen[0])
+        self.assertIs(seen[1]["append_log"], True)
+
     def test_dftb_helper_builds_mrsf_tddftb_input(self):
         openqp = load_openqp_module()
 

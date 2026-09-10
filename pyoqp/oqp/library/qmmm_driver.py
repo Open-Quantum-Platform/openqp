@@ -530,7 +530,10 @@ class OpenQpQMMM:
             else:
                 xyz_atoms = self._build_xyz_string()
                 self.oqp_cfg_base["input.system"] = xyz_atoms
-                self.op = OPENQP(self.oqp_cfg_base, True)
+                # one log per run: the first geometry opens it, later ones append
+                self.op = OPENQP(self.oqp_cfg_base, True,
+                                 append_log=getattr(self, "_log_started", False))
+                self._log_started = True
                 if is_tb_method(str(self.op.mol.config['input']['method'])):
                     tb_potmm = None if self.Embedding == "mechanical" else potmm
                     return self._forces_qm_dftb(self.op.mol, tb_potmm)

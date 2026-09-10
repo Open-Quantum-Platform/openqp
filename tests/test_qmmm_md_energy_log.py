@@ -249,7 +249,9 @@ class TestLoggedEnergyIsTheBackendEnergy(unittest.TestCase):
         self.assertEqual(nframes, 7)                                # frames 0..n_steps
         self.assertAlmostEqual(z["E_pot"][0], e0, places=6)
         self.assertAlmostEqual(z["E_pot"][3], e3, places=5)
-        self.assertEqual(len(seen), 8)
+        # 6 steps + run()'s final sample; the extra step() taken after it starts
+        # at that same geometry and reuses the force instead of recomputing it
+        self.assertEqual(len(seen), 7)
         self.assertNotAlmostEqual(lin, d._qmmm_energy_kJ, places=3)
         np.testing.assert_allclose(z["E_tot"][:6], returned, rtol=0, atol=1e-9)
         np.testing.assert_allclose(rows[:, 3], z["E_tot"], rtol=0, atol=1e-7)
@@ -290,6 +292,33 @@ class TestLoggedEnergyIsTheBackendEnergy(unittest.TestCase):
                 self.assertEqual(nframes, 3)
                 if fmt == "dcd":
                     self.assertEqual((istart, nsavc), (0, 2))
+
+    def test_a_continued_run_appends_without_duplicating_the_boundary_row(self):
+        import tempfile
+        from oqp.library.qmmm_md import QMMM_MD
+        with tempfile.TemporaryDirectory() as tmp:
+            deck = Path(tmp) / "md.inp"
+            deck.write_text(DECK.format(pdb=EXAMPLES / "formaldehyde_water.pdb",
+                                        ff=EXAMPLES / "formaldehyde.xml", tip=EXAMPLES / "tip3p.xml")
+                            .replace("n_steps=6", "n_steps=2"))
+            cwd = os.getcwd(); os.chdir(tmp)
+            try:
+                d = QMMM_MD(oqp_cfg=str(deck))
+                d.run()
+                d.run()                                   # continues from step 2
+                z = np.load("e.npz")
+                rows = np.loadtxt("e.dat", delimiter=",", skiprows=1, ndmin=2)
+                qm_log = Path("oqp_project.log").read_text(errors="ignore")
+            finally:
+                os.chdir(cwd)
+        # one QM log for the whole run: the per-geometry Runners append to it
+        # (it used to be truncated at every new geometry, so an MD log only
+        # ever held the last step)
+        self.assertEqual(qm_log.count("OpenQP calculation"), 1)
+        self.assertGreaterEqual(qm_log.count("next QM/MM evaluation"), 4)
+        self.assertGreaterEqual(qm_log.count("SCF"), 5)
+        self.assertEqual(list(z["step"]), [0, 1, 2, 3, 4])
+        self.assertEqual([int(round(t / 0.0005)) for t in rows[:, 0]], [0, 1, 2, 3, 4])
 
     def test_rigidwater_false_leaves_water_flexible(self):
         import tempfile

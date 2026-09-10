@@ -84,6 +84,39 @@ def _require_openmm():
       ) from _OPENMM_IMPORT_ERROR
 
 
+input_dir = None   # directory of the input deck being loaded (set by Molecule.load_config)
+
+
+def resolve_forcefield_files(value, deck_dir=None):
+   """``[qmmm] forcefield_files`` -> list of force-field file names.
+
+   The unsplit value is tried first (a single file whose name contains spaces),
+   then the value is split on commas or whitespace.  A relative name that does
+   not exist in the working directory but does next to the deck is rebased
+   there; anything else (e.g. OpenMM built-ins such as ``amber14-all.xml``) is
+   returned unchanged.
+   """
+   import os
+   import re
+
+   def rebase(name):
+      if (deck_dir and name and not os.path.isabs(name) and not os.path.exists(name)
+              and os.path.exists(os.path.join(deck_dir, name))):
+         return os.path.join(deck_dir, name)
+      return name
+
+   if isinstance(value, (list, tuple)):
+      return [rebase(str(v).strip()) for v in value if str(v).strip()]
+   text = str(value or "").strip()
+   if not text:
+      return []
+   whole = rebase(text)
+   if os.path.isfile(whole):
+      return [whole]
+   parts = text.split(",") if "," in text else re.split(r"\s+", text)
+   return [rebase(p.strip()) for p in parts if p.strip()]
+
+
 def _openmm_from_oqp(force_field,nonbondedMethod,constraints,water):
 
    _require_openmm()

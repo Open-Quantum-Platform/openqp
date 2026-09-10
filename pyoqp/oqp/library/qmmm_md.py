@@ -625,6 +625,13 @@ class QMMM_MD:
         # the QM force one step stale and broke energy conservation.
         state_pre = self.simulation_md.context.getState(getPositions=True)
         pos_pre = state_pre.getPositions()
+        xyz_now = np.asarray(state_pre.getPositions(asNumpy=True).value_in_unit(unit.nanometer))
+        if (getattr(self, "_sampled_step", None) == self.simulation_md.currentStep
+                and getattr(self, "_sampled_xyz", None) is not None
+                and np.array_equal(self._sampled_xyz, xyz_now)):
+            # a continued run() starts where the previous run() sampled its
+            # last row: the force is already current and the row is written
+            return self._traj_data["E_tot"][-1]
         sim0.context.setPositions(pos_pre)
         if is_periodic_method(self.cutoff):
             self.mm_systems["simew"].context.setPositions(pos_pre)
@@ -663,6 +670,7 @@ class QMMM_MD:
         self._traj_data["temperature"].append(T_inst)
         self._traj_data["volume_nm3"].append(vol)
         self._report_energies(step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol)
+        self._sampled_step, self._sampled_xyz = step_idx, xyz_now
         return E_tot
 
     def _report_energies(self, step_idx, t_ps, E_pot, E_kin, E_tot, T_inst, vol):
@@ -670,6 +678,8 @@ class QMMM_MD:
         ``report_interval`` steps, step 0 included)."""
         if step_idx % self.report_interval != 0:
             return
+        if self._log_handle is None or self._log_handle.closed:
+            self._log_handle = open(self.log_file, "a")     # a continued run() appends
         now = time.time()
         if self._wall_t0 is None:
             self._wall_t0 = (now, t_ps)

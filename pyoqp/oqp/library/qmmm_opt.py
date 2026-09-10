@@ -24,6 +24,7 @@ import os
 import numpy as np
 from openmm import app, unit
 from oqp.library.oqp_engine import OQPEngine
+from oqp.library.liboqp import _OQPRunner
 
 from oqp.library.qmmm_driver import OpenQpQMMM
 from oqp.library.qmmm_md import (
@@ -71,6 +72,7 @@ class QMMM_Opt:
             lj_switch=_flag("lj_switch"), h_lj=_flag("h_lj"),
             mm_charge_width=None if _w in (None, "", "none", "None", 0, 0.0, "0") else float(_w),
         )
+        self._validate_qm_molecule_layout()
 
         # ---- state: [optimize] istate, as for the all-QM optimizer (0 = the
         # ground state of an HF/DFT run, n = the n-th TDHF/MRSF root); the
@@ -102,6 +104,29 @@ class QMMM_Opt:
         self._last_gradient = None      # full-system gradient of the last evaluation
 
     # ------------------------------------------------------------------ #
+    def _validate_qm_molecule_layout(self):
+        """The QM Molecule was built from [input] system before this driver
+        existed.  It must be the [qmmm] selection in topology order followed by
+        one hydrogen per cut bond (the NAMD driver's check), or every
+        evaluation would put this driver's coordinates on the wrong atoms, or
+        past the end of the native coordinate buffer."""
+        nlink = len(getattr(self.driver, "link_atoms", None) or [])
+        z_mol = np.asarray(self.mol.get_atoms2("charge"), dtype=float).reshape(-1)
+        z_top = {a.index: (0 if a.element is None else a.element.atomic_number)
+                 for a in self.pdb.topology.atoms()}
+        if any(int(i) not in z_top for i in self.qm_atoms):
+            raise ValueError(f"QM/MM optimisation: [qmmm] qm_atoms reaches beyond the "
+                             f"{len(z_top)} atoms of [qmmm] pdb_file.")
+        z_expected = [z_top[int(i)] for i in self.qm_atoms] + [1] * nlink
+        if z_mol.size != len(z_expected) or any(abs(z_mol[k] - z_expected[k]) > 0.5
+                                               for k in range(z_mol.size)):
+            raise ValueError(
+                "QM/MM optimisation: the QM molecule built from [input] system does not match "
+                f"[qmmm] pdb_file / qm_atoms: molecule Z={z_mol.astype(int).tolist()}, expected "
+                f"{z_expected} ({len(self.qm_atoms)} QM atoms in topology order + {nlink} link "
+                "hydrogen(s)). '[input] system = file.pdb ...' indices are 1-based while "
+                "[qmmm] qm_atoms are 0-based.")
+
     def _forcefield_paths(self, raw):
         """[qmmm] forcefield_files -> list of paths.  The unsplit value is
         resolved against the deck first, so a single deck-relative file whose
@@ -205,11 +230,23 @@ class QMMM_Opt:
                              f"{self.coordsys} coordinates, trust {trust:.2f} (max {trust_max:.2f}) bohr, "
                              f"maxit {self.maxit}"))
         it = [0]
+        electronic_failure = [None]
 
         def energy_gradient(x_bohr):
             X = X0.copy()
             X[mv] = np.asarray(x_bohr, dtype=float).reshape(-1, 3) * BOHR_TO_NM
-            e, f = self._energy_force(X)
+            try:
+                e, f = self._energy_force(X)
+            except Exception as error:
+                # as the native optimizer: an SCF/response solve that does not
+                # converge at a trial geometry rejects that geometry; with no
+                # evaluated geometry to fall back on it is a real failure
+                if not self.history or not _OQPRunner._is_electronic_nonconvergence(error):
+                    raise
+                electronic_failure[0] = error
+                dump_log(mol, title=("PyOQP: QM/MM optimisation: electronic solver did not converge "
+                                     "at the trial geometry; rejecting it.\n   %s" % error))
+                raise StopIteration from error
             self.driver._reuse_orbitals = not self.init_scf   # later steps start from these orbitals
             g = -f[mv].reshape(-1)
             it[0] += 1
@@ -247,8 +284,10 @@ class QMMM_Opt:
                 steps = max(self.maxit - it[0], recovery_maxit)
                 r_trust = min(recovery_trust, trust_max)
                 r_trust_max = min(trust_max, max(r_trust, 2.5 * r_trust))
-                dump_log(mol, title=(f"PyOQP: QM/MM optimisation recovery selected after the iteration "
-                                     f"limit. Restarting the lowest-energy geometry (E = {best['e']:.10f} "
+                reason = ("electronic non-convergence at a trial geometry"
+                          if electronic_failure[0] is not None else "the iteration limit")
+                dump_log(mol, title=(f"PyOQP: QM/MM optimisation recovery selected after {reason}. "
+                                     f"Restarting the lowest-energy geometry (E = {best['e']:.10f} "
                                      f"Hartree) with {self.coordsys} coordinates, trust={r_trust:.3f}, "
                                      f"and a fresh model Hessian for up to {steps} steps"))
                 recovered = True
@@ -294,6 +333,7 @@ class QMMM_Opt:
         mol.qmmm_optimization = {
             "converged": bool(converged), "energy_hartree": float(final["e"]),
             "evaluations": int(it[0]), "recovery": bool(recovered),
+            "electronic_failure": electronic_failure[0] is not None,
             "rms_grad": float(final["rms"]), "max_grad": float(final["max"]),
             "movable_atoms": [int(i) for i in mv], "output": self.output,
         }

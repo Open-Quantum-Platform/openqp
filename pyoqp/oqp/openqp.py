@@ -2068,7 +2068,7 @@ OQP = OpenQP
 
 
 class OPENQP:
-    def __init__(self, cfg: dict, silent: bool = False):
+    def __init__(self, cfg: dict, silent: bool = False, append_log: bool = False):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for k, v in cfg.items():
             if k == "input.system":
@@ -2081,14 +2081,18 @@ class OPENQP:
         self.config_str = self._dump_strings_from_parser(parser)
         self.config_typed = parser.validate()
 
-        self.runner = Runner(
+        runner_kwargs = dict(
             project="oqp_project",
             input_file=None,
             log="oqp_project.log",
             input_dict=self.config_str,
             silent=1 if silent else 0,
-            usempi=True
+            usempi=True,
         )
+        if append_log:
+            # only when used, so Runner stand-ins with the older signature work
+            runner_kwargs["append_log"] = True
+        self.runner = Runner(**runner_kwargs)
         self.mol = self.runner.mol
 
     @property

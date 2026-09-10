@@ -1004,6 +1004,7 @@ class OQPData:
         },
         "qmmm": {
             "forcefield": "set_qmmm_forcefield",
+            "forcefield_files": "set_qmmm_forcefield_files",
             "nonbondedmethod": "set_qmmm_nonbondedmethod",
             "constraints": "set_qmmm_constraints",
             "rigidwater": "set_qmmm_rigidwater",
@@ -1435,6 +1436,20 @@ class OQPData:
     def set_qmmm_forcefield(self, forcefield):
         """Handle QM/MM calculation forcefield"""
         qmmm.force_field = forcefield
+
+    def set_qmmm_forcefield_files(self, forcefield_files):
+        """``[qmmm] forcefield_files`` is the force field of the active QM/MM
+        drivers (optimisation, MD, NAMD).  When given it also builds the
+        PDB-based QM molecule (``[input] system = file.pdb ...``), which
+        otherwise used only the legacy ``[qmmm] forcefield`` and so could not
+        recognise a residue defined by a custom XML.  The [qmmm] section is
+        applied before [input], and ``forcefield`` before this key, so the
+        builder sees it.  Only the builder's force field is set: the
+        configuration itself, which the NAMD restart identity hashes, is left
+        as written."""
+        files = qmmm.resolve_forcefield_files(forcefield_files, qmmm.input_dir)
+        if files:
+            qmmm.force_field = files
 
     def set_qmmm_rigidwater(self, rigidwater):
         """Handle QM/MM calculation rigidWater"""

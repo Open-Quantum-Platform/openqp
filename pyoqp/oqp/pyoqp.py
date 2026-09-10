@@ -279,7 +279,8 @@ class Runner:
     """
 
     def __init__(self, project=None, input_file=None, log=None,
-                 input_dict=None, silent=0, usempi=True, input_metadata=None):
+                 input_dict=None, silent=0, usempi=True, input_metadata=None,
+                 append_log=False):
         """
         Initialize the OQP Runner.
 
@@ -411,12 +412,19 @@ class Runner:
         # Initialize the log before the native banner appends to it.  The old
         # order wrote the banner first and immediately truncated it in the
         # ``start`` section, hiding the contributor and resource information.
+        # append_log: a further QM evaluation of a run whose log is already
+        # open (the ESPF QM/MM driver builds one Runner per geometry); the
+        # banner and the request are written once, by the first evaluation.
         dump_log(self.mol, title='', section='start',
-                 info={"build": _openqp_build_label()})
+                 info={"build": _openqp_build_label(), "append": bool(append_log)})
+        # Always: besides the banner, this hands the native side its log file
+        # name (OQP::log_filename -> infos%log_filename); skipping it leaves
+        # every native write of the evaluation without a log unit.
         oqp.oqp_banner(self.mol)
-        dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
-        dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
-        self._log_perf_settings()
+        if not append_log:
+            dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
+            dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
+            self._log_perf_settings()
 
     def _log_perf_settings(self):
         """Append the resolved performance settings + warnings to the log."""
