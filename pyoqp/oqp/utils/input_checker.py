@@ -7006,6 +7006,16 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
     try:
+        return _basis_max_angular_momentum_inspected(config)
+    except Exception:
+        # basis_set_exchange knows neither a custom "file:" basis, which the
+        # runtime reads from the input directory, nor an unknown name; report
+        # "cannot inspect" instead of crashing the whole input check.
+        return None
+
+
+def _basis_max_angular_momentum_inspected(config: dict[str, Any]) -> int | None:
+    try:
         import basis_set_exchange as bse
     except Exception:
         return None

@@ -191,6 +191,14 @@ class MrsfHessianPreflight(unittest.TestCase):
         self.assertNotIn(_TRACKED_ROOT_MARKER, _preflight_text(
             _native_path_request("irc", 1, hess={"read": True})))
 
+    def test_custom_file_basis_does_not_crash_the_analytic_hessian_check(self):
+        # The basis-L check looked "file:..." names up in basis_set_exchange and
+        # raised KeyError, so no analytic Hessian could use a custom basis file.
+        request = _checked_request(nstate=5)
+        request["input"]["basis"] = "file:custom-basis.json"
+        report = check_input_values(request, raise_error=False, emit=False)
+        self.assertNotIn("angular momentum only up to L=3", report.to_text())
+
     def test_shipped_analytic_mrsf_decks_still_pass(self):
         # examples/HESS/*MRSF_ANALYTIC_HESSIAN*.inp: runtype=hess, state=3, nstate=6.
         for functional in ("bhhlyp", ""):
