@@ -222,12 +222,14 @@ contains
       call cpu_time(rhs_cpu_start)
       call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
                     dat=cgdata, tol=sqrt(abs(cnv)))
+      if (infos%control%verbose >= 1) &
       write(iw,'(" INITIAL CPHF ERROR RHS",I5," =",3X,' // &
                '1P,E10.3,1X,"/",1P,E10.3)') &
               irhs, pcg%error**2, cnv
       do iter = 1, mxit
         if (pcg%errcode /= PCG_OK) exit
         call pcg%step()
+        if (infos%control%verbose >= 1) &
         write(iw,'(" CPHF ITER RHS",I5," ITER#",I4," ERROR =",3X,' // &
                  '1P,E10.3,1X,"/",1P,E10.3)') &
                 irhs, iter, pcg%error**2, cnv

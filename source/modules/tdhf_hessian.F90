@@ -188,9 +188,12 @@ contains
     hstore=htotal
     call reset_channel_derivative_cache()
     open(unit=iw,file=infos%log_filename,position='append')
-    write(iw,'(/,A,1P,E12.4)') 'TDHF Hessian maximum amplitude-response residual: ',amp_res
-    write(iw,'(A,1P,E12.4)') 'TDHF Hessian maximum Z-response residual: ',z_res
-    write(iw,'(A,1P,E12.4)') 'TDHF Hessian unsymmetrized response-row asymmetry: ',asym
+    ! Solver diagnostics: detailed log only (verbose >= 2).
+    if (infos%control%verbose >= 2) then
+      write(iw,'(/,A,1P,E12.4)') 'TDHF Hessian maximum amplitude-response residual: ',amp_res
+      write(iw,'(A,1P,E12.4)') 'TDHF Hessian maximum Z-response residual: ',z_res
+      write(iw,'(A,1P,E12.4)') 'TDHF Hessian unsymmetrized response-row asymmetry: ',asym
+    end if
     close(iw)
   end subroutine tdhf_hessian
 

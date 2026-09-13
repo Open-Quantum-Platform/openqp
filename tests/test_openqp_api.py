@@ -25,6 +25,7 @@ SCHEMA = {
         "library": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
+        "verbose": {"type": int, "default": "1"},
         "qmmm_flag": {"type": bool, "default": "False"},
         "d4": {"type": bool, "default": "False"},
     },
@@ -789,6 +790,18 @@ $$$$
             openqp.OpenQP(project="bad_tddft").theory("tddft")
         with self.assertRaisesRegex(ValueError, "SF-TDDFT theory requires"):
             openqp.OpenQP(project="bad_sf").theory("sf-tddft")
+
+    def test_control_sets_the_log_verbosity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_quiet")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(verbose=0, omp_threads=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["verbose"], "0")
+        self.assertEqual(config["input"]["omp_threads"], "4")
 
     def test_control_sets_runtype_threads_and_optimizer_options(self):
         openqp = load_openqp_module()

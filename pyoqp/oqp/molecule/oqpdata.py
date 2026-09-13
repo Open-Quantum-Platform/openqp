@@ -166,6 +166,10 @@ OQP_CONFIG_SCHEMA = {
         # utils/perf_levels.py; explicit input keys override the preset. Set perf=-1
         # to disable the preset entirely (leave every knob at its control default).
         'perf': {'type': int, 'default': '1'},
+        # verbose: log detail for the whole run -- 0 quiet, 1 normal (default),
+        # 2 detailed, 3 debug (see oqp.utils.log_format).  The older spelling
+        # [scf] verbose is still honoured.
+        'verbose': {'type': int, 'default': '1'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'ispher': {'type': ispher_mode, 'default': 'auto'},
@@ -886,6 +890,7 @@ class OQPData:
             "system2": "set_system2",
             "qmmm_flag": "set_qmmm_flag",
             "soc_2e":     "set_soc_2e",
+            "verbose":    "set_input_verbose",
         },
         "guess": {
         },
@@ -1332,9 +1337,26 @@ class OQPData:
         """SOSCF level-shift parameter."""
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
 
+    def set_input_verbose(self, verbose):
+        """Log verbosity for the whole run, ``[input] verbose`` (0 quiet .. 3 debug)."""
+        self._verbose_input = int(verbose)
+        self._apply_verbose()
+
     def set_scf_verbose(self, verbose):
-        """Controls output verbosity"""
-        self._data.control.verbose = verbose
+        """Older spelling of the log verbosity, ``[scf] verbose``."""
+        self._verbose_scf = int(verbose)
+        self._apply_verbose()
+
+    def _apply_verbose(self):
+        """Push the resolved level to every native print gate."""
+        from oqp.utils.log_format import VERBOSE_DEBUG, resolve_verbosity
+        level = resolve_verbosity({
+            'input': {'verbose': getattr(self, '_verbose_input', 1)},
+            'scf': {'verbose': getattr(self, '_verbose_scf', 1)},
+        })
+        self._data.control.verbose = level
+        # The MRSF developer dumps had their own switch that no input could set.
+        self._data.tddft.debug_mode = level >= VERBOSE_DEBUG
 
     def set_trah_stability(self, flag: bool):
         """Enable/disable Hessian/eigenspectrum stability analysis before TRAH."""

@@ -200,3 +200,46 @@ def test_compatibility_document_names_stable_markers_and_units():
         assert marker in text
     for unit in ("Hartree", "Hartree/Bohr", "cm^-1", "km/mol"):
         assert unit in text
+
+
+def test_one_verbosity_level_with_the_legacy_scf_spelling():
+    resolve = LOG.resolve_verbosity
+    assert resolve({}) == LOG.VERBOSE_NORMAL
+    assert resolve({"input": {"verbose": 1}, "scf": {"verbose": 1}}) == 1
+    assert resolve({"input": {"verbose": 2}, "scf": {"verbose": 1}}) == 2
+    assert resolve({"input": {"verbose": "1"}, "scf": {"verbose": "0"}}) == 0
+    assert resolve({"input": {"verbose": 3}, "scf": {"verbose": 0}}) == 3
+    assert resolve({"input": {"verbose": 9}}) == LOG.VERBOSE_DEBUG
+    assert resolve({"input": {"verbose": -4}}) == LOG.VERBOSE_QUIET
+    assert resolve({"input": {"verbose": "loud"}}) == LOG.VERBOSE_NORMAL
+
+
+def test_module_print_level_follows_the_global_level_unless_set():
+    level = LOG.module_print_level
+    assert level({"dftb": {"print_level": 1}}, "dftb") == 1
+    assert level({"input": {"verbose": 0}, "dftb": {"print_level": 1}}, "dftb") == 0
+    assert level({"input": {"verbose": 3}, "dftb": {"print_level": 1}}, "dftb") == 2
+    assert level({"input": {"verbose": 0}, "dftb": {"print_level": 2}}, "dftb") == 2
+    assert level({"input": {"verbose": 2}, "dftb": {"print_level": 0}}, "dftb") == 0
+
+
+def test_boolean_log_values_read_yes_or_no():
+    assert LOG.format_value(True) == "yes"
+    assert LOG.format_value(False) == "no"
+    assert LOG.format_value(0) == 0
+    row = LOG.format_log_fields((("scf incremental", True),))
+    assert row.endswith(" yes") and "True" not in row
+
+
+def test_numpy_convergence_flags_read_yes_or_no():
+    numpy = __import__("pytest").importorskip("numpy")
+    assert LOG.format_value(numpy.float64(1.0) <= 2.0) == "yes"
+    assert LOG.format_value(numpy.float64(3.0) <= 2.0) == "no"
+
+
+def test_logging_document_describes_every_verbosity_level():
+    text = (ROOT / "docs" / "logging.md").read_text()
+    assert "[input] verbose" in text and "[scf] verbose" in text
+    for level in (LOG.VERBOSE_QUIET, LOG.VERBOSE_NORMAL,
+                  LOG.VERBOSE_DETAILED, LOG.VERBOSE_DEBUG):
+        assert f"| `{level}` |" in text

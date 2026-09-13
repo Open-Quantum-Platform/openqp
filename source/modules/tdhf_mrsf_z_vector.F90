@@ -489,13 +489,15 @@ contains
     unstable = .false.
     happy_breakdown = .false.
     
-    write(iw,'(/," GMRES Solver Parameters:")')
-    write(iw,'("   Problem size        : ", I8)') n
-    write(iw,'("   Restart dimension   : ", I4)') m
-    write(iw,'("   Max iterations      : ", I4)') max_iter
-    write(iw,'("   Convergence tol     : ", 1p,e10.3)') tol
-    write(iw,'(/," Iteration   Inner  Residual Norm   Reduction")')
-    write(iw,'(" ---------   -----  -------------   ---------")')
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/," GMRES Solver Parameters:")')
+      write(iw,'("   Problem size        : ", I8)') n
+      write(iw,'("   Restart dimension   : ", I4)') m
+      write(iw,'("   Max iterations      : ", I4)') max_iter
+      write(iw,'("   Convergence tol     : ", 1p,e10.3)') tol
+      write(iw,'(/," Iteration   Inner  Residual Norm   Reduction")')
+      write(iw,'(" ---------   -----  -------------   ---------")')
+    end if
     call flush(iw)
     
     ! Compute initial residual
@@ -593,7 +595,8 @@ contains
       ! Report the true residual; beta is only the preconditioned Arnoldi seed norm.
       error = true_residual
       if (iter == 1) then
-        write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
+        if (infos%control%verbose >= 1) &
+          write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
               restart_count, error, error/error_initial
       end if
       
@@ -722,7 +725,8 @@ contains
         
         ! Print progress every 5 inner iterations or at convergence
         if (mod(j, 5) == 0 .or. error < tol .or. j == m) then
-          write(iw,'(I6,8x,I3,2x,1p,F13.8,1x,F13.8)') &
+          if (infos%control%verbose >= 1) &
+            write(iw,'(I6,8x,I3,2x,1p,F13.8,1x,F13.8)') &
                 restart_count, j, error, error/error_initial
           call flush(iw)
         end if
@@ -1802,7 +1806,8 @@ contains
         error = huge(1.0_dp)
       end if
 
-      write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
+      if (infos%control%verbose >= 1) &
+        write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
       call flush(iw)
 
       ! -----------------------------------------------
@@ -1912,7 +1917,8 @@ contains
           error = huge(1.0_dp)
           exit
         end if
-        write(iw,'(" Iter#",I2," Error =",&
+        if (infos%control%verbose >= 1) &
+          write(iw,'(" Iter#",I2," Error =",&
               &3x,1p,e10.3,1x,"/",1p,e10.3)') &
                 iter, error, cnvtol
         call flush(iw)

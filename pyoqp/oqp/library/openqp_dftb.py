@@ -22,6 +22,7 @@ import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
 from oqp.utils import dftb_trace
+from oqp.utils.log_format import module_print_level
 from oqp.utils.file_utils import dump_log
 from oqp.utils.state_labels import (
     DFTB_CAP_STATE_SPECTRUM,
@@ -721,7 +722,7 @@ class OpenQPDFTBAdapter:
         step_cpu_start = time.process_time()
         native_trace = _call_with_native_diagnostics(
             native_call,
-            print_level=int(self.dftb.get("print_level", 1)),
+            print_level=module_print_level(self.config, self.SECTION),
             state_spectrum=state_spectrum,
             structured_trace=bool(capabilities & DFTB_CAP_STRUCTURED_TRACE),
         )
@@ -869,7 +870,7 @@ class OpenQPDFTBAdapter:
         printed here: it is stored and reported after the excited-state
         summary table.
         """
-        print_level = max(0, int(self.dftb.get("print_level", 1)))
+        print_level = module_print_level(self.config, self.SECTION)
         if print_level == 0:
             return
         verbose = print_level >= 2
@@ -1239,7 +1240,7 @@ class OpenQPDFTBAdapter:
         if getattr(self.mol, "_dftb_summary_logged_key", None) == key:
             return
         self.mol._dftb_summary_logged_key = key
-        if max(0, int(self.dftb.get("print_level", 1))) == 0:
+        if module_print_level(self.config, self.SECTION) == 0:
             return
         dump_log(
             self.mol,
@@ -1912,7 +1913,7 @@ class OpenQPDFTBAdapter:
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
             float(self.dftb.get("response_tolerance", 1.0e-6)),
-            int(self.dftb.get("print_level", 1)),
+            module_print_level(self.config, self.SECTION),
             bool(self.dftb.get("state_to_state_spectrum", True)),
             # DTCAM operator surface + preset: a Python workflow may retune
             # these on the same molecule, so cached results must not outlive

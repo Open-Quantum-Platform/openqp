@@ -38,7 +38,7 @@ kind of information that follows and is common to all methods.
 ## Common fields, units, and precision
 
 Key/value records retain the stable `PyOQP` prefix and align the field label in
-a 28-character column. Boolean values in new common fields use `yes` or `no`.
+a 28-character column. Boolean values in common fields use `yes` or `no`.
 
 | Quantity | Log unit | Common precision |
 | --- | --- | --- |
@@ -76,6 +76,30 @@ the internal high-spin reference remains identified as an internal reference;
 the common formatter does not reinterpret engine root numbers or alter spin,
 energy, gradient, or coupling data.
 
+## Verbosity
+
+One level sets how much detail the whole log carries, in the Python driver and
+in the native solvers alike. Set it with `[input] verbose`. The older spelling
+`[scf] verbose` is still read; the parser gives both the default `1`, so the one
+an input changes wins, `[input]` first. `[dftb] print_level` left at its default
+follows the same level.
+
+| Level | Name | What it adds |
+| --- | --- | --- |
+| `0` | quiet | Section headings, the calculation request, SCF and solver convergence results, final energies, gradients and properties, warnings |
+| `1` | normal (default) | SCF, TRAH (native and OpenTRAH), Davidson, Z-vector, GMRES, CPHF and CC iteration tables; orbital energies; SCF energy components; DFT grid statistics |
+| `2` | detailed | MO coefficients and the orbital table of an unconverged SCF; the primitive-by-primitive basis listing; solver diagnostics (Hessian response residuals and storage notes, the NAC overlap table, MOM reordering, NMR gates); notes on symmetry reductions skipped by design; the dispersion block when dispersion is off |
+| `3` | debug | Developer dumps: PCM, spin-orbit, scalar-relativistic and MRSF debug output; OpenTRAH MINRES internals |
+
+`runtype = md` and `namd` run at level 0 unless the input sets a level above 1.
+
+At every level the module banners and step timings are written. The LibXC
+header, the DFT grid description and each functional's description and
+literature references are written once per run rather than at every SCF,
+response, gradient or Hessian step, and again only when the grid or exchange
+parameters change. Dispersion settings and dispersion-corrected energies appear
+only when dispersion is requested.
+
 ## Compatibility policy
 
 The following markers remain stable:
@@ -85,7 +109,7 @@ The following markers remain stable:
   `PyOQP electronic gradients`;
 - `PyOQP state`, CASSCF/FCI field names, and physical MRSF state labels;
 - native `SCF`, Davidson, Z-vector, CPHF, CC, and displacement iteration
-  markers;
+  markers at the default verbosity (level 0 omits the iteration tables);
 - the legacy final-energy table column order, including additive DFTB columns.
 
 The section heading and explicit unit records are additive. Energy values in

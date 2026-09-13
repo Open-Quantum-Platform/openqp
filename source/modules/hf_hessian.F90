@@ -99,9 +99,11 @@ contains
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
 
     open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
-    write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
-    write(iw,'(A)') '  Storing native OpenQP HF/DFT analytic Hessian matrix in OQP::hf_hessian.'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(/,A)') 'PyOQP: Native OpenQP HF/DFT Hessian CPHF response prepass'
+      write(iw,'(A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocc=', nocc, ' nvir=', nvir, ' rhs=', ncart
+      write(iw,'(A)') '  Storing native OpenQP HF/DFT analytic Hessian matrix in OQP::hf_hessian.'
+    end if
 
     if (nocc <= 0 .or. nvir <= 0 .or. ncart <= 0) then
       write(iw,'(A)') '  Native CPHF prepass skipped: empty occupied/virtual/nuclear space.'
@@ -514,7 +516,9 @@ contains
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP HF/DFT analytic Hessian matrix')
     hess_store = hess_native
-    write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
+    end if
     close(iw)
 
     deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
@@ -615,10 +619,12 @@ contains
     hfscale = 1.0_dp
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
 
-    write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian CPHF response prepass'
-    write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
-      ' noccb=', noccb, ' rhs=', ncart, ' ltot=', ltot
-    write(iw,'(A)') '  Storing native OpenQP open-shell HF analytic Hessian in OQP::hf_hessian.'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian CPHF response prepass'
+      write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
+        ' noccb=', noccb, ' rhs=', ncart, ' ltot=', ltot
+      write(iw,'(A)') '  Storing native OpenQP open-shell HF analytic Hessian in OQP::hf_hessian.'
+    end if
 
     if (ncart <= 0 .or. (la <= 0 .and. lb <= 0)) then
       write(iw,'(A)') '  UHF CPHF prepass skipped: empty occupied/virtual/nuclear space.'
@@ -1078,7 +1084,9 @@ contains
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
     hess_store = hess_native
-    write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian matrix stored'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian matrix stored'
+    end if
 
     deallocate(ptot, dSa, dTa, dVa, sflat, hflat, bvec, uvec, scr, tmp, SxMO, hxMO, &
                probe, gx, d0a, d0b, gfull, Gd0, dpck, fpck, &
@@ -1166,10 +1174,12 @@ contains
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
     hstep = 1.0d-3
 
-    write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian CPHF response prepass'
-    write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
-      ' noccb=', noccb, ' rhs=', ncart, ' rotdim=', ltot
-    write(iw,'(A)') '  Storing native OpenQP open-shell (ROHF) HF analytic Hessian in OQP::hf_hessian.'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian CPHF response prepass'
+      write(iw,'(A,I6,A,I6,A,I6,A,I6,A,I6)') '  nbf=', nbf, ' nocca=', nocca, &
+        ' noccb=', noccb, ' rhs=', ncart, ' rotdim=', ltot
+      write(iw,'(A)') '  Storing native OpenQP open-shell (ROHF) HF analytic Hessian in OQP::hf_hessian.'
+    end if
 
     if (ncart <= 0 .or. ltot <= 0) then
       write(iw,'(A)') '  ROHF CPHF prepass skipped: empty rotation/nuclear space.'
@@ -1475,7 +1485,9 @@ contains
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP open-shell (ROHF) HF analytic Hessian matrix')
     hess_store = hess_native
-    write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
+    if (infos%control%verbose >= 2) then
+      write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
+    end if
 
     deallocate(pa, pb, ptot, dSa, dTa, dVa, faMO, fbMO, scr, tmp, &
                SxMO, hxMO, probe, ga2e, gb2e, d0a, d0b, dpck, fpck, gfull, Gd0, &

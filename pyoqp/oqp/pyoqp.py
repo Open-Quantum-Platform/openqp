@@ -424,6 +424,7 @@ class Runner:
         if not report:
             return
         from oqp.utils import perf_levels
+        from oqp.utils.log_format import INPUT_REFERENCE, format_log_section
         block = perf_levels.format_report(getattr(self.mol, "perf_level", perf_levels.UNSET),
                                           report, getattr(self.mol, "perf_warns", []))
         if not block:
@@ -431,6 +432,8 @@ class Runner:
         if getattr(self.mol, "log", None):
             try:
                 with open(self.mol.log, 'a', encoding='utf-8') as fout:
+                    fout.write(format_log_section('PyOQP: Performance settings',
+                                                  INPUT_REFERENCE))
                     fout.write(block + "\n")
             except OSError:
                 pass

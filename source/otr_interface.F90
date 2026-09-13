@@ -97,7 +97,16 @@ contains
     n_param = conv%n_param
     max_iter = int(infos%control%maxit, kind=ip)
     conv_tol = real(infos%control%conv, kind=rp)
-    verbose  = int(3, kind=ip)
+    ! Map the log level onto OpenTrustRegion's own: 1 warnings, 2 convergence
+    ! summary, 3 iteration table (the former fixed setting), 4 MINRES internals.
+    select case (int(infos%control%verbose))
+    case (:0)
+      verbose = int(2, kind=ip)
+    case (1:2)
+      verbose = int(3, kind=ip)
+    case default
+      verbose = int(4, kind=ip)
+    end select
     settings = default_solver_settings
     settings%conv_tol = conv_tol
     settings%verbose = verbose

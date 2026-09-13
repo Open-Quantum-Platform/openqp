@@ -11,6 +11,12 @@ module functionals
   use precision, only: fp
   implicit none
   private
+  !> LibXC ids whose description and literature references have already been
+  !> written.  The functional is set up again for every SCF, response and
+  !> gradient step of a run, and repeating the same text each time made it one
+  !> of the largest blocks of the log.
+  integer(C_INT), allocatable, save :: announced_ids(:)
+  real(kind=fp),  allocatable, save :: announced_coeffs(:)  !< coefficient each id was described with
   ! Code of errors if LibXC can not perform calculation of some derivatives
   integer, parameter :: ENERGY_ERROR   = 1, & !< energy calculation error
                         FIRST_ERROR    = 2, & !< first derivatives calculation error
@@ -30,7 +36,14 @@ module functionals
     procedure :: calc_evxc, calc_evfxc, calc_xc
   end type functional_t
   public functional_t
+  public reset_functional_announcements
 contains
+
+  !> @brief Forget which functionals were described, so a new run's log describes them again.
+  subroutine reset_functional_announcements()
+    if (allocated(announced_ids)) deallocate(announced_ids)
+    if (allocated(announced_coeffs)) deallocate(announced_coeffs)
+  end subroutine reset_functional_announcements
   !> @brief  Add functional into internal array of functionals
   !> @author Igor S. Gerasimov
   !> @date   July,  2019 --Initial release--
@@ -58,6 +71,7 @@ contains
     type(xc_f03_func_t)                                 :: xc_func
     integer(C_INT)                                      :: refnum
     integer                                             :: refnumt
+    logical                                             :: announce
     if(.not.allocated(this%functionals_list)) then
       allocate(this%functionals_list(0))
       allocate(this%functionals_info(0))
@@ -73,20 +87,28 @@ contains
     call move_alloc(tmp_functionals_info, this%functionals_info)
     call move_alloc(tmp_coefficients    , this%coefficients    )
     call xc_f03_func_init(xc_func, func_id, XC_POLARIZED)
-    select case(xc_f03_func_info_get_kind(xc_f03_func_get_info(xc_func)))
-      case(XC_EXCHANGE)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-                   " exchange functional will be used with a coefficient ", coeff, ".")
-      case(XC_CORRELATION)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " correlation functional will be used with a coefficient ", coeff, ".")
-      case(XC_EXCHANGE_CORRELATION)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " exchange-correlation functional will be used with a coefficient ", coeff, ".")
-      case(XC_KINETIC)
-        call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
-          " kinetic functional will be used with a coefficient ", coeff, ".")
-    end select
+    if (.not. allocated(announced_ids)) allocate(announced_ids(0), announced_coeffs(0))
+    announce = .not. any(announced_ids == func_id .and. announced_coeffs == coeff)
+    if (announce) then
+      announced_ids = [announced_ids, func_id]
+      announced_coeffs = [announced_coeffs, coeff]
+    end if
+    if (announce) then
+      select case(xc_f03_func_info_get_kind(xc_f03_func_get_info(xc_func)))
+        case(XC_EXCHANGE)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+                     " exchange functional will be used with a coefficient ", coeff, ".")
+        case(XC_CORRELATION)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " correlation functional will be used with a coefficient ", coeff, ".")
+        case(XC_EXCHANGE_CORRELATION)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " exchange-correlation functional will be used with a coefficient ", coeff, ".")
+        case(XC_KINETIC)
+          call show_message("(A,ES16.8E2,A)", "The " // trim(xc_f03_func_info_get_name(xc_f03_func_get_info(xc_func))) // &
+            " kinetic functional will be used with a coefficient ", coeff, ".")
+      end select
+    end if
     select case (xc_f03_func_info_get_family(xc_f03_func_get_info(xc_func)))
       case(XC_FAMILY_GGA, XC_FAMILY_HYB_GGA)
         this%needgrd = .true.
@@ -96,8 +118,10 @@ contains
       case default
     end select
     ! checking, that functional can be used.
-    if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_DEVELOPMENT) .ne. 0) then
-      call show_message("The behavior of this functional can be changed in the next versions of LibXC.")
+    if (announce) then
+      if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_DEVELOPMENT) .ne. 0) then
+        call show_message("The behavior of this functional can be changed in the next versions of LibXC.")
+      end if
     end if
     if(IAND(xc_f03_func_info_get_flags(xc_f03_func_get_info(xc_func)), XC_FLAGS_NEEDS_LAPLACIAN) .ne. 0) then
       call show_message("This functional requires laplacian, but the calculation of laplacian is not implemented" // &
@@ -107,15 +131,17 @@ contains
       call show_message("This functional uses VV10 correlation, but the calculation of VV10 correlation is not" // &
           " implemented in the current version of OQP.", WITH_ABORT)
     end if
-    ! Then showing referencies
-    refnum = 0_C_INT
-    call show_message("The functional has been described in the following articles:")
-    do refnumt = 1, XC_MAX_REFERENCES
-      xc_ref = xc_f03_func_info_get_references(xc_f03_func_get_info(xc_func),refnum)
-      call show_message("(A,I1,A)", "[", refnumt, "] " // trim(xc_f03_func_reference_get_ref(xc_ref)) // "; DOI: " // &
-        trim(xc_f03_func_reference_get_doi(xc_ref)))
-      if(refnum .lt. 0) exit
-    end do
+    if (announce) then
+      ! Then showing referencies
+      refnum = 0_C_INT
+      call show_message("The functional has been described in the following articles:")
+      do refnumt = 1, XC_MAX_REFERENCES
+        xc_ref = xc_f03_func_info_get_references(xc_f03_func_get_info(xc_func),refnum)
+        call show_message("(A,I1,A)", "[", refnumt, "] " // trim(xc_f03_func_reference_get_ref(xc_ref)) // "; DOI: " // &
+          trim(xc_f03_func_reference_get_doi(xc_ref)))
+        if(refnum .lt. 0) exit
+      end do
+    end if
     if(present(external_parameters)) then
       call xc_f03_func_set_ext_params(xc_func, external_parameters)
     end if

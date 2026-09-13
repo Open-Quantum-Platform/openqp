@@ -112,7 +112,7 @@ contains
           infos, overlap_mo, td_states_overlap, bvec, &
           bvec_old, nbf,noca, nocb, nstates, ndtlf)
 
-    call get_dcv(nac_out, td_states_overlap, nstates)
+    call get_dcv(nac_out, td_states_overlap, nstates, int(infos%control%verbose))
 
 !   call print_nac(infos, td_states_overlap, nac_out)
 
@@ -920,7 +920,7 @@ contains
 !>
 !>     @author Seunghoon Lee, Konstantin Komarov
 !>
-  subroutine get_dcv(nact, s_st, nstates)
+  subroutine get_dcv(nact, s_st, nstates, verbose)
 
     use precision, only: dp
     use io_constants, only: iw
@@ -930,8 +930,15 @@ contains
     integer :: nstates
     real(kind=dp), dimension(nstates,*) :: nact, s_st
 
+    integer, intent(in), optional :: verbose
     integer :: i, j
-    logical :: debug = .true.
+    logical :: debug
+
+    ! The forward/backward overlap table is a diagnostic of the finite-difference
+    ! coupling: detailed log only (verbose >= 2).  Without the level it prints,
+    ! as it always did.
+    debug = .true.
+    if (present(verbose)) debug = verbose >= 2
 
     if (debug) write(iw, &
       fmt='(/x/,a,/29x," F              B          F - B")') &

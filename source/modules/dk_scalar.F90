@@ -94,7 +94,7 @@ contains
         PVPp(:)      ! pVp transformed to p-space, packed triangular
     integer :: qrnk  ! effective rank after removing linear dependencies in S
 
-    dk_debug = (infos%control%verbose > 1)
+    dk_debug = (infos%control%verbose >= 3)
 
     open(unit=iw, file=infos%log_filename, position="append")
 
