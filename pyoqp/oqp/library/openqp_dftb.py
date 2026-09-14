@@ -8,6 +8,7 @@ import importlib
 import itertools
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -871,12 +872,25 @@ class OpenQPDFTBAdapter:
         summary table.
         """
         print_level = module_print_level(self.config, self.SECTION)
-        if print_level == 0:
-            return
         verbose = print_level >= 2
+        # Parse before any early return: the energy components are data the
+        # final report uses, and warnings belong in the log at every level.
         parsed = dftb_trace.parse_native_trace(native_trace)
         if parsed.get("energy_components"):
             self.mol.dftb_energy_components = parsed["energy_components"]
+        if print_level == 0:
+            notices = list(parsed.get("warnings", [])) + [
+                line for line in parsed.get("other", [])
+                if re.search(r"warn|error", line, re.IGNORECASE)]
+            if not any(parsed[key] for key in (
+                    "scc_passes", "davidson", "zvector", "zvector_dense")):
+                notices += [line for line in str(native_trace or "").splitlines()
+                            if re.search(r"warn|error", line, re.IGNORECASE)
+                            and line not in notices]
+            if notices:
+                dump_log(self.mol, title="PyOQP: OpenQP-DFTB warnings", section="text",
+                         info={"text": "\n".join("   " + line.strip() for line in notices)})
+            return
         if not any(parsed[key] for key in (
                 "scc_passes", "davidson", "zvector", "zvector_dense")):
             # Nothing structured (old library or probe-style text): keep the
