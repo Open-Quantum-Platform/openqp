@@ -3,9 +3,9 @@
 Near an ROHF solution whose orbital gradient cannot reach the requested
 tolerance at this precision, the loop used to repeat forever without output
 (24 DNA thymine NAMD trajectories hung for up to 67 hours at full CPU).  It now
-stops once |g| has not halved for a fixed number of steps, while a refinement
-that is still converging -- slowly, halving every few steps -- runs to the
-requested tolerance.
+stops once |g| has not dropped by a quarter for a fixed number of steps, while
+a refinement that is still converging -- even slowly -- runs to the requested
+tolerance.
 """
 import os
 import re
@@ -53,18 +53,19 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
     def test_loop_stops_on_stagnation_and_is_bounded(self):
         src = TRAH_CORE.read_text()
         self.assertIn("integer,  parameter :: fp_stall_steps = 16", src)
+        self.assertIn("real(dp), parameter :: fp_progress = 0.75_dp", src)
         self.assertIn("integer,  parameter :: max_fp_refine = 100", src)
         self.assertRegex(
             src,
             r"do while \(gnorm > par%conv_tol \.and\. snorm > 0\.0_dp \.and\. pred <= pred_floor &\s*\n"
             r"\s*\.and\. n_stall < fp_stall_steps \.and\. n_fp < max_fp_refine\)")
         self.assertRegex(src, r"max_fp_refine\)\s*\n\s*n_fp = n_fp \+ 1\n")
-        # only a step that does not halve |g| since its last halving counts towards the stall
-        self.assertRegex(src, r"if \(gnorm < 0\.5_dp\*g_ref\) then\s*\n\s*g_ref   = gnorm\s*\n\s*n_stall = 0\s*\n"
+        # only a step without progress (a quarter drop since the last one) counts towards the stall
+        self.assertRegex(src, r"if \(gnorm < fp_progress\*g_ref\) then\s*\n\s*g_ref   = gnorm\s*\n\s*n_stall = 0\s*\n"
                               r"\s*else\s*\n\s*n_stall = n_stall \+ 1")
 
     def test_block_bound_reached_while_improving_returns_to_the_macro_loop(self):
-        """A block that hits its step bound while |g| still halves cycles into
+        """A block that hits its step bound while |g| still converges cycles into
         the nmac-bounded macro loop; a stagnant block stops."""
         src = TRAH_CORE.read_text()
         self.assertRegex(src, r"if \(n_fp >= max_fp_refine \.and\. n_stall < fp_stall_steps \.and\. macro < par%nmac\) then"
@@ -96,9 +97,13 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
         self.assertIsNotNone(m, "TRAH did not report where the refinement stopped")
         n_steps, g_stop = int(m.group(2)), float(m.group(1))
         self.assertGreater(g_stop, 1e-14)
-        # |g| halves every few steps for well over eight steps before it reaches
-        # the noise floor, so the refinement must run past any fixed eight-step cap
+        # |g| converges for well over eight steps before it reaches the noise
+        # floor, so the refinement must run past any fixed eight-step cap -- and
+        # then stop on stagnation inside that block, not by exhausting its step
+        # bound and cycling
         self.assertGreater(n_steps, 8)
+        self.assertLess(n_steps, 100)
+        self.assertNotIn("refinement continuing", log)
         entry = re.findall(r"^\s+\d+\s+-?\d+\.\d+\s+(\d\.\d+E[-+]\d+)\s+[-\d.]+\s+[\d.]+\s+\d+\s+acc", log, re.M)
         self.assertTrue(entry, "no accepted TRAH macroiteration in the log")
         self.assertLess(g_stop, 1e-2*float(entry[-1]))
