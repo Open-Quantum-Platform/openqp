@@ -841,6 +841,8 @@ OQP_CONFIG_SCHEMA = {
         'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
+        'continuation_checkpoint': {'type': str, 'default': ''},
+        'continuation_trajectory': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
         # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
         # ground-state OpenMM MD driver and must not silently thermostat FSSH.

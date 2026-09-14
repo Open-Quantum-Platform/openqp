@@ -728,6 +728,19 @@ class NAMD:
         self.restart_interval = self._output_interval_steps(
             self.restart_interval_input, self.dt_fs)
         self.restart_requested = self._as_bool(md.get('restart', False))
+        self.continuation_checkpoint = str(md.get('continuation_checkpoint', '')).strip()
+        self.continuation_trajectory = str(md.get('continuation_trajectory', '')).strip()
+        if bool(self.continuation_checkpoint) != bool(self.continuation_trajectory):
+            raise ValueError('continuation_checkpoint and continuation_trajectory are both required')
+        if self.continuation_checkpoint:
+            if self.restart_requested or type(self) is not NAMD:
+                raise ValueError('local continuation requires a new same-spin NAMD run')
+            if self.tdc_provider != 'analytic':
+                raise ValueError('local continuation currently requires analytic TDC')
+            self.continuation_checkpoint = os.path.abspath(os.path.expanduser(self.continuation_checkpoint))
+            self.continuation_trajectory = os.path.abspath(os.path.expanduser(self.continuation_trajectory))
+        self._time_origin_fs = 0.0
+        self._continuation_provenance = None
         self.trajectory_file = self._md_output_path(
             md.get('trajectory_file', ''), '.namd.trj')
         # Observational sidecar for the transported/extrapolated NAC adjoint.
@@ -865,7 +878,7 @@ class NAMD:
         # A checkpoint is the authoritative velocity state.  Do not retain a
         # transport-time dependency on the original velocity input file.
         self.vel = (np.zeros((self.natom, 3), dtype=float)
-                    if self.restart_requested else self._init_velocities())
+                    if self.restart_requested or self.continuation_checkpoint else self._init_velocities())
 
         # previous-step payload for the overlap (back_door carry)
         self.prev_xyz = None
@@ -1296,6 +1309,9 @@ class NAMD:
             'restart_manifest_file': self.restart_manifest_file,
         }
         inputs = {}
+        for name in ('continuation_checkpoint', 'continuation_trajectory'):
+            if getattr(self, name, ''):
+                inputs[name] = getattr(self, name)
         original_source = getattr(self.mol, 'oqp_input_source', None)
         resolved_input = getattr(self.mol, 'input_file', None)
         source = original_source or resolved_input
@@ -1488,7 +1504,7 @@ class NAMD:
         return self._odp_last
 
     def _prepare_md_outputs_on_io_rank(self):
-        if self.restart_requested:
+        if self.restart_requested or getattr(self, 'continuation_checkpoint', ''):
             return
         # Invalidate the runnable stale manifest first.  A failed fresh start
         # must never leave a launchable checkpoint from an older trajectory.
@@ -2403,7 +2419,7 @@ class NAMD:
             drift = total - self._nve_reference_energy
             step_change = total - self._nve_previous_energy
         transition_jump = float(transition_energy_jump)
-        time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
+        time_fs = self._physical_time_fs(istep)
         drift_rate = drift/time_fs if time_fs > 0.0 else 0.0
         transition_failure = (
             np.isfinite(transition_jump)
@@ -2521,6 +2537,8 @@ class NAMD:
                 'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
+                'time_origin_fs': getattr(self, '_time_origin_fs', 0.0),
+                'continuation': getattr(self, '_continuation_provenance', None),
                 'wham_system_identity': getattr(
                     self, '_wham_system_identity', {'kind': 'unavailable'}),
                 'electronic_representation': getattr(
@@ -2645,7 +2663,7 @@ class NAMD:
         record['nve_verdict'] = -1
         record['odp_window'] = -1
         gate = self._nacme_gate_last or {}
-        time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
+        time_fs = self._physical_time_fs(istep)
         record['step'] = istep
         record['time_fs'] = time_fs
         record['active'] = self.active
@@ -2885,7 +2903,7 @@ class NAMD:
         self._restart_guess_identity = settings
         return settings
 
-    def _restart_signature_matches(self, saved_signature):
+    def _restart_signature_matches(self, saved_signature, *, allow_smaller_dt=False):
         """Validate a saved identity, allowing only a mutable save_mol file."""
         try:
             saved = json.loads(saved_signature)
@@ -2898,6 +2916,16 @@ class NAMD:
             raise RuntimeError(
                 'NAMD restart checkpoint has invalid signature metadata'
             )
+        if allow_smaller_dt:
+            old_dt, new_dt = saved.get('dt_fs'), current.get('dt_fs')
+            if (not isinstance(old_dt, (int, float)) or isinstance(old_dt, bool)
+                    or not isinstance(new_dt, (int, float)) or isinstance(new_dt, bool)
+                    or not np.isfinite(old_dt) or not np.isfinite(new_dt)
+                    or not 0.0 < new_dt < old_dt):
+                return False
+            # Only this explicit new-output operation permits a smaller dt.
+            # Every Hamiltonian, response, RNG, and acceptance setting stays bound.
+            current['dt_fs'] = old_dt
         if saved == current:
             return True
 
@@ -3408,8 +3436,11 @@ class NAMD:
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
             'signature': np.array([self._restart_signature()]),
+            'time_origin_fs': np.array([getattr(self, '_time_origin_fs', 0.0)]),
+            'continuation_provenance_json': np.array([json.dumps(
+                getattr(self, '_continuation_provenance', None), sort_keys=True)]),
             'step': np.array([istep], dtype=np.int64),
-            'time_fs': np.array([self._t_fs if self.dt_adaptive else istep*self.dt_fs]),
+            'time_fs': np.array([self._physical_time_fs(istep)]),
             'active': np.array([self.active], dtype=np.int64),
             'rng_step': np.array([self._rng_step], dtype=np.int64),
             'gate_failures': np.array([self._nacme_gate_failures], dtype=np.int64),
@@ -3615,6 +3646,8 @@ class NAMD:
                       if source else os.getcwd())
         spec = self._rebase_restart_spec_paths(spec, source_dir)
         kwargs = dict(spec.driver.kwargs)
+        kwargs.pop('continuation_checkpoint', None)
+        kwargs.pop('continuation_trajectory', None)
         kwargs.update({
             'restart': True,
             # Freeze a date-derived default so restarting on a later day keeps
@@ -3642,12 +3675,98 @@ class NAMD:
             if os.path.exists(temporary):
                 os.unlink(temporary)
 
+    def _physical_time_fs(self, istep):
+        if getattr(self, 'dt_adaptive', False):
+            return self._t_fs
+        return getattr(self, '_time_origin_fs', 0.0) + istep*self.dt_fs
+
+    def _load_continuation_on_io_rank(self):
+        """Validate an immutable source and start isolated smaller-dt outputs."""
+        self._validate_sidecar_paths()
+        outputs = (self.trajectory_file, self.restart_file,
+                   self.restart_manifest_file, self.zpredict_audit_file)
+        sources = (self.continuation_checkpoint, self.continuation_trajectory)
+        for output in outputs:
+            if os.path.lexists(output):
+                raise ValueError('local continuation requires new output paths: ' + output)
+        for output in outputs + (self.mol.log,):
+            for source in sources:
+                if (os.path.realpath(output) == os.path.realpath(source)
+                        or (os.path.exists(output) and os.path.exists(source)
+                            and os.path.samefile(output, source))):
+                    raise ValueError('continuation source aliases an output')
+        with open(self.continuation_checkpoint, 'rb') as stream:
+            checkpoint_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+        payload = self._load_restart_on_io_rank(
+            self.continuation_checkpoint, allow_smaller_dt=True)
+        required_tags = {'OQP::VEC_MO_A', 'OQP::VEC_MO_B', 'OQP::E_MO_A',
+                         'OQP::E_MO_B', 'OQP::DM_A', 'OQP::DM_B',
+                         'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::SM',
+                         'OQP::td_bvec_mo', 'OQP::td_energies',
+                         'OQP::state_tracking_phase_initial',
+                         'OQP::state_tracking_lineage'}
+        if required_tags.difference(payload['prev_data']):
+            raise ValueError('continuation checkpoint lacks reference/phase history')
+        if self.nstep <= payload['step']:
+            raise ValueError('continuation nstep must exceed the saved absolute step index')
+        if payload['optional']['nve_previous_energy'] is None:
+            raise ValueError('local continuation requires the saved total-energy history')
+        scanned = self._scan_trajectory_prefix(
+            payload['step'], path=self.continuation_trajectory,
+            expected_signature=payload['signature'])
+        if (scanned['last_step'] != payload['step']
+                or {k: scanned[k] for k in ('bytes', 'sha256')} != payload['trajectory_prefix']):
+            raise ValueError('continuation trajectory does not match checkpoint prefix')
+        header, records = read_namd_trajectory(self.continuation_trajectory)
+        anchor = np.array(records[scanned['records']-1:scanned['records']], copy=True)
+        del records
+        for field, value in (
+                ('coordinates_bohr', payload['coordinates']),
+                ('velocities_au', payload['velocities']),
+                ('coef_real', payload['coef'].real), ('coef_imag', payload['coef'].imag)):
+            if not np.allclose(anchor[field][0].reshape(-1), np.asarray(value).reshape(-1),
+                               rtol=0.0, atol=1e-14):
+                raise ValueError('continuation checkpoint and trajectory state disagree')
+        if (int(anchor['active'][0]) != payload['active']
+                or not np.isclose(float(anchor['time_fs'][0]), payload['time_fs'],
+                                  rtol=0.0, atol=1e-10)):
+            raise ValueError('continuation checkpoint and trajectory time/state disagree')
+        with open(self.continuation_checkpoint, 'rb') as stream:
+            if hashlib.file_digest(stream, 'sha256').hexdigest() != checkpoint_hash:
+                raise ValueError('continuation checkpoint changed during validation')
+        provenance = {
+            'checkpoint': self.continuation_checkpoint,
+            'checkpoint_sha256': checkpoint_hash,
+            'trajectory': self.continuation_trajectory,
+            'committed_prefix': payload['trajectory_prefix'],
+            'source_step': payload['step'], 'source_time_fs': payload['time_fs'],
+            'source_rng_step': payload['rng_step'],
+            'source_dt_fs': json.loads(payload['signature'])['dt_fs'],
+            'new_dt_fs': self.dt_fs,
+            'parent': payload.get('continuation_provenance'),
+        }
+        payload['time_origin_fs'] = payload['time_fs'] - payload['step']*self.dt_fs
+        payload['continuation_provenance'] = provenance
+        header.update(signature=self._restart_signature(), continuation=provenance,
+                      time_origin_fs=payload['time_origin_fs'])
+        encoded = json.dumps(header, sort_keys=True).encode('utf-8')
+        data = NAMD_TRAJECTORY_MAGIC + struct.pack('<Q', len(encoded)) + encoded + anchor.tobytes()
+        with open(self.trajectory_file, 'xb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        with open(self.zpredict_audit_file, 'xb'):
+            pass
+        self._remember_trajectory_prefix(self._scan_trajectory_prefix(payload['step']))
+        return payload
+
     def _load_restart(self):
         """Collectively load and restore a representation-aware checkpoint."""
-        if not self.restart_requested:
+        continuing = bool(getattr(self, 'continuation_checkpoint', ''))
+        if not self.restart_requested and not continuing:
             return None
         payload = self._run_io_collective_result(
-            self._load_restart_on_io_rank)
+            self._load_continuation_on_io_rank if continuing else self._load_restart_on_io_rank)
         self.prev_data = payload['prev_data']
         self.prev_xyz = payload['prev_xyz']
         self.mol.put_data(self.prev_data)
@@ -3658,6 +3777,8 @@ class NAMD:
         self._nacme_gate_failures = payload['gate_failures']
         self._nve_gate_failures = payload['nve_failures']
         self._t_fs = payload['time_fs']
+        self._time_origin_fs = payload.get('time_origin_fs', 0.0)
+        self._continuation_provenance = payload.get('continuation_provenance')
         for name, value in payload['optional'].items():
             setattr(self, f'_{name}', value)
         self._restore_restart_extra(payload['extra'])
@@ -3665,8 +3786,14 @@ class NAMD:
             setattr(self, f'_{name}', value)
         self._conservative_restraint_energy = (
             self._droplet_energy + self._solute_com_energy)
-        self._reconcile_trajectory_with_restart(
-            payload['step'], payload['trajectory_prefix'])
+        self._etot_prev = self._nve_previous_energy
+        if continuing:
+            self._run_io_collective(lambda: self._save_restart_on_io_rank(
+                payload['step'], payload['coordinates'], payload['velocities'],
+                payload['acceleration']))
+        else:
+            self._reconcile_trajectory_with_restart(
+                payload['step'], payload['trajectory_prefix'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={payload["step"]} '
@@ -3678,11 +3805,12 @@ class NAMD:
                 'step', 'coordinates', 'velocities', 'acceleration')
         }
 
-    def _load_restart_on_io_rank(self):
+    def _load_restart_on_io_rank(self, checkpoint_file=None, *, allow_smaller_dt=False):
         """Read and validate a checkpoint on rank zero without pickle data."""
-        if not os.path.isfile(self.restart_file):
-            raise FileNotFoundError(f'NAMD restart file not found: {self.restart_file}')
-        with np.load(self.restart_file, allow_pickle=False) as saved:
+        checkpoint_file = checkpoint_file or self.restart_file
+        if not os.path.isfile(checkpoint_file):
+            raise FileNotFoundError(f'NAMD restart file not found: {checkpoint_file}')
+        with np.load(checkpoint_file, allow_pickle=False) as saved:
             version = self._restart_integer(saved, 'schema_version')
             if version != NAMD_RESTART_SCHEMA_VERSION:
                 raise ValueError(f'unsupported NAMD restart schema {version}')
@@ -3691,7 +3819,7 @@ class NAMD:
                 raise RuntimeError(
                     'NAMD restart checkpoint has invalid signature metadata')
             signature = str(signature_array[0])
-            if not self._restart_signature_matches(signature):
+            if not self._restart_signature_matches(signature, allow_smaller_dt=allow_smaller_dt):
                 raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
             odp_array = np.asarray(saved['odp_provenance'])
             current_odp = json.dumps(
@@ -3705,6 +3833,21 @@ class NAMD:
             gate_failures = self._restart_integer(saved, 'gate_failures')
             nve_failures = self._restart_integer(saved, 'nve_failures')
             time_fs = self._restart_float(saved, 'time_fs', minimum=0.0)
+            time_origin_fs = (self._restart_float(saved, 'time_origin_fs')
+                              if 'time_origin_fs' in saved else 0.0)
+            continuation_provenance = None
+            if 'continuation_provenance_json' in saved:
+                provenance_array = np.asarray(saved['continuation_provenance_json'])
+                if provenance_array.shape != (1,) or provenance_array.dtype.kind not in 'SU':
+                    raise ValueError('invalid continuation provenance')
+                continuation_provenance = json.loads(str(provenance_array[0]))
+                if continuation_provenance is not None and not isinstance(continuation_provenance, dict):
+                    raise ValueError('invalid continuation provenance')
+            saved_dt = json.loads(signature).get('dt_fs')
+            if (not self.dt_adaptive and (not isinstance(saved_dt, (int, float))
+                    or not np.isclose(time_fs, time_origin_fs + step*saved_dt,
+                                      rtol=0.0, atol=1e-10))):
+                raise ValueError('NAMD restart physical time is inconsistent with its step and dt')
             trajectory_prefix_bytes = self._restart_integer(
                 saved, 'trajectory_prefix_bytes')
             trajectory_digest_array = np.asarray(
@@ -3800,6 +3943,9 @@ class NAMD:
                 'gate_failures': gate_failures,
                 'nve_failures': nve_failures,
                 'time_fs': time_fs,
+                'time_origin_fs': time_origin_fs,
+                'continuation_provenance': continuation_provenance,
+                'signature': signature,
                 'trajectory_prefix': {
                     'bytes': trajectory_prefix_bytes,
                     'sha256': trajectory_prefix_sha256,
@@ -3859,9 +4005,9 @@ class NAMD:
         self._trajectory_prefix_last_step = scanned['last_step']
         self._trajectory_prefix_stat = self._trajectory_stat_identity()
 
-    def _scan_trajectory_prefix(self, checkpoint_step):
+    def _scan_trajectory_prefix(self, checkpoint_step, *, path=None, expected_signature=None):
         """Scan one committed prefix without retaining its trajectory bytes."""
-        path = self.trajectory_file
+        path = path or self.trajectory_file
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             return {
                 'hasher': hashlib.sha256(), 'bytes': 0, 'sha256':
@@ -3887,7 +4033,7 @@ class NAMD:
         offset = 16 + header_size
         if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
             raise ValueError('unsupported OpenQP NAMD trajectory schema')
-        if header.get('signature') != self._restart_signature():
+        if header.get('signature') != (expected_signature or self._restart_signature()):
             raise ValueError('restart trajectory and checkpoint model mismatch')
         try:
             dtype = _namd_trajectory_dtype(
@@ -4522,7 +4668,7 @@ class NAMD:
         self._update_nve_gate(istep, epot, ekin, transition_energy_jump)
         dump_log(
             mol,
-            title=(f'NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_elec={electronic_epot:.8f}  '
                    f'U_ODP={(0.0 if odp is None else odp["energy"]):.8f}  '
@@ -5690,7 +5836,7 @@ class NAMD_QMMM(NAMD):
         self._update_nve_gate(istep, epot, ekin, transition_energy_jump)
         dump_log(
             self.mol,
-            title=(f'QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'QMMM-NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  '
                    f'U_ODP={(0.0 if self._odp_last is None else self._odp_last["energy"]):.8f}  '
@@ -6414,7 +6560,7 @@ class NAMD_SOC(NAMD):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'SOC-NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+e_pure:.8f}  '
                    f'E_pure={e_pure:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
                    f'{self._hop_rng_log()}  '
@@ -6638,7 +6784,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-MCH-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'SOC-MCH-NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}:{self._mch_active_label(self.active)}  '
                    f'E_tot={ekin+e_pure:.8f}  E_pure={e_pure:.8f}  '
                    f'E_kin={ekin:.8f}  hop={hopped}  '
@@ -7066,7 +7212,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'SOC-QMMM-NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
                    f'{self._hop_rng_log()}  '
@@ -7218,7 +7364,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-MCH-QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+            title=(f'SOC-MCH-QMMM-NAMD step {istep:6d}  t={(self._physical_time_fs(istep)):9.3f} fs  '
                    f'active={self.active}:{self._mch_active_label(self.active)}  '
                    f'E_tot={ekin+epot:.8f}  E_pot={epot:.8f}  '
                    f'E_kin={ekin:.8f}  hop={hopped}  '

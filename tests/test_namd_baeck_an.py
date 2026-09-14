@@ -79,7 +79,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "int oqp_namd_nacme_gate(" in header
     assert "def _run_nacme_gate(" in driver
     assert "signed=True" in driver
-    assert "if self.restart_requested else self._init_velocities()" in driver
+    assert "if (self.restart_requested or self.continuation_checkpoint) else self._init_velocities()" in driver
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer

@@ -1057,8 +1057,8 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     swapmo = _get(config, "guess", "swapmo", "")
     restart_namd_mutable_guess = (
         _as_lower(_get(config, "input", "runtype", "")) == "namd"
-        and str(_get(config, "md", "restart", False)).strip().lower()
-        in _TRUE_BOOL
+        and (str(_get(config, "md", "restart", False)).strip().lower()
+             in _TRUE_BOOL or bool(_get(config, "md", "continuation_checkpoint", "")))
         and str(_get(config, "guess", "save_mol", False)).strip().lower()
         in _TRUE_BOOL
     )
