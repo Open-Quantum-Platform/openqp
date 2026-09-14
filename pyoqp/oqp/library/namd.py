@@ -4064,20 +4064,75 @@ class NAMD_QMMM(NAMD):
         return self.driver.electrostatic_potential()
 
     @staticmethod
-    def _embedded_scf(sp):
+    def _embedded_scf(sp, warm=False):
         """Run the embedded SCF (the ESPF term is already in hcore) through the
         same robustness ladder as a gas-phase reference: primary converger,
         then SOSCF/TRAH escalation warm-started from the current orbitals.
         A reference that still does not converge stops the run: propagating
         on an unconverged SCF gives an inconsistent energy/force pair, and a
         DIIS loop that stops at its iteration limit even leaves the density
-        records in an intermediate state."""
-        converged = sp._run_scf()
+        records in an intermediate state.
+
+        ``warm``: the orbitals already held are a converged solution of a
+        nearby Hamiltonian (the previous MD step or an image iteration), and
+        the solve starts with the second-order converger.  Where the ROHF
+        triplet is not in the order of the effective-Fock energies, the first
+        refill of the orbitals swaps an occupied and an open orbital (+0.2
+        Hartree) whichever converger runs; DIIS then stalls and hands over to
+        SOSCF anyway, which recovers the solution.  Starting with SOSCF skips
+        the stalled DIIS stage."""
+        saved_converger = sp.converger_type
+        if warm:
+            sp.converger_type = 'soscf'
+        try:
+            converged = sp._run_scf()
+        finally:
+            sp.converger_type = saved_converger
         if not converged:
             raise RuntimeError(
                 "NAMD QM/MM: the embedded SCF did not converge (primary "
                 "converger and the SOSCF/TRAH escalation).  Raise [scf] maxit, "
                 "loosen [scf] conv, or check the QM/MM contacts.")
+
+    def _start_scf_orbitals(self, sp):
+        """Basis, one-electron integrals and starting orbitals for this MD
+        step's embedded SCF.  Once a step has converged, the next step starts
+        from its orbitals, re-orthonormalised in the overlap metric of the new
+        geometry (symmetric orthonormalisation keeps each orbital's character)
+        with the density rebuilt from them.  A fresh guess every step starts
+        the SCF ~1.3 Hartree above the solution, costs ~30 iterations, and
+        lets the open-shell reference settle on a different solution from
+        one step to the next.  Returns True for a warm start."""
+        from oqp.library.qmmm_driver import unpack_lower_tri_single
+        mol = self.mol
+        if not getattr(self, "_scf_orbitals_ready", False):
+            sp._prep_guess()
+            return False
+        c_prev = np.array(mol.data["OQP::VEC_MO_A"], dtype=float, copy=True)
+        e_prev = np.array(mol.data["OQP::E_MO_A"], dtype=float, copy=True)
+        oqp.library.set_basis(mol)
+        ints_1e(mol)
+        nbf = mol.data.get_basis()["nbf"]
+        target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
+        if c_prev.size != nbf * nbf or target.size != nbf * nbf:
+            oqp.library.guess(mol)
+            return False
+        c = c_prev.reshape((nbf, nbf)).T                      # C[ao, mo]
+        s_ao = unpack_lower_tri_single(mol.data["OQP::SM"], nbf)
+        w, v = np.linalg.eigh(c.T @ s_ao @ c)
+        if not np.all(np.isfinite(w)) or w.min() <= 1.0e-8:
+            oqp.library.guess(mol)
+            return False
+        c = c @ (v * (1.0 / np.sqrt(w))) @ v.T
+        packed = np.ascontiguousarray(c.T.reshape(target.shape))
+        mol.data["OQP::VEC_MO_A"][...] = packed
+        mol.data["OQP::VEC_MO_B"][...] = packed
+        mol.data["OQP::E_MO_A"][...] = e_prev.reshape(np.shape(mol.data["OQP::E_MO_A"]))
+        mol.data["OQP::E_MO_B"][...] = e_prev.reshape(np.shape(mol.data["OQP::E_MO_B"]))
+        oqp.guess_json(mol)
+        dump_log(mol, title="PyOQP: NAMD QM/MM SCF warm start from the previous step's orbitals",
+                 section='')
+        return True
 
     def _fold_link_charges(self, pchg):
         """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
@@ -4144,7 +4199,7 @@ class NAMD_QMMM(NAMD):
             return potmm, potqm
 
         sp = SinglePoint(mol)
-        sp._prep_guess()
+        warm_start = self._start_scf_orbitals(sp)
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         # Periodic full-ESPF: the QM charges also interact with their own images
@@ -4174,7 +4229,8 @@ class NAMD_QMMM(NAMD):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=(warm_start or it > 0))
+            self._scf_orbitals_ready = True
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)
@@ -4337,7 +4393,7 @@ class NAMD_QMMM(NAMD):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=True)
             ref = [mol.get_scf_energy()]
             if ctx["with_overlap"]:
                 mol.back_door = (self.prev_xyz, self.prev_data)
@@ -5709,7 +5765,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         potmm, potqm = self._embedding_field()
 
         sp = SinglePoint(mol)
-        sp._prep_guess()
+        warm_start = self._start_scf_orbitals(sp)
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         potmm_mm = np.asarray(potmm, dtype=float).copy()
@@ -5731,7 +5787,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=(warm_start or it > 0))
+            self._scf_orbitals_ready = True
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)

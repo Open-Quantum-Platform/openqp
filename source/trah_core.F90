@@ -169,6 +169,10 @@ module trah_core_mod
   real(dp), parameter :: delta_min    = 1.0e-4_dp
   real(dp), parameter :: gtol_fp      = 1.0e-4_dp
   real(dp), parameter :: stab_step    = 1.0e-3_dp  !< step above this at small |g| = saddle escape
+  !> Cap on the descent steps taken once the model predicts no energy reduction
+  !> above FP noise.  Near an ROHF solution whose gradient cannot fall below the
+  !> requested tolerance at this precision, an uncapped loop never exits.
+  integer,  parameter :: max_fp_refine = 8
 
 contains
 
@@ -185,7 +189,7 @@ contains
     real(dp), intent(out), optional :: hist_e(:), hist_de(:), hist_g(:), hist_s(:)
     integer,  intent(out), optional :: nhist
 
-    integer  :: n, macro, micro_used, ierr, nh
+    integer  :: n, macro, micro_used, ierr, nh, n_fp
     real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
@@ -262,7 +266,10 @@ contains
       ! quadratically before exiting.  The energy ratio is FP-noise-dominated
       ! here, so accept unconditionally.
       if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
-        do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor)
+        n_fp = 0
+        do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor &
+                  .and. n_fp < max_fp_refine)
+          n_fp = n_fp + 1
           call prov%apply_step(p, ierr)
           if (ierr == 0) call prov%grad_hdiag(g, hdiag, e0, ierr)
           if (ierr /= 0) then
@@ -279,7 +286,8 @@ contains
         end do
         if (pred > pred_floor .and. gnorm >= par%conv_tol) cycle
         if (par%verbose) write(IW, &
-              '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision)")') macro, e0, gnorm
+              '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision, ",i0," refinement steps)")') &
+              macro, e0, gnorm, n_fp
         ! report error below conv_tol so the SCF driver recognises convergence
         ! and does NOT re-diagonalise the raw Fock (which would corrupt ROHF
         ! orbitals)
