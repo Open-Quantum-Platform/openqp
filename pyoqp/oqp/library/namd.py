@@ -4280,7 +4280,9 @@ class NAMD_QMMM(NAMD):
                                      f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
                                      f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
                                      f"Hartree over three iterations"), section='')
-                q_prev = q_new
+                # keep q_prev: it is the field this SCF (and the excitation that
+                # follows) was computed in, so the active-state loop measures its
+                # first residual against the field the electrons actually saw
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
@@ -5850,7 +5852,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                                      f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
                                      f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
                                      f"Hartree over three iterations"), section='')
-                q_prev = q_new
+                # keep q_prev: it is the field this SCF (and the excitation that
+                # follows) was computed in, so the active-state loop measures its
+                # first residual against the field the electrons actually saw
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new

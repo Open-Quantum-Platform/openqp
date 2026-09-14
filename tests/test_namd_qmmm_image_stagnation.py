@@ -9,9 +9,13 @@ self-consistency did not converge in 50 iterations" although nothing changed
 any more; the same checkpoints replayed on another machine passed those steps.
 """
 import re
+import sys
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 NAMD = ROOT / "pyoqp" / "oqp" / "library" / "namd.py"
@@ -42,7 +46,7 @@ class TestImageFieldStagnationSource(unittest.TestCase):
         src = NAMD.read_text()
         pattern = (r"e_hist\.append\(float\(mol\.get_scf_energy\(\)\)\)\s*\n"
                    r"\s*if delta < self\.driver\.IMAGE_TOL:\s*\n(?:.*\n){3}"
-                   r"\s*if _image_field_stagnant\(it, delta, e_hist, self\.driver\):[\s\S]{0,500}?"
+                   r"\s*if _image_field_stagnant\(it, delta, e_hist, self\.driver\):[\s\S]{0,900}?"
                    r"converged = True\s*\n\s*break\s*\n"
                    r"\s*q_prev = 0\.5 \* \(q_new \+ q_prev\) if it > 6 else q_new")
         self.assertEqual(len(re.findall(pattern, src)), 2)
@@ -72,6 +76,113 @@ class TestImageFieldStagnant(unittest.TestCase):
 
     def test_only_the_last_three_energies_count(self):
         self.assertTrue(self.stagnant(12, 2.7e-6, [-456.30] + NOISE, DRV))
+
+
+class TestFallbackSource(unittest.TestCase):
+    def test_fallback_keeps_the_scf_input_charges(self):
+        src = NAMD.read_text()
+        blocks = re.findall(r"if _image_field_stagnant\(it, delta, e_hist, self\.driver\):([\s\S]*?)converged = True", src)
+        self.assertEqual(len(blocks), 2)
+        for block in blocks:
+            self.assertNotIn("q_prev = q_new", block)
+
+
+class _FakeData(dict):
+    def __init__(self, nbf):
+        super().__init__()
+        self.nbf = nbf
+
+    def get_basis(self):
+        return {"nbf": self.nbf}
+
+
+@unittest.skipUnless(_helper() is not None, "compiled OpenQP runtime unavailable")
+class TestReferenceImageLoop(unittest.TestCase):
+    """NAMD_QMMM._electronic_qmmm's reference-density image loop with the
+    electronic structure stubbed: scripted ESPF charges and SCF energies, and an
+    identity image matrix, so the MM potential each SCF sees is its input field."""
+
+    NAT, NBF = 2, 2
+    BASE = np.array([0.30, -0.30])
+    E0 = -456.3375043003
+
+    def _noise(self, n, amp=3e-6):
+        return [self.BASE + amp * np.array([(-1) ** k, (-1) ** (k + 1)]) for k in range(n)]
+
+    def _run(self, charges, energies, maxiter=50):
+        import oqp.library.namd as namd
+        nat, nbf = self.NAT, self.NBF
+        data = _FakeData(nbf)
+        data["natom"] = nat
+        calls = {"scf": 0, "potmm": [], "logs": []}
+        mol = types.SimpleNamespace(data=data, config={"input": {"method": "hf"}},
+                                    get_hcore=lambda: np.zeros(nbf * (nbf + 1) // 2),
+                                    set_hcore=lambda h: None,
+                                    get_scf_energy=lambda: energies[calls["scf"] - 1])
+        ewald = types.SimpleNamespace(qm_image_matrix=lambda pos: (np.eye(nat), np.zeros((nat, nat, 3))))
+        driver = types.SimpleNamespace(espf_full=True, IMAGE_MAXITER=maxiter, IMAGE_TOL=1e-7,
+                                       IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-5, IMAGE_ETOL=1e-8,
+                                       _ewald=lambda: ewald,
+                                       _qm_center_positions_bohr=lambda: np.zeros((nat, 3)))
+        obj = namd.NAMD_QMMM.__new__(namd.NAMD_QMMM)
+        obj.mol, obj.driver = mol, driver
+        obj._embedding_field = lambda: (np.zeros(nat), np.zeros((nat, nat)))
+        obj._start_scf_orbitals = lambda sp: False
+        obj._geometry_key = lambda: "geometry"
+
+        def scf(sp, warm=False):
+            calls["potmm"].append(np.array(data["OQP::POTMM"], dtype=float))
+            calls["scf"] += 1
+        obj._embedded_scf = scf
+        seed = {}
+
+        def refine(q):
+            seed["q"] = np.array(q, dtype=float)
+            return "refined potential"
+        obj._refine_image_field = refine
+
+        def form_esp_charges(m):
+            data["OQP::partial_charges"] = charges[calls["scf"] - 1]
+        drv_mod = types.SimpleNamespace(unpack_lower_tri_single=lambda a, n: np.zeros((n, n)),
+                                        unpack_lower_tri_multi=lambda a, n, k: np.zeros((k, n, n)),
+                                        pack_lower_tri_single=lambda h: h)
+        with mock.patch.dict(sys.modules, {"oqp.library.qmmm_driver": drv_mod}), \
+                mock.patch.object(namd.oqp, "espf_op_corr", lambda m: data.__setitem__("OQP::ESPF_CORR", None), create=True), \
+                mock.patch.object(namd.oqp, "form_esp_charges", form_esp_charges, create=True), \
+                mock.patch.object(namd, "ints_1e", lambda m: None), \
+                mock.patch.object(namd, "SinglePoint", mock.MagicMock()), \
+                mock.patch.object(namd, "LastStep", mock.MagicMock()), \
+                mock.patch.object(namd, "dump_log", lambda m, title="", **kw: calls["logs"].append(title)):
+            result = obj._electronic_qmmm(with_overlap=False)
+        return result, seed.get("q"), calls
+
+    def test_noise_floor_is_accepted_with_the_field_the_scf_saw(self):
+        n = 50
+        charges = self._noise(n)
+        _, seed, calls = self._run(charges, [self.E0 + 2e-10 * (-1) ** k for k in range(n)])
+        self.assertEqual(calls["scf"], 10)
+        self.assertTrue(any("accepted on stagnation after 10 iterations" in t for t in calls["logs"]))
+        # the active-state loop starts from the input field of the last SCF, not its output charges
+        np.testing.assert_array_equal(seed, calls["potmm"][-1])
+        self.assertGreater(float(np.abs(seed - charges[9]).max()), 1e-6)
+
+    def test_moving_energy_still_raises(self):
+        n = 50
+        with self.assertRaisesRegex(RuntimeError, "did not stagnate"):
+            self._run(self._noise(n), [self.E0 + 1e-6 * (-1) ** k for k in range(n)])
+
+    def test_strict_convergence_is_unchanged(self):
+        n = 50
+        charges = [self.BASE + 0.01] + [self.BASE] * (n - 1)
+        _, seed, calls = self._run(charges, [self.E0] * n)
+        self.assertEqual(calls["scf"], 3)
+        np.testing.assert_array_equal(seed, self.BASE)
+        self.assertFalse(any("stagnation" in t for t in calls["logs"]))
+
+    def test_no_fallback_before_ten_iterations(self):
+        n = 9
+        with self.assertRaisesRegex(RuntimeError, "did not converge in 9 iterations"):
+            self._run(self._noise(n), [self.E0] * n, maxiter=9)
 
 
 if __name__ == "__main__":
