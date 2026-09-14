@@ -879,7 +879,7 @@ contains
 !     confine each root's update to the dominant irrep of its Ritz vector.
       sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nsolve))
       call sym_response_project(infos, sym_ritz, qvec, nsolve)
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
+      if (infos%control%verbose >= 1) call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
 
 !     Convergence is judged on the REPORTED roots -- demanding that every extra
 !     tracked root converge too would turn a converging run into a

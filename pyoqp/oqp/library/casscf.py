@@ -1342,13 +1342,17 @@ class CASSCF:
             _log(mol, f"   PyOQP state-average roots:          {', '.join(str(r) for r in roots)}")
             _log(mol, f"   PyOQP state-average weights:        {', '.join(f'{w:.4f}' for w in weights)}")
         _log(mol)
-        _log(mol, "   --- macro iterations ---")
-        _log(mol, f"   {'it':>4} {'E(objective)':>20} {'dE':>14} {'|g_orb|':>12} {'|step|':>12}")
-        for (it, e, de, g, st) in history:
-            de_s = "" if it == 0 else f"{de:14.2e}"
-            st_s = "" if it == 0 else f"{st:12.2e}"
-            _log(mol, f"   {it:4d} {e:20.10f} {de_s:>14} {g:12.3e} {st_s:>12}")
-        _log(mol)
+        # The macroiteration table is an iteration table: omitted at verbose = 0,
+        # which keeps the convergence summary below.
+        from oqp.utils.log_format import VERBOSE_NORMAL, resolve_verbosity
+        if resolve_verbosity(mol.config) >= VERBOSE_NORMAL:
+            _log(mol, "   --- macro iterations ---")
+            _log(mol, f"   {'it':>4} {'E(objective)':>20} {'dE':>14} {'|g_orb|':>12} {'|step|':>12}")
+            for (it, e, de, g, st) in history:
+                de_s = "" if it == 0 else f"{de:14.2e}"
+                st_s = "" if it == 0 else f"{st:12.2e}"
+                _log(mol, f"   {it:4d} {e:20.10f} {de_s:>14} {g:12.3e} {st_s:>12}")
+            _log(mol)
         _log(mol, f"   PyOQP CASSCF converged:             {'yes' if converged else 'no'}")
         _log(mol, f"   PyOQP CASSCF macro iterations:      {niter} / {options.max_macro_iterations}")
         _log(mol, f"   PyOQP CASSCF final |g_orb|:         {history[-1][3]:.3e}")

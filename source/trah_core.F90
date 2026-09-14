@@ -132,6 +132,7 @@ module trah_core_mod
     !> parameter rather than a hard-coded choice.
     logical  :: rms_gnorm = .true.
     logical  :: verbose = .true.    !< write the macroiteration table to IW
+    logical  :: iterations = .true. !< include its per-iteration rows (log verbose >= 1)
     !> Optional history callback context: the CASSCF driver records one row per
     !> accepted macroiteration, the SCF driver does not.
     logical  :: want_history = .false.
@@ -249,7 +250,7 @@ contains
             return
           end if
           if (lam < -stab_eig_tol) then
-            if (par%verbose) write(IW, &
+            if (par%verbose .and. par%iterations) write(IW, &
               '(4x,i4,2x,f20.10,2x,es12.4,3x,"unstable (Hess eig ",es10.2,") - escaping")') &
               macro, e0, gnorm, lam
             call prov%apply_step(0.1_dp*vmin, ierr)
@@ -262,7 +263,7 @@ contains
             cycle
           end if
         end if
-        if (par%verbose) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
+        if (par%verbose .and. par%iterations) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
               macro-1, e0, gnorm
         res%error = gnorm
         res%converged = .true.
@@ -310,7 +311,7 @@ contains
           ! converging: take another macroiteration, which re-enters this block
           ! while the conditions hold and is bounded by nmac.
           if (n_fp >= max_fp_refine .and. n_stall < fp_stall_steps .and. macro < par%nmac) then
-            if (par%verbose) write(IW, &
+            if (par%verbose .and. par%iterations) write(IW, &
                   '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement continuing after ",i0," steps")') &
                   macro, e0, gnorm, n_fp
             cycle
@@ -327,7 +328,7 @@ contains
           res%ierr  = 4
           exit
         end if
-        if (par%verbose) write(IW, &
+        if (par%verbose .and. par%iterations) write(IW, &
               '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision, ",i0," refinement steps)")') &
               macro, e0, gnorm, n_fp
         ! report error below conv_tol so the SCF driver recognises convergence
@@ -379,7 +380,7 @@ contains
           end do
         end block
       end if
-      if (par%verbose) then
+      if (par%verbose .and. par%iterations) then
         write(IW,'(4x,i4,2x,f20.10,2x,es12.4,2x,f7.3,2x,f7.3,3x,i4,3x,a)') &
               macro, merge(etrial, e0, accepted), gnorm, rho, delta, micro_used, &
               merge('acc', 'rej', accepted)
@@ -417,7 +418,7 @@ contains
       ! `gnorm` is deliberately the value from the top of this macroiteration.
       if (delta < delta_min) then
         if (gnorm < gtol_fp) then
-          if (par%verbose) write(IW, &
+          if (par%verbose .and. par%iterations) write(IW, &
             '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (trust radius minimal)")') macro, e0, gnorm
           res%error = min(gnorm, 0.99_dp*par%conv_tol)
           res%converged = .true.

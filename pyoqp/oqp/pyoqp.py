@@ -435,16 +435,26 @@ class Runner:
             with open(banner_log, "r+b") as fh:
                 fh.truncate(banner_offset)
         if not append_log:
+            # This run starts its log from scratch, possibly on a path an earlier
+            # run in this process already used: have the native side describe the
+            # DFT set-up and functionals in it again.
+            oqp.oqp_log_restarted(self.mol)
             dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
             dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
             self._log_perf_settings()
 
     def _log_perf_settings(self):
         """Append the resolved performance settings + warnings to the log."""
+        # One writer for the shared log, like dump_log's mpi_dump guard: under
+        # mpiexec the other ranks would append this block before rank 0 has
+        # written the banner.
+        if getattr(self.mol, "usempi", False) and MPIManager().world_rank != 0:
+            return
         report = getattr(self.mol, "perf_report", None)
         if not report:
             return
         from oqp.utils import perf_levels
+        from oqp.utils.log_format import INPUT_REFERENCE, format_log_section
         block = perf_levels.format_report(getattr(self.mol, "perf_level", perf_levels.UNSET),
                                           report, getattr(self.mol, "perf_warns", []))
         if not block:
@@ -452,6 +462,8 @@ class Runner:
         if getattr(self.mol, "log", None):
             try:
                 with open(self.mol.log, 'a', encoding='utf-8') as fout:
+                    fout.write(format_log_section('PyOQP: Performance settings',
+                                                  INPUT_REFERENCE))
                     fout.write(block + "\n")
             except OSError:
                 pass

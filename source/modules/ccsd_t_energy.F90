@@ -535,7 +535,7 @@ contains
     opts%conv       = infos%control%cc_conv
     opts%ndiis      = int(infos%control%cc_ndiis)
     opts%do_triples = do_t
-    opts%verbose    = 1
+    opts%verbose    = min(1, int(infos%control%verbose))
     opts%iw         = iw
 
     e_ref = infos%mol_energy%energy

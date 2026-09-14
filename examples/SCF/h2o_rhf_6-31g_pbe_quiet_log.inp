@@ -1,0 +1,39 @@
+# Quiet log with the global [input] verbose = 0.
+# One level governs the whole log (docs/logging.md): 0 keeps headings, the
+# calculation request, converged results and warnings, and drops the
+# iteration, orbital and energy-component tables.  The energy is the one
+# h2o_rhf_6-31g_pbe_quiet_orbitals gets with the older [scf] spelling:
+# the keyword only gates output.
+[input]
+system=
+ 8   0.000000000   0.000000000  -0.041061554
+ 1  -0.533194329   0.533194329  -0.614469223
+ 1   0.533194329  -0.533194329  -0.614469223
+
+charge=0
+method=hf
+basis=6-31g
+runtype=energy
+functional=pbe
+d4=false
+verbose=0
+
+
+[guess]
+type=huckel
+save_mol=true
+
+
+[scf]
+type=rhf
+multiplicity=1
+maxit=30
+maxdiis=7
+diis_type=cdiis
+conv=1.0e-6
+
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=

@@ -151,6 +151,7 @@ contains
     integer :: nbf, nocc, nvir, lexc, i, j, irhs, iter, mxit
     integer :: clock_rate, clock_start, clock_stop, rhs_clock_start, rhs_clock_stop
     logical :: dft, all_converged, rhs_converged
+    integer :: iter_min, iter_max, nconv
     real(kind=dp) :: cnv, scale_exch
     real(kind=dp) :: cpu_start, cpu_stop, rhs_cpu_start, rhs_cpu_stop, rhs_wall
 
@@ -210,24 +211,32 @@ contains
     call system_clock(count_rate=clock_rate)
     call system_clock(clock_start)
     call cpu_time(cpu_start)
-    write(iw,'(/3x,60("-"))')
-    write(iw,'(6x,"CPHF/CPKS iterative solver")')
-    write(iw,'(6x,"right-hand sides =",I5,3x,"nocc =",I5,3x,"nvir =",I5)') &
-            nrhs, nocc, nvir
-    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
-    write(iw,'(3x,60("-"))')
+    ! Banner and summary at the default level; per-right-hand-side residuals at verbose >= 2.
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/3x,60("-"))')
+      write(iw,'(6x,"CPHF/CPKS iterative solver")')
+      write(iw,'(6x,"right-hand sides =",I5,3x,"nocc =",I5,3x,"nvir =",I5)') &
+              nrhs, nocc, nvir
+      write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+      write(iw,'(3x,60("-"))')
+    end if
+    iter_min = huge(iter_min)
+    iter_max = 0
+    nconv = 0
 
     do irhs = 1, nrhs
       call system_clock(rhs_clock_start)
       call cpu_time(rhs_cpu_start)
       call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
                     dat=cgdata, tol=sqrt(abs(cnv)))
+      if (infos%control%verbose >= 2) &
       write(iw,'(" INITIAL CPHF ERROR RHS",I5," =",3X,' // &
                '1P,E10.3,1X,"/",1P,E10.3)') &
               irhs, pcg%error**2, cnv
       do iter = 1, mxit
         if (pcg%errcode /= PCG_OK) exit
         call pcg%step()
+        if (infos%control%verbose >= 2) &
         write(iw,'(" CPHF ITER RHS",I5," ITER#",I4," ERROR =",3X,' // &
                  '1P,E10.3,1X,"/",1P,E10.3)') &
                 irhs, iter, pcg%error**2, cnv
@@ -238,6 +247,10 @@ contains
       rhs_wall = real(rhs_clock_stop - rhs_clock_start, kind=dp) / real(clock_rate, kind=dp)
       rhs_converged = pcg%errcode == PCG_CONVERGED
       all_converged = all_converged .and. rhs_converged
+      iter_min = min(iter_min, iter - 1)
+      iter_max = max(iter_max, iter - 1)
+      if (rhs_converged) nconv = nconv + 1
+      if (infos%control%verbose >= 2) &
       write(iw,'(" CPHF RHS",I5," completed in",I5," iterations;",' // &
                '" CPU time =",F10.3," s; wall time =",F10.3," s")') &
               irhs, iter - 1, rhs_cpu_stop - rhs_cpu_start, rhs_wall
@@ -258,8 +271,13 @@ contains
 
     call system_clock(clock_stop)
     call cpu_time(cpu_stop)
-    write(iw,'(6x,"CPHF wall time =",F10.3," s; CPU time =",F10.3," s"/)') &
+    if (infos%control%verbose >= 1 .and. nrhs > 0) &
+      write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
+            nconv, nrhs, iter_min, iter_max
+    if (infos%control%verbose >= 1) &
+      write(iw,'(6x,"CPHF wall time =",F10.3," s; CPU time =",F10.3," s"/)') &
             real(clock_stop - clock_start, kind=dp) / real(clock_rate, kind=dp), cpu_stop - cpu_start
+    call flush(iw)
     call flush(iw)
 
     call int2_driver%clean()
@@ -476,6 +494,7 @@ contains
     real(kind=dp), pointer :: pxm(:,:)
     integer :: nbf, nocca, noccb, nvira, nvirb, la, lb, ltot
     integer :: i, j, irhs, iter, mxit, off
+    integer :: iter_min, iter_max, nconv
     logical :: dft
     real(kind=dp) :: cnv, scale_exch
 
@@ -544,11 +563,16 @@ contains
     cgdata%scale_exch = scale_exch
     cgdata%dft = dft
 
-    write(iw,'(/3x,60("-"))')
-    write(iw,'(6x,"open-shell (UHF) CPHF iterative solver")')
-    write(iw,'(6x,"right-hand sides =",I5,3x,"la =",I6,3x,"lb =",I6)') nrhs, la, lb
-    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
-    write(iw,'(3x,60("-"))')
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/3x,60("-"))')
+      write(iw,'(6x,"open-shell (UHF) CPHF iterative solver")')
+      write(iw,'(6x,"right-hand sides =",I5,3x,"la =",I6,3x,"lb =",I6)') nrhs, la, lb
+      write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+      write(iw,'(3x,60("-"))')
+    end if
+    iter_min = huge(iter_min)
+    iter_max = 0
+    nconv = 0
 
     off = 0
     do irhs = 1, nrhs
@@ -558,12 +582,25 @@ contains
         if (pcg%errcode /= PCG_OK) exit
         call pcg%step()
       end do
-      write(iw,'(" UHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+      iter_min = min(iter_min, iter - 1)
+      iter_max = max(iter_max, iter - 1)
+      if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
+      if (infos%control%verbose >= 2) &
+        write(iw,'(" UHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
               irhs, iter - 1, pcg%error**2
       call flush(iw)
       uvec(:,irhs) = pcg%x
       call pcg%clean()
     end do
+
+    if (infos%control%verbose >= 1 .and. nrhs > 0) &
+      write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
+            nconv, nrhs, iter_min, iter_max
+    if (nconv < nrhs) write(iw,'(6x,"WARNING: UHF CPHF did not converge for",I5," of",I5," right-hand sides")') &
+            nrhs - nconv, nrhs
+    ! Analytic open-shell Hessians write this unit through the captured fort.6
+    ! file; flush so the summary is there when the capture is read.
+    call flush(iw)
 
     deallocate(wrka, wrkb, xm, xminv)
   end subroutine cphf_solve_uhf
@@ -857,6 +894,7 @@ contains
     real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
     integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: i, a, k, irhs, iter, mxit
+    integer :: iter_min, iter_max, nconv
     logical :: dft
     real(kind=dp) :: cnv, scale_exch, d
 
@@ -934,11 +972,16 @@ contains
     cgdata%scale_exch = scale_exch
     cgdata%dft = dft
 
-    write(iw,'(/3x,60("-"))')
-    write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
-    write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
-    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
-    write(iw,'(3x,60("-"))')
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/3x,60("-"))')
+      write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+      write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
+      write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+      write(iw,'(3x,60("-"))')
+    end if
+    iter_min = huge(iter_min)
+    iter_max = 0
+    nconv = 0
 
     do irhs = 1, nrhs
       call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
@@ -947,12 +990,25 @@ contains
         if (pcg%errcode /= PCG_OK) exit
         call pcg%step()
       end do
-      write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+      iter_min = min(iter_min, iter - 1)
+      iter_max = max(iter_max, iter - 1)
+      if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
+      if (infos%control%verbose >= 2) &
+        write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
               irhs, iter - 1, pcg%error**2
       call flush(iw)
       uvec(:,irhs) = pcg%x
       call pcg%clean()
     end do
+
+    if (infos%control%verbose >= 1 .and. nrhs > 0) &
+      write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
+            nconv, nrhs, iter_min, iter_max
+    if (nconv < nrhs) write(iw,'(6x,"WARNING: ROHF CPHF did not converge for",I5," of",I5," right-hand sides")') &
+            nrhs - nconv, nrhs
+    ! Analytic open-shell Hessians write this unit through the captured fort.6
+    ! file; flush so the summary is there when the capture is read.
+    call flush(iw)
 
     deallocate(famo, fbmo, xminv, fao, w2, w3)
   end subroutine cphf_solve_rohf

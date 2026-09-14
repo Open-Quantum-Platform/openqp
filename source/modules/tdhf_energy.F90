@@ -125,7 +125,7 @@ contains
   ! 3. LOG: Write: Main output file
     open (unit=IW, file=infos%log_filename, position="append")
   !
-    call print_module_info('THDF_Energy','Computing Energy of TDDFT')
+    call print_module_info('TDHF_Energy','Computing Energy of TDDFT')
 
   ! Readings
 
@@ -297,7 +297,7 @@ contains
         mxerr = 0.0_dp
       end if
 
-      call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
+      if (infos%control%verbose >= 1) call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
 
 !     Check convergence
       converged = mxerr<=cnvtol

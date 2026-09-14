@@ -21,6 +21,23 @@ contains
     call oqp_banner(inf)
   end subroutine oqp_banner_C
 
+  !> @brief Start the DFT description records afresh (C API: oqp_log_restarted).
+  !> @detail The Python driver calls it when a Runner starts its log from scratch, not
+  !>         for evaluations appended to an existing log.  A recreated log path is
+  !>         therefore described again, and the records never outgrow the runs of
+  !>         the current generation in a long-lived process.
+  subroutine oqp_log_restarted_C(c_handle) bind(C, name="oqp_log_restarted")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use mod_dft, only: dft_forget_setups
+    use functionals, only: forget_functional_announcements
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call dft_forget_setups()
+    call forget_functional_announcements()
+  end subroutine oqp_log_restarted_C
+
   subroutine oqp_banner(infos)
     use messages, only: show_message, with_abort
     use types, only: information

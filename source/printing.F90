@@ -92,12 +92,16 @@ contains
 
     mo0 = max(mostart, 1)
     mo1 = min(moend, basis%nbf)
-    call print_eigvec_vals_labeled(basis, infos, mo0, mo1)
+    ! verbose = 1 (the default) lists the orbital energies only.  The
+    ! coefficient rows add nbf lines for every five orbitals, which made this
+    ! table the largest block of a typical log; verbose >= 2 restores them.
+    call print_eigvec_vals_labeled(basis, infos, mo0, mo1, &
+                                   energies_only=(infos%control%verbose < 2))
 
   end subroutine print_mo_range
 !>
 !>    @brief    print eigenvector/values, with MO symmetry labels
-  subroutine print_eigvec_vals_labeled(basis, infos, mostart, moend)
+  subroutine print_eigvec_vals_labeled(basis, infos, mostart, moend, energies_only)
 
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -112,8 +116,10 @@ contains
     type(information), intent(inout) :: infos
 
     integer, intent(in) :: mostart, moend
+    logical, intent(in), optional :: energies_only
 
     integer :: i, imax, imin, j, nmax
+    logical :: print_vectors
     character(len=*), parameter :: fmt1 = '(/15x,10(8x,i4,5x))'
     character(len=*), parameter :: fmt2 = '(15x,10f17.10)'
     character(len=*), parameter :: fmt4 = '(i5,2x,a8,10f17.10)'
@@ -130,6 +136,8 @@ contains
 !The rows are labeled with the basis function names.
 
     nmax = 5
+    print_vectors = .true.
+    if (present(energies_only)) print_vectors = .not. energies_only
 
     call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
@@ -141,9 +149,11 @@ contains
       write(iw,fmt1) (i, i=imin, imax)
       write(iw,fmt2) (mo_energy_a(i), i=imin, imax)
 
-      do j = 1, basis%nbf
-        write(iw,fmt4) j, basis%bf_label(j), mo_a(j,imin:imax)
-      end do
+      if (print_vectors) then
+        do j = 1, basis%nbf
+          write(iw,fmt4) j, basis%bf_label(j), mo_a(j,imin:imax)
+        end do
+      end if
 
     end do
 
@@ -158,9 +168,11 @@ contains
         write(iw,fmt1) (i, i=imin, imax)
         write(iw,fmt2) (mo_energy_b(i), i=imin, imax)
 
-        do j = 1, basis%nbf
-          write(iw,fmt4) j, basis%bf_label(j), mo_b(j,imin:imax)
-        end do
+        if (print_vectors) then
+          do j = 1, basis%nbf
+            write(iw,fmt4) j, basis%bf_label(j), mo_b(j,imin:imax)
+          end do
+        end if
 
       end do
     end if

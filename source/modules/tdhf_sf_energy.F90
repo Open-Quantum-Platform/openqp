@@ -356,7 +356,7 @@ contains
       sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
       call sym_response_project(infos, sym_ritz, scr3, nstates)
 
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
+      if (infos%control%verbose >= 1) call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 
       mxerr = maxval(rnorm)
 
