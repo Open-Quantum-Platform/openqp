@@ -3635,6 +3635,22 @@ def _parse_int_list(spec):
     return out
 
 
+
+def _image_field_stagnant(iteration, delta, energies, driver):
+    """True when a reference-density image field whose ESPF charges only
+    fluctuate at the SCF noise floor can be accepted.
+
+    ``iteration`` is the zero-based image iteration, ``delta`` its max |dq|
+    (e) and ``energies`` the reference SCF energy of every iteration so far.
+    The strict ``IMAGE_TOL`` test runs first; this is the fallback for an ROHF
+    reference whose soft orbital rotations amplify the SCF gradient noise into
+    charge noise above ``IMAGE_TOL`` (see the constants on the QM/MM driver).
+    """
+    if iteration + 1 < int(driver.IMAGE_STAGNANT_MINITER) or len(energies) < 3:
+        return False
+    last = energies[-3:]
+    return delta < driver.IMAGE_TOL_STAGNANT and max(last) - min(last) < driver.IMAGE_ETOL
+
 class NAMD_QMMM(NAMD):
     """FSSH NAMD with electrostatic ESPF QM/MM embedding (non-periodic).
 
@@ -4237,6 +4253,7 @@ class NAMD_QMMM(NAMD):
             q_prev = None
         converged = psi_img is None
         delta, it = float("inf"), -1
+        e_hist = []
         for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
@@ -4253,7 +4270,16 @@ class NAMD_QMMM(NAMD):
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
             delta = float(np.abs(q_new - q_prev).max())
+            e_hist.append(float(mol.get_scf_energy()))
             if delta < self.driver.IMAGE_TOL:
+                q_prev = q_new
+                converged = True
+                break
+            if _image_field_stagnant(it, delta, e_hist, self.driver):
+                dump_log(mol, title=(f"PyOQP: QM-image field (reference density) accepted on "
+                                     f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
+                                     f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
+                                     f"Hartree over three iterations"), section='')
                 q_prev = q_new
                 converged = True
                 break
@@ -4269,7 +4295,9 @@ class NAMD_QMMM(NAMD):
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
                 f"did not converge in {it + 1} iterations "
-                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}, and the "
+                f"charges did not stagnate below {self.driver.IMAGE_TOL_STAGNANT:.0e} e "
+                f"with a stable SCF energy); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
         self._grad_cache = None
@@ -5795,6 +5823,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             q_prev = None
         converged = psi_img is None
         delta, it = float("inf"), -1
+        e_hist = []
         for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
@@ -5811,7 +5840,16 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
             delta = float(np.abs(q_new - q_prev).max())
+            e_hist.append(float(mol.get_scf_energy()))
             if delta < self.driver.IMAGE_TOL:
+                q_prev = q_new
+                converged = True
+                break
+            if _image_field_stagnant(it, delta, e_hist, self.driver):
+                dump_log(mol, title=(f"PyOQP: QM-image field (reference density) accepted on "
+                                     f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
+                                     f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
+                                     f"Hartree over three iterations"), section='')
                 q_prev = q_new
                 converged = True
                 break
@@ -5827,7 +5865,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
                 f"did not converge in {it + 1} iterations "
-                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}, and the "
+                f"charges did not stagnate below {self.driver.IMAGE_TOL_STAGNANT:.0e} e "
+                f"with a stable SCF energy); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
         if psi_img is not None:

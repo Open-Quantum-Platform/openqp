@@ -1302,6 +1302,18 @@ class OpenQpQMMM:
     #: cap and convergence threshold on the ESPF charges (e).
     IMAGE_MAXITER = 50
     IMAGE_TOL = 1e-7
+    #: Stagnation acceptance for the reference-density loop.  Near an ROHF
+    #: reference with a nearly degenerate open/closed pair the SCF gradient
+    #: stops at its ~1e-8 noise floor and the soft orbital rotations turn that
+    #: residual into ESPF-charge noise of 1e-6 to 1e-5 e, so IMAGE_TOL can be
+    #: out of reach while nothing changes any more.  After
+    #: IMAGE_STAGNANT_MINITER iterations the field is accepted when
+    #: max |dq| < IMAGE_TOL_STAGNANT and the last three SCF energies agree to
+    #: IMAGE_ETOL (Hartree); a switch between two SCF solutions moves the energy
+    #: and is still rejected.
+    IMAGE_STAGNANT_MINITER = 10
+    IMAGE_TOL_STAGNANT = 1e-5
+    IMAGE_ETOL = 1e-8
     #: Active-state refinement in NAMD (each iteration costs a Z-vector
     #: gradient).  The relaxed charges carry the Z-vector residual (1e-5 to
     #: 1e-4 e at the default Z-vector convergence), so the field is taken as
