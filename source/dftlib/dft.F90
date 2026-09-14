@@ -5,6 +5,7 @@ module mod_dft
   use io_constants, only: iw
   use basis_tools, only: basis_set
   use mod_dft_molgrid, only: dft_grid_t
+  use dft_radial_grid_types, only: dft_radial_grid_none
 
   implicit none
 
@@ -32,15 +33,24 @@ module mod_dft
 !>   Several radial grids may coexist: `radial_id` maps each atom to
 !>   one of `nrad_types` radial grids.  Radial type 1 is always the
 !>   standard unit-radius grid (scaled by the Bragg-Slater radius);
-!>   types >= 2 are element-specific grids in absolute bohr: DE2
+!>   types >= 2 are element-specific grids in absolute bohr -- DE2
 !>   (`de2_alpha`/`de2_rmax` give alpha and the outermost node) or,
 !>   when `me_rscale` is allocated and positive, MultiExp with
-!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0).
+!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0) -- unless
+!>   `rad_map` marks the type as another standard grid: its own map
+!>   and `rad_npts` nodes, scaled by the Bragg-Slater radius like
+!>   type 1 (SG-1 uses this for atoms above Ar).
 !>   If `nang_override` is allocated and non-zero for an atom type,
 !>   that type is unpruned: a single `nang_override(t)`-point Lebedev
 !>   sphere is used at ALL radii (heavy-atom fallback).
   type dft_grid_pruned_t
     integer :: nrad = 0
+    !> Radial grid type this pruned scheme is DEFINED on, when the
+    !> scheme pins one (SG-1 is defined on the MHL/Euler-Maclaurin
+    !> map).  `dft_radial_grid_none` = no override: use the radial
+    !> type the user configured.  Applied only while this grid is
+    !> being built, so it never mutates the user's settings.
+    integer :: rad_grid_type = dft_radial_grid_none
     integer :: ngrids = 1
     integer, allocatable :: nang(:,:)    !< (region, atom type)
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
@@ -55,14 +65,22 @@ module mod_dft
     real(kind=dp), allocatable :: de2_alpha(:) !< DE2 alpha of radial type
     real(kind=dp), allocatable :: de2_rmax(:)  !< DE2 outermost node, bohr
     integer, allocatable :: rad_npts(:)  !< nodes of radial type (0: global nrad)
+    !> Radial map of radial type i when that type is a standard grid scaled
+    !> by the Bragg-Slater radius (like type 1) rather than an
+    !> element-specific absolute grid (DE2/MultiExp).  Unallocated, or
+    !> `dft_radial_grid_none` for a type, = absolute grid.  SG-1 uses it to
+    !> keep the user's radial grid for atoms above Ar.
+    integer, allocatable :: rad_map(:)
     real(kind=dp), allocatable :: me_rscale(:) !< MultiExp R of radial type (0: DE2)
   end type
 
-!  SG1 region boundaries (in units of the atomic radius) and Lebedev
-!  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
-!  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
+!  SG1 region boundaries (in units of the atomic radius), radial shell
+!  counts on the 50-point MHL/EML grid, and Lebedev orders, from
+!  P.M.W. Gill, B.G. Johnson, J.A. Pople, Chem. Phys. Lett. 209
+!  (1993) 506: columns are H-He, Li-Ne, Na-Ar.
 !  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
-!  the unpruned 194-point grid at all radii.  Row 4 is fully
+!  the unpruned 194-point grid at all radii, on the radial grid the user
+!  configured (SG1's own 50-point MHL grid applies to H-Ar only).  Row 4 is fully
 !  overridden via nang_override (set in dft_set_options), so its
 !  boundaries are never used.
   real(kind=dp), parameter :: sg1rads(5,4) = reshape(&
@@ -73,6 +91,12 @@ module mod_dft
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
+  integer, parameter :: SG1_NRAD = 50
+  integer, parameter :: sg1shells(5,3) = reshape(&
+        [17, 4, 4, 9, 16, &
+         14, 7, 3, 9, 17, &
+         12, 7, 5, 7, 19], &
+         [5,3])
 
 !  SG-2 / SG-3 pruned grids: S. Dasgupta, J.M. Herbert,
 !  J. Comput. Chem. 38, 869 (2017).  Radial grid: Mitani
@@ -675,6 +699,7 @@ contains
 
   subroutine dft_set_options(infos, pruned, need_functional)
     use iso_c_binding, only: c_null_char
+    use dft_radial_grid_types, only: dft_radial_grid_mhl
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
@@ -734,10 +759,15 @@ contains
       select case (trim(pruned_name))
       case ("SG1")
         pruned%ngrids = 5
+        pruned%nrad = SG1_NRAD
+        pruned%rad_grid_type = dft_radial_grid_mhl
         ntyps = 4
         allocate(pruned%nang(pruned%ngrids, ntyps), &
-                 pruned%radii(pruned%ngrids, ntyps))
+                 pruned%radii(pruned%ngrids, ntyps), &
+                 pruned%nradPerRegion(pruned%ngrids, ntyps))
         pruned%radii = sg1rads
+        pruned%nradPerRegion = 0
+        pruned%nradPerRegion(:, 1:3) = sg1shells
         do i = 1, ntyps
           pruned%nang(:,i) = sg1grids
         end do
@@ -753,6 +783,20 @@ contains
         ! unpruned, i.e. a single 194-point sphere at all radii
         allocate(pruned%nang_override(ntyps), source=0)
         pruned%nang_override(4) = 194
+        ! ...and on the radial grid the user configured -- size AND map --
+        ! as they always were: SG1's 50-point MHL pin is part of SG1's
+        ! definition, which covers H-Ar only.  Heavy atoms get radial type 2,
+        ! a standard grid scaled by the Bragg-Slater radius like type 1.
+        ! Molecules without heavy atoms keep the single radial type.
+        if (any(pruned%rad_id(1:nat) == 4)) then
+          pruned%nrad_types = 2
+          allocate(pruned%radial_id(nat), source=1)
+          where (pruned%rad_id(1:nat) == 4) pruned%radial_id(1:nat) = 2
+          allocate(pruned%rad_npts(2), source=0)
+          pruned%rad_npts(2) = int(infos%dft%grid_rad_size)
+          allocate(pruned%rad_map(2), source=dft_radial_grid_none)
+          pruned%rad_map(2) = int(infos%dft%rad_grid_type)
+        end if
 
         write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
                   &5X,21("-")/&
@@ -972,10 +1016,11 @@ contains
       integer :: bstype
       integer :: grid_id
       integer :: max_ang_pts
-      integer :: ngr, rtid, nrad_at, override
+      integer :: ngr, rtid, nrad_at, override, nrad_max, bstype_map
       integer :: rad_grid_type, dft_partfun, dft_bfc_algo
       real(kind=dp) :: dftthr0
       real(KIND=dp) :: brsl_radii(BRSL_NUM_ELEMENTS)
+      real(KIND=dp) :: brsl_map(BRSL_NUM_ELEMENTS)
       logical :: verbose_
 
       real(kind=dp), allocatable :: txyz(:), twght(:)
@@ -1000,7 +1045,22 @@ contains
       nrad = int(infos%dft%grid_rad_size)
       ! A pruned grid may prescribe its own radial grid size
       if (pruned%nrad > 0) nrad = pruned%nrad
-      maxpt_per_atom = nrad*max_ang_pts
+      ! ...and its own radial map (SG-1 is defined on the MHL grid).
+      ! Local to this build: infos is left as the user configured it,
+      ! so a later grid build is unaffected by this one.
+      if (pruned%rad_grid_type /= dft_radial_grid_none) &
+        rad_grid_type = pruned%rad_grid_type
+      ! Standard-map radial types other than type 1 (SG1 heavy atoms) may
+      ! carry more nodes than type 1: size the per-type radial storage and
+      ! the per-atom point buffer for the largest of them.
+      nrad_max = nrad
+      if (allocated(pruned%rad_map)) then
+        do i = 2, pruned%nrad_types
+          if (pruned%rad_map(i) /= dft_radial_grid_none) &
+            nrad_max = max(nrad_max, pruned%rad_npts(i))
+        end do
+      end if
+      maxpt_per_atom = nrad_max*max_ang_pts
 
       allocate(&
         txyz(max_ang_pts*3), &
@@ -1011,7 +1071,7 @@ contains
         source=0.0d0)
 
 !     Init storage for the grid
-      call molGrid%reset(nat, maxpt_per_atom, nRad, pruned%nrad_types)
+      call molGrid%reset(nat, maxpt_per_atom, nrad_max, pruned%nrad_types)
 
 !     Print out DFT info
       if (verbose_) then
@@ -1040,9 +1100,28 @@ contains
         bsrad(i) = bragg_slater_radius(brsl_radii, infos%atoms%zn(i))
       end do
 
+!     Atoms on a standard-map radial type other than type 1 take the
+!     Bragg-Slater table that belongs to that type's own map, by the rule
+!     above (TA/Becke maps: TA radii; otherwise Gill's).
+      if (allocated(pruned%rad_map)) then
+        do i = 1, nat
+          rtid = pruned%radial_id(i)
+          if (rtid < 2) cycle
+          if (pruned%rad_map(rtid) == dft_radial_grid_none) cycle
+          select case (pruned%rad_map(rtid))
+          case (2, 3)
+            bstype_map = BRSL_TYPE_TA
+          case default
+            bstype_map = BRSL_TYPE_GILL
+          end select
+          call set_bragg_slater(brsl_map, bstype_map)
+          bsrad(i) = bragg_slater_radius(brsl_map, infos%atoms%zn(i))
+        end do
+      end if
+
 !     Set up radial grid (the standard grid is radial type 1)
-      call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
-              nrad, rad_grid_type)
+      call get_radial_grid(molGrid%rad_pts(1:nrad,1), &
+              molGrid%rad_wts(1:nrad,1), nrad, rad_grid_type)
 
 !     Element-specific radial grids, absolute radii.
 !     MultiExp (SG-0): per-element node count and scaling radius;
@@ -1052,6 +1131,16 @@ contains
 !     never referenced (per-atom grids are sliced to the per-type
 !     node count below).
       do i = 2, pruned%nrad_types
+!       Standard-map type (SG1 heavy atoms): built like type 1, on this
+!       type's own node count and map
+        if (allocated(pruned%rad_map)) then
+          if (pruned%rad_map(i) /= dft_radial_grid_none) then
+            nrad_at = pruned%rad_npts(i)
+            call get_radial_grid(molGrid%rad_pts(1:nrad_at,i), &
+                    molGrid%rad_wts(1:nrad_at,i), nrad_at, pruned%rad_map(i))
+            cycle
+          end if
+        end if
         if (allocated(pruned%me_rscale)) then
           nrad_at = pruned%rad_npts(i)
           call multiexp_radial_grid(nrad_at, pruned%me_rscale(i), &
@@ -1130,10 +1219,15 @@ contains
         end if
         atomic_grid%rad_pts = molGrid%rad_pts(1:nrad_at, rtid)
         atomic_grid%rad_wts = molGrid%rad_wts(1:nrad_at, rtid)
+        atomic_grid%rAtm = bsrad(iat)
         if (rtid > 1) then
+!         absolute element-specific grid, unless this type is a
+!         standard-map grid scaled like type 1
           atomic_grid%rAtm = 1.0_dp
-        else
-          atomic_grid%rAtm = bsrad(iat)
+          if (allocated(pruned%rad_map)) then
+            if (pruned%rad_map(rtid) /= dft_radial_grid_none) &
+              atomic_grid%rAtm = bsrad(iat)
+          end if
         end if
 
         call molGrid%add_atomic_grid(atomic_grid)
