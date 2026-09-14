@@ -420,6 +420,11 @@ class Runner:
 
     def _log_perf_settings(self):
         """Append the resolved performance settings + warnings to the log."""
+        # One writer for the shared log, like dump_log's mpi_dump guard: under
+        # mpiexec the other ranks would append this block before rank 0 has
+        # written the banner.
+        if getattr(self.mol, "usempi", False) and MPIManager().world_rank != 0:
+            return
         report = getattr(self.mol, "perf_report", None)
         if not report:
             return
