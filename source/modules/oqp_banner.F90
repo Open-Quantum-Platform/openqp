@@ -21,6 +21,23 @@ contains
     call oqp_banner(inf)
   end subroutine oqp_banner_C
 
+  !> @brief Forget what was described in this run's log (C API: oqp_log_restarted).
+  !> @detail The Python driver calls it after the banner of a run that starts its log
+  !>         from scratch, not for evaluations appended to an existing log, so a log
+  !>         path reused by a later run in the same process is described again.
+  subroutine oqp_log_restarted_C(c_handle) bind(C, name="oqp_log_restarted")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use mod_dft, only: dft_forget_log
+    use functionals, only: forget_announcements_for_log
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    if (.not. allocated(inf%log_filename)) return
+    call dft_forget_log(inf%log_filename)
+    call forget_announcements_for_log(inf%log_filename)
+  end subroutine oqp_log_restarted_C
+
   subroutine oqp_banner(infos)
     use messages, only: show_message, with_abort
     use types, only: information

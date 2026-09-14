@@ -43,6 +43,7 @@ module functionals
   end type functional_t
   public functional_t
   public set_announcement_log
+  public forget_announcements_for_log
 contains
 
   !> @brief Select the log file that functional descriptions are recorded against.
@@ -59,6 +60,23 @@ contains
     log_names = [character(len=1024) :: log_names, name]
     current_log = size(log_names)
   end subroutine set_announcement_log
+
+  !> @brief Forget the functionals described in one log file, when a run starts it afresh.
+  subroutine forget_announcements_for_log(name)
+    character(len=*), intent(in) :: name
+    integer :: i, idx
+    logical, allocatable :: keep(:)
+    if (.not. allocated(log_names) .or. .not. allocated(announced_ids)) return
+    idx = 0
+    do i = 1, size(log_names)
+      if (log_names(i) == name) idx = i
+    end do
+    if (idx == 0) return
+    keep = announced_logs /= idx
+    announced_ids = pack(announced_ids, keep)
+    announced_coeffs = pack(announced_coeffs, keep)
+    announced_logs = pack(announced_logs, keep)
+  end subroutine forget_announcements_for_log
   !> @brief  Add functional into internal array of functionals
   !> @author Igor S. Gerasimov
   !> @date   July,  2019 --Initial release--

@@ -241,6 +241,28 @@ class TestOrbitalTableIsActuallySuppressed(unittest.TestCase):
             self.assertEqual(text.count("The libXC interfaces are described"), 1)
             self.assertGreater(text.count("The functional has been described"), 0)
 
+    def test_a_recreated_log_gets_its_description_again(self):
+        """Two separate runs that reuse one log path in one process: the second
+        run starts the file afresh, so it must describe the set-up again."""
+        from oqp.pyoqp import Runner
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "h2.inp"
+            inp.write_text(DECK.format(runtype="energy", functional="functional=bhhlyp\n",
+                                       input_verbose="", verbose=""))
+            log = str(Path(tmp) / "h2.log")
+            os.chdir(tmp)
+            try:
+                Runner(project="h2", input_file=str(inp), log=log, silent=1, usempi=False).run()
+                Runner(project="h2", input_file=str(inp), log=log, silent=1, usempi=False).run()
+            finally:
+                os.chdir(cwd)
+            text = Path(log).read_text(errors="replace")
+        self.assertEqual(text.count("Final RHF energy is"), 1)    # control: the file was started afresh
+        self.assertEqual(text.count("The libXC interfaces are described"), 1)
+        self.assertGreater(text.count("The functional has been described"), 0)
+        self.assertEqual(len(re.findall(r"Lebedev grid-based DFT options|Standard Grid", text)), 1)
+
     def test_every_run_describes_its_functional(self):
         """The once-per-run records are reset at the start of a run, so a second
         run in the same Python process still documents its functional."""

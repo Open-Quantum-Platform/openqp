@@ -25,6 +25,7 @@ module mod_dft
   public dftclean
   public dftexcor
   public dftder
+  public dft_forget_log
 
 !> @brief Pruned-grid specification
 !> @details A pruned grid is defined per atom type by up to `ngrids`
@@ -379,6 +380,20 @@ contains
     if (.not. allocated(described_setups)) allocate(described_setups(0))
     if (.not. any(described_setups == rec)) described_setups = [character(len=1600) :: described_setups, rec]
   end subroutine record_setup
+
+!> @brief Forget the set-ups described in one log file, when a run starts it afresh.
+  subroutine dft_forget_log(log_name)
+    character(len=*), intent(in) :: log_name
+    character(len=1024) :: key
+    character(len=1025) :: prefix
+    integer :: i, n
+    if (.not. allocated(described_setups)) return
+    key = log_name
+    prefix = trim(key)//'|'
+    n = len_trim(prefix)
+    described_setups = pack(described_setups, &
+      [(described_setups(i)(1:n) /= prefix(1:n), i = 1, size(described_setups))])
+  end subroutine dft_forget_log
 
 
   subroutine save_dft_HF_exchange_from_input(this, infos)

@@ -240,6 +240,10 @@ int64_t oqp_get_basis_spherical(struct oqp_handle_t *c_handle,
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
 void oqp_set_harmonic_active(bool flag);
 void oqp_banner(struct oqp_handle_t *inf);
+/* Forget the DFT set-up and functional descriptions recorded for this run's log file.
+   Called when a run starts its log from scratch (not for evaluations appended to it),
+   so a log path reused later in the same process is described again. */
+void oqp_log_restarted(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);
 

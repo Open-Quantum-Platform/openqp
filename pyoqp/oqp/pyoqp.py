@@ -435,6 +435,10 @@ class Runner:
             with open(banner_log, "r+b") as fh:
                 fh.truncate(banner_offset)
         if not append_log:
+            # This run starts its log from scratch, possibly on a path an earlier
+            # run in this process already used: have the native side describe the
+            # DFT set-up and functionals in it again.
+            oqp.oqp_log_restarted(self.mol)
             dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
             dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
             self._log_perf_settings()
