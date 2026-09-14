@@ -21,8 +21,11 @@ module functionals
   !> Log files that have received a description, and the one the current set-up writes to.
   !> Runners constructed before they run, interleaved runs and evaluations appended to one
   !> log (QM/MM optimisation and dynamics) all get exactly one description per log file.
+  !> The records start afresh with every log a run creates (oqp_log_restarted) and are
+  !> capped at max_logs log files, so a long-lived process does not accumulate them.
   character(len=1024), allocatable, save :: log_names(:)
   integer, save :: current_log = 0
+  integer, parameter :: max_logs = 64
   ! Code of errors if LibXC can not perform calculation of some derivatives
   integer, parameter :: ENERGY_ERROR   = 1, & !< energy calculation error
                         FIRST_ERROR    = 2, & !< first derivatives calculation error
@@ -43,7 +46,7 @@ module functionals
   end type functional_t
   public functional_t
   public set_announcement_log
-  public forget_announcements_for_log
+  public forget_functional_announcements
 contains
 
   !> @brief Select the log file that functional descriptions are recorded against.
@@ -57,26 +60,22 @@ contains
         return
       end if
     end do
+    if (size(log_names) >= max_logs) then
+      call forget_functional_announcements()
+      allocate(log_names(0))
+    end if
     log_names = [character(len=1024) :: log_names, name]
     current_log = size(log_names)
   end subroutine set_announcement_log
 
-  !> @brief Forget the functionals described in one log file, when a run starts it afresh.
-  subroutine forget_announcements_for_log(name)
-    character(len=*), intent(in) :: name
-    integer :: i, idx
-    logical, allocatable :: keep(:)
-    if (.not. allocated(log_names) .or. .not. allocated(announced_ids)) return
-    idx = 0
-    do i = 1, size(log_names)
-      if (log_names(i) == name) idx = i
-    end do
-    if (idx == 0) return
-    keep = announced_logs /= idx
-    announced_ids = pack(announced_ids, keep)
-    announced_coeffs = pack(announced_coeffs, keep)
-    announced_logs = pack(announced_logs, keep)
-  end subroutine forget_announcements_for_log
+  !> @brief Forget every functional description recorded so far (a run starts a new log).
+  subroutine forget_functional_announcements()
+    if (allocated(announced_ids)) deallocate(announced_ids)
+    if (allocated(announced_coeffs)) deallocate(announced_coeffs)
+    if (allocated(announced_logs)) deallocate(announced_logs)
+    if (allocated(log_names)) deallocate(log_names)
+    current_log = 0
+  end subroutine forget_functional_announcements
   !> @brief  Add functional into internal array of functionals
   !> @author Igor S. Gerasimov
   !> @date   July,  2019 --Initial release--

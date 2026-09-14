@@ -15,7 +15,10 @@ module mod_dft
   !> response, gradient and Hessian step sets the same functional and grid up again;
   !> each log file gets the description once, whichever runs are built, interleaved
   !> or appended (QM/MM optimisation and dynamics build a Runner per geometry).
+  !> The records start afresh with every log a run creates (oqp_log_restarted) and are
+  !> capped at max_described_setups entries, so a long-lived process does not accumulate them.
   character(len=1600), allocatable, save :: described_setups(:)
+  integer, parameter :: max_described_setups = 256
 
   private
   public dft_initialize
@@ -25,7 +28,7 @@ module mod_dft
   public dftclean
   public dftexcor
   public dftder
-  public dft_forget_log
+  public dft_forget_setups
 
 !> @brief Pruned-grid specification
 !> @details A pruned grid is defined per atom type by up to `ngrids`
@@ -378,22 +381,18 @@ contains
     character(len=1600) :: rec
     rec = trim(log_key)//'|'//trim(key)
     if (.not. allocated(described_setups)) allocate(described_setups(0))
-    if (.not. any(described_setups == rec)) described_setups = [character(len=1600) :: described_setups, rec]
+    if (any(described_setups == rec)) return
+    if (size(described_setups) >= max_described_setups) then
+      deallocate(described_setups)
+      allocate(described_setups(0))
+    end if
+    described_setups = [character(len=1600) :: described_setups, rec]
   end subroutine record_setup
 
-!> @brief Forget the set-ups described in one log file, when a run starts it afresh.
-  subroutine dft_forget_log(log_name)
-    character(len=*), intent(in) :: log_name
-    character(len=1024) :: key
-    character(len=1025) :: prefix
-    integer :: i, n
-    if (.not. allocated(described_setups)) return
-    key = log_name
-    prefix = trim(key)//'|'
-    n = len_trim(prefix)
-    described_setups = pack(described_setups, &
-      [(described_setups(i)(1:n) /= prefix(1:n), i = 1, size(described_setups))])
-  end subroutine dft_forget_log
+!> @brief Forget every set-up description recorded so far (a run starts a new log).
+  subroutine dft_forget_setups()
+    if (allocated(described_setups)) deallocate(described_setups)
+  end subroutine dft_forget_setups
 
 
   subroutine save_dft_HF_exchange_from_input(this, infos)
