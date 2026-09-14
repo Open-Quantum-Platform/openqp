@@ -4090,15 +4090,15 @@ class NAMD_QMMM(NAMD):
         records in an intermediate state.
 
         ``warm``: the orbitals already held are a converged solution of a
-        nearby Hamiltonian (the previous MD step or an image iteration), and
-        the solve starts with the second-order converger.  Where the ROHF
-        triplet is not in the order of the effective-Fock energies, the first
-        refill of the orbitals swaps an occupied and an open orbital (+0.2
-        Hartree) whichever converger runs; DIIS then stalls and hands over to
-        SOSCF anyway, which recovers the solution.  Starting with SOSCF skips
-        the stalled DIIS stage."""
+        nearby Hamiltonian (the previous MD step or an image iteration).  With
+        a DIIS primary the solve then starts with SOSCF: where the ROHF triplet
+        is not in the order of the effective-Fock energies, the first refill of
+        the orbitals swaps an occupied and an open orbital (+0.2 Hartree), DIIS
+        stalls and hands over to SOSCF anyway, and starting with SOSCF skips the
+        stalled DIIS stage.  An explicitly selected primary (soscf, trah, auto,
+        ...) runs as requested."""
         saved_converger = sp.converger_type
-        if warm:
+        if warm and str(saved_converger).lower() == 'diis':
             sp.converger_type = 'soscf'
         try:
             converged = sp._run_scf()

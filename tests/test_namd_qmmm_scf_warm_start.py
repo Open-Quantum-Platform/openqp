@@ -43,11 +43,11 @@ class _FakeMol:
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestWarmSolvesStartWithSoscf(unittest.TestCase):
 
-    def _sp(self, result=True, exc=None):
+    def _sp(self, result=True, exc=None, primary="diis"):
         seen = []
 
         class SP:
-            converger_type = "diis"
+            converger_type = primary
 
             def _run_scf(self):
                 seen.append(self.converger_type)
@@ -64,6 +64,17 @@ class TestWarmSolvesStartWithSoscf(unittest.TestCase):
         NAMD_QMMM._embedded_scf(sp)
         self.assertEqual(seen, ["soscf", "diis"])
         self.assertEqual(sp.converger_type, "diis")
+
+    def test_explicitly_selected_converger_runs_on_warm_solves(self):
+        """Only a DIIS primary is swapped for SOSCF; a converger the input
+        selects explicitly is not overridden on warm solves."""
+        from oqp.library.namd import NAMD_QMMM
+        for primary in ("trah", "soscf", "auto", "TRAH"):
+            with self.subTest(primary=primary):
+                sp, seen = self._sp(primary=primary)
+                NAMD_QMMM._embedded_scf(sp, warm=True)
+                self.assertEqual(seen, [primary])
+                self.assertEqual(sp.converger_type, primary)
 
     def test_primary_is_restored_when_the_solve_raises(self):
         from oqp.library.namd import NAMD_QMMM
