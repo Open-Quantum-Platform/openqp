@@ -189,6 +189,58 @@ class TestOrbitalTableIsActuallySuppressed(unittest.TestCase):
         self.assertEqual(text.count("The libXC interfaces are described"), 1)
         self.assertEqual(len(re.findall(r"Lebedev grid-based DFT options|Standard Grid", text)), 1)
 
+    def test_appended_evaluations_share_one_description(self):
+        """QM/MM optimisation and dynamics build a Runner per geometry and
+        append to one log; the set-up is described in that log once."""
+        from oqp.pyoqp import Runner
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "h2.inp"
+            inp.write_text(DECK.format(runtype="energy", functional="functional=bhhlyp\n",
+                                       input_verbose="", verbose=""))
+            log = str(Path(tmp) / "h2.log")
+            os.chdir(tmp)
+            try:
+                Runner(project="h2", input_file=str(inp), log=log, silent=1, usempi=False).run()
+                Runner(project="h2", input_file=str(inp), log=log, silent=1, usempi=False,
+                       append_log=True).run()
+            finally:
+                os.chdir(cwd)
+            text = Path(log).read_text(errors="replace")
+        self.assertEqual(text.count("OpenQP: Open Quantum Platform"), 1)   # control: one run log
+        self.assertEqual(text.count("Final RHF energy is"), 2)             # both evaluations ran
+        self.assertEqual(text.count("The libXC interfaces are described"), 1)
+        self.assertEqual(len(re.findall(r"Lebedev grid-based DFT options|Standard Grid", text)), 1)
+
+    def test_each_log_gets_one_description_however_runs_are_ordered(self):
+        """Runners built before any of them runs, runs interleaved across two
+        logs, and an evaluation appended to the first log: each log file carries
+        its own description exactly once."""
+        from oqp.pyoqp import Runner
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            inp = Path(tmp) / "h2.inp"
+            inp.write_text(DECK.format(runtype="energy", functional="functional=bhhlyp\n",
+                                       input_verbose="", verbose=""))
+            log_a, log_b = str(Path(tmp) / "a.log"), str(Path(tmp) / "b.log")
+            os.chdir(tmp)
+            try:
+                first = Runner(project="a", input_file=str(inp), log=log_a, silent=1, usempi=False)
+                second = Runner(project="b", input_file=str(inp), log=log_b, silent=1, usempi=False)
+                first.run()
+                second.run()
+                Runner(project="a", input_file=str(inp), log=log_a, silent=1, usempi=False,
+                       append_log=True).run()
+            finally:
+                os.chdir(cwd)
+            a = Path(log_a).read_text(errors="replace")
+            b = Path(log_b).read_text(errors="replace")
+        self.assertEqual(a.count("Final RHF energy is"), 2)    # control: both evaluations ran
+        self.assertEqual(b.count("Final RHF energy is"), 1)
+        for text in (a, b):
+            self.assertEqual(text.count("The libXC interfaces are described"), 1)
+            self.assertGreater(text.count("The functional has been described"), 0)
+
     def test_every_run_describes_its_functional(self):
         """The once-per-run records are reset at the start of a run, so a second
         run in the same Python process still documents its functional."""

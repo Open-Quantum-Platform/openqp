@@ -24,8 +24,6 @@ contains
   subroutine oqp_banner(infos)
     use messages, only: show_message, with_abort
     use types, only: information
-    use functionals, only: reset_functional_announcements
-    use mod_dft, only: dft_reset_announcements
 !$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver
     use iso_c_binding, only: c_char
@@ -58,10 +56,6 @@ contains
     do i = 1, ubound(log_filename,1)
        infos%log_filename(i:i) = log_filename(i)
     end do
-    ! A new run starts a new log: describe the functional and grid in it again.
-    call reset_functional_announcements()
-    call dft_reset_announcements()
-
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call fdate(cdate)
     call pe%get_hostnames(hostnames)

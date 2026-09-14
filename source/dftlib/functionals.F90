@@ -17,6 +17,12 @@ module functionals
   !> of the largest blocks of the log.
   integer(C_INT), allocatable, save :: announced_ids(:)
   real(kind=fp),  allocatable, save :: announced_coeffs(:)  !< coefficient each id was described with
+  integer,        allocatable, save :: announced_logs(:)    !< index into log_names of that description
+  !> Log files that have received a description, and the one the current set-up writes to.
+  !> Runners constructed before they run, interleaved runs and evaluations appended to one
+  !> log (QM/MM optimisation and dynamics) all get exactly one description per log file.
+  character(len=1024), allocatable, save :: log_names(:)
+  integer, save :: current_log = 0
   ! Code of errors if LibXC can not perform calculation of some derivatives
   integer, parameter :: ENERGY_ERROR   = 1, & !< energy calculation error
                         FIRST_ERROR    = 2, & !< first derivatives calculation error
@@ -36,14 +42,23 @@ module functionals
     procedure :: calc_evxc, calc_evfxc, calc_xc
   end type functional_t
   public functional_t
-  public reset_functional_announcements
+  public set_announcement_log
 contains
 
-  !> @brief Forget which functionals were described, so a new run's log describes them again.
-  subroutine reset_functional_announcements()
-    if (allocated(announced_ids)) deallocate(announced_ids)
-    if (allocated(announced_coeffs)) deallocate(announced_coeffs)
-  end subroutine reset_functional_announcements
+  !> @brief Select the log file that functional descriptions are recorded against.
+  subroutine set_announcement_log(name)
+    character(len=*), intent(in) :: name
+    integer :: i
+    if (.not. allocated(log_names)) allocate(log_names(0))
+    do i = 1, size(log_names)
+      if (log_names(i) == name) then
+        current_log = i
+        return
+      end if
+    end do
+    log_names = [character(len=1024) :: log_names, name]
+    current_log = size(log_names)
+  end subroutine set_announcement_log
   !> @brief  Add functional into internal array of functionals
   !> @author Igor S. Gerasimov
   !> @date   July,  2019 --Initial release--
@@ -87,11 +102,13 @@ contains
     call move_alloc(tmp_functionals_info, this%functionals_info)
     call move_alloc(tmp_coefficients    , this%coefficients    )
     call xc_f03_func_init(xc_func, func_id, XC_POLARIZED)
-    if (.not. allocated(announced_ids)) allocate(announced_ids(0), announced_coeffs(0))
-    announce = .not. any(announced_ids == func_id .and. announced_coeffs == coeff)
+    if (.not. allocated(announced_ids)) allocate(announced_ids(0), announced_coeffs(0), announced_logs(0))
+    announce = .not. any(announced_ids == func_id .and. announced_coeffs == coeff &
+                         .and. announced_logs == current_log)
     if (announce) then
       announced_ids = [announced_ids, func_id]
       announced_coeffs = [announced_coeffs, coeff]
+      announced_logs = [announced_logs, current_log]
     end if
     if (announce) then
       select case(xc_f03_func_info_get_kind(xc_f03_func_get_info(xc_func)))

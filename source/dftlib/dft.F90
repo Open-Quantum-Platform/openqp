@@ -11,10 +11,11 @@ module mod_dft
 
   character(len=*), parameter :: module_name = "dft"
 
-  !> Functional and grid of the last DFT set-up written to the log.  Every SCF,
-  !> response, gradient and Hessian step sets the same ones up again, so the
-  !> description is written only when it differs from the previous set-up.
-  character(len=512), save :: announced_setup = ''
+  !> DFT set-ups already described, as "log file|signature" records.  Every SCF,
+  !> response, gradient and Hessian step sets the same functional and grid up again;
+  !> each log file gets the description once, whichever runs are built, interleaved
+  !> or appended (QM/MM optimisation and dynamics build a Runner per geometry).
+  character(len=1600), allocatable, save :: described_setups(:)
 
   private
   public dft_initialize
@@ -24,7 +25,6 @@ module mod_dft
   public dftclean
   public dftexcor
   public dftder
-  public dft_reset_announcements
 
 !> @brief Pruned-grid specification
 !> @details A pruned grid is defined per atom type by up to `ngrids`
@@ -337,8 +337,8 @@ module mod_dft
 contains
 
 !> @brief Signature of a DFT set-up for the log: functional, grid and exchange mix.
-!> @detail dft_set_options describes a set-up only when its starting signature
-!>         differs from the one the previous set-up ended with, so a repeat is
+!> @detail dft_set_options describes a set-up only when no earlier set-up in the
+!>         same log started or ended with its starting signature, so a repeat is
 !>         quiet while a changed grid or exchange mix is described again.
   function dft_setup_signature(infos, xc_func_name) result(key)
     use iso_c_binding, only: c_null_char
@@ -362,10 +362,24 @@ contains
       infos%dft%cam_alpha, infos%dft%cam_beta, infos%dft%cam_mu
   end function dft_setup_signature
 
-!> @brief Forget the described set-up, so a new run's log describes it again.
-  subroutine dft_reset_announcements()
-    announced_setup = ''
-  end subroutine dft_reset_announcements
+!> @brief True when this set-up signature was already described in this log file.
+  logical function setup_described(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    setup_described = .false.
+    if (allocated(described_setups)) setup_described = any(described_setups == rec)
+  end function setup_described
+
+!> @brief Record that this set-up signature has been described in this log file.
+  subroutine record_setup(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    if (.not. allocated(described_setups)) allocate(described_setups(0))
+    if (.not. any(described_setups == rec)) described_setups = [character(len=1600) :: described_setups, rec]
+  end subroutine record_setup
+
 
   subroutine save_dft_HF_exchange_from_input(this, infos)
     use types, only: information
@@ -750,6 +764,7 @@ contains
     use strings, only: c_f_char
     use types, only: information
     use libxc, only: libxc_input
+    use functionals, only: set_announcement_log
 
     implicit none
 
@@ -768,6 +783,7 @@ contains
     integer :: z, ie, nsec, maxsec, nang_fallback
     integer :: zmap(SG_NELEM)
     character(len=512) :: setup_key
+    character(len=1024) :: log_key
     logical :: announce, internal_
 
     need_func = .true.
@@ -784,8 +800,12 @@ contains
     ! other than what the previous set-up left behind (see dft_setup_signature).
     internal_ = .false.
     if (present(internal)) internal_ = internal
+    ! Descriptions are recorded per log file (helper set-ups write to the same log).
+    log_key = ''
+    if (allocated(infos%log_filename)) log_key = infos%log_filename
+    call set_announcement_log(trim(log_key))
     setup_key = dft_setup_signature(infos, xc_func_name)
-    announce = setup_key /= announced_setup .and. .not. internal_
+    announce = .not. internal_ .and. .not. setup_described(log_key, setup_key)
 
     if (.not. infos%dft%grid_pruned) then
       pruned%ngrids = 1
@@ -1048,7 +1068,12 @@ contains
     end if
 
     ! Remember the set-up as configured; a helper set-up leaves no trace.
-    if (.not. internal_) announced_setup = dft_setup_signature(infos, xc_func_name)
+    ! Record how the set-up started and how it ended: the next set-up of this run
+    ! starts from the latter, a new Runner appending to this log from the former.
+    if (.not. internal_) then
+      call record_setup(log_key, setup_key)
+      call record_setup(log_key, dft_setup_signature(infos, xc_func_name))
+    end if
 
   end subroutine
 

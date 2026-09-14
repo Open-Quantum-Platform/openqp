@@ -95,9 +95,10 @@ follows the same level.
 
 At every level the module banners and step timings are written. The LibXC
 header, the DFT grid description and each functional's description and
-literature references are written once per run rather than at every SCF,
-response, gradient or Hessian step, and again only when the grid or exchange
-parameters change. Dispersion settings and dispersion-corrected energies appear
+literature references are written once per log rather than at every SCF,
+response, gradient or Hessian step (evaluations appended to one log, as in
+QM/MM optimisation and dynamics, share it), and again only when the grid or
+exchange parameters change. Dispersion settings and dispersion-corrected energies appear
 only when dispersion is requested.
 
 ## Compatibility policy
