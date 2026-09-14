@@ -170,13 +170,17 @@ module trah_core_mod
   real(dp), parameter :: gtol_fp      = 1.0e-4_dp
   real(dp), parameter :: stab_step    = 1.0e-3_dp  !< step above this at small |g| = saddle escape
   !> Descent steps taken once the model predicts no energy reduction above FP
-  !> noise continue while they keep bringing |g| to new minima.  Near an ROHF
+  !> noise continue while |g| keeps converging, i.e. keeps halving.  Near an ROHF
   !> solution whose gradient cannot fall below the requested tolerance at this
-  !> precision, |g| only fluctuates at a noise floor and an unguarded loop never
-  !> exits: stop after this many consecutive steps without a new minimum.
-  integer,  parameter :: fp_stall_steps = 8
+  !> precision, |g| only fluctuates at a noise floor, now and then setting a
+  !> slightly lower minimum, and an unguarded loop never exits: stop once this
+  !> many consecutive steps have not halved |g| since it last halved.  A slow but
+  !> genuine refinement halves far more often (CASSCF LiH at 0.92 per step halves
+  !> every 9 steps), while steps at a noise floor cost Hessian products and gain
+  !> nothing.
+  integer,  parameter :: fp_stall_steps = 16
   !> Hard bound on one refinement block.  A block that reaches it while |g| is
-  !> still reaching new minima returns to the (nmac-bounded) macro loop.
+  !> still halving returns to the (nmac-bounded) macro loop.
   integer,  parameter :: max_fp_refine = 100
 
 contains
@@ -195,7 +199,7 @@ contains
     integer,  intent(out), optional :: nhist
 
     integer  :: n, macro, micro_used, ierr, nh, n_fp, n_stall
-    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_best
+    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_ref
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
 
@@ -271,7 +275,7 @@ contains
       ! quadratically before exiting.  The energy ratio is FP-noise-dominated
       ! here, so accept unconditionally.
       if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
-        g_best  = gnorm
+        g_ref   = gnorm              ! |g| when it last halved
         n_fp    = 0
         n_stall = 0
         do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor &
@@ -284,8 +288,8 @@ contains
             return
           end if
           gnorm = gnorm_of(g, n, par%rms_gnorm)
-          if (gnorm < g_best) then
-            g_best  = gnorm
+          if (gnorm < 0.5_dp*g_ref) then
+            g_ref   = gnorm
             n_stall = 0
           else
             n_stall = n_stall + 1
@@ -300,7 +304,7 @@ contains
         if (pred > pred_floor .and. gnorm >= par%conv_tol) cycle
         if (gnorm > par%conv_tol) then
           ! The block ended above the requested tolerance.  If it hit its step
-          ! bound while |g| was still reaching new minima, the refinement is
+          ! bound while |g| was still halving, the refinement is
           ! converging: take another macroiteration, which re-enters this block
           ! while the conditions hold and is bounded by nmac.
           if (n_fp >= max_fp_refine .and. n_stall < fp_stall_steps .and. macro < par%nmac) then
@@ -309,7 +313,7 @@ contains
                   macro, e0, gnorm, n_fp
             cycle
           end if
-          ! Stagnant (no new |g| minimum in fp_stall_steps steps, or a zero step)
+          ! Stagnant (|g| not halved in fp_stall_steps steps, or a zero step)
           ! or out of macroiterations: stop, but report non-convergence
           ! with the gradient actually reached; the caller decides what an energy
           ! converged to FP precision is worth (the SCF driver keeps its own |g|
