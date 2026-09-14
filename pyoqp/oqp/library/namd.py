@@ -1800,6 +1800,10 @@ class NAMD:
 
     def _require_converged_reference(self):
         """Never propagate an electronic reference rejected by the SCF solver."""
+        # Tight-binding adapters validate their own SCC solver and do not
+        # populate the ab initio SCF status field.
+        if is_tb_method(self.mol.config['input']['method']):
+            return
         if not self.mol.mol_energy.SCF_converged:
             raise RuntimeError(
                 'NAMD cannot continue: SCF did not converge; no force or '

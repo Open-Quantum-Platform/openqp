@@ -21,10 +21,12 @@ def driver_class(namespace):
 def make_driver(converged):
     sp = Mock()
     namespace = {'SinglePoint': Mock(return_value=sp), 'Gradient': Mock(),
-                 'BasisOverlap': Mock(), 'LastStep': Mock()}
+                 'BasisOverlap': Mock(), 'LastStep': Mock(),
+                 'is_tb_method': lambda method: method in ('dftb', 'xtb')}
     cls = driver_class(namespace)
     d = cls()
-    d.mol = SimpleNamespace(mol_energy=SimpleNamespace(SCF_converged=converged))
+    d.mol = SimpleNamespace(mol_energy=SimpleNamespace(SCF_converged=converged),
+                            config={'input': {'method': 'tdhf'}})
     d.mo_reuse = False
     d.ref_follow = 'off'
     d.scf_fail = 'escalate'
@@ -55,3 +57,9 @@ def test_successful_reference_still_reaches_excitation():
     d._electronic(with_overlap=False)
     sp.excitation.assert_called_once_with(-414.0)
     ns['LastStep'].assert_called_once()
+
+
+def test_tight_binding_uses_its_own_scc_acceptance():
+    d, _, _ = make_driver(False)
+    d.mol.config['input']['method'] = 'dftb'
+    d._require_converged_reference()
