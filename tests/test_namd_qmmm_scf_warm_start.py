@@ -145,5 +145,38 @@ class TestStepStartsFromPreviousOrbitals(unittest.TestCase):
             gs.assert_called_once(); gj.assert_not_called()
 
 
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestRestartKeepsWarmStart(unittest.TestCase):
+    """A resumed trajectory warm-starts its first step from the checkpoint's
+    orbitals, like the uninterrupted one."""
+
+    def _resume(self, prev_data, restart_payload):
+        from oqp.library.namd import NAMD, NAMD_QMMM
+        owner = NAMD_QMMM.__new__(NAMD_QMMM)
+
+        def base_load(obj):
+            obj.prev_data = prev_data
+            return restart_payload
+
+        with mock.patch.object(NAMD, "_load_restart", base_load):
+            result = owner._load_restart()
+        return owner, result
+
+    def test_checkpoint_with_orbitals_marks_them_ready(self):
+        payload = {"step": 20}
+        owner, result = self._resume({"OQP::VEC_MO_A": [1.0], "OQP::DM_A": [1.0]}, payload)
+        self.assertIs(result, payload)
+        self.assertTrue(owner._scf_orbitals_ready)
+
+    def test_checkpoint_without_orbitals_keeps_the_guess(self):
+        owner, _ = self._resume({"OQP::DM_A": [1.0]}, {"step": 20})
+        self.assertFalse(owner._scf_orbitals_ready)
+
+    def test_no_restart_leaves_the_flag_unset(self):
+        owner, result = self._resume({"OQP::VEC_MO_A": [1.0]}, None)
+        self.assertIsNone(result)
+        self.assertFalse(getattr(owner, "_scf_orbitals_ready", False))
+
+
 if __name__ == "__main__":
     unittest.main()

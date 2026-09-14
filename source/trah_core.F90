@@ -285,6 +285,18 @@ contains
           snorm = sqrt(dot_product(p, p))
         end do
         if (pred > pred_floor .and. gnorm >= par%conv_tol) cycle
+        if (gnorm > par%conv_tol) then
+          ! The capped refinement ended above the requested tolerance.  Stop, but
+          ! report non-convergence with the gradient actually reached: the caller
+          ! decides what an energy converged to FP precision is worth (the SCF
+          ! driver keeps its own |g| acceptance; CASSCF sees it as unconverged).
+          if (par%verbose) write(IW, &
+                '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement stopped after ",i0," steps above conv")') &
+                macro, e0, gnorm, n_fp
+          res%error = gnorm
+          res%ierr  = 4
+          exit
+        end if
         if (par%verbose) write(IW, &
               '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision, ",i0," refinement steps)")') &
               macro, e0, gnorm, n_fp

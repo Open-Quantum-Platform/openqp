@@ -4094,6 +4094,18 @@ class NAMD_QMMM(NAMD):
                 "converger and the SOSCF/TRAH escalation).  Raise [scf] maxit, "
                 "loosen [scf] conv, or check the QM/MM contacts.")
 
+    def _load_restart(self):
+        """Restore the checkpoint and, when it carries the converged orbitals
+        of the saved step (restored into the molecule with the rest of the
+        previous-step data), let the next step warm-start from them exactly as
+        an uninterrupted trajectory would.  _start_scf_orbitals still checks
+        their size and overlap metric before using them."""
+        restart = super()._load_restart()
+        if restart is not None:
+            data = self.prev_data if isinstance(self.prev_data, dict) else {}
+            self._scf_orbitals_ready = "OQP::VEC_MO_A" in data
+        return restart
+
     def _start_scf_orbitals(self, sp):
         """Basis, one-electron integrals and starting orbitals for this MD
         step's embedded SCF.  Once a step has converged, the next step starts
@@ -4103,7 +4115,6 @@ class NAMD_QMMM(NAMD):
         the SCF ~1.3 Hartree above the solution, costs ~30 iterations, and
         lets the open-shell reference settle on a different solution from
         one step to the next.  Returns True for a warm start."""
-        from oqp.library.qmmm_driver import unpack_lower_tri_single
         mol = self.mol
         if not getattr(self, "_scf_orbitals_ready", False):
             sp._prep_guess()
@@ -4118,7 +4129,13 @@ class NAMD_QMMM(NAMD):
             oqp.library.guess(mol)
             return False
         c = c_prev.reshape((nbf, nbf)).T                      # C[ao, mo]
-        s_ao = unpack_lower_tri_single(mol.data["OQP::SM"], nbf)
+        packed_s = np.asarray(mol.data["OQP::SM"], dtype=float).ravel()
+        if packed_s.size != nbf * (nbf + 1) // 2:
+            oqp.library.guess(mol)
+            return False
+        s_ao = np.zeros((nbf, nbf))
+        s_ao[np.tril_indices(nbf)] = packed_s             # row-major lower triangle
+        s_ao = s_ao + s_ao.T - np.diag(np.diag(s_ao))
         w, v = np.linalg.eigh(c.T @ s_ao @ c)
         if not np.all(np.isfinite(w)) or w.min() <= 1.0e-8:
             oqp.library.guess(mol)

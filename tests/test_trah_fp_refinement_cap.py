@@ -58,21 +58,31 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
-    def test_rohf_triplet_trah_with_unreachable_tolerance_finishes(self):
+    """The refinement loop stops, and above the requested tolerance the core no
+    longer claims convergence: the log states where it stopped.  The SCF driver
+    then applies its own |g| < 1e-4 acceptance and finishes the calculation."""
+
+    def _run(self, conv):
         with tempfile.TemporaryDirectory() as tmp:
             deck = Path(tmp) / "h2o_trah_tight.inp"
-            deck.write_text(DECK)
+            deck.write_text(DECK.replace("conv=1e-14", f"conv={conv}"))
             env = dict(os.environ, OMP_NUM_THREADS="2")
             try:
                 proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", deck.name], cwd=tmp, env=env,
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=240)
             except subprocess.TimeoutExpired:
-                self.fail("TRAH did not finish within 240 s with an unreachable gradient tolerance")
-            log = (Path(tmp) / "h2o_trah_tight.log").read_text(errors="ignore")
+                self.fail(f"TRAH did not finish within 240 s at conv={conv}")
+            return proc, (Path(tmp) / "h2o_trah_tight.log").read_text(errors="ignore")
+
+    def test_unreachable_tolerance_stops_without_claiming_convergence(self):
+        proc, log = self._run("1e-14")
         self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
-        m = re.search(r"CONVERGED \(FP precision, (\d+) refinement steps\)", log)
-        self.assertIsNotNone(m, "TRAH did not report convergence at floating-point precision")
-        self.assertLessEqual(int(m.group(1)), 8)
+        m = re.search(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
+        self.assertIsNotNone(m, "TRAH did not report where the capped refinement stopped")
+        self.assertEqual(int(m.group(2)), 8)
+        self.assertGreater(float(m.group(1)), 1e-14)
+        self.assertNotIn("CONVERGED (FP precision", log)
+        self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
 
 
 if __name__ == "__main__":
