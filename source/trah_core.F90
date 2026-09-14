@@ -160,11 +160,8 @@ module trah_core_mod
     logical  :: converged = .false.
   end type trah_result_t
 
-  ! Near-convergence guards: once the model can no longer predict a meaningful
-  ! energy reduction (pred below FP noise) or the trust radius collapses while
-  ! the gradient is already small, the energy is converged even if |g| has not
-  ! reached the (tight) gradient tolerance.  A trust collapse with a large |g|
-  ! is instead a genuine stall and is reported as non-convergence.
+  ! Energy precision and trust-radius limits control refinement or failure;
+  ! they never replace the requested orbital-gradient tolerance.
   real(dp), parameter :: stab_eig_tol = 1.0e-4_dp  !< Hessian eig below -this = unstable
   real(dp), parameter :: pred_floor   = 1.0e-11_dp
   real(dp), parameter :: delta_min    = 1.0e-4_dp
@@ -211,7 +208,8 @@ contains
     dmax  = merge(par%dmax, max(4.0_dp, 8.0_dp*delta), par%dmax > 0.0_dp)
     nh    = 0
     snorm = 0.0_dp
-    res%ierr = 0
+    res%ierr = 4
+    res%error = huge(1.0_dp)
     res%converged = .false.
 
     allocate(g(n), hdiag(n), p(n), vmin(n))
@@ -266,6 +264,7 @@ contains
         if (par%verbose .and. par%iterations) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
               macro-1, e0, gnorm
         res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -334,7 +333,8 @@ contains
         ! report error below conv_tol so the SCF driver recognises convergence
         ! and does NOT re-diagonalise the raw Fock (which would corrupt ROHF
         ! orbitals)
-        res%error = min(gnorm, 0.99_dp*par%conv_tol)
+        res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -414,20 +414,18 @@ contains
         delta = min(2.0_dp*delta, dmax)
       end if
 
-      ! trust region collapsed: converged (small |g|) or a genuine stall.
-      ! `gnorm` is deliberately the value from the top of this macroiteration.
+      ! A small trust radius is a stagnation condition, not an alternative
+      ! convergence tolerance. Re-evaluate the norm after any accepted step.
+      gnorm = gnorm_of(g, n, par%rms_gnorm)
       if (delta < delta_min) then
-        if (gnorm < gtol_fp) then
-          if (par%verbose .and. par%iterations) write(IW, &
-            '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (trust radius minimal)")') macro, e0, gnorm
-          res%error = min(gnorm, 0.99_dp*par%conv_tol)
-          res%converged = .true.
-        else
-          if (par%verbose) write(IW, &
-            '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES10.3)') gnorm
-          res%error = gnorm
-          res%ierr  = 4
+        res%error = gnorm
+        if (gnorm < par%conv_tol .and. snorm < stab_step) then
+          ! Let the normal convergence/stability test inspect this point.
+          cycle
         end if
+        if (par%verbose) write(IW, &
+          '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES12.4)') gnorm
+        res%ierr = 4
         exit
       end if
 
@@ -440,6 +438,7 @@ contains
 
     res%energy = e0
     res%gnorm  = gnorm_of(g, n, par%rms_gnorm)
+    res%error = res%gnorm
     res%step_norm = snorm
     if (present(nhist)) nhist = nh
     deallocate(g, hdiag, p, vmin)

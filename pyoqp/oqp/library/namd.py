@@ -1740,6 +1740,7 @@ class NAMD:
                         scf_cfg.pop(k, None)
                     else:
                         scf_cfg[k] = v
+        self._require_converged_reference()
         if with_overlap:
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
@@ -1797,8 +1798,16 @@ class NAMD:
         self._restart_boundary = True
         return sp, ref_energy
 
+    def _require_converged_reference(self):
+        """Never propagate an electronic reference rejected by the SCF solver."""
+        if not self.mol.mol_energy.SCF_converged:
+            raise RuntimeError(
+                'NAMD cannot continue: SCF did not converge; no force or '
+                'electronic propagation is permitted for this reference.')
+
     def _active_gradient(self):
         """Compute and return the gradient (natom,3) on the current active state."""
+        self._require_converged_reference()
         mol = self.mol
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
