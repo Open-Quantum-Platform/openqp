@@ -1,8 +1,10 @@
-"""Native TRAH: the descent loop taken at floating-point precision is capped.
+"""Native TRAH: the descent loop taken at floating-point precision terminates.
 
 Near an ROHF solution whose orbital gradient cannot reach the requested
 tolerance at this precision, the loop used to repeat forever without output
-(24 DNA thymine NAMD trajectories hung for up to 67 hours at full CPU).
+(24 DNA thymine NAMD trajectories hung for up to 67 hours at full CPU).  It now
+stops once |g| stops reaching new minima, while a refinement that is still
+converging -- however slowly -- runs to the requested tolerance.
 """
 import os
 import re
@@ -47,21 +49,24 @@ def _runtime_available():
 
 
 class TestTrahRefinementLoopSource(unittest.TestCase):
-    def test_loop_carries_an_iteration_cap(self):
+    def test_loop_stops_on_stagnation_and_is_bounded(self):
         src = TRAH_CORE.read_text()
-        self.assertIn("integer,  parameter :: max_fp_refine = 8", src)
+        self.assertIn("integer,  parameter :: fp_stall_steps = 8", src)
+        self.assertIn("integer,  parameter :: max_fp_refine = 100", src)
         self.assertRegex(
             src,
             r"do while \(gnorm > par%conv_tol \.and\. snorm > 0\.0_dp \.and\. pred <= pred_floor &\s*\n"
-            r"\s*\.and\. n_fp < max_fp_refine\)")
+            r"\s*\.and\. n_stall < fp_stall_steps \.and\. n_fp < max_fp_refine\)")
+        # only a step that does not reach a new |g| minimum counts towards the stall
+        self.assertRegex(src, r"if \(gnorm < g_best\) then\s*\n\s*g_best  = gnorm\s*\n\s*n_stall = 0\s*\n"
+                              r"\s*else\s*\n\s*n_stall = n_stall \+ 1")
 
-    def test_progressing_block_returns_to_the_macro_loop(self):
-        """A capped block that still halved |g| cycles into the nmac-bounded
-        macro loop; only a stagnant block (or the last macroiteration) stops."""
+    def test_block_bound_reached_while_improving_returns_to_the_macro_loop(self):
+        """A block that hits its step bound while |g| still reaches new minima
+        cycles into the nmac-bounded macro loop; a stagnant block stops."""
         src = TRAH_CORE.read_text()
-        self.assertIn("real(dp), parameter :: fp_progress = 0.5_dp", src)
-        self.assertRegex(src, r"g_fp0 = gnorm\s*\n\s*n_fp = 0")
-        self.assertRegex(src, r"if \(gnorm < fp_progress\*g_fp0 \.and\. macro < par%nmac\) then[\s\S]{0,400}?\bcycle\b")
+        self.assertRegex(src, r"if \(n_fp >= max_fp_refine \.and\. n_stall < fp_stall_steps \.and\. macro < par%nmac\) then"
+                              r"[\s\S]{0,400}?\bcycle\b")
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
@@ -86,14 +91,17 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
         proc, log = self._run("1e-14")
         self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
         m = re.search(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
-        self.assertIsNotNone(m, "TRAH did not report where the capped refinement stopped")
-        self.assertEqual(int(m.group(2)), 8)
-        g_stop = float(m.group(1))
+        self.assertIsNotNone(m, "TRAH did not report where the refinement stopped")
+        n_steps, g_stop = int(m.group(2)), float(m.group(1))
         self.assertGreater(g_stop, 1e-14)
-        # blocks that still halved |g| went on refining past the first eight steps
-        cont = [float(g) for g in re.findall(r"\s(\S+)\s+refinement continuing after 8 steps", log)]
-        self.assertTrue(cont, "no refinement block continued although |g| was still decreasing")
-        self.assertLess(g_stop, cont[0])
+        # |g| falls at every step for well over eight steps before it reaches the
+        # noise floor, so a stall rule must let those steps run (a fixed eight-step
+        # cap does not) and then stop on stagnation, not on the block bound
+        self.assertGreater(n_steps, 16)
+        self.assertLess(n_steps, 100)
+        entry = re.findall(r"^\s+\d+\s+-?\d+\.\d+\s+(\d\.\d+E[-+]\d+)\s+[-\d.]+\s+[\d.]+\s+\d+\s+acc", log, re.M)
+        self.assertTrue(entry, "no accepted TRAH macroiteration in the log")
+        self.assertLess(g_stop, 1e-2*float(entry[-1]))
         self.assertNotIn("CONVERGED (FP precision", log)
         self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
 
