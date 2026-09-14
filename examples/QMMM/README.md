@@ -27,6 +27,8 @@ Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NVT.inp` | One-step NVT smoke run with the independent Langevin thermostat and separately recorded energy exchange. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
 | `ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp` | Two-step MRSF-TDDFT FSSH across a **covalent QM/MM boundary** (hydrogen link atom): alanine dipeptide, QM = the C-terminal amide, `NoCutoff`. |
+| `ala-dipeptide_RHF-QMMM-OPT-linkatom.inp` | **QM/MM geometry optimisation** across the same covalent boundary (RHF/6-31G): minimises the embedded QM/MM energy over the QM atoms with the MM fixed (`[optimize] qmmm_radius=0`), 12 steps, writes the full-system PDB. |
+| `ala-dipeptide_RHF-QMMM-OPT-constraints.inp` | **QM/MM optimisation with held bonds**: as above, with the MM atoms within 3 Å of the QM region free to move (`[optimize] qmmm_radius=3.0`) and their X–H bond lengths held by `[qmmm] constraints=HBonds` (frozen distances in the native optimizer), 6 steps; writes the geometry to the file named by `[optimize] qmmm_output`. |
 | `ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp` | The same boundary in a **periodic TIP3P box** (`cutoff=PME`, Ewald QM/MM electrostatics with the self-consistent QM-image term) exercising `ewald_tol`, `lj_switch`, `h_lj` and `mm_charge_width`. |
 
 To exercise checkpoint loading, select the semantic examples in the regression

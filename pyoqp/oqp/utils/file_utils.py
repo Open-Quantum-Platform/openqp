@@ -146,7 +146,11 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     mode = 'a'
     loginfo = format_log_section(title, section_category(section))
 
-    if section == 'start':
+    if section == 'start' and info and info.get('append'):
+        # a further QM evaluation of the same run (the QM/MM driver builds a
+        # fresh molecule per geometry): extend the run's log, do not restart it
+        loginfo = format_log_section(title or 'PyOQP: next QM/MM evaluation', RUN)
+    elif section == 'start':
         mode = 'w'
         build = ''
         if info and info.get('build'):
