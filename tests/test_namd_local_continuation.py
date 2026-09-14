@@ -195,3 +195,38 @@ def test_child_restart_manifest_removes_continuation_options(tmp_path):
     assert 'continuation_checkpoint' not in spec.driver.kwargs
     assert 'continuation_trajectory' not in spec.driver.kwargs
     assert spec.driver.kwargs['nstep'] == 3
+
+
+@pytest.mark.parametrize('restored_dt', [.075, .1])
+def test_return_toward_original_dt_preserves_state_and_time(tmp_path, monkeypatch, restored_dt):
+    monkeypatch.setattr(mod, 'dump_log', lambda *args, **kwargs: None)
+    source = source_checkpoint(tmp_path)
+    fine = child(tmp_path, source)
+    fine._load_restart()
+    returning = driver(tmp_path, restored_dt, 'return')
+    returning.continuation_checkpoint = fine.restart_file
+    returning.continuation_trajectory = fine.trajectory_file
+    before = Path(fine.restart_file).read_bytes()
+    returning._load_restart()
+    assert returning._physical_time_fs(7) == pytest.approx(.7)
+    assert returning._physical_time_fs(8) == pytest.approx(.7 + restored_dt)
+    assert returning._rng_step == 7
+    assert np.array_equal(returning.coef, fine.coef)
+    assert Path(fine.restart_file).read_bytes() == before
+    # Ordinary restart must still reject a changed dt.
+    returning.dt_fs = .06
+    with pytest.raises(ValueError, match='mismatch'):
+        returning._load_restart_on_io_rank()
+
+
+def test_return_cannot_exceed_original_dt(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, 'dump_log', lambda *args, **kwargs: None)
+    source = source_checkpoint(tmp_path)
+    fine = child(tmp_path, source)
+    fine._load_restart()
+    returning = driver(tmp_path, .2, 'return')
+    returning.continuation_checkpoint = fine.restart_file
+    returning.continuation_trajectory = fine.trajectory_file
+    with pytest.raises(ValueError, match='mismatch'):
+        returning._load_restart()
+    assert not Path(returning.trajectory_file).exists()

@@ -64,6 +64,7 @@ def load_runfunc_with_namd_stubs():
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
 
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {
         "__init__": lambda self, *_args, **_kwargs: None,
         "energy": lambda self: None,
@@ -147,6 +148,7 @@ def load_namd_with_stubs():
     utils = types.ModuleType("oqp.utils")
     utils.__path__ = []
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {})
     for name in ("SinglePoint", "Gradient", "LastStep", "BasisOverlap", "NACME"):
         setattr(single_point, name, noop)
@@ -610,6 +612,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             driver.tdc_scheme = 0
             driver.trivial = 0
             driver.trivial_thresh = 0.5
+            driver.rescale_provider = "isotropic"
+            driver.tdc_provider = "overlap"
+            driver.frustrated = "none"
             driver.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
             driver.vel = np.zeros((1, 3))
             driver._hop_random_override = lambda: self.fail(
@@ -628,6 +633,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     mol.data["OQP::namd_params"], copy=True))
                 mol.data["OQP::namd_coef"] = np.array(
                     [np.sqrt(0.75), 0.0, 0.0, 0.5])
+                mol.data["OQP::namd_results"] = np.zeros(2*2 + 8)
 
             namd.oqp.mrsf_namd_hop = propagate_only
             new_active, hopped = driver._hop(allow_hop=False)

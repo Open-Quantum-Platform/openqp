@@ -1,4 +1,4 @@
-# Smaller-time-step continuation
+# Local time-step continuation
 
 Run `oqp source.oqp` and then `oqp continuation.oqp` from this directory in a
 validated OpenQP environment. This short formaldehyde example first saves step 1
@@ -16,7 +16,9 @@ is left untouched. The generated child restart input uses ordinary restart.
 
 Only fixed-step, same-spin analytic-TDC NAMD is supported. Hamiltonian,
 electronic solver, acceptance, and random-seed settings must remain unchanged;
-only a strictly smaller dt is permitted. The full saved electronic/reference
+dt may be reduced, or increased back toward the original dt recorded in the
+continuation history. It cannot exceed that original dt. Ordinary restart still
+requires identical dt. The full saved electronic/reference
 state, acceleration, amplitudes, phase history, energy history, and random
 counter are restored. SCF acceptance criteria are unchanged. Different time
 discretizations can encounter different hopping events despite the preserved

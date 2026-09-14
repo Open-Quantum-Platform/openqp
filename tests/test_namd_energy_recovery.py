@@ -102,3 +102,31 @@ def test_unconverged_reference_cannot_be_rescaled():
         run()
     assert d._disc_event_count == 0
     np.testing.assert_array_equal(d.vel, [[1.]])
+
+
+@pytest.mark.parametrize('active_changed, expected', [(False, np.nan), (True, .1)])
+def test_numerical_correction_is_separate_from_hop_energy(active_changed, expected):
+    source = SOURCE.read_text()
+    start = source.index('            active_changed = new_active != active_old',
+                         source.index('            refinement_attempted = False'))
+    end = source.index('            self._apply_thermostat(istep)', start)
+    d = SimpleNamespace(active=0, vel=np.ones((1, 1)), mass=np.ones(1),
+                        _ref_switch_jump=.4, _conservative_restraint_force=0.,
+                        _conservative_restraint_energy=0.,
+                        _active_gradient=lambda: np.zeros((1, 1)))
+    ns = dict(np=np, self=d, mol=SimpleNamespace(energies=np.array([-.5, -.4])),
+              new_active=int(active_changed), active_old=0, bias_energy=0.,
+              energy_before_transition=0.)
+    exec(textwrap.dedent(source[start:end]), ns)
+    if np.isnan(expected):
+        assert np.isnan(ns['transition_energy_jump'])
+    else:
+        assert ns['transition_energy_jump'] == pytest.approx(expected)
+
+
+def test_insufficient_kinetic_energy_does_not_count_as_a_correction():
+    d, run, trace, log = make_recovery({2: .8, 4: .7, 8: .6, 10: .55})
+    run()
+    assert d._disc_event_count == 0
+    assert d._disc_energy_absorbed == 0.
+    np.testing.assert_array_equal(d.vel, [[1.]])

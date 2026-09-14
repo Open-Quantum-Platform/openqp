@@ -193,6 +193,7 @@ def test_hop_passes_analytic_tdc_and_full_direction_tensor(monkeypatch):
     driver.rescale_provider = 'analytic_nac'
     driver.trivial = 0
     driver.trivial_thresh = 0.5
+    driver.frustrated = "none"
     driver._last_analytic_tdc = np.array([[0.0, 0.7], [-0.7, 0.0]])
     driver._last_analytic_dcv = np.arange(12.0).reshape(2, 2, 1, 3)
     driver._hop_random = lambda: 0.25
@@ -250,6 +251,7 @@ def _hop_triggered_driver():
     driver.nacme_check = 'off'
     driver.trivial = 0
     driver.trivial_thresh = 0.5
+    driver.frustrated = "none"
     driver._last_analytic_tdc = None
     driver._last_analytic_dcv = None
     driver._last_analytic_pair = None

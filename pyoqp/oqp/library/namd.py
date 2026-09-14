@@ -2955,8 +2955,9 @@ class NAMD:
         self._restart_guess_identity = settings
         return settings
 
-    def _restart_signature_matches(self, saved_signature, *, allow_smaller_dt=False):
-        """Validate a saved identity, allowing only a mutable save_mol file."""
+    def _restart_signature_matches(self, saved_signature, *, allow_smaller_dt=False,
+                                   continuation_dt_limit=None):
+        """Validate model identity and explicitly permitted continuation dt changes."""
         try:
             saved = json.loads(saved_signature)
             current = json.loads(self._restart_signature())
@@ -2973,9 +2974,12 @@ class NAMD:
             if (not isinstance(old_dt, (int, float)) or isinstance(old_dt, bool)
                     or not isinstance(new_dt, (int, float)) or isinstance(new_dt, bool)
                     or not np.isfinite(old_dt) or not np.isfinite(new_dt)
-                    or not 0.0 < new_dt < old_dt):
+                    or old_dt <= 0.0 or not 0.0 < new_dt
+                    or (new_dt >= old_dt and (continuation_dt_limit is None
+                        or new_dt > continuation_dt_limit or new_dt == old_dt))):
                 return False
-            # Only this explicit new-output operation permits a smaller dt.
+            # Explicit new-output continuation can reduce dt or return up to
+            # the original dt recorded in the continuation history.
             # Every Hamiltonian, response, RNG, and acceptance setting stays bound.
             current['dt_fs'] = old_dt
         if saved == current:
@@ -3735,7 +3739,7 @@ class NAMD:
         return getattr(self, '_time_origin_fs', 0.0) + istep*self.dt_fs
 
     def _load_continuation_on_io_rank(self):
-        """Validate an immutable source and start isolated smaller-dt outputs."""
+        """Validate an immutable source and start isolated changed-dt outputs."""
         self._validate_sidecar_paths()
         outputs = (self.trajectory_file, self.restart_file,
                    self.restart_manifest_file, self.zpredict_audit_file)
@@ -3873,8 +3877,6 @@ class NAMD:
                 raise RuntimeError(
                     'NAMD restart checkpoint has invalid signature metadata')
             signature = str(signature_array[0])
-            if not self._restart_signature_matches(signature, allow_smaller_dt=allow_smaller_dt):
-                raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
             odp_array = np.asarray(saved['odp_provenance'])
             current_odp = json.dumps(
                 self._odp_provenance(), sort_keys=True, separators=(',', ':'))
@@ -3897,6 +3899,28 @@ class NAMD:
                 continuation_provenance = json.loads(str(provenance_array[0]))
                 if continuation_provenance is not None and not isinstance(continuation_provenance, dict):
                     raise ValueError('invalid continuation provenance')
+            dt_limit = None
+            if allow_smaller_dt and continuation_provenance is not None:
+                # Walk the recorded chain rather than treating an arbitrary
+                # increase from a fixed-dt checkpoint as a return.
+                ancestor = continuation_provenance
+                child_dt = json.loads(signature).get('dt_fs')
+                while ancestor is not None:
+                    if not isinstance(ancestor, dict):
+                        raise ValueError('invalid continuation dt history')
+                    old_dt = ancestor.get('source_dt_fs')
+                    new_dt = ancestor.get('new_dt_fs')
+                    if (not isinstance(old_dt, (int, float)) or isinstance(old_dt, bool)
+                            or not np.isfinite(old_dt) or old_dt <= 0.0
+                            or new_dt != child_dt):
+                        raise ValueError('invalid continuation dt history')
+                    dt_limit = old_dt
+                    child_dt = old_dt
+                    ancestor = ancestor.get('parent')
+            if not self._restart_signature_matches(
+                    signature, allow_smaller_dt=allow_smaller_dt,
+                    continuation_dt_limit=dt_limit):
+                raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
             saved_dt = json.loads(signature).get('dt_fs')
             if (not self.dt_adaptive and (not isinstance(saved_dt, (int, float))
                     or not np.isclose(time_fs, time_origin_fs + step*saved_dt,
@@ -4631,15 +4655,22 @@ class NAMD:
                         kind = 'window-leak discontinuity'
                     else:
                         kind = 'energy discontinuity'
-                    if not self._somo_switch_step:
-                        self._disc_event_count += 1
-                    if ke_target > 0.0 and ke_now > 0.0:
+                    if (np.isfinite(ke_target) and np.isfinite(ke_now)
+                            and ke_target > 0.0 and ke_now > 0.0):
+                        if not self._somo_switch_step:
+                            self._disc_event_count += 1
                         factor = np.sqrt(ke_target/ke_now)
                         self.vel = self.vel*factor
                         dump_log(mol, title=('NAMD numerical correction details: kinetic energy '
                                  '%.12f -> %.12f Hartree; velocity factor %.12f; '
                                  'energy correction %+.8e Hartree'
                                  % (ke_now, ke_target, factor, -jump)), section='input')
+                        dump_log(mol, title=(
+                            'NAMD numerical correction: relative kinetic-energy change '
+                            '%+.6f%%; next interval retries the configured dt %.8f fs; '
+                            'energy criteria and finer-step recovery remain active'
+                            % (100.0*(ke_target-ke_now)/ke_now, self.dt/FS_TO_AU)),
+                            section='input')
                         self._disc_energy_absorbed += jump
                         dump_log(mol, title=('NAMD: %s at step %d; '
                                              'active-state energy jump %+.4f Hartree '
@@ -4700,8 +4731,10 @@ class NAMD:
                     energy_after_transition - energy_before_transition)
             else:
                 transition_energy_jump = np.nan
-            if np.isnan(transition_energy_jump) and not np.isnan(self._ref_switch_jump):
-                transition_energy_jump = self._ref_switch_jump
+            # The numerical correction was applied before energy_before_transition.
+            # Do not test that correction against the physical-hop tolerance.
+            # Its uncorrected energy change and velocity factor are logged above;
+            # the ordinary step and cumulative NVE criteria still apply below.
 
             self._apply_thermostat(istep)
             accel = accel_new
