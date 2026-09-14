@@ -1804,7 +1804,12 @@ class Molecule:
                                 + (', full group' if active.get('full_group')
                                    else ', abelian subgroup') + ')'
                                 if status == 'active' else ''))
-                if status != 'active':
+                # Path, optimization and Hessian drivers skip the reduction by
+                # design at every geometry; say so only in the detailed log.
+                from oqp.utils.log_format import VERBOSE_DETAILED, resolve_verbosity
+                designed_skip = (str(status).startswith('skipped_runtype_')
+                                 and resolve_verbosity(self.config) < VERBOSE_DETAILED)
+                if status != 'active' and not designed_skip:
                     # The C1 fallback gives a numerically identical answer, so
                     # without this line a user who explicitly asked for the
                     # reduction has no way to discover it never ran.
@@ -1839,14 +1844,24 @@ class Molecule:
                     lines.append('    projection stays off --'
                                  ' [symmetry] use_response_symmetry)')
             lines.append('')
+            # Optimizations and path searches repeat an unchanged summary at
+            # every geometry; write it again only when it or the log changed.
+            text = '\n'.join(lines)
+            if (self.log, text) == getattr(self, '_last_symmetry_log', None):
+                return
             with open(self.log, 'a', encoding='utf-8') as fout:
-                fout.write('\n'.join(lines))
+                fout.write(text)
+            self._last_symmetry_log = (self.log, text)
         except Exception:
             pass
 
     @mpi_dump
     def _dump_mo_labels_log(self, result):
         """Append MO irrep labels to the main log (best effort, non-fatal)."""
+        from oqp.utils.log_format import VERBOSE_NORMAL, resolve_verbosity
+        # Same level as the native orbital table these labels annotate.
+        if resolve_verbosity(self.config) < VERBOSE_NORMAL:
+            return
         try:
             meta = self.symmetry_metadata
             lines = [
@@ -2658,7 +2673,8 @@ class Molecule:
         # The parser is seeded with every schema default, so an option is
         # always present; only the default value is overridden, and a deck
         # asking for more detail (verbose >= 2) or already silent keeps it.
-        if str(parser.get("scf", "verbose", fallback="1")).strip() == "1":
+        if (str(parser.get("input", "verbose", fallback="1")).strip() == "1"
+                and str(parser.get("scf", "verbose", fallback="1")).strip() == "1"):
             parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):

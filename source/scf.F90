@@ -645,7 +645,9 @@ contains
                  infos%control%pfon_nsmear
 
     ! Initial message for SCF iterations
-    if (infos%control%pfon) then
+    if (infos%control%verbose < 1) then
+      ! verbose = 0 prints no iteration table; the converged result is still reported.
+    elseif (infos%control%pfon) then
       write(IW,fmt="&
             &(/3x,'Direct SCF iterations begin.'/, &
             &  3x,113('='),/ &
@@ -967,7 +969,9 @@ contains
       ! Print Current Energy
       !----------------------------------------------------------------------------
       ! Print iteration information
-      if (infos%control%pfon) then
+      if (infos%control%verbose < 1) then
+        ! verbose = 0 prints no iteration table; the converged result is still reported.
+      elseif (infos%control%pfon) then
         write(IW,fmt="(4x,i4.1,2x,a23,1x,a23,1x,i16,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
               iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
               fmt_real14(diis_error), vshift, &
@@ -1341,7 +1345,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Final Energy Components
     !----------------------------------------------------------------------------
-    call energy%print_e()
+    if (infos%control%verbose >= 1) call energy%print_e()
 
     !----------------------------------------------------------------------------
     ! Save Results to infos Structure

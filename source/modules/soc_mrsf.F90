@@ -90,7 +90,7 @@ contains
 
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
-    debug_soc_prints = (infos%control%verbose > 1)
+    debug_soc_prints = (infos%control%verbose >= 3)
 
     do_2e_soc = (infos%control%soc_2e /= 0)
 

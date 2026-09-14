@@ -291,7 +291,7 @@ GENERIC_SCHEMA_KEYS = {
         max_penetration
     """),
     "solute_com": _keys("enabled center force_constant atoms"),
-    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
+    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads verbose"),
     "d4": _keys("s6 s8 s9 a1 a2 alp"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
@@ -590,6 +590,7 @@ TOP_OPTION_ALIASES = {
     "qmmm_flag": "qmmm_flag",
     "omp_threads": "omp_threads",
     "threads": "omp_threads",
+    "verbose": "verbose",
 }
 
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
@@ -2191,6 +2192,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             optional_input_owners = {
                 "library": "library", "ispher": "ispher", "perf": "perf",
                 "d4": "d4", "qmmm_flag": "qmmm_flag", "omp_threads": "omp_threads",
+                "verbose": "verbose",
             }
             duplicate = [
                 key for key, option in optional_input_owners.items()
@@ -2519,7 +2521,7 @@ def lower_to_legacy(
         put("input", "basis", spec.basis)
     if spec.functional:
         put("input", "functional", spec.functional)
-    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads"):
+    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads", "verbose"):
         if key in spec.options:
             put("input", key, spec.options[key])
 
@@ -3143,7 +3145,7 @@ def render_canonical_oqp(spec: CalculationSpec, *, strip_defaults: bool = True) 
         route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
-        "omp_threads",
+        "omp_threads", "verbose",
     )
     option_parts = [
         "%s=%s" % (key, _render_value(spec.options[key]))

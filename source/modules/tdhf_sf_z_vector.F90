@@ -465,7 +465,8 @@ contains
               &/3x,24("-")/)')
       end if
 
-      write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
+      if (infos%control%verbose >= 1) &
+        write(*,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') error, cnvtol
 
   ! -----------------------------------------------
 
@@ -558,7 +559,8 @@ contains
           write(*,'(" Z-Vector breakdown: non-finite SF PCG residual at iter", I4)') iter
           exit
         end if
-        write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+        if (infos%control%verbose >= 1) &
+          write(*,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
           iter, error, cnvtol
         call flush(iw)
 

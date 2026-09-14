@@ -94,6 +94,7 @@ contains
     par%deterministic = infos%control%mom
     par%rms_gnorm  = .true.
     par%verbose    = .true.
+    par%iterations = infos%control%verbose >= 1
     par%want_history = .false.
 
     allocate(mo_e_a(conv%nbf), mo_e_b(conv%nbf), g(n), hdiag(n))

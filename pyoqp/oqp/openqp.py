@@ -439,11 +439,13 @@ class _ControlProxy:
     def __init__(self, owner):
         object.__setattr__(self, "_owner", owner)
 
-    def __call__(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
+    def __call__(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
         return self._owner._control(
             runtype=runtype,
             omp_threads=omp_threads,
             usempi=usempi,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -680,8 +682,10 @@ class OpenQP:
             return False
         return bool(text and "\n" not in text and ";" not in text and " " not in text)
 
-    def _control(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
-        """Set run-level controls such as runtype, OpenMP, and optimization options."""
+    def _control(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
+        """Set run-level controls such as runtype, OpenMP, log verbosity, and
+        optimization options."""
         updates = {}
         section_runtype = runtype
         if runtype is not None and str(runtype).lower() == "pcm":
@@ -691,6 +695,9 @@ class OpenQP:
             updates["input.runtype"] = runtype
         if omp_threads is not None:
             updates["input.omp_threads"] = omp_threads
+        if verbose is not None:
+            # [input] verbose: 0 quiet, 1 normal, 2 detailed, 3 debug.
+            updates["input.verbose"] = verbose
         if usempi is not None:
             self.usempi = self._as_bool(usempi, option="usempi")
         if updates:

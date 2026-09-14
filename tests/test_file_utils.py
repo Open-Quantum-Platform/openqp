@@ -421,5 +421,49 @@ class TestWriteXYZ(unittest.TestCase):
         self.assertIn("PyOQP rmsd grad:", text)
 
 
+class TestVerbosityInPythonLog(unittest.TestCase):
+    def _energy_log(self, d4_flag, verbose=None):
+        file_utils = load_file_utils()
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as folder:
+            log = Path(folder) / "verbosity.log"
+            mol = minimal_log_mol(log)
+            mol.config["input"]["d4"] = d4_flag
+            if verbose is not None:
+                mol.config["input"]["verbose"] = verbose
+            file_utils.dump_log(
+                mol,
+                title="PyOQP: Dispersion Correction",
+                section="dftd",
+                info={"type": "dftd4", "d4": d4_flag},
+            )
+            file_utils.dump_log(
+                mol,
+                title="PyOQP: Final Energy",
+                section="energy",
+                info={"el": [-1.0], "d4": 0.0},
+            )
+            return log.read_text()
+
+    def test_dispersion_records_only_when_dispersion_is_requested(self):
+        off = self._energy_log(False)
+        self.assertNotIn("PyOQP: Dispersion Correction", off)
+        self.assertNotIn("dispersion corrected energies", off)
+        self.assertIn("PyOQP electronic energies", off)
+        on = self._energy_log(True)
+        self.assertEqual(on.split("PyOQP dftd correction:", 1)[1].split()[0], "yes")
+        self.assertIn("PyOQP dispersion corrected energies", on)
+
+    def test_detailed_log_keeps_the_disabled_dispersion_block(self):
+        text = self._energy_log(False, verbose=2)
+        self.assertIn("PyOQP: Dispersion Correction", text)
+        self.assertEqual(text.split("PyOQP dftd correction:", 1)[1].split()[0], "no")
+
+    def test_python_log_lines_carry_no_trailing_whitespace(self):
+        text = self._energy_log(True)
+        self.assertEqual([line for line in text.splitlines() if line != line.rstrip()], [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,6 +11,15 @@ module mod_dft
 
   character(len=*), parameter :: module_name = "dft"
 
+  !> DFT set-ups already described, as "log file|signature" records.  Every SCF,
+  !> response, gradient and Hessian step sets the same functional and grid up again;
+  !> each log file gets the description once, whichever runs are built, interleaved
+  !> or appended (QM/MM optimisation and dynamics build a Runner per geometry).
+  !> The records start afresh with every log a run creates (oqp_log_restarted) and are
+  !> capped at max_described_setups entries, so a long-lived process does not accumulate them.
+  character(len=1600), allocatable, save :: described_setups(:)
+  integer, parameter :: max_described_setups = 256
+
   private
   public dft_initialize
   public dft_build_grid_sized
@@ -19,6 +28,7 @@ module mod_dft
   public dftclean
   public dftexcor
   public dftder
+  public dft_forget_setups
 
 !> @brief Pruned-grid specification
 !> @details A pruned grid is defined per atom type by up to `ngrids`
@@ -330,6 +340,61 @@ module mod_dft
 
 contains
 
+!> @brief Signature of a DFT set-up for the log: functional, grid and exchange mix.
+!> @detail dft_set_options describes a set-up only when no earlier set-up in the
+!>         same log started or ended with its starting signature, so a repeat is
+!>         quiet while a changed grid or exchange mix is described again.
+  function dft_setup_signature(infos, xc_func_name) result(key)
+    use iso_c_binding, only: c_null_char
+    use types, only: information
+    type(information), intent(in) :: infos
+    character(len=*), intent(in) :: xc_func_name
+    character(len=512) :: key
+    character(len=64) :: grid_name
+    integer :: i
+
+    ! The pruned-grid name matters: the MRSF Z-vector swaps in a coarse grid.
+    grid_name = ' '
+    do i = 1, min(len(grid_name), size(infos%dft%grid_pruned_name))
+      if (infos%dft%grid_pruned_name(i) == c_null_char) exit
+      grid_name(i:i) = infos%dft%grid_pruned_name(i)
+    end do
+    write(key, '(A,"|",L1,"|",A,"|",I0,"|",I0,"|",ES12.5,"|",L1,4("|",ES16.9))') &
+      trim(xc_func_name), logical(infos%dft%grid_pruned), trim(grid_name), &
+      int(infos%dft%grid_rad_size), int(infos%dft%grid_ang_size), &
+      infos%dft%grid_density_cutoff, logical(infos%dft%cam_flag), infos%dft%hfscale, &
+      infos%dft%cam_alpha, infos%dft%cam_beta, infos%dft%cam_mu
+  end function dft_setup_signature
+
+!> @brief True when this set-up signature was already described in this log file.
+  logical function setup_described(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    setup_described = .false.
+    if (allocated(described_setups)) setup_described = any(described_setups == rec)
+  end function setup_described
+
+!> @brief Record that this set-up signature has been described in this log file.
+  subroutine record_setup(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    if (.not. allocated(described_setups)) allocate(described_setups(0))
+    if (any(described_setups == rec)) return
+    if (size(described_setups) >= max_described_setups) then
+      deallocate(described_setups)
+      allocate(described_setups(0))
+    end if
+    described_setups = [character(len=1600) :: described_setups, rec]
+  end subroutine record_setup
+
+!> @brief Forget every set-up description recorded so far (a run starts a new log).
+  subroutine dft_forget_setups()
+    if (allocated(described_setups)) deallocate(described_setups)
+  end subroutine dft_forget_setups
+
+
   subroutine save_dft_HF_exchange_from_input(this, infos)
     use types, only: information
     implicit none
@@ -362,25 +427,30 @@ contains
 
   end subroutine save_dft_HF_exchange_from_input
 
-  subroutine update_dft_HF_exchange_from_input(this, infos)
+  subroutine update_dft_HF_exchange_from_input(this, infos, announce)
     use types, only: information
     implicit none
     class(saved_HF_info), intent(inout) :: this
     type(information), intent(inout) :: infos
+    logical, intent(in), optional :: announce
+    logical :: announce_
 
     real(kind=dp) :: scale
     character(len=80), parameter :: format = &
           '(11x,a,":",t22,"|", t24, e12.5, t37, "-|>", t41, e12.5, t54, "|")'
 
+    announce_ = .true.
+    if (present(announce)) announce_ = announce
+
     if (infos%dft%cam_flag) then
-      write(*,'(2x,a)') "CAM-B3LYP with tuned Hartree-Fock exchange from the input."
-      write(*, '(5x,"CAM parametres: |   It was     |   It become    |")')
+      if (announce_) write(*,'(2x,a)') "CAM-B3LYP with tuned Hartree-Fock exchange from the input."
+      if (announce_) write(*, '(5x,"CAM parametres: |   It was     |   It become    |")')
       if (this%alpha) then
          scale = this%saved_alpha
       else
          scale =  infos%dft%cam_alpha
       end if
-      write(*, fmt=format) "Alpha", 0.19_dp, scale
+      if (announce_) write(*, fmt=format) "Alpha", 0.19_dp, scale
       if (this%alpha) infos%dft%cam_alpha = this%saved_alpha
 
       if (this%beta) then
@@ -388,7 +458,7 @@ contains
       else
          scale =  infos%dft%cam_beta
       end if
-      write(*, fmt=format) "Beta", 0.46_dp, scale
+      if (announce_) write(*, fmt=format) "Beta", 0.46_dp, scale
       if (this%beta) infos%dft%cam_beta = this%saved_beta
 
       if (this%mu) then
@@ -396,27 +466,27 @@ contains
       else
          scale =  infos%dft%cam_mu
       end if
-      write(*, fmt=format) "mu", 0.33_dp, scale
+      if (announce_) write(*, fmt=format) "mu", 0.33_dp, scale
       if (this%mu) infos%dft%cam_mu = this%saved_mu
     else
-      write(*,'(2x,a)') "Tuned Hartree-Fock exchange from the input."
-      write(*, '(10x,"Exact HF exchange:")')
+      if (announce_) write(*,'(2x,a)') "Tuned Hartree-Fock exchange from the input."
+      if (announce_) write(*, '(10x,"Exact HF exchange:")')
       if (this%hfscale) then
          scale = this%saved_hfscale
       else
          scale =  infos%dft%hfscale
       end if
-      write(*, fmt=format) "HF scale", infos%dft%hfscale, scale
+      if (announce_) write(*, fmt=format) "HF scale", infos%dft%hfscale, scale
       if (this%hfscale) infos%dft%hfscale = this%saved_hfscale
-      write(*, '(2x,a)') "Please cite the following works when using this option:"
-      write(*,fmt='(3a)') "[1] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
+      if (announce_) write(*, '(2x,a)') "Please cite the following works when using this option:"
+      if (announce_) write(*,fmt='(3a)') "[1] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
             "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
-      write(*,fmt='(3a)') "[2] K. Komarov, W. Park, S. Lee, M. Huix-Rotllant, ", &
+      if (announce_) write(*,fmt='(3a)') "[2] K. Komarov, W. Park, S. Lee, M. Huix-Rotllant, ", &
             "and C. H. Choi, J. Chem. Theory Comput., 19, 7671-7684 (2023); ", &
             "DOI: 10.1021/acs.jctc.3c00884"
     end if
-    write(*,*)
+    if (announce_) write(*,*)
 
   end subroutine update_dft_HF_exchange_from_input
 
@@ -435,6 +505,7 @@ contains
 
     real(kind=dp) :: logtol
     type(dft_grid_pruned_t) :: pruned
+    logical :: internal
 
 !   Setup sreening parameters
     logtol = -log(1.0e-10_dp)
@@ -442,7 +513,10 @@ contains
     call basis%set_screening(logtol)
 
 !   Set grid DFT options
-    call dft_set_options(infos, pruned, need_functional)
+    ! An explicit verbose=.false. marks a helper set-up (PCM cavity, SAP guess).
+    internal = .false.
+    if (present(verbose)) internal = .not. verbose
+    call dft_set_options(infos, pruned, need_functional, internal)
 
 !   Initialize grid
     call dft_prepare_grid(infos, basis, molGrid, pruned, verbose)
@@ -697,19 +771,21 @@ contains
     call libxc_destroy(infos%functional)
   end subroutine
 
-  subroutine dft_set_options(infos, pruned, need_functional)
+  subroutine dft_set_options(infos, pruned, need_functional, internal)
     use iso_c_binding, only: c_null_char
     use dft_radial_grid_types, only: dft_radial_grid_mhl
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
     use libxc, only: libxc_input
+    use functionals, only: set_announcement_log
 
     implicit none
 
     type(information), intent(inout) :: infos
     type(dft_grid_pruned_t), intent(inout) :: pruned
     logical, optional, intent(in) :: need_functional
+    logical, optional, intent(in) :: internal  !< helper set-up: never described
     type(saved_HF_info) :: saved_hf
     logical :: need_func
 
@@ -720,6 +796,9 @@ contains
     logical :: is_sg3
     integer :: z, ie, nsec, maxsec, nang_fallback
     integer :: zmap(SG_NELEM)
+    character(len=512) :: setup_key
+    character(len=1024) :: log_key
+    logical :: announce, internal_
 
     need_func = .true.
     if (present(need_functional)) need_func = need_functional
@@ -731,13 +810,24 @@ contains
 
     xc_func_name = c_f_char(infos%dft%xc_functional_name)
 
+    ! Describe the functional and grid only when this set-up starts from something
+    ! other than what the previous set-up left behind (see dft_setup_signature).
+    internal_ = .false.
+    if (present(internal)) internal_ = internal
+    ! Descriptions are recorded per log file (helper set-ups write to the same log).
+    log_key = ''
+    if (allocated(infos%log_filename)) log_key = infos%log_filename
+    call set_announcement_log(trim(log_key))
+    setup_key = dft_setup_signature(infos, xc_func_name)
+    announce = .not. internal_ .and. .not. setup_described(log_key, setup_key)
+
     if (.not. infos%dft%grid_pruned) then
       pruned%ngrids = 1
       allocate(pruned%nang(1,1), pruned%radii(1,1))
       pruned%nang(1,1) = infos%dft%grid_ang_size
       pruned%radii(1,1) = 1.0d+30
 
-      write(iw,'(/5X,"Lebedev grid-based DFT options"/&
+      if (announce) write(iw,'(/5X,"Lebedev grid-based DFT options"/&
                 &5X,30("-")/&
                 &5X,"XC functional: ",A/&
                 &5X,"NRAD  =",I8,5X,"NLEB  =",I8/&
@@ -798,7 +888,7 @@ contains
           pruned%rad_map(2) = int(infos%dft%rad_grid_type)
         end if
 
-        write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
+        if (announce) write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
                   &5X,21("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"THRESH=",1P,E12.2)') &
@@ -875,7 +965,7 @@ contains
           pruned%de2_rmax(i) = sg_de2_rmax(ie)
         end do
 
-        write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
+        if (announce) write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
                   &5X,40("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"NRAD  =",I8,"   (Mitani DE2 radial grid)"/&
@@ -959,7 +1049,7 @@ contains
           pruned%me_rscale(i-3) = sg0_rscale(ie)
         end do
 
-        write(iw,'(/5X,"Standard Grid 0 (SG0) of Chien and Gill"/&
+        if (announce) write(iw,'(/5X,"Standard Grid 0 (SG0) of Chien and Gill"/&
                   &5X,39("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"NRAD  =   23/26   (MultiExp radial grid)"/&
@@ -982,12 +1072,21 @@ contains
       call libxc_input(functional_name=trim(xc_func_name), &
                        dft_params=infos%dft, &
                        tddft_params=infos%tddft, &
-                       functional=infos%functional)
+                       functional=infos%functional, &
+                       announce=announce)
 
       ! update HFscale, or cam_alpha,beta,mu from input
-      if(saved_HF%do) call saved_HF%update_HF(infos)
+      if(saved_HF%do) call saved_HF%update_HF(infos, announce)
     else if (need_func) then
       call show_message('Please, specify functional in the input file', WITH_ABORT)
+    end if
+
+    ! Remember the set-up as configured; a helper set-up leaves no trace.
+    ! Record how the set-up started and how it ended: the next set-up of this run
+    ! starts from the latter, a new Runner appending to this log from the former.
+    if (.not. internal_) then
+      call record_setup(log_key, setup_key)
+      call record_setup(log_key, dft_setup_signature(infos, xc_func_name))
     end if
 
   end subroutine
@@ -1074,7 +1173,7 @@ contains
       call molGrid%reset(nat, maxpt_per_atom, nrad_max, pruned%nrad_types)
 
 !     Print out DFT info
-      if (verbose_) then
+      if (verbose_ .and. infos%control%verbose >= 1) then
         dftthr0=1.0d-03/(maxpt_per_atom*nat)
         if(dftthr0.lt.1.1d-15) then
           write(iw,'(5x, "All DFT thresholds are turned off.")')
@@ -1279,7 +1378,7 @@ contains
 
       call molGrid%compress
 
-      if (verbose_) then
+      if (verbose_ .and. infos%control%verbose >= 1) then
         write(iw,'(5X,"Molecular grid: ",I0," points in ",I0," slices")') &
               sum(molGrid%nTotPts(1:molGrid%nSlices)), molGrid%nSlices
       end if
@@ -1432,7 +1531,7 @@ contains
                        nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
     end if
 !$  t1 = omp_get_wtime()
-!$  write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
+!$  if (infos%control%verbose >= 2) write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
 
   end subroutine
 
