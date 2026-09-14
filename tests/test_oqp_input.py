@@ -2476,3 +2476,9 @@ def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
     )
     assert disabled["input"]["runtype"] == "energy"
     assert disabled["odp"]["enabled"] == "False"
+
+
+def test_namd_scf_guess_retry_example_parses():
+    example = ROOT / "examples/namd_scf_guess_retry/retry.oqp"
+    spec, lowered = _parse(example.read_text(), source_dir=example.parent)
+    assert lowered["md"]["scf_guess_retry"].lower() == "true"

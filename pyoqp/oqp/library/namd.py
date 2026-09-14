@@ -592,6 +592,8 @@ class NAMD:
         self.scf_fail = str(md.get('scf_fail', 'escalate')).strip().lower()
         if self.scf_fail not in ('escalate', 'restart'):
             raise ValueError("[md] scf_fail must be escalate or restart")
+        self.scf_guess_retry = str(md.get('scf_guess_retry', 'true')).strip().lower() in (
+            'true', '1', 'on', 'yes')
         self._restart_boundary = False
         self._scf_restart_steps = 0
         # Reference (SOMO) continuity controls.  ref_follow selects the SCF
@@ -617,14 +619,8 @@ class NAMD:
         if self.frustrated not in ('none', 'reflect'):
             raise ValueError("[md] frustrated must be none or reflect")
         self._frustrated_reflect_count = 0
-        # Total-energy discontinuity bookkeeping: when the active-state
-        # energy jumps between two consecutive geometries by more than the
-        # Verlet integration can account for (|E_tot(now) - E_tot(prev)| >
-        # disc_tol, no hop involved), the jump is treated like an accepted
-        # hop: the velocities are rescaled isotropically so that the total
-        # energy is conserved and the event is logged and recorded.  This
-        # covers ROHF reference changes that the SOMO test does not see,
-        # retained-window leakage and hot-hydrogen kinks of the MRSF surface.
+        # Numerical energy correction is an optional last resort after
+        # finer nuclear integration, separate from a physical surface hop.
         self.disc_rescale = str(md.get('disc_rescale', 'false')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self.disc_tol = float(md.get('disc_tol', 0.002))
@@ -639,10 +635,12 @@ class NAMD:
         # force at every substep, orbitals carried along).  The state overlap,
         # couplings and hop decision are then evaluated once between the
         # start and the end of the full step as usual.  Only the residual jump
-        # (a genuine reference-branch change) is left to disc_rescale.
+        # remaining after refinement may be treated by disc_rescale.
         self.disc_substeps = int(md.get('disc_substeps', 0))
         if self.disc_substeps < 0:
             raise ValueError("[md] disc_substeps must be >= 0")
+        if self.disc_rescale or self.ref_switch_rescale:
+            self.disc_substeps = max(2, self.disc_substeps)
         self._disc_substep_events = 0
         self._window_leak_step = False
         self._somo_switch_step = False
@@ -1729,25 +1727,19 @@ class NAMD:
                 try:
                     sp = SinglePoint(mol)
                     ref_energy = sp.reference()
-                except RuntimeError as exc:
-                    if not (self.mo_reuse and cont):
+                except (SCFnotConverged, RuntimeError) as exc:
+                    if isinstance(exc, RuntimeError) and 'SCF did not converge' not in str(exc):
                         raise
-                    # Last resort for a continuation step: re-solve from a
-                    # fresh Huckel guess with the full DIIS->SOSCF->TRAH
-                    # ladder.  A changed SOMO configuration is detected by
-                    # the SOMO check and treated as a reference switch.
+                    if not (self.mo_reuse and cont and
+                            getattr(self, 'scf_guess_retry', True)):
+                        raise
                     self._scf_fallback_steps += 1
                     dump_log(mol, title='PyOQP: NAMD SCF continuation from the '
                              'previous-step orbitals failed (%s); re-solving the '
-                             'reference from a fresh Huckel guess (fallback %d)'
+                             'reference from a fresh Huckel guess (attempt %d)'
                              % (exc, self._scf_fallback_steps), section='input')
-                    mol.config['guess']['type'] = 'huckel'
-                    scf_cfg = mol.config['scf']
-                    scf_cfg['converger_type'] = 'diis'
-                    scf_cfg['escalation'] = 'soscf,trah'
-                    mol.data.set_scf_converger_type('diis')
-                    sp = SinglePoint(mol)
-                    ref_energy = sp.reference()
+                    sp, ref_energy = self._reference_fresh_guess()
+
         finally:
             if scf_saved is not None:
                 scf_cfg = mol.config['scf']
@@ -1762,6 +1754,66 @@ class NAMD:
             BasisOverlap(mol).overlap()
         sp.excitation(ref_energy)
         LastStep(mol).compute(mol)
+
+    def _energy_retry_state(self):
+        """Preserve electronic histories and diagnostics before a trial step."""
+        prefixes = ('_ba_', '_last_', '_pending_', '_nacme_gate_')
+        names = {'_somo_switch_step', '_window_leak_step', '_somo_switch_count',
+                 '_window_leak_count', '_overlap_collapse_steps', '_restart_boundary'}
+        return {name: copy.deepcopy(value) for name, value in self.__dict__.items()
+                if name.startswith(prefixes) or name in names}
+
+    def _restore_energy_retry_state(self, saved):
+        for name in self._energy_retry_state():
+            if name not in saved:
+                delattr(self, name)
+        for name, value in saved.items():
+            setattr(self, name, copy.deepcopy(value))
+
+    @staticmethod
+    def _energy_refinement_counts(max_substeps):
+        """Increasing subdivisions, with the configured maximum included once."""
+        maximum = int(max_substeps)
+        counts = []
+        count = 2
+        while count < maximum:
+            counts.append(count)
+            count *= 2
+        if maximum >= 2:
+            counts.append(maximum)
+        return counts
+
+    def _reference_fresh_guess(self):
+        """Retry once at the same geometry and require actual SCF convergence."""
+        mol = self.mol
+        scf_cfg = mol.config['scf']
+        guess_cfg = mol.config['guess']
+        saved_scf = {k: scf_cfg.get(k) for k in ('converger_type', 'escalation')}
+        saved_guess = guess_cfg.get('type')
+        try:
+            guess_cfg['type'] = 'huckel'
+            scf_cfg['converger_type'] = 'diis'
+            scf_cfg['escalation'] = 'soscf,trah'
+            mol.data.set_scf_converger_type('diis')
+            sp = SinglePoint(mol)
+            energy = sp.reference()
+            self._require_converged_reference()
+            dump_log(mol, title=('NAMD SCF recovery succeeded: fresh Huckel guess; '
+                                 'reference energy %.12f Hartree; requested SCF '
+                                 'criterion satisfied; orbital/state continuity '
+                                 'is evaluated separately' % float(energy[0] if isinstance(energy, (list, tuple)) else energy)), section='input')
+            return sp, energy
+        finally:
+            if saved_guess is None:
+                guess_cfg.pop('type', None)
+            else:
+                guess_cfg['type'] = saved_guess
+            for key, value in saved_scf.items():
+                if value is None:
+                    scf_cfg.pop(key, None)
+                else:
+                    scf_cfg[key] = value
+            mol.data.set_scf_converger_type(saved_scf['converger_type'] or 'diis')
 
     def _reference_with_restart(self):
         """Primary converger only; on failure perform a GAMESS-style restart.
@@ -3252,6 +3304,8 @@ class NAMD:
                     'nve_gate_transition_tol', 'nve_gate_consecutive')
             },
         }
+        if str(md.get('scf_guess_retry', 'true')).strip().lower() not in ('true', '1', 'on', 'yes'):
+            identity['scf_guess_retry'] = False
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
     def _tracking_state_count(self):
@@ -4459,6 +4513,7 @@ class NAMD:
             r_start = np.array(r, copy=True)
             vel_start = np.array(self.vel, copy=True)
             accel_start = np.array(accel, copy=True)
+            retry_state = self._energy_retry_state()
 
             # velocity-Verlet position update
             r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
@@ -4479,39 +4534,55 @@ class NAMD:
             # Energy-guarded substepping: repeat the step from the stored
             # phase point and electronic state with finer nuclear substeps
             # when the total energy jumped by more than disc_tol.
-            if self.disc_substeps > 0 and self._etot_prev is not None:
+            refinement_attempted = False
+            recovery_tol = self.disc_tol
+            if self.nve_gate != 'off':
+                recovery_tol = min(recovery_tol, self.nve_gate_step_tol)
+            if self.disc_substeps > 1 and self._etot_prev is not None:
                 odp0 = self._evaluate_odp(r)
                 bias0 = 0.0 if odp0 is None else odp0['energy']
                 epot0 = (float(np.asarray(mol.energies)[self.active])
                          + bias0 + self._conservative_restraint_energy)
                 jump0 = (epot0 + 0.5*np.sum(self.mass[:, None]*self.vel**2)
                          - self._etot_prev)
-                if abs(jump0) > self.disc_tol and self.prev_data is not None:
-                    nsub = self.disc_substeps
-                    dts = self.dt / nsub
-                    mol.put_data(self.prev_data)
-                    r = np.array(r_start, copy=True)
-                    self.vel = np.array(vel_start, copy=True)
-                    accel = np.array(accel_start, copy=True)
-                    for k in range(1, nsub + 1):
-                        r = r + self.vel * dts + 0.5 * accel * dts ** 2
-                        mol.update_system(r.reshape(-1))
-                        last = (k == nsub)
-                        self.vel, accel_new, fused_gradient_nac = (
-                            self._advance_electronic_and_kick(
-                                istep, r, self.vel, accel, dts, last, True))
-                        if not last:
-                            accel = accel_new
-                    if fused_gradient_nac:
-                        self._update_analytic_nac(istep, compare_overlap=True)
-                    else:
-                        self._state_overlap(istep)
-                    odp1 = self._evaluate_odp(r)
-                    bias1 = 0.0 if odp1 is None else odp1['energy']
-                    epot1 = (float(np.asarray(mol.energies)[self.active])
-                             + bias1 + self._conservative_restraint_energy)
-                    jump1 = (epot1 + 0.5*np.sum(self.mass[:, None]*self.vel**2)
-                             - self._etot_prev)
+                if abs(jump0) > recovery_tol and self.prev_data is not None:
+                    for nsub in self._energy_refinement_counts(self.disc_substeps):
+                        refinement_attempted = True
+                        dts = self.dt / nsub
+                        self._restore_energy_retry_state(retry_state)
+                        mol.put_data(copy.deepcopy(self.prev_data))
+                        r = np.array(r_start, copy=True)
+                        self.vel = np.array(vel_start, copy=True)
+                        accel = np.array(accel_start, copy=True)
+                        for k in range(1, nsub + 1):
+                            r = r + self.vel * dts + 0.5 * accel * dts ** 2
+                            mol.update_system(r.reshape(-1))
+                            last = (k == nsub)
+                            self.vel, accel_new, fused_gradient_nac = (
+                                self._advance_electronic_and_kick(
+                                    istep, r, self.vel, accel, dts, last, True))
+                            if not last:
+                                accel = accel_new
+                        if fused_gradient_nac:
+                            self._update_analytic_nac(istep, compare_overlap=True)
+                        else:
+                            self._state_overlap(istep)
+                        odp1 = self._evaluate_odp(r)
+                        bias1 = 0.0 if odp1 is None else odp1['energy']
+                        epot1 = (float(np.asarray(mol.energies)[self.active])
+                                 + bias1 + self._conservative_restraint_energy)
+                        jump1 = (epot1 + 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                                 - self._etot_prev)
+                        dump_log(mol, title=(
+                            'NAMD energy recovery: step %d; %d nuclear substeps, '
+                            'dt %.8f fs; initial change %+.8e Hartree; '
+                            'remaining change %+.8e Hartree; criterion %.8e Hartree; '
+                            '%s; SCF and active-state force recomputed at each substep'
+                            % (istep, nsub, dts/FS_TO_AU, jump0, jump1, recovery_tol,
+                               'accepted without numerical rescaling' if abs(jump1) <= recovery_tol
+                               else 'criterion not satisfied')), section='input')
+                        if abs(jump1) <= recovery_tol:
+                            break
                     self._disc_substep_events += 1
                     dump_log(mol, title=('NAMD: total-energy jump %+.4f Hartree at step %d '
                                          'exceeded disc_tol; step repeated with %d '
@@ -4530,9 +4601,8 @@ class NAMD:
             active_old = self.active
             odp = self._evaluate_odp(r)
             bias_energy = 0.0 if odp is None else odp['energy']
-            # Reference switch event: conserve the total energy across the
-            # jump of the active-state energy by an isotropic velocity rescale
-            # (the same treatment as an accepted hop), and record the jump.
+            # Numerical correction is permitted only after finer nuclear steps
+            # fail. It is separate from momentum adjustment at a surface hop.
             self._ref_switch_jump = np.nan
             if self._etot_prev is not None:
                 epot_now = (float(np.asarray(mol.energies)[self.active])
@@ -4540,8 +4610,19 @@ class NAMD:
                 ke_now = 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 jump = (epot_now + ke_now) - self._etot_prev
                 somo_case = self._somo_switch_step and self.ref_switch_rescale
-                disc_case = self.disc_rescale and abs(jump) > self.disc_tol
-                if somo_case or disc_case:
+                disc_case = self.disc_rescale and abs(jump) > recovery_tol
+                if (somo_case or disc_case) and abs(jump) > recovery_tol and not refinement_attempted:
+                    dump_log(mol, title=('NAMD numerical energy rescaling withheld at step %d: '
+                             'no finer-step retry was completed; energy change %+.8e Hartree'
+                             % (istep, jump)), section='input')
+                if ((somo_case or disc_case) and refinement_attempted
+                        and abs(jump) > recovery_tol):
+                    self._require_converged_reference()
+                    dump_log(mol, title=('NAMD last-resort numerical energy rescaling: '
+                             'step %d; configured finer-step attempts exhausted; '
+                             'SCF converged; remaining total-energy change %+.8e Hartree; '
+                             'this correction is distinct from a physical surface hop'
+                             % (istep, jump)), section='input')
                     ke_target = self._etot_prev - epot_now
                     self._ref_switch_jump = jump
                     if self._somo_switch_step:
@@ -4553,7 +4634,12 @@ class NAMD:
                     if not self._somo_switch_step:
                         self._disc_event_count += 1
                     if ke_target > 0.0 and ke_now > 0.0:
-                        self.vel = self.vel*np.sqrt(ke_target/ke_now)
+                        factor = np.sqrt(ke_target/ke_now)
+                        self.vel = self.vel*factor
+                        dump_log(mol, title=('NAMD numerical correction details: kinetic energy '
+                                 '%.12f -> %.12f Hartree; velocity factor %.12f; '
+                                 'energy correction %+.8e Hartree'
+                                 % (ke_now, ke_target, factor, -jump)), section='input')
                         self._disc_energy_absorbed += jump
                         dump_log(mol, title=('NAMD: %s at step %d; '
                                              'active-state energy jump %+.4f Hartree '

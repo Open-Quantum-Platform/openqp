@@ -829,6 +829,7 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
         'mo_reuse': {'type': bool, 'default': 'false'},  # reuse previous-step orbitals as the SCF guess
+        'scf_guess_retry': {'type': bool, 'default': 'true'},  # one fresh-guess retry after failed continuation SCF
         'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
         'ref_follow': {'type': str, 'default': 'off'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
         'ref_switch_rescale': {'type': bool, 'default': 'false'},  # conserve total energy across a reference switch

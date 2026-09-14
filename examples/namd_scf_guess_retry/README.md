@@ -1,0 +1,1 @@
+An SCF continuation that exhausts its converger sequence is retried once from a fresh Huckel guess. Successful runs do not trigger recovery. SCF convergence remains mandatory; energy conservation and state-continuity checks remain active. The unit regressions deliberately exercise failed and recovered SCF calls.
