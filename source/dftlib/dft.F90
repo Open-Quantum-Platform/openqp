@@ -1492,7 +1492,7 @@ contains
                        nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
     end if
 !$  t1 = omp_get_wtime()
-!$  write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
+!$  if (infos%control%verbose >= 2) write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
 
   end subroutine
 

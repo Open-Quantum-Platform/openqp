@@ -87,8 +87,8 @@ follows the same level.
 | Level | Name | What it adds |
 | --- | --- | --- |
 | `0` | quiet | Section headings, the calculation request, SCF and solver convergence results, final energies, gradients and properties, warnings |
-| `1` | normal (default) | SCF, TRAH (native and OpenTRAH), Davidson, Z-vector, GMRES, CPHF and CC iteration tables; orbital energies; SCF energy components; DFT grid statistics |
-| `2` | detailed | MO coefficients and the orbital table of an unconverged SCF; the primitive-by-primitive basis listing; solver diagnostics (Hessian response residuals and storage notes, the NAC overlap table, MOM reordering, NMR gates); notes on symmetry reductions skipped by design; the dispersion block when dispersion is off |
+| `1` | normal (default) | SCF, TRAH (native and OpenTRAH), Davidson, Z-vector, GMRES and CC iteration tables; one convergence summary per CPHF solve; orbital energies; SCF energy components; DFT grid statistics |
+| `2` | detailed | MO coefficients and the orbital table of an unconverged SCF; the primitive-by-primitive basis listing; solver diagnostics (per-right-hand-side CPHF residuals, DFT XC integration timings, Hessian response residuals and storage notes, the NAC overlap table, MOM reordering, NMR gates); notes on symmetry reductions skipped by design; the dispersion block when dispersion is off |
 | `3` | debug | Developer dumps: PCM, spin-orbit, scalar-relativistic and MRSF debug output; OpenTRAH MINRES internals |
 
 `runtype = md` and `namd` run at level 0 unless the input sets a level above 1.
