@@ -55,6 +55,14 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
             r"do while \(gnorm > par%conv_tol \.and\. snorm > 0\.0_dp \.and\. pred <= pred_floor &\s*\n"
             r"\s*\.and\. n_fp < max_fp_refine\)")
 
+    def test_progressing_block_returns_to_the_macro_loop(self):
+        """A capped block that still halved |g| cycles into the nmac-bounded
+        macro loop; only a stagnant block (or the last macroiteration) stops."""
+        src = TRAH_CORE.read_text()
+        self.assertIn("real(dp), parameter :: fp_progress = 0.5_dp", src)
+        self.assertRegex(src, r"g_fp0 = gnorm\s*\n\s*n_fp = 0")
+        self.assertRegex(src, r"if \(gnorm < fp_progress\*g_fp0 \.and\. macro < par%nmac\) then[\s\S]{0,400}?\bcycle\b")
+
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
@@ -80,7 +88,12 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
         m = re.search(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
         self.assertIsNotNone(m, "TRAH did not report where the capped refinement stopped")
         self.assertEqual(int(m.group(2)), 8)
-        self.assertGreater(float(m.group(1)), 1e-14)
+        g_stop = float(m.group(1))
+        self.assertGreater(g_stop, 1e-14)
+        # blocks that still halved |g| went on refining past the first eight steps
+        cont = [float(g) for g in re.findall(r"\s(\S+)\s+refinement continuing after 8 steps", log)]
+        self.assertTrue(cont, "no refinement block continued although |g| was still decreasing")
+        self.assertLess(g_stop, cont[0])
         self.assertNotIn("CONVERGED (FP precision", log)
         self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
 

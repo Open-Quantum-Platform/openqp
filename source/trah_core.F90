@@ -173,6 +173,9 @@ module trah_core_mod
   !> above FP noise.  Near an ROHF solution whose gradient cannot fall below the
   !> requested tolerance at this precision, an uncapped loop never exits.
   integer,  parameter :: max_fp_refine = 8
+  !> A refinement block that has at least halved |g| is still converging:
+  !> it returns to the (nmac-bounded) macro loop instead of stopping.
+  real(dp), parameter :: fp_progress = 0.5_dp
 
 contains
 
@@ -190,7 +193,7 @@ contains
     integer,  intent(out), optional :: nhist
 
     integer  :: n, macro, micro_used, ierr, nh, n_fp
-    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old
+    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_fp0
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
 
@@ -266,6 +269,7 @@ contains
       ! quadratically before exiting.  The energy ratio is FP-noise-dominated
       ! here, so accept unconditionally.
       if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
+        g_fp0 = gnorm
         n_fp = 0
         do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor &
                   .and. n_fp < max_fp_refine)
@@ -286,10 +290,20 @@ contains
         end do
         if (pred > pred_floor .and. gnorm >= par%conv_tol) cycle
         if (gnorm > par%conv_tol) then
-          ! The capped refinement ended above the requested tolerance.  Stop, but
-          ! report non-convergence with the gradient actually reached: the caller
-          ! decides what an energy converged to FP precision is worth (the SCF
-          ! driver keeps its own |g| acceptance; CASSCF sees it as unconverged).
+          ! The capped block ended above the requested tolerance.  If it still at
+          ! least halved |g|, the refinement is converging: take another
+          ! macroiteration, which re-enters this block while the conditions hold
+          ! and is bounded by nmac.
+          if (gnorm < fp_progress*g_fp0 .and. macro < par%nmac) then
+            if (par%verbose) write(IW, &
+                  '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement continuing after ",i0," steps")') &
+                  macro, e0, gnorm, n_fp
+            cycle
+          end if
+          ! Stagnant (or out of macroiterations): stop, but report non-convergence
+          ! with the gradient actually reached; the caller decides what an energy
+          ! converged to FP precision is worth (the SCF driver keeps its own |g|
+          ! acceptance; CASSCF sees it as unconverged).
           if (par%verbose) write(IW, &
                 '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement stopped after ",i0," steps above conv")') &
                 macro, e0, gnorm, n_fp
