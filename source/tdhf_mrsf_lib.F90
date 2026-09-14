@@ -1908,7 +1908,7 @@ contains
 
     if (debug_mode) then
       write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
-      write(iw,*) wrk(1:5,1:5)
+      write(iw,*) wrk(1:min(5,size(wrk,1)),1:min(5,size(wrk,2)))
     end if
 
     ij = 0

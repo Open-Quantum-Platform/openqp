@@ -146,11 +146,13 @@ contains
 
     if (dk_debug) then
       write(iw, '(/,a)') '  Hcore diagonal d-block (14-19):'
-      do i = 14, 19
+      do i = 14, min(19, nbf)
         write(iw, '(2x,i5,es16.6)') i, hcore(i*(i-1)/2 + i)
       end do
-      write(iw, '(a)') '  Hcore(17,17), (18,18), (19,19) vs (14,14):'
-      write(iw, '(3es16.6)') hcore(17*16/2+17), hcore(14*13/2+14)
+      if (nbf >= 19) then
+        write(iw, '(a)') '  Hcore(17,17), (18,18), (19,19) vs (14,14):'
+        write(iw, '(3es16.6)') hcore(17*16/2+17), hcore(14*13/2+14)
+      end if
     end if
 
     ! --- Step 2: build p-space basis ---
