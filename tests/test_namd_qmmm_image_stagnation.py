@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMD = ROOT / "pyoqp" / "oqp" / "library" / "namd.py"
 DRIVER = ROOT / "pyoqp" / "oqp" / "library" / "qmmm_driver.py"
 
-DRV = types.SimpleNamespace(IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-5, IMAGE_ETOL=1e-8)
+DRV = types.SimpleNamespace(IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-4, IMAGE_ETOL=1e-8)
 # reference SCF energies of image iterations 4-6 at the e25 step-44 noise floor
 NOISE = [-456.3375043006, -456.3375043002, -456.3375043003]
 
@@ -39,7 +39,7 @@ class TestImageFieldStagnationSource(unittest.TestCase):
         src = DRIVER.read_text()
         self.assertIn("    IMAGE_TOL = 1e-7\n", src)
         self.assertIn("    IMAGE_STAGNANT_MINITER = 10\n", src)
-        self.assertIn("    IMAGE_TOL_STAGNANT = 1e-5\n", src)
+        self.assertIn("    IMAGE_TOL_STAGNANT = 1e-4\n", src)
         self.assertIn("    IMAGE_ETOL = 1e-8\n", src)
 
     def test_both_reference_loops_fall_back_only_after_the_strict_test(self):
@@ -65,7 +65,7 @@ class TestImageFieldStagnant(unittest.TestCase):
         self.assertFalse(self.stagnant(8, 2.7e-6, NOISE, DRV))
 
     def test_charges_still_moving_are_rejected(self):
-        self.assertFalse(self.stagnant(20, 3.5e-5, NOISE, DRV))
+        self.assertFalse(self.stagnant(20, 3.5e-4, NOISE, DRV))
 
     def test_moving_energy_is_rejected(self):
         # a switch between two SCF solutions moves the energy far beyond 1e-8
@@ -109,7 +109,7 @@ class TestReferenceImageLoop(unittest.TestCase):
     def _noise(self, n, amp=3e-6):
         return [self.BASE + amp * np.array([(-1) ** k, (-1) ** (k + 1)]) for k in range(n)]
 
-    def _run(self, charges, energies, maxiter=50):
+    def _run(self, charges, energies, maxiter=50, tol_stagnant=1e-4):
         import oqp.library.namd as namd
         nat, nbf = self.NAT, self.NBF
         data = _FakeData(nbf)
@@ -121,7 +121,7 @@ class TestReferenceImageLoop(unittest.TestCase):
                                     get_scf_energy=lambda: energies[calls["scf"] - 1])
         ewald = types.SimpleNamespace(qm_image_matrix=lambda pos: (np.eye(nat), np.zeros((nat, nat, 3))))
         driver = types.SimpleNamespace(espf_full=True, IMAGE_MAXITER=maxiter, IMAGE_TOL=1e-7,
-                                       IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-5, IMAGE_ETOL=1e-8,
+                                       IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=tol_stagnant, IMAGE_ETOL=1e-8,
                                        _ewald=lambda: ewald,
                                        _qm_center_positions_bohr=lambda: np.zeros((nat, 3)))
         obj = namd.NAMD_QMMM.__new__(namd.NAMD_QMMM)
@@ -165,6 +165,19 @@ class TestReferenceImageLoop(unittest.TestCase):
         # the active-state loop starts from the input field of the last SCF, not its output charges
         np.testing.assert_array_equal(seed, calls["potmm"][-1])
         self.assertGreater(float(np.abs(seed - charges[9]).max()), 1e-6)
+
+    def test_two_state_alternation_at_the_e25_step_45_size_is_accepted(self):
+        """e25 step 45: every SCF converges to the same solution, the energy
+        alternates within 1.3e-9 Hartree and max |dq| against the damped field
+        settles at 1.56e-5 e.  Accepted at 1e-4 e; the earlier 1e-5 e raised."""
+        n = 50
+        charges = self._noise(n, amp=1.04e-5)
+        energies = [self.E0 + 6.5e-10 * (-1) ** k for k in range(n)]
+        _, seed, calls = self._run(charges, energies)
+        self.assertEqual(calls["scf"], 10)
+        self.assertTrue(any("accepted on stagnation after 10 iterations" in t for t in calls["logs"]))
+        with self.assertRaisesRegex(RuntimeError, "did not stagnate"):
+            self._run(charges, energies, tol_stagnant=1e-5)
 
     def test_moving_energy_still_raises(self):
         n = 50
