@@ -94,11 +94,17 @@ module types
     logical(c_bool) :: Z_Vector_converged = .false. !< Convergence checking Flag for Z-Vector Iteration
   end type energy_results
 
+  !> Values of control_parameters%guess.  GUESS_COLD: the orbitals come from a
+  !> model guess (Hueckel, core Hamiltonian); GUESS_SUPPLIED: they were supplied
+  !> (a JSON guess, or the converged orbitals of the previous SCF), so a
+  !> second-order converger may start from them without re-diagonalising.
+  integer(c_int64_t), parameter, public :: GUESS_COLD = 1, GUESS_SUPPLIED = 2
+
   type, public, bind(C) :: control_parameters
     integer(c_int64_t) :: hamilton = 10      !< The method of calculations: 10=HF, 20=DFT
     integer(c_int64_t) :: scftype  = 1       !< Refence wavefuction, 1= RHF 2= UHF 3= ROHF
     character(c_char)  :: runtype(20)  = ''  !<  Run type: energy, grad, etc.
-    integer(c_int64_t) :: guess    = 1       !< used guess
+    integer(c_int64_t) :: guess    = 1       !< origin of the current orbitals: GUESS_COLD or GUESS_SUPPLIED
     integer(c_int64_t) :: active_basis = 0    !< Choose data basis: 0 -> info%basis, 1 -> info%alt_basis
     integer(c_int64_t) :: maxit    = 3       !< The maximum number of iterations
     integer(c_int64_t) :: maxit_dav = 50     !< The maximum number of iterations in Davidson eigensolver

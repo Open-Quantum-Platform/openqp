@@ -63,7 +63,7 @@ module trah_core_mod
   public :: trah_run, trah_micro_step, trah_lowest_hessian_eig
 
   !> The physics behind one TRAH optimization.  A method implements these four
-  !> and gets the whole trust-region machinery.
+  !> and gets the whole trust-region machinery; `refresh` is optional.
   type, abstract :: trah_provider_t
     integer :: nparam = 0     !< length of the rotation vector
   contains
@@ -71,6 +71,10 @@ module trah_core_mod
     procedure(trah_hv_i), deferred :: hess_vec
     procedure(trah_te_i), deferred :: trial_energy
     procedure(trah_as_i), deferred :: apply_step
+    !> Drop state accumulated across evaluations, so the next grad_hdiag is
+    !> exact.  Called before every floating-point refinement gradient.  The
+    !> default has nothing to drop.
+    procedure :: refresh => trah_provider_refresh
   end type trah_provider_t
 
   abstract interface
@@ -188,6 +192,10 @@ module trah_core_mod
 
 contains
 
+  subroutine trah_provider_refresh(this)
+    class(trah_provider_t), intent(inout) :: this
+  end subroutine trah_provider_refresh
+
   !> One TRAH macro trust-region loop from the provider's current point.
   !>
   !> On entry the provider is positioned at the starting point; on exit at the
@@ -285,6 +293,10 @@ contains
                   .and. n_stall < fp_stall_steps .and. n_fp < max_fp_refine)
           n_fp = n_fp + 1
           call prov%apply_step(p, ierr)
+          ! The gradient refined here is smaller than the error a provider can
+          ! accumulate across evaluations (the SCF incremental Fock), so each
+          ! refinement gradient starts from a clean state.
+          call prov%refresh()
           if (ierr == 0) call prov%grad_hdiag(g, hdiag, e0, ierr)
           if (ierr /= 0) then
             res%ierr = ierr
@@ -636,7 +648,7 @@ contains
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used, ierr
     integer :: nn, mmax, m, i, k, info, lwork, n_rtv, j, mw, ssz
-    real(dp) :: theta, rnorm, c0, snorm, php, di, nv
+    real(dp) :: theta, rnorm, c0, snorm, php, di, nv, scale
     real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), au(:), r(:), tc(:)
     real(dp), allocatable :: eig(:), work(:), hx(:)
     integer,  allocatable :: seed(:)
@@ -718,15 +730,20 @@ contains
       V(:,m) = tc/nv
     end do
 
-    ! step kappa = y/c from the lowest Ritz vector (head normalized positive)
+    ! step kappa = y/c from the lowest Ritz vector (head normalized positive);
+    ! au = A u belongs to the same vector, so it changes sign with u
     c0 = u(1)
-    if (c0 < 0.0_dp) then; u = -u; c0 = -c0; end if
-    p = u(2:nn)/max(c0, 1.0e-8_dp)
-    snorm = norm2(p)
-    if (snorm > delta) p = p*(delta/snorm)
+    if (c0 < 0.0_dp) then; u = -u; au = -au; c0 = -c0; end if
+    scale = 1.0_dp/max(c0, 1.0e-8_dp)
+    snorm = norm2(u(2:nn))*scale
+    if (snorm > delta) scale = scale*(delta/snorm)
+    p = u(2:nn)*scale
 
-    call prov%hess_vec(p, hx, ierr)
-    if (ierr /= 0) return
+    ! H p from the Davidson products instead of another Hessian-vector
+    ! product: A = [[0, g^T], [g, H]] and u = [c; y] give (A u)_tail = c g + H y,
+    ! and p = s y with s the denominator and trust-radius scaling above, so
+    ! H p = s ((A u)_tail - c g).
+    hx = scale*(au(2:nn) - c0*g)
     php  = dot_product(p, hx)
     pred = -(dot_product(g, p) + 0.5_dp*php)
     deallocate(V, W, u, au, r, tc, eig, work, hx)

@@ -5,7 +5,9 @@ tolerance at this precision, the loop used to repeat forever without output
 (24 DNA thymine NAMD trajectories hung for up to 67 hours at full CPU).  It now
 stops once |g| has not dropped by a quarter for a fixed number of steps, while
 a refinement that is still converging -- even slowly -- runs to the requested
-tolerance.
+tolerance.  Each refinement gradient is built from a clean provider state (the
+full SCF Fock rather than the incremental one), so a tolerance above the
+floating-point floor is reached instead of the incremental-Fock error floor.
 """
 import os
 import re
@@ -64,6 +66,18 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
         self.assertRegex(src, r"if \(gnorm < fp_progress\*g_ref\) then\s*\n\s*g_ref   = gnorm\s*\n\s*n_stall = 0\s*\n"
                               r"\s*else\s*\n\s*n_stall = n_stall \+ 1")
 
+    def test_refinement_gradients_are_built_from_a_clean_state(self):
+        """Each refinement step drops the provider's accumulated state before its
+        gradient; the SCF provider resets the incremental-Fock history."""
+        src = TRAH_CORE.read_text()
+        self.assertRegex(src, r"n_fp = n_fp \+ 1\s*\n\s*call prov%apply_step\(p, ierr\)\s*\n(?:\s*!.*\n)*"
+                              r"\s*call prov%refresh\(\)\s*\n\s*if \(ierr == 0\) call prov%grad_hdiag\(g, hdiag, e0, ierr\)")
+        self.assertIn("procedure :: refresh => trah_provider_refresh", src)
+        scf = (ROOT / "source" / "trah_converger.F90").read_text()
+        self.assertIn("procedure :: refresh      => scf_refresh", scf)
+        self.assertRegex(scf, r"subroutine scf_refresh\(this\)\s*\n.*\n\s*this%conv%f_old = 0\.0_dp\s*\n"
+                              r"\s*this%conv%d_old = 0\.0_dp\s*\n\s*end subroutine scf_refresh")
+
     def test_block_bound_reached_while_improving_returns_to_the_macro_loop(self):
         """A block that hits its step bound while |g| still converges cycles into
         the nmac-bounded macro loop; a stagnant block stops."""
@@ -91,24 +105,34 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
             return proc, (Path(tmp) / "h2o_trah_tight.log").read_text(errors="ignore")
 
     def test_unreachable_tolerance_stops_without_claiming_convergence(self):
-        proc, log = self._run("1e-14")
+        proc, log = self._run("1e-18")
         self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
-        m = re.search(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
-        self.assertIsNotNone(m, "TRAH did not report where the refinement stopped")
-        n_steps, g_stop = int(m.group(2)), float(m.group(1))
-        self.assertGreater(g_stop, 1e-14)
-        # |g| converges for well over eight steps before it reaches the noise
-        # floor, so the refinement must run past any fixed eight-step cap -- and
-        # then stop on stagnation inside that block, not by exhausting its step
-        # bound and cycling
+        stops = re.findall(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
+        self.assertEqual(len(stops), 1, "TRAH did not report where the refinement stopped")
+        g_stop = float(stops[0][0])
+        # blocks that reach their step bound while |g| still converges cycle
+        # through the nmac-bounded macro loop before the stagnant block stops
+        n_steps = int(stops[0][1]) + 100*log.count("refinement continuing")
+        self.assertGreater(g_stop, 1e-18)
+        # |g| converges for well over eight steps before it reaches the
+        # floating-point floor, so the refinement runs past any fixed eight-step cap
         self.assertGreater(n_steps, 8)
-        self.assertLess(n_steps, 100)
-        self.assertNotIn("refinement continuing", log)
         entry = re.findall(r"^\s+\d+\s+-?\d+\.\d+\s+(\d\.\d+E[-+]\d+)\s+[-\d.]+\s+[\d.]+\s+\d+\s+acc", log, re.M)
         self.assertTrue(entry, "no accepted TRAH macroiteration in the log")
         self.assertLess(g_stop, 1e-2*float(entry[-1]))
         self.assertNotIn("CONVERGED (FP precision", log)
         self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
+
+    def test_refinement_reaches_a_tolerance_above_the_floating_point_floor(self):
+        """With refinement gradients built from the full Fock, |g| goes below 1e-12.
+        Carrying the incremental Fock through the refinement, it stopped at an
+        incremental |g| near 3e-10 while the full-Fock |g| was 8e-9."""
+        proc, log = self._run("1e-12")
+        self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
+        m = re.search(r"\s(\S+)\s+CONVERGED \(FP precision, (\d+) refinement steps\)", log)
+        self.assertIsNotNone(m, "the TRAH refinement did not converge to 1e-12")
+        self.assertLess(float(m.group(1)), 1e-12)
+        self.assertNotIn("refinement stopped", log)
 
 
 if __name__ == "__main__":

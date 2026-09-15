@@ -7,6 +7,9 @@ from oqp.utils.file_utils import try_basis
 from oqp.utils.file_utils import try_data_file
 from oqp.utils.file_utils import dump_log
 
+# control%guess values (source/types.F90): where the current orbitals came from
+GUESS_COLD, GUESS_SUPPLIED = 1, 2
+
 def update_guess(mol):
     if mol.config['json']['scf_type'] == 'rhf':
         mol.data["OQP::VEC_MO_B"] = copy.deepcopy(mol.data["OQP::VEC_MO_A"])
@@ -115,6 +118,10 @@ def guess(mol):
         mol.data["OQP::E_MO_B"] = copy.deepcopy(mol.data["OQP::E_MO_A"])
         mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
         beta = 'copied'
+
+    # A second-order converger starts from reloaded orbitals without
+    # re-diagonalising the first Fock; computed guesses are model orbitals.
+    mol.data._data.control.guess = GUESS_SUPPLIED if alpha == 'reloaded' else GUESS_COLD
 
     guess_info = {
         'guess_type': guess_type,
