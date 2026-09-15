@@ -47,7 +47,7 @@ contains
     USE precision, only: dp
     use oqp_tagarray_driver
     use constants, only: kB_HaK
-    use types, only: information
+    use types, only: information, GUESS_COLD, GUESS_SUPPLIED
     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
                             int2_rhf_data_t, int2_urohf_data_t
     use mod_dft, only: dftexcor
@@ -101,6 +101,7 @@ contains
     logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
+    logical :: keep_supplied            ! first iteration keeps supplied orbitals
 
     !==============================================================================
     ! Electron Counting Parameters
@@ -1150,7 +1151,31 @@ contains
         ! DIIS: Retrieve updated Fock directly
         ! Form the interpolated the Fock/Density matrix
         call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
-        if (int2_driver%pe%rank == 0) then
+        ! A second-order converger (SOSCF/TRAH) starts from supplied orbitals as
+        ! they are: diagonalising the first Fock would refill them in the order of
+        ! the (ROHF effective) orbital energies, which can swap the occupations of
+        ! a converged solution and cost many iterations to recover.  Orbitals count
+        ! as supplied only when orthonormal in the current overlap metric, so a
+        ! cold guess or a new geometry still takes the diagonalisation.
+        keep_supplied = .false.
+        if ((use_soscf .or. use_trah) .and. iter == 1 .and. &
+            infos%control%guess == GUESS_SUPPLIED) then
+          work2 = matmul(transpose(mo_a), matmul(smat_full, mo_a))
+          do i = 1, nbf
+            work2(i,i) = work2(i,i) - 1.0_dp
+          end do
+          keep_supplied = maxval(abs(work2)) < 1.0e-8_dp
+          if (keep_supplied .and. scf_type == scf_uhf .and. nelec_b /= 0) then
+            work2 = matmul(transpose(mo_b), matmul(smat_full, mo_b))
+            do i = 1, nbf
+              work2(i,i) = work2(i,i) - 1.0_dp
+            end do
+            keep_supplied = maxval(abs(work2)) < 1.0e-8_dp
+          end if
+        end if
+        if (keep_supplied) then
+          write(IW,"(10x,'Second-order converger starts from the supplied orbitals.')")
+        else if (int2_driver%pe%rank == 0) then
            ! Compute New Alpha Orbitals
            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
            if (scf_type == scf_uhf .and. nelec_b /= 0) then
@@ -1247,6 +1272,13 @@ contains
     else
       write(IW,"(3x,64('-')/10x,'SCF convergence achieved ....')")
       infos%mol_energy%SCF_converged = .true.
+    end if
+    ! The orbitals this SCF leaves behind: supplied for the next SCF when converged,
+    ! a cold start after a stall or the iteration limit.
+    if (infos%mol_energy%SCF_converged) then
+      infos%control%guess = GUESS_SUPPLIED
+    else
+      infos%control%guess = GUESS_COLD
     end if
 
     write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), energy%etot, iter
