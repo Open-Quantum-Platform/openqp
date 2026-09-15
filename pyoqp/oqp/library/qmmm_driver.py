@@ -1312,10 +1312,12 @@ class OpenQpQMMM:
     #: max |dq| < IMAGE_TOL_STAGNANT and the last three SCF energies agree to
     #: IMAGE_ETOL (Hartree).  IMAGE_TOL_STAGNANT equals IMAGE_TOL_ACTIVE: in
     #: NAMD the active-state loop re-converges the propagated field to that
-    #: tolerance anyway.  Charges or energies that still move are rejected.
+    #: tolerance anyway, and IMAGE_ETOL equals IMAGE_ETOL_ACTIVE: when every image
+    #: iteration ends in TRAH the SCF energy scatters by a few 1e-8 Hartree.
+    #: Charges or energies that still move are rejected.
     IMAGE_STAGNANT_MINITER = 10
     IMAGE_TOL_STAGNANT = 1e-4
-    IMAGE_ETOL = 1e-8
+    IMAGE_ETOL = 1e-7
     #: Active-state refinement in NAMD (each iteration costs a Z-vector
     #: gradient).  The relaxed charges carry the Z-vector residual (1e-5 to
     #: 1e-4 e at the default Z-vector convergence), so the field is taken as

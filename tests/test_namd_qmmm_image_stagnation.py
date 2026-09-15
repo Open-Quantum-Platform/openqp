@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMD = ROOT / "pyoqp" / "oqp" / "library" / "namd.py"
 DRIVER = ROOT / "pyoqp" / "oqp" / "library" / "qmmm_driver.py"
 
-DRV = types.SimpleNamespace(IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-4, IMAGE_ETOL=1e-8)
+DRV = types.SimpleNamespace(IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=1e-4, IMAGE_ETOL=1e-7)
 # reference SCF energies of image iterations 4-6 at the e25 step-44 noise floor
 NOISE = [-456.3375043006, -456.3375043002, -456.3375043003]
 
@@ -40,7 +40,7 @@ class TestImageFieldStagnationSource(unittest.TestCase):
         self.assertIn("    IMAGE_TOL = 1e-7\n", src)
         self.assertIn("    IMAGE_STAGNANT_MINITER = 10\n", src)
         self.assertIn("    IMAGE_TOL_STAGNANT = 1e-4\n", src)
-        self.assertIn("    IMAGE_ETOL = 1e-8\n", src)
+        self.assertIn("    IMAGE_ETOL = 1e-7\n", src)
 
     def test_both_reference_loops_fall_back_only_after_the_strict_test(self):
         src = NAMD.read_text()
@@ -109,7 +109,7 @@ class TestReferenceImageLoop(unittest.TestCase):
     def _noise(self, n, amp=3e-6):
         return [self.BASE + amp * np.array([(-1) ** k, (-1) ** (k + 1)]) for k in range(n)]
 
-    def _run(self, charges, energies, maxiter=50, tol_stagnant=1e-4):
+    def _run(self, charges, energies, maxiter=50, tol_stagnant=1e-4, etol=1e-7):
         import oqp.library.namd as namd
         nat, nbf = self.NAT, self.NBF
         data = _FakeData(nbf)
@@ -121,7 +121,7 @@ class TestReferenceImageLoop(unittest.TestCase):
                                     get_scf_energy=lambda: energies[calls["scf"] - 1])
         ewald = types.SimpleNamespace(qm_image_matrix=lambda pos: (np.eye(nat), np.zeros((nat, nat, 3))))
         driver = types.SimpleNamespace(espf_full=True, IMAGE_MAXITER=maxiter, IMAGE_TOL=1e-7,
-                                       IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=tol_stagnant, IMAGE_ETOL=1e-8,
+                                       IMAGE_STAGNANT_MINITER=10, IMAGE_TOL_STAGNANT=tol_stagnant, IMAGE_ETOL=etol,
                                        _ewald=lambda: ewald,
                                        _qm_center_positions_bohr=lambda: np.zeros((nat, 3)))
         obj = namd.NAMD_QMMM.__new__(namd.NAMD_QMMM)
@@ -178,6 +178,19 @@ class TestReferenceImageLoop(unittest.TestCase):
         self.assertTrue(any("accepted on stagnation after 10 iterations" in t for t in calls["logs"]))
         with self.assertRaisesRegex(RuntimeError, "did not stagnate"):
             self._run(charges, energies, tol_stagnant=1e-5)
+
+    def test_energy_scatter_of_trah_exits_at_the_e52_step_741_size_is_accepted(self):
+        """e52 step 741: every image iteration ends in TRAH, the charges meet the
+        fallback and the SCF energies scatter by 3.7e-8 Hartree.  Accepted at
+        1e-7 Hartree; the earlier 1e-8 Hartree raised."""
+        n = 50
+        charges = self._noise(n)
+        energies = [self.E0 + 1.85e-8 * (-1) ** k for k in range(n)]
+        _, _, calls = self._run(charges, energies)
+        self.assertEqual(calls["scf"], 10)
+        self.assertTrue(any("accepted on stagnation after 10 iterations" in t for t in calls["logs"]))
+        with self.assertRaisesRegex(RuntimeError, "did not stagnate"):
+            self._run(charges, energies, etol=1e-8)
 
     def test_moving_energy_still_raises(self):
         n = 50
