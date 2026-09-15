@@ -63,7 +63,7 @@ module trah_core_mod
   public :: trah_run, trah_micro_step, trah_lowest_hessian_eig
 
   !> The physics behind one TRAH optimization.  A method implements these four
-  !> and gets the whole trust-region machinery.
+  !> and gets the whole trust-region machinery; `refresh` is optional.
   type, abstract :: trah_provider_t
     integer :: nparam = 0     !< length of the rotation vector
   contains
@@ -71,6 +71,10 @@ module trah_core_mod
     procedure(trah_hv_i), deferred :: hess_vec
     procedure(trah_te_i), deferred :: trial_energy
     procedure(trah_as_i), deferred :: apply_step
+    !> Drop state accumulated across evaluations, so the next grad_hdiag is
+    !> exact.  Called before every floating-point refinement gradient.  The
+    !> default has nothing to drop.
+    procedure :: refresh => trah_provider_refresh
   end type trah_provider_t
 
   abstract interface
@@ -188,6 +192,10 @@ module trah_core_mod
 
 contains
 
+  subroutine trah_provider_refresh(this)
+    class(trah_provider_t), intent(inout) :: this
+  end subroutine trah_provider_refresh
+
   !> One TRAH macro trust-region loop from the provider's current point.
   !>
   !> On entry the provider is positioned at the starting point; on exit at the
@@ -285,6 +293,10 @@ contains
                   .and. n_stall < fp_stall_steps .and. n_fp < max_fp_refine)
           n_fp = n_fp + 1
           call prov%apply_step(p, ierr)
+          ! The gradient refined here is smaller than the error a provider can
+          ! accumulate across evaluations (the SCF incremental Fock), so each
+          ! refinement gradient starts from a clean state.
+          call prov%refresh()
           if (ierr == 0) call prov%grad_hdiag(g, hdiag, e0, ierr)
           if (ierr /= 0) then
             res%ierr = ierr
