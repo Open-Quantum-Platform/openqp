@@ -3635,6 +3635,22 @@ def _parse_int_list(spec):
     return out
 
 
+
+def _image_field_stagnant(iteration, delta, energies, driver):
+    """True when a reference-density image field whose ESPF charges only
+    fluctuate at the SCF noise floor can be accepted.
+
+    ``iteration`` is the zero-based image iteration, ``delta`` its max |dq|
+    (e) and ``energies`` the reference SCF energy of every iteration so far.
+    The strict ``IMAGE_TOL`` test runs first; this is the fallback for an ROHF
+    reference whose soft orbital rotations amplify the SCF gradient noise into
+    charge noise above ``IMAGE_TOL`` (see the constants on the QM/MM driver).
+    """
+    if iteration + 1 < int(driver.IMAGE_STAGNANT_MINITER) or len(energies) < 3:
+        return False
+    last = energies[-3:]
+    return delta < driver.IMAGE_TOL_STAGNANT and max(last) - min(last) < driver.IMAGE_ETOL
+
 class NAMD_QMMM(NAMD):
     """FSSH NAMD with electrostatic ESPF QM/MM embedding (non-periodic).
 
@@ -4064,20 +4080,92 @@ class NAMD_QMMM(NAMD):
         return self.driver.electrostatic_potential()
 
     @staticmethod
-    def _embedded_scf(sp):
+    def _embedded_scf(sp, warm=False):
         """Run the embedded SCF (the ESPF term is already in hcore) through the
         same robustness ladder as a gas-phase reference: primary converger,
         then SOSCF/TRAH escalation warm-started from the current orbitals.
         A reference that still does not converge stops the run: propagating
         on an unconverged SCF gives an inconsistent energy/force pair, and a
         DIIS loop that stops at its iteration limit even leaves the density
-        records in an intermediate state."""
-        converged = sp._run_scf()
+        records in an intermediate state.
+
+        ``warm``: the orbitals already held are a converged solution of a
+        nearby Hamiltonian (the previous MD step or an image iteration).  With
+        a DIIS primary the solve then starts with SOSCF: where the ROHF triplet
+        is not in the order of the effective-Fock energies, the first refill of
+        the orbitals swaps an occupied and an open orbital (+0.2 Hartree), DIIS
+        stalls and hands over to SOSCF anyway, and starting with SOSCF skips the
+        stalled DIIS stage.  An explicitly selected primary (soscf, trah, auto,
+        ...) runs as requested."""
+        saved_converger = sp.converger_type
+        if warm and str(saved_converger).lower() == 'diis':
+            sp.converger_type = 'soscf'
+        try:
+            converged = sp._run_scf()
+        finally:
+            sp.converger_type = saved_converger
         if not converged:
             raise RuntimeError(
                 "NAMD QM/MM: the embedded SCF did not converge (primary "
                 "converger and the SOSCF/TRAH escalation).  Raise [scf] maxit, "
                 "loosen [scf] conv, or check the QM/MM contacts.")
+
+    def _load_restart(self):
+        """Restore the checkpoint and, when it carries the converged orbitals
+        of the saved step (restored into the molecule with the rest of the
+        previous-step data), let the next step warm-start from them exactly as
+        an uninterrupted trajectory would.  _start_scf_orbitals still checks
+        their size and overlap metric before using them."""
+        restart = super()._load_restart()
+        if restart is not None:
+            data = self.prev_data if isinstance(self.prev_data, dict) else {}
+            self._scf_orbitals_ready = "OQP::VEC_MO_A" in data
+        return restart
+
+    def _start_scf_orbitals(self, sp):
+        """Basis, one-electron integrals and starting orbitals for this MD
+        step's embedded SCF.  Once a step has converged, the next step starts
+        from its orbitals, re-orthonormalised in the overlap metric of the new
+        geometry (symmetric orthonormalisation keeps each orbital's character)
+        with the density rebuilt from them.  A fresh guess every step starts
+        the SCF ~1.3 Hartree above the solution, costs ~30 iterations, and
+        lets the open-shell reference settle on a different solution from
+        one step to the next.  Returns True for a warm start."""
+        mol = self.mol
+        if not getattr(self, "_scf_orbitals_ready", False):
+            sp._prep_guess()
+            return False
+        c_prev = np.array(mol.data["OQP::VEC_MO_A"], dtype=float, copy=True)
+        e_prev = np.array(mol.data["OQP::E_MO_A"], dtype=float, copy=True)
+        oqp.library.set_basis(mol)
+        ints_1e(mol)
+        nbf = mol.data.get_basis()["nbf"]
+        target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
+        if c_prev.size != nbf * nbf or target.size != nbf * nbf:
+            oqp.library.guess(mol)
+            return False
+        c = c_prev.reshape((nbf, nbf)).T                      # C[ao, mo]
+        packed_s = np.asarray(mol.data["OQP::SM"], dtype=float).ravel()
+        if packed_s.size != nbf * (nbf + 1) // 2:
+            oqp.library.guess(mol)
+            return False
+        s_ao = np.zeros((nbf, nbf))
+        s_ao[np.tril_indices(nbf)] = packed_s             # row-major lower triangle
+        s_ao = s_ao + s_ao.T - np.diag(np.diag(s_ao))
+        w, v = np.linalg.eigh(c.T @ s_ao @ c)
+        if not np.all(np.isfinite(w)) or w.min() <= 1.0e-8:
+            oqp.library.guess(mol)
+            return False
+        c = c @ (v * (1.0 / np.sqrt(w))) @ v.T
+        packed = np.ascontiguousarray(c.T.reshape(target.shape))
+        mol.data["OQP::VEC_MO_A"][...] = packed
+        mol.data["OQP::VEC_MO_B"][...] = packed
+        mol.data["OQP::E_MO_A"][...] = e_prev.reshape(np.shape(mol.data["OQP::E_MO_A"]))
+        mol.data["OQP::E_MO_B"][...] = e_prev.reshape(np.shape(mol.data["OQP::E_MO_B"]))
+        oqp.guess_json(mol)
+        dump_log(mol, title="PyOQP: NAMD QM/MM SCF warm start from the previous step's orbitals",
+                 section='')
+        return True
 
     def _fold_link_charges(self, pchg):
         """(nqm,) MM-facing QM charges: each link atom's ESPF charge is added
@@ -4144,7 +4232,7 @@ class NAMD_QMMM(NAMD):
             return potmm, potqm
 
         sp = SinglePoint(mol)
-        sp._prep_guess()
+        warm_start = self._start_scf_orbitals(sp)
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         # Periodic full-ESPF: the QM charges also interact with their own images
@@ -4165,6 +4253,7 @@ class NAMD_QMMM(NAMD):
             q_prev = None
         converged = psi_img is None
         delta, it = float("inf"), -1
+        e_hist = []
         for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
@@ -4174,14 +4263,26 @@ class NAMD_QMMM(NAMD):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=(warm_start or it > 0))
+            self._scf_orbitals_ready = True
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
             delta = float(np.abs(q_new - q_prev).max())
+            e_hist.append(float(mol.get_scf_energy()))
             if delta < self.driver.IMAGE_TOL:
                 q_prev = q_new
+                converged = True
+                break
+            if _image_field_stagnant(it, delta, e_hist, self.driver):
+                dump_log(mol, title=(f"PyOQP: QM-image field (reference density) accepted on "
+                                     f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
+                                     f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
+                                     f"Hartree over three iterations"), section='')
+                # keep q_prev: it is the field this SCF (and the excitation that
+                # follows) was computed in, so the active-state loop measures its
+                # first residual against the field the electrons actually saw
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
@@ -4196,7 +4297,9 @@ class NAMD_QMMM(NAMD):
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
                 f"did not converge in {it + 1} iterations "
-                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}, and the "
+                f"charges did not stagnate below {self.driver.IMAGE_TOL_STAGNANT:.0e} e "
+                f"with a stable SCF energy); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
         self._grad_cache = None
@@ -4337,7 +4440,7 @@ class NAMD_QMMM(NAMD):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=True)
             ref = [mol.get_scf_energy()]
             if ctx["with_overlap"]:
                 mol.back_door = (self.prev_xyz, self.prev_data)
@@ -5709,7 +5812,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         potmm, potqm = self._embedding_field()
 
         sp = SinglePoint(mol)
-        sp._prep_guess()
+        warm_start = self._start_scf_orbitals(sp)
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         potmm_mm = np.asarray(potmm, dtype=float).copy()
@@ -5722,6 +5825,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             q_prev = None
         converged = psi_img is None
         delta, it = float("inf"), -1
+        e_hist = []
         for it in range(int(self.driver.IMAGE_MAXITER)):
             potmm = potmm_mm if psi_img is None else potmm_mm + psi_img @ q_prev
             mol.data["OQP::POTMM"] = potmm
@@ -5731,14 +5835,26 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
             hcore += np.einsum("ijk,i->jk", espf, potmm)
             mol.set_hcore(pack_lower_tri_single(hcore))
-            self._embedded_scf(sp)
+            self._embedded_scf(sp, warm=(warm_start or it > 0))
+            self._scf_orbitals_ready = True
             if psi_img is None:
                 break
             oqp.form_esp_charges(mol)
             q_new = np.array(mol.data["OQP::partial_charges"], dtype=float)
             delta = float(np.abs(q_new - q_prev).max())
+            e_hist.append(float(mol.get_scf_energy()))
             if delta < self.driver.IMAGE_TOL:
                 q_prev = q_new
+                converged = True
+                break
+            if _image_field_stagnant(it, delta, e_hist, self.driver):
+                dump_log(mol, title=(f"PyOQP: QM-image field (reference density) accepted on "
+                                     f"stagnation after {it + 1} iterations: max |dq| = {delta:.2e} e, "
+                                     f"SCF energy stable to {max(e_hist[-3:]) - min(e_hist[-3:]):.1e} "
+                                     f"Hartree over three iterations"), section='')
+                # keep q_prev: it is the field this SCF (and the excitation that
+                # follows) was computed in, so the active-state loop measures its
+                # first residual against the field the electrons actually saw
                 converged = True
                 break
             q_prev = 0.5 * (q_new + q_prev) if it > 6 else q_new
@@ -5753,7 +5869,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             raise RuntimeError(
                 f"Periodic ESPF QM/MM NAMD: the QM-image charge self-consistency "
                 f"did not converge in {it + 1} iterations "
-                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}); the "
+                f"(max |dq| = {delta:.2e} e > {self.driver.IMAGE_TOL:.0e}, and the "
+                f"charges did not stagnate below {self.driver.IMAGE_TOL_STAGNANT:.0e} e "
+                f"with a stable SCF energy); the "
                 "energy/force would be inconsistent.  Tighten [scf] conv or "
                 "check the QM/MM contacts.")
         if psi_img is not None:
