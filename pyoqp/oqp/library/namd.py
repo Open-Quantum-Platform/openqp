@@ -3750,6 +3750,12 @@ class NAMD_QMMM(NAMD):
             sys0.getParticleMass(i).value_in_unit(u.dalton) for i in range(self.natom_all)
         ]) * AMU_TO_AU                                          # electron masses
         self._resolve_active_atoms(q)
+        # rigid-water (SHAKE/RATTLE) constraints for the MM region.  Built
+        # before the velocities and before the identities: constraint closure
+        # can move an atom either into or out of the active set, and both need
+        # the final set.  An atom that closure ACTIVATES cannot have its random
+        # velocity restored afterwards, so the Maxwell draw has to come second.
+        self._build_constraints()
         self._restart_system_identity = self._qmmm_restart_system_identity(
             sys0, q)
         self._wham_system_identity = self._qmmm_wham_system_identity(sys0, q)
@@ -3763,23 +3769,14 @@ class NAMD_QMMM(NAMD):
             p = (self.m_all[:, None] * self.v_all).sum(axis=0)
             self.v_all -= p / self.m_all.sum()
             # A held atom is not thermalised and carries no momentum.  With
-            # nothing frozen the two lines above are the whole draw, unchanged;
-            # otherwise the held rows are zeroed and the centre of mass of the
-            # moving subsystem is put back at rest.  _build_constraints can
-            # freeze further atoms, so this runs again after it.
-            self._zero_held_velocities()
+            # nothing held the two lines above are the whole draw, unchanged.
+            self._hold_velocities()
+            self._remove_moving_com()
 
         # sync the QM Molecule geometry from the pdb QM atoms
         self._sync_positions()
         # QM-region masses for the hop (already set by super from mol.get_mass())
         self.qm_mass = self.mass.copy()
-        # rigid-water (SHAKE/RATTLE) constraints for the MM region
-        self._build_constraints()
-        # _build_constraints may freeze a constrained partner of an atom the
-        # deck froze, which happens after the Maxwell draw above: an atom that
-        # became held must not keep the velocity it was given, and the COM
-        # correction has to be redone over the atoms that actually move.
-        self._zero_held_velocities()
         self._setup_qmmm_restraint_targets()
 
     # ------------------------------------------------------------------ #
@@ -3965,9 +3962,8 @@ class NAMD_QMMM(NAMD):
                   f"propagated, {self.natom_all - len(self.active_atoms)} held fixed "
                   f"(their charges and forces still act)")
 
-    def _zero_held_velocities(self):
-        """Hold every non-propagated atom at zero velocity and put the moving
-        subsystem's centre of mass back at rest.
+    def _hold_velocities(self):
+        """Zero the velocity of every atom this run does not propagate.
 
         A held atom that kept a velocity would never move (the position update
         is masked) but its fictitious kinetic energy would still enter the
@@ -3976,19 +3972,40 @@ class NAMD_QMMM(NAMD):
         if self._all_atoms_move:
             return
         self.v_all *= self._move_mask
+
+    def _remove_moving_com(self):
+        """Put the centre of mass of the propagated subsystem at rest.
+
+        Initialisation only.  While the trajectory runs, the moving atoms can
+        legitimately pick up net momentum from the held environment, and that
+        translation is a real degree of freedom: removing it at every step
+        would silently constrain the dynamics and charge the removed kinetic
+        energy to the thermostat's reported exchange.
+        """
+        if self._all_atoms_move:
+            return
         m_move = self.m_all * self._move_mask[:, 0]
         if m_move.sum() > 0.0:
             p = (m_move[:, None] * self.v_all).sum(axis=0)
             self.v_all -= (p / m_move.sum()) * self._move_mask
 
     def _set_move_mask(self, active):
-        """Column mask (natom_all, 1): 1 on a propagated atom, 0 on a held one.
-        One multiplication then holds an atom in every velocity-Verlet update
-        without a branch inside the loop."""
-        mask = np.zeros((self.natom_all, 1))
-        mask[np.asarray(sorted(int(i) for i in active), dtype=int), 0] = 1.0
+        """Column mask (natom_all, 1): 0 on a held atom, 1 everywhere else.
+
+        The mask zeroes only atoms that are genuinely held.  A virtual site is
+        never "active" -- OpenMM places it from its parents -- so building the
+        mask from membership in ``active`` would mark every virtual site as
+        held, and a TIP4P topology that selected nothing would stop looking
+        like an unselected run.  Taking the complement instead keeps the mask
+        all ones exactly when nothing is held.
+        """
+        held = held_atoms(self.pdb.topology, active)
+        mask = np.ones((self.natom_all, 1))
+        if held:
+            mask[np.asarray(sorted(held), dtype=int), 0] = 0.0
         self._move_mask = mask
-        self._all_atoms_move = bool(mask.all())
+        self._held_atoms = held
+        self._all_atoms_move = not held
 
     def _build_constraints(self):
         """Collect the MM rigid-water bond/angle constraints (O-H, O-H, H-H per
@@ -4104,8 +4121,10 @@ class NAMD_QMMM(NAMD):
             self.v_all, self.m_all, istep)
         # The thermostat draws a new velocity for every row; a held atom must
         # not be given one, or its fictitious kinetic energy would enter the
-        # reported temperature and the thermostat's energy exchange.
-        self._zero_held_velocities()
+        # reported temperature and the thermostat's energy exchange.  Only the
+        # held rows are zeroed: the moving subsystem's net translation is a
+        # physical degree of freedom and must survive the thermostat.
+        self._hold_velocities()
         self._rattle(self.r_all, self.v_all)
         kinetic_after = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
         self._thermostat_exchange = float(kinetic_after - kinetic_before)

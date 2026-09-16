@@ -302,7 +302,8 @@ class TestNamdHeldAtomBookkeeping(unittest.TestCase):
         o = self._bare([1, 1, 0, 0])
         o.v_all = np.array([[1.0, 0.0, 0.0], [-0.4, 0.2, 0.0],
                             [5.0, 5.0, 5.0], [7.0, 0.0, 0.0]])
-        o._zero_held_velocities()
+        o._hold_velocities()
+        o._remove_moving_com()
         np.testing.assert_array_equal(o.v_all[2:], 0.0)
         moving_mass = o.m_all * o._move_mask[:, 0]
         momentum = (moving_mass[:, None] * o.v_all).sum(axis=0)
@@ -313,8 +314,51 @@ class TestNamdHeldAtomBookkeeping(unittest.TestCase):
         v = np.array([[1.0, 0.0, 0.0], [-0.4, 0.2, 0.0],
                       [5.0, 5.0, 5.0], [7.0, 0.0, 0.0]])
         o.v_all = v.copy()
-        o._zero_held_velocities()
+        o._hold_velocities()
+        o._remove_moving_com()
         np.testing.assert_array_equal(o.v_all, v)
+
+    def test_the_thermostat_holds_frozen_rows_but_keeps_the_moving_drift(self):
+        """Production `_apply_thermostat` wiring.  The Langevin update writes a
+        velocity for every row, so held rows must be re-zeroed -- but the net
+        translation of the moving subsystem is a physical degree of freedom and
+        must NOT be removed on every thermostat step.
+        """
+        o = self._bare([1, 1, 0])
+        o.m_all = np.array([1.0, 1.0, 1.0])
+        o.r_all = np.zeros((3, 3))
+        o.v_all = np.zeros((3, 3))
+        o.thermostat = 'langevin'
+        o._thermostat_exchange_cumulative = 0.0
+        # the two moving atoms translate together; the held one is given a
+        # velocity by the thermostat, exactly as the real Langevin step would
+        drifting = np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [9.0, 9.0, 9.0]])
+        o._langevin_update = lambda v, m, istep: (drifting.copy(), None)
+        o._rattle = lambda r, v: None
+        o._qm_velocities = lambda: np.zeros((1, 3))
+        o._apply_thermostat(1)
+        np.testing.assert_array_equal(o.v_all[2], 0.0)       # held row cleared
+        moving_momentum = (o.m_all[:2, None] * o.v_all[:2]).sum(axis=0)
+        self.assertAlmostEqual(float(moving_momentum[0]), 2.0)
+
+    def test_a_virtual_site_topology_with_no_selection_still_moves_everything(self):
+        """A virtual site is never `active`, so a mask built from membership in
+        the active set would mark it held -- and a TIP4P deck that selected
+        nothing would stop looking like an unselected run."""
+        top = app.Topology()
+        chain = top.addChain()
+        res = top.addResidue("HOH", chain)
+        for name, element in (("O", app.element.oxygen),
+                              ("H1", app.element.hydrogen),
+                              ("H2", app.element.hydrogen)):
+            top.addAtom(name, element, res)
+        top.addAtom("M", None, res)                  # the TIP4P virtual site
+        o = object.__new__(NAMD_QMMM)
+        o.pdb = SimpleNamespace(topology=top)
+        o.natom_all = top.getNumAtoms()
+        o._set_move_mask(np.array([0, 1, 2], dtype=int))
+        self.assertTrue(o._all_atoms_move)
+        np.testing.assert_array_equal(o._move_mask, np.ones((4, 1)))
 
     def test_a_held_atom_does_not_shrink_the_adaptive_timestep(self):
         """dt_adaptive sizes the step from the largest predicted displacement.
@@ -346,6 +390,40 @@ class TestNamdHeldAtomBookkeeping(unittest.TestCase):
             "pdb_file": "x.pdb", "active_atoms": "", "frozen_atoms": "",
             "active_radius": 0.0, "active_from_pdb": False})
         self.assertEqual(base, defaults)
+
+
+@unittest.skipUnless(_HAVE and _HAVE_DRIVERS, "OpenMM or OpenQP backend unavailable")
+class TestBuildConstraintsWiring(unittest.TestCase):
+    """Exercises the production `_build_constraints`, not a re-implementation."""
+
+    def _bare(self, active):
+        o = object.__new__(NAMD_QMMM)
+        o._u = unit
+        o.pdb = app.PDBFile(str(PDB_ACTIVE))
+        o.natom_all = o.pdb.topology.getNumAtoms()
+        o.forcefield = app.ForceField(
+            str(ROOT / "examples" / "QMMM" / "formaldehyde.xml"),
+            str(ROOT / "examples" / "QMMM" / "tip3p.xml"))
+        o.cutoff = app.NoCutoff
+        o.qm_atoms = np.array([0, 1, 2, 3], dtype=int)
+        o.m_all = np.ones(o.natom_all)
+        o.active_atoms = np.asarray(active, dtype=int)
+        o.frozen_atoms = set()
+        o._set_move_mask(o.active_atoms)
+        o._build_constraints()
+        return o
+
+    def test_constraints_inside_the_held_set_are_dropped(self):
+        held = self._bare(range(7))          # QM + the nearest water only
+        kept = set(zip(held._ci.tolist(), held._cj.tolist()))
+        self.assertTrue(kept, "the active water must still be constrained")
+        for i, j in kept:
+            self.assertLess(i, 7, kept)
+            self.assertLess(j, 7, kept)
+        # control: with every atom active, the unselected waters' constraints
+        # are kept, so the filter above really removed something
+        everything = self._bare(range(19))
+        self.assertGreater(len(everything._ci), len(held._ci))
 
 
 @unittest.skipUnless(_HAVE and _HAVE_DRIVERS, "OpenMM or OpenQP backend unavailable")
