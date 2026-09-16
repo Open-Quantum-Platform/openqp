@@ -7,12 +7,15 @@ the link atoms.  This driver instead minimises the QM/MM energy returned by
 ``OpenQpQMMM.compute_force`` (embedded SCF with the ESPF field, the ESPF and
 link-atom gradient terms, the classical MM forces) with respect to a chosen
 set of MOVABLE atoms: the QM region plus, optionally, every MM residue with an
-atom within ``[optimize] qmmm_radius`` angstrom of a QM atom, plus the atoms
-named by ``[optimize] qmmm_active`` and minus those named by
-``[optimize] qmmm_freeze`` (a protein or nucleic-acid backbone, say, which the
-radius would otherwise set free).  Everything else is held fixed, which is the
-usual practice for a solvated system and is what keeps the problem well posed
-(the classical solvent has no minimum worth finding).
+atom within ``[qmmm] active_radius`` angstrom of a QM atom, plus the atoms named
+by ``[qmmm] active_atoms`` and minus those named by ``[qmmm] frozen_atoms`` (a
+protein or nucleic-acid backbone, say, which the radius would otherwise set
+free).  Everything else is held fixed, which is the usual practice for a
+solvated system and is what keeps the problem well posed (the classical solvent
+has no minimum worth finding).  ``oqp.library.qmmm_active`` documents the
+selection syntax, which follows ORCA's ``%qmmm ActiveAtoms``.  The ``[optimize]``
+spellings are accepted as aliases: ``qmmm_radius`` (the released name for the
+movable shell), ``qmmm_active`` and ``qmmm_freeze``.
 
 State selection follows the dynamics drivers: ``[properties] grad`` names the
 TDHF/MRSF root (1 = the lowest root); ground-state HF/DFT needs nothing.
@@ -21,13 +24,15 @@ Outputs: the optimised full-system PDB (``[optimize] qmmm_output``, default
 ``<project>_opt.pdb``), one log line per iteration, and the usual mol data
 (energies, geometry) for the QM fragment.
 """
-import math
 import os
 import numpy as np
 from openmm import app, unit
 from oqp.library.oqp_engine import OQPEngine
 from oqp.library.liboqp import _OQPRunner
 
+from oqp.library.qmmm_active import (
+    SELECTION_KEYS, freeze_constrained_partners, parse_atom_selection,
+    resolve_active_set)
 from oqp.library.qmmm_driver import OpenQpQMMM
 from oqp.library.qmmm_md import (
     _extract_qmmm_config, _parse_int_list, _parse_str_list, _resolve_cutoff)
@@ -51,7 +56,8 @@ class QMMM_Opt:
         pdb_file = str(qmmm_cfg.get("pdb_file") or "").strip()
         if not pdb_file:
             raise ValueError("'qmmm.pdb_file' is required for a QM/MM optimisation.")
-        self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))
+        self._pdb_path = self._resolve_aux_file(pdb_file)
+        self.pdb = app.PDBFile(self._pdb_path)
         ff_files = self._forcefield_paths(qmmm_cfg.get("forcefield_files", ""))
         if not ff_files:
             raise ValueError("'qmmm.forcefield_files' is required for a QM/MM optimisation.")
@@ -85,21 +91,14 @@ class QMMM_Opt:
         self._reject_continue_geom(mol.config.get("guess", {}).get("continue_geom", False))
         mol.config.setdefault("properties", {})["grad"] = [self.istate]
 
-        # ---- movable set: QM atoms + whole MM residues within qmmm_radius ----
-        self.radius = float(opt.get("qmmm_radius", 0.0))
-        if not math.isfinite(self.radius) or self.radius < 0.0:
-            raise ValueError("'optimize.qmmm_radius' must be a finite distance >= 0 angstrom, "
-                             f"got {opt.get('qmmm_radius')!r}.")
-        self.active_spec = str(opt.get("qmmm_active", "") or "").strip()
-        self.freeze_spec = str(opt.get("qmmm_freeze", "") or "").strip()
-        self.extra_active = self._select_atoms(self.active_spec, "qmmm_active")
-        self.frozen_atoms = self._select_atoms(self.freeze_spec, "qmmm_freeze")
-        qm_frozen = sorted(self.frozen_atoms.intersection(int(i) for i in self.qm_atoms))
-        if qm_frozen:
-            raise ValueError(f"[optimize] qmmm_freeze names QM atoms {qm_frozen} (0-based). The QM "
-                             "region is what the optimisation moves; freeze MM atoms only, or take "
-                             "those atoms out of [qmmm] qm_atoms.")
-        self.movable = self._movable_atoms(self.radius)
+        # ---- movable set: the [qmmm] selection keys (ORCA's ActiveAtoms
+        # spelling), with the released [optimize] names kept as aliases ----
+        self.selection = self._selection_config(qmmm_cfg, opt)
+        self.radius = float(self.selection.get("active_radius", 0.0) or 0.0)
+        self.active_spec = str(self.selection.get("active_atoms", "") or "").strip()
+        self.freeze_spec = str(self.selection.get("frozen_atoms", "") or "").strip()
+        self.extra_active = self._select_atoms(self.active_spec, "active_atoms")
+        self.movable = self._movable_atoms()
         # [qmmm] rigidwater / constraints, held on the movable MM atoms (may
         # add constrained partners to the movable set)
         self.frozen_pairs = self._constraint_pairs(qmmm_cfg)
@@ -247,25 +246,8 @@ class QMMM_Opt:
             if int(p1) in qm or int(p2) in qm:
                 continue
             allpairs.append((int(p1), int(p2)))
-        movable = set(int(i) for i in self.movable)
-        frozen = set(int(i) for i in getattr(self, "frozen_atoms", ()))
-        changed = True
-        while changed:
-            changed = False
-            for p1, p2 in allpairs:
-                if (p1 in movable) == (p2 in movable):
-                    continue
-                if frozen.intersection((p1, p2)):
-                    # [optimize] qmmm_freeze wins: its constrained partner is held too,
-                    # so no constraint ties a moving atom to a fixed one.
-                    for p in (p1, p2):
-                        if p in movable:
-                            movable.discard(p)
-                            frozen.add(p)
-                            changed = True
-                else:
-                    movable.update((p1, p2))
-                    changed = True
+        movable, frozen = freeze_constrained_partners(
+            allpairs, self.movable, getattr(self, "frozen_atoms", ()))
         self.frozen_atoms = frozen
         self.movable = np.array(sorted(movable), dtype=int)
         return [(p1, p2) for p1, p2 in allpairs if p1 in movable]
@@ -295,95 +277,57 @@ class QMMM_Opt:
                 return candidate
         return value
 
-    def _select_atoms(self, spec, key):
-        """``[optimize] qmmm_active`` / ``qmmm_freeze`` -> a set of 0-based atom indices.
+    @staticmethod
+    def _selection_config(qmmm_cfg, opt):
+        """The ``[qmmm]`` selection keys, with the ``[optimize]`` spellings
+        accepted as aliases.
 
-        Groups are separated by whitespace or semicolons.  A group that starts
-        with ``name:`` is a comma-separated list of PDB atom names, matched
-        case-insensitively over the whole system (``name:P,OP1,OP2,O5'`` is a
-        nucleic-acid backbone); any other group is a comma-separated list of
-        0-based indices and ``first-last`` ranges, the [qmmm] qm_atoms
-        convention.  Virtual sites are never selected: OpenMM places them from
-        their parents, so they are not independent coordinates.
+        ``[qmmm] active_radius`` / ``active_atoms`` / ``frozen_atoms`` are the
+        ORCA-aligned names every QM/MM driver reads.  ``[optimize] qmmm_radius``
+        is the released name of the movable shell, and ``qmmm_active`` /
+        ``qmmm_freeze`` are its companions, so a deck written with either
+        spelling keeps working.  ``[qmmm]`` wins when both are given.
         """
-        text = str(spec or "").strip()
-        if not text:
-            return set()
-        by_name, atoms = {}, [a for a in self.pdb.topology.atoms()]
-        for atom in atoms:
-            if atom.element is not None:
-                by_name.setdefault(str(atom.name).strip().lower(), []).append(int(atom.index))
-        natom = len(atoms)
-        out = set()
-        for group in text.replace(";", " ").split():
-            if group.lower().startswith("name:"):
-                names = [n for n in group[5:].split(",") if n.strip()]
-                if not names:
-                    raise ValueError(f"[optimize] {key}: 'name:' needs at least one atom name, got {group!r}.")
-                for name in names:
-                    hit = by_name.get(name.strip().lower())
-                    if not hit:
-                        raise ValueError(f"[optimize] {key}: no atom is named {name.strip()!r} in "
-                                         f"[qmmm] pdb_file (names are matched case-insensitively).")
-                    out.update(hit)
-                continue
-            for token in group.split(","):
-                token = token.strip()
-                if not token:
-                    continue
-                try:
-                    lo, hi = (int(token), int(token)) if "-" not in token else (
-                        int(token.split("-")[0]), int(token.split("-")[1]))
-                except ValueError:
-                    raise ValueError(f"[optimize] {key}: {token!r} is neither a 0-based index, a "
-                                     "'first-last' range, nor a 'name:...' group.")
-                if lo > hi:
-                    raise ValueError(f"[optimize] {key}: range {token!r} runs backwards.")
-                if lo < 0 or hi >= natom:
-                    raise ValueError(f"[optimize] {key}: {token!r} is outside the 0-based range "
-                                     f"0..{natom - 1} of [qmmm] pdb_file.")
-                out.update(i for i in range(lo, hi + 1) if atoms[i].element is not None)
-        return out
+        cfg = {key: qmmm_cfg.get(key, "") for key in SELECTION_KEYS}
+        cfg["active_from_pdb"] = qmmm_cfg.get("active_from_pdb", False)
+        blank = ("", "0", "0.0", "none", "false")
+        for new, old in (("active_radius", "qmmm_radius"),
+                         ("active_atoms", "qmmm_active"),
+                         ("frozen_atoms", "qmmm_freeze")):
+            if str(cfg.get(new, "") or "").strip().lower() in blank:
+                value = opt.get(old, "")
+                if str(value or "").strip().lower() not in blank:
+                    cfg[new] = value
+        return cfg
 
-    def _apply_selection(self, movable):
-        """QM atoms + radius shell + [optimize] qmmm_active - [optimize] qmmm_freeze."""
-        movable = set(int(i) for i in movable) | set(int(i) for i in getattr(self, "extra_active", ()))
-        movable -= set(int(i) for i in getattr(self, "frozen_atoms", ()))
-        movable |= set(int(i) for i in self.qm_atoms)      # the QM region always moves
-        return np.array(sorted(movable), dtype=int)
+    def _select_atoms(self, spec, key):
+        """A selection string -> a set of 0-based atom indices (see
+        ``oqp.library.qmmm_active`` for the syntax)."""
+        return parse_atom_selection(spec, list(self.pdb.topology.atoms()), key)
 
-    def _movable_atoms(self, radius):
-        qm = set(int(i) for i in self.qm_atoms)
-        if radius <= 0.0:
-            return self._apply_selection(set(qm))
-        X = np.array(self.pdb.positions.value_in_unit(unit.angstrom))
+    def _movable_atoms(self, radius=None):
+        """QM atoms + the active_radius shell + active_atoms - frozen_atoms.
+
+        ``default_all=False``: with no selection an optimisation moves the QM
+        region alone, which is what a solvated deck expects and what the
+        released behaviour was.  ``radius`` overrides the configured
+        ``active_radius`` for a caller that wants one shell size only.
+        """
+        cfg = dict(getattr(self, "selection", {}) or {})
+        if radius is not None:
+            cfg["active_radius"] = radius
         box = self.driver._box_lengths_bohr()
-        box_ang = None if box is None else np.asarray(box) / 1.8897259886
-        qx = X[sorted(qm)]
-        movable = set(qm)
-
-        def dist(idx):
-            d = X[idx][:, None, :] - qx[None, :, :]
-            if box_ang is not None:
-                d -= box_ang * np.round(d / box_ang)
-            return np.linalg.norm(d, axis=2).min(axis=1)     # per atom: nearest QM atom
-
-        for res in self.pdb.topology.residues():
-            # virtual sites (element None, e.g. the TIP4P M site) are not
-            # independent coordinates: OpenMM places them from their parents
-            idx = [a.index for a in res.atoms() if a.element is not None]
-            if not idx:
-                continue
-            if qm.intersection(idx):
-                # A covalent cut inside a residue: its MM atoms (the link host
-                # and beyond) are selected one by one, otherwise the residue
-                # that carries the QM atoms could never move at all.
-                mm_here = [i for i in idx if i not in qm]
-                if mm_here:
-                    movable.update(int(i) for i, r in zip(mm_here, dist(mm_here)) if r <= radius)
-            elif dist(idx).min() <= radius:
-                movable.update(idx)          # whole residue: keeps waters and side chains intact
-        return self._apply_selection(movable)
+        movable, frozen = resolve_active_set(
+            cfg,
+            self.pdb.topology,
+            self.pdb.positions.value_in_unit(unit.angstrom),
+            self.qm_atoms,
+            box_ang=None if box is None else np.asarray(box) / 1.8897259886,
+            default_all=False,
+            pdb_path=getattr(self, "_pdb_path", None),
+        )
+        self.frozen_atoms = frozen
+        return movable
 
     # ------------------------------------------------------------------ #
     def _virtual_site_indices(self):
@@ -457,9 +401,9 @@ class QMMM_Opt:
         self.coordsys = self._resolve_coordsys(eng.get("coordsys", "auto"))
         sel = ""
         if self.active_spec:
-            sel += f", +{len(self.extra_active)} from qmmm_active"
+            sel += f", +{len(self.extra_active)} from active_atoms"
         if self.freeze_spec:
-            sel += f", -{len(self.frozen_atoms)} held by qmmm_freeze"
+            sel += f", -{len(self.frozen_atoms)} held by frozen_atoms"
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
                              f"{len(mv)} movable atoms (radius {self.radius:.1f} A{sel}, "
                              f"{len(self.frozen_pairs)} constrained distances), "

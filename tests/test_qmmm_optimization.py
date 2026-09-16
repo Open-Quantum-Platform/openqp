@@ -146,28 +146,52 @@ class TestMovableSetAndState(unittest.TestCase):
                                       [0, 1, 2, 4, 5, 6, 7, 8, 9])
 
     def test_active_and_freeze_select_the_movable_set(self):
-        """[optimize] qmmm_active adds atoms the radius misses, qmmm_freeze holds
+        """[qmmm] active_atoms adds atoms the radius misses, frozen_atoms holds
         atoms it would set free, and the QM region always moves."""
         o = self._bare(0.0)
         o.active_spec = o.freeze_spec = ""
-        o.extra_active, o.frozen_atoms = set(), set()
+        o.selection = {}
         # radius alone: the near water (4,5,6) moves
         np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6])
         # freeze by name: every atom named O is held (both waters carry one)
-        o.frozen_atoms = QMMM_Opt._select_atoms(o, "name:O", "qmmm_freeze")
-        self.assertEqual(o.frozen_atoms, {4, 7})
+        self.assertEqual(QMMM_Opt._select_atoms(o, "name:O", "frozen_atoms"), {4, 7})
+        o.selection = {"frozen_atoms": "name:O"}
         np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 5, 6])
-        # explicit indices and ranges add atoms outside the radius
-        o.frozen_atoms = set()
-        o.extra_active = QMMM_Opt._select_atoms(o, "7-9", "qmmm_active")
-        self.assertEqual(o.extra_active, {7, 8, 9})
-        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6, 7, 8, 9])
-        # a frozen atom wins over the active list, and the QM atoms are never dropped
-        o.frozen_atoms = QMMM_Opt._select_atoms(o, "7;name:C1", "qmmm_freeze")
-        self.assertEqual(o.frozen_atoms, {0, 7})              # C1 is a QM atom; __init__ rejects that deck
+        # explicit indices and ranges add atoms outside the radius, in ORCA's
+        # spelling ({7:9}, first:last) and in ours (7-9) alike
+        for spec in ("7-9", "7:9", "{7:9}", "7,8,9", "7 8 9"):
+            o.selection = {"active_atoms": spec}
+            np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0),
+                                          [0, 1, 2, 4, 5, 6, 7, 8, 9], err_msg=spec)
+        # a frozen atom wins over the active list
+        o.selection = {"active_atoms": "7-9", "frozen_atoms": "7"}
         np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6, 8, 9])
-        o.extra_active, o.frozen_atoms = set(), {0, 1}
+        # the QM region is what the calculation moves, so it may not be frozen
+        o.selection = {"frozen_atoms": "name:C1"}
+        with self.assertRaises(ValueError) as err:
+            QMMM_Opt._movable_atoms(o, 2.0)
+        self.assertIn("names QM atoms", str(err.exception))
+        # no selection at all: an optimisation moves the QM region only
+        o.selection = {}
         np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 0.0), [0, 1])
+
+    def test_optimize_spellings_are_accepted_as_aliases(self):
+        """A deck written against the released [optimize] names keeps working,
+        [qmmm] wins when both are given, and the schema defaults must not read
+        as a selection."""
+        from oqp.library.qmmm_active import selection_requested
+        cfg = QMMM_Opt._selection_config({}, {"qmmm_radius": 4.0, "qmmm_active": "7-9",
+                                              "qmmm_freeze": "name:O"})
+        self.assertEqual((cfg["active_radius"], cfg["active_atoms"], cfg["frozen_atoms"]),
+                         (4.0, "7-9", "name:O"))
+        self.assertTrue(selection_requested(cfg))
+        cfg = QMMM_Opt._selection_config({"active_radius": 3.0, "active_atoms": "1-2"},
+                                         {"qmmm_radius": 4.0, "qmmm_active": "7-9"})
+        self.assertEqual((cfg["active_radius"], cfg["active_atoms"]), (3.0, "1-2"))
+        cfg = QMMM_Opt._selection_config(
+            {"active_atoms": "", "frozen_atoms": "", "active_radius": 0.0, "active_from_pdb": False},
+            {"qmmm_radius": 0.0, "qmmm_active": "", "qmmm_freeze": ""})
+        self.assertFalse(selection_requested(cfg))
 
     def test_selection_syntax_errors_are_reported(self):
         o = self._bare(0.0)
@@ -175,14 +199,27 @@ class TestMovableSetAndState(unittest.TestCase):
                           ("3-1", "runs backwards"), ("10", "outside the 0-based range"),
                           ("CA", "neither a 0-based index")):
             with self.assertRaises(ValueError) as err:
-                QMMM_Opt._select_atoms(o, spec, "qmmm_freeze")
+                QMMM_Opt._select_atoms(o, spec, "frozen_atoms")
             self.assertIn(msg, str(err.exception))
+        # the shell radius is a distance, and a negative one is a typo, not a
+        # request to select nothing
+        o.selection = {}
+        with self.assertRaises(ValueError) as err:
+            QMMM_Opt._movable_atoms(o, -1.0)
+        self.assertIn("finite distance >= 0 angstrom", str(err.exception))
 
     def test_frozen_atoms_keep_their_constrained_partners_fixed(self):
-        src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
-        self.assertIn("if frozen.intersection((p1, p2)):", src)
-        self.assertIn("movable.discard(p)", src)
-        self.assertIn("self.frozen_atoms = frozen", src)
+        """A rigid-water constraint may not tie a moving atom to a fixed one:
+        SHAKE/RATTLE would drag the fixed atom.  The pair is held when either
+        atom was frozen, and moves together otherwise."""
+        from oqp.library.qmmm_active import freeze_constrained_partners
+        pairs = [(4, 5), (4, 6), (5, 6)]          # O-H, O-H, H-H of the near water
+        # the O was frozen while the radius set its hydrogens free: the water is held
+        active, frozen = freeze_constrained_partners(pairs, [0, 1, 2, 5, 6], {4})
+        self.assertEqual((active, frozen), ({0, 1, 2}, {4, 5, 6}))
+        # nothing frozen: the constrained partners of a moving atom join it
+        active, frozen = freeze_constrained_partners(pairs, [0, 1, 2, 4], set())
+        self.assertEqual((active, frozen), ({0, 1, 2, 4, 5, 6}, set()))
 
     def test_list_parsers_accept_the_api_and_namd_forms(self):
         from oqp.library.qmmm_md import _parse_int_list, _parse_str_list
@@ -198,7 +235,8 @@ class TestMovableSetAndState(unittest.TestCase):
     def test_driver_honours_init_scf_and_resolves_the_deck_path(self):
         src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
         self.assertIn("self.driver._reuse_orbitals = not self.init_scf", src)
-        self.assertIn("self.pdb = app.PDBFile(self._resolve_aux_file(pdb_file))", src)
+        self.assertIn("self._pdb_path = self._resolve_aux_file(pdb_file)", src)
+        self.assertIn("self.pdb = app.PDBFile(self._pdb_path)", src)
         self.assertIn("max(1, int(opt.get(\"maxit\", 30)))", src)
         self.assertIn('self._forcefield_paths(qmmm_cfg.get("forcefield_files", ""))', src)
         self.assertIn('self.coordsys = self._resolve_coordsys(eng.get("coordsys", "auto"))', src)
@@ -473,7 +511,10 @@ class TestRecoveryAndGradientAreWired(unittest.TestCase):
             self.assertIn(f'eng.get("{key}"', src)
         self.assertIn("mol.grads = ", src)
         self.assertIn("self._last_gradient = -f", src)
-        self.assertIn("math.isfinite(self.radius)", src)
+        # the active/frozen selection, the radius validation included, moved to
+        # the module every QM/MM driver shares
+        shared = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_active.py").read_text()
+        self.assertIn("np.isfinite(radius)", shared)
 
 
 @unittest.skipUnless(_HAVE, "OpenMM or compiled OpenQP backend unavailable")

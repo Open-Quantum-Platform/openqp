@@ -285,6 +285,7 @@ GENERIC_SCHEMA_KEYS = {
         trajectory_format trajectory_file log_file report_interval energy_file
         qm_atoms_xyz qm_list frontier_scheme
         ewald_tol lj_switch h_lj mm_charge_width
+        active_atoms frozen_atoms active_radius active_from_pdb
     """),
     "droplet": _keys("""
         enabled center radius buffer force_constant target atoms water_resnames
