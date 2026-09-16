@@ -26,7 +26,7 @@ import numpy as np
 
 __all__ = ["parse_atom_selection", "active_from_pdb_file", "residues_within_radius",
            "resolve_active_set", "selection_requested", "freeze_constrained_partners",
-           "SELECTION_KEYS"]
+           "held_atoms", "SELECTION_KEYS"]
 
 #: the ``[qmmm]`` keys this module reads (ORCA's names)
 SELECTION_KEYS = ("active_atoms", "frozen_atoms", "active_radius", "active_from_pdb")
@@ -34,27 +34,59 @@ SELECTION_KEYS = ("active_atoms", "frozen_atoms", "active_radius", "active_from_
 _BREAK = str.maketrans({"{": " ", "}": " ", ";": " ", ",": " "})
 
 
+def _text(value):
+    """A config value as text, keeping a numeric zero.
+
+    ``str(value or "")`` would turn the integer ``0`` into ``""``, and atom
+    index zero is a perfectly ordinary selection -- a deck saying
+    ``frozen_atoms = 0`` must freeze atom 0, not silently select nothing.
+    """
+    return "" if value is None else str(value).strip()
+
+
 def _truthy(value):
-    return (value is True) or (str(value or "").strip().lower() in ("1", "true", "yes", "on", "t"))
+    return (value is True) or (_text(value).lower() in ("1", "true", "yes", "on", "t"))
 
 
 def _radius_of(cfg):
+    """The requested shell radius, validated here rather than at the point of
+    use: a driver may ask whether a selection was requested at all and return
+    early, and a negative or NaN radius must be reported then too instead of
+    being read as "nothing was asked for"."""
     raw = cfg.get("active_radius", 0.0)
-    text = "" if raw is None else str(raw).strip()
+    text = _text(raw)
     if text.lower() in ("", "none"):
         return 0.0
     try:
-        return float(text)
+        radius = float(text)
     except ValueError:
         raise ValueError(f"[qmmm] active_radius must be a distance in angstrom, got {raw!r}.")
+    if not np.isfinite(radius) or radius < 0.0:
+        raise ValueError("[qmmm] active_radius must be a finite distance >= 0 angstrom, "
+                         f"got {raw!r}.")
+    return radius
+
+
+def held_atoms(topology, active):
+    """The real atoms a run does NOT move: everything outside ``active``.
+
+    ``frozen_atoms`` is only what the deck took out by name.  An
+    ``active_atoms`` / ``active_radius`` / ``active_from_pdb`` selection holds
+    everything it did not select, and *that* is the set a driver has to hold --
+    using the explicit frozen set instead silently propagates every unselected
+    atom.  Virtual sites are excluded: OpenMM places them from their parents.
+    """
+    keep = set(int(i) for i in active)
+    return {i for i, atom in enumerate(topology.atoms())
+            if atom.element is not None and i not in keep}
 
 
 def selection_requested(qmmm_cfg):
     """True when the deck asks for a selection at all; otherwise each driver
     keeps its own default (the QM region, or every atom for dynamics)."""
     cfg = qmmm_cfg or {}
-    return bool(str(cfg.get("active_atoms", "") or "").strip()
-                or str(cfg.get("frozen_atoms", "") or "").strip()
+    return bool(_text(cfg.get("active_atoms", ""))
+                or _text(cfg.get("frozen_atoms", ""))
                 or _truthy(cfg.get("active_from_pdb", False))
                 or _radius_of(cfg) > 0.0)
 
@@ -77,7 +109,7 @@ def parse_atom_selection(spec, atoms, key):
     are never selected: OpenMM places them from their parents, so they are not
     independent coordinates.
     """
-    text = str(spec or "").strip()
+    text = _text(spec)
     if not text:
         return set()
     by_name = {}
@@ -213,7 +245,7 @@ def resolve_active_set(qmmm_cfg, topology, positions_ang, qm_atoms,
     if not np.isfinite(radius) or radius < 0.0:
         raise ValueError("[qmmm] active_radius must be a finite distance >= 0 angstrom, "
                          f"got {cfg.get('active_radius')!r}.")
-    explicit = str(cfg.get("active_atoms", "") or "").strip()
+    explicit = _text(cfg.get("active_atoms", ""))
     from_pdb = _truthy(cfg.get("active_from_pdb", False))
 
     if explicit or from_pdb or radius > 0.0:

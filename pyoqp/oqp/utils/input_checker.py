@@ -5939,8 +5939,17 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         except (TypeError, ValueError):
             _rad_set = True
         _out_v = _get(config, "optimize", "qmmm_output", "")
+        _act_v = _get(config, "optimize", "qmmm_active", "")
+        _frz_v = _get(config, "optimize", "qmmm_freeze", "")
+
+        def _supplied(value):
+            # '0' is atom zero, a real selection, so test the text not the truth
+            return ("" if value is None else str(value).strip()) != ""
+
         for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
-                                    ("qmmm_output", bool(str(_out_v or "").strip()), _out_v)):
+                                    ("qmmm_output", _supplied(_out_v), _out_v),
+                                    ("qmmm_active", _supplied(_act_v), _act_v),
+                                    ("qmmm_freeze", _supplied(_frz_v), _frz_v)):
             if _is_set:
                 report.add(
                     "ERROR",

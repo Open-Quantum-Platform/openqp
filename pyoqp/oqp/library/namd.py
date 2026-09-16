@@ -39,7 +39,8 @@ from datetime import date
 from importlib import resources
 import numpy as np
 
-from oqp.library.qmmm_active import freeze_constrained_partners, resolve_active_set
+from oqp.library.qmmm_active import (
+    freeze_constrained_partners, held_atoms, resolve_active_set)
 
 import oqp
 from oqp.library.ints_1e import ints_1e
@@ -3759,15 +3760,14 @@ class NAMD_QMMM(NAMD):
         else:
             sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
             self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
-            # A held atom is not thermalised and carries no momentum, so the
-            # Maxwell draw and the COM correction both run over the atoms that
-            # actually move.  With nothing frozen the mask is 1 everywhere and
-            # this is the previous expression.
-            self.v_all *= self._move_mask
-            m_move = self.m_all * self._move_mask[:, 0]
-            if m_move.sum() > 0.0:
-                p = (m_move[:, None] * self.v_all).sum(axis=0)
-                self.v_all -= (p / m_move.sum()) * self._move_mask
+            p = (self.m_all[:, None] * self.v_all).sum(axis=0)
+            self.v_all -= p / self.m_all.sum()
+            # A held atom is not thermalised and carries no momentum.  With
+            # nothing frozen the two lines above are the whole draw, unchanged;
+            # otherwise the held rows are zeroed and the centre of mass of the
+            # moving subsystem is put back at rest.  _build_constraints can
+            # freeze further atoms, so this runs again after it.
+            self._zero_held_velocities()
 
         # sync the QM Molecule geometry from the pdb QM atoms
         self._sync_positions()
@@ -3775,6 +3775,11 @@ class NAMD_QMMM(NAMD):
         self.qm_mass = self.mass.copy()
         # rigid-water (SHAKE/RATTLE) constraints for the MM region
         self._build_constraints()
+        # _build_constraints may freeze a constrained partner of an atom the
+        # deck froze, which happens after the Maxwell draw above: an atom that
+        # became held must not keep the velocity it was given, and the COM
+        # correction has to be redone over the atoms that actually move.
+        self._zero_held_velocities()
         self._setup_qmmm_restraint_targets()
 
     # ------------------------------------------------------------------ #
@@ -3818,8 +3823,21 @@ class NAMD_QMMM(NAMD):
                 continue
             value = cfg.pop(key)
             text = '' if value is None else str(value).strip()
-            if text.lower() in ('', 'none', 'false', '0', '0.0'):
-                continue                       # no selection: every atom propagates
+            if key in ('active_atoms', 'frozen_atoms'):
+                # '0' is atom zero, a real selection -- only a blank is 'unset'
+                if text.lower() in ('', 'none'):
+                    continue
+            elif key == 'active_from_pdb':
+                if text.lower() in ('', 'none', 'false', 'off', 'no', '0'):
+                    continue
+            else:                              # active_radius: 0 A selects nothing
+                if text.lower() in ('', 'none'):
+                    continue
+                try:
+                    if float(text) == 0.0:
+                        continue
+                except ValueError:
+                    pass
             cfg[key] = text
         return cfg
 
@@ -3841,14 +3859,24 @@ class NAMD_QMMM(NAMD):
             for atom1, atom2 in self.pdb.topology.bonds()
         ), dtype='<i8').reshape((-1, 2))
         system_xml = self._mm.XmlSerializer.serialize(system)
+        array_parts = [
+            ('atomic_numbers', atomic_numbers, '<i8'),
+            ('masses_electron', self.m_all, '<f8'),
+            ('initial_coordinates_bohr', self.r_all, '<f8'),
+            ('qm_atoms', self.qm_atoms, '<i8'),
+            ('bonds', bonds, '<i8'),
+        ]
+        if not self._all_atoms_move:
+            # Bind the checkpoint to the atoms this run actually propagates, so
+            # a restart cannot silently resume with a different set.  The
+            # resolved set is used rather than the config text because
+            # active_from_pdb keeps its selection in the PDB's B-factor column,
+            # which the config does not capture.  Added only when a selection
+            # exists, so checkpoints written before these keys existed keep
+            # validating.
+            array_parts.append(('active_atoms_resolved', self.active_atoms, '<i8'))
         digest = _restart_identity_digest(
-            array_parts=(
-                ('atomic_numbers', atomic_numbers, '<i8'),
-                ('masses_electron', self.m_all, '<f8'),
-                ('initial_coordinates_bohr', self.r_all, '<f8'),
-                ('qm_atoms', self.qm_atoms, '<i8'),
-                ('bonds', bonds, '<i8'),
-            ),
+            array_parts=tuple(array_parts),
             text_parts=(
                 ('atom_metadata', json.dumps(
                     atom_metadata, separators=(',', ':'))),
@@ -3937,6 +3965,22 @@ class NAMD_QMMM(NAMD):
                   f"propagated, {self.natom_all - len(self.active_atoms)} held fixed "
                   f"(their charges and forces still act)")
 
+    def _zero_held_velocities(self):
+        """Hold every non-propagated atom at zero velocity and put the moving
+        subsystem's centre of mass back at rest.
+
+        A held atom that kept a velocity would never move (the position update
+        is masked) but its fictitious kinetic energy would still enter the
+        reported temperature, the NVE audit and the checkpoint.
+        """
+        if self._all_atoms_move:
+            return
+        self.v_all *= self._move_mask
+        m_move = self.m_all * self._move_mask[:, 0]
+        if m_move.sum() > 0.0:
+            p = (m_move[:, None] * self.v_all).sum(axis=0)
+            self.v_all -= (p / m_move.sum()) * self._move_mask
+
     def _set_move_mask(self, active):
         """Column mask (natom_all, 1): 1 on a propagated atom, 0 on a held one.
         One multiplication then holds an atom in every velocity-Verlet update
@@ -3976,7 +4020,13 @@ class NAMD_QMMM(NAMD):
             self.active_atoms = np.array(sorted(active), dtype=int)
             self.frozen_atoms = frozen
             self._set_move_mask(self.active_atoms)
-            keep = [k for k in range(len(ci)) if ci[k] not in frozen and cj[k] not in frozen]
+            # Every atom outside the active set is held, not just the ones
+            # frozen_atoms named: an active_atoms / active_radius /
+            # active_from_pdb selection holds everything it did not select.
+            # Testing `frozen` here would leave the constraints inside those
+            # unselected waters in place, and SHAKE would then move them.
+            held = held_atoms(self.pdb.topology, self.active_atoms)
+            keep = [k for k in range(len(ci)) if ci[k] not in held and cj[k] not in held]
             ci = [ci[k] for k in keep]
             cj = [cj[k] for k in keep]
             cd = [cd[k] for k in keep]
@@ -4052,6 +4102,10 @@ class NAMD_QMMM(NAMD):
         kinetic_before = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
         self.v_all, _ = self._langevin_update(
             self.v_all, self.m_all, istep)
+        # The thermostat draws a new velocity for every row; a held atom must
+        # not be given one, or its fictitious kinetic energy would enter the
+        # reported temperature and the thermostat's energy exchange.
+        self._zero_held_velocities()
         self._rattle(self.r_all, self.v_all)
         kinetic_after = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
         self._thermostat_exchange = float(kinetic_after - kinetic_before)
@@ -4777,8 +4831,11 @@ class NAMD_QMMM(NAMD):
             # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
             # (fixed dt: the same-spin path uses the Fortran hop kernel with dt_fs)
             r_old = self.r_all.copy()
-            self.r_all = self.r_all + (self.v_all * self.dt
-                                       + 0.5 * accel * self.dt ** 2) * self._move_mask
+            # Each term carries the mask separately so the sum keeps the
+            # association it had before: multiplying by an exact 1.0 is exact,
+            # so a run with nothing held is bit-identical to the old expression.
+            self.r_all = (self.r_all + self.v_all * self.dt * self._move_mask
+                          + 0.5 * accel * self.dt ** 2 * self._move_mask)
             self._shake(r_old, self.r_all, self.v_all, self.dt)
             self._sync_positions()
 
@@ -6143,11 +6200,18 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
 
         for istep in range(start_step + 1, self.nstep + 1):
             # adaptive timestep + velocity-Verlet position update + SHAKE
-            self.dt = self._adaptive_dt(self.v_all, accel)
+            # A held atom cannot move, so neither its velocity nor the force on
+            # it may shrink the step the moving atoms get.  With nothing held
+            # the mask is 1 everywhere and this is the previous call.
+            self.dt = self._adaptive_dt(self.v_all * self._move_mask,
+                                        accel * self._move_mask)
             self._t_fs += self.dt / FS_TO_AU
             r_old = self.r_all.copy()
-            self.r_all = self.r_all + (self.v_all * self.dt
-                                       + 0.5 * accel * self.dt ** 2) * self._move_mask
+            # Each term carries the mask separately so the sum keeps the
+            # association it had before: multiplying by an exact 1.0 is exact,
+            # so a run with nothing held is bit-identical to the old expression.
+            self.r_all = (self.r_all + self.v_all * self.dt * self._move_mask
+                          + 0.5 * accel * self.dt ** 2 * self._move_mask)
             self._shake(r_old, self.r_all, self.v_all, self.dt)
             self._sync_positions()
 
@@ -6311,11 +6375,18 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                  + (epot if restart is None else 0.0))
 
         for istep in range(start_step + 1, self.nstep + 1):
-            self.dt = self._adaptive_dt(self.v_all, accel)
+            # A held atom cannot move, so neither its velocity nor the force on
+            # it may shrink the step the moving atoms get.  With nothing held
+            # the mask is 1 everywhere and this is the previous call.
+            self.dt = self._adaptive_dt(self.v_all * self._move_mask,
+                                        accel * self._move_mask)
             self._t_fs += self.dt / FS_TO_AU
             r_old = self.r_all.copy()
-            self.r_all = self.r_all + (self.v_all * self.dt
-                                       + 0.5 * accel * self.dt ** 2) * self._move_mask
+            # Each term carries the mask separately so the sum keeps the
+            # association it had before: multiplying by an exact 1.0 is exact,
+            # so a run with nothing held is bit-identical to the old expression.
+            self.r_all = (self.r_all + self.v_all * self.dt * self._move_mask
+                          + 0.5 * accel * self.dt ** 2 * self._move_mask)
             self._shake(r_old, self.r_all, self.v_all, self.dt)
             self._sync_positions()
 

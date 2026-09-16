@@ -7,7 +7,8 @@ import time
 from copy import deepcopy
 import sys
 from oqp.library.qmmm_active import (
-    freeze_constrained_partners, resolve_active_set, selection_requested)
+    freeze_constrained_partners, held_atoms, resolve_active_set,
+    selection_requested)
 from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
@@ -499,10 +500,14 @@ class QMMM_MD:
             pairs = [(p1, p2) for p1, p2, _ in _rigid_water_constraints(
                 self.forcefield, self.pdb.topology, self.qm_atoms)]
             active, frozen = freeze_constrained_partners(pairs, active, frozen)
+        # Everything outside the active set is held, not merely what
+        # frozen_atoms named: an active_atoms / active_radius / active_from_pdb
+        # selection holds every atom it did not select.
+        held = held_atoms(self.pdb.topology, active)
         natom = self.pdb.topology.getNumAtoms()
-        print(f"[QM/MM MD] active atoms: {natom - len(frozen)} of {natom} propagated, "
-              f"{len(frozen)} held fixed (their charges and forces still act)")
-        return set(int(i) for i in frozen)
+        print(f"[QM/MM MD] active atoms: {natom - len(held)} of {natom} propagated, "
+              f"{len(held)} held fixed (their charges and forces still act)")
+        return held
 
     def _build_md_system(self):
         sys0 = self.mm_systems["sys0"]

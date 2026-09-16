@@ -290,13 +290,26 @@ class QMMM_Opt:
         """
         cfg = {key: qmmm_cfg.get(key, "") for key in SELECTION_KEYS}
         cfg["active_from_pdb"] = qmmm_cfg.get("active_from_pdb", False)
-        blank = ("", "0", "0.0", "none", "false")
+
+        def unset(key, value):
+            # '0' is atom zero for a selection, but zero angstrom is no shell,
+            # so the radius is the only key where a zero means 'not given'.
+            text = "" if value is None else str(value).strip()
+            if key != "active_radius":
+                return text.lower() in ("", "none")
+            if text.lower() in ("", "none"):
+                return True
+            try:
+                return float(text) == 0.0
+            except ValueError:
+                return False
+
         for new, old in (("active_radius", "qmmm_radius"),
                          ("active_atoms", "qmmm_active"),
                          ("frozen_atoms", "qmmm_freeze")):
-            if str(cfg.get(new, "") or "").strip().lower() in blank:
+            if unset(new, cfg.get(new, "")):
                 value = opt.get(old, "")
-                if str(value or "").strip().lower() not in blank:
+                if not unset(new, value):
                     cfg[new] = value
         return cfg
 

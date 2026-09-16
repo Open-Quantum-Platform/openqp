@@ -932,9 +932,19 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
             return [(d.severity, d.path) for d in r.diagnostics]
         self.assertIn(("ERROR", "optimize.qmmm_radius"), diags({"qmmm_radius": 3.0}))
         self.assertIn(("ERROR", "optimize.qmmm_output"), diags({"qmmm_output": "x.pdb"}))
-        clean = diags({"qmmm_radius": 0.0, "qmmm_output": ""})
+        # The selection aliases are just as inert without qmmm_flag: an all-QM
+        # optimisation that accepted them would silently optimise a different
+        # set of atoms than the deck asked for.
+        self.assertIn(("ERROR", "optimize.qmmm_active"), diags({"qmmm_active": "7-9"}))
+        self.assertIn(("ERROR", "optimize.qmmm_freeze"), diags({"qmmm_freeze": "name:CA"}))
+        # atom zero is a supplied selection, not a blank
+        self.assertIn(("ERROR", "optimize.qmmm_freeze"), diags({"qmmm_freeze": "0"}))
+        clean = diags({"qmmm_radius": 0.0, "qmmm_output": "",
+                       "qmmm_active": "", "qmmm_freeze": ""})
         self.assertNotIn(("ERROR", "optimize.qmmm_radius"), clean)
         self.assertNotIn(("ERROR", "optimize.qmmm_output"), clean)
+        self.assertNotIn(("ERROR", "optimize.qmmm_active"), clean)
+        self.assertNotIn(("ERROR", "optimize.qmmm_freeze"), clean)
 
     def test_checker_rejects_dlc_and_ric(self):
         for cs in ("dlc", "ric", "internal"):
