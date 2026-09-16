@@ -7,10 +7,12 @@ the link atoms.  This driver instead minimises the QM/MM energy returned by
 ``OpenQpQMMM.compute_force`` (embedded SCF with the ESPF field, the ESPF and
 link-atom gradient terms, the classical MM forces) with respect to a chosen
 set of MOVABLE atoms: the QM region plus, optionally, every MM residue with an
-atom within ``[optimize] qmmm_radius`` angstrom of a QM atom.  Everything else
-is held fixed, which is the usual practice for a solvated system and is what
-keeps the problem well posed (the classical solvent has no minimum worth
-finding).
+atom within ``[optimize] qmmm_radius`` angstrom of a QM atom, plus the atoms
+named by ``[optimize] qmmm_active`` and minus those named by
+``[optimize] qmmm_freeze`` (a protein or nucleic-acid backbone, say, which the
+radius would otherwise set free).  Everything else is held fixed, which is the
+usual practice for a solvated system and is what keeps the problem well posed
+(the classical solvent has no minimum worth finding).
 
 State selection follows the dynamics drivers: ``[properties] grad`` names the
 TDHF/MRSF root (1 = the lowest root); ground-state HF/DFT needs nothing.
@@ -88,6 +90,15 @@ class QMMM_Opt:
         if not math.isfinite(self.radius) or self.radius < 0.0:
             raise ValueError("'optimize.qmmm_radius' must be a finite distance >= 0 angstrom, "
                              f"got {opt.get('qmmm_radius')!r}.")
+        self.active_spec = str(opt.get("qmmm_active", "") or "").strip()
+        self.freeze_spec = str(opt.get("qmmm_freeze", "") or "").strip()
+        self.extra_active = self._select_atoms(self.active_spec, "qmmm_active")
+        self.frozen_atoms = self._select_atoms(self.freeze_spec, "qmmm_freeze")
+        qm_frozen = sorted(self.frozen_atoms.intersection(int(i) for i in self.qm_atoms))
+        if qm_frozen:
+            raise ValueError(f"[optimize] qmmm_freeze names QM atoms {qm_frozen} (0-based). The QM "
+                             "region is what the optimisation moves; freeze MM atoms only, or take "
+                             "those atoms out of [qmmm] qm_atoms.")
         self.movable = self._movable_atoms(self.radius)
         # [qmmm] rigidwater / constraints, held on the movable MM atoms (may
         # add constrained partners to the movable set)
@@ -237,13 +248,25 @@ class QMMM_Opt:
                 continue
             allpairs.append((int(p1), int(p2)))
         movable = set(int(i) for i in self.movable)
+        frozen = set(int(i) for i in getattr(self, "frozen_atoms", ()))
         changed = True
         while changed:
             changed = False
             for p1, p2 in allpairs:
-                if (p1 in movable) != (p2 in movable):
+                if (p1 in movable) == (p2 in movable):
+                    continue
+                if frozen.intersection((p1, p2)):
+                    # [optimize] qmmm_freeze wins: its constrained partner is held too,
+                    # so no constraint ties a moving atom to a fixed one.
+                    for p in (p1, p2):
+                        if p in movable:
+                            movable.discard(p)
+                            frozen.add(p)
+                            changed = True
+                else:
                     movable.update((p1, p2))
                     changed = True
+        self.frozen_atoms = frozen
         self.movable = np.array(sorted(movable), dtype=int)
         return [(p1, p2) for p1, p2 in allpairs if p1 in movable]
 
@@ -272,10 +295,67 @@ class QMMM_Opt:
                 return candidate
         return value
 
+    def _select_atoms(self, spec, key):
+        """``[optimize] qmmm_active`` / ``qmmm_freeze`` -> a set of 0-based atom indices.
+
+        Groups are separated by whitespace or semicolons.  A group that starts
+        with ``name:`` is a comma-separated list of PDB atom names, matched
+        case-insensitively over the whole system (``name:P,OP1,OP2,O5'`` is a
+        nucleic-acid backbone); any other group is a comma-separated list of
+        0-based indices and ``first-last`` ranges, the [qmmm] qm_atoms
+        convention.  Virtual sites are never selected: OpenMM places them from
+        their parents, so they are not independent coordinates.
+        """
+        text = str(spec or "").strip()
+        if not text:
+            return set()
+        by_name, atoms = {}, [a for a in self.pdb.topology.atoms()]
+        for atom in atoms:
+            if atom.element is not None:
+                by_name.setdefault(str(atom.name).strip().lower(), []).append(int(atom.index))
+        natom = len(atoms)
+        out = set()
+        for group in text.replace(";", " ").split():
+            if group.lower().startswith("name:"):
+                names = [n for n in group[5:].split(",") if n.strip()]
+                if not names:
+                    raise ValueError(f"[optimize] {key}: 'name:' needs at least one atom name, got {group!r}.")
+                for name in names:
+                    hit = by_name.get(name.strip().lower())
+                    if not hit:
+                        raise ValueError(f"[optimize] {key}: no atom is named {name.strip()!r} in "
+                                         f"[qmmm] pdb_file (names are matched case-insensitively).")
+                    out.update(hit)
+                continue
+            for token in group.split(","):
+                token = token.strip()
+                if not token:
+                    continue
+                try:
+                    lo, hi = (int(token), int(token)) if "-" not in token else (
+                        int(token.split("-")[0]), int(token.split("-")[1]))
+                except ValueError:
+                    raise ValueError(f"[optimize] {key}: {token!r} is neither a 0-based index, a "
+                                     "'first-last' range, nor a 'name:...' group.")
+                if lo > hi:
+                    raise ValueError(f"[optimize] {key}: range {token!r} runs backwards.")
+                if lo < 0 or hi >= natom:
+                    raise ValueError(f"[optimize] {key}: {token!r} is outside the 0-based range "
+                                     f"0..{natom - 1} of [qmmm] pdb_file.")
+                out.update(i for i in range(lo, hi + 1) if atoms[i].element is not None)
+        return out
+
+    def _apply_selection(self, movable):
+        """QM atoms + radius shell + [optimize] qmmm_active - [optimize] qmmm_freeze."""
+        movable = set(int(i) for i in movable) | set(int(i) for i in getattr(self, "extra_active", ()))
+        movable -= set(int(i) for i in getattr(self, "frozen_atoms", ()))
+        movable |= set(int(i) for i in self.qm_atoms)      # the QM region always moves
+        return np.array(sorted(movable), dtype=int)
+
     def _movable_atoms(self, radius):
         qm = set(int(i) for i in self.qm_atoms)
         if radius <= 0.0:
-            return np.array(sorted(qm), dtype=int)
+            return self._apply_selection(set(qm))
         X = np.array(self.pdb.positions.value_in_unit(unit.angstrom))
         box = self.driver._box_lengths_bohr()
         box_ang = None if box is None else np.asarray(box) / 1.8897259886
@@ -303,7 +383,7 @@ class QMMM_Opt:
                     movable.update(int(i) for i, r in zip(mm_here, dist(mm_here)) if r <= radius)
             elif dist(idx).min() <= radius:
                 movable.update(idx)          # whole residue: keeps waters and side chains intact
-        return np.array(sorted(movable), dtype=int)
+        return self._apply_selection(movable)
 
     # ------------------------------------------------------------------ #
     def _virtual_site_indices(self):
@@ -375,8 +455,13 @@ class QMMM_Opt:
         # several disconnected fragments, and Cartesian coordinates are safe
         # for that); an explicit choice is passed to the engine as requested.
         self.coordsys = self._resolve_coordsys(eng.get("coordsys", "auto"))
+        sel = ""
+        if self.active_spec:
+            sel += f", +{len(self.extra_active)} from qmmm_active"
+        if self.freeze_spec:
+            sel += f", -{len(self.frozen_atoms)} held by qmmm_freeze"
         dump_log(mol, title=(f"PyOQP: QM/MM geometry optimisation: {len(self.qm_atoms)} QM atoms, "
-                             f"{len(mv)} movable atoms (radius {self.radius:.1f} A, "
+                             f"{len(mv)} movable atoms (radius {self.radius:.1f} A{sel}, "
                              f"{len(self.frozen_pairs)} constrained distances), "
                              f"{len(X0) - len(mv)} fixed; state {self.istate}; native RFO/BFGS, "
                              f"{self.coordsys} coordinates, trust {trust:.2f} (max {trust_max:.2f}) bohr, "

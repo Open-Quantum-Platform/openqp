@@ -410,7 +410,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
         pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
-        qmmm_radius qmmm_output
+        qmmm_radius qmmm_output qmmm_active qmmm_freeze
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -603,7 +603,7 @@ _GEOMETRY_CONVERGENCE_OPTIONS = {
 # QM/MM optimisation (qmmm_flag=true) only: the movable-shell radius and the
 # full-system output file.  Exposed on the plain optimize driver alone; the
 # crossing and reaction-path drivers do not consume them.
-_QMMM_OPT_OPTIONS = {"qmmm_radius", "qmmm_output"}
+_QMMM_OPT_OPTIONS = {"qmmm_radius", "qmmm_output", "qmmm_active", "qmmm_freeze"}
 _CROSSING_SEARCH_OPTIONS = {
     "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",

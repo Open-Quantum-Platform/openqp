@@ -669,6 +669,12 @@ OQP_CONFIG_SCHEMA = {
         # <project>_opt.pdb).
         'qmmm_radius': {'type': float, 'default': '0.0'},
         'qmmm_output': {'type': str, 'default': ''},
+        # qmmm_active: further atoms that may move, added to the radius shell;
+        # qmmm_freeze: atoms held fixed even when the radius selects them.  Both
+        # take 0-based indices and ranges ('1000-1450,1500', the [qmmm] qm_atoms
+        # convention) and name groups ('name:P,OP1,O5''), and the QM atoms always move.
+        'qmmm_active': {'type': str, 'default': ''},
+        'qmmm_freeze': {'type': str, 'default': ''},
         # MECP objective.  ``auto`` selects SQP on the native optimizer, which
         # it replaces outright, and the augmented Lagrangian on the backends
         # that supply their own optimizer.  Both converge the energy gap; the

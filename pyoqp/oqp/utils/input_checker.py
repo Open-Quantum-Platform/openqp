@@ -5970,6 +5970,35 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",
                 )
+            for _key in ("qmmm_active", "qmmm_freeze"):
+                _spec = str(_get(config, "optimize", _key, "") or "").strip()
+                if not _spec:
+                    continue
+                for _group in _spec.replace(";", " ").split():
+                    if _group.lower().startswith("name:"):
+                        if not [n for n in _group[5:].split(",") if n.strip()]:
+                            report.add(
+                                "ERROR", f"optimize.{_key}",
+                                "A 'name:' group must list at least one PDB atom name.",
+                                value=_group, expected="name:P,OP1,OP2",
+                                action=f"Write the atom names after 'name:', or drop [optimize] {_key}.",
+                            )
+                        continue
+                    for _token in _group.split(","):
+                        _token = _token.strip()
+                        if not _token:
+                            continue
+                        _parts = _token.split("-")
+                        _ok = all(p.strip().isdigit() for p in _parts) and len(_parts) in (1, 2)
+                        if _ok and len(_parts) == 2 and int(_parts[0]) > int(_parts[1]):
+                            _ok = False
+                        if not _ok:
+                            report.add(
+                                "ERROR", f"optimize.{_key}",
+                                "Atom selections take 0-based indices, 'first-last' ranges, or 'name:...' groups.",
+                                value=_token, expected="1000-1450,1500 or name:P,OP1",
+                                action=f"Fix the [optimize] {_key} selection.",
+                            )
             _cg = _get(config, "guess", "continue_geom", False)
             if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
                 report.add(

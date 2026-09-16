@@ -145,6 +145,45 @@ class TestMovableSetAndState(unittest.TestCase):
         np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.5),                    # far water is 2 A away through the face
                                       [0, 1, 2, 4, 5, 6, 7, 8, 9])
 
+    def test_active_and_freeze_select_the_movable_set(self):
+        """[optimize] qmmm_active adds atoms the radius misses, qmmm_freeze holds
+        atoms it would set free, and the QM region always moves."""
+        o = self._bare(0.0)
+        o.active_spec = o.freeze_spec = ""
+        o.extra_active, o.frozen_atoms = set(), set()
+        # radius alone: the near water (4,5,6) moves
+        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6])
+        # freeze by name: every atom named O is held (both waters carry one)
+        o.frozen_atoms = QMMM_Opt._select_atoms(o, "name:O", "qmmm_freeze")
+        self.assertEqual(o.frozen_atoms, {4, 7})
+        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 5, 6])
+        # explicit indices and ranges add atoms outside the radius
+        o.frozen_atoms = set()
+        o.extra_active = QMMM_Opt._select_atoms(o, "7-9", "qmmm_active")
+        self.assertEqual(o.extra_active, {7, 8, 9})
+        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6, 7, 8, 9])
+        # a frozen atom wins over the active list, and the QM atoms are never dropped
+        o.frozen_atoms = QMMM_Opt._select_atoms(o, "7;name:C1", "qmmm_freeze")
+        self.assertEqual(o.frozen_atoms, {0, 7})              # C1 is a QM atom; __init__ rejects that deck
+        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 2.0), [0, 1, 2, 4, 5, 6, 8, 9])
+        o.extra_active, o.frozen_atoms = set(), {0, 1}
+        np.testing.assert_array_equal(QMMM_Opt._movable_atoms(o, 0.0), [0, 1])
+
+    def test_selection_syntax_errors_are_reported(self):
+        o = self._bare(0.0)
+        for spec, msg in (("name:", "at least one atom name"), ("name:ZZ", "no atom is named"),
+                          ("3-1", "runs backwards"), ("10", "outside the 0-based range"),
+                          ("CA", "neither a 0-based index")):
+            with self.assertRaises(ValueError) as err:
+                QMMM_Opt._select_atoms(o, spec, "qmmm_freeze")
+            self.assertIn(msg, str(err.exception))
+
+    def test_frozen_atoms_keep_their_constrained_partners_fixed(self):
+        src = (ROOT / "pyoqp" / "oqp" / "library" / "qmmm_opt.py").read_text()
+        self.assertIn("if frozen.intersection((p1, p2)):", src)
+        self.assertIn("movable.discard(p)", src)
+        self.assertIn("self.frozen_atoms = frozen", src)
+
     def test_list_parsers_accept_the_api_and_namd_forms(self):
         from oqp.library.qmmm_md import _parse_int_list, _parse_str_list
         self.assertEqual(_parse_int_list("0 1 2"), [0, 1, 2])           # job.qmmm(qm_atoms=[0,1,2]) serialises to this

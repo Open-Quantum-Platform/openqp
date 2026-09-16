@@ -1,0 +1,52 @@
+# QM/MM geometry optimisation with an explicit movable set: [optimize]
+# qmmm_freeze holds atoms the radius would set free, qmmm_active adds atoms it
+# does not reach.
+#
+# Same alanine dipeptide, QM region and N-C covalent boundary (hydrogen link
+# atom) as ala-dipeptide_RHF-QMMM-OPT-linkatom.  qmmm_radius=3.0 alone would
+# move the MM atoms 6, 7, 10-14 (the residue's backbone N and CA, the amide H,
+# HA, CB and two of its hydrogens).  Here qmmm_freeze holds the backbone N
+# (index 6) and CA (name:CA, index 7) at their starting positions - the usual
+# wish for a protein or nucleic-acid backbone.  [qmmm] constraints=HBonds ties
+# N to the amide H and CA to HA, so those two hydrogens are held with them (the
+# log reports four held atoms) and no constraint links a moving atom to a fixed
+# one.  qmmm_active=15 adds HB3, which lies 3.48 A
+# from the QM region and the radius therefore misses.  Selections are 0-based,
+# as [qmmm] qm_atoms is, while the [input] system indices are 1-based; the QM
+# atoms always move and may not be frozen.  Four steps keep this a short,
+# fixed pin; the reference records the geometry reached.
+[input]
+system=ala.pdb 9 10 17 18 19
+charge=0
+runtype=optimize
+basis=6-31g
+method=hf
+qmmm_flag=True
+
+[guess]
+type=huckel
+save_mol=true
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-9
+
+[optimize]
+istate=0
+maxit=4
+qmmm_radius=3.0
+qmmm_active=15
+qmmm_freeze=6 name:CA
+qmmm_output=ala-dipeptide_RHF-QMMM-OPT-active.held.pdb
+
+[oqp]
+auto_recovery=false
+
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic
+constraints=HBonds
