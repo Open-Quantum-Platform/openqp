@@ -66,3 +66,6 @@ tools/nac_validation/*.molden
 tools/nac_validation/*.out
 tools/nac_validation/data_snapshots/*.json
 tools/nac_validation/data_snapshots/*.molden
+
+# Generated Python packaging metadata
+*.egg-info/
