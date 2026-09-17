@@ -757,6 +757,7 @@ void fockx_selftest(struct oqp_handle_t *inf);
 void fockx_os_selftest(struct oqp_handle_t *inf);
 
 void tdhf_energy(struct oqp_handle_t *inf);
+void tdhf_qmrsf_dk(struct oqp_handle_t *inf);
 void tdhf_z_vector(struct oqp_handle_t *inf);
 void tdhf_gradient(struct oqp_handle_t *inf);
 void tdhf_hessian(struct oqp_handle_t *inf);

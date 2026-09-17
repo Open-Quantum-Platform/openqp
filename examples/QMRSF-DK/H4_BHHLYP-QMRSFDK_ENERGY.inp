@@ -1,0 +1,33 @@
+# QMRSF-DK energy: square H4 at r = 1.00 A, the FCI-anchored benchmark of the
+# QMRSF-DK paper.  Four electrons in four orbitals on a quintet ROKS reference;
+# the CAS(4,4) M_s = 0 space spin adapts to 20 singlets, 15 triplets, 1 quintet.
+[input]
+system=
+ H      0.5000    0.50    0.00
+ H     -0.5000    0.50    0.00
+ H     -0.5000   -0.50    0.00
+ H      0.5000   -0.50    0.00
+charge=0
+runtype=energy
+basis=6-31g
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=minao
+save_mol=false
+
+[scf]
+type=rohf
+multiplicity=5
+maxit=100
+conv=1.0e-10
+save_molden=false
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+
+[tdhf]
+type=qmrsf_dk
+hfscale=0.5

@@ -438,6 +438,9 @@ class SinglePoint(Calculator):
             'tda': oqp.tdhf_energy,
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
+            # Present only when liboqp is built with the QMRSF-DK modules;
+            # degrades to None against an older liboqp and fails only if dispatched.
+            'qmrsf_dk': getattr(oqp, 'tdhf_qmrsf_dk', None),
             'umrsf': oqp.tdhf_umrsf_energy,
             'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
             'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
@@ -667,7 +670,13 @@ class SinglePoint(Calculator):
             if self.method == 'tdhf':
                 # ixcore is a TDHF/XAS orbital shift and is not used by FCI.
                 self.ixcore_shift()
-                energies = self.excitation(ref_energy)
+                if self.td == 'qmrsf_dk':
+                    # QMRSF-DK is built on the quintet ROKS reference and its own
+                    # CAS(4,4) backbone, not the triplet MRSF Davidson, so it does
+                    # not go through excitation()/td_energies.
+                    energies = self.qmrsf_standalone(ref_energy)
+                else:
+                    energies = self.excitation(ref_energy)
             elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
             elif self.method == 'fci':
@@ -1185,6 +1194,103 @@ class SinglePoint(Calculator):
                 except Exception:
                     pass
         return snap
+
+    def qmrsf_standalone(self, ref_energy):
+        """Run QMRSF-DK on the converged quintet ROKS/ROHF reference.
+
+        The Fortran routine tdhf_qmrsf_dk builds the active
+        integrals via the int2-reuse AO->MO transform, solves the CAS(4,4)
+        backbone, applies the dynamic-correlation dressing, and writes its
+        results to the log + a validation dump (qmrsf_*_live.dat). SCF has
+        already run in reference(); here we just dispatch and report.
+        """
+        dump_log(self.mol, title='PyOQP: QMRSF pathway (%s)' % self.td, section='tdhf')
+        response_start = time.perf_counter()
+        fn = self.energy_func.get(self.td)
+        if fn is None:
+            raise RuntimeError(
+                'liboqp lacks %s - rebuild liboqp with the QMRSF-DK modules '
+                '(source/modules/qmrsf_*.F90, tdhf_qmrsf_dk.F90).' % self.td)
+        if self.td == 'qmrsf_dk':
+            gauge = self.mol.canonicalize_qmrsf_active_orbitals()
+            dump_log(self.mol, title='PyOQP: QMRSF active-orbital gauge',
+                     section='', info=gauge)
+            # The native routine returns without writing its results file when
+            # a manifold fails to diagonalize or the reference is rejected.  A
+            # dump left by an earlier calculation in this directory would then
+            # be read against the new reference energy, so remove it first and
+            # let its absence report the failure.
+            stale_dump = os.path.join(os.getcwd(), 'qmrsf_dk_full_live.dat')
+            if os.path.isfile(stale_dump):
+                os.remove(stale_dump)
+        fn(self.mol)
+        response_elapsed = time.perf_counter() - response_start
+
+        qmrsf_energies = None
+        # Post-process the DK validation dump into a clean JSON + log table.
+        # The Fortran routine writes 'qmrsf_dk_full_live.dat' into the run's cwd;
+        # failure here must never abort the run, so the whole block is guarded.
+        if self.td == 'qmrsf_dk':
+            try:
+                from oqp.library.qmrsf_results import (
+                    parse_qmrsf_dk_dump,
+                    build_qmrsf_dk_results,
+                    write_qmrsf_json,
+                    format_qmrsf_dk_log_table,
+                )
+                dump_path = os.path.join(os.getcwd(), 'qmrsf_dk_full_live.dat')
+                # A dump left by an earlier calculation in the same directory
+                # would be combined with this run's reference energy, so the
+                # file is removed before the native call above and its absence
+                # here means the response did not complete.
+                if os.path.isfile(dump_path):
+                    dump = parse_qmrsf_dk_dump(dump_path)
+                    ref_scalar = ref_energy[0] if isinstance(ref_energy, (list, tuple)) else ref_energy
+                    results = build_qmrsf_dk_results(dump, ref_scalar)
+                    results['timing'] = {
+                        'reference_scf_s': float(getattr(self.mol, 'scf_elapsed_s', 0.0)),
+                        'qmrsf_response_s': float(response_elapsed),
+                    }
+                    log_path = self.mol.log
+                    base, ext = os.path.splitext(log_path)
+                    json_path = (base if ext else log_path) + '.qmrsf_dk.json'
+                    write_qmrsf_json(results, json_path)
+                    self.mol.qmrsf_results = results
+                    # On a KS/ROKS reference report the DFT-dressed DK spectrum
+                    # (the genuine Pathway-II value); otherwise the bare DK.
+                    if results.get('is_dft_dressed') and \
+                            all('E_DK_DFT' in s for s in results['states']):
+                        qmrsf_energies = [s['E_DK_DFT'] for s in results['states']]
+                    else:
+                        qmrsf_energies = [s['E_DK'] for s in results['states']]
+                    dump_log(self.mol, title=format_qmrsf_dk_log_table(results), section='')
+                    dump_log(self.mol,
+                             title='PyOQP: QMRSF-DK results written to %s' % json_path,
+                             section='')
+                else:
+                    dump_log(self.mol,
+                             title='PyOQP: QMRSF-DK dump not found (%s); '
+                                   'skipping results output' % dump_path,
+                             section='')
+            except Exception as err:
+                dump_log(self.mol,
+                         title='PyOQP: QMRSF-DK results post-processing failed '
+                               '(%s); continuing' % err,
+                         section='')
+
+        # results() returns the QMRSF-DK dressed spectrum when available, so the
+        # standard OpenQP energy interface exposes the dressed states; otherwise it
+        # falls back to the reference scalar.  Full per-state detail is on
+        # self.mol.qmrsf_results and in the JSON.
+        self.mol.energies = qmrsf_energies if qmrsf_energies is not None else ref_energy
+        # Publish the dressed spectrum as excitation energies relative to the
+        # QMRSF-DK ground state, the same contract the MRSF path uses, so that
+        # the standard results/reference machinery sees the QMRSF-DK states.
+        if qmrsf_energies is not None and len(qmrsf_energies) > 0:
+            e0 = qmrsf_energies[0]
+            self.mol.data['OQP::td_energies'] = \
+                np.array([e - e0 for e in qmrsf_energies], dtype=float)
+        return self.mol.energies
 
     def excitation(self, ref_energy):
         if is_tb_method(self.method):
