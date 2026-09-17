@@ -185,7 +185,7 @@ def test_runner_rejects_log_alias_before_logging(tmp_path, alias):
 def test_child_restart_manifest_removes_continuation_options(tmp_path):
     from oqp.utils.oqp_input import parse_canonical_oqp
     d = driver(tmp_path, .05, 'child')
-    example = Path(__file__).parents[1] / 'examples/namd_local_continuation/source.restart.oqp'
+    example = Path(__file__).parents[1] / 'examples/namd_local_continuation/source.continuation.oqp'
     d.mol.oqp_canonical_input = example.read_text()
     d.mol.oqp_input_source = str(example)
     d._rebase_restart_spec_paths = lambda spec, source_dir: spec

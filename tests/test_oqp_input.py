@@ -2510,3 +2510,11 @@ def test_namd_explicit_controls_override_recommended_defaults():
     assert values['md', 'disc_rescale'] is False
     assert values['md', 'velocity'] == 'zero'
     assert values['scf', 'conv'] == 1e-10
+
+
+@pytest.mark.parametrize("path", sorted((ROOT / "examples" / "QMMM").glob("*NAMD*.oqp")))
+def test_qmmm_namd_examples_explicitly_select_supported_rescaling(path):
+    spec, config = _parse(path.read_text(), source_dir=path.parent)
+    assert config['md']['rescale'] == 'isotropic'
+    if config['md'].get('nacme_gate') == 'warn':
+        assert config['md']['nacme_check'] == 'baeck_an'
