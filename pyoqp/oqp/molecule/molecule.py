@@ -24,6 +24,28 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 # written by default so the ``guess=json`` restart workflow keeps working.
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
 HESSIAN_CACHE_VERSION = 2
+# Configuration keys that cannot change H(R) and therefore must not invalidate
+# a cached Hessian.  tdhf.tlf selects how cross-geometry state overlaps are
+# evaluated for NACME/NAMD; its default changed without touching any energy.
+HESSIAN_CACHE_IGNORED_KEYS = {'tdhf': ('tlf',)}
+
+
+def _hessian_request_for_comparison(request):
+    """Drop keys that do not define H(R) from a stored or current request."""
+    if not isinstance(request, dict):
+        return request
+    normalized = dict(request)
+    model = request.get('model_config')
+    if isinstance(model, dict):
+        model = dict(model)
+        for section, keys in HESSIAN_CACHE_IGNORED_KEYS.items():
+            if isinstance(model.get(section), dict):
+                model[section] = {
+                    key: value for key, value in model[section].items()
+                    if key not in keys
+                }
+        normalized['model_config'] = model
+    return normalized
 
 
 def _env_wants_lean_json():
@@ -2096,17 +2118,22 @@ class Molecule:
 
     def get_nac(self):
         """
-        Get the non-adiabatic (phase-corrected derivative) coupling matrix d_ij.
+        Get the non-adiabatic couplings of a NACME or NAC-vector run.
 
-        Populated by a NACME run (``self.dcm``); empty for every other runtype.
-        The elements are sign/phase ambiguous between builds, so the regression
+        A NACME run populates the phase-corrected derivative coupling matrix
+        ``self.dcm``; a ``nac`` run populates the NAC vectors h_ij
+        (``self.nac``).  Every other runtype returns an empty list.  The
+        elements are sign/phase ambiguous between builds, so the regression
         comparison uses magnitudes (see the ``nac`` registry entry,
         ``phase_invariant=True``).
         """
         dcm = np.asarray(self.dcm, dtype=float)
-        if dcm.size == 0:
+        if dcm.size:
+            return dcm.tolist()
+        nac = np.asarray(self.nac, dtype=float)
+        if nac.size == 0:
             return []
-        return dcm.tolist()
+        return nac.tolist()
 
     def get_soc(self):
         """
@@ -3414,7 +3441,9 @@ class Molecule:
                 'cached Hessian state %s does not match requested state %s'
                 % (cached_state, requested_state)
             )
-        current_request = self._hessian_request_signature(requested_state)
+        current_request = _hessian_request_for_comparison(
+            self._hessian_request_signature(requested_state))
+        cached_request = _hessian_request_for_comparison(cached_request)
         if cached_request != current_request:
             cached_model = cached_request.get('model_config', {})
             current_model = current_request['model_config']
