@@ -124,6 +124,68 @@ module tdhf_mrsf_z_vector_mod
   integer, save :: minres_nbf_ctx = 0
   logical, save :: minres_dft_ctx = .false.
 
+  ! NAC orbital-response (CPHF) mode: when on, the z-vector RHS is the
+  ! occ-virt interstate transition density gamma^IJ (interchange theorem,
+  ! A^orb Z = gamma^IJ_ov), and the unrelaxed difference density / transition
+  ! Fock are set to zero so the relaxed density is the pure orbital-response Z
+  ! and the subsequent gradient contraction yields -sum Z B^x = d^cphf (after
+  ! the SCF/ground part is subtracted in the Python driver).
+  logical :: mrsf_nac_cphf_mode = .false.
+  integer :: mrsf_nac_istate = 0
+  integer :: mrsf_nac_jstate = 0
+  ! Rotation-block restriction for per-block calibration of the NAC CPHF
+  ! RHS: 0 = all blocks, 1 = doc-socc only, 2 = doc-virt only,
+  ! 3 = socc-virt only.
+  integer :: mrsf_nac_cphf_block = 0
+
+contains
+
+  !> Wall-clock seconds (monotonic), for the optional z-vector profiler.
+  function zv_wtime() result(t)
+    real(kind=dp) :: t
+    integer(kind=8) :: c, r
+    call system_clock(c, r)
+    if (r > 0_8) then
+      t = real(c, dp) / real(r, dp)
+    else
+      t = 0.0_dp
+    end if
+  end function zv_wtime
+
+  !> Read the OQP_MRSF_ZV_TIMERS opt-in once and reset the accumulators.
+  subroutine zv_timers_begin()
+    character(len=8) :: e_
+    if (.not. zv_tmr_init) then
+      call get_environment_variable('OQP_MRSF_ZV_TIMERS', e_)
+      zv_tmr_on = len_trim(e_) > 0
+      zv_tmr_init = .true.
+    end if
+    zv_t_rhs = 0.0_dp; zv_t_int2 = 0.0_dp; zv_t_xc = 0.0_dp
+    zv_t_trans = 0.0_dp; zv_t_cg = 0.0_dp; zv_t_back = 0.0_dp
+    zv_n_iter = 0
+  end subroutine zv_timers_begin
+
+  !> Emit the accumulated per-section breakdown (no-op unless timers are on).
+  subroutine zv_timers_report(log_unit, solver_name)
+    integer, intent(in) :: log_unit
+    character(len=*), intent(in) :: solver_name
+    real(kind=dp) :: tot, sigma
+    if (.not. zv_tmr_on) return
+    sigma = zv_t_int2 + zv_t_xc + zv_t_trans
+    tot = zv_t_rhs + sigma + zv_t_cg + zv_t_back
+    write(log_unit,'(/1x,"==== MRSF Z-VECTOR PROFILE (",a,") ====")') trim(solver_name)
+    write(log_unit,'(1x,"Iterations                 : ",i8)') zv_n_iter
+    write(log_unit,'(1x,"RHS build            (s)   : ",f12.4)') zv_t_rhs
+    write(log_unit,'(1x,"Per-iter 2e digestion(s)   : ",f12.4)') zv_t_int2
+    write(log_unit,'(1x,"Per-iter XC kernel   (s)   : ",f12.4)') zv_t_xc
+    write(log_unit,'(1x,"Per-iter transforms  (s)   : ",f12.4)') zv_t_trans
+    write(log_unit,'(1x,"  -> sigma/Fock build(s)   : ",f12.4)') sigma
+    write(log_unit,'(1x,"Per-iter CG algebra  (s)   : ",f12.4)') zv_t_cg
+    write(log_unit,'(1x,"Back-projection      (s)   : ",f12.4)') zv_t_back
+    write(log_unit,'(1x,"Sum of sections      (s)   : ",f12.4)') tot
+    if (zv_n_iter > 0) &
+      write(log_unit,'(1x,"Avg sigma / iteration(s)   : ",f12.4)') sigma/real(zv_n_iter,dp)
+    write(log_unit,'(1x,"=========================================")')
     call flush(log_unit)
   end subroutine zv_timers_report
 
@@ -250,68 +312,6 @@ module tdhf_mrsf_z_vector_mod
       end do
     end do
   end subroutine zv_sfrogen_gather
-  ! NAC orbital-response (CPHF) mode: when on, the z-vector RHS is the
-  ! occ-virt interstate transition density gamma^IJ (interchange theorem,
-  ! A^orb Z = gamma^IJ_ov), and the unrelaxed difference density / transition
-  ! Fock are set to zero so the relaxed density is the pure orbital-response Z
-  ! and the subsequent gradient contraction yields -sum Z B^x = d^cphf (after
-  ! the SCF/ground part is subtracted in the Python driver).
-  logical :: mrsf_nac_cphf_mode = .false.
-  integer :: mrsf_nac_istate = 0
-  integer :: mrsf_nac_jstate = 0
-  ! Rotation-block restriction for per-block calibration of the NAC CPHF
-  ! RHS: 0 = all blocks, 1 = doc-socc only, 2 = doc-virt only,
-  ! 3 = socc-virt only.
-  integer :: mrsf_nac_cphf_block = 0
-
-contains
-
-  !> Wall-clock seconds (monotonic), for the optional z-vector profiler.
-  function zv_wtime() result(t)
-    real(kind=dp) :: t
-    integer(kind=8) :: c, r
-    call system_clock(c, r)
-    if (r > 0_8) then
-      t = real(c, dp) / real(r, dp)
-    else
-      t = 0.0_dp
-    end if
-  end function zv_wtime
-
-  !> Read the OQP_MRSF_ZV_TIMERS opt-in once and reset the accumulators.
-  subroutine zv_timers_begin()
-    character(len=8) :: e_
-    if (.not. zv_tmr_init) then
-      call get_environment_variable('OQP_MRSF_ZV_TIMERS', e_)
-      zv_tmr_on = len_trim(e_) > 0
-      zv_tmr_init = .true.
-    end if
-    zv_t_rhs = 0.0_dp; zv_t_int2 = 0.0_dp; zv_t_xc = 0.0_dp
-    zv_t_trans = 0.0_dp; zv_t_cg = 0.0_dp; zv_t_back = 0.0_dp
-    zv_n_iter = 0
-  end subroutine zv_timers_begin
-
-  !> Emit the accumulated per-section breakdown (no-op unless timers are on).
-  subroutine zv_timers_report(log_unit, solver_name)
-    integer, intent(in) :: log_unit
-    character(len=*), intent(in) :: solver_name
-    real(kind=dp) :: tot, sigma
-    if (.not. zv_tmr_on) return
-    sigma = zv_t_int2 + zv_t_xc + zv_t_trans
-    tot = zv_t_rhs + sigma + zv_t_cg + zv_t_back
-    write(log_unit,'(/1x,"==== MRSF Z-VECTOR PROFILE (",a,") ====")') trim(solver_name)
-    write(log_unit,'(1x,"Iterations                 : ",i8)') zv_n_iter
-    write(log_unit,'(1x,"RHS build            (s)   : ",f12.4)') zv_t_rhs
-    write(log_unit,'(1x,"Per-iter 2e digestion(s)   : ",f12.4)') zv_t_int2
-    write(log_unit,'(1x,"Per-iter XC kernel   (s)   : ",f12.4)') zv_t_xc
-    write(log_unit,'(1x,"Per-iter transforms  (s)   : ",f12.4)') zv_t_trans
-    write(log_unit,'(1x,"  -> sigma/Fock build(s)   : ",f12.4)') sigma
-    write(log_unit,'(1x,"Per-iter CG algebra  (s)   : ",f12.4)') zv_t_cg
-    write(log_unit,'(1x,"Back-projection      (s)   : ",f12.4)') zv_t_back
-    write(log_unit,'(1x,"Sum of sections      (s)   : ",f12.4)') tot
-    if (zv_n_iter > 0) &
-      write(log_unit,'(1x,"Avg sigma / iteration(s)   : ",f12.4)') sigma/real(zv_n_iter,dp)
-    write(log_unit,'(1x,"
   ! C-bound setter for the NAC CPHF mode (states are 1-indexed; istate==0
   ! turns the mode off so ordinary gradient z-vectors are unaffected).
   subroutine set_mrsf_nac_cphf_C(c_handle, i, j) bind(C, name="set_mrsf_nac_cphf")
