@@ -16,7 +16,8 @@ def make_recovery(residuals, converged=True, previous=True):
     tree = ast.parse(source)
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'NAMD')
     names = {'_energy_refinement_counts', '_energy_retry_state',
-             '_restore_energy_retry_state'}
+             '_restore_energy_retry_state',
+             '_scale_analytic_velocity_contractions'}
     cls.body = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
     ns = dict(np=np, copy=copy, FS_TO_AU=1.0, dump_log=Mock())
     exec(compile(ast.Module(body=[cls], type_ignores=[]), str(SOURCE), 'exec'), ns)

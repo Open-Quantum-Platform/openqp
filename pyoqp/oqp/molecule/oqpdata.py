@@ -804,7 +804,10 @@ OQP_CONFIG_SCHEMA = {
         # Largest finite double disables the gap gate without invalidating restarts.
         'thrshe': {'type': float, 'default': '1.7976931348623157e308'},  # Hartree
         'tdc': {'type': string, 'default': 'npi'},           # 'fd' | 'npi' | 'analytic' | 'baeck_an'
-        'rescale': {'type': string, 'default': 'hop_analytic_nac'}, # 'isotropic' | 'analytic_nac' | 'hop_analytic_nac'
+        # 'auto' uses hop-triggered analytic NAC where the model supports it
+        # (gas-phase same-spin MRSF singlets on a ROHF/ROKS triplet reference,
+        # scf/tdhf conv <= 1e-8) and isotropic rescaling otherwise.
+        'rescale': {'type': string, 'default': 'auto'}, # 'auto' | 'isotropic' | 'analytic_nac' | 'hop_analytic_nac'
         # Opt in only: an overlap-triggered root relabel is a method-specific
         # heuristic, not part of standard FSSH, and can otherwise be mistaken
         # for a stochastic hop at a genuine conical intersection.
@@ -839,8 +842,8 @@ OQP_CONFIG_SCHEMA = {
         'disc_rescale': {'type': bool, 'default': 'true'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
         'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
         'disc_substeps': {'type': int, 'default': '10'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
-        'trajectory_interval': {'type': int, 'default': '1'}, # 0 = automatic, approximately every 10 fs
-        'restart_interval': {'type': int, 'default': '10'},    # 0 = automatic, approximately every 10 fs
+        'trajectory_interval': {'type': int, 'default': '1'},  # steps; 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '10'},    # steps; 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
         'continuation_checkpoint': {'type': str, 'default': ''},

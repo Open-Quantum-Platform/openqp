@@ -50,8 +50,10 @@ def driver(tmp_path, dt=0.1, name='source'):
     return d
 
 
-def source_checkpoint(tmp_path):
+def source_checkpoint(tmp_path, configure=None):
     d = driver(tmp_path)
+    if configure is not None:
+        configure(d)
     dtype = mod._namd_trajectory_dtype(2, 1, 0)
     record = np.zeros(1, dtype=dtype)
     record['step'], record['time_fs'], record['active'] = 7, .7, 2
@@ -113,6 +115,26 @@ def test_continuation_preserves_full_state_source_rng_and_time(tmp_path, monkeyp
     assert resumed._physical_time_fs(9) == pytest.approx(.8)
     assert resumed._etot_prev == -.8
     assert np.array_equal(resumed.coef, d.coef)
+
+
+def test_restart_restores_nvt_energy_recovery_baseline(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, 'dump_log', lambda *args, **kwargs: None)
+
+    def nvt(d):
+        # NVT keeps no NVE history; energy recovery uses its own baseline.
+        d._nve_reference_energy = d._nve_previous_energy = None
+        d._etot_prev = -.75
+        d._disc_energy_absorbed = .002
+
+    source_checkpoint(tmp_path, configure=nvt)
+    resumed = driver(tmp_path)
+    resumed.restart_requested = True
+    resumed._nve_reference_energy = resumed._nve_previous_energy = None
+    resumed._etot_prev = None
+    resumed._disc_energy_absorbed = 0.0
+    resumed._load_restart()
+    assert resumed._etot_prev == pytest.approx(-.75)
+    assert resumed._disc_energy_absorbed == pytest.approx(.002)
 
 
 @pytest.mark.parametrize('change', ['larger_dt', 'equal_dt', 'nan_dt', 'seed', 'solver'])

@@ -2488,7 +2488,7 @@ def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
     spec, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
                           'namd(S2,nstep=1000,dt=0.5,velocity="velocity.au")')
     values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
-    expected = dict(tdc='npi', rescale='hop_analytic_nac', decoherence='edc',
+    expected = dict(tdc='npi', rescale='auto', decoherence='edc',
                     frustrated='reflect', mo_reuse=True, ref_follow='soscf',
                     ref_switch_rescale=True, disc_rescale=True, disc_substeps=10,
                     velocity='velocity.au', nstep=1000, dt=0.5)
@@ -2497,6 +2497,15 @@ def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
     assert values['md', 'thrshe'] == sys.float_info.max
     assert values['dftgrid', 'pruned'] == 'sg2'
     assert values['scf', 'conv'] == values['tdhf', 'conv'] == 1e-8
+    # The minimal MRSF singlet route resolves rescale=auto to hop-triggered
+    # analytic NAC; a legacy-threshold variant of it falls back to isotropic.
+    from oqp.library.namd import analytic_nac_route_issue
+    effective = {}
+    for (section, key), value in values.items():
+        effective.setdefault(section, {})[key] = value
+    assert analytic_nac_route_issue(effective) is None
+    effective['scf']['conv'] = 1e-6
+    assert analytic_nac_route_issue(effective) is not None
 
 
 def test_namd_explicit_controls_override_recommended_defaults():

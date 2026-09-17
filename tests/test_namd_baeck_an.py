@@ -1009,6 +1009,29 @@ d_wrong_spin = _fixed_step_driver(); d_wrong_spin.mol = spin_mol
 d_wrong_spin.nstate = 2; d_wrong_spin.dt_fs = 0.5
 d_wrong_spin.seed = 1; d_wrong_spin.rng_stream = 2
 spin_bound = d_charge._restart_signature() != d_wrong_spin._restart_signature()
+
+# Frustrated-hop reflection, reference following, SCF recovery and energy
+# correction all alter velocities or the followed reference.
+def _controls_signature(**md):
+    controls_mol = Mol()
+    controls_mol.config = {
+        section: dict(settings) for section, settings in Mol.config.items()}
+    controls_mol.config['md'] = dict(md)
+    driver = _fixed_step_driver(); driver.mol = controls_mol
+    driver.nstate = 2; driver.dt_fs = 0.5; driver.seed = 1; driver.rng_stream = 2
+    return driver._restart_signature()
+controls_base = dict(frustrated='reflect', mo_reuse=True, scf_fail='escalate',
+                     scf_guess_retry=True, ref_follow='soscf',
+                     ref_switch_rescale=True, somo_tol=0.5, disc_rescale=True,
+                     disc_tol=0.002, disc_substeps=10)
+trajectory_controls_bound = all(
+    _controls_signature(**controls_base)
+    != _controls_signature(**dict(controls_base, **{key: value}))
+    for key, value in (('frustrated', 'none'), ('mo_reuse', False),
+                       ('scf_fail', 'restart'), ('scf_guess_retry', False),
+                       ('ref_follow', 'off'), ('ref_switch_rescale', False),
+                       ('somo_tol', 0.3), ('disc_rescale', False),
+                       ('disc_tol', 0.01), ('disc_substeps', 4)))
 basis_mol = Mol()
 basis_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
@@ -1585,6 +1608,7 @@ print('DENSE=' + json.dumps({
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
+        'trajectory_controls_bound': trajectory_controls_bound,
         'basis_definition_bound': basis_definition_bound,
         'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
         'dftgrid_bound': dftgrid_bound, 'gate_policy_bound': gate_policy_bound,
@@ -1674,6 +1698,7 @@ print('DENSE=' + json.dumps({
         'partial_history_rejected': True,
         'gate_streak_metadata_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
+        'trajectory_controls_bound': True,
         'basis_definition_bound': True,
         'pcm_bound': True, 'tdhf_operator_bound': True,
         'dftgrid_bound': True, 'gate_policy_bound': True,

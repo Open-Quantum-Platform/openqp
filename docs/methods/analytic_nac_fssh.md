@@ -96,6 +96,17 @@ tdc = npi
 rescale = hop_analytic_nac
 ```
 
+The default is `rescale = auto`.  At startup it selects `hop_analytic_nac`
+only where the resident analytic NAC is defined: gas-phase, same-spin MRSF
+singlet states on a two-SOMO ROHF/ROKS triplet reference with `scf.conv` and
+`tdhf.conv` no larger than `1e-8` (the concise `namd(...)` route supplies
+`1e-8`).  Every other route (SOC, QM/MM, tight binding, MRSF triplets, other
+response types, or a legacy input with the default `1e-6` thresholds) uses
+isotropic rescaling, and the log records the reason.  An explicit
+`hop_analytic_nac`, `analytic_nac`, `tdc = analytic` or `nacme_check = analytic`
+on a model that cannot provide the NAC is rejected before the first step
+instead of at the first stochastic candidate.
+
 Thus, HT-NAC supplies the physically defined momentum-rescaling direction at
 an attempted transition while avoiding an analytic NAC calculation on steps
 with no candidate.  It does not replace NPI hop probabilities by analytic

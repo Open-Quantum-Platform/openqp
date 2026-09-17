@@ -522,6 +522,108 @@ def test_hop_triggered_record_clear_prevents_stale_exact_vector():
     assert driver._nacme_reference_source == 0
 
 
+def _fake_native_relabel(mol, *, relabeled_active, target):
+    """Native result after a trivial-crossing relabel (and optional candidate)."""
+    params = np.array(mol.data['OQP::namd_params'], copy=True)
+    n = int(round(params[12]))
+    params[4] = float(relabeled_active)
+    params[10] = 0.0
+    params[11] = float(target)
+    mol.data['OQP::namd_params'] = params
+    results = np.zeros(n*n + 8)
+    results[n*n + 1] = float(target)
+    results[n*n + 4] = 1.0          # swapped: trivial relabel happened
+    results[n*n + 5] = 2.0
+    results[n*n + 7] = -1.0
+    mol.data['OQP::namd_results'] = results
+
+
+def test_trivial_relabel_alone_is_not_a_hop_candidate(monkeypatch):
+    import oqp
+
+    driver = _hop_triggered_driver()
+    driver.trivial = 1
+    driver._hop_random = lambda: 0.75
+    driver._update_analytic_nac = lambda *_args, **_kwargs: pytest.fail(
+        'a trivial-crossing relabel was treated as a stochastic hop candidate')
+    monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional',
+                        lambda *_args: pytest.fail('velocities were rescaled'))
+    monkeypatch.setattr(
+        oqp, 'mrsf_namd_hop',
+        lambda mol: _fake_native_relabel(mol, relabeled_active=2, target=2))
+    _silence_dump_log(monkeypatch)
+
+    velocity = driver.vel.copy()
+    new_active, hopped = driver._hop(allow_hop=True, istep=5)
+    assert (new_active, hopped) == (2, False)
+    np.testing.assert_array_equal(driver.vel, velocity)
+
+
+def test_candidate_after_relabel_uses_the_relabelled_source_state(monkeypatch):
+    import oqp
+
+    driver = _hop_triggered_driver()
+    driver.trivial = 1
+    driver._hop_random = lambda: 0.25
+    seen = {}
+
+    def fake_exact(istep, *, compare_overlap=False, pair=None):
+        seen['pair'] = pair
+        dcv = np.zeros((2, 2, 1, 3))
+        dcv[1, 0, 0] = [1.0, 0.0, 0.0]
+        dcv[0, 1, 0] = -dcv[1, 0, 0]
+        driver._last_analytic_dcv = dcv
+        driver._last_analytic_pair = pair
+        driver._last_analytic_step = istep
+
+    def fake_rescale(_natom, _velocity, _mass, _direction, delta_e,
+                     gamma_ptr, discriminant_ptr):
+        seen['delta_e'] = delta_e
+        return 1                     # frustrated
+
+    driver._update_analytic_nac = fake_exact
+    monkeypatch.setattr(oqp, 'oqp_namd_rescale_directional', fake_rescale)
+    monkeypatch.setattr(
+        oqp, 'mrsf_namd_hop',
+        lambda mol: _fake_native_relabel(mol, relabeled_active=2, target=1))
+    _silence_dump_log(monkeypatch)
+    monkeypatch.delenv('OQP_NAMD_HOP_NAC_PAIRS', raising=False)
+
+    new_active, hopped = driver._hop(allow_hop=True, istep=6)
+    # The candidate is 2 -> 1 after the relabel; a frustrated update keeps
+    # the relabelled state instead of undoing the diabatic following.
+    assert seen['pair'] == (2, 1)
+    assert seen['delta_e'] == pytest.approx(-0.5 - (-0.4))
+    assert (new_active, hopped) == (2, False)
+
+
+def test_record_clear_keeps_history_owned_by_a_continuous_consumer():
+    driver = _hop_triggered_driver()
+    driver.nacme_check = 'analytic'
+    previous = np.array([[0.0, 0.3], [-0.3, 0.0]])
+    driver._analytic_tdc_previous = previous.copy()
+    driver._last_analytic_dcv = np.ones((2, 2, 1, 3))
+    driver._clear_hop_triggered_analytic_record()
+    np.testing.assert_array_equal(driver._analytic_tdc_previous, previous)
+    assert driver._last_analytic_dcv is not None
+
+
+def test_velocity_correction_rescales_cached_analytic_tdc():
+    driver = _hop_triggered_driver()
+    driver.tdc_provider = 'analytic'
+    tdc = np.array([[0.0, 1.0], [-1.0, 0.0]])
+    driver._last_analytic_tdc = tdc.copy()
+    driver._analytic_tdc_previous = tdc.copy()
+    driver._last_analytic_step = 9
+    driver._last_analytic_pair = None
+    driver._scale_analytic_velocity_contractions(0.98994949, 9)
+    np.testing.assert_allclose(driver._last_analytic_tdc, 0.98994949*tdc)
+    np.testing.assert_allclose(driver._analytic_tdc_previous, 0.98994949*tdc)
+    # A vector from another step is not the one the velocity scaled.
+    driver._scale_analytic_velocity_contractions(0.5, 10)
+    np.testing.assert_allclose(driver._last_analytic_tdc, 0.98994949*tdc)
+
+
 def test_built_hop_triggered_kernel_returns_uncommitted_candidate(tmp_path):
     """Exercise native rescale mode 2, not the Python test double above."""
     script = r"""

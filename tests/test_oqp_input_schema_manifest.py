@@ -140,6 +140,9 @@ def test_namd_scientific_safety_defaults_are_minimal_input_defaults():
     assert defaults["thrshe"] == ("1.7976931348623157e308", "float")
     assert defaults["nacme_check"] == ("off", "str")
     assert defaults["nve_gate"] == ("warn", "str")
+    # Analytic hop rescaling is chosen per route (see analytic_nac_route_issue)
+    # so legacy, triplet, SOC, QM/MM and tight-binding inputs keep isotropic.
+    assert defaults["rescale"] == ("auto", "string")
 
 
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():

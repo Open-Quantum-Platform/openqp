@@ -205,6 +205,56 @@ def _validate_distinct_output_paths(*, protected_paths=(), **paths):
                 f"[md] NAMD output {label} must not alias the input deck")
 
 
+_ANALYTIC_NAC_CONV_MAX = 1.0e-8
+
+
+def _config_flag(value):
+    return (value is True) or (str(value).strip().lower() in ('true', '1', 'on', 'yes'))
+
+
+def analytic_nac_model_issue(config):
+    """Return why the resident analytic MRSF NAC cannot serve this model.
+
+    ``None`` means the electronic model is the two-SOMO ROHF/ROKS MRSF singlet
+    response that ``oqp.library.nac_analytic.analytic_nac`` implements, with
+    SCF and response thresholds tight enough for its accuracy guard.  The
+    spin-orbit and QM/MM boundaries are enforced separately by their drivers.
+    """
+    inp = config.get('input', {})
+    scf = config.get('scf', {})
+    tdhf = config.get('tdhf', {})
+    if is_tb_method(str(inp.get('method', ''))):
+        return 'tight-binding models have no analytic NAC'
+    if str(tdhf.get('type', '')).strip().lower() != 'mrsf':
+        return 'tdhf.type must be mrsf'
+    try:
+        tdhf_mult = int(tdhf.get('multiplicity', 1))
+        scf_mult = int(scf.get('multiplicity', 1))
+    except (TypeError, ValueError):
+        return 'invalid multiplicity'
+    if tdhf_mult != 1:
+        return 'analytic NAC implements singlet MRSF states only'
+    if str(scf.get('type', '')).strip().lower() != 'rohf' or scf_mult != 3:
+        return 'analytic NAC requires a two-SOMO ROHF/ROKS triplet reference'
+    for section, values in (('scf', scf), ('tdhf', tdhf)):
+        try:
+            conv = float(values.get('conv', 1.0e-6))
+        except (TypeError, ValueError):
+            return '%s.conv is not a number' % section
+        if not (np.isfinite(conv) and 0.0 < conv <= _ANALYTIC_NAC_CONV_MAX):
+            return '%s.conv=%g exceeds %g' % (section, conv, _ANALYTIC_NAC_CONV_MAX)
+    return None
+
+
+def analytic_nac_route_issue(config):
+    """Return why a NAMD route cannot use analytic NAC, including SOC/QM/MM."""
+    if bool(config.get('md', {}).get('soc', False)):
+        return 'spin-orbit NAMD'
+    if _config_flag(config.get('input', {}).get('qmmm_flag', False)):
+        return 'QM/MM NAMD'
+    return analytic_nac_model_issue(config)
+
+
 def _sha256_stream(stream):
     """Hash a binary stream in bounded chunks, including on Python 3.10."""
     digest = hashlib.sha256()
@@ -572,16 +622,26 @@ class NAMD:
         self.tdc_scheme = {
             'fd': 0, 'npi': 1, 'analytic': 2, 'baeck_an': 3,
         }[self.tdc_provider]
-        self.rescale_provider = str(md.get('rescale', 'hop_analytic_nac')).strip().lower().replace('-', '_')
+        self.rescale_provider = str(md.get('rescale', 'auto')).strip().lower().replace('-', '_')
         if self.rescale_provider in ('analytic', 'nac'):
             self.rescale_provider = 'analytic_nac'
         if self.rescale_provider in ('hop_analytic', 'hop_nac', 'ht_nac'):
             self.rescale_provider = 'hop_analytic_nac'
         if self.rescale_provider not in (
-                'isotropic', 'analytic_nac', 'hop_analytic_nac'):
+                'auto', 'isotropic', 'analytic_nac', 'hop_analytic_nac'):
             raise ValueError(
-                "[md] rescale must be isotropic, analytic_nac, or "
+                "[md] rescale must be auto, isotropic, analytic_nac, or "
                 "hop_analytic_nac")
+        # rescale=auto selects hop-triggered analytic NAC only where the
+        # resident analytic NAC is defined.  Resolving this once at startup
+        # keeps every other route on isotropic rescaling instead of failing at
+        # the first stochastic hop candidate, possibly deep into a trajectory.
+        self._rescale_auto_issue = None
+        if self.rescale_provider == 'auto':
+            self._rescale_auto_issue = analytic_nac_route_issue(cfg)
+            self.rescale_provider = (
+                'hop_analytic_nac' if self._rescale_auto_issue is None
+                else 'isotropic')
         # Carry the converged orbitals of the previous geometry into the SCF
         # of the next geometry (guess type 'previous' after the first step).
         # Reuse the previous orbitals by default. Repeating the configured
@@ -636,6 +696,7 @@ class NAMD:
             raise ValueError("[md] disc_tol must be positive")
         self._disc_event_count = 0
         self._disc_energy_absorbed = 0.0
+        self._step_numerical_correction = 0.0
         # Energy-guarded nuclear substepping: when the pre-hop total-energy
         # jump of a step exceeds disc_tol, the step is repeated from the
         # previous phase point and electronic state with disc_substeps
@@ -785,6 +846,14 @@ class NAMD:
             raise NotImplementedError(
                 "analytic NAC TDC/rescaling/check currently supports same-spin NAMD only"
             )
+        if (self._needs_analytic_nac()
+                or self.rescale_provider == 'hop_analytic_nac'):
+            model_issue = analytic_nac_model_issue(cfg)
+            if model_issue is not None:
+                raise ValueError(
+                    "[md] analytic NAC TDC/rescaling/check was requested, but "
+                    "this electronic model cannot provide it: %s. Use "
+                    "rescale=auto or isotropic, or tighten the model." % model_issue)
         if soc_requested and self.odp is not None:
             raise NotImplementedError(
                 "[odp] currently supports same-spin NVE NAMD only"
@@ -1765,7 +1834,8 @@ class NAMD:
 
     def _energy_retry_state(self):
         """Preserve electronic histories and diagnostics before a trial step."""
-        prefixes = ('_ba_', '_last_', '_pending_', '_nacme_gate_')
+        prefixes = ('_ba_', '_last_', '_pending_', '_nacme_gate_',
+                    '_analytic_tdc_', '_nacme_reference_')
         names = {'_somo_switch_step', '_window_leak_step', '_somo_switch_count',
                  '_window_leak_count', '_overlap_collapse_steps', '_restart_boundary'}
         return {name: copy.deepcopy(value) for name, value in self.__dict__.items()
@@ -1972,6 +2042,34 @@ class NAMD:
             raise RuntimeError(
                 f'{tag} must be an exact finite nstate TD-energy vector')
         return np.ascontiguousarray(energies)
+
+    def _scale_analytic_velocity_contractions(self, factor, istep):
+        """Keep cached d.v couplings consistent with a uniform velocity scale.
+
+        The analytic TDC endpoint of this step was contracted with the velocity
+        before a numerical energy correction.  Both the propagated TDC and the
+        endpoint history are linear in v, so they scale by the same factor.
+        """
+        if (getattr(self, '_last_analytic_tdc', None) is None
+                or getattr(self, '_last_analytic_step', None) != int(istep)):
+            return
+        self._last_analytic_tdc = np.asarray(self._last_analytic_tdc) * factor
+        if (getattr(self, '_last_analytic_pair', None) is None
+                and getattr(self, '_analytic_tdc_previous', None) is not None):
+            self._analytic_tdc_previous = (
+                np.asarray(self._analytic_tdc_previous) * factor)
+
+    def _log_rescale_resolution(self):
+        """Record which velocity-rescaling direction rescale=auto selected."""
+        requested = str(self.mol.config.get('md', {}).get('rescale', 'auto')).strip().lower()
+        if requested != 'auto':
+            return
+        reason = getattr(self, '_rescale_auto_issue', None)
+        dump_log(self.mol, title=(
+            'NAMD velocity rescaling: rescale=auto -> %s%s' % (
+                self.rescale_provider,
+                '' if reason is None else ' (analytic NAC unavailable: %s)' % reason)),
+            section='input')
 
     def _needs_analytic_nac(self):
         """Return whether this trajectory consumes the resident analytic NAC."""
@@ -2476,8 +2574,15 @@ class NAMD:
             drift = 0.0
             step_change = 0.0
         else:
-            drift = total - self._nve_reference_energy
-            step_change = total - self._nve_previous_energy
+            # A numerical velocity correction forces the total energy back to
+            # its previous value.  Audit the energy the dynamics actually
+            # produced: add back this step's absorbed change and the
+            # cumulative absorbed energy, so the gate cannot be satisfied by
+            # the correction it is meant to police.
+            step_correction = float(getattr(self, '_step_numerical_correction', 0.0))
+            absorbed = float(getattr(self, '_disc_energy_absorbed', 0.0))
+            drift = total + absorbed - self._nve_reference_energy
+            step_change = total + step_correction - self._nve_previous_energy
         transition_jump = float(transition_energy_jump)
         time_fs = self._physical_time_fs(istep)
         drift_rate = drift/time_fs if time_fs > 0.0 else 0.0
@@ -3316,8 +3421,17 @@ class NAMD:
                     'nve_gate_transition_tol', 'nve_gate_consecutive')
             },
         }
-        if str(md.get('scf_guess_retry', 'true')).strip().lower() not in ('true', '1', 'on', 'yes'):
-            identity['scf_guess_retry'] = False
+        # Controls that change which reference is followed, how frustrated
+        # hops and energy discontinuities alter velocities, or how failed SCF
+        # steps are recovered all change the trajectory, so a restart must
+        # not silently continue under different settings.
+        identity['trajectory_controls'] = {
+            key: str(md.get(key, '')).strip().lower()
+            for key in ('mo_reuse', 'scf_fail', 'scf_guess_retry',
+                        'ref_follow', 'ref_switch_rescale', 'somo_tol',
+                        'frustrated', 'disc_rescale', 'disc_tol',
+                        'disc_substeps')
+        }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
     def _tracking_state_count(self):
@@ -3440,6 +3554,9 @@ class NAMD:
             'ba_dt_left': (),
             'nve_reference_energy': (),
             'nve_previous_energy': (),
+            'analytic_tdc_previous': (self.nstate, self.nstate),
+            'etot_prev': (),
+            'disc_energy_absorbed': (),
         }
         validated = {}
         for name, expected in shapes.items():
@@ -3496,6 +3613,10 @@ class NAMD:
                 self, '_analytic_tdc_previous', None),
             'nve_reference_energy': self._nve_reference_energy,
             'nve_previous_energy': self._nve_previous_energy,
+            # The energy-recovery baseline is also kept for NVT, where the NVE
+            # history above stays empty.
+            'etot_prev': getattr(self, '_etot_prev', None),
+            'disc_energy_absorbed': getattr(self, '_disc_energy_absorbed', 0.0),
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
                     f'step {istep}: history'))
         trajectory_prefix = self._trajectory_checkpoint_identity(istep)
@@ -3852,7 +3973,10 @@ class NAMD:
             setattr(self, f'_{name}', value)
         self._conservative_restraint_energy = (
             self._droplet_energy + self._solute_com_energy)
-        self._etot_prev = self._nve_previous_energy
+        if getattr(self, '_etot_prev', None) is None:
+            self._etot_prev = self._nve_previous_energy
+        if getattr(self, '_disc_energy_absorbed', None) is None:
+            self._disc_energy_absorbed = 0.0
         if continuing:
             self._run_io_collective(lambda: self._save_restart_on_io_rank(
                 payload['step'], payload['coordinates'], payload['velocities'],
@@ -3982,7 +4106,14 @@ class NAMD:
             optional = {}
             for name in ('ba_energy_left', 'ba_energy_center', 'ba_tdc_left',
                          'ba_dt_left', 'nve_reference_energy',
-                         'nve_previous_energy'):
+                         'nve_previous_energy', 'analytic_tdc_previous',
+                         'etot_prev', 'disc_energy_absorbed'):
+                if f'has_{name}' not in saved and name in (
+                        'analytic_tdc_previous', 'etot_prev',
+                        'disc_energy_absorbed'):
+                    # Checkpoints written before these histories existed.
+                    optional[name] = None
+                    continue
                 present = np.asarray(saved[f'has_{name}'])
                 if (present.shape != (1,) or int(present[0]) not in (0, 1)):
                     raise RuntimeError(
@@ -4355,6 +4486,12 @@ class NAMD:
         """Clear exact-NAC fields before a step without a known hop candidate."""
         if self.rescale_provider != 'hop_analytic_nac':
             return
+        if self._needs_analytic_nac():
+            # A continuous consumer (tdc=analytic, rescale history or
+            # nacme_check=analytic) re-evaluates every pair at each step and
+            # owns the centered/audit history; clearing it here would leave
+            # the requested analytic NACME check permanently unevaluated.
+            return
         self._last_analytic_dcv = None
         self._last_analytic_pair = None
         self._last_analytic_step = None
@@ -4456,10 +4593,15 @@ class NAMD:
         self._last_hop_direction = np.zeros((self.natom, 3), dtype=float)
         target = int(round(results[n*n + 1]))
         blocked = int(round(results[n*n + 2])) == 1
+        # In deferred mode the native kernel commits only a trivial-crossing
+        # relabel, so params[_P_ACTIVE] is the post-relabel source state.  A
+        # stochastic candidate is target /= that state; comparing with the
+        # pre-relabel state would turn a relabel into a spurious hop.
+        source = new_active
         if (allow_hop and deferred_directional
-                and target != active_before and not blocked):
+                and target != source and not blocked):
             new_active, hopped = self._hop_triggered_analytic_rescale(
-                active_before, target, istep)
+                source, target, istep)
             blocked = not hopped
             params[_P_ACTIVE] = float(new_active)
             params[_P_HOPPED] = 1.0 if hopped else 0.0
@@ -4472,7 +4614,11 @@ class NAMD:
             mol.data["OQP::namd_params"] = params
             mol.data["OQP::namd_results"] = results
             mol.data["OQP::namd_velocity"] = self.vel.reshape(-1).copy()
-        if (hopped and self.rescale_provider == 'analytic_nac'
+        # Native mode 1 rescales along d(source, target) with the post-relabel
+        # source; that state is not recoverable after a relabel plus a hop, so
+        # only record the direction when no trivial relabel occurred.
+        relabeled = int(round(results[n*n + 4])) == 1
+        if (hopped and self.rescale_provider == 'analytic_nac' and not relabeled
                 and 1 <= active_before <= n and 1 <= new_active <= n):
             self._last_hop_direction = np.array(
                 dcv[active_before - 1, new_active - 1], copy=True)
@@ -4514,6 +4660,7 @@ class NAMD:
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: Tully FSSH Nonadiabatic Molecular Dynamics')
+        self._log_rescale_resolution()
         self._prepare_md_outputs()
         restart = self._load_restart()
         if restart is None:
@@ -4636,6 +4783,7 @@ class NAMD:
             # Numerical correction is permitted only after finer nuclear steps
             # fail. It is separate from momentum adjustment at a surface hop.
             self._ref_switch_jump = np.nan
+            self._step_numerical_correction = 0.0
             if self._etot_prev is not None:
                 epot_now = (float(np.asarray(mol.energies)[self.active])
                             + bias_energy + self._conservative_restraint_energy)
@@ -4669,6 +4817,7 @@ class NAMD:
                             self._disc_event_count += 1
                         factor = np.sqrt(ke_target/ke_now)
                         self.vel = self.vel*factor
+                        self._scale_analytic_velocity_contractions(factor, istep)
                         dump_log(mol, title=('NAMD numerical correction details: kinetic energy '
                                  '%.12f -> %.12f Hartree; velocity factor %.12f; '
                                  'energy correction %+.8e Hartree'
@@ -4680,6 +4829,7 @@ class NAMD:
                             % (100.0*(ke_target-ke_now)/ke_now, self.dt/FS_TO_AU)),
                             section='input')
                         self._disc_energy_absorbed += jump
+                        self._step_numerical_correction = float(jump)
                         dump_log(mol, title=('NAMD: %s at step %d; '
                                              'active-state energy jump %+.4f Hartree '
                                              'absorbed by isotropic velocity rescaling '
