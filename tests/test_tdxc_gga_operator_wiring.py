@@ -96,7 +96,7 @@ def test_production_tddft_gradient_preserves_the_validated_fixed_grid_path():
     assert "include_ground_state" not in body
     assert "call derexc_blk" not in body
     assert "threshold=1.0d-14" in body
-    assert "dedft = dedft + dat%nucgrad(:,:,1)" in TDXC_GRAD
+    assert "dedft = dedft + sum(dat%nucgrad(:,1:infos%mol_prop%natom,:,1), dim=3)" in TDXC_GRAD
 
 
 def test_restricted_owner_motion_alone_gets_closed_shell_factor():

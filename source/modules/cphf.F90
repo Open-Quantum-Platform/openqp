@@ -1156,6 +1156,10 @@ contains
       write(iw,'(3x,60("-"))')
     end if
 
+    iter_min = huge(iter_min)
+    iter_max = 0
+    nconv = 0
+
     if (use_minres) then
       ! Keep one scalar Paige-Saunders recurrence per RHS, but synchronize the
       ! expensive Hessian actions.  This is deliberately not block MINRES:
@@ -1263,7 +1267,11 @@ contains
         solved = (minres_batch(irhs)%errcode == MINRES_CONVERGED .or. &
                   minres_batch(irhs)%errcode == MINRES_OK) .and. &
                  residual_norm <= sqrt(abs(rhs_cnv(irhs)))
-        write(iw,'(" ROHF Z-VECTOR MINRES RHS",I5," stopped after",I5," iterations; status=",I3,"; true error=",1P,E10.3)') &
+        iter_min = min(iter_min, minres_batch(irhs)%iter)
+        iter_max = max(iter_max, minres_batch(irhs)%iter)
+        if (solved) nconv = nconv + 1
+        if (infos%control%verbose >= 2) &
+          write(iw,'(" ROHF Z-VECTOR MINRES RHS",I5," stopped after",I5," iterations; status=",I3,"; true error=",1P,E10.3)') &
                  irhs, minres_batch(irhs)%iter, &
                  int(minres_batch(irhs)%errcode), residual_sq
         call flush(iw)
@@ -1280,7 +1288,11 @@ contains
           if (pcg%errcode /= PCG_OK) exit
           call pcg%step()
         end do
-        write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+        iter_min = min(iter_min, iter - 1)
+        iter_max = max(iter_max, iter - 1)
+        if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
+        if (infos%control%verbose >= 2) &
+          write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
                 irhs, iter - 1, pcg%error**2
         call flush(iw)
         uvec(:,irhs) = pcg%x
@@ -1289,6 +1301,13 @@ contains
         call pcg%clean()
       end do
     end if
+
+    if (infos%control%verbose >= 1 .and. nrhs > 0) &
+      write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
+            nconv, nrhs, iter_min, iter_max
+    if (nconv < nrhs) write(iw,'(6x,"WARNING: ROHF response did not converge for",I5," of",I5," right-hand sides")') &
+            nrhs - nconv, nrhs
+    call flush(iw)
 
     ! dft_initialize owns process-global XC work arrays.  Leaving them live
     ! here makes a second CPHF solve in the same process reuse stale grid state
