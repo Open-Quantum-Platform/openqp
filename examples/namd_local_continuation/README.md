@@ -1,6 +1,6 @@
 # Local time-step continuation
 
-Run `oqp source.oqp` and then `oqp continuation.oqp` from this directory in a
+Run `oqp source.oqp` and then `oqp source.restart.oqp` from this directory in a
 validated OpenQP environment. This short formaldehyde example first saves step 1
 at 0.1 fs, then propagates two 0.05 fs steps to 0.2 fs in separate outputs.
 It demonstrates the interface; it is not a converged photochemical calculation.

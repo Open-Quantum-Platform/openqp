@@ -447,7 +447,7 @@ base_md = {
     'nstep': 2, 'dt': 0.5, 'active': 1, 'substep': 10,
     'decoherence': 'edc', 'edc_c': 0.1, 'thrshe': 0.01, 'tdc': 'fd',
     'trivial': False, 'trivial_thresh': 0.1, 'init_temp': 0.0,
-    'velocity': 'zero', 'seed': 1, 'soc': True,
+    'velocity': 'zero', 'seed': 1, 'soc': True, 'rescale': 'isotropic',
 }
 
 class Mol:
