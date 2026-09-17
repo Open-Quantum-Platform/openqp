@@ -81,6 +81,7 @@ def child(tmp_path, source):
 
 
 def test_continuation_preserves_full_state_source_rng_and_time(tmp_path, monkeypatch):
+    monkeypatch.delattr(mod.hashlib, "file_digest", raising=False)
     monkeypatch.setattr(mod, 'dump_log', lambda *args, **kwargs: None)
     source = source_checkpoint(tmp_path)
     original = {p: Path(p).read_bytes() for p in (source.restart_file, source.trajectory_file)}
@@ -230,3 +231,11 @@ def test_return_cannot_exceed_original_dt(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match='mismatch'):
         returning._load_restart()
     assert not Path(returning.trajectory_file).exists()
+
+
+@pytest.mark.parametrize("content", [b"", b"abc", b"x" * (1024 * 1024 + 13)])
+def test_checkpoint_hash_matches_sha256_without_python311_api(content, monkeypatch):
+    import io
+    import hashlib
+    monkeypatch.delattr(hashlib, "file_digest", raising=False)
+    assert mod._sha256_stream(io.BytesIO(content)) == hashlib.sha256(content).hexdigest()

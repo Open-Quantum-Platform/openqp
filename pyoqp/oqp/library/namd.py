@@ -205,6 +205,14 @@ def _validate_distinct_output_paths(*, protected_paths=(), **paths):
                 f"[md] NAMD output {label} must not alias the input deck")
 
 
+def _sha256_stream(stream):
+    """Hash a binary stream in bounded chunks, including on Python 3.10."""
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _restart_manifest_path(log_path):
     """Return a job-specific runnable restart manifest beside the main log."""
     absolute = os.path.abspath(os.fspath(log_path))
@@ -3754,7 +3762,7 @@ class NAMD:
                             and os.path.samefile(output, source))):
                     raise ValueError('continuation source aliases an output')
         with open(self.continuation_checkpoint, 'rb') as stream:
-            checkpoint_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+            checkpoint_hash = _sha256_stream(stream)
         payload = self._load_restart_on_io_rank(
             self.continuation_checkpoint, allow_smaller_dt=True)
         required_tags = {'OQP::VEC_MO_A', 'OQP::VEC_MO_B', 'OQP::E_MO_A',
@@ -3790,7 +3798,7 @@ class NAMD:
                                   rtol=0.0, atol=1e-10)):
             raise ValueError('continuation checkpoint and trajectory time/state disagree')
         with open(self.continuation_checkpoint, 'rb') as stream:
-            if hashlib.file_digest(stream, 'sha256').hexdigest() != checkpoint_hash:
+            if _sha256_stream(stream) != checkpoint_hash:
                 raise ValueError('continuation checkpoint changed during validation')
         provenance = {
             'checkpoint': self.continuation_checkpoint,
