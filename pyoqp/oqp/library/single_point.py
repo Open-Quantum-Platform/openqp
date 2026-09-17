@@ -3445,8 +3445,7 @@ class NAC(Calculator):
         bilinear adjoint; no orbital-generator finite-difference harvest is
         present in production."""
         from oqp.library.nac_analytic import analytic_nac
-        dump_log(self.mol, title='PyOQP: analytic NAC (nac-lagrangian v3 '
-                 'native Z-vector; closed-form Fortran wpair)',
+        dump_log(self.mol, title='PyOQP: analytic derivative coupling',
                  section='')
         nacv, dcv = analytic_nac(self.mol)
         return nacv, dcv, ['analytic-v3-zvector'] * (3 * self.natom)

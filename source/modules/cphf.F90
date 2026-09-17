@@ -1141,18 +1141,20 @@ contains
     cgdata%scale_exch = scale_exch
     cgdata%dft = dft
 
-    write(iw,'(/3x,60("-"))')
-    if (use_minres) then
-      write(iw,'(6x,"open-shell (ROHF) adjoint Z-vector solver")')
-    else
-      write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+    if (infos%control%verbose >= 1) then
+      write(iw,'(/3x,60("-"))')
+      if (use_minres) then
+        write(iw,'(6x,"open-shell (ROHF) adjoint Z-vector solver")')
+      else
+        write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+      end if
+      write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
+      write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+      if (present(rhs_tolerances)) &
+        write(iw,'(6x,"per-RHS tolerance range =",1P,E10.3," ... ",E10.3)') &
+          minval(rhs_cnv), maxval(rhs_cnv)
+      write(iw,'(3x,60("-"))')
     end if
-    write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
-    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
-    if (present(rhs_tolerances)) &
-      write(iw,'(6x,"per-RHS tolerance range =",1P,E10.3," ... ",E10.3)') &
-        minval(rhs_cnv), maxval(rhs_cnv)
-    write(iw,'(3x,60("-"))')
 
     if (use_minres) then
       ! Keep one scalar Paige-Saunders recurrence per RHS, but synchronize the

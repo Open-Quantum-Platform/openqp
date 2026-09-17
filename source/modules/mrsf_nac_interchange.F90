@@ -646,16 +646,18 @@ contains
           trim(real_to_string(scaled_residual_sq)) // &
           ' (fallback relative norm=10*sqrt(epsilon)).', WITHOUT_ABORT)
       end if
-      z_relative_error = 0.0_dp
-      if (guess_available(irhs)) z_relative_error = &
-        sqrt(sum((guess(:,irhs)-solution(:,irhs))**2))/ &
-        max(sqrt(sum(solution(:,irhs)**2)),tiny(1.0_dp))
-      write(iw,'(A,1X,I0,1X,A,1X,3(L1,1X),5(ES16.8,1X),I0)') &
-        'NAC_Z_PREDICTOR', first_pair+irhs-1, trim(mode), &
-        guess_available(irhs), guess_accepted(irhs), use_approximation, &
-        eta, singular_min, &
-        initial_residual(irhs), residual(irhs), z_relative_error, &
-        iterations(irhs)
+      if (infos%control%verbose >= 2) then
+        z_relative_error = 0.0_dp
+        if (guess_available(irhs)) z_relative_error = &
+          sqrt(sum((guess(:,irhs)-solution(:,irhs))**2))/ &
+          max(sqrt(sum(solution(:,irhs)**2)),tiny(1.0_dp))
+        write(iw,'(A,1X,I0,1X,A,1X,3(L1,1X),5(ES16.8,1X),I0)') &
+          'NAC_Z_PREDICTOR', first_pair+irhs-1, trim(mode), &
+          guess_available(irhs), guess_accepted(irhs), use_approximation, &
+          eta, singular_min, &
+          initial_residual(irhs), residual(irhs), z_relative_error, &
+          iterations(irhs)
+      end if
     end do
 
     if (predictor_mode) then

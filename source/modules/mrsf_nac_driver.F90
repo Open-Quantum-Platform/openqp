@@ -347,7 +347,8 @@ contains
       selected_i = min(only_istate, only_jstate)
       selected_j = max(only_istate, only_jstate)
       npair = 1
-      write(iw,'(A,2(1X,I0),1X,A,I0)') 'NAC_SELECTED_PAIR', selected_i, &
+      if (infos%control%verbose >= 2) &
+        write(iw,'(A,2(1X,I0),1X,A,I0)') 'NAC_SELECTED_PAIR', selected_i, &
         selected_j, 'of nstate=', nstate
     end if
     call data_has_tags(infos%dat, tags_required, module_name, &
