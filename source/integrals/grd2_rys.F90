@@ -2386,6 +2386,11 @@ end subroutine compute_soc2e_ao
         end if
       end do
     end do
+    ! The in-loop flush fires on the final primitive pair only if that pair
+    ! survives screening.  When it is screened out, the partial batch of
+    ! earlier surviving pairs would otherwise be dropped.
+    if (ng > 0) call compute_grd_ints_batch(gdat, dab, fd_batch, ng, nmax, &
+      mmax, nimax, njmax, nkmax, nlmax)
 
     do iprobe = 1, nprobe
       gdat%fd = fd_batch(:,:,iprobe)

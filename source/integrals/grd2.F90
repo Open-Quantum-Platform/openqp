@@ -8,7 +8,7 @@ module grd2
   use basis_tools, only: basis_set
   use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_compute_batch, grd2_rys_hess_compute, &
                       grd2_operator_consumer_t, grd2_rys_compute_operator
-  use constants, only: BAS_MXANG
+  use constants, only: BAS_MXANG, NUM_CART_BF
   use int2_compute, only: int2_compute_data_t, ints_exchange
 
 !###############################################################################
@@ -648,7 +648,11 @@ contains
     skip1 = 0
     skip2 = 0
     numint = 0
-    call load_petite_shell_map(infos, basis%nshell, sym_map, sym_nops)
+    ! No petite-list reduction here: batched probes carry interstate and
+    ! response densities that are not totally symmetric, and grd2_driver only
+    ! applies the reduction to callers that opt in with such densities.
+    sym_map => null()
+    sym_nops = 0
     if (basis%mxam>BAS_MXANG) then
       call show_message('gradient integrals programmed up to '&
         //bfchars(BAS_MXANG-1)//' functions', WITH_ABORT)
@@ -713,7 +717,10 @@ contains
 
               call gdat%set_ids(basis,i,j,k,l)
               if (all(gdat%skip(:))) cycle
-              nquartet = product(basis%naos(gdat%id))
+              ! Probe densities are packed with Cartesian shell extents
+              ! (spherical shells are expanded before contraction), so an
+              ! inactive probe must clear the Cartesian block, not naos.
+              nquartet = product(NUM_CART_BF(basis%am(gdat%id)))
               if (sym_nops > 1) then
                 q4 = petite_quartet_weight( &
                   sym_map,sym_nops,basis%nshell,i,j,k,l)

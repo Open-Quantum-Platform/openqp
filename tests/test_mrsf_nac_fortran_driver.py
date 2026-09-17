@@ -206,8 +206,13 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
     assert "!$omp critical(grd2_batch_de_merge)" in worker
     assert "de = de + de_thread" in worker
     assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in worker
-    assert "nquartet = product(basis%naos(gdat%id))" in worker
+    # Probe densities use Cartesian shell extents even for spherical shells.
+    assert "nquartet = product(NUM_CART_BF(basis%am(gdat%id)))" in worker
+    assert "nquartet = product(basis%naos(gdat%id))" not in worker
     assert "dab(1:nquartet,iprobe) = 0.0_dp" in worker
+    # Interstate/response probes are not totally symmetric: no petite list.
+    assert "call load_petite_shell_map(" not in driver
+    assert "sym_nops = 0" in driver
     assert "product(gdat%nbf)" not in worker
     assert driver.count("call grd2_rys_compute_batch(") == 2
     assert "do iprobe = 2, nprobe" in driver
