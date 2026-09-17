@@ -2827,6 +2827,9 @@ def lower_to_legacy(
     elif name == "md":
         put("properties", "grad", roots[0] if roots else 0)
     elif name == "namd":
+        # Analytic NAC directions require converged SCF and response states.
+        for section, key in (("scf", "conv"), ("tdhf", "conv"), ("tdhf", "zvconv")):
+            config.setdefault(section, {}).setdefault(key, "1e-8")
         if roots:
             if driver_options.get("soc") and states[0].label:
                 put("md", "init_state", states[0].label)

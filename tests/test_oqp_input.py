@@ -2482,3 +2482,31 @@ def test_namd_scf_guess_retry_example_parses():
     example = ROOT / "examples/namd_scf_guess_retry/retry.oqp"
     spec, lowered = _parse(example.read_text(), source_dir=example.parent)
     assert lowered["md"]["scf_guess_retry"].lower() == "true"
+
+
+def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
+    spec, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
+                          'namd(S2,nstep=1000,dt=0.5,velocity="velocity.au")')
+    values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
+    expected = dict(tdc='npi', rescale='hop_analytic_nac', decoherence='edc',
+                    frustrated='reflect', mo_reuse=True, ref_follow='soscf',
+                    ref_switch_rescale=True, disc_rescale=True, disc_substeps=10,
+                    velocity='velocity.au', nstep=1000, dt=0.5)
+    for key, value in expected.items():
+        assert values['md', key] == value
+    assert values['md', 'thrshe'] == sys.float_info.max
+    assert values['dftgrid', 'pruned'] == 'sg2'
+    assert values['scf', 'conv'] == values['tdhf', 'conv'] == 1e-8
+
+
+def test_namd_explicit_controls_override_recommended_defaults():
+    _, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
+                       'namd(S2,tdc=fd,rescale=isotropic,disc_substeps=0,'
+                       'disc_rescale=false,velocity=zero) scf(conv=1e-10)')
+    values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
+    assert values['md', 'tdc'] == 'fd'
+    assert values['md', 'rescale'] == 'isotropic'
+    assert values['md', 'disc_substeps'] == 0
+    assert values['md', 'disc_rescale'] is False
+    assert values['md', 'velocity'] == 'zero'
+    assert values['scf', 'conv'] == 1e-10

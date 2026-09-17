@@ -798,12 +798,13 @@ OQP_CONFIG_SCHEMA = {
         'nstep': {'type': int, 'default': '100'},
         'dt': {'type': float, 'default': '0.5'},            # fs
         'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
-        'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
+        'substep': {'type': int, 'default': '50000'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '0.1'},        # energy-gap hop gate (Hartree)
-        'tdc': {'type': string, 'default': 'fd'},           # 'fd' | 'npi' | 'analytic' | 'baeck_an'
-        'rescale': {'type': string, 'default': 'isotropic'}, # 'isotropic' | 'analytic_nac' | 'hop_analytic_nac'
+        # Largest finite double disables the gap gate without invalidating restarts.
+        'thrshe': {'type': float, 'default': '1.7976931348623157e308'},  # Hartree
+        'tdc': {'type': string, 'default': 'npi'},           # 'fd' | 'npi' | 'analytic' | 'baeck_an'
+        'rescale': {'type': string, 'default': 'hop_analytic_nac'}, # 'isotropic' | 'analytic_nac' | 'hop_analytic_nac'
         # Opt in only: an overlap-triggered root relabel is a method-specific
         # heuristic, not part of standard FSSH, and can otherwise be mistaken
         # for a stochastic hop at a genuine conical intersection.
@@ -816,7 +817,7 @@ OQP_CONFIG_SCHEMA = {
         'seed': {'type': int, 'default': '0'},
         'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
         'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
-        'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' | 'analytic'
+        'nacme_check': {'type': str, 'default': 'off'}, # 'off' | 'baeck_an' | 'analytic'
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
         'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
@@ -828,18 +829,18 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
-        'mo_reuse': {'type': bool, 'default': 'false'},  # reuse previous-step orbitals as the SCF guess
+        'mo_reuse': {'type': bool, 'default': 'true'},  # reuse previous-step orbitals as the SCF guess
         'scf_guess_retry': {'type': bool, 'default': 'true'},  # one fresh-guess retry after failed continuation SCF
         'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
-        'ref_follow': {'type': str, 'default': 'off'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
-        'ref_switch_rescale': {'type': bool, 'default': 'false'},  # conserve total energy across a reference switch
+        'ref_follow': {'type': str, 'default': 'soscf'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
+        'ref_switch_rescale': {'type': bool, 'default': 'true'},  # conserve total energy across a reference switch
         'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
-        'frustrated': {'type': str, 'default': 'none'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
-        'disc_rescale': {'type': bool, 'default': 'false'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
+        'frustrated': {'type': str, 'default': 'reflect'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
+        'disc_rescale': {'type': bool, 'default': 'true'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
         'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
-        'disc_substeps': {'type': int, 'default': '0'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
-        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
-        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
+        'disc_substeps': {'type': int, 'default': '10'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
+        'trajectory_interval': {'type': int, 'default': '1'}, # 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '10'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
         'continuation_checkpoint': {'type': str, 'default': ''},

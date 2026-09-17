@@ -564,7 +564,7 @@ class NAMD:
         self.tdc_scheme = {
             'fd': 0, 'npi': 1, 'analytic': 2, 'baeck_an': 3,
         }[self.tdc_provider]
-        self.rescale_provider = str(md.get('rescale', 'isotropic')).strip().lower().replace('-', '_')
+        self.rescale_provider = str(md.get('rescale', 'hop_analytic_nac')).strip().lower().replace('-', '_')
         if self.rescale_provider in ('analytic', 'nac'):
             self.rescale_provider = 'analytic_nac'
         if self.rescale_provider in ('hop_analytic', 'hop_nac', 'ht_nac'):
@@ -576,10 +576,10 @@ class NAMD:
                 "hop_analytic_nac")
         # Carry the converged orbitals of the previous geometry into the SCF
         # of the next geometry (guess type 'previous' after the first step).
-        # The default re-runs the configured guess (e.g. Huckel) at every
-        # step, which can converge to a different ROHF solution or orbital
-        # ordering and collapse the TLF state overlap.
-        self.mo_reuse = str(md.get('mo_reuse', 'false')).strip().lower() in (
+        # Reuse the previous orbitals by default. Repeating the configured
+        # guess at every step can select a different ROHF solution or
+        # orbital ordering and collapse the electronic-state overlap.
+        self.mo_reuse = str(md.get('mo_reuse', 'true')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self._overlap_collapse_steps = 0
         # scf_fail=restart: no in-step converger escalation.  When the primary
@@ -605,23 +605,23 @@ class NAMD:
         # ref_switch_rescale the velocities are rescaled isotropically at such
         # a step so that the total energy is conserved across the jump of the
         # active-state MRSF energy, and the jump is recorded.
-        self.ref_follow = str(md.get('ref_follow', 'off')).strip().lower().replace('-', '_')
+        self.ref_follow = str(md.get('ref_follow', 'soscf')).strip().lower().replace('-', '_')
         if self.ref_follow not in ('off', 'soscf', 'diis_vshift'):
             raise ValueError("[md] ref_follow must be off, soscf, or diis_vshift")
-        self.ref_switch_rescale = str(md.get('ref_switch_rescale', 'false')).strip().lower() in (
+        self.ref_switch_rescale = str(md.get('ref_switch_rescale', 'true')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self.somo_tol = float(md.get('somo_tol', 0.5))
         # Frustrated-hop treatment for derivative-coupling (directional)
         # rescaling: 'none' leaves the velocity unchanged (Tully 1990);
         # 'reflect' reverses the momentum component along d_IJ
         # (Hammes-Schiffer & Tully 1994).
-        self.frustrated = str(md.get('frustrated', 'none')).strip().lower()
+        self.frustrated = str(md.get('frustrated', 'reflect')).strip().lower()
         if self.frustrated not in ('none', 'reflect'):
             raise ValueError("[md] frustrated must be none or reflect")
         self._frustrated_reflect_count = 0
         # Numerical energy correction is an optional last resort after
         # finer nuclear integration, separate from a physical surface hop.
-        self.disc_rescale = str(md.get('disc_rescale', 'false')).strip().lower() in (
+        self.disc_rescale = str(md.get('disc_rescale', 'true')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self.disc_tol = float(md.get('disc_tol', 0.002))
         if not np.isfinite(self.disc_tol) or self.disc_tol <= 0.0:
@@ -636,7 +636,7 @@ class NAMD:
         # couplings and hop decision are then evaluated once between the
         # start and the end of the full step as usual.  Only the residual jump
         # remaining after refinement may be treated by disc_rescale.
-        self.disc_substeps = int(md.get('disc_substeps', 0))
+        self.disc_substeps = int(md.get('disc_substeps', 10))
         if self.disc_substeps < 0:
             raise ValueError("[md] disc_substeps must be >= 0")
         if self.disc_rescale or self.ref_switch_rescale:
@@ -656,7 +656,7 @@ class NAMD:
         self.rng_stream = int(md.get('rng_stream', 1))
         self.first_hop_step = int(md.get('first_hop_step', 1))
         self.nacme_check = str(md.get(
-            'nacme_check', 'baeck_an')).strip().lower().replace('-', '_')
+            'nacme_check', 'off')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
         if self.nacme_check not in ('off', 'baeck_an', 'analytic'):
@@ -719,8 +719,8 @@ class NAMD:
         _validate_thermostat_parameters(
             self.thermostat_temperature, self.thermostat_friction,
             self.thermostat == 'langevin')
-        self.trajectory_interval_input = int(md.get('trajectory_interval', 0))
-        self.restart_interval_input = int(md.get('restart_interval', 0))
+        self.trajectory_interval_input = int(md.get('trajectory_interval', 1))
+        self.restart_interval_input = int(md.get('restart_interval', 10))
         self.trajectory_interval = self._output_interval_steps(
             self.trajectory_interval_input, self.dt_fs)
         self.restart_interval = self._output_interval_steps(
