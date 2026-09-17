@@ -93,7 +93,7 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
         self.assertIn("self%probe_value(ipt,imtx,mythread)", self.consumer)
         self.assertIn("self%nucgrad(:,b,imtx,mythread)", self.consumer)
         self.assertIn(
-            "dat%do_weight_derivative .and. dat%do_ground_state",
+            "if (dat%do_ground_state) then",
             self.consumer,
         )
 

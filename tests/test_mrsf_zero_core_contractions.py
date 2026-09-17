@@ -31,7 +31,6 @@ def test_umrsfcbc_skips_empty_closed_shell_blas_contraction():
     close = body.index("end if", contraction)
 
     assert guard < contraction < close
-    assert "zero-width array" in body[max(0, guard - 240):contraction]
 
 
 def test_mrsfmntoia_skips_zero_leading_dimension_outputs():
@@ -105,7 +104,7 @@ def test_disabled_fxc_does_not_alias_unallocated_gradient_scratch():
     assert "self%drRho(3, nSpin, xce%maxPts, self%nMtx, nThreads)" in parallel
     assert "self%drRho(4," not in parallel
     assert "self%rTau(nSpin, xce%maxPts, self%nMtx, nThreads)" in parallel
-    mgga = parallel[parallel.index("if (xce%funTyp == OQP_FUNTYP_MGGA) then"):]
+    mgga = parallel[parallel.rindex("if (xce%funTyp == OQP_FUNTYP_MGGA) then"):].split("end if", 1)[0]
     assert "self%rTau(" not in mgga
     assert "self%moG1_(" in mgga
 

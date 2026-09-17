@@ -822,15 +822,15 @@ contains
                 f_r, f_s, f_t)
 
         if (dat%do_weight_derivative) then
-          dat%probe_value(i,mythread) = dot_product(d_r, rhoab)
+          dat%probe_value(i,j,mythread) = dot_product(d_r, rhoab)
           if (xce%funTyp /= OQP_FUNTYP_LDA) &
-            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                         + dot_product(d_s, sigma)
           if (xce%funTyp == OQP_FUNTYP_MGGA) &
-            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                         + dot_product(d_t, tauab)
-          if (dat%do_ground_state) dat%probe_value(i,mythread) = &
-            dat%probe_value(i,mythread) + xc%exc(i)*xce%xyzw(i,4)
+          if (dat%do_ground_state) dat%probe_value(i,j,mythread) = &
+            dat%probe_value(i,j,mythread) + xc%exc(i)*xce%xyzw(i,4)
         end if
 
 !        if (maxval(abs([dsaa,dsbb,dsab,dsba]))<xce%threshold) then
@@ -1074,13 +1074,13 @@ contains
                 g_r, g_s, g_t)
 
         if (dat%do_weight_derivative) then
-          dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+          dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                       + dot_product(f_r,rhoab)
           if (xce%funTyp /= OQP_FUNTYP_LDA) &
-            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                         + dot_product(f_s,sigma)
           if (xce%funTyp == OQP_FUNTYP_MGGA) &
-            dat%probe_value(i,mythread) = dat%probe_value(i,mythread) &
+            dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                         + dot_product(f_t,tauab)
         end if
 
@@ -1652,7 +1652,7 @@ contains
     ! The partition-weight probe is already spin summed by grad_v_xc_np and
     ! grad_f_xc_np.  The restricted factor for owner motion is applied where
     ! that one-spin AO contribution enters nucGrad.
-    if (dat%do_weight_derivative) dedft = dedft + dat%nucGrad(:,:,1)
+    if (dat%do_weight_derivative) dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
 
     call dat%clean()
   end subroutine
