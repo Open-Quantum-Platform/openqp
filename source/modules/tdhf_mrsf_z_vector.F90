@@ -2377,12 +2377,7 @@ contains
                    0.0_dp, hxb, nbf)
 
      ! spin pair ov-ov, co-co, co-ov coupling
-        block
-          character(len=16) :: ev
-          call get_environment_variable('NAC_ZERO_SP', ev)
-          if (len_trim(ev) == 0) &
-            call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
-        end block
+        call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
 
      !  Unrelaxed difference density matrices T_ij and T_ab
      !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
@@ -2391,26 +2386,6 @@ contains
      !   code calls with I/=J)
         call mrsf_interstate_tden(infos, bvec_mo, target_state, target_state, &
                                   tij, tab)
-
-     ! NAC bisection gates (audit instrumentation): selectively zero RHS
-     ! components to localize the ground-configuration cross-bilinear
-     ! deficiency. NAC_ZERO_T also empties the relaxed-density T part
-     ! (tij/tab are reused by sfropcal downstream).
-        block
-          character(len=16) :: ev
-          call get_environment_variable('NAC_ZERO_HX', ev)
-          if (len_trim(ev) > 0) then
-            hxa = 0.0_dp; hxb = 0.0_dp
-          end if
-          call get_environment_variable('NAC_ZERO_T', ev)
-          if (len_trim(ev) > 0) then
-            tij = 0.0_dp; tab = 0.0_dp
-          end if
-          call get_environment_variable('NAC_ZERO_AB1', ev)
-          if (len_trim(ev) > 0) then
-            ab1_mo_a = 0.0_dp; ab1_mo_b = 0.0_dp
-          end if
-        end block
 
         call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
                      Tij, Tab, Fa, Fb, nocca, noccb)
