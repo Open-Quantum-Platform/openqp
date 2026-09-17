@@ -41,6 +41,23 @@ def test_analytic_nac_route_is_available_only_where_it_is_defined():
         _mrsf_singlet_config(input={'qmmm_flag': True})) is None
 
 
+def test_minimal_mrsf_namd_input_resolves_auto_to_hop_analytic_nac():
+    from oqp.utils import oqp_input
+
+    spec = oqp_input.parse_canonical_oqp(
+        'mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
+        'namd(S2,nstep=1000,dt=0.5,velocity="velocity.au")')
+    config = oqp_input.lower_to_legacy(spec)
+    values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
+    effective = {}
+    for (section, key), value in values.items():
+        effective.setdefault(section, {})[key] = value
+    assert effective['md']['rescale'] == 'auto'
+    assert mod.analytic_nac_route_issue(effective) is None
+    effective['scf']['conv'] = 1e-6
+    assert mod.analytic_nac_route_issue(effective) is not None
+
+
 def test_energy_retry_restores_analytic_audit_history():
     driver = mod.NAMD.__new__(mod.NAMD)
     accepted = np.array([[0.0, 1.0], [-1.0, 0.0]])

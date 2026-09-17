@@ -207,6 +207,42 @@ def _validate_distinct_output_paths(*, protected_paths=(), **paths):
 
 _ANALYTIC_NAC_CONV_MAX = 1.0e-8
 
+_TRAJECTORY_CONTROL_KEYS = (
+    'mo_reuse', 'scf_fail', 'scf_guess_retry', 'ref_follow',
+    'ref_switch_rescale', 'somo_tol', 'frustrated', 'disc_rescale',
+    'disc_tol', 'disc_substeps')
+
+
+def _normalized_md_control(key, value):
+    """Canonical text of an [md] control, typed by its schema entry."""
+    from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+    kind = OQP_CONFIG_SCHEMA['md'][key]['type']
+    text = str(value).strip().lower()
+    try:
+        if kind is bool:
+            return 'true' if text in ('true', '1', 'on', 'yes') else 'false'
+        if kind is int:
+            return repr(int(float(text)))
+        if kind is float:
+            return repr(float(text))
+    except ValueError:
+        pass
+    return text
+
+
+def _non_default_md_controls(md, keys):
+    """Return {key: canonical value} for controls that differ from defaults."""
+    from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+    controls = {}
+    for key in keys:
+        if key not in md:
+            continue
+        value = _normalized_md_control(key, md[key])
+        default = _normalized_md_control(key, OQP_CONFIG_SCHEMA['md'][key]['default'])
+        if value != default:
+            controls[key] = value
+    return controls
+
 
 def _config_flag(value):
     return (value is True) or (str(value).strip().lower() in ('true', '1', 'on', 'yes'))
@@ -3394,7 +3430,10 @@ class NAMD:
             'substep': md.get('substep', ''),
             'decoherence': md.get('decoherence', ''),
             'edc_c': md.get('edc_c', ''), 'thrshe': md.get('thrshe', ''),
-            'tdc': md.get('tdc', ''), 'rescale': md.get('rescale', ''),
+            # The resolved provider keeps rescale=auto checkpoints compatible
+            # with runs that named the provider it resolves to.
+            'tdc': md.get('tdc', ''),
+            'rescale': getattr(self, 'rescale_provider', None) or md.get('rescale', ''),
             'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
@@ -3425,13 +3464,11 @@ class NAMD:
         # hops and energy discontinuities alter velocities, or how failed SCF
         # steps are recovered all change the trajectory, so a restart must
         # not silently continue under different settings.
-        identity['trajectory_controls'] = {
-            key: str(md.get(key, '')).strip().lower()
-            for key in ('mo_reuse', 'scf_fail', 'scf_guess_retry',
-                        'ref_follow', 'ref_switch_rescale', 'somo_tol',
-                        'frustrated', 'disc_rescale', 'disc_tol',
-                        'disc_substeps')
-        }
+        # Only non-default values are recorded, so checkpoints written before
+        # these controls were bound (all at their defaults) remain loadable.
+        controls = _non_default_md_controls(md, _TRAJECTORY_CONTROL_KEYS)
+        if controls:
+            identity['trajectory_controls'] = controls
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
     def _tracking_state_count(self):
@@ -3896,7 +3933,8 @@ class NAMD:
             raise ValueError('continuation checkpoint lacks reference/phase history')
         if self.nstep <= payload['step']:
             raise ValueError('continuation nstep must exceed the saved absolute step index')
-        if payload['optional']['nve_previous_energy'] is None:
+        if (payload['optional']['nve_previous_energy'] is None
+                and payload['optional'].get('etot_prev') is None):
             raise ValueError('local continuation requires the saved total-energy history')
         scanned = self._scan_trajectory_prefix(
             payload['step'], path=self.continuation_trajectory,

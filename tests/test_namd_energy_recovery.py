@@ -89,6 +89,20 @@ def test_rescaling_only_after_all_configured_subdivisions():
     assert any('last-resort' in c.kwargs.get('title', '') for c in log.call_args_list)
 
 
+def test_last_resort_correction_rescales_the_cached_analytic_tdc():
+    d, run, trace, log = make_recovery({2: .04, 4: .03, 8: .02, 10: .01})
+    tdc = np.array([[0.0, 0.4], [-0.4, 0.0]])
+    d._last_analytic_tdc = tdc.copy()
+    d._analytic_tdc_previous = tdc.copy()
+    d._last_analytic_step = 1
+    d._last_analytic_pair = None
+    run()
+    factor = float(d.vel[0, 0])
+    assert d._disc_event_count == 1 and factor != pytest.approx(1.0)
+    np.testing.assert_allclose(d._last_analytic_tdc, factor*tdc)
+    np.testing.assert_allclose(d._analytic_tdc_previous, factor*tdc)
+
+
 def test_no_rescaling_without_a_completed_refinement():
     d, run, trace, log = make_recovery({}, previous=False)
     run()

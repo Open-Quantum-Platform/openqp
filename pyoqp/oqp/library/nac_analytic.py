@@ -117,7 +117,7 @@ def analytic_nac(mol, *, pair=None):
 
     debug_path = os.environ.get('NAC_ANALYTIC_DEBUG')
 
-    if mol.config['tdhf']['multiplicity'] != 1:
+    if int(mol.config['tdhf']['multiplicity']) != 1:
         raise NotImplementedError(
             'analytic MRSF NAC v3 currently implements the singlet fold only'
         )

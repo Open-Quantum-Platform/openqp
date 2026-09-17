@@ -221,6 +221,12 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
     assert "uniform attenuation and mu" in driver
 
     rys = GRD2_RYS.read_text()
+    batch = rys.split(
+        "subroutine grd2_rys_compute_batch(", 1
+    )[1].split("end subroutine grd2_rys_compute_batch", 1)[0]
+    # A screened final primitive pair must not drop the pending batch.
+    loops_end = batch.index("do iprobe = 1, nprobe")
+    assert "if (ng > 0) call compute_grd_ints_batch(" in batch[:loops_end]
     recurrence = rys.split(
         "subroutine compute_grd_ints_batch(", 1
     )[1].split("end subroutine compute_grd_ints_batch", 1)[0]

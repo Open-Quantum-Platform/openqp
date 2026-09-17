@@ -2497,15 +2497,6 @@ def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
     assert values['md', 'thrshe'] == sys.float_info.max
     assert values['dftgrid', 'pruned'] == 'sg2'
     assert values['scf', 'conv'] == values['tdhf', 'conv'] == 1e-8
-    # The minimal MRSF singlet route resolves rescale=auto to hop-triggered
-    # analytic NAC; a legacy-threshold variant of it falls back to isotropic.
-    from oqp.library.namd import analytic_nac_route_issue
-    effective = {}
-    for (section, key), value in values.items():
-        effective.setdefault(section, {})[key] = value
-    assert analytic_nac_route_issue(effective) is None
-    effective['scf']['conv'] = 1e-6
-    assert analytic_nac_route_issue(effective) is not None
 
 
 def test_namd_explicit_controls_override_recommended_defaults():

@@ -2121,8 +2121,9 @@ class Molecule:
         Get the non-adiabatic couplings of a NACME or NAC-vector run.
 
         A NACME run populates the phase-corrected derivative coupling matrix
-        ``self.dcm``; a ``nac`` run populates the NAC vectors h_ij
-        (``self.nac``).  Every other runtype returns an empty list.  The
+        ``self.dcm``, which takes precedence; any workflow that evaluates NAC
+        vectors (``nac`` runs and drivers calling ``NAC``) populates h_ij in
+        ``self.nac``.  Otherwise an empty list is returned.  The
         elements are sign/phase ambiguous between builds, so the regression
         comparison uses magnitudes (see the ``nac`` registry entry,
         ``phase_invariant=True``).
