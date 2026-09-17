@@ -490,6 +490,11 @@ def invalid(**overrides):
         return True
     return False
 
+def without_rescale():
+    mol = Mol()
+    del mol.config['md']['rescale']
+    return mol
+
 def contextual_nacme_off(**overrides):
     return NAMD(Mol(**overrides)).nacme_check == 'off'
 
@@ -499,6 +504,12 @@ print('SOC_GATES=' + json.dumps({
     'truthy_string': accepted(soc='false', nve_gate='warn'),
     'trajectory_file': accepted(trajectory_file='soc.trj'),
     'trajectory_interval': accepted(trajectory_interval=2),
+    # The schema default rescale=auto must resolve to isotropic for SOC;
+    # only an explicit analytic request is rejected.
+    'default_rescale': accepted(rescale='auto'),
+    'missing_rescale': NAMD(without_rescale()).rescale_provider == 'isotropic',
+    'default_rescale_isotropic': NAMD(Mol(rescale='auto')).rescale_provider == 'isotropic',
+    'explicit_hop_analytic': rejected(rescale='hop_analytic_nac'),
     'nacme_check': contextual_nacme_off(nacme_check='baeck_an'),
     'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
@@ -531,6 +542,9 @@ print('SOC_GATES=' + json.dumps({
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'truthy_integer': True, 'truthy_string': True,
         'trajectory_file': True, 'trajectory_interval': True,
+        'default_rescale': True, 'default_rescale_isotropic': True,
+        'missing_rescale': True,
+        'explicit_hop_analytic': True,
         'nacme_check': True,
         'same_spin_adaptive': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
