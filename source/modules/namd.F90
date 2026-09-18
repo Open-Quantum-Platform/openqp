@@ -860,7 +860,7 @@ contains
     real(kind=dp), intent(in) :: mass(:), direction(:,:), delta_e
     logical, intent(out) :: accepted
     real(kind=dp), intent(out) :: gamma, discriminant
-    integer :: a, nat
+    integer :: a, nat, pivot(2)
     real(kind=dp) :: avec, bvec, sqrt_disc, q, gamma1, gamma2, scale
 
     accepted = .false.
@@ -901,7 +901,12 @@ contains
     else
       gamma1 = q/avec
       gamma2 = 2.0_dp*delta_e/q
-      if (abs(gamma1) <= abs(gamma2)) then
+      if (bvec == 0.0_dp .and. delta_e < 0.0_dp) then
+        ! Equal roots: orient the kick by the largest Cartesian component.
+        ! Its sign flips with d, so gamma*d is independent of state phase.
+        pivot = maxloc(abs(direction))
+        gamma = sign(sqrt_disc/avec, direction(pivot(1),pivot(2)))
+      else if (abs(gamma1) <= abs(gamma2)) then
         gamma = gamma1
       else
         gamma = gamma2

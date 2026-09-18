@@ -10,7 +10,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_rohf_common_rotation_fock_curvature(tmp_path):
+@pytest.mark.parametrize("nonstationary", [False, True])
+def test_rohf_common_rotation_fock_curvature(tmp_path, nonstationary):
     compiler = os.environ.get('FC') or shutil.which('gfortran-15') or shutil.which('gfortran')
     if not compiler:
         pytest.skip('Fortran compiler required')
@@ -24,6 +25,10 @@ def test_rohf_common_rotation_fock_curvature(tmp_path):
     # Compile the actual production routines with only their data container and
     # packed-matrix adapter supplied by the fixture. No SCF runtime is needed.
     fixture = (ROOT / 'tests/fortran/trah_rohf_fock_selftest.F90').read_text()
+    if nonstationary:
+        fixture = fixture.replace(
+            '[-.8_dp,0._dp,-.3_dp,0._dp,.1_dp,.4_dp,-.3_dp,.4_dp,.9_dp]',
+            '[-.8_dp,.13_dp,.1_dp,.13_dp,.1_dp,.4_dp,.1_dp,.4_dp,.9_dp]')
     program = fixture.replace('! PRODUCTION_ROUTINES', '\n'.join(helpers))
     src = tmp_path / 'check.f90'
     src.write_text(program)

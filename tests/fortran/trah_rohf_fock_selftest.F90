@@ -31,7 +31,8 @@ program check
   type(trah_converger) :: c
   real(dp) :: fa(3,3),fb(3,3),ka(3,3),kb(3,3),k(3,3),x(3),ha(1,2),hb(2,1)
   real(dp) :: ta(3,3),tb(3,3),original(3,3),corrected(3,3),fd(3,3),gp(3),gm(3)
-  real(dp),parameter :: h=1.0e-5_dp
+  real(dp) :: ei(3),ej(3)
+  real(dp),parameter :: h=1.0e-4_dp
   integer :: i,j,l,t
   ! Stationary ROHF reference with nonzero individual spin-Fock CV blocks.
   fa=reshape([-1._dp,.2_dp,.3_dp,.2_dp,-.5_dp,0._dp,.3_dp,0._dp,.7_dp],[3,3])
@@ -58,34 +59,35 @@ program check
     original(:,l)=2*[hb(1,1),ha(1,1)+hb(2,1),ha(1,2)]
     call rohf_missing_fock_terms(c,x,ha,hb)
     corrected(:,l)=2*[hb(1,1),ha(1,1)+hb(2,1),ha(1,2)]
-    call rotated_gradient(l,h,gp)
-    call rotated_gradient(l,-h,gm)
-    fd(:,l)=(gp-gm)/(2*h)
+    ej=0;ej(l)=h
+    do i=1,3
+      ei=0;ei(i)=h
+      fd(i,l)=(energy(ei+ej)-energy(ei-ej)-energy(-ei+ej)+energy(-ei-ej))/(4*h*h)
+    end do
   end do
-  if (maxval(abs(corrected-fd))>1.e-8_dp) error stop 'corrected curvature disagrees with finite differences'
-  if (maxval(abs(original-fd))<.5_dp) error stop 'fixture did not detect the omitted CO-OV coupling'
-  if (maxval(abs(corrected-transpose(corrected)))>1.e-12_dp) error stop 'stationary Hessian is not symmetric'
+  if (maxval(abs(corrected-fd))>2.e-6_dp) error stop 'corrected curvature disagrees with finite differences'
+  if (maxval(abs(original-fd))<.1_dp) error stop 'fixture did not detect the omitted CO-OV coupling'
+  if (maxval(abs(corrected-transpose(corrected)))>1.e-12_dp) error stop 'Hessian is not symmetric'
   print *, 'PASS: ROHF Fock curvature finite differences'
 contains
-  subroutine rotated_gradient(l,angle,g)
-    integer,intent(in) :: l
-    real(dp),intent(in) :: angle
-    real(dp),intent(out) :: g(3)
-    real(dp) :: u(3,3),a(3,3),b(3,3)
-    integer :: p,q,n
-    ! Independent exact plane rotation for CO, CV, and OV, respectively.
-    select case(l)
-    case(1);p=1;q=2
-    case(2);p=1;q=3
-    case(3);p=2;q=3
-    end select
+  function energy(x) result(e)
+    real(dp),intent(in) :: x(3)
+    real(dp) :: e,u(3,3),term(3,3),rot(3,3),a(3,3),b(3,3)
+    integer :: n
+    ! Independent exponential-coordinate energy, not the moving gradient.
+    rot=0
+    rot(2,1)=x(1);rot(3,1)=x(2);rot(3,2)=x(3)
+    rot=rot-transpose(rot)
     u=0
     do n=1,3
       u(n,n)=1
     end do
-    u(p,p)=cos(angle);u(q,q)=cos(angle)
-    u(q,p)=sin(angle);u(p,q)=-sin(angle)
+    term=u
+    do n=1,8
+      term=matmul(term,rot)/n
+      u=u+term
+    end do
     a=matmul(transpose(u),matmul(fa,u));b=matmul(transpose(u),matmul(fb,u))
-    g=2*[b(2,1),a(3,1)+b(3,1),a(3,2)]
-  end subroutine
+    e=a(1,1)+a(2,2)+b(1,1)
+  end function
 end program
