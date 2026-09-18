@@ -159,5 +159,58 @@ class DigestIdentities(unittest.TestCase):
         self._assert_close(lhs, rhs, scale, "NAC db halving")
 
 
+    def test_non_nac_db_groups_5_to_8_repeat_1_to_4(self):
+        """The single-state db blocks carry the same doubling."""
+        co12, = _matrices(1)
+        groups = [(0, 2, 3, 1), (0, 3, 2, 1), (1, 2, 3, 0), (1, 3, 2, 0)]
+        lhs, rhs, scale = [], [], 0.0
+        for idx in _indices():
+            pick = lambda t: (idx[t[0]], idx[t[1]])
+            first4 = sum(
+                co12[pick((g[0], g[1]))] * co12[pick((g[2], g[3]))]
+                for g in groups
+            )
+            full = first4 + sum(
+                co12[pick((g[2], g[3]))] * co12[pick((g[0], g[1]))]
+                for g in groups
+            )
+            lhs.append(full)
+            rhs.append(2.0 * first4)
+            scale = max(scale, abs(full))
+        self._assert_close(lhs, rhs, scale, "non-NAC db doubling")
+
+    def test_nac_digest_reduces_to_the_single_state_digest(self):
+        """With spcI = spcJ the NAC blocks must reproduce the plain ones.
+
+        This is what makes the two routines candidates for a single
+        implementation: the interstate digest is the single-state digest with
+        the I<->J symmetrisation switched on.
+        """
+        co12, ball, bco1, bo2v = _matrices(4)
+        checks = [
+            ("db", lambda i: _db_nac_halved(co12, co12, *i),
+             lambda i: _db_single(co12, *i)),
+            ("dc", lambda i: _dc_nac(bco1, bco1, bo2v, bo2v, *i),
+             lambda i: _dc(bco1, bo2v, *i)),
+        ]
+        for what, nac, plain in checks:
+            lhs, rhs, scale = [], [], 0.0
+            for idx in _indices():
+                a = plain(idx)
+                lhs.append(a)
+                rhs.append(nac(idx))
+                scale = max(scale, abs(a))
+            self._assert_close(lhs, rhs, scale, f"I=J reduction, {what}")
+
+
+def _db_single(m, i, j, k, l):
+    """The single-state db block, all eight groups as originally written."""
+    groups = [
+        ((i, k), (l, j)), ((i, l), (k, j)), ((j, k), (l, i)), ((j, l), (k, i)),
+        ((l, j), (i, k)), ((k, j), (i, l)), ((l, i), (j, k)), ((k, i), (j, l)),
+    ]
+    return sum(m[p] * m[q] for p, q in groups)
+
+
 if __name__ == "__main__":
     unittest.main()

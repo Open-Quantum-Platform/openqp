@@ -794,27 +794,23 @@ contains
             end if
 
             if (qfspcp1 /= 0.0_dp) then
-              db1 =  co12(i1,k1)*co12(l1,j1) &
-                   + co12(i1,l1)*co12(k1,j1) &
-                   + co12(j1,k1)*co12(l1,i1) &
-                   + co12(j1,l1)*co12(k1,i1) &
-                   + co12(l1,j1)*co12(i1,k1) &
-                   + co12(k1,j1)*co12(i1,l1) &
-                   + co12(l1,i1)*co12(j1,k1) &
-                   + co12(k1,i1)*co12(j1,l1)
+              ! Groups 5-8 repeat groups 1-4 with the factors exchanged,
+              ! so the block is twice the first four.
+              db1 = 2.0_dp*(co12(i1,k1)*co12(l1,j1) &
+                          + co12(i1,l1)*co12(k1,j1) &
+                          + co12(j1,k1)*co12(l1,i1) &
+                          + co12(j1,l1)*co12(k1,i1))
 
               df1 = df1 + sgnk*qfspcp1*db1
             end if
 
             if (qfspcp2 /= 0.0_dp) then
-              db2 =  o21v(i1,k1)*o21v(l1,j1) &
-                   + o21v(i1,l1)*o21v(k1,j1) &
-                   + o21v(j1,k1)*o21v(l1,i1) &
-                   + o21v(j1,l1)*o21v(k1,i1) &
-                   + o21v(l1,j1)*o21v(i1,k1) &
-                   + o21v(k1,j1)*o21v(i1,l1) &
-                   + o21v(l1,i1)*o21v(j1,k1) &
-                   + o21v(k1,i1)*o21v(j1,l1)
+              ! Groups 5-8 repeat groups 1-4 with the factors exchanged,
+              ! so the block is twice the first four.
+              db2 = 2.0_dp*(o21v(i1,k1)*o21v(l1,j1) &
+                          + o21v(i1,l1)*o21v(k1,j1) &
+                          + o21v(j1,k1)*o21v(l1,i1) &
+                          + o21v(j1,l1)*o21v(k1,i1))
 
               df1 = df1 + sgnk*qfspcp2*db2
             end if
