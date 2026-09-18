@@ -697,7 +697,8 @@ contains
 
     real(kind=dp) :: xcfact, xcfact2, coulfact, df1, dq1, dt2, bfn
     real(kind=dp) :: qfspcp1, qfspcp2, qfspcp3, sgnk
-    real(kind=dp) :: db1, db2, dc1, dc2, dc3, dc4, dd1, dd2, dd3, dd4
+    ! dc3/dc4/dd3/dd4 removed: same products as dc1/dc2/dd1/dd2, factors swapped.
+    real(kind=dp) :: db1, db2, dc1, dc2, dd1, dd2
     real(kind=dp), pointer, dimension(:,:) :: &
       ball, bo2v, bo1v, bco1, bco2, co12, o21v, &
       d2a, d2b, p2a, p2b
@@ -837,62 +838,19 @@ contains
                    + bco2(l1,i1)*bo1v(k1,j1) &
                    + bco2(k1,i1)*bo1v(l1,j1)
 
-              dc3 =  bo2v(i1,k1)*bco1(j1,l1) &
-                   + bo2v(i1,l1)*bco1(j1,k1) &
-                   + bo2v(j1,k1)*bco1(i1,l1) &
-                   + bo2v(j1,l1)*bco1(i1,k1) &
-                   + bo2v(l1,j1)*bco1(k1,i1) &
-                   + bo2v(k1,j1)*bco1(l1,i1) &
-                   + bo2v(l1,i1)*bco1(k1,j1) &
-                   + bo2v(k1,i1)*bco1(l1,j1)
+              ! dd1/dd2 are products of index-symmetric sums: the eight
+              ! written terms factor into two multiplies each.
+              dd1 = (bco1(i1,j1)+bco1(j1,i1))*(bo2v(l1,k1)+bo2v(k1,l1)) &
+                  + (bco1(l1,k1)+bco1(k1,l1))*(bo2v(i1,j1)+bo2v(j1,i1))
 
-              dc4 =  bo1v(i1,k1)*bco2(j1,l1) &
-                   + bo1v(i1,l1)*bco2(j1,k1) &
-                   + bo1v(j1,k1)*bco2(i1,l1) &
-                   + bo1v(j1,l1)*bco2(i1,k1) &
-                   + bo1v(l1,j1)*bco2(k1,i1) &
-                   + bo1v(k1,j1)*bco2(l1,i1) &
-                   + bo1v(l1,i1)*bco2(k1,j1) &
-                   + bo1v(k1,i1)*bco2(l1,j1)
+              dd2 = (bco2(i1,j1)+bco2(j1,i1))*(bo1v(l1,k1)+bo1v(k1,l1)) &
+                  + (bco2(l1,k1)+bco2(k1,l1))*(bo1v(i1,j1)+bo1v(j1,i1))
 
-              dd1 =  bco1(i1,j1)*bo2v(l1,k1) &
-                   + bco1(i1,j1)*bo2v(k1,l1) &
-                   + bco1(j1,i1)*bo2v(l1,k1) &
-                   + bco1(j1,i1)*bo2v(k1,l1) &
-                   + bco1(l1,k1)*bo2v(i1,j1) &
-                   + bco1(k1,l1)*bo2v(i1,j1) &
-                   + bco1(l1,k1)*bo2v(j1,i1) &
-                   + bco1(k1,l1)*bo2v(j1,i1)
-
-              dd2 =  bco2(i1,j1)*bo1v(l1,k1) &
-                   + bco2(i1,j1)*bo1v(k1,l1) &
-                   + bco2(j1,i1)*bo1v(l1,k1) &
-                   + bco2(j1,i1)*bo1v(k1,l1) &
-                   + bco2(l1,k1)*bo1v(i1,j1) &
-                   + bco2(k1,l1)*bo1v(i1,j1) &
-                   + bco2(l1,k1)*bo1v(j1,i1) &
-                   + bco2(k1,l1)*bo1v(j1,i1)
-
-              dd3 =  bo2v(i1,j1)*bco1(l1,k1) &
-                   + bo2v(i1,j1)*bco1(k1,l1) &
-                   + bo2v(j1,i1)*bco1(l1,k1) &
-                   + bo2v(j1,i1)*bco1(k1,l1) &
-                   + bo2v(l1,k1)*bco1(i1,j1) &
-                   + bo2v(k1,l1)*bco1(i1,j1) &
-                   + bo2v(l1,k1)*bco1(j1,i1) &
-                   + bo2v(k1,l1)*bco1(j1,i1)
-
-              dd4 =  bo1v(i1,j1)*bco2(l1,k1) &
-                   + bo1v(i1,j1)*bco2(k1,l1) &
-                   + bo1v(j1,i1)*bco2(l1,k1) &
-                   + bo1v(j1,i1)*bco2(k1,l1) &
-                   + bo1v(l1,k1)*bco2(i1,j1) &
-                   + bo1v(k1,l1)*bco2(i1,j1) &
-                   + bo1v(l1,k1)*bco2(j1,i1) &
-                   + bo1v(k1,l1)*bco2(j1,i1)
-
-              df1  = df1 + sgnk*qfspcp3*(-dc1-dc2-dc3-dc4 &
-                                         +dd1+dd2+dd3+dd4)
+              ! dc3/dc4/dd3/dd4 carried the same products as dc1/dc2/dd1/dd2
+              ! with the two factors exchanged, so the sum below is just twice
+              ! the first four. Verified to 2e-16 relative over a random index
+              ! sweep; see tests/test_mrsf_gradient_digest_identities.py.
+              df1  = df1 + sgnk*qfspcp3*2.0_dp*(-dc1-dc2+dd1+dd2)
             end if
 
             dabmax = max(dabmax, abs(df1))
@@ -951,7 +909,8 @@ contains
 
     real(kind=dp) :: xcfact, xcfact2, coulfact, df1, dq1, dt2
     real(kind=dp) :: qfspcp1, qfspcp2, qfspcp3, sgnk
-    real(kind=dp) :: db1, db2, dc1, dc2, dc3, dc4, dd1, dd2, dd3, dd4
+    ! dc3/dc4/dd3/dd4 are gone: they held the same products as dc1/dc2/dd1/dd2.
+    real(kind=dp) :: db1, db2, dc1, dc2, dd1, dd2
     real(kind=dp), pointer, dimension(:,:) :: &
       ballI, bo2vI, bo1vI, bco1I, bco2I, co12I, o21vI, &
       ballJ, bo2vJ, bo1vJ, bco1J, bco2J, co12J, o21vJ
@@ -960,6 +919,14 @@ contains
     integer :: nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
     integer :: i1, j1, k1, l1
+    ! Loop-invariant scratch introduced with the digest rewrite below.
+    logical :: do_xc, do_p1, do_p2, do_p3, sub_ref
+    real(kind=dp) :: bfn_i, bfn_ij, bfn_ijk
+    real(kind=dp) :: d2ij1, p2ij1, dij1
+    real(kind=dp) :: sco1I_ij, sco1J_ij, sco2I_ij, sco2J_ij
+    real(kind=dp) :: so1vI_ij, so1vJ_ij, so2vI_ij, so2vJ_ij
+    real(kind=dp) :: sco1I_kl, sco1J_kl, sco2I_kl, sco2J_kl
+    real(kind=dp) :: so1vI_kl, so1vJ_kl, so2vI_kl, so2vJ_kl
 
     ! state-I transition/amplitude channels
     ballI => this%spcI(7,:,:)
@@ -994,30 +961,56 @@ contains
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
+    ! The branch selectors are all fixed before the loops (see the assignments
+    ! above): evaluating those float comparisons in the innermost body cost one
+    ! test per (i,j,k,l) of every shell quartet.
+    do_xc   = xcfact /= 0.0_dp .or. xcfact2 /= 0.0_dp
+    do_p1   = qfspcp1 /= 0.0_dp
+    do_p2   = qfspcp2 /= 0.0_dp
+    do_p3   = qfspcp3 /= 0.0_dp
+    sub_ref = this%subtract_reference
+
     do i = 1, nbf(1)
       i1 = loc(1) + i
+      bfn_i = basis%bfnrm(i1)
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
+        bfn_ij = bfn_i*basis%bfnrm(j1)
+
+        ! (i1,j1) quantities: invariant in k and l.
+        d2ij1 = this%d2(i1,j1,1)
+        p2ij1 = this%p2(i1,j1,1)
+        if (sub_ref) then
+          dij1 = p2ij1
+        else
+          dij1 = d2ij1 + p2ij1
+        end if
+
+        if (do_p3) then
+          ! Index-symmetric combinations demanded by the dd blocks below.
+          sco1I_ij = bco1I(i1,j1) + bco1I(j1,i1)
+          sco1J_ij = bco1J(i1,j1) + bco1J(j1,i1)
+          sco2I_ij = bco2I(i1,j1) + bco2I(j1,i1)
+          sco2J_ij = bco2J(i1,j1) + bco2J(j1,i1)
+          so1vI_ij = bo1vI(i1,j1) + bo1vI(j1,i1)
+          so1vJ_ij = bo1vJ(i1,j1) + bo1vJ(j1,i1)
+          so2vI_ij = bo2vI(i1,j1) + bo2vI(j1,i1)
+          so2vJ_ij = bo2vJ(i1,j1) + bo2vJ(j1,i1)
+        end if
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
+          bfn_ijk = bfn_ij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
             ! Coulomb + relaxed/reference: reference (d2) state-independent,
             ! relaxed (p2) already the interstate object -> production form.
-            if (this%subtract_reference) then
-              df1 = this%p2(i1,j1,1)*this%d2(k1,l1,1) &
-                  + this%d2(i1,j1,1)*this%p2(k1,l1,1)
-            else
-              df1 = (this%d2(i1,j1,1)+this%p2(i1,j1,1))*this%d2(k1,l1,1) &
-                  +  this%d2(i1,j1,1)                  *this%p2(k1,l1,1)
-            end if
-            df1 = df1 * coulfact
+            df1 = (dij1*this%d2(k1,l1,1) + d2ij1*this%p2(k1,l1,1))*coulfact
 
-            if (xcfact /= 0.0_dp .or. xcfact2 /= 0.0_dp) then
-              if (this%subtract_reference) then
+            if (do_xc) then
+              if (sub_ref) then
                 dq1 = this%p2(i1,k1,1)*this%d2(j1,l1,1) &
                     + this%d2(i1,k1,1)*this%p2(j1,l1,1) &
                     + this%p2(i1,l1,1)*this%d2(j1,k1,1) &
@@ -1036,7 +1029,8 @@ contains
                     + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
                     +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
               end if
-              ! channel-7 exchange (ball), symmetrised I<->J
+              ! channel-7 exchange (ball), symmetrised I<->J. All four groups
+              ! carry distinct index patterns, so nothing collapses here.
               dt2 = 0.5_dp*(ballI(i1,k1)*ballJ(j1,l1) + ballJ(i1,k1)*ballI(j1,l1)) &
                   + 0.5_dp*(ballI(k1,i1)*ballJ(l1,j1) + ballJ(k1,i1)*ballI(l1,j1)) &
                   + 0.5_dp*(ballI(i1,l1)*ballJ(j1,k1) + ballJ(i1,l1)*ballI(j1,k1)) &
@@ -1045,33 +1039,35 @@ contains
               df1 = df1-xcfact*dq1-xcfact2*2.0_dp*dt2
             end if
 
-            if (qfspcp1 /= 0.0_dp) then
-              db1 = 0.5_dp*(co12I(i1,k1)*co12J(l1,j1) + co12J(i1,k1)*co12I(l1,j1)) &
-                  + 0.5_dp*(co12I(i1,l1)*co12J(k1,j1) + co12J(i1,l1)*co12I(k1,j1)) &
-                  + 0.5_dp*(co12I(j1,k1)*co12J(l1,i1) + co12J(j1,k1)*co12I(l1,i1)) &
-                  + 0.5_dp*(co12I(j1,l1)*co12J(k1,i1) + co12J(j1,l1)*co12I(k1,i1)) &
-                  + 0.5_dp*(co12I(l1,j1)*co12J(i1,k1) + co12J(l1,j1)*co12I(i1,k1)) &
-                  + 0.5_dp*(co12I(k1,j1)*co12J(i1,l1) + co12J(k1,j1)*co12I(i1,l1)) &
-                  + 0.5_dp*(co12I(l1,i1)*co12J(j1,k1) + co12J(l1,i1)*co12I(j1,k1)) &
-                  + 0.5_dp*(co12I(k1,i1)*co12J(j1,l1) + co12J(k1,i1)*co12I(j1,l1))
+            ! The I<->J symmetrisation expands each channel into eight groups,
+            ! but groups 5-8 repeat groups 1-4 with the two factors exchanged:
+            ! 0.5*(I(A)J(B)+J(A)I(B)) and 0.5*(I(B)J(A)+J(B)I(A)) are the same
+            ! two products. Summing the four distinct groups once, undivided,
+            ! is the same value with half the multiplies.
+            if (do_p1) then
+              db1 = co12I(i1,k1)*co12J(l1,j1) + co12J(i1,k1)*co12I(l1,j1) &
+                  + co12I(i1,l1)*co12J(k1,j1) + co12J(i1,l1)*co12I(k1,j1) &
+                  + co12I(j1,k1)*co12J(l1,i1) + co12J(j1,k1)*co12I(l1,i1) &
+                  + co12I(j1,l1)*co12J(k1,i1) + co12J(j1,l1)*co12I(k1,i1)
 
               df1 = df1 + sgnk*qfspcp1*db1
             end if
 
-            if (qfspcp2 /= 0.0_dp) then
-              db2 = 0.5_dp*(o21vI(i1,k1)*o21vJ(l1,j1) + o21vJ(i1,k1)*o21vI(l1,j1)) &
-                  + 0.5_dp*(o21vI(i1,l1)*o21vJ(k1,j1) + o21vJ(i1,l1)*o21vI(k1,j1)) &
-                  + 0.5_dp*(o21vI(j1,k1)*o21vJ(l1,i1) + o21vJ(j1,k1)*o21vI(l1,i1)) &
-                  + 0.5_dp*(o21vI(j1,l1)*o21vJ(k1,i1) + o21vJ(j1,l1)*o21vI(k1,i1)) &
-                  + 0.5_dp*(o21vI(l1,j1)*o21vJ(i1,k1) + o21vJ(l1,j1)*o21vI(i1,k1)) &
-                  + 0.5_dp*(o21vI(k1,j1)*o21vJ(i1,l1) + o21vJ(k1,j1)*o21vI(i1,l1)) &
-                  + 0.5_dp*(o21vI(l1,i1)*o21vJ(j1,k1) + o21vJ(l1,i1)*o21vI(j1,k1)) &
-                  + 0.5_dp*(o21vI(k1,i1)*o21vJ(j1,l1) + o21vJ(k1,i1)*o21vI(j1,l1))
+            if (do_p2) then
+              db2 = o21vI(i1,k1)*o21vJ(l1,j1) + o21vJ(i1,k1)*o21vI(l1,j1) &
+                  + o21vI(i1,l1)*o21vJ(k1,j1) + o21vJ(i1,l1)*o21vI(k1,j1) &
+                  + o21vI(j1,k1)*o21vJ(l1,i1) + o21vJ(j1,k1)*o21vI(l1,i1) &
+                  + o21vI(j1,l1)*o21vJ(k1,i1) + o21vJ(j1,l1)*o21vI(k1,i1)
 
               df1 = df1 + sgnk*qfspcp2*db2
             end if
 
-            if (qfspcp3 /= 0.0_dp) then
+            if (do_p3) then
+              ! dc3/dc4 and dd3/dd4 held exactly the same multiset of products
+              ! as dc1/dc2 and dd1/dd2 -- only the order of the two factors
+              ! differed -- so the original -dc1-dc2-dc3-dc4+dd1+dd2+dd3+dd4
+              ! is 2*(-dc1-dc2+dd1+dd2). Computing the duplicates cost 64
+              ! multiplies per (i,j,k,l) and was discarded into an identical sum.
               dc1 = 0.5_dp*(bco1I(i1,k1)*bo2vJ(j1,l1) + bco1J(i1,k1)*bo2vI(j1,l1)) &
                   + 0.5_dp*(bco1I(i1,l1)*bo2vJ(j1,k1) + bco1J(i1,l1)*bo2vI(j1,k1)) &
                   + 0.5_dp*(bco1I(j1,k1)*bo2vJ(i1,l1) + bco1J(j1,k1)*bo2vI(i1,l1)) &
@@ -1090,70 +1086,36 @@ contains
                   + 0.5_dp*(bco2I(l1,i1)*bo1vJ(k1,j1) + bco2J(l1,i1)*bo1vI(k1,j1)) &
                   + 0.5_dp*(bco2I(k1,i1)*bo1vJ(l1,j1) + bco2J(k1,i1)*bo1vI(l1,j1))
 
-              dc3 = 0.5_dp*(bo2vI(i1,k1)*bco1J(j1,l1) + bo2vJ(i1,k1)*bco1I(j1,l1)) &
-                  + 0.5_dp*(bo2vI(i1,l1)*bco1J(j1,k1) + bo2vJ(i1,l1)*bco1I(j1,k1)) &
-                  + 0.5_dp*(bo2vI(j1,k1)*bco1J(i1,l1) + bo2vJ(j1,k1)*bco1I(i1,l1)) &
-                  + 0.5_dp*(bo2vI(j1,l1)*bco1J(i1,k1) + bo2vJ(j1,l1)*bco1I(i1,k1)) &
-                  + 0.5_dp*(bo2vI(l1,j1)*bco1J(k1,i1) + bo2vJ(l1,j1)*bco1I(k1,i1)) &
-                  + 0.5_dp*(bo2vI(k1,j1)*bco1J(l1,i1) + bo2vJ(k1,j1)*bco1I(l1,i1)) &
-                  + 0.5_dp*(bo2vI(l1,i1)*bco1J(k1,j1) + bo2vJ(l1,i1)*bco1I(k1,j1)) &
-                  + 0.5_dp*(bo2vI(k1,i1)*bco1J(l1,j1) + bo2vJ(k1,i1)*bco1I(l1,j1))
+              ! dd1/dd2 factor exactly: each is a product of index-symmetric
+              ! sums, so sixteen multiplies collapse to four. The (i1,j1) halves
+              ! are hoisted to the j loop.
+              sco1I_kl = bco1I(k1,l1) + bco1I(l1,k1)
+              sco1J_kl = bco1J(k1,l1) + bco1J(l1,k1)
+              so2vI_kl = bo2vI(k1,l1) + bo2vI(l1,k1)
+              so2vJ_kl = bo2vJ(k1,l1) + bo2vJ(l1,k1)
+              dd1 = 0.5_dp*(sco1I_ij*so2vJ_kl + sco1J_ij*so2vI_kl &
+                          + sco1I_kl*so2vJ_ij + sco1J_kl*so2vI_ij)
 
-              dc4 = 0.5_dp*(bo1vI(i1,k1)*bco2J(j1,l1) + bo1vJ(i1,k1)*bco2I(j1,l1)) &
-                  + 0.5_dp*(bo1vI(i1,l1)*bco2J(j1,k1) + bo1vJ(i1,l1)*bco2I(j1,k1)) &
-                  + 0.5_dp*(bo1vI(j1,k1)*bco2J(i1,l1) + bo1vJ(j1,k1)*bco2I(i1,l1)) &
-                  + 0.5_dp*(bo1vI(j1,l1)*bco2J(i1,k1) + bo1vJ(j1,l1)*bco2I(i1,k1)) &
-                  + 0.5_dp*(bo1vI(l1,j1)*bco2J(k1,i1) + bo1vJ(l1,j1)*bco2I(k1,i1)) &
-                  + 0.5_dp*(bo1vI(k1,j1)*bco2J(l1,i1) + bo1vJ(k1,j1)*bco2I(l1,i1)) &
-                  + 0.5_dp*(bo1vI(l1,i1)*bco2J(k1,j1) + bo1vJ(l1,i1)*bco2I(k1,j1)) &
-                  + 0.5_dp*(bo1vI(k1,i1)*bco2J(l1,j1) + bo1vJ(k1,i1)*bco2I(l1,j1))
+              sco2I_kl = bco2I(k1,l1) + bco2I(l1,k1)
+              sco2J_kl = bco2J(k1,l1) + bco2J(l1,k1)
+              so1vI_kl = bo1vI(k1,l1) + bo1vI(l1,k1)
+              so1vJ_kl = bo1vJ(k1,l1) + bo1vJ(l1,k1)
+              dd2 = 0.5_dp*(sco2I_ij*so1vJ_kl + sco2J_ij*so1vI_kl &
+                          + sco2I_kl*so1vJ_ij + sco2J_kl*so1vI_ij)
 
-              dd1 = 0.5_dp*(bco1I(i1,j1)*bo2vJ(l1,k1) + bco1J(i1,j1)*bo2vI(l1,k1)) &
-                  + 0.5_dp*(bco1I(i1,j1)*bo2vJ(k1,l1) + bco1J(i1,j1)*bo2vI(k1,l1)) &
-                  + 0.5_dp*(bco1I(j1,i1)*bo2vJ(l1,k1) + bco1J(j1,i1)*bo2vI(l1,k1)) &
-                  + 0.5_dp*(bco1I(j1,i1)*bo2vJ(k1,l1) + bco1J(j1,i1)*bo2vI(k1,l1)) &
-                  + 0.5_dp*(bco1I(l1,k1)*bo2vJ(i1,j1) + bco1J(l1,k1)*bo2vI(i1,j1)) &
-                  + 0.5_dp*(bco1I(k1,l1)*bo2vJ(i1,j1) + bco1J(k1,l1)*bo2vI(i1,j1)) &
-                  + 0.5_dp*(bco1I(l1,k1)*bo2vJ(j1,i1) + bco1J(l1,k1)*bo2vI(j1,i1)) &
-                  + 0.5_dp*(bco1I(k1,l1)*bo2vJ(j1,i1) + bco1J(k1,l1)*bo2vI(j1,i1))
-
-              dd2 = 0.5_dp*(bco2I(i1,j1)*bo1vJ(l1,k1) + bco2J(i1,j1)*bo1vI(l1,k1)) &
-                  + 0.5_dp*(bco2I(i1,j1)*bo1vJ(k1,l1) + bco2J(i1,j1)*bo1vI(k1,l1)) &
-                  + 0.5_dp*(bco2I(j1,i1)*bo1vJ(l1,k1) + bco2J(j1,i1)*bo1vI(l1,k1)) &
-                  + 0.5_dp*(bco2I(j1,i1)*bo1vJ(k1,l1) + bco2J(j1,i1)*bo1vI(k1,l1)) &
-                  + 0.5_dp*(bco2I(l1,k1)*bo1vJ(i1,j1) + bco2J(l1,k1)*bo1vI(i1,j1)) &
-                  + 0.5_dp*(bco2I(k1,l1)*bo1vJ(i1,j1) + bco2J(k1,l1)*bo1vI(i1,j1)) &
-                  + 0.5_dp*(bco2I(l1,k1)*bo1vJ(j1,i1) + bco2J(l1,k1)*bo1vI(j1,i1)) &
-                  + 0.5_dp*(bco2I(k1,l1)*bo1vJ(j1,i1) + bco2J(k1,l1)*bo1vI(j1,i1))
-
-              dd3 = 0.5_dp*(bo2vI(i1,j1)*bco1J(l1,k1) + bo2vJ(i1,j1)*bco1I(l1,k1)) &
-                  + 0.5_dp*(bo2vI(i1,j1)*bco1J(k1,l1) + bo2vJ(i1,j1)*bco1I(k1,l1)) &
-                  + 0.5_dp*(bo2vI(j1,i1)*bco1J(l1,k1) + bo2vJ(j1,i1)*bco1I(l1,k1)) &
-                  + 0.5_dp*(bo2vI(j1,i1)*bco1J(k1,l1) + bo2vJ(j1,i1)*bco1I(k1,l1)) &
-                  + 0.5_dp*(bo2vI(l1,k1)*bco1J(i1,j1) + bo2vJ(l1,k1)*bco1I(i1,j1)) &
-                  + 0.5_dp*(bo2vI(k1,l1)*bco1J(i1,j1) + bo2vJ(k1,l1)*bco1I(i1,j1)) &
-                  + 0.5_dp*(bo2vI(l1,k1)*bco1J(j1,i1) + bo2vJ(l1,k1)*bco1I(j1,i1)) &
-                  + 0.5_dp*(bo2vI(k1,l1)*bco1J(j1,i1) + bo2vJ(k1,l1)*bco1I(j1,i1))
-
-              dd4 = 0.5_dp*(bo1vI(i1,j1)*bco2J(l1,k1) + bo1vJ(i1,j1)*bco2I(l1,k1)) &
-                  + 0.5_dp*(bo1vI(i1,j1)*bco2J(k1,l1) + bo1vJ(i1,j1)*bco2I(k1,l1)) &
-                  + 0.5_dp*(bo1vI(j1,i1)*bco2J(l1,k1) + bo1vJ(j1,i1)*bco2I(l1,k1)) &
-                  + 0.5_dp*(bo1vI(j1,i1)*bco2J(k1,l1) + bo1vJ(j1,i1)*bco2I(k1,l1)) &
-                  + 0.5_dp*(bo1vI(l1,k1)*bco2J(i1,j1) + bo1vJ(l1,k1)*bco2I(i1,j1)) &
-                  + 0.5_dp*(bo1vI(k1,l1)*bco2J(i1,j1) + bo1vJ(k1,l1)*bco2I(i1,j1)) &
-                  + 0.5_dp*(bo1vI(l1,k1)*bco2J(j1,i1) + bo1vJ(l1,k1)*bco2I(j1,i1)) &
-                  + 0.5_dp*(bo1vI(k1,l1)*bco2J(j1,i1) + bo1vJ(k1,l1)*bco2I(j1,i1))
-
-              df1  = df1 + sgnk*qfspcp3*(-dc1-dc2-dc3-dc4 &
-                                         +dd1+dd2+dd3+dd4)
+              df1 = df1 + sgnk*qfspcp3*2.0_dp*(-dc1-dc2+dd1+dd2)
             end if
 
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            ! bfnrm is separable over the four indices; the first three factors
+            ! are hoisted, leaving one multiply here instead of building a
+            ! four-element temporary and calling product() per iteration.
+            ab(l,k,j,i) = df1*bfn_ijk*basis%bfnrm(l1)
           end do
         end do
       end do
     end do
+
   end subroutine grd2_mrsf_nac_compute_data_t_get_density
 
 !###############################################################################
