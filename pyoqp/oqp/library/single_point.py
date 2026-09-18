@@ -3438,7 +3438,7 @@ class NAC(Calculator):
 
     def analytical_nac(self):
         """Analytic MRSF NAC via the certified nac-lagrangian assembly
-        (oqp.library.nac_analytic; see tools/nac_lagrangian/
+        (oqp.library.nac_analytic; see openqp-devkit tools/nac_lagrangian/
         MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md).  v3 is the gated
         native-Z-vector implementation of the complete response formula.  The
         resident Fortran mrsf_nac_wpair engine uses the closed-form MRSF

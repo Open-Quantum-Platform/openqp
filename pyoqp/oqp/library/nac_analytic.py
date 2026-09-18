@@ -1,7 +1,7 @@
 """Production analytic MRSF-TDDFT NAC -- the nac-lagrangian assembly (v3).
 
 For every ordered pair (I != J), all terms from certified components (see
-tools/nac_lagrangian/MRSF_NAC_DERIVATION.md, Secs. 4 and 7.24-7.41):
+openqp-devkit tools/nac_lagrangian/MRSF_NAC_DERIVATION.md, Secs. 4 and 7.24-7.41):
 
   d_IJ = antisym[ T1 + zeta(X):B^R + X:V + gamma:Sk ]
     T1    = [amp2e + esum](ytil_IJ, X_J)      slot-injected engines
@@ -155,7 +155,7 @@ def analytic_nac(mol, *, pair=None):
     natom = int(mol.data['natom'])
 
     # Production has no nuclear-coordinate forward CPHF branch.  The separate
-    # tools/nac_lagrangian/rohf_response_gate.py diagnostic owns that 3N solve.
+    # openqp-devkit tools/nac_lagrangian/rohf_response_gate.py diagnostic owns that 3N solve.
     if pair is None:
         oqp.mrsf_nac_lagrangian(mol)
     else:
