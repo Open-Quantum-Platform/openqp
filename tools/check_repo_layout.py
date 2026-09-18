@@ -40,6 +40,11 @@ TOOLS_ALLOWED = {
     "minao": "source/minao_lut.F90",
     "sap": "source/sap_lut.F90",
     "scf-converger-ml": ".github/workflows/train-scf-selector.yml",
+    # Loaded by tests, not by the build. Found the hard way: the first pass of
+    # this split searched for the literal path "tools/<name>" and so missed a
+    # Python import and an importlib load built from path parts, which broke CI.
+    "diagnostics": "tests/test_trace_namd_hop.py, test_namd_baeck_an.py, test_namd_diagnostics.py",
+    "validate_analytic_hessian.py": "tests/test_analytic_hessian_validator.py",
     # Code generators whose output is committed. The build does not invoke them,
     # but regenerating Boys/Rys tables or the libxc bindings requires them to
     # sit beside the source they produce.
