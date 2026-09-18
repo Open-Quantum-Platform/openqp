@@ -7,7 +7,7 @@ operations but not under C3/C6, so a full-group grid reduction would be
 inexact. The two halves therefore reduce over different groups, which costs
 nothing for HF (no grid) and is a measured error for DFT:
 ``benzene_full_dft`` is out by 3.14e-04 against the tier's own 5e-7 tolerance
-(openqp-devkit openqp-devkit docs/planned/integral-symmetry.md, "Still open").
+(openqp-devkit docs/planned/integral-symmetry.md, "Still open").
 
 This test exists because the combination only became REACHABLE when per-shell
 purity started being exported. Before that, staging bailed with

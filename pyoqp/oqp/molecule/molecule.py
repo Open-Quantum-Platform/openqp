@@ -929,7 +929,7 @@ class Molecule:
         NOT under C3/C6. That mismatch costs nothing for HF, which has no
         grid. With a functional it is a measured error -- ``benzene_full_dft``
         is out by 3.14e-04 against the tier's own 5e-7 tolerance
-        (openqp-devkit openqp-devkit docs/planned/integral-symmetry.md, "Still open").
+        (openqp-devkit docs/planned/integral-symmetry.md, "Still open").
 
         The combination used to be unreachable on the bases DFT is normally
         run in: before per-shell purity was exported, staging bailed with
