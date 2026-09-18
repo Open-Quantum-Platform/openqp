@@ -68,7 +68,7 @@ subroutine get_ab_initio_density(alpha_density,alpha_orbital,beta_density,beta_o
      case (2)
        call orb_to_dens(beta_density,beta_orbital,occno,nb,nbasis,nbasis)
 
-     case (3)
+     case (3, 4)
        call orb_to_dens(beta_density,alpha_orbital,occno,nb,nbasis,nbasis)
      end select
    end if

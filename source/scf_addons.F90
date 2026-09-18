@@ -231,6 +231,7 @@ module scf_addons
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
   integer, parameter, public :: scf_uhf  = 2  ! Unrestricted HF
   integer, parameter, public :: scf_rohf = 3  ! ROHF
+  integer, parameter, public :: scf_reks = 4  ! REKS(2,2) ensemble DFT
   integer, parameter, public :: scf_diis = 0, scf_bfgs = 1, scf_trah = 2
 
   !> @brief Type to encapsulate pFON (pseudo-Fractional Occupation Number) functionality
@@ -304,6 +305,7 @@ contains
     case (scf_rhf);  name = 'RHF'
     case (scf_uhf);  name = 'UHF'
     case (scf_rohf); name = 'ROHF'
+    case (scf_reks); name = 'REKS(2,2)'
     case default;    name = 'UNKNOWN'
     end select
   end function get_scf_name

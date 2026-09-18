@@ -27,7 +27,7 @@ METHODS = {
     "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 CC_METHODS = {"ccsd", "ccsd(t)"}
-SCF_TYPES = {"rhf", "rohf", "uhf"}
+SCF_TYPES = {"rhf", "rohf", "uhf", "reks"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 MP2_VARIANTS = {
     "mp2", "conventional",

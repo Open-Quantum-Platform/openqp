@@ -382,6 +382,13 @@ OQP_CONFIG_SCHEMA = {
         'xc_phi_cache': {'type': string, 'default': 'auto'},
         'xc_incdft': {'type': string, 'default': 'auto'},
         'grad_cutoff': {'type': string, 'default': 'auto'},
+        # REKS(2,2) ensemble DFT ([scf] type=reks)
+        'reks_type': {'type': string, 'default': 'sa'},
+        'reks_target': {'type': string, 'default': 'sa'},
+        'reks_wpps': {'type': float, 'default': '0.5'},
+        'reks_shift': {'type': float, 'default': '0.3'},
+        'reks_delta': {'type': float, 'default': '0.4'},
+        'reks_diis': {'type': bool, 'default': 'True'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -878,7 +885,7 @@ class _TagArrayView(np.ndarray):
 class OQPData:
     """Wrapper for OQP data class"""
 
-    _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
+    _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3, "reks": 4}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)',
@@ -919,6 +926,12 @@ class OQPData:
         },
         "scf": {
             "type": "set_scf_type",
+            "reks_type": "set_scf_reks_type",
+            "reks_target": "set_scf_reks_target",
+            "reks_wpps": "set_scf_reks_wpps",
+            "reks_shift": "set_scf_reks_shift",
+            "reks_delta": "set_scf_reks_delta",
+            "reks_diis": "set_scf_reks_diis",
             "maxit": "set_scf_maxit",
             "maxdiis": "set_scf_maxdiis",
             "diis_reset_mod": "set_scf_diis_reset_mod",
@@ -1176,6 +1189,43 @@ class OQPData:
     def set_scf_maxit(self, maxit):
         """Set maximum number of SCF iterations"""
         self._data.control.maxit = maxit
+
+    _reks_types = {"sa": 0, "sa-reks": 0, "reks": 0, "0": 0,
+                   "2si": 1, "ssr": 1, "ssr22": 1, "ssr(2,2)": 1, "1": 1,
+                   "3si": 2, "ssr32": 2, "ssr(3,2)": 2, "2": 2}
+    _reks_targets = {"sa": 0, "average": 0, "0": 0,
+                     "s0": 1, "pps": 1, "1": 1,
+                     "s1": 2, "oss": 2, "2": 2}
+
+    def set_scf_reks_type(self, reks_type):
+        """Set the REKS flavour: sa (SA-REKS), 2si (SSR(2,2)) or 3si (SSR(3,2))"""
+        key = str(reks_type).strip().lower()
+        if key not in OQPData._reks_types:
+            raise ValueError(f"Unknown [scf] reks_type={reks_type}; use sa, 2si or 3si")
+        self._data.control.reks_type = OQPData._reks_types[key]
+
+    def set_scf_reks_target(self, reks_target):
+        """Set the reported REKS state: sa (average), s0 (PPS) or s1 (OSS)"""
+        key = str(reks_target).strip().lower()
+        if key not in OQPData._reks_targets:
+            raise ValueError(f"Unknown [scf] reks_target={reks_target}; use sa, s0 or s1")
+        self._data.control.reks_target = OQPData._reks_targets[key]
+
+    def set_scf_reks_wpps(self, wpps):
+        """Set the PPS weight of the SA-REKS ensemble"""
+        self._data.control.reks_wpps = float(wpps)
+
+    def set_scf_reks_shift(self, shift):
+        """Set the REKS level shift (a.u.)"""
+        self._data.control.reks_shift = float(shift)
+
+    def set_scf_reks_delta(self, delta):
+        """Set the delta parameter of the REKS interpolating function"""
+        self._data.control.reks_delta = float(delta)
+
+    def set_scf_reks_diis(self, flag):
+        """Enable/disable DIIS in the REKS SCF"""
+        self._data.control.reks_diis = 1 if flag else 0
 
     def set_scf_maxdiis(self, maxdiis):
         """Set maximum number of DIIS Equations"""

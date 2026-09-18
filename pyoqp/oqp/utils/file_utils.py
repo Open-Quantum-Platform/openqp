@@ -146,7 +146,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     td_zvconv = mol.config['tdhf']['zvconv']
     td_nvdav = mol.config['tdhf']['nvdav']
 
-    scftypes = {1: "rhf", 2: "uhf", 3: "rohf"}
+    scftypes = {1: "rhf", 2: "uhf", 3: "rohf", 4: "reks"}
 
     mode = 'a'
     loginfo = format_log_section(title, section_category(section))

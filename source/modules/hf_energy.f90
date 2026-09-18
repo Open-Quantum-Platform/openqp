@@ -49,7 +49,8 @@ contains
     type(dft_grid_t) :: coarseGrid
     logical :: have_coarse
 
-    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
+    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3 &
+            .or. infos%control%scftype == 4
     dft = infos%control%hamilton == 20
 
 !   3. LOG: Write: Main output file

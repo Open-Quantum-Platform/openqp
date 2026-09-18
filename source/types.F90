@@ -195,6 +195,13 @@ module types
     integer(c_int64_t) :: cc_cholesky = 2        !< Cholesky-factorise the ladder integrals (0=off, 1=on, 2=auto on memory)
     real(c_double) :: cc_cholesky_tol = 1.0e-10_dp !< Cholesky truncation threshold
     integer(c_int64_t) :: cc_cholesky_direct = 0 !< 0=auto (on memory), 1=always, 2=never
+    ! REKS(2,2) / SA-REKS / SSR controls -- keep in sync with include/oqp.h
+    integer(c_int64_t) :: reks_type   = 0        !< 0=SA-REKS, 1=2SI-2SA (SSR(2,2)), 2=3SI-2SA (SSR(3,2))
+    integer(c_int64_t) :: reks_target = 0        !< 0=SA average, 1=S0/PPS, 2=S1/OSS
+    real(c_double)     :: reks_wpps   = 0.5_dp   !< PPS weight in the SA ensemble
+    real(c_double)     :: reks_shift  = 0.3_dp   !< level shift (a.u.) for the active/virtual orbitals
+    real(c_double)     :: reks_delta  = 0.4_dp   !< delta parameter of the interpolating function
+    integer(c_int64_t) :: reks_diis   = 1        !< 1=use DIIS on the effective Fock, 0=off
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

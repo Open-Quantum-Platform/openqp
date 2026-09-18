@@ -56,6 +56,7 @@ contains
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
+    use reks, only: reks_driver
     use mathlib, only: traceprod_sym_packed
     use qmat_cache, only: get_qmat_cached
     use mathlib, only: unpack_matrix
@@ -258,6 +259,12 @@ contains
     !==============================================================================
     ! Extract Calculation Parameters from Input
     !==============================================================================
+    ! REKS(2,2) ensemble DFT has its own driver (coupling-operator SCF)
+    if (infos%control%scftype == 4) then
+      call reks_driver(basis, infos, molGrid)
+      return
+    end if
+
     ! Set SCF type (RHF, UHF, or ROHF) and
     ! configure parameters based on SCF type
     select case (infos%control%scftype)

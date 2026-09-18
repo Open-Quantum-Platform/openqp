@@ -1,0 +1,28 @@
+# SSR(2,2) HF energy of stretched LiH with DIIS, S1 target
+# REKS(2,2) ensemble DFT (Filatov): [scf] type=reks selects the SA-REKS(2,2)
+# coupling-operator SCF; reks_type=2si/3si adds the SSR state interaction and
+# reks_target selects the reported state (sa, s0, s1).
+# Reference: GAMESS-US REKS (Filatov/Lee) on the same geometry, see
+# tests in the OpenQP REKS validation record (2026-09-18).
+[input]
+system=
+   3  0.0  0.0  0.0
+   1  0.0  0.0  3.0
+charge=0
+runtype=energy
+basis=6-31g**
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+type=reks
+multiplicity=1
+reks_type=2si
+reks_target=s1
+reks_wpps=0.5
+reks_shift=0.3
+reks_diis=True
+maxit=100
+conv=1e-8

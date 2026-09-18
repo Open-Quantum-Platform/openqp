@@ -140,7 +140,8 @@ class Molecule:
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],
-                         "uhf": []
+                         "uhf": [],
+                         "reks": []
                          }
         self.config_tag = {
             'json': ['scf_type', 'basis', 'library']

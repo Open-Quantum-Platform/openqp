@@ -186,6 +186,13 @@ struct control_parameters {
     int64_t   cc_cholesky;
     double    cc_cholesky_tol;
     int64_t   cc_cholesky_direct;
+    /* REKS(2,2) -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   reks_type;
+    int64_t   reks_target;
+    double    reks_wpps;
+    double    reks_shift;
+    double    reks_delta;
+    int64_t   reks_diis;
 };
 
 struct mpi_communicator {
