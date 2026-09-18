@@ -17,6 +17,13 @@ heuristics. Judgment calls -- is this new docs/ page user documentation or a
 design note, is this test a regression test or a mirror of a development gate --
 belong to the Claude review, which comments without blocking.
 
+Finding consumers: search for the file STEM, not the path. Two rounds of CI
+failures on the split PR came from grepping "tools/<name>" and "docs/<name>",
+which matches neither `from tools.diagnostics.trace_namd_hop import ...` nor
+`ROOT / "docs" / "logging.md"`. The exhaustive query is for the directory name
+as a quoted path component: `["\']docs["\']`, `["\']tools["\']`, plus the
+slash forms.
+
 Run: python3 tools/check_repo_layout.py [repo_root]
 Exit 0 when the tree conforms, 1 otherwise. Reads the tree as text; builds
 nothing and executes nothing from it.
@@ -66,20 +73,33 @@ ROOT_MD_ALLOWED = {
     "TROUBLESHOOTING.md",
 }
 
-# Directories that must not exist at all: their entire contents moved.
-FORBIDDEN_DIRS = {
-    "docs": "method notes, design documents and release notes",
+# docs/ follows the same rule as tools/: a file stays only if something in this
+# repository reads it. Two tests read their subject document directly, so those
+# two documents are part of the test, not prose that happens to sit nearby.
+# Everything else -- method notes, design documents, release notes -- moved.
+DOCS_ALLOWED = {
+    "TDDFT_HESSIAN_IMPORT.md": "tests/test_tdhf_hessian_import.py (ROOT / \"docs\" / ...)",
+    "logging.md": "tests/test_log_format.py (ROOT / \"docs\" / ... .read_text())",
 }
 
 
 def check(root: Path) -> list[str]:
     problems: list[str] = []
 
-    for name, what in sorted(FORBIDDEN_DIRS.items()):
-        if (root / name).is_dir():
+    docs = root / "docs"
+    if docs.is_dir():
+        for path in sorted(docs.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(docs).as_posix()
+            if rel in DOCS_ALLOWED:
+                continue
             problems.append(
-                f"{name}/ exists. This repository does not carry {what}; "
-                f"they live in {DEVKIT}."
+                f"docs/{rel} has no consumer in this repository.\n"
+                f"    Method notes, design documents and release notes belong in\n"
+                f"    {DEVKIT}; user documentation belongs in openqp-docs.\n"
+                f"    If a test reads this file, add it to DOCS_ALLOWED in\n"
+                f"    tools/check_repo_layout.py together with that test."
             )
 
     tools = root / "tools"

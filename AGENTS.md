@@ -102,8 +102,9 @@ asked six times and was answered zero times. Nearly half of that PR was
 development scaffolding: a 2,883-line derivation, eight validation gate scripts,
 and ten tests mirroring them.
 
-- `docs/` does not exist here. User documentation goes to openqp-docs (rule 4);
-  design and method notes go to openqp-devkit.
+- `docs/` is an allowlist, like `tools/`: a document stays only if a test reads
+  it as part of what that test checks. User documentation goes to openqp-docs
+  (rule 4); design and method notes go to openqp-devkit.
 - `tools/` is an allowlist. Every entry must name the path in this repository
   that consumes it.
 - Markdown at the repository root is limited to the files a newcomer needs plus
