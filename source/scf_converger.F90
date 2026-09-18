@@ -3949,10 +3949,37 @@ contains
                          mo_b, nbf, &
                  0.0_dp, work3,  nbf)
       x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      call rohf_missing_fock_terms(self,x,x2mat,x2mat_b)
       call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
     end select
     end associate
   end subroutine calc_h_op
+
+  ! Rotations redundant for one spin density still rotate its Fock matrix
+  ! in the common ROHF orbital basis. Restore the omitted [F_sigma,K] terms:
+  ! closed-open rotations for alpha and open-virtual rotations for beta.
+  subroutine rohf_missing_fock_terms(self,x,ha,hb)
+    class(trah_converger), intent(inout) :: self
+    real(dp), intent(in) :: x(:)
+    real(dp), intent(inout) :: ha(:,:),hb(:,:)
+    real(dp), allocatable :: ka(:,:),kb(:,:),fm(:,:),tmp(:,:),a(:,:)
+    integer :: n,na,nb
+    n=self%nbf;na=self%nocc_a;nb=self%nocc_b
+    allocate(ka(n,n),kb(n,n),fm(n,n),tmp(n,n),a(n,n))
+    call skew_sym_k(self,x,ka,na)
+    kb=0.0_dp
+    kb(na+1:n,nb+1:na)=ka(na+1:n,nb+1:na)
+    kb(nb+1:na,na+1:n)=ka(nb+1:na,na+1:n)
+    ka(na+1:n,:)=0.0_dp;ka(:,na+1:n)=0.0_dp
+    call unpack_matrix(self%fock_ao(:,1),a)
+    tmp=matmul(a,self%mo_a);fm=matmul(transpose(self%mo_a),tmp)
+    tmp=matmul(fm,ka)-matmul(ka,fm)
+    ha=ha+tmp(na+1:n,1:na)
+    call unpack_matrix(self%fock_ao(:,2),a)
+    tmp=matmul(a,self%mo_b);fm=matmul(transpose(self%mo_b),tmp)
+    tmp=matmul(fm,kb)-matmul(kb,fm)
+    hb=hb+tmp(nb+1:n,1:nb)
+  end subroutine rohf_missing_fock_terms
 
   !> @brief Pack ROHF α/β trial matrices into a single rotation vector.
   !> @detail Packs S↔D, V↔D, and V↔S blocks according to the ROHF layout
