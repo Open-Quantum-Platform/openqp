@@ -1,5 +1,5 @@
 # Quiet log with the global [input] verbose = 0.
-# One level governs the whole log (docs/logging.md): 0 keeps headings, the
+# One level governs the whole log (openqp-devkit docs/logging.md): 0 keeps headings, the
 # calculation request, converged results and warnings, and drops the
 # iteration, orbital and energy-component tables.  The energy is the one
 # h2o_rhf_6-31g_pbe_quiet_orbitals gets with the older [scf] spelling:

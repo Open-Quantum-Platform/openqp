@@ -9,7 +9,7 @@
 # linux/amd64-only.  The runtime therefore deliberately uses the same Python
 # minor version and a newer glibc baseline.  Moving the container to Python
 # 3.11 requires publishing the proposed Python-3.11 builder first; see
-# docs/openqp-dev-buildenv-hardening-plan.md.
+# openqp-devkit docs/openqp-dev-buildenv-hardening-plan.md.
 FROM openqp/openqp-buildenv:1@sha256:83a2ba2108bc2bb1123e7dfac31320833817242681ee41f36e5ee950dfb22a3e AS builder
 
 ARG OPENQP_VERSION=1.3.1

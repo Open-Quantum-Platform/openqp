@@ -3,7 +3,7 @@
 This file is read by the automated PR reviewers (Codex reads `AGENTS.md`
 natively; the Claude review workflow is pointed at it in
 `.github/workflows/claude.yml`) and by human contributors. Every pull request is
-expected to satisfy the four rules below. A reviewer should call out, per rule,
+expected to satisfy the five rules below. A reviewer should call out, per rule,
 whether the PR satisfies it or explain what is missing.
 
 ## PR rules
@@ -86,3 +86,35 @@ a keyword-page entry under `docs/keywords/` and/or a workflow page under
 
 **Reviewer check:** if the diff adds/changes user-facing keywords or workflows,
 confirm the PR description links an openqp-docs PR; flag it if missing.
+
+### 5. openqp carries product code, not development material
+
+This repository holds the engine, its tests and examples, and the scripts the
+build and CI actually consume. Method notes, derivations, validation harnesses,
+performance investigations and one-off diagnostics belong in
+[Open-Quantum-Platform/openqp-devkit](https://github.com/Open-Quantum-Platform/openqp-devkit)
+(private), which was split out of this repository with history preserved.
+
+This is not housekeeping. GitHub refuses to serve a diff past 20,000 changed
+lines (`406 too_large`), and Codex review reads that diff, so an oversized pull
+request gets no review and **no error message** — #405, at 24,955 changed lines,
+asked six times and was answered zero times. Nearly half of that PR was
+development scaffolding: a 2,883-line derivation, eight validation gate scripts,
+and ten tests mirroring them.
+
+- `docs/` does not exist here. User documentation goes to openqp-docs (rule 4);
+  design and method notes go to openqp-devkit.
+- `tools/` is an allowlist. Every entry must name the path in this repository
+  that consumes it.
+- Markdown at the repository root is limited to the files a newcomer needs plus
+  this one.
+
+**Enforced by CI:** `tools/check_repo_layout.py` (the `PR policy` workflow)
+checks the **whole tree**, not just the files a PR adds, so the split cannot
+erode one merge at a time. As with rule 1, CI runs the trusted base-branch copy
+of the script. If the build or CI genuinely needs a new script, add it to
+`TOOLS_ALLOWED` together with its consumer.
+
+**Reviewer check:** the gate is a dumb allowlist. Judgment calls are yours — is
+a new `docs/`-style page user documentation or a design note, is a new test a
+regression test or a mirror of a development-time gate? Say so.

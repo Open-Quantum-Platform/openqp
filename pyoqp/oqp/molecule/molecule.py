@@ -929,7 +929,7 @@ class Molecule:
         NOT under C3/C6. That mismatch costs nothing for HF, which has no
         grid. With a functional it is a measured error -- ``benzene_full_dft``
         is out by 3.14e-04 against the tier's own 5e-7 tolerance
-        (docs/planned/integral-symmetry.md, "Still open").
+        (openqp-devkit openqp-devkit docs/planned/integral-symmetry.md, "Still open").
 
         The combination used to be unreachable on the bases DFT is normally
         run in: before per-shell purity was exported, staging bailed with
@@ -1828,7 +1828,7 @@ class Molecule:
                     lines.append('   tier used instead: the XC grid reduces over the'
                                  ' abelian operations only,')
                     lines.append('   and the non-abelian mismatch is a measured'
-                                 ' 3e-04 error (see docs/planned/')
+                                 ' 3e-04 error (see openqp-devkit docs/planned/')
                     lines.append('   integral-symmetry.md). Remove the [input]'
                                  ' functional to use the full group.')
                 if active.get('reoriented'):
