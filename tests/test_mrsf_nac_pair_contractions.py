@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import re
+
 import numpy as np
 
 
@@ -91,7 +93,20 @@ def test_amp_subtracts_the_reference_before_the_integral_sweep():
     assert "subtract_reference = .true." in amp
     assert amp.count("call grd2_driver") == 1
     assert "deSCF" not in amp
-    assert "if (this%subtract_reference) then" in density
+    # The digest must branch on subtract_reference. It reads the flag once
+    # before the loop nest rather than re-testing it per (i,j,k,l), so match
+    # the flag and the branch separately instead of one literal `if` line --
+    # the previous single-literal assertion failed on a pure hoist that changed
+    # no arithmetic.
+    assert "this%subtract_reference" in density
+    flag = re.search(
+        r"(\w+)\s*=\s*this%subtract_reference", density
+    )
+    assert flag is not None, "subtract_reference is read but never bound"
+    assert re.search(
+        r"if \((?:this%subtract_reference|" + flag.group(1) + r")\) then",
+        density,
+    ), "subtract_reference is bound but never branched on"
 
     rng = np.random.default_rng(87)
     d = rng.standard_normal((2, 8))
