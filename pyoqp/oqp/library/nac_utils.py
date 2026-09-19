@@ -11,9 +11,10 @@ import numpy as np
 # Numerical-NAC scratch files predate the canonical PR #160 convention.  A
 # sidecar marker prevents restart=True from silently mixing those historical
 # files with current workers after a partial restart.
-NUMERICAL_NAC_CACHE_SCHEMA_VERSION = 1
+NUMERICAL_NAC_CACHE_SCHEMA_VERSION = 2
 NUMERICAL_NAC_CACHE_CONVENTION = (
-    "canonical-old-new__s-minus-st-over-2step__central-root-order-v1"
+    "canonical-old-new__retained-column-normalized__"
+    "s-minus-st-over-2step__central-root-order-v2"
 )
 
 
@@ -71,6 +72,26 @@ def canonical_state_overlap(native_overlap):
             f"state overlap must be a square matrix, got {native.shape}"
         )
     return np.array(native.T, copy=True)
+
+
+def normalize_retained_state_overlap(state_overlap):
+    """Normalize retained-state columns for a spatial finite-difference TLF.
+
+    The published spatial TLF vector treats each displaced retained-state
+    projection as a normalized electronic state before the +dx/-dx central
+    difference.  Time-dependent propagation is deliberately different: its
+    finite-window overlap remains raw so population outside the retained
+    manifold is not folded back into it.
+    """
+    overlap = np.asarray(state_overlap, dtype=float)
+    if overlap.ndim != 2 or overlap.shape[0] != overlap.shape[1]:
+        raise ValueError(
+            f"state overlap must be a square matrix, got {overlap.shape}"
+        )
+    norms = np.linalg.norm(overlap, axis=0)
+    if np.any(norms <= np.finfo(float).tiny):
+        raise ValueError("retained-state overlap contains a zero-norm column")
+    return overlap / norms.reshape(1, -1)
 
 
 def hst_derivative_coupling(state_overlap, step):

@@ -1,0 +1,3 @@
+mrsf(nstate=2)/bhhlyp/sto-3g
+namd(S1,nstep=1,dt=0.1,mo_reuse=true,scf_fail=escalate,scf_guess_retry=true,tdc=analytic,seed=3)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"

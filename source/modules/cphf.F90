@@ -19,13 +19,16 @@ module cphf_mod
 !>   for comparison against an external reference (no geometry derivatives required).
 
   use precision, only: dp
-  use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
+  use iso_c_binding, only: c_ptr, c_f_pointer
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use types, only: information
   use basis_tools, only: basis_set
-  use int2_compute, only: int2_compute_t, int2_fock_data_t
+  use int2_compute, only: int2_compute_t, int2_fock_data_t, int2_urohf_data_t
   use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
+  use mod_dft_gridint_fxc, only: xc_consumer_tde_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
+  use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
   use io_constants, only: iw
 
   implicit none
@@ -87,10 +90,44 @@ module cphf_mod
     type(information), pointer :: infos => null()
     type(basis_set), pointer :: basis => null()
     type(dft_grid_t), pointer :: molgrid => null()
+    type(int2_compute_t), pointer :: int2_driver => null()
+    class(int2_fock_data_t), pointer :: int2_data => null()
+    type(xc_consumer_tde_t), pointer :: xc_consumer => null()
     real(kind=dp), pointer :: mo(:,:) => null()
     real(kind=dp), pointer :: famo(:,:) => null()    ! alpha Fock (full, MO basis)
     real(kind=dp), pointer :: fbmo(:,:) => null()    ! beta  Fock (full, MO basis)
     real(kind=dp), pointer :: xminv(:) => null()     ! diagonal preconditioner
+    ! Solver-owned callback workspace.  Keeping these targets in
+    ! cphf_solve_rohf removes eleven heap allocations from every Hessian
+    ! action without introducing module/global state.  The pointers remain
+    ! valid until every Krylov solve and certified-residual action is done.
+    real(kind=dp), contiguous, pointer :: xa_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: xb_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2a_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2b_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: work2(:,:) => null()
+    real(kind=dp), contiguous, pointer :: work3(:,:) => null()
+    real(kind=dp), contiguous, pointer :: dm_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: v_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: kmat_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: dm_tri_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: pfock_work(:,:) => null()
+    ! Multi-vector operator workspace.  Independent MINRES recurrences fill
+    ! the last axis, while ERI and XC kernels consume every active vector in
+    ! one traversal.  No storage here is process-global or TagArray-backed.
+    real(kind=dp), contiguous, pointer :: xa_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: xb_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2a_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2b_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: work2_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: work3_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: dxa_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: dxb_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: fxa_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: fxb_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: kmat_batch(:,:,:) => null()
+    real(kind=dp), contiguous, pointer :: dm_tri_batch(:,:) => null()
+    real(kind=dp), contiguous, pointer :: pfock_batch(:,:) => null()
     integer :: nbf = 0
     integer :: nocca = 0, noccb = 0, nvira = 0, nvirb = 0, offset = 0, ltot = 0
     real(kind=dp) :: scale_exch = 1.0_dp
@@ -128,7 +165,7 @@ contains
 !> @param[out]   converged true only when every right-hand side converged (optional)
   subroutine cphf_solve(infos, nrhs, bvec, uvec, tol, maxit, converged)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_E_MO_A, OQP_VEC_MO_A
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -170,7 +207,14 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      ! libxc_input appends to process-global functional storage.  A reusable
+      ! response solve may be entered after another DFT driver, so make the
+      ! lifecycle idempotent at both boundaries rather than assuming a clean
+      ! caller.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     allocate(wrk1(nbf,nbf), pa(nbf,nbf,1), xm(lexc), xminv(lexc), source=0.0_dp)
 
@@ -281,6 +325,7 @@ contains
     call flush(iw)
 
     call int2_driver%clean()
+    if (dft) call dftclean(infos)
     deallocate(wrk1, pa, xm, xminv)
   end subroutine cphf_solve
 
@@ -475,7 +520,7 @@ contains
   subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_E_MO_A, OQP_VEC_MO_A, OQP_E_MO_B, OQP_VEC_MO_B
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -518,7 +563,10 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_B, epsb)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mob)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     allocate(wrka(nbf,nbf), wrkb(nbf,nbf), xm(ltot), xminv(ltot), source=0.0_dp)
 
@@ -602,6 +650,7 @@ contains
     ! file; flush so the summary is there when the capture is read.
     call flush(iw)
 
+    if (dft) call dftclean(infos)
     deallocate(wrka, wrkb, xm, xminv)
   end subroutine cphf_solve_uhf
 
@@ -830,7 +879,10 @@ contains
     end if
   end subroutine rohf_pack_trial
 
-!> @brief Inverse of rohf_pack_trial (scf_converger::unpack_rohf_trial).
+!> @brief Embed independent ROHF rotations into alpha/beta tangent blocks.
+!>   This is not the array inverse of rohf_pack_trial: the shared docc-virt
+!>   coordinate is copied to both spins, while rohf_pack_trial is the dual
+!>   projection that sums those two spin components.
   subroutine rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
     real(kind=dp), intent(in)  :: x(:)
     real(kind=dp), intent(out) :: xa(:,:), xb(:,:)
@@ -870,11 +922,17 @@ contains
 !>   Fvv x - x Foo (full MO Fock blocks, so non-canonical orbitals are handled)
 !>   plus the response Fock from the trial rotation density (get_response_packed,
 !>   scftype>=2 -> Coulomb from the spin-summed density, exchange same-spin).
-  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit)
+!>   ``tol`` and the optional ``residual`` use the squared Euclidean residual
+!>   convention retained by the historical CPHF drivers; PCG itself receives
+!>   sqrt(tol) and tests the unsquared residual norm.
+  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit, &
+                             converged, residual, minres_solver, &
+                             initial_guess, initial_residual, iterations, &
+                             initial_guess_accepted, rhs_tolerances)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -882,25 +940,48 @@ contains
     real(kind=dp), intent(out) :: uvec(:,:)
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
+    logical, intent(out), optional :: converged(:)
+    real(kind=dp), intent(out), optional :: residual(:)
+    logical, intent(in), optional :: minres_solver
+    real(kind=dp), intent(in), optional :: initial_guess(:,:)
+    real(kind=dp), intent(out), optional :: initial_residual(:)
+    integer, intent(out), optional :: iterations(:)
+    logical, intent(out), optional :: initial_guess_accepted(:)
+    real(kind=dp), intent(in), optional :: rhs_tolerances(:)
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
+    type(int2_compute_t), target :: int2_driver_batch
+    class(int2_fock_data_t), allocatable, target :: int2_data_batch
     type(cphf_cg_data_rohf), target :: cgdata
+    type(xc_consumer_tde_t), target :: xc_consumer
     type(pcg_t) :: pcg
+    type(minres_t), allocatable :: minres_batch(:)
 
     real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
     real(kind=dp), allocatable, target :: famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable, target :: xminv(:)
-    real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
-    integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
-    integer :: i, a, k, irhs, iter, mxit
+    real(kind=dp), allocatable, target :: fao(:,:), w2(:,:), w3(:,:), ax(:)
+    real(kind=dp), allocatable, target :: xa_work(:,:), xb_work(:,:), &
+      x2a_work(:,:), x2b_work(:,:), v_work(:,:), kmat_work(:,:), &
+      dm_tri_work(:,:), pfock_work(:,:)
+    real(kind=dp), allocatable, target :: xa_batch(:,:,:), xb_batch(:,:,:), &
+      x2a_batch(:,:,:), x2b_batch(:,:,:), work2_batch(:,:,:), &
+      work3_batch(:,:,:), dxa_batch(:,:,:), dxb_batch(:,:,:), &
+      fxa_batch(:,:,:), fxb_batch(:,:,:), kmat_batch(:,:,:), &
+      dm_tri_batch(:,:), pfock_batch(:,:)
+    real(kind=dp), allocatable :: xvec_batch(:,:), ax_batch(:,:), rhs_cnv(:)
+    integer, allocatable :: active_rhs(:)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: iter_min, iter_max, nconv
-    logical :: dft
-    real(kind=dp) :: cnv, scale_exch, d
+    integer :: i, a, k, irhs, iter, mxit, nactive, ia
+    logical :: dft, use_minres, solved, ready
+    real(kind=dp) :: cnv, scale_exch, d, residual_norm, residual_sq
 
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
     nocca = infos%mol_prop%nelec_A
     noccb = infos%mol_prop%nelec_B
     nvira = nbf - nocca
@@ -909,19 +990,81 @@ contains
     ltot = noccb*(offset + nvira) + offset*nvira
     dft = infos%control%hamilton == 20
     cnv = default_tol; if (present(tol)) cnv = tol
+    allocate(rhs_cnv(nrhs), source=cnv)
+    if (present(rhs_tolerances)) then
+      if (size(rhs_tolerances) < nrhs) error stop &
+        'cphf_solve_rohf: rhs_tolerances is smaller than nrhs'
+      if (.not. all(ieee_is_finite(rhs_tolerances(1:nrhs))) .or. &
+          any(rhs_tolerances(1:nrhs) <= 0.0_dp)) error stop &
+        'cphf_solve_rohf: rhs_tolerances must be finite and positive'
+      rhs_cnv = rhs_tolerances(1:nrhs)
+    end if
     mxit = 100; if (present(maxit)) mxit = maxit
+    use_minres = .false.; if (present(minres_solver)) use_minres = minres_solver
     if (mxit < ltot + 5) mxit = ltot + 5
+    if (present(initial_guess)) then
+      if (.not. use_minres) error stop &
+        'cphf_solve_rohf: initial_guess currently requires MINRES'
+      if (size(initial_guess,1) /= ltot .or. &
+          size(initial_guess,2) < nrhs) error stop &
+        'cphf_solve_rohf: initial_guess has inconsistent dimensions'
+      if (.not. all(ieee_is_finite(initial_guess(:,1:nrhs)))) error stop &
+        'cphf_solve_rohf: initial_guess contains non-finite values'
+    end if
+    if (present(converged)) then
+      if (size(converged) < nrhs) error stop &
+        'cphf_solve_rohf: converged output is smaller than nrhs'
+      converged(1:nrhs) = .false.
+    end if
+    if (present(residual)) then
+      if (size(residual) < nrhs) error stop &
+        'cphf_solve_rohf: residual output is smaller than nrhs'
+      residual(1:nrhs) = huge(1.0_dp)
+    end if
+    if (present(initial_residual)) then
+      if (size(initial_residual) < nrhs) error stop &
+        'cphf_solve_rohf: initial_residual output is smaller than nrhs'
+      initial_residual(1:nrhs) = huge(1.0_dp)
+    end if
+    if (present(iterations)) then
+      if (size(iterations) < nrhs) error stop &
+        'cphf_solve_rohf: iterations output is smaller than nrhs'
+      iterations(1:nrhs) = 0
+    end if
+    if (present(initial_guess_accepted)) then
+      if (size(initial_guess_accepted) < nrhs) error stop &
+        'cphf_solve_rohf: initial_guess_accepted output is smaller than nrhs'
+      initial_guess_accepted(1:nrhs) = .false.
+    end if
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
     call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     ! converged spin Fock matrices in the MO basis (FULL matrices; the operator
     ! needs the off-diagonal vir-occ blocks for the non-canonical commutator)
     allocate(famo(nbf,nbf), fbmo(nbf,nbf))
-    allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf))
+    allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf), ax(ltot))
+    allocate(xa_work(nvira,nocca), xb_work(nvirb,noccb), &
+             x2a_work(nvira,nocca), x2b_work(nvirb,noccb), &
+             v_work(nbf,nbf), kmat_work(nbf,nbf), &
+             dm_tri_work(nbf2,2), pfock_work(nbf2,2))
+    if (use_minres) then
+      allocate(xa_batch(nvira,nocca,nrhs), xb_batch(nvirb,noccb,nrhs), &
+               x2a_batch(nvira,nocca,nrhs), x2b_batch(nvirb,noccb,nrhs), &
+               work2_batch(nbf,nbf,nrhs), work3_batch(nbf,nbf,nrhs), &
+               dxa_batch(nbf,nbf,nrhs), dxb_batch(nbf,nbf,nrhs), &
+               fxa_batch(nbf,nbf,nrhs), fxb_batch(nbf,nbf,nrhs), &
+               kmat_batch(nbf,nbf,nrhs), dm_tri_batch(nbf2,2*nrhs), &
+               pfock_batch(nbf2,2*nrhs), xvec_batch(ltot,nrhs), &
+               ax_batch(ltot,nrhs), active_rhs(nrhs), &
+               minres_batch(nrhs))
+    end if
     call unpack_matrix(focka, fao)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
     call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, famo, nbf)
@@ -965,6 +1108,32 @@ contains
     cgdata%mo => mo
     cgdata%famo => famo; cgdata%fbmo => fbmo
     cgdata%xminv => xminv
+    cgdata%xa_work => xa_work; cgdata%xb_work => xb_work
+    cgdata%x2a_work => x2a_work; cgdata%x2b_work => x2b_work
+    ! fao/w2/w3 are dead after the two converged-Fock transforms above, so
+    ! recycle them as callback matrices instead of retaining three idle nbf^2
+    ! buffers alongside a second set of equally-sized scratch arrays.
+    cgdata%dm_work => fao
+    cgdata%work2 => w2; cgdata%work3 => w3
+    cgdata%v_work => v_work; cgdata%kmat_work => kmat_work
+    cgdata%dm_tri_work => dm_tri_work; cgdata%pfock_work => pfock_work
+    if (use_minres) then
+      call int2_driver_batch%init(basis, infos)
+      call int2_driver_batch%set_screening()
+      allocate(int2_data_batch, source=int2_urohf_data_t( &
+               nfocks=2*nrhs, d=dm_tri_batch, &
+               scale_exchange=scale_exch, scale_coulomb=1.0_dp))
+      cgdata%int2_driver => int2_driver_batch
+      cgdata%int2_data => int2_data_batch
+      if (dft) cgdata%xc_consumer => xc_consumer
+      cgdata%xa_batch => xa_batch; cgdata%xb_batch => xb_batch
+      cgdata%x2a_batch => x2a_batch; cgdata%x2b_batch => x2b_batch
+      cgdata%work2_batch => work2_batch; cgdata%work3_batch => work3_batch
+      cgdata%dxa_batch => dxa_batch; cgdata%dxb_batch => dxb_batch
+      cgdata%fxa_batch => fxa_batch; cgdata%fxb_batch => fxb_batch
+      cgdata%kmat_batch => kmat_batch
+      cgdata%dm_tri_batch => dm_tri_batch; cgdata%pfock_batch => pfock_batch
+    end if
     cgdata%nbf = nbf
     cgdata%nocca = nocca; cgdata%noccb = noccb
     cgdata%nvira = nvira; cgdata%nvirb = nvirb
@@ -974,43 +1143,195 @@ contains
 
     if (infos%control%verbose >= 1) then
       write(iw,'(/3x,60("-"))')
-      write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+      if (use_minres) then
+        write(iw,'(6x,"open-shell (ROHF) adjoint Z-vector solver")')
+      else
+        write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
+      end if
       write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
       write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+      if (present(rhs_tolerances)) &
+        write(iw,'(6x,"per-RHS tolerance range =",1P,E10.3," ... ",E10.3)') &
+          minval(rhs_cnv), maxval(rhs_cnv)
       write(iw,'(3x,60("-"))')
     end if
+
     iter_min = huge(iter_min)
     iter_max = 0
     nconv = 0
 
-    do irhs = 1, nrhs
-      call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
-                    dat=cgdata, tol=sqrt(abs(cnv)))
-      do iter = 1, mxit
-        if (pcg%errcode /= PCG_OK) exit
-        call pcg%step()
+    if (use_minres) then
+      ! Keep one scalar Paige-Saunders recurrence per RHS, but synchronize the
+      ! expensive Hessian actions.  This is deliberately not block MINRES:
+      ! there is no block orthogonalization, rank decision, or coupled stopping
+      ! criterion that could change the solutions near a reference instability.
+      if (present(initial_guess)) then
+        ! Evaluate all H*z0 products in one shared ERI/XC traversal.  Supplying
+        ! ax0 to MINRES avoids repeating the same expensive action once per
+        ! state pair during recurrence initialization.
+        call cphf_apbx_rohf_batch(ax_batch(:,1:nrhs), &
+                                  initial_guess(:,1:nrhs), cgdata)
+      end if
+      do irhs = 1, nrhs
+        ! An orbital Hessian is symmetric but need not be positive definite
+        ! near a reference instability.  Pair-adjoint Z vectors therefore use
+        ! MINRES, while ordinary forward CPHF keeps the historical PCG default.
+        ! Use half the requested residual norm in the recurrence, then certify
+        ! the returned vector with the true unpreconditioned residual below.
+        if (present(initial_guess)) then
+          residual_sq = sum((bvec(:,irhs)-ax_batch(:,irhs))**2)
+          if (present(initial_residual)) &
+            initial_residual(irhs) = residual_sq
+          if (ieee_is_finite(residual_sq) .and. &
+              residual_sq < sum(bvec(:,irhs)**2)) then
+            if (present(initial_guess_accepted)) &
+              initial_guess_accepted(irhs) = .true.
+            call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                             update=cphf_apbx_rohf, &
+                             precond=cphf_precond_rohf_minres, dat=cgdata, &
+                             x0=initial_guess(:,irhs), &
+                             ax0=ax_batch(:,irhs), &
+                             tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
+          else
+            call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                             update=cphf_apbx_rohf, &
+                             precond=cphf_precond_rohf_minres, dat=cgdata, &
+                             tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
+          end if
+        else
+          if (present(initial_residual)) &
+            initial_residual(irhs) = sum(bvec(:,irhs)**2)
+          call minres_batch(irhs)%init(b=bvec(:,irhs), &
+                           update=cphf_apbx_rohf, &
+                           precond=cphf_precond_rohf_minres, dat=cgdata, &
+                           tol=0.5_dp*sqrt(abs(rhs_cnv(irhs))))
+        end if
       end do
-      iter_min = min(iter_min, iter - 1)
-      iter_max = max(iter_max, iter - 1)
-      if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
-      if (infos%control%verbose >= 2) &
-        write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
-              irhs, iter - 1, pcg%error**2
-      call flush(iw)
-      uvec(:,irhs) = pcg%x
-      call pcg%clean()
-    end do
+
+      do iter = 1, mxit
+        nactive = 0
+        do irhs = 1, nrhs
+          if (minres_batch(irhs)%errcode /= MINRES_OK) cycle
+          call minres_batch(irhs)%prepare_step(ready)
+          if (.not. ready) cycle
+          nactive = nactive + 1
+          active_rhs(nactive) = irhs
+          xvec_batch(:,nactive) = minres_batch(irhs)%v
+        end do
+        if (nactive == 0) exit
+        call cphf_apbx_rohf_batch(ax_batch(:,1:nactive), &
+                                  xvec_batch(:,1:nactive), cgdata)
+        do ia = 1, nactive
+          irhs = active_rhs(ia)
+          minres_batch(irhs)%av = ax_batch(:,ia)
+          call minres_batch(irhs)%finish_step()
+        end do
+      end do
+
+      ! Publish every independent solution before strict residual certification.
+      do irhs = 1, nrhs
+        if (allocated(minres_batch(irhs)%x)) then
+          uvec(:,irhs) = minres_batch(irhs)%x
+        else
+          uvec(:,irhs) = 0.0_dp
+        end if
+      end do
+
+      do irhs = 1, nrhs
+        if (allocated(minres_batch(irhs)%x)) then
+          ! Krylov iterations deliberately use the conservative multi-density
+          ! screening envelope.  Certify one RHS at a time so each reported
+          ! residual retains its own scalar screening bound, while reusing the
+          ! persistent integral driver and batch workspaces owned by this
+          ! solve.  A one-column call cannot inherit another RHS's density
+          ! envelope and avoids rebuilding immutable integral-driver state.
+          call cphf_apbx_rohf_batch(ax_batch(:,1:1), &
+                                    uvec(:,irhs:irhs), cgdata)
+          residual_norm = norm2(bvec(:,irhs) - ax_batch(:,1))
+        else
+          residual_norm = huge(1.0_dp)
+        end if
+        ! The public residual convention is squared.  Square only after a
+        ! finite overflow check so an initialization/breakdown failure remains
+        ! a clean fail-closed HUGE value even with floating-point traps enabled.
+        residual_sq = huge(1.0_dp)
+        if (ieee_is_finite(residual_norm)) then
+          if (residual_norm == 0.0_dp) then
+            residual_sq = 0.0_dp
+          else if (residual_norm > 0.0_dp) then
+            if (residual_norm <= huge(1.0_dp)/residual_norm) then
+              residual_sq = residual_norm*residual_norm
+            end if
+          end if
+        end if
+        solved = (minres_batch(irhs)%errcode == MINRES_CONVERGED .or. &
+                  minres_batch(irhs)%errcode == MINRES_OK) .and. &
+                 residual_norm <= sqrt(abs(rhs_cnv(irhs)))
+        iter_min = min(iter_min, minres_batch(irhs)%iter)
+        iter_max = max(iter_max, minres_batch(irhs)%iter)
+        if (solved) nconv = nconv + 1
+        if (infos%control%verbose >= 2) &
+          write(iw,'(" ROHF Z-VECTOR MINRES RHS",I5," stopped after",I5," iterations; status=",I3,"; true error=",1P,E10.3)') &
+                 irhs, minres_batch(irhs)%iter, &
+                 int(minres_batch(irhs)%errcode), residual_sq
+        call flush(iw)
+        if (present(converged)) converged(irhs) = solved
+        if (present(residual)) residual(irhs) = residual_sq
+        if (present(iterations)) iterations(irhs) = minres_batch(irhs)%iter
+        call minres_batch(irhs)%clean()
+      end do
+    else
+      do irhs = 1, nrhs
+        call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
+                      dat=cgdata, tol=sqrt(abs(rhs_cnv(irhs))))
+        do iter = 1, mxit
+          if (pcg%errcode /= PCG_OK) exit
+          call pcg%step()
+        end do
+        iter_min = min(iter_min, iter - 1)
+        iter_max = max(iter_max, iter - 1)
+        if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
+        if (infos%control%verbose >= 2) &
+          write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
+                irhs, iter - 1, pcg%error**2
+        call flush(iw)
+        uvec(:,irhs) = pcg%x
+        if (present(converged)) converged(irhs) = pcg%errcode == PCG_CONVERGED
+        if (present(residual)) residual(irhs) = pcg%error**2
+        call pcg%clean()
+      end do
+    end if
 
     if (infos%control%verbose >= 1 .and. nrhs > 0) &
       write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
             nconv, nrhs, iter_min, iter_max
-    if (nconv < nrhs) write(iw,'(6x,"WARNING: ROHF CPHF did not converge for",I5," of",I5," right-hand sides")') &
+    if (nconv < nrhs) write(iw,'(6x,"WARNING: ROHF response did not converge for",I5," of",I5," right-hand sides")') &
             nrhs - nconv, nrhs
-    ! Analytic open-shell Hessians write this unit through the captured fort.6
-    ! file; flush so the summary is there when the capture is read.
     call flush(iw)
 
-    deallocate(famo, fbmo, xminv, fao, w2, w3)
+    ! dft_initialize owns process-global XC work arrays.  Leaving them live
+    ! here makes a second CPHF solve in the same process reuse stale grid state
+    ! (and, in practice, changes an identical solution).  Every other OpenQP
+    ! response driver brackets the grid lifecycle explicitly; do the same for
+    ! the reusable ROHF solver.
+    if (dft) call dftclean(infos)
+
+    if (use_minres) then
+      if (dft) call xc_consumer%clean()
+      call int2_data_batch%clean()
+      deallocate(int2_data_batch)
+      call int2_driver_batch%clean()
+    end if
+
+    deallocate(famo, fbmo, xminv, fao, w2, w3, ax, rhs_cnv)
+    deallocate(xa_work, xb_work, x2a_work, x2b_work, v_work, kmat_work, &
+               dm_tri_work, pfock_work)
+    if (use_minres) then
+      deallocate(xa_batch, xb_batch, x2a_batch, x2b_batch, work2_batch, &
+                 work3_batch, dxa_batch, dxb_batch, fxa_batch, fxb_batch, &
+                 kmat_batch, dm_tri_batch, pfock_batch, xvec_batch, &
+                 ax_batch, active_rhs, minres_batch)
+    end if
   end subroutine cphf_solve_rohf
 
 !###############################################################################
@@ -1024,20 +1345,25 @@ contains
     type(c_ptr) :: dat
     type(cphf_cg_data_rohf), pointer :: p
 
-    real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
-    real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
-    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:), kmat(:,:), ck(:,:)
-    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, i, j, a, s
+    real(kind=dp), contiguous, pointer :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
+    real(kind=dp), contiguous, pointer :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
+    real(kind=dp), contiguous, pointer :: dm_tri(:,:), pfock(:,:), kmat(:,:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, offset, i, j, a, s
 
     call c_f_pointer(dat, p)
-    nbf = p%nbf; nbf2 = nbf*(nbf+1)/2
+    nbf = p%nbf
     nocca = p%nocca; noccb = p%noccb; nvira = p%nvira; nvirb = p%nvirb
     offset = p%offset
 
-    allocate(xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb))
-    allocate(work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), v(nbf,nbf))
-    allocate(kmat(nbf,nbf), ck(nbf,nbf))
-    allocate(dm_tri(nbf2,2), pfock(nbf2,2), source=0.0_dp)
+    xa => p%xa_work; xb => p%xb_work
+    x2a => p%x2a_work; x2b => p%x2b_work
+    work2 => p%work2; work3 => p%work3
+    dm => p%dm_work; v => p%v_work; kmat => p%kmat_work
+    dm_tri => p%dm_tri_work; pfock => p%pfock_work
+    ! get_response_packed accumulates into its packed output.  Allocation used
+    ! to provide this zero implicitly on every callback; make it explicit now
+    ! that the storage is persistent.
+    pfock = 0.0_dp
 
     call rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
 
@@ -1059,12 +1385,19 @@ contains
         kmat(j, noccb+s) = kmat(j, noccb+s) - xb(s,j)
       end do
     end do
-    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%famo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%famo, nbf, 1.0_dp, ck, nbf)
-    x2a = ck(nocca+1:nbf, 1:nocca)
-    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%fbmo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%fbmo, nbf, 1.0_dp, ck, nbf)
-    x2b = ck(noccb+1:nbf, 1:noccb)
+    ! Only the virtual-occupied block of [F,K] enters the ROHF packing.
+    ! Form that rectangular block directly instead of materializing four full
+    ! nbf-by-nbf products and then discarding most of each result.
+    call dgemm('n','n', nvira, nocca, nbf,  1.0_dp, &
+               p%famo(nocca+1,1), nbf, kmat, nbf, 0.0_dp, x2a, nvira)
+    call dgemm('n','n', nvira, nocca, nbf, -1.0_dp, &
+               kmat(nocca+1,1), nbf, p%famo, nbf, 1.0_dp, x2a, nvira)
+    if (noccb > 0) then
+      call dgemm('n','n', nvirb, noccb, nbf,  1.0_dp, &
+                 p%fbmo(noccb+1,1), nbf, kmat, nbf, 0.0_dp, x2b, nvirb)
+      call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
+                 kmat(noccb+1,1), nbf, p%fbmo, nbf, 1.0_dp, x2b, nvirb)
+    end if
 
     ! orbital-rotation density (alpha):  dm = Cv xa Co^T + (Cv xa Co^T)^T
     work2 = 0.0_dp
@@ -1077,34 +1410,219 @@ contains
     end do
     call pack_matrix(dm, dm_tri(:,1))
     ! beta
-    work2 = 0.0_dp
-    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, p%mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, work2, nbf)
-    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, work2, nbf, p%mo(:,1:noccb), nbf, 0.0_dp, work3, nbf)
-    do i = 1, nbf
-      do j = 1, nbf
-        dm(i,j) = work3(i,j) + work3(j,i)
+    if (noccb > 0) then
+      work2 = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 p%mo(:,noccb+1:nbf), nbf, xb, nvirb, &
+                 0.0_dp, work2, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, work2, nbf, &
+                 p%mo(:,1:noccb), nbf, 0.0_dp, work3, nbf)
+      do i = 1, nbf
+        do j = 1, nbf
+          dm(i,j) = work3(i,j) + work3(j,i)
+        end do
       end do
-    end do
+    else
+      dm = 0.0_dp
+    end if
     call pack_matrix(dm, dm_tri(:,2))
 
     ! response Fock from the trial density (open-shell: J[dPa+dPb] - cx K[dP^s])
     call get_response_packed(p%basis, p%infos, p%molgrid, p%mo, dm_tri, pfock, p%mo)
 
-    ! add the MO vir-occ block of the response Fock (alpha)
+    ! Add only the MO virtual-occupied block of the response Fock.  Computing
+    ! Cv^T V Co directly avoids the two full nbf-by-nbf output transforms per
+    ! spin that were immediately sliced down to this rectangular block.
     call unpack_matrix(pfock(:,1), v)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
-    x2a = x2a + work3(nocca+1:nbf, 1:nocca)
+    call dgemm('n','n', nbf, nocca, nbf, 1.0_dp, v, nbf, &
+               p%mo, nbf, 0.0_dp, work2, nbf)
+    call dgemm('t','n', nvira, nocca, nbf, 1.0_dp, &
+               p%mo(1,nocca+1), nbf, work2, nbf, 1.0_dp, x2a, nvira)
     ! beta
-    call unpack_matrix(pfock(:,2), v)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
-    x2b = x2b + work3(noccb+1:nbf, 1:noccb)
+    if (noccb > 0) then
+      call unpack_matrix(pfock(:,2), v)
+      call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, v, nbf, &
+                 p%mo, nbf, 0.0_dp, work2, nbf)
+      call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
+                 p%mo(1,noccb+1), nbf, work2, nbf, 1.0_dp, x2b, nvirb)
+    end if
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
-    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat, ck)
   end subroutine cphf_apbx_rohf
+
+!###############################################################################
+
+!> @brief Apply the ROHF Hessian to several independent trial vectors.
+!>
+!> Algebra and per-vector accumulation order match `cphf_apbx_rohf`; only the
+!> expensive ERI and XC grid traversals are shared.  Spin columns are laid out
+!> `[alpha_1,beta_1,alpha_2,beta_2,...]` for the generalized unrestricted Fock
+!> consumer, while `utddft_fxc` uses its native `nMtx` axis.
+  subroutine cphf_apbx_rohf_batch(y, x, p)
+    use mathlib, only: pack_matrix, unpack_matrix
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    real(kind=dp), intent(out) :: y(:,:)
+    real(kind=dp), intent(in) :: x(:,:)
+    type(cphf_cg_data_rohf), intent(inout) :: p
+
+    integer :: nbf, nocca, noccb, nvira, nvirb, offset, nvec
+    integer :: ivec, i, j, a, s, ca, cb, nf, ii
+
+    nbf = p%nbf
+    nocca = p%nocca; noccb = p%noccb
+    nvira = p%nvira; nvirb = p%nvirb; offset = p%offset
+    nvec = size(x,2)
+    if (size(x,1) /= p%ltot .or. size(y,1) /= p%ltot .or. &
+        size(y,2) /= nvec) &
+      error stop 'cphf_apbx_rohf_batch: inconsistent vector dimensions'
+    if (nvec < 1 .or. nvec > size(p%xa_batch,3)) &
+      error stop 'cphf_apbx_rohf_batch: workspace is smaller than batch'
+
+    p%dm_tri_batch(:,1:2*nvec) = 0.0_dp
+    p%pfock_batch(:,1:2*nvec) = 0.0_dp
+
+    do ivec = 1, nvec
+      call rohf_unpack_trial(x(:,ivec), p%xa_batch(:,:,ivec), &
+                             p%xb_batch(:,:,ivec), nbf, nocca, noccb)
+
+      p%kmat_batch(:,:,ivec) = 0.0_dp
+      do i = 1, nocca
+        do a = 1, nvira
+          p%kmat_batch(nocca+a,i,ivec) = p%xa_batch(a,i,ivec)
+          p%kmat_batch(i,nocca+a,ivec) = -p%xa_batch(a,i,ivec)
+        end do
+      end do
+      do j = 1, noccb
+        do s = 1, offset
+          p%kmat_batch(noccb+s,j,ivec) = &
+            p%kmat_batch(noccb+s,j,ivec) + p%xb_batch(s,j,ivec)
+          p%kmat_batch(j,noccb+s,ivec) = &
+            p%kmat_batch(j,noccb+s,ivec) - p%xb_batch(s,j,ivec)
+        end do
+      end do
+
+      call dgemm('n','n', nvira, nocca, nbf, 1.0_dp, &
+                 p%famo(nocca+1,1), nbf, p%kmat_batch(1,1,ivec), nbf, &
+                 0.0_dp, p%x2a_batch(1,1,ivec), nvira)
+      call dgemm('n','n', nvira, nocca, nbf, -1.0_dp, &
+                 p%kmat_batch(nocca+1,1,ivec), nbf, p%famo, nbf, &
+                 1.0_dp, p%x2a_batch(1,1,ivec), nvira)
+      if (noccb > 0) then
+        call dgemm('n','n', nvirb, noccb, nbf, 1.0_dp, &
+                   p%fbmo(noccb+1,1), nbf, &
+                   p%kmat_batch(1,1,ivec), nbf, &
+                   0.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+        call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
+                   p%kmat_batch(noccb+1,1,ivec), nbf, p%fbmo, nbf, &
+                   1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      end if
+
+      ! Trial alpha density.
+      call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
+                 p%mo(1,nocca+1), nbf, p%xa_batch(1,1,ivec), nvira, &
+                 0.0_dp, p%work2_batch(1,1,ivec), nbf)
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, &
+                 p%work2_batch(1,1,ivec), nbf, p%mo, nbf, &
+                 0.0_dp, p%work3_batch(1,1,ivec), nbf)
+      do i = 1, nbf
+        do j = 1, nbf
+          p%dxa_batch(i,j,ivec) = p%work3_batch(i,j,ivec) + &
+                                   p%work3_batch(j,i,ivec)
+        end do
+      end do
+
+      ! Trial beta density.
+      if (noccb > 0) then
+        call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                   p%mo(1,noccb+1), nbf, p%xb_batch(1,1,ivec), nvirb, &
+                   0.0_dp, p%work2_batch(1,1,ivec), nbf)
+        call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, &
+                   p%work2_batch(1,1,ivec), nbf, p%mo, nbf, &
+                   0.0_dp, p%work3_batch(1,1,ivec), nbf)
+        do i = 1, nbf
+          do j = 1, nbf
+            p%dxb_batch(i,j,ivec) = p%work3_batch(i,j,ivec) + &
+                                     p%work3_batch(j,i,ivec)
+          end do
+        end do
+      else
+        p%dxb_batch(:,:,ivec) = 0.0_dp
+      end if
+
+      ca = 2*ivec - 1; cb = ca + 1
+      call pack_matrix(p%dxa_batch(:,:,ivec), p%dm_tri_batch(:,ca))
+      call pack_matrix(p%dxb_batch(:,:,ivec), p%dm_tri_batch(:,cb))
+    end do
+
+    ! The generalized unrestricted consumer evaluates each adjacent spin pair
+    ! independently while integral generation/screening happens only once.
+    ! Its driver owns basis-pair and Schwarz data for the full solve, avoiding
+    ! repeated setup of those immutable structures at every Krylov step.
+    ! int2 screening takes the maximum shell density over all supplied columns,
+    ! so batching is conservative relative to separate scalar builds: it can
+    ! retain extra cutoff-level quartets, but cannot screen a quartet needed by
+    ! any member.  The certified true residual remains the numerical gate.
+    select type (idata => p%int2_data)
+    type is (int2_urohf_data_t)
+      idata%d => p%dm_tri_batch(:,1:2*nvec)
+      idata%scale_exchange = p%scale_exch
+      idata%scale_coulomb = 1.0_dp
+      call p%int2_driver%run(idata, &
+           cam=p%dft.and.p%infos%dft%cam_flag, &
+           alpha=p%infos%dft%cam_alpha, beta=p%infos%dft%cam_beta, &
+           mu=p%infos%dft%cam_mu)
+      p%pfock_batch(:,1:2*nvec) = 0.5_dp*idata%f(:,1:2*nvec,1)
+    class default
+      error stop 'cphf_apbx_rohf_batch: invalid unrestricted Fock consumer'
+    end select
+    do nf = 1, 2*nvec
+      ii = 0
+      do i = 1, nbf
+        ii = ii + i
+        p%pfock_batch(ii,nf) = 2.0_dp*p%pfock_batch(ii,nf)
+      end do
+    end do
+    do ivec = 1, nvec
+      ca = 2*ivec - 1; cb = ca + 1
+      call unpack_matrix(p%pfock_batch(:,ca), p%fxa_batch(:,:,ivec))
+      call unpack_matrix(p%pfock_batch(:,cb), p%fxb_batch(:,:,ivec))
+    end do
+
+    if (p%dft) then
+      ! Reuse the consumer while the active MINRES width is unchanged.  When
+      ! independent recurrences converge and nvec shrinks, parallel_start
+      ! resizes the workspace once for that new width; subsequent Hessian
+      ! actions at the same width reuse it without computing inactive columns.
+      if (.not. associated(p%xc_consumer)) &
+        error stop 'cphf_apbx_rohf_batch: missing XC consumer workspace'
+      call utddft_fxc(basis=p%basis, molGrid=p%molgrid, isVecs=.true., &
+           wfa=p%mo, wfb=p%mo, fxa=p%fxa_batch(:,:,1:nvec), &
+           fxb=p%fxb_batch(:,:,1:nvec), dxa=p%dxa_batch(:,:,1:nvec), &
+           dxb=p%dxb_batch(:,:,1:nvec), nMtx=nvec, threshold=0.0_dp, &
+           infos=p%infos, consumer=p%xc_consumer)
+    end if
+
+    do ivec = 1, nvec
+      call dgemm('n','n', nbf, nocca, nbf, 1.0_dp, &
+                 p%fxa_batch(1,1,ivec), nbf, p%mo, nbf, &
+                 0.0_dp, p%work2_batch(1,1,ivec), nbf)
+      call dgemm('t','n', nvira, nocca, nbf, 1.0_dp, &
+                 p%mo(1,nocca+1), nbf, p%work2_batch(1,1,ivec), nbf, &
+                 1.0_dp, p%x2a_batch(1,1,ivec), nvira)
+      if (noccb > 0) then
+        call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, &
+                   p%fxb_batch(1,1,ivec), nbf, p%mo, nbf, &
+                   0.0_dp, p%work2_batch(1,1,ivec), nbf)
+        call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
+                   p%mo(1,noccb+1), nbf, &
+                   p%work2_batch(1,1,ivec), nbf, &
+                   1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      end if
+      call rohf_pack_trial(y(:,ivec), p%x2a_batch(:,:,ivec), &
+                           p%x2b_batch(:,:,ivec), nbf, nocca, noccb)
+    end do
+  end subroutine cphf_apbx_rohf_batch
 
 !###############################################################################
 
@@ -1116,6 +1634,23 @@ contains
     call c_f_pointer(dat, p)
     y = p%xminv*x
   end subroutine cphf_precond_rohf
+
+!###############################################################################
+
+!> @brief Positive Jacobi preconditioner for the ROHF MINRES adjoint.
+!>
+!> Preconditioned MINRES permits an indefinite orbital Hessian but requires its
+!> preconditioner to be symmetric positive definite.  The historical PCG path
+!> intentionally retains the signed inverse gaps above; only the state-pair
+!> Z-vector route removes those signs.
+  subroutine cphf_precond_rohf_minres(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_rohf), pointer :: p
+    call c_f_pointer(dat, p)
+    y = abs(p%xminv)*x
+  end subroutine cphf_precond_rohf_minres
 
 !###############################################################################
 
