@@ -70,7 +70,7 @@ jobs:
             Leave a non-blocking review comment with blocking issues, important suggestions,
             and tests that should be run. If no blocking issues are found, say so clearly.
 
-            In addition to correctness/bug review, check the PR against the four
+            In addition to correctness/bug review, check the PR against the
             contribution rules in AGENTS.md (in the repo root) and report each
             explicitly:
               1. Every BLAS/LAPACK routine the PR references is registered in
@@ -93,6 +93,17 @@ jobs:
                  the allowlist cannot make. Also flag a PR whose diff is
                  approaching 20,000 changed lines - past that GitHub returns
                  406 too_large and Codex review silently produces nothing.
+              6. Any code the PR adds or changes that indexes AOs is correct for
+                 a SPHERICAL basis, not only a Cartesian one. grd2 drives
+                 get_density with Cartesian shell extents, and cart/sph differ
+                 from d upwards (5 vs 6) and widen at f (7 vs 10), so indexing
+                 densities or derivative-integral blocks with basis%ao_offset /
+                 basis%naos is silently wrong in a spherical basis and fine in
+                 a Pople one. tools/check_digest_harmonic.py blocks a grd2
+                 digest that never consults HARMONIC_ACTIVE; your job is the
+                 rest - any AO-indexed scatter or contraction, and whether the
+                 PR actually EXERCISES a spherical basis (cc-pVDZ reaches the d
+                 mismatch, cc-pVTZ the f one) rather than only 6-31G/6-31G*.
             For each rule, state PASS, or explain what is missing.
 
       # The review step is continue-on-error so that this step can report the
