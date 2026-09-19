@@ -46,6 +46,16 @@ module tdhf_mrsf_gradient_mod
     real(kind=dp), pointer :: p2(:,:,:) => null()
     real(kind=dp), pointer :: spcI(:,:,:) => null()
     real(kind=dp), pointer :: spcJ(:,:,:) => null()
+    ! Cartesian-effective (bfnrm-folded) copies + offsets for HARMONIC_ACTIVE,
+    ! exactly as grd2_mrsf_compute_data_t above carries them.  grd2 hands the
+    ! digest CARTESIAN shell extents, so with a spherical basis the spherical
+    ! densities cannot be indexed with them.
+    real(kind=dp), allocatable :: d2a_c(:,:), d2b_c(:,:), p2a_c(:,:), p2b_c(:,:)
+    real(kind=dp), allocatable :: ballI_c(:,:), bo2vI_c(:,:), bo1vI_c(:,:), &
+                                  bco1I_c(:,:), bco2I_c(:,:), o21vI_c(:,:), co12I_c(:,:)
+    real(kind=dp), allocatable :: ballJ_c(:,:), bo2vJ_c(:,:), bo1vJ_c(:,:), &
+                                  bco1J_c(:,:), bco2J_c(:,:), o21vJ_c(:,:), co12J_c(:,:)
+    integer, allocatable :: cart_off(:)
     integer :: nbf = 0
     integer :: mrst = 1
     ! Omit the state-independent d2*d2 reference gradient.  The NAC amplitude
@@ -58,6 +68,7 @@ module tdhf_mrsf_gradient_mod
     procedure :: init => grd2_mrsf_nac_compute_data_t_init
     procedure :: clean => grd2_mrsf_nac_compute_data_t_clean
     procedure :: get_density => grd2_mrsf_nac_compute_data_t_get_density
+    procedure :: build_cart => grd2_mrsf_nac_build_cart
   end type
 
 contains
@@ -881,6 +892,43 @@ contains
 
 !###############################################################################
 
+!> @brief Cartesian-effective copies of the NAC digest densities for
+!>   HARMONIC_ACTIVE, the bilinear counterpart of grd2_mrsf_build_cart.
+!>   Call AFTER init.
+!>
+!>   grd2 drives get_density with CARTESIAN shell extents.  Without this the
+!>   digest read its spherical-indexed densities at Cartesian offsets: silent
+!>   for a Cartesian basis, where the two index spaces coincide, and wrong for
+!>   a spherical one -- it broke molecular symmetry from d upwards and ran off
+!>   the end of the array from f upwards.
+  subroutine grd2_mrsf_nac_build_cart(this, basis)
+    class(grd2_mrsf_nac_compute_data_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, allocatable :: od(:)
+    integer :: nc
+    if (.not. HARMONIC_ACTIVE) return
+    call mrsf_cart_one(basis, this%d2(:,:,1), this%d2a_c, this%cart_off, nc)
+    call mrsf_cart_one(basis, this%d2(:,:,2), this%d2b_c, od, nc)
+    call mrsf_cart_one(basis, this%p2(:,:,1), this%p2a_c, od, nc)
+    call mrsf_cart_one(basis, this%p2(:,:,2), this%p2b_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(7,:,:), this%ballI_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(1,:,:), this%bo2vI_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(2,:,:), this%bo1vI_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(3,:,:), this%bco1I_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(4,:,:), this%bco2I_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(5,:,:), this%o21vI_c, od, nc)
+    call mrsf_cart_one(basis, this%spcI(6,:,:), this%co12I_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(7,:,:), this%ballJ_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(1,:,:), this%bo2vJ_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(2,:,:), this%bo1vJ_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(3,:,:), this%bco1J_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(4,:,:), this%bco2J_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(5,:,:), this%o21vJ_c, od, nc)
+    call mrsf_cart_one(basis, this%spcJ(6,:,:), this%co12J_c, od, nc)
+  end subroutine grd2_mrsf_nac_build_cart
+
+!###############################################################################
+
   subroutine grd2_mrsf_nac_compute_data_t_clean(this)
     implicit none
     class(grd2_mrsf_nac_compute_data_t), target, intent(inout) :: this
@@ -909,7 +957,9 @@ contains
     real(kind=dp) :: db1, db2, dc1, dc2, dd1, dd2
     real(kind=dp), pointer, dimension(:,:) :: &
       ballI, bo2vI, bo1vI, bco1I, bco2I, co12I, o21vI, &
-      ballJ, bo2vJ, bo1vJ, bco1J, bco2J, co12J, o21vJ
+      ballJ, bo2vJ, bo1vJ, bco1J, bco2J, co12J, o21vJ, &
+      d2a, d2b, p2a, p2b
+    logical :: usecart
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
@@ -924,22 +974,42 @@ contains
     real(kind=dp) :: sco1I_kl, sco1J_kl, sco2I_kl, sco2J_kl
     real(kind=dp) :: so1vI_kl, so1vJ_kl, so2vI_kl, so2vJ_kl
 
-    ! state-I transition/amplitude channels
-    ballI => this%spcI(7,:,:)
-    bo2vI => this%spcI(1,:,:)
-    bo1vI => this%spcI(2,:,:)
-    bco1I => this%spcI(3,:,:)
-    bco2I => this%spcI(4,:,:)
-    o21vI => this%spcI(5,:,:)
-    co12I => this%spcI(6,:,:)
-    ! state-J transition/amplitude channels
-    ballJ => this%spcJ(7,:,:)
-    bo2vJ => this%spcJ(1,:,:)
-    bo1vJ => this%spcJ(2,:,:)
-    bco1J => this%spcJ(3,:,:)
-    bco2J => this%spcJ(4,:,:)
-    o21vJ => this%spcJ(5,:,:)
-    co12J => this%spcJ(6,:,:)
+    ! grd2 drives this digest with CARTESIAN shell extents.  For a spherical
+    ! basis the densities must therefore be the Cartesian-effective copies
+    ! built by build_cart, addressed at Cartesian offsets -- the same switch
+    ! grd2_mrsf_compute_data_t_get_density makes above.
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      d2a => this%d2a_c;  d2b => this%d2b_c
+      p2a => this%p2a_c;  p2b => this%p2b_c
+      ! state-I transition/amplitude channels
+      ballI => this%ballI_c;  bo2vI => this%bo2vI_c;  bo1vI => this%bo1vI_c
+      bco1I => this%bco1I_c;  bco2I => this%bco2I_c
+      o21vI => this%o21vI_c;  co12I => this%co12I_c
+      ! state-J transition/amplitude channels
+      ballJ => this%ballJ_c;  bo2vJ => this%bo2vJ_c;  bo1vJ => this%bo1vJ_c
+      bco1J => this%bco1J_c;  bco2J => this%bco2J_c
+      o21vJ => this%o21vJ_c;  co12J => this%co12J_c
+    else
+      d2a => this%d2(:,:,1);  d2b => this%d2(:,:,2)
+      p2a => this%p2(:,:,1);  p2b => this%p2(:,:,2)
+      ! state-I transition/amplitude channels
+      ballI => this%spcI(7,:,:)
+      bo2vI => this%spcI(1,:,:)
+      bo1vI => this%spcI(2,:,:)
+      bco1I => this%spcI(3,:,:)
+      bco2I => this%spcI(4,:,:)
+      o21vI => this%spcI(5,:,:)
+      co12I => this%spcI(6,:,:)
+      ! state-J transition/amplitude channels
+      ballJ => this%spcJ(7,:,:)
+      bo2vJ => this%spcJ(1,:,:)
+      bo1vJ => this%spcJ(2,:,:)
+      bco1J => this%spcJ(3,:,:)
+      bco2J => this%spcJ(4,:,:)
+      o21vJ => this%spcJ(5,:,:)
+      co12J => this%spcJ(6,:,:)
+    end if
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
@@ -951,9 +1021,13 @@ contains
     sgnk = 1.0_dp
     if (this%mrst==3) sgnk = -1.0_dp
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-
-    nbf = basis%naos(id)
+    if (usecart) then
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      loc = basis%ao_offset(id)-1
+      nbf = basis%naos(id)
+    end if
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
@@ -968,15 +1042,19 @@ contains
 
     do i = 1, nbf(1)
       i1 = loc(1) + i
-      bfn_i = basis%bfnrm(i1)
+      ! mrsf_cart_one already folded bfnrm into the Cartesian-effective
+      ! copies, so the explicit factors apply to the spherical path only.
+      bfn_i = 1.0_dp
+      if (.not. usecart) bfn_i = basis%bfnrm(i1)
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
-        bfn_ij = bfn_i*basis%bfnrm(j1)
+        bfn_ij = bfn_i
+        if (.not. usecart) bfn_ij = bfn_i*basis%bfnrm(j1)
 
         ! (i1,j1) quantities: invariant in k and l.
-        d2ij1 = this%d2(i1,j1,1)
-        p2ij1 = this%p2(i1,j1,1)
+        d2ij1 = d2a(i1,j1)
+        p2ij1 = p2a(i1,j1)
         if (sub_ref) then
           dij1 = p2ij1
         else
@@ -997,33 +1075,34 @@ contains
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
-          bfn_ijk = bfn_ij*basis%bfnrm(k1)
+          bfn_ijk = bfn_ij
+          if (.not. usecart) bfn_ijk = bfn_ij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
             ! Coulomb + relaxed/reference: reference (d2) state-independent,
             ! relaxed (p2) already the interstate object -> production form.
-            df1 = (dij1*this%d2(k1,l1,1) + d2ij1*this%p2(k1,l1,1))*coulfact
+            df1 = (dij1*d2a(k1,l1) + d2ij1*p2a(k1,l1))*coulfact
 
             if (do_xc) then
               if (sub_ref) then
-                dq1 = this%p2(i1,k1,1)*this%d2(j1,l1,1) &
-                    + this%d2(i1,k1,1)*this%p2(j1,l1,1) &
-                    + this%p2(i1,l1,1)*this%d2(j1,k1,1) &
-                    + this%d2(i1,l1,1)*this%p2(j1,k1,1) &
-                    + this%p2(i1,k1,2)*this%d2(j1,l1,2) &
-                    + this%d2(i1,k1,2)*this%p2(j1,l1,2) &
-                    + this%p2(i1,l1,2)*this%d2(j1,k1,2) &
-                    + this%d2(i1,l1,2)*this%p2(j1,k1,2)
+                dq1 = p2a(i1,k1)*d2a(j1,l1) &
+                    + d2a(i1,k1)*p2a(j1,l1) &
+                    + p2a(i1,l1)*d2a(j1,k1) &
+                    + d2a(i1,l1)*p2a(j1,k1) &
+                    + p2b(i1,k1)*d2b(j1,l1) &
+                    + d2b(i1,k1)*p2b(j1,l1) &
+                    + p2b(i1,l1)*d2b(j1,k1) &
+                    + d2b(i1,l1)*p2b(j1,k1)
               else
-                dq1 = (this%d2(i1,k1,1)+this%p2(i1,k1,1))*this%d2(j1,l1,1) &
-                    +  this%d2(i1,k1,1)                  *this%p2(j1,l1,1) &
-                    + (this%d2(i1,l1,1)+this%p2(i1,l1,1))*this%d2(j1,k1,1) &
-                    +  this%d2(i1,l1,1)                  *this%p2(j1,k1,1) &
-                    + (this%d2(i1,k1,2)+this%p2(i1,k1,2))*this%d2(j1,l1,2) &
-                    +  this%d2(i1,k1,2)                  *this%p2(j1,l1,2) &
-                    + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
-                    +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
+                dq1 = (d2a(i1,k1)+p2a(i1,k1))*d2a(j1,l1) &
+                    +  d2a(i1,k1)                  *p2a(j1,l1) &
+                    + (d2a(i1,l1)+p2a(i1,l1))*d2a(j1,k1) &
+                    +  d2a(i1,l1)                  *p2a(j1,k1) &
+                    + (d2b(i1,k1)+p2b(i1,k1))*d2b(j1,l1) &
+                    +  d2b(i1,k1)                  *p2b(j1,l1) &
+                    + (d2b(i1,l1)+p2b(i1,l1))*d2b(j1,k1) &
+                    +  d2b(i1,l1)                  *p2b(j1,k1)
               end if
               ! channel-7 exchange (ball), symmetrised I<->J. All four groups
               ! carry distinct index patterns, so nothing collapses here.
@@ -1106,7 +1185,11 @@ contains
             ! bfnrm is separable over the four indices; the first three factors
             ! are hoisted, leaving one multiply here instead of building a
             ! four-element temporary and calling product() per iteration.
-            ab(l,k,j,i) = df1*bfn_ijk*basis%bfnrm(l1)
+            if (usecart) then
+              ab(l,k,j,i) = df1
+            else
+              ab(l,k,j,i) = df1*bfn_ijk*basis%bfnrm(l1)
+            end if
           end do
         end do
       end do
@@ -1347,6 +1430,10 @@ contains
                                  infos%tddft%spc_ovov, &
                                  infos%tddft%spc_coov], mrst = mrst )
         call gFull%init()
+        select type (gFull)
+        class is (grd2_mrsf_nac_compute_data_t)
+          call gFull%build_cart(basis)
+        end select
         call grd2_driver(infos, basis, deFull, gFull, &
                          cam = do_cam, alpha = infos%tddft%cam_alpha, &
                          beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
@@ -1919,6 +2006,10 @@ contains
                                                    infos%tddft%spc_coov], &
                                        mrst = mrst )
     call gN%init()
+    select type (gN)
+    class is (grd2_mrsf_nac_compute_data_t)
+      call gN%build_cart(basis)
+    end select
     call grd2_driver(infos, basis, deN, gN, &
                      cam = do_cam, alpha = infos%tddft%cam_alpha, &
                      beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)

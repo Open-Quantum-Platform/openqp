@@ -904,7 +904,7 @@ contains
 
     INTEGER :: ii, jj, c, i, j, gi, gj, B_at, oi, oj
     REAL(kind=dp) :: tol
-    REAL(kind=dp), ALLOCATABLE :: dblk(:,:,:)
+    REAL(kind=dp), ALLOCATABLE :: dblk(:,:,:), sblk(:,:,:)
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
 
@@ -928,17 +928,24 @@ contains
             IF (cntp%numpairs==0) CYCLE
             allocate(dblk(cntp%inao, cntp%jnao, 3), source=0.0d0)
             CALL comp_overlap_der1_block(cntp, dblk)
+            ! comp_overlap_der1_block returns a CARTESIAN block (cntp%inao is
+            ! NUM_CART_BF), while ao_offset/nbf count the shell's ACTUAL AOs.
+            ! For a pure shell those differ from f upwards (10 vs 7), so the
+            ! block must be reduced before it is scattered, exactly as in
+            ! der_overlap_matrix above.  Scattering the raw Cartesian block
+            ! wrote 10 columns into a 7-wide slot and past the end of dSket.
+            CALL reduce_der1_shell_block(basis, ii, jj, dblk, sblk)
             DO c = 1, 3
-                DO i = 1, cntp%inao
+                DO i = 1, basis%naos(ii)
                     gi = oi + i
-                    DO j = 1, cntp%jnao
+                    DO j = 1, basis%naos(jj)
                         gj = oj + j
                         ! ket-center derivative: <chi_i | d_{B_at} chi_j> = -dblk
-                        dSket(gi, gj, c, B_at) = dSket(gi, gj, c, B_at) - dblk(i,j,c)
+                        dSket(gi, gj, c, B_at) = dSket(gi, gj, c, B_at) - sblk(i,j,c)
                     END DO
                 END DO
             END DO
-            deallocate(dblk)
+            deallocate(dblk, sblk)
         END DO
     END DO
  END SUBROUTINE
