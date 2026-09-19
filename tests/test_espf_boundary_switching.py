@@ -88,7 +88,7 @@ def test_a_user_override_installed_between_runs_still_wins(monkeypatch):
 
 
 def test_the_two_widths_are_the_documented_ones():
-    """docs/espf_qmmm_switching.md and the native default must agree with these."""
+    """openqp-devkit docs/espf_qmmm_switching.md and the native default must agree with these."""
     assert SWSCALE_WHOLE_MOLECULE == pytest.approx(1.8)
     assert SWSCALE_COVALENT_BOUNDARY == pytest.approx(1.5)
 

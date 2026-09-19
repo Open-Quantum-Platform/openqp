@@ -7426,7 +7426,7 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
         if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
             # The legacy split scheme routes the QM charges through OpenMM
             # point charges; under PBC its force is not the derivative of
-            # its energy (docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # its energy (openqp-devkit docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
             # so a periodic trajectory must use the full-ESPF scheme.
             report.add(
                 "ERROR",

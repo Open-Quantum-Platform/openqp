@@ -1167,7 +1167,7 @@ module qmmm_mod
     ! ESPF_SWSCALE=1.5 cuts that residual 5-13x on both measured link-atom
     ! systems, while being ~20% worse without a cut bond.  Not a safe global
     ! default, so it is documented rather than changed -- see
-    ! docs/espf_qmmm_switching.md and issue #260.
+    ! openqp-devkit docs/espf_qmmm_switching.md and issue #260.
     sw_scale = 1.8_dp
     call get_environment_variable('ESPF_SWSCALE', envv, status=status)
     if (status == 0) then
