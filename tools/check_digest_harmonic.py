@@ -61,7 +61,7 @@ def _procedure_body(text, name):
 
 
 def _derived_types(root):
-    """Every type transitively deriving from BASE, as name -> record.
+    """Every declaration of a type transitively deriving from BASE.
 
     A digest that extends an intermediate subtype rather than BASE itself is
     still a digest. hf_gradient.F90 has exactly that shape -- an abstract
@@ -69,6 +69,10 @@ def _derived_types(root):
     binding its own get_density -- and matching only the literal base name left
     both of them unexamined.
     """
+    # A name may legitimately appear more than once across the tree, so keep
+    # every declaration rather than letting the last one seen win. A silently
+    # shadowed record would make this gate examine the wrong procedure body,
+    # which is the exact class of failure it exists to prevent.
     found = {}
     for path in sorted(pathlib.Path(root).rglob("*.F90")):
         text = path.read_text(errors="replace")
@@ -77,31 +81,35 @@ def _derived_types(root):
             parent = EXTENDS_RE.search(attrs)
             if parent is None:
                 continue
-            name = match.group("name").lower()
-            found[name] = {
+            found.setdefault(match.group("name").lower(), []).append({
                 "name": match.group("name"),
                 "parent": parent.group("parent").lower(),
                 "abstract": "abstract" in attrs.lower(),
                 "path": path,
                 "text": text,
                 "start": match.start(),
-            }
+            })
 
     derived, changed = {BASE.lower()}, True
     while changed:
         changed = False
-        for name, record in found.items():
-            if name not in derived and record["parent"] in derived:
+        for name, records in found.items():
+            if name in derived:
+                continue
+            if any(r["parent"] in derived for r in records):
                 derived.add(name)
                 changed = True
-    return {n: r for n, r in found.items() if n in derived}
+    return [r for name, records in found.items() if name in derived
+            for r in records]
 
 
 def check(root):
     root = pathlib.Path(root)
     failures = []
     checked = 0
-    for name, record in sorted(_derived_types(root).items()):
+    records = sorted(_derived_types(root),
+                     key=lambda r: (str(r["path"]), r["start"]))
+    for record in records:
         if record["abstract"]:
             continue
         block = _type_block(record["text"], record["start"])
