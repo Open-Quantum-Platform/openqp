@@ -538,7 +538,7 @@ They optimize the weighted state-average objective over the requested roots.
   weighted objective is not a state.  A `[properties] grad` entry that
   disagrees with `gradient_state` is an error rather than a silent redirect.
   Ignored by a state-specific run, which publishes one state.
-  See `docs/sa_casscf_gradients.md`.
+  See `openqp-devkit docs/sa_casscf_gradients.md`.
 
 - zvector_tol // conditioning of the individual-state Z-vector solve
 

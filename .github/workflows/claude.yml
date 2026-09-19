@@ -50,6 +50,17 @@ jobs:
           # installation is linked.
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Without this the action runs in "agent" mode, because a `prompt` is
+          # supplied. Agent mode installs the github_comment MCP server only when
+          # claude_args names its tools explicitly, so with no claude_args Claude
+          # has no way to post anything: run 35342108357 on #405 produced a
+          # complete review, hit permission_denials_count: 10, dropped the review
+          # and still exited 0, so the gate below reported success while no
+          # comment existed. track_progress forces tag mode for pull_request
+          # events, which creates a tracking comment and allows
+          # mcp__github_comment__update_claude_comment. The `prompt` below is
+          # preserved - tag mode appends it as <custom_instructions>.
+          track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -74,6 +85,14 @@ jobs:
                  pyoqp/oqp/openqp.py and a test in tests/test_openqp_api.py.
               4. New user-facing keywords/workflows are documented in openqp-docs
                  (a linked openqp-docs PR).
+              5. Nothing in the PR is development material that belongs in
+                 openqp-devkit: derivations, validation harnesses, design or
+                 performance notes, one-off diagnostics, or tests that merely
+                 mirror a development-time gate script. tools/check_repo_layout.py
+                 blocks the obvious cases by allowlist; your job is the judgment
+                 the allowlist cannot make. Also flag a PR whose diff is
+                 approaching 20,000 changed lines - past that GitHub returns
+                 406 too_large and Codex review silently produces nothing.
             For each rule, state PASS, or explain what is missing.
 
       # The review step is continue-on-error so that this step can report the
