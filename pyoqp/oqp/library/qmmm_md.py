@@ -6,6 +6,9 @@ import os
 import time
 from copy import deepcopy
 import sys
+from oqp.library.qmmm_active import (
+    freeze_constrained_partners, held_atoms, resolve_active_set,
+    selection_requested)
 from oqp.library.qmmm_driver import OpenQpQMMM, read_xyz, is_periodic_method
 
 
@@ -291,7 +294,11 @@ class QMMM_MD:
         if pdb_file is None:
             raise ValueError("'qmmm.pdb_file' is required in the configuration.")
 
+        self._pdb_path = pdb_file
         self.pdb = app.PDBFile(pdb_file)
+        # [qmmm] active_atoms / frozen_atoms / active_radius / active_from_pdb.
+        # Resolved in _build_md_system, once the OpenMM system exists.
+        self._selection_cfg = qmmm_cfg
 
         ff_files = _parse_str_list(qmmm_cfg.get("forcefield_files", ""))
         if not ff_files:
@@ -468,6 +475,40 @@ class QMMM_MD:
         )
         self.mm_systems = self.oqp_driver.mm_systems
 
+    def _resolve_frozen_atoms(self):
+        """The atoms OpenMM holds fixed for this run, from the ``[qmmm]``
+        selection keys (see ``oqp.library.qmmm_active`` for the syntax).
+
+        Empty when the deck asks for nothing, so an existing run propagates
+        every atom as it always did.  A rigid-water constraint may not tie a
+        moving atom to a fixed one, so constrained partners are frozen together.
+        """
+        cfg = getattr(self, "_selection_cfg", {}) or {}
+        if not selection_requested(cfg):
+            return set()
+        box = self.oqp_driver._box_lengths_bohr()
+        active, frozen = resolve_active_set(
+            cfg,
+            self.pdb.topology,
+            self.pdb.positions.value_in_unit(unit.angstrom),
+            self.qm_atoms,
+            box_ang=None if box is None else [b * 0.52917721067 for b in box],   # bohr -> angstrom
+            default_all=True,          # dynamics propagates everything unless asked
+            pdb_path=getattr(self, "_pdb_path", None),
+        )
+        if self.rigidwater:
+            pairs = [(p1, p2) for p1, p2, _ in _rigid_water_constraints(
+                self.forcefield, self.pdb.topology, self.qm_atoms)]
+            active, frozen = freeze_constrained_partners(pairs, active, frozen)
+        # Everything outside the active set is held, not merely what
+        # frozen_atoms named: an active_atoms / active_radius / active_from_pdb
+        # selection holds every atom it did not select.
+        held = held_atoms(self.pdb.topology, active)
+        natom = self.pdb.topology.getNumAtoms()
+        print(f"[QM/MM MD] active atoms: {natom - len(held)} of {natom} propagated, "
+              f"{len(held)} held fixed (their charges and forces still act)")
+        return held
+
     def _build_md_system(self):
         sys0 = self.mm_systems["sys0"]
         self.system_md = mm.System()
@@ -479,6 +520,15 @@ class QMMM_MD:
             if sys0.isVirtualSite(i):
                 self.system_md.setVirtualSite(i, _copy_virtual_site(sys0.getVirtualSite(i)))
 
+        # [qmmm] active_atoms / frozen_atoms: OpenMM holds an atom in place by
+        # giving it zero mass, and that is what "frozen" means for runtype=md.
+        # The atom keeps its charge, its embedding field and its force
+        # contribution -- it simply does not move.  With no selection every atom
+        # moves, exactly as before.
+        self.frozen_atoms = self._resolve_frozen_atoms()
+        for i in sorted(self.frozen_atoms):
+            self.system_md.setParticleMass(i, 0.0)
+
         # MM rigid-water constraints (O-H, O-H, H-H per TIP3P water), as the
         # NAMD driver's _build_constraints: taken from a rigidWater system of
         # the same topology, QM atoms excluded.  The MM forces still come from
@@ -487,6 +537,11 @@ class QMMM_MD:
         self.n_constraints = 0
         if self.rigidwater:
             for p1, p2, dist in _rigid_water_constraints(self.forcefield, self.pdb.topology, self.qm_atoms):
+                if p1 in self.frozen_atoms or p2 in self.frozen_atoms:
+                    # OpenMM rejects a constraint on a massless particle, and a
+                    # held water has nothing to constrain: both atoms are fixed
+                    # (_resolve_frozen_atoms freezes constrained partners together).
+                    continue
                 self.system_md.addConstraint(p1, p2, dist)
                 self.n_constraints += 1
             print(f"[QM/MM MD] rigid water: {self.n_constraints} MM constraints applied "

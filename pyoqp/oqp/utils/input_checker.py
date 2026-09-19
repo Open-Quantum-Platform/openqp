@@ -5939,8 +5939,17 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         except (TypeError, ValueError):
             _rad_set = True
         _out_v = _get(config, "optimize", "qmmm_output", "")
+        _act_v = _get(config, "optimize", "qmmm_active", "")
+        _frz_v = _get(config, "optimize", "qmmm_freeze", "")
+
+        def _supplied(value):
+            # '0' is atom zero, a real selection, so test the text not the truth
+            return ("" if value is None else str(value).strip()) != ""
+
         for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
-                                    ("qmmm_output", bool(str(_out_v or "").strip()), _out_v)):
+                                    ("qmmm_output", _supplied(_out_v), _out_v),
+                                    ("qmmm_active", _supplied(_act_v), _act_v),
+                                    ("qmmm_freeze", _supplied(_frz_v), _frz_v)):
             if _is_set:
                 report.add(
                     "ERROR",
@@ -5970,6 +5979,13 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="0 (QM atoms only) or a positive distance in angstrom",
                     action="Set [optimize] qmmm_radius to 0 or a positive number.",
                 )
+            for _key in ("qmmm_active", "qmmm_freeze"):
+                for _value, _msg in _atom_selection_errors(_get(config, "optimize", _key, "")):
+                    report.add(
+                        "ERROR", f"optimize.{_key}", _msg,
+                        value=_value, expected="1000-1450,1500 or name:P,OP1",
+                        action=f"Fix the [optimize] {_key} selection.",
+                    )
             _cg = _get(config, "guess", "continue_geom", False)
             if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
                 report.add(
@@ -7347,6 +7363,78 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _atom_selection_errors(spec: Any) -> list[tuple[str, str]]:
+    """Syntax errors in an active/frozen atom selection, as (value, message).
+
+    Accepts ORCA's ``%qmmm ActiveAtoms`` spelling (``{0:5 16 21:30}``) and our
+    own ``0-5,16,21-30``, plus ``name:P,OP1`` groups.  Only the syntax is
+    checked here; whether an index is in range or an atom name exists depends
+    on the PDB, and the driver reports that when it reads the topology.
+    """
+    text = str(spec or "").strip()
+    if not text:
+        return []
+    out: list[tuple[str, str]] = []
+    for group in text.replace("{", " ").replace("}", " ").replace(";", " ").split():
+        if group.lower().startswith("name:"):
+            if not [n for n in group[5:].split(",") if n.strip()]:
+                out.append((group, "A 'name:' group must list at least one PDB atom name."))
+            continue
+        for token in group.replace(",", " ").split():
+            parts = token.replace(":", "-").split("-")
+            ok = len(parts) in (1, 2) and all(p.strip().isdigit() for p in parts)
+            if ok and len(parts) == 2 and int(parts[0]) > int(parts[1]):
+                ok = False
+            if not ok:
+                out.append((token, "Atom selections take 0-based indices, ranges "
+                                   "(first-last, or ORCA's first:last), or 'name:...' groups."))
+    return out
+
+
+def _check_qmmm_active_selection(config: dict[str, Any], report: CheckReport) -> None:
+    """[qmmm] active_atoms / frozen_atoms / active_radius / active_from_pdb:
+    the ORCA-style selection of what a QM/MM run may move.  Read by the
+    optimiser, the QM/MM MD driver and the NAMD drivers alike."""
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        return
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if runtype not in ("optimize", "md", "namd"):
+        return
+    for key in ("active_atoms", "frozen_atoms"):
+        for value, message in _atom_selection_errors(_get(config, "qmmm", key, "")):
+            report.add(
+                "ERROR", f"qmmm.{key}", message,
+                value=value, expected="{0:5 16 21:30}, 0-5,16 or name:P,OP1",
+                action=f"Fix the [qmmm] {key} selection.",
+            )
+    raw = _get(config, "qmmm", "active_radius", 0.0)
+    try:
+        radius = float(str(raw).strip() or 0.0)
+    except (TypeError, ValueError):
+        radius = -1.0
+    if not math.isfinite(radius) or radius < 0.0:
+        report.add(
+            "ERROR",
+            "qmmm.active_radius",
+            "The active shell of a QM/MM run must be a finite distance >= 0 angstrom.",
+            value=str(raw),
+            expected="0 (no shell) or a positive distance in angstrom",
+            action="Set [qmmm] active_radius to 0 or a positive number.",
+        )
+    from_pdb = _get(config, "qmmm", "active_from_pdb", False)
+    if (from_pdb is True) or (str(from_pdb or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+        if not str(_get(config, "qmmm", "pdb_file", "") or "").strip():
+            report.add(
+                "ERROR",
+                "qmmm.active_from_pdb",
+                "Reading the active atoms from the B-factor column needs the PDB that "
+                "carries it.",
+                value="true",
+                expected="[qmmm] pdb_file set to the PDB whose B-factors mark the active atoms",
+                action="Set [qmmm] pdb_file, or select the atoms with [qmmm] active_atoms.",
+            )
+
+
 def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> None:
     """The periodic/embedding controls of the OpenQpQMMM driver (runtype=md /
     namd) are not consumed by the legacy single-point QM/MM path; reject them
@@ -7548,6 +7636,7 @@ def check_input_values(
     _check_pcm(config, report)
     _check_dftb(config, report)
     _check_qmmm_driver_options(config, report)
+    _check_qmmm_active_selection(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
     _check_scf(config, report)

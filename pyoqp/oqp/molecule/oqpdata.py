@@ -142,6 +142,20 @@ OQP_CONFIG_SCHEMA = {
         # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
         # rc | z1 (optional redistribution refinements).
         'frontier_scheme': {'type': str, 'default': 'none'},
+        # Active / frozen atoms, following ORCA's %qmmm ActiveAtoms: the atoms a
+        # QM/MM optimisation may move and a QM/MM MD may propagate.  Indices are
+        # 0-based and a range may be written first:last (ORCA) or first-last;
+        # 'name:P,OP1' selects by PDB atom name.  frozen_atoms takes atoms back
+        # out of the set (a backbone), active_radius adds whole MM residues
+        # within that distance in angstrom of the QM region (ORCA's
+        # ActiveCore_Extension), and active_from_pdb reads the selection from the
+        # B-factor column of pdb_file, 1 = active (Use_Active_InfoFromPDB).
+        # The defaults change nothing: an optimisation moves the QM region only,
+        # dynamics propagates every atom.  See oqp/library/qmmm_active.py.
+        'active_atoms': {'type': str, 'default': ''},
+        'frozen_atoms': {'type': str, 'default': ''},
+        'active_radius': {'type': float, 'default': '0.0'},
+        'active_from_pdb': {'type': bool, 'default': 'False'},
     },
     # Finite nonperiodic solvent containment.  Lengths are angstrom and the
     # force constant is kcal mol^-1 angstrom^-2 at the user boundary; the NAMD
@@ -679,12 +693,16 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
-        # QM/MM optimisation (qmmm_flag=true): MM residues with an atom within
-        # this distance (angstrom) of a QM atom move with the QM region; 0 =
-        # QM atoms only.  qmmm_output: optimised full-system PDB (default
-        # <project>_opt.pdb).
-        'qmmm_radius': {'type': float, 'default': '0.0'},
+        # qmmm_output: optimised full-system PDB (default <project>_opt.pdb).
         'qmmm_output': {'type': str, 'default': ''},
+        # Aliases of the [qmmm] selection keys, so a deck written with either
+        # spelling keeps running: qmmm_radius -- the released name of the
+        # movable shell -- is [qmmm] active_radius, qmmm_active is active_atoms
+        # and qmmm_freeze is frozen_atoms.  [qmmm] wins when both are given, and
+        # only the [qmmm] spelling reaches the dynamics drivers.
+        'qmmm_radius': {'type': float, 'default': '0.0'},
+        'qmmm_active': {'type': str, 'default': ''},
+        'qmmm_freeze': {'type': str, 'default': ''},
         # MECP objective.  ``auto`` selects SQP on the native optimizer, which
         # it replaces outright, and the augmented Lagrangian on the backends
         # that supply their own optimizer.  Both converge the energy gap; the
