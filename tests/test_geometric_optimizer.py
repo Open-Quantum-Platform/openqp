@@ -948,6 +948,54 @@ class TestOQPTesterCollection(unittest.TestCase):
                     tester._case_output_dir(str(restart)),
                 )
 
+    def test_continuation_shares_directory_but_preserves_producer_outputs(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            producer = root / "QMMM/job.oqp"
+            restart = root / "QMMM/job.continuation.oqp"
+            self._write(producer)
+            self._write(restart)
+            calls = []
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_restart_pair_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                tester.output_dir = str(root / "output")
+                tester.omp_threads = 1
+                tester.max_workers = 2
+                tester.results = []
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                tester._log_result_status = lambda _result: None
+
+                def fake_isolated(path):
+                    calls.append(path)
+                    return {
+                        "project": tester._project_name_for_input(path),
+                        "input_file": path,
+                        "log_file": "job.log",
+                        "status": "PASSED",
+                        "message": "matched",
+                        "execution_time": 0.0,
+                    }
+
+                tester._run_isolated = fake_isolated
+                tester.run_tests(str(root), input_format="oqp")
+
+                self.assertEqual(calls, [str(producer), str(restart)])
+                self.assertEqual(
+                    tester._project_name_for_input(str(producer)), "job")
+                self.assertEqual(
+                    tester._project_name_for_input(str(restart)), "job.continuation")
+                self.assertEqual(
+                    tester._case_output_dir(str(producer)),
+                    tester._case_output_dir(str(restart)),
+                )
+
     def test_isolated_subprocess_uses_its_case_directory(self):
         class NoopRunner:
             pass

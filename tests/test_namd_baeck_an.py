@@ -79,7 +79,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "int oqp_namd_nacme_gate(" in header
     assert "def _run_nacme_gate(" in driver
     assert "signed=True" in driver
-    assert "if self.restart_requested else self._init_velocities()" in driver
+    assert "if self.restart_requested or self.continuation_checkpoint else self._init_velocities()" in driver
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
@@ -447,7 +447,7 @@ base_md = {
     'nstep': 2, 'dt': 0.5, 'active': 1, 'substep': 10,
     'decoherence': 'edc', 'edc_c': 0.1, 'thrshe': 0.01, 'tdc': 'fd',
     'trivial': False, 'trivial_thresh': 0.1, 'init_temp': 0.0,
-    'velocity': 'zero', 'seed': 1, 'soc': True,
+    'velocity': 'zero', 'seed': 1, 'soc': True, 'rescale': 'isotropic',
 }
 
 class Mol:
@@ -490,6 +490,11 @@ def invalid(**overrides):
         return True
     return False
 
+def without_rescale():
+    mol = Mol()
+    del mol.config['md']['rescale']
+    return mol
+
 def contextual_nacme_off(**overrides):
     return NAMD(Mol(**overrides)).nacme_check == 'off'
 
@@ -499,6 +504,12 @@ print('SOC_GATES=' + json.dumps({
     'truthy_string': accepted(soc='false', nve_gate='warn'),
     'trajectory_file': accepted(trajectory_file='soc.trj'),
     'trajectory_interval': accepted(trajectory_interval=2),
+    # The schema default rescale=auto must resolve to isotropic for SOC;
+    # only an explicit analytic request is rejected.
+    'default_rescale': accepted(rescale='auto'),
+    'missing_rescale': NAMD(without_rescale()).rescale_provider == 'isotropic',
+    'default_rescale_isotropic': NAMD(Mol(rescale='auto')).rescale_provider == 'isotropic',
+    'explicit_hop_analytic': rejected(rescale='hop_analytic_nac'),
     'nacme_check': contextual_nacme_off(nacme_check='baeck_an'),
     'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
@@ -531,6 +542,9 @@ print('SOC_GATES=' + json.dumps({
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'truthy_integer': True, 'truthy_string': True,
         'trajectory_file': True, 'trajectory_interval': True,
+        'default_rescale': True, 'default_rescale_isotropic': True,
+        'missing_rescale': True,
+        'explicit_hop_analytic': True,
         'nacme_check': True,
         'same_spin_adaptive': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
@@ -548,6 +562,12 @@ import numpy as np
 import oqp.library.namd as namd_module
 from oqp.library.namd import NAMD, read_namd_trajectory
 namd_module.dump_log = lambda *_args, **_kwargs: None
+
+def _fixed_step_driver():
+    driver = NAMD.__new__(NAMD)
+    driver.dt_adaptive = False
+    driver.zpredict_audit_file = os.path.join(root, f'zpredict-{id(driver)}.tsv')
+    return driver
 
 root = os.environ['OQP_NAMD_TEST_ROOT']
 input_root = os.path.join(root, 'input')
@@ -592,7 +612,7 @@ class Mol:
     def put_data(self, data):
         self.loaded = data
 
-d = NAMD.__new__(NAMD)
+d = _fixed_step_driver()
 d.mol = Mol(); d.nstate = 2; d.nstep = 3; d.dt_fs = 0.5; d.dt_adaptive = False
 d._t_fs = 0.0; d.seed = 1; d.rng_stream = 2; d.trajectory_interval = 1
 d.trajectory_file = os.path.join(root, 'job.namd.trj')
@@ -679,9 +699,9 @@ tb1.config['dftb'] = {'backend': 'native', 'model': 'mio',
 tb2 = Mol(); tb2.config = {
     section: dict(settings) for section, settings in tb1.config.items()}
 tb2.config['dftb']['model'] = '3ob'
-d_tb1 = NAMD.__new__(NAMD); d_tb1.mol = tb1; d_tb1.nstate = 2
+d_tb1 = _fixed_step_driver(); d_tb1.mol = tb1; d_tb1.nstate = 2
 d_tb1.dt_fs = 0.5; d_tb1.seed = 1; d_tb1.rng_stream = 2
-d_tb2 = NAMD.__new__(NAMD); d_tb2.mol = tb2; d_tb2.nstate = 2
+d_tb2 = _fixed_step_driver(); d_tb2.mol = tb2; d_tb2.nstate = 2
 d_tb2.dt_fs = 0.5; d_tb2.seed = 1; d_tb2.rng_stream = 2
 tight_binding_bound = d_tb1._restart_signature() != d_tb2._restart_signature()
 
@@ -693,13 +713,13 @@ tb_default = Mol(); tb_default.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 tb_default.config['input']['method'] = 'dftb'
 tb_default.config['dftb'] = {'backend': 'native', 'model': 'mio'}
-d_tb_default1 = NAMD.__new__(NAMD); d_tb_default1.mol = tb_default
+d_tb_default1 = _fixed_step_driver(); d_tb_default1.mol = tb_default
 d_tb_default1.nstate = 2; d_tb_default1.dt_fs = 0.5
 d_tb_default1.seed = 1; d_tb_default1.rng_stream = 2
 default_tb_signature1 = d_tb_default1._restart_signature()
 with open(os.path.join(input_root, 'local.xml'), 'a', encoding='utf-8') as stream:
     stream.write('changed\n')
-d_tb_default2 = NAMD.__new__(NAMD); d_tb_default2.mol = tb_default
+d_tb_default2 = _fixed_step_driver(); d_tb_default2.mol = tb_default
 d_tb_default2.nstate = 2; d_tb_default2.dt_fs = 0.5
 d_tb_default2.seed = 1; d_tb_default2.rng_stream = 2
 default_tb_artifact_bound = (
@@ -715,7 +735,7 @@ tb_model_default.config['input']['method'] = 'dftb'
 tb_model_default.config['dftb'] = {
     'backend': 'native', 'type': 'mrsf', 'model': '',
     'parameter_path': 'local.xml', 'library_path': 'local.xml'}
-d_tb_model_default = NAMD.__new__(NAMD); d_tb_model_default.mol = tb_model_default
+d_tb_model_default = _fixed_step_driver(); d_tb_model_default.mol = tb_model_default
 d_tb_model_default.nstate = 2; d_tb_model_default.dt_fs = 0.5
 d_tb_model_default.seed = 1; d_tb_model_default.rng_stream = 2
 default_model_signature = d_tb_model_default._restart_signature()
@@ -723,7 +743,7 @@ default_model_not_mutated = tb_model_default.config['dftb']['model'] == ''
 tb_model_resolved = Mol(); tb_model_resolved.config = {
     section: dict(settings) for section, settings in tb_model_default.config.items()}
 tb_model_resolved.config['dftb']['model'] = 'dtcam'
-d_tb_model_resolved = NAMD.__new__(NAMD); d_tb_model_resolved.mol = tb_model_resolved
+d_tb_model_resolved = _fixed_step_driver(); d_tb_model_resolved.mol = tb_model_resolved
 d_tb_model_resolved.nstate = 2; d_tb_model_resolved.dt_fs = 0.5
 d_tb_model_resolved.seed = 1; d_tb_model_resolved.rng_stream = 2
 default_tb_model_stable = (
@@ -768,7 +788,7 @@ with np.load(d.restart_file, allow_pickle=False) as saved:
 with open(d.trajectory_file, 'ab') as stream:
     stream.write(b'partial-record')
 
-d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
+d2 = _fixed_step_driver(); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 loaded = d2._load_restart()
@@ -815,7 +835,7 @@ _foreign_header, foreign_records = read_namd_trajectory(
 foreign_records['coordinates_bohr'][0, 0, 0] += 0.25
 foreign_records.flush()
 del foreign_records
-d_foreign_trajectory = NAMD.__new__(NAMD); d_foreign_trajectory.mol = Mol()
+d_foreign_trajectory = _fixed_step_driver(); d_foreign_trajectory.mol = Mol()
 d_foreign_trajectory.nstate = 2; d_foreign_trajectory.dt_fs = 0.5
 d_foreign_trajectory.seed = 1; d_foreign_trajectory.rng_stream = 2
 d_foreign_trajectory.restart_requested = True
@@ -843,7 +863,7 @@ class ResultMPI:
         return ResultMPI.message
 
 def mpi_restart_loader(rank, restart_path):
-    probe = NAMD.__new__(NAMD); probe.mol = Mol()
+    probe = _fixed_step_driver(); probe.mol = Mol()
     probe.mol.mpi_manager = ResultMPI(rank)
     probe.nstate = 2; probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
     probe.restart_requested = True; probe.restart_file = restart_path
@@ -867,7 +887,7 @@ with np.load(d.restart_file, allow_pickle=False) as saved:
 corrupt['coef_real'][0] = np.nan
 bad_restart = os.path.join(root, 'bad.namd.restart.npz')
 np.savez_compressed(bad_restart, **corrupt)
-d_bad = NAMD.__new__(NAMD); d_bad.mol = Mol(); d_bad.nstate = 2
+d_bad = _fixed_step_driver(); d_bad.mol = Mol(); d_bad.nstate = 2
 d_bad.dt_fs = 0.5; d_bad.seed = 1; d_bad.rng_stream = 2
 d_bad.restart_requested = True; d_bad.restart_file = bad_restart
 d_bad.trajectory_file = d.trajectory_file
@@ -887,7 +907,7 @@ broadcast_corrupt['coef_real'] = np.array([0.0])
 broadcast_corrupt['coef_imag'] = np.array([1.0, 0.0])
 broadcast_restart = os.path.join(root, 'broadcast.namd.restart.npz')
 np.savez_compressed(broadcast_restart, **broadcast_corrupt)
-d_broadcast = NAMD.__new__(NAMD); d_broadcast.mol = Mol()
+d_broadcast = _fixed_step_driver(); d_broadcast.mol = Mol()
 d_broadcast.nstate = 2; d_broadcast.dt_fs = 0.5
 d_broadcast.seed = 1; d_broadcast.rng_stream = 2
 d_broadcast.restart_requested = True
@@ -907,7 +927,7 @@ with np.load(d.restart_file, allow_pickle=False) as saved:
 history_corrupt['ba_energy_left'] = np.array([0.0])
 history_restart = os.path.join(root, 'history.namd.restart.npz')
 np.savez_compressed(history_restart, **history_corrupt)
-d_history = NAMD.__new__(NAMD); d_history.mol = Mol(); d_history.nstate = 2
+d_history = _fixed_step_driver(); d_history.mol = Mol(); d_history.nstate = 2
 d_history.dt_fs = 0.5; d_history.seed = 1; d_history.rng_stream = 2
 d_history.restart_requested = True; d_history.restart_file = history_restart
 d_history.trajectory_file = d.trajectory_file
@@ -925,7 +945,7 @@ partial_history['has_ba_dt_left'] = np.array([0], dtype=np.int8)
 partial_history['ba_dt_left'] = np.empty(0, dtype=np.float64)
 partial_history_restart = os.path.join(root, 'partial-history.restart.npz')
 np.savez_compressed(partial_history_restart, **partial_history)
-d_partial = NAMD.__new__(NAMD); d_partial.mol = Mol(); d_partial.nstate = 2
+d_partial = _fixed_step_driver(); d_partial.mol = Mol(); d_partial.nstate = 2
 d_partial.dt_fs = 0.5; d_partial.seed = 1; d_partial.rng_stream = 2
 d_partial.restart_requested = True; d_partial.restart_file = partial_history_restart
 d_partial.trajectory_file = d.trajectory_file
@@ -949,7 +969,7 @@ for index, replacement in enumerate((
     streak_corrupt['gate_failures' if index != 1 else 'nve_failures'] = replacement
     streak_restart = os.path.join(root, f'streak-{index}.namd.restart.npz')
     np.savez_compressed(streak_restart, **streak_corrupt)
-    d_streak = NAMD.__new__(NAMD); d_streak.mol = Mol(); d_streak.nstate = 2
+    d_streak = _fixed_step_driver(); d_streak.mol = Mol(); d_streak.nstate = 2
     d_streak.dt_fs = 0.5; d_streak.seed = 1; d_streak.rng_stream = 2
     d_streak.restart_requested = True; d_streak.restart_file = streak_restart
     d_streak.trajectory_file = d.trajectory_file
@@ -963,7 +983,7 @@ gate_streak_metadata_rejected = all(streak_rejections)
 
 # Same method/count but different atom identities must not accept the file.
 wrong_mol = Mol(); wrong_mol.atoms = np.array([7, 1, 2])
-d_wrong = NAMD.__new__(NAMD); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
+d_wrong = _fixed_step_driver(); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
 d_wrong.dt_fs = 0.5; d_wrong.seed = 1; d_wrong.rng_stream = 2
 d_wrong.restart_requested = True; d_wrong.restart_file = d.restart_file
 d_wrong.trajectory_file = d.trajectory_file
@@ -975,23 +995,23 @@ else:
     molecule_mismatch_rejected = False
 
 # QM selections participate in the signature even with identical QM atoms.
-d_qm1 = NAMD.__new__(NAMD); d_qm1.mol = Mol(); d_qm1.nstate = 2
+d_qm1 = _fixed_step_driver(); d_qm1.mol = Mol(); d_qm1.nstate = 2
 d_qm1.dt_fs = 0.5; d_qm1.seed = 1; d_qm1.rng_stream = 2
 d_qm1.qm_atoms = np.array([0, 1])
-d_qm2 = NAMD.__new__(NAMD); d_qm2.mol = Mol(); d_qm2.nstate = 2
+d_qm2 = _fixed_step_driver(); d_qm2.mol = Mol(); d_qm2.nstate = 2
 d_qm2.dt_fs = 0.5; d_qm2.seed = 1; d_qm2.rng_stream = 2
 d_qm2.qm_atoms = np.array([1, 2])
 qm_selection_bound = d_qm1._restart_signature() != d_qm2._restart_signature()
 
 # Charge and reference/excited-state spin settings define the electronic
 # Hamiltonian and therefore participate in checkpoint compatibility.
-d_charge = NAMD.__new__(NAMD); d_charge.mol = Mol(); d_charge.nstate = 2
+d_charge = _fixed_step_driver(); d_charge.mol = Mol(); d_charge.nstate = 2
 d_charge.dt_fs = 0.5; d_charge.seed = 1; d_charge.rng_stream = 2
 charge_mol = Mol()
 charge_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 charge_mol.config['input']['charge'] = 1
-d_wrong_charge = NAMD.__new__(NAMD); d_wrong_charge.mol = charge_mol
+d_wrong_charge = _fixed_step_driver(); d_wrong_charge.mol = charge_mol
 d_wrong_charge.nstate = 2; d_wrong_charge.dt_fs = 0.5
 d_wrong_charge.seed = 1; d_wrong_charge.rng_stream = 2
 charge_bound = d_charge._restart_signature() != d_wrong_charge._restart_signature()
@@ -999,16 +1019,51 @@ spin_mol = Mol()
 spin_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 spin_mol.config['tdhf']['multiplicity'] = 1
-d_wrong_spin = NAMD.__new__(NAMD); d_wrong_spin.mol = spin_mol
+d_wrong_spin = _fixed_step_driver(); d_wrong_spin.mol = spin_mol
 d_wrong_spin.nstate = 2; d_wrong_spin.dt_fs = 0.5
 d_wrong_spin.seed = 1; d_wrong_spin.rng_stream = 2
 spin_bound = d_charge._restart_signature() != d_wrong_spin._restart_signature()
+
+# Frustrated-hop reflection, reference following, SCF recovery and energy
+# correction all alter velocities or the followed reference.
+def _controls_signature(provider=None, **md):
+    controls_mol = Mol()
+    controls_mol.config = {
+        section: dict(settings) for section, settings in Mol.config.items()}
+    controls_mol.config['md'] = dict(md)
+    driver = _fixed_step_driver(); driver.mol = controls_mol
+    driver.nstate = 2; driver.dt_fs = 0.5; driver.seed = 1; driver.rng_stream = 2
+    if provider is not None:
+        driver.rescale_provider = provider
+    return driver._restart_signature()
+controls_base = dict(frustrated='reflect', mo_reuse=True, scf_fail='escalate',
+                     scf_guess_retry=True, ref_follow='soscf',
+                     ref_switch_rescale=True, somo_tol=0.5, disc_rescale=True,
+                     disc_tol=0.002, disc_substeps=10)
+trajectory_controls_bound = all(
+    _controls_signature(**controls_base)
+    != _controls_signature(**dict(controls_base, **{key: value}))
+    for key, value in (('frustrated', 'none'), ('mo_reuse', False),
+                       ('scf_fail', 'restart'), ('scf_guess_retry', False),
+                       ('ref_follow', 'off'), ('ref_switch_rescale', False),
+                       ('somo_tol', 0.3), ('disc_rescale', False),
+                       ('disc_tol', 0.01), ('disc_substeps', 4)))
+# Default controls (spelled as parsed values) sign like a checkpoint written
+# before the controls were bound, and rescale=auto signs as its resolution.
+default_controls_compatible = (
+    _controls_signature(**controls_base) == _controls_signature()
+    and _controls_signature(**dict(controls_base, somo_tol='0.50', disc_substeps='10'))
+    == _controls_signature()
+    and _controls_signature('hop_analytic_nac', rescale='auto')
+    == _controls_signature(rescale='hop_analytic_nac')
+    and _controls_signature('isotropic', rescale='auto')
+    != _controls_signature(rescale='hop_analytic_nac'))
 basis_mol = Mol()
 basis_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 basis_mol.config['input']['library'] = 'H 6-31g; O aug-cc-pvdz'
 basis_mol.config['input']['ispher'] = 0
-d_wrong_basis = NAMD.__new__(NAMD); d_wrong_basis.mol = basis_mol
+d_wrong_basis = _fixed_step_driver(); d_wrong_basis.mol = basis_mol
 d_wrong_basis.nstate = 2; d_wrong_basis.dt_fs = 0.5
 d_wrong_basis.seed = 1; d_wrong_basis.rng_stream = 2
 basis_definition_bound = (
@@ -1016,13 +1071,13 @@ basis_definition_bound = (
 pcm_mol = Mol(); pcm_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 pcm_mol.config['pcm'] = {'enabled': True, 'epsilon': 40.0, 'model': 'ddpcm'}
-d_pcm = NAMD.__new__(NAMD); d_pcm.mol = pcm_mol; d_pcm.nstate = 2
+d_pcm = _fixed_step_driver(); d_pcm.mol = pcm_mol; d_pcm.nstate = 2
 d_pcm.dt_fs = 0.5; d_pcm.seed = 1; d_pcm.rng_stream = 2
 pcm_bound = d_charge._restart_signature() != d_pcm._restart_signature()
 operator_mol = Mol(); operator_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 operator_mol.config['tdhf']['cam_alpha'] = 0.25
-d_operator = NAMD.__new__(NAMD); d_operator.mol = operator_mol
+d_operator = _fixed_step_driver(); d_operator.mol = operator_mol
 d_operator.nstate = 2; d_operator.dt_fs = 0.5
 d_operator.seed = 1; d_operator.rng_stream = 2
 tdhf_operator_bound = (
@@ -1031,14 +1086,14 @@ grid_mol = Mol(); grid_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 grid_mol.config['dftgrid'] = {'rad_npts': 120, 'ang_npts': 434,
                               'hfscale': 0.55}
-d_grid = NAMD.__new__(NAMD); d_grid.mol = grid_mol; d_grid.nstate = 2
+d_grid = _fixed_step_driver(); d_grid.mol = grid_mol; d_grid.nstate = 2
 d_grid.dt_fs = 0.5; d_grid.seed = 1; d_grid.rng_stream = 2
 dftgrid_bound = d_charge._restart_signature() != d_grid._restart_signature()
 policy_mol = Mol(); policy_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 policy_mol.config['md'] = {'nacme_gate': 'error',
                            'nacme_gate_consecutive': 5}
-d_policy = NAMD.__new__(NAMD); d_policy.mol = policy_mol; d_policy.nstate = 2
+d_policy = _fixed_step_driver(); d_policy.mol = policy_mol; d_policy.nstate = 2
 d_policy.dt_fs = 0.5; d_policy.seed = 1; d_policy.rng_stream = 2
 gate_policy_bound = d_charge._restart_signature() != d_policy._restart_signature()
 nac_align_signatures = []
@@ -1046,20 +1101,20 @@ for align in ('no', 'phase', 'reorder'):
     align_mol = Mol(); align_mol.config = {
         section: dict(settings) for section, settings in Mol.config.items()}
     align_mol.config['nac'] = {'align': align}
-    d_align = NAMD.__new__(NAMD); d_align.mol = align_mol; d_align.nstate = 2
+    d_align = _fixed_step_driver(); d_align.mol = align_mol; d_align.nstate = 2
     d_align.dt_fs = 0.5; d_align.seed = 1; d_align.rng_stream = 2
     nac_align_signatures.append(d_align._restart_signature())
 nac_alignment_bound = len(set(nac_align_signatures)) == 3
 scf_mol = Mol(); scf_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 scf_mol.config['scf']['scal_rel'] = 'x2c'
-d_scf = NAMD.__new__(NAMD); d_scf.mol = scf_mol; d_scf.nstate = 2
+d_scf = _fixed_step_driver(); d_scf.mol = scf_mol; d_scf.nstate = 2
 d_scf.dt_fs = 0.5; d_scf.seed = 1; d_scf.rng_stream = 2
 scf_settings_bound = d_charge._restart_signature() != d_scf._restart_signature()
 symmetry_mol = Mol(); symmetry_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 symmetry_mol.config.setdefault('symmetry', {})['use_integral_symmetry'] = 'full'
-d_symmetry = NAMD.__new__(NAMD); d_symmetry.mol = symmetry_mol
+d_symmetry = _fixed_step_driver(); d_symmetry.mol = symmetry_mol
 d_symmetry.nstate = 2; d_symmetry.dt_fs = 0.5
 d_symmetry.seed = 1; d_symmetry.rng_stream = 2
 symmetry_settings_bound = (
@@ -1073,13 +1128,13 @@ with open(basis_path, 'w', encoding='utf-8') as stream:
 file_basis_mol = Mol(); file_basis_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 file_basis_mol.config['input']['basis'] = 'file:custom-basis.json'
-d_file_basis1 = NAMD.__new__(NAMD); d_file_basis1.mol = file_basis_mol
+d_file_basis1 = _fixed_step_driver(); d_file_basis1.mol = file_basis_mol
 d_file_basis1.nstate = 2; d_file_basis1.dt_fs = 0.5
 d_file_basis1.seed = 1; d_file_basis1.rng_stream = 2
 file_basis_signature1 = d_file_basis1._restart_signature()
 with open(basis_path, 'a', encoding='utf-8') as stream:
     stream.write(' ')
-d_file_basis2 = NAMD.__new__(NAMD); d_file_basis2.mol = file_basis_mol
+d_file_basis2 = _fixed_step_driver(); d_file_basis2.mol = file_basis_mol
 d_file_basis2.nstate = 2; d_file_basis2.dt_fs = 0.5
 d_file_basis2.seed = 1; d_file_basis2.rng_stream = 2
 target_basis_file_bound = (
@@ -1088,13 +1143,13 @@ target_basis_file_bound = (
 init_basis_mol = Mol(); init_basis_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 init_basis_mol.config['scf']['init_basis'] = 'file:custom-basis.json'
-d_init_basis1 = NAMD.__new__(NAMD); d_init_basis1.mol = init_basis_mol
+d_init_basis1 = _fixed_step_driver(); d_init_basis1.mol = init_basis_mol
 d_init_basis1.nstate = 2; d_init_basis1.dt_fs = 0.5
 d_init_basis1.seed = 1; d_init_basis1.rng_stream = 2
 init_basis_signature1 = d_init_basis1._restart_signature()
 with open(basis_path, 'a', encoding='utf-8') as stream:
     stream.write(' ')
-d_init_basis2 = NAMD.__new__(NAMD); d_init_basis2.mol = init_basis_mol
+d_init_basis2 = _fixed_step_driver(); d_init_basis2.mol = init_basis_mol
 d_init_basis2.nstate = 2; d_init_basis2.dt_fs = 0.5
 d_init_basis2.seed = 1; d_init_basis2.rng_stream = 2
 initial_basis_file_bound = (
@@ -1129,10 +1184,10 @@ absolute_basis_mol = Mol(); absolute_basis_mol.config = {
 absolute_basis_mol.config['input']['basis'] = 'file:' + os.path.abspath(basis_path)
 absolute_basis_mol.config['scf']['init_basis'] = (
     'file:' + os.path.abspath(basis_path))
-d_relative_basis = NAMD.__new__(NAMD); d_relative_basis.mol = relative_basis_mol
+d_relative_basis = _fixed_step_driver(); d_relative_basis.mol = relative_basis_mol
 d_relative_basis.nstate = 2; d_relative_basis.dt_fs = 0.5
 d_relative_basis.seed = 1; d_relative_basis.rng_stream = 2
-d_absolute_basis = NAMD.__new__(NAMD); d_absolute_basis.mol = absolute_basis_mol
+d_absolute_basis = _fixed_step_driver(); d_absolute_basis.mol = absolute_basis_mol
 d_absolute_basis.nstate = 2; d_absolute_basis.dt_fs = 0.5
 d_absolute_basis.seed = 1; d_absolute_basis.rng_stream = 2
 basis_spelling_stable = (
@@ -1154,7 +1209,7 @@ def guess_signature(**settings):
         'continue_geom': False, 'swapmo': '',
     }
     mol.config['guess'].update(settings)
-    probe = NAMD.__new__(NAMD); probe.mol = mol; probe.nstate = 2
+    probe = _fixed_step_driver(); probe.mol = mol; probe.nstate = 2
     probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
     return probe._restart_signature()
 
@@ -1179,7 +1234,7 @@ mutable_guess_mol.config['guess'] = {
     'type': 'json', 'file': guess_path, 'file2': '', 'save_mol': True,
     'continue_geom': False, 'swapmo': '',
 }
-d_mutable_guess = NAMD.__new__(NAMD); d_mutable_guess.mol = mutable_guess_mol
+d_mutable_guess = _fixed_step_driver(); d_mutable_guess.mol = mutable_guess_mol
 d_mutable_guess.nstate = 2; d_mutable_guess.dt_fs = 0.5
 d_mutable_guess.seed = 1; d_mutable_guess.rng_stream = 2
 mutable_guess_signature = d_mutable_guess._restart_signature()
@@ -1187,7 +1242,7 @@ with open(guess_path, 'w', encoding='utf-8') as stream:
     stream.write('{"saved result": 3}\n')
 guess_identity_cached = (
     d_mutable_guess._restart_signature() == mutable_guess_signature)
-d_mutable_restart = NAMD.__new__(NAMD); d_mutable_restart.mol = mutable_guess_mol
+d_mutable_restart = _fixed_step_driver(); d_mutable_restart.mol = mutable_guess_mol
 d_mutable_restart.nstate = 2; d_mutable_restart.dt_fs = 0.5
 d_mutable_restart.seed = 1; d_mutable_restart.rng_stream = 2
 mutable_guess_restart_accepted = (
@@ -1199,7 +1254,7 @@ with open(other_guess_path, 'w', encoding='utf-8') as stream:
 changed_path_mol = Mol(); changed_path_mol.config = {
     section: dict(values) for section, values in mutable_guess_mol.config.items()}
 changed_path_mol.config['guess']['file'] = other_guess_path
-d_changed_guess = NAMD.__new__(NAMD); d_changed_guess.mol = changed_path_mol
+d_changed_guess = _fixed_step_driver(); d_changed_guess.mol = changed_path_mol
 d_changed_guess.nstate = 2; d_changed_guess.dt_fs = 0.5
 d_changed_guess.seed = 1; d_changed_guess.rng_stream = 2
 mutable_guess_path_change_rejected = not d_changed_guess._restart_signature_matches(
@@ -1270,7 +1325,7 @@ class EmptyTopology:
         return None
 
 def espf_probe():
-    probe = NAMD.__new__(NAMD); probe.mol = Mol(); probe.nstate = 2
+    probe = _fixed_step_driver(); probe.mol = Mol(); probe.nstate = 2
     probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
     probe.pdb = SimpleNamespace(topology=EmptyTopology())
     probe.m_all = np.ones(3)
@@ -1328,7 +1383,7 @@ with open(broken_trajectory, 'wb') as stream:
     stream.write(b'not-a-valid-header')
 mpi_errors = []
 for rank in (0, 1):
-    d_mpi = NAMD.__new__(NAMD)
+    d_mpi = _fixed_step_driver()
     d_mpi.mol = SimpleNamespace(mpi_manager=FakeMPI(rank))
     d_mpi.trajectory_file = broken_trajectory
     try:
@@ -1345,7 +1400,7 @@ collective_error_propagated = (
 FakeMPI.status = None
 save_errors = []
 for rank in (0, 1):
-    d_save_mpi = NAMD.__new__(NAMD)
+    d_save_mpi = _fixed_step_driver()
     d_save_mpi.mol = SimpleNamespace(mpi_manager=FakeMPI(rank))
     d_save_mpi.restart_interval = 1
     d_save_mpi._save_restart_on_io_rank = (
@@ -1358,7 +1413,7 @@ collective_save_error = len(save_errors) == 2 and save_errors[0] == save_errors[
 
 # Fresh starts invalidate old runnable checkpoints, while path aliases are
 # rejected before any sidecar is opened.
-d_fresh = NAMD.__new__(NAMD); d_fresh.mol = SimpleNamespace(
+d_fresh = _fixed_step_driver(); d_fresh.mol = SimpleNamespace(
     log=os.path.join(root, 'fresh.log'))
 d_fresh.restart_requested = False
 d_fresh.trajectory_interval = 20; d_fresh.restart_interval = 20
@@ -1374,7 +1429,7 @@ fresh_outputs_invalidated = (
     os.path.getsize(d_fresh.trajectory_file) == 0
     and not os.path.exists(d_fresh.restart_file)
     and not os.path.exists(d_fresh.restart_manifest_file))
-d_collision = NAMD.__new__(NAMD)
+d_collision = _fixed_step_driver()
 d_collision.mol = SimpleNamespace(log=os.path.join(root, 'collision.log'))
 d_collision.trajectory_file = d_fresh.trajectory_file
 d_collision.restart_file = d_fresh.trajectory_file
@@ -1385,7 +1440,7 @@ except ValueError:
     sidecar_collision_rejected = True
 else:
     sidecar_collision_rejected = False
-d_log_collision = NAMD.__new__(NAMD)
+d_log_collision = _fixed_step_driver()
 d_log_collision.mol = SimpleNamespace(log=d_fresh.trajectory_file)
 d_log_collision.trajectory_file = d_fresh.trajectory_file
 d_log_collision.restart_file = d_fresh.restart_file
@@ -1398,7 +1453,7 @@ else:
     log_collision_rejected = False
 
 def input_collision(candidate, *, velocity='zero', qmmm=None, config=None):
-    probe = NAMD.__new__(NAMD)
+    probe = _fixed_step_driver()
     source_file = os.path.join(input_root, 'request.oqp')
     probe.mol = SimpleNamespace(
         log=os.path.join(root, 'input-collision.log'),
@@ -1462,7 +1517,7 @@ input_collisions_rejected = all((
 
 # A discontinuity invalidates the previous gate result before the current
 # dense record is written.
-d_ba = NAMD.__new__(NAMD); d_ba.nacme_check = 'baeck_an'; d_ba.nstate = 2
+d_ba = _fixed_step_driver(); d_ba.nacme_check = 'baeck_an'; d_ba.nstate = 2
 d_ba.dt = 1.0; d_ba._ba_energy_left = np.array([0.0, 0.1])
 d_ba._ba_energy_center = np.array([0.0, 0.2]); d_ba._ba_tdc_left = np.eye(2)
 d_ba._ba_dt_left = 1.0; d_ba._ba_last = {'stale': True}
@@ -1481,7 +1536,7 @@ stale_gate_cleared = (
     and d_ba._nacme_reference_mask is None
     and d_ba._nacme_reference_source == 0
     and d_ba._nacme_gate_failures == 0)
-bad_live = NAMD.__new__(NAMD); bad_live.nacme_check = 'baeck_an'
+bad_live = _fixed_step_driver(); bad_live.nacme_check = 'baeck_an'
 bad_live.nstate = 2; bad_live.mol = SimpleNamespace(data={
     'OQP::td_energies_old': np.array([0.0]),
     'OQP::td_energies': np.array([0.0, 0.2]),
@@ -1492,7 +1547,7 @@ except RuntimeError:
     short_live_energy_rejected = True
 else:
     short_live_energy_rejected = False
-bad_hop = NAMD.__new__(NAMD); bad_hop.nstate = 2
+bad_hop = _fixed_step_driver(); bad_hop.nstate = 2
 bad_hop.mol = SimpleNamespace(data={'OQP::td_energies': np.array([0.0])})
 try:
     bad_hop._validated_td_energies('OQP::td_energies')
@@ -1502,7 +1557,7 @@ else:
     hop_energy_rejected = False
 
 # Defaults derive a unique manifest from the log stem.
-d_other = NAMD.__new__(NAMD)
+d_other = _fixed_step_driver()
 d_other.mol = SimpleNamespace(log=os.path.join(root, 'other.log'))
 unique_manifests = d._restart_manifest_path() != d_other._restart_manifest_path()
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
@@ -1579,6 +1634,8 @@ print('DENSE=' + json.dumps({
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
+        'trajectory_controls_bound': trajectory_controls_bound,
+        'default_controls_compatible': default_controls_compatible,
         'basis_definition_bound': basis_definition_bound,
         'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
         'dftgrid_bound': dftgrid_bound, 'gate_policy_bound': gate_policy_bound,
@@ -1668,6 +1725,8 @@ print('DENSE=' + json.dumps({
         'partial_history_rejected': True,
         'gate_streak_metadata_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
+        'trajectory_controls_bound': True,
+        'default_controls_compatible': True,
         'basis_definition_bound': True,
         'pcm_bound': True, 'tdhf_operator_bound': True,
         'dftgrid_bound': True, 'gate_policy_bound': True,

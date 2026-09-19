@@ -912,7 +912,7 @@ contains
       call conv%run(conv_res)
       if (use_trah .and. trim(conv_res%active_converger_name) == 'TRAH' ) then
         call run_otr(infos, molgrid, conv , conv_res, energy)
-        if (conv_res%ierr == 4) exit
+        if (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv)) exit
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
         ! Retrieve updated Energies of Alpha Orbitals
@@ -1238,7 +1238,10 @@ contains
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
-    if (stalled_exit) then
+    if (use_trah .and. (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv))) then
+      write(IW,"(3x,64('-')/10x,'SCF did not converge: TRAH failed the requested criterion.')")
+      infos%mol_energy%SCF_converged = .false.
+    else if (stalled_exit) then
       write(IW,"(3x,64('-')/10x,'SCF stalled before convergence; escalating to a higher-order solver.')")
       infos%mol_energy%SCF_converged = .false.
     else if (iter > maxit) then

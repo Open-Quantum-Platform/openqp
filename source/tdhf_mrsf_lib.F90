@@ -2196,6 +2196,79 @@ contains
 
   end subroutine mrsfxvec
 
+!>    @brief    Unrelaxed interstate difference density matrices
+!>              T^{IJ}_ij and T^{IJ}_ab for a pair of MRSF states,
+!>              the symmetrized bilinear generalization of the
+!>              single-state T_ij/T_ab entering the Z-vector RHS:
+!>
+!>              T^{IJ}(i+,j+) := -1/2 sum_a- ( Xi(i+,a-)*Xj(j+,a-)
+!>                                           + Xj(i+,a-)*Xi(j+,a-) )
+!>              T^{IJ}(a-,b-) := +1/2 sum_i+ ( Xi(i+,a-)*Xj(i+,b-)
+!>                                           + Xj(i+,a-)*Xi(i+,b-) )
+!>
+!>              For ist==jst this reduces exactly to the gradient
+!>              case T_ij = -X*X^T, T_ab = X^T*X. Amplitudes are
+!>              dimensionally transformed (mrsfxvec) before
+!>              contraction, so the spin-paired O->O components are
+!>              unfolded consistently. Singlet/triplet (mult=1,3)
+!>              MRSF only.
+!>
+  subroutine mrsf_interstate_tden(infos, bvec_mo, ist, jst, tij, tab)
+
+    use precision, only: dp
+    use types, only: information
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in), dimension(:,:) :: bvec_mo
+    integer, intent(in) :: ist, jst
+    real(kind=dp), intent(out), dimension(:,:) :: tij, tab
+
+    real(kind=dp), allocatable, dimension(:) :: xi, xj
+    integer :: noca, nocb, nvirb, nbf, ok
+
+    nbf = infos%basis%nbf
+    noca = infos%mol_prop%nelec_a
+    nocb = infos%mol_prop%nelec_b
+    nvirb = nbf-nocb
+
+    if (infos%tddft%mult /= 1 .and. infos%tddft%mult /= 3) &
+      call show_message('mrsf_interstate_tden supports mult=1,3 only', with_abort)
+
+    allocate(xi(noca*nvirb), xj(noca*nvirb), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    call mrsfxvec(infos, bvec_mo(:,ist), xi)
+    if (jst == ist) then
+      xj = xi
+    else
+      call mrsfxvec(infos, bvec_mo(:,jst), xj)
+    end if
+
+  ! T^{IJ}(i+,j+) = -1/2 ( Xi*Xj^T + Xj*Xi^T )
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tij, noca)
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tij, noca)
+
+  ! T^{IJ}(a-,b-) = +1/2 ( Xi^T*Xj + Xj^T*Xi )
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tab, nvirb)
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tab, nvirb)
+
+  end subroutine mrsf_interstate_tden
+
 !>    @brief    Spin-pairing parts
 !>              of singlet and triplet MRSF Lagrangian
 !>
@@ -2205,7 +2278,7 @@ contains
     use messages, only: show_message, with_abort
     implicit none
 
-    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    real(kind=dp), intent(inout), dimension(:,:) :: xhxa, xhxb
     real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
     real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
     integer, intent(in) :: noca, nocb
@@ -3163,6 +3236,9 @@ contains
 
     end if
 
+    ! get_trans_den accumulates into trden; define it here (intent(out))
+    ! so callers may pass reused work arrays.
+    trden = 0.0_dp
     call get_trans_den(trden, xv12i, xv12j, noca, nocb, nvirb)
 
     return

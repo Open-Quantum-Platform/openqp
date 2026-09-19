@@ -145,6 +145,7 @@ type soc2e_int_data_t
     public :: grd2_operator_consumer_t
     public :: grd2_rys_compute
     public :: grd2_rys_compute_operator
+    public :: grd2_rys_compute_batch
     public :: soc2e_int_data_t
     public :: soc2e_rys_compute
     public :: soc2e_driver
@@ -2283,4 +2284,216 @@ end subroutine compute_soc2e_ao
     deallocate(schwarz_ints)
     deallocate(den_phys)
   end subroutine soc2e_driver
+  subroutine grd2_rys_compute_batch(gdat, ppairs, dab, dabmax, fd_batch, mu2)
+
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    implicit none
+
+    type(grd2_int_data_t) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(in) :: dab(:,:), dabmax(:)
+    real(kind=dp), intent(out) :: fd_batch(:,:,:)
+    real(kind=dp), intent(in), optional :: mu2
+
+    integer :: ijg, klg, maxgg, mmax, ng, iprobe, nprobe
+    integer :: nimax, njmax, nkmax, nlmax, nmax
+    real(kind=dp) :: aa, ab, aandb1, bb, da, db, test, dabmax_all
+    real(kind=dp) :: pfac, rho
+    real(kind=dp) :: p(3), q(3)
+    logical :: last
+    integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
+    real(kind=dp) :: mu2_1
+
+    nprobe = size(dab,2)
+    dabmax_all = maxval(dabmax)
+
+    mu2_1 = 0
+    if (present(mu2)) mu2_1 = 1.0d0/mu2
+
+    call set_shells(gdat)
+
+    id1 = maxval(gdat%id(1:2))
+    id2 = minval(gdat%id(1:2))
+    npp_p = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_p = ppairs%ppid(2,id1*(id1-1)/2+id2)
+
+    id1 = maxval(gdat%id(3:4))
+    id2 = minval(gdat%id(3:4))
+    npp_q = ppairs%ppid(1,id1*(id1-1)/2+id2)
+    ppid_q = ppairs%ppid(2,id1*(id1-1)/2+id2)
+    if (npp_p*npp_q == 0) return
+
+    nimax = gdat%am(1) + gdat%der(1) + 1
+    njmax = gdat%am(2) + gdat%der(2) + 1
+    nkmax = gdat%am(3) + gdat%der(3) + 1
+    nlmax = gdat%am(4) + gdat%der(4) + 1
+
+    nmax = gdat%am(1)+gdat%am(2)+1 + &
+      min(gdat%der(1)+gdat%der(2),gdat%nder)
+    mmax = gdat%am(3)+gdat%am(4)+1 + &
+      min(gdat%der(3)+gdat%der(4),gdat%nder)
+    maxgg = MAXCONTR/gdat%nroots
+
+    fd_batch = 0.0_dp
+    ng = 0
+    do klg = 1, npp_q
+      db = ppairs%k(ppid_q-1+klg)*ppairs%ginv(ppid_q-1+klg)
+      bb = ppairs%g(ppid_q-1+klg)
+      q = ppairs%P(:,ppid_q-1+klg)
+
+      do ijg = 1, npp_p
+        da = ppairs%k(ppid_p-1+ijg)*ppairs%ginv(ppid_p-1+ijg)
+        aa = ppairs%g(ppid_p-1+ijg)
+        p = ppairs%P(:,ppid_p-1+ijg)
+        ab = (aa+bb) + aa*bb*mu2_1
+        pfac = da*db
+        test = pfac*pfac
+        if (test<gdat%dtol*ab) cycle
+        ! Use the largest probe bound for the common recurrence.  This can
+        ! only retain extra cutoff-level terms for a smaller probe; it never
+        ! drops a term that its scalar traversal would have kept.
+        if (test*dabmax_all*dabmax_all<gdat%dabcut*ab) cycle
+
+        aandb1 = 1.0_dp/ab
+        rho = aa*bb*aandb1
+        ng = ng+1
+
+        gdat%abv(1,ng) = ppairs%ginv(ppid_p-1+ijg)
+        gdat%abv(2,ng) = ppairs%ginv(ppid_q-1+klg)
+        gdat%abv(3,ng) = rho
+        gdat%abv(4,ng) = pfac*sqrt(aandb1)
+        gdat%abv(5,ng) = aandb1
+        gdat%abv(6,ng) = rho*sum((p-q)**2)
+
+        gdat%ai(ng) = 2*ppairs%alpha_a(ppid_p-1+ijg)
+        gdat%aj(ng) = 2*ppairs%alpha_b(ppid_p-1+ijg)
+        gdat%ak(ng) = 2*ppairs%alpha_a(ppid_q-1+klg)
+        gdat%al(ng) = 2*ppairs%alpha_b(ppid_q-1+klg)
+        gdat%PQ(:,ng) = p-q
+        if (nmax>1) gdat%pb(:,ng) = ppairs%PB(:,ppid_p-1+ijg)
+        if (mmax>1) gdat%qd(:,ng) = ppairs%PB(:,ppid_q-1+klg)
+        gdat%dij(:,ng) = &
+          ppairs%PA(:,ppid_p-1+ijg)-ppairs%PB(:,ppid_p-1+ijg)
+        gdat%dkl(:,ng) = &
+          ppairs%PA(:,ppid_q-1+klg)-ppairs%PB(:,ppid_q-1+klg)
+
+        last = klg==npp_q .and. ijg==npp_p
+        if (ng==maxgg .or. last) then
+          if (ng==0) return
+          call compute_grd_ints_batch(gdat, dab, fd_batch, ng, nmax, mmax, &
+            nimax, njmax, nkmax, nlmax)
+          ng = 0
+        end if
+      end do
+    end do
+    ! The in-loop flush fires on the final primitive pair only if that pair
+    ! survives screening.  When it is screened out, the partial batch of
+    ! earlier surviving pairs would otherwise be dropped.
+    if (ng > 0) call compute_grd_ints_batch(gdat, dab, fd_batch, ng, nmax, &
+      mmax, nimax, njmax, nkmax, nlmax)
+
+    do iprobe = 1, nprobe
+      gdat%fd = fd_batch(:,:,iprobe)
+      call apply_translation_invariance(gdat)
+      fd_batch(:,:,iprobe) = gdat%fd
+    end do
+  end subroutine grd2_rys_compute_batch
+
+
+  subroutine compute_grd_ints_batch(gdat, dab, fd_batch, ng, nmax, mmax, &
+                                    nimax, njmax, nkmax, nlmax)
+
+    type(grd2_int_data_t), intent(inout) :: gdat
+    real(kind=dp), intent(in) :: dab(:,:)
+    real(kind=dp), intent(inout) :: fd_batch(:,:,:)
+    integer, intent(in) :: mmax, ng
+    integer, intent(in) :: nimax, njmax, nkmax, nlmax, nmax
+
+    call compute_rys_rw(gdat, gdat%rw, ng)
+    call compute_coefficients(gdat%b00, gdat%b01, gdat%b10, &
+      gdat%c00, gdat%d00, gdat%f00, gdat%abv, gdat%pq, gdat%pb, &
+      gdat%qd, gdat%rw, nmax, mmax, ng, gdat%nroots)
+    call compute_xyz_p0q0(gdat%gnm,ng*gdat%nroots,nmax,mmax, &
+      gdat%b00, gdat%b01, gdat%b10, gdat%c00, gdat%d00, gdat%f00)
+    call compute_xyz_ijkl(gdat%gijkl, gdat%gnkl, gdat%gnm, &
+      ng, gdat%nroots, nmax, mmax, nimax, njmax, nkmax, nlmax, &
+      gdat%dij,gdat%dkl)
+    call compute_der_xyz_ijkl(gdat, gdat%gijkl, &
+      ng, gdat%nroots*3, nimax, njmax, nkmax, nlmax, &
+      gdat%ai, gdat%aj, gdat%ak, gdat%al, &
+      gdat%fi, gdat%fj, gdat%fk, gdat%fl)
+
+    call compute_der_ijkl_batch(gdat, ng*gdat%nroots, gdat%ijklxyz, &
+      gdat%gijkl, gdat%fi, gdat%fj, gdat%fk, gdat%fl, dab, fd_batch)
+  end subroutine compute_grd_ints_batch
+
+
+  subroutine compute_der_ijkl_batch(gdat, ngnr, ijklxyz, g0, fi, fj, fk, fl, &
+                                    den, fd)
+
+    implicit none
+
+    type(grd2_int_data_t) :: gdat
+    integer, intent(in) :: ngnr
+    integer, intent(in) :: ijklxyz(:,:,:)
+    real(kind=dp), intent(in) :: g0(ngnr,3,*)
+    real(kind=dp), intent(in) :: fi(ngnr,3,*), fj(ngnr,3,*)
+    real(kind=dp), intent(in) :: fk(ngnr,3,*), fl(ngnr,3,*)
+    real(kind=dp), intent(in) :: den(:,:)
+    real(kind=dp), intent(inout) :: fd(:,:,:)
+
+    integer :: i, j, k, l, iprobe, nx, ny, nz, iden
+    real(kind=dp) :: yz(ngnr), xz(ngnr), xy(ngnr), dint(3,4), df
+
+    do i = 1, gdat%nbf(1)
+      do j = 1, gdat%nbf(2)
+        do k = 1, gdat%nbf(3)
+          do l = 1, gdat%nbf(4)
+            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2) &
+               + ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2) &
+               + ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2) &
+               + ijklxyz(3,k,3)+ijklxyz(3,l,4)
+            iden = l + gdat%nbf(4)*(k-1 + gdat%nbf(3)*(j-1 + &
+              gdat%nbf(2)*(i-1)))
+
+            associate(x => g0(:,1,nx), y => g0(:,2,ny), &
+                      z => g0(:,3,nz))
+              yz = y*z
+              xz = x*z
+              xy = x*y
+              dint = 0.0_dp
+              if (.not.gdat%skip(1)) then
+                dint(1,1) = sum(fi(:,1,nx)*yz)
+                dint(2,1) = sum(fi(:,2,ny)*xz)
+                dint(3,1) = sum(fi(:,3,nz)*xy)
+              end if
+              if (.not.gdat%skip(2)) then
+                dint(1,2) = sum(fj(:,1,nx)*yz)
+                dint(2,2) = sum(fj(:,2,ny)*xz)
+                dint(3,2) = sum(fj(:,3,nz)*xy)
+              end if
+              if (.not.gdat%skip(3)) then
+                dint(1,3) = sum(fk(:,1,nx)*yz)
+                dint(2,3) = sum(fk(:,2,ny)*xz)
+                dint(3,3) = sum(fk(:,3,nz)*xy)
+              end if
+              if (.not.gdat%skip(4)) then
+                dint(1,4) = sum(fl(:,1,nx)*yz)
+                dint(2,4) = sum(fl(:,2,ny)*xz)
+                dint(3,4) = sum(fl(:,3,nz)*xy)
+              end if
+            end associate
+
+            do iprobe = 1, size(den,2)
+              df = den(iden,iprobe)
+              fd(:,:,iprobe) = fd(:,:,iprobe) + df*dint
+            end do
+          end do
+        end do
+      end do
+    end do
+  end subroutine compute_der_ijkl_batch
+
 end module grd2_rys

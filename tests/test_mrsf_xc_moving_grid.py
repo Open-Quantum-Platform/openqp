@@ -27,8 +27,9 @@ def test_mrsf_gradient_requests_probe_only_moving_grid_response():
     assert "include_ground_state=.false." in body
     assert "include_weight_derivative=.true." in body
     assert "weight_derivative_only=.true." in body
-    assert "include_ground_state=.true." in body
-    assert "grid_p = 0.0_dp" in body
+    assert "use mod_dft_gridint_grad, only: derexc_blk" in body
+    assert "call derexc_blk" in body
+    assert "include_ground_state=.true." not in body
 
 
 def test_linear_probe_has_partition_and_owner_motion_terms():
@@ -43,11 +44,13 @@ def test_linear_probe_has_partition_and_owner_motion_terms():
     assert "xce%currAtom" in source
 
 
-def test_moving_grid_mode_is_restricted_to_one_linear_probe():
+def test_moving_grid_mode_preserves_each_linear_probe():
     source = _source("source/dftlib/dft_gridint_tdxc_grad.F90")
 
     assert "requested_weight_derivative .and. doFxc" in source
-    assert "requested_weight_derivative .and. nMtx /= 1" in source
+    assert "size(dedft_mtx,3) /= nMtx" in source
+    assert "self%probe_value(ipt,imtx,mythread)" in source
+    assert "self%nucgrad(:,b,imtx,mythread)" in source
     assert "if (.not. requested_weight_only) then" in source
     assert "xc%exc(i)*xce%xyzw(i,4)" in source
 

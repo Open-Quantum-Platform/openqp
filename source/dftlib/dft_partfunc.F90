@@ -380,7 +380,7 @@ contains
       partfunc%deriv => partf_diff_smoothstep4
 
     case (PTYPE_SMSTP5)
-      partfunc%limit = 0.74_fp
+      partfunc%limit = 0.73_fp
       partfunc%eval => partf_eval_smoothstep5
       partfunc%deriv => partf_diff_smoothstep5
 

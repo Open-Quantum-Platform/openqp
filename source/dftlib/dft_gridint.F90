@@ -168,6 +168,10 @@ module mod_dft_gridint
     !< consumer update so consumers can associate points with their owning
     !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
     integer :: currAtom = 0
+    ! Atom owning the current atom-centred grid slice.  run_xc uses a
+    ! thread-private engine, so consumers may safely use this as slice
+    ! context (e.g. for fuzzy-cell weight derivatives).
+    integer :: gridOrigin = 0
     integer :: maxPts = 0
     integer :: maxAngMom = 0
     integer :: nAODer = 0
@@ -2529,6 +2533,7 @@ contains
 !$      if (do_timing) tic = omp_get_wtime()
 
         iAtom = xc_opts%molGrid%idOrigin(iSlice)
+        xce%gridOrigin = iAtom
 
         ! Symmetry reduction: integrate only unique atoms' slices, with
         ! quadrature weights scaled by the atom-orbit size. Geometry-only, so
