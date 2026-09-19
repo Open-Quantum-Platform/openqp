@@ -42,6 +42,13 @@ DEVKIT = "Open-Quantum-Platform/openqp-devkit"
 TOOLS_ALLOWED = {
     "check_blas_wrapper.py": ".github/workflows/pr-policy.yml (rule 1)",
     "check_repo_layout.py": ".github/workflows/pr-policy.yml (rule 5, this gate)",
+    # Landed ahead of the script itself: this gate runs the TRUSTED
+    # base-branch copy of check_repo_layout.py, so the allowlist that
+    # governs a pull request is the one already on the base. A pull
+    # request that adds a tools/ entry AND its allowlist line in one go
+    # is therefore judged by the base's allowlist and fails. Adding a
+    # new CI tool takes two pull requests: this one, then the script.
+    "check_digest_harmonic.py": ".github/workflows/pr-policy.yml (rule 6)",
     "convert_legacy_examples.py": "tests/known_failures.txt",
     "generate_int2_pure_kernels.py": "source/integrals/int2_pure_generated.F90",
     "minao": "source/minao_lut.F90",
