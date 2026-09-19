@@ -42,6 +42,7 @@ DEVKIT = "Open-Quantum-Platform/openqp-devkit"
 TOOLS_ALLOWED = {
     "check_blas_wrapper.py": ".github/workflows/pr-policy.yml (rule 1)",
     "check_repo_layout.py": ".github/workflows/pr-policy.yml (rule 5, this gate)",
+    "check_digest_harmonic.py": ".github/workflows/pr-policy.yml (rule 6)",
     "convert_legacy_examples.py": "tests/known_failures.txt",
     "generate_int2_pure_kernels.py": "source/integrals/int2_pure_generated.F90",
     "minao": "source/minao_lut.F90",
