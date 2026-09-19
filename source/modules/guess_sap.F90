@@ -17,7 +17,7 @@ contains
 
   subroutine guess_sap(infos)
     use precision, only: dp
-    use types, only: information
+    use types, only: information, GUESS_COLD
     use io_constants, only: IW
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
@@ -63,6 +63,7 @@ contains
       OQP_SM, OQP_TM, OQP_hbasis_filename /)
     character(len=1,kind=c_char), contiguous, pointer :: sap_filename(:)
 
+    infos%control%guess = GUESS_COLD
     open (unit=IW, file=infos%log_filename, position="append")
     call print_module_info('Guess_SAP', &
         'Initial guess using Superposition of Atomic Potentials')

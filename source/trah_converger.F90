@@ -50,6 +50,7 @@ module trah_native
     procedure :: hess_vec     => scf_hess_vec
     procedure :: trial_energy => scf_trial_energy
     procedure :: apply_step   => scf_apply_step
+    procedure :: refresh      => scf_refresh
   end type scf_trah_provider_t
 
 contains
@@ -101,7 +102,11 @@ contains
     conv%f_old = 0.0_dp
     conv%d_old = 0.0_dp
 
-    write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    if (par%sub_solver == 2 .or. par%deterministic) then
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    else
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, augmented-Hessian Davidson)"/5X,61("-"))')
+    end if
     write(IW,'(5X,"start trust radius =",F7.3,"   conv =",ES9.2,"   max micro =",I4)') &
               par%r0, par%conv_tol, par%nmic
     write(IW,'(/4x,"Macro",6x,"Energy",13x,"|grad|",7x,"rho",6x,"trust",3x,"micro",3x,"step")')
@@ -245,6 +250,19 @@ contains
     ierr = 0
     call rotate_mo(this%conv, this%infos%control%scftype, p, this%conv%mo_a, this%conv%mo_b)
   end subroutine scf_apply_step
+
+  !> Reset the incremental-Fock history, so the next Fock is built from the
+  !> full density.  Every Fock in the run is incremental, F = F_old + G[D - D_old]
+  !> with G screened on the shrinking difference density, and the dropped terms
+  !> add up: on ROHF triplet H2O/6-31G*/BHHLYP the refinement stopped at an
+  !> incremental |g| of 3e-10 where the full-Fock |g| was 8e-9.  Refinement
+  !> gradients are therefore built in full, as ordinary SCF does near
+  !> convergence.
+  subroutine scf_refresh(this)
+    class(scf_trah_provider_t), intent(inout) :: this
+    this%conv%f_old = 0.0_dp
+    this%conv%d_old = 0.0_dp
+  end subroutine scf_refresh
 
   ! ----------------------------------------------------------- SCF machinery
   subroutine compute_native_mo_energies(nbf, fock, mo_coeffs, mo_energies, work_1, work_2)
