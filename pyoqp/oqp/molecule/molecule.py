@@ -13,7 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
-from oqp.utils.json_utils import json_array
+from oqp.utils.json_utils import json_array, tag_array_from_json
 from oqp.utils.state_labels import is_mrsf, public_state_label
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
@@ -24,6 +24,28 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 # written by default so the ``guess=json`` restart workflow keeps working.
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
 HESSIAN_CACHE_VERSION = 2
+# Configuration keys that cannot change H(R) and therefore must not invalidate
+# a cached Hessian.  tdhf.tlf selects how cross-geometry state overlaps are
+# evaluated for NACME/NAMD; its default changed without touching any energy.
+HESSIAN_CACHE_IGNORED_KEYS = {'tdhf': ('tlf',)}
+
+
+def _hessian_request_for_comparison(request):
+    """Drop keys that do not define H(R) from a stored or current request."""
+    if not isinstance(request, dict):
+        return request
+    normalized = dict(request)
+    model = request.get('model_config')
+    if isinstance(model, dict):
+        model = dict(model)
+        for section, keys in HESSIAN_CACHE_IGNORED_KEYS.items():
+            if isinstance(model.get(section), dict):
+                model[section] = {
+                    key: value for key, value in model[section].items()
+                    if key not in keys
+                }
+        normalized['model_config'] = model
+    return normalized
 
 
 def _env_wants_lean_json():
@@ -115,6 +137,7 @@ class Molecule:
             'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
             'OQP::Hcore', 'OQP::SM', 'OQP::TM', 'OQP::WAO',
             'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density', 'OQP::td_energies',
+            'OQP::td_xpy', 'OQP::td_xmy', 'OQP::td_z', 'OQP::td_p',
             'OQP::td_trans_density_mo', 'OQP::td_trans_dipole', 'OQP::td_dip_ao',
             'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
             'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
@@ -123,7 +146,7 @@ class Molecule:
             'OQP::dc_matrix', 'OQP::nac_matrix',
             'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges',
             'OQP::namd_coef', 'OQP::namd_velocity', 'OQP::namd_params', 'OQP::namd_results',
-            'OQP::namd_tdc', 'OQP::namd_eabs', 'OQP::namd_stas',
+            'OQP::namd_tdc', 'OQP::namd_eabs', 'OQP::namd_stas', 'OQP::namd_dcv',
             'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
             'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
             'OQP::mo_tracking_order', 'OQP::mo_tracking_phase',
@@ -928,7 +951,7 @@ class Molecule:
         NOT under C3/C6. That mismatch costs nothing for HF, which has no
         grid. With a functional it is a measured error -- ``benzene_full_dft``
         is out by 3.14e-04 against the tier's own 5e-7 tolerance
-        (docs/planned/integral-symmetry.md, "Still open").
+        (openqp-devkit docs/planned/integral-symmetry.md, "Still open").
 
         The combination used to be unreachable on the bases DFT is normally
         run in: before per-shell purity was exported, staging bailed with
@@ -1803,7 +1826,12 @@ class Molecule:
                                 + (', full group' if active.get('full_group')
                                    else ', abelian subgroup') + ')'
                                 if status == 'active' else ''))
-                if status != 'active':
+                # Path, optimization and Hessian drivers skip the reduction by
+                # design at every geometry; say so only in the detailed log.
+                from oqp.utils.log_format import VERBOSE_DETAILED, resolve_verbosity
+                designed_skip = (str(status).startswith('skipped_runtype_')
+                                 and resolve_verbosity(self.config) < VERBOSE_DETAILED)
+                if status != 'active' and not designed_skip:
                     # The C1 fallback gives a numerically identical answer, so
                     # without this line a user who explicitly asked for the
                     # reduction has no way to discover it never ran.
@@ -1822,7 +1850,7 @@ class Molecule:
                     lines.append('   tier used instead: the XC grid reduces over the'
                                  ' abelian operations only,')
                     lines.append('   and the non-abelian mismatch is a measured'
-                                 ' 3e-04 error (see docs/planned/')
+                                 ' 3e-04 error (see openqp-devkit docs/planned/')
                     lines.append('   integral-symmetry.md). Remove the [input]'
                                  ' functional to use the full group.')
                 if active.get('reoriented'):
@@ -1838,14 +1866,24 @@ class Molecule:
                     lines.append('    projection stays off --'
                                  ' [symmetry] use_response_symmetry)')
             lines.append('')
+            # Optimizations and path searches repeat an unchanged summary at
+            # every geometry; write it again only when it or the log changed.
+            text = '\n'.join(lines)
+            if (self.log, text) == getattr(self, '_last_symmetry_log', None):
+                return
             with open(self.log, 'a', encoding='utf-8') as fout:
-                fout.write('\n'.join(lines))
+                fout.write(text)
+            self._last_symmetry_log = (self.log, text)
         except Exception:
             pass
 
     @mpi_dump
     def _dump_mo_labels_log(self, result):
         """Append MO irrep labels to the main log (best effort, non-fatal)."""
+        from oqp.utils.log_format import VERBOSE_NORMAL, resolve_verbosity
+        # Same level as the native orbital table these labels annotate.
+        if resolve_verbosity(self.config) < VERBOSE_NORMAL:
+            return
         try:
             meta = self.symmetry_metadata
             lines = [
@@ -2080,17 +2118,23 @@ class Molecule:
 
     def get_nac(self):
         """
-        Get the non-adiabatic (phase-corrected derivative) coupling matrix d_ij.
+        Get the non-adiabatic couplings of a NACME or NAC-vector run.
 
-        Populated by a NACME run (``self.dcm``); empty for every other runtype.
-        The elements are sign/phase ambiguous between builds, so the regression
+        A NACME run populates the phase-corrected derivative coupling matrix
+        ``self.dcm``, which takes precedence; any workflow that evaluates NAC
+        vectors (``nac`` runs and drivers calling ``NAC``) populates h_ij in
+        ``self.nac``.  Otherwise an empty list is returned.  The
+        elements are sign/phase ambiguous between builds, so the regression
         comparison uses magnitudes (see the ``nac`` registry entry,
         ``phase_invariant=True``).
         """
         dcm = np.asarray(self.dcm, dtype=float)
-        if dcm.size == 0:
+        if dcm.size:
+            return dcm.tolist()
+        nac = np.asarray(self.nac, dtype=float)
+        if nac.size == 0:
             return []
-        return dcm.tolist()
+        return nac.tolist()
 
     def get_soc(self):
         """
@@ -2277,6 +2321,14 @@ class Molecule:
                 # result and regression data must expose that final value.
                 energy = float(np.asarray(final_energies).ravel()[0])
 
+        # A QM/MM optimisation minimised the embedded total energy (QM state +
+        # nuclear-MM + MM terms); that objective, not the fragment SCF scalar
+        # kept in mol_energy, is the result of the run and what the saved
+        # reference must pin.
+        qmmm_opt = getattr(self, 'qmmm_optimization', None)
+        if qmmm_opt and str(self.config.get('input', {}).get('runtype', '')).strip().lower() != 'optimize':
+            qmmm_opt = None                    # a summary left over from an earlier optimisation
+
         data = {
             'atoms': self.get_atoms().tolist(),
             'coord': self.get_system().tolist(),
@@ -2447,6 +2499,21 @@ class Molecule:
                 if value:
                     data[key] = value
 
+        # Last, after every backend-specific block (the DFTB one sets 'energy'
+        # from mol.energies[0], which is NaN for a QM/MM optimisation of an
+        # excited state): the minimised QM/MM total is this run's energy.
+        if qmmm_opt:
+            data['energy'] = float(qmmm_opt['energy_hartree'])
+            if qmmm_opt.get('grad_fragment') is not None:
+                # the objective's gradient for the published atoms, not the
+                # QM-fragment buffer the native gradient code left behind
+                data['grad'] = qmmm_opt['grad_fragment']
+            data['qmmm_optimization'] = {
+                k: qmmm_opt[k] for k in ('converged', 'energy_hartree', 'evaluations', 'recovery',
+                                         'electronic_failure', 'constraints', 'rms_grad', 'max_grad',
+                                         'output')
+                if k in qmmm_opt}
+
         return data
 
     def get_state_tracking(self):
@@ -2537,6 +2604,28 @@ class Molecule:
         """Deallocate oqp data object"""
         self.data = None
 
+    def _resolve_system_pdb_path(self):
+        """``[input] system = file.pdb <QM indices>``: when the PDB is not
+        found relative to the working directory, look next to the input file
+        (the rule the ``[qmmm]`` auxiliary files already follow), so a QM/MM
+        deck can be run from any directory, e.g. by ``openqp --run_tests``."""
+        try:
+            system = self.config['input'].get('system', '')
+        except (KeyError, TypeError, AttributeError):
+            return
+        if not isinstance(system, str) or '.pdb' not in system.lower():
+            return
+        stripped = system.strip()
+        end = stripped.lower().find('.pdb') + 4
+        pdb_path, suffix = stripped[:end].strip(), stripped[end:]
+        input_file = getattr(self, 'input_file', None)
+        if (os.path.isabs(pdb_path) or os.path.exists(pdb_path)
+                or not isinstance(input_file, str) or not input_file):
+            return
+        candidate = os.path.join(os.path.dirname(os.path.abspath(input_file)), pdb_path)
+        if os.path.exists(candidate):
+            self.config['input']['system'] = candidate + suffix
+
     @mpi_get_attr
     def get_config(self, input_source):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA, allow_no_value=True)
@@ -2548,6 +2637,8 @@ class Molecule:
             parser.load_dict(input_source)
         else:
             raise ValueError("Input must be a filename (str) or a configuration dictionary (dict)")
+
+        self._quiet_orbitals_in_dynamics(parser)
 
         # Print configuration if not in silent mode
         if not self.silent:
@@ -2567,6 +2658,14 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
+        self._resolve_system_pdb_path()
+        # deck-relative [qmmm] forcefield_files for the PDB-based molecule builder
+        from oqp.utils import qmmm as _qmmm_utils
+        _qmmm_utils.input_dir = (os.path.dirname(os.path.abspath(input_source))
+                                 if isinstance(input_source, str) else
+                                 (os.path.dirname(os.path.abspath(self.input_file))
+                                  if isinstance(getattr(self, 'input_file', None), str) and self.input_file
+                                  else None))
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -2576,6 +2675,35 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    @staticmethod
+    def _quiet_orbitals_in_dynamics(parser):
+        """Default ``[scf] verbose`` to 0 for ``runtype = md`` / ``namd``.
+
+        A dynamics run calls the SCF at least once per step and the SCF prints
+        the whole MO coefficient table on every call, so the table is repeated
+        for every step of the trajectory: a 100-step QM/MM NAMD run of an
+        18-atom QM region wrote 405 tables, 700 000 lines and 83 MB of log, in
+        which the 101 lines that report the dynamics are impossible to find.
+        ``verbose = 0`` suppresses the table (``source/printing.F90``); an
+        explicit ``verbose >= 2`` in the deck still prints it, and the orbitals
+        of any single frame remain available from the Molden file, the restart
+        record and the trajectory file, none of which this touches.
+
+        Runs on the parser before the configuration is echoed, so what is
+        printed is what the run will use.  ``QMMM_MD`` in config mode rewrites
+        ``runtype`` to ``energy`` before the molecule is built and therefore
+        applies the same default itself.
+        """
+        runtype = str(parser.get("input", "runtype", fallback="")).strip().lower()
+        if runtype not in ("md", "namd"):
+            return
+        # The parser is seeded with every schema default, so an option is
+        # always present; only the default value is overridden, and a deck
+        # asking for more detail (verbose >= 2) or already silent keeps it.
+        if (str(parser.get("input", "verbose", fallback="1")).strip() == "1"
+                and str(parser.get("scf", "verbose", fallback="1")).strip() == "1"):
+            parser.set("scf", "verbose", "0")
 
     def _resolve_perf(self, input_source):
         """Apply the `perf` preset to self.config before it is pushed to the control
@@ -3249,7 +3377,7 @@ class Molecule:
         self._state_tracking_fresh = False
         for key in self.tag:
             try:
-                self.data[key] = np.array(data[key])
+                self.data[key] = tag_array_from_json(key, data[key])
 
             except KeyError:
                 continue
@@ -3314,7 +3442,9 @@ class Molecule:
                 'cached Hessian state %s does not match requested state %s'
                 % (cached_state, requested_state)
             )
-        current_request = self._hessian_request_signature(requested_state)
+        current_request = _hessian_request_for_comparison(
+            self._hessian_request_signature(requested_state))
+        cached_request = _hessian_request_for_comparison(cached_request)
         if cached_request != current_request:
             cached_model = cached_request.get('model_config', {})
             current_model = current_request['model_config']

@@ -59,6 +59,331 @@ contains
     infos%control%maxit_dav = maxit0
   end subroutine tdhf_mrsf_energy_with_restart
 
+!###############################################################################
+
+  subroutine mrsf_matvec_apply_C(c_handle) bind(C, name="mrsf_matvec_apply")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_matvec_apply(inf)
+  end subroutine mrsf_matvec_apply_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_response_C(c_handle) bind(C, name="mrsf_nac_response")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    logical :: log_was_open
+
+    inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
+    call mrsf_nac_response(inf)
+    if (.not. log_was_open) close(iw)
+  end subroutine mrsf_nac_response_C
+
+!> @brief Apply the full ground-state Fock response kernel for analytic NAC.
+!> @detail Reads packed first-order alpha/beta densities from
+!>   OQP::nac_dm1_a/b and writes the corresponding packed JK+XC response
+!>   matrices to OQP::nac_v1_a/b.  Unlike the old DM-only finite-difference
+!>   probe, this route calls get_response_packed, so a DFT calculation includes
+!>   the explicit f_xc P^(1) contribution evaluated on the reference grid.
+!>   OQP::nac_vxc_a/b additionally expose the XC-only difference for the v20
+!>   response audit.  Production consumes the resident full-MO orbital source
+!>   OQP::nac_mt_response, avoiding AO packing and MO transforms in Python.
+  subroutine mrsf_nac_response(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: with_abort
+    use precision, only: dp
+    use mod_dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_addons, only: get_response_packed
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_response"
+    character(len=*), parameter :: OQP_nac_dm1_a = "OQP::nac_dm1_a"
+    character(len=*), parameter :: OQP_nac_dm1_b = "OQP::nac_dm1_b"
+    character(len=*), parameter :: OQP_nac_v1_a = "OQP::nac_v1_a"
+    character(len=*), parameter :: OQP_nac_v1_b = "OQP::nac_v1_b"
+    character(len=*), parameter :: OQP_nac_vxc_a = "OQP::nac_vxc_a"
+    character(len=*), parameter :: OQP_nac_vxc_b = "OQP::nac_vxc_b"
+    character(len=*), parameter :: OQP_nac_mt_response = &
+      "OQP::nac_mt_response"
+    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
+      OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_nac_dm1_a, OQP_nac_dm1_b /)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    type(dft_grid_t) :: molGrid
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), dm1_a(:), dm1_b(:)
+    real(kind=dp), pointer :: nac_v1_a(:), nac_v1_b(:), nac_vxc_a(:), &
+                              nac_vxc_b(:), nac_mt_response(:)
+    real(kind=dp), allocatable :: dm1(:,:), v1(:,:), vjk(:,:), &
+                                  mo_a_work(:,:), mo_b_work(:,:), vmo_packed(:), &
+                                  vmo_a(:,:), vmo_b(:,:), mt_response(:,:)
+    integer :: nbf, nbf2, nocca, noccb, q
+    logical :: dft
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    dft = infos%control%hamilton == 20
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_a, dm1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_b, dm1_b)
+
+    allocate(dm1(nbf2,2), v1(nbf2,2), vjk(nbf2,2), &
+             mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), vmo_packed(nbf2), &
+             vmo_a(nbf,nbf), vmo_b(nbf,nbf), mt_response(nbf,nbf), &
+             source=0.0_dp)
+    dm1(:,1) = dm1_a
+    dm1(:,2) = dm1_b
+    mo_a_work = mo_a
+    mo_b_work = mo_b
+
+    if (dft) then
+      ! get_response_packed is a reusable public NAC kernel and may follow a
+      ! displaced SCF/DFT worker in the same process.  Reset libxc before
+      ! initialization so the functional list cannot be appended twice.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid, verbose=.false.)
+    end if
+    ! Capture the JK-only diagnostic from the response kernel's own integral
+    ! pass.  Calling fock_jk separately here used to evaluate the identical
+    ! pair density twice for every state pair.
+    call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, &
+                             mo_b_work, vjk)
+    if (dft) call dftclean(infos)
+
+    ! Transform the full response potential to the reference MO basis and
+    ! form exactly the orbital source used by the MRSF pair Lagrangian:
+    !   M_response(p,q) = 2 [V1_a(p,q) n_a(q) + V1_b(p,q) n_b(q)].
+    ! This used to be rebuilt in Python for every ordered state pair.
+    block
+      use mathlib, only: orthogonal_transform_sym, unpack_matrix
+      call orthogonal_transform_sym(nbf, nbf, v1(:,1), mo_a, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_a)
+      call orthogonal_transform_sym(nbf, nbf, v1(:,2), mo_b, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_b)
+      mt_response = 0.0_dp
+      do q = 1, nocca
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_a(:,q)
+      end do
+      do q = 1, noccb
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_b(:,q)
+      end do
+    end block
+
+    call infos%dat%erase((/ character(len=80) :: &
+      OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b, &
+      OQP_nac_mt_response /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mt_response, ta_type_real64, &
+         nbf*nbf, (/ nbf*nbf /), &
+         comment='ordered MRSF full ground-state response orbital source')
+    call tagarray_get_data(infos%dat, OQP_nac_v1_a, nac_v1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_v1_b, nac_v1_b)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_a, nac_vxc_a)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_b, nac_vxc_b)
+    call tagarray_get_data(infos%dat, OQP_nac_mt_response, nac_mt_response)
+    nac_v1_a = v1(:,1)
+    nac_v1_b = v1(:,2)
+    nac_vxc_a = v1(:,1) - vjk(:,1)
+    nac_vxc_b = v1(:,2) - vjk(:,2)
+    nac_mt_response = reshape(mt_response, (/ nbf*nbf /))
+
+  end subroutine mrsf_nac_response
+
+!> @brief NAC Phase 11 diagnostic. Apply the MRSF Davidson matvec A (TDA) to a
+!>   single trial amplitude (OQP::td_bvec_mo column 1) using the CURRENT
+!>   orbitals VEC_MO_A/B but the FROZEN AO Fock FOCK_A/B (rebuilt as the MO
+!>   Fock C^T F_AO C from the given orbitals). Writes A.x to OQP::nac_mvax.
+!>   Driving this from Python with orbital-rotated VEC_MO_A/B (FOCK_A/B held
+!>   fixed) yields a frozen-Fock finite-difference reconstruction of the
+!>   amplitude-term orbital gradient X_I^T(d_theta A)X_J, the matvec-derived
+!>   Z-vector RHS that must replace the gradient chain (sfrorhs) off-diagonal.
+  subroutine mrsf_matvec_apply(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use precision, only: dp
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfmntoia, mrsfesum
+    use tdhf_lib, only: iatogen
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix, orthogonal_transform
+    use iso_c_binding, only: c_f_pointer, c_int
+
+    implicit none
+    character(len=*), parameter :: subroutine_name = "mrsf_matvec_apply"
+    character(len=*), parameter :: OQP_nac_mvax = "OQP::nac_mvax"
+    character(len=*), parameter :: OQP_nac_gmo = "OQP::nac_gmo"
+    character(len=*), parameter :: OQP_nac_fa = "OQP::nac_fa"
+    character(len=*), parameter :: OQP_nac_fb = "OQP::nac_fb"
+    character(len=*), parameter :: OQP_nac_gchan = "OQP::nac_gchan"
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
+                                          mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
+    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:), nac_fa(:), nac_fb(:), nac_gchan(:)
+    real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
+    real(kind=dp), allocatable :: gmo(:,:), gchan(:,:,:)
+    integer :: ich
+    real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    type(int2_compute_t) :: int2_driver
+    type(int2_mrsf_data_t), target :: int2_data_st
+    integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, iter, diag_index
+    integer(c_int), pointer :: ixcore_ptr(:)
+    real(kind=dp) :: scale_exch, hfs
+    logical :: dft
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_td_bvec_mo /)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb
+    xvec_dim = nocca*nvirb
+    mrst = infos%tddft%mult
+    dft = infos%control%hamilton == 20
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%tddft%hfscale
+    hfs = infos%tddft%hfscale
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    if (.not. (infos%tddft%ixcore_len == 0)) &
+      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
+
+    allocate(fa(nbf,nbf), fb(nbf,nbf), scr(nbf2), wrk1(nbf,nbf), &
+             mrsf_density(1,7,nbf,nbf), amo(xvec_dim,1), gmo(nbf,nbf), source=0.0_dp)
+
+    ! MO Fock from the FROZEN AO Fock and the (possibly rotated) orbitals
+    call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
+    if (.not. (infos%tddft%ixcore_len == 0)) then
+      do iter = 1, noccb
+        if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
+          diag_index = (iter + 1) * iter / 2
+          scr(diag_index) = -1.0d6
+        end if
+      end do
+    end if
+    call unpack_matrix(scr, fa)
+    call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, scr)
+    call unpack_matrix(scr, fb)
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+
+    ! A . x   (TDA),  x = bvec_mo(:,1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(1,:,:,:))
+    int2_data_st = int2_mrsf_data_t( &
+      d3 = mrsf_density(:1,:,:,:), &
+      tamm_dancoff = .true., &
+      scale_exchange = scale_exch, &
+      scale_coulomb = scale_exch)
+    call int2_driver%run(int2_data_st, &
+      cam = dft .and. infos%dft%cam_flag, &
+      alpha = infos%tddft%cam_alpha, alpha_coulomb = infos%tddft%cam_alpha, &
+      beta = infos%tddft%cam_beta, beta_coulomb = infos%tddft%cam_beta, &
+      mu = infos%tddft%cam_mu)
+    fmrst2 => int2_data_st%f3(:,:,:,:,1)
+    if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+    if (infos%tddft%spc_coco /= hfs) &
+      fmrst2(:,6,:,:) = fmrst2(:,6,:,:)*infos%tddft%spc_coco/hfs
+    if (infos%tddft%spc_ovov /= hfs) &
+      fmrst2(:,5,:,:) = fmrst2(:,5,:,:)*infos%tddft%spc_ovov/hfs
+    if (infos%tddft%spc_coov /= hfs) &
+      fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
+
+    ! NAC Phase 11: export the FULL-MO 2e kernel of the matvec, G_MO =
+    ! mo_a^T * agdlr^AO * mo_a (channel-7 AO Fock back-transformed to MO space),
+    ! identical to the production z-vector's wrk2 (tdhf_mrsf_z_vector.F90:1707).
+    ! With G_MO in hand the orbital-rotation z-vector RHS hxa/hxb can be built
+    ! ANALYTICALLY from the INPUT-folded amplitude (mrsfxvec) in Python, avoiding
+    ! both the finite-difference and mrsfesum's output-side SOMO fold (the FD
+    ! artifact diagnosed in PHASE11_fd_findings.md).
+    call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), gmo)
+
+    ! NAC Phase 11: also export the SIX spin-pair channel MO kernels
+    ! gchan(:,:,ich) = mo_a^T * channel_ich^AO * mo_a (ich=1..6: ado2v, ado1v,
+    ! adco1, adco2, ao21v, aco12), AFTER the triplet flip + spc rescale, exactly
+    ! as mrsfmntoia/mrsfsp consume them. With these fixed MO kernels the matvec's
+    ! full 2e back-transform (mrsfmntoia sections 3-6 + the SOMO output fold) can
+    ! be reconstructed at any rotated C in Python (U^T gchan U) and its rotation
+    ! gradient L^mntoia compared to the gradient chain [G_MO + mrsfsp] -- the
+    ! discriminating test for the O==M^T output-fold-transpose deficiency.
+    allocate(gchan(nbf,nbf,6), source=0.0_dp)
+    do ich = 1, 6
+      call orthogonal_transform('n', nbf, mo_a, fmrst2(1,ich,:,:), gchan(:,:,ich))
+    end do
+
+    call mrsfmntoia(infos, fmrst2(1,:,:,:), amo, mo_a, mo_b, 1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfesum(infos, wrk1, fa, fb, amo, 1)
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_mvax /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
+    call tagarray_get_data(infos%dat, OQP_nac_mvax, nac_ax)
+    nac_ax = amo(:,1)
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gmo /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_gmo, nac_gmo)
+    nac_gmo = reshape(gmo, (/ nbf*nbf /))
+
+    ! NAC Phase 11: also export the frozen-Fock MO Fock matrices fa,fb
+    ! (= mo_a^T F_AO_a mo_a and mo_b^T F_AO_b mo_b, F_AO frozen, incl. any
+    ! ixcore level shift) that mrsfesum contracts with the amplitude. Lets the
+    ! interstate relaxation term be built analytically in Python with the
+    ! bit-identical Fock (no packed-triangular reconstruction).
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fa /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fa, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fa, nac_fa)
+    nac_fa = reshape(fa, (/ nbf*nbf /))
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fb /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fb, nac_fb)
+    nac_fb = reshape(fb, (/ nbf*nbf /))
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gchan /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
+    call tagarray_get_data(infos%dat, OQP_nac_gchan, nac_gchan)
+    nac_gchan = reshape(gchan, (/ nbf*nbf*6 /))
+
+    call int2_driver%clean()
+
+  end subroutine mrsf_matvec_apply
+
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
@@ -879,7 +1204,7 @@ contains
 !     confine each root's update to the dominant irrep of its Ritz vector.
       sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nsolve))
       call sym_response_project(infos, sym_ritz, qvec, nsolve)
-      call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
+      if (infos%control%verbose >= 1) call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
 
 !     Convergence is judged on the REPORTED roots -- demanding that every extra
 !     tracked root converge too would turn a converging run into a

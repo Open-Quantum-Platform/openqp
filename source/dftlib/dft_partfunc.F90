@@ -179,7 +179,8 @@ contains
     end if
     frac = 1.0_fp/(1.0_fp-x*x)
     ex = exp(-(SCALEF*SCALEF*x*x*frac*frac))
-    df = -FACTOR*ex*(1.0_fp+x*x)*frac
+    ! d[x/(1-x**2)]/dx = (1+x**2)/(1-x**2)**2.
+    df = -FACTOR*ex*(1.0_fp+x*x)*frac*frac
   end function
 
 !-------------------------------------------------------------------------------
@@ -212,7 +213,8 @@ contains
     else
       f1 = 0.5_fp-x*SCALEF
       f2 = f1*f1
-      df = f2*(30.0_fp-60.0_fp*f1+30.0_fp*f2)
+      ! f1 = 1/2 - SCALEF*x, so include df1/dx = -SCALEF.
+      df = -SCALEF*f2*(30.0_fp-60.0_fp*f1+30.0_fp*f2)
     end if
   end function
 
@@ -249,8 +251,8 @@ contains
       f1 = 0.5_fp-x*SCALEF
       f2 = f1*f1
       f4 = f2*f2
-      df = f2*f1*((140.0_fp-420.0_fp*f1)+ &
-                  f2*(420.0_fp-140.0_fp*f1))
+      df = -SCALEF*f2*f1*((140.0_fp-420.0_fp*f1)+ &
+                          f2*(420.0_fp-140.0_fp*f1))
     end if
   end function
 
@@ -288,9 +290,9 @@ contains
       f1 = 0.5_fp-x*SCALEF
       f2 = f1*f1
       f4 = f2*f2
-      df = f4*((630.0_fp-2520.0_fp*f1)+ &
-               f2*(3780.0_fp-2520.0_fp*f1)+ &
-               f4*630.0_fp)
+      df = -SCALEF*f4*((630.0_fp-2520.0_fp*f1)+ &
+                       f2*(3780.0_fp-2520.0_fp*f1)+ &
+                       f4*630.0_fp)
     end if
   end function
 
@@ -328,9 +330,9 @@ contains
       f1 = 0.5_fp-x*SCALEF
       f2 = f1*f1
       f4 = f2*f2
-      df = f4*f1*((2772.0_fp-13860.0_fp*f1)+ &
-                  f2*(27720.0_fp-27720.0_fp*f1)+ &
-                  f4*(13860.0_fp-2772.0_fp*f1))
+      df = -SCALEF*f4*f1*((2772.0_fp-13860.0_fp*f1)+ &
+                          f2*(27720.0_fp-27720.0_fp*f1)+ &
+                          f4*(13860.0_fp-2772.0_fp*f1))
     end if
   end function
 
@@ -378,7 +380,7 @@ contains
       partfunc%deriv => partf_diff_smoothstep4
 
     case (PTYPE_SMSTP5)
-      partfunc%limit = 0.74_fp
+      partfunc%limit = 0.73_fp
       partfunc%eval => partf_eval_smoothstep5
       partfunc%deriv => partf_diff_smoothstep5
 

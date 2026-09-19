@@ -5,10 +5,20 @@ module mod_dft
   use io_constants, only: iw
   use basis_tools, only: basis_set
   use mod_dft_molgrid, only: dft_grid_t
+  use dft_radial_grid_types, only: dft_radial_grid_none
 
   implicit none
 
   character(len=*), parameter :: module_name = "dft"
+
+  !> DFT set-ups already described, as "log file|signature" records.  Every SCF,
+  !> response, gradient and Hessian step sets the same functional and grid up again;
+  !> each log file gets the description once, whichever runs are built, interleaved
+  !> or appended (QM/MM optimisation and dynamics build a Runner per geometry).
+  !> The records start afresh with every log a run creates (oqp_log_restarted) and are
+  !> capped at max_described_setups entries, so a long-lived process does not accumulate them.
+  character(len=1600), allocatable, save :: described_setups(:)
+  integer, parameter :: max_described_setups = 256
 
   private
   public dft_initialize
@@ -18,6 +28,7 @@ module mod_dft
   public dftclean
   public dftexcor
   public dftder
+  public dft_forget_setups
 
 !> @brief Pruned-grid specification
 !> @details A pruned grid is defined per atom type by up to `ngrids`
@@ -32,15 +43,24 @@ module mod_dft
 !>   Several radial grids may coexist: `radial_id` maps each atom to
 !>   one of `nrad_types` radial grids.  Radial type 1 is always the
 !>   standard unit-radius grid (scaled by the Bragg-Slater radius);
-!>   types >= 2 are element-specific grids in absolute bohr: DE2
+!>   types >= 2 are element-specific grids in absolute bohr -- DE2
 !>   (`de2_alpha`/`de2_rmax` give alpha and the outermost node) or,
 !>   when `me_rscale` is allocated and positive, MultiExp with
-!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0).
+!>   `rad_npts` nodes and scaling radius `me_rscale` (SG-0) -- unless
+!>   `rad_map` marks the type as another standard grid: its own map
+!>   and `rad_npts` nodes, scaled by the Bragg-Slater radius like
+!>   type 1 (SG-1 uses this for atoms above Ar).
 !>   If `nang_override` is allocated and non-zero for an atom type,
 !>   that type is unpruned: a single `nang_override(t)`-point Lebedev
 !>   sphere is used at ALL radii (heavy-atom fallback).
   type dft_grid_pruned_t
     integer :: nrad = 0
+    !> Radial grid type this pruned scheme is DEFINED on, when the
+    !> scheme pins one (SG-1 is defined on the MHL/Euler-Maclaurin
+    !> map).  `dft_radial_grid_none` = no override: use the radial
+    !> type the user configured.  Applied only while this grid is
+    !> being built, so it never mutates the user's settings.
+    integer :: rad_grid_type = dft_radial_grid_none
     integer :: ngrids = 1
     integer, allocatable :: nang(:,:)    !< (region, atom type)
     real(kind=dp), allocatable :: radii(:,:) !< (region, atom type)
@@ -55,14 +75,22 @@ module mod_dft
     real(kind=dp), allocatable :: de2_alpha(:) !< DE2 alpha of radial type
     real(kind=dp), allocatable :: de2_rmax(:)  !< DE2 outermost node, bohr
     integer, allocatable :: rad_npts(:)  !< nodes of radial type (0: global nrad)
+    !> Radial map of radial type i when that type is a standard grid scaled
+    !> by the Bragg-Slater radius (like type 1) rather than an
+    !> element-specific absolute grid (DE2/MultiExp).  Unallocated, or
+    !> `dft_radial_grid_none` for a type, = absolute grid.  SG-1 uses it to
+    !> keep the user's radial grid for atoms above Ar.
+    integer, allocatable :: rad_map(:)
     real(kind=dp), allocatable :: me_rscale(:) !< MultiExp R of radial type (0: DE2)
   end type
 
-!  SG1 region boundaries (in units of the atomic radius) and Lebedev
-!  orders, from P.M.W. Gill, B.G. Johnson, J.A. Pople,
-!  Chem. Phys. Lett. 209 (1993) 506: rows are H-He, Li-Ne, Na-Ar.
+!  SG1 region boundaries (in units of the atomic radius), radial shell
+!  counts on the 50-point MHL/EML grid, and Lebedev orders, from
+!  P.M.W. Gill, B.G. Johnson, J.A. Pople, Chem. Phys. Lett. 209
+!  (1993) 506: columns are H-He, Li-Ne, Na-Ar.
 !  SG1 is only defined up to Ar; heavier atoms (row 4) fall back to
-!  the unpruned 194-point grid at all radii.  Row 4 is fully
+!  the unpruned 194-point grid at all radii, on the radial grid the user
+!  configured (SG1's own 50-point MHL grid applies to H-Ar only).  Row 4 is fully
 !  overridden via nang_override (set in dft_set_options), so its
 !  boundaries are never used.
   real(kind=dp), parameter :: sg1rads(5,4) = reshape(&
@@ -73,6 +101,12 @@ module mod_dft
          shape(sg1rads))
   integer, parameter :: sg1atoms(4) =  [2,  10,  18,  137]
   integer, parameter :: sg1grids(5) =  [6, 38, 86, 194, 86]
+  integer, parameter :: SG1_NRAD = 50
+  integer, parameter :: sg1shells(5,3) = reshape(&
+        [17, 4, 4, 9, 16, &
+         14, 7, 3, 9, 17, &
+         12, 7, 5, 7, 19], &
+         [5,3])
 
 !  SG-2 / SG-3 pruned grids: S. Dasgupta, J.M. Herbert,
 !  J. Comput. Chem. 38, 869 (2017).  Radial grid: Mitani
@@ -306,6 +340,61 @@ module mod_dft
 
 contains
 
+!> @brief Signature of a DFT set-up for the log: functional, grid and exchange mix.
+!> @detail dft_set_options describes a set-up only when no earlier set-up in the
+!>         same log started or ended with its starting signature, so a repeat is
+!>         quiet while a changed grid or exchange mix is described again.
+  function dft_setup_signature(infos, xc_func_name) result(key)
+    use iso_c_binding, only: c_null_char
+    use types, only: information
+    type(information), intent(in) :: infos
+    character(len=*), intent(in) :: xc_func_name
+    character(len=512) :: key
+    character(len=64) :: grid_name
+    integer :: i
+
+    ! The pruned-grid name matters: the MRSF Z-vector swaps in a coarse grid.
+    grid_name = ' '
+    do i = 1, min(len(grid_name), size(infos%dft%grid_pruned_name))
+      if (infos%dft%grid_pruned_name(i) == c_null_char) exit
+      grid_name(i:i) = infos%dft%grid_pruned_name(i)
+    end do
+    write(key, '(A,"|",L1,"|",A,"|",I0,"|",I0,"|",ES12.5,"|",L1,4("|",ES16.9))') &
+      trim(xc_func_name), logical(infos%dft%grid_pruned), trim(grid_name), &
+      int(infos%dft%grid_rad_size), int(infos%dft%grid_ang_size), &
+      infos%dft%grid_density_cutoff, logical(infos%dft%cam_flag), infos%dft%hfscale, &
+      infos%dft%cam_alpha, infos%dft%cam_beta, infos%dft%cam_mu
+  end function dft_setup_signature
+
+!> @brief True when this set-up signature was already described in this log file.
+  logical function setup_described(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    setup_described = .false.
+    if (allocated(described_setups)) setup_described = any(described_setups == rec)
+  end function setup_described
+
+!> @brief Record that this set-up signature has been described in this log file.
+  subroutine record_setup(log_key, key)
+    character(len=*), intent(in) :: log_key, key
+    character(len=1600) :: rec
+    rec = trim(log_key)//'|'//trim(key)
+    if (.not. allocated(described_setups)) allocate(described_setups(0))
+    if (any(described_setups == rec)) return
+    if (size(described_setups) >= max_described_setups) then
+      deallocate(described_setups)
+      allocate(described_setups(0))
+    end if
+    described_setups = [character(len=1600) :: described_setups, rec]
+  end subroutine record_setup
+
+!> @brief Forget every set-up description recorded so far (a run starts a new log).
+  subroutine dft_forget_setups()
+    if (allocated(described_setups)) deallocate(described_setups)
+  end subroutine dft_forget_setups
+
+
   subroutine save_dft_HF_exchange_from_input(this, infos)
     use types, only: information
     implicit none
@@ -338,25 +427,30 @@ contains
 
   end subroutine save_dft_HF_exchange_from_input
 
-  subroutine update_dft_HF_exchange_from_input(this, infos)
+  subroutine update_dft_HF_exchange_from_input(this, infos, announce)
     use types, only: information
     implicit none
     class(saved_HF_info), intent(inout) :: this
     type(information), intent(inout) :: infos
+    logical, intent(in), optional :: announce
+    logical :: announce_
 
     real(kind=dp) :: scale
     character(len=80), parameter :: format = &
           '(11x,a,":",t22,"|", t24, e12.5, t37, "-|>", t41, e12.5, t54, "|")'
 
+    announce_ = .true.
+    if (present(announce)) announce_ = announce
+
     if (infos%dft%cam_flag) then
-      write(*,'(2x,a)') "CAM-B3LYP with tuned Hartree-Fock exchange from the input."
-      write(*, '(5x,"CAM parametres: |   It was     |   It become    |")')
+      if (announce_) write(*,'(2x,a)') "CAM-B3LYP with tuned Hartree-Fock exchange from the input."
+      if (announce_) write(*, '(5x,"CAM parametres: |   It was     |   It become    |")')
       if (this%alpha) then
          scale = this%saved_alpha
       else
          scale =  infos%dft%cam_alpha
       end if
-      write(*, fmt=format) "Alpha", 0.19_dp, scale
+      if (announce_) write(*, fmt=format) "Alpha", 0.19_dp, scale
       if (this%alpha) infos%dft%cam_alpha = this%saved_alpha
 
       if (this%beta) then
@@ -364,7 +458,7 @@ contains
       else
          scale =  infos%dft%cam_beta
       end if
-      write(*, fmt=format) "Beta", 0.46_dp, scale
+      if (announce_) write(*, fmt=format) "Beta", 0.46_dp, scale
       if (this%beta) infos%dft%cam_beta = this%saved_beta
 
       if (this%mu) then
@@ -372,27 +466,27 @@ contains
       else
          scale =  infos%dft%cam_mu
       end if
-      write(*, fmt=format) "mu", 0.33_dp, scale
+      if (announce_) write(*, fmt=format) "mu", 0.33_dp, scale
       if (this%mu) infos%dft%cam_mu = this%saved_mu
     else
-      write(*,'(2x,a)') "Tuned Hartree-Fock exchange from the input."
-      write(*, '(10x,"Exact HF exchange:")')
+      if (announce_) write(*,'(2x,a)') "Tuned Hartree-Fock exchange from the input."
+      if (announce_) write(*, '(10x,"Exact HF exchange:")')
       if (this%hfscale) then
          scale = this%saved_hfscale
       else
          scale =  infos%dft%hfscale
       end if
-      write(*, fmt=format) "HF scale", infos%dft%hfscale, scale
+      if (announce_) write(*, fmt=format) "HF scale", infos%dft%hfscale, scale
       if (this%hfscale) infos%dft%hfscale = this%saved_hfscale
-      write(*, '(2x,a)') "Please cite the following works when using this option:"
-      write(*,fmt='(3a)') "[1] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
+      if (announce_) write(*, '(2x,a)') "Please cite the following works when using this option:"
+      if (announce_) write(*,fmt='(3a)') "[1] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
             "and C. H. Choi, J. Chem. Theory Comput., ??, ?? (2024); ", &
             "DOI: 10.1021/acs.jctc.4c00640"
-      write(*,fmt='(3a)') "[2] K. Komarov, W. Park, S. Lee, M. Huix-Rotllant, ", &
+      if (announce_) write(*,fmt='(3a)') "[2] K. Komarov, W. Park, S. Lee, M. Huix-Rotllant, ", &
             "and C. H. Choi, J. Chem. Theory Comput., 19, 7671-7684 (2023); ", &
             "DOI: 10.1021/acs.jctc.3c00884"
     end if
-    write(*,*)
+    if (announce_) write(*,*)
 
   end subroutine update_dft_HF_exchange_from_input
 
@@ -411,6 +505,7 @@ contains
 
     real(kind=dp) :: logtol
     type(dft_grid_pruned_t) :: pruned
+    logical :: internal
 
 !   Setup sreening parameters
     logtol = -log(1.0e-10_dp)
@@ -418,7 +513,10 @@ contains
     call basis%set_screening(logtol)
 
 !   Set grid DFT options
-    call dft_set_options(infos, pruned, need_functional)
+    ! An explicit verbose=.false. marks a helper set-up (PCM cavity, SAP guess).
+    internal = .false.
+    if (present(verbose)) internal = .not. verbose
+    call dft_set_options(infos, pruned, need_functional, internal)
 
 !   Initialize grid
     call dft_prepare_grid(infos, basis, molGrid, pruned, verbose)
@@ -673,18 +771,21 @@ contains
     call libxc_destroy(infos%functional)
   end subroutine
 
-  subroutine dft_set_options(infos, pruned, need_functional)
+  subroutine dft_set_options(infos, pruned, need_functional, internal)
     use iso_c_binding, only: c_null_char
+    use dft_radial_grid_types, only: dft_radial_grid_mhl
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
     use libxc, only: libxc_input
+    use functionals, only: set_announcement_log
 
     implicit none
 
     type(information), intent(inout) :: infos
     type(dft_grid_pruned_t), intent(inout) :: pruned
     logical, optional, intent(in) :: need_functional
+    logical, optional, intent(in) :: internal  !< helper set-up: never described
     type(saved_HF_info) :: saved_hf
     logical :: need_func
 
@@ -695,6 +796,9 @@ contains
     logical :: is_sg3
     integer :: z, ie, nsec, maxsec, nang_fallback
     integer :: zmap(SG_NELEM)
+    character(len=512) :: setup_key
+    character(len=1024) :: log_key
+    logical :: announce, internal_
 
     need_func = .true.
     if (present(need_functional)) need_func = need_functional
@@ -706,13 +810,24 @@ contains
 
     xc_func_name = c_f_char(infos%dft%xc_functional_name)
 
+    ! Describe the functional and grid only when this set-up starts from something
+    ! other than what the previous set-up left behind (see dft_setup_signature).
+    internal_ = .false.
+    if (present(internal)) internal_ = internal
+    ! Descriptions are recorded per log file (helper set-ups write to the same log).
+    log_key = ''
+    if (allocated(infos%log_filename)) log_key = infos%log_filename
+    call set_announcement_log(trim(log_key))
+    setup_key = dft_setup_signature(infos, xc_func_name)
+    announce = .not. internal_ .and. .not. setup_described(log_key, setup_key)
+
     if (.not. infos%dft%grid_pruned) then
       pruned%ngrids = 1
       allocate(pruned%nang(1,1), pruned%radii(1,1))
       pruned%nang(1,1) = infos%dft%grid_ang_size
       pruned%radii(1,1) = 1.0d+30
 
-      write(iw,'(/5X,"Lebedev grid-based DFT options"/&
+      if (announce) write(iw,'(/5X,"Lebedev grid-based DFT options"/&
                 &5X,30("-")/&
                 &5X,"XC functional: ",A/&
                 &5X,"NRAD  =",I8,5X,"NLEB  =",I8/&
@@ -734,10 +849,15 @@ contains
       select case (trim(pruned_name))
       case ("SG1")
         pruned%ngrids = 5
+        pruned%nrad = SG1_NRAD
+        pruned%rad_grid_type = dft_radial_grid_mhl
         ntyps = 4
         allocate(pruned%nang(pruned%ngrids, ntyps), &
-                 pruned%radii(pruned%ngrids, ntyps))
+                 pruned%radii(pruned%ngrids, ntyps), &
+                 pruned%nradPerRegion(pruned%ngrids, ntyps))
         pruned%radii = sg1rads
+        pruned%nradPerRegion = 0
+        pruned%nradPerRegion(:, 1:3) = sg1shells
         do i = 1, ntyps
           pruned%nang(:,i) = sg1grids
         end do
@@ -753,8 +873,22 @@ contains
         ! unpruned, i.e. a single 194-point sphere at all radii
         allocate(pruned%nang_override(ntyps), source=0)
         pruned%nang_override(4) = 194
+        ! ...and on the radial grid the user configured -- size AND map --
+        ! as they always were: SG1's 50-point MHL pin is part of SG1's
+        ! definition, which covers H-Ar only.  Heavy atoms get radial type 2,
+        ! a standard grid scaled by the Bragg-Slater radius like type 1.
+        ! Molecules without heavy atoms keep the single radial type.
+        if (any(pruned%rad_id(1:nat) == 4)) then
+          pruned%nrad_types = 2
+          allocate(pruned%radial_id(nat), source=1)
+          where (pruned%rad_id(1:nat) == 4) pruned%radial_id(1:nat) = 2
+          allocate(pruned%rad_npts(2), source=0)
+          pruned%rad_npts(2) = int(infos%dft%grid_rad_size)
+          allocate(pruned%rad_map(2), source=dft_radial_grid_none)
+          pruned%rad_map(2) = int(infos%dft%rad_grid_type)
+        end if
 
-        write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
+        if (announce) write(iw,'(/5X,"Standard Grid 1 (SG1)"/&
                   &5X,21("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"THRESH=",1P,E12.2)') &
@@ -831,7 +965,7 @@ contains
           pruned%de2_rmax(i) = sg_de2_rmax(ie)
         end do
 
-        write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
+        if (announce) write(iw,'(/5X,"Standard Grid ",A," (",A,") of Dasgupta and Herbert"/&
                   &5X,40("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"NRAD  =",I8,"   (Mitani DE2 radial grid)"/&
@@ -915,7 +1049,7 @@ contains
           pruned%me_rscale(i-3) = sg0_rscale(ie)
         end do
 
-        write(iw,'(/5X,"Standard Grid 0 (SG0) of Chien and Gill"/&
+        if (announce) write(iw,'(/5X,"Standard Grid 0 (SG0) of Chien and Gill"/&
                   &5X,39("-")/&
                   &5X,"XC functional: ",A/&
                   &5X,"NRAD  =   23/26   (MultiExp radial grid)"/&
@@ -938,12 +1072,21 @@ contains
       call libxc_input(functional_name=trim(xc_func_name), &
                        dft_params=infos%dft, &
                        tddft_params=infos%tddft, &
-                       functional=infos%functional)
+                       functional=infos%functional, &
+                       announce=announce)
 
       ! update HFscale, or cam_alpha,beta,mu from input
-      if(saved_HF%do) call saved_HF%update_HF(infos)
+      if(saved_HF%do) call saved_HF%update_HF(infos, announce)
     else if (need_func) then
       call show_message('Please, specify functional in the input file', WITH_ABORT)
+    end if
+
+    ! Remember the set-up as configured; a helper set-up leaves no trace.
+    ! Record how the set-up started and how it ended: the next set-up of this run
+    ! starts from the latter, a new Runner appending to this log from the former.
+    if (.not. internal_) then
+      call record_setup(log_key, setup_key)
+      call record_setup(log_key, dft_setup_signature(infos, xc_func_name))
     end if
 
   end subroutine
@@ -972,10 +1115,11 @@ contains
       integer :: bstype
       integer :: grid_id
       integer :: max_ang_pts
-      integer :: ngr, rtid, nrad_at, override
+      integer :: ngr, rtid, nrad_at, override, nrad_max, bstype_map
       integer :: rad_grid_type, dft_partfun, dft_bfc_algo
       real(kind=dp) :: dftthr0
       real(KIND=dp) :: brsl_radii(BRSL_NUM_ELEMENTS)
+      real(KIND=dp) :: brsl_map(BRSL_NUM_ELEMENTS)
       logical :: verbose_
 
       real(kind=dp), allocatable :: txyz(:), twght(:)
@@ -1000,7 +1144,22 @@ contains
       nrad = int(infos%dft%grid_rad_size)
       ! A pruned grid may prescribe its own radial grid size
       if (pruned%nrad > 0) nrad = pruned%nrad
-      maxpt_per_atom = nrad*max_ang_pts
+      ! ...and its own radial map (SG-1 is defined on the MHL grid).
+      ! Local to this build: infos is left as the user configured it,
+      ! so a later grid build is unaffected by this one.
+      if (pruned%rad_grid_type /= dft_radial_grid_none) &
+        rad_grid_type = pruned%rad_grid_type
+      ! Standard-map radial types other than type 1 (SG1 heavy atoms) may
+      ! carry more nodes than type 1: size the per-type radial storage and
+      ! the per-atom point buffer for the largest of them.
+      nrad_max = nrad
+      if (allocated(pruned%rad_map)) then
+        do i = 2, pruned%nrad_types
+          if (pruned%rad_map(i) /= dft_radial_grid_none) &
+            nrad_max = max(nrad_max, pruned%rad_npts(i))
+        end do
+      end if
+      maxpt_per_atom = nrad_max*max_ang_pts
 
       allocate(&
         txyz(max_ang_pts*3), &
@@ -1011,10 +1170,10 @@ contains
         source=0.0d0)
 
 !     Init storage for the grid
-      call molGrid%reset(nat, maxpt_per_atom, nRad, pruned%nrad_types)
+      call molGrid%reset(nat, maxpt_per_atom, nrad_max, pruned%nrad_types)
 
 !     Print out DFT info
-      if (verbose_) then
+      if (verbose_ .and. infos%control%verbose >= 1) then
         dftthr0=1.0d-03/(maxpt_per_atom*nat)
         if(dftthr0.lt.1.1d-15) then
           write(iw,'(5x, "All DFT thresholds are turned off.")')
@@ -1040,9 +1199,28 @@ contains
         bsrad(i) = bragg_slater_radius(brsl_radii, infos%atoms%zn(i))
       end do
 
+!     Atoms on a standard-map radial type other than type 1 take the
+!     Bragg-Slater table that belongs to that type's own map, by the rule
+!     above (TA/Becke maps: TA radii; otherwise Gill's).
+      if (allocated(pruned%rad_map)) then
+        do i = 1, nat
+          rtid = pruned%radial_id(i)
+          if (rtid < 2) cycle
+          if (pruned%rad_map(rtid) == dft_radial_grid_none) cycle
+          select case (pruned%rad_map(rtid))
+          case (2, 3)
+            bstype_map = BRSL_TYPE_TA
+          case default
+            bstype_map = BRSL_TYPE_GILL
+          end select
+          call set_bragg_slater(brsl_map, bstype_map)
+          bsrad(i) = bragg_slater_radius(brsl_map, infos%atoms%zn(i))
+        end do
+      end if
+
 !     Set up radial grid (the standard grid is radial type 1)
-      call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
-              nrad, rad_grid_type)
+      call get_radial_grid(molGrid%rad_pts(1:nrad,1), &
+              molGrid%rad_wts(1:nrad,1), nrad, rad_grid_type)
 
 !     Element-specific radial grids, absolute radii.
 !     MultiExp (SG-0): per-element node count and scaling radius;
@@ -1052,6 +1230,16 @@ contains
 !     never referenced (per-atom grids are sliced to the per-type
 !     node count below).
       do i = 2, pruned%nrad_types
+!       Standard-map type (SG1 heavy atoms): built like type 1, on this
+!       type's own node count and map
+        if (allocated(pruned%rad_map)) then
+          if (pruned%rad_map(i) /= dft_radial_grid_none) then
+            nrad_at = pruned%rad_npts(i)
+            call get_radial_grid(molGrid%rad_pts(1:nrad_at,i), &
+                    molGrid%rad_wts(1:nrad_at,i), nrad_at, pruned%rad_map(i))
+            cycle
+          end if
+        end if
         if (allocated(pruned%me_rscale)) then
           nrad_at = pruned%rad_npts(i)
           call multiexp_radial_grid(nrad_at, pruned%me_rscale(i), &
@@ -1130,16 +1318,25 @@ contains
         end if
         atomic_grid%rad_pts = molGrid%rad_pts(1:nrad_at, rtid)
         atomic_grid%rad_wts = molGrid%rad_wts(1:nrad_at, rtid)
+        atomic_grid%rAtm = bsrad(iat)
         if (rtid > 1) then
+!         absolute element-specific grid, unless this type is a
+!         standard-map grid scaled like type 1
           atomic_grid%rAtm = 1.0_dp
-        else
-          atomic_grid%rAtm = bsrad(iat)
+          if (allocated(pruned%rad_map)) then
+            if (pruned%rad_map(rtid) /= dft_radial_grid_none) &
+              atomic_grid%rAtm = bsrad(iat)
+          end if
         end if
 
         call molGrid%add_atomic_grid(atomic_grid)
       end do
 
 !     Assemble molecular grid from atomic grids
+
+      molGrid%partFunType = dft_partfun
+      molGrid%hasSurfaceShift = .false.
+      molGrid%surfaceShift = 0.0_dp
 
 !     Do Becke's fuzzy cell
       select case (dft_bfc_algo)
@@ -1151,6 +1348,8 @@ contains
       case (1)
 !       Precompute surface shifting parameters
         call setaij(aij, nat, bsrad)
+        molGrid%hasSurfaceShift = .true.
+        molGrid%surfaceShift = aij
 !       Becke's algorithm:
 !       4th deg. Becke's polynomial and surface shifting
         call dft_fc_blk(molgrid, dft_partfun, &
@@ -1170,6 +1369,8 @@ contains
           bsrad_becke(i) = bragg_slater_radius(brsl_becke, infos%atoms%zn(i))
         end do
         call setaij_treutler(aij, nat, bsrad_becke)
+        molGrid%hasSurfaceShift = .true.
+        molGrid%surfaceShift = aij
         call dft_fc_blk(molgrid, dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 
@@ -1177,7 +1378,7 @@ contains
 
       call molGrid%compress
 
-      if (verbose_) then
+      if (verbose_ .and. infos%control%verbose >= 1) then
         write(iw,'(5X,"Molecular grid: ",I0," points in ",I0," slices")') &
               sum(molGrid%nTotPts(1:molGrid%nSlices)), molGrid%nSlices
       end if
@@ -1330,7 +1531,7 @@ contains
                        nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
     end if
 !$  t1 = omp_get_wtime()
-!$  write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
+!$  if (infos%control%verbose >= 2) write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
 
   end subroutine
 

@@ -645,7 +645,9 @@ contains
                  infos%control%pfon_nsmear
 
     ! Initial message for SCF iterations
-    if (infos%control%pfon) then
+    if (infos%control%verbose < 1) then
+      ! verbose = 0 prints no iteration table; the converged result is still reported.
+    elseif (infos%control%pfon) then
       write(IW,fmt="&
             &(/3x,'Direct SCF iterations begin.'/, &
             &  3x,113('='),/ &
@@ -910,7 +912,7 @@ contains
       call conv%run(conv_res)
       if (use_trah .and. trim(conv_res%active_converger_name) == 'TRAH' ) then
         call run_otr(infos, molgrid, conv , conv_res, energy)
-        if (conv_res%ierr == 4) exit
+        if (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv)) exit
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
         ! Retrieve updated Energies of Alpha Orbitals
@@ -967,7 +969,9 @@ contains
       ! Print Current Energy
       !----------------------------------------------------------------------------
       ! Print iteration information
-      if (infos%control%pfon) then
+      if (infos%control%verbose < 1) then
+        ! verbose = 0 prints no iteration table; the converged result is still reported.
+      elseif (infos%control%pfon) then
         write(IW,fmt="(4x,i4.1,2x,a23,1x,a23,1x,i16,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
               iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
               fmt_real14(diis_error), vshift, &
@@ -1234,7 +1238,10 @@ contains
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
-    if (stalled_exit) then
+    if (use_trah .and. (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv))) then
+      write(IW,"(3x,64('-')/10x,'SCF did not converge: TRAH failed the requested criterion.')")
+      infos%mol_energy%SCF_converged = .false.
+    else if (stalled_exit) then
       write(IW,"(3x,64('-')/10x,'SCF stalled before convergence; escalating to a higher-order solver.')")
       infos%mol_energy%SCF_converged = .false.
     else if (iter > maxit) then
@@ -1289,10 +1296,22 @@ contains
       fock_a = rohf_bak(:,1)
       fock_b = rohf_bak(:,2)
 !      call mo_to_ao(fock_b, pfock(:,2), smat_full, mo_a, nbf, nbf, work1, work2)
-      dmat_a = pdmat(:,1) - pdmat(:,2)
-      dmat_b = pdmat(:,2)
       mo_b = mo_a
       mo_energy_b = mo_energy_a
+      ! Rebuild the alpha and beta densities from the final orbitals.  The
+      ! working array pdmat(:,1) holds the TOTAL density only after the
+      ! ROHF combination step (start of a DIIS iteration, or the SOSCF/TRAH
+      ! convergence handler); on every other exit -- SOSCF/TRAH paths, and a
+      ! DIIS loop leaving through the iteration limit right after a density
+      ! rebuild -- it holds the ALPHA density, and the former formula
+      ! pdmat(:,1) - pdmat(:,2) then stored the spin density as DM_A.  Every
+      ! post-SCF consumer (ESPF charges, Mulliken populations, MRSF relaxed
+      ! densities, gradients) expects DM_A = alpha and DM_B = beta.
+      if (do_pfon) then
+        call pfon%build_density(dmat_a, mo_a, work1, work2, do_pfon, dmat_b, mo_b)
+      else
+        call get_ab_initio_density(dmat_a, mo_a, dmat_b, mo_b, infos, basis)
+      end if
       
     end select
 !  Construct ESPF partial charges and print MM energy in output (only done if QM/MM run)
@@ -1329,7 +1348,7 @@ contains
     !----------------------------------------------------------------------------
     ! Print Final Energy Components
     !----------------------------------------------------------------------------
-    call energy%print_e()
+    if (infos%control%verbose >= 1) call energy%print_e()
 
     !----------------------------------------------------------------------------
     ! Save Results to infos Structure

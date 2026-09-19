@@ -1372,7 +1372,12 @@ contains
 
 
     this%fockdim = basis%nbf*(basis%nbf+1) / 2
-    this%nfocks = 2
+    this%nfocks = size(this%d,2)
+    if (mod(this%nfocks,2) /= 0) then
+      call show_message( &
+        'Open-shell Fock densities must be supplied as alpha/beta pairs.', &
+        WITH_ABORT)
+    end if
 
     call this%int2_fock_data_t_parallel_start(basis, nthreads)
 
@@ -1492,7 +1497,7 @@ contains
     integer :: ii, jj, kk, ll, ij, ik, il, jk, jl, kl, n, ii2, jj2, kk2
     real(kind=dp) :: xval2, xval4, val, val1, val4, cij, ckl
     real(kind=dp) :: a1ik, a1jl, a1il, a1jk, a2ik, a2jl, a2il, a2jk
-    integer :: mythread
+    integer :: ifock, mythread
 
     xval2 = 2 * this%scale_exchange
     xval4 = 4 * this%scale_coulomb
@@ -1523,54 +1528,75 @@ contains
       val1 = val*xval2
       val4 = val*xval4
 
-      cij = val4*sum(this%d(ij,1:2))
-      ckl = val4*sum(this%d(kl,1:2))
+      ! Each adjacent alpha/beta density pair is an independent open-shell
+      ! response.  Processing all pairs here shares the ERI traversal while
+      ! preserving the usual Coulomb sum and spin-specific exchange.
+      do ifock = 1, this%nfocks, 2
+        cij = val4*sum(this%d(ij,ifock:ifock+1))
+        ckl = val4*sum(this%d(kl,ifock:ifock+1))
 
-      if (this%atomic_fock) then
-        ! locals so atomic RHS references no component of `this`
-        a1ik = -val1*this%d(jl,1); a1jl = -val1*this%d(ik,1)
-        a1il = -val1*this%d(jk,1); a1jk = -val1*this%d(il,1)
-        a2ik = -val1*this%d(jl,2); a2jl = -val1*this%d(ik,2)
-        a2il = -val1*this%d(jk,2); a2jk = -val1*this%d(il,2)
-        !$omp atomic update
-        this%f(ij,1,1) = this%f(ij,1,1) + ckl
-        !$omp atomic update
-        this%f(kl,1,1) = this%f(kl,1,1) + cij
-        !$omp atomic update
-        this%f(ik,1,1) = this%f(ik,1,1) + a1ik
-        !$omp atomic update
-        this%f(jl,1,1) = this%f(jl,1,1) + a1jl
-        !$omp atomic update
-        this%f(il,1,1) = this%f(il,1,1) + a1il
-        !$omp atomic update
-        this%f(jk,1,1) = this%f(jk,1,1) + a1jk
-        !$omp atomic update
-        this%f(ij,2,1) = this%f(ij,2,1) + ckl
-        !$omp atomic update
-        this%f(kl,2,1) = this%f(kl,2,1) + cij
-        !$omp atomic update
-        this%f(ik,2,1) = this%f(ik,2,1) + a2ik
-        !$omp atomic update
-        this%f(jl,2,1) = this%f(jl,2,1) + a2jl
-        !$omp atomic update
-        this%f(il,2,1) = this%f(il,2,1) + a2il
-        !$omp atomic update
-        this%f(jk,2,1) = this%f(jk,2,1) + a2jk
-      else
-      this%f(ij,1,mythread) = this%f(ij,1,mythread) + ckl
-      this%f(kl,1,mythread) = this%f(kl,1,mythread) + cij
-      this%f(ik,1,mythread) = this%f(ik,1,mythread) - val1*this%d(jl,1)
-      this%f(jl,1,mythread) = this%f(jl,1,mythread) - val1*this%d(ik,1)
-      this%f(il,1,mythread) = this%f(il,1,mythread) - val1*this%d(jk,1)
-      this%f(jk,1,mythread) = this%f(jk,1,mythread) - val1*this%d(il,1)
+        if (this%atomic_fock) then
+          ! locals so atomic RHS references no component of `this`
+          a1ik = -val1*this%d(jl,ifock)
+          a1jl = -val1*this%d(ik,ifock)
+          a1il = -val1*this%d(jk,ifock)
+          a1jk = -val1*this%d(il,ifock)
+          a2ik = -val1*this%d(jl,ifock+1)
+          a2jl = -val1*this%d(ik,ifock+1)
+          a2il = -val1*this%d(jk,ifock+1)
+          a2jk = -val1*this%d(il,ifock+1)
+          !$omp atomic update
+          this%f(ij,ifock,1) = this%f(ij,ifock,1) + ckl
+          !$omp atomic update
+          this%f(kl,ifock,1) = this%f(kl,ifock,1) + cij
+          !$omp atomic update
+          this%f(ik,ifock,1) = this%f(ik,ifock,1) + a1ik
+          !$omp atomic update
+          this%f(jl,ifock,1) = this%f(jl,ifock,1) + a1jl
+          !$omp atomic update
+          this%f(il,ifock,1) = this%f(il,ifock,1) + a1il
+          !$omp atomic update
+          this%f(jk,ifock,1) = this%f(jk,ifock,1) + a1jk
+          !$omp atomic update
+          this%f(ij,ifock+1,1) = this%f(ij,ifock+1,1) + ckl
+          !$omp atomic update
+          this%f(kl,ifock+1,1) = this%f(kl,ifock+1,1) + cij
+          !$omp atomic update
+          this%f(ik,ifock+1,1) = this%f(ik,ifock+1,1) + a2ik
+          !$omp atomic update
+          this%f(jl,ifock+1,1) = this%f(jl,ifock+1,1) + a2jl
+          !$omp atomic update
+          this%f(il,ifock+1,1) = this%f(il,ifock+1,1) + a2il
+          !$omp atomic update
+          this%f(jk,ifock+1,1) = this%f(jk,ifock+1,1) + a2jk
+        else
+          this%f(ij,ifock,mythread) = &
+            this%f(ij,ifock,mythread) + ckl
+          this%f(kl,ifock,mythread) = &
+            this%f(kl,ifock,mythread) + cij
+          this%f(ik,ifock,mythread) = this%f(ik,ifock,mythread) &
+            - val1*this%d(jl,ifock)
+          this%f(jl,ifock,mythread) = this%f(jl,ifock,mythread) &
+            - val1*this%d(ik,ifock)
+          this%f(il,ifock,mythread) = this%f(il,ifock,mythread) &
+            - val1*this%d(jk,ifock)
+          this%f(jk,ifock,mythread) = this%f(jk,ifock,mythread) &
+            - val1*this%d(il,ifock)
 
-      this%f(ij,2,mythread) = this%f(ij,2,mythread) + ckl
-      this%f(kl,2,mythread) = this%f(kl,2,mythread) + cij
-      this%f(ik,2,mythread) = this%f(ik,2,mythread) - val1*this%d(jl,2)
-      this%f(jl,2,mythread) = this%f(jl,2,mythread) - val1*this%d(ik,2)
-      this%f(il,2,mythread) = this%f(il,2,mythread) - val1*this%d(jk,2)
-      this%f(jk,2,mythread) = this%f(jk,2,mythread) - val1*this%d(il,2)
-      end if
+          this%f(ij,ifock+1,mythread) = &
+            this%f(ij,ifock+1,mythread) + ckl
+          this%f(kl,ifock+1,mythread) = &
+            this%f(kl,ifock+1,mythread) + cij
+          this%f(ik,ifock+1,mythread) = this%f(ik,ifock+1,mythread) &
+            - val1*this%d(jl,ifock+1)
+          this%f(jl,ifock+1,mythread) = this%f(jl,ifock+1,mythread) &
+            - val1*this%d(ik,ifock+1)
+          this%f(il,ifock+1,mythread) = this%f(il,ifock+1,mythread) &
+            - val1*this%d(jk,ifock+1)
+          this%f(jk,ifock+1,mythread) = this%f(jk,ifock+1,mythread) &
+            - val1*this%d(il,ifock+1)
+        end if
+      end do
     end do
 
     buf%ncur = 0

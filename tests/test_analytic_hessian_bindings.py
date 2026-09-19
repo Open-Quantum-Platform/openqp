@@ -67,30 +67,31 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("hess_store = hess_native", source)
         self.assertNotIn("implementation is not available yet", source)
 
-    def test_tdhf_hessian_fortran_scaffolds_export_c_abi_without_claiming_support(self):
-        expected = {
-            "tdhf_hessian.F90": [
-                "module tdhf_hessian_mod",
-                'bind(C, name="tdhf_hessian")',
-                "subroutine tdhf_hessian_C",
-                "subroutine tdhf_hessian",
-                "Analytic TDDFT Hessian kernel scaffold reached",
-            ],
-            "tdhf_sf_hessian.F90": [
-                "module tdhf_sf_hessian_mod",
-                'bind(C, name="tdhf_sf_hessian")',
-                "subroutine tdhf_sf_hessian_C",
-                "subroutine tdhf_sf_hessian",
-                "Analytic SF-TDDFT Hessian kernel scaffold reached",
-            ],
-        }
+    def test_tdhf_hessian_fortran_exports_native_kernel_while_sf_remains_closed(self):
+        source = read("source/modules/tdhf_hessian.F90")
+        for needle in (
+            "module tdhf_hessian_mod",
+            'bind(C, name="tdhf_hessian")',
+            "subroutine tdhf_hessian_C",
+            "subroutine tdhf_hessian",
+            "solve_tdhf_amplitude_response",
+            "solve_tdhf_z_response",
+            "build_tdhf_response_rows_hf",
+            "alloc_or_die(OQP_tdhf_hessian",
+        ):
+            self.assertIn(needle, source)
+        self.assertNotIn("Analytic TDDFT Hessian kernel scaffold reached", source)
 
-        for filename, needles in expected.items():
-            with self.subTest(filename=filename):
-                source = read(f"source/modules/{filename}")
-                for needle in needles:
-                    self.assertIn(needle, source)
-                self.assertIn("WITH_ABORT", source)
+        sf_source = read("source/modules/tdhf_sf_hessian.F90")
+        for needle in (
+            "module tdhf_sf_hessian_mod",
+            'bind(C, name="tdhf_sf_hessian")',
+            "subroutine tdhf_sf_hessian_C",
+            "subroutine tdhf_sf_hessian",
+            "Analytic SF-TDDFT Hessian kernel scaffold reached",
+            "WITH_ABORT",
+        ):
+            self.assertIn(needle, sf_source)
         self.assertFalse((ROOT / "source/modules/tdhf_mrsf_hessian.F90").exists())
 
     def test_molecule_has_single_hessian_storage_helper_with_asymmetry_metadata(self):

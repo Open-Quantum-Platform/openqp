@@ -178,8 +178,29 @@ contains
 
     sized = ubound(this%d3,2)
 
-!   Form shell density
-    call shell_den_screen_mrsf(this%dsh, this%d3(:,sized,:,:), basis)
+!   Form shell density.
+!   The Schwarz density bound must majorize EVERY density slot this data
+!   type's update kernel contracts (all seven: bo2v/bo1v/bco1/bco2/o21v/
+!   co12/ball), because one screening decision skips a shell quartet for all
+!   of them at once.  A bound built from the summed `ball` alone is NOT a
+!   majorant: its internal cancellations can be small exactly where the
+!   mixed spin-pair densities (co12/o21v) are large, and the driver then
+!   drops real aco12/ao21v contributions.  The Davidson energy stage largely
+!   hid this behind multi-trial-vector union bounds, but the single-density
+!   Z-vector RHS build did not: the spin-pair Lagrangian went wrong and MRSF
+!   analytic gradients disagreed with finite differences by up to ~4e-3
+!   Hartree/Bohr (state-dependently) while every energy stayed exact.
+!   Fold the per-slot bounds with an elementwise max instead.
+    block
+      real(kind=dp), allocatable :: dsh_tmp(:,:)
+      integer :: c
+      allocate(dsh_tmp, mold=this%dsh)
+      this%dsh = 0.0_dp
+      do c = 1, sized
+        call shell_den_screen_mrsf(dsh_tmp, this%d3(:,c,:,:), basis)
+        this%dsh = max(this%dsh, dsh_tmp)
+      end do
+    end block
     this%max_den = maxval(abs(this%dsh))
 
   end subroutine
@@ -206,7 +227,11 @@ contains
       do jsh = 1, ish
         minj = basis%ao_offset(jsh)
         maxj = minj+basis%naos(jsh)-1
-        dsh(ish,jsh) = maxval(abs(da(:,minj:maxj,mini:maxi)))
+        ! The digestion kernel reads both orientations of a non-symmetric
+        ! density (d3(:,:,j,l) and d3(:,:,l,j)), so the bound must cover the
+        ! (jsh,ish) AND (ish,jsh) blocks; co12/o21v are not symmetric.
+        dsh(ish,jsh) = max(maxval(abs(da(:,minj:maxj,mini:maxi))), &
+                           maxval(abs(da(:,mini:maxi,minj:maxj))))
         dsh(jsh,ish) = dsh(ish,jsh)
       end do
     end do
@@ -1883,7 +1908,7 @@ contains
 
     if (debug_mode) then
       write(iw,*) 'UMRSFMNTOIA wrk(1:5,1:5)'
-      write(iw,*) wrk(1:5,1:5)
+      write(iw,*) wrk(1:min(5,size(wrk,1)),1:min(5,size(wrk,2)))
     end if
 
     ij = 0
@@ -2171,6 +2196,79 @@ contains
 
   end subroutine mrsfxvec
 
+!>    @brief    Unrelaxed interstate difference density matrices
+!>              T^{IJ}_ij and T^{IJ}_ab for a pair of MRSF states,
+!>              the symmetrized bilinear generalization of the
+!>              single-state T_ij/T_ab entering the Z-vector RHS:
+!>
+!>              T^{IJ}(i+,j+) := -1/2 sum_a- ( Xi(i+,a-)*Xj(j+,a-)
+!>                                           + Xj(i+,a-)*Xi(j+,a-) )
+!>              T^{IJ}(a-,b-) := +1/2 sum_i+ ( Xi(i+,a-)*Xj(i+,b-)
+!>                                           + Xj(i+,a-)*Xi(i+,b-) )
+!>
+!>              For ist==jst this reduces exactly to the gradient
+!>              case T_ij = -X*X^T, T_ab = X^T*X. Amplitudes are
+!>              dimensionally transformed (mrsfxvec) before
+!>              contraction, so the spin-paired O->O components are
+!>              unfolded consistently. Singlet/triplet (mult=1,3)
+!>              MRSF only.
+!>
+  subroutine mrsf_interstate_tden(infos, bvec_mo, ist, jst, tij, tab)
+
+    use precision, only: dp
+    use types, only: information
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in), dimension(:,:) :: bvec_mo
+    integer, intent(in) :: ist, jst
+    real(kind=dp), intent(out), dimension(:,:) :: tij, tab
+
+    real(kind=dp), allocatable, dimension(:) :: xi, xj
+    integer :: noca, nocb, nvirb, nbf, ok
+
+    nbf = infos%basis%nbf
+    noca = infos%mol_prop%nelec_a
+    nocb = infos%mol_prop%nelec_b
+    nvirb = nbf-nocb
+
+    if (infos%tddft%mult /= 1 .and. infos%tddft%mult /= 3) &
+      call show_message('mrsf_interstate_tden supports mult=1,3 only', with_abort)
+
+    allocate(xi(noca*nvirb), xj(noca*nvirb), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    call mrsfxvec(infos, bvec_mo(:,ist), xi)
+    if (jst == ist) then
+      xj = xi
+    else
+      call mrsfxvec(infos, bvec_mo(:,jst), xj)
+    end if
+
+  ! T^{IJ}(i+,j+) = -1/2 ( Xi*Xj^T + Xj*Xi^T )
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tij, noca)
+    call dgemm('n', 't', noca, noca, nvirb, &
+              -0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tij, noca)
+
+  ! T^{IJ}(a-,b-) = +1/2 ( Xi^T*Xj + Xj^T*Xi )
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xi, noca, &
+                       xj, noca, &
+               0.0_dp, tab, nvirb)
+    call dgemm('t', 'n', nvirb, nvirb, noca, &
+               0.5_dp, xj, noca, &
+                       xi, noca, &
+               1.0_dp, tab, nvirb)
+
+  end subroutine mrsf_interstate_tden
+
 !>    @brief    Spin-pairing parts
 !>              of singlet and triplet MRSF Lagrangian
 !>
@@ -2180,7 +2278,7 @@ contains
     use messages, only: show_message, with_abort
     implicit none
 
-    real(kind=dp), intent(out), dimension(:,:) :: xhxa, xhxb
+    real(kind=dp), intent(inout), dimension(:,:) :: xhxa, xhxb
     real(kind=dp), intent(in), dimension(:,:) :: ca, cb, xv
     real(kind=dp), intent(in), target, dimension(:,:,:) :: fmrsf
     integer, intent(in) :: noca, nocb
@@ -3138,6 +3236,9 @@ contains
 
     end if
 
+    ! get_trans_den accumulates into trden; define it here (intent(out))
+    ! so callers may pass reused work arrays.
+    trden = 0.0_dp
     call get_trans_den(trden, xv12i, xv12j, noca, nocb, nvirb)
 
     return

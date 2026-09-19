@@ -35,7 +35,7 @@ module mod_dft_gridint
   integer, parameter, public :: &
       XXX = 1, YYY = 2, ZZZ = 3, &
       XXY = 4, XXZ = 5, YYX = 6, YYZ = 7, &
-      ZZX = 8, ZZY = 9, XYZ = 10
+      ZZX = 8, ZZY = 9, XYZ3 = 10
 
 ! Convert 'square' XYZ indices to triangular,
 ! needed in hessian code
@@ -139,6 +139,7 @@ module mod_dft_gridint
       , moVB(:, :) => null() & !< MO values (beta)
       , aoG1(:, :, :) => null() & !< AO gradient
       , aoG2(:, :, :) => null() & !< AO 2nd der.
+      , aoG3(:, :, :) => null() & !< AO 3rd der.
       , moG1A(:, :, :) => null() & !< MO gradient (alpha)
       , moG2A(:, :, :) => null() & !< MO 2nd der. (alpha)
       , moG1B(:, :, :) => null() & !< MO gradient (beta)
@@ -167,6 +168,10 @@ module mod_dft_gridint
     !< consumer update so consumers can associate points with their owning
     !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
     integer :: currAtom = 0
+    ! Atom owning the current atom-centred grid slice.  run_xc uses a
+    ! thread-private engine, so consumers may safely use this as slice
+    ! context (e.g. for fuzzy-cell weight derivatives).
+    integer :: gridOrigin = 0
     integer :: maxPts = 0
     integer :: maxAngMom = 0
     integer :: nAODer = 0
@@ -592,6 +597,19 @@ contains
         self%moG1B => self%moMemB(:, :, 2:4)
         self%moG2B => self%moMemB(:, :, 5:10)
       end if
+    case (3)
+      self%aoV => self%aoMem(:, :, 1)
+      self%aoG1 => self%aoMem(:, :, 2:4)
+      self%aoG2 => self%aoMem(:, :, 5:10)
+      self%aoG3 => self%aoMem(:, :, 11:20)
+
+      ! Existing density paths transform only values and first derivatives.
+      self%moVA => self%moMemA(:, :, 1)
+      self%moG1A => self%moMemA(:, :, 2:4)
+      if (self%hasBeta) then
+        self%moVB => self%moMemB(:, :, 1)
+        self%moG1B => self%moMemB(:, :, 2:4)
+      end if
     end select
 
   end subroutine
@@ -716,6 +734,32 @@ contains
                        self%aoG2(:, iPt, YZ_), &
                        self%aoG2(:, iPt, XZ_), shells=shells)
 
+      end do
+    case (3)
+      do iPt = 1, ubound(xyz,1)
+        ptxyz = xyz(iPt,1:3)
+
+        call basis%aoval(ptxyz, nnz, &
+                       self%aoV(:, iPt), &
+                       self%aoG1(:, iPt, X__), &
+                       self%aoG1(:, iPt, Y__), &
+                       self%aoG1(:, iPt, Z__), &
+                       self%aoG2(:, iPt, XX_), &
+                       self%aoG2(:, iPt, YY_), &
+                       self%aoG2(:, iPt, ZZ_), &
+                       self%aoG2(:, iPt, XY_), &
+                       self%aoG2(:, iPt, YZ_), &
+                       self%aoG2(:, iPt, XZ_), &
+                       self%aoG3(:, iPt, XXX), &
+                       self%aoG3(:, iPt, YYY), &
+                       self%aoG3(:, iPt, ZZZ), &
+                       self%aoG3(:, iPt, XXY), &
+                       self%aoG3(:, iPt, XXZ), &
+                       self%aoG3(:, iPt, YYX), &
+                       self%aoG3(:, iPt, YYZ), &
+                       self%aoG3(:, iPt, ZZX), &
+                       self%aoG3(:, iPt, ZZY), &
+                       self%aoG3(:, iPt, XYZ3), shells=shells)
       end do
     case default
       write (*,'("Invalid grad level=",I2," in xc_engine_t % COMPAOS")') nDer
@@ -917,6 +961,21 @@ contains
           self%moVB => self%moMemB(:, :, 1)
           self%moG1B => self%moMemB(:, :, 2:4)
           self%moG2B => self%moMemB(:, :, 5:10)
+        end if
+
+      case (3)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:20) = reorderable_data(indices(1:numAOs_p), :, 1:20)
+
+        self%aoV => self%aoMem(:, :, 1)
+        self%aoG1 => self%aoMem(:, :, 2:4)
+        self%aoG2 => self%aoMem(:, :, 5:10)
+        self%aoG3 => self%aoMem(:, :, 11:20)
+        self%moVA => self%moMemA(:, :, 1)
+        self%moG1A => self%moMemA(:, :, 2:4)
+        if (hasBeta) then
+          self%moVB => self%moMemB(:, :, 1)
+          self%moG1B => self%moMemB(:, :, 2:4)
         end if
       end select
 
@@ -2474,6 +2533,7 @@ contains
 !$      if (do_timing) tic = omp_get_wtime()
 
         iAtom = xc_opts%molGrid%idOrigin(iSlice)
+        xce%gridOrigin = iAtom
 
         ! Symmetry reduction: integrate only unique atoms' slices, with
         ! quadrature weights scaled by the atom-orbit size. Geometry-only, so

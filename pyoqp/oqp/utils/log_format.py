@@ -22,6 +22,16 @@ GRADIENTS_PROPERTIES = "GRADIENTS AND PROPERTIES"
 TERMINATION = "TIMING AND TERMINATION"
 PROGRESS = "CALCULATION PROGRESS"
 
+# One verbosity level governs the whole log, Python and native code alike:
+#   0  quiet     section headers, input summary, final results and warnings
+#   1  normal    + iteration tables, orbital energies, module banners (default)
+#   2  detailed  + MO coefficients, basis-set listing, solver diagnostics
+#   3  debug     + developer dumps (PCM, SOC, scalar-relativistic, MRSF debug)
+VERBOSE_QUIET = 0
+VERBOSE_NORMAL = 1
+VERBOSE_DETAILED = 2
+VERBOSE_DEBUG = 3
+
 LOG_SECTION_ORDER = (
     RUN,
     INPUT_REFERENCE,
@@ -127,6 +137,44 @@ _SECTION_CATEGORIES = {
 }
 
 
+def resolve_verbosity(config):
+    """Return the log verbosity level (0-3) requested by an OpenQP config.
+
+    ``[input] verbose`` is the global setting.  ``[scf] verbose`` predates it
+    and is still honoured: the parser seeds both with the default 1, so the one
+    the input moved away from 1 wins, ``[input]`` first.
+    """
+
+    def level(section):
+        try:
+            value = (config or {}).get(section, {}).get("verbose", VERBOSE_NORMAL)
+            return int(str(value).strip())
+        except (AttributeError, TypeError, ValueError):
+            return VERBOSE_NORMAL
+
+    requested = level("input")
+    if requested == VERBOSE_NORMAL:
+        requested = level("scf")
+    return max(VERBOSE_QUIET, min(VERBOSE_DEBUG, requested))
+
+
+def module_print_level(config, section, key="print_level",
+                       maximum=VERBOSE_DETAILED):
+    """Return a module's own print level, following the global verbosity.
+
+    Left at its default of 1 the module key defers to ``resolve_verbosity``;
+    an explicit other value still overrides it for that module alone.
+    """
+
+    try:
+        level = int(str((config or {}).get(section, {}).get(key, 1)).strip())
+    except (AttributeError, TypeError, ValueError):
+        level = 1
+    if level == 1:
+        level = resolve_verbosity(config)
+    return max(VERBOSE_QUIET, min(maximum, level))
+
+
 def section_category(section=None):
     """Return the standard category for one legacy ``dump_log`` section."""
 
@@ -151,9 +199,18 @@ def format_log_fields(rows, *, prefix=LOG_PREFIX, label_width=LOG_FIELD_WIDTH,
     lead = " " * indent
     marker = (str(prefix) + " ") if prefix else ""
     return "\n".join(
-        f"{lead}{marker}{str(label) + ':':<{label_width}} {value}"
+        f"{lead}{marker}{str(label) + ':':<{label_width}} {format_value(value)}"
         for label, value in rows
     )
+
+
+def format_value(value):
+    """Render a log value; booleans read ``yes``/``no`` throughout the log."""
+
+    # NumPy comparisons return numpy.bool (numpy.bool_ before NumPy 2).
+    if isinstance(value, bool) or type(value).__name__ in ("bool", "bool_"):
+        return "yes" if value else "no"
+    return value
 
 
 def format_module_banner(title, info=""):

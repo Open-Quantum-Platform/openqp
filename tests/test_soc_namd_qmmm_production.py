@@ -64,6 +64,7 @@ def load_runfunc_with_namd_stubs():
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
 
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {
         "__init__": lambda self, *_args, **_kwargs: None,
         "energy": lambda self: None,
@@ -147,6 +148,7 @@ def load_namd_with_stubs():
     utils = types.ModuleType("oqp.utils")
     utils.__path__ = []
     single_point = types.ModuleType("oqp.library.single_point")
+    single_point.SCFnotConverged = type("SCFnotConverged", (Exception,), {})
     noop = type("_Noop", (), {})
     for name in ("SinglePoint", "Gradient", "LastStep", "BasisOverlap", "NACME"):
         setattr(single_point, name, noop)
@@ -449,7 +451,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("self._rng_step >= self.first_hop_step", src)
         self.assertNotIn("np.random.default_rng", src)
         self.assertIn("cfg['properties']['back_door'] = True", src)
-        self.assertIn("NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)", src)
+        self.assertIn("NAMD_SOC._store_prev(self, self._qm_positions_bohr(), u, eval_ha)", src)
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
 
@@ -610,6 +612,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             driver.tdc_scheme = 0
             driver.trivial = 0
             driver.trivial_thresh = 0.5
+            driver.rescale_provider = "isotropic"
+            driver.tdc_provider = "overlap"
+            driver.frustrated = "none"
             driver.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
             driver.vel = np.zeros((1, 3))
             driver._hop_random_override = lambda: self.fail(
@@ -628,6 +633,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     mol.data["OQP::namd_params"], copy=True))
                 mol.data["OQP::namd_coef"] = np.array(
                     [np.sqrt(0.75), 0.0, 0.0, 0.5])
+                mol.data["OQP::namd_results"] = np.zeros(2*2 + 8)
 
             namd.oqp.mrsf_namd_hop = propagate_only
             new_active, hopped = driver._hop(allow_hop=False)
@@ -892,10 +898,15 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("gradient.mol.symmetrize_gradient(gqm)", src)
         self.assertIn("gradient.mol.set_grad(gqm)", src)
 
+        # The native post-SCF energy/gradient block is shared by the mol and
+        # config modes (_native_embedded_energy_gradient); it ends at the next
+        # method definition.
         native_start = src.index("# --- Gradients: pure QM + ESPF contribution")
-        native_end = src.index("self.op.mol.save_data()", native_start)
+        native_end = src.index("\n    def ", native_start)
         native_path = src[native_start:native_end]
-        self.assertNotIn("oqp.hf_gradient(self.op.mol)", native_path)
+        self.assertNotIn("oqp.hf_gradient(", native_path)
+        self.assertIn("def _native_embedded_energy_gradient(self, mol, sp, potmm, potqm)", src)
+        self.assertEqual(src.count("self._native_embedded_energy_gradient("), 2)   # mol + config modes
 
     def test_trivial_crossing_active_state_updates_are_applied(self):
         src = NAMD.read_text()

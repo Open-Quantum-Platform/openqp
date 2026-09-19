@@ -439,11 +439,13 @@ class _ControlProxy:
     def __init__(self, owner):
         object.__setattr__(self, "_owner", owner)
 
-    def __call__(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
+    def __call__(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
         return self._owner._control(
             runtype=runtype,
             omp_threads=omp_threads,
             usempi=usempi,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -585,10 +587,19 @@ class OpenQP:
         the QM/MM partition cuts a covalent bond in the ESPF path:
         ``'none'`` (default, the validated full-field ESPF baseline), or the
         optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
-        for whole-molecule QM regions. Covalent QM/MM boundaries are handled by
-        the ground-state QM/MM MD path (``QMMM_MD``); the nonadiabatic
-        ``runtype=namd`` path does not yet append link atoms to its QM molecule
-        and raises on a covalent cut.
+        for whole-molecule QM regions. Covalent QM/MM boundaries (hydrogen
+        link atoms) are handled by single-point energies, the ground-state
+        QM/MM MD path (``QMMM_MD``) and the nonadiabatic ``runtype=namd``
+        paths (FSSH and SOC-NAMD); for NAMD the QM molecule must be built from
+        the PDB (``job.molecule("file.pdb <1-based indices>")``) so the link
+        hydrogens are appended.
+
+        Periodic solvated systems (``cutoff='PME'`` / ``'Ewald'``) use Ewald
+        electrostatics with a self-consistent QM-image term. Related
+        ``[qmmm]`` keys: ``ewald_tol`` (OpenMM PME tolerance), ``lj_switch``
+        (switched Lennard-Jones cutoff), ``h_lj`` (Lennard-Jones parameters on
+        MM hydrogens that have none) and ``mm_charge_width`` (Gaussian-smeared
+        MM charges, width in Angstrom).
 
         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
         """
@@ -603,8 +614,11 @@ class OpenQP:
         inferred_pdb, inferred_qm_atoms = self._qmmm_selection_from_system(system)
         if pdb_file is None:
             pdb_file = inferred_pdb
-        if qm_atoms is None:
-            qm_atoms = inferred_qm_atoms
+        if qm_atoms is None and inferred_qm_atoms is not None:
+            # the selector after the PDB path in [input] system is one-based
+            # (the Fortran-side convention); [qmmm] qm_atoms is a zero-based
+            # OpenMM topology selection, so an inferred selector is shifted
+            qm_atoms = self._zero_based_selector(inferred_qm_atoms)
 
         self.set(**{"input.qmmm_flag": True})
         updates = {}
@@ -626,6 +640,21 @@ class OpenQP:
         if updates:
             self.section("qmmm", **updates)
         return self
+
+    @staticmethod
+    def _zero_based_selector(selector):
+        """``"9 10 17-19"`` (one-based, as written after a PDB path in
+        ``[input] system``) -> ``"8 9 16-18"`` (zero-based ``[qmmm] qm_atoms``)."""
+        out = []
+        for token in str(selector).replace(",", " ").split():
+            lo, hi = (token.split("-", 1) if "-" in token else (token, token))
+            lo, hi = int(lo), int(hi)
+            if lo < 1 or hi < lo:
+                raise ValueError(
+                    f"QM atom selector {token!r} after the PDB path is one-based "
+                    "(first atom = 1); pass qm_atoms=[...] to give zero-based indices")
+            out.append(f"{lo - 1}-{hi - 1}" if "-" in token else str(lo - 1))
+        return " ".join(out)
 
     @staticmethod
     def _qmmm_selection_from_system(system):
@@ -653,8 +682,10 @@ class OpenQP:
             return False
         return bool(text and "\n" not in text and ";" not in text and " " not in text)
 
-    def _control(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
-        """Set run-level controls such as runtype, OpenMP, and optimization options."""
+    def _control(self, runtype=None, omp_threads=None, usempi=None, verbose=None,
+                 **kwargs):
+        """Set run-level controls such as runtype, OpenMP, log verbosity, and
+        optimization options."""
         updates = {}
         section_runtype = runtype
         if runtype is not None and str(runtype).lower() == "pcm":
@@ -664,6 +695,9 @@ class OpenQP:
             updates["input.runtype"] = runtype
         if omp_threads is not None:
             updates["input.omp_threads"] = omp_threads
+        if verbose is not None:
+            # [input] verbose: 0 quiet, 1 normal, 2 detailed, 3 debug.
+            updates["input.verbose"] = verbose
         if usempi is not None:
             self.usempi = self._as_bool(usempi, option="usempi")
         if updates:
@@ -2041,7 +2075,7 @@ OQP = OpenQP
 
 
 class OPENQP:
-    def __init__(self, cfg: dict, silent: bool = False):
+    def __init__(self, cfg: dict, silent: bool = False, append_log: bool = False):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for k, v in cfg.items():
             if k == "input.system":
@@ -2054,14 +2088,18 @@ class OPENQP:
         self.config_str = self._dump_strings_from_parser(parser)
         self.config_typed = parser.validate()
 
-        self.runner = Runner(
+        runner_kwargs = dict(
             project="oqp_project",
             input_file=None,
             log="oqp_project.log",
             input_dict=self.config_str,
             silent=1 if silent else 0,
-            usempi=True
+            usempi=True,
         )
+        if append_log:
+            # only when used, so Runner stand-ins with the older signature work
+            runner_kwargs["append_log"] = True
+        self.runner = Runner(**runner_kwargs)
         self.mol = self.runner.mol
 
     @property

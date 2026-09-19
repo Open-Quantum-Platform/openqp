@@ -25,6 +25,7 @@ SCHEMA = {
         "library": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
+        "verbose": {"type": int, "default": "1"},
         "qmmm_flag": {"type": bool, "default": "False"},
         "d4": {"type": bool, "default": "False"},
     },
@@ -53,6 +54,7 @@ SCHEMA = {
         "embedding": {"type": _string, "default": "electrostatic"},
         "rigidwater": {"type": bool, "default": "False"},
         "frontier_scheme": {"type": _string, "default": "none"},
+        "constraints": {"type": str, "default": "None"},
     },
     "droplet": {
         "enabled": {"type": bool, "default": "False"},
@@ -121,6 +123,7 @@ SCHEMA = {
         "type": {"type": _string, "default": "rpa"},
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
     },
     "dftb": {
         "backend": {"type": _string, "default": "native"},
@@ -177,10 +180,13 @@ SCHEMA = {
         "pen_jump": {"type": str, "default": "10,25"},
         "energy_gap": {"type": float, "default": "1e-5"},
         "maxit": {"type": int, "default": "30"},
+        "qmmm_radius": {"type": float, "default": "0.0"},
+        "qmmm_output": {"type": str, "default": ""},
     },
     "oqp": {
         "coordsys": {"type": _string, "default": "tric"},
         "trust": {"type": float, "default": "0.2"},
+        "auto_recovery": {"type": bool, "default": "True"},
     },
     "geometric": {
         "coordsys": {"type": _string, "default": "tric"},
@@ -403,6 +409,23 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(len(config["input"]["system"].strip().splitlines()), 5)
         self.assertTrue(config["input"]["system"].startswith("\nC "))
         self.assertEqual(config["input"]["basis"], "6-31g*")
+
+    def test_static_analytical_nac_is_available_through_workflow_and_settings(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_analytic_nac").molecule(geometry="water")
+        job.theory.mrsf(functional="bhhlyp", basis="6-31g", nstate=2)
+        job.settings.scf(conv=1e-10)
+        job.settings.tdhf(conv=1e-10)
+        job.workflow.nac(type="analytical", states="1 2")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "nac")
+        self.assertEqual(config["nac"]["type"], "analytical")
+        self.assertEqual(config["nac"]["states"], "1 2")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+        self.assertEqual(float(config["scf"]["conv"]), 1e-10)
+        self.assertEqual(float(config["tdhf"]["conv"]), 1e-10)
 
     def test_molecule_accepts_second_geometry_and_multiplicity(self):
         openqp = load_openqp_module()
@@ -790,6 +813,18 @@ $$$$
         with self.assertRaisesRegex(ValueError, "SF-TDDFT theory requires"):
             openqp.OpenQP(project="bad_sf").theory("sf-tddft")
 
+    def test_control_sets_the_log_verbosity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_quiet")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(verbose=0, omp_threads=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["verbose"], "0")
+        self.assertEqual(config["input"]["omp_threads"], "4")
+
     def test_control_sets_runtype_threads_and_optimizer_options(self):
         openqp = load_openqp_module()
         job = (
@@ -814,6 +849,33 @@ $$$$
         self.assertEqual(config["optimize"]["maxit"], "12")
         self.assertEqual(config["oqp"]["coordsys"], "dlc")
         self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_workflow_optimize_composes_with_qmmm(self):
+        # the QM/MM geometry optimisation through the Python API: job.qmmm(...)
+        # followed by job.workflow.optimize(...) builds the deck the QM/MM
+        # optimiser reads (runtype, flag, selection, movable shell, output,
+        # constraints, native engine controls)
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="ala_qmmm_opt")
+            .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+            .qmmm(forcefield="amber14-all.xml", cutoff="NoCutoff", constraints="HBonds")
+        )
+        job.workflow.optimize(istate=0, maxit=6, qmmm_radius=3.0, qmmm_output="ala_held.pdb",
+                              coordsys="tric", auto_recovery=False)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")      # one-based selector, zero-based list
+        self.assertEqual(config["qmmm"]["forcefield_files"], "amber14-all.xml")
+        self.assertEqual(config["qmmm"]["constraints"], "HBonds")
+        self.assertEqual(config["optimize"]["istate"], "0")
+        self.assertEqual(config["optimize"]["maxit"], "6")
+        self.assertEqual(config["optimize"]["qmmm_radius"], "3.0")
+        self.assertEqual(config["optimize"]["qmmm_output"], "ala_held.pdb")
+        self.assertEqual(config["oqp"]["coordsys"], "tric")
+        self.assertEqual(config["oqp"]["auto_recovery"], "False")
 
     def test_control_meci_sets_crossing_runtype_and_options(self):
         openqp = load_openqp_module()
@@ -1093,7 +1155,21 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
         self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "9 10 17 18 19")
+        # the selector after the PDB path is one-based; [qmmm] qm_atoms is the
+        # zero-based OpenMM selection of the same atoms
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")
+
+    def test_qmmm_inferred_selector_is_shifted_to_zero_based_ranges_too(self):
+        openqp = load_openqp_module()
+        job = (openqp.OpenQP(project="qmmm_infer")
+               .molecule("ala.pdb 9-10 17 18-19", basis="6-31g")
+               .qmmm())
+        self.assertEqual(job.to_input_dict()["qmmm"]["qm_atoms"], "8-9 16 17-18")
+        # an explicit qm_atoms is taken as given (already zero-based)
+        job2 = (openqp.OpenQP(project="qmmm_explicit")
+                .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+                .qmmm(qm_atoms=[8, 9, 16, 17, 18]))
+        self.assertEqual(job2.to_input_dict()["qmmm"]["qm_atoms"], "8 9 16 17 18")
 
     def test_qmmm_frontier_scheme_sets_section_key(self):
         openqp = load_openqp_module()
@@ -1130,7 +1206,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="socnamd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="PME")
         )
@@ -1148,7 +1224,7 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
         self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
-        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")   # one-based 1-5 -> zero-based
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["md"]["soc"], "True")
         self.assertEqual(config["md"]["soc_basis"], "mch")
@@ -1163,7 +1239,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="droplet_namd_qmmm")
-            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="NoCutoff")
             .droplet(
@@ -1384,6 +1460,30 @@ $$$$
         self.assertIs(mol, runner.mol)
         self.assertTrue(runner.ran)
 
+
+    def test_legacy_wrapper_forwards_append_log_only_when_set(self):
+        # the ESPF QM/MM driver builds one OPENQP per geometry; the later ones
+        # append to the run's log instead of truncating it
+        openqp = load_openqp_module()
+        seen = []
+        base = openqp.Runner
+
+        class Capture(base):
+            def __init__(self, **kwargs):
+                seen.append(dict(kwargs))
+                kwargs.pop("append_log", None)
+                super().__init__(**kwargs)
+
+        openqp.Runner = Capture
+        try:
+            cfg = {"input.system": "H 0 0 0; H 0 0 0.74", "input.basis": "sto-3g",
+                   "input.method": "hf", "input.runtype": "energy", "scf.type": "rhf"}
+            openqp.OPENQP(cfg)
+            openqp.OPENQP(cfg, True, append_log=True)
+        finally:
+            openqp.Runner = base
+        self.assertNotIn("append_log", seen[0])
+        self.assertIs(seen[1]["append_log"], True)
 
     def test_dftb_helper_builds_mrsf_tddftb_input(self):
         openqp = load_openqp_module()

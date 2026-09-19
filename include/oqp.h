@@ -240,6 +240,10 @@ int64_t oqp_get_basis_spherical(struct oqp_handle_t *c_handle,
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
 void oqp_set_harmonic_active(bool flag);
 void oqp_banner(struct oqp_handle_t *inf);
+/* Start the DFT set-up and functional description records afresh.  Called when a run
+   starts its log from scratch (not for evaluations appended to it), so a reused log
+   path is described again and the records stay bounded in a long-lived process. */
+void oqp_log_restarted(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);
 
@@ -768,6 +772,28 @@ void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
 void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
+void mrsf_nac_lagrangian(struct oqp_handle_t *inf);
+void mrsf_nac_lagrangian_pair(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
+void mrsf_nac_metric_data(struct oqp_handle_t *inf);
+void mrsf_nac_metric_column(struct oqp_handle_t *inf, int32_t jstate);
+void mrsf_nac_overlap(struct oqp_handle_t *inf);
+void mrsf_nac_amp(struct oqp_handle_t *inf);
+void mrsf_nac_amp_pair(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
+void mrsf_nac_polarize(struct oqp_handle_t *inf, long istate, long jstate);
+void mrsf_nac_esum(struct oqp_handle_t *inf, long istate, long jstate);
+void set_mrsf_nac_cphf(struct oqp_handle_t *inf, int64_t i, int64_t j);
+void set_mrsf_nac_cphf_block(struct oqp_handle_t *inf, int64_t b);
+void mrsf_matvec_apply(struct oqp_handle_t *inf);
+void mrsf_nac_response(struct oqp_handle_t *inf);
+void mrsf_nac_wpair(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
+void mrsf_nac_rohf_zvector(struct oqp_handle_t *inf);
+void mrsf_nac_rohf_solve(struct oqp_handle_t *inf);
+void mrsf_nac_rohf_pair_overlap(struct oqp_handle_t *inf);
+void mrsf_nac_pair_accumulator_init(struct oqp_handle_t *inf);
+void mrsf_nac_pair_accumulate(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
+void mrsf_nac_pair_finalize(struct oqp_handle_t *inf);
+void mrsf_nac_rohf_hf_adjoint(struct oqp_handle_t *inf);
+void mrsf_nac_xc_adjoint(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);
@@ -835,6 +861,9 @@ int oqp_namd_com_restraint(int64_t natom, const double *coordinates,
 int oqp_namd_langevin_thermostat(int64_t natom, double dt,
         double temperature, double friction, int64_t seed, int64_t stream,
         int64_t step, const double *masses, double *velocities, double *heat);
+int oqp_namd_rescale_directional(int64_t natom, double *velocity,
+        const double *mass, const double *direction, double delta_e,
+        double *gamma, double *discriminant);
 int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
         int *assignment, double *signs, double *matched, double *margins);
 int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,

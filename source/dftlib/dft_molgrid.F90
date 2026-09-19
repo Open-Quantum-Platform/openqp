@@ -40,6 +40,13 @@ module mod_dft_molgrid
     !< total number of nonzero grid points
     integer :: nMolPts = 0
 
+    ! Partition-function metadata retained with the assembled grid.  These
+    ! quantities are required to differentiate the normalized atom-centred
+    ! quadrature weights in response-gradient calculations.
+    integer :: partFunType = 0
+    logical :: hasSurfaceShift = .false.
+    real(KIND=fp), allocatable :: surfaceShift(:,:)
+
     !< spherical atomic grids used in this molecular grid
     type(sorted_grid_t) :: spherical_grids
 
@@ -629,8 +636,10 @@ contains
 
     if (allocated(grid%totWts)) deallocate (grid%totWts)
     if (allocated(grid%wt_top)) deallocate (grid%wt_top)
+    if (allocated(grid%surfaceShift)) deallocate (grid%surfaceShift)
     allocate (grid%totWts(maxPtPerAt, nAt), source=0.0_fp)
     allocate (grid%wt_top(nAt), source=0)
+    allocate (grid%surfaceShift(nAt, nAt), source=0.0_fp)
 
     if (allocated(grid%rInner)) deallocate (grid%rInner)
     if (allocated(grid%dummyAtom)) deallocate (grid%dummyAtom)
@@ -642,6 +651,8 @@ contains
     grid%maxNRadTimesNAng = 0
     grid%nSlices = 0
     grid%nMolPts = 0
+    grid%partFunType = 0
+    grid%hasSurfaceShift = .false.
 
   end subroutine reset_dft_grid_t
 

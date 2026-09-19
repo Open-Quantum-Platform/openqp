@@ -132,6 +132,7 @@ module trah_core_mod
     !> parameter rather than a hard-coded choice.
     logical  :: rms_gnorm = .true.
     logical  :: verbose = .true.    !< write the macroiteration table to IW
+    logical  :: iterations = .true. !< include its per-iteration rows (log verbose >= 1)
     !> Optional history callback context: the CASSCF driver records one row per
     !> accepted macroiteration, the SCF driver does not.
     logical  :: want_history = .false.
@@ -159,16 +160,28 @@ module trah_core_mod
     logical  :: converged = .false.
   end type trah_result_t
 
-  ! Near-convergence guards: once the model can no longer predict a meaningful
-  ! energy reduction (pred below FP noise) or the trust radius collapses while
-  ! the gradient is already small, the energy is converged even if |g| has not
-  ! reached the (tight) gradient tolerance.  A trust collapse with a large |g|
-  ! is instead a genuine stall and is reported as non-convergence.
+  ! Energy precision and trust-radius limits control refinement or failure;
+  ! they never replace the requested orbital-gradient tolerance.
   real(dp), parameter :: stab_eig_tol = 1.0e-4_dp  !< Hessian eig below -this = unstable
   real(dp), parameter :: pred_floor   = 1.0e-11_dp
   real(dp), parameter :: delta_min    = 1.0e-4_dp
   real(dp), parameter :: gtol_fp      = 1.0e-4_dp
   real(dp), parameter :: stab_step    = 1.0e-3_dp  !< step above this at small |g| = saddle escape
+  !> Descent steps taken once the model predicts no energy reduction above FP
+  !> noise continue while |g| keeps converging.  Near an ROHF solution whose
+  !> gradient cannot fall below the requested tolerance at this precision, |g|
+  !> only fluctuates at a noise floor, now and then setting a slightly lower
+  !> minimum, and an unguarded loop never exits.  Progress is a drop of |g| below
+  !> fp_progress times its value at the last such drop; refinement stops after
+  !> fp_stall_steps steps without one.  A refinement contracting at up to
+  !> fp_progress**(1/fp_stall_steps) = 0.982 per step keeps going (CASSCF LiH
+  !> contracts at 0.92), while steps at a noise floor cost Hessian products and
+  !> gain nothing.
+  integer,  parameter :: fp_stall_steps = 16
+  real(dp), parameter :: fp_progress = 0.75_dp
+  !> Hard bound on one refinement block.  A block that reaches it while |g| is
+  !> still converging returns to the (nmac-bounded) macro loop.
+  integer,  parameter :: max_fp_refine = 100
 
 contains
 
@@ -185,8 +198,8 @@ contains
     real(dp), intent(out), optional :: hist_e(:), hist_de(:), hist_g(:), hist_s(:)
     integer,  intent(out), optional :: nhist
 
-    integer  :: n, macro, micro_used, ierr, nh
-    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old
+    integer  :: n, macro, micro_used, ierr, nh, n_fp, n_stall
+    real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_ref
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
 
@@ -195,7 +208,8 @@ contains
     dmax  = merge(par%dmax, max(4.0_dp, 8.0_dp*delta), par%dmax > 0.0_dp)
     nh    = 0
     snorm = 0.0_dp
-    res%ierr = 0
+    res%ierr = 4
+    res%error = huge(1.0_dp)
     res%converged = .false.
 
     allocate(g(n), hdiag(n), p(n), vmin(n))
@@ -234,7 +248,7 @@ contains
             return
           end if
           if (lam < -stab_eig_tol) then
-            if (par%verbose) write(IW, &
+            if (par%verbose .and. par%iterations) write(IW, &
               '(4x,i4,2x,f20.10,2x,es12.4,3x,"unstable (Hess eig ",es10.2,") - escaping")') &
               macro, e0, gnorm, lam
             call prov%apply_step(0.1_dp*vmin, ierr)
@@ -247,9 +261,10 @@ contains
             cycle
           end if
         end if
-        if (par%verbose) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
+        if (par%verbose .and. par%iterations) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
               macro-1, e0, gnorm
         res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -262,7 +277,12 @@ contains
       ! quadratically before exiting.  The energy ratio is FP-noise-dominated
       ! here, so accept unconditionally.
       if (pred <= pred_floor .and. gnorm < gtol_fp .and. snorm < stab_step) then
-        do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor)
+        g_ref   = gnorm              ! |g| at the last progress
+        n_fp    = 0
+        n_stall = 0
+        do while (gnorm > par%conv_tol .and. snorm > 0.0_dp .and. pred <= pred_floor &
+                  .and. n_stall < fp_stall_steps .and. n_fp < max_fp_refine)
+          n_fp = n_fp + 1
           call prov%apply_step(p, ierr)
           if (ierr == 0) call prov%grad_hdiag(g, hdiag, e0, ierr)
           if (ierr /= 0) then
@@ -270,6 +290,12 @@ contains
             return
           end if
           gnorm = gnorm_of(g, n, par%rms_gnorm)
+          if (gnorm < fp_progress*g_ref) then
+            g_ref   = gnorm
+            n_stall = 0
+          else
+            n_stall = n_stall + 1
+          end if
           call trah_micro_step(prov, par, g, hdiag, delta, n, p, pred, micro_used, ierr)
           if (ierr /= 0) then
             res%ierr = ierr
@@ -278,12 +304,37 @@ contains
           snorm = sqrt(dot_product(p, p))
         end do
         if (pred > pred_floor .and. gnorm >= par%conv_tol) cycle
-        if (par%verbose) write(IW, &
-              '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision)")') macro, e0, gnorm
+        if (gnorm > par%conv_tol) then
+          ! The block ended above the requested tolerance.  If it hit its step
+          ! bound while |g| was still converging, the refinement is
+          ! converging: take another macroiteration, which re-enters this block
+          ! while the conditions hold and is bounded by nmac.
+          if (n_fp >= max_fp_refine .and. n_stall < fp_stall_steps .and. macro < par%nmac) then
+            if (par%verbose .and. par%iterations) write(IW, &
+                  '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement continuing after ",i0," steps")') &
+                  macro, e0, gnorm, n_fp
+            cycle
+          end if
+          ! Stagnant (no progress in fp_stall_steps steps, or a zero step)
+          ! or out of macroiterations: stop, but report non-convergence
+          ! with the gradient actually reached; the caller decides what an energy
+          ! converged to FP precision is worth (the SCF driver keeps its own |g|
+          ! acceptance; CASSCF sees it as unconverged).
+          if (par%verbose) write(IW, &
+                '(4x,i4,2x,f20.10,2x,es12.4,3x,"refinement stopped after ",i0," steps above conv")') &
+                macro, e0, gnorm, n_fp
+          res%error = gnorm
+          res%ierr  = 4
+          exit
+        end if
+        if (par%verbose .and. par%iterations) write(IW, &
+              '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (FP precision, ",i0," refinement steps)")') &
+              macro, e0, gnorm, n_fp
         ! report error below conv_tol so the SCF driver recognises convergence
         ! and does NOT re-diagonalise the raw Fock (which would corrupt ROHF
         ! orbitals)
-        res%error = min(gnorm, 0.99_dp*par%conv_tol)
+        res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -329,7 +380,7 @@ contains
           end do
         end block
       end if
-      if (par%verbose) then
+      if (par%verbose .and. par%iterations) then
         write(IW,'(4x,i4,2x,f20.10,2x,es12.4,2x,f7.3,2x,f7.3,3x,i4,3x,a)') &
               macro, merge(etrial, e0, accepted), gnorm, rho, delta, micro_used, &
               merge('acc', 'rej', accepted)
@@ -363,20 +414,18 @@ contains
         delta = min(2.0_dp*delta, dmax)
       end if
 
-      ! trust region collapsed: converged (small |g|) or a genuine stall.
-      ! `gnorm` is deliberately the value from the top of this macroiteration.
+      ! A small trust radius is a stagnation condition, not an alternative
+      ! convergence tolerance. Re-evaluate the norm after any accepted step.
+      gnorm = gnorm_of(g, n, par%rms_gnorm)
       if (delta < delta_min) then
-        if (gnorm < gtol_fp) then
-          if (par%verbose) write(IW, &
-            '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (trust radius minimal)")') macro, e0, gnorm
-          res%error = min(gnorm, 0.99_dp*par%conv_tol)
-          res%converged = .true.
-        else
-          if (par%verbose) write(IW, &
-            '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES10.3)') gnorm
-          res%error = gnorm
-          res%ierr  = 4
+        res%error = gnorm
+        if (gnorm < par%conv_tol .and. snorm < stab_step) then
+          ! Let the normal convergence/stability test inspect this point.
+          cycle
         end if
+        if (par%verbose) write(IW, &
+          '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES12.4)') gnorm
+        res%ierr = 4
         exit
       end if
 
@@ -389,6 +438,7 @@ contains
 
     res%energy = e0
     res%gnorm  = gnorm_of(g, n, par%rms_gnorm)
+    res%error = res%gnorm
     res%step_norm = snorm
     if (present(nhist)) nhist = nh
     deallocate(g, hdiag, p, vmin)

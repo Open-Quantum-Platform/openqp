@@ -84,6 +84,39 @@ def _require_openmm():
       ) from _OPENMM_IMPORT_ERROR
 
 
+input_dir = None   # directory of the input deck being loaded (set by Molecule.load_config)
+
+
+def resolve_forcefield_files(value, deck_dir=None):
+   """``[qmmm] forcefield_files`` -> list of force-field file names.
+
+   The unsplit value is tried first (a single file whose name contains spaces),
+   then the value is split on commas or whitespace.  A relative name that does
+   not exist in the working directory but does next to the deck is rebased
+   there; anything else (e.g. OpenMM built-ins such as ``amber14-all.xml``) is
+   returned unchanged.
+   """
+   import os
+   import re
+
+   def rebase(name):
+      if (deck_dir and name and not os.path.isabs(name) and not os.path.exists(name)
+              and os.path.exists(os.path.join(deck_dir, name))):
+         return os.path.join(deck_dir, name)
+      return name
+
+   if isinstance(value, (list, tuple)):
+      return [rebase(str(v).strip()) for v in value if str(v).strip()]
+   text = str(value or "").strip()
+   if not text:
+      return []
+   whole = rebase(text)
+   if os.path.isfile(whole):
+      return [whole]
+   parts = text.split(",") if "," in text else re.split(r"\s+", text)
+   return [rebase(p.strip()) for p in parts if p.strip()]
+
+
 def _openmm_from_oqp(force_field,nonbondedMethod,constraints,water):
 
    _require_openmm()
@@ -234,7 +267,7 @@ def openmm_info():
 
 # Iterate over all particles and print their masses
    for atom in pdb.topology.atoms():
-      at_num.append(atom.element.atomic_number)
+      at_num.append(0 if atom.element is None else atom.element.atomic_number)   # virtual sites have no element
       mass.append(system.getParticleMass(atom.index).value_in_unit(unit.dalton))
       pos=pdb.positions[atom.index].value_in_unit(unit.bohr)
       xyz.append(pos.x)
@@ -346,6 +379,7 @@ def openmm_system():
    positions = simulation.context.getState(getPositions=True).getPositions()
 ### Get the information about QM atoms (qm_info) and their connectivity (bonded_info, used to generate link atom list)
    qm_info = []
+   found_bonds = []
    for qm_atom in pdb.topology.atoms():
       if qm_atom.index in qm_atoms:
 # Retrieve atomic number, mass and position => save it in qm_info
@@ -353,14 +387,18 @@ def openmm_system():
          qm_mass = system.getParticleMass(qm_atom.index).value_in_unit(unit.dalton)
          qm_position = positions[qm_atom.index].value_in_unit(unit.bohr)
          qm_info.append((qm_number,qm_mass,[qm_position[0],qm_position[1],qm_position[2]]))
-# Check if the specified atoms are bonded => save it in bonded_info
-         if not bonded_info:
-            for mm_atom in pdb.topology.atoms():
-               if mm_atom.index not in qm_atoms:
-                  if _openmm_atoms_bonded(pdb.topology, qm_atom.index, mm_atom.index):
-                     mm_number = mm_atom.element.atomic_number
-                     g_factor=(covalent_radii[1]+covalent_radii[qm_number])/(covalent_radii[qm_number]+covalent_radii[mm_number])
-                     bonded_info.append((qm_atom.index,mm_atom.index,g_factor))
+# Check if the specified atoms are bonded => save it in bonded_info.  Every QM
+# frontier atom is scanned (a partition may cut bonds at several QM atoms);
+# the list is rebuilt on each call and ordered by (QM index, MM index), the
+# order in which the QM/MM driver (qmmm_connectivity.detect_link_atoms) numbers
+# the link atoms.
+         for mm_atom in pdb.topology.atoms():
+            if mm_atom.index not in qm_atoms:
+               if _openmm_atoms_bonded(pdb.topology, qm_atom.index, mm_atom.index):
+                  mm_number = mm_atom.element.atomic_number
+                  g_factor=(covalent_radii[1]+covalent_radii[qm_number])/(covalent_radii[qm_number]+covalent_radii[mm_number])
+                  found_bonds.append((qm_atom.index,mm_atom.index,g_factor))
+   bonded_info[:] = sorted(found_bonds, key=lambda b: (b[0], b[1]))
 
 ### Compute total number of atoms (QM+Link Atoms)
    num_atoms=len(qm_info)+len(bonded_info)
@@ -385,7 +423,7 @@ def openmm_system():
          if g_factor >= 1.0 or g_factor <=0:
              if not linkatom_error:
                  print("Error!! You should reconsider your QM/MM partitioning between:")
-             print(f"     - QM({qm_atoms[i]}) and MM({mm_index})")
+             print(f"     - QM({qm_index}) and MM({mm_index})")
              linkatom_error = True
          x.append(qm_position[0]+g_factor*(mm_position[0]-qm_position[0]))
          y.append(qm_position[1]+g_factor*(mm_position[1]-qm_position[1]))

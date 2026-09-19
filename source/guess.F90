@@ -12,6 +12,11 @@ module guess
     public corresponding_orbital_projection
     public mksphar
 
+    ! An eigensolver is free to return either sign for every real eigenvector.
+    ! Keep the tolerance in step with the corresponding CI-vector convention:
+    ! it makes symmetry-related, round-off-level ties select the lowest AO.
+    real(dp), parameter :: ORBITAL_PHASE_TIE_RTOL = 1.0e-8_dp
+
 contains
 
 !> @brief  this will calculatte the density matrix
@@ -106,7 +111,33 @@ end subroutine get_ab_initio_density
                       tfock,    nbf, &
               0.0_dp, orbitals, nbf)
 
+   call canonicalize_orbital_phases(orbitals)
+
  end subroutine get_ab_initio_orbital
+
+!> @brief Choose a deterministic sign for each real molecular orbital.
+!>
+!> The coefficient of largest magnitude is made positive.  Coefficients within
+!> ORBITAL_PHASE_TIE_RTOL of that magnitude are treated as a tie, resolved by
+!> the lowest AO index.  A wholly zero column is left unchanged.
+ pure subroutine canonicalize_orbital_phases(orbitals)
+   real(dp), intent(inout) :: orbitals(:,:)
+
+   real(dp) :: peak, window
+   integer :: i, j
+
+   do j = 1, size(orbitals, 2)
+     peak = maxval(abs(orbitals(:,j)))
+     if (peak <= 0.0_dp) cycle
+     window = peak * (1.0_dp - ORBITAL_PHASE_TIE_RTOL)
+     do i = 1, size(orbitals, 1)
+       if (abs(orbitals(i,j)) >= window) then
+         if (orbitals(i,j) < 0.0_dp) orbitals(:,j) = -orbitals(:,j)
+         exit
+       end if
+     end do
+   end do
+ end subroutine canonicalize_orbital_phases
 
 !>
 !> @brief Corresponding orbital projection

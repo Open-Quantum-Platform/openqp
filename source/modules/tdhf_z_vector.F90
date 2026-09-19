@@ -110,7 +110,7 @@ contains
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
-      mo_a(:,:), mo_energy_a(:), wao(:), td_p(:,:), td_t(:,:), &
+      mo_a(:,:), mo_energy_a(:), wao(:), td_p(:,:), td_t(:,:), td_z(:), &
       ta(:), xpy(:,:), xmy(:,:), td_energies(:)
 
     character(len=*), parameter :: &
@@ -258,7 +258,8 @@ contains
       update=compute_apbx, precond=precond, &
       dat=cgdata, tol=sqrt(abs(cnvtol)))
 
-    write(iw,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') pcg%error**2, cnvtol
+    if (infos%control%verbose >= 1) &
+      write(iw,'(" INITIAL ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') pcg%error**2, cnvtol
 
     ! Begin CG iterations
     do iter = 1, infos%control%maxit_zv
@@ -270,7 +271,8 @@ contains
 
       call pcg%step()
 
-      write(iw,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+      if (infos%control%verbose >= 1) &
+        write(iw,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
               iter, pcg%error**2, cnvtol
       call flush(iw)
     end do
@@ -318,6 +320,9 @@ contains
     deallocate(int2_data)
     allocate(zvec, source=pcg%x)
     call pcg%clean()
+    call infos%dat%alloc_or_die(OQP_td_z, (/ lexc /), td_z, &
+      description=OQP_td_z_comment)
+    td_z = zvec
 
 !   3. Now, compute relaxed energy-weighted difference density matrix W
 

@@ -59,6 +59,31 @@ def guess(mol):
             alpha = 'computed'
             beta = 'computed'
 
+    elif guess_type == 'previous':
+        # Reuse the orbitals already resident in mol.data (for example the
+        # converged orbitals of the previous NAMD geometry).  guess_json
+        # rebuilds the alpha/beta densities from the resident VEC_MO_A/B in
+        # the current AO basis, so no file is read.  Fall back to Huckel
+        # when no resident orbitals exist yet.
+        try:
+            mol.data["OQP::VEC_MO_A"]
+            have_mo = True
+        except AttributeError:
+            have_mo = False
+        if have_mo:
+            if mol.config['scf']['type'] != 'rhf':
+                update_guess(mol)
+            else:
+                oqp.guess_json(mol)
+            alpha = 'reused'
+            beta = 'reused'
+        else:
+            hubas = try_basis("MINI_huckel", fallback=None)
+            mol.data["OQP::hbasis_filename"] = hubas
+            oqp.guess_huckel(mol)
+            alpha = 'computed'
+            beta = 'computed'
+
     elif guess_type == 'sap':
         # Native Fortran SAP: superposition of atomic potentials integrated
         # on the DFT grid (Lehtola, JCTC 15, 1593 (2019)). No PySCF needed.

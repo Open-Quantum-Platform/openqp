@@ -200,7 +200,7 @@ PT2_GRADIENT_ROUTES = {"auto", "analytic", "numerical"}
 PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
 STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
 STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
-GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
+GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao", "previous"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
@@ -325,6 +325,13 @@ def _get(config: dict[str, Any], section: str, option: str, default: Any = None)
 
 def _as_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
+
+
+def _is_true(value: Any) -> bool:
+    """Truth of a schema boolean that may still arrive as a string."""
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "on", "yes"}
+    return bool(value)
 
 
 def _check_choice_literal(
@@ -1050,8 +1057,8 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     swapmo = _get(config, "guess", "swapmo", "")
     restart_namd_mutable_guess = (
         _as_lower(_get(config, "input", "runtype", "")) == "namd"
-        and str(_get(config, "md", "restart", False)).strip().lower()
-        in _TRUE_BOOL
+        and (str(_get(config, "md", "restart", False)).strip().lower()
+             in _TRUE_BOOL or bool(_get(config, "md", "continuation_checkpoint", "")))
         and str(_get(config, "guess", "save_mol", False)).strip().lower()
         in _TRUE_BOOL
     )
@@ -5924,15 +5931,113 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # [optimize] qmmm_radius / qmmm_output are read only by the QM/MM optimiser
+        _rad_v = _get(config, "optimize", "qmmm_radius", 0.0)
+        try:
+            _rad_set = float(_rad_v) != 0.0
+        except (TypeError, ValueError):
+            _rad_set = True
+        _out_v = _get(config, "optimize", "qmmm_output", "")
+        for _key, _is_set, _val in (("qmmm_radius", _rad_set, _rad_v),
+                                    ("qmmm_output", bool(str(_out_v or "").strip()), _out_v)):
+            if _is_set:
+                report.add(
+                    "ERROR",
+                    f"optimize.{_key}",
+                    "This option is used only by a QM/MM optimisation (qmmm_flag=true); "
+                    "an all-QM optimisation would silently ignore it.",
+                    value=str(_val),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [optimize] {_key}, or run a QM/MM optimisation.",
+                )
     if bool(_get(config, "input", "qmmm_flag", False)):
-        report.add(
-            "ERROR",
-            "input.qmmm_flag",
-            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
-            value=f"qmmm_flag=true/runtype={runtype}",
-            expected="a supported QM/MM energy, md, or namd workflow",
-            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
-        )
+        if runtype == "optimize":
+            # Plain minimisation goes to the QM/MM optimiser (qmmm_opt.py),
+            # which minimises the embedded QM/MM energy over the QM atoms plus
+            # the MM residues within [optimize] qmmm_radius; only the plain
+            # optimizer is connected, the reaction-path drivers are not.
+            try:
+                radius = float(_get(config, "optimize", "qmmm_radius", 0.0))
+            except (TypeError, ValueError):
+                radius = -1.0
+            if not math.isfinite(radius) or radius < 0.0:
+                report.add(
+                    "ERROR",
+                    "optimize.qmmm_radius",
+                    "The movable-shell radius of a QM/MM optimisation must be a finite number >= 0 angstrom.",
+                    value=str(_get(config, "optimize", "qmmm_radius", 0.0)),
+                    expected="0 (QM atoms only) or a positive distance in angstrom",
+                    action="Set [optimize] qmmm_radius to 0 or a positive number.",
+                )
+            _cg = _get(config, "guess", "continue_geom", False)
+            if (_cg is True) or (not isinstance(_cg, bool) and str(_cg or "").strip().lower() in ("1", "true", "yes", "on", "t")):
+                report.add(
+                    "ERROR",
+                    "guess.continue_geom",
+                    "A QM/MM optimisation starts from [qmmm] pdb_file, not from a saved QM-fragment "
+                    "geometry, so continue_geom would silently rerun from the original structure.",
+                    value=str(_get(config, "guess", "continue_geom", False)),
+                    expected="false",
+                    action="Set [guess] continue_geom=false and use the optimised full-system PDB "
+                           "([optimize] qmmm_output) as the new [qmmm] pdb_file.",
+                )
+            _swapmo_q = _get(config, "guess", "swapmo", "")
+            if (len(_swapmo_q) > 0) if isinstance(_swapmo_q, (list, tuple)) else bool(str(_swapmo_q or "").strip()):
+                report.add(
+                    "ERROR",
+                    "guess.swapmo",
+                    "Orbital swaps are applied by the single-point reference, which the QM/MM optimisation's "
+                    "embedded SCF does not use; a requested non-Aufbau occupation would be silently lost.",
+                    value=str(_swapmo_q),
+                    expected="empty",
+                    action="Remove [guess] swapmo, or optimise without qmmm_flag.",
+                )
+            _istate_raw = _get(config, "optimize", "istate", 0)
+            try:
+                _istate_q = int(_istate_raw)
+            except (TypeError, ValueError):
+                _istate_q = -1
+            if _istate_q < 0 or (_as_lower(_get(config, "input", "method", "hf")) == "tdhf" and _istate_q < 1):
+                report.add(
+                    "ERROR",
+                    "optimize.istate",
+                    "A QM/MM optimisation needs a valid state: istate >= 0, and >= 1 for method=tdhf "
+                    "(an MRSF/TDHF root, 1 = the lowest).",
+                    value=str(_istate_raw),
+                    expected=">= 1 for tdhf, >= 0 otherwise",
+                    action="Set [optimize] istate to the root to optimise.",
+                )
+            _coordsys_q = str(_get(config, "oqp", "coordsys", "auto") or "auto").strip().lower()
+            if _coordsys_q not in ("auto", "cart", "cartesian", "tric"):
+                report.add(
+                    "ERROR",
+                    "oqp.coordsys",
+                    "DLC/RIC coordinates remove the collective translations and rotations of the movable "
+                    "atoms, which move against the fixed MM atoms in a QM/MM optimisation.",
+                    value=_coordsys_q,
+                    expected="auto, cartesian or tric",
+                    action="Set [oqp] coordsys=auto (Cartesian) or tric.",
+                )
+            if str(_get(config, "optimize", "lib", "oqp")).strip().lower() != "oqp":
+                report.add(
+                    "WARNING",
+                    "optimize.lib",
+                    "A QM/MM optimisation uses its own L-BFGS driver; [optimize] lib is ignored.",
+                    value=str(_get(config, "optimize", "lib", "oqp")),
+                    expected="oqp",
+                    action="Remove [optimize] lib for a QM/MM optimisation.",
+                )
+        else:
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "Reaction-path and crossing drivers are not connected to the active QM/MM force backend "
+                "(only runtype=optimize, md and namd are).",
+                value=f"qmmm_flag=true/runtype={runtype}",
+                expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
+                action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+            )
 
     if lib not in OPT_LIBS:
         report.add(
@@ -5956,7 +6061,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
-    if lib == "oqp":
+    # a QM/MM optimisation always runs the native engine, whatever [optimize] lib says
+    native_engine = lib == "oqp" or (bool(_get(config, "input", "qmmm_flag", False))
+                                     and runtype == "optimize")
+    if native_engine:
         auto_recovery = _get(config, "oqp", "auto_recovery", True)
         if not isinstance(auto_recovery, bool):
             report.add(
@@ -6692,6 +6800,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    td_multiplicity = _get(config, "tdhf", "multiplicity", 1)
+    td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
@@ -6719,8 +6829,66 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
             return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
-        if td_type in {"tda", "rpa"}:
-            return "unsupported_tdhf_type", f"TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}."
+        if (td_type == "rpa" and scf_type == "rhf"
+                and td_multiplicity == 1 and state == 1 and td_nstate >= 2):
+            # Keep this list synchronized with
+            # tdhf_hessian_functional_is_verified.  Pure TDHF is selected by
+            # an empty functional and remains valid.
+            functional_aliases = {
+                "svwn": "svwn5",
+                "svwn5": "svwn5",
+                "lda": "svwn5",
+                "blyp": "blyp",
+                "pbe": "pbe",
+                "pbepbe": "pbe",
+                "b3lyp5": "b3lyp5",
+                "b3lypv5": "b3lyp5",
+            }
+            canonical_functional = functional_aliases.get(functional, functional)
+            verified_semilocal = {"svwn5", "blyp", "pbe", "b3lyp5"}
+            if functional and canonical_functional not in verified_semilocal:
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians currently support the restricted "
+                    "LDA/GGA and global-hybrid paths; meta-GGA, CAM, and other range-separated "
+                    "functionals require a numerical Hessian.",
+                )
+            # [dftgrid] cam_flag turns on range separation independently of the
+            # functional name, and tdhf_hessian_is_applicable is handed
+            # infos%dft%cam_flag and aborts on it. Checking only the name lets
+            # e.g. functional=pbe with cam_flag=true validate here and then die
+            # in Fortran. Scoped to this excited-state branch: the ground-state
+            # analytic Hessian supports CAM (tests/test_cam_hessian.py).
+            if functional and _is_true(_get(config, "dftgrid", "cam_flag", False)):
+                return (
+                    "unsupported_feature",
+                    "Analytic TDDFT Hessians do not support range-separated "
+                    "(CAM) mode; [dftgrid] cam_flag=true is rejected by the "
+                    "native gate. Use a numerical Hessian.",
+                )
+            return "supported", "OpenQP closed-shell singlet TDHF/LDA/GGA-TDDFT analytic Hessian dispatch is enabled."
+        if td_type == "rpa":
+            if scf_type != "rhf":
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently require an RHF reference."
+            if td_multiplicity != 1:
+                return "unsupported_tdhf_type", "Analytic RPA Hessians currently support singlet targets only (tdhf.multiplicity=1)."
+            if state != 1:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians currently support only the lowest "
+                    "excited root (hess.state=1); higher roots require an "
+                    "indefinite-safe projected amplitude-response solver.",
+                )
+            if td_nstate < 2:
+                return (
+                    "unsupported_feature",
+                    "Analytic RPA Hessians require tdhf.nstate>=2 so the "
+                    "lowest excited root can be verified as isolated from "
+                    "the next computed root.",
+                )
+            return "unsupported_feature", "The requested RPA Hessian functional is not in the verified analytic set."
+        if td_type == "tda":
+            return "unsupported_tdhf_type", "TDA analytic Hessians are not implemented; use full-response RPA or a numerical Hessian."
         return "unsupported_tdhf_type", f"Analytic Hessian does not support tdhf.type={td_type}."
 
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
@@ -6826,6 +6994,81 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use a basis without g/higher functions for analytical Hessian, or set [hess] type=numerical.",
             )
 
+        # The analytic TDDFT Hessian is far more grid-sensitive than the rest
+        # of the derivative stack, so the default grid is not enough for it.
+        # Measured on H2O/STO-3G SVWN S1 (this geometry is examples/HESS/
+        # H2O_SVWN_RPA_ANA_HESS.inp): the analytic frequencies move 6.03 cm-1
+        # between the default pruned SG2 96x302 grid and an unpruned 128x590
+        # grid, while the finite-difference Hessian is identical to 0.01 cm-1
+        # on both, i.e. already converged at the default grid. The gap is not
+        # finite-difference noise: it is unchanged (3.2698e-3 Hartree/bohr^2)
+        # for dx from 0.0005 to 0.004 bohr and survives Richardson
+        # extrapolation to dx->0. Warn rather than reject: the result is still
+        # usable and converges correctly, and the committed HESS examples are
+        # deliberately small runtime smoke cases.
+        # Scoped to the excited-state path, which is what was measured. The
+        # ground-state HF/DFT analytic Hessian is a separate, older kernel and
+        # is not characterised here, so it must not inherit this warning.
+        if (
+            capability == "supported"
+            and method == "tdhf"
+            and _as_lower(_get(config, "input", "functional", ""))
+        ):
+            pruned = _as_lower(_get(config, "dftgrid", "pruned", "SG2"))
+            try:
+                rad_npts = int(_get(config, "dftgrid", "rad_npts", 96))
+                ang_npts = int(_get(config, "dftgrid", "ang_npts", 302))
+            except (TypeError, ValueError):
+                rad_npts, ang_npts = 96, 302
+            # source/dftlib/dft.F90 selects a pruning scheme with
+            # `select case (trim(pruned_name))` over SG0/SG1/SG2/SG3 and has no
+            # `case default`, so every other spelling -- "", none, off, false --
+            # leaves the grid unpruned. Match that, rather than guessing at a
+            # list of "off" synonyms.
+            is_pruned = pruned in {"sg0", "sg1", "sg2", "sg3"}
+            if is_pruned or rad_npts < 128 or ang_npts < 590:
+                report.add(
+                    "WARNING",
+                    "dftgrid",
+                    "Analytic TDDFT Hessians need a finer, unpruned DFT grid than "
+                    "the default. Measured on H2O/STO-3G SVWN, the analytic S1 "
+                    "frequencies move 6.0 cm-1 between the default pruned SG2 "
+                    "96x302 grid and an unpruned 128x590 grid, while the "
+                    "finite-difference Hessian is converged to 0.01 cm-1 on both.",
+                    value=f"pruned={pruned or 'none'}, rad_npts={rad_npts}, ang_npts={ang_npts}",
+                    expected="pruned= (unpruned) with rad_npts>=128 and ang_npts>=590",
+                    action="For production frequencies set [dftgrid] pruned= , "
+                           "rad_npts=128, ang_npts=590 (or finer), or use "
+                           "[hess] type=numerical, which is converged at the "
+                           "default grid and was measured faster here.",
+                )
+
+        # tdhf_hessian_is_applicable requires mpi_size == 1 and aborts
+        # otherwise, so a multi-rank launch of an otherwise supported analytic
+        # TD Hessian dies in Fortran after the SCF and response have already
+        # run. Catch it here instead. Scoped to the excited-state path: the
+        # ground-state Hessian has no such restriction.
+        if capability == "supported" and method == "tdhf":
+            try:
+                mpi_size = int(MPIManager().size)
+            except Exception:
+                mpi_size = 1
+            if mpi_size > 1:
+                report.add(
+                    "ERROR",
+                    "hess.type",
+                    "Analytic TD Hessians run on one MPI rank only; the native "
+                    "kernel aborts with more.",
+                    value=f"{mpi_size} MPI ranks",
+                    expected="1 rank",
+                    # Deliberately not recommending OpenMP as the fallback:
+                    # tdhf_hessian does omp_set_num_threads(1) for the whole
+                    # kernel, so threads do not help this path either.
+                    action="Run the analytic TD Hessian on a single rank, or "
+                           "set [hess] type=numerical, which parallelises over "
+                           "displacements via [hess] nproc.",
+                )
+
     if method == "hf" and state > 0:
         report.add(
             "ERROR",
@@ -6870,21 +7113,25 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
         _add_cpu_info(report, "hess.nproc", nproc, restart)
 
 
-def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
+def _check_nac(
+    config: dict[str, Any], report: CheckReport, *, allow_analytical: bool = True
+) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     nproc = _get(config, "nac", "nproc", 1)
     states = _as_list(_get(config, "nac", "states", []))
     nac_type = _as_lower(_get(config, "nac", "type", "numerical"))
 
-    if nac_type != "numerical":
+    allowed_types = {"numerical", "analytical"} if allow_analytical else {"numerical"}
+    if nac_type not in allowed_types:
         report.add(
             "ERROR",
             "nac.type",
-            "Analytical NAC vectors are not available.",
+            "Unknown NAC vector type." if allow_analytical else
+            "NACME uses overlap time-derivative couplings, not analytical NAC vectors.",
             value=nac_type,
-            expected="numerical",
-            action="Set [nac] type=numerical.",
+            expected="numerical or analytical" if allow_analytical else "numerical",
+            action="Set [nac] type to a supported value.",
         )
 
     if method != "tdhf":
@@ -6906,6 +7153,44 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
             expected="mrsf",
             action="Set [tdhf] type=mrsf.",
         )
+
+    if nac_type == "analytical" and allow_analytical:
+        for section, key, expected, message in (
+            ("scf", "type", "rohf", "Analytical NAC requires an ROHF/ROKS reference."),
+            ("scf", "multiplicity", 3, "Analytical NAC requires a two-SOMO triplet reference."),
+            ("tdhf", "multiplicity", 1, "Analytical NAC currently implements singlet states only."),
+        ):
+            value = _get(config, section, key, "rhf" if key == "type" else 1)
+            actual = _as_lower(value) if key == "type" else value
+            if actual != expected:
+                report.add(
+                    "ERROR", f"{section}.{key}", message,
+                    value=value, expected=expected,
+                    action=f"Set [{section}] {key}={expected}.",
+                )
+        for section in ("scf", "tdhf"):
+            value = _get(config, section, "conv", 1e-6)
+            try:
+                conv = float(value)
+                valid = (
+                    not isinstance(value, bool)
+                    and math.isfinite(conv) and 0 < conv <= 1e-8
+                )
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                report.add(
+                    "ERROR", f"{section}.conv",
+                    "Analytical NAC requires a finite, positive convergence threshold <= 1e-8.",
+                    value=value, expected="0 < conv <= 1e-8",
+                    action=f"Set [{section}] conv=1e-10 (recommended near a crossing).",
+                )
+        nstate = _get(config, "tdhf", "nstate", 1)
+        if nstate < 2:
+            report.add(
+                "ERROR", "tdhf.nstate", "Analytical NAC requires at least two states.",
+                value=nstate, expected=">= 2", action="Increase [tdhf] nstate.",
+            )
 
     if nproc < 1:
         report.add(
@@ -6946,6 +7231,11 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
                     value=pair,
                     action="Use positive TDHF state numbers.",
                     wiki=WIKI_HELP["nac.states"],
+                )
+            if nac_type == "analytical" and int(pair[0]) == int(pair[1]):
+                report.add(
+                    "ERROR", "nac.states", "Analytical NAC requires two distinct states.",
+                    value=pair, action="Use a pair such as states=1 2 (MRSF S0/S1).",
                 )
 
     _add_cpu_info(report, "nac.nproc", nproc, False)
@@ -6996,7 +7286,7 @@ def _check_dftb_nacme_previous_geometry(config: dict[str, Any], report: CheckRep
 
 
 def _check_nacme(config: dict[str, Any], report: CheckReport) -> None:
-    _check_nac(config, report)
+    _check_nac(config, report, allow_analytical=False)
 
     guess_file2 = _get(config, "guess", "file2", "")
     system2 = _get(config, "input", "system2", "")
@@ -7057,6 +7347,167 @@ def _add_cpu_info(report: CheckReport, path: str, nproc: int, restart: bool) -> 
     )
 
 
+def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> None:
+    """The periodic/embedding controls of the OpenQpQMMM driver (runtype=md /
+    namd) are not consumed by the legacy single-point QM/MM path; reject them
+    there instead of silently running a NoCutoff point-charge job."""
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        return
+    def _truthy(v):
+        return (v is True) or (str(v).strip().lower() in ("1", "true", "on", "yes", "t"))
+    def _set(v):
+        return str(v or "").strip().lower() not in ("", "none", "0", "0.0")
+    cutoff = str(_get(config, "qmmm", "cutoff", "NoCutoff") or "NoCutoff").strip().lower()
+    if runtype == "namd" and _truthy(_get(config, "md", "soc", False)) \
+            and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        # The spin-adiabatic SOC-NAMD state is a mixture of MCH states whose
+        # relaxed ESPF charges are not available per image-field iteration, so
+        # the periodic QM-image term cannot be made self-consistent with the
+        # propagated state (NAMD_SOC_QMMM raises NotImplementedError).
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic QM/MM (PME/Ewald/CutoffPeriodic) is not available for SOC-NAMD; "
+            "the periodic QM-image field needs the relaxed charges of the propagated "
+            "state, which the spin-mixed SOC state does not provide.",
+            value=f"cutoff={cutoff} with [md] soc=true",
+            expected="cutoff=NoCutoff for SOC-NAMD, or [md] soc=false for a periodic box",
+            action="Run SOC-NAMD QM/MM as an isolated cluster (cutoff=NoCutoff), or use "
+                   "same-spin FSSH ([md] soc=false) for the periodic box.",
+        )
+        return
+    if runtype in ("md", "namd", "optimize"):
+        # optimize: the QM/MM optimiser builds the same OpenQpQMMM driver as
+        # runtype=md and passes every periodic/embedding control through.
+        embedding = str(_get(config, "qmmm", "embedding", "electrostatic") or "electrostatic").strip().lower()
+        method = _as_lower(_get(config, "input", "method", "hf"))
+        if runtype == "optimize" and method not in ("hf", "tdhf", "dftb", "xtb"):
+            report.add(
+                "ERROR",
+                "input.method",
+                "The QM/MM optimiser can differentiate HF/DFT, TDHF/MRSF and the tight-binding "
+                "methods only; other methods reach the driver without an embedded gradient.",
+                value=method,
+                expected="hf, tdhf, dftb or xtb",
+                action="Use one of those methods, or optimise without qmmm_flag.",
+            )
+        if runtype == "optimize":
+            for key in ("pdb_file", "qm_atoms", "forcefield_files"):
+                if not str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        f"A QM/MM optimisation needs [qmmm] {key}.",
+                        value="(blank)",
+                        expected="a value",
+                        action=f"Set [qmmm] {key}.",
+                    )
+            try:
+                maxit = int(_get(config, "optimize", "maxit", 30))
+            except (TypeError, ValueError):
+                maxit = 0
+            if maxit < 1:
+                report.add(
+                    "ERROR",
+                    "optimize.maxit",
+                    "A QM/MM optimisation needs at least one evaluation.",
+                    value=str(_get(config, "optimize", "maxit", 30)),
+                    expected=">= 1",
+                    action="Set [optimize] maxit to a positive number.",
+                )
+            for key in ("qm_atoms_xyz", "qm_list"):
+                if str(_get(config, "qmmm", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"qmmm.{key}",
+                        "The QM-coordinate override of the MD driver is not applied by the QM/MM "
+                        "optimiser; the run would optimise the PDB geometry instead.",
+                        value=str(_get(config, "qmmm", key, "")),
+                        expected="no override (put the starting geometry in the PDB)",
+                        action="Remove [qmmm] qm_atoms_xyz / qm_list for a QM/MM optimisation.",
+                    )
+            if _truthy(_get(config, "input", "d4", False)):
+                report.add(
+                    "ERROR",
+                    "input.d4",
+                    "D4 dispersion is not part of the QM/MM force the optimiser minimises "
+                    "(compute_force has no LastStep dispersion pass), so the geometry would "
+                    "minimise the non-D4 surface.",
+                    value="d4=true",
+                    expected="d4=false for a QM/MM optimisation",
+                    action="Disable d4, or optimise without qmmm_flag.",
+                )
+            for key in ("freeze", "frozen_distances"):
+                if str(_get(config, "optimize", key, "") or "").strip() or str(_get(config, "oqp", key, "") or "").strip():
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "Frozen-distance constraints are not applied by the QM/MM optimiser yet; "
+                        "the run would silently move the constrained bond.",
+                        value=str(_get(config, "optimize", key, "") or _get(config, "oqp", key, "")),
+                        expected="no constraint, or optimise without qmmm_flag",
+                        action="Remove the constraint for a QM/MM optimisation.",
+                    )
+        if method == "tdhf" and runtype == "namd" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            try:
+                zvconv = float(_get(config, "tdhf", "zvconv", 1.0e-6))
+            except (TypeError, ValueError):
+                zvconv = 1.0e-6
+            if zvconv > 1.0e-8:
+                # The periodic QM-image field is iterated with the RELAXED
+                # ESPF charges of the target state; their noise floor follows
+                # the Z-vector residual (about 1e-4 e at zvconv=1e-6 for an
+                # 18-atom indole, i.e. at the loop tolerance, which then needs
+                # 4-5 gradient evaluations per step; 2 at zvconv=1e-8).
+                report.add(
+                    "WARNING",
+                    "tdhf.zvconv",
+                    "Periodic (PME/Ewald) dynamics on a TDHF/MRSF state iterates the QM-image "
+                    "field with the relaxed ESPF charges, whose precision is set by the "
+                    "Z-vector convergence; the default leaves them at the loop tolerance.",
+                    value=f"{zvconv:g}",
+                    expected="zvconv <= 1e-8",
+                    action="Set [tdhf] zvconv=1e-8 (two image iterations per step instead of four or five).",
+                )
+        if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
+            # The legacy split scheme routes the QM charges through OpenMM
+            # point charges; under PBC its force is not the derivative of
+            # its energy (openqp-devkit docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # so a periodic trajectory must use the full-ESPF scheme.
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                "embedding=split is not force-consistent in a periodic box; periodic "
+                "dynamics needs the full-ESPF scheme.",
+                value=f"embedding=split with cutoff={cutoff}",
+                expected="embedding=electrostatic (full ESPF) for PME/Ewald/CutoffPeriodic, "
+                         "or cutoff=NoCutoff for the split scheme",
+                action="Use embedding=electrostatic for the periodic box, or NoCutoff for split.",
+            )
+        return
+    ignored = []
+    if cutoff not in ("nocutoff", "cutoffnonperiodic"):
+        ignored.append(f"cutoff={cutoff}")
+    for key in ("ewald_tol", "mm_charge_width"):
+        if _set(_get(config, "qmmm", key, "")):
+            ignored.append(key)
+    for key in ("lj_switch", "h_lj"):
+        if _truthy(_get(config, "qmmm", key, False)):
+            ignored.append(key)
+    if ignored:
+        report.add(
+            "ERROR",
+            "qmmm.cutoff",
+            "Periodic/embedding QM/MM controls are only used by runtype=md and "
+            "runtype=namd; the single-point QM/MM path would silently ignore them.",
+            value=", ".join(ignored),
+            expected="runtype=md or namd, or a NoCutoff single point without these keys",
+            action="Use runtype=md/namd for periodic (PME/Ewald) or smeared-charge "
+                   "QM/MM, or remove these [qmmm] keys for a single-point energy.",
+        )
+
+
 def check_input_values(
     config: dict[str, Any],
     *,
@@ -7096,6 +7547,7 @@ def check_input_values(
     _check_guess(config, report)
     _check_pcm(config, report)
     _check_dftb(config, report)
+    _check_qmmm_driver_options(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
     _check_scf(config, report)

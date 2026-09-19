@@ -1,0 +1,27 @@
+[input]
+system=
+  O  0.0000000000  0.0000000000  0.0000000000
+  H  0.0000000000  0.0000000000  0.9000000000
+  H  0.0000000000  0.7000000000 -0.3000000000
+charge=0
+method=tdhf
+basis=sto-3g
+runtype=hess
+functional=b3lyp5
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-10
+
+[tdhf]
+type=rpa
+multiplicity=1
+nstate=3
+conv=1.0e-10
+zvconv=1.0e-10
+
+[hess]
+type=analytical
+state=1
+clean=True

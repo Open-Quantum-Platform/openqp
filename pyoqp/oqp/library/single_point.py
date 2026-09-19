@@ -119,6 +119,7 @@ from oqp.library.nac_utils import (
     hst_derivative_coupling,
     interstate_coupling,
     load_numerical_nac_cache,
+    normalize_retained_state_overlap,
     write_numerical_nac_cache_marker,
 )
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
@@ -1757,6 +1758,10 @@ class Gradient(Calculator):
             dump_log(self.mol, title='PyOQP: Gradient of %s' % target)
             self.mol.data.set_tdhf_target(i)
             self.zvec_func[self.td](self.mol)
+            if (self.td == 'mrsf' and
+                    os.environ.get('OQP_MRSF_NAC_ZV_FUSE_GRADIENT', '')
+                    .strip().lower() in ('1', 'y', 'yes', 't', 'true', 'on')):
+                self.mol._nac_fused_gradient_ready = True
 
             # check convergence
             z_flag = self.mol.mol_energy.Z_Vector_converged
@@ -2133,9 +2138,40 @@ class Hessian(Calculator):
 
     def analytical_tddft_hess(self):
         td_type = self.mol.config['tdhf']['type']
-        raise NotImplementedError(
-            f'TDDFT analytic Hessian is not implemented yet for tdhf.type={td_type}.'
-        )
+        self.mol.data.set_tdhf_target(self.state)
+        oqp.tdhf_z_vector(self.mol)
+        if not self.mol.mol_energy.Z_Vector_converged:
+            raise ZVnotConverged()
+        native_hess_func = getattr(oqp, 'tdhf_hessian', None)
+        if native_hess_func is None:
+            raise RuntimeError('This OpenQP build does not export the native TD Hessian kernel.')
+        native_hess_func(self.mol)
+        self._collect_native_fort6_logs(self.mol)
+        try:
+            raw_hessian = self.mol.data['OQP::tdhf_hessian']
+        except (AttributeError, KeyError) as exc:
+            raise RuntimeError('Native oqp.tdhf_hessian did not store OQP::tdhf_hessian.') from exc
+        hessian = self.mol.set_hessian_result(raw_hessian)
+        disp_hessian = self._dispersion_hessian()
+        d4_added = np.ndim(disp_hessian) != 0
+        if d4_added:
+            hessian = hessian + disp_hessian
+            self.mol.hessian = hessian
+        metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
+        metadata.update({
+            'backend': 'native_openqp',
+            'native_openqp_kernel': True,
+            'native_openqp_coupled_td_response': True,
+            'native_openqp_z_response': True,
+            'native_openqp_final_assembly': True,
+            'native_openqp_d4_dispersion': d4_added,
+            'no_external_hessian_backend': True,
+            'no_numerical_fallback': True,
+            'tdhf_type': td_type,
+            'shape': list(hessian.shape),
+        })
+        setattr(self.mol, 'hessian_metadata', metadata)
+        return hessian, ['computed', 'native_openqp']
 
     def analytical_sf_hess(self):
         raise NotImplementedError(
@@ -2894,7 +2930,10 @@ class NACME(BasisOverlap):
         current_x = copy.deepcopy(self.mol.data['OQP::td_bvec_mo'])
         x_shape = current_x.shape
 
-        # reshape Fortran data into Python style
+        # The tag-array bridge exposes the Fortran (amplitude, state) buffer
+        # in a C-shaped view.  Its contiguous buffer remains state-major, so
+        # rebuild (state, amplitude) rows from that buffer.  JSON loading must
+        # first restore this bridge layout (see tag_array_from_json).
         current_x = current_x.reshape((x_shape[1], x_shape[0]))
         previous_x = previous_x.reshape((x_shape[1], x_shape[0]))
 
@@ -2988,8 +3027,9 @@ class NACME(BasisOverlap):
         # available above as transport history, but are not current results.
         self.mol._state_tracking_fresh = True
 
-        # update x in Fortran data shape
-        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape((x_shape[0], x_shape[1]))
+        # Restore the tag-array bridge shape without changing its state-major
+        # contiguous buffer.
+        self.mol.data['OQP::td_bvec_mo'] = current_x.reshape(x_shape)
 
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
@@ -3013,14 +3053,23 @@ class NACME(BasisOverlap):
             noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
         data["OQP::td_states_overlap"] = s_st
 
-    def nacme(self, align=True, reorder_x=False):
+    def nacme(self, align=True, reorder_x=False, normalize_retained=False):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
         between the two geometries.
 
         Currently, adapted only for MRSF-TDDFT approach
         """
-        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation')
+        tlf_order = int(self.mol.config.get('tdhf', {}).get('tlf', 0))
+        if tlf_order == 0:
+            overlap_note = ('exact minor determinants (tlf=0 = notlf, default; '
+                            'no truncated-Leibniz approximation)')
+        else:
+            overlap_note = ('TLF(%d) truncated-Leibniz minors; assumes nearly '
+                            'orthonormal consecutive MOs, set tlf=0 for exact '
+                            'minors' % tlf_order)
+        dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation '
+                                 '[state-overlap minors: %s]' % overlap_note)
 
         # align X amplitudes
         if align:
@@ -3039,6 +3088,8 @@ class NACME(BasisOverlap):
         state_overlap = canonical_state_overlap(
             self.mol.data["OQP::td_states_overlap"]
         )
+        if normalize_retained:
+            state_overlap = normalize_retained_state_overlap(state_overlap)
 
         # compute time-derivative nac
         dc_matrix = hst_derivative_coupling(state_overlap, self.dt)
@@ -3177,8 +3228,228 @@ class NAC(Calculator):
                )
         return x, y, sx, sy, pitch, tilt, peak, bifu
 
+    def _build_nac_gamma_tlf(self):
+        """Reject the retired Python linearized-overlap approximation.
+
+        The historical body below omitted the exact minor cofactors, the
+        column-normalization derivative, and same-space orbital generators;
+        it is not the derivative of ``compute_states_overlap``.  Production
+        obtains the ordered exact metric from resident Fortran through
+        ``oqp.mrsf_nac_metric_data``.  Keep this guard while old forensic
+        scripts still reference the private helper, so they fail loudly
+        instead of silently reinstating the rejected approximation.
+        """
+        raise RuntimeError(
+            "_build_nac_gamma_tlf is retired; use resident "
+            "oqp.mrsf_nac_metric_data"
+        )
+
+    def _compute_amp_damp(self, dx=1.0e-3):
+        """Historical displaced-operator diagnostic; never a production path.
+
+        BP#1 amplitude term damp(I,J) = X_I^T (dA/dR) X_J / (Om_J - Om_I).
+
+        A is the MRSF TDA matvec (mrsf_matvec_apply: full 2e + the mrsfesum 1e/
+        Fock/W contraction).  A is SYMMETRIC in the 90-dim amplitude space, so the
+        first-order perturbation identity  X_I^T dX_J = X_I^T dA X_J/(Om_J-Om_I)
+        is exact.  We build dA at each +/- nuclear displacement by transporting the
+        displaced-frame matvec back into the FIXED reference MO frame (per-block
+        Loewdin orbital transport of the determinant-grid amplitude), then FD.
+
+        This is the analytic amplitude derivative captured semi-numerically (FD of
+        the analytic matvec OPERATOR, not of energies/states): it reproduces the
+        transported-matvec reference to FD floor (cos +/-1, ratio ~1) for all H2O
+        BHHLYP+HF pairs, and so the assembly d_ij = d_ov - damp reproduces the
+        numerical NAC.  The 1e/W + U^x physics that the explicit-ERI 2e-only
+        Fortran term (mrsf_nac_amp) omits is included here because the FULL matvec
+        (2e + mrsfesum) is differenced and transported (= orbital response).
+        Returns damp as a dict {(i,j): ndarray(3*natom)} 1-indexed, or None on
+        SCF/transport failure for a pair (caller then skips that pair).
+        """
+        import math
+        mol = self.mol
+        natom = self.natom
+        nstate = self.nstate
+        SQ = 1.0 / math.sqrt(2.0)
+        OVTAG = 'OQP::overlap_mo_non_orthogonal'
+
+        # int2 cutoff -> exact (the matvec must be LINEAR for column build);
+        # saved + restored at the end so same-mol in-process chaining stays clean
+        _cut0 = None
+        try:
+            _cut0 = mol.data._data.control.int2e_cutoff
+            mol.data._data.control.int2e_cutoff = 1e-20
+        except Exception:
+            pass
+
+        noca = int(np.asarray(mol.data['nelec_A']).ravel()[0])
+        nocb = noca - 2
+        C0raw = np.array(mol.data['OQP::VEC_MO_A'], copy=True)
+        nbf = C0raw.shape[0]
+        nvirb = nbf - nocb
+        nij = noca * nvirb
+        e0 = np.array(mol.data['OQP::E_MO_A'], copy=True)
+        C0b = np.array(mol.data['OQP::VEC_MO_B'], copy=True)
+        e0b = np.array(mol.data['OQP::E_MO_B'], copy=True)
+        xyz0 = np.array(mol.get_system(), copy=True)
+        X0_raw = np.array(mol.data['OQP::td_bvec_mo'], copy=True)
+        Xshape = X0_raw.shape
+        X0 = X0_raw.reshape(-1).reshape((nstate, nij))
+        E = list(mol.energies)
+        Om = [E[k + 1] - E[0] for k in range(nstate)]
+        ncoord = 3 * natom
+        ijlr1 = (noca - 1 - nocb - 1) * noca + (noca - 1) - 1
+        ijlr2 = (noca - nocb - 1) * noca + (noca) - 1
+
+        def set_bvec(col):
+            rr = X0_raw.copy().reshape(-1)
+            rr[0:nij] = col
+            mol.data['OQP::td_bvec_mo'] = rr.reshape(Xshape)
+
+        def Acol(c):
+            set_bvec(c)
+            oqp.mrsf_matvec_apply(mol)
+            return np.array(mol.data['OQP::nac_mvax'], copy=True).ravel()
+
+        def Amat():
+            A = np.zeros((nij, nij))
+            e = np.zeros(nij)
+            for j in range(nij):
+                e[:] = 0.0
+                e[j] = 1.0
+                A[:, j] = Acol(e)
+            return A
+
+        def unfold_det(col):
+            x = np.zeros((noca, nvirb))
+            for i in range(noca):
+                for a in range(nvirb):
+                    ij = a * noca + i
+                    if ij == ijlr1:
+                        x[i, a] = col[ijlr1] * SQ
+                    elif ij == ijlr2:
+                        x[i, a] = -col[ijlr1] * SQ
+                    else:
+                        x[i, a] = col[ij]
+            return x
+
+        def refold_det(cp):
+            g = cp.copy()
+            i1, a1 = ijlr1 % noca, ijlr1 // noca
+            g[i1, a1] = math.sqrt(2.0) * cp[i1, a1]
+            i2, a2 = ijlr2 % noca, ijlr2 // noca
+            g[i2, a2] = 0.0
+            return g.T.reshape(-1)
+
+        def transport_T(Q):
+            Qo = Q[0:noca, 0:noca]
+            Qv = Q[nocb:nbf, nocb:nbf]
+            T = np.zeros((nij, nij))
+            e = np.zeros(nij)
+            for j in range(nij):
+                e[:] = 0.0
+                e[j] = 1.0
+                c = unfold_det(e)
+                ct = Qo.T @ c @ Qv
+                T[:, j] = refold_det(ct)
+            return T
+
+        def transport_vec(Q, col):
+            # T applied to ONE amplitude vector (unfold -> block-rotate -> refold).
+            # X_I^T (T^T A T) X_J = (T X_I)^T A (T X_J), so the full nij x nij
+            # A_ref is never needed -- A is only ever applied to the nstate
+            # transported kets. This is the whole cost of the term: nstate matvec
+            # applications per displacement instead of nij (verified identical to
+            # the full-matrix path, cos +1.0 ratio 1.0; ~nij-fold cheaper, which is
+            # what lets PSB3-sized systems run).
+            Qo = Q[0:noca, 0:noca]
+            Qv = Q[nocb:nbf, nocb:nbf]
+            return refold_det(Qo.T @ unfold_det(col) @ Qv)
+
+        mol.save_data()
+        cfg = mol.config
+        json0 = mol.log.replace('.log', '.json')
+        guess_bak = dict(cfg['guess'])
+        cfg['guess']['type'] = 'json'
+        cfg['guess']['file'] = json0
+        cfg['guess']['continue_geom'] = False
+
+        def displaced_scalars(coord):
+            # Returns the nstate x nstate matrix  S_ij = (T X0_i)^T A_disp (T X0_j)
+            # = X0_i^T A_ref X0_j, computed with only nstate matvec applications.
+            mol.update_system(coord)
+            oqp.library.ints_1e(mol)
+            oqp.library.guess(mol)
+            SinglePoint(mol).energy()
+            mol.data['OQP::xyz_old'] = xyz0.reshape((3, natom))
+            mol.data['OQP::VEC_MO_A_old'] = C0raw
+            mol.data['OQP::E_MO_A_old'] = e0
+            mol.data['OQP::VEC_MO_B_old'] = C0b
+            mol.data['OQP::E_MO_B_old'] = e0b
+            oqp.get_structures_ao_overlap(mol)
+            M = np.array(mol.data[OVTAG], copy=True).reshape(-1).reshape((nbf, nbf)).T
+            Q = np.zeros((nbf, nbf))
+            for lo, hi in ((0, nocb), (nocb, noca), (noca, nbf)):
+                sub = M[lo:hi, lo:hi]
+                wv, U = np.linalg.eigh(sub.T @ sub)
+                R = sub @ (U @ np.diag(1.0 / np.sqrt(wv)) @ U.T)
+                Q[lo:hi, lo:hi] = R
+            TX = [transport_vec(Q, X0[k]) for k in range(nstate)]
+            ATX = [Acol(TX[k]) for k in range(nstate)]     # nstate matvec applies
+            return np.array([[TX[i] @ ATX[j] for j in range(nstate)]
+                             for i in range(nstate)])
+
+        ok = True
+        dS = np.zeros((ncoord, nstate, nstate))
+        try:
+            for k in range(ncoord):
+                Sp = displaced_scalars(xyz0 + dx * np.eye(ncoord)[k])
+                Sm = displaced_scalars(xyz0 - dx * np.eye(ncoord)[k])
+                dS[k] = (Sp - Sm) / (2 * dx)
+        except Exception:
+            ok = False
+
+        # restore reference geometry/orbitals/guess + amplitudes + int2 cutoff
+        cfg['guess'].update(guess_bak)
+        mol.update_system(xyz0)
+        oqp.library.ints_1e(mol)
+        oqp.library.guess(mol)
+        SinglePoint(mol).energy()
+        mol.data['OQP::td_bvec_mo'] = X0_raw
+        if _cut0 is not None:
+            try:
+                mol.data._data.control.int2e_cutoff = _cut0
+            except Exception:
+                pass
+
+        if not ok:
+            return None
+        damp = {}
+        for I in range(nstate):
+            for J in range(nstate):
+                if I == J:
+                    continue
+                gap = Om[J] - Om[I]
+                if abs(gap) < 1e-12:
+                    damp[(I + 1, J + 1)] = None
+                    continue
+                damp[(I + 1, J + 1)] = dS[:, I, J] / gap
+        return damp
+
     def analytical_nac(self):
-        exit('analytical nac vector is not available yet, choose numerical')
+        """Analytic MRSF NAC via the certified nac-lagrangian assembly
+        (oqp.library.nac_analytic; see openqp-devkit tools/nac_lagrangian/
+        MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md).  v3 is the gated
+        native-Z-vector implementation of the complete response formula.  The
+        resident Fortran mrsf_nac_wpair engine uses the closed-form MRSF
+        bilinear adjoint; no orbital-generator finite-difference harvest is
+        present in production."""
+        from oqp.library.nac_analytic import analytic_nac
+        dump_log(self.mol, title='PyOQP: analytic derivative coupling',
+                 section='')
+        nacv, dcv = analytic_nac(self.mol)
+        return nacv, dcv, ['analytic-v3-zvector'] * (3 * self.natom)
+
 
     def numerical_nac(self):
         dir_nacv = f'{self.mol.log_path}/{self.mol.project_name}_num_nacv'
@@ -3354,7 +3625,7 @@ def nacme_wrapper(key_dict):
             BasisOverlap(mol).overlap()
             sp.excitation(ref_energy)
             LastStep(mol).compute(mol)
-            NACME(mol).nacme(reorder_x=True)
+            NACME(mol).nacme(reorder_x=True, normalize_retained=True)
             dump_log(mol, title='', section='end')
 
         try:

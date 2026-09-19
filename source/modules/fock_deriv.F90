@@ -21,7 +21,7 @@ module fock_deriv_mod
 !>   already-validated grd2_driver energy gradient (exact, non-iterative).
 
   use precision, only: dp
-  use grd2, only: grd2_driver, grd2_compute_data_t
+  use grd2, only: grd2_driver, grd2_driver_batch, grd2_compute_data_t
   use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
   use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
@@ -33,7 +33,7 @@ module fock_deriv_mod
   !> grd2 compute-data extension forming the mixed two-density product M (x) P.
   type, extends(grd2_compute_data_t) :: grd2_fockprobe_data_t
     real(kind=dp), pointer :: pmat(:,:) => null()   !< density P (nbf,nbf), full
-    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe  M (nbf,nbf), full (symmetric)
+    real(kind=dp), pointer :: mmat(:,:) => null()   !< probe M (nbf,nbf), full
     ! Cartesian-effective (bfnrm-folded) copies + Cartesian offsets, used under
     ! HARMONIC_ACTIVE so the spherical probe/density contract with Cartesian
     ! derivative ERIs (set by prepare_cart).
@@ -73,7 +73,10 @@ module fock_deriv_mod
   public :: grd2_fockprobe_data_t
   public :: grd2_fockprobe_os_data_t
   public :: fock_deriv_contract
+  public :: fock_deriv_matrix
+  public :: fock_deriv_matrix_general
   public :: fock_deriv_contract_os
+  public :: fock_deriv_contract_os_batch
 
 contains
 
@@ -83,7 +86,7 @@ contains
 !> @param[in]  infos    system info (converged SCF)
 !> @param[in]  basis    basis set
 !> @param[in]  pmat     density P (nbf,nbf) full, AO basis (alpha density for RHF)
-!> @param[in]  mmat     probe M (nbf,nbf) full, symmetric, AO basis
+!> @param[in]  mmat     probe M (nbf,nbf) full, AO basis
 !> @param[in]  hfscale  HF exchange scale (1.0 for HF; HFscale for hybrids)
 !> @param[out] gx       (3, natom) contraction per nuclear coordinate
   subroutine fock_deriv_contract(infos, basis, pmat, mmat, hfscale, gx)
@@ -113,6 +116,105 @@ contains
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
   end subroutine fock_deriv_contract
+
+!###############################################################################
+
+!> @brief Build the complete symmetric two-electron derivative Fock matrix
+!>        F^x[P] for every nuclear coordinate.
+!>
+!> @details The validated scalar contraction above is evaluated on the
+!>          orthonormal basis of symmetric AO probe matrices.  A diagonal
+!>          probe has M_uu=1, while an off-diagonal probe has
+!>          M_uv=M_vu=1/2.  The closed-shell contraction is one half of the
+!>          SCF response-Fock trace, so twice its value is the corresponding
+!>          independent matrix element.  This
+!>          reference implementation favors a direct, auditable relation to
+!>          fock_deriv_contract; a later blocked-quartet implementation may
+!>          replace it without changing the result or the calling convention.
+!>
+!> @param[in]  infos    system information for the converged SCF state
+!> @param[in]  basis    basis set
+!> @param[in]  pmat     closed-shell alpha density in the AO basis
+!> @param[in]  hfscale  exact-exchange scale
+!> @param[out] fmat     (nbf,nbf,3,natom) derivative two-electron Fock matrices
+  subroutine fock_deriv_matrix(infos, basis, pmat, hfscale, fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
+    real(kind=dp), allocatable, target :: probe(:,:)
+    real(kind=dp), allocatable :: gx(:,:)
+    integer :: mu, nu, natom, nbf
+
+    nbf = basis%nbf
+    natom = size(basis%atoms%xyz, 2)
+    if (any(shape(pmat) /= [nbf, nbf])) &
+      error stop 'fock_deriv_matrix: density shape does not match the basis'
+    if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
+      error stop 'fock_deriv_matrix: output shape does not match the system'
+
+    allocate(probe(nbf,nbf), gx(3,natom))
+    fmat = 0.0_dp
+    do nu = 1, nbf
+      do mu = nu, nbf
+        probe = 0.0_dp
+        if (mu == nu) then
+          probe(mu,nu) = 1.0_dp
+        else
+          probe(mu,nu) = 0.5_dp
+          probe(nu,mu) = 0.5_dp
+        end if
+        call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
+        fmat(mu,nu,:,:) = 2.0_dp*gx
+        fmat(nu,mu,:,:) = 2.0_dp*gx
+      end do
+    end do
+  end subroutine fock_deriv_matrix
+
+!###############################################################################
+
+!> @brief Build F^x[P] for a general, possibly nonsymmetric AO density.
+!>
+!> @details Each ordered AO matrix unit is used as a probe.  Unlike
+!>          fock_deriv_matrix, this routine does not identify transposed
+!>          elements.  It is required for the separate P and P^T transition-
+!>          density contractions in differentiated TDHF response operators.
+!>
+!> @param[in]  infos    system information for the converged SCF state
+!> @param[in]  basis    basis set
+!> @param[in]  pmat     general AO density
+!> @param[in]  hfscale  exact-exchange scale
+!> @param[out] fmat     (nbf,nbf,3,natom) derivative Fock matrices
+  subroutine fock_deriv_matrix_general(infos, basis, pmat, hfscale, fmat)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pmat(:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: fmat(:,:,:,:)
+
+    real(kind=dp), allocatable, target :: probe(:,:)
+    real(kind=dp), allocatable :: gx(:,:)
+    integer :: mu, nu, natom, nbf
+
+    nbf = basis%nbf
+    natom = size(basis%atoms%xyz, 2)
+    if (any(shape(pmat) /= [nbf, nbf])) &
+      error stop 'fock_deriv_matrix_general: density shape does not match the basis'
+    if (any(shape(fmat) /= [nbf, nbf, 3, natom])) &
+      error stop 'fock_deriv_matrix_general: output shape does not match the system'
+
+    allocate(probe(nbf,nbf), gx(3,natom))
+    do nu = 1, nbf
+      do mu = 1, nbf
+        probe = 0.0_dp
+        probe(mu,nu) = 1.0_dp
+        call fock_deriv_contract(infos, basis, pmat, probe, hfscale, gx)
+        fmat(mu,nu,:,:) = 2.0_dp*gx
+      end do
+    end do
+  end subroutine fock_deriv_matrix_general
 
 !###############################################################################
 
@@ -159,7 +261,9 @@ contains
 !>     - x_hf/2 ( M_ik P_jl + M_il P_jk + P_ik M_jl + P_il M_jk ).
 !>   The 1/2 with the four symmetric exchange terms reproduces the same total as
 !>   the energy routine's x_hf ( D_ik D_jl + D_il D_jk ) when M = P, so the trace
-!>   identity tr(P . F^x[P]) = (2e gradient) holds exactly.
+!>   identity tr(P . F^x[P]) = (2e gradient) holds exactly.  This bilinear
+!>   expression retains the ordered M and P elements and therefore also
+!>   applies to nonsymmetric transition densities.
   subroutine grd2_fockprobe_get_density(this, basis, id, dab, dabmax)
     class(grd2_fockprobe_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
@@ -265,6 +369,79 @@ contains
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
   end subroutine fock_deriv_contract_os
+
+!###############################################################################
+
+!> Batched open-shell derivative-Fock contractions.  Alpha and beta probes are
+!> interleaved so one derivative-ERI traversal serves every RHS and spin while
+!> each probe retains its proper spin-exchange density.
+  subroutine fock_deriv_contract_os_batch(infos, basis, pcoul, pexcha, pexchb, &
+                                          mmata, mmatb, hfscale, gx)
+    use messages, only: show_message, WITH_ABORT
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pcoul(:,:), pexcha(:,:), pexchb(:,:)
+    real(kind=dp), target, intent(in) :: mmata(:,:,:), mmatb(:,:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: gx(:,:,:)
+
+    type(grd2_fockprobe_os_data_t), allocatable :: gcomps(:)
+    real(kind=dp), allocatable :: gall(:,:,:)
+    integer, allocatable :: off_dummy(:)
+    integer, parameter :: max_rhs = 3
+    integer :: irhs, nrhs, ia, ib, ncart
+
+    nrhs = size(mmata,3)
+    if (nrhs < 1 .or. nrhs > max_rhs .or. &
+        any(shape(mmatb) /= shape(mmata)) .or. &
+        size(gx,1) /= 3 .or. size(gx,2) /= size(infos%atoms%xyz,2) .or. &
+        size(gx,3) /= nrhs) then
+      call show_message( &
+        'Batched open-shell derivative-Fock dimensions are inconsistent.', &
+        WITH_ABORT)
+    end if
+
+    allocate(gcomps(2*nrhs))
+    allocate(gall(3,size(gx,2),2*nrhs), source=0.0_dp)
+    do irhs = 1, nrhs
+      ia = 2*irhs-1
+      ib = 2*irhs
+      gcomps(ia)%pcoul => pcoul
+      gcomps(ia)%pexch => pexcha
+      gcomps(ia)%mmat => mmata(:,:,irhs)
+      gcomps(ib)%pcoul => pcoul
+      gcomps(ib)%pexch => pexchb
+      gcomps(ib)%mmat => mmatb(:,:,irhs)
+      gcomps(ia)%nbf = basis%nbf
+      gcomps(ib)%nbf = basis%nbf
+      gcomps(ia)%coulscale = 1.0_dp
+      gcomps(ib)%coulscale = 1.0_dp
+      gcomps(ia)%hfscale = hfscale
+      gcomps(ib)%hfscale = hfscale
+      gcomps(ia)%hfscale2 = hfscale
+      gcomps(ib)%hfscale2 = hfscale
+      if (HARMONIC_ACTIVE) then
+        call fockprobe_cart(basis, pcoul, gcomps(ia)%pcoul_cart, &
+                            gcomps(ia)%cart_off, ncart)
+        call fockprobe_cart(basis, pexcha, gcomps(ia)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmata(:,:,irhs), &
+                            gcomps(ia)%mmat_cart, off_dummy, ncart)
+        call fockprobe_cart(basis, pcoul, gcomps(ib)%pcoul_cart, &
+                            gcomps(ib)%cart_off, ncart)
+        call fockprobe_cart(basis, pexchb, gcomps(ib)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmatb(:,:,irhs), &
+                            gcomps(ib)%mmat_cart, off_dummy, ncart)
+      end if
+    end do
+
+    call grd2_driver_batch(infos, basis, gall, gcomps)
+    do irhs = 1, nrhs
+      gx(:,:,irhs) = gall(:,:,2*irhs-1) + gall(:,:,2*irhs)
+    end do
+    deallocate(gcomps,gall)
+  end subroutine fock_deriv_contract_os_batch
 
 !###############################################################################
 

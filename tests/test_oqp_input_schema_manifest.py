@@ -137,9 +137,12 @@ def test_namd_scientific_safety_defaults_are_minimal_input_defaults():
     assert defaults["seed"] == ("0", "int")
     assert defaults["rng_stream"] == ("1", "int")
     assert defaults["first_hop_step"] == ("1", "int")
-    assert defaults["thrshe"] == ("0.1", "float")
-    assert defaults["nacme_check"] == ("baeck_an", "str")
+    assert defaults["thrshe"] == ("1.7976931348623157e308", "float")
+    assert defaults["nacme_check"] == ("off", "str")
     assert defaults["nve_gate"] == ("warn", "str")
+    # Analytic hop rescaling is chosen per route (see analytic_nac_route_issue)
+    # so legacy, triplet, SOC, QM/MM and tight-binding inputs keep isotropic.
+    assert defaults["rescale"] == ("auto", "string")
 
 
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
@@ -223,8 +226,11 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # coupled-cluster, D4, and SCF controls now present on main, and [pt2]
     # gradient (the PT2 nuclear-gradient route selector: analytic derivative
     # vs central differences).  357 since correlated-state irrep selection added
-    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity.
-    assert len(checked) == 357
+    # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity;
+    # 361 with the periodic/embedding QM/MM controls [qmmm] ewald_tol,
+    # lj_switch, h_lj and mm_charge_width; 362 with the global log level
+    # [input] verbose.
+    assert len(checked) == 362
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():
@@ -273,10 +279,14 @@ def test_route_driver_manifest_matches_public_driver_coverage():
     # gap_sigma and mecp_search are [optimize] schema keys emitted only by the
     # crossing drivers, so the manifest owns them while DRIVER_OPTIONS keeps
     # them out of the drivers that never read them.
+    # qmmm_radius / qmmm_output are [optimize] schema keys consumed by the
+    # QM/MM optimiser only; the manifest owns them and DRIVER_OPTIONS exposes
+    # them on the plain optimize driver alone.
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
         | set(oqp_input._CROSSING_OPTIONS)
         | set(oqp_input._MECP_ONLY_OPTIONS)
+        | set(oqp_input._QMMM_OPT_OPTIONS)
         | {"lib", "istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}

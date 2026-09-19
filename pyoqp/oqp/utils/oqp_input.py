@@ -284,13 +284,14 @@ GENERIC_SCHEMA_KEYS = {
         temperature ensemble friction pressure barostat_interval
         trajectory_format trajectory_file log_file report_interval energy_file
         qm_atoms_xyz qm_list frontier_scheme
+        ewald_tol lj_switch h_lj mm_charge_width
     """),
     "droplet": _keys("""
         enabled center radius buffer force_constant target atoms water_resnames
         max_penetration
     """),
     "solute_com": _keys("enabled center force_constant atoms"),
-    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
+    "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads verbose"),
     "d4": _keys("s6 s8 s9 a1 a2 alp"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
     "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
@@ -409,6 +410,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
         pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
+        qmmm_radius qmmm_output
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -423,14 +425,15 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "hess": _keys("type state dx nproc read restart temperature clean symmetry_unique"),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
-        nstep dt active substep decoherence edc_c thrshe tdc trivial
+        nstep dt active substep decoherence edc_c thrshe tdc rescale trivial
         trivial_thresh init_temp velocity seed rng_stream first_hop_step
         nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
         nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
         nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
-        nve_gate_consecutive
+        nve_gate_consecutive mo_reuse scf_fail scf_guess_retry ref_follow ref_switch_rescale somo_tol frustrated disc_rescale disc_tol disc_substeps
         trajectory_interval restart_interval trajectory_file
-        restart_file restart ensemble thermostat thermostat_temperature
+        restart_file restart continuation_checkpoint continuation_trajectory
+        ensemble thermostat thermostat_temperature
         thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
         dt_adaptive dt_min dx_max
@@ -588,6 +591,7 @@ TOP_OPTION_ALIASES = {
     "qmmm_flag": "qmmm_flag",
     "omp_threads": "omp_threads",
     "threads": "omp_threads",
+    "verbose": "verbose",
 }
 
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
@@ -597,6 +601,10 @@ _GEOMETRY_CONVERGENCE_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
     "energy_shift", "init_scf",
 }
+# QM/MM optimisation (qmmm_flag=true) only: the movable-shell radius and the
+# full-system output file.  Exposed on the plain optimize driver alone; the
+# crossing and reaction-path drivers do not consume them.
+_QMMM_OPT_OPTIONS = {"qmmm_radius", "qmmm_output"}
 _CROSSING_SEARCH_OPTIONS = {
     "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight",
@@ -638,7 +646,8 @@ DRIVER_OPTIONS = {
     "grad": {"td_prop", "export", "title"},
     "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
                  | set(_NATIVE_ENGINE_OPTIONS)
-                 | set(_NATIVE_CONSTRAINT_OPTIONS)),
+                 | set(_NATIVE_CONSTRAINT_OPTIONS)
+                 | set(_QMMM_OPT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
     # would run a different objective than the input asks for.
@@ -670,14 +679,15 @@ DRIVER_OPTIONS = {
     "md": set(),
     "namd": {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
-        "thrshe", "tdc", "trivial", "trivial_thresh", "init_temp",
+        "thrshe", "tdc", "rescale", "trivial", "trivial_thresh", "init_temp",
         "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
         "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
         "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
         "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
-        "nve_gate_transition_tol", "nve_gate_consecutive",
+        "nve_gate_transition_tol", "nve_gate_consecutive", "mo_reuse", "scf_fail", "scf_guess_retry",
+        "ref_follow", "ref_switch_rescale", "somo_tol", "frustrated", "disc_rescale", "disc_tol", "disc_substeps",
         "trajectory_interval", "restart_interval", "trajectory_file",
-        "restart_file", "restart", "soc", "soc_basis",
+        "restart_file", "restart", "continuation_checkpoint", "continuation_trajectory", "soc", "soc_basis",
         "ensemble", "thermostat", "thermostat_temperature",
         "thermostat_friction",
         "soc_du_dt_corr", "soc_tdc_grad_corr", "grad_wthr", "init_state",
@@ -771,7 +781,7 @@ SF_STATE_AWARE_DRIVERS = {
     "md", "namd", "data",
 }
 
-ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd"}
+ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd", "optimize"}
 
 _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
@@ -1015,8 +1025,36 @@ def _normalize_basis_value(value: str) -> str:
     return value.lower()
 
 
-def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
-    parts = _split_top_level(route, "/")
+def _split_route_token(token: str) -> List[str]:
+    """Split route separators while preserving slash-bearing component names."""
+
+    raw_parts = _split_top_level(token, "/")
+    parts: List[str] = []
+    index = 0
+    while index < len(raw_parts):
+        if (
+            index + 1 < len(raw_parts)
+            and raw_parts[index].lower() == "pbe-3"
+            and raw_parts[index + 1].lower() == "8"
+        ):
+            parts.append(raw_parts[index] + "/" + raw_parts[index + 1])
+            index += 2
+        else:
+            parts.append(raw_parts[index])
+            index += 1
+    return parts
+
+
+def _parse_route_components(
+    parts: Sequence[str], route: str
+) -> Tuple[str, Dict[str, Any], str, str]:
+    """Parse already-separated route components.
+
+    Keeping this separate from the slash spelling is important for functional
+    names such as ``PBE-3/8``: whitespace supplies an unambiguous component
+    boundary that must not be lost by joining the tokens with ``/`` first.
+    """
+
     if not parts or len(parts) > 3:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
@@ -1066,6 +1104,10 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "%s is not a route option for %s; use the exact section call %s(%s=...)"
             % (key, alias, section, key)
         )
+    component_values: List[str] = []
+    for part in parts[1:]:
+        parsed = _parse_value(part)
+        component_values.append(parsed if isinstance(parsed, str) else part)
     functional = ""
     basis = ""
     if model in {
@@ -1083,15 +1125,128 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
             "mrsf-hf", "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         } | WF_MODELS:
-            basis = parts[1]
+            basis = component_values[0]
         else:
-            functional = parts[1]
+            functional = component_values[0]
     elif len(parts) == 3:
-        functional, basis = parts[1], parts[2]
+        functional, basis = component_values
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
     normalized_basis = _normalize_basis_value(basis)
     return model, model_options, functional.lower(), normalized_basis
+
+
+def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
+    return _parse_route_components(_split_route_token(route), route)
+
+
+def _starts_post_route_syntax(token: str) -> bool:
+    """Return whether *token* cannot be another route component."""
+
+    if "=" in token:
+        return True
+    token_value = _parse_value(token)
+    if (
+        isinstance(token_value, str)
+        and Path(token_value).suffix.lower() in {".xyz", ".pdb"}
+    ):
+        return True
+    raw_name = token.split("(", 1)[0].lower()
+    name = raw_name.replace("-", "_")
+    known_call = (
+        name in PRIMARY_ALIASES
+        or name in BARE_MODIFIER_CALLS
+        or name in SECTION_NAMES
+        or name in {"nmr", "ir", "raman", "d4"}
+    )
+    if known_call:
+        return True
+    call_shape = re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_-]*(?:\(.*\))?", token, re.DOTALL
+    )
+    if call_shape:
+        call_names = (
+            list(PRIMARY_ALIASES)
+            + list(SECTION_NAMES)
+            + ["nmr", "ir", "raman", "d4"]
+        )
+        if "(" not in token:
+            return (
+                len(name) > 1
+                and name[-1] == name[-2]
+                and name[:-1] in call_names
+            )
+        # Parenthesized route components have a digit or hyphen in their family
+        # name (for example CAM-QTP(00), 6-31g(2df,p), and
+        # def2-svp(jkfit)). Other identifier-shaped calls must reach normal
+        # call validation even when their name is not close enough for a
+        # spelling suggestion.
+        probable_route_component = any(
+            char.isdigit() or char == "-" for char in raw_name
+        )
+        if probable_route_component:
+            return False
+        return True
+    return False
+
+
+def _route_component_variants(tokens: Sequence[str]) -> List[List[str]]:
+    """Return route-component interpretations without losing token boundaries."""
+
+    variants: List[List[str]] = [[]]
+    for token in tokens:
+        choices = [[token]]
+        split = _split_route_token(token)
+        if len(split) > 1:
+            choices.append(split)
+        variants = [
+            prefix + choice
+            for prefix in variants
+            for choice in choices
+            if len(prefix) + len(choice) <= 3
+        ]
+    # Prefer interpretations that fill all route components.  For equal
+    # lengths, the construction order preserves whitespace-delimited tokens.
+    return sorted(variants, key=len, reverse=True)
+
+
+def _parse_route_prefix(
+    tokens: Sequence[str],
+) -> Tuple[str, Dict[str, Any], str, str, int]:
+    """Parse a slash- or whitespace-separated route at the token prefix.
+
+    A route contains at most three components.  Joining only the leading
+    non-driver tokens lets ``mrsf bhhlyp 6-31g*`` and mixed spellings denote
+    the same calculation as ``mrsf/bhhlyp/6-31g*`` without consuming a bare
+    driver, a geometry file, or an explicit ``basis=...`` option.
+    """
+
+    candidates: List[Tuple[int, List[str], str]] = []
+    for count in range(1, min(len(tokens), 3) + 1):
+        if count > 1 and _starts_post_route_syntax(tokens[count - 1]):
+            break
+        display = " ".join(tokens[:count])
+        for parts in _route_component_variants(tokens[:count]):
+            candidates.append((count, parts, display))
+
+    errors: List[OQPInputError] = []
+    for count, parts, display in sorted(
+        candidates, key=lambda candidate: candidate[0], reverse=True
+    ):
+        try:
+            model, model_options, functional, basis = _parse_route_components(
+                parts, display
+            )
+        except OQPInputError as exc:
+            errors.append(exc)
+            continue
+        return model, model_options, functional, basis, count
+
+    if errors:
+        # Candidates are ordered from the most complete interpretation to the
+        # least.  Preserve the diagnostic from that best interpretation.
+        raise errors[0]
+    raise OQPInputError("Missing electronic-structure route")
 
 
 def looks_canonical(text: str) -> bool:
@@ -1153,12 +1308,20 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
-    model, model_options, functional, basis = _parse_route(tokens[0])
+    model, model_options, functional, basis, route_token_count = (
+        _parse_route_prefix(tokens)
+    )
     options: Dict[str, Any] = {}
     calls: List[CallSpec] = []
-    for token_index, token in enumerate(tokens[1:], start=1):
+    for token_index, token in enumerate(
+        tokens[route_token_count:], start=route_token_count
+    ):
         assignment = _split_assignment(token)
-        if token_index == 1 and assignment is None and "(" not in token:
+        if (
+            token_index == route_token_count
+            and assignment is None
+            and "(" not in token
+        ):
             positional_geom = _parse_value(token)
             if (
                 isinstance(positional_geom, str)
@@ -1732,12 +1895,11 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         hess_type = str(driver.kwargs["type"]).strip().lower()
         if hess_type not in {"numerical", "analytical"}:
             raise OQPInputError("%s type must be numerical or analytical" % driver.name)
-    if driver.name in {"nac", "bp", "nacme"} and "type" in driver.kwargs:
+    if driver.name in {"nac", "bp"} and "type" in driver.kwargs:
         nac_type = str(driver.kwargs["type"]).strip().lower()
-        if nac_type != "numerical":
+        if nac_type not in {"numerical", "analytical"}:
             raise OQPInputError(
-                "%s currently supports type=numerical only; analytical NAC is unavailable"
-                % driver.name
+                "%s type must be numerical or analytical" % driver.name
             )
     qmmm_section = next(
         (call for call in spec.modifiers if call.name == "qmmm"), None
@@ -1785,7 +1947,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("md(...) is the QM/MM molecular-dynamics driver and requires qmmm(...)")
     if has_qmmm and driver.name not in ACTIVE_QMMM_DRIVERS:
         raise OQPInputError(
-            "The active QM/MM backend supports energy, md, and namd. "
+            "The active QM/MM backend supports energy, optimize, md, and namd. "
             "%s is not connected and would otherwise run without the requested QM/MM forces."
             % driver.name
         )
@@ -1820,6 +1982,35 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             )
         if driver.name == "bp" and model == "mrsf-dftb":
             raise OQPInputError("bp is not available for MRSF-TDDFTB")
+        if str(options.get("type", "numerical")).strip().lower() == "analytical":
+            # The resident Lagrangian driver implements the two-SOMO,
+            # ROHF/ROKS MRSF singlet response, not the DFTB or triplet cases.
+            if model not in {"mrsf", "mrsf-hf"} or any(
+                    state.multiplicity != 1 for state in states):
+                raise OQPInputError(
+                    "Analytical NAC requires singlet states on an MRSF-TDDFT "
+                    "or MRSF-TDHF route"
+                )
+            defaults = _load_schema_defaults() or {}
+            for section in ("scf", "tdhf"):
+                call = next(
+                    (call for call in spec.modifiers if call.name == section), None
+                )
+                default = defaults.get(section, {}).get("conv", ("float", None))[1]
+                value = call.kwargs.get("conv", default) if call else default
+                try:
+                    conv = float(value)
+                    valid = (
+                        not isinstance(value, bool)
+                        and math.isfinite(conv) and 0 < conv <= 1e-8
+                    )
+                except (TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    raise OQPInputError(
+                        "Analytical NAC requires 0 < %s conv <= 1e-8; "
+                        "set %s(conv=1e-10)" % (section, section)
+                    )
     if driver.name == "nacme":
         has_previous = "geom2" in spec.options or any(
             call.name == "guess" and bool(call.kwargs.get("file2"))
@@ -2031,6 +2222,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             optional_input_owners = {
                 "library": "library", "ispher": "ispher", "perf": "perf",
                 "d4": "d4", "qmmm_flag": "qmmm_flag", "omp_threads": "omp_threads",
+                "verbose": "verbose",
             }
             duplicate = [
                 key for key, option in optional_input_owners.items()
@@ -2359,7 +2551,7 @@ def lower_to_legacy(
         put("input", "basis", spec.basis)
     if spec.functional:
         put("input", "functional", spec.functional)
-    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads"):
+    for key in ("library", "ispher", "perf", "d4", "qmmm_flag", "omp_threads", "verbose"):
         if key in spec.options:
             put("input", key, spec.options[key])
 
@@ -2635,6 +2827,9 @@ def lower_to_legacy(
     elif name == "md":
         put("properties", "grad", roots[0] if roots else 0)
     elif name == "namd":
+        # Analytic NAC directions require converged SCF and response states.
+        for section, key in (("scf", "conv"), ("tdhf", "conv"), ("tdhf", "zvconv")):
+            config.setdefault(section, {}).setdefault(key, "1e-8")
         if roots:
             if driver_options.get("soc") and states[0].label:
                 put("md", "init_state", states[0].label)
@@ -2983,7 +3178,7 @@ def render_canonical_oqp(spec: CalculationSpec, *, strip_defaults: bool = True) 
         route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
-        "omp_threads",
+        "omp_threads", "verbose",
     )
     option_parts = [
         "%s=%s" % (key, _render_value(spec.options[key]))

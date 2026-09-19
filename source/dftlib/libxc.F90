@@ -38,7 +38,7 @@ contains
   !> @params functional_name (in) functional's name
   !> @param  infos           (inout)  info datatype
   !> @param  functional      (inout)  constructing functional
-  subroutine libxc_input(functional_name, dft_params, tddft_params, functional)
+  subroutine libxc_input(functional_name, dft_params, tddft_params, functional, announce)
     use messages, only: show_message, WITH_ABORT
     use types, only: dft_parameters, tddft_parameters
 
@@ -46,6 +46,7 @@ contains
     type(dft_parameters), intent(inout) :: dft_params
     type(tddft_parameters), intent(inout) :: tddft_params
     type(functional_t), intent(inout) :: functional
+    logical, intent(in), optional :: announce  !< describe LibXC and the functional (default yes)
 
     ! Functional names
     character(len=:), allocatable :: funcname
@@ -55,6 +56,9 @@ contains
 
     real(kind=fp) :: HFEX, MP2
     real(kind=fp) :: chf, c2opp, c2same
+    logical :: announce_
+    announce_ = .true.
+    if (present(announce)) announce_ = announce
     HFEX = 0.0_fp
     chf = 0.0_fp
     c2opp = 0.0_fp
@@ -64,15 +68,17 @@ contains
     call xc_f03_reference_doi(LibXC_DOI)
     call xc_f03_version_string(LibXC_version)
 
-    call show_message(" ") !empty line
-    call show_message(" The LibXC "//trim(LibXC_version)//" version is used.")
-    call show_message(" "//trim(LibXC_reference))
-    call show_message(" The libXC interfaces are described in the following article:")
-    call show_message(" Igor S. Gerasimov, Federico Zahariev, Sarom S. Leang, Anton Tesliuk, Mark S. Gordon, Michael G. Medvedev,")
-    call show_message(" Introducing LibXC into GAMESS (US),")
-    call show_message(" Mendeleev Commun., 2021, 31, 302–305")
-    call show_message(" ") !empty line
-    call show_message(" The information about selected functionals:")
+    if (announce_) then
+      call show_message(" ") !empty line
+      call show_message(" The LibXC "//trim(LibXC_version)//" version is used.")
+      call show_message(" "//trim(LibXC_reference))
+      call show_message(" The libXC interfaces are described in the following article:")
+      call show_message(" Igor S. Gerasimov, Federico Zahariev, Sarom S. Leang, Anton Tesliuk, Mark S. Gordon, Michael G. Medvedev,")
+      call show_message(" Introducing LibXC into GAMESS (US),")
+      call show_message(" Mendeleev Commun., 2021, 31, 302–305")
+      call show_message(" ") !empty line
+      call show_message(" The information about selected functionals:")
+    end if
 
     funcname = functional_name
     select case (funcname)
@@ -80,6 +86,11 @@ contains
       HFEX = 1.00_fp
     case ("SLATER")
       call functional%add_functional(XC_LDA_X, 1.00_fp) !SLATER_X
+    case ("SVWN", "LDA", "SVWN5")
+      ! Slater exchange plus the VWN5 local correlation convention used by
+      ! GAMESS DFTTYP=SVWN and Libxc's canonical LDA_C_VWN identifier.
+      call functional%add_functional(XC_LDA_X, 1.00_fp)
+      call functional%add_functional(XC_LDA_C_VWN, 1.00_fp)
     case ("TETER")
       call functional%add_functional(XC_LDA_XC_TETER93, 1.00_fp) !TETER93_XC
     case ("KSDT")
@@ -942,23 +953,25 @@ contains
     dft_params%MP2SS_Scale = c2opp
     dft_params%MP2OS_Scale = c2same
     ! Print information about non-local part of functionals
-    call show_message(" ")
-    if (.not. dft_params%cam_flag) then
-      call show_message("(A,ES16.8E2)", "The global hybrid part:                ", dft_params%HFScale)
-    else
-      call show_message("CAM-corrected functional is called")
-      call show_message("Yanai's notation of CAM parameters is used")
-      call show_message("(A,ES16.8E2)", "The global hybrid part:                ", dft_params%cam_alpha)
-      call show_message("(A,ES16.8E2)", "Additional long-range hybrid part:     ", dft_params%cam_beta)
-      call show_message("(A,ES16.8E2)", "Range-saparated factor:                ", dft_params%cam_mu)
-    end if
-    if (dft_params%dh_flag) then
+    if (announce_) then
       call show_message(" ")
-      call show_message("Double-hybrid functional is called")
-      call show_message("(A,ES16.8E2)", "Same-spin MP2 correlation factor:      ", dft_params%MP2SS_Scale)
-      call show_message("(A,ES16.8E2)", "Opposite-spin MP2 correlation factor:  ", dft_params%MP2OS_Scale)
+      if (.not. dft_params%cam_flag) then
+        call show_message("(A,ES16.8E2)", "The global hybrid part:                ", dft_params%HFScale)
+      else
+        call show_message("CAM-corrected functional is called")
+        call show_message("Yanai's notation of CAM parameters is used")
+        call show_message("(A,ES16.8E2)", "The global hybrid part:                ", dft_params%cam_alpha)
+        call show_message("(A,ES16.8E2)", "Additional long-range hybrid part:     ", dft_params%cam_beta)
+        call show_message("(A,ES16.8E2)", "Range-saparated factor:                ", dft_params%cam_mu)
+      end if
+      if (dft_params%dh_flag) then
+        call show_message(" ")
+        call show_message("Double-hybrid functional is called")
+        call show_message("(A,ES16.8E2)", "Same-spin MP2 correlation factor:      ", dft_params%MP2SS_Scale)
+        call show_message("(A,ES16.8E2)", "Opposite-spin MP2 correlation factor:  ", dft_params%MP2OS_Scale)
+      end if
+      call show_message(" ")
     end if
-    call show_message(" ")
   end subroutine libxc_input
   !
   !> @brief  Destroy internal variables of functional

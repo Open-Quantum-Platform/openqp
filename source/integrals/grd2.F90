@@ -6,8 +6,9 @@ module grd2
   use constants, only: tol_int
   use io_constants, only: iw
   use basis_tools, only: basis_set
-  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute
-  use constants, only: BAS_MXANG
+  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_compute_batch, grd2_rys_hess_compute, &
+                      grd2_operator_consumer_t, grd2_rys_compute_operator
+  use constants, only: BAS_MXANG, NUM_CART_BF
   use int2_compute, only: int2_compute_data_t, ints_exchange
 
 !###############################################################################
@@ -66,6 +67,8 @@ module grd2
 
   private
   public :: grd2_driver
+  public :: grd2_operator_driver
+  public :: grd2_driver_batch
   public :: grd2_hess_driver
   public :: grd2_compute_data_t
 
@@ -97,12 +100,24 @@ contains
     real(kind=dp), allocatable :: de_internal(:,:)
 
     logical :: do_cam = .false.
+!<  Saved pass state, so a CAM call leaves the caller's compute object exactly
+!<  as it found it (see the restore below).
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(de_internal, mold=de)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
     ! Regular Coulomb and exchange
@@ -127,6 +142,21 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_driver_gen(infos, basis, de_internal, gcomp, petite=petite)
       de = de + de_internal
+
+      ! Put the object back the way it arrived. The two passes above rewrite
+      ! every pass-specific field, and pass 2 in particular leaves
+      ! attenuated=.true. and coulscale=0. Restoring here -- rather than
+      ! papering over it in the non-CAM branch -- keeps a compute object that
+      ! is reused across calls correct: otherwise a later full-range call
+      ! silently drops all Coulomb, keeps the CAM exchange scales, and (for the
+      ! MRSF digest, which skips its spin-pair-coupling terms when attenuated)
+      ! drops those too.
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
     else
       ! Only adopt the DFT hybrid mixing here for actual DFT calculations
       ! (hamilton>=20).  For pure Hartree-Fock the caller already set the
@@ -390,6 +420,361 @@ contains
 
   end subroutine grd2_driver_gen
 
+!> @brief Traverse derivative ERI shell quartets once and assemble an AO
+!>        operator through a consumer callback.
+!>
+!> This path deliberately omits density-dependent fine screening: an operator
+!> represents every AO probe simultaneously, so no single probe-density bound
+!> can safely screen a shell quartet.  The ordinary Schwarz and primitive
+!> integral cutoffs remain active.  TDHF Hessians currently require one MPI
+!> rank and set one OpenMP thread, so the callback can scatter deterministically
+!> without atomics or thread-private O(nbf^2*ncart) buffers.
+  subroutine grd2_operator_driver(infos, basis, consumer, attenuated, mu)
+    use messages, only: show_message, WITH_ABORT
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use parallel, only: par_env_t
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    class(grd2_operator_consumer_t), intent(inout) :: consumer
+    logical, optional, intent(in) :: attenuated
+    real(kind=dp), optional, intent(in) :: mu
+
+    type(grd2_int_data_t) :: gdat
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp) :: cutoff, dabcut, dtol, rtol, zbig, gmax, emu2
+    integer :: i, j, k, l, ij, kl, maxl, iok
+    logical :: do_attenuated
+
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (pe%size /= 1) call show_message( &
+      'Blocked derivative-operator assembly currently requires one MPI rank.', &
+      WITH_ABORT)
+
+    do_attenuated = .false.
+    if (present(attenuated)) do_attenuated = attenuated
+    if (do_attenuated .and. .not.present(mu)) call show_message( &
+      'Attenuated derivative-operator assembly requires a range parameter.', &
+      WITH_ABORT)
+    if (do_attenuated) emu2 = mu**2
+
+    cutoff = infos%control%grad_cutoff
+    if (cutoff <= 0.0_dp) cutoff = 1.0e-10_dp
+    zbig = maxval(basis%ex)
+    dabcut = 1.0e-11_dp
+    if (zbig > 1.0e6_dp) dabcut = dabcut/10.0_dp
+    if (zbig > 1.0e7_dp) dabcut = dabcut/10.0_dp
+    dtol = 10.0_dp**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+    call cutoffs%set(cutoff_integral_value=dabcut, cutoff_exp=rtol, &
+                     cutoff_prefactor_pq=dtol, cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+    allocate(schwarz_ints(basis%nshell,basis%nshell))
+    if (do_attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
+
+    call gdat%init(basis%mxam, 1, dtol*dtol, dabcut, iok)
+    if (iok /= 0) call show_message( &
+      'Unable to allocate blocked derivative-operator integral workspace.', &
+      WITH_ABORT)
+    do i = 1, basis%nshell
+      do j = 1, i
+        ij = i*(i-1)/2+j
+        if (ppairs%ppid(1,ij) == 0) cycle
+        do k = 1, i
+          maxl = k
+          if (k == i) maxl = j
+          do l = 1, maxl
+            kl = k*(k-1)/2+l
+            if (ppairs%ppid(1,kl) == 0) cycle
+            gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+            if (gmax < cutoff) cycle
+            call gdat%set_ids(basis, i, j, k, l)
+            if (all(gdat%skip)) cycle
+            if (do_attenuated) then
+              call grd2_rys_compute_operator(gdat, ppairs, consumer, basis, emu2)
+            else
+              call grd2_rys_compute_operator(gdat, ppairs, consumer, basis)
+            end if
+          end do
+        end do
+      end do
+    end do
+    call gdat%clean()
+  end subroutine grd2_operator_driver
+
+!###############################################################################
+
+!> Batched two-electron gradient driver.  Every probe has its own density
+!> consumer and output gradient, while shell-pair preparation, screening and
+!> derivative-integral recurrences are shared by the bounded probe batch.
+  subroutine grd2_driver_batch(infos, basis, de, gcomps, &
+                               cam, alpha, beta, mu)
+
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: de(:,:,:)
+    class(grd2_compute_data_t), intent(inout) :: gcomps(:)
+    logical, optional, intent(in) :: cam
+    real(kind=dp), optional, intent(in) :: alpha, beta, mu
+
+    real(kind=dp), allocatable :: de_internal(:,:,:)
+    logical :: do_cam
+    integer :: iprobe, nprobe
+
+    nprobe = size(gcomps)
+    if (nprobe < 1 .or. size(de,3) /= nprobe) then
+      call show_message('Batched grd2 probe dimensions are inconsistent.', &
+                        WITH_ABORT)
+    end if
+    do_cam = infos%dft%cam_flag
+    if (present(cam)) do_cam = cam
+
+    if (do_cam) then
+      allocate(de_internal, mold=de)
+      de_internal = 0.0_dp
+      do iprobe = 1, nprobe
+        gcomps(iprobe)%cur_pass = 1
+        gcomps(iprobe)%attenuated = .false.
+        gcomps(iprobe)%coulscale = 1.0_dp
+        gcomps(iprobe)%hfscale = infos%dft%cam_alpha
+        gcomps(iprobe)%hfscale2 = infos%tddft%cam_alpha
+        if (present(alpha)) gcomps(iprobe)%hfscale2 = alpha
+      end do
+      call grd2_driver_batch_gen(infos, basis, de_internal, gcomps)
+      de = de + de_internal
+
+      de_internal = 0.0_dp
+      do iprobe = 1, nprobe
+        gcomps(iprobe)%cur_pass = 2
+        gcomps(iprobe)%attenuated = .true.
+        gcomps(iprobe)%coulscale = 0.0_dp
+        gcomps(iprobe)%hfscale = infos%dft%cam_beta
+        gcomps(iprobe)%hfscale2 = infos%tddft%cam_beta
+        if (present(beta)) gcomps(iprobe)%hfscale2 = beta
+        gcomps(iprobe)%mu = infos%dft%cam_mu
+        if (present(mu)) gcomps(iprobe)%mu = mu
+      end do
+      call grd2_driver_batch_gen(infos, basis, de_internal, gcomps)
+      de = de + de_internal
+    else
+      if (infos%control%hamilton >= 20) then
+        do iprobe = 1, nprobe
+          gcomps(iprobe)%hfscale = infos%dft%hfscale
+          gcomps(iprobe)%hfscale2 = infos%tddft%hfscale
+        end do
+      end if
+      call grd2_driver_batch_gen(infos, basis, de, gcomps)
+    end if
+  end subroutine grd2_driver_batch
+
+!###############################################################################
+
+  subroutine grd2_driver_batch_gen(infos, basis, de, gcomps)
+
+    use messages, only: show_message, WITH_ABORT
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use int2_compute, only: petite_quartet_weight, load_petite_shell_map
+    use parallel, only: par_env_t
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: de(:,:,:)
+    class(grd2_compute_data_t), intent(inout) :: gcomps(:)
+
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp) :: emu2, cutoff, cutoff2, dabcut
+    real(kind=dp) :: zbig, rtol, dtol
+    integer :: numint, skip1, skip2, maxnbf, sym_nops
+    integer :: iprobe, nprobe
+    integer(8), contiguous, pointer :: sym_map(:)
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+
+    nprobe = size(gcomps)
+    ! One shared recurrence can represent only one integral family.  Keep this
+    ! invariant explicit so a future caller cannot silently mix regular and
+    ! attenuated probes, or attenuated probes with different range parameters.
+    do iprobe = 2, nprobe
+      if (gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated .or. &
+          (gcomps(1)%attenuated .and. &
+           gcomps(iprobe)%mu /= gcomps(1)%mu)) then
+        call show_message( &
+          'Batched grd2 probes require uniform attenuation and mu.', &
+          WITH_ABORT)
+      end if
+    end do
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (gcomps(1)%attenuated) emu2 = gcomps(1)%mu**2
+
+    cutoff = 1.0d-10
+    cutoff2 = cutoff/2.0d0
+    zbig = maxval(basis%ex)
+    dabcut = 1.0d-11
+    if (zbig>1.0d6) dabcut = dabcut/10
+    if (zbig>1.0d7) dabcut = dabcut/10
+    dtol = 10.0d0**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+    call cutoffs%set(cutoff_integral_value=dabcut, cutoff_exp=rtol, &
+      cutoff_prefactor_pq=dtol, cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+
+    allocate(schwarz_ints(basis%nshell,basis%nshell))
+    if (gcomps(1)%attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
+
+    skip1 = 0
+    skip2 = 0
+    numint = 0
+    ! No petite-list reduction here: batched probes carry interstate and
+    ! response densities that are not totally symmetric, and grd2_driver only
+    ! applies the reduction to callers that opt in with such densities.
+    sym_map => null()
+    sym_nops = 0
+    if (basis%mxam>BAS_MXANG) then
+      call show_message('gradient integrals programmed up to '&
+        //bfchars(BAS_MXANG-1)//' functions', WITH_ABORT)
+    end if
+    maxnbf = (basis%mxam+1)*(basis%mxam+2)/2
+    dtol = dtol*dtol
+
+    ! Keep allocatable descriptors out of the GCC/libgomp outlined worker.
+    ! Each thread enters a normal procedure invocation with local scratch;
+    ! only the expensive quartet loop is workshared, and the small gradient
+    ! is merged once per thread after all of its quartets are complete.
+!$omp parallel reduction(+:skip1, skip2, numint)
+    call batch_worker(skip1, skip2, numint)
+!$omp end parallel
+
+    call pe%allreduce(skip1,1)
+    call pe%allreduce(skip2,1)
+    call pe%allreduce(numint,1)
+    call pe%allreduce(de,size(de))
+    deallocate(schwarz_ints)
+  contains
+    recursive subroutine batch_worker(skip1_thread, skip2_thread, numint_thread)
+      integer, intent(inout) :: skip1_thread, skip2_thread, numint_thread
+      real(kind=dp), allocatable :: dab(:,:), dabmax(:), fd_batch(:,:,:)
+      real(kind=dp), allocatable :: de_thread(:,:,:)
+      logical, allocatable :: probe_active(:)
+      real(kind=dp) :: gmax
+      integer :: i, ij, iok, iprobe, j, k, l, kl, maxl, mpi_ij
+      integer :: nquartet, q4
+      type(grd2_int_data_t) :: gdat
+
+      allocate(dab(maxnbf**4,nprobe), dabmax(nprobe), &
+               fd_batch(3,4,nprobe), &
+               de_thread(3,size(de,2),nprobe), source=0.0_dp)
+      allocate(probe_active(nprobe), source=.false.)
+      call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
+
+!$omp barrier
+      if (infos%mpiinfo%usempi) mpi_ij = 0
+      do i = 1, basis%nshell
+        do j = 1, i
+          ij = i*(i-1)/2+j
+          if (ppairs%ppid(1,ij)==0) cycle
+          if (infos%mpiinfo%usempi) then
+            mpi_ij = mpi_ij+1
+            if (mod(mpi_ij,pe%size) /= pe%rank) cycle
+          end if
+
+!$omp do schedule(dynamic,4) collapse(2)
+          do k = 1, i
+            do l = 1, i
+              maxl = k
+              if (k == i) maxl = j
+              if (l > maxl) cycle
+              kl = k*(k-1)/2+l
+              if (ppairs%ppid(1,kl)==0) cycle
+              gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+              if (gmax<cutoff) then
+                skip1_thread = skip1_thread+1
+                cycle
+              end if
+
+              call gdat%set_ids(basis,i,j,k,l)
+              if (all(gdat%skip(:))) cycle
+              ! Probe densities are packed with Cartesian shell extents
+              ! (spherical shells are expanded before contraction), so an
+              ! inactive probe must clear the Cartesian block, not naos.
+              nquartet = product(NUM_CART_BF(basis%am(gdat%id)))
+              if (sym_nops > 1) then
+                q4 = petite_quartet_weight( &
+                  sym_map,sym_nops,basis%nshell,i,j,k,l)
+                if (q4 == 0) cycle
+              else
+                q4 = 1
+              end if
+
+              do iprobe = 1, nprobe
+                call gcomps(iprobe)%get_density( &
+                  basis,gdat%id,dab(:,iprobe),dabmax(iprobe))
+              end do
+              probe_active = dabmax*gmax*real(q4,dp) >= cutoff2
+              if (.not. any(probe_active)) then
+                skip2_thread = skip2_thread+1
+                cycle
+              end if
+              do iprobe = 1, nprobe
+                if (.not. probe_active(iprobe)) then
+                  ! gdat%nbf is set later by grd2_rys_compute_batch.  Use the
+                  ! current shell extents here instead of reading that stale
+                  ! recurrence field during quartet-level probe screening.
+                  dab(1:nquartet,iprobe) = 0.0_dp
+                  dabmax(iprobe) = 0.0_dp
+                end if
+              end do
+
+              numint_thread = numint_thread+1
+              if (gcomps(1)%attenuated) then
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch,emu2)
+              else
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch)
+              end if
+              do iprobe = 1, nprobe
+                de_thread(:,gdat%at,iprobe) = &
+                  de_thread(:,gdat%at,iprobe) + &
+                  real(q4,dp)*fd_batch(:,:,iprobe)
+              end do
+            end do
+          end do
+!$omp end do
+        end do
+      end do
+
+      call gdat%clean()
+!$omp critical(grd2_batch_de_merge)
+      de = de + de_thread
+!$omp end critical(grd2_batch_de_merge)
+      deallocate(dab,dabmax,fd_batch,probe_active,de_thread)
+    end subroutine batch_worker
+  end subroutine grd2_driver_batch_gen
+
 !###############################################################################
 
 !> @brief Driver for the analytic two-electron contribution to the Hessian
@@ -436,12 +821,23 @@ contains
     type(par_env_t) :: pe
 
     logical :: do_cam = .false.
+!<  Saved pass state -- see the matching restore, and the note in grd2_driver.
+    logical :: sv_attenuated
+    integer :: sv_cur_pass
+    real(kind=dp) :: sv_mu, sv_hfscale, sv_hfscale2, sv_coulscale
 
     do_cam = infos%dft%cam_flag
     if (present(cam)) do_cam = cam
 
     if (do_cam) then
       allocate(hess_internal, mold=hess)
+
+      sv_attenuated = gcomp%attenuated
+      sv_cur_pass   = gcomp%cur_pass
+      sv_mu         = gcomp%mu
+      sv_hfscale    = gcomp%hfscale
+      sv_hfscale2   = gcomp%hfscale2
+      sv_coulscale  = gcomp%coulscale
 
       gcomp%cur_pass = 1
       ! Regular Coulomb and exchange.
@@ -466,6 +862,13 @@ contains
       if (present(mu)) gcomp%mu = mu
       call grd2_hess_driver(infos, basis, hess_internal, gcomp, cam=.false.)
       hess = hess + hess_internal
+
+      gcomp%attenuated = sv_attenuated
+      gcomp%cur_pass   = sv_cur_pass
+      gcomp%mu         = sv_mu
+      gcomp%hfscale    = sv_hfscale
+      gcomp%hfscale2   = sv_hfscale2
+      gcomp%coulscale  = sv_coulscale
 
       deallocate(hess_internal)
       return

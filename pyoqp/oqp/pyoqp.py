@@ -263,6 +263,23 @@ def _openqp_build_label():
 _RUNNER_OMP_BASELINE = [os.environ.get("OMP_NUM_THREADS")]
 
 
+def _protect_continuation_log(config, log):
+    """Reject source aliases before any calculation log is opened."""
+    if not log:
+        return
+    for key in ('continuation_checkpoint', 'continuation_trajectory'):
+        source = config.get('md', {}).get(key, '')
+        if not source:
+            continue
+        source = os.path.abspath(os.path.expanduser(source))
+        output = os.path.abspath(os.path.expanduser(log))
+        aliases = os.path.realpath(source) == os.path.realpath(output)
+        if os.path.exists(source) and os.path.exists(output):
+            aliases = aliases or os.path.samefile(source, output)
+        if aliases:
+            raise ValueError('NAMD continuation source cannot be used as the calculation log')
+
+
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -279,7 +296,8 @@ class Runner:
     """
 
     def __init__(self, project=None, input_file=None, log=None,
-                 input_dict=None, silent=0, usempi=True, input_metadata=None):
+                 input_dict=None, silent=0, usempi=True, input_metadata=None,
+                 append_log=False):
         """
         Initialize the OQP Runner.
 
@@ -353,6 +371,7 @@ class Runner:
             self.mol.load_config(input_dict)
         else:
             self.mol.load_config(input_file)
+        _protect_continuation_log(self.mol.config, self.mol.log)
         if self.mpi_manager.rank != 0:
             if os.name == 'nt':  # Windows
                 log = 'NUL'
@@ -411,19 +430,49 @@ class Runner:
         # Initialize the log before the native banner appends to it.  The old
         # order wrote the banner first and immediately truncated it in the
         # ``start`` section, hiding the contributor and resource information.
-        dump_log(self.mol, title='', section='start',
-                 info={"build": _openqp_build_label()})
+        # append_log: a further QM evaluation of a run whose log is already
+        # open (the ESPF QM/MM driver builds one Runner per geometry); the
+        # banner and the request are written once, by the first evaluation.
+        if append_log:
+            dump_log(self.mol, title='', section='start',
+                     info={"build": _openqp_build_label(), "append": True})
+        else:
+            dump_log(self.mol, title='', section='start',
+                     info={"build": _openqp_build_label()})
+        # Always: besides the banner, this hands the native side its log file
+        # name (OQP::log_filename -> infos%log_filename); skipping it leaves
+        # every native write of the evaluation without a log unit.  On an
+        # appended evaluation the banner text itself is cut back off (the
+        # native routine closes its unit before returning, and every native
+        # writer reopens the log with position="append"), so a trajectory log
+        # carries it once.
+        banner_log = log if (append_log and isinstance(log, str) and os.path.isfile(log)) else None
+        banner_offset = os.path.getsize(banner_log) if banner_log else None
         oqp.oqp_banner(self.mol)
-        dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
-        dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
-        self._log_perf_settings()
+        if banner_log is not None:
+            with open(banner_log, "r+b") as fh:
+                fh.truncate(banner_offset)
+        if not append_log:
+            # This run starts its log from scratch, possibly on a path an earlier
+            # run in this process already used: have the native side describe the
+            # DFT set-up and functionals in it again.
+            oqp.oqp_log_restarted(self.mol)
+            dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
+            dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
+            self._log_perf_settings()
 
     def _log_perf_settings(self):
         """Append the resolved performance settings + warnings to the log."""
+        # One writer for the shared log, like dump_log's mpi_dump guard: under
+        # mpiexec the other ranks would append this block before rank 0 has
+        # written the banner.
+        if getattr(self.mol, "usempi", False) and MPIManager().world_rank != 0:
+            return
         report = getattr(self.mol, "perf_report", None)
         if not report:
             return
         from oqp.utils import perf_levels
+        from oqp.utils.log_format import INPUT_REFERENCE, format_log_section
         block = perf_levels.format_report(getattr(self.mol, "perf_level", perf_levels.UNSET),
                                           report, getattr(self.mol, "perf_warns", []))
         if not block:
@@ -431,6 +480,8 @@ class Runner:
         if getattr(self.mol, "log", None):
             try:
                 with open(self.mol.log, 'a', encoding='utf-8') as fout:
+                    fout.write(format_log_section('PyOQP: Performance settings',
+                                                  INPUT_REFERENCE))
                     fout.write(block + "\n")
             except OSError:
                 pass
@@ -455,6 +506,9 @@ class Runner:
         # optimisation, NAMD) is exposed.  Invalidate at the start of every
         # top-level calculation; the kernels re-declare it when they write.
         self.mol._grad_valid = False
+        # Likewise the QM/MM optimisation summary, which get_results() turns
+        # into the published energy: it belongs to the run that set it.
+        self.mol.qmmm_optimization = None
 
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
@@ -487,6 +541,15 @@ class Runner:
             from oqp.library.qmmm_md import QMMM_MD
             self.qmmm_md = QMMM_MD(mol=self.mol)
             self.qmmm_md.run()
+        elif qmmm_flag and str(run_type).strip().lower() == "optimize":
+            # Minimise the embedded QM/MM energy over the movable atoms; the
+            # all-QM optimizer below would move the QM fragment in vacuum.
+            if self.mol.usempi and self.mpi_manager.use_mpi > 0:
+                raise RuntimeError(
+                    "QM/MM geometry optimisation cannot run under MPI; create Runner with usempi=False"
+                )
+            from oqp.library.qmmm_opt import run_qmmm_optimization
+            self.qmmm_opt = run_qmmm_optimization(self.mol)
         else:
             self.run_func[run_type](self.mol)
 
@@ -522,7 +585,8 @@ class Runner:
         restart_namd = (
             str(input_config.get('runtype', '')).strip().lower() == 'namd'
             and (
-                md_config.get('restart') is True
+                bool(md_config.get('continuation_checkpoint', ''))
+                or md_config.get('restart') is True
                 or str(md_config.get('restart', '')).strip().lower()
                 in {'true', '1', 'yes', 'on'}
             )

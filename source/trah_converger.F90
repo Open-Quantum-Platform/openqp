@@ -94,6 +94,7 @@ contains
     par%deterministic = infos%control%mom
     par%rms_gnorm  = .true.
     par%verbose    = .true.
+    par%iterations = infos%control%verbose >= 1
     par%want_history = .false.
 
     allocate(mo_e_a(conv%nbf), mo_e_b(conv%nbf), g(n), hdiag(n))
@@ -137,9 +138,9 @@ contains
       gnorm = tres%gnorm
       macro = tres%iter
       res%error = tres%error
-      if (tres%ierr > 0) res%ierr = tres%ierr
+      res%ierr = tres%ierr
 
-      conv_ok = (tres%gnorm < 1.0e-4_dp)
+      conv_ok = tres%converged .and. tres%ierr == 0 .and. tres%gnorm < par%conv_tol
       if (conv_ok .and. e0 < e_best) then
         e_best = e0; mob_a = conv%mo_a; mob_b = conv%mo_b; have_best = .true.
       end if
@@ -155,9 +156,15 @@ contains
       conv%mo_a = mob_a; conv%mo_b = mob_b
       conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
       call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
-      res%error = min(sqrt(dot_product(g, g)/real(n, dp)), 0.99_dp*par%conv_tol)
-      res%ierr  = 0
+      res%error = sqrt(dot_product(g, g)/real(max(1,n), dp))
+      res%ierr = 4
+      if (res%error < par%conv_tol) res%ierr = 0
+      write(IW,'(5X,"Native TRAH: final fresh-Fock residual =",ES12.4,"  tolerance =",ES12.4)') &
+        res%error, par%conv_tol
+      if (res%ierr /= 0) write(IW,'(5X,"Native TRAH: final fresh-Fock residual did not converge.")')
       if (nrst > 1) write(IW,'(/5X,"best of ",I0," restarts: E =",F20.10)') nrst, e_best
+    else
+      if (res%ierr == 0) res%ierr = 4
     end if
 
     conv%etot = e0

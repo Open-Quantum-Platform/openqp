@@ -1,7 +1,7 @@
 # SA-CASSCF/STO-3G analytic nuclear gradient of the weighted objective.
 #
 # LiH CAS(2,2) averaged over the two lowest singlets with equal weights. This
-# is Path A of docs/sa_casscf_gradients.md: the optimized objective
+# is Path A of openqp-devkit docs/sa_casscf_gradients.md: the optimized objective
 #
 #     L = sum_I w_I E_I
 #

@@ -8,6 +8,7 @@ import importlib
 import itertools
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,7 @@ import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
 from oqp.utils import dftb_trace
+from oqp.utils.log_format import module_print_level
 from oqp.utils.file_utils import dump_log
 from oqp.utils.state_labels import (
     DFTB_CAP_STATE_SPECTRUM,
@@ -721,7 +723,7 @@ class OpenQPDFTBAdapter:
         step_cpu_start = time.process_time()
         native_trace = _call_with_native_diagnostics(
             native_call,
-            print_level=int(self.dftb.get("print_level", 1)),
+            print_level=module_print_level(self.config, self.SECTION),
             state_spectrum=state_spectrum,
             structured_trace=bool(capabilities & DFTB_CAP_STRUCTURED_TRACE),
         )
@@ -869,13 +871,26 @@ class OpenQPDFTBAdapter:
         printed here: it is stored and reported after the excited-state
         summary table.
         """
-        print_level = max(0, int(self.dftb.get("print_level", 1)))
-        if print_level == 0:
-            return
+        print_level = module_print_level(self.config, self.SECTION)
         verbose = print_level >= 2
+        # Parse before any early return: the energy components are data the
+        # final report uses, and warnings belong in the log at every level.
         parsed = dftb_trace.parse_native_trace(native_trace)
         if parsed.get("energy_components"):
             self.mol.dftb_energy_components = parsed["energy_components"]
+        if print_level == 0:
+            notices = list(parsed.get("warnings", [])) + [
+                line for line in parsed.get("other", [])
+                if re.search(r"warn|error", line, re.IGNORECASE)]
+            if not any(parsed[key] for key in (
+                    "scc_passes", "davidson", "zvector", "zvector_dense")):
+                notices += [line for line in str(native_trace or "").splitlines()
+                            if re.search(r"warn|error", line, re.IGNORECASE)
+                            and line not in notices]
+            if notices:
+                dump_log(self.mol, title="PyOQP: OpenQP-DFTB warnings", section="text",
+                         info={"text": "\n".join("   " + line.strip() for line in notices)})
+            return
         if not any(parsed[key] for key in (
                 "scc_passes", "davidson", "zvector", "zvector_dense")):
             # Nothing structured (old library or probe-style text): keep the
@@ -1239,7 +1254,7 @@ class OpenQPDFTBAdapter:
         if getattr(self.mol, "_dftb_summary_logged_key", None) == key:
             return
         self.mol._dftb_summary_logged_key = key
-        if max(0, int(self.dftb.get("print_level", 1))) == 0:
+        if module_print_level(self.config, self.SECTION) == 0:
             return
         dump_log(
             self.mol,
@@ -1912,7 +1927,7 @@ class OpenQPDFTBAdapter:
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
             float(self.dftb.get("response_tolerance", 1.0e-6)),
-            int(self.dftb.get("print_level", 1)),
+            module_print_level(self.config, self.SECTION),
             bool(self.dftb.get("state_to_state_spectrum", True)),
             # DTCAM operator surface + preset: a Python workflow may retune
             # these on the same molecule, so cached results must not outlive

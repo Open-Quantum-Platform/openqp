@@ -1,0 +1,37 @@
+# Suppressing the MO coefficient table with [scf] verbose = 0.
+# The table is printed after every SCF, so a dynamics run repeats it for
+# every step; runtype = md / namd default to this setting.  The energy is
+# the one h2o_rhf_6-31g_pbe_basic produces: the keyword only gates output.
+[input]
+system=
+ 8   0.000000000   0.000000000  -0.041061554
+ 1  -0.533194329   0.533194329  -0.614469223
+ 1   0.533194329  -0.533194329  -0.614469223
+
+charge=0
+method=hf
+basis=6-31g
+runtype=energy
+functional=pbe
+d4=false
+
+
+[guess]
+type=huckel
+save_mol=true
+
+
+[scf]
+type=rhf
+multiplicity=1
+maxit=30
+maxdiis=7
+diis_type=cdiis
+conv=1.0e-6
+verbose=0
+
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=

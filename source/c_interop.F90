@@ -430,13 +430,10 @@ contains
 !>                                -3 - error removing data
   function oqp_del(c_handle, tag) result(n) bind(C, name='oqp_del')
     use strings, only: c_f_char
-    use oqp_tagarray_driver, only: data_has_tags, TA_OK
-    use tagarray_defines
 
     type(oqp_handle_t) :: c_handle
     integer(c_int64_t) :: n
     character(kind=c_char) :: tag(*)
-    integer(c_int32_t) :: stat
 
     type(information), pointer :: inf
     character(:), allocatable :: tag_str
@@ -448,8 +445,12 @@ contains
     tag_str = trim(adjustl(c_f_char(tag)))
 
     n = -2
-    call data_has_tags(inf%dat, [tag_str], 'c_interop', 'oqp_del', WITHOUT_ABORT, status=stat)
-    if (stat /= TA_OK) return
+    ! A missing record is an ordinary query result for the C/Python deletion
+    ! interface.  In particular, symmetry invalidation deliberately attempts
+    ! to erase every optional staging record.  Do not route that expected
+    ! condition through data_has_tags(), which writes a diagnostic to the
+    ! default Fortran unit and creates an otherwise spurious fort.6 file.
+    if (.not. inf%dat%contains(tag_str)) return
 
     n = -3
     call inf%dat%erase([tag_str])
