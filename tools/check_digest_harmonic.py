@@ -27,10 +27,13 @@ import pathlib
 import re
 import sys
 
+BASE = "grd2_compute_data_t"
+# Attributes may appear on either side of extends(...), so take the whole
+# attribute list and pull the parent out of it.
 TYPE_RE = re.compile(
-    r"^\s*type\s*,\s*extends\s*\(\s*grd2_compute_data_t\s*\)\s*"
-    r"(?P<attrs>(?:,\s*\w+\s*)*)::\s*(?P<name>\w+)",
+    r"^[ \t]*type[ \t]*,(?P<attrs>[^:\n]*)::[ \t]*(?P<name>\w+)",
     re.IGNORECASE | re.MULTILINE)
+EXTENDS_RE = re.compile(r"extends\s*\(\s*(?P<parent>\w+)\s*\)", re.IGNORECASE)
 BINDING_RE = re.compile(
     r"^\s*procedure\s*(?:\([^)]*\))?\s*(?:,[^:]*)?::\s*get_density\s*=>\s*(?P<impl>\w+)",
     re.IGNORECASE | re.MULTILINE)
@@ -57,41 +60,77 @@ def _procedure_body(text, name):
     return text[start.start():stop.end() if stop else len(text)]
 
 
-def check(root):
-    failures = []
-    checked = 0
+def _derived_types(root):
+    """Every type transitively deriving from BASE, as name -> record.
+
+    A digest that extends an intermediate subtype rather than BASE itself is
+    still a digest. hf_gradient.F90 has exactly that shape -- an abstract
+    grd2_hf_compute_data_t with grd2_rhf/uhf_compute_data_t under it, each
+    binding its own get_density -- and matching only the literal base name left
+    both of them unexamined.
+    """
+    found = {}
     for path in sorted(pathlib.Path(root).rglob("*.F90")):
         text = path.read_text(errors="replace")
         for match in TYPE_RE.finditer(text):
-            if "abstract" in (match.group("attrs") or "").lower():
+            attrs = match.group("attrs")
+            parent = EXTENDS_RE.search(attrs)
+            if parent is None:
                 continue
-            block = _type_block(text, match.start())
-            binding = BINDING_RE.search(block)
-            if binding is None:
-                # Inherits its parent's digest; nothing of its own to check.
-                continue
-            impl = binding.group("impl")
-            body = _procedure_body(text, impl)
-            rel = path.relative_to(root)
-            if body is None:
-                failures.append(
-                    f"{rel}: type {match.group('name')} binds get_density to "
-                    f"{impl}, which is not defined in this file")
-                continue
-            checked += 1
-            if "HARMONIC_ACTIVE" not in body:
-                line = text[:match.start()].count("\n") + 1
-                failures.append(
-                    f"{rel}:{line}: type {match.group('name')} digests a "
-                    f"two-particle density in {impl} without ever consulting "
-                    f"HARMONIC_ACTIVE.\n"
-                    f"    grd2 drives get_density with CARTESIAN shell "
-                    f"extents. Index the densities with basis%ao_offset / "
-                    f"basis%naos and the digest is silently wrong for every "
-                    f"spherical basis.\n"
-                    f"    See grd2_mrsf_compute_data_t_get_density and "
-                    f"grd2_mrsf_build_cart in source/modules/"
-                    f"tdhf_mrsf_gradient.F90 for the pattern.")
+            name = match.group("name").lower()
+            found[name] = {
+                "name": match.group("name"),
+                "parent": parent.group("parent").lower(),
+                "abstract": "abstract" in attrs.lower(),
+                "path": path,
+                "text": text,
+                "start": match.start(),
+            }
+
+    derived, changed = {BASE.lower()}, True
+    while changed:
+        changed = False
+        for name, record in found.items():
+            if name not in derived and record["parent"] in derived:
+                derived.add(name)
+                changed = True
+    return {n: r for n, r in found.items() if n in derived}
+
+
+def check(root):
+    root = pathlib.Path(root)
+    failures = []
+    checked = 0
+    for name, record in sorted(_derived_types(root).items()):
+        if record["abstract"]:
+            continue
+        block = _type_block(record["text"], record["start"])
+        binding = BINDING_RE.search(block)
+        if binding is None:
+            # Inherits its parent's digest; nothing of its own to check.
+            continue
+        impl = binding.group("impl")
+        body = _procedure_body(record["text"], impl)
+        rel = record["path"].relative_to(root)
+        if body is None:
+            failures.append(
+                f"{rel}: type {record['name']} binds get_density to "
+                f"{impl}, which is not defined in this file")
+            continue
+        checked += 1
+        if "HARMONIC_ACTIVE" not in body:
+            line = record["text"][:record["start"]].count("\n") + 1
+            failures.append(
+                f"{rel}:{line}: type {record['name']} digests a "
+                f"two-particle density in {impl} without ever consulting "
+                f"HARMONIC_ACTIVE.\n"
+                f"    grd2 drives get_density with CARTESIAN shell "
+                f"extents. Index the densities with basis%ao_offset / "
+                f"basis%naos and the digest is silently wrong for every "
+                f"spherical basis.\n"
+                f"    See grd2_mrsf_compute_data_t_get_density and "
+                f"grd2_mrsf_build_cart in source/modules/"
+                f"tdhf_mrsf_gradient.F90 for the pattern.")
     return checked, failures
 
 

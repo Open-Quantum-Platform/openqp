@@ -145,8 +145,10 @@ the densities and address them at Cartesian offsets. See
 requires the `get_density` bound to each concrete `grd2_compute_data_t`
 extension to mention `HARMONIC_ACTIVE`. The check is **per type**, not per
 file: the NAC digest above was added to a file whose other digest already
-handled the spherical case. As with rules 1 and 5, CI runs the trusted
-base-branch copy of the script.
+handled the spherical case. It follows the inheritance transitively, so a
+digest that extends an intermediate subtype — `grd2_rhf_compute_data_t` under
+the abstract `grd2_hf_compute_data_t`, say — is examined like any other. As
+with rules 1 and 5, CI runs the trusted base-branch copy of the script.
 
 **Reviewer check:** the gate proves only that the question was asked, never
 that the branch is right. Any change touching AO-indexed code should be
