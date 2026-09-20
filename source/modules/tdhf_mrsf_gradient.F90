@@ -115,12 +115,12 @@ contains
     integer :: mrst
     character(len=12) :: target_label
     character(len=16) :: method_name
-    logical :: roref = .false.
+    logical :: roref
 
     type(dft_grid_t) :: molGrid
 
   ! General data
-    logical :: dft
+    logical :: dft, log_was_open
     integer :: scf_type, mol_mult
 
     real(kind=dp), allocatable :: p(:,:,:), v(:,:,:), d(:,:,:), spc(:,:,:)
@@ -144,13 +144,15 @@ contains
             'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     mrst = infos%tddft%mult
     target_label = mrsf_state_label(mrst, infos%tddft%target_state)
 
   ! Files open
-    open (unit=iw, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
   !
     call print_module_info('MRSF_Grad','Computing Gradient of '//trim(method_name))
 !
@@ -300,7 +302,7 @@ contains
 !   Print timings
     call measure_time(print_total=1, log_unit=iw)
 
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
   end subroutine tdhf_mrsf_gradient
 
@@ -381,13 +383,9 @@ contains
                                                           OQP_nac_trden /))
     call tagarray_reserve_data(infos%dat, OQP_nac_overlap, ta_type_real64, &
           3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
-    call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
-    nac_ov = 0.0_dp
     ! also export the MO interstate transition densities for diagnostics
     call tagarray_reserve_data(infos%dat, OQP_nac_trden, ta_type_real64, &
           nbf*nbf*nstate*nstate, (/ nbf*nbf, nstate, nstate /))
-    call tagarray_get_data(infos%dat, OQP_nac_trden, trden_st)
-    trden_st = 0.0_dp
 
     allocate(dSket(nbf,nbf,3,natom), dSfull(nbf,nbf,3,natom), &
              trden(nbf,nbf), trden_ss(nbf,nbf), trden_ao(nbf,nbf), &
@@ -431,6 +429,15 @@ contains
         end do
       end if
     end block
+
+    ! Every reserve/erase above may relocate any TagArray record.
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+    if (have_custom) call tagarray_get_data(infos%dat, OQP_nac_gamma, gam_tlf)
+    call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
+    call tagarray_get_data(infos%dat, OQP_nac_trden, trden_st)
+    nac_ov = 0.0_dp
+    trden_st = 0.0_dp
 
     do ist = 1, nstate
       do jst = 1, nstate
@@ -593,21 +600,19 @@ contains
     end if
 
     if (allocated(gcomp)) deallocate(gcomp)
-    allocate(gcomp, source=grd2_mrsf_compute_data_t( d2 = d &
-                                    , p2 = p &
-                                    , spc2 = spc &
-                                    , nbf = basis%nbf &
-                                    , hfscale = scale_exch &
-                                    , hfscale2 = scale_exch2 &
-                                    , spcscale = [infos%tddft%spc_coco, &
-                                                  infos%tddft%spc_ovov, &
-                                                  infos%tddft%spc_coov] &
-                                    , mrst = infos%tddft%mult ))
-
-    call gcomp%init()
-
+    allocate(grd2_mrsf_compute_data_t :: gcomp)
     select type (gcomp)
-    class is (grd2_mrsf_compute_data_t)
+    type is (grd2_mrsf_compute_data_t)
+      gcomp%d2 => d
+      gcomp%p2 => p
+      gcomp%spc2 => spc
+      gcomp%nbf = basis%nbf
+      gcomp%hfscale = scale_exch
+      gcomp%hfscale2 = scale_exch2
+      gcomp%spcscale = [infos%tddft%spc_coco, &
+                      infos%tddft%spc_ovov, infos%tddft%spc_coov]
+      gcomp%mrst = infos%tddft%mult
+      call gcomp%init()
       call gcomp%build_cart(basis)
     end select
 
@@ -689,6 +694,20 @@ contains
   subroutine grd2_mrsf_compute_data_t_clean(this)
     implicit none
     class(grd2_mrsf_compute_data_t), target, intent(inout) :: this
+
+    ! Release owned Cartesian copies; the caller owns the input densities.
+    if (allocated(this%d2a_c)) deallocate(this%d2a_c)
+    if (allocated(this%d2b_c)) deallocate(this%d2b_c)
+    if (allocated(this%p2a_c)) deallocate(this%p2a_c)
+    if (allocated(this%p2b_c)) deallocate(this%p2b_c)
+    if (allocated(this%ball_c)) deallocate(this%ball_c)
+    if (allocated(this%bo2v_c)) deallocate(this%bo2v_c)
+    if (allocated(this%bo1v_c)) deallocate(this%bo1v_c)
+    if (allocated(this%bco1_c)) deallocate(this%bco1_c)
+    if (allocated(this%bco2_c)) deallocate(this%bco2_c)
+    if (allocated(this%o21v_c)) deallocate(this%o21v_c)
+    if (allocated(this%co12_c)) deallocate(this%co12_c)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################
@@ -932,6 +951,27 @@ contains
   subroutine grd2_mrsf_nac_compute_data_t_clean(this)
     implicit none
     class(grd2_mrsf_nac_compute_data_t), target, intent(inout) :: this
+
+    ! Release owned Cartesian copies; the caller owns the input densities.
+    if (allocated(this%d2a_c)) deallocate(this%d2a_c)
+    if (allocated(this%d2b_c)) deallocate(this%d2b_c)
+    if (allocated(this%p2a_c)) deallocate(this%p2a_c)
+    if (allocated(this%p2b_c)) deallocate(this%p2b_c)
+    if (allocated(this%ballI_c)) deallocate(this%ballI_c)
+    if (allocated(this%bo2vI_c)) deallocate(this%bo2vI_c)
+    if (allocated(this%bo1vI_c)) deallocate(this%bo1vI_c)
+    if (allocated(this%bco1I_c)) deallocate(this%bco1I_c)
+    if (allocated(this%bco2I_c)) deallocate(this%bco2I_c)
+    if (allocated(this%o21vI_c)) deallocate(this%o21vI_c)
+    if (allocated(this%co12I_c)) deallocate(this%co12I_c)
+    if (allocated(this%ballJ_c)) deallocate(this%ballJ_c)
+    if (allocated(this%bo2vJ_c)) deallocate(this%bo2vJ_c)
+    if (allocated(this%bo1vJ_c)) deallocate(this%bo1vJ_c)
+    if (allocated(this%bco1J_c)) deallocate(this%bco1J_c)
+    if (allocated(this%bco2J_c)) deallocate(this%bco2J_c)
+    if (allocated(this%o21vJ_c)) deallocate(this%o21vJ_c)
+    if (allocated(this%co12J_c)) deallocate(this%co12J_c)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################
@@ -1422,16 +1462,26 @@ contains
         ! d2/p2 in place, so retain a fresh copy for every requested pair.
         dcopy = d0
         deFull = 0.0_dp
-        gFull = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = pIJ, &
-                     spcI = spcI, spcJ = spcJ, nbf = nbf, &
-                     subtract_reference = .true., &
-                     hfscale = scale_exch, hfscale2 = scale_exch2, &
-                     spcscale = [infos%tddft%spc_coco, &
-                                 infos%tddft%spc_ovov, &
-                                 infos%tddft%spc_coov], mrst = mrst )
-        call gFull%init()
+        ! ifx 2026.1.1 leaves allocation-descriptor fields undefined when
+        ! assigning this structure constructor to a polymorphic allocatable.
+        ! Typed allocation initializes every Cartesian component descriptor;
+        ! associate the owned inputs without copying a constructor temporary.
+        if (allocated(gFull)) deallocate(gFull)
+        allocate(grd2_mrsf_nac_compute_data_t :: gFull)
         select type (gFull)
-        class is (grd2_mrsf_nac_compute_data_t)
+        type is (grd2_mrsf_nac_compute_data_t)
+          gFull%d2 => dcopy
+          gFull%p2 => pIJ
+          gFull%spcI => spcI
+          gFull%spcJ => spcJ
+          gFull%nbf = nbf
+          gFull%subtract_reference = .true.
+          gFull%hfscale = scale_exch
+          gFull%hfscale2 = scale_exch2
+          gFull%spcscale = [infos%tddft%spc_coco, &
+                          infos%tddft%spc_ovov, infos%tddft%spc_coov]
+          gFull%mrst = mrst
+          call gFull%init()
           call gFull%build_cart(basis)
         end select
         call grd2_driver(infos, basis, deFull, gFull, &
@@ -1824,6 +1874,11 @@ contains
     real(kind=dp) :: coef(4)
     integer :: natom, save_target, c, nx, nst
     character(len=80) :: tags_req(1)
+    logical :: log_was_open
+
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
 
     tags_req(1) = OQP_td_bvec_mo
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
@@ -1858,12 +1913,14 @@ contains
         allocate(homog(3, natom, 4))
         scl = (/ 0.0_dp, 1.0_dp, 2.0_dp, 3.0_dp /)
         do c = 1, 4
+          call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
           bvec_mo(:, istate) = scl(c) * Xi
           infos%atoms%grad = 0.0_dp
           call tdhf_mrsf_z_vector(infos)
           call tdhf_mrsf_gradient(infos)
           homog(:, :, c) = infos%atoms%grad
         end do
+        call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
         bvec_mo = save_bvec
         infos%tddft%target_state = save_target
         infos%atoms%grad = 0.0_dp
@@ -1874,11 +1931,13 @@ contains
         homog_out = reshape(homog, (/ 3*natom, 4 /))
         write(iw,'(/5X,"=== NAC homogeneity dump (scales 0,1,2,3) done ===")')
         deallocate(homog, save_bvec, Xi, Xj, accum)
+        if (.not. log_was_open) close(iw)
         return
       end if
     end block
 
     do c = 1, 4
+      call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
       select case (c)
         case (1); bvec_mo(:, istate) = Xi + Xj
         case (2); bvec_mo(:, istate) = Xi
@@ -1891,7 +1950,8 @@ contains
       accum = accum + coef(c) * infos%atoms%grad
     end do
 
-    ! restore
+    ! The gradient can relocate the amplitude record.
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
     bvec_mo = save_bvec
     infos%tddft%target_state = save_target
     infos%atoms%grad = 0.0_dp
@@ -1905,6 +1965,7 @@ contains
     write(iw,'(/5X,"=== NAC polarization X_",I0,"^T dA X_",I0," computed ===")') &
          istate, jstate
     deallocate(save_bvec, Xi, Xj, accum)
+    if (.not. log_was_open) close(iw)
   end subroutine mrsf_nac_polarize
 
 !###############################################################################
@@ -1984,30 +2045,41 @@ contains
     allocate(deP(3,natom), deN(3,natom), source=0.0_dp)
 
     ! Path A: production quadratic type
-    gP = grd2_mrsf_compute_data_t( d2 = dA, p2 = pA, spc2 = spc, &
-                                   nbf = nbf, hfscale = scale_exch, &
-                                   hfscale2 = scale_exch2, &
-                                   spcscale = [infos%tddft%spc_coco, &
-                                               infos%tddft%spc_ovov, &
-                                               infos%tddft%spc_coov], &
-                                   mrst = mrst )
-    call gP%init()
+    allocate(grd2_mrsf_compute_data_t :: gP)
+    select type (gP)
+    type is (grd2_mrsf_compute_data_t)
+      gP%d2 => dA
+      gP%p2 => pA
+      gP%spc2 => spc
+      gP%nbf = nbf
+      gP%hfscale = scale_exch
+      gP%hfscale2 = scale_exch2
+      gP%mrst = mrst
+      gP%spcscale = [infos%tddft%spc_coco, &
+                         infos%tddft%spc_ovov, infos%tddft%spc_coov]
+      call gP%init()
+      call gP%build_cart(basis)
+    end select
     call grd2_driver(infos, basis, deP, gP, &
                      cam = do_cam, alpha = infos%tddft%cam_alpha, &
                      beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
     call gP%clean()
 
     ! Path B: bilinear NAC type at I=J (spcI == spcJ == spc)
-    gN = grd2_mrsf_nac_compute_data_t( d2 = dB, p2 = pB, spcI = spc, spcJ = spc, &
-                                       nbf = nbf, hfscale = scale_exch, &
-                                       hfscale2 = scale_exch2, &
-                                       spcscale = [infos%tddft%spc_coco, &
-                                                   infos%tddft%spc_ovov, &
-                                                   infos%tddft%spc_coov], &
-                                       mrst = mrst )
-    call gN%init()
+    allocate(grd2_mrsf_nac_compute_data_t :: gN)
     select type (gN)
-    class is (grd2_mrsf_nac_compute_data_t)
+    type is (grd2_mrsf_nac_compute_data_t)
+      gN%d2 => dB
+      gN%p2 => pB
+      gN%spcI => spc
+      gN%spcJ => spc
+      gN%nbf = nbf
+      gN%hfscale = scale_exch
+      gN%hfscale2 = scale_exch2
+      gN%mrst = mrst
+      gN%spcscale = [infos%tddft%spc_coco, &
+                         infos%tddft%spc_ovov, infos%tddft%spc_coov]
+      call gN%init()
       call gN%build_cart(basis)
     end select
     call grd2_driver(infos, basis, deN, gN, &
@@ -2020,9 +2092,6 @@ contains
     write(iw,'(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
     write(iw,'(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
     write(iw,'(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
-    write(*, '(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
-    write(*, '(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
-    write(*, '(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
 
     deallocate(dA, pA, dB, pB, spc, deP, deN)
 
@@ -2232,11 +2301,11 @@ end module tdhf_mrsf_gradient_mod
 
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
-    int2_data_st = int2_mrsf_data_t( &
-      d3 = mrsf_density(:2*nrhs,:,:,:), &
-      tamm_dancoff = .true., &
-      scale_exchange = scale_exch, &
-      scale_coulomb = scale_exch)
+    call int2_data_st%clean()
+    int2_data_st%d3 => mrsf_density(:2*nrhs,:,:,:)
+    int2_data_st%tamm_dancoff = .true.
+    int2_data_st%scale_exchange = scale_exch
+    int2_data_st%scale_coulomb = scale_exch
     call int2_driver%run(int2_data_st, &
       cam = dft .and. infos%dft%cam_flag, &
       alpha = infos%tddft%cam_alpha, &

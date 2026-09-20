@@ -72,7 +72,7 @@ contains
     integer :: s_size
 
     integer :: nbf, nbf_tri
-    logical :: roref = .false.
+    logical :: roref
 
     type(dft_grid_t) :: molGrid
 
@@ -96,7 +96,7 @@ contains
 !    end if 
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     dft = infos%control%hamilton == 20
 
@@ -413,6 +413,12 @@ contains
   subroutine grd2_sf_compute_data_t_clean(this)
     implicit none
     class(grd2_sf_compute_data_t), target, intent(inout) :: this
+    if (allocated(this%d2a_c)) deallocate(this%d2a_c)
+    if (allocated(this%d2b_c)) deallocate(this%d2b_c)
+    if (allocated(this%p2a_c)) deallocate(this%p2a_c)
+    if (allocated(this%p2b_c)) deallocate(this%p2b_c)
+    if (allocated(this%v2_c)) deallocate(this%v2_c)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################

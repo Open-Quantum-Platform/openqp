@@ -71,7 +71,7 @@ contains
     integer :: nbf, nbf_tri
     integer :: iter
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
-    logical :: roref = .false.
+    logical :: roref
 
     type(int2_compute_t) :: int2_driver
     class(int2_td_data_t), allocatable, target :: int2_data
@@ -114,7 +114,7 @@ contains
  !   end if 
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     dft = infos%control%hamilton == 20
 

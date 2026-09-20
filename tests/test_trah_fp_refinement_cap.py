@@ -36,6 +36,8 @@ type=huckel
 multiplicity=3
 type=rohf
 converger_type=trah
+trh_impl=native
+escalation=trah
 conv=1e-14
 """
 
@@ -73,15 +75,19 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
-class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
-    """The refinement loop stops, and above the requested tolerance the core no
-    longer claims convergence: the log states where it stopped.  The SCF driver
-    then applies its own |g| < 1e-4 acceptance and finishes the calculation."""
+class TestTightGradientToleranceTerminates(unittest.TestCase):
+    """Tight molecular targets may converge after full-Fock refinement. Success
+    requires the measured residual; an unreachable target must still fail.
+    The explicit escalation list excludes recovery by a different SCF solver.
+    """
 
-    def _run(self, conv):
+    def _run(self, conv, *, basis="6-31g*", incremental=None):
         with tempfile.TemporaryDirectory() as tmp:
             deck = Path(tmp) / "h2o_trah_tight.inp"
-            deck.write_text(DECK.replace("conv=1e-14", f"conv={conv}"))
+            text = DECK.replace("conv=1e-14", f"conv={conv}").replace("basis=6-31g*", f"basis={basis}")
+            if incremental is not None:
+                text += f"incremental={incremental}\n"
+            deck.write_text(text)
             env = dict(os.environ, OMP_NUM_THREADS="2")
             try:
                 proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", deck.name], cwd=tmp, env=env,
@@ -90,25 +96,56 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
                 self.fail(f"TRAH did not finish within 240 s at conv={conv}")
             return proc, (Path(tmp) / "h2o_trah_tight.log").read_text(errors="ignore")
 
-    def test_unreachable_tolerance_stops_without_claiming_convergence(self):
+    def test_tight_tolerance_uses_the_fresh_fock_residual(self):
         proc, log = self._run("1e-14")
-        self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
-        m = re.search(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
-        self.assertIsNotNone(m, "TRAH did not report where the refinement stopped")
-        n_steps, g_stop = int(m.group(2)), float(m.group(1))
-        self.assertGreater(g_stop, 1e-14)
-        # |g| converges for well over eight steps before it reaches the noise
-        # floor, so the refinement must run past any fixed eight-step cap -- and
-        # then stop on stagnation inside that block, not by exhausting its step
-        # bound and cycling
-        self.assertGreater(n_steps, 8)
-        self.assertLess(n_steps, 100)
-        self.assertNotIn("refinement continuing", log)
-        entry = re.findall(r"^\s+\d+\s+-?\d+\.\d+\s+(\d\.\d+E[-+]\d+)\s+[-\d.]+\s+[\d.]+\s+\d+\s+acc", log, re.M)
-        self.assertTrue(entry, "no accepted TRAH macroiteration in the log")
-        self.assertLess(g_stop, 1e-2*float(entry[-1]))
-        self.assertNotIn("CONVERGED (FP precision", log)
-        self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
+        diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+        residuals = re.findall(r"final fresh-Fock residual\s*=\s*([0-9.E+-]+)", log)
+        if proc.returncode == 0:
+            self.assertTrue(residuals, diagnostic)
+            self.assertLess(float(residuals[-1]), 1e-14, diagnostic)
+            self.assertIn("SCF convergence achieved", log)
+        else:
+            # Whether 1e-14 is reachable depends on the numerical libraries.
+            # A platform that cannot reach it must report failure honestly.
+            self.assertIn("SCF did not converge: TRAH failed the requested criterion", log, diagnostic)
+            self.assertNotIn("SCF convergence achieved", log, diagnostic)
+            self.assertIn("SCF energy is not converged", log, diagnostic)
+
+    def test_unreachable_tolerance_stops_without_claiming_convergence(self):
+        proc, log = self._run("1e-30")
+        diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+        self.assertNotEqual(proc.returncode, 0, diagnostic)
+        self.assertIn("SCF did not converge: TRAH failed the requested criterion", log, diagnostic)
+        self.assertIn("SCF energy is not converged", log, diagnostic)
+        self.assertNotIn("SCF convergence achieved", log, diagnostic)
+        self.assertNotIn("CONVERGED (FP precision", log, diagnostic)
+        # Blocks may continue while making progress, but each block remains
+        # bounded and the subprocess timeout detects an unbounded refinement.
+        stopped = re.findall(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
+        self.assertTrue(stopped, diagnostic)
+        for residual, steps in stopped:
+            self.assertGreater(float(residual), 1e-30)
+            self.assertLessEqual(int(steps), 100)
+
+    def test_spherical_basis_refresh_matches_full_fock(self):
+        energies = []
+        for incremental in (True, False):
+            with self.subTest(incremental=incremental):
+                proc, log = self._run("1e-8", basis="cc-pvdz", incremental=incremental)
+                diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+                self.assertEqual(proc.returncode, 0, diagnostic)
+                # H2O/cc-pVDZ has 24 spherical AOs versus 25 Cartesian AOs.
+                # This confirms that the oxygen d shell uses the spherical path.
+                self.assertRegex(log, r"Number of Basis Set functions\s*=\s*24\b")
+                residuals = re.findall(r"final fresh-Fock residual\s*=\s*([0-9.E+-]+)", log)
+                self.assertTrue(residuals, diagnostic)
+                self.assertLess(float(residuals[-1]), 1e-8, diagnostic)
+                self.assertIn("SCF convergence achieved", log, diagnostic)
+                values = re.findall(r"PyOQP state 0\s+(-?\d+\.\d+)", log)
+                self.assertTrue(values, diagnostic)
+                energies.append(float(values[-1]))
+        self.assertEqual(len(energies), 2)
+        self.assertLess(abs(energies[0] - energies[1]), 1e-8)
 
 
 if __name__ == "__main__":

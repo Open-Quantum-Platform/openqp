@@ -3,7 +3,7 @@
 This file is read by the automated PR reviewers (Codex reads `AGENTS.md`
 natively; the Claude review workflow is pointed at it in
 `.github/workflows/claude.yml`) and by human contributors. Every pull request is
-expected to satisfy the five rules below. A reviewer should call out, per rule,
+expected to satisfy the rules below. A reviewer should call out, per rule,
 whether the PR satisfies it or explain what is missing.
 
 ## PR rules
@@ -155,3 +155,36 @@ that the branch is right. Any change touching AO-indexed code should be
 exercised in a spherical basis, not just a Pople one — `cc-pVDZ` reaches the d
 mismatch and `cc-pVTZ` the f one. Symmetry makes a good detector and needs no
 reference value: see `tests/test_mrsf_nac_spherical_basis.py`.
+
+
+### 7. Initialization and resource cleanup are part of correctness
+
+For every changed allocation, pointer, persistent buffer, native handle, file or
+worker, review its complete lifetime: creation, use, replacement, normal return,
+early return and error exit. This applies to Fortran, C/C++, Python and bundled
+library patches, not only to the numerical kernel that uses them.
+
+- Initialize every value before it is read, including optional-branch outputs,
+  allocation descriptors, pointer association and module/SAVE state. Declaration
+  initialization of a Fortran local implies SAVE; do not use it for per-call state.
+- Identify the owner of each allocation and borrowed view. After replacing or
+  erasing a backing record, reacquire pointers; never retain a NumPy view past
+  its native owner's lifetime. Match allocator/deallocator, alignment and ABI.
+- Cleanup must release owned resources once, permit safe repeated cleanup where
+  exposed, and preserve borrowed resources. Close a file only when the current
+  operation opened it. Restore temporary settings and modified molecular data
+  on recoverable failures as well as successful returns.
+- Size persistent buffers from the current molecule, basis and state count;
+  invalidate or resize them when that identity changes. Exercise repeated calls
+  in one process, increasing and decreasing dimensions, and relevant early/error
+  paths. One successful fresh-process calculation does not establish safety.
+- Memory fixes need a regression that fails for the original defect, plus a
+  suitable native memory/bounds check when feasible. Record compiler, dimensions,
+  result and any remaining diagnostics. Do not silence a memory error, enable an
+  allocator workaround, or loosen numerical tolerances to obtain a passing CI.
+- Patches to bundled libraries must invalidate only the affected cache entries;
+  validate allocation and destruction with the patched dependency actually linked.
+
+**Reviewer check:** report PASS with the relevant tests, NOT APPLICABLE with a
+reason, or identify the missing evidence. Static pattern checks and an ordinary
+CI pass alone cannot prove initialization or resource lifetime correctness.

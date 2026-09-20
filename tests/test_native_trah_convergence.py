@@ -14,7 +14,7 @@ def test_native_trah_respects_requested_tolerance_and_iteration_limit(tmp_path):
         pytest.skip('Fortran compiler required for the native TRAH acceptance test')
     exe = tmp_path / 'trah_convergence'
     subprocess.run([
-        compiler, '-fdefault-integer-8', '-ffree-line-length-none',
+        compiler, '-fcheck=all', '-fdefault-integer-8', '-ffree-line-length-none',
         str(ROOT / 'tests/fixtures/trah_core_support.f90'),
         str(ROOT / 'source/trah_core.F90'),
         str(ROOT / 'tests/fortran/trah_convergence_selftest.F90'),

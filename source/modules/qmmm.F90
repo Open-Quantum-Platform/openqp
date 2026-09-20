@@ -75,7 +75,7 @@ module qmmm_mod
 
     integer :: nat, nbf, nbf2, ok, istate
     integer :: npt, nptcur, i
-    logical :: urohf, use_relaxed
+    logical :: urohf, use_relaxed, log_was_open
 
     real(dp), allocatable :: tmp(:), chg_op(:)
     real(dp), allocatable, target :: xyz(:,:), ttt(:,:)
@@ -91,7 +91,8 @@ module qmmm_mod
     character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
          OQP_partial_charges /)
 
-    open (unit=IW, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) open(unit=iw, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -172,6 +173,7 @@ module qmmm_mod
     call print_charges(infos, partial_charges, iw)
 
     deallocate(tmp, xyz, ttt, chg_op)
+    if (.not. log_was_open) close(iw)
   end subroutine form_esp_charges_excited
 
 

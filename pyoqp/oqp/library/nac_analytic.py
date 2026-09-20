@@ -181,7 +181,7 @@ def analytic_nac(mol, *, pair=None):
                 ('predictor_nacv', 'OQP::nac_predictor_nacv')):
             try:
                 debug[key] = np.array(mol.data[tag], copy=True)
-            except (KeyError, RuntimeError, TypeError, ValueError):
+            except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
                 pass
         np.savez(debug_path, **debug)
 

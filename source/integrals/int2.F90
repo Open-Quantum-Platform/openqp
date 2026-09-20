@@ -509,7 +509,8 @@ contains
     real(kind=dp), optional, intent(in) :: alpha, beta, mu, &
                                            alpha_coulomb, beta_coulomb
 
-    logical :: do_cam = .false.
+    logical :: do_cam
+    do_cam = .false.
     if (present(cam)) do_cam = cam
 
     if (present(stat)) stat = 0
@@ -622,7 +623,7 @@ contains
     logical :: omp
     logical :: zero_shq
     type(int2_storage_t) :: int2_storage
-    type(eri_data_t), allocatable :: eri_data
+    type(eri_data_t), pointer :: eri_data
     integer :: ok
     integer(c_int64_t) :: nBlasThreads
     integer :: nOmpThreads
@@ -688,6 +689,8 @@ contains
 !$  omp = .true.
 
     nschwz = 0
+    nint = 0
+    thr_nshq = 0
     lmax = maxval(this%basis%am)
     if (lmax < 0 .or. lmax > 6) &
             call show_message("Basis set agular momentum exceeds max. supported", WITH_ABORT)
@@ -727,6 +730,10 @@ contains
 !$omp end master
 !$omp barrier
 
+    ! This thread owns the target through the matching deallocate below.
+    ! Explicit pointer allocation avoids ifx's partly initialized private
+    ! scalar allocatable descriptor without changing scratch-array ownership.
+    nullify(eri_data)
     allocate(eri_data)
     allocate(eri_data%ints(NUM_CART_BF(lmax)**4), source=0.0d0)
     allocate(eri_data%gdat)
@@ -1233,8 +1240,8 @@ contains
 
     class(int2_storage_t), intent(inout) :: this
 
-    deallocate(this%ids)
-    deallocate(this%ints)
+    if (allocated(this%ids)) deallocate(this%ids)
+    if (allocated(this%ints)) deallocate(this%ints)
 
     this%buf_size = 0
     this%ncur = 0
@@ -1409,8 +1416,8 @@ contains
   subroutine int2_fock_data_t_clean(this)
     implicit none
     class(int2_fock_data_t), intent(inout) :: this
-    deallocate(this%f)
-    deallocate(this%dsh)
+    if (allocated(this%f)) deallocate(this%f)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     nullify(this%d)
   end subroutine
 

@@ -156,8 +156,8 @@ contains
 
     class(int2_mrsf_data_t), intent(inout) :: this
 
-    deallocate(this%f3)
-    deallocate(this%dsh)
+    if (allocated(this%f3)) deallocate(this%f3)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     if (allocated(this%ds)) deallocate(this%ds)
     if (allocated(this%ds_sp)) deallocate(this%ds_sp)
     if (allocated(this%d3_sp)) deallocate(this%d3_sp)
