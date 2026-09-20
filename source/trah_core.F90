@@ -66,6 +66,8 @@ module trah_core_mod
   !> and gets the whole trust-region machinery.
   type, abstract :: trah_provider_t
     integer :: nparam = 0     !< length of the rotation vector
+    !< Set when trial_energy overwrites data used by the accepted-point Hessian.
+    logical :: refresh_on_rejection = .false.
   contains
     procedure(trah_gh_i), deferred :: grad_hdiag
     procedure(trah_hv_i), deferred :: hess_vec
@@ -405,7 +407,7 @@ contains
             hist_s(nh)  = snorm
           end if
         end if
-      else
+      else if (prov%refresh_on_rejection) then
         ! Trial evaluations can replace a provider's Fock/density caches even
         ! though its accepted orbitals are unchanged. Rebuild the model at
         ! those orbitals before another Hessian product or convergence test.

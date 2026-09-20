@@ -8,7 +8,7 @@ module trah_test_provider
   logical::stuck=.false.
   logical::check_cache=.false.,trial_cache=.false.
   integer::reject_trials=0
-  integer::evaluations=0
+  integer::evaluations=0,accepted_steps=0
  contains
   procedure::grad_hdiag=>gh
   procedure::hess_vec=>model_hv
@@ -59,6 +59,7 @@ module trah_test_provider
  real(dp),intent(in)::p(:)
  integer,intent(out)::ierr
  this%x=this%x+p(1);ierr=0
+ this%accepted_steps=this%accepted_steps+1
  end subroutine
 end module
 program check_trah_convergence
@@ -91,9 +92,18 @@ program check_trah_convergence
  ! SCF trial energies overwrite Fock caches. Reject one full step and all
  ! five line-search trials, then require a refreshed model before H.v.
  p%x=1;p%check_cache=.true.;p%reject_trials=6;p%trial_cache=.false.
+ p%refresh_on_rejection=.true.
  par%nmac=20;par%r0=0.4_dp
  call trah_run(p,par,res)
  if(.not.res%converged.or.res%ierr/=0.or.res%error>=par%conv_tol)error stop 'rejected trial cache'
  if(p%reject_trials/=0)error stop 'rejection case not exercised'
+ ! Providers with an independent accepted-point Hessian (such as CASSCF)
+ ! must not rebuild it when only the trial point changes.
+ p%x=1;p%check_cache=.false.;p%refresh_on_rejection=.false.;p%reject_trials=6
+ p%evaluations=0;p%accepted_steps=0
+ call trah_run(p,par,res)
+ if(.not.res%converged.or.res%ierr/=0)error stop 'independent Hessian convergence'
+ if(p%reject_trials/=0)error stop 'independent Hessian rejection not exercised'
+ if(p%evaluations/=p%accepted_steps+1)error stop 'unnecessary accepted-point rebuild'
  print *, 'PASS: quadratic, precision stagnation, trust collapse, maximum iterations'
 end program

@@ -78,6 +78,7 @@ contains
     n = int(conv%n_param)
 
     prov%nparam  = n
+    prov%refresh_on_rejection = .true.
     prov%infos   => infos
     prov%molgrid => molgrid
     prov%conv    => conv
