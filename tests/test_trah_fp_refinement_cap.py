@@ -78,10 +78,13 @@ class TestTightGradientToleranceTerminates(unittest.TestCase):
     """Tight molecular targets may converge after full-Fock refinement. Success
     requires the measured residual; an unreachable target must still fail."""
 
-    def _run(self, conv):
+    def _run(self, conv, *, basis="6-31g*", incremental=None):
         with tempfile.TemporaryDirectory() as tmp:
             deck = Path(tmp) / "h2o_trah_tight.inp"
-            deck.write_text(DECK.replace("conv=1e-14", f"conv={conv}"))
+            text = DECK.replace("conv=1e-14", f"conv={conv}").replace("basis=6-31g*", f"basis={basis}")
+            if incremental is not None:
+                text += f"incremental={incremental}\n"
+            deck.write_text(text)
             env = dict(os.environ, OMP_NUM_THREADS="2")
             try:
                 proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", deck.name], cwd=tmp, env=env,
@@ -120,6 +123,26 @@ class TestTightGradientToleranceTerminates(unittest.TestCase):
         for residual, steps in stopped:
             self.assertGreater(float(residual), 1e-30)
             self.assertLessEqual(int(steps), 100)
+
+    def test_spherical_basis_refresh_matches_full_fock(self):
+        energies = []
+        for incremental in (True, False):
+            with self.subTest(incremental=incremental):
+                proc, log = self._run("1e-8", basis="cc-pvdz", incremental=incremental)
+                diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+                self.assertEqual(proc.returncode, 0, diagnostic)
+                # H2O/cc-pVDZ has 24 spherical AOs versus 25 Cartesian AOs.
+                # This confirms that the oxygen d shell uses the spherical path.
+                self.assertRegex(log, r"Number of Basis Set functions\s*=\s*24\b")
+                residuals = re.findall(r"final fresh-Fock residual\s*=\s*([0-9.E+-]+)", log)
+                self.assertTrue(residuals, diagnostic)
+                self.assertLess(float(residuals[-1]), 1e-8, diagnostic)
+                self.assertIn("SCF convergence achieved", log, diagnostic)
+                values = re.findall(r"PyOQP state 0\s+(-?\d+\.\d+)", log)
+                self.assertTrue(values, diagnostic)
+                energies.append(float(values[-1]))
+        self.assertEqual(len(energies), 2)
+        self.assertLess(abs(energies[0] - energies[1]), 1e-8)
 
 
 if __name__ == "__main__":
