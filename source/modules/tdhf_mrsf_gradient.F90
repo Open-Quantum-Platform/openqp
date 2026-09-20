@@ -2092,9 +2092,6 @@ contains
     write(iw,'(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
     write(iw,'(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
     write(iw,'(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
-    write(*, '(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
-    write(*, '(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
-    write(*, '(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
 
     deallocate(dA, pA, dB, pB, spc, deP, deN)
 

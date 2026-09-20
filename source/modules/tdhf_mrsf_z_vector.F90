@@ -1924,6 +1924,11 @@ contains
         write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
       call flush(iw)
 
+      ! Do not form p^T A p for an already converged initial residual (p=0
+      ! for an exact solution), or continue after an invalid initial state.
+      ! Progressive screening has not changed the cutoff at this point.
+      if (mrsf_zvector_breakdown .or. error < cnvtol) return
+
       ! -----------------------------------------------
 
       do iter = 1, infos%control%maxit_zv

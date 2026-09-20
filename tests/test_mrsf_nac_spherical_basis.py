@@ -222,6 +222,8 @@ class MRSFNACSphericalBasisTests(unittest.TestCase):
             self.assertEqual(len(differences), 4, text[-3000:])
             self.assertLess(max(abs(float(x)) for x in differences), 1e-10)
             self.assertIn("NAC polarization", text)
+            self.assertNotIn("Z-Vector breakdown", text)
+            self.assertTrue(np.all(np.isfinite(mol.data["OQP::nac_amp_polar"])))
             self.assertFalse((Path(tmp) / "fort.6").exists())
             # On Linux, verify that the final native return released the log.
             fd_directory = Path("/proc/self/fd")
