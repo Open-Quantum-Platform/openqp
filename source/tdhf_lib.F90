@@ -115,9 +115,9 @@ contains
   subroutine int2_td_data_t_clean(this)
     implicit none
     class(int2_td_data_t), intent(inout) :: this
-    deallocate(this%apb)
-    deallocate(this%amb)
-    deallocate(this%dsh)
+    if (allocated(this%apb)) deallocate(this%apb)
+    if (allocated(this%amb)) deallocate(this%amb)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     nullify(this%d)
     nullify(this%d2)
   end subroutine

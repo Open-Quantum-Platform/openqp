@@ -1120,9 +1120,16 @@ contains
     if (use_minres) then
       call int2_driver_batch%init(basis, infos)
       call int2_driver_batch%set_screening()
-      allocate(int2_data_batch, source=int2_urohf_data_t( &
-               nfocks=2*nrhs, d=dm_tri_batch, &
-               scale_exchange=scale_exch, scale_coulomb=1.0_dp))
+      ! Avoid copying unallocated descriptors from a constructor temporary
+      ! (ifx 2026.1); initialize the allocated dynamic type directly.
+      allocate(int2_urohf_data_t :: int2_data_batch)
+      select type (int2_data_batch)
+      type is (int2_urohf_data_t)
+        int2_data_batch%nfocks = 2*nrhs
+        int2_data_batch%d => dm_tri_batch
+        int2_data_batch%scale_exchange = scale_exch
+        int2_data_batch%scale_coulomb = 1.0_dp
+      end select
       cgdata%int2_driver => int2_driver_batch
       cgdata%int2_data => int2_data_batch
       if (dft) cgdata%xc_consumer => xc_consumer

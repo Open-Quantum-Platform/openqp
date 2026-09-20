@@ -67,7 +67,10 @@ contains
     if (ok /= 0) return
 
     allocate(c_handle, stat=ok)
-    if (ok /= 0) return
+    if (ok /= 0) then
+      deallocate(inf)
+      return
+    end if
 
     c_handle%inf = c_loc(inf)
     call oqp_handle_refresh_ptr(c_handle)

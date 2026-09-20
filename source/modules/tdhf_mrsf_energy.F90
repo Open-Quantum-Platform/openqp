@@ -305,11 +305,11 @@ contains
     ! A . x   (TDA),  x = bvec_mo(:,1)
     call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
     call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(1,:,:,:))
-    int2_data_st = int2_mrsf_data_t( &
-      d3 = mrsf_density(:1,:,:,:), &
-      tamm_dancoff = .true., &
-      scale_exchange = scale_exch, &
-      scale_coulomb = scale_exch)
+    call int2_data_st%clean()
+    int2_data_st%d3 => mrsf_density(:1,:,:,:)
+    int2_data_st%tamm_dancoff = .true.
+    int2_data_st%scale_exchange = scale_exch
+    int2_data_st%scale_coulomb = scale_exch
     call int2_driver%run(int2_data_st, &
       cam = dft .and. infos%dft%cam_flag, &
       alpha = infos%tddft%cam_alpha, alpha_coulomb = infos%tddft%cam_alpha, &
@@ -484,8 +484,8 @@ contains
     integer :: nsolve, nextra
     integer(8), contiguous, pointer :: pair_irrep_probe(:)
     integer(4) :: pair_irrep_stat
-    logical :: roref = .false.
-    logical :: uhfref = .false.
+    logical :: roref
+    logical :: uhfref
     logical :: debug_mode
 
     type(int2_compute_t) :: int2_driver
@@ -564,12 +564,11 @@ contains
       if (mol_mult/=3) call show_message('MRSF requires a triplet ROHF internal reference (mult=3).',with_abort)
     end if
     scf_type = infos%control%scftype
-    if (.not. umrsf .and. scf_type==3) roref = .true.
+    roref = .not. umrsf .and. scf_type == 3
+    uhfref = umrsf
 
     if (umrsf .and. scf_type/=2) then
       call show_message('UMRSF requires a UHF internal reference (SCFTYPE=2).',with_abort)
-    else if (umrsf) then
-      uhfref = .true.
     end if
 
     nbf = basis%nbf
@@ -1052,11 +1051,11 @@ contains
       if (mrst==1 .or. mrst==3) then
 
         if (umrsf) then
-          int2_udata_st = int2_umrsf_data_t( &
-            d3 = mrsf_density(:iv,:,:,:), &
-            tamm_dancoff = tamm_dancoff, &
-            scale_exchange = scale_exch, &
-            scale_coulomb = scale_exch)
+          call int2_udata_st%clean()
+          int2_udata_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_udata_st%tamm_dancoff = tamm_dancoff
+          int2_udata_st%scale_exchange = scale_exch
+          int2_udata_st%scale_coulomb = scale_exch
 
           call int2_driver%run( &
             int2_udata_st, &
@@ -1070,11 +1069,11 @@ contains
           fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
 
         else
-          int2_data_st = int2_mrsf_data_t( &
-            d3 = mrsf_density(:iv,:,:,:), &
-            tamm_dancoff = tamm_dancoff, &
-            scale_exchange = scale_exch, &
-            scale_coulomb = scale_exch)
+          call int2_data_st%clean()
+          int2_data_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_data_st%tamm_dancoff = tamm_dancoff
+          int2_data_st%scale_exchange = scale_exch
+          int2_data_st%scale_coulomb = scale_exch
 
         call int2_driver%run( &
           int2_data_st, &

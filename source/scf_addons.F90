@@ -1152,17 +1152,18 @@ contains
     end if
     call int2_driver%set_screening()
 
+    if (allocated(int2_data)) deallocate(int2_data)
     select case (infos%control%scftype)
     case (1)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
-    case (2)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=size(d,2), d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
-    case (3)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=size(d,2), d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
+      allocate(int2_rhf_data_t :: int2_data)
+      int2_data%nfocks = 1
+    case (2, 3)
+      allocate(int2_urohf_data_t :: int2_data)
+      int2_data%nfocks = size(d,2)
     end select
+    int2_data%d => d
+    int2_data%scale_exchange = scale_e
+    int2_data%scale_coulomb = scale_c
 
 
     ! Constructing two electron Fock matrix

@@ -477,17 +477,17 @@ contains
     case (scf_rhf)
       pdmat(:,1) = dmat_a
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, &
-                                  d=pdmat, &
-                                  scale_exchange=scalefactor))
+      allocate(int2_rhf_data_t :: int2_data)
+      int2_data%nfocks = 1
     case (scf_uhf, scf_rohf)
       pdmat(:,1) = dmat_a
       pdmat(:,2) = dmat_b
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, &
-                                    d=pdmat, &
-                                    scale_exchange=scalefactor))
+      allocate(int2_urohf_data_t :: int2_data)
+      int2_data%nfocks = 2
     end select
+    int2_data%d => pdmat
+    int2_data%scale_exchange = scalefactor
 
     ! Convert overlap matrix to full format for DIIS/SOSCF
     call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -609,6 +609,8 @@ contains
     ! Initialize DFT exchange-correlation energy
     energy%eexc = 0.0_dp
     energy%e_old = 0.0_dp
+    ! The iteration table uses this local history, not energy%e_old.
+    e_old = 0.0_dp
 
     !==============================================================================
     ! Print SCF Options
