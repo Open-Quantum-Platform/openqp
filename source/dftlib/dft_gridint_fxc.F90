@@ -81,9 +81,13 @@ contains
         size(self%mo,2) == xce%maxPts .and. &
         size(self%tmp_,1) == xce%numAOs*xce%maxPts*xce%numTmpVec
       if (xce%funTyp == OQP_FUNTYP_MGGA) then
-        reusable = reusable .and. allocated(self%moG1_) .and. &
-          size(self%moG1_,1) == xce%numAOs*xce%maxPts*3*self%nMtx .and. &
-          size(self%moG1_,2) == nThreads
+        if (allocated(self%moG1_)) then
+          reusable = reusable .and. &
+            size(self%moG1_,1) == xce%numAOs*xce%maxPts*3*self%nMtx .and. &
+            size(self%moG1_,2) == nThreads
+        else
+          reusable = .false.
+        end if
       else
         reusable = reusable .and. .not. allocated(self%moG1_)
       end if

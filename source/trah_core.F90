@@ -200,15 +200,24 @@ contains
     real(dp), intent(out), optional :: hist_e(:), hist_de(:), hist_g(:), hist_s(:)
     integer,  intent(out), optional :: nhist
 
-    integer  :: n, macro, micro_used, ierr, nh, n_fp, n_stall
+    integer  :: n, macro, micro_used, ierr, nh, history_capacity, n_fp, n_stall
     real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_ref
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
 
+    res = trah_result_t()
     n     = prov%nparam
     delta = par%r0
     dmax  = merge(par%dmax, max(4.0_dp, 8.0_dp*delta), par%dmax > 0.0_dp)
     nh    = 0
+    if (present(nhist)) nhist = 0
+    history_capacity = 0
+    if (par%want_history .and. present(nhist)) then
+      if (present(hist_it) .and. present(hist_e) .and. present(hist_de) .and. &
+          present(hist_g) .and. present(hist_s)) then
+        history_capacity = min(size(hist_it), size(hist_e), size(hist_de), size(hist_g), size(hist_s))
+      end if
+    end if
     snorm = 0.0_dp
     res%ierr = 4
     res%error = huge(1.0_dp)
@@ -397,9 +406,10 @@ contains
           res%ierr = ierr
           return
         end if
-        if (par%want_history .and. present(nhist)) then
-          if (nh < size(hist_e)) then
+        if (history_capacity > 0) then
+          if (nh < history_capacity) then
             nh = nh + 1
+            nhist = nh
             hist_it(nh) = macro
             hist_e(nh)  = e0
             hist_de(nh) = e0 - obj_old

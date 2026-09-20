@@ -1284,7 +1284,7 @@ contains
     integer :: minres_iter
     integer, target :: minres_dummy
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
-    logical :: roref = .false.
+    logical :: roref
     integer :: mrst
 
     type(int2_compute_t), target :: int2_driver
@@ -1316,7 +1316,7 @@ contains
     character(len=16) :: method_name
     character(len=16) :: fuse_env
 
-    logical :: dft, mrsf_zvector_breakdown, fuse_nac_gradient
+    logical :: dft, mrsf_zvector_breakdown, fuse_nac_gradient, log_was_open
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
@@ -1343,7 +1343,7 @@ contains
             'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     mrsf_zvector_breakdown = .false.
 
@@ -1354,7 +1354,9 @@ contains
 
   ! Files open
   ! 3. LOG: Write: Main output file
-    open (unit=iw, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
   !
     call print_module_info('MRSF_TDHF_Z_Vector','Solving Z-Vector for '//trim(method_name))
 
@@ -1633,7 +1635,7 @@ contains
        if (dft) call dftclean(infos)
        call measure_time(print_total=1, log_unit=iw)
        call cleanup_gmres_work()
-       close(iw)
+       if (.not. log_was_open) close(iw)
        return
     end if
 
@@ -1707,7 +1709,7 @@ contains
     ! Clean up GMRES work arrays
     call cleanup_gmres_work()
 
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
   contains
 

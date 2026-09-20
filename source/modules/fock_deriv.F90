@@ -246,6 +246,9 @@ contains
     class(grd2_fockprobe_data_t), target, intent(inout) :: this
     this%pmat => null()
     this%mmat => null()
+    if (allocated(this%pmat_cart)) deallocate(this%pmat_cart)
+    if (allocated(this%mmat_cart)) deallocate(this%mmat_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine grd2_fockprobe_clean
 
 !###############################################################################
@@ -457,6 +460,10 @@ contains
     this%pcoul => null()
     this%pexch => null()
     this%mmat => null()
+    if (allocated(this%pcoul_cart)) deallocate(this%pcoul_cart)
+    if (allocated(this%pexch_cart)) deallocate(this%pexch_cart)
+    if (allocated(this%mmat_cart)) deallocate(this%mmat_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine grd2_fockprobe_os_clean
 
 !###############################################################################

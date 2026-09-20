@@ -68,6 +68,8 @@ program check_trah_convergence
  type(model)::p
  type(trah_params_t)::par
  type(trah_result_t)::res
+ integer::nh,hi(1)
+ real(dp)::he(3),hde(2),hg(3),hs(3)
  p%nparam=1
  par%deterministic=.true.;par%sub_solver=2;par%conv_tol=1e-8_dp
  par%nmac=20;par%verbose=.false.
@@ -105,5 +107,14 @@ program check_trah_convergence
  if(.not.res%converged.or.res%ierr/=0)error stop 'independent Hessian convergence'
  if(p%reject_trials/=0)error stop 'independent Hessian rejection not exercised'
  if(p%evaluations/=p%accepted_steps+1)error stop 'unnecessary accepted-point rebuild'
+ ! Optional history may be absent or have unequal capacities.
+ par%want_history=.true.;p%x=1
+ nh=-1
+ call trah_run(p,par,res,nhist=nh)
+ if(.not.res%converged.or.nh/=0)error stop 'absent history arrays'
+ p%x=1;he=-999;hde=-999;hg=-999;hs=-999
+ call trah_run(p,par,res,hi,he,hde,hg,hs,nh)
+ if(.not.res%converged.or.nh/=1)error stop 'history minimum capacity'
+ if(any(he(2:)/=-999).or.hde(2)/=-999)error stop 'history overwritten'
  print *, 'PASS: quadratic, precision stagnation, trust collapse, maximum iterations'
 end program

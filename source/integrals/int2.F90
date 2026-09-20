@@ -509,7 +509,8 @@ contains
     real(kind=dp), optional, intent(in) :: alpha, beta, mu, &
                                            alpha_coulomb, beta_coulomb
 
-    logical :: do_cam = .false.
+    logical :: do_cam
+    do_cam = .false.
     if (present(cam)) do_cam = cam
 
     if (present(stat)) stat = 0
@@ -1233,8 +1234,8 @@ contains
 
     class(int2_storage_t), intent(inout) :: this
 
-    deallocate(this%ids)
-    deallocate(this%ints)
+    if (allocated(this%ids)) deallocate(this%ids)
+    if (allocated(this%ints)) deallocate(this%ints)
 
     this%buf_size = 0
     this%ncur = 0
@@ -1409,8 +1410,8 @@ contains
   subroutine int2_fock_data_t_clean(this)
     implicit none
     class(int2_fock_data_t), intent(inout) :: this
-    deallocate(this%f)
-    deallocate(this%dsh)
+    if (allocated(this%f)) deallocate(this%f)
+    if (allocated(this%dsh)) deallocate(this%dsh)
     nullify(this%d)
   end subroutine
 

@@ -360,6 +360,12 @@ jobs:
             source /opt/intel/oneapi/setvars.sh > /dev/null
             set -o pipefail
             openqp --run_tests all | tee run_tests.out
+         - name: Check analytic NAC state and basis dimensions
+           env:
+            OMP_NUM_THREADS: 1
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            python -m unittest discover -s tests -p test_mrsf_nac_spherical_basis.py -v
          - name: Preserve failed Intel example diagnostics
            if: failure()
            uses: actions/upload-artifact@v4

@@ -757,25 +757,27 @@ class QMMM_MD:
         dict of np.ndarray
             Keys: step, time_ps, E_pot, E_kin, E_tot, temperature, volume_nm3.
         """
-        if self.simulation_md is None:
-            self.setup()
+        try:
+            if self.simulation_md is None:
+                self.setup()
 
-        print(f"\n\nStarting {self._ensemble_label()} dynamics:\n")
+            print(f"\n\nStarting {self._ensemble_label()} dynamics:\n")
 
-        for step_i in range(self.n_steps):
-            self.step()
+            for step_i in range(self.n_steps):
+                self.step()
 
-            # Persist on the same cadence as the trajectory reporters
-            if (step_i + 1) % self.report_interval == 0:
-                self._save_traj_data()
+                # Persist on the same cadence as the trajectory reporters
+                if (step_i + 1) % self.report_interval == 0:
+                    self._save_traj_data()
 
-        # the geometry after the last step gets its energy row too
-        self._sample_energy()
-        # Final save (covers n_steps not a multiple of report_interval)
-        self._save_traj_data()
-        if getattr(self, "_log_handle", None) is not None:
-            self._log_handle.close()
-            self._log_handle = None
+            # the geometry after the last step gets its energy row too
+            self._sample_energy()
+            # Final save (covers n_steps not a multiple of report_interval)
+            self._save_traj_data()
+        finally:
+            if getattr(self, "_log_handle", None) is not None:
+                self._log_handle.close()
+                self._log_handle = None
 
         return {k: np.asarray(v) for k, v in self._traj_data.items()}
 
