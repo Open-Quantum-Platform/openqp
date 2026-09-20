@@ -197,7 +197,6 @@ class MRSFNACSphericalBasisTests(unittest.TestCase):
             np.testing.assert_array_equal(mol.data["OQP::td_bvec_mo"], original)
 
     def test_polarization_restores_amplitudes_and_closes_its_log(self):
-        from contextlib import chdir
         import re
 
         with tempfile.TemporaryDirectory(prefix="nac_polarization_") as tmp:
@@ -209,8 +208,13 @@ class MRSFNACSphericalBasisTests(unittest.TestCase):
             mol = runner.mol
             original = np.array(mol.data["OQP::td_bvec_mo"], copy=True)
             target = mol.data._data.tddft.target_state
-            with chdir(tmp), patch.dict(os.environ, {"OQP_NAC_SELFTEST": "1"}):
-                oqp.mrsf_nac_polarize(mol, 1, 2)
+            original_directory = Path.cwd()
+            try:
+                os.chdir(tmp)
+                with patch.dict(os.environ, {"OQP_NAC_SELFTEST": "1"}):
+                    oqp.mrsf_nac_polarize(mol, 1, 2)
+            finally:
+                os.chdir(original_directory)
             np.testing.assert_array_equal(mol.data["OQP::td_bvec_mo"], original)
             self.assertEqual(mol.data._data.tddft.target_state, target)
             text = log.read_text()
