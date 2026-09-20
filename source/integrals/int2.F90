@@ -623,7 +623,7 @@ contains
     logical :: omp
     logical :: zero_shq
     type(int2_storage_t) :: int2_storage
-    type(eri_data_t), allocatable :: eri_data
+    type(eri_data_t), pointer :: eri_data
     integer :: ok
     integer(c_int64_t) :: nBlasThreads
     integer :: nOmpThreads
@@ -689,6 +689,8 @@ contains
 !$  omp = .true.
 
     nschwz = 0
+    nint = 0
+    thr_nshq = 0
     lmax = maxval(this%basis%am)
     if (lmax < 0 .or. lmax > 6) &
             call show_message("Basis set agular momentum exceeds max. supported", WITH_ABORT)
@@ -728,6 +730,10 @@ contains
 !$omp end master
 !$omp barrier
 
+    ! This thread owns the target through the matching deallocate below.
+    ! Explicit pointer allocation avoids ifx's partly initialized private
+    ! scalar allocatable descriptor without changing scratch-array ownership.
+    nullify(eri_data)
     allocate(eri_data)
     allocate(eri_data%ints(NUM_CART_BF(lmax)**4), source=0.0d0)
     allocate(eri_data%gdat)

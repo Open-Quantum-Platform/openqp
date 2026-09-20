@@ -609,6 +609,8 @@ contains
     ! Initialize DFT exchange-correlation energy
     energy%eexc = 0.0_dp
     energy%e_old = 0.0_dp
+    ! The iteration table uses this local history, not energy%e_old.
+    e_old = 0.0_dp
 
     !==============================================================================
     ! Print SCF Options
