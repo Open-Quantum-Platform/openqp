@@ -324,8 +324,13 @@ contains
     else
       call get_ab_initio_density(conv%dens(:,1), mo_a, conv%dens(:,2), mo_b, infos, basis)
     end if
+    ! Trust-region acceptance compares small energy differences at arbitrary
+    ! trial points, including rejected ones. Screening successive difference
+    ! densities accumulates history-dependent Fock errors that can exceed the
+    ! predicted decrease near convergence. Build each model/trial Fock from
+    ! its full density so the energy depends only on the current orbitals.
     call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, mo_a, conv%dens, &
-                   mo_b, nschwz, conv%f_old, conv%d_old)
+                   mo_b, nschwz)
   end subroutine rebuild_fock
 
   !> @brief Deterministic symmetry-breaking kick: rotate the orbitals by a random
