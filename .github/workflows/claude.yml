@@ -104,7 +104,18 @@ jobs:
                  rest - any AO-indexed scatter or contraction, and whether the
                  PR actually EXERCISES a spherical basis (cc-pVDZ reaches the d
                  mismatch, cc-pVTZ the f one) rather than only 6-31G/6-31G*.
-            For each rule, state PASS, or explain what is missing.
+              7. Initialization and cleanup cover the complete resource lifetime:
+                 initialize before reads, distinguish owners from borrowed
+                 pointers/views, match allocators and alignment, invalidate stale
+                 caches on dimension/identity changes, preserve caller-owned logs,
+                 and restore temporary state on normal and recoverable error exits.
+                 Check same-process repeated calls, increasing/decreasing basis and
+                 state dimensions, and relevant early/error paths. Memory fixes
+                 need a defect-specific regression and native memory/bounds-check
+                 evidence where feasible; a green rerun or suppressed diagnostic
+                 is not evidence of a fix. See AGENTS.md rule 7.
+            For each rule, state PASS with evidence, NOT APPLICABLE with a reason,
+            or explain what is missing.
 
       # The review step is continue-on-error so that this step can report the
       # failure in its own words, but the job must still go red: a review gate

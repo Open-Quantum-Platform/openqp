@@ -26,4 +26,11 @@ too.
 - [ ] **Docs** — user-facing keywords/workflows documented in openqp-docs; link
       the companion PR here: <!-- openqp-docs PR # -->
 
+- [ ] **Initialization and cleanup** — owners, pointer/view validity, matching
+      allocation/deallocation, log ownership, temporary-state restoration and
+      normal/early/error exits were checked (AGENTS.md rule 7). Relevant repeated
+      calls and growing/shrinking dimensions are tested. Native memory-check
+      results and remaining diagnostics are recorded, or non-applicability is
+      explained.
+
 <!-- If a checklist item does not apply, say why. -->
