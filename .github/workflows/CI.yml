@@ -218,6 +218,21 @@ jobs:
               exit 1
             fi
 
+         - name: Check linked TagArray allocation and cleanup
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            CC: gcc-${{ matrix.version }}
+           run: |
+            sudo apt-get update
+            sudo apt-get install -y valgrind
+            python tests/native/run_tagarray_memcheck.py
+         - name: Preserve TagArray memory diagnostics
+           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
+            path: tagarray-memory/
+            if-no-files-found: ignore
          # The example suite above validates numerical references end to end, but
          # it never touches the pure-Python layer -- the tests/ pytest suite was
          # not executed by CI at all, so everything under pyoqp/oqp (the analysis
