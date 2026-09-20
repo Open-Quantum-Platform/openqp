@@ -37,6 +37,7 @@ multiplicity=3
 type=rohf
 converger_type=trah
 trh_impl=native
+escalation=trah
 conv=1e-14
 """
 
@@ -76,7 +77,9 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestTightGradientToleranceTerminates(unittest.TestCase):
     """Tight molecular targets may converge after full-Fock refinement. Success
-    requires the measured residual; an unreachable target must still fail."""
+    requires the measured residual; an unreachable target must still fail.
+    The explicit escalation list excludes recovery by a different SCF solver.
+    """
 
     def _run(self, conv, *, basis="6-31g*", incremental=None):
         with tempfile.TemporaryDirectory() as tmp:
