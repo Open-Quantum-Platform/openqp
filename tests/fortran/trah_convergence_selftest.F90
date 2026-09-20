@@ -6,6 +6,8 @@ module trah_test_provider
  type,extends(trah_provider_t)::model
   real(dp)::x=1.0_dp, residual=5e-8_dp, curvature=1.0_dp
   logical::stuck=.false.
+  logical::check_cache=.false.,trial_cache=.false.
+  integer::reject_trials=0
   integer::evaluations=0
  contains
   procedure::grad_hdiag=>gh
@@ -19,6 +21,7 @@ module trah_test_provider
  real(dp),intent(out)::g(:),hdiag(:),e
  integer,intent(out)::ierr
  this%evaluations=this%evaluations+1
+ this%trial_cache=.false.
  if(this%stuck)then
   g=this%residual;e=0
  else
@@ -31,6 +34,10 @@ module trah_test_provider
  real(dp),intent(in)::v(:)
  real(dp),intent(out)::hv(:)
  integer,intent(out)::ierr
+ if(this%check_cache.and.this%trial_cache)then
+  ierr=77
+  return
+ endif
  hv=this%curvature*v;ierr=0
  end subroutine
  subroutine te(this,p,e,ierr)
@@ -40,6 +47,11 @@ module trah_test_provider
  integer,intent(out)::ierr
  e=0
  if(.not.this%stuck)e=0.5_dp*(this%x+p(1))**2
+ this%trial_cache=.true.
+ if(this%reject_trials>0)then
+  this%reject_trials=this%reject_trials-1
+  e=1.0_dp+0.5_dp*this%x**2
+ endif
  ierr=0
  end subroutine
  subroutine ap(this,p,ierr)
@@ -76,5 +88,12 @@ program check_trah_convergence
  call trah_run(p,par,res)
  if(res%converged.or.res%ierr==0.or.res%iter/=1)error stop 'maxit false success'
  if(abs(res%error-abs(p%x))>1e-15_dp)error stop 'stale final residual'
+ ! SCF trial energies overwrite Fock caches. Reject one full step and all
+ ! five line-search trials, then require a refreshed model before H.v.
+ p%x=1;p%check_cache=.true.;p%reject_trials=6;p%trial_cache=.false.
+ par%nmac=20;par%r0=0.4_dp
+ call trah_run(p,par,res)
+ if(.not.res%converged.or.res%ierr/=0.or.res%error>=par%conv_tol)error stop 'rejected trial cache'
+ if(p%reject_trials/=0)error stop 'rejection case not exercised'
  print *, 'PASS: quadratic, precision stagnation, trust collapse, maximum iterations'
 end program

@@ -405,6 +405,15 @@ contains
             hist_s(nh)  = snorm
           end if
         end if
+      else
+        ! Trial evaluations can replace a provider's Fock/density caches even
+        ! though its accepted orbitals are unchanged. Rebuild the model at
+        ! those orbitals before another Hessian product or convergence test.
+        call prov%grad_hdiag(g, hdiag, e0, ierr)
+        if (ierr /= 0) then
+          res%ierr = ierr
+          return
+        end if
       end if
 
       ! trust-radius update
