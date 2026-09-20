@@ -1,12 +1,10 @@
 # Contributor and AI-reviewer guide
 
-This file is read by the automated PR reviewers (Codex reads `AGENTS.md`
-natively; the Claude review workflow is pointed at it in
-`.github/workflows/claude.yml`) and by human contributors. Every pull request is
-expected to satisfy the five rules below. A reviewer should call out, per rule,
-whether the PR satisfies it or explain what is missing.
+This file is read by Codex and by human contributors. Every merge request is
+expected to satisfy the rules below. A reviewer should call out, per rule,
+whether the merge request satisfies it or explain what is missing.
 
-## PR rules
+## Code Review Rules
 
 ### 1. BLAS/LAPACK must go through the OpenQP wrapper layer
 
@@ -77,22 +75,24 @@ flag it.
 ### 4. New functionality is documented in openqp-docs
 
 User-facing keywords, sections, and workflows must be documented in the manual
-repo [Open-Quantum-Platform/openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs):
+repo [open-quantum-platform/openqp-docs](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-docs):
 a keyword-page entry under `docs/keywords/` and/or a workflow page under
 `docs/workflows/`, wired into `mkdocs.yml` nav.
 
-- openqp-docs is a **separate repository**, so this PR's CI cannot see it
-  directly. Link the companion openqp-docs PR in this PR's description.
+- openqp-docs is a **separate repository**, so this merge request's CI cannot
+  see it directly. Link the companion openqp-docs merge request in this merge
+  request's description.
 
 **Reviewer check:** if the diff adds/changes user-facing keywords or workflows,
-confirm the PR description links an openqp-docs PR; flag it if missing.
+confirm the merge request description links an openqp-docs merge request; flag
+it if missing.
 
 ### 5. openqp carries product code, not development material
 
 This repository holds the engine, its tests and examples, and the scripts the
 build and CI actually consume. Method notes, derivations, validation harnesses,
 performance investigations and one-off diagnostics belong in
-[Open-Quantum-Platform/openqp-devkit](https://github.com/Open-Quantum-Platform/openqp-devkit)
+[open-quantum-platform/openqp-devkit](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-devkit)
 (private), which was split out of this repository with history preserved.
 
 This is not housekeeping. GitHub refuses to serve a diff past 20,000 changed
