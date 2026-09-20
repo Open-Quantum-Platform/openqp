@@ -360,6 +360,18 @@ jobs:
             source /opt/intel/oneapi/setvars.sh > /dev/null
             set -o pipefail
             openqp --run_tests all | tee run_tests.out
+         - name: Preserve failed Intel example diagnostics
+           if: failure()
+           uses: actions/upload-artifact@v4
+           with:
+            name: intel-example-failure-${{ github.run_id }}-${{ github.run_attempt }}
+            retention-days: 7
+            if-no-files-found: ignore
+            path: |
+               run_tests.out
+               openqp_test_tmp_*/**/*.log
+               openqp_test_tmp_*/**/*.crash-stderr.txt
+               openqp_test_tmp_*/**/*.crash-stdout.txt
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
