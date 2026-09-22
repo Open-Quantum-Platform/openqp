@@ -1077,6 +1077,17 @@ $$$$
         on = job("h2o_on")
         on.workflow.nmr(gauge="giao", acid="yes")
         self.assertEqual(on.to_input_dict()["properties"]["scf_prop"], "nmr,acid")
+        # None is "not asked for"; an empty or unrecognised string is a typo,
+        # and both surfaces have to answer the same way (the .oqp modifier
+        # raises on exactly these).
+        none_given = job("h2o_none")
+        none_given.workflow.nmr(gauge="giao", acid=None)
+        self.assertEqual(
+            none_given.to_input_dict()["properties"]["scf_prop"], "nmr")
+        for typo in ("", "none", "maybe"):
+            with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+                job("h2o_typo").workflow.nmr(gauge="giao", acid=typo)
+
         with self.assertRaisesRegex(ValueError, "acid expects true or false"):
             job("h2o_bad").workflow.nmr(gauge="giao", acid="2")
 

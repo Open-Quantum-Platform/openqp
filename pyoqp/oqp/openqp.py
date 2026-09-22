@@ -216,17 +216,21 @@ class _WorkflowNmrProxy:
         self._owner = owner
 
     _TRUE = {"true", "yes", "on", "1"}
-    _FALSE = {"false", "no", "off", "0", "", "none"}
+    _FALSE = {"false", "no", "off", "0"}
 
     @classmethod
     def _as_bool(cls, value):
         """Accept the spellings a config file uses, reject anything else.
 
         Plain truthiness would read the string "false" as enabled and quietly
-        write four cube files.
+        write four cube files.  ``None`` means "not asked for" and is the one
+        non-string spelling of off; an empty or unrecognised string is a typo
+        and is refused, which is what the .oqp surface does with the same text.
         """
         if isinstance(value, bool):
             return value
+        if value is None:
+            return False
         text = str(value).strip().lower()
         if text in cls._TRUE:
             return True
