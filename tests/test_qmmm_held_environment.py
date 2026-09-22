@@ -95,30 +95,53 @@ def test_wham_unconstrained_identity_is_backward_compatible(wham_driver):
 
 
 @pytest.fixture
-def md_driver():
-    mm = pytest.importorskip('openmm')
-    from openmm import app, unit
+def md_class():
+    pytest.importorskip('openmm')
     spec = importlib.util.spec_from_file_location('selection_under_test', LIBRARY / 'qmmm_active.py')
     selection = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(selection)
-    namespace = {'np': np, 'mm': mm, 'app': app, 'unit': unit}
-    for name in ('selection_requested', 'resolve_active_set', 'freeze_constrained_partners', 'held_atoms'):
-        namespace[name] = getattr(selection, name)
-    cls = _production_class('qmmm_md.py', 'QMMM_MD',
-        {'_resolve_frozen_atoms', '_build_md_system'}, namespace,
-        functions={'_copy_virtual_site', '_rigid_water_constraints', '_to_kJmol'})
-    driver = cls()
-    pdb_path = ROOT / 'examples' / 'QMMM' / 'formaldehyde_water_active.pdb'
-    driver.pdb = app.PDBFile(str(pdb_path))
-    driver._pdb_path = str(pdb_path)
-    driver.qm_atoms = np.array([0, 1, 2, 3])
-    driver.rigidwater = False
-    driver.ensemble = 'npt'
-    driver._selection_cfg = {}
-    driver.system_md = None
-    driver.pressure = 1.0 * unit.bar
-    driver.temperature = 300.0 * unit.kelvin
-    driver.barostat_interval = 25
+    namespace = {name: getattr(selection, name) for name in (
+        'selection_requested', 'resolve_active_set', 'freeze_constrained_partners', 'held_atoms')}
+    # Load the complete MD class, including its constructor and module constants.
+    # Only the oqp imports are omitted to avoid loading the native QM backend;
+    # the selection implementation above and OpenMM itself remain real.
+    tree = ast.parse((LIBRARY / 'qmmm_md.py').read_text())
+    tree.body = [node for node in tree.body if not (
+        isinstance(node, ast.ImportFrom) and node.module.startswith('oqp.'))]
+    exec(compile(tree, str(LIBRARY / 'qmmm_md.py'), 'exec'), namespace)
+    return namespace['QMMM_MD']
+
+
+def _md_config(ensemble, selection):
+    return {
+        'qmmm.pdb_file': str(ROOT / 'examples' / 'QMMM' / 'formaldehyde_water_active.pdb'),
+        'qmmm.forcefield_files': ['tip3p.xml'],
+        'qmmm.qm_atoms': '0-3',
+        'qmmm.rigidwater': False,
+        'qmmm.ensemble': ensemble,
+        **{f'qmmm.{key}': value for key, value in selection.items()},
+    }
+
+
+@pytest.mark.parametrize('selection', [
+    {}, {'active_atoms': '0-18'},
+    {'frozen_atoms': '7-9'}, {'active_atoms': '0-6'},
+    {'active_from_pdb': True}, {'active_radius': 0.1},
+])
+def test_constructor_rejects_all_npt_configurations(md_class, selection):
+    # NPT is unsupported even without held atoms: QM/MM has no lattice
+    # derivative. Exercise the public constructor, not a manually altered object.
+    with pytest.raises(NotImplementedError, match='no lattice derivative'):
+        md_class(oqp_cfg=_md_config('npt', selection))
+
+
+@pytest.mark.parametrize('ensemble', ['nve', 'nvt'])
+def test_fixed_volume_ensembles_still_hold_atoms(md_class, ensemble):
+    import openmm as mm
+    from openmm import unit
+    driver = md_class(oqp_cfg=_md_config(ensemble, {'active_atoms': '0-6'}))
+    assert driver.ensemble == ensemble
+    assert driver.system_md is None
     count = driver.pdb.topology.getNumAtoms()
     system = mm.System()
     for _ in range(count):
@@ -127,41 +150,8 @@ def md_driver():
     driver.oqp_driver = SimpleNamespace(
         _box_lengths_bohr=lambda: None,
         compute_force=Mock(return_value=(0.0, np.zeros((count, 3)))))
-    return driver
-
-
-@pytest.mark.parametrize('selection', [
-    {'frozen_atoms': '7-9'}, {'active_atoms': '0-6'},
-    {'active_from_pdb': True}, {'active_radius': 0.1},
-])
-def test_npt_rejects_resolved_held_atoms_before_force_evaluation(md_driver, selection):
-    md_driver._selection_cfg = selection
-    with pytest.raises(ValueError, match='NPT.*held atoms'):
-        md_driver._build_md_system()
-    md_driver.oqp_driver.compute_force.assert_not_called()
-    assert md_driver.system_md is None
-    # A rejected initialization can be retried with a supported selection.
-    md_driver._selection_cfg = {}
-    md_driver._build_md_system()
-    assert not md_driver.frozen_atoms
-
-
-@pytest.mark.parametrize('ensemble', ['nve', 'nvt'])
-def test_fixed_volume_ensembles_still_hold_atoms(md_driver, ensemble):
-    from openmm import unit
-    md_driver.ensemble = ensemble
-    md_driver._selection_cfg = {'active_atoms': '0-6'}
-    md_driver._build_md_system()
-    assert md_driver.frozen_atoms == set(range(7, 19))
+    driver._build_md_system()
+    assert driver.frozen_atoms == set(range(7, 19))
     for i in range(19):
-        mass = md_driver.system_md.getParticleMass(i).value_in_unit(unit.dalton)
+        mass = driver.system_md.getParticleMass(i).value_in_unit(unit.dalton)
         assert mass == (1.0 if i < 7 else 0.0)
-
-
-@pytest.mark.parametrize('selection', [{}, {'active_atoms': '0-18'}])
-def test_npt_without_held_atoms_keeps_the_barostat(md_driver, selection):
-    import openmm as mm
-    md_driver._selection_cfg = selection
-    md_driver._build_md_system()
-    assert not md_driver.frozen_atoms
-    assert any(isinstance(force, mm.MonteCarloBarostat) for force in md_driver.system_md.getForces())
