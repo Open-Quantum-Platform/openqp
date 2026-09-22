@@ -5274,7 +5274,11 @@ class NAMD_QMMM(NAMD):
         }
 
     def _qmmm_wham_system_identity(self, system, qmmm_config):
-        """Hash QM/MM topology and Hamiltonian without initial coordinates."""
+        """Hash QM/MM topology, Hamiltonian, and any fixed environment.
+
+        Mobile initial coordinates differ between umbrella windows; held
+        coordinates instead define the constrained molecular system.
+        """
         qmmm_config = self._qmmm_identity_config(qmmm_config)
         atoms = list(self.pdb.topology.atoms())
         atomic_numbers = [
@@ -5297,13 +5301,23 @@ class NAMD_QMMM(NAMD):
                         'mm_charge_width')
             if key in qmmm_config
         }
+        array_parts = [
+            ('atomic_numbers', atomic_numbers, '<i8'),
+            ('masses_electron', self.m_all, '<f8'),
+            ('qm_atoms', self.qm_atoms, '<i8'),
+            ('bonds', bonds, '<i8'),
+        ]
+        held = np.asarray(sorted(getattr(self, '_held_atoms', ())), dtype='<i8')
+        if held.size:
+            # Use the final selection after constraint closure, including atoms
+            # excluded by active_atoms/radius/PDB selections. With no held atoms
+            # retain the previous identity for existing unconstrained windows.
+            array_parts.extend((
+                ('held_atoms_resolved', held, '<i8'),
+                ('held_coordinates_bohr', self.r_all[held], '<f8'),
+            ))
         digest = _restart_identity_digest(
-            array_parts=(
-                ('atomic_numbers', atomic_numbers, '<i8'),
-                ('masses_electron', self.m_all, '<f8'),
-                ('qm_atoms', self.qm_atoms, '<i8'),
-                ('bonds', bonds, '<i8'),
-            ),
+            array_parts=tuple(array_parts),
             text_parts=(
                 ('atom_metadata', json.dumps(
                     atom_metadata, separators=(',', ':'))),

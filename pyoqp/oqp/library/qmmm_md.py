@@ -510,6 +510,16 @@ class QMMM_MD:
         return held
 
     def _build_md_system(self):
+        self.frozen_atoms = self._resolve_frozen_atoms()
+        if self.ensemble == "npt" and self.frozen_atoms:
+            # Zero masses stop integration, but not the coordinate scaling in
+            # MonteCarloBarostat volume moves. Reject before evaluating forces
+            # or allocating a system that cannot preserve the fixed coordinates.
+            raise ValueError(
+                "QM/MM NPT dynamics with held atoms is not supported: "
+                "the barostat can move their fixed coordinates. "
+                "Use NVE/NVT or select all atoms as active."
+            )
         sys0 = self.mm_systems["sys0"]
         self.system_md = mm.System()
         for i in range(sys0.getNumParticles()):
@@ -525,7 +535,6 @@ class QMMM_MD:
         # The atom keeps its charge, its embedding field and its force
         # contribution -- it simply does not move.  With no selection every atom
         # moves, exactly as before.
-        self.frozen_atoms = self._resolve_frozen_atoms()
         for i in sorted(self.frozen_atoms):
             self.system_md.setParticleMass(i, 0.0)
 
