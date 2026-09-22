@@ -134,6 +134,7 @@ contains
     real(kind=dp), contiguous, pointer :: mo_e(:), mo_e_b(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
     real(kind=dp), contiguous, pointer :: nmrout(:)
+    real(kind=dp), contiguous, pointer :: pdens(:,:,:)
     real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
 
     basis => infos%basis
@@ -258,6 +259,14 @@ contains
     ! --- Two-electron GIAO Fock derivative ---
     allocate(twoe(3,nbf,nbf), twoe2(3,nbf,nbf), vj(3,nbf,nbf), vk(3,nbf,nbf), source=0.0d0)
     allocate(sig_u(3,3,nat), sig_c(3,3,nat), source=0.0d0)
+
+    ! Publish the coupled AO density response so the ACID / current-density
+    ! export can rebuild J(r) without re-solving the CPHF.  Allocated here and
+    ! accumulated in place by each spin channel.
+    call infos%dat%alloc_or_die(OQP_nmr_pdens, (/ 3, nbf, nbf /), pdens, &
+                                description=OQP_nmr_pdens_comment)
+    pdens = 0.0d0
+
     if (open_shell) then
       ! Spin-resolved: h1_sigma = h10(1e) + J[D_tot] - cx*K[D_sigma].  giao_h10_
       ! twoe_matrix returns (vj=J, vk=K, h10) for its input density; call it once
@@ -287,14 +296,14 @@ contains
         call semicanon_orbitals(fock_a, mo_a, nbf, nmo, nocc,   ca_sc, ea_sc)
         call semicanon_orbitals(fock_b, mo_b, nbf, nmo, nocc_b, cb_sc, eb_sc)
         call giao_para_channel(infos, basis, ca_sc, ea_sc, nocc,   nmo, nbf, nat, &
-                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
         call giao_para_channel(infos, basis, cb_sc, eb_sc, nocc_b, nmo, nbf, nat, &
-                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
       else
         call giao_para_channel(infos, basis, mo_a, mo_e,   nocc,   nmo, nbf, nat, &
-                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
         call giao_para_channel(infos, basis, mo_b, mo_e_b, nocc_b, nmo, nbf, nat, &
-                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
       end if
     else
       ! Closed shell: h1 = h10(1e) + (J - 0.5 K)[D_tot] (twoe), single channel.
@@ -307,7 +316,7 @@ contains
         end do
       end do
       call giao_para_channel(infos, basis, mo_a, mo_e, nocc, nmo, nbf, nat, &
-                             coords, h1ao, s1ao, scale_exch, 2.0d0, sig_u, sig_c)
+                             coords, h1ao, s1ao, scale_exch, 2.0d0, sig_u, sig_c, pdens)
     end if
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
@@ -589,7 +598,8 @@ contains
   !> CPHF (uncoupled + coupled), and PSO contraction, ACCUMULATED into sig_u/sig_c.
   !> occ_factor = 2 for RHF (closed shell), 1 for each UHF spin channel.
   subroutine giao_para_channel(infos, basis, mo, e, nocc, nmo, nbf, nat, coords, &
-                               h1ao, s1ao, scale_exch, occ_factor, sig_u, sig_c)
+                               h1ao, s1ao, scale_exch, occ_factor, sig_u, sig_c, &
+                               pb_out)
     use types, only: information
     use basis_tools, only: basis_set
     use int1, only: pso_integrals
@@ -599,8 +609,12 @@ contains
     real(kind=dp), intent(in) :: h1ao(:,:,:), s1ao(:,:,:), scale_exch, occ_factor
     integer, intent(in) :: nocc, nmo, nbf, nat
     real(kind=dp), intent(inout) :: sig_u(:,:,:), sig_c(:,:,:)
+    !> Optional accumulator for the coupled AO density response, spin-summed as
+    !> occ_factor*(D - D^T) with shape (3,nbf,nbf).  Exported for the ACID /
+    !> current-density map; the shielding itself does not use it.
+    real(kind=dp), intent(inout), optional :: pb_out(:,:,:)
     real(kind=dp), allocatable :: h1mo(:,:,:), s1mo(:,:,:), mo1u(:,:,:), mo1c(:,:,:)
-    real(kind=dp), allocatable :: pso(:,:,:), st(:,:)
+    real(kind=dp), allocatable :: pso(:,:,:), st(:,:), pb(:,:)
     integer :: c, iat
 
     allocate(h1mo(nmo,nocc,3), s1mo(nmo,nocc,3), mo1u(nmo,nocc,3), mo1c(nmo,nocc,3), &
@@ -611,6 +625,14 @@ contains
     end do
     call solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1u)
     call solve_mo1_coupled(infos, basis, mo, h1mo, s1mo, e, nocc, nmo, scale_exch, mo1c)
+    if (present(pb_out)) then
+      allocate(pb(nbf,nbf), source=0.0d0)
+      do c = 1, 3
+        call giao_pb_density(mo, mo1c(:,:,c), pb, nbf, nmo, nocc)
+        pb_out(c,:,:) = pb_out(c,:,:) + occ_factor*pb
+      end do
+      deallocate(pb)
+    end if
     do iat = 1, nat
       call pso_integrals(basis, coords(:,iat), pso)
       call para_tensor(mo1u, mo, pso, nbf, nmo, nocc, st, occ_factor)

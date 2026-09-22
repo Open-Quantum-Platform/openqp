@@ -44,6 +44,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
     "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
     "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_nmr_pdens = OQP_prefix // "nmr_pdens"
+  character(len=*), parameter, public :: OQP_nmr_pdens_comment = &
+    "Imaginary antisymmetric AO density-matrix response to the external "// &
+    "magnetic field from the coupled GIAO CPHF/CPKS solution, spin-summed; "// &
+    "shape (3, nbf, nbf), D^(1)_c = i * P(c,:,:), gauge origin at the "// &
+    "coordinate origin.  Consumed by the ACID/current-density export."
   character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
   character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
     "Mulliken atomic partial charges (e), one per atom"
