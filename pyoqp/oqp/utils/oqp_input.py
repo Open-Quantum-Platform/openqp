@@ -2707,9 +2707,19 @@ def lower_to_legacy(
                     if "acid" not in current:
                         current.append("acid")
                     props["scf_prop"] = ",".join(current)
-            unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid"}
+            grid = {k: v for k, v in call.kwargs.items()
+                    if k in {"acid_spacing", "acid_padding"}}
+            if grid and "acid" not in current:
+                raise OQPInputError(
+                    "nmr acid_spacing/acid_padding require acid=true")
+            for key, value in grid.items():
+                props[key] = _as_config_string(value)
+            unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid",
+                                          "acid_spacing", "acid_padding"}
             if unknown or call.args:
-                raise OQPInputError("nmr accepts only gauge=... and acid=...")
+                raise OQPInputError(
+                    "nmr accepts only gauge=..., acid=..., acid_spacing=... "
+                    "and acid_padding=...")
             continue
         if call.name == "pcm":
             put("pcm", "enabled", True)

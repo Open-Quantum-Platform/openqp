@@ -215,7 +215,27 @@ class _WorkflowNmrProxy:
     def __init__(self, owner):
         self._owner = owner
 
+    _TRUE = {"true", "yes", "on", "1"}
+    _FALSE = {"false", "no", "off", "0", "", "none"}
+
+    @classmethod
+    def _as_bool(cls, value):
+        """Accept the spellings a config file uses, reject anything else.
+
+        Plain truthiness would read the string "false" as enabled and quietly
+        write four cube files.
+        """
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in cls._TRUE:
+            return True
+        if text in cls._FALSE:
+            return False
+        raise ValueError(f"acid expects true or false, got {value!r}")
+
     def __call__(self, gauge=None, acid=False, **kwargs):
+        acid = self._as_bool(acid)
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge

@@ -2545,3 +2545,13 @@ def test_nmr_acid_modifier_is_explicit_about_gauge_and_typos():
         _parse('hf/sto-3g geom="h2o.xyz" nmr(acid=maybe)')
     with pytest.raises(OQPInputError, match="requires gauge=giao"):
         _parse('hf/sto-3g geom="h2o.xyz" nmr(gauge=cgo,acid=true)')
+
+    # The grid controls are documented on this modifier, so they have to reach
+    # the lowered section rather than being rejected as unknown.
+    _, sized = _parse(
+        'hf/sto-3g geom="h2o.xyz" nmr(acid=true,acid_spacing=0.5,acid_padding=3.0)'
+    )
+    assert sized["properties"]["acid_spacing"] == "0.5"
+    assert sized["properties"]["acid_padding"] == "3.0"
+    with pytest.raises(OQPInputError, match="require acid=true"):
+        _parse('hf/sto-3g geom="h2o.xyz" nmr(acid_spacing=0.5)')

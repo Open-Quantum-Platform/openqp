@@ -98,9 +98,15 @@ def acid_scalar(jten):
 
 def current_vector(jten, bfield):
     """Current-density vector field for one magnetic-field direction."""
-    b = np.asarray(bfield, dtype=float)
-    norm = np.linalg.norm(b)
-    if norm == 0.0:
+    b = np.asarray(bfield, dtype=float).reshape(-1)
+    if b.size != 3 or not np.all(np.isfinite(b)):
+        raise ValueError(
+            "magnetic field direction must be three finite components; got "
+            f"{bfield!r}")
+    norm = float(np.linalg.norm(b))
+    # A non-finite component would give a non-finite norm, which is not zero,
+    # so the old test let NaN through into all three vector cubes.
+    if not np.isfinite(norm) or norm == 0.0:
         raise ValueError("magnetic field direction must be non-zero")
     return jten @ (b / norm)
 
@@ -109,6 +115,21 @@ class AcidExporter:
     """ACID / current-density cubes for a finished GIAO NMR calculation."""
 
     def __init__(self, mol, ao=None, padding=5.0, spacing=0.20):
+        # This is public API, so it validates its own arguments rather than
+        # relying on the workflow that usually calls it: nan and inf survive
+        # float() and slip past an ordering test, and make_box_grid would then
+        # build a degenerate box of non-finite coordinates and write cubes
+        # nothing can read.
+        spacing = float(spacing)
+        padding = float(padding)
+        if not (np.isfinite(spacing) and np.isfinite(padding)):
+            raise ValueError(
+                f"grid spacing and padding must be finite; got spacing={spacing}, "
+                f"padding={padding}.")
+        if spacing <= 0.0 or padding < 0.0:
+            raise ValueError(
+                f"grid spacing must be positive and padding non-negative; got "
+                f"spacing={spacing}, padding={padding}.")
         self.mol = mol
         self.ao = ao if ao is not None else AOBasis(mol)
         self.nbf = self.ao.nbf
