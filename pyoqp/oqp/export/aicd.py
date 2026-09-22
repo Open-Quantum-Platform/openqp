@@ -27,14 +27,11 @@ unperturbed density matrix, so they cannot be reconstructed from exported
 orbitals alone.  Dropping them is not a small correction -- on a displaced
 methane they shift the reconstructed shielding by 72 and 7 ppm respectively.
 
-ACID(r) is the anisotropy of J_ij(r), the invariant used for the shielding
-anisotropy: with S the symmetric part of J and S0 its traceless part,
-
-    ACID(r) = sqrt( (3/2) sum_ij S0_ij^2 ) .
-
-Because it is a tensor invariant it does not depend on the direction of B, which
-is what makes ACID isosurfaces comparable between molecules in a way NICS is
-not.
+ACID(r) is the anisotropy invariant of J_ij(r) in the normalisation of Herges
+and Geuenich (see ``acid_scalar``), so isosurface values are directly the ones
+used in the literature -- 0.05 a.u. is the standard plotting value.  Because it
+is a tensor invariant it does not depend on the direction of B, which is what
+makes ACID isosurfaces comparable between molecules in a way NICS is not.
 
 Note on gauge: ACID must be built on the GIAO path.  With a common gauge origin
 the map is badly gauge-contaminated -- benzene NICS(0) comes out near -105 ppm
@@ -75,11 +72,28 @@ def _unpack_lt(packed, n):
 
 
 def acid_scalar(jten):
-    """Anisotropy invariant of a current-density tensor field (npts, 3, 3)."""
-    sym = 0.5 * (jten + np.swapaxes(jten, -1, -2))
-    trace = np.trace(sym, axis1=-2, axis2=-1) / 3.0
-    s0 = sym - trace[:, None, None] * np.eye(3)
-    return np.sqrt(1.5 * np.einsum("pij,pij->p", s0, s0, optimize=True))
+    """ACID on the standard scale, so 0.05 a.u. means what the literature means.
+
+    Herges and Geuenich, J. Phys. Chem. A 105, 3214 (2001), in the form the
+    GIMIC reference implementation uses (``src/libgimic/acid.f90``):
+
+        ACID^2 = 1/3 [(t_xx-t_yy)^2 + (t_yy-t_zz)^2 + (t_zz-t_xx)^2]
+               + 1/2 [(t_xy+t_yx)^2 + (t_xz+t_zx)^2 + (t_yz+t_zy)^2]
+
+    Only the symmetric part of the tensor survives this contraction.  That is
+    the point of the method rather than an approximation: the antisymmetric part
+    carries the diamagnetic circulation, which is proportional to the electron
+    density and so peaks at the nuclei, and it is exactly what would otherwise
+    bury the delocalisation the map is for.
+    """
+    t = jten
+    diag = ((t[..., 0, 0] - t[..., 1, 1]) ** 2
+            + (t[..., 1, 1] - t[..., 2, 2]) ** 2
+            + (t[..., 2, 2] - t[..., 0, 0]) ** 2)
+    off = ((t[..., 0, 1] + t[..., 1, 0]) ** 2
+           + (t[..., 0, 2] + t[..., 2, 0]) ** 2
+           + (t[..., 1, 2] + t[..., 2, 1]) ** 2)
+    return np.sqrt(diag / 3.0 + off / 2.0)
 
 
 def current_vector(jten, bfield):

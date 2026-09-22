@@ -237,6 +237,27 @@ class AcidCurrentDensityTests(unittest.TestCase):
         self.assertLess(self.got["antisymmetry_big"],
                         1e-10 * max(self.got["scale_small"], 1.0))
 
+    def test_acid_uses_the_published_normalisation(self):
+        """Pin the scale: 0.05 a.u. has to mean what the literature means.
+
+        Recomputed here straight from Herges and Geuenich (J. Phys. Chem. A 105,
+        3214), in the form the GIMIC reference implementation uses, so a change
+        of convention in ``acid_scalar`` fails instead of silently moving every
+        isosurface.  Uses the committed tensors, so it needs no calculation.
+        """
+        import numpy as np
+        t = np.asarray(self.ref["current_tensor"])
+        diag = ((t[:, 0, 0] - t[:, 1, 1]) ** 2 + (t[:, 1, 1] - t[:, 2, 2]) ** 2
+                + (t[:, 2, 2] - t[:, 0, 0]) ** 2)
+        off = ((t[:, 0, 1] + t[:, 1, 0]) ** 2 + (t[:, 0, 2] + t[:, 2, 0]) ** 2
+               + (t[:, 1, 2] + t[:, 2, 1]) ** 2)
+        published = np.sqrt(diag / 3.0 + off / 2.0)
+        # Check the fixture against its own tensors, so this pins the convention
+        # to machine precision; OpenQP is held to the fixture separately, where
+        # the cross-code tolerance belongs.
+        self.assertLess(np.abs(np.asarray(self.ref["acid"]) - published).max(),
+                        1e-12, "the reference fixture is not on the published scale")
+
     def test_spherical_basis_is_refused_explicitly(self):
         message = self.got["spherical_refusal"]
         self.assertTrue(message,
