@@ -148,6 +148,8 @@ SCHEMA = {
         "grad": {"type": int, "default": "0"},
         "scf_prop": {"type": _string, "default": ""},
         "nmr_gauge": {"type": _string, "default": "cgo"},
+        "acid_spacing": {"type": float, "default": "0.2"},
+        "acid_padding": {"type": float, "default": "5.0"},
     },
     "hess": {
         "type": {"type": _string, "default": "numerical"},
@@ -1035,6 +1037,53 @@ $$$$
         with self.assertRaisesRegex(ValueError, "CGO NMR"):
             open_shell.workflow.nmr(gauge="cgo")
         open_shell.workflow.nmr(gauge="giao")
+
+    def test_workflow_nmr_acid_flag(self):
+        """ACID rides on the shielding call, so the two have to agree.
+
+        The concise-input tests cover the .oqp spelling; this covers the Python
+        one, where the flag used to be read by plain truthiness and the gauge
+        default differed from the concise surface.
+        """
+        openqp = load_openqp_module()
+
+        def job(name):
+            return (
+                openqp.OpenQP(project=name)
+                .molecule(geometry="water", charge=0, multiplicity=1)
+                .theory("hf", basis="6-31g*")
+            )
+
+        # Asking for ACID without naming a gauge selects GIAO, as the concise
+        # surface does; ordering puts nmr first, which the driver relies on.
+        enabled = job("h2o_acid")
+        enabled.workflow.nmr(acid=True, acid_spacing=0.5, acid_padding=3.0)
+        config = enabled.to_input_dict()
+        self.assertEqual(config["properties"]["scf_prop"], "nmr,acid")
+        self.assertEqual(config["properties"]["nmr_gauge"], "giao")
+        self.assertEqual(str(config["properties"]["acid_spacing"]), "0.5")
+        self.assertEqual(str(config["properties"]["acid_padding"]), "3.0")
+
+        # A plain shielding call is untouched.
+        plain = job("h2o_plain")
+        plain.workflow.nmr(gauge="giao")
+        self.assertEqual(plain.to_input_dict()["properties"]["scf_prop"], "nmr")
+
+        # Config-style spellings are parsed, not trusted: "false" used to be
+        # truthy and silently wrote four cube files.
+        off = job("h2o_off")
+        off.workflow.nmr(gauge="giao", acid="false")
+        self.assertEqual(off.to_input_dict()["properties"]["scf_prop"], "nmr")
+        on = job("h2o_on")
+        on.workflow.nmr(gauge="giao", acid="yes")
+        self.assertEqual(on.to_input_dict()["properties"]["scf_prop"], "nmr,acid")
+        with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+            job("h2o_bad").workflow.nmr(gauge="giao", acid="2")
+
+        # ACID exists only on the GIAO path, and naming CGO is refused rather
+        # than quietly overridden.
+        with self.assertRaisesRegex(ValueError, "gauge='giao'"):
+            job("h2o_cgo").workflow.nmr(gauge="cgo", acid=True)
 
     def test_workflow_ekt_requires_mrsf_and_channel(self):
         openqp = load_openqp_module()
