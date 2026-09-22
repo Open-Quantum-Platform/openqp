@@ -68,6 +68,9 @@ module trah_core_mod
     integer :: nparam = 0     !< length of the rotation vector
     !< Set when trial_energy overwrites data used by the accepted-point Hessian.
     logical :: refresh_on_rejection = .false.
+    !< True only when hess_vec is linear, so cached Davidson products may be
+    !< combined to form the product for the final Ritz step.
+    logical :: hess_vec_is_linear = .false.
   contains
     procedure(trah_gh_i), deferred :: grad_hdiag
     procedure(trah_hv_i), deferred :: hess_vec
@@ -747,10 +750,17 @@ contains
     if (snorm > delta) scale = scale*(delta/snorm)
     p = scale*u(2:nn)
 
-    ! For A = [[0,g^T],[g,H]] and u = [c;y],
-    ! (A u)_tail = c g + H y. Since p = scale*y, reuse the
-    ! Davidson product instead of evaluating one additional H p.
-    hx = scale*(au(2:nn) - c0*g)
+    if (prov%hess_vec_is_linear) then
+      ! For A = [[0,g^T],[g,H]] and u = [c;y],
+      ! (A u)_tail = c g + H y. Since p = scale*y, reuse the
+      ! Davidson product instead of evaluating one additional H p.
+      hx = scale*(au(2:nn) - c0*g)
+    else
+      ! Finite-difference products can depend nonlinearly on their direction.
+      ! Evaluate H p directly so pred describes the actual final step.
+      call prov%hess_vec(p, hx, ierr)
+      if (ierr /= 0) return
+    end if
     php  = dot_product(p, hx)
     pred = -(dot_product(g, p) + 0.5_dp*php)
     deallocate(V, W, u, au, r, tc, eig, work, hx)

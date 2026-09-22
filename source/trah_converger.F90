@@ -79,6 +79,7 @@ contains
 
     prov%nparam  = n
     prov%refresh_on_rejection = .true.
+    prov%hess_vec_is_linear = .true.
     prov%infos   => infos
     prov%molgrid => molgrid
     prov%conv    => conv

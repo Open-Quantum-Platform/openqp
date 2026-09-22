@@ -119,8 +119,9 @@ program check_trah_convergence
  if(any(he(2:)/=-999).or.hde(2)/=-999)error stop 'history overwritten'
  ! The augmented-Hessian solve already forms A*u. Its tail determines H*p,
  ! including the eigenvector sign and trust-radius scaling, without another
- ! Hessian-vector product.
+ ! Hessian-vector product when the provider declares a linear product.
  p%hess_evaluations=0;p%curvature=2
+ p%hess_vec_is_linear=.true.
  par%deterministic=.false.;par%sub_solver=1;par%nrtv=1;par%nmic=6
  g1=0.2_dp;h1=2.0_dp
  call trah_micro_step(p,par,g1,h1,0.05_dp,1,step1,pred1,used,ierr)
@@ -129,5 +130,13 @@ program check_trah_convergence
  expected=-(g1(1)*step1(1)+0.5_dp*p%curvature*step1(1)*step1(1))
  if(abs(pred1-expected)>1e-13_dp)error stop 'Davidson predicted reduction'
  if(abs(step1(1))>0.05_dp+1e-14_dp)error stop 'Davidson trust radius'
+ ! A provider that does not guarantee linear products must retain the direct
+ ! evaluation at the final step (for example, CASSCF finite differences).
+ p%hess_evaluations=0;p%hess_vec_is_linear=.false.
+ call trah_micro_step(p,par,g1,h1,0.05_dp,1,step1,pred1,used,ierr)
+ if(ierr/=0)error stop 'nonlinear-provider Davidson micro-solve failed'
+ if(p%hess_evaluations/=used+1)error stop 'missing direct Davidson Hessian product'
+ expected=-(g1(1)*step1(1)+0.5_dp*p%curvature*step1(1)*step1(1))
+ if(abs(pred1-expected)>1e-13_dp)error stop 'direct-product predicted reduction'
  print *, 'PASS: quadratic, precision stagnation, trust collapse, maximum iterations'
 end program
