@@ -33,17 +33,11 @@ contains
     real(kind=dp), intent(out) :: vj(:,:,:), vk(:,:,:), h10(:,:,:)
 
     type(int2_compute_t), target :: int2_driver
-    type(int2_rys_data_t) :: gdat
     real(kind=dp), allocatable :: dm_norm(:,:), dm_cart(:,:), dm_work(:,:)
     real(kind=dp), allocatable :: vj_work(:,:,:), vk_work(:,:,:), h10_work(:,:,:), vk_pre(:,:,:)
-    real(kind=dp), allocatable, target :: eri0(:), erir(:)
-    real(kind=dp), pointer :: p0(:,:,:,:), pr(:,:,:,:)
-    real(kind=dp) :: g(3), d(3), rij(3), norm4, ket_fac, base_val
     integer, allocatable :: loc(:), cart_off(:)
     integer :: i, j, m, nbf, nshell, maxang, maxcart, nbf_work
-    integer :: si, sj, sk, sl, ni, nj, nk, nl, mu, nu, kap, lam
-    integer :: ii, jj, kk, ll, axis, mapr, ids(4), am0(4), amr(4), ok
-    logical :: zero_shq, usecart
+    logical :: usecart, rys_failed
 
     nbf = basis%nbf
     nshell = basis%nshell
@@ -71,7 +65,6 @@ contains
     allocate(vj_work(3,nbf_work,nbf_work), source=0.0_dp)
     allocate(vk_work(3,nbf_work,nbf_work), h10_work(3,nbf_work,nbf_work), source=0.0_dp)
     allocate(vk_pre(3,nbf_work,nbf_work), source=0.0_dp)
-    allocate(eri0(maxcart**4), erir(maxcart**4), source=0.0_dp)
 
     call int2_driver%init(basis, infos)
     int2_driver%rys_only = .true.   ! NMR is Rys-only by construction
@@ -79,10 +72,37 @@ contains
     ! pair data without angular-momentum reordering so the Rys recurrence sees
     ! PA/PB vectors in the same shell order as the explicit ids below.
     call int2_driver%ppairs%compute(basis, int2_driver%cutoffs, noswap=.true.)
-    call gdat%init(maxang + 1, int2_driver%cutoffs, ok)
-    if (ok /= 0) call show_message('GIAO two-electron: cannot allocate Rys workspace', with_abort)
+    ! The quartet loop is the one genuinely expensive serial block in the GIAO
+    ! path, so it runs in parallel over the bra-bra shell.  Each thread keeps its
+    ! own Rys workspace and its own accumulators, reduced once at the end: the
+    ! writes below scatter over (mu,nu,kap,lam) and cannot be made atomic
+    ! cheaply.  Cost is 2*3*nbf_work^2 reals per thread.  `do sj = 1, si` makes
+    ! the work per si strongly non-uniform, hence dynamic scheduling.
+    rys_failed = .false.
 
-    do si = 1, nshell
+    !$omp parallel default(shared)
+    block
+      type(int2_rys_data_t) :: gdat_l
+      real(kind=dp), allocatable, target :: eri0_l(:), erir_l(:)
+      real(kind=dp), pointer :: p0(:,:,:,:), pr(:,:,:,:)
+      real(kind=dp), allocatable :: vj_l(:,:,:), vk_l(:,:,:)
+      real(kind=dp) :: g(3), d(3), rij(3), norm4, ket_fac, base_val
+      integer :: si, sj, sk, sl, ni, nj, nk, nl, mu, nu, kap, lam
+      integer :: ii, jj, kk, ll, axis, mapr, m, ids(4), am0(4), amr(4), ok_l
+      logical :: zero_shq
+
+      allocate(eri0_l(maxcart**4), erir_l(maxcart**4), source=0.0_dp)
+      allocate(vj_l(3,nbf_work,nbf_work), vk_l(3,nbf_work,nbf_work), source=0.0_dp)
+      call gdat_l%init(maxang + 1, int2_driver%cutoffs, ok_l)
+      if (ok_l /= 0) then
+        !$omp atomic write
+        rys_failed = .true.
+      end if
+
+      !$omp barrier
+      if (.not. rys_failed) then
+      !$omp do schedule(dynamic)
+      do si = 1, nshell
       if (usecart) then
         ni = NUM_CART_BF(basis%am(si))
       else
@@ -111,10 +131,10 @@ contains
             ket_fac = merge(1.0_dp, 2.0_dp, sk == sl)
             ids = [si, sj, sk, sl]
             am0 = basis%am(ids)
-            eri0 = 0.0_dp
-            call int2_rys_compute_ordered_am(eri0, gdat, int2_driver%ppairs, ids, am0, zero_shq)
+            eri0_l = 0.0_dp
+            call int2_rys_compute_ordered_am(eri0_l, gdat_l, int2_driver%ppairs, ids, am0, zero_shq)
             if (zero_shq) cycle
-            p0(1:nl,1:nk,1:nj,1:ni) => eri0(1:nl*nk*nj*ni)
+            p0(1:nl,1:nk,1:nj,1:ni) => eri0_l(1:nl*nk*nj*ni)
             ! The raised-bra quartet depends only on (ids, am0 + 1 on the bra);
             ! it is identical for all three axes and all (ii,jj,kk,ll), so
             ! compute it ONCE per shell quartet.  (It was previously recomputed
@@ -123,9 +143,9 @@ contains
             ! depends on (ii, axis).
             amr = am0
             amr(1) = amr(1) + 1
-            erir = 0.0_dp
-            call int2_rys_compute_ordered_am(erir, gdat, int2_driver%ppairs, ids, amr, zero_shq)
-            pr(1:nl,1:nk,1:nj,1:num_cart_bf(amr(1))) => erir(1:nl*nk*nj*num_cart_bf(amr(1)))
+            erir_l = 0.0_dp
+            call int2_rys_compute_ordered_am(erir_l, gdat_l, int2_driver%ppairs, ids, amr, zero_shq)
+            pr(1:nl,1:nk,1:nj,1:num_cart_bf(amr(1))) => erir_l(1:nl*nk*nj*num_cart_bf(amr(1)))
             do ii = 1, ni
               mu = loc(si) + ii - 1
               do jj = 1, nj
@@ -145,13 +165,13 @@ contains
                     g(2) = -0.5_dp*(rij(3)*d(1) - rij(1)*d(3))
                     g(3) = -0.5_dp*(rij(1)*d(2) - rij(2)*d(1))
                     do m = 1, 3
-                      vj_work(m,mu,nu) = vj_work(m,mu,nu) - ket_fac*g(m)*dm_work(lam,kap)
-                      vk_pre(m,mu,lam) = vk_pre(m,mu,lam) + g(m)*dm_work(nu,kap)
-                      if (sk /= sl) vk_pre(m,mu,kap) = vk_pre(m,mu,kap) + g(m)*dm_work(nu,lam)
+                      vj_l(m,mu,nu) = vj_l(m,mu,nu) - ket_fac*g(m)*dm_work(lam,kap)
+                      vk_l(m,mu,lam) = vk_l(m,mu,lam) + g(m)*dm_work(nu,kap)
+                      if (sk /= sl) vk_l(m,mu,kap) = vk_l(m,mu,kap) + g(m)*dm_work(nu,lam)
                       if (si /= sj) then
-                        vj_work(m,nu,mu) = vj_work(m,nu,mu) + ket_fac*g(m)*dm_work(lam,kap)
-                        vk_pre(m,nu,lam) = vk_pre(m,nu,lam) - g(m)*dm_work(mu,kap)
-                        if (sk /= sl) vk_pre(m,nu,kap) = vk_pre(m,nu,kap) - g(m)*dm_work(mu,lam)
+                        vj_l(m,nu,mu) = vj_l(m,nu,mu) + ket_fac*g(m)*dm_work(lam,kap)
+                        vk_l(m,nu,lam) = vk_l(m,nu,lam) - g(m)*dm_work(mu,kap)
+                        if (sk /= sl) vk_l(m,nu,kap) = vk_l(m,nu,kap) - g(m)*dm_work(mu,lam)
                       end if
                     end do
                   end do
@@ -163,7 +183,21 @@ contains
           end do
         end do
       end do
-    end do
+      end do
+      !$omp end do
+      end if
+
+      !$omp critical
+      vj_work = vj_work + vj_l
+      vk_pre = vk_pre + vk_l
+      !$omp end critical
+
+      call gdat_l%clean()
+    end block
+    !$omp end parallel
+
+    if (rys_failed) call show_message( &
+      'GIAO two-electron: cannot allocate Rys workspace', with_abort)
 
     do m = 1, 3
       do i = 1, nbf_work
@@ -184,9 +218,8 @@ contains
       h10 = h10_work
     end if
 
-    call gdat%clean()
     call int2_driver%clean()
-    deallocate(vj_work, vk_work, h10_work, vk_pre, eri0, erir)
+    deallocate(vj_work, vk_work, h10_work, vk_pre)
 
   end subroutine giao_h10_twoe_matrix
 

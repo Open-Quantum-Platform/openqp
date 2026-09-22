@@ -517,7 +517,7 @@ contains
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: kdat
     real(kind=dp), allocatable, target :: pa(:,:,:)
-    real(kind=dp), allocatable :: gxv(:), mo1x(:,:), prev(:,:), gao(:,:)
+    real(kind=dp), allocatable :: gxv(:), mo1x(:,:,:), prev(:,:,:), gao(:,:)
 
     nbf = basis%nbf
     nvir = nmo - nocc
@@ -526,8 +526,11 @@ contains
     call solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1)
     if (abs(scale_exch) <= 1.0d-12) return
 
-    allocate(pa(nbf,nbf,1), gxv(nocc*nvir), mo1x(nmo,nocc), &
-             prev(nmo,nocc), gao(nbf,nbf), source=0.0d0)
+    ! One density per Cartesian component, digested in a single integral pass:
+    ! the three CPHF equations are independent, but they share the two-electron
+    ! integrals, which is what the pass actually costs.
+    allocate(pa(nbf,nbf,3), gxv(nocc*nvir), mo1x(nmo,nocc,3), &
+             prev(nmo,nocc,3), gao(nbf,nbf), source=0.0d0)
 
     call int2_driver%init(basis, infos)
     ! NMR uses the native Rys ERI path only (the GIAO two-electron derivative
@@ -537,15 +540,17 @@ contains
     kdat = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
                           tamm_dancoff=.false., scale_exchange=scale_exch)
 
-    do x = 1, 3
-      mo1x = mo1(:,:,x)
-      do it = 1, maxit
-        prev = mo1x
-        ! Imaginary antisymmetric AO first-order density from the full MO
-        ! response (occ + vir rows); CGO-consistent normalization (no x2).
-        call giao_pb_density(mo, mo1x, pa(:,:,1), nbf, nmo, nocc)
-        call int2_driver%run(kdat)
-        gao = 0.5d0*kdat%amb(:,:,1,1)
+    mo1x = mo1
+    do it = 1, maxit
+      prev = mo1x
+      ! Imaginary antisymmetric AO first-order density from the full MO
+      ! response (occ + vir rows); CGO-consistent normalization (no x2).
+      do x = 1, 3
+        call giao_pb_density(mo, mo1x(:,:,x), pa(:,:,x), nbf, nmo, nocc)
+      end do
+      call int2_driver%run(kdat)
+      do x = 1, 3
+        gao = 0.5d0*kdat%amb(:,:,x,1)
         ! Exchange response projected to the occ-vir block (i fast):
         ! gxv(i+(a-1)*nocc) = (C^T gao C)[i_occ, a_vir].
         call mntoia(gao, gxv, mo, mo, nocc, nocc)
@@ -557,21 +562,21 @@ contains
             ! mntoia returns the [occ,vir] block gxv(i,a); the response element
             ! needed here is the [vir,occ] entry v1(a,i) = -gxv(i,a) (the
             ! exchange image is antisymmetric).
-            mo1x(p,i) = -(hs - gxv(k))/(e(p)-e(i))
+            mo1x(p,i,x) = -(hs - gxv(k))/(e(p)-e(i))
           end do
           do p = 1, nocc
-            mo1x(p,i) = -0.5d0*s1mo(p,i,x)
+            mo1x(p,i,x) = -0.5d0*s1mo(p,i,x)
           end do
         end do
-        diff = maxval(abs(mo1x - prev))
-        if (diff < tol) exit
       end do
-      if (diff >= tol) then
-        call show_message('WARNING: GIAO coupled magnetic response (CPHF) did &
-          &not converge within the iteration limit; shieldings may be inaccurate')
-      end if
-      mo1(:,:,x) = mo1x
+      diff = maxval(abs(mo1x - prev))
+      if (diff < tol) exit
     end do
+    if (diff >= tol) then
+      call show_message('WARNING: GIAO coupled magnetic response (CPHF) did &
+        &not converge within the iteration limit; shieldings may be inaccurate')
+    end if
+    mo1 = mo1x
 
     call int2_driver%clean()
     deallocate(pa, gxv, mo1x, prev, gao)
@@ -615,10 +620,12 @@ contains
     real(kind=dp), intent(inout), optional :: pb_out(:,:,:)
     real(kind=dp), allocatable :: h1mo(:,:,:), s1mo(:,:,:), mo1u(:,:,:), mo1c(:,:,:)
     real(kind=dp), allocatable :: pso(:,:,:), st(:,:), pb(:,:)
+    real(kind=dp), allocatable :: dm10u(:,:,:), dm10c(:,:,:)
     integer :: c, iat
 
     allocate(h1mo(nmo,nocc,3), s1mo(nmo,nocc,3), mo1u(nmo,nocc,3), mo1c(nmo,nocc,3), &
-             pso(nbf,nbf,3), st(3,3), source=0.0d0)
+             pso(nbf,nbf,3), st(3,3), dm10u(nbf,nbf,3), dm10c(nbf,nbf,3), &
+             source=0.0d0)
     do c = 1, 3
       call ao_to_mo_occ(h1ao(:,:,c), mo, h1mo(:,:,c), nbf, nmo, nocc)
       call ao_to_mo_occ(s1ao(:,:,c), mo, s1mo(:,:,c), nbf, nmo, nocc)
@@ -633,14 +640,16 @@ contains
       end do
       deallocate(pb)
     end if
+    call perturbed_ao_density(mo1u, mo, nbf, nmo, nocc, occ_factor, dm10u)
+    call perturbed_ao_density(mo1c, mo, nbf, nmo, nocc, occ_factor, dm10c)
     do iat = 1, nat
       call pso_integrals(basis, coords(:,iat), pso)
-      call para_tensor(mo1u, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      call para_tensor(dm10u, pso, nbf, st)
       sig_u(:,:,iat) = sig_u(:,:,iat) + st
-      call para_tensor(mo1c, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      call para_tensor(dm10c, pso, nbf, st)
       sig_c(:,:,iat) = sig_c(:,:,iat) + st
     end do
-    deallocate(h1mo, s1mo, mo1u, mo1c, pso, st)
+    deallocate(h1mo, s1mo, mo1u, mo1c, pso, st, dm10u, dm10c)
   end subroutine giao_para_channel
 
   !> Semicanonicalize ROHF orbitals for spin sigma: diagonalize the occ-occ and
@@ -679,20 +688,33 @@ contains
     deallocate(fao, fmo)
   end subroutine semicanon_orbitals
 
-  subroutine para_tensor(mo1, mo, h01i, nbf, nmo, nocc, sig, occ_factor)
-    real(kind=dp), intent(in) :: mo1(:,:,:), mo(:,:), h01i(:,:,:)
+  !> AO first-order density from the MO response, ofac*C mo1 C_occ^T.
+  !> It depends on the response, not on the nucleus, so the shielding loop
+  !> builds it once per channel rather than once per atom.
+  subroutine perturbed_ao_density(mo1, mo, nbf, nmo, nocc, ofac, dm10)
+    ! Explicit shapes: these go straight to dgemm, which needs the leading
+    ! dimensions to be the real ones and the storage to be contiguous.
     integer, intent(in) :: nbf, nmo, nocc
-    real(kind=dp), intent(out) :: sig(:,:)
-    real(kind=dp), intent(in), optional :: occ_factor
-    integer :: x, y, a, b
-    real(kind=dp), allocatable :: dm10(:,:,:)
-    real(kind=dp) :: acc, ofac
-    ofac = 2.0d0                 ! RHF closed-shell occupation; UHF per spin = 1
-    if (present(occ_factor)) ofac = occ_factor
-    allocate(dm10(nbf,nbf,3))
+    real(kind=dp), intent(in) :: mo1(nmo,nocc,3), mo(nbf,nmo), ofac
+    real(kind=dp), intent(out) :: dm10(nbf,nbf,3)
+    real(kind=dp), allocatable :: tmp(:,:)
+    integer :: x
+    allocate(tmp(nbf,nocc))
     do x = 1, 3
-      dm10(:,:,x) = ofac*matmul(mo(:,1:nmo), matmul(mo1(:,:,x), transpose(mo(:,1:nocc))))
+      call dgemm('n','n', nbf, nocc, nmo, 1.0d0, mo, nbf, mo1(:,:,x), nmo, &
+                 0.0d0, tmp, nbf)
+      call dgemm('n','t', nbf, nbf, nocc, ofac, tmp, nbf, mo, nbf, &
+                 0.0d0, dm10(:,:,x), nbf)
     end do
+    deallocate(tmp)
+  end subroutine perturbed_ao_density
+
+  subroutine para_tensor(dm10, h01i, nbf, sig)
+    real(kind=dp), intent(in) :: dm10(:,:,:), h01i(:,:,:)
+    integer, intent(in) :: nbf
+    real(kind=dp), intent(out) :: sig(:,:)
+    integer :: x, y, a, b
+    real(kind=dp) :: acc
     do x = 1, 3
       do y = 1, 3
         acc = 0.0d0
@@ -706,7 +728,6 @@ contains
         sig(x,y) = -2.0d0*acc
       end do
     end do
-    deallocate(dm10)
   end subroutine para_tensor
 
 end module nmr_giao_shielding_mod
