@@ -82,15 +82,24 @@ contains
 
     !$omp parallel default(shared)
     block
-      type(int2_rys_data_t) :: gdat_l
-      real(kind=dp), allocatable, target :: eri0_l(:), erir_l(:)
+      ! Per-thread state is held through explicitly allocated POINTERs, not
+      ! block-scope allocatables: ifx leaves a privatized allocatable
+      ! descriptor only partly initialized inside a parallel region, which is
+      ! the same defect int2_twoei works around the same way (int2.F90, "this
+      ! thread owns the target through the matching deallocate below").  As
+      ! allocatables this crashed the three DFT GIAO NMR examples on the Intel
+      ! oneAPI leg while every gcc and Accelerate leg passed.
+      type(int2_rys_data_t), pointer :: gdat_l
+      real(kind=dp), pointer :: eri0_l(:), erir_l(:)
       real(kind=dp), pointer :: p0(:,:,:,:), pr(:,:,:,:)
-      real(kind=dp), allocatable :: vj_l(:,:,:), vk_l(:,:,:)
+      real(kind=dp), pointer :: vj_l(:,:,:), vk_l(:,:,:)
       real(kind=dp) :: g(3), d(3), rij(3), norm4, ket_fac, base_val
       integer :: si, sj, sk, sl, ni, nj, nk, nl, mu, nu, kap, lam
       integer :: ii, jj, kk, ll, axis, mapr, m, ids(4), am0(4), amr(4), ok_l
       logical :: zero_shq
 
+      nullify(gdat_l, eri0_l, erir_l, vj_l, vk_l, p0, pr)
+      allocate(gdat_l)
       allocate(eri0_l(maxcart**4), erir_l(maxcart**4), source=0.0_dp)
       allocate(vj_l(3,nbf_work,nbf_work), vk_l(3,nbf_work,nbf_work), source=0.0_dp)
       call gdat_l%init(maxang + 1, int2_driver%cutoffs, ok_l)
@@ -193,6 +202,7 @@ contains
       !$omp end critical
 
       call gdat_l%clean()
+      deallocate(vj_l, vk_l, eri0_l, erir_l, gdat_l)
     end block
     !$omp end parallel
 
