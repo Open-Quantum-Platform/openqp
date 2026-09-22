@@ -1,9 +1,10 @@
 """The ORCA-style active/frozen atom selection shared by the QM/MM drivers.
 
-These exercise ``oqp.library.qmmm_active`` directly, so they need OpenMM (for
-the topology and the PDB reader) but not the compiled OpenQP backend, and they
-therefore run in CI's Python leg.  The driver-side wiring is covered by
-tests/test_qmmm_optimization.py.
+Most of these exercise ``oqp.library.qmmm_active`` directly and need OpenMM for
+the topology and the PDB reader.  CI's Python leg installs the compiled backend
+but NOT OpenMM, so those classes skip there and are covered by running this file
+locally; only the classes gated on the backend alone run in CI.  The driver-side
+wiring is covered by tests/test_qmmm_optimization.py.
 """
 import unittest
 from pathlib import Path
@@ -24,11 +25,18 @@ try:
 except Exception:  # pragma: no cover - OpenMM missing
     _HAVE = False
 
-try:  # the driver classes additionally need the compiled OpenQP backend
+try:  # the NAMD driver needs the compiled OpenQP backend, but not OpenMM:
+    # it imports openmm only inside the functions that build a system, so the
+    # bookkeeping tests below run in CI's Python leg, which has no OpenMM
     from oqp.library.namd import NAMD_QMMM
-    from oqp.library.qmmm_md import QMMM_MD
-    _HAVE_DRIVERS = True
+    _HAVE_NAMD = True
 except Exception:  # pragma: no cover - backend missing
+    _HAVE_NAMD = False
+
+try:  # the OpenMM MD driver needs both
+    from oqp.library.qmmm_md import QMMM_MD
+    _HAVE_DRIVERS = _HAVE_NAMD
+except Exception:  # pragma: no cover - backend or OpenMM missing
     _HAVE_DRIVERS = False
 
 
@@ -360,63 +368,6 @@ class TestNamdHeldAtomBookkeeping(unittest.TestCase):
         self.assertTrue(o._all_atoms_move)
         np.testing.assert_array_equal(o._move_mask, np.ones((4, 1)))
 
-    def test_a_massless_virtual_site_is_not_a_degree_of_freedom(self):
-        """TIP4P's M site is placed by OpenMM from its parents and carries no
-        kinetic energy, so it must not enter the DOF count that thermalises the
-        real atoms -- nor must a held atom."""
-        o = self._bare([1, 1, 1, 1])
-        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
-        self.assertEqual(int(np.count_nonzero(o._moving_particles())), 3)
-        # control: the mask alone counts the virtual site, which is the DOF the
-        # thermostat would otherwise use
-        self.assertEqual(int(round(float(np.sum(o._move_mask)))), 4)
-        held = self._bare([1, 0, 1, 1])
-        held.m_all = o.m_all
-        self.assertEqual(int(np.count_nonzero(held._moving_particles())), 2)
-        # with neither a virtual site nor a held atom, every atom counts
-        plain = self._bare([1, 1, 1])
-        plain.m_all = np.array([16.0, 1.0, 1.0]) * 1822.888486
-        self.assertEqual(int(np.count_nonzero(plain._moving_particles())), 3)
-
-    def test_thermalisation_hits_the_target_with_a_virtual_site_present(self):
-        from oqp.library.namd import KB_HARTREE
-        o = self._bare([1, 1, 1, 1])
-        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
-        o._has_constraints = False
-        o.init_temp = 300.0
-        o.v_all = np.zeros((4, 3))
-        o.v_all[:3] = np.array([[1.0, -2.0, 0.5], [3.0, 0.0, -1.0], [-2.0, 1.0, 2.0]]) * 1.0e-4
-        v0 = o.v_all.copy()
-        o._thermalize_initial()
-        ke = 0.5 * np.sum(o.m_all[:, None] * o.v_all ** 2)
-        ndof = 3 * 3 - 3                      # three real atoms, COM removed
-        self.assertAlmostEqual(2.0 * ke / (ndof * KB_HARTREE), 300.0, places=6)
-        # control: the old count (four particles, 9 DOF) reads the same kinetic
-        # energy as a lower temperature, so it scales the real atoms up -- to
-        # 450 K here, 1.5x the target, which is the defect this test pins
-        ke0 = 0.5 * np.sum(o.m_all[:, None] * v0 ** 2)
-        scale_old = np.sqrt(300.0 / (2.0 * ke0 / ((3 * 4 - 3) * KB_HARTREE)))
-        ke_old = ke0 * scale_old ** 2
-        self.assertAlmostEqual(2.0 * ke_old / (ndof * KB_HARTREE), 450.0, places=6)
-
-    def test_the_maxwell_draw_survives_a_massless_site(self):
-        """sqrt(kT/0) is inf and 0 * inf is NaN, so an unguarded draw poisons
-        every atom's velocity through the momentum sum, not just the site's."""
-        o = self._bare([1, 1, 1, 1])
-        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
-        o.init_temp = 300.0
-        o._counter_normals = lambda shape: np.ones(shape)
-        o._draw_maxwell_velocities()
-        self.assertTrue(np.all(np.isfinite(o.v_all)))
-        np.testing.assert_array_equal(o.v_all[3], 0.0)
-        self.assertTrue(np.all(o.v_all[:3] != 0.0))
-        # control: the same draw without the guard is NaN for every atom
-        from oqp.library.namd import KB_HARTREE
-        with np.errstate(divide="ignore"):
-            sig = np.sqrt(KB_HARTREE * o.init_temp / o.m_all)
-        v = np.ones((4, 3)) * sig[:, None]
-        self.assertTrue(np.all(np.isnan((o.m_all[:, None] * v).sum(axis=0))))
-
     def test_a_held_atom_does_not_shrink_the_adaptive_timestep(self):
         """dt_adaptive sizes the step from the largest predicted displacement.
         A held atom has no displacement, so the force on it must not slow the
@@ -516,3 +467,75 @@ class TestOpenMMMdHoldsTheRightAtoms(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(_HAVE_NAMD, "compiled OpenQP backend unavailable")
+class TestMasslessVirtualSiteBookkeeping(unittest.TestCase):
+    """A massless virtual site (TIP4P's M) is placed by OpenMM from its parents,
+    never integrated.  These need the driver class but no OpenMM topology, so
+    they run in CI's Python leg, which installs the backend and not OpenMM."""
+
+    def _bare(self, mask):
+        o = object.__new__(NAMD_QMMM)
+        o._move_mask = np.asarray(mask, dtype=float).reshape(-1, 1)
+        o._all_atoms_move = bool(o._move_mask.all())
+        o.natom_all = len(o._move_mask)
+        o.m_all = np.array([1.0, 2.0, 3.0, 4.0])[:o.natom_all]
+        return o
+
+    def test_a_massless_virtual_site_is_not_a_degree_of_freedom(self):
+        """TIP4P's M site is placed by OpenMM from its parents and carries no
+        kinetic energy, so it must not enter the DOF count that thermalises the
+        real atoms -- nor must a held atom."""
+        o = self._bare([1, 1, 1, 1])
+        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
+        self.assertEqual(int(np.count_nonzero(o._moving_particles())), 3)
+        # control: the mask alone counts the virtual site, which is the DOF the
+        # thermostat would otherwise use
+        self.assertEqual(int(round(float(np.sum(o._move_mask)))), 4)
+        held = self._bare([1, 0, 1, 1])
+        held.m_all = o.m_all
+        self.assertEqual(int(np.count_nonzero(held._moving_particles())), 2)
+        # with neither a virtual site nor a held atom, every atom counts
+        plain = self._bare([1, 1, 1])
+        plain.m_all = np.array([16.0, 1.0, 1.0]) * 1822.888486
+        self.assertEqual(int(np.count_nonzero(plain._moving_particles())), 3)
+
+    def test_thermalisation_hits_the_target_with_a_virtual_site_present(self):
+        from oqp.library.namd import KB_HARTREE
+        o = self._bare([1, 1, 1, 1])
+        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
+        o._has_constraints = False
+        o.init_temp = 300.0
+        o.v_all = np.zeros((4, 3))
+        o.v_all[:3] = np.array([[1.0, -2.0, 0.5], [3.0, 0.0, -1.0], [-2.0, 1.0, 2.0]]) * 1.0e-4
+        v0 = o.v_all.copy()
+        o._thermalize_initial()
+        ke = 0.5 * np.sum(o.m_all[:, None] * o.v_all ** 2)
+        ndof = 3 * 3 - 3                      # three real atoms, COM removed
+        self.assertAlmostEqual(2.0 * ke / (ndof * KB_HARTREE), 300.0, places=6)
+        # control: the old count (four particles, 9 DOF) reads the same kinetic
+        # energy as a lower temperature, so it scales the real atoms up -- to
+        # 450 K here, 1.5x the target, which is the defect this test pins
+        ke0 = 0.5 * np.sum(o.m_all[:, None] * v0 ** 2)
+        scale_old = np.sqrt(300.0 / (2.0 * ke0 / ((3 * 4 - 3) * KB_HARTREE)))
+        ke_old = ke0 * scale_old ** 2
+        self.assertAlmostEqual(2.0 * ke_old / (ndof * KB_HARTREE), 450.0, places=6)
+
+    def test_the_maxwell_draw_survives_a_massless_site(self):
+        """sqrt(kT/0) is inf and 0 * inf is NaN, so an unguarded draw poisons
+        every atom's velocity through the momentum sum, not just the site's."""
+        o = self._bare([1, 1, 1, 1])
+        o.m_all = np.array([16.0, 1.0, 1.0, 0.0]) * 1822.888486
+        o.init_temp = 300.0
+        o._counter_normals = lambda shape: np.ones(shape)
+        o._draw_maxwell_velocities()
+        self.assertTrue(np.all(np.isfinite(o.v_all)))
+        np.testing.assert_array_equal(o.v_all[3], 0.0)
+        self.assertTrue(np.all(o.v_all[:3] != 0.0))
+        # control: the same draw without the guard is NaN for every atom
+        from oqp.library.namd import KB_HARTREE
+        with np.errstate(divide="ignore"):
+            sig = np.sqrt(KB_HARTREE * o.init_temp / o.m_all)
+        v = np.ones((4, 3)) * sig[:, None]
+        self.assertTrue(np.all(np.isnan((o.m_all[:, None] * v).sum(axis=0))))
