@@ -19,6 +19,8 @@ is the desktop application for building molecular structures, preparing OpenQP
 inputs, running calculations, and analyzing results. **[Download OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/download/)**
 for macOS, Windows, or Linux; choose a `with-engine` installer for the easiest
 setup, with OpenQP bundled and ready to run.
+See the [Studio release notes and version comparison](https://open-quantum-platform.github.io/openqp-docs/studio/whats-new/)
+for changes, known limitations, and upgrade guidance.
 
 ![OQP Studio Analysis showing a selected molecular orbital and its positive and negative three-dimensional phases](assets/oqp-studio-analysis-orbital.png)
 
