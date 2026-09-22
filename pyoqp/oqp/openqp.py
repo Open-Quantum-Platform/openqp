@@ -215,10 +215,48 @@ class _WorkflowNmrProxy:
     def __init__(self, owner):
         self._owner = owner
 
-    def __call__(self, gauge=None, **kwargs):
+    _TRUE = {"true", "yes", "on", "1"}
+    _FALSE = {"false", "no", "off", "0"}
+
+    @classmethod
+    def _as_bool(cls, value):
+        """Accept the spellings a config file uses, reject anything else.
+
+        Plain truthiness would read the string "false" as enabled and quietly
+        write four cube files.  ``None`` means "not asked for" and is the one
+        non-string spelling of off; an empty or unrecognised string is a typo
+        and is refused, which is what the .oqp surface does with the same text.
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        text = str(value).strip().lower()
+        if text in cls._TRUE:
+            return True
+        if text in cls._FALSE:
+            return False
+        raise ValueError(f"acid expects true or false, got {value!r}")
+
+    def __call__(self, gauge=None, acid=False, **kwargs):
+        acid = self._as_bool(acid)
+        # The grid controls only describe an ACID box, so asking for one
+        # without asking for ACID is a request this call cannot honour: it
+        # would store them, write no cubes and say nothing.  The .oqp modifier
+        # refuses the same combination; this is the other half of it.
+        grid = sorted(k for k in ("acid_spacing", "acid_padding") if k in kwargs)
+        if grid and not acid:
+            raise ValueError(
+                f"{' and '.join(grid)} require acid=true; without it no cubes "
+                f"are written and the grid is ignored.")
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge
+        # ACID exists only on the GIAO path, so asking for it without naming a
+        # gauge selects one, as the concise surface already does.  Naming cgo
+        # explicitly still fails below rather than being quietly overridden.
+        if acid and "nmr_gauge" not in kwargs:
+            kwargs["nmr_gauge"] = "giao"
         nmr_gauge = str(kwargs.get("nmr_gauge", "cgo")).lower()
         scf_type = str(self._owner.config_typed.get("scf", {}).get("type", "rhf")).lower()
         if nmr_gauge not in {"cgo", "giao"}:
@@ -226,7 +264,14 @@ class _WorkflowNmrProxy:
         if nmr_gauge == "cgo" and scf_type != "rhf":
             raise ValueError("CGO NMR shielding supports closed-shell RHF references only.")
         self._owner._reject_nmr_unsupported_functionals()
-        kwargs["scf_prop"] = "nmr"
+        # ACID is drawn from the GIAO magnetic density response, so it is a
+        # modifier on the shielding call rather than a separate request: that
+        # puts the dependency in the signature instead of in list ordering.
+        if acid and nmr_gauge != "giao":
+            raise ValueError(
+                "ACID cubes require gauge='giao'; a common gauge origin leaves "
+                "the map gauge-contaminated.")
+        kwargs["scf_prop"] = "nmr,acid" if acid else "nmr"
         return self._owner.section("properties", **kwargs)
 
 

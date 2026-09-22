@@ -66,6 +66,14 @@ class AOBasis:
             raise ValueError(
                 f"AOBasis: nbf={self.nbf} matches neither the Cartesian ({n_cart}) "
                 f"nor spherical ({n_sph}) shell count for this basis.")
+        # The Cartesian component table stops at f; a g shell would otherwise
+        # fail deep inside the loop below with a bare KeyError.
+        max_am = int(max(angs)) if len(angs) else 0
+        if max_am > max(_CART):
+            raise NotImplementedError(
+                f"AOBasis supports angular momenta up to L={max(_CART)} (f); this "
+                f"basis contains an L={max_am} shell. Use a smaller basis or "
+                "evaluate on OQP's own grid.")
         p0 = 0
         for sh in range(int(basis["nsh"])):
             L = int(angs[sh]); nc = int(ncontr[sh]); at = int(centers[sh])
@@ -91,26 +99,63 @@ class AOBasis:
     def _nrad(a, L):
         return (2.0 * a / np.pi) ** 0.75 * (4.0 * a) ** (L / 2.0) / np.sqrt(_dfac(L))
 
-    def eval_ao(self, points):
-        """Evaluate all AOs on ``points`` (npts, 3) in Bohr -> (npts, nbf)."""
-        pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    def _radial(self, pts, derivative=False):
+        """Per-shell displacement, radial factor and, optionally, dR/d(r^2)*2."""
         npts = pts.shape[0]
-        # radial part per shell (npts,)
-        shell_rad = []
-        shell_dx = []
+        shell_dx, shell_rad, shell_drad = [], [], []
         for (A, L, a, d) in self.shells:
             dx = pts - A[None, :]
             r2 = np.einsum("pi,pi->p", dx, dx)
             rad = np.zeros(npts)
+            drad = np.zeros(npts) if derivative else None
             for ai, di in zip(a, d):
-                rad += di * self._nrad(ai, L) * np.exp(-ai * r2)
-            shell_rad.append(rad)
+                g = di * self._nrad(ai, L) * np.exp(-ai * r2)
+                rad += g
+                if derivative:
+                    drad += -2.0 * ai * g
             shell_dx.append(dx)
-        out = np.empty((npts, self.nbf))
+            shell_rad.append(rad)
+            shell_drad.append(drad)
+        return shell_dx, shell_rad, shell_drad
+
+    def eval_ao(self, points):
+        """Evaluate all AOs on ``points`` (npts, 3) in Bohr -> (npts, nbf)."""
+        pts = np.asarray(points, dtype=float).reshape(-1, 3)
+        shell_dx, shell_rad, _ = self._radial(pts)
+        out = np.empty((pts.shape[0], self.nbf))
         for mu, (sh_id, (lx, ly, lz), scomp) in enumerate(self.ao_index):
             dx = shell_dx[sh_id]
             ang = (dx[:, 0] ** lx) * (dx[:, 1] ** ly) * (dx[:, 2] ** lz)
             out[:, mu] = scomp * ang * shell_rad[sh_id]
+        return out
+
+    def eval_ao_deriv1(self, points):
+        """AO values and first derivatives -> (4, npts, nbf): value, d/dx, d/dy, d/dz.
+
+        For chi = s * x^lx y^ly z^lz R(r^2) the Cartesian derivative is
+        d_x chi = s * y^ly z^lz * (lx x^(lx-1) R + x^(lx+1) R'), with
+        R' = sum_i d_i N_i (-2 a_i) exp(-a_i r^2); the angular term drops when
+        the corresponding exponent is zero.  Layout matches the usual
+        ``GTOval_deriv1`` ordering so grid consumers can be shared.
+        """
+        pts = np.asarray(points, dtype=float).reshape(-1, 3)
+        shell_dx, shell_rad, shell_drad = self._radial(pts, derivative=True)
+        out = np.empty((4, pts.shape[0], self.nbf))
+        for mu, (sh_id, lvec, scomp) in enumerate(self.ao_index):
+            dx = shell_dx[sh_id]
+            rad, drad = shell_rad[sh_id], shell_drad[sh_id]
+            powers = [dx[:, k] ** lvec[k] for k in range(3)]
+            ang = powers[0] * powers[1] * powers[2]
+            out[0, :, mu] = scomp * ang * rad
+            for k in range(3):
+                other = 1.0
+                for j in range(3):
+                    if j != k:
+                        other = other * powers[j]
+                term = dx[:, k] * ang * drad
+                if lvec[k] > 0:
+                    term = term + lvec[k] * (dx[:, k] ** (lvec[k] - 1)) * other * rad
+                out[1 + k, :, mu] = scomp * term
         return out
 
     # ---- analytic overlap (McMurchie-Davidson), for evaluator validation ----

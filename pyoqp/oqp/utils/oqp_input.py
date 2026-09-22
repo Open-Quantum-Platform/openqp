@@ -338,7 +338,7 @@ GENERIC_SCHEMA_KEYS = {
         ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart
     """),
     "ekt": frozenset(),
-    "properties": _keys("scf_prop nmr_gauge td_prop nac export title back_door"),
+    "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop nac export title back_door"),
     "optimize": frozenset(),
     "geometric": frozenset(),
     "oqp": frozenset(),
@@ -2688,9 +2688,39 @@ def lower_to_legacy(
             # The new concise surface defaults to gauge-origin-independent
             # shielding. Legacy .inp retains its established CGO default.
             props["nmr_gauge"] = _as_config_string(gauge if gauge is not None else "giao")
-            unknown = set(call.kwargs) - {"gauge", "nmr_gauge"}
+            # acid rides on the shielding call because it consumes the GIAO
+            # density response that call produces.
+            acid_raw = call.kwargs.get("acid")
+            if acid_raw is not None:
+                text = str(acid_raw).strip().lower()
+                if text in {"true", "yes", "on", "1"}:
+                    acid = True
+                elif text in {"false", "no", "off", "0"}:
+                    acid = False
+                else:
+                    # Silently reading a typo as "no" would hand back a run with
+                    # no cubes and no complaint.
+                    raise OQPInputError(
+                        f"nmr acid= expects true or false, got {acid_raw!r}")
+                if acid:
+                    if str(props["nmr_gauge"]).strip().lower() != "giao":
+                        raise OQPInputError("nmr(acid=true) requires gauge=giao")
+                    if "acid" not in current:
+                        current.append("acid")
+                    props["scf_prop"] = ",".join(current)
+            grid = {k: v for k, v in call.kwargs.items()
+                    if k in {"acid_spacing", "acid_padding"}}
+            if grid and "acid" not in current:
+                raise OQPInputError(
+                    "nmr acid_spacing/acid_padding require acid=true")
+            for key, value in grid.items():
+                props[key] = _as_config_string(value)
+            unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid",
+                                          "acid_spacing", "acid_padding"}
             if unknown or call.args:
-                raise OQPInputError("nmr accepts only gauge=...")
+                raise OQPInputError(
+                    "nmr accepts only gauge=..., acid=..., acid_spacing=... "
+                    "and acid_padding=...")
             continue
         if call.name == "pcm":
             put("pcm", "enabled", True)

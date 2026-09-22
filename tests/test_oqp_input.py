@@ -2518,3 +2518,40 @@ def test_qmmm_namd_examples_explicitly_select_supported_rescaling(path):
     assert config['md']['rescale'] == 'isotropic'
     if config['md'].get('nacme_gate') == 'warn':
         assert config['md']['nacme_check'] == 'baeck_an'
+
+
+def test_nmr_acid_modifier_is_explicit_about_gauge_and_typos():
+    """ACID rides on the shielding call, so the two must agree about the gauge.
+
+    A value that is neither true nor false used to be read as "no": the run
+    finished with no cubes and no complaint, which is the worst way to spell a
+    typo.
+    """
+    spec, legacy = _parse('hf/sto-3g geom="h2o.xyz" nmr(acid=true)')
+    assert legacy["properties"]["scf_prop"] == "nmr,acid"
+    assert legacy["properties"]["nmr_gauge"] == "giao"
+
+    _, off = _parse('hf/sto-3g geom="h2o.xyz" nmr(acid=false)')
+    assert off["properties"]["scf_prop"] == "nmr"
+
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert "acid=true" in rendered
+    assert oqp_input.render_canonical_oqp(
+        oqp_input.parse_canonical_oqp(rendered)) == rendered
+
+    # The modifier is interpreted when the spec is lowered, so these go through
+    # the same path a real run takes.
+    with pytest.raises(OQPInputError, match="expects true or false"):
+        _parse('hf/sto-3g geom="h2o.xyz" nmr(acid=maybe)')
+    with pytest.raises(OQPInputError, match="requires gauge=giao"):
+        _parse('hf/sto-3g geom="h2o.xyz" nmr(gauge=cgo,acid=true)')
+
+    # The grid controls are documented on this modifier, so they have to reach
+    # the lowered section rather than being rejected as unknown.
+    _, sized = _parse(
+        'hf/sto-3g geom="h2o.xyz" nmr(acid=true,acid_spacing=0.5,acid_padding=3.0)'
+    )
+    assert sized["properties"]["acid_spacing"] == "0.5"
+    assert sized["properties"]["acid_padding"] == "3.0"
+    with pytest.raises(OQPInputError, match="require acid=true"):
+        _parse('hf/sto-3g geom="h2o.xyz" nmr(acid_spacing=0.5)')

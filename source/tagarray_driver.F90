@@ -44,6 +44,29 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
     "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
     "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_nmr_pdens = OQP_prefix // "nmr_pdens"
+  character(len=*), parameter, public :: OQP_nmr_pdens_comment = &
+    "Imaginary antisymmetric AO density-matrix response to the external "// &
+    "magnetic field from the coupled GIAO CPHF/CPKS solution, spin-summed; "// &
+    "shape (3, nbf, nbf), D^(1)_c = i * P(c,:,:), gauge origin at the "// &
+    "coordinate origin.  Consumed by the ACID/current-density export."
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref = OQP_prefix // "nmr_pdens_ref"
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref_comment = &
+    "Provenance of OQP::nmr_pdens, shape "// &
+    "(8 + 4*natom + 3*nshell + 2*nprim): [1] = nbf, [2] = natom, "// &
+    "[3] = nshell, [4] = nprim, [5] = charge, [6] = nelec_a, "// &
+    "[7] = nelec_b, [8] = mult, then the atomic numbers, then the nuclear "// &
+    "coordinates (bohr, 3 per atom), then per shell in AO order (origin "// &
+    "zero-based, am, ncontr), then the exponents and the contraction "// &
+    "coefficients in full.  "// &
+    "[1] < 0 marks the response incomplete.  The stamp carries only what "// &
+    "it can represent exactly: sizes, geometry and basis.  The electronic "// &
+    "state the response was built from is not described here -- it is the "// &
+    "MOs, their energies, the spin occupations and the exchange scale, and "// &
+    "every scalar summary of those is non-unique -- so scf_driver erases "// &
+    "both records on entry instead.  Both records otherwise outlive the "// &
+    "call that wrote them, so the ACID export refuses a response whose "// &
+    "stamp does not match the molecule it is asked to plot."
   character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
   character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
     "Mulliken atomic partial charges (e), one per atom"

@@ -73,6 +73,56 @@ def compute_energy(mol):
         mol.save_data()
 
 
+def write_acid_cubes(mol):
+    """Write the ACID scalar and the induced-current components as cubes.
+
+    Runs after ``scf_prop=nmr`` with ``nmr_gauge=giao``, which is what publishes
+    the magnetic density response the current density is built from.  The
+    magnetic field direction only selects which vector field is written; the
+    ACID scalar is a tensor invariant and does not depend on it.
+    """
+    from oqp.export import AcidExporter
+    from oqp.utils.mpi_utils import MPIManager
+
+    # Every rank reaches compute_scf_prop, and this writes four shared cube
+    # paths.  Left unguarded they race on the same files and each rank rebuilds
+    # the whole grid.  world_rank, not rank: inside a split communicator the
+    # group roots would all pass.
+    if getattr(mol, "usempi", False) and MPIManager().world_rank != 0:
+        return []
+
+    properties = mol.config.get("properties", {})
+    spacing = float(properties.get("acid_spacing", 0.2))
+    padding = float(properties.get("acid_padding", 5.0))
+    # nan and inf survive float() and slip past an ordering test, and the grid
+    # builder then produces a degenerate box of non-finite coordinates and
+    # writes cubes nothing can read.  Reject them as input, not as output.
+    if not (np.isfinite(spacing) and np.isfinite(padding)):
+        raise ValueError(
+            "properties.acid_spacing and acid_padding must be finite; got "
+            f"spacing={spacing}, padding={padding}."
+        )
+    if spacing <= 0.0 or padding < 0.0:
+        raise ValueError(
+            "properties.acid_spacing must be positive and acid_padding "
+            f"non-negative; got spacing={spacing}, padding={padding}."
+        )
+    try:
+        exporter = AcidExporter(mol, padding=padding, spacing=spacing)
+    except ValueError as error:
+        raise ValueError(
+            f"{error} Add 'nmr' before 'acid' in properties.scf_prop and set "
+            "properties.nmr_gauge=giao."
+        ) from None
+
+    prefix = mol.log[:-4] if mol.log.endswith('.log') else mol.log
+    paths = exporter.write_cubes(prefix, bfield=(0.0, 0.0, 1.0))
+    with open(mol.log, 'a', encoding='utf-8') as fout:
+        fout.write('\n    ACID cubes written: '
+                   + ', '.join(os.path.basename(path) for path in paths) + '\n')
+    return paths
+
+
 def compute_scf_prop(mol):
     # compute HF/DFT properties
     properties = mol.config["properties"]["scf_prop"]
@@ -85,6 +135,8 @@ def compute_scf_prop(mol):
             oqp.lowdin(mol)
         elif prop == 'resp':
             oqp.resp_charges(mol)
+        elif prop == 'acid':
+            write_acid_cubes(mol)
         elif prop == 'nmr':
             scf_type = mol.config.get("scf", {}).get("type", "rhf")
             if isinstance(scf_type, str):

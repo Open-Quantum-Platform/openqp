@@ -111,6 +111,7 @@ contains
 
     integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
+    integer :: ref_q, ref_s, ref_nsh, ref_nprim
     integer(4) :: status
     logical :: is_dft, open_shell, iw_open, log_was_open, giao_debug
     real(kind=dp) :: tol, scale_exch
@@ -134,6 +135,8 @@ contains
     real(kind=dp), contiguous, pointer :: mo_e(:), mo_e_b(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
     real(kind=dp), contiguous, pointer :: nmrout(:)
+    real(kind=dp), contiguous, pointer :: pdens(:,:,:)
+    real(kind=dp), contiguous, pointer :: pdens_ref(:)
     real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
 
     basis => infos%basis
@@ -258,6 +261,29 @@ contains
     ! --- Two-electron GIAO Fock derivative ---
     allocate(twoe(3,nbf,nbf), twoe2(3,nbf,nbf), vj(3,nbf,nbf), vk(3,nbf,nbf), source=0.0d0)
     allocate(sig_u(3,3,nat), sig_c(3,3,nat), source=0.0d0)
+
+    ! Publish the coupled AO density response so the ACID / current-density
+    ! export can rebuild J(r) without re-solving the CPHF.  Allocated here and
+    ! accumulated in place by each spin channel.
+    call infos%dat%alloc_or_die(OQP_nmr_pdens, (/ 3, nbf, nbf /), pdens, &
+                                description=OQP_nmr_pdens_comment)
+    pdens = 0.0d0
+
+    ! The response means nothing on its own: it is only consistent with the
+    ! geometry, basis size and density it was built from, and BOTH records
+    ! outlive this call -- they survive in the molecule and in the .oqp file,
+    ! where a later same-size SCF, a moved geometry or a CGO NMR run would
+    ! leave the response behind untouched.  So stamp the pair invalid now and
+    ! fill the stamp in only once the response is complete: an aborted or
+    ! superseded run then reads as stale rather than as current.
+    ref_nsh = basis%nshell
+    ref_nprim = basis%nprim
+    call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, &
+                                (/ 8 + 4*nat + 3*ref_nsh + 2*ref_nprim /), &
+                                pdens_ref, description=OQP_nmr_pdens_ref_comment)
+    pdens_ref = 0.0d0
+    pdens_ref(1) = -1.0d0
+
     if (open_shell) then
       ! Spin-resolved: h1_sigma = h10(1e) + J[D_tot] - cx*K[D_sigma].  giao_h10_
       ! twoe_matrix returns (vj=J, vk=K, h10) for its input density; call it once
@@ -287,14 +313,14 @@ contains
         call semicanon_orbitals(fock_a, mo_a, nbf, nmo, nocc,   ca_sc, ea_sc)
         call semicanon_orbitals(fock_b, mo_b, nbf, nmo, nocc_b, cb_sc, eb_sc)
         call giao_para_channel(infos, basis, ca_sc, ea_sc, nocc,   nmo, nbf, nat, &
-                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
         call giao_para_channel(infos, basis, cb_sc, eb_sc, nocc_b, nmo, nbf, nat, &
-                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
       else
         call giao_para_channel(infos, basis, mo_a, mo_e,   nocc,   nmo, nbf, nat, &
-                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao,   s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
         call giao_para_channel(infos, basis, mo_b, mo_e_b, nocc_b, nmo, nbf, nat, &
-                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c)
+                               coords, h1ao_b, s1ao, scale_exch, 1.0d0, sig_u, sig_c, pdens)
       end if
     else
       ! Closed shell: h1 = h10(1e) + (J - 0.5 K)[D_tot] (twoe), single channel.
@@ -307,10 +333,56 @@ contains
         end do
       end do
       call giao_para_channel(infos, basis, mo_a, mo_e, nocc, nmo, nbf, nat, &
-                             coords, h1ao, s1ao, scale_exch, 2.0d0, sig_u, sig_c)
+                             coords, h1ao, s1ao, scale_exch, 2.0d0, sig_u, sig_c, pdens)
     end if
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
+
+    ! pdens is final here: record what it belongs to.  The stamp carries only
+    ! what it can represent exactly -- sizes, the geometry, and the basis.  The
+    ! electronic state the response was built from is NOT described here: it is
+    ! the MOs, their energies, the spin occupations and the exchange scale, and
+    ! any scalar summary of them (or of the density they produce) is
+    ! non-unique.  That side is handled by invalidation instead -- scf_driver
+    ! erases both records on entry -- so a stale response cannot survive a new
+    ! SCF to be judged by a fingerprint here.
+    pdens_ref(1) = real(nbf, kind=dp)
+    pdens_ref(2) = real(nat, kind=dp)
+    pdens_ref(3) = real(ref_nsh, kind=dp)
+    pdens_ref(4) = real(ref_nprim, kind=dp)
+    ! Which nuclei, and how many electrons around them.  Coordinates and basis
+    ! do not say this: a composition or charge edited in place keeps both, and
+    ! the atomic numbers go straight into the cube header, so the file would
+    ! name one system and hold another's field.
+    pdens_ref(5) = real(infos%mol_prop%charge, kind=dp)
+    pdens_ref(6) = real(infos%mol_prop%nelec_a, kind=dp)
+    pdens_ref(7) = real(infos%mol_prop%nelec_b, kind=dp)
+    pdens_ref(8) = real(infos%mol_prop%mult, kind=dp)
+    do ref_s = 1, nat
+      pdens_ref(8+ref_s) = basis%atoms%zn(ref_s)
+    end do
+    pdens_ref(9+nat:8+4*nat) = reshape(coords, (/ 3*nat /))
+    ! The basis block pins the AO ordering and the AO functions themselves.
+    ! nbf cannot see a permutation of the basis, and neither could an invariant
+    ! of the density it produces -- trace and sum of squares both survive
+    ! D -> P D P^T -- so without this block a same-size basis whose shells came
+    ! back in a different order would be accepted, and the export would then
+    ! contract this response in the old AO order against the new AOs.  The
+    ! primitives are stored in full rather than reduced: any per-shell summary
+    ! is non-injective (exponents [1, 2] and [1.5, 1.5] share a sum), and at
+    ! 2*nprim reals this is a rounding error next to the 3*nbf^2 response it
+    ! guards.  These are the same arrays oqp_get_basis hands the exporter.
+    ref_q = 8 + 4*nat
+    do ref_s = 1, ref_nsh
+      ! Zero-based, matching what oqp_get_basis exports and therefore what the
+      ! export compares against (oqpdata.get_basis subtracts 1).
+      pdens_ref(ref_q+1) = real(basis%origin(ref_s) - 1, kind=dp)
+      pdens_ref(ref_q+2) = real(basis%am(ref_s), kind=dp)
+      pdens_ref(ref_q+3) = real(basis%ncontr(ref_s), kind=dp)
+      ref_q = ref_q + 3
+    end do
+    pdens_ref(ref_q+1:ref_q+ref_nprim) = basis%ex(1:ref_nprim)
+    pdens_ref(ref_q+ref_nprim+1:ref_q+2*ref_nprim) = basis%cc(1:ref_nprim)
 
     ! --- Diamagnetic shielding (GIAO) ---
     !   a11part = cg_a11part(O=0) + 0.5 field_a R_nu,b  (verified vs libcint).
@@ -508,7 +580,7 @@ contains
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: kdat
     real(kind=dp), allocatable, target :: pa(:,:,:)
-    real(kind=dp), allocatable :: gxv(:), mo1x(:,:), prev(:,:), gao(:,:)
+    real(kind=dp), allocatable :: gxv(:), mo1x(:,:,:), prev(:,:,:), gao(:,:)
 
     nbf = basis%nbf
     nvir = nmo - nocc
@@ -517,8 +589,11 @@ contains
     call solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1)
     if (abs(scale_exch) <= 1.0d-12) return
 
-    allocate(pa(nbf,nbf,1), gxv(nocc*nvir), mo1x(nmo,nocc), &
-             prev(nmo,nocc), gao(nbf,nbf), source=0.0d0)
+    ! One density per Cartesian component, digested in a single integral pass:
+    ! the three CPHF equations are independent, but they share the two-electron
+    ! integrals, which is what the pass actually costs.
+    allocate(pa(nbf,nbf,3), gxv(nocc*nvir), mo1x(nmo,nocc,3), &
+             prev(nmo,nocc,3), gao(nbf,nbf), source=0.0d0)
 
     call int2_driver%init(basis, infos)
     ! NMR uses the native Rys ERI path only (the GIAO two-electron derivative
@@ -528,15 +603,17 @@ contains
     kdat = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
                           tamm_dancoff=.false., scale_exchange=scale_exch)
 
-    do x = 1, 3
-      mo1x = mo1(:,:,x)
-      do it = 1, maxit
-        prev = mo1x
-        ! Imaginary antisymmetric AO first-order density from the full MO
-        ! response (occ + vir rows); CGO-consistent normalization (no x2).
-        call giao_pb_density(mo, mo1x, pa(:,:,1), nbf, nmo, nocc)
-        call int2_driver%run(kdat)
-        gao = 0.5d0*kdat%amb(:,:,1,1)
+    mo1x = mo1
+    do it = 1, maxit
+      prev = mo1x
+      ! Imaginary antisymmetric AO first-order density from the full MO
+      ! response (occ + vir rows); CGO-consistent normalization (no x2).
+      do x = 1, 3
+        call giao_pb_density(mo, mo1x(:,:,x), pa(:,:,x), nbf, nmo, nocc)
+      end do
+      call int2_driver%run(kdat)
+      do x = 1, 3
+        gao = 0.5d0*kdat%amb(:,:,x,1)
         ! Exchange response projected to the occ-vir block (i fast):
         ! gxv(i+(a-1)*nocc) = (C^T gao C)[i_occ, a_vir].
         call mntoia(gao, gxv, mo, mo, nocc, nocc)
@@ -548,21 +625,21 @@ contains
             ! mntoia returns the [occ,vir] block gxv(i,a); the response element
             ! needed here is the [vir,occ] entry v1(a,i) = -gxv(i,a) (the
             ! exchange image is antisymmetric).
-            mo1x(p,i) = -(hs - gxv(k))/(e(p)-e(i))
+            mo1x(p,i,x) = -(hs - gxv(k))/(e(p)-e(i))
           end do
           do p = 1, nocc
-            mo1x(p,i) = -0.5d0*s1mo(p,i,x)
+            mo1x(p,i,x) = -0.5d0*s1mo(p,i,x)
           end do
         end do
-        diff = maxval(abs(mo1x - prev))
-        if (diff < tol) exit
       end do
-      if (diff >= tol) then
-        call show_message('WARNING: GIAO coupled magnetic response (CPHF) did &
-          &not converge within the iteration limit; shieldings may be inaccurate')
-      end if
-      mo1(:,:,x) = mo1x
+      diff = maxval(abs(mo1x - prev))
+      if (diff < tol) exit
     end do
+    if (diff >= tol) then
+      call show_message('WARNING: GIAO coupled magnetic response (CPHF) did &
+        &not converge within the iteration limit; shieldings may be inaccurate')
+    end if
+    mo1 = mo1x
 
     call int2_driver%clean()
     deallocate(pa, gxv, mo1x, prev, gao)
@@ -589,7 +666,8 @@ contains
   !> CPHF (uncoupled + coupled), and PSO contraction, ACCUMULATED into sig_u/sig_c.
   !> occ_factor = 2 for RHF (closed shell), 1 for each UHF spin channel.
   subroutine giao_para_channel(infos, basis, mo, e, nocc, nmo, nbf, nat, coords, &
-                               h1ao, s1ao, scale_exch, occ_factor, sig_u, sig_c)
+                               h1ao, s1ao, scale_exch, occ_factor, sig_u, sig_c, &
+                               pb_out)
     use types, only: information
     use basis_tools, only: basis_set
     use int1, only: pso_integrals
@@ -599,26 +677,42 @@ contains
     real(kind=dp), intent(in) :: h1ao(:,:,:), s1ao(:,:,:), scale_exch, occ_factor
     integer, intent(in) :: nocc, nmo, nbf, nat
     real(kind=dp), intent(inout) :: sig_u(:,:,:), sig_c(:,:,:)
+    !> Optional accumulator for the coupled AO density response, spin-summed as
+    !> occ_factor*(D - D^T) with shape (3,nbf,nbf).  Exported for the ACID /
+    !> current-density map; the shielding itself does not use it.
+    real(kind=dp), intent(inout), optional :: pb_out(:,:,:)
     real(kind=dp), allocatable :: h1mo(:,:,:), s1mo(:,:,:), mo1u(:,:,:), mo1c(:,:,:)
-    real(kind=dp), allocatable :: pso(:,:,:), st(:,:)
+    real(kind=dp), allocatable :: pso(:,:,:), st(:,:), pb(:,:)
+    real(kind=dp), allocatable :: dm10u(:,:,:), dm10c(:,:,:)
     integer :: c, iat
 
     allocate(h1mo(nmo,nocc,3), s1mo(nmo,nocc,3), mo1u(nmo,nocc,3), mo1c(nmo,nocc,3), &
-             pso(nbf,nbf,3), st(3,3), source=0.0d0)
+             pso(nbf,nbf,3), st(3,3), dm10u(nbf,nbf,3), dm10c(nbf,nbf,3), &
+             source=0.0d0)
     do c = 1, 3
       call ao_to_mo_occ(h1ao(:,:,c), mo, h1mo(:,:,c), nbf, nmo, nocc)
       call ao_to_mo_occ(s1ao(:,:,c), mo, s1mo(:,:,c), nbf, nmo, nocc)
     end do
     call solve_mo1_uncoupled(h1mo, s1mo, e, nocc, nmo, mo1u)
     call solve_mo1_coupled(infos, basis, mo, h1mo, s1mo, e, nocc, nmo, scale_exch, mo1c)
+    if (present(pb_out)) then
+      allocate(pb(nbf,nbf), source=0.0d0)
+      do c = 1, 3
+        call giao_pb_density(mo, mo1c(:,:,c), pb, nbf, nmo, nocc)
+        pb_out(c,:,:) = pb_out(c,:,:) + occ_factor*pb
+      end do
+      deallocate(pb)
+    end if
+    call perturbed_ao_density(mo1u, mo, nbf, nmo, nocc, occ_factor, dm10u)
+    call perturbed_ao_density(mo1c, mo, nbf, nmo, nocc, occ_factor, dm10c)
     do iat = 1, nat
       call pso_integrals(basis, coords(:,iat), pso)
-      call para_tensor(mo1u, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      call para_tensor(dm10u, pso, nbf, st)
       sig_u(:,:,iat) = sig_u(:,:,iat) + st
-      call para_tensor(mo1c, mo, pso, nbf, nmo, nocc, st, occ_factor)
+      call para_tensor(dm10c, pso, nbf, st)
       sig_c(:,:,iat) = sig_c(:,:,iat) + st
     end do
-    deallocate(h1mo, s1mo, mo1u, mo1c, pso, st)
+    deallocate(h1mo, s1mo, mo1u, mo1c, pso, st, dm10u, dm10c)
   end subroutine giao_para_channel
 
   !> Semicanonicalize ROHF orbitals for spin sigma: diagonalize the occ-occ and
@@ -657,20 +751,33 @@ contains
     deallocate(fao, fmo)
   end subroutine semicanon_orbitals
 
-  subroutine para_tensor(mo1, mo, h01i, nbf, nmo, nocc, sig, occ_factor)
-    real(kind=dp), intent(in) :: mo1(:,:,:), mo(:,:), h01i(:,:,:)
+  !> AO first-order density from the MO response, ofac*C mo1 C_occ^T.
+  !> It depends on the response, not on the nucleus, so the shielding loop
+  !> builds it once per channel rather than once per atom.
+  subroutine perturbed_ao_density(mo1, mo, nbf, nmo, nocc, ofac, dm10)
+    ! Explicit shapes: these go straight to dgemm, which needs the leading
+    ! dimensions to be the real ones and the storage to be contiguous.
     integer, intent(in) :: nbf, nmo, nocc
-    real(kind=dp), intent(out) :: sig(:,:)
-    real(kind=dp), intent(in), optional :: occ_factor
-    integer :: x, y, a, b
-    real(kind=dp), allocatable :: dm10(:,:,:)
-    real(kind=dp) :: acc, ofac
-    ofac = 2.0d0                 ! RHF closed-shell occupation; UHF per spin = 1
-    if (present(occ_factor)) ofac = occ_factor
-    allocate(dm10(nbf,nbf,3))
+    real(kind=dp), intent(in) :: mo1(nmo,nocc,3), mo(nbf,nmo), ofac
+    real(kind=dp), intent(out) :: dm10(nbf,nbf,3)
+    real(kind=dp), allocatable :: tmp(:,:)
+    integer :: x
+    allocate(tmp(nbf,nocc))
     do x = 1, 3
-      dm10(:,:,x) = ofac*matmul(mo(:,1:nmo), matmul(mo1(:,:,x), transpose(mo(:,1:nocc))))
+      call dgemm('n','n', nbf, nocc, nmo, 1.0d0, mo, nbf, mo1(:,:,x), nmo, &
+                 0.0d0, tmp, nbf)
+      call dgemm('n','t', nbf, nbf, nocc, ofac, tmp, nbf, mo, nbf, &
+                 0.0d0, dm10(:,:,x), nbf)
     end do
+    deallocate(tmp)
+  end subroutine perturbed_ao_density
+
+  subroutine para_tensor(dm10, h01i, nbf, sig)
+    real(kind=dp), intent(in) :: dm10(:,:,:), h01i(:,:,:)
+    integer, intent(in) :: nbf
+    real(kind=dp), intent(out) :: sig(:,:)
+    integer :: x, y, a, b
+    real(kind=dp) :: acc
     do x = 1, 3
       do y = 1, 3
         acc = 0.0d0
@@ -684,7 +791,6 @@ contains
         sig(x,y) = -2.0d0*acc
       end do
     end do
-    deallocate(dm10)
   end subroutine para_tensor
 
 end module nmr_giao_shielding_mod

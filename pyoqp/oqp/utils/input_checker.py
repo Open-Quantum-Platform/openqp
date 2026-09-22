@@ -215,7 +215,7 @@ OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
 MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
-SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
+SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr", "acid"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
@@ -5593,6 +5593,72 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=functional,
                 action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
             )
+    if "acid" in scf_prop:
+        # ACID is drawn from the GIAO magnetic density response, and it has to
+        # be requested after the shielding that produces it.
+        if "nmr" not in scf_prop:
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes require the GIAO NMR response that produces them.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="Add 'nmr' to properties.scf_prop, before 'acid'.",
+            )
+        elif scf_prop.index("acid") < scf_prop.index("nmr"):
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes are requested before the NMR response they are built from.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="List 'nmr' before 'acid' in properties.scf_prop.",
+            )
+        if nmr_gauge != "giao":
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "ACID cubes require GIAO; a common gauge origin leaves the map "
+                "gauge-contaminated (benzene NICS(0) is ~95 ppm off in 6-31G*).",
+                value=nmr_gauge,
+                expected="giao",
+                action="Set properties.nmr_gauge=giao.",
+            )
+        # The grid controls are read only after the SCF and the GIAO response,
+        # so a bad value otherwise costs the whole calculation before
+        # write_acid_cubes rejects it.  NaN slips past `<= 0.0` -- every
+        # comparison against it is false -- and make_box_grid would then build
+        # a box of non-finite coordinates and write cubes nothing can read.
+        for key, value, floor in (
+            ("acid_spacing", _get(config, "properties", "acid_spacing", 0.2), "> 0.0"),
+            ("acid_padding", _get(config, "properties", "acid_padding", 5.0), ">= 0.0"),
+        ):
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} must be a number, in bohr.",
+                    value=value,
+                    expected=f"float {floor}",
+                    action=f"Set properties.{key} to a number, e.g. "
+                           f"{'0.2' if key == 'acid_spacing' else '5.0'}.",
+                )
+                continue
+            bad = (not math.isfinite(number)
+                   or (number <= 0.0 if key == "acid_spacing" else number < 0.0))
+            if bad:
+                report.add(
+                    "ERROR",
+                    f"properties.{key}",
+                    f"properties.{key} must be a finite number {floor}, in bohr.",
+                    value=number,
+                    expected=f"{floor} and finite",
+                    action=f"Set properties.{key} to a sensible grid value, e.g. "
+                           f"{'0.2' if key == 'acid_spacing' else '5.0'}.",
+                )
+
     if td_prop:
         report.add(
             "WARNING",

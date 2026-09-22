@@ -285,6 +285,18 @@ contains
     nelec_a = infos%mol_prop%nelec_a
     nelec_b = infos%mol_prop%nelec_b
 
+    ! Any GIAO magnetic response on this molecule belongs to the orbitals this
+    ! run is about to replace.  giao_para_channel builds it from the MOs, their
+    ! energies, the spin occupations and the exchange scale -- none of which a
+    ! provenance stamp can represent exactly, and two solutions can share the
+    ! invariants of the total density that it could.  So drop the response here
+    ! instead of trying to describe it: after this point the molecule has no
+    ! GIAO response until a GIAO run makes one.  Erasing on entry rather than on
+    ! exit also keeps a failed or interrupted SCF from leaving one behind.
+    ! erase is a no-op for a tag that is not present.
+    call infos%dat%erase((/ character(len=80) :: &
+           OQP_nmr_pdens, OQP_nmr_pdens_ref /))
+
     ! Get matrix dimensions
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
