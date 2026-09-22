@@ -77,6 +77,10 @@ def giao(tag, inp, log):
     return r.mol
 
 
+def basis_nbf(m):
+    return int(m.data.get_basis()["nbf"])
+
+
 def response(mol):
     nbf = int(round(np.asarray(mol.data["OQP::VEC_MO_A"]).size ** 0.5))
     raw = np.array(mol.data["OQP::nmr_pdens"], copy=True).ravel(order="C")
@@ -141,11 +145,11 @@ except ValueError as error:
 else:
     RESULT["moved_refusal"] = ""
 
-# Re-converge where it moved to, then put the coordinates back: the stamped
-# geometry matches again and only the wavefunction has moved on, which is the
-# same-size-SCF case -- caught by the density fingerprint rather than by nbf.
-SinglePoint(mol).energy()
+# A new SCF replaces the orbitals the response was built from, and nothing in
+# a stamp can identify those, so scf_driver drops the response instead.  Put
+# the coordinates back first, so the geometry check cannot be what answers.
 mol.update_system(home)
+SinglePoint(mol).energy()
 try:
     AcidExporter(mol)
 except ValueError as error:
@@ -163,15 +167,15 @@ AcidExporter(mol)
 # --- the AO ordering is part of the response's identity --------------------
 # Hold the density and the geometry fixed and permute the stamp's shell block,
 # which is what the exporter sees when a same-size basis comes back with its
-# shells reordered.  nbf is unchanged and the density invariants are unchanged
-# by construction -- trace and sum of squares survive D -> P D P^T -- so only
-# the shell block can catch this.
+# shells reordered.  nbf is unchanged, and no invariant of the density could
+# have helped either -- trace and sum of squares both survive D -> P D P^T --
+# so only the shell block can catch this.
 snap = np.array(mol.data["OQP::nmr_pdens_ref"], copy=True).ravel()
 buf = np.asarray(mol.data["OQP::nmr_pdens_ref"]).ravel()
 nat = len(mol.get_atoms())
-head = 6 + 3 * nat
-nsh = int(round(snap[4]))
-nprim = int(round(snap[5]))
+head = 4 + 3 * nat          # [1] nbf, [2] natom, [3] nshell, [4] nprim
+nsh = int(round(snap[2]))
+nprim = int(round(snap[3]))
 blk = buf[head:head + 3 * nsh].reshape(nsh, 3).copy()
 RESULT["permuted_rows_differ"] = bool(np.any(blk[0] != blk[2]))
 blk[[0, 2]] = blk[[2, 0]]
@@ -215,11 +219,11 @@ if target >= 0:
     AcidExporter(mol)
 
 # A real same-size basis swap: STO-6G has the same seven AOs as STO-3G here, so
-# nbf cannot tell them apart.  Re-converge without re-running the GIAO.
+# nbf cannot tell them apart.  No SCF here on purpose -- an SCF would erase the
+# response and answer before the stamp ever got the chance.
 mol.config["input"]["basis"] = "sto-6g"
 oqp.library.set_basis(mol)
-SinglePoint(mol).energy()
-RESULT["rebasis_nbf"] = int(round(np.asarray(mol.data["OQP::VEC_MO_A"]).size ** 0.5))
+RESULT["rebasis_nbf"] = int(basis_nbf(mol))
 try:
     AcidExporter(mol)
 except ValueError as error:
@@ -378,13 +382,15 @@ class AcidCurrentDensityTests(unittest.TestCase):
                  "since moved, and would have written a map mixing the two")
         self.assertIn("geometry moved", msg)
 
-    def test_a_reconverged_density_invalidates_the_response(self):
-        """Same atoms, same basis size, new SCF: still not the same response."""
+    def test_a_new_scf_drops_the_response(self):
+        """Same atoms, same basis, new orbitals: the response must not survive."""
         msg = self.got["restale_refusal"]
         self.assertTrue(
-            msg, "the exporter accepted a response built from a different "
-                 "wavefunction at the same geometry and basis size")
-        self.assertIn("density changed", msg)
+            msg, "the exporter accepted a response built from orbitals that "
+                 "the new SCF has since replaced")
+        # scf_driver erases it, so the export finds nothing rather than judging
+        # a fingerprint of a state it cannot identify.
+        self.assertIn("absent", msg)
 
     def test_a_permuted_ao_order_invalidates_the_response(self):
         """nbf and the density invariants cannot see a reordered basis."""
@@ -420,13 +426,12 @@ class AcidCurrentDensityTests(unittest.TestCase):
         msg = self.got["rebasis_refusal"]
         self.assertTrue(msg, "the exporter accepted a response built in a "
                              "different basis of the same size")
-        # It has to be the basis that is named, not the density: the density
-        # also moved here, and without the basis block that is all the check
-        # would have had to go on.  STO-6G differs from STO-3G in contraction
-        # length, so which part of the basis block speaks first is an
+        # It has to be the basis block that answers.  No SCF ran, so the
+        # response is still there to be judged; STO-6G differs from STO-3G in
+        # contraction length, so which part of the block speaks first is an
         # implementation detail.
         self.assertIn("basis", msg)
-        self.assertNotIn("density", msg)
+        self.assertNotIn("absent", msg)
 
     def test_spherical_basis_is_refused_explicitly(self):
         message = self.got["spherical_refusal"]

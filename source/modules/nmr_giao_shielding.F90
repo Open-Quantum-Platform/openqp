@@ -279,7 +279,7 @@ contains
     ref_nsh = basis%nshell
     ref_nprim = basis%nprim
     call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, &
-                                (/ 6 + 3*nat + 3*ref_nsh + 2*ref_nprim /), &
+                                (/ 4 + 3*nat + 3*ref_nsh + 2*ref_nprim /), &
                                 pdens_ref, description=OQP_nmr_pdens_ref_comment)
     pdens_ref = 0.0d0
     pdens_ref(1) = -1.0d0
@@ -338,38 +338,31 @@ contains
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
 
-    ! pdens is final here: record what it belongs to.  The density fingerprint
-    ! is the pair (trace, sum of squares) of the same total AO density the
-    ! export rebuilds, which moves for any change of basis, charge, spin state
-    ! or SCF solution; the coordinates catch a geometry that merely moved.
-    block
-      real(kind=dp), allocatable :: dtot(:,:)
-      allocate(dtot(nbf,nbf))
-      dtot = dm
-      if (open_shell) dtot = dtot + dm_b
-      pdens_ref(3) = 0.0d0
-      do i = 1, nbf
-        pdens_ref(3) = pdens_ref(3) + dtot(i,i)
-      end do
-      pdens_ref(4) = sum(dtot*dtot)
-      deallocate(dtot)
-    end block
+    ! pdens is final here: record what it belongs to.  The stamp carries only
+    ! what it can represent exactly -- sizes, the geometry, and the basis.  The
+    ! electronic state the response was built from is NOT described here: it is
+    ! the MOs, their energies, the spin occupations and the exchange scale, and
+    ! any scalar summary of them (or of the density they produce) is
+    ! non-unique.  That side is handled by invalidation instead -- scf_driver
+    ! erases both records on entry -- so a stale response cannot survive a new
+    ! SCF to be judged by a fingerprint here.
     pdens_ref(1) = real(nbf, kind=dp)
     pdens_ref(2) = real(nat, kind=dp)
-    pdens_ref(5) = real(ref_nsh, kind=dp)
-    pdens_ref(6) = real(ref_nprim, kind=dp)
-    pdens_ref(7:6+3*nat) = reshape(coords, (/ 3*nat /))
+    pdens_ref(3) = real(ref_nsh, kind=dp)
+    pdens_ref(4) = real(ref_nprim, kind=dp)
+    pdens_ref(5:4+3*nat) = reshape(coords, (/ 3*nat /))
     ! The basis block pins the AO ordering and the AO functions themselves.
-    ! nbf and the density invariants above are unchanged by a permutation of
-    ! the basis -- trace and sum of squares survive D -> P D P^T -- so on their
-    ! own they would accept a same-size basis whose shells came back in a
-    ! different order, and the export would then contract this response in the
-    ! old AO order against the new AOs.  The primitives are stored in full
+    ! nbf cannot see a permutation of the basis, and neither could an invariant
+    ! of the density it produces -- trace and sum of squares both survive
+    ! D -> P D P^T -- so without this block a same-size basis whose shells came
+    ! back in a different order would be accepted, and the export would then
+    ! contract this response in the old AO order against the new AOs.  The
+    ! primitives are stored in full
     ! rather than reduced: any per-shell summary is non-injective (exponents
     ! [1, 2] and [1.5, 1.5] share a sum), and at 2*nprim reals this is a
     ! rounding error next to the 3*nbf^2 response it guards.  These are the
     ! same arrays oqp_get_basis hands the exporter.
-    ref_q = 6 + 3*nat
+    ref_q = 4 + 3*nat
     do ref_s = 1, ref_nsh
       ! Zero-based, matching what oqp_get_basis exports and therefore what the
       ! export compares against (oqpdata.get_basis subtracts 1).

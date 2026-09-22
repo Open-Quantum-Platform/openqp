@@ -41,10 +41,14 @@ Provenance: ``OQP::nmr_pdens`` is a persistent record -- it stays on the
 molecule and in the .oqp file until another GIAO run replaces it, and nothing
 else invalidates it.  A same-size SCF, a moved geometry or a CGO NMR call
 therefore leaves behind a response that still loads at the right shape.  The
-driver stamps the basis size, atom count, geometry and density fingerprint it
-built the response from into ``OQP::nmr_pdens_ref``; ``AcidExporter`` refuses
-anything that does not match the molecule it is asked to plot, rather than
-quietly mixing one geometry's response with another's coordinates.
+driver stamps what it can represent exactly -- sizes, geometry and the basis
+down to its primitives -- into ``OQP::nmr_pdens_ref``, and ``AcidExporter``
+refuses anything that does not match the molecule it is asked to plot rather
+than quietly mixing one geometry's response with another's coordinates.  The
+electronic state is handled the other way round: the response depends on the
+MOs, their energies, the spin occupations and the exchange scale, which no
+scalar summary identifies, so ``scf_driver`` erases both records on entry and a
+new SCF simply leaves no response behind.
 
 Basis limits: the grid evaluator (``oqp.analysis.gto_grid.AOBasis``) walks
 Cartesian components up to f, so a spherical-harmonic basis needs
@@ -183,6 +187,10 @@ class AcidExporter:
         without looking wrong.  The GIAO driver stamps what the response
         belongs to (``OQP::nmr_pdens_ref``); this is the other half of that
         contract.
+
+        The stamp covers only what it can pin down exactly: sizes, geometry and
+        basis.  A changed electronic state is not detected here -- it is
+        prevented, by ``scf_driver`` erasing the response as it starts.
         """
         try:
             ref = np.asarray(self.mol.data["OQP::nmr_pdens_ref"],
@@ -212,26 +220,26 @@ class AcidExporter:
                 f"the GIAO magnetic response was built for "
                 f"{int(round(ref[0]))} basis functions, but this molecule now "
                 f"has {self.nbf}.  Re-run the GIAO NMR calculation.")
-        nsh = int(round(ref[4]))
-        nprim = int(round(ref[5]))
-        head = 6 + 3 * nat
+        nsh = int(round(ref[2]))
+        nprim = int(round(ref[3]))
+        head = 4 + 3 * nat
         if ref.size != head + 3 * nsh + 2 * nprim:
             raise ValueError(
                 "the GIAO magnetic response carries a malformed provenance "
                 f"stamp ({ref.size} entries for {nat} atoms, {nsh} shells and "
                 f"{nprim} primitives).  Re-run the GIAO NMR calculation.")
-        moved = float(np.abs(ref[6:head].reshape(nat, 3) - self.coords).max())
+        moved = float(np.abs(ref[4:head].reshape(nat, 3) - self.coords).max())
         if moved > 1.0e-8:
             raise ValueError(
                 f"the geometry moved by {moved:.3e} bohr since the GIAO "
                 f"magnetic response was computed, so the response no longer "
                 f"matches these coordinates.  Re-run the GIAO NMR "
                 f"calculation.")
-        # The AO ordering itself: nbf and the density invariants below are
-        # blind to a permutation of the basis (trace and sum of squares survive
-        # D -> P D P^T), so a same-size basis that came back with its shells in
-        # a different order would pass everything else while the response is
-        # indexed in the old order.
+        # The AO ordering itself.  nbf cannot see a permutation of the basis,
+        # and neither can any invariant of the density it produces -- trace and
+        # sum of squares both survive D -> P D P^T -- so without this a
+        # same-size basis that came back with its shells in a different order
+        # would pass while the response stayed indexed in the old order.
         got_sh, got_prim = self._basis_signature()
         if got_sh.shape[0] != nsh or got_prim.shape[1] != nprim:
             raise ValueError(
@@ -268,20 +276,6 @@ class AcidExporter:
                 f"against ({want_prim[0, k]:.10g}, {want_prim[1, k]:.10g}) when "
                 f"the response was built, so the AO functions it is indexed in "
                 f"are not these.  Re-run the GIAO NMR calculation.")
-        # The density fingerprint is summed in a different order here than in
-        # the driver, so it is compared at a tolerance -- it is a detector of
-        # a changed wavefunction, not a checksum.  Any real change (basis,
-        # charge, spin state, a re-converged SCF) moves it enormously.
-        got = np.array([float(np.trace(self.dm)), float(np.sum(self.dm ** 2))])
-        want = ref[2:4]
-        scale = np.maximum(np.abs(want), 1.0)
-        if np.any(np.abs(got - want) > 1.0e-8 * scale):
-            raise ValueError(
-                "the electronic density changed since the GIAO magnetic "
-                "response was computed (density fingerprint "
-                f"{got[0]:.10g}/{got[1]:.10g} against {want[0]:.10g}/"
-                f"{want[1]:.10g}), so the response belongs to a different "
-                "wavefunction.  Re-run the GIAO NMR calculation.")
 
     def _basis_signature(self):
         """The basis as the grid evaluator sees it: shells and primitives.
