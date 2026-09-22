@@ -124,6 +124,35 @@ RESULT["shape_again"] = list(p_again.shape)
 RESULT["stale_after_shrink"] = float(np.abs(p_again - p_small).max())
 RESULT["scale_small"] = float(np.abs(p_small).max())
 
+# --- the response is persistent, so a molecule that moved must be refused ---
+# The geometry-optimisation shape of the defect: OQP::nmr_pdens survives
+# update_system() untouched and, at an unchanged basis size, still loads with
+# the right shape -- so without a provenance stamp the exporter silently
+# combines the previous geometry's response with this geometry's coordinates.
+AcidExporter(mol)  # current right here; everything below deliberately is not
+home = np.asarray(mol.get_system(), dtype=float).copy()
+away = home.copy()
+away[0] += 0.05
+mol.update_system(away)
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["moved_refusal"] = str(error)
+else:
+    RESULT["moved_refusal"] = ""
+
+# Re-converge where it moved to, then put the coordinates back: the stamped
+# geometry matches again and only the wavefunction has moved on, which is the
+# same-size-SCF case -- caught by the density fingerprint rather than by nbf.
+SinglePoint(mol).energy()
+mol.update_system(home)
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["restale_refusal"] = str(error)
+else:
+    RESULT["restale_refusal"] = ""
+
 # --- spherical basis: AO-indexed response, Cartesian-only exporter ----------
 mol_sph = giao("sph", {inp_sph!r}, {log_sph!r})
 nbf_sph, p_sph = response(mol_sph)
@@ -266,6 +295,22 @@ class AcidCurrentDensityTests(unittest.TestCase):
         # the cross-code tolerance belongs.
         self.assertLess(np.abs(np.asarray(self.ref["acid"]) - published).max(),
                         1e-12, "the reference fixture is not on the published scale")
+
+    def test_a_moved_geometry_invalidates_the_response(self):
+        """A response left over from the previous geometry must not be plotted."""
+        msg = self.got["moved_refusal"]
+        self.assertTrue(
+            msg, "the exporter accepted a response from a geometry that has "
+                 "since moved, and would have written a map mixing the two")
+        self.assertIn("geometry moved", msg)
+
+    def test_a_reconverged_density_invalidates_the_response(self):
+        """Same atoms, same basis size, new SCF: still not the same response."""
+        msg = self.got["restale_refusal"]
+        self.assertTrue(
+            msg, "the exporter accepted a response built from a different "
+                 "wavefunction at the same geometry and basis size")
+        self.assertIn("density changed", msg)
 
     def test_spherical_basis_is_refused_explicitly(self):
         message = self.got["spherical_refusal"]

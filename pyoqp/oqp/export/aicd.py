@@ -37,6 +37,15 @@ Note on gauge: ACID must be built on the GIAO path.  With a common gauge origin
 the map is badly gauge-contaminated -- benzene NICS(0) comes out near -105 ppm
 in 6-31G* and is still ~43 ppm off at 6-311++G**, against -10 ppm for GIAO.
 
+Provenance: ``OQP::nmr_pdens`` is a persistent record -- it stays on the
+molecule and in the .oqp file until another GIAO run replaces it, and nothing
+else invalidates it.  A same-size SCF, a moved geometry or a CGO NMR call
+therefore leaves behind a response that still loads at the right shape.  The
+driver stamps the basis size, atom count, geometry and density fingerprint it
+built the response from into ``OQP::nmr_pdens_ref``; ``AcidExporter`` refuses
+anything that does not match the molecule it is asked to plot, rather than
+quietly mixing one geometry's response with another's coordinates.
+
 Basis limits: the grid evaluator (``oqp.analysis.gto_grid.AOBasis``) walks
 Cartesian components up to f, so a spherical-harmonic basis needs
 ``[input] ispher=false`` and a Cartesian basis containing g or higher shells is
@@ -143,20 +152,88 @@ class AcidExporter:
         self.mol = mol
         self.ao = ao if ao is not None else AOBasis(mol)
         self.nbf = self.ao.nbf
+        self.coords = self.ao.coords
+        self.rcen = self.ao.coords[self.ao.ao_atom]
+        self.Z = np.asarray(mol.get_atoms(), dtype=int)
+        self.dm = self._total_density()
         try:
-            self.pmat = _f_order(mol, "OQP::nmr_pdens", (3, self.nbf, self.nbf))
+            mol.data["OQP::nmr_pdens"]
         except AttributeError:
             # OQPData raises AttributeError for an absent tag; say what is
             # actually missing rather than surfacing the tagarray lookup.
             raise ValueError(
                 "OQP::nmr_pdens is absent; ACID needs a completed GIAO NMR run "
                 "(properties=nmr with nmr_gauge=giao).") from None
-        self.dm = self._total_density()
-        self.rcen = self.ao.coords[self.ao.ao_atom]
-        self.Z = np.asarray(mol.get_atoms(), dtype=int)
-        self.coords = self.ao.coords
+        # Provenance before shape: a response from a different molecule can
+        # still carry the right shape, and when it does not, "built for 7 basis
+        # functions" is the message worth having rather than a reshape error.
+        self._verify_provenance()
+        self.pmat = _f_order(mol, "OQP::nmr_pdens", (3, self.nbf, self.nbf))
         self.origin, self.n, self.dvec, self.points = make_box_grid(
             self.coords, padding=padding, spacing=spacing)
+
+    def _verify_provenance(self):
+        """Refuse a response that does not belong to this molecule.
+
+        ``OQP::nmr_pdens`` is persistent: it lives on in the molecule and in
+        the .oqp file, and only another GIAO run replaces it.  A same-size SCF,
+        a moved geometry or a CGO NMR call therefore leaves the old response
+        in place, still the right shape and still loadable, and combining it
+        with the current density and coordinates gives a map that is wrong
+        without looking wrong.  The GIAO driver stamps what the response
+        belongs to (``OQP::nmr_pdens_ref``); this is the other half of that
+        contract.
+        """
+        try:
+            ref = np.asarray(self.mol.data["OQP::nmr_pdens_ref"],
+                             dtype=float).ravel()
+        except AttributeError:
+            raise ValueError(
+                "OQP::nmr_pdens carries no provenance stamp, so it cannot be "
+                "shown to belong to this molecule; it predates the ACID "
+                "export or was written by another code path.  Re-run the GIAO "
+                "NMR calculation.") from None
+        nat = self.coords.shape[0]
+        # Written invalid when the buffer is allocated and filled in only once
+        # the response is complete, so a run that aborted mid-way reads as
+        # stale here rather than as current.
+        if ref.size < 4 or ref[0] < 0.0:
+            raise ValueError(
+                "the GIAO magnetic response is marked incomplete: the run that "
+                "allocated it did not finish.  Re-run the GIAO NMR "
+                "calculation.")
+        if ref.size != 3 * nat + 4:
+            raise ValueError(
+                f"the GIAO magnetic response was built for a molecule with "
+                f"{(ref.size - 4) // 3} atoms, but this one has {nat}.  "
+                f"Re-run the GIAO NMR calculation.")
+        if int(round(ref[0])) != self.nbf or int(round(ref[1])) != nat:
+            raise ValueError(
+                f"the GIAO magnetic response was built for "
+                f"{int(round(ref[0]))} basis functions on "
+                f"{int(round(ref[1]))} atoms, but this molecule now has "
+                f"{self.nbf} on {nat}.  Re-run the GIAO NMR calculation.")
+        moved = float(np.abs(ref[4:].reshape(nat, 3) - self.coords).max())
+        if moved > 1.0e-8:
+            raise ValueError(
+                f"the geometry moved by {moved:.3e} bohr since the GIAO "
+                f"magnetic response was computed, so the response no longer "
+                f"matches these coordinates.  Re-run the GIAO NMR "
+                f"calculation.")
+        # The density fingerprint is summed in a different order here than in
+        # the driver, so it is compared at a tolerance -- it is a detector of
+        # a changed wavefunction, not a checksum.  Any real change (basis,
+        # charge, spin state, a re-converged SCF) moves it enormously.
+        got = np.array([float(np.trace(self.dm)), float(np.sum(self.dm ** 2))])
+        want = ref[2:4]
+        scale = np.maximum(np.abs(want), 1.0)
+        if np.any(np.abs(got - want) > 1.0e-8 * scale):
+            raise ValueError(
+                "the electronic density changed since the GIAO magnetic "
+                "response was computed (density fingerprint "
+                f"{got[0]:.10g}/{got[1]:.10g} against {want[0]:.10g}/"
+                f"{want[1]:.10g}), so the response belongs to a different "
+                "wavefunction.  Re-run the GIAO NMR calculation.")
 
     def _total_density(self):
         """Total AO density, matching the GIAO shielding driver's convention.

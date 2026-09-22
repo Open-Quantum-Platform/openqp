@@ -135,6 +135,7 @@ contains
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
     real(kind=dp), contiguous, pointer :: nmrout(:)
     real(kind=dp), contiguous, pointer :: pdens(:,:,:)
+    real(kind=dp), contiguous, pointer :: pdens_ref(:)
     real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
 
     basis => infos%basis
@@ -267,6 +268,18 @@ contains
                                 description=OQP_nmr_pdens_comment)
     pdens = 0.0d0
 
+    ! The response means nothing on its own: it is only consistent with the
+    ! geometry, basis size and density it was built from, and BOTH records
+    ! outlive this call -- they survive in the molecule and in the .oqp file,
+    ! where a later same-size SCF, a moved geometry or a CGO NMR run would
+    ! leave the response behind untouched.  So stamp the pair invalid now and
+    ! fill the stamp in only once the response is complete: an aborted or
+    ! superseded run then reads as stale rather than as current.
+    call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, (/ 3*nat + 4 /), pdens_ref, &
+                                description=OQP_nmr_pdens_ref_comment)
+    pdens_ref = 0.0d0
+    pdens_ref(1) = -1.0d0
+
     if (open_shell) then
       ! Spin-resolved: h1_sigma = h10(1e) + J[D_tot] - cx*K[D_sigma].  giao_h10_
       ! twoe_matrix returns (vj=J, vk=K, h10) for its input density; call it once
@@ -320,6 +333,26 @@ contains
     end if
     sig_u = sig_u * a2ppm
     sig_c = sig_c * a2ppm
+
+    ! pdens is final here: record what it belongs to.  The density fingerprint
+    ! is the pair (trace, sum of squares) of the same total AO density the
+    ! export rebuilds, which moves for any change of basis, charge, spin state
+    ! or SCF solution; the coordinates catch a geometry that merely moved.
+    block
+      real(kind=dp), allocatable :: dtot(:,:)
+      allocate(dtot(nbf,nbf))
+      dtot = dm
+      if (open_shell) dtot = dtot + dm_b
+      pdens_ref(3) = 0.0d0
+      do i = 1, nbf
+        pdens_ref(3) = pdens_ref(3) + dtot(i,i)
+      end do
+      pdens_ref(4) = sum(dtot*dtot)
+      deallocate(dtot)
+    end block
+    pdens_ref(1) = real(nbf, kind=dp)
+    pdens_ref(2) = real(nat, kind=dp)
+    pdens_ref(5:) = reshape(coords, (/ 3*nat /))
 
     ! --- Diamagnetic shielding (GIAO) ---
     !   a11part = cg_a11part(O=0) + 0.5 field_a R_nu,b  (verified vs libcint).

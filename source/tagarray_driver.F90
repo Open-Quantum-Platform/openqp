@@ -50,6 +50,15 @@ module oqp_tagarray_driver
     "magnetic field from the coupled GIAO CPHF/CPKS solution, spin-summed; "// &
     "shape (3, nbf, nbf), D^(1)_c = i * P(c,:,:), gauge origin at the "// &
     "coordinate origin.  Consumed by the ACID/current-density export."
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref = OQP_prefix // "nmr_pdens_ref"
+  character(len=*), parameter, public :: OQP_nmr_pdens_ref_comment = &
+    "Provenance of OQP::nmr_pdens, shape (3*natom+4): [1] = nbf, "// &
+    "[2] = natom, [3] = trace and [4] = sum of squares of the total AO "// &
+    "density the response was built from, [5:] = the nuclear coordinates "// &
+    "it was built at (bohr, 3 per atom).  [1] < 0 marks the response "// &
+    "incomplete.  Both records outlive the call that wrote them, so the "// &
+    "ACID export refuses a response whose stamp does not match the "// &
+    "molecule it is asked to plot."
   character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
   character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
     "Mulliken atomic partial charges (e), one per atom"
