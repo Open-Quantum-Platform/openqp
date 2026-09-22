@@ -240,6 +240,15 @@ class _WorkflowNmrProxy:
 
     def __call__(self, gauge=None, acid=False, **kwargs):
         acid = self._as_bool(acid)
+        # The grid controls only describe an ACID box, so asking for one
+        # without asking for ACID is a request this call cannot honour: it
+        # would store them, write no cubes and say nothing.  The .oqp modifier
+        # refuses the same combination; this is the other half of it.
+        grid = sorted(k for k in ("acid_spacing", "acid_padding") if k in kwargs)
+        if grid and not acid:
+            raise ValueError(
+                f"{' and '.join(grid)} require acid=true; without it no cubes "
+                f"are written and the grid is ignored.")
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge

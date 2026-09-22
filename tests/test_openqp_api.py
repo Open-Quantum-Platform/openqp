@@ -1077,6 +1077,20 @@ $$$$
         on = job("h2o_on")
         on.workflow.nmr(gauge="giao", acid="yes")
         self.assertEqual(on.to_input_dict()["properties"]["scf_prop"], "nmr,acid")
+        # The grid controls describe an ACID box, so they cannot be honoured
+        # without one; the .oqp modifier refuses the same combination, and
+        # accepting them here would store them, write no cubes and say nothing.
+        for kwargs in ({"acid_spacing": 0.5},
+                       {"acid_padding": 3.0},
+                       {"acid_spacing": 0.5, "acid_padding": 3.0}):
+            with self.assertRaisesRegex(ValueError, "require acid=true"):
+                job("h2o_grid").workflow.nmr(gauge="giao", acid=False, **kwargs)
+        # ...and they are accepted when ACID is actually asked for.
+        sized = job("h2o_sized")
+        sized.workflow.nmr(acid=True, acid_padding=2.5)
+        self.assertEqual(
+            str(sized.to_input_dict()["properties"]["acid_padding"]), "2.5")
+
         # None is "not asked for"; an empty or unrecognised string is a typo,
         # and both surfaces have to answer the same way (the .oqp modifier
         # raises on exactly these).
