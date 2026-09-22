@@ -1709,7 +1709,11 @@ class NAMD:
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape((-1, 3))
             constraints = len(self._ci) if getattr(self, '_has_constraints', False) else 0
             mask = getattr(self, '_move_mask', None)
-            moving = len(masses) if mask is None else int(round(float(np.sum(mask))))
+            rows = (np.ones(len(masses), dtype=bool) if mask is None
+                    else np.asarray(mask, dtype=float).reshape(-1) > 0.0)
+            # massless virtual sites are placed, not integrated: same count as
+            # _thermalize_initial used to rescale the velocities
+            moving = int(np.count_nonzero(rows & (masses > 0.0)))
             dof = 3*moving - constraints - 3
             source = 'restart' if getattr(self, 'restart_requested', False) else 'maxwell'
         elif hasattr(self, 'mass') and hasattr(self, 'vel'):
@@ -5148,10 +5152,7 @@ class NAMD_QMMM(NAMD):
         if self.restart_requested:
             self.v_all = np.zeros((self.natom_all, 3))
         else:
-            sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
-            self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
-            p = (self.m_all[:, None] * self.v_all).sum(axis=0)
-            self.v_all -= p / self.m_all.sum()
+            self._draw_maxwell_velocities()
             # A held atom is not thermalised and carries no momentum.  With
             # nothing held the two lines above are the whole draw, unchanged.
             self._hold_velocities()
@@ -5373,6 +5374,34 @@ class NAMD_QMMM(NAMD):
             p = (m_move[:, None] * self.v_all).sum(axis=0)
             self.v_all -= (p / m_move.sum()) * self._move_mask
 
+    def _draw_maxwell_velocities(self):
+        """Full-system Maxwell-Boltzmann velocities (a.u.) with the momentum removed.
+
+        A massless virtual site has no Maxwell width -- sqrt(kT/0) is inf, and
+        0 * inf in the momentum sum makes EVERY atom's velocity NaN -- so it is
+        drawn at rest instead; OpenMM places it from its parents anyway.  With
+        no virtual sites present this is the plain draw, normals included.
+        """
+        with np.errstate(divide='ignore'):
+            sig = np.where(self.m_all > 0.0,
+                           np.sqrt(KB_HARTREE * self.init_temp / self.m_all), 0.0)
+        self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
+        p = (self.m_all[:, None] * self.v_all).sum(axis=0)
+        self.v_all -= p / self.m_all.sum()
+        self.v_all[self.m_all <= 0.0] = 0.0
+
+    def _moving_particles(self):
+        """Boolean (natom_all,): the particles that carry degrees of freedom.
+
+        A held atom does not move, and a massless virtual site is placed by
+        OpenMM from its parents rather than integrated, so neither counts.  With
+        nothing held and no virtual sites this is every atom, as before.
+        """
+        mask = getattr(self, '_move_mask', None)
+        moving = (np.ones(len(self.m_all), dtype=bool) if mask is None
+                  else np.asarray(mask, dtype=float).reshape(-1) > 0.0)
+        return moving & (np.asarray(self.m_all, dtype=float).reshape(-1) > 0.0)
+
     def _set_move_mask(self, active):
         """Column mask (natom_all, 1): 0 on a held atom, 1 everywhere else.
 
@@ -5465,8 +5494,12 @@ class NAMD_QMMM(NAMD):
         which otherwise leaves the system below the target temperature.  Uniform
         scaling preserves both the RATTLE projection and zero COM momentum."""
         ncon = len(self._ci) if self._has_constraints else 0
-        # only the propagated atoms carry kinetic degrees of freedom
-        nmove = int(round(float(np.sum(self._move_mask))))
+        # Only propagated atoms carry kinetic degrees of freedom, and a massless
+        # virtual site is not an independent particle: OpenMM places it from its
+        # parents, and it contributes nothing to the kinetic energy below.
+        # Counting it would inflate ndof and rescale the real atoms to the wrong
+        # temperature.  With no virtual sites this is the plain moving count.
+        nmove = int(np.count_nonzero(self._moving_particles()))
         ndof = 3 * nmove - ncon - 3
         if ndof <= 0:
             return
