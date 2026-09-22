@@ -16,7 +16,7 @@ spin-orbit coupling.
 
 Prefer a graphical interface? **[OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/)**
 is the desktop application for building molecular structures, preparing OpenQP
-inputs, running calculations, and analyzing results. **[Download OQP Studio](https://github.com/Open-Quantum-Platform/openqp/releases/latest)**
+inputs, running calculations, and analyzing results. **[Download OQP Studio](https://open-quantum-platform.github.io/openqp-docs/studio/download/)**
 for macOS, Windows, or Linux; choose a `with-engine` installer for the easiest
 setup, with OpenQP bundled and ready to run.
 
