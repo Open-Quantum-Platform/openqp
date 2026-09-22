@@ -2687,9 +2687,18 @@ def lower_to_legacy(
             # The new concise surface defaults to gauge-origin-independent
             # shielding. Legacy .inp retains its established CGO default.
             props["nmr_gauge"] = _as_config_string(gauge if gauge is not None else "giao")
-            unknown = set(call.kwargs) - {"gauge", "nmr_gauge"}
+            # acid rides on the shielding call because it consumes the GIAO
+            # density response that call produces.
+            acid = call.kwargs.get("acid")
+            if acid is not None and str(acid).strip().lower() in {"true", "yes", "on", "1"}:
+                if str(props["nmr_gauge"]).strip().lower() != "giao":
+                    raise OQPInputError("nmr(acid=true) requires gauge=giao")
+                if "acid" not in current:
+                    current.append("acid")
+                props["scf_prop"] = ",".join(current)
+            unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid"}
             if unknown or call.args:
-                raise OQPInputError("nmr accepts only gauge=...")
+                raise OQPInputError("nmr accepts only gauge=... and acid=...")
             continue
         if call.name == "pcm":
             put("pcm", "enabled", True)

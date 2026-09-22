@@ -215,7 +215,7 @@ class _WorkflowNmrProxy:
     def __init__(self, owner):
         self._owner = owner
 
-    def __call__(self, gauge=None, **kwargs):
+    def __call__(self, gauge=None, acid=False, **kwargs):
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge
@@ -226,7 +226,14 @@ class _WorkflowNmrProxy:
         if nmr_gauge == "cgo" and scf_type != "rhf":
             raise ValueError("CGO NMR shielding supports closed-shell RHF references only.")
         self._owner._reject_nmr_unsupported_functionals()
-        kwargs["scf_prop"] = "nmr"
+        # ACID is drawn from the GIAO magnetic density response, so it is a
+        # modifier on the shielding call rather than a separate request: that
+        # puts the dependency in the signature instead of in list ordering.
+        if acid and nmr_gauge != "giao":
+            raise ValueError(
+                "ACID cubes require gauge='giao'; a common gauge origin leaves "
+                "the map gauge-contaminated.")
+        kwargs["scf_prop"] = "nmr,acid" if acid else "nmr"
         return self._owner.section("properties", **kwargs)
 
 
