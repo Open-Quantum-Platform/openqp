@@ -66,6 +66,14 @@ class AOBasis:
             raise ValueError(
                 f"AOBasis: nbf={self.nbf} matches neither the Cartesian ({n_cart}) "
                 f"nor spherical ({n_sph}) shell count for this basis.")
+        # The Cartesian component table stops at f; a g shell would otherwise
+        # fail deep inside the loop below with a bare KeyError.
+        max_am = int(max(angs)) if len(angs) else 0
+        if max_am > max(_CART):
+            raise NotImplementedError(
+                f"AOBasis supports angular momenta up to L={max(_CART)} (f); this "
+                f"basis contains an L={max_am} shell. Use a smaller basis or "
+                "evaluate on OQP's own grid.")
         p0 = 0
         for sh in range(int(basis["nsh"])):
             L = int(angs[sh]); nc = int(ncontr[sh]); at = int(centers[sh])

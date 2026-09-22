@@ -215,7 +215,7 @@ OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
 MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
-SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
+SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr", "acid"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
@@ -5593,6 +5593,38 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=functional,
                 action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
             )
+    if "acid" in scf_prop:
+        # ACID is drawn from the GIAO magnetic density response, and it has to
+        # be requested after the shielding that produces it.
+        if "nmr" not in scf_prop:
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes require the GIAO NMR response that produces them.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="Add 'nmr' to properties.scf_prop, before 'acid'.",
+            )
+        elif scf_prop.index("acid") < scf_prop.index("nmr"):
+            report.add(
+                "ERROR",
+                "properties.scf_prop",
+                "ACID cubes are requested before the NMR response they are built from.",
+                value=", ".join(scf_prop),
+                expected="nmr, acid",
+                action="List 'nmr' before 'acid' in properties.scf_prop.",
+            )
+        if nmr_gauge != "giao":
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "ACID cubes require GIAO; a common gauge origin leaves the map "
+                "gauge-contaminated (benzene NICS(0) is ~95 ppm off in 6-31G*).",
+                value=nmr_gauge,
+                expected="giao",
+                action="Set properties.nmr_gauge=giao.",
+            )
+
     if td_prop:
         report.add(
             "WARNING",

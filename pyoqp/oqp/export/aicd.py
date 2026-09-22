@@ -39,6 +39,12 @@ not.
 Note on gauge: ACID must be built on the GIAO path.  With a common gauge origin
 the map is badly gauge-contaminated -- benzene NICS(0) comes out near -105 ppm
 in 6-31G* and is still ~43 ppm off at 6-311++G**, against -10 ppm for GIAO.
+
+Basis limits: the grid evaluator (``oqp.analysis.gto_grid.AOBasis``) walks
+Cartesian components up to f, so a spherical-harmonic basis needs
+``[input] ispher=false`` and a Cartesian basis containing g or higher shells is
+not supported.  Both are rejected with an explicit message rather than a partial
+map.  The native ``OQP::nmr_pdens`` response itself carries no such restriction.
 """
 import numpy as np
 

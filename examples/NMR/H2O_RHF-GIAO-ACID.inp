@@ -1,0 +1,30 @@
+# RHF/STO-3G GIAO NMR shielding of H2O, followed by ACID cubes.
+# 'acid' writes the anisotropy of the induced current density together with the
+# three components of the current-density vector for B along z, as Gaussian
+# cubes named after the log file.  It reads the magnetic density response that
+# nmr_gauge=giao publishes, so 'nmr' must come first and the gauge must be GIAO:
+# a common gauge origin leaves the map gauge-contaminated.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=sto-3g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[properties]
+scf_prop=nmr,acid
+nmr_gauge=giao
+# Coarse grid to keep the example fast and its cubes small; the defaults
+# (0.2 / 5.0 bohr) are what a publication-quality map wants.
+acid_spacing=0.5
+acid_padding=3.0

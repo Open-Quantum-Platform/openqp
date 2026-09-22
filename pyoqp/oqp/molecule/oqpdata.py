@@ -646,6 +646,10 @@ OQP_CONFIG_SCHEMA = {
         # GIAO is recognized explicitly but gated until the integral/response
         # implementation and benchmarks are complete.
         'nmr_gauge': {'type': string, 'default': 'cgo'},
+        # ACID cube grid, in bohr.  The defaults resolve a ring current
+        # comfortably; coarsen them for a quick look at a large molecule.
+        'acid_spacing': {'type': float, 'default': '0.2'},
+        'acid_padding': {'type': float, 'default': '5.0'},
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
         'nac': {'type': str, 'default': ''},

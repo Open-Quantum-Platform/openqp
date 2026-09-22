@@ -337,7 +337,7 @@ GENERIC_SCHEMA_KEYS = {
         ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart
     """),
     "ekt": frozenset(),
-    "properties": _keys("scf_prop nmr_gauge td_prop nac export title back_door"),
+    "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop nac export title back_door"),
     "optimize": frozenset(),
     "geometric": frozenset(),
     "oqp": frozenset(),
