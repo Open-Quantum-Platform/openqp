@@ -94,6 +94,14 @@ def write_acid_cubes(mol):
     properties = mol.config.get("properties", {})
     spacing = float(properties.get("acid_spacing", 0.2))
     padding = float(properties.get("acid_padding", 5.0))
+    # nan and inf survive float() and slip past an ordering test, and the grid
+    # builder then produces a degenerate box of non-finite coordinates and
+    # writes cubes nothing can read.  Reject them as input, not as output.
+    if not (np.isfinite(spacing) and np.isfinite(padding)):
+        raise ValueError(
+            "properties.acid_spacing and acid_padding must be finite; got "
+            f"spacing={spacing}, padding={padding}."
+        )
     if spacing <= 0.0 or padding < 0.0:
         raise ValueError(
             "properties.acid_spacing must be positive and acid_padding "
