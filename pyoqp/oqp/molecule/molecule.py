@@ -159,6 +159,14 @@ class Molecule:
             'OQP::soc_eval',
             'OQP::soc_evec_re', 'OQP::soc_evec_im',
             'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
+            # The GIAO magnetic response and the stamp saying what it belongs
+            # to.  Checkpointed together or not at all: the response without
+            # its stamp cannot be shown to match the molecule it is reloaded
+            # onto, which is the whole point of the pair.  save_data(lean=True)
+            # is what drops them for anyone who does not want 3*nbf^2 reals in
+            # the file; absent tags are skipped, so a run without NMR is
+            # unaffected.
+            'OQP::nmr_pdens', 'OQP::nmr_pdens_ref',
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],

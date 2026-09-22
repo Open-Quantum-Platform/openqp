@@ -221,6 +221,17 @@ else:
 buf[:] = snap
 AcidExporter(mol)  # the restore has to leave a usable response behind
 
+# The checkpoint: the docstrings promise both records survive in the .oqp file,
+# and get_data() is the payload that decides whether they do.  Without the tags
+# registered the response is simply missing after a reload, and the export then
+# reports it absent for a calculation that did produce it.
+saved = mol.get_data()
+RESULT["checkpoint_has_pdens"] = "OQP::nmr_pdens" in saved
+RESULT["checkpoint_has_ref"] = "OQP::nmr_pdens_ref" in saved
+# tolist() keeps the array shape, so count elements rather than rows.
+RESULT["checkpoint_pdens_len"] = int(np.asarray(saved.get("OQP::nmr_pdens", [])).size)
+RESULT["checkpoint_ref_len"] = int(np.asarray(saved.get("OQP::nmr_pdens_ref", [])).size)
+
 # The evaluator is not injectable: one built for another molecule, or for a
 # same-size basis this molecule has since left, would sit outside the stamp
 # entirely -- the stamp is compared against the molecule, not against it.
@@ -483,6 +494,19 @@ class AcidCurrentDensityTests(unittest.TestCase):
         self.assertGreater(self.got["cube_acid_max"], 0.0)
         for size in self.got["cube_vector_sizes"]:
             self.assertEqual(size, self.got["cube_vector_sizes"][0])
+
+    def test_the_response_and_its_stamp_are_checkpointed(self):
+        """The docstrings promise the .oqp file keeps them; get_data decides."""
+        self.assertTrue(self.got["checkpoint_has_pdens"],
+                        "OQP::nmr_pdens is not in the checkpoint payload, so a "
+                        "reloaded calculation cannot export its map")
+        self.assertTrue(self.got["checkpoint_has_ref"],
+                        "OQP::nmr_pdens_ref is not in the checkpoint payload, "
+                        "so a reloaded response could not be matched to its "
+                        "molecule even if it were kept")
+        nbf = self.got["nbf_small"]
+        self.assertEqual(self.got["checkpoint_pdens_len"], 3 * nbf * nbf)
+        self.assertGreater(self.got["checkpoint_ref_len"], 0)
 
     def test_the_ao_evaluator_cannot_be_injected(self):
         """It would sit outside the provenance contract, not inside it."""
