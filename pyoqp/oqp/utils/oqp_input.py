@@ -2689,13 +2689,24 @@ def lower_to_legacy(
             props["nmr_gauge"] = _as_config_string(gauge if gauge is not None else "giao")
             # acid rides on the shielding call because it consumes the GIAO
             # density response that call produces.
-            acid = call.kwargs.get("acid")
-            if acid is not None and str(acid).strip().lower() in {"true", "yes", "on", "1"}:
-                if str(props["nmr_gauge"]).strip().lower() != "giao":
-                    raise OQPInputError("nmr(acid=true) requires gauge=giao")
-                if "acid" not in current:
-                    current.append("acid")
-                props["scf_prop"] = ",".join(current)
+            acid_raw = call.kwargs.get("acid")
+            if acid_raw is not None:
+                text = str(acid_raw).strip().lower()
+                if text in {"true", "yes", "on", "1"}:
+                    acid = True
+                elif text in {"false", "no", "off", "0"}:
+                    acid = False
+                else:
+                    # Silently reading a typo as "no" would hand back a run with
+                    # no cubes and no complaint.
+                    raise OQPInputError(
+                        f"nmr acid= expects true or false, got {acid_raw!r}")
+                if acid:
+                    if str(props["nmr_gauge"]).strip().lower() != "giao":
+                        raise OQPInputError("nmr(acid=true) requires gauge=giao")
+                    if "acid" not in current:
+                        current.append("acid")
+                    props["scf_prop"] = ",".join(current)
             unknown = set(call.kwargs) - {"gauge", "nmr_gauge", "acid"}
             if unknown or call.args:
                 raise OQPInputError("nmr accepts only gauge=... and acid=...")

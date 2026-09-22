@@ -219,6 +219,11 @@ class _WorkflowNmrProxy:
         self._owner._require_reference_scf_theory_for("NMR")
         if gauge is not None:
             kwargs["nmr_gauge"] = gauge
+        # ACID exists only on the GIAO path, so asking for it without naming a
+        # gauge selects one, as the concise surface already does.  Naming cgo
+        # explicitly still fails below rather than being quietly overridden.
+        if acid and "nmr_gauge" not in kwargs:
+            kwargs["nmr_gauge"] = "giao"
         nmr_gauge = str(kwargs.get("nmr_gauge", "cgo")).lower()
         scf_type = str(self._owner.config_typed.get("scf", {}).get("type", "rhf")).lower()
         if nmr_gauge not in {"cgo", "giao"}:
