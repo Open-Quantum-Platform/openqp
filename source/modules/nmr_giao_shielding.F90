@@ -279,7 +279,7 @@ contains
     ref_nsh = basis%nshell
     ref_nprim = basis%nprim
     call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, &
-                                (/ 4 + 3*nat + 3*ref_nsh + 2*ref_nprim /), &
+                                (/ 8 + 4*nat + 3*ref_nsh + 2*ref_nprim /), &
                                 pdens_ref, description=OQP_nmr_pdens_ref_comment)
     pdens_ref = 0.0d0
     pdens_ref(1) = -1.0d0
@@ -350,19 +350,29 @@ contains
     pdens_ref(2) = real(nat, kind=dp)
     pdens_ref(3) = real(ref_nsh, kind=dp)
     pdens_ref(4) = real(ref_nprim, kind=dp)
-    pdens_ref(5:4+3*nat) = reshape(coords, (/ 3*nat /))
+    ! Which nuclei, and how many electrons around them.  Coordinates and basis
+    ! do not say this: a composition or charge edited in place keeps both, and
+    ! the atomic numbers go straight into the cube header, so the file would
+    ! name one system and hold another's field.
+    pdens_ref(5) = real(infos%mol_prop%charge, kind=dp)
+    pdens_ref(6) = real(infos%mol_prop%nelec_a, kind=dp)
+    pdens_ref(7) = real(infos%mol_prop%nelec_b, kind=dp)
+    pdens_ref(8) = real(infos%mol_prop%mult, kind=dp)
+    do ref_s = 1, nat
+      pdens_ref(8+ref_s) = basis%atoms%zn(ref_s)
+    end do
+    pdens_ref(9+nat:8+4*nat) = reshape(coords, (/ 3*nat /))
     ! The basis block pins the AO ordering and the AO functions themselves.
     ! nbf cannot see a permutation of the basis, and neither could an invariant
     ! of the density it produces -- trace and sum of squares both survive
     ! D -> P D P^T -- so without this block a same-size basis whose shells came
     ! back in a different order would be accepted, and the export would then
     ! contract this response in the old AO order against the new AOs.  The
-    ! primitives are stored in full
-    ! rather than reduced: any per-shell summary is non-injective (exponents
-    ! [1, 2] and [1.5, 1.5] share a sum), and at 2*nprim reals this is a
-    ! rounding error next to the 3*nbf^2 response it guards.  These are the
-    ! same arrays oqp_get_basis hands the exporter.
-    ref_q = 4 + 3*nat
+    ! primitives are stored in full rather than reduced: any per-shell summary
+    ! is non-injective (exponents [1, 2] and [1.5, 1.5] share a sum), and at
+    ! 2*nprim reals this is a rounding error next to the 3*nbf^2 response it
+    ! guards.  These are the same arrays oqp_get_basis hands the exporter.
+    ref_q = 8 + 4*nat
     do ref_s = 1, ref_nsh
       ! Zero-based, matching what oqp_get_basis exports and therefore what the
       ! export compares against (oqpdata.get_basis subtracts 1).

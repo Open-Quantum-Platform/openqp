@@ -53,10 +53,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nmr_pdens_ref = OQP_prefix // "nmr_pdens_ref"
   character(len=*), parameter, public :: OQP_nmr_pdens_ref_comment = &
     "Provenance of OQP::nmr_pdens, shape "// &
-    "(4 + 3*natom + 3*nshell + 2*nprim): [1] = nbf, [2] = natom, "// &
-    "[3] = nshell, [4] = nprim, then the nuclear coordinates (bohr, 3 per "// &
-    "atom), then per shell in AO order (origin zero-based, am, ncontr), "// &
-    "then the exponents and the contraction coefficients in full.  "// &
+    "(8 + 4*natom + 3*nshell + 2*nprim): [1] = nbf, [2] = natom, "// &
+    "[3] = nshell, [4] = nprim, [5] = charge, [6] = nelec_a, "// &
+    "[7] = nelec_b, [8] = mult, then the atomic numbers, then the nuclear "// &
+    "coordinates (bohr, 3 per atom), then per shell in AO order (origin "// &
+    "zero-based, am, ncontr), then the exponents and the contraction "// &
+    "coefficients in full.  "// &
     "[1] < 0 marks the response incomplete.  The stamp carries only what "// &
     "it can represent exactly: sizes, geometry and basis.  The electronic "// &
     "state the response was built from is not described here -- it is the "// &

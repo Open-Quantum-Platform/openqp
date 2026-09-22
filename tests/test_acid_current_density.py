@@ -102,6 +102,38 @@ RESULT["acid"] = acid_scalar(j).tolist()
 RESULT["acid_rotated"] = acid_scalar(np.einsum("ia,pab,jb->pij", q, j, q)).tolist()
 RESULT["nbf_small"] = nbf_small
 
+# --- the workflow path, not just the exporter API --------------------------
+# scf_prop=acid dispatches here, and the shipped example asserts nothing about
+# what comes out of it -- it passes as long as nothing raises.  So check the
+# files themselves: four cubes, a grid that matches the header, and a scalar
+# field that is a norm and therefore cannot be negative.
+import os as _os
+from oqp.library.runfunc import write_acid_cubes
+
+mol.config["properties"]["acid_spacing"] = "0.6"
+mol.config["properties"]["acid_padding"] = "2.0"
+cube_paths = write_acid_cubes(mol)
+RESULT["cube_names"] = [_os.path.basename(q) for q in cube_paths]
+RESULT["cubes_exist"] = [_os.path.exists(q) for q in cube_paths]
+
+
+def read_cube(path):
+    with open(path) as fh:
+        lines = fh.read().splitlines()
+    natom = int(lines[2].split()[0])
+    dims = [int(lines[3 + k].split()[0]) for k in range(3)]
+    body = " ".join(lines[6 + natom:]).split()
+    return natom, dims, np.array(body, dtype=float)
+
+
+natom_c, dims_c, vals_c = read_cube(cube_paths[0])
+RESULT["cube_natom"] = natom_c
+RESULT["cube_npts_match"] = bool(vals_c.size == dims_c[0] * dims_c[1] * dims_c[2])
+RESULT["cube_all_finite"] = bool(np.all(np.isfinite(vals_c)))
+RESULT["cube_acid_min"] = float(vals_c.min())
+RESULT["cube_acid_max"] = float(vals_c.max())
+RESULT["cube_vector_sizes"] = [int(read_cube(q)[2].size) for q in cube_paths[1:]]
+
 # --- the SAME molecule and tagarray, at a different basis size -------------
 # A fresh Runner would build a fresh OQPData and never replace anything, so the
 # basis is changed on the molecule that already owns OQP::nmr_pdens.
@@ -173,7 +205,7 @@ AcidExporter(mol)
 snap = np.array(mol.data["OQP::nmr_pdens_ref"], copy=True).ravel()
 buf = np.asarray(mol.data["OQP::nmr_pdens_ref"]).ravel()
 nat = len(mol.get_atoms())
-head = 4 + 3 * nat          # [1] nbf, [2] natom, [3] nshell, [4] nprim
+head = 8 + 4 * nat          # header, charge/electron counts, Z, coords
 nsh = int(round(snap[2]))
 nprim = int(round(snap[3]))
 blk = buf[head:head + 3 * nsh].reshape(nsh, 3).copy()
@@ -188,6 +220,39 @@ else:
     RESULT["permuted_refusal"] = ""
 buf[:] = snap
 AcidExporter(mol)  # the restore has to leave a usable response behind
+
+# Nuclear and charge identity: the coordinates and the basis are untouched, so
+# only these slots say which system the response belongs to.  Poking them is
+# what the exporter sees when a composition or a charge is edited in place with
+# no SCF in between.
+buf[4] += 1.0
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["charge_refusal"] = str(error)
+else:
+    RESULT["charge_refusal"] = ""
+buf[:] = snap
+buf[8] += 1.0
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["z_refusal"] = str(error)
+else:
+    RESULT["z_refusal"] = ""
+buf[:] = snap
+
+# The sentinel the driver writes when it allocates the buffer and clears only
+# once the response is complete.  Nothing else reaches this branch: it stands
+# for a GIAO run that died between the two.
+buf[0] = -1.0
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["incomplete_refusal"] = str(error)
+else:
+    RESULT["incomplete_refusal"] = ""
+buf[:] = snap
 
 # Primitives that share a per-shell summary: keep the centres, angular momenta
 # and contraction counts, and move two exponents within one shell to their
@@ -391,6 +456,45 @@ class AcidCurrentDensityTests(unittest.TestCase):
         # scf_driver erases it, so the export finds nothing rather than judging
         # a fingerprint of a state it cannot identify.
         self.assertIn("absent", msg)
+
+    def test_the_workflow_writes_four_readable_cubes(self):
+        """scf_prop=acid has to produce files, not just avoid raising."""
+        self.assertEqual(len(self.got["cube_names"]), 4)
+        stems = [n.rsplit("_", 1)[-1] for n in self.got["cube_names"]]
+        self.assertEqual(stems, ["acid.cube", "jx.cube", "jy.cube", "jz.cube"])
+        self.assertTrue(all(self.got["cubes_exist"]), self.got["cube_names"])
+        self.assertEqual(self.got["cube_natom"], 3)
+        self.assertTrue(self.got["cube_npts_match"],
+                        "the cube body does not fill the grid its header declares")
+        self.assertTrue(self.got["cube_all_finite"])
+        # ACID is sqrt(a sum of squares), so a negative value means the field
+        # and the header disagree about layout.
+        self.assertGreaterEqual(self.got["cube_acid_min"], 0.0)
+        self.assertGreater(self.got["cube_acid_max"], 0.0)
+        for size in self.got["cube_vector_sizes"]:
+            self.assertEqual(size, self.got["cube_vector_sizes"][0])
+
+    def test_a_different_system_invalidates_the_response(self):
+        """Same coordinates and basis, different nuclei or charge."""
+        charge = self.got["charge_refusal"]
+        self.assertTrue(
+            charge, "the exporter accepted a response built at a different "
+                    "molecular charge")
+        self.assertIn("charge", charge)
+        z = self.got["z_refusal"]
+        self.assertTrue(
+            z, "the exporter accepted a response built for different nuclei, "
+               "and would have written their atomic numbers into the cube "
+               "header over another system's field")
+        self.assertIn("Z=", z)
+
+    def test_an_incomplete_response_is_refused(self):
+        """The driver marks the buffer invalid until the response is finished."""
+        msg = self.got["incomplete_refusal"]
+        self.assertTrue(
+            msg, "the exporter accepted a response the driver had marked "
+                 "incomplete")
+        self.assertIn("incomplete", msg)
 
     def test_a_permuted_ao_order_invalidates_the_response(self):
         """nbf and the density invariants cannot see a reordered basis."""

@@ -38,17 +38,18 @@ the map is badly gauge-contaminated -- benzene NICS(0) comes out near -105 ppm
 in 6-31G* and is still ~43 ppm off at 6-311++G**, against -10 ppm for GIAO.
 
 Provenance: ``OQP::nmr_pdens`` is a persistent record -- it stays on the
-molecule and in the .oqp file until another GIAO run replaces it, and nothing
-else invalidates it.  A same-size SCF, a moved geometry or a CGO NMR call
-therefore leaves behind a response that still loads at the right shape.  The
-driver stamps what it can represent exactly -- sizes, geometry and the basis
-down to its primitives -- into ``OQP::nmr_pdens_ref``, and ``AcidExporter``
-refuses anything that does not match the molecule it is asked to plot rather
-than quietly mixing one geometry's response with another's coordinates.  The
-electronic state is handled the other way round: the response depends on the
-MOs, their energies, the spin occupations and the exchange scale, which no
-scalar summary identifies, so ``scf_driver`` erases both records on entry and a
-new SCF simply leaves no response behind.
+molecule and in the .oqp file, and the only things that touch it are a GIAO run
+(which replaces it) and ``scf_driver`` (which erases it).  So a new SCF leaves
+no response at all, while a change that bypasses the SCF -- a moved geometry, a
+replaced basis -- leaves one behind that still loads at the right shape.  That
+split is deliberate.  What can be pinned down exactly is stamped: the driver
+records sizes, geometry and the basis down to its primitives in
+``OQP::nmr_pdens_ref``, and ``AcidExporter`` refuses anything that does not
+match the molecule it is asked to plot rather than quietly mixing one
+geometry's response with another's coordinates.  What cannot is not described
+but prevented: the response depends on the MOs, their energies, the spin
+occupations and the exchange scale, and no scalar summary of those -- or of the
+density they produce -- identifies them, so the SCF drops the response instead.
 
 Basis limits: the grid evaluator (``oqp.analysis.gto_grid.AOBasis``) walks
 Cartesian components up to f, so a spherical-harmonic basis needs
@@ -180,17 +181,18 @@ class AcidExporter:
         """Refuse a response that does not belong to this molecule.
 
         ``OQP::nmr_pdens`` is persistent: it lives on in the molecule and in
-        the .oqp file, and only another GIAO run replaces it.  A same-size SCF,
-        a moved geometry or a CGO NMR call therefore leaves the old response
-        in place, still the right shape and still loadable, and combining it
-        with the current density and coordinates gives a map that is wrong
-        without looking wrong.  The GIAO driver stamps what the response
-        belongs to (``OQP::nmr_pdens_ref``); this is the other half of that
-        contract.
+        the .oqp file.  A change that does not run an SCF -- a moved geometry,
+        a replaced basis -- therefore leaves the old response in place, still
+        the right shape and still loadable, and combining it with the current
+        coordinates and AOs gives a map that is wrong without looking wrong.
+        The GIAO driver stamps what the response belongs to
+        (``OQP::nmr_pdens_ref``); this is the other half of that contract.
 
         The stamp covers only what it can pin down exactly: sizes, geometry and
         basis.  A changed electronic state is not detected here -- it is
-        prevented, by ``scf_driver`` erasing the response as it starts.
+        prevented, by ``scf_driver`` erasing the response as it starts, so a
+        response that reaches this point was built by a GIAO run on the
+        orbitals that are still current.
         """
         try:
             ref = np.asarray(self.mol.data["OQP::nmr_pdens_ref"],
@@ -222,13 +224,38 @@ class AcidExporter:
                 f"has {self.nbf}.  Re-run the GIAO NMR calculation.")
         nsh = int(round(ref[2]))
         nprim = int(round(ref[3]))
-        head = 4 + 3 * nat
+        head = 8 + 4 * nat
         if ref.size != head + 3 * nsh + 2 * nprim:
             raise ValueError(
                 "the GIAO magnetic response carries a malformed provenance "
                 f"stamp ({ref.size} entries for {nat} atoms, {nsh} shells and "
                 f"{nprim} primitives).  Re-run the GIAO NMR calculation.")
-        moved = float(np.abs(ref[4:head].reshape(nat, 3) - self.coords).max())
+        # Which nuclei, and how many electrons around them.  Neither the
+        # coordinates nor the basis says this, and the atomic numbers are
+        # written straight into the cube header, so a composition edited in
+        # place would name one system in the file and plot another's field.
+        for slot, name, got in (
+                (4, "charge", self.mol.data["charge"]),
+                # Capital A/B: these are the C struct members (include/oqp.h),
+                # and the lookup is exact.
+                (5, "alpha electrons", self.mol.data["nelec_A"]),
+                (6, "beta electrons", self.mol.data["nelec_B"]),
+                (7, "multiplicity", self.mol.data["mult"])):
+            if int(round(ref[slot])) != int(got):
+                raise ValueError(
+                    f"the GIAO magnetic response was built with "
+                    f"{name} = {int(round(ref[slot]))}, but this molecule now "
+                    f"has {int(got)}.  Re-run the GIAO NMR calculation.")
+        want_z = ref[8:8 + nat]
+        got_z = np.asarray(self.Z, dtype=float)
+        bad_z = np.flatnonzero(want_z != got_z)
+        if bad_z.size:
+            i = int(bad_z[0])
+            raise ValueError(
+                f"the GIAO magnetic response was built for a different "
+                f"molecule: atom {i} was Z={want_z[i]:.0f} and is now "
+                f"Z={got_z[i]:.0f}.  Re-run the GIAO NMR calculation.")
+        moved = float(np.abs(ref[8 + nat:head].reshape(nat, 3) - self.coords).max())
         if moved > 1.0e-8:
             raise ValueError(
                 f"the geometry moved by {moved:.3e} bohr since the GIAO "
