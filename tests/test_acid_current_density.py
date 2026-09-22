@@ -98,16 +98,27 @@ RESULT["acid"] = acid_scalar(j).tolist()
 RESULT["acid_rotated"] = acid_scalar(np.einsum("ia,pab,jb->pij", q, j, q)).tolist()
 RESULT["nbf_small"] = nbf_small
 
-# --- same process, larger basis: the buffer must grow -----------------------
-mol_big = giao("big", {inp_big!r}, {log_big!r})
-nbf_big, p_big = response(mol_big)
+# --- the SAME molecule and tagarray, at a different basis size -------------
+# A fresh Runner would build a fresh OQPData and never replace anything, so the
+# basis is changed on the molecule that already owns OQP::nmr_pdens.
+import oqp.library
+from oqp.library.single_point import SinglePoint
+
+
+def rebasis(m, basis):
+    m.config["input"]["basis"] = basis
+    oqp.library.set_basis(m)
+    SinglePoint(m).energy()
+    oqp.nmr_giao_shielding_debug(m)
+    return response(m)
+
+
+nbf_big, p_big = rebasis(mol, "6-31G")
 RESULT["nbf_big"] = nbf_big
 RESULT["shape_big"] = list(p_big.shape)
 RESULT["antisymmetry_big"] = float(np.abs(p_big + np.swapaxes(p_big, 1, 2)).max())
 
-# --- same process, back to the small basis: it must shrink and be fresh -----
-mol_again = giao("again", {inp_small!r}, {log_again!r})
-nbf_again, p_again = response(mol_again)
+nbf_again, p_again = rebasis(mol, {basis_small!r})
 RESULT["nbf_again"] = nbf_again
 RESULT["shape_again"] = list(p_again.shape)
 RESULT["stale_after_shrink"] = float(np.abs(p_again - p_small).max())
@@ -154,8 +165,7 @@ class AcidCurrentDensityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as wd:
             work = Path(wd)
             paths = {}
-            for tag, basis in (("small", ref["basis"]), ("big", "6-31G"),
-                               ("sph", "cc-pvdz")):
+            for tag, basis in (("small", ref["basis"]), ("sph", "cc-pvdz")):
                 inp = work / f"{tag}.inp"
                 inp.write_text(_input(geometry, basis))
                 paths[tag] = str(inp)
@@ -164,8 +174,7 @@ class AcidCurrentDensityTests(unittest.TestCase):
             script.write_text(DRIVER.format(
                 points=json.dumps(ref["points_bohr"]),
                 inp_small=paths["small"], log_small=str(work / "small.log"),
-                inp_big=paths["big"], log_big=str(work / "big.log"),
-                log_again=str(work / "again.log"),
+                basis_small=ref["basis"],
                 inp_sph=paths["sph"], log_sph=str(work / "sph.log"),
                 out=str(out)))
             env = dict(os.environ)

@@ -82,6 +82,14 @@ def write_acid_cubes(mol):
     ACID scalar is a tensor invariant and does not depend on it.
     """
     from oqp.export import AcidExporter
+    from oqp.utils.mpi_utils import MPIManager
+
+    # Every rank reaches compute_scf_prop, and this writes four shared cube
+    # paths.  Left unguarded they race on the same files and each rank rebuilds
+    # the whole grid.  world_rank, not rank: inside a split communicator the
+    # group roots would all pass.
+    if getattr(mol, "usempi", False) and MPIManager().world_rank != 0:
+        return []
 
     properties = mol.config.get("properties", {})
     spacing = float(properties.get("acid_spacing", 0.2))
