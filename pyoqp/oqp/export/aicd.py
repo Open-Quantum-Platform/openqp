@@ -202,24 +202,58 @@ class AcidExporter:
                 "the GIAO magnetic response is marked incomplete: the run that "
                 "allocated it did not finish.  Re-run the GIAO NMR "
                 "calculation.")
-        if ref.size != 3 * nat + 4:
+        if ref.size < 5 or int(round(ref[1])) != nat:
             raise ValueError(
                 f"the GIAO magnetic response was built for a molecule with "
-                f"{(ref.size - 4) // 3} atoms, but this one has {nat}.  "
-                f"Re-run the GIAO NMR calculation.")
-        if int(round(ref[0])) != self.nbf or int(round(ref[1])) != nat:
+                f"{int(round(ref[1])) if ref.size >= 2 else '?'} atoms, but "
+                f"this one has {nat}.  Re-run the GIAO NMR calculation.")
+        if int(round(ref[0])) != self.nbf:
             raise ValueError(
                 f"the GIAO magnetic response was built for "
-                f"{int(round(ref[0]))} basis functions on "
-                f"{int(round(ref[1]))} atoms, but this molecule now has "
-                f"{self.nbf} on {nat}.  Re-run the GIAO NMR calculation.")
-        moved = float(np.abs(ref[4:].reshape(nat, 3) - self.coords).max())
+                f"{int(round(ref[0]))} basis functions, but this molecule now "
+                f"has {self.nbf}.  Re-run the GIAO NMR calculation.")
+        nsh = int(round(ref[4]))
+        head = 5 + 3 * nat
+        if ref.size != head + 5 * nsh:
+            raise ValueError(
+                "the GIAO magnetic response carries a malformed provenance "
+                f"stamp ({ref.size} entries for {nat} atoms and {nsh} shells). "
+                "Re-run the GIAO NMR calculation.")
+        moved = float(np.abs(ref[5:head].reshape(nat, 3) - self.coords).max())
         if moved > 1.0e-8:
             raise ValueError(
                 f"the geometry moved by {moved:.3e} bohr since the GIAO "
                 f"magnetic response was computed, so the response no longer "
                 f"matches these coordinates.  Re-run the GIAO NMR "
                 f"calculation.")
+        # The AO ordering itself: nbf and the density invariants below are
+        # blind to a permutation of the basis (trace and sum of squares survive
+        # D -> P D P^T), so a same-size basis that came back with its shells in
+        # a different order would pass everything else while the response is
+        # indexed in the old order.
+        got_sh = self._basis_signature()
+        if got_sh.shape[0] != nsh:
+            raise ValueError(
+                f"the GIAO magnetic response was built in a basis of {nsh} "
+                f"shells, but this molecule now has {got_sh.shape[0]}.  Re-run "
+                f"the GIAO NMR calculation.")
+        want_sh = ref[head:].reshape(nsh, 5)
+        bad = np.flatnonzero(
+            np.any(got_sh[:, :3] != want_sh[:, :3], axis=1)
+            | np.any(np.abs(got_sh[:, 3:] - want_sh[:, 3:])
+                     > 1.0e-12 * np.maximum(np.abs(want_sh[:, 3:]), 1.0), axis=1))
+        if bad.size:
+            s = int(bad[0])
+            raise ValueError(
+                f"the basis changed since the GIAO magnetic response was "
+                f"computed: shell {s} is now (centre, am, ncontr, sum_exp, "
+                f"sum_coef) = ({got_sh[s, 0]:.0f}, {got_sh[s, 1]:.0f}, "
+                f"{got_sh[s, 2]:.0f}, {got_sh[s, 3]:.6g}, {got_sh[s, 4]:.6g}) "
+                f"against ({want_sh[s, 0]:.0f}, {want_sh[s, 1]:.0f}, "
+                f"{want_sh[s, 2]:.0f}, {want_sh[s, 3]:.6g}, "
+                f"{want_sh[s, 4]:.6g}) when the response was built, so the "
+                f"response is indexed in a different AO order.  Re-run the "
+                f"GIAO NMR calculation.")
         # The density fingerprint is summed in a different order here than in
         # the driver, so it is compared at a tolerance -- it is a detector of
         # a changed wavefunction, not a checksum.  Any real change (basis,
@@ -234,6 +268,27 @@ class AcidExporter:
                 f"{got[0]:.10g}/{got[1]:.10g} against {want[0]:.10g}/"
                 f"{want[1]:.10g}), so the response belongs to a different "
                 "wavefunction.  Re-run the GIAO NMR calculation.")
+
+    def _basis_signature(self):
+        """Per-shell (centre, am, ncontr, sum of exps, sum of coefs), AO order.
+
+        Built from the same ``oqp_get_basis`` arrays the grid evaluator uses,
+        so this is the identity of the AO ordering the response is indexed in
+        rather than a hash of it.
+        """
+        b = self.mol.data.get_basis()
+        centers = np.asarray(b["centers"], dtype=float)
+        angs = np.asarray(b["angs"], dtype=float)
+        ncontr = np.asarray(b["ncontr"]).astype(int)
+        alpha = np.asarray(b["alpha"], dtype=float)
+        coef = np.asarray(b["coef"], dtype=float)
+        out = np.empty((ncontr.size, 5))
+        p = 0
+        for s, nc in enumerate(ncontr):
+            out[s] = (centers[s], angs[s], float(nc),
+                      float(alpha[p:p + nc].sum()), float(coef[p:p + nc].sum()))
+            p += nc
+        return out
 
     def _total_density(self):
         """Total AO density, matching the GIAO shielding driver's convention.

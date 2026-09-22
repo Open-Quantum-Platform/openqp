@@ -153,6 +153,49 @@ except ValueError as error:
 else:
     RESULT["restale_refusal"] = ""
 
+# The two steps above deliberately left the molecule stale; re-converge and
+# re-run the GIAO so the basis checks below start from a response that really
+# is current, rather than from one the density check would reject anyway.
+SinglePoint(mol).energy()
+oqp.nmr_giao_shielding_debug(mol)
+AcidExporter(mol)
+
+# --- the AO ordering is part of the response's identity --------------------
+# Hold the density and the geometry fixed and permute the stamp's shell block,
+# which is what the exporter sees when a same-size basis comes back with its
+# shells reordered.  nbf is unchanged and the density invariants are unchanged
+# by construction -- trace and sum of squares survive D -> P D P^T -- so only
+# the shell block can catch this.
+snap = np.array(mol.data["OQP::nmr_pdens_ref"], copy=True).ravel()
+buf = np.asarray(mol.data["OQP::nmr_pdens_ref"]).ravel()
+head = 5 + 3 * len(mol.get_atoms())
+nsh = int(round(snap[4]))
+blk = buf[head:].reshape(nsh, 5).copy()
+RESULT["permuted_rows_differ"] = bool(np.any(blk[0] != blk[2]))
+blk[[0, 2]] = blk[[2, 0]]
+buf[head:] = blk.ravel()
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["permuted_refusal"] = str(error)
+else:
+    RESULT["permuted_refusal"] = ""
+buf[:] = snap
+AcidExporter(mol)  # the restore has to leave a usable response behind
+
+# A real same-size basis swap: STO-6G has the same seven AOs as STO-3G here, so
+# nbf cannot tell them apart.  Re-converge without re-running the GIAO.
+mol.config["input"]["basis"] = "sto-6g"
+oqp.library.set_basis(mol)
+SinglePoint(mol).energy()
+RESULT["rebasis_nbf"] = int(round(np.asarray(mol.data["OQP::VEC_MO_A"]).size ** 0.5))
+try:
+    AcidExporter(mol)
+except ValueError as error:
+    RESULT["rebasis_refusal"] = str(error)
+else:
+    RESULT["rebasis_refusal"] = ""
+
 # --- spherical basis: AO-indexed response, Cartesian-only exporter ----------
 mol_sph = giao("sph", {inp_sph!r}, {log_sph!r})
 nbf_sph, p_sph = response(mol_sph)
@@ -311,6 +354,27 @@ class AcidCurrentDensityTests(unittest.TestCase):
             msg, "the exporter accepted a response built from a different "
                  "wavefunction at the same geometry and basis size")
         self.assertIn("density changed", msg)
+
+    def test_a_permuted_ao_order_invalidates_the_response(self):
+        """nbf and the density invariants cannot see a reordered basis."""
+        self.assertTrue(self.got["permuted_rows_differ"],
+                        "the permuted shells were identical, so the case was "
+                        "never exercised")
+        msg = self.got["permuted_refusal"]
+        self.assertTrue(
+            msg, "the exporter accepted a response indexed in a different AO "
+                 "order than the basis it was about to be contracted with")
+        self.assertIn("basis changed", msg)
+
+    def test_a_same_size_basis_swap_invalidates_the_response(self):
+        """STO-6G has the same nbf as STO-3G, so only the shell block sees it."""
+        self.assertEqual(self.got["rebasis_nbf"], self.got["nbf_small"],
+                         "STO-6G was expected to have the same nbf as STO-3G, "
+                         "so that nbf alone cannot catch the swap")
+        msg = self.got["rebasis_refusal"]
+        self.assertTrue(msg, "the exporter accepted a response built in a "
+                             "different basis of the same size")
+        self.assertIn("basis changed", msg)
 
     def test_spherical_basis_is_refused_explicitly(self):
         message = self.got["spherical_refusal"]
