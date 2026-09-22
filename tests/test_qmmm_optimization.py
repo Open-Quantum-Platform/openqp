@@ -966,6 +966,47 @@ class TestStateAndCoordinatesForQmmmOptimisation(unittest.TestCase):
                 QMMM_Opt._validate_istate(istate, method)
 
 
+class TestQmmmSelectionNeedsQmmmFlag(unittest.TestCase):
+    """[qmmm] active_atoms / frozen_atoms / active_radius / active_from_pdb are
+    read by the QM/MM drivers alone, so the checker refuses them elsewhere."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.chk = _load_checker()
+
+    def test_qmmm_selection_rejected_without_qmmm(self):
+        """The canonical [qmmm] selection is as inert as the [optimize] aliases
+        when qmmm_flag is off: an all-QM optimiser or dynamics driver moves every
+        atom, so a deck that asks for a subset must be told, not obeyed in part."""
+        chk = self.chk
+
+        def diags(qmmm, runtype="optimize", qmmm_flag=False):
+            cfg = {"input": {"runtype": runtype, "qmmm_flag": qmmm_flag, "method": "hf",
+                             "basis": "6-31g", "system": "h2o.xyz", "charge": 0},
+                   "optimize": {"lib": "oqp", "istate": 0}, "qmmm": dict(qmmm)}
+            r = chk.CheckReport(); chk._check_qmmm_active_selection(cfg, r)
+            return [(d.severity, d.path) for d in r.diagnostics]
+
+        for runtype in ("optimize", "md", "namd"):
+            self.assertIn(("ERROR", "qmmm.active_atoms"), diags({"active_atoms": "7-9"}, runtype), runtype)
+            self.assertIn(("ERROR", "qmmm.frozen_atoms"), diags({"frozen_atoms": "name:CA"}, runtype), runtype)
+            self.assertIn(("ERROR", "qmmm.active_radius"), diags({"active_radius": 4.0}, runtype), runtype)
+            self.assertIn(("ERROR", "qmmm.active_from_pdb"), diags({"active_from_pdb": True}, runtype), runtype)
+        # atom zero is a supplied selection, not a blank
+        self.assertIn(("ERROR", "qmmm.frozen_atoms"), diags({"frozen_atoms": "0"}))
+        # the unset values of all four keys pass, and so does a job that moves nothing
+        self.assertEqual([], diags({"active_atoms": "", "frozen_atoms": "",
+                                    "active_radius": 0.0, "active_from_pdb": False}))
+        self.assertEqual([], diags({"active_atoms": "7-9", "active_radius": 4.0}, "energy"))
+        # with qmmm_flag the selection is read, so it is checked rather than refused
+        with_qmmm = diags({"active_atoms": "7-9", "active_radius": 4.0}, "optimize", True)
+        self.assertEqual([], with_qmmm)
+        self.assertIn(("ERROR", "qmmm.active_atoms"),
+                      diags({"active_atoms": "seven"}, "optimize", True))
+        self.assertIn(("ERROR", "qmmm.active_radius"),
+                      diags({"active_radius": -1.0}, "optimize", True))
+
+
 @unittest.skipUnless(_HAVE and _runtime_available(), "OpenMM or compiled OpenQP runtime unavailable")
 class TestTip4pBoxOptimisation(unittest.TestCase):
     """Formaldehyde in five TIP4P-Ew waters, whose M sites have no element:

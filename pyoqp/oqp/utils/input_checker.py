@@ -7395,10 +7395,43 @@ def _check_qmmm_active_selection(config: dict[str, Any], report: CheckReport) ->
     """[qmmm] active_atoms / frozen_atoms / active_radius / active_from_pdb:
     the ORCA-style selection of what a QM/MM run may move.  Read by the
     optimiser, the QM/MM MD driver and the NAMD drivers alike."""
-    if not bool(_get(config, "input", "qmmm_flag", False)):
-        return
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     if runtype not in ("optimize", "md", "namd"):
+        return
+    if not bool(_get(config, "input", "qmmm_flag", False)):
+        # Only the QM/MM drivers read this selection.  An all-QM optimiser or
+        # dynamics driver moves every atom, so accepting it here would run a
+        # different calculation from the one the deck asks for, in silence.
+        # Same treatment as the [optimize] qmmm_active / qmmm_freeze aliases.
+        def _supplied(value):
+            # '0' is atom zero, a real selection, so test the text not the truth
+            return ("" if value is None else str(value).strip()) != ""
+
+        raw_radius = _get(config, "qmmm", "active_radius", 0.0)
+        try:
+            radius_set = float(str(raw_radius).strip() or 0.0) != 0.0
+        except (TypeError, ValueError):
+            radius_set = True
+        raw_pdb = _get(config, "qmmm", "active_from_pdb", False)
+        pdb_set = (raw_pdb is True) or (str(raw_pdb or "").strip().lower()
+                                        in ("1", "true", "yes", "on", "t"))
+        raw_active = _get(config, "qmmm", "active_atoms", "")
+        raw_frozen = _get(config, "qmmm", "frozen_atoms", "")
+        for key, is_set, value in (("active_atoms", _supplied(raw_active), raw_active),
+                                   ("frozen_atoms", _supplied(raw_frozen), raw_frozen),
+                                   ("active_radius", radius_set, raw_radius),
+                                   ("active_from_pdb", pdb_set, raw_pdb)):
+            if is_set:
+                report.add(
+                    "ERROR",
+                    f"qmmm.{key}",
+                    "The active-atom selection is read only by a QM/MM run "
+                    f"(qmmm_flag=true); an all-QM {runtype} would ignore it and move "
+                    "every atom.",
+                    value=str(value),
+                    expected="the default, or [input] qmmm_flag=true",
+                    action=f"Remove [qmmm] {key}, or run with qmmm_flag=true.",
+                )
         return
     for key in ("active_atoms", "frozen_atoms"):
         for value, message in _atom_selection_errors(_get(config, "qmmm", key, "")):
