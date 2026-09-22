@@ -221,6 +221,16 @@ else:
 buf[:] = snap
 AcidExporter(mol)  # the restore has to leave a usable response behind
 
+# The evaluator is not injectable: one built for another molecule, or for a
+# same-size basis this molecule has since left, would sit outside the stamp
+# entirely -- the stamp is compared against the molecule, not against it.
+try:
+    AcidExporter(mol, ao=AcidExporter(mol).ao)
+except TypeError as error:
+    RESULT["ao_injection_refused"] = str(error)
+else:
+    RESULT["ao_injection_refused"] = ""
+
 # Nuclear and charge identity: the coordinates and the basis are untouched, so
 # only these slots say which system the response belongs to.  Poking them is
 # what the exporter sees when a composition or a charge is edited in place with
@@ -473,6 +483,14 @@ class AcidCurrentDensityTests(unittest.TestCase):
         self.assertGreater(self.got["cube_acid_max"], 0.0)
         for size in self.got["cube_vector_sizes"]:
             self.assertEqual(size, self.got["cube_vector_sizes"][0])
+
+    def test_the_ao_evaluator_cannot_be_injected(self):
+        """It would sit outside the provenance contract, not inside it."""
+        msg = self.got["ao_injection_refused"]
+        self.assertTrue(
+            msg, "AcidExporter still accepts a caller-supplied AO evaluator, "
+                 "which the provenance stamp cannot vouch for")
+        self.assertIn("ao", msg)
 
     def test_a_different_system_invalidates_the_response(self):
         """Same coordinates and basis, different nuclei or charge."""

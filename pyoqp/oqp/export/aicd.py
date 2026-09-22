@@ -138,7 +138,7 @@ def current_vector(jten, bfield):
 class AcidExporter:
     """ACID / current-density cubes for a finished GIAO NMR calculation."""
 
-    def __init__(self, mol, ao=None, padding=5.0, spacing=0.20):
+    def __init__(self, mol, padding=5.0, spacing=0.20):
         # This is public API, so it validates its own arguments rather than
         # relying on the workflow that usually calls it: nan and inf survive
         # float() and slip past an ordering test, and make_box_grid would then
@@ -155,7 +155,15 @@ class AcidExporter:
                 f"grid spacing must be positive and padding non-negative; got "
                 f"spacing={spacing}, padding={padding}.")
         self.mol = mol
-        self.ao = ao if ao is not None else AOBasis(mol)
+        # The evaluator is built here rather than accepted from the caller.
+        # An AOBasis belongs to the molecule and basis it was built from, and
+        # the provenance check below compares the stamp against the MOLECULE --
+        # so an injected evaluator sits outside that contract entirely: a
+        # cached one, used after the molecule moved to a same-size basis, would
+        # pass every check and still evaluate the response with the old AO
+        # functions.  Verifying an injected one means rebuilding this to
+        # compare against, which is exactly the cost injecting it would save.
+        self.ao = AOBasis(mol)
         self.nbf = self.ao.nbf
         self.coords = self.ao.coords
         self.rcen = self.ao.coords[self.ao.ao_atom]
