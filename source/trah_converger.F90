@@ -79,6 +79,7 @@ contains
 
     prov%nparam  = n
     prov%refresh_on_rejection = .true.
+    prov%hess_vec_is_linear = .true.
     prov%infos   => infos
     prov%molgrid => molgrid
     prov%conv    => conv
@@ -104,7 +105,11 @@ contains
     conv%f_old = 0.0_dp
     conv%d_old = 0.0_dp
 
-    write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    if (par%sub_solver == 2 .or. par%deterministic) then
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, Steihaug-CG)"/5X,46("-"))')
+    else
+      write(IW,'(/5X,"Native TRAH (trust-region Newton, augmented-Hessian Davidson)"/5X,61("-"))')
+    end if
     write(IW,'(5X,"start trust radius =",F7.3,"   conv =",ES9.2,"   max micro =",I4)') &
               par%r0, par%conv_tol, par%nmic
     write(IW,'(/4x,"Macro",6x,"Energy",13x,"|grad|",7x,"rho",6x,"trust",3x,"micro",3x,"step")')

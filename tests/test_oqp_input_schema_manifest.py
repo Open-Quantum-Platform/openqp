@@ -229,9 +229,11 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # [fci] irrep, [fci] irrep_min_purity, [ci] irrep and [ci] irrep_min_purity;
     # 361 with the periodic/embedding QM/MM controls [qmmm] ewald_tol,
     # lj_switch, h_lj and mm_charge_width; 362 with the global log level
-    # [input] verbose; 364 with the ACID cube grid controls
-    # [properties] acid_spacing and acid_padding.
-    assert len(checked) == 364
+    # [input] verbose; 366 with the ORCA-style active-atom selection
+    # [qmmm] active_atoms, frozen_atoms, active_radius and active_from_pdb;
+    # 368 with the ACID cube grid controls [properties] acid_spacing and
+    # acid_padding.
+    assert len(checked) == 368
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():

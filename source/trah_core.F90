@@ -68,6 +68,9 @@ module trah_core_mod
     integer :: nparam = 0     !< length of the rotation vector
     !< Set when trial_energy overwrites data used by the accepted-point Hessian.
     logical :: refresh_on_rejection = .false.
+    !< True only when hess_vec is linear, so cached Davidson products may be
+    !< combined to form the product for the final Ritz step.
+    logical :: hess_vec_is_linear = .false.
   contains
     procedure(trah_gh_i), deferred :: grad_hdiag
     procedure(trah_hv_i), deferred :: hess_vec
@@ -656,7 +659,7 @@ contains
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used, ierr
     integer :: nn, mmax, m, i, k, info, lwork, n_rtv, j, mw, ssz
-    real(dp) :: theta, rnorm, c0, snorm, php, di, nv
+    real(dp) :: theta, rnorm, c0, snorm, php, di, nv, scale
     real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), au(:), r(:), tc(:)
     real(dp), allocatable :: eig(:), work(:), hx(:)
     integer,  allocatable :: seed(:)
@@ -738,15 +741,26 @@ contains
       V(:,m) = tc/nv
     end do
 
-    ! step kappa = y/c from the lowest Ritz vector (head normalized positive)
+    ! Step kappa = y/c from the lowest Ritz vector. A u belongs to the same
+    ! vector, so it must change sign together with u.
     c0 = u(1)
-    if (c0 < 0.0_dp) then; u = -u; c0 = -c0; end if
-    p = u(2:nn)/max(c0, 1.0e-8_dp)
-    snorm = norm2(p)
-    if (snorm > delta) p = p*(delta/snorm)
+    if (c0 < 0.0_dp) then; u = -u; au = -au; c0 = -c0; end if
+    scale = 1.0_dp/max(c0, 1.0e-8_dp)
+    snorm = norm2(u(2:nn))*scale
+    if (snorm > delta) scale = scale*(delta/snorm)
+    p = scale*u(2:nn)
 
-    call prov%hess_vec(p, hx, ierr)
-    if (ierr /= 0) return
+    if (prov%hess_vec_is_linear) then
+      ! For A = [[0,g^T],[g,H]] and u = [c;y],
+      ! (A u)_tail = c g + H y. Since p = scale*y, reuse the
+      ! Davidson product instead of evaluating one additional H p.
+      hx = scale*(au(2:nn) - c0*g)
+    else
+      ! Finite-difference products can depend nonlinearly on their direction.
+      ! Evaluate H p directly so pred describes the actual final step.
+      call prov%hess_vec(p, hx, ierr)
+      if (ierr /= 0) return
+    end if
     php  = dot_product(p, hx)
     pred = -(dot_product(g, p) + 0.5_dp*php)
     deallocate(V, W, u, au, r, tc, eig, work, hx)
