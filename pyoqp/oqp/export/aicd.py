@@ -96,8 +96,13 @@ def acid_scalar(jten):
     return np.sqrt(diag / 3.0 + off / 2.0)
 
 
-def current_vector(jten, bfield):
-    """Current-density vector field for one magnetic-field direction."""
+def unit_field(bfield):
+    """Validated unit vector for the magnetic-field direction.
+
+    One place that turns whatever the caller passed into three finite numbers,
+    so the field used to contract the tensor and the field written into the cube
+    header cannot disagree about shape.
+    """
     b = np.asarray(bfield, dtype=float).reshape(-1)
     if b.size != 3 or not np.all(np.isfinite(b)):
         raise ValueError(
@@ -105,10 +110,15 @@ def current_vector(jten, bfield):
             f"{bfield!r}")
     norm = float(np.linalg.norm(b))
     # A non-finite component would give a non-finite norm, which is not zero,
-    # so the old test let NaN through into all three vector cubes.
+    # so an equality test against zero alone lets NaN through into every cube.
     if not np.isfinite(norm) or norm == 0.0:
         raise ValueError("magnetic field direction must be non-zero")
-    return jten @ (b / norm)
+    return b / norm
+
+
+def current_vector(jten, bfield):
+    """Current-density vector field for one magnetic-field direction."""
+    return jten @ unit_field(bfield)
 
 
 class AcidExporter:
@@ -219,11 +229,12 @@ class AcidExporter:
 
     def write_cubes(self, prefix, bfield=(0.0, 0.0, 1.0)):
         """Write ``<prefix>_acid.cube`` and ``<prefix>_j{x,y,z}.cube``."""
+        # Normalise before anything is written: a field this cannot use must
+        # fail with no files on disk, not after the scalar cube has landed.
+        b = unit_field(bfield)
         jten = self.current_density(self.points)
         scalar = acid_scalar(jten)
-        jvec = current_vector(jten, bfield)
-        b = np.asarray(bfield, dtype=float)
-        b = b / np.linalg.norm(b)
+        jvec = jten @ b
         head = "GIAO current density, atomic units"
         paths = [f"{prefix}_acid.cube"]
         _write_cube(paths[0], "OQP ACID: anisotropy of the induced current density",
