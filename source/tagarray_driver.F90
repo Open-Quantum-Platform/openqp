@@ -52,15 +52,17 @@ module oqp_tagarray_driver
     "coordinate origin.  Consumed by the ACID/current-density export."
   character(len=*), parameter, public :: OQP_nmr_pdens_ref = OQP_prefix // "nmr_pdens_ref"
   character(len=*), parameter, public :: OQP_nmr_pdens_ref_comment = &
-    "Provenance of OQP::nmr_pdens, shape (5 + 3*natom + 5*nshell): "// &
-    "[1] = nbf, [2] = natom, [3] = trace and [4] = sum of squares of the "// &
-    "total AO density the response was built from, [5] = nshell, then the "// &
-    "nuclear coordinates (bohr, 3 per atom), then per shell in AO order "// &
-    "(origin zero-based, am, ncontr, sum of exponents, sum of contraction "// &
-    "coefficients).  [1] < 0 marks the response incomplete.  The shell "// &
-    "block pins the AO ordering itself: nbf and the density invariants are "// &
-    "unchanged by a permutation of the basis, so they cannot tell a "// &
-    "reordered same-size basis from the one the response was built in.  "// &
+    "Provenance of OQP::nmr_pdens, shape "// &
+    "(6 + 3*natom + 3*nshell + 2*nprim): [1] = nbf, [2] = natom, [3] = "// &
+    "trace and [4] = sum of squares of the total AO density the response "// &
+    "was built from, [5] = nshell, [6] = nprim, then the nuclear "// &
+    "coordinates (bohr, 3 per atom), then per shell in AO order (origin "// &
+    "zero-based, am, ncontr), then the exponents and the contraction "// &
+    "coefficients in full.  [1] < 0 marks the response incomplete.  The "// &
+    "basis block pins the AO ordering and the AO functions: nbf and the "// &
+    "density invariants are unchanged by a permutation of the basis, and "// &
+    "any per-shell summary of the primitives is non-injective, so neither "// &
+    "can tell a same-size basis from the one the response was built in.  "// &
     "Both records outlive the call that wrote them, so the ACID export "// &
     "refuses a response whose stamp does not match the molecule it is "// &
     "asked to plot."

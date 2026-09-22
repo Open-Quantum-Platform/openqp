@@ -111,7 +111,7 @@ contains
 
     integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
-    integer :: ref_p, ref_q, ref_s, ref_nsh
+    integer :: ref_q, ref_s, ref_nsh, ref_nprim
     integer(4) :: status
     logical :: is_dft, open_shell, iw_open, log_was_open, giao_debug
     real(kind=dp) :: tol, scale_exch
@@ -277,7 +277,9 @@ contains
     ! fill the stamp in only once the response is complete: an aborted or
     ! superseded run then reads as stale rather than as current.
     ref_nsh = basis%nshell
-    call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, (/ 5 + 3*nat + 5*ref_nsh /), &
+    ref_nprim = basis%nprim
+    call infos%dat%alloc_or_die(OQP_nmr_pdens_ref, &
+                                (/ 6 + 3*nat + 3*ref_nsh + 2*ref_nprim /), &
                                 pdens_ref, description=OQP_nmr_pdens_ref_comment)
     pdens_ref = 0.0d0
     pdens_ref(1) = -1.0d0
@@ -355,26 +357,29 @@ contains
     pdens_ref(1) = real(nbf, kind=dp)
     pdens_ref(2) = real(nat, kind=dp)
     pdens_ref(5) = real(ref_nsh, kind=dp)
-    pdens_ref(6:5+3*nat) = reshape(coords, (/ 3*nat /))
-    ! The shell block pins the AO ordering.  nbf and the density invariants
-    ! above are unchanged by a permutation of the basis -- trace and sum of
-    ! squares survive D -> P D P^T -- so on their own they would accept a
-    ! same-size basis whose shells came back in a different order, and the
-    ! export would then contract this response in the old AO order against the
-    ! new AOs.  These are the same arrays oqp_get_basis hands the exporter.
-    ref_q = 5 + 3*nat
-    ref_p = 1
+    pdens_ref(6) = real(ref_nprim, kind=dp)
+    pdens_ref(7:6+3*nat) = reshape(coords, (/ 3*nat /))
+    ! The basis block pins the AO ordering and the AO functions themselves.
+    ! nbf and the density invariants above are unchanged by a permutation of
+    ! the basis -- trace and sum of squares survive D -> P D P^T -- so on their
+    ! own they would accept a same-size basis whose shells came back in a
+    ! different order, and the export would then contract this response in the
+    ! old AO order against the new AOs.  The primitives are stored in full
+    ! rather than reduced: any per-shell summary is non-injective (exponents
+    ! [1, 2] and [1.5, 1.5] share a sum), and at 2*nprim reals this is a
+    ! rounding error next to the 3*nbf^2 response it guards.  These are the
+    ! same arrays oqp_get_basis hands the exporter.
+    ref_q = 6 + 3*nat
     do ref_s = 1, ref_nsh
-      ! Zero-based, matching what oqp_get_basis exports and therefore
-      ! what the export compares against (oqpdata.get_basis subtracts 1).
+      ! Zero-based, matching what oqp_get_basis exports and therefore what the
+      ! export compares against (oqpdata.get_basis subtracts 1).
       pdens_ref(ref_q+1) = real(basis%origin(ref_s) - 1, kind=dp)
       pdens_ref(ref_q+2) = real(basis%am(ref_s), kind=dp)
       pdens_ref(ref_q+3) = real(basis%ncontr(ref_s), kind=dp)
-      pdens_ref(ref_q+4) = sum(basis%ex(ref_p:ref_p+basis%ncontr(ref_s)-1))
-      pdens_ref(ref_q+5) = sum(basis%cc(ref_p:ref_p+basis%ncontr(ref_s)-1))
-      ref_p = ref_p + basis%ncontr(ref_s)
-      ref_q = ref_q + 5
+      ref_q = ref_q + 3
     end do
+    pdens_ref(ref_q+1:ref_q+ref_nprim) = basis%ex(1:ref_nprim)
+    pdens_ref(ref_q+ref_nprim+1:ref_q+2*ref_nprim) = basis%cc(1:ref_nprim)
 
     ! --- Diamagnetic shielding (GIAO) ---
     !   a11part = cg_a11part(O=0) + 0.5 field_a R_nu,b  (verified vs libcint).

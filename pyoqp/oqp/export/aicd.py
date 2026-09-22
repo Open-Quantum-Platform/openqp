@@ -213,13 +213,14 @@ class AcidExporter:
                 f"{int(round(ref[0]))} basis functions, but this molecule now "
                 f"has {self.nbf}.  Re-run the GIAO NMR calculation.")
         nsh = int(round(ref[4]))
-        head = 5 + 3 * nat
-        if ref.size != head + 5 * nsh:
+        nprim = int(round(ref[5]))
+        head = 6 + 3 * nat
+        if ref.size != head + 3 * nsh + 2 * nprim:
             raise ValueError(
                 "the GIAO magnetic response carries a malformed provenance "
-                f"stamp ({ref.size} entries for {nat} atoms and {nsh} shells). "
-                "Re-run the GIAO NMR calculation.")
-        moved = float(np.abs(ref[5:head].reshape(nat, 3) - self.coords).max())
+                f"stamp ({ref.size} entries for {nat} atoms, {nsh} shells and "
+                f"{nprim} primitives).  Re-run the GIAO NMR calculation.")
+        moved = float(np.abs(ref[6:head].reshape(nat, 3) - self.coords).max())
         if moved > 1.0e-8:
             raise ValueError(
                 f"the geometry moved by {moved:.3e} bohr since the GIAO "
@@ -231,29 +232,42 @@ class AcidExporter:
         # D -> P D P^T), so a same-size basis that came back with its shells in
         # a different order would pass everything else while the response is
         # indexed in the old order.
-        got_sh = self._basis_signature()
-        if got_sh.shape[0] != nsh:
+        got_sh, got_prim = self._basis_signature()
+        if got_sh.shape[0] != nsh or got_prim.shape[1] != nprim:
             raise ValueError(
                 f"the GIAO magnetic response was built in a basis of {nsh} "
-                f"shells, but this molecule now has {got_sh.shape[0]}.  Re-run "
-                f"the GIAO NMR calculation.")
-        want_sh = ref[head:].reshape(nsh, 5)
-        bad = np.flatnonzero(
-            np.any(got_sh[:, :3] != want_sh[:, :3], axis=1)
-            | np.any(np.abs(got_sh[:, 3:] - want_sh[:, 3:])
-                     > 1.0e-12 * np.maximum(np.abs(want_sh[:, 3:]), 1.0), axis=1))
+                f"shells and {nprim} primitives, but this molecule now has "
+                f"{got_sh.shape[0]} and {got_prim.shape[1]}.  Re-run the GIAO "
+                f"NMR calculation.")
+        want_sh = ref[head:head + 3 * nsh].reshape(nsh, 3)
+        bad = np.flatnonzero(np.any(got_sh != want_sh, axis=1))
         if bad.size:
             s = int(bad[0])
             raise ValueError(
                 f"the basis changed since the GIAO magnetic response was "
-                f"computed: shell {s} is now (centre, am, ncontr, sum_exp, "
-                f"sum_coef) = ({got_sh[s, 0]:.0f}, {got_sh[s, 1]:.0f}, "
-                f"{got_sh[s, 2]:.0f}, {got_sh[s, 3]:.6g}, {got_sh[s, 4]:.6g}) "
+                f"computed: shell {s} is now (centre, am, ncontr) = "
+                f"({got_sh[s, 0]:.0f}, {got_sh[s, 1]:.0f}, {got_sh[s, 2]:.0f}) "
                 f"against ({want_sh[s, 0]:.0f}, {want_sh[s, 1]:.0f}, "
-                f"{want_sh[s, 2]:.0f}, {want_sh[s, 3]:.6g}, "
-                f"{want_sh[s, 4]:.6g}) when the response was built, so the "
+                f"{want_sh[s, 2]:.0f}) when the response was built, so the "
                 f"response is indexed in a different AO order.  Re-run the "
                 f"GIAO NMR calculation.")
+        # Primitives in full, not reduced: a per-shell summary is not
+        # injective, so exponents [1, 2] and [1.5, 1.5] would share it.  These
+        # are the same stored doubles on both sides, hence the tight tolerance
+        # -- it absorbs serialization, not a real difference.
+        want_prim = ref[head + 3 * nsh:].reshape(2, nprim)
+        bad = np.flatnonzero(np.any(
+            np.abs(got_prim - want_prim)
+            > 1.0e-13 * np.maximum(np.abs(want_prim), 1.0), axis=0))
+        if bad.size:
+            k = int(bad[0])
+            raise ValueError(
+                f"the basis primitives changed since the GIAO magnetic "
+                f"response was computed: primitive {k} is now (exponent, "
+                f"coefficient) = ({got_prim[0, k]:.10g}, {got_prim[1, k]:.10g}) "
+                f"against ({want_prim[0, k]:.10g}, {want_prim[1, k]:.10g}) when "
+                f"the response was built, so the AO functions it is indexed in "
+                f"are not these.  Re-run the GIAO NMR calculation.")
         # The density fingerprint is summed in a different order here than in
         # the driver, so it is compared at a tolerance -- it is a detector of
         # a changed wavefunction, not a checksum.  Any real change (basis,
@@ -270,25 +284,21 @@ class AcidExporter:
                 "wavefunction.  Re-run the GIAO NMR calculation.")
 
     def _basis_signature(self):
-        """Per-shell (centre, am, ncontr, sum of exps, sum of coefs), AO order.
+        """The basis as the grid evaluator sees it: shells and primitives.
 
-        Built from the same ``oqp_get_basis`` arrays the grid evaluator uses,
-        so this is the identity of the AO ordering the response is indexed in
-        rather than a hash of it.
+        Returns per-shell ``(centre, am, ncontr)`` in AO order and the full
+        ``(exponents, coefficients)``, from the same ``oqp_get_basis`` arrays
+        the evaluator builds its shells from.  This is the identity of the AO
+        functions the response is indexed in, not a summary of them.
         """
         b = self.mol.data.get_basis()
-        centers = np.asarray(b["centers"], dtype=float)
-        angs = np.asarray(b["angs"], dtype=float)
-        ncontr = np.asarray(b["ncontr"]).astype(int)
-        alpha = np.asarray(b["alpha"], dtype=float)
-        coef = np.asarray(b["coef"], dtype=float)
-        out = np.empty((ncontr.size, 5))
-        p = 0
-        for s, nc in enumerate(ncontr):
-            out[s] = (centers[s], angs[s], float(nc),
-                      float(alpha[p:p + nc].sum()), float(coef[p:p + nc].sum()))
-            p += nc
-        return out
+        shells = np.column_stack((
+            np.asarray(b["centers"], dtype=float),
+            np.asarray(b["angs"], dtype=float),
+            np.asarray(b["ncontr"], dtype=float)))
+        prims = np.vstack((np.asarray(b["alpha"], dtype=float),
+                           np.asarray(b["coef"], dtype=float)))
+        return shells, prims
 
     def _total_density(self):
         """Total AO density, matching the GIAO shielding driver's convention.

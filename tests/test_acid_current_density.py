@@ -168,12 +168,14 @@ AcidExporter(mol)
 # the shell block can catch this.
 snap = np.array(mol.data["OQP::nmr_pdens_ref"], copy=True).ravel()
 buf = np.asarray(mol.data["OQP::nmr_pdens_ref"]).ravel()
-head = 5 + 3 * len(mol.get_atoms())
+nat = len(mol.get_atoms())
+head = 6 + 3 * nat
 nsh = int(round(snap[4]))
-blk = buf[head:].reshape(nsh, 5).copy()
+nprim = int(round(snap[5]))
+blk = buf[head:head + 3 * nsh].reshape(nsh, 3).copy()
 RESULT["permuted_rows_differ"] = bool(np.any(blk[0] != blk[2]))
 blk[[0, 2]] = blk[[2, 0]]
-buf[head:] = blk.ravel()
+buf[head:head + 3 * nsh] = blk.ravel()
 try:
     AcidExporter(mol)
 except ValueError as error:
@@ -182,6 +184,35 @@ else:
     RESULT["permuted_refusal"] = ""
 buf[:] = snap
 AcidExporter(mol)  # the restore has to leave a usable response behind
+
+# Primitives that share a per-shell summary: keep the centres, angular momenta
+# and contraction counts, and move two exponents within one shell to their
+# mean.  The sum is preserved exactly, so any per-shell reduction of the
+# primitives is blind to this -- only storing them in full is not.
+pbase = head + 3 * nsh
+ncontr = buf[head:head + 3 * nsh].reshape(nsh, 3)[:, 2].astype(int)
+off, target = 0, -1
+for nc in ncontr:
+    if nc >= 2 and buf[pbase + off] != buf[pbase + off + 1]:
+        target = off
+        break
+    off += nc
+RESULT["prim_target_found"] = bool(target >= 0)
+if target >= 0:
+    e0, e1 = float(buf[pbase + target]), float(buf[pbase + target + 1])
+    mid = 0.5 * (e0 + e1)
+    buf[pbase + target] = mid
+    buf[pbase + target + 1] = mid
+    RESULT["prim_sum_drift"] = float(abs((mid + mid) - (e0 + e1)))
+    RESULT["prim_values_moved"] = float(abs(mid - e0))
+    try:
+        AcidExporter(mol)
+    except ValueError as error:
+        RESULT["prim_refusal"] = str(error)
+    else:
+        RESULT["prim_refusal"] = ""
+    buf[:] = snap
+    AcidExporter(mol)
 
 # A real same-size basis swap: STO-6G has the same seven AOs as STO-3G here, so
 # nbf cannot tell them apart.  Re-converge without re-running the GIAO.
@@ -366,6 +397,21 @@ class AcidCurrentDensityTests(unittest.TestCase):
                  "order than the basis it was about to be contracted with")
         self.assertIn("basis changed", msg)
 
+    def test_primitives_sharing_a_summary_invalidate_the_response(self):
+        """Exponents [1, 2] and [1.5, 1.5] share every per-shell summary."""
+        self.assertTrue(self.got["prim_target_found"],
+                        "no shell had two distinct primitives, so the case was "
+                        "never exercised")
+        self.assertEqual(self.got["prim_sum_drift"], 0.0,
+                         "the substitution was supposed to preserve the "
+                         "per-shell sum exactly")
+        self.assertGreater(self.got["prim_values_moved"], 0.0)
+        msg = self.got["prim_refusal"]
+        self.assertTrue(
+            msg, "the exporter accepted a response built on different AO "
+                 "functions that happen to share a per-shell summary")
+        self.assertIn("primitives changed", msg)
+
     def test_a_same_size_basis_swap_invalidates_the_response(self):
         """STO-6G has the same nbf as STO-3G, so only the shell block sees it."""
         self.assertEqual(self.got["rebasis_nbf"], self.got["nbf_small"],
@@ -374,7 +420,13 @@ class AcidCurrentDensityTests(unittest.TestCase):
         msg = self.got["rebasis_refusal"]
         self.assertTrue(msg, "the exporter accepted a response built in a "
                              "different basis of the same size")
-        self.assertIn("basis changed", msg)
+        # It has to be the basis that is named, not the density: the density
+        # also moved here, and without the basis block that is all the check
+        # would have had to go on.  STO-6G differs from STO-3G in contraction
+        # length, so which part of the basis block speaks first is an
+        # implementation detail.
+        self.assertIn("basis", msg)
+        self.assertNotIn("density", msg)
 
     def test_spherical_basis_is_refused_explicitly(self):
         message = self.got["spherical_refusal"]
