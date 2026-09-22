@@ -741,6 +741,13 @@ contains
     r = d-a_pk
     error = dot_product(r, r)
 
+    ! An exact initial solution needs no normalized search direction.
+    ! In particular the zero-amplitude NAC polarization term has r = 0.
+    if (all(r == 0.0_dp)) then
+      pk = 0.0_dp
+      return
+    end if
+
   ! Beta ini
     beta = 1.0_dp/dot_product(r**2, xm_in)
 

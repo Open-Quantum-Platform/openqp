@@ -56,3 +56,94 @@ jobs:
             fi
           fi
           python3 "$gate" "$GITHUB_WORKSPACE"
+
+  repo-layout:
+    name: Repository layout gate (rule 5)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code (scanned as text only)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # openqp carries product code and what the build/CI depends on; method
+      # notes, derivations, validation harnesses and diagnostics live in
+      # Open-Quantum-Platform/openqp-devkit. This is not tidiness: a pull
+      # request past GitHub's 20,000-line diff limit gets 406 too_large from the
+      # diff API, and Codex review -- which reads that diff -- then produces
+      # nothing at all, with no error shown on the pull request. #405 asked six
+      # times and never got an answer.
+      #
+      # Checks the WHOLE tree, not just the PR's added files, so the split
+      # cannot erode one merge at a time.
+      #
+      # As with rule 1, run the TRUSTED base-branch copy of the script against
+      # the PR-head tree, so a PR cannot weaken the gate by editing it in the
+      # same PR.
+      - name: Repository layout gate
+        run: |
+          set -euo pipefail
+          gate=tools/check_repo_layout.py
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            git fetch --depth=1 origin "$base" || true
+            if git cat-file -e "$base:$gate" 2>/dev/null; then
+              mkdir -p .gate
+              git show "$base:$gate" > .gate/check_repo_layout.py
+              gate=.gate/check_repo_layout.py
+              echo "Using trusted base-branch gate script ($base:tools/check_repo_layout.py)"
+            else
+              echo "Base branch has no gate script yet; using in-tree copy (bootstrap)."
+            fi
+          fi
+          python3 "$gate" "$GITHUB_WORKSPACE"
+
+  digest-harmonic:
+    name: grd2 spherical-basis gate (rule 6)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code (scanned as text only)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # grd2 drives get_density with CARTESIAN shell extents. A digest that
+      # indexes its densities with basis%ao_offset / basis%naos, which count
+      # the ACTUAL AOs, is therefore wrong whenever the basis is spherical --
+      # and only then, because in a Cartesian basis the two index spaces
+      # coincide. Every example and test here that exercised the analytic NAC
+      # used 6-31G or 6-31G*, so that digest shipped broken with CI green: d
+      # functions gave symmetry-breaking wrong numbers that moved with the
+      # thread count, f functions wrote off the end of the array and aborted.
+      #
+      # It was added to a file whose OTHER digest handled the spherical case,
+      # so a check at file granularity would have missed it. This gate is per
+      # type. It cannot tell a correct branch from an incorrect one; it only
+      # ensures nobody adds a digest having never considered the question.
+      #
+      # As with rules 1 and 5, run the TRUSTED base-branch copy of the script
+      # against the PR-head tree, so a PR cannot weaken the gate by editing it
+      # in the same PR.
+      - name: grd2 spherical-basis gate
+        run: |
+          set -euo pipefail
+          gate=tools/check_digest_harmonic.py
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            git fetch --depth=1 origin "$base" || true
+            if git cat-file -e "$base:$gate" 2>/dev/null; then
+              mkdir -p .gate
+              git show "$base:$gate" > .gate/check_digest_harmonic.py
+              gate=.gate/check_digest_harmonic.py
+              echo "Using trusted base-branch gate script ($base:tools/check_digest_harmonic.py)"
+            else
+              echo "Base branch has no gate script yet; using in-tree copy (bootstrap)."
+            fi
+          fi
+          python3 "$gate" "$GITHUB_WORKSPACE/source"

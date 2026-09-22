@@ -6,9 +6,9 @@ module grd2
   use constants, only: tol_int
   use io_constants, only: iw
   use basis_tools, only: basis_set
-  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_hess_compute, &
+  use grd2_rys, only: grd2_int_data_t, grd2_rys_compute, grd2_rys_compute_batch, grd2_rys_hess_compute, &
                       grd2_operator_consumer_t, grd2_rys_compute_operator
-  use constants, only: BAS_MXANG
+  use constants, only: BAS_MXANG, NUM_CART_BF
   use int2_compute, only: int2_compute_data_t, ints_exchange
 
 !###############################################################################
@@ -68,6 +68,7 @@ module grd2
   private
   public :: grd2_driver
   public :: grd2_operator_driver
+  public :: grd2_driver_batch
   public :: grd2_hess_driver
   public :: grd2_compute_data_t
 
@@ -509,6 +510,270 @@ contains
     end do
     call gdat%clean()
   end subroutine grd2_operator_driver
+
+!###############################################################################
+
+!> Batched two-electron gradient driver.  Every probe has its own density
+!> consumer and output gradient, while shell-pair preparation, screening and
+!> derivative-integral recurrences are shared by the bounded probe batch.
+  subroutine grd2_driver_batch(infos, basis, de, gcomps, &
+                               cam, alpha, beta, mu)
+
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: de(:,:,:)
+    class(grd2_compute_data_t), intent(inout) :: gcomps(:)
+    logical, optional, intent(in) :: cam
+    real(kind=dp), optional, intent(in) :: alpha, beta, mu
+
+    real(kind=dp), allocatable :: de_internal(:,:,:)
+    logical :: do_cam
+    integer :: iprobe, nprobe
+
+    nprobe = size(gcomps)
+    if (nprobe < 1 .or. size(de,3) /= nprobe) then
+      call show_message('Batched grd2 probe dimensions are inconsistent.', &
+                        WITH_ABORT)
+    end if
+    do_cam = infos%dft%cam_flag
+    if (present(cam)) do_cam = cam
+
+    if (do_cam) then
+      allocate(de_internal, mold=de)
+      de_internal = 0.0_dp
+      do iprobe = 1, nprobe
+        gcomps(iprobe)%cur_pass = 1
+        gcomps(iprobe)%attenuated = .false.
+        gcomps(iprobe)%coulscale = 1.0_dp
+        gcomps(iprobe)%hfscale = infos%dft%cam_alpha
+        gcomps(iprobe)%hfscale2 = infos%tddft%cam_alpha
+        if (present(alpha)) gcomps(iprobe)%hfscale2 = alpha
+      end do
+      call grd2_driver_batch_gen(infos, basis, de_internal, gcomps)
+      de = de + de_internal
+
+      de_internal = 0.0_dp
+      do iprobe = 1, nprobe
+        gcomps(iprobe)%cur_pass = 2
+        gcomps(iprobe)%attenuated = .true.
+        gcomps(iprobe)%coulscale = 0.0_dp
+        gcomps(iprobe)%hfscale = infos%dft%cam_beta
+        gcomps(iprobe)%hfscale2 = infos%tddft%cam_beta
+        if (present(beta)) gcomps(iprobe)%hfscale2 = beta
+        gcomps(iprobe)%mu = infos%dft%cam_mu
+        if (present(mu)) gcomps(iprobe)%mu = mu
+      end do
+      call grd2_driver_batch_gen(infos, basis, de_internal, gcomps)
+      de = de + de_internal
+    else
+      if (infos%control%hamilton >= 20) then
+        do iprobe = 1, nprobe
+          gcomps(iprobe)%hfscale = infos%dft%hfscale
+          gcomps(iprobe)%hfscale2 = infos%tddft%hfscale
+        end do
+      end if
+      call grd2_driver_batch_gen(infos, basis, de, gcomps)
+    end if
+  end subroutine grd2_driver_batch
+
+!###############################################################################
+
+  subroutine grd2_driver_batch_gen(infos, basis, de, gcomps)
+
+    use messages, only: show_message, WITH_ABORT
+    use types, only: information
+    use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use int2_compute, only: petite_quartet_weight, load_petite_shell_map
+    use parallel, only: par_env_t
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: de(:,:,:)
+    class(grd2_compute_data_t), intent(inout) :: gcomps(:)
+
+    real(kind=dp), allocatable :: schwarz_ints(:,:)
+    real(kind=dp) :: emu2, cutoff, cutoff2, dabcut
+    real(kind=dp) :: zbig, rtol, dtol
+    integer :: numint, skip1, skip2, maxnbf, sym_nops
+    integer :: iprobe, nprobe
+    integer(8), contiguous, pointer :: sym_map(:)
+    type(int2_pair_storage) :: ppairs
+    type(int2_cutoffs_t) :: cutoffs
+    type(par_env_t) :: pe
+
+    nprobe = size(gcomps)
+    ! One shared recurrence can represent only one integral family.  Keep this
+    ! invariant explicit so a future caller cannot silently mix regular and
+    ! attenuated probes, or attenuated probes with different range parameters.
+    do iprobe = 2, nprobe
+      if (gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated .or. &
+          (gcomps(1)%attenuated .and. &
+           gcomps(iprobe)%mu /= gcomps(1)%mu)) then
+        call show_message( &
+          'Batched grd2 probes require uniform attenuation and mu.', &
+          WITH_ABORT)
+      end if
+    end do
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    if (gcomps(1)%attenuated) emu2 = gcomps(1)%mu**2
+
+    cutoff = 1.0d-10
+    cutoff2 = cutoff/2.0d0
+    zbig = maxval(basis%ex)
+    dabcut = 1.0d-11
+    if (zbig>1.0d6) dabcut = dabcut/10
+    if (zbig>1.0d7) dabcut = dabcut/10
+    dtol = 10.0d0**(-tol_int)
+    rtol = log(10.0_dp)*tol_int
+    call cutoffs%set(cutoff_integral_value=dabcut, cutoff_exp=rtol, &
+      cutoff_prefactor_pq=dtol, cutoff_prefactor_p=dtol)
+    call ppairs%alloc(basis, cutoffs)
+    call ppairs%compute(basis, cutoffs)
+
+    allocate(schwarz_ints(basis%nshell,basis%nshell))
+    if (gcomps(1)%attenuated) then
+      call ints_exchange(basis, schwarz_ints, emu2)
+    else
+      call ints_exchange(basis, schwarz_ints)
+    end if
+
+    skip1 = 0
+    skip2 = 0
+    numint = 0
+    ! No petite-list reduction here: batched probes carry interstate and
+    ! response densities that are not totally symmetric, and grd2_driver only
+    ! applies the reduction to callers that opt in with such densities.
+    sym_map => null()
+    sym_nops = 0
+    if (basis%mxam>BAS_MXANG) then
+      call show_message('gradient integrals programmed up to '&
+        //bfchars(BAS_MXANG-1)//' functions', WITH_ABORT)
+    end if
+    maxnbf = (basis%mxam+1)*(basis%mxam+2)/2
+    dtol = dtol*dtol
+
+    ! Keep allocatable descriptors out of the GCC/libgomp outlined worker.
+    ! Each thread enters a normal procedure invocation with local scratch;
+    ! only the expensive quartet loop is workshared, and the small gradient
+    ! is merged once per thread after all of its quartets are complete.
+!$omp parallel reduction(+:skip1, skip2, numint)
+    call batch_worker(skip1, skip2, numint)
+!$omp end parallel
+
+    call pe%allreduce(skip1,1)
+    call pe%allreduce(skip2,1)
+    call pe%allreduce(numint,1)
+    call pe%allreduce(de,size(de))
+    deallocate(schwarz_ints)
+  contains
+    recursive subroutine batch_worker(skip1_thread, skip2_thread, numint_thread)
+      integer, intent(inout) :: skip1_thread, skip2_thread, numint_thread
+      real(kind=dp), allocatable :: dab(:,:), dabmax(:), fd_batch(:,:,:)
+      real(kind=dp), allocatable :: de_thread(:,:,:)
+      logical, allocatable :: probe_active(:)
+      real(kind=dp) :: gmax
+      integer :: i, ij, iok, iprobe, j, k, l, kl, maxl, mpi_ij
+      integer :: nquartet, q4
+      type(grd2_int_data_t) :: gdat
+
+      allocate(dab(maxnbf**4,nprobe), dabmax(nprobe), &
+               fd_batch(3,4,nprobe), &
+               de_thread(3,size(de,2),nprobe), source=0.0_dp)
+      allocate(probe_active(nprobe), source=.false.)
+      call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
+
+!$omp barrier
+      if (infos%mpiinfo%usempi) mpi_ij = 0
+      do i = 1, basis%nshell
+        do j = 1, i
+          ij = i*(i-1)/2+j
+          if (ppairs%ppid(1,ij)==0) cycle
+          if (infos%mpiinfo%usempi) then
+            mpi_ij = mpi_ij+1
+            if (mod(mpi_ij,pe%size) /= pe%rank) cycle
+          end if
+
+!$omp do schedule(dynamic,4) collapse(2)
+          do k = 1, i
+            do l = 1, i
+              maxl = k
+              if (k == i) maxl = j
+              if (l > maxl) cycle
+              kl = k*(k-1)/2+l
+              if (ppairs%ppid(1,kl)==0) cycle
+              gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+              if (gmax<cutoff) then
+                skip1_thread = skip1_thread+1
+                cycle
+              end if
+
+              call gdat%set_ids(basis,i,j,k,l)
+              if (all(gdat%skip(:))) cycle
+              ! Probe densities are packed with Cartesian shell extents
+              ! (spherical shells are expanded before contraction), so an
+              ! inactive probe must clear the Cartesian block, not naos.
+              nquartet = product(NUM_CART_BF(basis%am(gdat%id)))
+              if (sym_nops > 1) then
+                q4 = petite_quartet_weight( &
+                  sym_map,sym_nops,basis%nshell,i,j,k,l)
+                if (q4 == 0) cycle
+              else
+                q4 = 1
+              end if
+
+              do iprobe = 1, nprobe
+                call gcomps(iprobe)%get_density( &
+                  basis,gdat%id,dab(:,iprobe),dabmax(iprobe))
+              end do
+              probe_active = dabmax*gmax*real(q4,dp) >= cutoff2
+              if (.not. any(probe_active)) then
+                skip2_thread = skip2_thread+1
+                cycle
+              end if
+              do iprobe = 1, nprobe
+                if (.not. probe_active(iprobe)) then
+                  ! gdat%nbf is set later by grd2_rys_compute_batch.  Use the
+                  ! current shell extents here instead of reading that stale
+                  ! recurrence field during quartet-level probe screening.
+                  dab(1:nquartet,iprobe) = 0.0_dp
+                  dabmax(iprobe) = 0.0_dp
+                end if
+              end do
+
+              numint_thread = numint_thread+1
+              if (gcomps(1)%attenuated) then
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch,emu2)
+              else
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch)
+              end if
+              do iprobe = 1, nprobe
+                de_thread(:,gdat%at,iprobe) = &
+                  de_thread(:,gdat%at,iprobe) + &
+                  real(q4,dp)*fd_batch(:,:,iprobe)
+              end do
+            end do
+          end do
+!$omp end do
+        end do
+      end do
+
+      call gdat%clean()
+!$omp critical(grd2_batch_de_merge)
+      de = de + de_thread
+!$omp end critical(grd2_batch_de_merge)
+      deallocate(dab,dabmax,fd_batch,probe_active,de_thread)
+    end subroutine batch_worker
+  end subroutine grd2_driver_batch_gen
 
 !###############################################################################
 

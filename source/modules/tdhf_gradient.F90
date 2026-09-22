@@ -394,6 +394,11 @@ contains
   subroutine grd2_tdhf_compute_data_t_clean(this)
     implicit none
     class(grd2_tdhf_compute_data_t), target, intent(inout) :: this
+    if (allocated(this%d_cart)) deallocate(this%d_cart)
+    if (allocated(this%p_cart)) deallocate(this%p_cart)
+    if (allocated(this%xpy_cart)) deallocate(this%xpy_cart)
+    if (allocated(this%xmy_cart)) deallocate(this%xmy_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################

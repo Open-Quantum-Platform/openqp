@@ -35,6 +35,17 @@ def parray(strng):
     return list([int(s.split()[0]), int(s.split()[1])] for s in strng.split(',')) if strng else ()
 
 
+def tlf_order(value):
+    """State-overlap minor evaluation: 0/notlf/exact = exact minors, 1/2 = TLF order."""
+    text = str(value).strip().lower()
+    if text in ('notlf', 'no_tlf', 'no-tlf', 'exact', 'none', 'no', 'off'):
+        return 0
+    order = int(text)
+    if order not in (0, 1, 2):
+        raise ValueError("tdhf.tlf must be 0 (notlf/exact), 1 or 2")
+    return order
+
+
 def string(strng):
     """Handle string parameters"""
     return strng.lower()
@@ -451,7 +462,12 @@ OQP_CONFIG_SCHEMA = {
         'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
-        'tlf': {'type': int, 'default': '2'},
+        # State-overlap minor determinants for NACME/NAMD: 0 = exact
+        # (Gaussian-elimination minors, no truncation; default), 1/2 =
+        # first/second-order truncated Leibniz formula (JCTC 15, 882).  The
+        # truncation assumes nearly orthonormal consecutive MOs and collapses
+        # when near-degenerate occupied orbitals rotate between steps.
+        'tlf': {'type': tlf_order, 'default': '0'},
         'hfscale': {'type': float, 'default': '-1.0'},
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},
@@ -800,11 +816,16 @@ OQP_CONFIG_SCHEMA = {
         'nstep': {'type': int, 'default': '100'},
         'dt': {'type': float, 'default': '0.5'},            # fs
         'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
-        'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
+        'substep': {'type': int, 'default': '50000'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '0.1'},        # energy-gap hop gate (Hartree)
-        'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
+        # Largest finite double disables the gap gate without invalidating restarts.
+        'thrshe': {'type': float, 'default': '1.7976931348623157e308'},  # Hartree
+        'tdc': {'type': string, 'default': 'npi'},           # 'fd' | 'npi' | 'analytic' | 'baeck_an'
+        # 'auto' uses hop-triggered analytic NAC where the model supports it
+        # (gas-phase same-spin MRSF singlets on a ROHF/ROKS triplet reference,
+        # scf/tdhf conv <= 1e-8) and isotropic rescaling otherwise.
+        'rescale': {'type': string, 'default': 'auto'}, # 'auto' | 'isotropic' | 'analytic_nac' | 'hop_analytic_nac'
         # Opt in only: an overlap-triggered root relabel is a method-specific
         # heuristic, not part of standard FSSH, and can otherwise be mistaken
         # for a stochastic hop at a genuine conical intersection.
@@ -817,7 +838,7 @@ OQP_CONFIG_SCHEMA = {
         'seed': {'type': int, 'default': '0'},
         'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
         'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
-        'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' magnitude-only TD-BA audit
+        'nacme_check': {'type': str, 'default': 'off'}, # 'off' | 'baeck_an' | 'analytic'
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
         'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
@@ -829,10 +850,22 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
-        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
-        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
+        'mo_reuse': {'type': bool, 'default': 'true'},  # reuse previous-step orbitals as the SCF guess
+        'scf_guess_retry': {'type': bool, 'default': 'true'},  # one fresh-guess retry after failed continuation SCF
+        'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
+        'ref_follow': {'type': str, 'default': 'soscf'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
+        'ref_switch_rescale': {'type': bool, 'default': 'true'},  # conserve total energy across a reference switch
+        'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
+        'frustrated': {'type': str, 'default': 'reflect'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
+        'disc_rescale': {'type': bool, 'default': 'true'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
+        'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
+        'disc_substeps': {'type': int, 'default': '10'},   # >0: repeat a step whose total-energy jump exceeds disc_tol with this many nuclear substeps
+        'trajectory_interval': {'type': int, 'default': '1'},  # steps; 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '10'},    # steps; 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
+        'continuation_checkpoint': {'type': str, 'default': ''},
+        'continuation_trajectory': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
         # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
         # ground-state OpenMM MD driver and must not silently thermostat FSSH.
@@ -904,7 +937,7 @@ class OQPData:
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
-    _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
+    _dftgrid_partition_functions = {'ssf': 0, 'erf': 1, 'becke': 2,
                                     'sstep2': 3, 'sstep3': 4, 'sstep4': 5, 'sstep5': 6}
     _handlers = {
         "input": {

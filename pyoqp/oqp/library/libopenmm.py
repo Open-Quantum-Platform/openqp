@@ -67,35 +67,35 @@ class QMMM_MD:
 
 #Add reporters
         simulation.reporters.append(app.PDBReporter('trajectory.pdb', 1))
-        oqp_output=open(self.mol.log+'.md','w')
-        oqp_output.write(f"\n\nStarting NVE dynamics using Verlet algorithm:\n")
-        simulation.reporters.append(app.StateDataReporter(oqp_output, 1, step=True, time=True, separator=" ",totalEnergy=True, kineticEnergy=True, potentialEnergy=True, temperature=False, speed=True,elapsedTime=True))
+        with open(self.mol.log + '.md', 'w') as oqp_output:
+            oqp_output.write(f"\n\nStarting NVE dynamics using Verlet algorithm:\n")
+            simulation.reporters.append(app.StateDataReporter(oqp_output, 1, step=True, time=True, separator=" ",totalEnergy=True, kineticEnergy=True, potentialEnergy=True, temperature=False, speed=True,elapsedTime=True))
 
-        state = simulation.context.getState(getPositions=True,getForces=True)
+            state = simulation.context.getState(getPositions=True,getForces=True)
 
-        for step in range(self.nSteps):
+            for step in range(self.nSteps):
 
-            simulation.step(1)
+                simulation.step(1)
 
-#Get the current positions from simulation context and update the pdb
-            state = simulation.context.getState(getPositions=True)
-            qmmm.pdb0.positions = state.getPositions()[:number_of_particles]
-        
-#Perform OQP calculation and update parameters in context 
-            qmmm_energy, qmmm_grad = self.oqp_qmmm_single_point(step+1)
-            qmmm_energy = qmmm_energy/number_of_particles*unit.kilojoules_per_mole/qmmm.kj_per_mol_to_hartree
-            simulation.context.setParameter('qmmm_energy', qmmm_energy)
+    #Get the current positions from simulation context and update the pdb
+                state = simulation.context.getState(getPositions=True)
+                qmmm.pdb0.positions = state.getPositions()[:number_of_particles]
 
-            qmmm_grad = (qmmm_grad/qmmm.kj_per_mol_to_hartree/qmmm.bohr_to_nm) * unit.kilojoules_per_mole/unit.nanometer
-            ecorr=0.0*unit.kilojoules_per_mole
-            for i in range(number_of_particles):
-                oqp_qmmm.setParticleParameters(i, i, qmmm_grad[i])
-                ecorr+=pdb.positions[i][0]*qmmm_grad[i][0]
-                ecorr+=pdb.positions[i][1]*qmmm_grad[i][1]
-                ecorr+=pdb.positions[i][2]*qmmm_grad[i][2]
-            ecorr/=number_of_particles
-            simulation.context.setParameter('ecorr', ecorr)
-            oqp_qmmm.updateParametersInContext(simulation.context)
+    #Perform OQP calculation and update parameters in context
+                qmmm_energy, qmmm_grad = self.oqp_qmmm_single_point(step+1)
+                qmmm_energy = qmmm_energy/number_of_particles*unit.kilojoules_per_mole/qmmm.kj_per_mol_to_hartree
+                simulation.context.setParameter('qmmm_energy', qmmm_energy)
+
+                qmmm_grad = (qmmm_grad/qmmm.kj_per_mol_to_hartree/qmmm.bohr_to_nm) * unit.kilojoules_per_mole/unit.nanometer
+                ecorr=0.0*unit.kilojoules_per_mole
+                for i in range(number_of_particles):
+                    oqp_qmmm.setParticleParameters(i, i, qmmm_grad[i])
+                    ecorr+=pdb.positions[i][0]*qmmm_grad[i][0]
+                    ecorr+=pdb.positions[i][1]*qmmm_grad[i][1]
+                    ecorr+=pdb.positions[i][2]*qmmm_grad[i][2]
+                ecorr/=number_of_particles
+                simulation.context.setParameter('ecorr', ecorr)
+                oqp_qmmm.updateParametersInContext(simulation.context)
 
     def oqp_qmmm_single_point(self,itr):
 

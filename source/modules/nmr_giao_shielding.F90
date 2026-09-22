@@ -112,7 +112,7 @@ contains
     integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
     integer(4) :: status
-    logical :: is_dft, open_shell, iw_open, giao_debug
+    logical :: is_dft, open_shell, iw_open, log_was_open, giao_debug
     real(kind=dp) :: tol, scale_exch
 
     real(kind=dp), allocatable :: h10p(:,:), s10p(:,:)            ! packed (nbf2,3)
@@ -146,6 +146,7 @@ contains
     ! Connect the log unit early so guard aborts and CPHF warnings land in the
     ! log instead of an orphan fort.* file.
     inquire(unit=iw, opened=iw_open)
+    log_was_open = iw_open
     if (.not. iw_open) open(unit=iw, file=infos%log_filename, position="append")
 
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
@@ -400,7 +401,7 @@ contains
         (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0, &
         (sig_tot(1,1,iat)+sig_tot(2,2,iat)+sig_tot(3,3,iat))/3.0d0
     end do
-    close(iw)
+    if (.not. log_was_open) close(iw)
 
     deallocate(gdia0, corrpre, a01, sig_dia, sig_tot)
     deallocate(h10p, s10p, twoe, twoe2, vj, vk, dm, dmp, h1ao, s1ao)

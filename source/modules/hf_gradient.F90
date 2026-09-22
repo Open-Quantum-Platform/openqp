@@ -405,6 +405,10 @@ contains
     implicit none
     class(grd2_rhf_compute_data_t), target, intent(inout) :: this
     if (allocated(this%d2a)) deallocate(this%d2a)
+    if (allocated(this%d2b)) deallocate(this%d2b)
+    if (allocated(this%d2a_cart)) deallocate(this%d2a_cart)
+    if (allocated(this%d2b_cart)) deallocate(this%d2b_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################
@@ -414,6 +418,9 @@ contains
     class(grd2_uhf_compute_data_t), target, intent(inout) :: this
     if (allocated(this%d2a)) deallocate(this%d2a)
     if (allocated(this%d2b)) deallocate(this%d2b)
+    if (allocated(this%d2a_cart)) deallocate(this%d2a_cart)
+    if (allocated(this%d2b_cart)) deallocate(this%d2b_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine
 
 !###############################################################################

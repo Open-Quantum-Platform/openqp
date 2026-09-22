@@ -273,6 +273,11 @@ class OQPTester:
         real_input = os.path.realpath(os.path.abspath(input_file))
         if real_input.lower().endswith(".restart.oqp"):
             real_input = real_input[:-len(".restart.oqp")] + ".oqp"
+        elif real_input.lower().endswith(".continuation.oqp"):
+            # Share checkpoint inputs, but use a distinct project/log so the
+            # child never overwrites its producer's restart manifest.
+            real_input = real_input[:-len(".continuation.oqp")] + ".oqp"
+            project_name = os.path.splitext(os.path.basename(real_input))[0]
         digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
         return os.path.join(self.output_dir, f"{project_name}__{digest}")
 
@@ -666,12 +671,13 @@ class OQPTester:
         restart = []
         for path in input_files:
             real_path = os.path.realpath(os.path.abspath(path))
-            if real_path.lower().endswith(".restart.oqp"):
-                producer = real_path[:-len(".restart.oqp")] + ".oqp"
-                if producer in selected:
-                    restart.append(path)
-                    continue
-            primary.append(path)
+            suffix = next((suffix for suffix in
+                           (".restart.oqp", ".continuation.oqp")
+                           if real_path.lower().endswith(suffix)), None)
+            if suffix and real_path[:-len(suffix)] + ".oqp" in selected:
+                restart.append(path)
+            else:
+                primary.append(path)
         return primary, restart
 
     def _get_input_files(self, test_path: str, *,

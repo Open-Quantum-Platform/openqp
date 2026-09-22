@@ -33,7 +33,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_VEC_MO_A, OQP_E_MO_A, &
       OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
@@ -559,7 +559,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_E_MO_A, OQP_E_MO_B, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
@@ -1123,7 +1123,7 @@ contains
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
-    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+    use oqp_tagarray_driver, only: tagarray_reserve_data, tagarray_get_data, OQP_DM_A, OQP_DM_B, &
       OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, OQP_Hcore, OQP_hf_hessian, TA_TYPE_REAL64
     use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn, &
@@ -1150,6 +1150,7 @@ contains
     real(dp), allocatable :: ga2e(:,:,:), gb2e(:,:,:)
     real(dp), allocatable :: d0a(:,:), d0b(:,:), dpck(:,:), fpck(:,:), gfull(:,:), Gd0(:,:)
     real(dp), allocatable :: ba(:,:), bb(:,:), bvec(:,:), uvec(:,:)
+    real(dp), allocatable :: nac_rohf_bvec_hf_jk_pulay(:,:)
     real(dp), allocatable :: xa(:,:), xb(:,:), dCa(:,:), dCb(:,:), gp(:,:), gm(:,:)
     real(dp), allocatable :: zneff(:), hess_native(:,:), hresp(:,:)
     real(dp), allocatable :: faop(:), fbop(:)
@@ -1157,6 +1158,9 @@ contains
     real(dp) :: hfscale, hstep, gx(3, size(infos%atoms%xyz,2))
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: i, j, a, icart, kc, cc, x, mu, nu, ie, nec
+    integer :: nac_dump_env_length, nac_dump_env_status
+    logical :: nac_dump_rohf_response
+    character(len=32) :: nac_dump_env
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1173,6 +1177,11 @@ contains
     hfscale = 1.0_dp
     if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
     hstep = 1.0d-3
+
+    nac_dump_env = ''
+    call get_environment_variable('NAC_DUMP_ROHF_RESPONSE', nac_dump_env, &
+                                  length=nac_dump_env_length, status=nac_dump_env_status)
+    nac_dump_rohf_response = nac_dump_env_status == 0 .and. nac_dump_env_length > 0
 
     if (infos%control%verbose >= 2) then
       write(iw,'(/,A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian CPHF response prepass'
@@ -1297,6 +1306,8 @@ contains
     allocate(dpck(nbf2,2), fpck(nbf2,2))
     allocate(ba(nvira,nocca), bb(nvirb,noccb))
     allocate(bvec(ltot,ncart), uvec(ltot,ncart), source=0.0_dp)
+    if (nac_dump_rohf_response) &
+      allocate(nac_rohf_bvec_hf_jk_pulay(ltot,ncart), source=0.0_dp)
     icart = 0
     do kc = 1, natom
       do cc = 1, 3
@@ -1354,6 +1365,15 @@ contains
                     + dot_product(fbMO(noccb+a,1:noccb), SxMO(1:noccb,i))
           end do
         end do
+
+        ! Diagnostic snapshot before the ROKS XC skeleton is added.  The native
+        ! Fortran layout is (ROHF rotation, Cartesian coordinate) =
+        ! (ltot,ncart).  OQPData performs a C-order reshape of this column-major
+        ! buffer, so a non-square Python consumer must recover it with
+        ! raw.reshape(ncart,ltot).T (a bare transpose is insufficient).
+        if (nac_dump_rohf_response) &
+          call rohf_pack_trial(nac_rohf_bvec_hf_jk_pulay(:,icart), ba, bb, &
+                               nbf, nocca, noccb)
 
         ! --- XC contribution to the CPKS right-hand side (ROKS only) -----------
         ! Central FD of the spin XC Fock (open-shell dftexcor) along R +/- h AND
@@ -1427,6 +1447,39 @@ contains
 
     call cphf_solve_rohf(infos, ncart, bvec, uvec)
 
+    if (nac_dump_rohf_response) then
+      block
+        real(dp), contiguous, pointer :: dump_bvec_hf_jk_pulay(:,:)
+        real(dp), contiguous, pointer :: dump_bvec_full(:,:), dump_uvec(:,:)
+
+        call infos%dat%erase((/ character(len=80) :: &
+          'OQP::nac_rohf_bvec_hf_jk_pulay', &
+          'OQP::nac_rohf_bvec_full', &
+          'OQP::nac_rohf_uvec' /))
+        ! All three records are stored in native Fortran order (ltot,ncart):
+        ! first index = packed ds/dv/sv ROHF rotation, second = Cartesian
+        ! coordinate.  Python must use raw.reshape(ncart,ltot).T to undo the
+        ! C-order view of the column-major storage.
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_bvec_hf_jk_pulay', &
+          TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
+          comment='ROHF HF+JK/Pulay CPHF RHS; Fortran (rotation,Cartesian)')
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_bvec_full', &
+          TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
+          comment='ROHF full HF+JK+XC CPHF RHS; Fortran (rotation,Cartesian)')
+        call tagarray_reserve_data(infos%dat, 'OQP::nac_rohf_uvec', &
+          TA_TYPE_REAL64, ltot*ncart, (/ ltot, ncart /), &
+          comment='ROHF CPHF response U; Fortran (rotation,Cartesian)')
+        call tagarray_get_data(infos%dat, 'OQP::nac_rohf_bvec_hf_jk_pulay', &
+                               dump_bvec_hf_jk_pulay)
+        call tagarray_get_data(infos%dat, 'OQP::nac_rohf_bvec_full', dump_bvec_full)
+        call tagarray_get_data(infos%dat, 'OQP::nac_rohf_uvec', dump_uvec)
+        dump_bvec_hf_jk_pulay = nac_rohf_bvec_hf_jk_pulay
+        dump_bvec_full = bvec
+        dump_uvec = uvec
+      end block
+      deallocate(nac_rohf_bvec_hf_jk_pulay)
+    end if
+
     ! ===== semi-numerical orbital-relaxation response =====
     ! Build the relaxed alpha/beta orbital derivatives independently, UHF-style:
     !   dCa_i = sum_a C^{vir_a}_a xa(a,i) - 1/2 sum_{j in docc+socc} S^x_ji C_j
@@ -1437,14 +1490,6 @@ contains
     allocate(xa(nvira,nocca), xb(nvirb,noccb), dCa(nbf,nocca), dCb(nbf,noccb))
     allocate(gp(3,natom), gm(3,natom), hresp(ncart,ncart), source=0.0_dp)
     allocate(faop(nbf2), fbop(nbf2))
-    if (infos%control%hamilton >= 20) then   ! flush stale grid state from the CPHF solver
-      block
-        use mod_dft, only: dft_initialize, dftclean
-        use mod_dft_molgrid, only: dft_grid_t
-        type(dft_grid_t) :: mgw
-        call dft_initialize(infos, basis, mgw); call dftclean(infos)
-      end block
-    end if
     do x = 1, ncart
       cc = mod(x-1,3)+1; kc = (x-1)/3+1
       call rohf_unpack_trial(uvec(:,x), xa, xb, nbf, nocca, noccb)

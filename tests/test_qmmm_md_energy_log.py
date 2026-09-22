@@ -420,3 +420,33 @@ class TestVirtualSitesInQmmmMd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLogCleanupOnFailure(unittest.TestCase):
+    def test_run_closes_log_after_step_or_final_save_failure(self):
+        import ast
+        from types import SimpleNamespace
+
+        tree = ast.parse(SRC.read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "QMMM_MD")
+        run = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+        code = ast.Module(body=[run], type_ignores=[])
+        namespace = {"np": SimpleNamespace(asarray=lambda value: value)}
+        exec(compile(ast.fix_missing_locations(code), str(SRC), "exec"), namespace)
+        for failure in ("step", "save", "setup"):
+            with self.subTest(failure=failure):
+                handle = io.StringIO()
+                def fail():
+                    raise RuntimeError("injected calculation failure")
+                fake = SimpleNamespace(
+                    simulation_md=None if failure == "setup" else object(),
+                    setup=fail, n_steps=1, report_interval=1,
+                    _ensemble_label=lambda: "NVE", _log_handle=handle,
+                    step=fail if failure == "step" else lambda: None,
+                    _save_traj_data=fail if failure == "save" else lambda: None,
+                    _sample_energy=lambda: None, _traj_data={},
+                )
+                with self.assertRaisesRegex(RuntimeError, "injected calculation failure"):
+                    namespace["run"](fake)
+                self.assertTrue(handle.closed)
+                self.assertIsNone(fake._log_handle)

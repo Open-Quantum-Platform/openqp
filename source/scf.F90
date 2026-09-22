@@ -477,17 +477,17 @@ contains
     case (scf_rhf)
       pdmat(:,1) = dmat_a
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, &
-                                  d=pdmat, &
-                                  scale_exchange=scalefactor))
+      allocate(int2_rhf_data_t :: int2_data)
+      int2_data%nfocks = 1
     case (scf_uhf, scf_rohf)
       pdmat(:,1) = dmat_a
       pdmat(:,2) = dmat_b
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, &
-                                    d=pdmat, &
-                                    scale_exchange=scalefactor))
+      allocate(int2_urohf_data_t :: int2_data)
+      int2_data%nfocks = 2
     end select
+    int2_data%d => pdmat
+    int2_data%scale_exchange = scalefactor
 
     ! Convert overlap matrix to full format for DIIS/SOSCF
     call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -609,6 +609,8 @@ contains
     ! Initialize DFT exchange-correlation energy
     energy%eexc = 0.0_dp
     energy%e_old = 0.0_dp
+    ! The iteration table uses this local history, not energy%e_old.
+    e_old = 0.0_dp
 
     !==============================================================================
     ! Print SCF Options
@@ -912,7 +914,7 @@ contains
       call conv%run(conv_res)
       if (use_trah .and. trim(conv_res%active_converger_name) == 'TRAH' ) then
         call run_otr(infos, molgrid, conv , conv_res, energy)
-        if (conv_res%ierr == 4) exit
+        if (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv)) exit
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
         ! Retrieve updated Energies of Alpha Orbitals
@@ -1238,7 +1240,10 @@ contains
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
-    if (stalled_exit) then
+    if (use_trah .and. (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv))) then
+      write(IW,"(3x,64('-')/10x,'SCF did not converge: TRAH failed the requested criterion.')")
+      infos%mol_energy%SCF_converged = .false.
+    else if (stalled_exit) then
       write(IW,"(3x,64('-')/10x,'SCF stalled before convergence; escalating to a higher-order solver.')")
       infos%mol_energy%SCF_converged = .false.
     else if (iter > maxit) then

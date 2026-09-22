@@ -66,6 +66,8 @@ module trah_core_mod
   !> and gets the whole trust-region machinery.
   type, abstract :: trah_provider_t
     integer :: nparam = 0     !< length of the rotation vector
+    !< Set when trial_energy overwrites data used by the accepted-point Hessian.
+    logical :: refresh_on_rejection = .false.
   contains
     procedure(trah_gh_i), deferred :: grad_hdiag
     procedure(trah_hv_i), deferred :: hess_vec
@@ -160,11 +162,8 @@ module trah_core_mod
     logical  :: converged = .false.
   end type trah_result_t
 
-  ! Near-convergence guards: once the model can no longer predict a meaningful
-  ! energy reduction (pred below FP noise) or the trust radius collapses while
-  ! the gradient is already small, the energy is converged even if |g| has not
-  ! reached the (tight) gradient tolerance.  A trust collapse with a large |g|
-  ! is instead a genuine stall and is reported as non-convergence.
+  ! Energy precision and trust-radius limits control refinement or failure;
+  ! they never replace the requested orbital-gradient tolerance.
   real(dp), parameter :: stab_eig_tol = 1.0e-4_dp  !< Hessian eig below -this = unstable
   real(dp), parameter :: pred_floor   = 1.0e-11_dp
   real(dp), parameter :: delta_min    = 1.0e-4_dp
@@ -201,17 +200,27 @@ contains
     real(dp), intent(out), optional :: hist_e(:), hist_de(:), hist_g(:), hist_s(:)
     integer,  intent(out), optional :: nhist
 
-    integer  :: n, macro, micro_used, ierr, nh, n_fp, n_stall
+    integer  :: n, macro, micro_used, ierr, nh, history_capacity, n_fp, n_stall
     real(dp) :: delta, dmax, gnorm, e0, etrial, rho, pred, snorm, lam, obj_old, g_ref
     real(dp), allocatable :: g(:), hdiag(:), p(:), vmin(:)
     logical  :: accepted
 
+    res = trah_result_t()
     n     = prov%nparam
     delta = par%r0
     dmax  = merge(par%dmax, max(4.0_dp, 8.0_dp*delta), par%dmax > 0.0_dp)
     nh    = 0
+    if (present(nhist)) nhist = 0
+    history_capacity = 0
+    if (par%want_history .and. present(nhist)) then
+      if (present(hist_it) .and. present(hist_e) .and. present(hist_de) .and. &
+          present(hist_g) .and. present(hist_s)) then
+        history_capacity = min(size(hist_it), size(hist_e), size(hist_de), size(hist_g), size(hist_s))
+      end if
+    end if
     snorm = 0.0_dp
-    res%ierr = 0
+    res%ierr = 4
+    res%error = huge(1.0_dp)
     res%converged = .false.
 
     allocate(g(n), hdiag(n), p(n), vmin(n))
@@ -266,6 +275,7 @@ contains
         if (par%verbose .and. par%iterations) write(IW,'(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED")') &
               macro-1, e0, gnorm
         res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -334,7 +344,8 @@ contains
         ! report error below conv_tol so the SCF driver recognises convergence
         ! and does NOT re-diagonalise the raw Fock (which would corrupt ROHF
         ! orbitals)
-        res%error = min(gnorm, 0.99_dp*par%conv_tol)
+        res%error = gnorm
+        res%ierr = 0
         res%converged = .true.
         exit
       end if
@@ -395,15 +406,25 @@ contains
           res%ierr = ierr
           return
         end if
-        if (par%want_history .and. present(nhist)) then
-          if (nh < size(hist_e)) then
+        if (history_capacity > 0) then
+          if (nh < history_capacity) then
             nh = nh + 1
+            nhist = nh
             hist_it(nh) = macro
             hist_e(nh)  = e0
             hist_de(nh) = e0 - obj_old
             hist_g(nh)  = gnorm_of(g, n, par%rms_gnorm)
             hist_s(nh)  = snorm
           end if
+        end if
+      else if (prov%refresh_on_rejection) then
+        ! Trial evaluations can replace a provider's Fock/density caches even
+        ! though its accepted orbitals are unchanged. Rebuild the model at
+        ! those orbitals before another Hessian product or convergence test.
+        call prov%grad_hdiag(g, hdiag, e0, ierr)
+        if (ierr /= 0) then
+          res%ierr = ierr
+          return
         end if
       end if
 
@@ -414,20 +435,18 @@ contains
         delta = min(2.0_dp*delta, dmax)
       end if
 
-      ! trust region collapsed: converged (small |g|) or a genuine stall.
-      ! `gnorm` is deliberately the value from the top of this macroiteration.
+      ! A small trust radius is a stagnation condition, not an alternative
+      ! convergence tolerance. Re-evaluate the norm after any accepted step.
+      gnorm = gnorm_of(g, n, par%rms_gnorm)
       if (delta < delta_min) then
-        if (gnorm < gtol_fp) then
-          if (par%verbose .and. par%iterations) write(IW, &
-            '(4x,i4,2x,f20.10,2x,es12.4,3x,"CONVERGED (trust radius minimal)")') macro, e0, gnorm
-          res%error = min(gnorm, 0.99_dp*par%conv_tol)
-          res%converged = .true.
-        else
-          if (par%verbose) write(IW, &
-            '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES10.3)') gnorm
-          res%error = gnorm
-          res%ierr  = 4
+        res%error = gnorm
+        if (gnorm < par%conv_tol .and. snorm < stab_step) then
+          ! Let the normal convergence/stability test inspect this point.
+          cycle
         end if
+        if (par%verbose) write(IW, &
+          '(5X,"Native TRAH: trust region collapsed without convergence, |g|=",ES12.4)') gnorm
+        res%ierr = 4
         exit
       end if
 
@@ -440,6 +459,7 @@ contains
 
     res%energy = e0
     res%gnorm  = gnorm_of(g, n, par%rms_gnorm)
+    res%error = res%gnorm
     res%step_norm = snorm
     if (present(nhist)) nhist = nh
     deallocate(g, hdiag, p, vmin)

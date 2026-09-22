@@ -3949,10 +3949,60 @@ contains
                          mo_b, nbf, &
                  0.0_dp, work3,  nbf)
       x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      call rohf_missing_fock_terms(self,x,x2mat,x2mat_b)
       call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
     end select
     end associate
   end subroutine calc_h_op
+
+  ! Replace the spin-specific Fock curvature by the symmetric second
+  ! derivative of E(C exp(K)). Away from stationarity, differentiating a
+  ! moving-frame gradient alone omits the orbital-coordinate connection.
+  subroutine rohf_missing_fock_terms(self,x,ha,hb)
+    class(trah_converger), intent(inout) :: self
+    real(dp), intent(in) :: x(:)
+    real(dp), intent(inout) :: ha(:,:),hb(:,:)
+    real(dp), allocatable :: k(:,:),ks(:,:),fm(:,:),a(:,:),dk(:,:),fk(:,:),h(:,:)
+    integer :: n,na,nb,no,spin
+    n=self%nbf;na=self%nocc_a;nb=self%nocc_b
+    allocate(k(n,n),ks(n,n),fm(n,n),a(n,n),dk(n,n),fk(n,n),h(n,n))
+    call skew_sym_k(self,x,k,na)
+    h=0.0_dp
+    do spin=1,2
+      no=na
+      call unpack_matrix(self%fock_ao(:,spin),a)
+      if (spin == 1) then
+        fm=matmul(transpose(self%mo_a),matmul(a,self%mo_a))
+      else
+        no=nb
+        fm=matmul(transpose(self%mo_b),matmul(a,self%mo_b))
+      end if
+      ! Remove the canonical Fvv X - X Foo already included by calc_h_op.
+      ks=0.0_dp
+      ks(no+1:n,1:no)=k(no+1:n,1:no)
+      ks(1:no,no+1:n)=k(1:no,no+1:n)
+      fk=matmul(fm,ks)-matmul(ks,fm)
+      if (spin == 1) then
+        ha=ha-fk(no+1:n,1:no)
+      else
+        hb=hb-fk(no+1:n,1:no)
+      end if
+      ! For spin occupation D, the symmetric half-Hessian is
+      ! 1/2 ( [[F,K],D] + [F,[K,D]] ), including redundant-spin blocks.
+      dk=0.0_dp
+      dk(:,1:no)=k(:,1:no)
+      dk(1:no,:)=dk(1:no,:)-k(1:no,:)
+      fk=matmul(fm,k)-matmul(k,fm)
+      a=matmul(fm,dk)-matmul(dk,fm)
+      a(:,1:no)=a(:,1:no)+fk(:,1:no)
+      a(1:no,:)=a(1:no,:)-fk(1:no,:)
+      h=h+0.5_dp*a
+    end do
+    ! Pack each common rotation once; the response contributions in ha/hb
+    ! are untouched. CV is stored in alpha here and summed by pack_rohf_trial.
+    hb(1:na-nb,:)=hb(1:na-nb,:)+h(nb+1:na,1:nb)
+    ha=ha+h(na+1:n,1:na)
+  end subroutine rohf_missing_fock_terms
 
   !> @brief Pack ROHF α/β trial matrices into a single rotation vector.
   !> @detail Packs S↔D, V↔D, and V↔S blocks according to the ROHF layout

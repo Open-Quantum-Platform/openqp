@@ -355,7 +355,7 @@ series = read_odp_wham_series(d.trajectory_file)
 with np.load(d.restart_file, allow_pickle=False) as saved:
     restart_provenance = json.loads(str(saved["odp_provenance"][0]))
 d2 = NAMD.__new__(NAMD)
-d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
+d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5; d2.dt_adaptive = False
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
 d2.mass = np.ones(2); d2.velocity_source = "zero"; d2.ensemble = "nve"
 d2.thermostat = "off"; d2.thermostat_temperature = 300.0

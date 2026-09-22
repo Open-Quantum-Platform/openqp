@@ -93,6 +93,7 @@ def install_single_point_stubs():
     nac_utils = types.ModuleType("oqp.library.nac_utils")
     for name in (
         "canonical_state_overlap",
+        "normalize_retained_state_overlap",
         "hst_derivative_coupling",
         "interstate_coupling",
         "load_numerical_nac_cache",

@@ -97,6 +97,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_tdc      = OQP_prefix // "namd_tdc"
   character(len=*), parameter, public :: OQP_namd_eabs     = OQP_prefix // "namd_eabs"
   character(len=*), parameter, public :: OQP_namd_stas     = OQP_prefix // "namd_stas"
+  character(len=*), parameter, public :: OQP_namd_dcv      = OQP_prefix // "namd_dcv"
 
   ! MRSF spin-orbit coupling (from upstream SOC merge)
   character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
@@ -192,6 +193,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_tdc_comment = OQP_prefix // "NAMD time-derivative coupling matrix (nstate x nstate)"
   character(len=*), parameter, public :: OQP_namd_eabs_comment = OQP_prefix // "NAMD absolute state energies (Hartree)"
   character(len=*), parameter, public :: OQP_namd_stas_comment = OQP_prefix // "NAMD state overlap matrix (flat n*n) for trivial-crossing"
+  character(len=*), parameter, public :: OQP_namd_dcv_comment = OQP_prefix // "NAMD analytic derivative couplings (3*natom*nstate*nstate)"
   character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
   character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
   character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
@@ -212,7 +214,7 @@ module oqp_tagarray_driver
     OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
     OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
     OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &
-    OQP_namd_tdc, OQP_namd_eabs, OQP_namd_stas /)
+    OQP_namd_tdc, OQP_namd_eabs, OQP_namd_stas, OQP_namd_dcv /)
 
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
@@ -224,9 +226,37 @@ module oqp_tagarray_driver
   end interface
   public :: data_has_tags, check_status
   public :: tagarray_get_data
+  public :: tagarray_reserve_data
   public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
   public :: ta_ok
 contains
+
+  ! Compatibility adapter for resident NAC records written against the
+  ! pre-1.0 TagArray reserve_data interface.  TagArray 1.0 replaces that
+  ! interface with container%create/alloc; override=.true. preserves the old
+  ! replace-existing-record semantics without changing the stored shape.
+  subroutine tagarray_reserve_data(container, tag, type_id, data_size, shape, comment)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(c_int32_t), intent(in) :: type_id
+    integer, intent(in) :: data_size
+    integer, intent(in) :: shape(:)
+    character(len=*), optional, intent(in) :: comment
+    integer(c_int32_t) :: status
+    integer(c_int64_t) :: shape64(size(shape))
+
+    shape64 = int(shape, c_int64_t)
+    if (int(data_size, c_int64_t) /= product(shape64)) then
+      error stop "tagarray_reserve_data: data_size does not match shape"
+    end if
+    if (present(comment)) then
+      status = container%create(tag, type_id, shape64, description=comment, &
+                                override=.true.)
+    else
+      status = container%create(tag, type_id, shape64, override=.true.)
+    end if
+    call check_status(status, module_name, "tagarray_reserve_data", tag, .true.)
+  end subroutine tagarray_reserve_data
 
     function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
     type(container_t), intent(inout) :: container

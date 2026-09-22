@@ -108,7 +108,7 @@ contains
     integer :: ierr
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     integer :: maxvec, target_state
-    logical :: roref = .false.
+    logical :: roref
 
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: int2_data
@@ -135,7 +135,7 @@ contains
 !    end if 
     
     scf_type = infos%control%scftype
-    if (scf_type==3) roref = .true.
+    roref = scf_type == 3
 
     dft = infos%control%hamilton == 20
 

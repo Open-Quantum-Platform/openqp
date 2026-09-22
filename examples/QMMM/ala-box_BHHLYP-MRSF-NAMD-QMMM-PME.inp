@@ -8,7 +8,7 @@
 # `cutoff = PME` selects the periodic branch: the QM/MM electrostatics are
 # evaluated by Ewald summation (MM potential and forces at every QM centre,
 # plus the interaction of the QM charges with their own periodic images, made
-# self-consistent with the ESPF charges; see docs/qmmm_ewald.md).  The four
+# self-consistent with the ESPF charges; see openqp-devkit docs/qmmm_ewald.md).  The four
 # periodic/embedding controls of the [qmmm] section are all exercised here:
 #   ewald_tol       OpenMM PME error tolerance for the MM-MM part (1e-6 for
 #                   energy-conservation work; OpenMM's default is 5e-4),
