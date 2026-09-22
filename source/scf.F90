@@ -47,7 +47,7 @@ contains
     USE precision, only: dp
     use oqp_tagarray_driver
     use constants, only: kB_HaK
-    use types, only: information
+    use types, only: information, GUESS_COLD, GUESS_SUPPLIED
     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
                             int2_rhf_data_t, int2_urohf_data_t
     use mod_dft, only: dftexcor
@@ -101,6 +101,7 @@ contains
     logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
+    logical :: keep_supplied            ! retain supplied orbitals on iteration one
 
     !==============================================================================
     ! Electron Counting Parameters
@@ -1152,7 +1153,28 @@ contains
         ! DIIS: Retrieve updated Fock directly
         ! Form the interpolated the Fock/Density matrix
         call conv_res%get_fock(matrix=pfock(:,1:diis_nfocks), istat=stat)
-        if (int2_driver%pe%rank == 0) then
+        ! A first-iteration SD result normally diagonalises this Fock. For a
+        ! second-order solver that would refill supplied orbitals by energy and
+        ! can change the occupation of a converged non-Aufbau ROHF solution.
+        ! Retain supplied orbitals only when they remain orthonormal in the
+        ! current AO overlap metric. pFON still requires energy ordering.
+        keep_supplied = .false.
+        if ((use_soscf .or. use_trah) .and. iter == 1 .and. .not. do_pfon .and. &
+            infos%control%guess == GUESS_SUPPLIED) then
+          keep_supplied = orthonormal_orbitals(mo_a, smat_full, nbf)
+          if (keep_supplied .and. scf_type == scf_uhf .and. nelec_b /= 0) &
+            keep_supplied = orthonormal_orbitals(mo_b, smat_full, nbf)
+        end if
+        if (keep_supplied) then
+          ! Use diagonal elements of the current Fock in the supplied orbital
+          ! basis. Stored energies can be stale after basis projection, while
+          ! SOSCF uses their gaps to form its initial inverse Hessian.
+          call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) &
+            call fock_diagonal_energies(pfock(:,2), mo_b, mo_energy_b, nbf)
+          if (int2_driver%pe%rank == 0) &
+            write(IW,"(10x,'Second-order converger starts from the supplied orbitals.')")
+        else if (int2_driver%pe%rank == 0) then
            ! Compute New Alpha Orbitals
            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
            if (scf_type == scf_uhf .and. nelec_b /= 0) then
@@ -1252,6 +1274,13 @@ contains
     else
       write(IW,"(3x,64('-')/10x,'SCF convergence achieved ....')")
       infos%mol_energy%SCF_converged = .true.
+    end if
+
+    ! A later SCF may retain only orbitals from a converged calculation.
+    if (infos%mol_energy%SCF_converged) then
+      infos%control%guess = GUESS_SUPPLIED
+    else
+      infos%control%guess = GUESS_COLD
     end if
 
     write(IW,"(/' Final ',A,' energy is',F20.10,' after',I4,' iterations'/)") trim(scf_name), energy%etot, iter
@@ -1984,6 +2013,50 @@ contains
     deallocate(ftmp)
 
   end subroutine mo_to_ao
+
+  !> Return true when max |C^T S C - I| is below 1e-8.
+  function orthonormal_orbitals(mo, smat_full, nbf) result(ok)
+    use precision, only: dp
+    use oqp_linalg
+
+    implicit none
+
+    real(kind=dp), intent(in) :: mo(:,:), smat_full(:,:)
+    integer, intent(in) :: nbf
+    logical :: ok
+    real(kind=dp), allocatable :: sc(:,:), ctsc(:,:)
+    integer :: i
+
+    allocate(sc(nbf,nbf), ctsc(nbf,nbf))
+    call dsymm('l', 'u', nbf, nbf, 1.0_dp, smat_full, nbf, mo, nbf, 0.0_dp, sc, nbf)
+    call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, mo, nbf, sc, nbf, 0.0_dp, ctsc, nbf)
+    do i = 1, nbf
+      ctsc(i,i) = ctsc(i,i) - 1.0_dp
+    end do
+    ok = maxval(abs(ctsc)) < 1.0e-8_dp
+  end function orthonormal_orbitals
+
+  !> Evaluate diag(C^T F C) for supplied orbitals and the current AO Fock.
+  subroutine fock_diagonal_energies(fock, mo, mo_e, nbf)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+    use oqp_linalg
+
+    implicit none
+
+    real(kind=dp), intent(in) :: fock(:), mo(:,:)
+    real(kind=dp), intent(out) :: mo_e(:)
+    integer, intent(in) :: nbf
+    real(kind=dp), allocatable :: f(:,:), fc(:,:)
+    integer :: i
+
+    allocate(f(nbf,nbf), fc(nbf,nbf))
+    call unpack_matrix(fock, f)
+    call dsymm('l', 'u', nbf, nbf, 1.0_dp, f, nbf, mo, nbf, 0.0_dp, fc, nbf)
+    do i = 1, nbf
+      mo_e(i) = dot_product(mo(:,i), fc(:,i))
+    end do
+  end subroutine fock_diagonal_energies
 
 
   subroutine rohf_fix(Mo, E, D, S, na, l0, nbf)!, num_swaps)

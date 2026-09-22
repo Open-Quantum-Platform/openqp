@@ -1081,6 +1081,7 @@ contains
     prov%nparam = npar
     prov%ctx => ctx
     prov%mode = hessmode
+    prov%hess_vec_is_linear = hessmode == 1
     prov%fdstep = fdstep
     allocate(prov%cbuf(0:n-1, 0:n-1), prov%ctry(0:n-1, 0:n-1), &
              prov%gcur(0:npar-1), prov%gp(0:npar-1), prov%gm(0:npar-1), &

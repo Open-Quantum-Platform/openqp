@@ -8,7 +8,7 @@ module trah_test_provider
   logical::stuck=.false.
   logical::check_cache=.false.,trial_cache=.false.
   integer::reject_trials=0
-  integer::evaluations=0,accepted_steps=0
+  integer::evaluations=0,accepted_steps=0,hess_evaluations=0
  contains
   procedure::grad_hdiag=>gh
   procedure::hess_vec=>model_hv
@@ -34,6 +34,7 @@ module trah_test_provider
  real(dp),intent(in)::v(:)
  real(dp),intent(out)::hv(:)
  integer,intent(out)::ierr
+ this%hess_evaluations=this%hess_evaluations+1
  if(this%check_cache.and.this%trial_cache)then
   ierr=77
   return
@@ -68,8 +69,8 @@ program check_trah_convergence
  type(model)::p
  type(trah_params_t)::par
  type(trah_result_t)::res
- integer::nh,hi(1)
- real(dp)::he(3),hde(2),hg(3),hs(3)
+ integer::nh,hi(1),used,ierr
+ real(dp)::he(3),hde(2),hg(3),hs(3),g1(1),h1(1),step1(1),pred1,expected
  p%nparam=1
  par%deterministic=.true.;par%sub_solver=2;par%conv_tol=1e-8_dp
  par%nmac=20;par%verbose=.false.
@@ -116,5 +117,26 @@ program check_trah_convergence
  call trah_run(p,par,res,hi,he,hde,hg,hs,nh)
  if(.not.res%converged.or.nh/=1)error stop 'history minimum capacity'
  if(any(he(2:)/=-999).or.hde(2)/=-999)error stop 'history overwritten'
+ ! The augmented-Hessian solve already forms A*u. Its tail determines H*p,
+ ! including the eigenvector sign and trust-radius scaling, without another
+ ! Hessian-vector product when the provider declares a linear product.
+ p%hess_evaluations=0;p%curvature=2
+ p%hess_vec_is_linear=.true.
+ par%deterministic=.false.;par%sub_solver=1;par%nrtv=1;par%nmic=6
+ g1=0.2_dp;h1=2.0_dp
+ call trah_micro_step(p,par,g1,h1,0.05_dp,1,step1,pred1,used,ierr)
+ if(ierr/=0)error stop 'Davidson micro-solve failed'
+ if(p%hess_evaluations/=used)error stop 'redundant Davidson Hessian product'
+ expected=-(g1(1)*step1(1)+0.5_dp*p%curvature*step1(1)*step1(1))
+ if(abs(pred1-expected)>1e-13_dp)error stop 'Davidson predicted reduction'
+ if(abs(step1(1))>0.05_dp+1e-14_dp)error stop 'Davidson trust radius'
+ ! A provider that does not guarantee linear products must retain the direct
+ ! evaluation at the final step (for example, CASSCF finite differences).
+ p%hess_evaluations=0;p%hess_vec_is_linear=.false.
+ call trah_micro_step(p,par,g1,h1,0.05_dp,1,step1,pred1,used,ierr)
+ if(ierr/=0)error stop 'nonlinear-provider Davidson micro-solve failed'
+ if(p%hess_evaluations/=used+1)error stop 'missing direct Davidson Hessian product'
+ expected=-(g1(1)*step1(1)+0.5_dp*p%curvature*step1(1)*step1(1))
+ if(abs(pred1-expected)>1e-13_dp)error stop 'direct-product predicted reduction'
  print *, 'PASS: quadratic, precision stagnation, trust collapse, maximum iterations'
 end program
