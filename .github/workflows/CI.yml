@@ -218,6 +218,21 @@ jobs:
               exit 1
             fi
 
+         - name: Check linked TagArray allocation and cleanup
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            CC: gcc-${{ matrix.version }}
+           run: |
+            sudo apt-get update
+            sudo apt-get install -y valgrind
+            python tests/native/run_tagarray_memcheck.py
+         - name: Preserve TagArray memory diagnostics
+           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
+            path: tagarray-memory/
+            if-no-files-found: ignore
          # The example suite above validates numerical references end to end, but
          # it never touches the pure-Python layer -- the tests/ pytest suite was
          # not executed by CI at all, so everything under pyoqp/oqp (the analysis
@@ -360,6 +375,24 @@ jobs:
             source /opt/intel/oneapi/setvars.sh > /dev/null
             set -o pipefail
             openqp --run_tests all | tee run_tests.out
+         - name: Check analytic NAC state and basis dimensions
+           env:
+            OMP_NUM_THREADS: 1
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            python -m unittest discover -s tests -p test_mrsf_nac_spherical_basis.py -v
+         - name: Preserve failed Intel example diagnostics
+           if: failure()
+           uses: actions/upload-artifact@v4
+           with:
+            name: intel-example-failure-${{ github.run_id }}-${{ github.run_attempt }}
+            retention-days: 7
+            if-no-files-found: ignore
+            path: |
+               run_tests.out
+               openqp_test_tmp_*/**/*.log
+               openqp_test_tmp_*/**/*.crash-stderr.txt
+               openqp_test_tmp_*/**/*.crash-stdout.txt
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must

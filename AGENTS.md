@@ -1,12 +1,11 @@
 # Contributor and AI-reviewer guide
 
-This file is read by the automated PR reviewers (Codex reads `AGENTS.md`
-natively; the Claude review workflow is pointed at it in
-`.github/workflows/claude.yml`) and by human contributors. Every pull request is
-expected to satisfy the four rules below. A reviewer should call out, per rule,
-whether the PR satisfies it or explain what is missing.
+This file is read by Codex, automated reviewers, and human contributors. Every
+merge request is expected to satisfy the rules below. A reviewer should call
+out, per rule, whether the merge request satisfies it or explain what is
+missing.
 
-## PR rules
+## Code Review Rules
 
 ### 1. BLAS/LAPACK must go through the OpenQP wrapper layer
 
@@ -77,12 +76,116 @@ flag it.
 ### 4. New functionality is documented in openqp-docs
 
 User-facing keywords, sections, and workflows must be documented in the manual
-repo [Open-Quantum-Platform/openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs):
+repo [open-quantum-platform/openqp-docs](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-docs):
 a keyword-page entry under `docs/keywords/` and/or a workflow page under
 `docs/workflows/`, wired into `mkdocs.yml` nav.
 
-- openqp-docs is a **separate repository**, so this PR's CI cannot see it
-  directly. Link the companion openqp-docs PR in this PR's description.
+- openqp-docs is a **separate repository**, so this merge request's CI cannot
+  see it directly. Link the companion openqp-docs merge request in this merge
+  request's description.
 
 **Reviewer check:** if the diff adds/changes user-facing keywords or workflows,
-confirm the PR description links an openqp-docs PR; flag it if missing.
+confirm the merge request description links an openqp-docs merge request; flag
+it if missing.
+
+### 5. openqp carries product code, not development material
+
+This repository holds the engine, its tests and examples, and the scripts the
+build and CI actually consume. Method notes, derivations, validation harnesses,
+performance investigations and one-off diagnostics belong in
+[open-quantum-platform/openqp-devkit](https://qchemlab.knu.ac.kr/open-quantum-platform/openqp-devkit)
+(private), which was split out of this repository with history preserved.
+
+This is not housekeeping. GitHub refuses to serve a diff past 20,000 changed
+lines (`406 too_large`), and Codex review reads that diff, so an oversized pull
+request gets no review and **no error message** — #405, at 24,955 changed lines,
+asked six times and was answered zero times. Nearly half of that PR was
+development scaffolding: a 2,883-line derivation, eight validation gate scripts,
+and ten tests mirroring them.
+
+- `docs/` is an allowlist, like `tools/`: a document stays only if a test reads
+  it as part of what that test checks. User documentation goes to openqp-docs
+  (rule 4); design and method notes go to openqp-devkit.
+- `tools/` is an allowlist. Every entry must name the path in this repository
+  that consumes it.
+- Markdown at the repository root is limited to the files a newcomer needs plus
+  this one.
+
+**Enforced by CI:** `tools/check_repo_layout.py` (the `PR policy` workflow)
+checks the **whole tree**, not just the files a PR adds, so the split cannot
+erode one merge at a time. As with rule 1, CI runs the trusted base-branch copy
+of the script. If the build or CI genuinely needs a new script, add it to
+`TOOLS_ALLOWED` together with its consumer.
+
+**Reviewer check:** the gate is a dumb allowlist. Judgment calls are yours — is
+a new `docs/`-style page user documentation or a design note, is a new test a
+regression test or a mirror of a development-time gate? Say so.
+
+### 6. A new two-electron gradient digest handles a spherical basis, and is tested in one
+
+`grd2` drives every `get_density` with **Cartesian** shell extents. A digest
+that indexes its densities with `basis%ao_offset` / `basis%naos`, which count
+the *actual* AOs, therefore reads the wrong elements whenever the basis is
+spherical — and only then, because in a Cartesian basis the two index spaces
+coincide.
+
+That failure is completely silent in a Pople basis. The analytic MRSF NAC
+digest shipped without the branch and was wrong for every spherical basis: with
+d functions (5 vs 6) it read neighbouring AO elements, broke molecular
+symmetry, and turned the 1e-13 run-to-run noise of the threaded SCF into an
+O(1) change in the answer; with f functions (7 vs 10) it wrote past the end of
+the array and aborted. Every analytic-NAC example and test in the repository
+used `6-31G` or `6-31G*`, so CI was green throughout.
+
+Under `HARMONIC_ACTIVE`, build Cartesian-effective, `bfnrm`-folded copies of
+the densities and address them at Cartesian offsets. See
+`grd2_mrsf_build_cart` and the `usecart` branch of
+`grd2_mrsf_compute_data_t_get_density` in `source/modules/tdhf_mrsf_gradient.F90`.
+
+**Enforced by CI:** `tools/check_digest_harmonic.py` (the `PR policy` workflow)
+requires the `get_density` bound to each concrete `grd2_compute_data_t`
+extension to mention `HARMONIC_ACTIVE`. The check is **per type**, not per
+file: the NAC digest above was added to a file whose other digest already
+handled the spherical case. It follows the inheritance transitively, so a
+digest that extends an intermediate subtype — `grd2_rhf_compute_data_t` under
+the abstract `grd2_hf_compute_data_t`, say — is examined like any other. As
+with rules 1 and 5, CI runs the trusted base-branch copy of the script.
+
+**Reviewer check:** the gate proves only that the question was asked, never
+that the branch is right. Any change touching AO-indexed code should be
+exercised in a spherical basis, not just a Pople one — `cc-pVDZ` reaches the d
+mismatch and `cc-pVTZ` the f one. Symmetry makes a good detector and needs no
+reference value: see `tests/test_mrsf_nac_spherical_basis.py`.
+
+
+### 7. Initialization and resource cleanup are part of correctness
+
+For every changed allocation, pointer, persistent buffer, native handle, file or
+worker, review its complete lifetime: creation, use, replacement, normal return,
+early return and error exit. This applies to Fortran, C/C++, Python and bundled
+library patches, not only to the numerical kernel that uses them.
+
+- Initialize every value before it is read, including optional-branch outputs,
+  allocation descriptors, pointer association and module/SAVE state. Declaration
+  initialization of a Fortran local implies SAVE; do not use it for per-call state.
+- Identify the owner of each allocation and borrowed view. After replacing or
+  erasing a backing record, reacquire pointers; never retain a NumPy view past
+  its native owner's lifetime. Match allocator/deallocator, alignment and ABI.
+- Cleanup must release owned resources once, permit safe repeated cleanup where
+  exposed, and preserve borrowed resources. Close a file only when the current
+  operation opened it. Restore temporary settings and modified molecular data
+  on recoverable failures as well as successful returns.
+- Size persistent buffers from the current molecule, basis and state count;
+  invalidate or resize them when that identity changes. Exercise repeated calls
+  in one process, increasing and decreasing dimensions, and relevant early/error
+  paths. One successful fresh-process calculation does not establish safety.
+- Memory fixes need a regression that fails for the original defect, plus a
+  suitable native memory/bounds check when feasible. Record compiler, dimensions,
+  result and any remaining diagnostics. Do not silence a memory error, enable an
+  allocator workaround, or loosen numerical tolerances to obtain a passing CI.
+- Patches to bundled libraries must invalidate only the affected cache entries;
+  validate allocation and destruction with the patched dependency actually linked.
+
+**Reviewer check:** report PASS with the relevant tests, NOT APPLICABLE with a
+reason, or identify the missing evidence. Static pattern checks and an ordinary
+CI pass alone cannot prove initialization or resource lifetime correctness.

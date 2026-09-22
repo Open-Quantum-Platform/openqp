@@ -301,7 +301,8 @@ def _context_from_input(inp_path):
         props = [p.strip().lower() for p in re.split(r'[,\s]+', raw_props) if p.strip()]
         return runtype, excited, props
     try:
-        text = open(inp_path, 'r').read()
+        with open(inp_path, 'r') as handle:
+            text = handle.read()
     except OSError:
         return 'energy', False, []
     m = re.search(r'^\s*runtype\s*=\s*(\w+)', text, re.I | re.M)
@@ -451,7 +452,8 @@ def _optin_bool_flags(schema_file=None):
     """{`section.option`: default} for every bool schema keyword default False."""
     import ast
     src = schema_file or _SCHEMA_FILE
-    tree = ast.parse(open(src).read())
+    with open(src) as handle:
+        tree = ast.parse(handle.read())
     node = next((n.value for n in ast.walk(tree)
                  if isinstance(n, ast.Assign)
                  and any(getattr(t, 'id', '') == 'OQP_CONFIG_SCHEMA'
@@ -483,8 +485,9 @@ def _flag_exercised_true(option, examples_dir):
                      r'(true|t|1|yes|\.true\.)\s*(#.*)?$', re.I | re.M)
     for inp in glob.glob(os.path.join(examples_dir, '**', '*.inp'), recursive=True):
         try:
-            if pat.search(open(inp).read()):
-                return True
+            with open(inp) as handle:
+                if pat.search(handle.read()):
+                    return True
         except OSError:
             continue
     return False

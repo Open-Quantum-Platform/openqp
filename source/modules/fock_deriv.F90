@@ -21,7 +21,7 @@ module fock_deriv_mod
 !>   already-validated grd2_driver energy gradient (exact, non-iterative).
 
   use precision, only: dp
-  use grd2, only: grd2_driver, grd2_compute_data_t
+  use grd2, only: grd2_driver, grd2_driver_batch, grd2_compute_data_t
   use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
   use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
@@ -76,6 +76,7 @@ module fock_deriv_mod
   public :: fock_deriv_matrix
   public :: fock_deriv_matrix_general
   public :: fock_deriv_contract_os
+  public :: fock_deriv_contract_os_batch
 
 contains
 
@@ -245,6 +246,9 @@ contains
     class(grd2_fockprobe_data_t), target, intent(inout) :: this
     this%pmat => null()
     this%mmat => null()
+    if (allocated(this%pmat_cart)) deallocate(this%pmat_cart)
+    if (allocated(this%mmat_cart)) deallocate(this%mmat_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine grd2_fockprobe_clean
 
 !###############################################################################
@@ -371,6 +375,79 @@ contains
 
 !###############################################################################
 
+!> Batched open-shell derivative-Fock contractions.  Alpha and beta probes are
+!> interleaved so one derivative-ERI traversal serves every RHS and spin while
+!> each probe retains its proper spin-exchange density.
+  subroutine fock_deriv_contract_os_batch(infos, basis, pcoul, pexcha, pexchb, &
+                                          mmata, mmatb, hfscale, gx)
+    use messages, only: show_message, WITH_ABORT
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), target, intent(in) :: pcoul(:,:), pexcha(:,:), pexchb(:,:)
+    real(kind=dp), target, intent(in) :: mmata(:,:,:), mmatb(:,:,:)
+    real(kind=dp), intent(in) :: hfscale
+    real(kind=dp), intent(out) :: gx(:,:,:)
+
+    type(grd2_fockprobe_os_data_t), allocatable :: gcomps(:)
+    real(kind=dp), allocatable :: gall(:,:,:)
+    integer, allocatable :: off_dummy(:)
+    integer, parameter :: max_rhs = 3
+    integer :: irhs, nrhs, ia, ib, ncart
+
+    nrhs = size(mmata,3)
+    if (nrhs < 1 .or. nrhs > max_rhs .or. &
+        any(shape(mmatb) /= shape(mmata)) .or. &
+        size(gx,1) /= 3 .or. size(gx,2) /= size(infos%atoms%xyz,2) .or. &
+        size(gx,3) /= nrhs) then
+      call show_message( &
+        'Batched open-shell derivative-Fock dimensions are inconsistent.', &
+        WITH_ABORT)
+    end if
+
+    allocate(gcomps(2*nrhs))
+    allocate(gall(3,size(gx,2),2*nrhs), source=0.0_dp)
+    do irhs = 1, nrhs
+      ia = 2*irhs-1
+      ib = 2*irhs
+      gcomps(ia)%pcoul => pcoul
+      gcomps(ia)%pexch => pexcha
+      gcomps(ia)%mmat => mmata(:,:,irhs)
+      gcomps(ib)%pcoul => pcoul
+      gcomps(ib)%pexch => pexchb
+      gcomps(ib)%mmat => mmatb(:,:,irhs)
+      gcomps(ia)%nbf = basis%nbf
+      gcomps(ib)%nbf = basis%nbf
+      gcomps(ia)%coulscale = 1.0_dp
+      gcomps(ib)%coulscale = 1.0_dp
+      gcomps(ia)%hfscale = hfscale
+      gcomps(ib)%hfscale = hfscale
+      gcomps(ia)%hfscale2 = hfscale
+      gcomps(ib)%hfscale2 = hfscale
+      if (HARMONIC_ACTIVE) then
+        call fockprobe_cart(basis, pcoul, gcomps(ia)%pcoul_cart, &
+                            gcomps(ia)%cart_off, ncart)
+        call fockprobe_cart(basis, pexcha, gcomps(ia)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmata(:,:,irhs), &
+                            gcomps(ia)%mmat_cart, off_dummy, ncart)
+        call fockprobe_cart(basis, pcoul, gcomps(ib)%pcoul_cart, &
+                            gcomps(ib)%cart_off, ncart)
+        call fockprobe_cart(basis, pexchb, gcomps(ib)%pexch_cart, &
+                            off_dummy, ncart)
+        call fockprobe_cart(basis, mmatb(:,:,irhs), &
+                            gcomps(ib)%mmat_cart, off_dummy, ncart)
+      end if
+    end do
+
+    call grd2_driver_batch(infos, basis, gall, gcomps)
+    do irhs = 1, nrhs
+      gx(:,:,irhs) = gall(:,:,2*irhs-1) + gall(:,:,2*irhs)
+    end do
+    deallocate(gcomps,gall)
+  end subroutine fock_deriv_contract_os_batch
+
+!###############################################################################
+
   subroutine grd2_fockprobe_os_init(this)
     class(grd2_fockprobe_os_data_t), target, intent(inout) :: this
     ! densities/probe are full matrices supplied by the caller; nothing to do.
@@ -383,6 +460,10 @@ contains
     this%pcoul => null()
     this%pexch => null()
     this%mmat => null()
+    if (allocated(this%pcoul_cart)) deallocate(this%pcoul_cart)
+    if (allocated(this%pexch_cart)) deallocate(this%pexch_cart)
+    if (allocated(this%mmat_cart)) deallocate(this%mmat_cart)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
   end subroutine grd2_fockprobe_os_clean
 
 !###############################################################################

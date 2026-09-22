@@ -389,7 +389,7 @@ def select_boundary_switching(covalent: bool) -> float | None:
     gradient residual 5-13x on both measured link-atom systems -- while 1.5
     is about 20% worse without a cut bond. Neither is a safe global default,
     which is why this is selected per system rather than changed outright.
-    See docs/espf_qmmm_switching.md and issue #260.
+    See openqp-devkit docs/espf_qmmm_switching.md and issue #260.
 
     An explicit ESPF_SWSCALE always wins: someone who set it is running a
     sweep or reproducing a number, and silently overriding that would be

@@ -1,5 +1,5 @@
 mrsf(nstate=2)/bhhlyp/6-31g*
-namd(T0,nstep=1,substep=50,seed=3,nacme_check=off,nve_gate=off,trivial=true,ensemble=nvt,thermostat=langevin)
+namd(T0,rescale=isotropic,nstep=1,substep=50,seed=3,nacme_check=off,nve_gate=off,trivial=true,ensemble=nvt,thermostat=langevin)
 qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3")
 droplet(enabled=true,radius=3.3,max_penetration=3.0)
 solute_com(enabled=true,force_constant=2.0,atoms="0-3")

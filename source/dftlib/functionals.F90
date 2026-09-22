@@ -201,7 +201,8 @@ contains
   !> @date   Sep, 2019 --Initial release--
   logical function can_calculate(this) result(OK)
     class(functional_t), intent(inout) :: this
-    OK = (allocated(this%functionals_list) .and. size(this%functionals_list) .gt. 0)
+    OK = .false.
+    if (allocated(this%functionals_list)) OK = size(this%functionals_list) > 0
   end function can_calculate
   !> @brief  Destroy internal variables
   !> @author Igor S. Gerasimov

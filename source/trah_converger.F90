@@ -45,12 +45,13 @@ module trah_native
     type(dft_grid_t),  pointer :: molgrid => null()
     type(trah_converger), pointer :: conv => null()
     type(scf_energy_t), pointer :: energy => null()
+    integer :: model_builds = 0
+    logical :: full_fock = .false.
   contains
     procedure :: grad_hdiag   => scf_grad_hdiag
     procedure :: hess_vec     => scf_hess_vec
     procedure :: trial_energy => scf_trial_energy
     procedure :: apply_step   => scf_apply_step
-    procedure :: refresh      => scf_refresh
   end type scf_trah_provider_t
 
 contains
@@ -77,6 +78,7 @@ contains
     n = int(conv%n_param)
 
     prov%nparam  = n
+    prov%refresh_on_rejection = .true.
     prov%infos   => infos
     prov%molgrid => molgrid
     prov%conv    => conv
@@ -130,6 +132,8 @@ contains
     macro = 0
 
     do irst = 1, nrst
+      prov%model_builds = 0
+      prov%full_fock = infos%control%scf_incremental == 0
       conv%mo_a = mo0_a; conv%mo_b = mo0_b
       conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
       if (nrst > 1) write(IW,'(/5X,"--- restart ",I0," of ",I0," ---")') irst, nrst
@@ -143,9 +147,9 @@ contains
       gnorm = tres%gnorm
       macro = tres%iter
       res%error = tres%error
-      if (tres%ierr > 0) res%ierr = tres%ierr
+      res%ierr = tres%ierr
 
-      conv_ok = (tres%gnorm < 1.0e-4_dp)
+      conv_ok = tres%converged .and. tres%ierr == 0 .and. tres%gnorm < par%conv_tol
       if (conv_ok .and. e0 < e_best) then
         e_best = e0; mob_a = conv%mo_a; mob_b = conv%mo_b; have_best = .true.
       end if
@@ -160,10 +164,16 @@ contains
     if (have_best) then
       conv%mo_a = mob_a; conv%mo_b = mob_b
       conv%f_old = 0.0_dp; conv%d_old = 0.0_dp
-      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0)
-      res%error = min(sqrt(dot_product(g, g)/real(n, dp)), 0.99_dp*par%conv_tol)
-      res%ierr  = 0
+      call build_fock_grad(infos, molgrid, conv, energy, conv%mo_a, conv%mo_b, g, hdiag, e0, .true.)
+      res%error = sqrt(dot_product(g, g)/real(max(1,n), dp))
+      res%ierr = 4
+      if (res%error < par%conv_tol) res%ierr = 0
+      write(IW,'(5X,"Native TRAH: final fresh-Fock residual =",ES12.4,"  tolerance =",ES12.4)') &
+        res%error, par%conv_tol
+      if (res%ierr /= 0) write(IW,'(5X,"Native TRAH: final fresh-Fock residual did not converge.")')
       if (nrst > 1) write(IW,'(/5X,"best of ",I0," restarts: E =",F20.10)') nrst, e_best
+    else
+      if (res%ierr == 0) res%ierr = 4
     end if
 
     conv%etot = e0
@@ -201,8 +211,17 @@ contains
     real(dp), intent(out) :: g(:), hdiag(:), e
     integer,  intent(out) :: ierr
     ierr = 0
+    this%model_builds = this%model_builds + 1
     call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
-                         this%conv%mo_a, this%conv%mo_b, g, hdiag, e)
+                         this%conv%mo_a, this%conv%mo_b, g, hdiag, e, &
+                         this%full_fock .or. mod(this%model_builds, 10) == 0)
+    ! Match the DIIS refresh threshold. Once in the tight tail, both the
+    ! model and every trial energy must use full-density Fock builds.
+    if (.not. this%full_fock .and. sqrt(dot_product(g,g)/real(max(1,size(g)),dp)) < 1.0e-4_dp) then
+      this%full_fock = .true.
+      call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
+                           this%conv%mo_a, this%conv%mo_b, g, hdiag, e, .true.)
+    end if
   end subroutine scf_grad_hdiag
 
   !> hv = H.v via the converger's Fock-like contraction (calc_h_op returns half
@@ -230,7 +249,7 @@ contains
     allocate(ma, source=this%conv%mo_a)
     allocate(mb, source=this%conv%mo_b)
     call rotate_mo(this%conv, this%infos%control%scftype, p, ma, mb)
-    call rebuild_fock(this%infos, this%molgrid, this%conv, this%energy, ma, mb, nschwz)
+    call rebuild_fock(this%infos, this%molgrid, this%conv, this%energy, ma, mb, nschwz, this%full_fock)
     ep => this%energy
     e = compute_energy(ep)
     deallocate(ma, mb)
@@ -244,19 +263,6 @@ contains
     ierr = 0
     call rotate_mo(this%conv, this%infos%control%scftype, p, this%conv%mo_a, this%conv%mo_b)
   end subroutine scf_apply_step
-
-  !> Reset the incremental-Fock history, so the next Fock is built from the
-  !> full density.  Every Fock in the run is incremental, F = F_old + G[D - D_old]
-  !> with G screened on the shrinking difference density, and the dropped terms
-  !> add up: on ROHF triplet H2O/6-31G*/BHHLYP the refinement stopped at an
-  !> incremental |g| of 3e-10 where the full-Fock |g| was 8e-9.  Refinement
-  !> gradients are therefore built in full, as ordinary SCF does near
-  !> convergence.
-  subroutine scf_refresh(this)
-    class(scf_trah_provider_t), intent(inout) :: this
-    this%conv%f_old = 0.0_dp
-    this%conv%d_old = 0.0_dp
-  end subroutine scf_refresh
 
   ! ----------------------------------------------------------- SCF machinery
   subroutine compute_native_mo_energies(nbf, fock, mo_coeffs, mo_energies, work_1, work_2)
@@ -284,16 +290,17 @@ contains
 
   !> @brief Build density+Fock from the given orbitals and return the (scaled)
   !>        orbital gradient, Hessian diagonal, and total energy.
-  subroutine build_fock_grad(infos, molgrid, conv, energy, mo_a, mo_b, g, hdiag, e)
+  subroutine build_fock_grad(infos, molgrid, conv, energy, mo_a, mo_b, g, hdiag, e, full_fock)
     type(information),    intent(inout), target :: infos
     type(dft_grid_t),     intent(in)            :: molgrid
     type(trah_converger), intent(inout)         :: conv
     type(scf_energy_t),   intent(inout), target :: energy
     real(dp),             intent(inout) :: mo_a(:,:), mo_b(:,:)
     real(dp),             intent(out)   :: g(:), hdiag(:), e
+    logical,              intent(in)    :: full_fock
     type(scf_energy_t), pointer :: ep
     integer :: nschwz
-    call rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz)
+    call rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz, full_fock)
     call conv%calc_g_h(g, hdiag)
     g     = 2.0_dp * g
     hdiag = 2.0_dp * hdiag
@@ -321,20 +328,28 @@ contains
     end select
   end subroutine rotate_mo
 
-  !> @brief density (from mo) -> Fock (calc_fock). Mirrors otr_interface.
-  subroutine rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz)
+  !> @brief density (from mo) -> Fock (calc_fock), with optional history refresh.
+  subroutine rebuild_fock(infos, molgrid, conv, energy, mo_a, mo_b, nschwz, full_fock)
     type(information),    intent(inout), target :: infos
     type(dft_grid_t),     intent(in)            :: molgrid
     type(trah_converger), intent(inout)         :: conv
     type(scf_energy_t),   intent(inout), target :: energy
     real(dp),             intent(inout) :: mo_a(:,:), mo_b(:,:)
     integer,              intent(out)   :: nschwz
+    logical,              intent(in)    :: full_fock
     type(basis_set), pointer :: basis
     basis => infos%basis
     if (int(infos%control%scftype) == 1) then
       call get_ab_initio_density(conv%dens(:,1), mo_a, conv%dens(:,1), mo_a, infos, basis)
     else
       call get_ab_initio_density(conv%dens(:,1), mo_a, conv%dens(:,2), mo_b, infos, basis)
+    end if
+    ! Screened difference-density builds accumulate errors larger than the
+    ! predicted energy decrease near convergence. Refresh like DIIS while
+    ! retaining incremental builds during the initial descent.
+    if (full_fock) then
+      conv%f_old = 0.0_dp
+      conv%d_old = 0.0_dp
     end if
     call calc_fock(basis, infos, molgrid, conv%fock_ao, energy, mo_a, conv%dens, &
                    mo_b, nschwz, conv%f_old, conv%d_old)

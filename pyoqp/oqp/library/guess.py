@@ -7,7 +7,7 @@ from oqp.utils.file_utils import try_basis
 from oqp.utils.file_utils import try_data_file
 from oqp.utils.file_utils import dump_log
 
-# control%guess values (source/types.F90): where the current orbitals came from
+# ``control%guess`` values from ``source/types.F90``.
 GUESS_COLD, GUESS_SUPPLIED = 1, 2
 
 def update_guess(mol):
@@ -55,6 +55,31 @@ def guess(mol):
         if os.path.exists(guess_file):
             alpha = 'reloaded'
             beta = 'reloaded'
+        else:
+            hubas = try_basis("MINI_huckel", fallback=None)
+            mol.data["OQP::hbasis_filename"] = hubas
+            oqp.guess_huckel(mol)
+            alpha = 'computed'
+            beta = 'computed'
+
+    elif guess_type == 'previous':
+        # Reuse the orbitals already resident in mol.data (for example the
+        # converged orbitals of the previous NAMD geometry).  guess_json
+        # rebuilds the alpha/beta densities from the resident VEC_MO_A/B in
+        # the current AO basis, so no file is read.  Fall back to Huckel
+        # when no resident orbitals exist yet.
+        try:
+            mol.data["OQP::VEC_MO_A"]
+            have_mo = True
+        except AttributeError:
+            have_mo = False
+        if have_mo:
+            if mol.config['scf']['type'] != 'rhf':
+                update_guess(mol)
+            else:
+                oqp.guess_json(mol)
+            alpha = 'reused'
+            beta = 'reused'
         else:
             hubas = try_basis("MINI_huckel", fallback=None)
             mol.data["OQP::hbasis_filename"] = hubas
@@ -119,9 +144,10 @@ def guess(mol):
         mol.data["OQP::DM_B"] = copy.deepcopy(mol.data["OQP::DM_A"])
         beta = 'copied'
 
-    # A second-order converger starts from reloaded orbitals without
-    # re-diagonalising the first Fock; computed guesses are model orbitals.
-    mol.data._data.control.guess = GUESS_SUPPLIED if alpha == 'reloaded' else GUESS_COLD
+    # JSON reloads and resident orbitals preserve a supplied SCF state.
+    # Computed guesses still require the initial Fock diagonalisation.
+    supplied = alpha in ('reloaded', 'reused')
+    mol.data._data.control.guess = GUESS_SUPPLIED if supplied else GUESS_COLD
 
     guess_info = {
         'guess_type': guess_type,

@@ -875,6 +875,16 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     assert legacy["md"]["restart_file"] == "state.npz"
 
 
+def test_namd_baeck_an_tdc_provider_lowers_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,tdc=baeck_an,rescale=isotropic,nacme_check=off)'
+    )
+    assert legacy["md"]["tdc"] == "baeck_an"
+    assert legacy["md"]["rescale"] == "isotropic"
+    assert legacy["md"]["nacme_check"] == "off"
+
+
 def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
@@ -1940,11 +1950,57 @@ def test_method_driver_capability_errors_are_early_and_actionable():
         )
 
 
-def test_unavailable_or_misspelled_derivative_types_fail_early():
-    with pytest.raises(OQPInputError, match="analytical NAC is unavailable"):
+@pytest.mark.parametrize("driver", ["nac", "bp"])
+@pytest.mark.parametrize("route", ["mrsf(nstate=3)/bhhlyp/6-31g*", "mrsf-tdhf(nstate=3)/6-31g*"])
+def test_static_analytical_nac_accepts_mrsf_singlets(driver, route):
+    _, config = _parse(
+        f'{route} geom="h2o.xyz" {driver}(S0,S1,type=analytical) '
+        'scf(conv=1e-8) tdhf(conv=1e-10)'
+    )
+    assert config["input"]["runtype"] == "nac"
+    assert config["nac"]["type"] == "analytical"
+    assert config["nac"]["states"] == "1 2"
+    assert config["scf"]["type"] == "rohf"
+    assert config["scf"]["multiplicity"] == "3"
+    assert config["tdhf"]["multiplicity"] == "1"
+    if driver == "bp":
+        assert config["nac"]["bp"] == "True"
+
+
+@pytest.mark.parametrize("section", ["scf", "tdhf"])
+@pytest.mark.parametrize("value", [None, "1e-6", "0", "-1e-10", "nan", "inf", "true"])
+def test_static_analytical_nac_rejects_loose_or_invalid_convergence(section, value):
+    other = "tdhf" if section == "scf" else "scf"
+    control = f"{section}(conv={value})" if value is not None else ""
+    with pytest.raises(OQPInputError, match=rf"0 < {section} conv <= 1e-8"):
+        _parse(
+            'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+            f'nac(S0,S1,type=analytical) {other}(conv=1e-10) {control}'
+        )
+
+
+@pytest.mark.parametrize("route, states, message", [
+    ("mrsf(nstate=3)/bhhlyp/6-31g*", "T0,T1", "requires singlet states"),
+    ("mrsf-tdhf(nstate=3)/6-31g*", "Q0,Q1", "requires singlet states"),
+    ("mrsf-tddftb(nstate=3)", "S0,S1", "requires singlet states"),
+    ("tddft(nstate=3)/bhhlyp/6-31g*", "S1,S2", "requires an MRSF route"),
+    ("umrsf(nstate=3)/bhhlyp/6-31g*", "S0,S1", "UMRSF currently supports"),
+    ("mrsf(nstate=3)/bhhlyp/6-31g*", "S0,S0", "requires distinct states"),
+    ("mrsf(nstate=1)/bhhlyp/6-31g*", "S0,S1", "but nstate=1"),
+])
+def test_static_analytical_nac_rejects_unsupported_states(route, states, message):
+    with pytest.raises(OQPInputError, match=message):
+        _parse(
+            f'{route} geom="h2o.xyz" nac({states},type=analytical) '
+            'scf(conv=1e-10) tdhf(conv=1e-10)'
+        )
+
+
+def test_misspelled_derivative_types_fail_early():
+    with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-            'nac(S0,S1,type=analytical)'
+            'nac(S0,S1,type=analytic)'
         )
     with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
         oqp_input.parse_canonical_oqp(
@@ -2420,3 +2476,45 @@ def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
     )
     assert disabled["input"]["runtype"] == "energy"
     assert disabled["odp"]["enabled"] == "False"
+
+
+def test_namd_scf_guess_retry_example_parses():
+    example = ROOT / "examples/namd_scf_guess_retry/retry.oqp"
+    spec, lowered = _parse(example.read_text(), source_dir=example.parent)
+    assert lowered["md"]["scf_guess_retry"].lower() == "true"
+
+
+def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
+    spec, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
+                          'namd(S2,nstep=1000,dt=0.5,velocity="velocity.au")')
+    values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
+    expected = dict(tdc='npi', rescale='auto', decoherence='edc',
+                    frustrated='reflect', mo_reuse=True, ref_follow='soscf',
+                    ref_switch_rescale=True, disc_rescale=True, disc_substeps=10,
+                    velocity='velocity.au', nstep=1000, dt=0.5)
+    for key, value in expected.items():
+        assert values['md', key] == value
+    assert values['md', 'thrshe'] == sys.float_info.max
+    assert values['dftgrid', 'pruned'] == 'sg2'
+    assert values['scf', 'conv'] == values['tdhf', 'conv'] == 1e-8
+
+
+def test_namd_explicit_controls_override_recommended_defaults():
+    _, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
+                       'namd(S2,tdc=fd,rescale=isotropic,disc_substeps=0,'
+                       'disc_rescale=false,velocity=zero) scf(conv=1e-10)')
+    values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
+    assert values['md', 'tdc'] == 'fd'
+    assert values['md', 'rescale'] == 'isotropic'
+    assert values['md', 'disc_substeps'] == 0
+    assert values['md', 'disc_rescale'] is False
+    assert values['md', 'velocity'] == 'zero'
+    assert values['scf', 'conv'] == 1e-10
+
+
+@pytest.mark.parametrize("path", sorted((ROOT / "examples" / "QMMM").glob("*NAMD*.oqp")))
+def test_qmmm_namd_examples_explicitly_select_supported_rescaling(path):
+    spec, config = _parse(path.read_text(), source_dir=path.parent)
+    assert config['md']['rescale'] == 'isotropic'
+    if config['md'].get('nacme_gate') == 'warn':
+        assert config['md']['nacme_check'] == 'baeck_an'

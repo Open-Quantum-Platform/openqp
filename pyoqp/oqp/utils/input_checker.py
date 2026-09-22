@@ -200,7 +200,7 @@ PT2_GRADIENT_ROUTES = {"auto", "analytic", "numerical"}
 PT2_MULTISTATE_MODES = {"auto", "none", "ms", "xms"}
 STATE_AVERAGE_SPIN_BLOCKS = {"diagnostic"}
 STATE_AVERAGE_ROOT_TRACKING = {"overlap"}
-GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
+GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao", "previous"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
@@ -1057,8 +1057,8 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     swapmo = _get(config, "guess", "swapmo", "")
     restart_namd_mutable_guess = (
         _as_lower(_get(config, "input", "runtype", "")) == "namd"
-        and str(_get(config, "md", "restart", False)).strip().lower()
-        in _TRUE_BOOL
+        and (str(_get(config, "md", "restart", False)).strip().lower()
+             in _TRUE_BOOL or bool(_get(config, "md", "continuation_checkpoint", "")))
         and str(_get(config, "guess", "save_mol", False)).strip().lower()
         in _TRUE_BOOL
     )
@@ -7113,21 +7113,25 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
         _add_cpu_info(report, "hess.nproc", nproc, restart)
 
 
-def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
+def _check_nac(
+    config: dict[str, Any], report: CheckReport, *, allow_analytical: bool = True
+) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     nproc = _get(config, "nac", "nproc", 1)
     states = _as_list(_get(config, "nac", "states", []))
     nac_type = _as_lower(_get(config, "nac", "type", "numerical"))
 
-    if nac_type != "numerical":
+    allowed_types = {"numerical", "analytical"} if allow_analytical else {"numerical"}
+    if nac_type not in allowed_types:
         report.add(
             "ERROR",
             "nac.type",
-            "Analytical NAC vectors are not available.",
+            "Unknown NAC vector type." if allow_analytical else
+            "NACME uses overlap time-derivative couplings, not analytical NAC vectors.",
             value=nac_type,
-            expected="numerical",
-            action="Set [nac] type=numerical.",
+            expected="numerical or analytical" if allow_analytical else "numerical",
+            action="Set [nac] type to a supported value.",
         )
 
     if method != "tdhf":
@@ -7149,6 +7153,44 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
             expected="mrsf",
             action="Set [tdhf] type=mrsf.",
         )
+
+    if nac_type == "analytical" and allow_analytical:
+        for section, key, expected, message in (
+            ("scf", "type", "rohf", "Analytical NAC requires an ROHF/ROKS reference."),
+            ("scf", "multiplicity", 3, "Analytical NAC requires a two-SOMO triplet reference."),
+            ("tdhf", "multiplicity", 1, "Analytical NAC currently implements singlet states only."),
+        ):
+            value = _get(config, section, key, "rhf" if key == "type" else 1)
+            actual = _as_lower(value) if key == "type" else value
+            if actual != expected:
+                report.add(
+                    "ERROR", f"{section}.{key}", message,
+                    value=value, expected=expected,
+                    action=f"Set [{section}] {key}={expected}.",
+                )
+        for section in ("scf", "tdhf"):
+            value = _get(config, section, "conv", 1e-6)
+            try:
+                conv = float(value)
+                valid = (
+                    not isinstance(value, bool)
+                    and math.isfinite(conv) and 0 < conv <= 1e-8
+                )
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                report.add(
+                    "ERROR", f"{section}.conv",
+                    "Analytical NAC requires a finite, positive convergence threshold <= 1e-8.",
+                    value=value, expected="0 < conv <= 1e-8",
+                    action=f"Set [{section}] conv=1e-10 (recommended near a crossing).",
+                )
+        nstate = _get(config, "tdhf", "nstate", 1)
+        if nstate < 2:
+            report.add(
+                "ERROR", "tdhf.nstate", "Analytical NAC requires at least two states.",
+                value=nstate, expected=">= 2", action="Increase [tdhf] nstate.",
+            )
 
     if nproc < 1:
         report.add(
@@ -7189,6 +7231,11 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
                     value=pair,
                     action="Use positive TDHF state numbers.",
                     wiki=WIKI_HELP["nac.states"],
+                )
+            if nac_type == "analytical" and int(pair[0]) == int(pair[1]):
+                report.add(
+                    "ERROR", "nac.states", "Analytical NAC requires two distinct states.",
+                    value=pair, action="Use a pair such as states=1 2 (MRSF S0/S1).",
                 )
 
     _add_cpu_info(report, "nac.nproc", nproc, False)
@@ -7239,7 +7286,7 @@ def _check_dftb_nacme_previous_geometry(config: dict[str, Any], report: CheckRep
 
 
 def _check_nacme(config: dict[str, Any], report: CheckReport) -> None:
-    _check_nac(config, report)
+    _check_nac(config, report, allow_analytical=False)
 
     guess_file2 = _get(config, "guess", "file2", "")
     system2 = _get(config, "input", "system2", "")
@@ -7426,7 +7473,7 @@ def _check_qmmm_driver_options(config: dict[str, Any], report: CheckReport) -> N
         if embedding == "split" and cutoff not in ("nocutoff", "cutoffnonperiodic"):
             # The legacy split scheme routes the QM charges through OpenMM
             # point charges; under PBC its force is not the derivative of
-            # its energy (docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
+            # its energy (openqp-devkit docs/qmmm_ewald.md: residuals of 1e3-1e4 kJ/mol/nm),
             # so a periodic trajectory must use the full-ESPF scheme.
             report.add(
                 "ERROR",

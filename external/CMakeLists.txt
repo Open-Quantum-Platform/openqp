@@ -342,7 +342,9 @@ ExternalProject_Add(libxc
         )
 endif()
 
-oqp_set_external_paths(TAGARRAY libtagarray
+# TagArray 1.0.0 allocated at alignment 64 but deleted at alignment 32.
+# Rebuild only this dependency with the fix; retain all other cached libraries.
+oqp_set_external_paths(TAGARRAY libtagarray-aligned64-v1
         "${CMAKE_SOURCE_DIR}/external/libtagarray"
         "${CMAKE_SOURCE_DIR}/external/libtagarray/src/libtagarray"
         "${CMAKE_BINARY_DIR}/external/libtagarray/src/libtagarray-build-${CMAKE_Fortran_COMPILER_ID}"
@@ -384,6 +386,7 @@ ExternalProject_Add(libtagarray
         # tagarray v1.0.0 ships a 144-char iso_c_binding USE line that its own
         # -std=f2018 build truncates under gfortran>=12; wrap it (idempotent).
         PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_linelen.py ${TAGARRAY_SOURCE_DIR}
+              COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_alignment.py ${TAGARRAY_SOURCE_DIR}
         INSTALL_COMMAND ""
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                     -DENABLE_FORTRAN=ON

@@ -1,5 +1,5 @@
 mrsf(nstate=2)/bhhlyp/6-31g*
-namd(T0,nstep=2,substep=50,seed=3,nacme_gate=warn,nacme_gate_invariant_tol=1e-09,nacme_gate_abs_tol=0.0002,nacme_gate_rel_tol=0.8,nacme_gate_consecutive=2,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,nve_gate_transition_tol=2e-06,nve_gate_consecutive=2,trajectory_interval=2,restart_interval=2,trajectory_file="H2CO-water.namd.trj",restart_file="H2CO-water.namd.restart.npz",trivial=true)
+namd(T0,rescale=isotropic,nstep=2,substep=50,seed=3,nacme_check=baeck_an,nacme_gate=warn,nacme_gate_invariant_tol=1e-09,nacme_gate_abs_tol=0.0002,nacme_gate_rel_tol=0.8,nacme_gate_consecutive=2,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,nve_gate_transition_tol=2e-06,nve_gate_consecutive=2,trajectory_interval=2,restart_interval=2,trajectory_file="H2CO-water.namd.trj",restart_file="H2CO-water.namd.restart.npz",trivial=true)
 qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3")
 droplet(enabled=true,radius=3.3,water_resnames="HOH WAT",max_penetration=3.0)
 solute_com(enabled=true,force_constant=2.0,atoms="0-3")

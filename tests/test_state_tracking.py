@@ -146,6 +146,38 @@ def test_numerical_worker_reorders_exchanged_roots_to_central_order(monkeypatch)
     assert np.allclose(data["OQP::td_bvec_mo"], np.eye(3))
 
 
+def test_align_x_tracks_nonsquare_state_major_bridge_buffer(monkeypatch):
+    class DummyMol:
+        def __init__(self):
+            documented_previous = np.array([
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0],
+            ])
+            documented_current = documented_previous[:, [2, 1, 0]]
+            # Emulate the state-major contiguous tag-array bridge view.
+            previous = documented_previous.T.ravel().reshape(4, 3)
+            current = documented_current.T.ravel().reshape(4, 3)
+            self.data = {
+                "OQP::td_bvec_mo_old": previous,
+                "OQP::td_bvec_mo": current,
+                "OQP::state_tracking_lineage": np.array([10, 11, 12]),
+                "OQP::state_tracking_phase_initial": np.ones(3),
+            }
+
+    monkeypatch.setattr(single_point, "dump_log", lambda *_args, **_kwargs: None)
+    tracker = single_point.NACME.__new__(single_point.NACME)
+    tracker.mol = DummyMol()
+
+    tracker.align_x(reorder=True)
+
+    data = tracker.mol.data
+    assert data["OQP::state_tracking_raw_order"].tolist() == [2, 1, 0]
+    assert data["OQP::state_tracking_order"].tolist() == [0, 1, 2]
+    assert np.allclose(data["OQP::td_bvec_mo"], data["OQP::td_bvec_mo_old"])
+
+
 def test_initial_gauge_sign_is_not_double_counted_across_json_restart(monkeypatch):
     class DummyMol:
         def __init__(self):

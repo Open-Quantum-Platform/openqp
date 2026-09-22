@@ -5,9 +5,7 @@ tolerance at this precision, the loop used to repeat forever without output
 (24 DNA thymine NAMD trajectories hung for up to 67 hours at full CPU).  It now
 stops once |g| has not dropped by a quarter for a fixed number of steps, while
 a refinement that is still converging -- even slowly -- runs to the requested
-tolerance.  Each refinement gradient is built from a clean provider state (the
-full SCF Fock rather than the incremental one), so a tolerance above the
-floating-point floor is reached instead of the incremental-Fock error floor.
+tolerance.
 """
 import os
 import re
@@ -38,6 +36,8 @@ type=huckel
 multiplicity=3
 type=rohf
 converger_type=trah
+trh_impl=native
+escalation=trah
 conv=1e-14
 """
 
@@ -66,18 +66,6 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
         self.assertRegex(src, r"if \(gnorm < fp_progress\*g_ref\) then\s*\n\s*g_ref   = gnorm\s*\n\s*n_stall = 0\s*\n"
                               r"\s*else\s*\n\s*n_stall = n_stall \+ 1")
 
-    def test_refinement_gradients_are_built_from_a_clean_state(self):
-        """Each refinement step drops the provider's accumulated state before its
-        gradient; the SCF provider resets the incremental-Fock history."""
-        src = TRAH_CORE.read_text()
-        self.assertRegex(src, r"n_fp = n_fp \+ 1\s*\n\s*call prov%apply_step\(p, ierr\)\s*\n(?:\s*!.*\n)*"
-                              r"\s*call prov%refresh\(\)\s*\n\s*if \(ierr == 0\) call prov%grad_hdiag\(g, hdiag, e0, ierr\)")
-        self.assertIn("procedure :: refresh => trah_provider_refresh", src)
-        scf = (ROOT / "source" / "trah_converger.F90").read_text()
-        self.assertIn("procedure :: refresh      => scf_refresh", scf)
-        self.assertRegex(scf, r"subroutine scf_refresh\(this\)\s*\n.*\n\s*this%conv%f_old = 0\.0_dp\s*\n"
-                              r"\s*this%conv%d_old = 0\.0_dp\s*\n\s*end subroutine scf_refresh")
-
     def test_block_bound_reached_while_improving_returns_to_the_macro_loop(self):
         """A block that hits its step bound while |g| still converges cycles into
         the nmac-bounded macro loop; a stagnant block stops."""
@@ -87,15 +75,19 @@ class TestTrahRefinementLoopSource(unittest.TestCase):
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
-class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
-    """The refinement loop stops, and above the requested tolerance the core no
-    longer claims convergence: the log states where it stopped.  The SCF driver
-    then applies its own |g| < 1e-4 acceptance and finishes the calculation."""
+class TestTightGradientToleranceTerminates(unittest.TestCase):
+    """Tight molecular targets may converge after full-Fock refinement. Success
+    requires the measured residual; an unreachable target must still fail.
+    The explicit escalation list excludes recovery by a different SCF solver.
+    """
 
-    def _run(self, conv):
+    def _run(self, conv, *, basis="6-31g*", incremental=None):
         with tempfile.TemporaryDirectory() as tmp:
             deck = Path(tmp) / "h2o_trah_tight.inp"
-            deck.write_text(DECK.replace("conv=1e-14", f"conv={conv}"))
+            text = DECK.replace("conv=1e-14", f"conv={conv}").replace("basis=6-31g*", f"basis={basis}")
+            if incremental is not None:
+                text += f"incremental={incremental}\n"
+            deck.write_text(text)
             env = dict(os.environ, OMP_NUM_THREADS="2")
             try:
                 proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", deck.name], cwd=tmp, env=env,
@@ -104,35 +96,56 @@ class TestUnreachableGradientToleranceTerminates(unittest.TestCase):
                 self.fail(f"TRAH did not finish within 240 s at conv={conv}")
             return proc, (Path(tmp) / "h2o_trah_tight.log").read_text(errors="ignore")
 
-    def test_unreachable_tolerance_stops_without_claiming_convergence(self):
-        proc, log = self._run("1e-18")
-        self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
-        stops = re.findall(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
-        self.assertEqual(len(stops), 1, "TRAH did not report where the refinement stopped")
-        g_stop = float(stops[0][0])
-        # blocks that reach their step bound while |g| still converges cycle
-        # through the nmac-bounded macro loop before the stagnant block stops
-        n_steps = int(stops[0][1]) + 100*log.count("refinement continuing")
-        self.assertGreater(g_stop, 1e-18)
-        # |g| converges for well over eight steps before it reaches the
-        # floating-point floor, so the refinement runs past any fixed eight-step cap
-        self.assertGreater(n_steps, 8)
-        entry = re.findall(r"^\s+\d+\s+-?\d+\.\d+\s+(\d\.\d+E[-+]\d+)\s+[-\d.]+\s+[\d.]+\s+\d+\s+acc", log, re.M)
-        self.assertTrue(entry, "no accepted TRAH macroiteration in the log")
-        self.assertLess(g_stop, 1e-2*float(entry[-1]))
-        self.assertNotIn("CONVERGED (FP precision", log)
-        self.assertIn("SCF convergence achieved", log)        # the SCF driver's own acceptance
+    def test_tight_tolerance_uses_the_fresh_fock_residual(self):
+        proc, log = self._run("1e-14")
+        diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+        residuals = re.findall(r"final fresh-Fock residual\s*=\s*([0-9.E+-]+)", log)
+        if proc.returncode == 0:
+            self.assertTrue(residuals, diagnostic)
+            self.assertLess(float(residuals[-1]), 1e-14, diagnostic)
+            self.assertIn("SCF convergence achieved", log)
+        else:
+            # Whether 1e-14 is reachable depends on the numerical libraries.
+            # A platform that cannot reach it must report failure honestly.
+            self.assertIn("SCF did not converge: TRAH failed the requested criterion", log, diagnostic)
+            self.assertNotIn("SCF convergence achieved", log, diagnostic)
+            self.assertIn("SCF energy is not converged", log, diagnostic)
 
-    def test_refinement_reaches_a_tolerance_above_the_floating_point_floor(self):
-        """With refinement gradients built from the full Fock, |g| goes below 1e-12.
-        Carrying the incremental Fock through the refinement, it stopped at an
-        incremental |g| near 3e-10 while the full-Fock |g| was 8e-9."""
-        proc, log = self._run("1e-12")
-        self.assertEqual(proc.returncode, 0, proc.stdout.decode(errors="ignore")[-2000:])
-        m = re.search(r"\s(\S+)\s+CONVERGED \(FP precision, (\d+) refinement steps\)", log)
-        self.assertIsNotNone(m, "the TRAH refinement did not converge to 1e-12")
-        self.assertLess(float(m.group(1)), 1e-12)
-        self.assertNotIn("refinement stopped", log)
+    def test_unreachable_tolerance_stops_without_claiming_convergence(self):
+        proc, log = self._run("1e-30")
+        diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+        self.assertNotEqual(proc.returncode, 0, diagnostic)
+        self.assertIn("SCF did not converge: TRAH failed the requested criterion", log, diagnostic)
+        self.assertIn("SCF energy is not converged", log, diagnostic)
+        self.assertNotIn("SCF convergence achieved", log, diagnostic)
+        self.assertNotIn("CONVERGED (FP precision", log, diagnostic)
+        # Blocks may continue while making progress, but each block remains
+        # bounded and the subprocess timeout detects an unbounded refinement.
+        stopped = re.findall(r"\s(\S+)\s+refinement stopped after (\d+) steps above conv", log)
+        self.assertTrue(stopped, diagnostic)
+        for residual, steps in stopped:
+            self.assertGreater(float(residual), 1e-30)
+            self.assertLessEqual(int(steps), 100)
+
+    def test_spherical_basis_refresh_matches_full_fock(self):
+        energies = []
+        for incremental in (True, False):
+            with self.subTest(incremental=incremental):
+                proc, log = self._run("1e-8", basis="cc-pvdz", incremental=incremental)
+                diagnostic = proc.stdout.decode(errors="ignore")[-2000:] + "\n" + log[-4000:]
+                self.assertEqual(proc.returncode, 0, diagnostic)
+                # H2O/cc-pVDZ has 24 spherical AOs versus 25 Cartesian AOs.
+                # This confirms that the oxygen d shell uses the spherical path.
+                self.assertRegex(log, r"Number of Basis Set functions\s*=\s*24\b")
+                residuals = re.findall(r"final fresh-Fock residual\s*=\s*([0-9.E+-]+)", log)
+                self.assertTrue(residuals, diagnostic)
+                self.assertLess(float(residuals[-1]), 1e-8, diagnostic)
+                self.assertIn("SCF convergence achieved", log, diagnostic)
+                values = re.findall(r"PyOQP state 0\s+(-?\d+\.\d+)", log)
+                self.assertTrue(values, diagnostic)
+                energies.append(float(values[-1]))
+        self.assertEqual(len(energies), 2)
+        self.assertLess(abs(energies[0] - energies[1]), 1e-8)
 
 
 if __name__ == "__main__":

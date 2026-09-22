@@ -1152,17 +1152,18 @@ contains
     end if
     call int2_driver%set_screening()
 
+    if (allocated(int2_data)) deallocate(int2_data)
     select case (infos%control%scftype)
     case (1)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
-    case (2)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
-    case (3)
-      if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
+      allocate(int2_rhf_data_t :: int2_data)
+      int2_data%nfocks = 1
+    case (2, 3)
+      allocate(int2_urohf_data_t :: int2_data)
+      int2_data%nfocks = size(d,2)
     end select
+    int2_data%d => d
+    int2_data%scale_exchange = scale_e
+    int2_data%scale_coulomb = scale_c
 
 
     ! Constructing two electron Fock matrix
@@ -1630,9 +1631,12 @@ contains
   !> @param[out] v1_tri    Packed AO response vector(s), same shape as dm1_tri.
   !> @param[inout,opt] mo_b AO→MO coefficients for β (nbf×nbf). Required for UHF;
   !>                        for ROHF it may be absent, in which case α is reused.
+  !> @param[out,opt] vjk_tri Optional packed JK-only response captured from the
+  !>                        same integral pass before the XC kernel is added.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine get_response_packed(basis, infos, molGrid, mo_a, dm1_tri, v1_tri, mo_b)
+  subroutine get_response_packed(basis, infos, molGrid, mo_a, dm1_tri, &
+                                 v1_tri, mo_b, vjk_tri)
       use precision,           only: dp
       use basis_tools,         only: basis_set
       use types,               only: information
@@ -1648,6 +1652,7 @@ contains
       real(dp),          intent(in)    :: dm1_tri(:,:)     ! nbf*(nbf+1)/2  (packed)
       real(dp),          intent(out)   :: v1_tri(:,:)      ! packed AO response
       real(dp), optional, intent(inout) :: mo_b(:,:)
+      real(dp), optional, intent(out) :: vjk_tri(:,:)
 
       integer :: nbf, nbf2, ok
       logical :: is_dft
@@ -1676,6 +1681,7 @@ contains
       select case (infos%control%scftype)
       case (scf_rhf)
         call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+        if (present(vjk_tri)) vjk_tri = v1_tri
         if (is_dft) then
           allocate(dm1_full(nbf,nbf), fx_full(nbf,nbf), fx_pack(nbf2), stat=ok)
           if (ok/=0) stop "alloc fail full"
@@ -1691,6 +1697,7 @@ contains
         end if
       case (scf_rohf, scf_uhf)
         call fock_jk(basis, d=dm1_tri, f=v1_tri, scale_exch=scalefactor, infos=infos)
+        if (present(vjk_tri)) vjk_tri = v1_tri
         if (is_dft) then
           allocate(dxa(nbf,nbf,1), dxb(nbf,nbf,1), fxa(nbf,nbf,1), fxb(nbf,nbf,1), fx_pack(nbf2), fx_full(nbf,nbf), stat=ok)
           if (ok/=0) stop "alloc fail full"

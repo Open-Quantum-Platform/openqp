@@ -263,6 +263,23 @@ def _openqp_build_label():
 _RUNNER_OMP_BASELINE = [os.environ.get("OMP_NUM_THREADS")]
 
 
+def _protect_continuation_log(config, log):
+    """Reject source aliases before any calculation log is opened."""
+    if not log:
+        return
+    for key in ('continuation_checkpoint', 'continuation_trajectory'):
+        source = config.get('md', {}).get(key, '')
+        if not source:
+            continue
+        source = os.path.abspath(os.path.expanduser(source))
+        output = os.path.abspath(os.path.expanduser(log))
+        aliases = os.path.realpath(source) == os.path.realpath(output)
+        if os.path.exists(source) and os.path.exists(output):
+            aliases = aliases or os.path.samefile(source, output)
+        if aliases:
+            raise ValueError('NAMD continuation source cannot be used as the calculation log')
+
+
 class Runner:
     """
     OQP main class for running calculations and tests.
@@ -354,6 +371,7 @@ class Runner:
             self.mol.load_config(input_dict)
         else:
             self.mol.load_config(input_file)
+        _protect_continuation_log(self.mol.config, self.mol.log)
         if self.mpi_manager.rank != 0:
             if os.name == 'nt':  # Windows
                 log = 'NUL'
@@ -567,7 +585,8 @@ class Runner:
         restart_namd = (
             str(input_config.get('runtype', '')).strip().lower() == 'namd'
             and (
-                md_config.get('restart') is True
+                bool(md_config.get('continuation_checkpoint', ''))
+                or md_config.get('restart') is True
                 or str(md_config.get('restart', '')).strip().lower()
                 in {'true', '1', 'yes', 'on'}
             )

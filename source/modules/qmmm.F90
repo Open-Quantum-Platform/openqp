@@ -75,7 +75,7 @@ module qmmm_mod
 
     integer :: nat, nbf, nbf2, ok, istate
     integer :: npt, nptcur, i
-    logical :: urohf, use_relaxed
+    logical :: urohf, use_relaxed, log_was_open
 
     real(dp), allocatable :: tmp(:), chg_op(:)
     real(dp), allocatable, target :: xyz(:,:), ttt(:,:)
@@ -91,7 +91,8 @@ module qmmm_mod
     character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
          OQP_partial_charges /)
 
-    open (unit=IW, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) open(unit=iw, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -172,6 +173,7 @@ module qmmm_mod
     call print_charges(infos, partial_charges, iw)
 
     deallocate(tmp, xyz, ttt, chg_op)
+    if (.not. log_was_open) close(iw)
   end subroutine form_esp_charges_excited
 
 
@@ -1167,7 +1169,7 @@ module qmmm_mod
     ! ESPF_SWSCALE=1.5 cuts that residual 5-13x on both measured link-atom
     ! systems, while being ~20% worse without a cut bond.  Not a safe global
     ! default, so it is documented rather than changed -- see
-    ! docs/espf_qmmm_switching.md and issue #260.
+    ! openqp-devkit docs/espf_qmmm_switching.md and issue #260.
     sw_scale = 1.8_dp
     call get_environment_variable('ESPF_SWSCALE', envv, status=status)
     if (status == 0) then

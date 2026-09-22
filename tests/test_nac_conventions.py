@@ -55,6 +55,22 @@ def test_interstate_coupling_uses_ej_minus_ei_for_vectors():
     assert np.allclose(interstate, np.swapaxes(interstate, 0, 1))
 
 
+def test_spatial_tlf_normalizes_columns_without_changing_time_overlap_policy():
+    raw = np.array([[0.8, 0.1], [-0.2, 0.6]])
+    normalized = NAC_UTILS.normalize_retained_state_overlap(raw)
+
+    assert np.allclose(np.linalg.norm(normalized, axis=0), 1.0)
+    assert not np.allclose(normalized, raw)
+    # The helper is opt-in: callers retaining the raw time-step overlap keep
+    # the original array and its leakage-bearing column norms.
+    assert np.allclose(raw, [[0.8, 0.1], [-0.2, 0.6]])
+
+
+def test_spatial_tlf_rejects_zero_norm_retained_column():
+    with pytest.raises(ValueError, match="zero-norm column"):
+        NAC_UTILS.normalize_retained_state_overlap(np.array([[1.0, 0.0], [0.0, 0.0]]))
+
+
 def test_state_gauge_covariance_is_joint_not_pairwise():
     energies = np.array([0.10, 0.25, 0.70])
     derivative = np.array(

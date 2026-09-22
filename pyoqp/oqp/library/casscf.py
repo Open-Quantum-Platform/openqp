@@ -1269,7 +1269,7 @@ class CASSCF:
         PT2 does not inherit these orbitals -- it semicanonicalizes from the
         density its H0 is defined against.  What the convention does decide is
         what the published orbitals and orbital energies mean.  See
-        docs/casscf_orbital_conventions.md and issue #338.
+        openqp-devkit docs/casscf_orbital_conventions.md and issue #338.
         """
         h1e, eri = _transform_integrals(hcore_ao, eri_ao, coeff)
         energies, coeffs, dets, D, G = _solve_active(

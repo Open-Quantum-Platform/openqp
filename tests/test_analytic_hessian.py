@@ -92,6 +92,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
             "hst_derivative_coupling",
             "interstate_coupling",
             "load_numerical_nac_cache",
+            "normalize_retained_state_overlap",
             "write_numerical_nac_cache_marker",
         ):
             setattr(nac_utils, name, lambda *args, **kwargs: None)
