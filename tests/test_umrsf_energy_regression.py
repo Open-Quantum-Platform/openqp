@@ -18,8 +18,8 @@ SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
 MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
-UMRSF_BHHLYP_FD = ROOT / "tools" / "validation_inputs" / "H2CO_BHHLYP_UMRSF_GRADIENT.inp"
-UMRSF_BLYP_FD = ROOT / "tools" / "validation_inputs" / "H2CO_BLYP_UMRSF_GRADIENT.inp"
+UMRSF_BHHLYP_FD = ROOT / "tests" / "data" / "umrsf" / "H2CO_BHHLYP_UMRSF_GRADIENT.inp"
+UMRSF_BLYP_FD = ROOT / "tests" / "data" / "umrsf" / "H2CO_BLYP_UMRSF_GRADIENT.inp"
 
 # UMRSF supports energy, gradients, and gradient-driven searches. Other
 # runtypes still need Hessians, NACs, or optimization-level reuse that has not
