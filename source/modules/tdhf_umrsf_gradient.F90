@@ -4011,17 +4011,20 @@ contains
       if (bnorm > tiny(1.0_dp)) then
         rhsov0 = rhsov
         ! pcg/minres tol is on the residual NORM (absolute); target the relative tolerance rtol.
+        ! The ov solve is asked for HALF of rtol: the acceptance test on the FULL coupled residual
+        ! (oo+ov+vv, both spins) came out 1.05-1.6 x the ov residual for 208-310 basis functions
+        ! and made an ov solve that met its own criterion fail the post-check.
         if (force_minres) then
           used_minres = .true.
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
-                               tol=rtol*bnorm, err=errout, iters=minres_iters)
+                               tol=0.5_dp*rtol*bnorm, err=errout, iters=minres_iters)
           iters = minres_iters
           sname = 'MINRES'
         else
           if (force_pcg) pcg_limit = mxit
           pcg_done = .false. ; pcg_bad = .false. ; pcg_iters = 0
           call pcg%init(b=rhsov0, update=umrsf_zov_matvec, precond=umrsf_zov_precond, &
-                        dat=ctx, tol=rtol*bnorm)
+                        dat=ctx, tol=0.5_dp*rtol*bnorm)
           select case (pcg%errcode)
           case (PCG_CONVERGED)
             pcg_done = .true.
@@ -4064,7 +4067,7 @@ contains
               used_minres = .true.
               rhsov = rhsov0
               call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
-                                   x0=ztrial, tol=rtol*bnorm, err=errout, iters=minres_iters)
+                                   x0=ztrial, tol=0.5_dp*rtol*bnorm, err=errout, iters=minres_iters)
             else
               rhsov(1:ndofov) = ztrial(1:ndofov)
             end if
