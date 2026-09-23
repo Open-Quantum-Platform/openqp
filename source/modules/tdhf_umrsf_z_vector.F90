@@ -19,7 +19,7 @@ contains
     use io_constants, only: iw
     use messages, only: show_message, WITH_ABORT
     use oqp_tagarray_driver, only: OQP_umrsf_response_gradient, &
-      OQP_umrsf_response_gradient_comment, TA_TYPE_REAL64, tagarray_get_data
+      OQP_umrsf_response_gradient_comment, TA_TYPE_REAL64, tagarray_get_data, tagarray_reserve_data
     use tdhf_umrsf_gradient_mod, only: tdhf_umrsf_build_response_gradient
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
