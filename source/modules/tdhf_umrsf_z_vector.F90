@@ -43,9 +43,9 @@ contains
       return
     end if
 
-    call inf%dat%remove_records(tags_response)
-    call inf%dat%reserve_data(OQP_umrsf_response_gradient, TA_TYPE_REAL64, 3*natom, &
-                              (/ 3, natom /), comment=OQP_umrsf_response_gradient_comment)
+    call inf%dat%erase(tags_response)
+    call tagarray_reserve_data(inf%dat, OQP_umrsf_response_gradient, TA_TYPE_REAL64, 3*natom, &
+                               (/ 3, natom /), comment=OQP_umrsf_response_gradient_comment)
     call tagarray_get_data(inf%dat, OQP_umrsf_response_gradient, cached_response)
     cached_response = response_grad
 

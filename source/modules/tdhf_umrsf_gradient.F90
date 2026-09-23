@@ -237,7 +237,7 @@ contains
     call data_has_tags(infos%dat, tags_response, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_umrsf_response_gradient, response_grad)
     allocate(response_copy, source=response_grad)
-    call infos%dat%remove_records(tags_response)
+    call infos%dat%erase(tags_response)
 
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/2x,a)') &
@@ -282,7 +282,7 @@ contains
     use grd1, only: grad_ee_overlap
     use constants, only: tol_int
     use oqp_linalg
-    use dft, only: dft_initialize, dftclean
+    use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use iso_c_binding, only: c_int, c_f_pointer
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
