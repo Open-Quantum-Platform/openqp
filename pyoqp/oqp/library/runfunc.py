@@ -75,6 +75,8 @@ def _single_gradient_target(mol, target_types=("umrsf",)):
 
     old_env = os.environ.get(_MRSF_TARGET_ONLY_ENV)
     if target is not None and target > 0:
+        # The target state stays set on exit: every consumer (single_point, qmmm_driver)
+        # re-sets it immediately before use, so only the environment switch is restored.
         mol.data.set_tdhf_target(target)
         os.environ[_MRSF_TARGET_ONLY_ENV] = "1"
 

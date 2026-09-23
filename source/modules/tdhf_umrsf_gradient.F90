@@ -34,7 +34,7 @@ module tdhf_umrsf_gradient_mod
   private
   public :: tdhf_umrsf_gradient_C, tdhf_umrsf_gradient, tdhf_umrsf_build_response_gradient
 
-  !> ------- Stage-2 XC context (MILESTONE B / RULES §18) -------
+  !> ------- Stage-2 XC context) -------
   !> Set ONCE per gradient in umrsf_grad_run_gates (DFT runs only). The reference UKS XC kernel
   !> f_xc[ρ_ref] enters the response gradient ONLY through the reference-orbital relaxation (the
   !> MRSF response A-matrix has NO grid f_xc — energy is int2-only, so the f_xc·(X+Y)(X+Y) term is
@@ -42,7 +42,7 @@ module tdhf_umrsf_gradient_mod
   !> Z-vector Hessian / refrelax G^f / G^z / W). xc_refa/refb = reference density (defines the
   !> kernel).  xc_moa/xc_mob keep this on the same reference-MO kernel path used by
   !> the standard UHF CPHF response code.
-  !> See DERIVATIONS/M2_xc_response.md.
+  !>
   logical,                  save :: xc_meanfield_on = .false.
   type(dft_grid_t),         save :: xc_molgrid
   real(kind=dp), allocatable, save :: xc_refa(:,:), xc_refb(:,:)
@@ -66,7 +66,7 @@ module tdhf_umrsf_gradient_mod
   !>   mixed exchange (k=9:10): the same contraction with D_k transposed, matching
   !>     the GAMESS-compatible K[D_k^T] permutation in int2_umrsf_data_t_update.
   !> s_k = mrst sign (k<=10 negated for mrst=3) * spin-pair-coupling scale. NEVER reuse grd2_uhf
-  !> (that gives D(x)D — the wrong 2-PDM). See DERIVATIONS/G1_response_2pdm.md.
+  !> (that gives D(x)D — the wrong 2-PDM).
   type, extends(grd2_compute_data_t) :: grd2_umrsf_resp_t
     integer :: nbf = 0
     integer :: nchan = 11
@@ -435,7 +435,7 @@ contains
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 0)
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 1)
 
-    ! ---- SMOOTH/converged get_jacobi alignment (RULES §15 step 2.1; §17 aligner unification) ----
+    ! ---- SMOOTH/converged get_jacobi alignment (the development rules step 2.1; §17 aligner unification) ----
     ! POST-MILESTONE-A: get_jacobi (above) is now itself cyclic+converged (max|btt|<1e-12), so va,vb
     ! arrive ALREADY at the converged fixed point and this umrsf_jacobi_smooth call is a CONFIRMING
     ! NO-OP (polish size → ~1e-13). Kept as a defensive re-convergence + the authoritative residual/
@@ -720,14 +720,14 @@ contains
     end block
     call gcomp%clean()
 
-    ! ===== SOMO-corrected unrelaxed difference density P_eff = sym(∂omega_orb/∂F̃) (MILESTONE C / M3) =====
+    ! ===== SOMO-corrected unrelaxed difference density P_eff = sym(∂omega_orb/∂F̃)/ M3) =====
     ! The MRSF orbital energy (mrsfesum, mrst=1/3) carries SOMO terms ∝ xlr=X(O1,O1) that the standard-CIS
     ! T_u OMITS ⇒ Tr(T_u F̃) ≠ omega_orb for SOMO-mixed (S2) states (gate gap ∝ xlr²; the S2 ~8e-3 error).
     ! omega_orb is LINEAR in F̃, so the correct unrelaxed difference density is P_eff = ∂omega_orb/∂F̃ (built
     ! by probing umrsf_orb_matvec with unit Focks; α occ-occ, β virt-virt like T_u; reduces to T_u when the
     ! SOMO-SOMO amplitudes vanish ⇒ S1/S3/non-SOMO untouched). P_eff REPLACES T_u as talpha/tbeta and
     ! propagates to pda/pdb (de_orb, refrelax), the frozen G̃ (gta=2 F̃ P_eff), G^f, the full-block Z, W.
-    ! Model: DERIVATIONS/M3_s2_somo_diffdens.md, c09_peff_closure.py (≤1e-9), CAS c09_cas_peff.py.
+    ! c09_peff_closure.py (≤1e-9), CAS c09_cas_peff.py.
     allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), &
              tua(nbf,nbf), tub(nbf,nbf), source=0.0_dp)
     call iatogen(xamp, xmat, nocca, noccb)
@@ -842,16 +842,16 @@ contains
       ! ΔG^f (M1 alignment Jacobian): default = ANALYTIC adjoint-IFT (umrsf_genfock_analytic, D1).
       ! UMRSF_GFFD=1 → the numerical re-align oracle umrsf_genfock_full (4·nbf² smooth re-aligns, ~1e-8
       ! floor). Both give the same full gradient (the alignment gauge cancels in assembly); the analytic
-      ! is O(nbf³) matmuls (no int2, no per-(p,q) re-align). D1 model closure DERIVATIONS/c06_exp4/c06_exp5.
+      ! is O(nbf³) matmuls (no int2, no per-(p,q) re-align). D1
       call get_environment_variable("UMRSF_GFFD",   e, status=ios) ; if (ios==0) l_gffd   = (trim(e)=="1")
       ! de_m1 (M1 alignment explicit-overlap Pulay): default = ANALYTIC −Tr(W_m1·S^x) (umrsf_m1_analytic,
       ! D2; W_m1 = cac Tbar cbcᵀ, the reverse-mode S-VJP of Φ=μ·r(s_align) — SAME μ/Tbar/gauge as the D1
       ! ΔG^f). UMRSF_M1FD=1 → the numerical geometry central-FD oracle umrsf_m1_overlap_grad (6·natom
-      ! re-aligns, ~1e-6 floor). D2 model closure DERIVATIONS/c11_dem1_analytic.py (3.8e-12, 7/7 seeds).
+      ! re-aligns, ~1e-6 floor). D2 .
       call get_environment_variable("UMRSF_M1FD",   e, status=ios) ; if (ios==0) l_m1fd   = (trim(e)=="1")
     end block
 
-    ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
+    ! ---- Stage-2 XC context (the development rules / ) ----
     ! DFT runs only. UMRSF_XCK (T3): add f_xc[ρ_ref]·P to the reference mean field ⇒ Z-vector Hessian /
     ! refrelax G^f / G^z / W. UMRSF_XCG (T2): add the difference-density XC gradient d/dR Tr(V_xc[ρ_ref]·P_eff).
     ! Both default ON for DFT (the response is otherwise missing all XC ⇒ the ~3.5e-2 BHHLYP S1 gap). The grid
@@ -1162,7 +1162,7 @@ contains
     peffb = pdb + dbg_zw*pzb
     call umrsf_orbital_grad(infos, basis, peffa, peffb, dmat_a, dmat_b, hfscale_ref, de_orb)
 
-    ! de_xc (T2, RULES §18): difference-density XC skeleton gradient  d/dR Tr(V_xc[ρ_ref]·P_eff)  — the XC
+    ! de_xc (T2, the development rules): difference-density XC skeleton gradient  d/dR Tr(V_xc[ρ_ref]·P_eff)  — the XC
     ! analogue of de_orb's 2e mean-field (J−cK) part, with the SAME P_eff. utddft_xc_gradient with
     ! do_ground_state=.false. (reference XC grad already in hf_gradient/dftder ⇒ no double counting) and
     ! do_fxc=.false. (no transition-density term: MRSF A has no grid f_xc). dedft sign convention matches
@@ -1209,7 +1209,7 @@ contains
 !###############################################################################
 !> @brief Orbital part of the UMRSF response matvec (A_orb·X)[i,j] on the occα×virβ block — clean-room
 !>        transcription of the energy's mrsfesum (mrst=1/3; tdhf_mrsf_lib.F90 READ-OK, re-derived as
-!>        DERIVATIONS/c09_somo_diffdens.py:mrsf_orb_matvec). LINEAR in the aligned-MO Fock (fij=F̃α occ-occ,
+!> :mrsf_orb_matvec). LINEAR in the aligned-MO Fock (fij=F̃α occ-occ,
 !>        fab=F̃β virt-virt) and in the amplitude wrk=X. umrsf_build_peff probes this with UNIT Focks to
 !>        get P_eff = ∂omega_orb/∂F̃; calling it with the real F̃ reproduces omega_orb (== mrsfesum) — a gate.
 !>        The SOMO terms (∝ xlr=X(O1,O1), O1=nocca-1 O2=nocca) are exactly what the standard-CIS T_u omits.
@@ -1270,7 +1270,7 @@ contains
 !>        is LINEAR in F̃, so P_raw_σ[p,q] = omega_orb evaluated with F̃_σ = unit E_pq (the only blocks F̃
 !>        enters: α occ-occ p,q∈1:nocca; β virt-virt p,q∈noccb+1:nbf). P_eff = sym(P_raw) (physical density;
 !>        Tr(sym(P)·F̃)=Tr(P·F̃) for symmetric F̃ ⇒ gate Tr(P_eff F̃)=omega_orb preserved). Reduces to T_u
-!>        when X(O1,O1)=X(O2,O2)=0. Model: DERIVATIONS/c09_peff_closure.py:Praw (≤1e-9), CAS c09_cas_peff.py.
+!>        when X(O1,O1)=X(O2,O2)=0. :Praw (≤1e-9), CAS c09_cas_peff.py.
   subroutine umrsf_build_peff(nbf, nocca, noccb, mrst, xmat, peffa, peffb)
     implicit none
     integer, intent(in) :: nbf, nocca, noccb, mrst
@@ -1314,9 +1314,9 @@ contains
 
 !###############################################################################
 !> SMOOTH (converged) corresponding-orbital alignment — clean-room port of the c05 MODEL
-!> (DERIVATIONS/c05_uhf_full_gradient.py:get_jacobi_align), faithful to the energy's get_jacobi
+!>  :get_jacobi_align), faithful to the energy's get_jacobi
 !> 2×2 angle law + segments (tdhf_mrsf_lib.F90, READ-OK) but run to CONVERGENCE: NO 1e-3 threshold,
-!> NO min-|θ| early exit — cyclic sweeps until max|btt| < tol. RULES §15: the threshold get_jacobi is
+!> NO min-|θ| early exit — cyclic sweeps until max|btt| < tol. the development rules: the threshold get_jacobi is
 !> non-smooth and was THE contamination of the earlier numerical-RHS Z-vector; the analytic gradient
 !> path needs the converged alignment so the within-segment generalized-Fock blocks vanish (then the
 !> M1 V-transform G^f = V G̃ Vᵀ is exact). seg0 rotates ALPHA columns {1..nocca-1} (closed+O1); seg1
@@ -1960,7 +1960,7 @@ contains
     call umrsf_timing_accum(wall1, cpu1, umrsf_mf_fock_wall, umrsf_mf_fock_cpu)
     call unpack_matrix(umrsf_mf_fout(:,1), ya_full)
     call unpack_matrix(umrsf_mf_fout(:,2), yb_full)
-    ! Stage-2 (RULES §18): add the reference UKS XC kernel response f_xc[ρ_ref]·P (T3). The reference
+    ! Stage-2: add the reference UKS XC kernel response f_xc[ρ_ref]·P (T3). The reference
     ! mean field becomes G_σ[P] = J[P] − hfscale·K[P_σ] + (f_xc·P)_σ (collinear UKS f_xc, spin-conserving
     ! P). One grid pass per call; propagates to the Z-vector Hessian, refrelax G^f, G^z and W.
     if (xc_meanfield_on) then
@@ -2498,12 +2498,12 @@ contains
 !###############################################################################
 !> Re-diagonalize the spin-flip TDA response matrix A in the SMOOTH-aligned basis and overlap-track
 !> to the stored amplitude bvec_ref → the genuine eigenvector xamp (+ eigenvalue omega_eig).
-!> RULES §15 / c05: the ov-only Z-vector + W machinery is exact ONLY when X is a TRUE eigenvector of
+!> the development rules / c05: the ov-only Z-vector + W machinery is exact ONLY when X is a TRUE eigenvector of
 !> A in the alignment basis. The stored bvec is the eigenvector in the ENERGY's THRESHOLD basis and is
 !> non-stationary in the converged-smooth basis (Rayleigh quotient ~1.5e-6 above the eigenvalue),
 !> which would corrupt R. Building A column-by-column via the energy matvec (nia int2 builds, cheap)
 !> and diagonalizing recovers the stationary X. State-following by max |eigenvector·bvec_ref| overlap
-!> (RULES §11), sign-fixed to bvec_ref.
+!>, sign-fixed to bvec_ref.
   subroutine umrsf_track_amplitude(infos, idrv, va, vb, famo, fbmo, bvec_ref, scale_exch, &
                                    hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
     use eigen, only: diag_symm_full
@@ -3210,7 +3210,7 @@ contains
 
 !###############################################################################
 !> ANALYTIC full generalized Fock G^f = V G̃ Vᵀ + ΔG^f  (D1 — replaces the 4·nbf² numerical re-align
-!> in umrsf_genfock_full).  ΔG^f is the adjoint-IFT alignment Jacobian (DERIVATIONS/c06_exp3.py
+!> in umrsf_genfock_full).  ΔG^f is the adjoint-IFT alignment Jacobian
 !> dGf_analytic; model closure c06_exp4_gauge_closure.py 4.0e-11; CAS c06_cas_chain.py), ported as
 !> the REVERSE-MODE of the scalar Φ(C)=μ·r(s_align(C)) with μ=H⁻ᵀλ held FIXED (the adjoint alignment
 !> response): λ = within-seg antisym G̃, H = ∂r/∂k the get_jacobi btt-stationarity Hessian, r the btt
@@ -3218,7 +3218,7 @@ contains
 !>   RotA=cacᵀ S va (=Ca^T S C̃a), RotB=cbcᵀ S vb ; T=cacᵀ S cbc ; N=norm_cols(T) ; s=RotAᵀ N RotB
 !>   Sbar=∂(μ·r)/∂s ; Nbar=RotA Sbar RotBᵀ ; Tbar=colnorm_vjp(Nbar,N,g) ; Ya=S cbc Tbarᵀ ; Yb=S cac Tbar
 !>   ΔG^f_a=−cacᵀ Ya ; ΔG^f_b=−cbcᵀ Yb ; G^f_a=RotA G̃a RotAᵀ+ΔG^f_a ; G^f_b=RotB G̃b RotBᵀ+ΔG^f_b.
-!> Reverse-mode ≡ complex-step dGf_analytic to 9e-19 (DERIVATIONS/c06_exp5_reverse_mode.py).  Only
+!> Reverse-mode ≡ complex-step dGf_analytic to 9e-19  ).  Only
 !> O(nbf³) matmuls + one symmetric npair×npair adjoint solve for μ (CG/MINRES) — NO int2, no re-align.  Segments:
 !> α cols {1..nocca-1} (closed+O1), β cols {nocca..nbf} (O2+virt), faithful to umrsf_jacobi_smooth.
 !> GAUGE: uses the same unseeded aligned va/vb as the noseed de_m1 (umrsf_m1_overlap_grad) ⇒ the
@@ -3281,7 +3281,7 @@ contains
     !      rotates s ROWS(a,b) (seg0) or COLS(a,b) (seg1): ds(a,q)=−s(b,q), ds(b,q)=+s(a,q) [rows];
     !      ds(p,a)=−s(p,b), ds(p,b)=+s(p,a) [cols]. r_m uses 4 entries of s; contract. H is exactly
     !      block-diagonal (a seg0 generator's ds lives on SEG0 rows, invisible to SEG1 residuals).
-    !      Verified ≡ the FD-H (c06_exp3) to 3.9e-12, μ to 9e-16 (DERIVATIONS/c06_exp5_reverse_mode). ----
+    !      Verified ≡ the FD-H (c06_exp3) to 3.9e-12, μ to 9e-16  ). ----
 
     ! ---- μ : solve Hᵀ μ = λ (symmetric H ⇒ CG/MINRES for the large block; rank-deficient-safe fallback) ----
     call umrsf_solve_alignment_adjoint_blocks(sstar, pri, prj, prseg, nocca, muvec, 'Gf analytic alignment response')
@@ -3331,7 +3331,7 @@ contains
 !> umrsf_genfock_analytic's reverse mode (which contracts T̄ to C for ΔG^f); D2 ONLY contracts T̄ to S.
 !> Computing it here — from the SAME gta/gtb/va/vb — GUARANTEES the same unseeded gauge as the ΔG^f.
 !> −Tr(W_m1·S^x) via grd1 grad_ee_overlap (eijden: negate + half-diagonal pack), as de_w/de2e do.
-!> Model closure DERIVATIONS/c11_dem1_analytic.py: analytic −Σ W_m1·dS ≡ numerical noseed re-align to
+!> Model closure : analytic −Σ W_m1·dS ≡ numerical noseed re-align to
 !> 3.8e-12 (7/7 seeds ≤4.2e-12); reverse-mode ≡ complex-step ∂Φ/∂S to 1.9e-19 (CAS c06_cas_chain.py).
   subroutine umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
     implicit none
@@ -3621,6 +3621,7 @@ contains
         bnrm = sqrt(sum(rhs(:,1)**2))
         if (bnrm <= tiny(1.0d0)) then
           rhs(:,1) = 0.0d0 ; iter_ok = .true. ; iters = 0 ; relres = 0.0d0 ; solvername = 'ZERO-RHS'
+          itwall = 0.0d0 ; itcpu = 0.0d0   ! the success message below reports the solve time
         else
           mxit = min(nb, 4000)
           call umrsf_clock_start(itw0, itc0)
