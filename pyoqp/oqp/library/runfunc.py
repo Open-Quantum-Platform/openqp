@@ -4,7 +4,6 @@ import os
 import numpy as np
 
 from contextlib import contextmanager
-import os
 
 import oqp
 import oqp.library
@@ -200,7 +199,9 @@ def compute_scf_prop(mol):
 
 def compute_grad(mol):
     # compute energy
-    with _single_gradient_target(mol, target_types=("mrsf", "umrsf")):
+    # UMRSF only: a single-state grad= request converges the target root alone. The RO-MRSF
+    # gradient keeps its multi-root convergence, so existing MRSF results are unchanged.
+    with _single_gradient_target(mol):
         SinglePoint(mol).energy()
 
     # compute gradient

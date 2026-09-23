@@ -1,0 +1,41 @@
+# Analytic nuclear gradient of the UMRSF-TDDFT S0 state of formaldehyde, BHHLYP/6-31G*.
+# For a UMRSF-TDDFT gradient, we have to set:
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype        grad
+#    input           method         tdhf
+#    scf             type           uhf
+#    scf             multiplicity   3
+#    tdhf            type           umrsf
+#    properties      grad           1        (state 1 = S0 of the singlet manifold)
+#
+# The UMRSF gradient supports HF, LDA/GGA and global-hybrid functionals; runtype=optimize, meci,
+# mecp and tci are built on it. Range-separated, meta-GGA and double-hybrid functionals and custom
+# spin-pair-coupling scales remain energy-only (see the input checker messages).
+[input]
+system=
+ H   0.037000000   0.925023000  -0.585394000
+ H  -0.021000000  -0.925030000  -0.585430000
+ C   0.008000000  -0.000017000   0.019259000
+ O  -0.014000000   0.000024000   1.196513000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=6-31g*
+
+[scf]
+type=uhf
+multiplicity=3
+conv=1e-10
+
+[tdhf]
+type=umrsf
+nstate=3
+multiplicity=1
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1

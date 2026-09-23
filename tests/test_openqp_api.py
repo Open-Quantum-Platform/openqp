@@ -429,6 +429,22 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(float(config["scf"]["conv"]), 1e-10)
         self.assertEqual(float(config["tdhf"]["conv"]), 1e-10)
 
+    def test_umrsf_gradient_is_available_through_theory_and_workflow(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_umrsf_grad").molecule(geometry="water")
+        job.theory.umrsf(functional="bhhlyp", basis="6-31g*", nstate=3)
+        job.settings.tdhf(conv=1e-9)
+        job.workflow.gradient(grad=1)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "umrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "3")
+        self.assertEqual(config["properties"]["grad"], "1")
+
     def test_molecule_accepts_second_geometry_and_multiplicity(self):
         openqp = load_openqp_module()
 

@@ -421,6 +421,12 @@ class _TheoryProxy:
     def mrsf_tddft(self, **kwargs):
         return self.mrsf(**kwargs)
 
+    def umrsf(self, **kwargs):
+        return self._owner.umrsf(**kwargs)
+
+    def umrsf_tddft(self, **kwargs):
+        return self.umrsf(**kwargs)
+
 
 class _WorkflowProxy:
     """Scientific workflow namespace for OpenQP Python scripts."""
@@ -1686,6 +1692,26 @@ class OpenQP:
         self.input(**input_updates)
         self.scf(type=reference, multiplicity=multiplicity)
         updates = {"type": "mrsf", "nstate": nstate}
+        updates.update(tdhf_keywords)
+        return self.tdhf(**updates)
+
+    def umrsf(self, nstate=3, reference="uhf", multiplicity=3,
+              runtype=None, functional=None, basis=None, **tdhf_keywords):
+        """Use a compact OpenQP UMRSF-TDDFT setup (UKS triplet reference).
+
+        Energies and analytic nuclear gradients (runtype=grad, optimize, meci,
+        mecp, tci) are available for HF, LDA/GGA and global-hybrid functionals.
+        """
+        input_updates = {"method": "tdhf"}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        if functional is not None:
+            input_updates["functional"] = functional
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
+        self.scf(type=reference, multiplicity=multiplicity)
+        updates = {"type": "umrsf", "nstate": nstate}
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
 
