@@ -3,6 +3,9 @@ import os
 
 import numpy as np
 
+from contextlib import contextmanager
+import os
+
 import oqp
 import oqp.library
 from oqp.utils.tb_backends import is_tb_method, tb_section_name
@@ -55,6 +58,35 @@ def compute_namd(mol):
     else:
         from oqp.library.namd import NAMD
         NAMD(mol).run()
+
+_MRSF_TARGET_ONLY_ENV = "OQP_MRSF_TARGET_ONLY_GRAD"
+
+
+@contextmanager
+def _single_gradient_target(mol, target_types=("umrsf",)):
+    grad_list = mol.config.get("properties", {}).get("grad", [])
+    method = mol.config.get("input", {}).get("method")
+    td_type = mol.config.get("tdhf", {}).get("type")
+    if isinstance(td_type, str):
+        td_type = td_type.lower()
+
+    target = None
+    if method == "tdhf" and td_type in target_types and len(grad_list) == 1:
+        target = int(grad_list[0])
+
+    old_env = os.environ.get(_MRSF_TARGET_ONLY_ENV)
+    if target is not None and target > 0:
+        mol.data.set_tdhf_target(target)
+        os.environ[_MRSF_TARGET_ONLY_ENV] = "1"
+
+    try:
+        yield
+    finally:
+        if target is not None and target > 0:
+            if old_env is None:
+                os.environ.pop(_MRSF_TARGET_ONLY_ENV, None)
+            else:
+                os.environ[_MRSF_TARGET_ONLY_ENV] = old_env
 
 
 def compute_energy(mol):
@@ -168,7 +200,8 @@ def compute_scf_prop(mol):
 
 def compute_grad(mol):
     # compute energy
-    SinglePoint(mol).energy()
+    with _single_gradient_target(mol, target_types=("mrsf", "umrsf")):
+        SinglePoint(mol).energy()
 
     # compute gradient
     Gradient(mol).gradient()
@@ -306,7 +339,8 @@ def compute_properties(mol):
     BasisOverlap(mol).overlap()
 
     # compute excitation energy
-    sp.excitation(ref_energy)
+    with _single_gradient_target(mol):
+        sp.excitation(ref_energy)
 
     # Transport the central-geometry response-vector gauge before gradients,
     # numerical-NAC workers, and the checkpoint JSON are produced.  PyRAI2MD
@@ -332,7 +366,8 @@ def compute_properties(mol):
 
 def compute_data(mol):
     # compute reference energy
-    SinglePoint(mol).energy()
+    with _single_gradient_target(mol):
+        SinglePoint(mol).energy()
 
     # compute gradient
     Gradient(mol).gradient()

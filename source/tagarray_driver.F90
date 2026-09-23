@@ -31,6 +31,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
   character(len=*), parameter, public :: OQP_td_mrsf_density = OQP_prefix // "td_mrsf_density"
   character(len=*), parameter, public :: OQP_td_p = OQP_prefix // "td_p"
+  character(len=*), parameter, public :: OQP_umrsf_response_gradient = OQP_prefix // "umrsf_response_gradient"
   character(len=*), parameter, public :: OQP_td_t = OQP_prefix // "td_t"
   character(len=*), parameter, public :: OQP_td_z = OQP_prefix // "td_z"
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
@@ -185,6 +186,8 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_bvec_mo_comment = "??? td_bvec_mo ???"
   character(len=*), parameter, public :: OQP_td_mrsf_density_comment = "??? td_mrsf_density ???"
   character(len=*), parameter, public :: OQP_td_p_comment = "??? td_p ???"
+  character(len=*), parameter, public :: OQP_umrsf_response_gradient_comment = &
+    "UMRSF response-gradient contribution prepared by the UMRSF z-vector stage"
   character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
   character(len=*), parameter, public :: OQP_td_z_comment = &
     "TDHF/TDDFT orbital-relaxation Z vector for the target state"
@@ -233,7 +236,7 @@ module oqp_tagarray_driver
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
-    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, OQP_umrsf_response_gradient, &
     OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
     OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
     OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &

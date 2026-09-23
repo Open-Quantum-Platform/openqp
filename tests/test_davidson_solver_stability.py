@@ -16,6 +16,7 @@ TDHF_SF_LIB_SRC = ROOT / "source" / "tdhf_sf_lib.F90"
 TDHF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_energy.F90"
 TDHF_SF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_sf_energy.F90"
 TDHF_MRSF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+RUNFUNC_SRC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 
 
 class DavidsonAutoRestartTests(unittest.TestCase):
@@ -50,6 +51,31 @@ class DavidsonAutoRestartTests(unittest.TestCase):
 
 
 class DavidsonSolverStabilityTests(unittest.TestCase):
+    def test_mrsf_energy_uses_larger_integral_buffer_and_active_slice(self):
+        """MRSF/UMRSF Davidson builds should avoid small-buffer update overhead."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+
+        self.assertIn("mrsf_int2_buffer_size = 200000", src)
+        self.assertRegex(
+            src,
+            r"int2_driver%buf_size\s*=\s*max\(int2_driver%buf_size,\s*mrsf_int2_buffer_size\)",
+        )
+        self.assertIn("d3 = mrsf_density(:iv,:,:,:)", src)
+        self.assertIn("d2=fmrq1(:,:,:iv)", src)
+
+    def test_mrsf_family_gradient_can_converge_only_target_root(self):
+        """Single-root MRSF/UMRSF gradients should not wait for unrelated roots."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+        runfunc = RUNFUNC_SRC.read_text()
+
+        self.assertIn("OQP_MRSF_TARGET_ONLY_GRAD", src)
+        self.assertIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
+        self.assertIn("target_only_gradient", src)
+        self.assertIn("mxerr = rnorm(target_state)", src)
+        self.assertIn("maxval(rnorm)", src)
+        self.assertIn('target_types=("mrsf", "umrsf")', runfunc)
+        self.assertIn("mol.data.set_tdhf_target(target)", runfunc)
+
     def test_rpa_residual_preconditioner_uses_finite_floor_guard(self):
         """RPA/TDA Davidson q vectors must not divide by tiny or non-finite gaps."""
         src = TDHF_LIB_SRC.read_text()

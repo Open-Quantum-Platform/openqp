@@ -1786,17 +1786,16 @@ contains
     integer, intent(in) :: ivec
 
     real(kind=dp), allocatable :: &
-      scr(:,:), wrk(:,:)
+      scr(:,:), tmp(:), wrk(:,:)
     real(kind=dp), pointer, dimension(:,:) :: &
       adco1a, adco1b, adco2a, adco2b, &
       ado1va, ado1vb, ado2va, ado2vb, agdlr, aco12, ao21v
     integer :: noca, nocb, mrst, i, ij, &
-      j, lr1, lr2, nbf, ok, ni, nj
+      j, lr1, lr2, nbf, ok
     real(kind=dp), parameter :: zero = 0.0_dp
     real(kind=dp), parameter :: one = 1.0_dp
     real(kind=dp), parameter :: half = 0.5_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
-    real(kind=dp) :: dumn
     logical :: debug_mode
 
     nbf = infos%basis%nbf
@@ -1805,7 +1804,7 @@ contains
     nocb = infos%mol_prop%nelec_b
     debug_mode = infos%tddft%debug_mode
 
-    allocate(scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
     agdlr => fmrsf(11,:,:)
@@ -1842,57 +1841,113 @@ contains
 !   ----- (m,n) to (i+,n) -----
     wrk = scr
 ! 3
-    j = lr2
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado1va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado1vb(ni, nj) * half &
-                      + va(ni, i) * vb(nj, j-1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1va, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1vb, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
 ! 4
-    j = lr1
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado2va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado2vb(ni, nj) * half &
-                      - va(ni, i) * vb(nj, j+1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2va, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2vb, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+              -one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
 ! 5
-    i = lr1
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco2a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco2b(ni, nj) * half &
-                      + vb(nj, j) * va(ni, i+1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2a, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2b, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
 ! 6
-    i = lr2
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco1a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco1b(ni, nj) * half &
-                      - vb(nj, j) * va(ni, i-1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1a, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1b, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+              -one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
     if (mrst==1) then
       wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
@@ -3505,20 +3560,22 @@ contains
     real(kind=dp), intent(inout), dimension(:,:) :: work
 
     integer :: i, nbf, nmo
-    integer :: p_start, p_end, q_start
+    integer :: slo, shi
     integer :: p, q, iterj
-    integer :: max_iter, i_max, j_max
+    integer :: max_iter
     real(kind=dp) :: thresh
-    real(kind=dp) :: max_off
+    real(kind=dp) :: max_off, btt
     real(kind=dp), parameter :: go2ev = 27.211386245988d+00
     logical :: dgprint
-    logical :: if_conv
 
     dgprint = infos%tddft%debug_mode
 
-    if_conv = .false.
-
-    thresh = 1d-3
+    ! RULES §17 — ALIGNER UNIFICATION: converge the corresponding-orbital gauge to the SAME tolerance
+    ! as the analytic gradient's umrsf_jacobi_smooth (max within-segment |btt| < 1e-12). The old
+    ! thresh=1d-3 (+ min-|θ| early exit + max-overlap-pair selection) left the gauge under-converged
+    ! and in a DIFFERENT btt=0 basin than the analytic's cyclic aligner. ONE algorithm for energy AND
+    ! analytic ⇒ they share one fixed point/basin by construction.
+    thresh = 1d-12
 
     nbf = size(mo_a, 1)
     nmo = size(mo_a, 2)
@@ -3551,53 +3608,33 @@ contains
     end if
 
     if (isegm == 0) then
-      p_start = nocca-1
-      p_end   = 2
-      q_start = 1
+      slo = 1 ; shi = nocca-1          ! alpha closed+O1 block {1..nocca-1}
       max_iter = 10000
     else if (isegm == 1) then
-      p_start = nmo
-      p_end   = nocca+1
-      q_start = nocca
+      slo = nocca ; shi = nmo          ! beta O2+virtual block {nocca..nmo}
       max_iter = 10000
     else
       call show_message('get_jacobi: invalid isegm', with_abort)
     end if
 
+    ! Cyclic Jacobi sweeps (IDENTICAL to umrsf_jacobi_smooth, RULES §17): sweep every within-segment
+    ! pair (p<q) IN ORDER, rotate each by its 2×2 corresponding-orbital angle, repeat until the max
+    ! stationarity residual max|btt| < thresh. Replaces max-overlap-pair selection + 1d-3 threshold +
+    ! min-|θ| early exit (which under-converged the gauge and split the basin from the analytic).
     do iterj = 1, max_iter
-
       max_off = 0.0d0
-      i_max = -1
-      j_max = -1
-
-      do p = p_start, p_end, -1
-        do q = q_start, p-1
-          if (abs(s_mo(p,q)) > max_off) then
-            max_off = abs(s_mo(p,q))
-            i_max = p
-            j_max = q
-          end if
-          if (abs(s_mo(q,p)) > max_off) then
-            max_off = abs(s_mo(q,p))
-            i_max = q
-            j_max = p
-          end if
+      do p = slo, shi-1
+        do q = p+1, shi
+          call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, p, q, btt)
+          max_off = max(max_off, btt)
         end do
       end do
-
-      if (dgprint) write(iw, *) "max_off", max_off, i_max, j_max
-
-      if (max_off <= thresh) then
-        write(iw,'("segment ",I1," converged at iter ",I0)') isegm, iterj
-        call flush(iw)
-        exit
-      else if (if_conv) then
-        write(iw,'("segment ",I1," reached the min theta at iter ",I0)') isegm, iterj
+      if (dgprint) write(iw, *) "sweep", iterj, "max|btt|", max_off
+      if (max_off < thresh) then
+        write(iw,'("segment ",I1," converged at sweep ",I0)') isegm, iterj
         call flush(iw)
         exit
       end if
-
-      call rotate_pair(mo_a, mo_b, smat_full, s_mo, nmo, nbf, isegm, i_max, j_max, if_conv)
     end do
 
     if (dgprint) then
@@ -3633,11 +3670,12 @@ contains
 !###############################################################################
 
 !> Single Jacobi rotation of the MO pair (i_idx, j_idx) chosen by get_jacobi
-  subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, if_conv)
+  subroutine rotate_pair(mo_a, mo_b, smat, s_mo, nbf, norb, isegm, i_idx, j_idx, btt_abs)
 
     implicit none
 
-    logical, intent(inout) :: if_conv
+    real(kind=dp), intent(out) :: btt_abs     ! |btt| BEFORE rotation = corresponding-orbital
+                                              ! stationarity residual (get_jacobi convergence metric)
     integer, intent(in) :: nbf, norb, isegm, i_idx, j_idx
     real(kind=dp), intent(inout) :: mo_a(nbf,*), mo_b(nbf,*)
     real(kind=dp), intent(in) :: smat(*)
@@ -3659,13 +3697,12 @@ contains
       btt = aa*cc - bb*dd
     end if
 
+    btt_abs = abs(btt)
+
     tht = 0.5d0 * atan2(btt, att)
 
-    if (abs(tht) < 1.0d-4) then
-      if_conv = .true.
-      return
-    end if
-
+    ! Cyclic sweep: ALWAYS apply the rotation (no min-|θ| early exit). Near the fixed point btt→0 ⇒
+    ! θ→0 ⇒ the Givens rotation is ≈identity; convergence is judged by max|btt| in get_jacobi.
     cth = cos(tht)
     sth = sin(tht)
 

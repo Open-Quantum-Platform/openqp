@@ -242,7 +242,7 @@ contains
     end do
 
 !   Compute Maximum and RMS Gradient
-    call grad_max_rms(infos%mol_prop%natom,infos%atoms%grad,gmax,grms)
+    call grad_max_rms(int(infos%mol_prop%natom),infos%atoms%grad,gmax,grms)
     write(iw,fmt="(/10X,'Maximum Gradient =',F10.7,4X,&
           &'RMS Gradient =',F10.7/)") gmax, grms
 
