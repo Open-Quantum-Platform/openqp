@@ -4091,8 +4091,10 @@ contains
           remaining = mxit-iters
           ztrial(1:ndofov) = rhsov(1:ndofov)
           rhsov = rhsov0
+          ! Stop at half the requested tolerance (not at tol=0, which spent the whole remaining budget:
+          ! 300 iterations to 1e-11 for C12H14 where 1e-6 was requested).
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
-                               x0=ztrial, tol=0.0_dp, err=errout, iters=extra_iters)
+                               x0=ztrial, tol=0.5_dp*rtol*bnorm, err=errout, iters=extra_iters)
           iters = iters + extra_iters
           minres_iters = minres_iters + extra_iters
           if (sname == 'PCG') sname = 'AUTO(CG->MINRES)'
