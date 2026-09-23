@@ -436,7 +436,7 @@ contains
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 1)
 
     ! ---- SMOOTH/converged get_jacobi alignment (the development rules step 2.1; §17 aligner unification) ----
-    ! POST-MILESTONE-A: get_jacobi (above) is now itself cyclic+converged (max|btt|<1e-12), so va,vb
+    ! get_jacobi (above) is itself cyclic and converged (max|btt|<1e-12), so va,vb
     ! arrive ALREADY at the converged fixed point and this umrsf_jacobi_smooth call is a CONFIRMING
     ! NO-OP (polish size → ~1e-13). Kept as a defensive re-convergence + the authoritative residual/
     ! S-orthonormality gate. The analytic gradient needs the converged fixed point (within-seg btt → 0)
@@ -2019,7 +2019,7 @@ contains
 !###############################################################################
 !> ANALYTIC 11-channel 2e generalized Fock  g2e^σ_pq = ∂ω_2e/∂U^σ_pq  (BOTH spins, one call),
 !> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 2 builds). Derivation +
-!> CAS/FD gate: DERIVATIONS/{c10_g2e_analytic.py,M4_g2e_analytic.md} (worst 5.25e-12 ≤1e-9).
+!> Verified against the CAS/finite-difference gate of the derivation notes (worst 5.25e-12 ≤ 1e-9).
 !>   ω_2e = Σ_k ⟨B_k, F_k⟩,  F_k = s_k int2[D]_k,  D=umrsfcbc, B=umrsf_bra_density,  int2_umrsf
 !>   is CHANNEL-DIAGONAL & SELF-ADJOINT (J/K of 8-fold-sym ERIs) ⇒ for the ket-derivative term
 !>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k (precomputed once).
