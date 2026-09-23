@@ -60,8 +60,9 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
             src,
             r"int2_driver%buf_size\s*=\s*max\(int2_driver%buf_size,\s*mrsf_int2_buffer_size\)",
         )
-        self.assertIn("d3 = mrsf_density(:iv,:,:,:)", src)
-        self.assertIn("d2=fmrq1(:,:,:iv)", src)
+        compact_src = re.sub(r"\s+", "", src)
+        self.assertIn("d3=>mrsf_density(:iv,:,:,:)", compact_src)
+        self.assertIn("d2=fmrq1(:,:,:iv)", compact_src)
 
     def test_mrsf_family_gradient_can_converge_only_target_root(self):
         """Single-root MRSF/UMRSF gradients should not wait for unrelated roots."""
@@ -72,8 +73,10 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
         self.assertIn("target_only_gradient", src)
         self.assertIn("mxerr = rnorm(target_state)", src)
-        self.assertIn("maxval(rnorm)", src)
-        self.assertIn('target_types=("mrsf", "umrsf")', runfunc)
+        self.assertIn("maxval(rnorm(1:nstates))", src)
+        # The single-root shortcut is UMRSF-only; RO-MRSF gradients keep multi-root convergence.
+        self.assertIn('target_types=("umrsf",)', runfunc)
+        self.assertNotIn('target_types=("mrsf", "umrsf")', runfunc)
         self.assertIn("mol.data.set_tdhf_target(target)", runfunc)
 
     def test_rpa_residual_preconditioner_uses_finite_floor_guard(self):
