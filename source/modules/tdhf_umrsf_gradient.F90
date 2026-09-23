@@ -23,7 +23,8 @@ module tdhf_umrsf_gradient_mod
   use precision, only: dp
   use types, only: information
   use grd2, only: grd2_compute_data_t
-  use basis_tools, only: basis_set
+  use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+  use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use mod_dft_molgrid, only: dft_grid_t
 
   implicit none
@@ -81,10 +82,17 @@ module tdhf_umrsf_gradient_mod
     real(kind=dp), allocatable :: coul_coef(:), exch_coef(:)
     real(kind=dp) :: sc = 1.0_dp                ! scale_coulomb
     real(kind=dp) :: sx = 1.0_dp                ! scale_exchange
+    ! Cartesian-effective (bfnrm-folded) copies + Cartesian shell offsets for HARMONIC_ACTIVE:
+    ! grd2_driver hands get_density CARTESIAN shell extents, so with a spherical basis the
+    ! spherical densities cannot be indexed with them (same protocol as grd2_hf/grd2_mrsf).
+    real(kind=dp), allocatable :: bden_c(:,:,:), dden_c(:,:,:), bden_sc(:,:,:), dden_sc(:,:,:)
+    integer, allocatable :: cart_off(:)
+    integer :: nbf_cart = 0
   contains
     procedure :: init => grd2_umrsf_resp_init
     procedure :: clean => grd2_umrsf_resp_clean
     procedure :: get_density => grd2_umrsf_resp_get_density
+    procedure :: build_cart => grd2_umrsf_resp_build_cart
   end type
 
   !> ------- ov-block Z-vector context (for the reusable pcg_optimize / minres_optimize) -------
@@ -652,6 +660,7 @@ contains
       if (l_2e_split) then
         call umrsf_resp_2e_grad_split(infos, basis, gcomp, de2e)
       else
+        call gcomp%build_cart(basis)
         call grd2_driver(infos, basis, de2e, gcomp)
       end if
       open(unit=iw, file=infos%log_filename, position="append")
@@ -2779,11 +2788,11 @@ contains
     ! 2e mean-field: d[Tr(P^Δ,u G[P^ref])] via grd2_uhf polarization
     da1 = pda_p + dmat_a ; db1 = pdb_p + dmat_b
     gc = grd2_uhf_compute_data_t(da=da1,    db=db1,    hfscale=hfscale, nbf=nbf)
-    call gc%init() ; call grd2_driver(infos, basis, de1, gc) ; call gc%clean()
+    call gc%init() ; call gc%build_cart(basis) ; call grd2_driver(infos, basis, de1, gc) ; call gc%clean()
     gc = grd2_uhf_compute_data_t(da=pda_p,  db=pdb_p,  hfscale=hfscale, nbf=nbf)
-    call gc%init() ; call grd2_driver(infos, basis, de2, gc) ; call gc%clean()
+    call gc%init() ; call gc%build_cart(basis) ; call grd2_driver(infos, basis, de2, gc) ; call gc%clean()
     gc = grd2_uhf_compute_data_t(da=dmat_a, db=dmat_b, hfscale=hfscale, nbf=nbf)
-    call gc%init() ; call grd2_driver(infos, basis, de3, gc) ; call gc%clean()
+    call gc%init() ; call gc%build_cart(basis) ; call grd2_driver(infos, basis, de3, gc) ; call gc%clean()
     de_orb = de_orb + (de1 - de2 - de3)
 
     deallocate(pdtot_p, pda_p, pdb_p, da1, db1, zn, de1, de2, de3)
@@ -4248,8 +4257,49 @@ contains
     ! densities/signs are filled by the caller before grd2_driver; nothing to do.
   end subroutine grd2_umrsf_resp_init
 
+  !> Build the bfnrm-folded Cartesian copies of the 4 x nchan response densities (HARMONIC_ACTIVE).
+  subroutine grd2_umrsf_resp_build_cart(this, basis)
+    class(grd2_umrsf_resp_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer :: ch
+    if (.not. HARMONIC_ACTIVE) return
+    do ch = 1, this%nchan
+      call umrsf_resp_cart_one(basis, this%bden(ch,:,:),   this%bden_c,  this%cart_off, this%nbf_cart, ch, this%nchan)
+      call umrsf_resp_cart_one(basis, this%dden(ch,:,:),   this%dden_c,  this%cart_off, this%nbf_cart, ch, this%nchan)
+      call umrsf_resp_cart_one(basis, this%bden_s(ch,:,:), this%bden_sc, this%cart_off, this%nbf_cart, ch, this%nchan)
+      call umrsf_resp_cart_one(basis, this%dden_s(ch,:,:), this%dden_sc, this%cart_off, this%nbf_cart, ch, this%nchan)
+    end do
+  end subroutine grd2_umrsf_resp_build_cart
+
+  !> One channel: fold bfnrm into m, expand to the Cartesian basis, store as slice ch of m_c(nchan,nc,nc).
+  subroutine umrsf_resp_cart_one(basis, m, m_c, off, nc, ch, nchan)
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: m(:,:)
+    real(kind=dp), allocatable, intent(inout) :: m_c(:,:,:)
+    integer, allocatable, intent(inout) :: off(:)
+    integer, intent(inout) :: nc
+    integer, intent(in) :: ch, nchan
+    real(kind=dp), allocatable :: tmp(:,:), mc(:,:)
+    integer, allocatable :: off1(:)
+    integer :: nc1
+    tmp = m
+    call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+    call build_cart_density(basis, tmp, mc, off1, nc1)
+    if (.not. allocated(off)) then
+      off = off1 ; nc = nc1
+    end if
+    if (.not. allocated(m_c)) allocate(m_c(nchan, nc1, nc1))
+    m_c(ch,:,:) = mc
+  end subroutine umrsf_resp_cart_one
+
   subroutine grd2_umrsf_resp_clean(this)
     class(grd2_umrsf_resp_t), target, intent(inout) :: this
+    if (allocated(this%bden_c)) deallocate(this%bden_c)
+    if (allocated(this%dden_c)) deallocate(this%dden_c)
+    if (allocated(this%bden_sc)) deallocate(this%bden_sc)
+    if (allocated(this%dden_sc)) deallocate(this%dden_sc)
+    if (allocated(this%cart_off)) deallocate(this%cart_off)
+    this%nbf_cart = 0
     if (allocated(this%bden)) deallocate(this%bden)
     if (allocated(this%dden)) deallocate(this%dden)
     if (allocated(this%bden_s)) deallocate(this%bden_s)
@@ -4278,20 +4328,33 @@ contains
     integer :: i, j, k, l, idx, ch, i1, j1, k1, l1
     integer :: loc(4), nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: bden(:,:,:), dden(:,:,:), bden_s(:,:,:), dden_s(:,:,:)
+    logical :: usecart
 
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-    nbf = basis%naos(id)
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      ! bfnrm is already folded into the Cartesian copies (build_cart) => no per-index factor below
+      bden => this%bden_c ; dden => this%dden_c ; bden_s => this%bden_sc ; dden_s => this%dden_sc
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      bden => this%bden ; dden => this%dden ; bden_s => this%bden_s ; dden_s => this%dden_s
+      loc = basis%ao_offset(id)-1
+      nbf = basis%naos(id)
+    end if
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
     do i = 1, nbf(1)
       i1 = loc(1) + i
       do j = 1, nbf(2)
         j1 = loc(2) + j
-        nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
+        nrmij = 1.0_dp
+        if (.not. usecart) nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
         do k = 1, nbf(3)
           k1 = loc(3) + k
-          nrmijk = nrmij*basis%bfnrm(k1)
+          nrmijk = nrmij
+          if (.not. usecart) nrmijk = nrmij*basis%bfnrm(k1)
           do l = 1, nbf(4)
             l1 = loc(4) + l
             df1 = 0.0_dp
@@ -4300,8 +4363,8 @@ contains
               c = this%coul_coef(idx)
               ! Coulomb (channels with J): +4*sc*s*(Bs(ij)Ds(kl)+Ds(ij)Bs(kl))  [symmetrized densities]
               df1 = df1 + c*( &
-                      this%bden_s(ch,i1,j1)*this%dden_s(ch,k1,l1) &
-                    + this%dden_s(ch,i1,j1)*this%bden_s(ch,k1,l1) )
+                      bden_s(ch,i1,j1)*dden_s(ch,k1,l1) &
+                    + dden_s(ch,i1,j1)*bden_s(ch,k1,l1) )
             end do
             do idx = 1, this%n_exch
               ch = this%exch_ch(idx)
@@ -4310,28 +4373,32 @@ contains
               ! K[D]; mixed alpha/beta channels 9:10 use K[D^T], exactly as the energy kernel.
               if (this%transpose_exchange(ch)) then
                 df1 = df1 - c*( &
-                        this%bden(ch,i1,k1)*this%dden(ch,l1,j1) &
-                      + this%bden(ch,j1,k1)*this%dden(ch,l1,i1) &
-                      + this%bden(ch,i1,l1)*this%dden(ch,k1,j1) &
-                      + this%bden(ch,j1,l1)*this%dden(ch,k1,i1) &
-                      + this%bden(ch,k1,i1)*this%dden(ch,j1,l1) &
-                      + this%bden(ch,l1,i1)*this%dden(ch,j1,k1) &
-                      + this%bden(ch,k1,j1)*this%dden(ch,i1,l1) &
-                      + this%bden(ch,l1,j1)*this%dden(ch,i1,k1) )
+                        bden(ch,i1,k1)*dden(ch,l1,j1) &
+                      + bden(ch,j1,k1)*dden(ch,l1,i1) &
+                      + bden(ch,i1,l1)*dden(ch,k1,j1) &
+                      + bden(ch,j1,l1)*dden(ch,k1,i1) &
+                      + bden(ch,k1,i1)*dden(ch,j1,l1) &
+                      + bden(ch,l1,i1)*dden(ch,j1,k1) &
+                      + bden(ch,k1,j1)*dden(ch,i1,l1) &
+                      + bden(ch,l1,j1)*dden(ch,i1,k1) )
               else
                 df1 = df1 - c*( &
-                        this%bden(ch,i1,k1)*this%dden(ch,j1,l1) &
-                      + this%bden(ch,j1,k1)*this%dden(ch,i1,l1) &
-                      + this%bden(ch,i1,l1)*this%dden(ch,j1,k1) &
-                      + this%bden(ch,j1,l1)*this%dden(ch,i1,k1) &
-                      + this%bden(ch,k1,i1)*this%dden(ch,l1,j1) &
-                      + this%bden(ch,l1,i1)*this%dden(ch,k1,j1) &
-                      + this%bden(ch,k1,j1)*this%dden(ch,l1,i1) &
-                      + this%bden(ch,l1,j1)*this%dden(ch,k1,i1) )
+                        bden(ch,i1,k1)*dden(ch,j1,l1) &
+                      + bden(ch,j1,k1)*dden(ch,i1,l1) &
+                      + bden(ch,i1,l1)*dden(ch,j1,k1) &
+                      + bden(ch,j1,l1)*dden(ch,i1,k1) &
+                      + bden(ch,k1,i1)*dden(ch,l1,j1) &
+                      + bden(ch,l1,i1)*dden(ch,k1,j1) &
+                      + bden(ch,k1,j1)*dden(ch,l1,i1) &
+                      + bden(ch,l1,j1)*dden(ch,k1,i1) )
               end if
             end do
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
+            if (usecart) then
+              ab(l,k,j,i) = df1
+            else
+              ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
+            end if
           end do
         end do
       end do
@@ -4438,6 +4505,7 @@ contains
       one%has_coul(1) = gcomp%has_coul(ch)
       one%transpose_exchange(1) = gcomp%transpose_exchange(ch)
       call umrsf_resp_2pdm_refresh_active(one)
+      call one%build_cart(basis)
       dtmp = 0.0_dp
       call grd2_driver(infos, basis, dtmp, one)
       de2e = de2e + dtmp
