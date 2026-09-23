@@ -4082,9 +4082,12 @@ contains
         resov(1:ndofov) = resov(1:ndofov) - rhsov0(1:ndofov)
         errout = sqrt(sum(resov(1:ndofov)**2))
         relres = errout / bnorm
-        ! If MINRES stopped on its preconditioned Lanczos norm before satisfying the physical
-        ! Euclidean criterion, use the unspent aggregate budget from the current candidate.
-        if (used_minres .and. relres > rtol .and. iters < mxit) then
+        ! If the solver stopped on its own (preconditioned) criterion before satisfying the physical
+        ! Euclidean criterion -- PCG's convergence test as much as MINRES's Lanczos norm; observed for
+        ! the C12-C18 polyenes, where PCG reported convergence at 2-8 x zvconv -- continue with MINRES
+        ! from the current candidate using the unspent aggregate budget.
+        if (relres > rtol .and. iters < mxit) then
+          used_minres = .true.
           remaining = mxit-iters
           ztrial(1:ndofov) = rhsov(1:ndofov)
           rhsov = rhsov0
@@ -4092,6 +4095,7 @@ contains
                                x0=ztrial, tol=0.0_dp, err=errout, iters=extra_iters)
           iters = iters + extra_iters
           minres_iters = minres_iters + extra_iters
+          if (sname == 'PCG') sname = 'AUTO(CG->MINRES)'
           call umrsf_zov_matvec(resov, rhsov, c_loc(ctx))
           resov(1:ndofov) = resov(1:ndofov) - rhsov0(1:ndofov)
           errout = sqrt(sum(resov(1:ndofov)**2))

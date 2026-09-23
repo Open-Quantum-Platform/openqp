@@ -171,27 +171,27 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         )
         self.assertIsNotNone(branch)
         product_pattern = (
-            r"this%bden\(ch,[^)]*\)\*this%dden\(ch,[^)]*\)"
+            r"(?<![%a-z_])bden\(ch,[^)]*\)\*dden\(ch,[^)]*\)"
         )
         expected_mixed_terms = (
-            "this%bden(ch,i1,k1)*this%dden(ch,l1,j1)",
-            "this%bden(ch,j1,k1)*this%dden(ch,l1,i1)",
-            "this%bden(ch,i1,l1)*this%dden(ch,k1,j1)",
-            "this%bden(ch,j1,l1)*this%dden(ch,k1,i1)",
-            "this%bden(ch,k1,i1)*this%dden(ch,j1,l1)",
-            "this%bden(ch,l1,i1)*this%dden(ch,j1,k1)",
-            "this%bden(ch,k1,j1)*this%dden(ch,i1,l1)",
-            "this%bden(ch,l1,j1)*this%dden(ch,i1,k1)",
+            "bden(ch,i1,k1)*dden(ch,l1,j1)",
+            "bden(ch,j1,k1)*dden(ch,l1,i1)",
+            "bden(ch,i1,l1)*dden(ch,k1,j1)",
+            "bden(ch,j1,l1)*dden(ch,k1,i1)",
+            "bden(ch,k1,i1)*dden(ch,j1,l1)",
+            "bden(ch,l1,i1)*dden(ch,j1,k1)",
+            "bden(ch,k1,j1)*dden(ch,i1,l1)",
+            "bden(ch,l1,j1)*dden(ch,i1,k1)",
         )
         expected_ordinary_terms = (
-            "this%bden(ch,i1,k1)*this%dden(ch,j1,l1)",
-            "this%bden(ch,j1,k1)*this%dden(ch,i1,l1)",
-            "this%bden(ch,i1,l1)*this%dden(ch,j1,k1)",
-            "this%bden(ch,j1,l1)*this%dden(ch,i1,k1)",
-            "this%bden(ch,k1,i1)*this%dden(ch,l1,j1)",
-            "this%bden(ch,l1,i1)*this%dden(ch,k1,j1)",
-            "this%bden(ch,k1,j1)*this%dden(ch,l1,i1)",
-            "this%bden(ch,l1,j1)*this%dden(ch,k1,i1)",
+            "bden(ch,i1,k1)*dden(ch,j1,l1)",
+            "bden(ch,j1,k1)*dden(ch,i1,l1)",
+            "bden(ch,i1,l1)*dden(ch,j1,k1)",
+            "bden(ch,j1,l1)*dden(ch,i1,k1)",
+            "bden(ch,k1,i1)*dden(ch,l1,j1)",
+            "bden(ch,l1,i1)*dden(ch,k1,j1)",
+            "bden(ch,k1,j1)*dden(ch,l1,i1)",
+            "bden(ch,l1,j1)*dden(ch,k1,i1)",
         )
         self.assertCountEqual(
             re.findall(product_pattern, branch.group(1)), expected_mixed_terms
