@@ -64,7 +64,7 @@ jobs:
             esac
 
             grep -Eiq \
-              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Operation too slow|Connection reset by peer|Recv failure|Send failure|Empty reply from server|HTTP/[23] stream|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (408|429|5[0-9]{2})' \
+              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Operation too slow|Connection reset by peer|Recv failure|Send failure|Empty reply from server|HTTP/[23] stream|TLS|SSL connection|transfer closed with .* bytes remaining to read|early EOF|unexpected disconnect|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (408|429|5[0-9]{2})' \
               "$error_log"
           }
 
