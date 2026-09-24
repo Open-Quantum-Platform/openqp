@@ -98,13 +98,18 @@ jobs:
           retry_gitlab_network git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
-          existing_iid=$(curl "${curl_retry[@]}" --fail --silent --show-error --get \
+          mr_list_response=$(mktemp)
+          merge_response=$(mktemp)
+          trap 'rm -f "$mr_list_response" "$merge_response"' EXIT
+
+          curl "${curl_retry[@]}" --fail --silent --show-error --get \
+            --output "$mr_list_response" \
             --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
             --data-urlencode "state=opened" \
             --data-urlencode "source_branch=$sync_branch" \
             --data-urlencode "target_branch=main" \
-            "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" |
-            jq -r '.[0].iid // empty')
+            "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests"
+          existing_iid=$(jq -r '.[0].iid // empty' "$mr_list_response")
 
           if [ -n "$existing_iid" ]; then
             mr_iid=$existing_iid
@@ -122,9 +127,6 @@ jobs:
               jq -r '.iid')
             echo "Created GitLab merge request !$mr_iid."
           fi
-
-          merge_response=$(mktemp)
-          trap 'rm -f "$merge_response"' EXIT
 
           # GitLab can briefly report a newly created MR as unmergeable while it
           # prepares the merge ref and creates the MR pipeline. Retry only that
