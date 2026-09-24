@@ -3,6 +3,10 @@ name: Sync GitHub main to GitLab
 "on":
   push:
     branches: [main]
+  schedule:
+    # Reconcile after an extended GitLab outage even if the push-triggered run
+    # exhausted its bounded retries.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -42,7 +46,47 @@ jobs:
           auth=$(printf 'oauth2:%s' "$GITLAB_TOKEN" | base64 -w0)
           git_auth=(-c "http.extraHeader=Authorization: Basic $auth")
 
-          git "${git_auth[@]}" fetch --no-tags "$GITLAB_PROJECT_URL" \
+          retry_gitlab_network() {
+            local attempt delay rc error_log
+            error_log=$(mktemp)
+
+            for attempt in 1 2 3 4 5; do
+              : >"$error_log"
+              if "$@" 2>"$error_log"; then
+                rm -f "$error_log"
+                return 0
+              else
+                rc=$?
+              fi
+              cat "$error_log" >&2
+
+              if ! grep -Eiq \
+                'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Connection reset by peer|Recv failure|Send failure|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (429|5[0-9]{2})' \
+                "$error_log"; then
+                rm -f "$error_log"
+                return "$rc"
+              fi
+
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::GitLab network operation still failed after $attempt attempts"
+                rm -f "$error_log"
+                return "$rc"
+              fi
+
+              delay=$((attempt * 5))
+              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/5)"
+              sleep "$delay"
+            done
+          }
+
+          curl_retry=(
+            --retry 4
+            --retry-all-errors
+            --retry-delay 3
+            --retry-max-time 45
+          )
+
+          retry_gitlab_network git "${git_auth[@]}" fetch --no-tags "$GITLAB_PROJECT_URL" \
             main:refs/remotes/gitlab/main
 
           if git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/gitlab/main; then
@@ -51,10 +95,10 @@ jobs:
           fi
 
           sync_branch="github-sync/$GITHUB_SHA"
-          git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
+          retry_gitlab_network git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
-          existing_iid=$(curl --fail --silent --show-error --get \
+          existing_iid=$(curl "${curl_retry[@]}" --fail --silent --show-error --get \
             --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
             --data-urlencode "state=opened" \
             --data-urlencode "source_branch=$sync_branch" \
@@ -86,7 +130,7 @@ jobs:
           # prepares the merge ref and creates the MR pipeline. Retry only that
           # transient response; every other API failure remains visible.
           for attempt in $(seq 1 30); do
-            http_code=$(curl --silent --show-error \
+            http_code=$(curl "${curl_retry[@]}" --silent --show-error \
               --output "$merge_response" \
               --write-out '%{http_code}' \
               --request PUT \
