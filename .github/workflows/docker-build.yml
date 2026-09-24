@@ -11,7 +11,8 @@ name: Build Docker Release Candidate
     # image, packaged application, native sources, or its verifier can change.
     paths:
       - ".github/workflows/docker-build.yml"
-      - ".github/scripts/verify_oci_artifact.py"
+      - ".github/scripts/**"
+      - ".dockerignore"
       - "Dockerfile"
       - "docker/**"
       - "CMakeLists.txt"
@@ -21,13 +22,16 @@ name: Build Docker Release Candidate
       - "LICENSING.md"
       - "SUSTAINABILITY.md"
       - "THIRD_PARTY_NOTICES.md"
+      - "README.md"
       - "basis_sets/**"
       - "cmake/**"
+      - "examples/**"
       - "external/**"
       - "include/**"
       - "licenses/**"
       - "pyoqp/**"
       - "source/**"
+      - "tools/**"
 
 # Build-only: no registry credentials, package write permission, login, push,
 # release attachment, retained image artifact, or exported build cache.
