@@ -100,37 +100,91 @@ jobs:
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
           mr_list_response=$(mktemp)
+          mr_create_response=$(mktemp)
+          mr_create_error=$(mktemp)
           merge_response=$(mktemp)
-          trap 'rm -f "$mr_list_response" "$merge_response"' EXIT
+          trap 'rm -f "$mr_list_response" "$mr_create_response" "$mr_create_error" "$merge_response"' EXIT
 
-          retry_gitlab_network curl --connect-timeout 10 --max-time 30 \
-            --fail --silent --show-error --get \
-            --output "$mr_list_response" \
-            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            --data-urlencode "state=opened" \
-            --data-urlencode "source_branch=$sync_branch" \
-            --data-urlencode "target_branch=main" \
-            "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests"
-          existing_iid=$(jq -r '.[0].iid // empty' "$mr_list_response")
+          find_existing_mr() {
+            retry_gitlab_network curl --connect-timeout 10 --max-time 30 \
+              --fail --silent --show-error --get \
+              --output "$mr_list_response" \
+              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+              --data-urlencode "state=opened" \
+              --data-urlencode "source_branch=$sync_branch" \
+              --data-urlencode "target_branch=main" \
+              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests"
+            jq -r '.[0].iid // empty' "$mr_list_response"
+          }
+
+          existing_iid=$(find_existing_mr)
 
           if [ -n "$existing_iid" ]; then
             mr_iid=$existing_iid
             echo "GitLab merge request !$mr_iid already exists."
           else
             short_sha=${GITHUB_SHA:0:12}
-            # Do not retry this non-idempotent POST: if the response is lost
-            # after creation, the hourly reconciliation will find the MR by its
-            # immutable source branch instead of risking a duplicate.
-            mr_iid=$(curl --connect-timeout 10 --max-time 30 \
-              --fail --silent --show-error --request POST \
-              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-              --data-urlencode "source_branch=$sync_branch" \
-              --data-urlencode "target_branch=main" \
-              --data-urlencode "title=Sync GitHub main at $short_sha" \
-              --data-urlencode "description=Automated inbound synchronization from https://github.com/Open-Quantum-Platform/openqp/commit/$GITHUB_SHA. GitLab CI remains the merge gate." \
-              --data-urlencode "remove_source_branch=true" \
-              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" |
-              jq -r '.iid')
+            mr_iid=
+
+            # A lost POST response is ambiguous: GitLab may already have
+            # created the MR. Re-list by the immutable source branch before
+            # every retry so the non-idempotent request cannot create a
+            # duplicate.
+            for create_attempt in 1 2 3; do
+              : >"$mr_create_error"
+              if create_http_code=$(curl --connect-timeout 10 --max-time 30 \
+                --silent --show-error \
+                --output "$mr_create_response" \
+                --write-out '%{http_code}' \
+                --request POST \
+                --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+                --data-urlencode "source_branch=$sync_branch" \
+                --data-urlencode "target_branch=main" \
+                --data-urlencode "title=Sync GitHub main at $short_sha" \
+                --data-urlencode "description=Automated inbound synchronization from https://github.com/Open-Quantum-Platform/openqp/commit/$GITHUB_SHA. GitLab CI remains the merge gate." \
+                --data-urlencode "remove_source_branch=true" \
+                "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" \
+                2>"$mr_create_error"); then
+                if [[ "$create_http_code" =~ ^2[0-9][0-9]$ ]]; then
+                  mr_iid=$(jq -r '.iid // empty' "$mr_create_response")
+                  if [ -z "$mr_iid" ]; then
+                    echo "::error::GitLab MR creation succeeded without returning an IID"
+                    exit 1
+                  fi
+                  break
+                fi
+
+                create_message=$(jq -r '.message // .error // "unknown GitLab response"' \
+                  "$mr_create_response" 2>/dev/null || printf 'non-JSON response')
+                if [ "$create_http_code" != "409" ] && [ "$create_http_code" != "429" ] && \
+                  ! [[ "$create_http_code" =~ ^5[0-9][0-9]$ ]]; then
+                  echo "::error::GitLab MR creation failed with HTTP $create_http_code: $create_message"
+                  exit 1
+                fi
+                echo "::warning::Ambiguous GitLab MR creation response HTTP $create_http_code: $create_message" >&2
+              else
+                rc=$?
+                cat "$mr_create_error" >&2
+                if ! is_transient_gitlab_error "$mr_create_error"; then
+                  echo "::error::GitLab MR creation failed with curl exit $rc"
+                  exit "$rc"
+                fi
+              fi
+
+              sleep 3
+              recovered_iid=$(find_existing_mr)
+              if [ -n "$recovered_iid" ]; then
+                mr_iid=$recovered_iid
+                echo "Recovered GitLab merge request !$mr_iid after an ambiguous creation response."
+                break
+              fi
+
+              if [ "$create_attempt" -eq 3 ]; then
+                echo "::error::GitLab MR creation did not succeed after $create_attempt attempts"
+                exit 1
+              fi
+              echo "::warning::No GitLab MR found after the ambiguous response; retrying POST ($create_attempt/3)" >&2
+            done
             echo "Created GitLab merge request !$mr_iid."
           fi
 
@@ -140,7 +194,7 @@ jobs:
           # beyond the job timeout. Authentication and permission errors fail
           # immediately.
           merge_error=$(mktemp)
-          trap 'rm -f "$mr_list_response" "$merge_response" "$merge_error"' EXIT
+          trap 'rm -f "$mr_list_response" "$mr_create_response" "$mr_create_error" "$merge_response" "$merge_error"' EXIT
           merge_deadline=$((SECONDS + 300))
           attempt=0
           last_http_code=none
