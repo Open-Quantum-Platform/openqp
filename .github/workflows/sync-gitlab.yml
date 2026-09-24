@@ -118,10 +118,13 @@ jobs:
           }
 
           find_existing_mr() {
-            retry_gitlab_network find_existing_mr_once
+            retry_gitlab_network find_existing_mr_once || return $?
           }
 
-          existing_iid=$(find_existing_mr)
+          if ! existing_iid=$(find_existing_mr); then
+            echo "::error::Unable to verify whether the GitLab merge request already exists"
+            exit 1
+          fi
 
           if [ -n "$existing_iid" ]; then
             mr_iid=$existing_iid
