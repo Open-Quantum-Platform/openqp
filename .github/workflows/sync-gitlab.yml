@@ -60,7 +60,7 @@ jobs:
             local attempt delay rc error_log
             error_log=$(mktemp)
 
-            for attempt in 1 2 3 4 5; do
+            for attempt in 1 2 3; do
               : >"$error_log"
               if "$@" 2>"$error_log"; then
                 rm -f "$error_log"
@@ -75,14 +75,14 @@ jobs:
                 return "$rc"
               fi
 
-              if [ "$attempt" -eq 5 ]; then
+              if [ "$attempt" -eq 3 ]; then
                 echo "::error::GitLab network operation still failed after $attempt attempts" >&2
                 rm -f "$error_log"
                 return "$rc"
               fi
 
               delay=$((attempt * 5))
-              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/5)" >&2
+              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/3)" >&2
               sleep "$delay"
             done
           }
@@ -105,16 +105,20 @@ jobs:
           merge_response=$(mktemp)
           trap 'rm -f "$mr_list_response" "$mr_create_response" "$mr_create_error" "$merge_response"' EXIT
 
-          find_existing_mr() {
-            retry_gitlab_network curl --connect-timeout 10 --max-time 30 \
+          find_existing_mr_once() {
+            curl --connect-timeout 10 --max-time 30 \
               --fail --silent --show-error --get \
               --output "$mr_list_response" \
               --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
               --data-urlencode "state=opened" \
               --data-urlencode "source_branch=$sync_branch" \
               --data-urlencode "target_branch=main" \
-              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests"
+              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" || return $?
             jq -r '.[0].iid // empty' "$mr_list_response"
+          }
+
+          find_existing_mr() {
+            retry_gitlab_network find_existing_mr_once
           }
 
           existing_iid=$(find_existing_mr)
@@ -173,11 +177,22 @@ jobs:
               fi
 
               sleep 3
-              recovered_iid=$(find_existing_mr)
-              if [ -n "$recovered_iid" ]; then
-                mr_iid=$recovered_iid
-                echo "Recovered GitLab merge request !$mr_iid after an ambiguous creation response."
-                break
+              : >"$mr_create_error"
+              if recovered_iid=$(find_existing_mr_once 2>"$mr_create_error"); then
+                if [ -n "$recovered_iid" ]; then
+                  mr_iid=$recovered_iid
+                  echo "Recovered GitLab merge request !$mr_iid after an ambiguous creation response."
+                  break
+                fi
+              else
+                rc=$?
+                cat "$mr_create_error" >&2
+                if is_transient_gitlab_error "$mr_create_error"; then
+                  echo "::error::Cannot safely retry MR creation because the recovery lookup failed transiently; the scheduled reconciliation will resume it."
+                else
+                  echo "::error::GitLab MR recovery lookup failed with curl exit $rc"
+                fi
+                exit "$rc"
               fi
 
               if [ "$create_attempt" -eq 3 ]; then
