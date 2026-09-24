@@ -6,8 +6,7 @@ name: PR policy
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 # Read-only, no secrets: the job only STATICALLY reads Fortran/CMake as text; it
 # never builds or executes checked-out PR code.

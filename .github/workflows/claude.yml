@@ -2,7 +2,10 @@ name: Claude
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # Review once when a PR first becomes reviewable. Later commits are reviewed
+    # only when someone explicitly mentions @claude, avoiding a full automatic
+    # review for every fixup commit.
+    types: [opened, reopened, ready_for_review]
   issue_comment:
     types: [created]
   pull_request_review_comment:

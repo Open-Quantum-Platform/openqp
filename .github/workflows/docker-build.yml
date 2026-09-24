@@ -7,6 +7,27 @@ name: Build Docker Release Candidate
   pull_request:
     branches:
       - main
+    # Building the attested image takes about 18 minutes. Run it only when the
+    # image, packaged application, native sources, or its verifier can change.
+    paths:
+      - ".github/workflows/docker-build.yml"
+      - ".github/scripts/verify_oci_artifact.py"
+      - "Dockerfile"
+      - "docker/**"
+      - "CMakeLists.txt"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "LICENSE"
+      - "LICENSING.md"
+      - "SUSTAINABILITY.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "licenses/**"
+      - "pyoqp/**"
+      - "source/**"
 
 # Build-only: no registry credentials, package write permission, login, push,
 # release attachment, retained image artifact, or exported build cache.
