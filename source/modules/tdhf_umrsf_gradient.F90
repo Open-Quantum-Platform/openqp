@@ -209,12 +209,19 @@ contains
     implicit none
     integer, intent(in) :: nbf, nbf2
     logical, intent(in) :: need_xc
-    if (.not. allocated(umrsf_mf_dens) .or. size(umrsf_mf_dens,1) /= nbf2) then
+    logical :: realloc
+    ! Fortran does not short-circuit .or.: query size() only on an allocated array, so that the
+    ! first call and a later call with a different basis size are both safe under bounds checking.
+    realloc = .not. allocated(umrsf_mf_dens)
+    if (.not. realloc) realloc = size(umrsf_mf_dens,1) /= nbf2
+    if (realloc) then
       if (allocated(umrsf_mf_dens)) deallocate(umrsf_mf_dens, umrsf_mf_fout)
       allocate(umrsf_mf_dens(nbf2,2), umrsf_mf_fout(nbf2,2))
     end if
     if (need_xc) then
-      if (.not. allocated(umrsf_mf_fxa) .or. size(umrsf_mf_fxa,1) /= nbf) then
+      realloc = .not. allocated(umrsf_mf_fxa)
+      if (.not. realloc) realloc = size(umrsf_mf_fxa,1) /= nbf
+      if (realloc) then
         if (allocated(umrsf_mf_fxa)) deallocate(umrsf_mf_fxa, umrsf_mf_fxb, umrsf_mf_dxa, umrsf_mf_dxb)
         allocate(umrsf_mf_fxa(nbf,nbf,1), umrsf_mf_fxb(nbf,nbf,1), &
                  umrsf_mf_dxa(nbf,nbf,1), umrsf_mf_dxb(nbf,nbf,1))

@@ -1840,6 +1840,10 @@ contains
 ! 1
 !   ----- (m,n) to (i+,n) -----
     wrk = scr
+    ! Sections 3-4 project onto the doubly occupied alpha block (orbitals 1..lr1-1); with a
+    ! two-electron triplet reference (noca = 2, lr1 = 1) that block is empty and DGEMM would
+    ! receive M = 0 with LDC = 0, which is an argument error. Skip the block instead.
+    if (lr1 > 1) then
 ! 3
     call dgemm('n','n',nbf,1,nbf, &
                half, ado1va, nbf, &
@@ -1894,6 +1898,10 @@ contains
               -one, va, nbf, &
                     tmp, nbf, &
                one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+    end if  ! lr1 > 1
+    ! Sections 5-6 project onto the beta virtual block; skip when there are no virtuals
+    ! (nbf == noca), which would otherwise pass M = 0 and LDC = 0 to DGEMM.
+    if (nbf > noca) then
 ! 5
     call dgemm('t','n',nbf,1,nbf, &
                half, adco2a, nbf, &
@@ -1949,6 +1957,7 @@ contains
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
+    end if  ! nbf > noca
     if (mrst==1) then
       wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
       wrk(lr2,lr2) = 0.0_dp
