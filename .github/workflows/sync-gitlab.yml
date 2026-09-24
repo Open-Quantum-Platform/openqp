@@ -3,6 +3,10 @@ name: Sync GitHub main to GitLab
 "on":
   push:
     branches: [main]
+  schedule:
+    # Reconcile after an extended GitLab outage even if the push-triggered run
+    # exhausted its bounded retries.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +20,7 @@ jobs:
   sync:
     name: Create GitLab sync merge request
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       GITLAB_PROJECT_ID: "17"
       GITLAB_PROJECT_URL: https://qchemlab.knu.ac.kr/open-quantum-platform/openqp.git
@@ -40,9 +44,59 @@ jobs:
           fi
 
           auth=$(printf 'oauth2:%s' "$GITLAB_TOKEN" | base64 -w0)
-          git_auth=(-c "http.extraHeader=Authorization: Basic $auth")
+          git_auth=(
+            -c "http.extraHeader=Authorization: Basic $auth"
+            -c http.lowSpeedLimit=1024
+            -c http.lowSpeedTime=30
+          )
+          sync_tmp=$(mktemp -d)
+          trap 'rm -rf "$sync_tmp"' EXIT
 
-          git "${git_auth[@]}" fetch --no-tags "$GITLAB_PROJECT_URL" \
+          is_transient_gitlab_error() {
+            local error_log=$1 rc=${2:-0}
+
+            # curl transport failures: HTTP/2, DNS, connect, partial response,
+            # timeout, TLS connect, empty response, send/receive, HTTP/2 stream,
+            # and HTTP/3. Certificate validation and HTTP 401/403 use different
+            # exit codes and therefore remain permanent failures.
+            case "$rc" in
+              5|6|7|16|18|28|35|52|55|56|92|95) return 0 ;;
+            esac
+
+            grep -Eiq \
+              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Operation too slow|Connection reset by peer|Recv failure|Send failure|Empty reply from server|HTTP/[23] stream|TLS|SSL connection|transfer closed with .* bytes remaining to read|early EOF|unexpected disconnect|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (408|429|5[0-9]{2})' \
+              "$error_log"
+          }
+
+          retry_gitlab_network() {
+            local attempt delay rc error_log
+            error_log="$sync_tmp/network-error.log"
+
+            for attempt in 1 2 3; do
+              : >"$error_log"
+              if "$@" 2>"$error_log"; then
+                return 0
+              else
+                rc=$?
+              fi
+              cat "$error_log" >&2
+
+              if ! is_transient_gitlab_error "$error_log" "$rc"; then
+                return "$rc"
+              fi
+
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::GitLab network operation still failed after $attempt attempts" >&2
+                return "$rc"
+              fi
+
+              delay=$((attempt * 5))
+              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/3)" >&2
+              sleep "$delay"
+            done
+          }
+
+          retry_gitlab_network git "${git_auth[@]}" fetch --no-tags "$GITLAB_PROJECT_URL" \
             main:refs/remotes/gitlab/main
 
           if git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/gitlab/main; then
@@ -51,42 +105,132 @@ jobs:
           fi
 
           sync_branch="github-sync/$GITHUB_SHA"
-          git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
+          retry_gitlab_network git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
-          existing_iid=$(curl --fail --silent --show-error --get \
-            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            --data-urlencode "state=opened" \
-            --data-urlencode "source_branch=$sync_branch" \
-            --data-urlencode "target_branch=main" \
-            "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" |
-            jq -r '.[0].iid // empty')
+          mr_list_response="$sync_tmp/mr-list.json"
+          mr_create_response="$sync_tmp/mr-create.json"
+          mr_create_error="$sync_tmp/mr-create-error.log"
+          merge_response="$sync_tmp/merge.json"
+
+          find_existing_mr_once() {
+            curl --connect-timeout 10 --max-time 30 \
+              --fail --silent --show-error --get \
+              --output "$mr_list_response" \
+              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+              --data-urlencode "state=opened" \
+              --data-urlencode "source_branch=$sync_branch" \
+              --data-urlencode "target_branch=main" \
+              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" || return $?
+            jq -r '.[0].iid // empty' "$mr_list_response"
+          }
+
+          find_existing_mr() {
+            retry_gitlab_network find_existing_mr_once || return $?
+          }
+
+          if ! existing_iid=$(find_existing_mr); then
+            echo "::error::Unable to verify whether the GitLab merge request already exists"
+            exit 1
+          fi
 
           if [ -n "$existing_iid" ]; then
             mr_iid=$existing_iid
             echo "GitLab merge request !$mr_iid already exists."
           else
             short_sha=${GITHUB_SHA:0:12}
-            mr_iid=$(curl --fail --silent --show-error --request POST \
-              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-              --data-urlencode "source_branch=$sync_branch" \
-              --data-urlencode "target_branch=main" \
-              --data-urlencode "title=Sync GitHub main at $short_sha" \
-              --data-urlencode "description=Automated inbound synchronization from https://github.com/Open-Quantum-Platform/openqp/commit/$GITHUB_SHA. GitLab CI remains the merge gate." \
-              --data-urlencode "remove_source_branch=true" \
-              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" |
-              jq -r '.iid')
+            mr_iid=
+
+            # A lost POST response is ambiguous: GitLab may already have
+            # created the MR. Re-list by the immutable source branch before
+            # every retry so the non-idempotent request cannot create a
+            # duplicate.
+            for create_attempt in 1 2 3; do
+              : >"$mr_create_error"
+              if create_http_code=$(curl --connect-timeout 10 --max-time 30 \
+                --silent --show-error \
+                --output "$mr_create_response" \
+                --write-out '%{http_code}' \
+                --request POST \
+                --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+                --data-urlencode "source_branch=$sync_branch" \
+                --data-urlencode "target_branch=main" \
+                --data-urlencode "title=Sync GitHub main at $short_sha" \
+                --data-urlencode "description=Automated inbound synchronization from https://github.com/Open-Quantum-Platform/openqp/commit/$GITHUB_SHA. GitLab CI remains the merge gate." \
+                --data-urlencode "remove_source_branch=true" \
+                "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests" \
+                2>"$mr_create_error"); then
+                if [[ "$create_http_code" =~ ^2[0-9][0-9]$ ]]; then
+                  mr_iid=$(jq -r '.iid // empty' "$mr_create_response")
+                  if [ -z "$mr_iid" ]; then
+                    echo "::error::GitLab MR creation succeeded without returning an IID"
+                    exit 1
+                  fi
+                  break
+                fi
+
+                create_message=$(jq -r '.message // .error // "unknown GitLab response"' \
+                  "$mr_create_response" 2>/dev/null || printf 'non-JSON response')
+                if [ "$create_http_code" != "408" ] && [ "$create_http_code" != "409" ] && \
+                  [ "$create_http_code" != "429" ] && \
+                  ! [[ "$create_http_code" =~ ^5[0-9][0-9]$ ]]; then
+                  echo "::error::GitLab MR creation failed with HTTP $create_http_code: $create_message"
+                  exit 1
+                fi
+                echo "::warning::Ambiguous GitLab MR creation response HTTP $create_http_code: $create_message" >&2
+              else
+                rc=$?
+                cat "$mr_create_error" >&2
+                if ! is_transient_gitlab_error "$mr_create_error" "$rc"; then
+                  echo "::error::GitLab MR creation failed with curl exit $rc"
+                  exit "$rc"
+                fi
+              fi
+
+              sleep 3
+              : >"$mr_create_error"
+              if recovered_iid=$(find_existing_mr_once 2>"$mr_create_error"); then
+                if [ -n "$recovered_iid" ]; then
+                  mr_iid=$recovered_iid
+                  echo "Recovered GitLab merge request !$mr_iid after an ambiguous creation response."
+                  break
+                fi
+              else
+                rc=$?
+                cat "$mr_create_error" >&2
+                if is_transient_gitlab_error "$mr_create_error" "$rc"; then
+                  echo "::error::Cannot safely retry MR creation because the recovery lookup failed transiently; the scheduled reconciliation will resume it."
+                else
+                  echo "::error::GitLab MR recovery lookup failed with curl exit $rc"
+                fi
+                exit "$rc"
+              fi
+
+              if [ "$create_attempt" -eq 3 ]; then
+                echo "::error::GitLab MR creation did not succeed after $create_attempt attempts"
+                exit 1
+              fi
+              echo "::warning::No GitLab MR found after the ambiguous response; retrying POST ($create_attempt/3)" >&2
+            done
             echo "Created GitLab merge request !$mr_iid."
           fi
 
-          merge_response=$(mktemp)
-          trap 'rm -f "$merge_response"' EXIT
-
           # GitLab can briefly report a newly created MR as unmergeable while it
-          # prepares the merge ref and creates the MR pipeline. Retry only that
-          # transient response; every other API failure remains visible.
-          for attempt in $(seq 1 30); do
-            http_code=$(curl --silent --show-error \
+          # prepares the merge ref and creates the MR pipeline. Use a single
+          # five-minute deadline so network and merge-state retries cannot stack
+          # beyond the job timeout. Authentication and permission errors fail
+          # immediately.
+          merge_error="$sync_tmp/merge-error.log"
+          merge_deadline=$((SECONDS + 300))
+          attempt=0
+          last_http_code=none
+          last_message='no response'
+
+          while [ "$SECONDS" -lt "$merge_deadline" ]; do
+            attempt=$((attempt + 1))
+            : >"$merge_error"
+            if http_code=$(curl --connect-timeout 5 --max-time 15 \
+              --silent --show-error \
               --output "$merge_response" \
               --write-out '%{http_code}' \
               --request PUT \
@@ -94,23 +238,48 @@ jobs:
               --data-urlencode "auto_merge=true" \
               --data-urlencode "should_remove_source_branch=true" \
               --data-urlencode "sha=$GITHUB_SHA" \
-              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests/$mr_iid/merge")
+              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests/$mr_iid/merge" \
+              2>"$merge_error"); then
+              last_http_code=$http_code
 
-            if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-              echo "Enabled auto-merge for GitLab merge request !$mr_iid."
-              exit 0
+              if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+                echo "Enabled auto-merge for GitLab merge request !$mr_iid."
+                exit 0
+              fi
+
+              message=$(jq -r '.message // .error // "unknown GitLab response"' \
+                "$merge_response" 2>/dev/null || printf 'non-JSON response')
+              last_message=$message
+              if { [ "$http_code" = "422" ] && [ "$message" = "Branch cannot be merged" ]; } || \
+                [ "$http_code" = "408" ] || [ "$http_code" = "429" ] || \
+                [[ "$http_code" =~ ^5[0-9][0-9]$ ]]; then
+                echo "::warning::Transient GitLab HTTP $http_code while enabling auto-merge: $message" >&2
+              else
+                echo "::error::GitLab auto-merge request failed with HTTP $http_code: $message"
+                exit 1
+              fi
+            else
+              rc=$?
+              cat "$merge_error" >&2
+              if ! is_transient_gitlab_error "$merge_error" "$rc"; then
+                echo "::error::GitLab auto-merge request failed with curl exit $rc"
+                exit "$rc"
+              fi
+              last_http_code=transport
+              last_message="curl exit $rc"
             fi
 
-            message=$(jq -r '.message // .error // "unknown GitLab response"' \
-              "$merge_response")
-            if [ "$http_code" != "422" ] || [ "$message" != "Branch cannot be merged" ]; then
-              echo "::error::GitLab auto-merge request failed with HTTP $http_code: $message"
-              exit 1
+            remaining=$((merge_deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
+              break
             fi
-
-            echo "GitLab is still preparing merge request !$mr_iid; retrying auto-merge ($attempt/30)."
-            sleep 10
+            delay=10
+            if [ "$remaining" -lt "$delay" ]; then
+              delay=$remaining
+            fi
+            echo "GitLab is still preparing merge request !$mr_iid; retrying auto-merge (attempt $attempt)."
+            sleep "$delay"
           done
 
-          echo "::error::GitLab merge request !$mr_iid stayed unmergeable for five minutes."
+          echo "::error::GitLab auto-merge was not accepted within five minutes (last result: $last_http_code, $last_message)."
           exit 1
