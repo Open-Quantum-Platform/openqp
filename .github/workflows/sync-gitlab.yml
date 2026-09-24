@@ -52,7 +52,7 @@ jobs:
 
           is_transient_gitlab_error() {
             grep -Eiq \
-              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Connection reset by peer|Recv failure|Send failure|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (429|5[0-9]{2})' \
+              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Operation too slow|Connection reset by peer|Recv failure|Send failure|Empty reply from server|HTTP/[23] stream|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (408|429|5[0-9]{2})' \
               "$1"
           }
 
@@ -156,7 +156,8 @@ jobs:
 
                 create_message=$(jq -r '.message // .error // "unknown GitLab response"' \
                   "$mr_create_response" 2>/dev/null || printf 'non-JSON response')
-                if [ "$create_http_code" != "409" ] && [ "$create_http_code" != "429" ] && \
+                if [ "$create_http_code" != "408" ] && [ "$create_http_code" != "409" ] && \
+                  [ "$create_http_code" != "429" ] && \
                   ! [[ "$create_http_code" =~ ^5[0-9][0-9]$ ]]; then
                   echo "::error::GitLab MR creation failed with HTTP $create_http_code: $create_message"
                   exit 1
@@ -225,7 +226,8 @@ jobs:
                 "$merge_response" 2>/dev/null || printf 'non-JSON response')
               last_message=$message
               if { [ "$http_code" = "422" ] && [ "$message" = "Branch cannot be merged" ]; } || \
-                [ "$http_code" = "429" ] || [[ "$http_code" =~ ^5[0-9][0-9]$ ]]; then
+                [ "$http_code" = "408" ] || [ "$http_code" = "429" ] || \
+                [[ "$http_code" =~ ^5[0-9][0-9]$ ]]; then
                 echo "::warning::Transient GitLab HTTP $http_code while enabling auto-merge: $message" >&2
               else
                 echo "::error::GitLab auto-merge request failed with HTTP $http_code: $message"
