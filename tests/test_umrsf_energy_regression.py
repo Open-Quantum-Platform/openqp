@@ -425,6 +425,22 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         report = checker.check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(any(error.path == "tdhf.multiplicity" for error in report.errors))
 
+    def test_umrsf_gradient_rejects_relaxed_excited_properties(self):
+        checker = _load_input_checker()
+        for runtype in ("grad", "optimize", "meci", "mecp", "tci"):
+            with self.subTest(runtype=runtype):
+                config = _umrsf_config(runtype)
+                config["properties"]["td_prop"] = True
+                report = checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertTrue(
+                    any(error.path == "properties.td_prop" and error.severity == "ERROR"
+                        for error in report.errors),
+                    report.to_text(),
+                )
+        config = _umrsf_config("grad")
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertFalse(any(error.path == "properties.td_prop" for error in report.errors))
+
     def test_umrsf_energy_still_allows_broader_parameterizations(self):
         checker = _load_input_checker()
         config = _umrsf_config("energy")

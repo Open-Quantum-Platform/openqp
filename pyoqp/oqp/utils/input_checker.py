@@ -6003,6 +6003,21 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         # The native gradient (umrsf_grad_run_gates) implements singlet and triplet response
         # states only; a quintet request would pass the energy stage and abort in the response
         # stage, so reject it here while keeping quintet energies available.
+        td_prop_value = _get(config, "properties", "td_prop", False)
+        td_prop_on = (td_prop_value if isinstance(td_prop_value, bool)
+                      else _as_lower(str(td_prop_value)) in _TRUE_BOOL)
+        if td_prop_on:
+            # electric_moments_excited / mulliken_excited consume the relaxed density (OQP::td_p),
+            # which the UMRSF response stage does not produce; the run would abort after the
+            # Z-vector stage instead of returning its gradient.
+            report.add(
+                "ERROR",
+                "properties.td_prop",
+                "Relaxed excited-state properties (td_prop) are not available with UMRSF gradients.",
+                value=td_prop_value,
+                expected="False",
+                action="Set properties.td_prop=False for gradient-driven UMRSF runtypes.",
+            )
         response_mult = int(_get(config, "tdhf", "multiplicity", 1))
         if response_mult not in (1, 3):
             report.add(

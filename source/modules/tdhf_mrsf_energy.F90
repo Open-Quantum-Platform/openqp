@@ -1234,8 +1234,18 @@ contains
           mxerr = max(mxerr, rnorm(ivec))
       end do
 
-!     Check convergence (a gradient run may follow the target root only)
-      if (target_only_gradient) mxerr = rnorm(target_state)
+!     Check convergence. A gradient run may follow the target root only, but the same intrusion
+!     argument applies to it: any other root (reported or extra) whose Ritz value lies within
+!     ||r|| of the target energy could still descend below the target and change which
+!     eigenvector is the requested energy-ordered state, so those roots must converge as well.
+      if (target_only_gradient) then
+        mxerr = rnorm(target_state)
+        do ivec = 1, nsolve
+          if (ivec == target_state) cycle
+          if (eex(ivec) - sqrt(rnorm(ivec)) <= eex(target_state)) &
+            mxerr = max(mxerr, rnorm(ivec))
+        end do
+      end if
       converged = mxerr<=cnvtol
       if (converged) exit
 
