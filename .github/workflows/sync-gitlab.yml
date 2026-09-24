@@ -49,6 +49,8 @@ jobs:
             -c http.lowSpeedLimit=1024
             -c http.lowSpeedTime=30
           )
+          sync_tmp=$(mktemp -d)
+          trap 'rm -rf "$sync_tmp"' EXIT
 
           is_transient_gitlab_error() {
             grep -Eiq \
@@ -58,12 +60,11 @@ jobs:
 
           retry_gitlab_network() {
             local attempt delay rc error_log
-            error_log=$(mktemp)
+            error_log="$sync_tmp/network-error.log"
 
             for attempt in 1 2 3; do
               : >"$error_log"
               if "$@" 2>"$error_log"; then
-                rm -f "$error_log"
                 return 0
               else
                 rc=$?
@@ -71,13 +72,11 @@ jobs:
               cat "$error_log" >&2
 
               if ! is_transient_gitlab_error "$error_log"; then
-                rm -f "$error_log"
                 return "$rc"
               fi
 
               if [ "$attempt" -eq 3 ]; then
                 echo "::error::GitLab network operation still failed after $attempt attempts" >&2
-                rm -f "$error_log"
                 return "$rc"
               fi
 
@@ -99,11 +98,10 @@ jobs:
           retry_gitlab_network git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
-          mr_list_response=$(mktemp)
-          mr_create_response=$(mktemp)
-          mr_create_error=$(mktemp)
-          merge_response=$(mktemp)
-          trap 'rm -f "$mr_list_response" "$mr_create_response" "$mr_create_error" "$merge_response"' EXIT
+          mr_list_response="$sync_tmp/mr-list.json"
+          mr_create_response="$sync_tmp/mr-create.json"
+          mr_create_error="$sync_tmp/mr-create-error.log"
+          merge_response="$sync_tmp/merge.json"
 
           find_existing_mr_once() {
             curl --connect-timeout 10 --max-time 30 \
@@ -212,8 +210,7 @@ jobs:
           # five-minute deadline so network and merge-state retries cannot stack
           # beyond the job timeout. Authentication and permission errors fail
           # immediately.
-          merge_error=$(mktemp)
-          trap 'rm -f "$mr_list_response" "$mr_create_response" "$mr_create_error" "$merge_response" "$merge_error"' EXIT
+          merge_error="$sync_tmp/merge-error.log"
           merge_deadline=$((SECONDS + 300))
           attempt=0
           last_http_code=none
