@@ -6018,6 +6018,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 expected="False",
                 action="Set properties.td_prop=False for gradient-driven UMRSF runtypes.",
             )
+        qmmm_value = _get(config, "input", "qmmm_flag", False)
+        qmmm_on = (qmmm_value if isinstance(qmmm_value, bool)
+                   else _as_lower(str(qmmm_value)) in _TRUE_BOOL)
+        if qmmm_on:
+            # qmmm_driver's excited-state ESPF force (grad_esp_qmmm_excited) consumes the relaxed
+            # density OQP::td_p and OQP::td_abxc, which the UMRSF response stage does not produce.
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "QM/MM is not available with UMRSF gradients (no relaxed density / ESPF charges).",
+                value=qmmm_value,
+                expected="False",
+                action="Run UMRSF gradient-driven jobs in the gas phase, or use tdhf.type=mrsf for QM/MM.",
+            )
         ixcore_value = str(_get(config, "tdhf", "ixcore", "-1")).strip()
         if ixcore_value not in ("", "-1"):
             # The gradient rebuilds the MO Fock with the same -1e6 core level shift as the energy
