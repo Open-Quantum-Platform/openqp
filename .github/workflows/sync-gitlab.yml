@@ -46,6 +46,12 @@ jobs:
           auth=$(printf 'oauth2:%s' "$GITLAB_TOKEN" | base64 -w0)
           git_auth=(-c "http.extraHeader=Authorization: Basic $auth")
 
+          is_transient_gitlab_error() {
+            grep -Eiq \
+              'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Connection reset by peer|Recv failure|Send failure|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (429|5[0-9]{2})' \
+              "$1"
+          }
+
           retry_gitlab_network() {
             local attempt delay rc error_log
             error_log=$(mktemp)
@@ -60,31 +66,22 @@ jobs:
               fi
               cat "$error_log" >&2
 
-              if ! grep -Eiq \
-                'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Connection reset by peer|Recv failure|Send failure|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (429|5[0-9]{2})' \
-                "$error_log"; then
+              if ! is_transient_gitlab_error "$error_log"; then
                 rm -f "$error_log"
                 return "$rc"
               fi
 
               if [ "$attempt" -eq 5 ]; then
-                echo "::error::GitLab network operation still failed after $attempt attempts"
+                echo "::error::GitLab network operation still failed after $attempt attempts" >&2
                 rm -f "$error_log"
                 return "$rc"
               fi
 
               delay=$((attempt * 5))
-              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/5)"
+              echo "::warning::Transient GitLab network failure; retrying in ${delay}s ($attempt/5)" >&2
               sleep "$delay"
             done
           }
-
-          curl_retry=(
-            --retry 4
-            --retry-all-errors
-            --retry-delay 3
-            --retry-max-time 45
-          )
 
           retry_gitlab_network git "${git_auth[@]}" fetch --no-tags "$GITLAB_PROJECT_URL" \
             main:refs/remotes/gitlab/main
@@ -102,7 +99,8 @@ jobs:
           merge_response=$(mktemp)
           trap 'rm -f "$mr_list_response" "$merge_response"' EXIT
 
-          curl "${curl_retry[@]}" --fail --silent --show-error --get \
+          retry_gitlab_network curl --connect-timeout 10 --max-time 30 \
+            --fail --silent --show-error --get \
             --output "$mr_list_response" \
             --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
             --data-urlencode "state=opened" \
@@ -129,10 +127,22 @@ jobs:
           fi
 
           # GitLab can briefly report a newly created MR as unmergeable while it
-          # prepares the merge ref and creates the MR pipeline. Retry only that
-          # transient response; every other API failure remains visible.
-          for attempt in $(seq 1 30); do
-            http_code=$(curl "${curl_retry[@]}" --silent --show-error \
+          # prepares the merge ref and creates the MR pipeline. Use a single
+          # five-minute deadline so network and merge-state retries cannot stack
+          # beyond the job timeout. Authentication and permission errors fail
+          # immediately.
+          merge_error=$(mktemp)
+          trap 'rm -f "$mr_list_response" "$merge_response" "$merge_error"' EXIT
+          merge_deadline=$((SECONDS + 300))
+          attempt=0
+          last_http_code=none
+          last_message='no response'
+
+          while [ "$SECONDS" -lt "$merge_deadline" ]; do
+            attempt=$((attempt + 1))
+            : >"$merge_error"
+            if http_code=$(curl --connect-timeout 5 --max-time 15 \
+              --silent --show-error \
               --output "$merge_response" \
               --write-out '%{http_code}' \
               --request PUT \
@@ -140,23 +150,47 @@ jobs:
               --data-urlencode "auto_merge=true" \
               --data-urlencode "should_remove_source_branch=true" \
               --data-urlencode "sha=$GITHUB_SHA" \
-              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests/$mr_iid/merge")
+              "$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/merge_requests/$mr_iid/merge" \
+              2>"$merge_error"); then
+              last_http_code=$http_code
 
-            if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-              echo "Enabled auto-merge for GitLab merge request !$mr_iid."
-              exit 0
+              if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+                echo "Enabled auto-merge for GitLab merge request !$mr_iid."
+                exit 0
+              fi
+
+              message=$(jq -r '.message // .error // "unknown GitLab response"' \
+                "$merge_response" 2>/dev/null || printf 'non-JSON response')
+              last_message=$message
+              if { [ "$http_code" = "422" ] && [ "$message" = "Branch cannot be merged" ]; } || \
+                [ "$http_code" = "429" ] || [[ "$http_code" =~ ^5[0-9][0-9]$ ]]; then
+                echo "::warning::Transient GitLab HTTP $http_code while enabling auto-merge: $message" >&2
+              else
+                echo "::error::GitLab auto-merge request failed with HTTP $http_code: $message"
+                exit 1
+              fi
+            else
+              rc=$?
+              cat "$merge_error" >&2
+              if ! is_transient_gitlab_error "$merge_error"; then
+                echo "::error::GitLab auto-merge request failed with curl exit $rc"
+                exit "$rc"
+              fi
+              last_http_code=transport
+              last_message="curl exit $rc"
             fi
 
-            message=$(jq -r '.message // .error // "unknown GitLab response"' \
-              "$merge_response")
-            if [ "$http_code" != "422" ] || [ "$message" != "Branch cannot be merged" ]; then
-              echo "::error::GitLab auto-merge request failed with HTTP $http_code: $message"
-              exit 1
+            remaining=$((merge_deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
+              break
             fi
-
-            echo "GitLab is still preparing merge request !$mr_iid; retrying auto-merge ($attempt/30)."
-            sleep 10
+            delay=10
+            if [ "$remaining" -lt "$delay" ]; then
+              delay=$remaining
+            fi
+            echo "GitLab is still preparing merge request !$mr_iid; retrying auto-merge (attempt $attempt)."
+            sleep "$delay"
           done
 
-          echo "::error::GitLab merge request !$mr_iid stayed unmergeable for five minutes."
+          echo "::error::GitLab auto-merge was not accepted within five minutes (last result: $last_http_code, $last_message)."
           exit 1
