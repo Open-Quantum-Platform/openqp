@@ -20,7 +20,7 @@ jobs:
   sync:
     name: Create GitLab sync merge request
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       GITLAB_PROJECT_ID: "17"
       GITLAB_PROJECT_URL: https://qchemlab.knu.ac.kr/open-quantum-platform/openqp.git
@@ -44,7 +44,11 @@ jobs:
           fi
 
           auth=$(printf 'oauth2:%s' "$GITLAB_TOKEN" | base64 -w0)
-          git_auth=(-c "http.extraHeader=Authorization: Basic $auth")
+          git_auth=(
+            -c "http.extraHeader=Authorization: Basic $auth"
+            -c http.lowSpeedLimit=1024
+            -c http.lowSpeedTime=30
+          )
 
           is_transient_gitlab_error() {
             grep -Eiq \
@@ -114,7 +118,11 @@ jobs:
             echo "GitLab merge request !$mr_iid already exists."
           else
             short_sha=${GITHUB_SHA:0:12}
-            mr_iid=$(curl --fail --silent --show-error --request POST \
+            # Do not retry this non-idempotent POST: if the response is lost
+            # after creation, the hourly reconciliation will find the MR by its
+            # immutable source branch instead of risking a duplicate.
+            mr_iid=$(curl --connect-timeout 10 --max-time 30 \
+              --fail --silent --show-error --request POST \
               --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
               --data-urlencode "source_branch=$sync_branch" \
               --data-urlencode "target_branch=main" \
