@@ -1,0 +1,37 @@
+# Analytic UMRSF-TDDFT S0 gradient of HBr with the LANL2DZ effective core potential on Br
+# (spherical basis). Regression for the ECP derivative term of the relaxed difference density:
+# without it the analytic gradient differed from central finite differences by 0.25 Ha/Bohr
+# (Br z: -0.2333 vs -0.0190); with it the agreement is 7e-7 Ha/Bohr.
+[input]
+system=
+ Br   0.000000000   0.000000000   0.000000000
+ H    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+type=uhf
+multiplicity=3
+conv=1e-10
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=umrsf
+nstate=3
+multiplicity=1
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1

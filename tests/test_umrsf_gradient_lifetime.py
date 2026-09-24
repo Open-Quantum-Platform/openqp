@@ -31,7 +31,19 @@ REF_TOL = 1.0e-6      # Ha/Bohr against the committed example references
 REPEAT_TOL = 1.0e-10  # same binary, same input, later in the process
 
 
+def _drop_stubbed_oqp_modules():
+    """tests/test_umrsf_energy_regression.py loads the input checker against stub
+    ``oqp``/``oqp.utils``/``oqp.utils.mpi_utils`` modules; in one unforked pytest
+    session those stubs would shadow the installed package here."""
+    import sys
+    for name in [n for n in list(sys.modules) if n == "oqp" or n.startswith("oqp.")]:
+        module = sys.modules[name]
+        if getattr(module, "__file__", None) is None and getattr(module, "__spec__", None) is None:
+            del sys.modules[name]
+
+
 def _backend_available() -> bool:
+    _drop_stubbed_oqp_modules()
     try:
         import oqp
         from oqp import lib
@@ -64,6 +76,7 @@ def _reference(name):
 
 
 def _run(workdir, tag, config):
+    _drop_stubbed_oqp_modules()
     from oqp.pyoqp import Runner
 
     runner = Runner(project=tag, input_file=None, log=str(workdir / f"{tag}.log"),

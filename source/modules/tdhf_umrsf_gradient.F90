@@ -2761,7 +2761,7 @@ contains
 !> via the validated grd2_uhf path and the polarization identity
 !>   d[Tr(A G[B])] = ½ d[E2(A+B) − E2(A) − E2(B)],  E2(P)=½Tr(P G[P]).
   subroutine umrsf_orbital_grad(infos, basis, pda, pdb, dmat_a, dmat_b, hfscale, de_orb)
-    use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay
+    use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, grad_1e_ecp
     use grd2, only: grd2_driver
     use hf_gradient_mod, only: grd2_uhf_compute_data_t
     use mathlib, only: pack_matrix
@@ -2796,6 +2796,9 @@ contains
     call grad_ee_kinetic(basis, pdtot_p, de_orb, logtol=tol)
     call grad_en_hellman_feynman(basis, infos%atoms%xyz, zn, pdtot_p, de_orb, logtol=tol)
     call grad_en_pulay(basis, infos%atoms%xyz, zn, pdtot_p, de_orb, logtol=tol)
+    ! ECP: Tr(P^Delta,u dV_ecp/dx). hf_gradient adds only the reference-density ECP term, so the
+    ! relaxed difference density has to carry its own; add_ecpder is a no-op without an ECP.
+    call grad_1e_ecp(infos, basis, infos%atoms%xyz, pdtot_p, de_orb, logtol=tol)
 
     ! 2e mean-field: d[Tr(P^Δ,u G[P^ref])] via grd2_uhf polarization
     da1 = pda_p + dmat_a ; db1 = pdb_p + dmat_b
