@@ -6000,6 +6000,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     # gradient equations would require additional response terms.
     if method == "tdhf" and td_type == "umrsf" and runtype in (
             "grad", "optimize", "meci", "mecp", "tci"):
+        # The native gradient (umrsf_grad_run_gates) implements singlet and triplet response
+        # states only; a quintet request would pass the energy stage and abort in the response
+        # stage, so reject it here while keeping quintet energies available.
+        response_mult = int(_get(config, "tdhf", "multiplicity", 1))
+        if response_mult not in (1, 3):
+            report.add(
+                "ERROR",
+                "tdhf.multiplicity",
+                "UMRSF analytic gradients support singlet (1) and triplet (3) response states only.",
+                value=response_mult,
+                expected="1 or 3",
+                action="Use tdhf.multiplicity=1 or 3 for gradient-driven UMRSF runtypes; "
+                       "quintet UMRSF remains available for runtype=energy.",
+            )
         functional = _as_lower(_get(config, "input", "functional", ""))
         cam_value = _get(config, "dftgrid", "cam_flag", False)
         cam_flag = (cam_value if isinstance(cam_value, bool)

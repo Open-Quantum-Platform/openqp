@@ -404,6 +404,27 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
                 report.to_text(),
             )
 
+    def test_umrsf_gradient_rejects_quintet_response_but_energy_allows_it(self):
+        checker = _load_input_checker()
+        for runtype in ("grad", "optimize", "meci", "mecp", "tci"):
+            with self.subTest(runtype=runtype):
+                config = _umrsf_config(runtype)
+                config["tdhf"]["multiplicity"] = 5
+                report = checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertTrue(
+                    any(error.path == "tdhf.multiplicity" for error in report.errors),
+                    report.to_text(),
+                )
+        for mult in (1, 3):
+            config = _umrsf_config("grad")
+            config["tdhf"]["multiplicity"] = mult
+            report = checker.check_input_values(config, raise_error=False, emit=False)
+            self.assertFalse(any(error.path == "tdhf.multiplicity" for error in report.errors))
+        config = _umrsf_config("energy")
+        config["tdhf"]["multiplicity"] = 5
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertFalse(any(error.path == "tdhf.multiplicity" for error in report.errors))
+
     def test_umrsf_energy_still_allows_broader_parameterizations(self):
         checker = _load_input_checker()
         config = _umrsf_config("energy")
