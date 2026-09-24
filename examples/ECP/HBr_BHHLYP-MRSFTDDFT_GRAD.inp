@@ -1,0 +1,37 @@
+# Analytic MRSF-TDDFT S0 gradient of HBr with the LANL2DZ effective core potential on Br (spherical).
+# Regression for the ECP-screened nuclear charges in sf_1e_grad: with the unscreened Z(Br)=35 the
+# analytic gradient was -6.3086 Ha/Bohr (Br z) against a finite-difference value of -0.0163; with the
+# screened charge Z-ecp_zn_num = 7 the agreement is 4e-6 Ha/Bohr.
+[input]
+system=
+ Br   0.000000000   0.000000000   0.000000000
+ H    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=3
+conv=1e-10
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=mrsf
+nstate=3
+multiplicity=1
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1
