@@ -53,9 +53,19 @@ jobs:
           trap 'rm -rf "$sync_tmp"' EXIT
 
           is_transient_gitlab_error() {
+            local error_log=$1 rc=${2:-0}
+
+            # curl transport failures: HTTP/2, DNS, connect, partial response,
+            # timeout, TLS connect, empty response, send/receive, HTTP/2 stream,
+            # and HTTP/3. Certificate validation and HTTP 401/403 use different
+            # exit codes and therefore remain permanent failures.
+            case "$rc" in
+              5|6|7|16|18|28|35|52|55|56|92|95) return 0 ;;
+            esac
+
             grep -Eiq \
               'Could not resolve host|Failed to connect|Connection timed out|Operation timed out|Operation too slow|Connection reset by peer|Recv failure|Send failure|Empty reply from server|HTTP/[23] stream|TLS|SSL connection|unexpected EOF|remote end hung up unexpectedly|requested URL returned error: (408|429|5[0-9]{2})' \
-              "$1"
+              "$error_log"
           }
 
           retry_gitlab_network() {
@@ -71,7 +81,7 @@ jobs:
               fi
               cat "$error_log" >&2
 
-              if ! is_transient_gitlab_error "$error_log"; then
+              if ! is_transient_gitlab_error "$error_log" "$rc"; then
                 return "$rc"
               fi
 
@@ -171,7 +181,7 @@ jobs:
               else
                 rc=$?
                 cat "$mr_create_error" >&2
-                if ! is_transient_gitlab_error "$mr_create_error"; then
+                if ! is_transient_gitlab_error "$mr_create_error" "$rc"; then
                   echo "::error::GitLab MR creation failed with curl exit $rc"
                   exit "$rc"
                 fi
@@ -188,7 +198,7 @@ jobs:
               else
                 rc=$?
                 cat "$mr_create_error" >&2
-                if is_transient_gitlab_error "$mr_create_error"; then
+                if is_transient_gitlab_error "$mr_create_error" "$rc"; then
                   echo "::error::Cannot safely retry MR creation because the recovery lookup failed transiently; the scheduled reconciliation will resume it."
                 else
                   echo "::error::GitLab MR recovery lookup failed with curl exit $rc"
@@ -251,7 +261,7 @@ jobs:
             else
               rc=$?
               cat "$merge_error" >&2
-              if ! is_transient_gitlab_error "$merge_error"; then
+              if ! is_transient_gitlab_error "$merge_error" "$rc"; then
                 echo "::error::GitLab auto-merge request failed with curl exit $rc"
                 exit "$rc"
               fi
