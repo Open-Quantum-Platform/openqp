@@ -6,10 +6,10 @@ workflow:
     # Direct pushes to the protected default branch are disabled in GitLab.
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       when: never
-    # Once a merge request exists, its pipeline replaces the branch pipeline.
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
-      when: never
-    - if: '$CI_COMMIT_BRANCH'
+    # Development branches are validated by their merge-request pipeline. Do
+    # not start an extra branch pipeline during the push that creates or updates
+    # the MR.
+    - when: never
 
 stages:
   - preflight
