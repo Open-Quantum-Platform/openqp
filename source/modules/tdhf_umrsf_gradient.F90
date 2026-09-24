@@ -1287,7 +1287,11 @@ contains
     ! each); the β virt-virt block (nvirb² probes) dominates. Byte-identical to serial (unique writes).
     !$omp parallel default(shared)
     block
-      real(kind=dp) :: epq_l(nbf,nbf), w_l(nbf,nbf)
+      ! Per-thread scratch. Allocatable rather than automatic: gfortran 13/14 reject an automatic
+      ! array inside a BLOCK ("explicit shaped array with nonconstant bounds") and ifx on Windows
+      ! corrupted the heap on the same construct.
+      real(kind=dp), allocatable :: epq_l(:,:), w_l(:,:)
+      allocate(epq_l(nbf,nbf), w_l(nbf,nbf))
       ! α: ∂omega_orb/∂F̃α[p,q], nonzero only on the occ-occ block
       !$omp do collapse(2) schedule(dynamic)
       do q = 1, nocca ; do p = 1, nocca
@@ -1304,6 +1308,7 @@ contains
         peffb(p,q) = sum(xmat*w_l)
       end do ; end do
       !$omp end do
+      deallocate(epq_l, w_l)
     end block
     !$omp end parallel
     ! symmetrize → physical difference density (block structure preserved: α occ-occ, β virt-virt)
