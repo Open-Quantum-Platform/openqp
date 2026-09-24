@@ -425,6 +425,26 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         report = checker.check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(any(error.path == "tdhf.multiplicity" for error in report.errors))
 
+    def test_umrsf_gradient_rejects_ixcore_selection(self):
+        checker = _load_input_checker()
+        for runtype in ("grad", "optimize", "meci", "mecp", "tci"):
+            with self.subTest(runtype=runtype):
+                config = _umrsf_config(runtype)
+                config["tdhf"]["ixcore"] = "1"
+                report = checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertTrue(
+                    any(error.path == "tdhf.ixcore" and error.severity == "ERROR"
+                        for error in report.errors),
+                    report.to_text(),
+                )
+        for runtype, ixcore in (("energy", "1"), ("grad", "-1")):
+            with self.subTest(runtype=runtype, ixcore=ixcore):
+                config = _umrsf_config(runtype)
+                config["tdhf"]["ixcore"] = ixcore
+                report = checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertFalse(any(error.path == "tdhf.ixcore" for error in report.errors),
+                                 report.to_text())
+
     def test_umrsf_gradient_rejects_relaxed_excited_properties(self):
         checker = _load_input_checker()
         for runtype in ("grad", "optimize", "meci", "mecp", "tci"):

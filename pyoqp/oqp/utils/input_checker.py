@@ -6018,6 +6018,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 expected="False",
                 action="Set properties.td_prop=False for gradient-driven UMRSF runtypes.",
             )
+        ixcore_value = str(_get(config, "tdhf", "ixcore", "-1")).strip()
+        if ixcore_value not in ("", "-1"):
+            # The gradient rebuilds the MO Fock with the same -1e6 core level shift as the energy
+            # path and then diagonalizes it for the canonical reference orbitals of the Z-vector
+            # solve, so the shifted eigenvalues would enter the reference response.
+            report.add(
+                "ERROR",
+                "tdhf.ixcore",
+                "UMRSF analytic gradients do not support core-excitation selection (tdhf.ixcore).",
+                value=ixcore_value,
+                expected="-1 (default)",
+                action="Drop tdhf.ixcore for gradient-driven UMRSF runtypes; "
+                       "ixcore-selected UMRSF remains available for runtype=energy.",
+            )
         response_mult = int(_get(config, "tdhf", "multiplicity", 1))
         if response_mult not in (1, 3):
             report.add(
