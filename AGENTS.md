@@ -213,7 +213,8 @@ MRSF examples were energy-only, and every other gradient and NAC validation
 was all-electron — so CI was green while HBr/LANL2DZ gave a 6.3 Ha/Bohr
 gradient error and an analytic coupling 140 times the numerical one.
 
-**Enforced by CI:** `tools/check_ecp_charges.py` (the `source-policy` job)
+**Enforced by CI:** `tools/check_ecp_charges.py` (the `PR policy` workflow on
+GitHub and the GitLab `source-policy` job)
 requires, per enclosing subroutine, that the charge argument of every
 `grad_en_hellman_feynman` / `grad_en_pulay` / `der_nucattr_matrix` call is
 ECP-screened (in the argument itself or in the line that defines it), and

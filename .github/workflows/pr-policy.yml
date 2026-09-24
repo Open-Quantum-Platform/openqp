@@ -146,3 +146,27 @@ jobs:
             fi
           fi
           python3 "$gate" "$GITHUB_WORKSPACE/source"
+
+      # RULE 8: every derivative of the nuclear attraction must see the
+      # ECP-screened charges (zn - ecp_zn_num) and the same density must be
+      # contracted with the ECP derivative. sf_1e_grad (SF/MRSF gradients) and
+      # the analytic MRSF NAC 1e term shipped without this for eight months;
+      # nothing noticed because no gradient/NAC validation used an ECP that
+      # actually removes core electrons. Trusted base-branch copy, as above.
+      - name: ECP charge/derivative gate
+        run: |
+          set -euo pipefail
+          gate=tools/check_ecp_charges.py
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            git fetch --depth=1 origin "$base" || true
+            if git cat-file -e "$base:$gate" 2>/dev/null; then
+              mkdir -p .gate
+              git show "$base:$gate" > .gate/check_ecp_charges.py
+              gate=.gate/check_ecp_charges.py
+              echo "Using trusted base-branch gate script ($base:tools/check_ecp_charges.py)"
+            else
+              echo "Base branch has no gate script yet; using in-tree copy (bootstrap)."
+            fi
+          fi
+          python3 "$gate"
