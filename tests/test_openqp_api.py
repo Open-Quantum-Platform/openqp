@@ -186,6 +186,14 @@ SCHEMA = {
         "qmmm_output": {"type": str, "default": ""},
     },
     "oqp": {
+        "model_hessian": {"type": _string, "default": "auto"},
+        "hessian_update": {"type": _string, "default": "auto"},
+        "gpr_history": {"type": int, "default": "8"},
+        "gpr_length_scale": {"type": float, "default": "0.5"},
+        "ts_search": {"type": _string, "default": "prfo"},
+        "ts_product": {"type": str, "default": ""},
+        "ts_guess": {"type": str, "default": ""},
+        "neb_interpolation": {"type": _string, "default": "linear"},
         "coordsys": {"type": _string, "default": "tric"},
         "trust": {"type": float, "default": "0.2"},
         "auto_recovery": {"type": bool, "default": "True"},
@@ -401,6 +409,33 @@ class TestOpenQPNativeAPI(unittest.TestCase):
 
         self.assertIn("\nO ", geometry)
         self.assertEqual(len(geometry.strip().splitlines()), 3)
+
+    def test_transit_workflow_routes_endpoint_and_search_options(self):
+        job = load_openqp_module().OpenQP().workflow.ts(search="qst3", product="p.xyz", guess="g.xyz")
+        self.assertEqual(job.config_typed["input"]["runtype"], "ts")
+        self.assertEqual(job.config_typed["oqp"]["ts_search"], "qst3")
+        self.assertEqual(job.config_typed["oqp"]["ts_product"], "p.xyz")
+        self.assertEqual(job.config_typed["oqp"]["ts_guess"], "g.xyz")
+
+    def test_native_curvature_options_from_workflow_and_section_proxy(self):
+        openqp = load_openqp_module()
+        for workflow in ("optimize", "ts"):
+            with self.subTest(workflow=workflow):
+                job = openqp.OpenQP()
+                getattr(job.workflow, workflow)(model_hessian="lindh",
+                                               hessian_update="gpr",
+                                               gpr_history=12,
+                                               gpr_length_scale=0.3)
+                self.assertEqual(job.config_typed["oqp"]["model_hessian"], "lindh")
+                self.assertEqual(job.config_typed["oqp"]["hessian_update"], "gpr")
+                self.assertEqual(job.config_typed["oqp"]["gpr_history"], 12)
+                self.assertEqual(job.config_typed["oqp"]["gpr_length_scale"], 0.3)
+                job.settings.oqp(gpr_history=6)
+                self.assertEqual(job.config_typed["oqp"]["gpr_history"], 6)
+
+    def test_neb_workflow_routes_idpp_interpolation(self):
+        job = load_openqp_module().OpenQP().workflow.neb(interpolation="idpp")
+        self.assertEqual(job.config_typed["oqp"]["neb_interpolation"], "idpp")
 
     def test_molecule_accepts_named_geometry(self):
         openqp = load_openqp_module()

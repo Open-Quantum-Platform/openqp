@@ -1,0 +1,4 @@
+# Experimental curvature controls; a short input demonstration, not a speed benchmark.
+rhf/sto-3g
+ts(S0,search="qst3",product="NH3_QST_product.xyz",guess="NH3_QST_guess.xyz",maxit=3,hessian="model",model_hessian="lindh",hessian_update="gpr",gpr_history=8,gpr_length_scale=0.5,auto_recovery=false)
+geom="NH3_QST_reactant.xyz"

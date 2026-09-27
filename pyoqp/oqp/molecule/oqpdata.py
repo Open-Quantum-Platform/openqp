@@ -765,6 +765,14 @@ OQP_CONFIG_SCHEMA = {
         # Optional real Cartesian Hessian used to initialize native P-RFO.
         # ``model`` preserves the inexpensive Schlegel-model default.
         'init_hessian': {'type': str, 'default': 'model'},
+        'model_hessian': {'type': str, 'default': 'auto'},
+        'hessian_update': {'type': str, 'default': 'auto'},
+        'gpr_history': {'type': int, 'default': '8'},
+        'gpr_length_scale': {'type': float, 'default': '0.5'},
+        'ts_search': {'type': str, 'default': 'prfo'},
+        'ts_product': {'type': str, 'default': ''},
+        'ts_guess': {'type': str, 'default': ''},
+        'neb_interpolation': {'type': str, 'default': 'linear'},
         'spring': {'type': float, 'default': '0.05'},
         'climb': {'type': bool, 'default': 'True'},
         'fmax': {'type': float, 'default': '2e-3'},

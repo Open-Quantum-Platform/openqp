@@ -19,5 +19,7 @@ istate=0
 maxit=10
 
 [oqp]
+# Preserve the optimizer model used to generate the committed trajectory reference.
+model_hessian=constant
 coordsys=tric
 trust=0.2

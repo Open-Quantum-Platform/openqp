@@ -34,7 +34,7 @@ def _load_oqp_modules():
     """Load oqp_coords and oqp_engine without the oqp backend."""
     package_names = ("oqp", "oqp.library")
     module_names = (
-        "oqp.library.oqp_coords", "oqp.library.oqp_engine",
+        "oqp.library.oqp_coords", "oqp.library.oqp_transit", "oqp.library.oqp_model_hessian", "oqp.library.oqp_gpr", "oqp.library.oqp_engine",
         "oqp.library.oqp_neb", "oqp.library.oqp_irc", "oqp.library.baeka",
     )
     saved = {name: sys.modules.get(name) for name in package_names + module_names}
@@ -44,6 +44,9 @@ def _load_oqp_modules():
             module.__path__ = []
             sys.modules[pkg] = module
         nc = _load("oqp.library.oqp_coords", LIB / "oqp_coords.py")
+        _load("oqp.library.oqp_transit", LIB / "oqp_transit.py")
+        _load("oqp.library.oqp_model_hessian", LIB / "oqp_model_hessian.py")
+        _load("oqp.library.oqp_gpr", LIB / "oqp_gpr.py")
         ne = _load("oqp.library.oqp_engine", LIB / "oqp_engine.py")
         nb = _load("oqp.library.oqp_neb", LIB / "oqp_neb.py")
         ni = _load("oqp.library.oqp_irc", LIB / "oqp_irc.py")

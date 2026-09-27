@@ -5940,6 +5940,8 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
 
     if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
+    else:
+        _check_model_curvature(config, report)
 
     if method in ("dftb", "xtb") and runtype in {"nac", "bp"}:
         # numerical NAC vectors / branching-plane are not wired for DFTB; the
@@ -5984,7 +5986,52 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         _check_hess(config, report)
 
 
+def _check_model_curvature(config: dict[str, Any], report: CheckReport) -> None:
+    """Validate experimental curvature controls even for unsupported drivers."""
+    model = _as_lower(_get(config, "oqp", "model_hessian", "auto"))
+    update = _as_lower(_get(config, "oqp", "hessian_update", "auto"))
+    history = _get(config, "oqp", "gpr_history", 8)
+    scale = _get(config, "oqp", "gpr_length_scale", 0.5)
+    def error(key, message):
+        report.add("ERROR", "oqp." + key, message,
+                   action="Correct the native model-curvature controls.")
+    if model not in {"auto", "constant", "lindh"}:
+        error("model_hessian", "Choose auto, constant or lindh.")
+    if update not in {"auto", "gpr"}:
+        error("hessian_update", "Choose auto or gpr.")
+    try:
+        valid_history = (not isinstance(history, bool) and
+                         float(history) == int(history) and 3 <= int(history) <= 20)
+    except (TypeError, ValueError, OverflowError):
+        valid_history = False
+    if not valid_history:
+        error("gpr_history", "GPR history must be an integer from 3 to 20.")
+    try:
+        valid_scale = (not isinstance(scale, bool) and math.isfinite(float(scale))
+                       and 1.0e-3 <= float(scale) <= 10.0)
+    except (TypeError, ValueError, OverflowError):
+        valid_scale = False
+    if not valid_scale:
+        error("gpr_length_scale", "GPR length scale must be finite and within [0.001, 10] bohr.")
+    nondefault = (model not in {"auto", "constant"} or update != "auto" or
+                  not valid_history or int(history) != 8 or
+                  not valid_scale or float(scale) != 0.5)
+    if nondefault:
+        runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+        if (runtype not in {"optimize", "ts"} or
+                _as_lower(_get(config, "optimize", "lib", "oqp")) != "oqp" or
+                bool(_get(config, "input", "qmmm_flag", False)) or
+                str(_get(config, "oqp", "freeze", "") or "").strip() or
+                _as_lower(_get(config, "oqp", "init_hessian", "model")) != "model"):
+            error("model_hessian", "Nondefault model/GPR controls require native optimize or ts, "
+                  "init_hessian=model, and no frozen distances or QM/MM.")
+        if update != "gpr" and (not valid_history or int(history) != 8 or
+                                not valid_scale or float(scale) != 0.5):
+            error("hessian_update", "Nondefault GPR controls require hessian_update=gpr.")
+
+
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
+    _check_model_curvature(config, report)
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
     lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
@@ -6120,6 +6167,29 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected="runtype=optimize, md or namd with qmmm_flag, or qmmm_flag=false",
                 action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
             )
+
+    search = _as_lower(_get(config, "oqp", "ts_search", "prfo"))
+    def transit_error(key, message):
+        report.add("ERROR", "oqp." + key, message, action="Correct the native TS search options.")
+    if search not in {"prfo", "qst2", "qst3"}:
+        transit_error("ts_search", "TS search must be prfo, qst2 or qst3.")
+    elif search != "prfo":
+        if runtype != "ts" or lib != "oqp":
+            transit_error("ts_search", "QST2/QST3 require runtype=ts and lib=oqp.")
+        if _as_lower(_get(config, "oqp", "init_hessian", "model")) != "model":
+            transit_error("init_hessian", "QST2/QST3 require a model Hessian; no molecular Hessian is evaluated.")
+        if str(_get(config, "oqp", "freeze", "")).strip():
+            transit_error("freeze", "QST2/QST3 currently do not support frozen distances.")
+        for key in (["ts_product", "ts_guess"] if search == "qst3" else ["ts_product"]):
+            if not str(_get(config, "oqp", key, "")).strip():
+                transit_error(key, "An endpoint XYZ file is required for this search.")
+        if search == "qst2" and str(_get(config, "oqp", "ts_guess", "")).strip():
+            transit_error("ts_guess", "A supplied TS guess requires qst3.")
+    elif any(str(_get(config, "oqp", k, "")).strip() for k in ("ts_product", "ts_guess")):
+        transit_error("ts_search", "Endpoint options require qst2 or qst3.")
+    interpolation = _as_lower(_get(config, "oqp", "neb_interpolation", "linear"))
+    if interpolation not in {"linear", "idpp"} or (interpolation == "idpp" and (runtype != "neb" or lib != "oqp")):
+        transit_error("neb_interpolation", "IDPP interpolation requires the native NEB workflow; choose linear or idpp.")
 
     if lib not in OPT_LIBS:
         report.add(

@@ -1951,6 +1951,10 @@ class OpenQP:
             "beta_schedule": "pen_jump",
             "gap": "energy_gap",
         }
+        if active_runtype == "ts":
+            public_aliases.update(search="ts_search", product="ts_product", guess="ts_guess")
+        elif active_runtype == "neb":
+            public_aliases.update(interpolation="neb_interpolation")
         for public, internal in public_aliases.items():
             if public not in requested:
                 continue

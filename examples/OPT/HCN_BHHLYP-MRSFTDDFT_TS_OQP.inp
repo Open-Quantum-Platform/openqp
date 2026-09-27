@@ -30,6 +30,8 @@ rmsd_step=1
 max_step=1
 
 [oqp]
+# Preserve the optimizer model used to generate the committed trajectory reference.
+model_hessian=constant
 coordsys=dlc
 trust=0.05
 trust_max=0.1

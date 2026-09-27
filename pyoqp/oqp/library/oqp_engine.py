@@ -26,6 +26,9 @@ from __future__ import annotations
 import numpy as np
 import scipy.linalg as sla
 import re
+from oqp.library.oqp_transit import transit_tangent
+from oqp.library.oqp_gpr import GPRCurvature
+from oqp.library.oqp_model_hessian import lindh_cartesian_hessian
 
 from oqp.library.oqp_coords import (
     build_coordinates,
@@ -87,7 +90,9 @@ class OQPEngine:
                  trust_max=0.5, maxiter=100, follow_mode=0, coordsys="auto",
                  logger=None, initial_hessian=None, initial_gradient=None,
                  masses=None, project_global_rigid_modes=False,
-                 frozen_distances=None):
+                 frozen_distances=None, transit_endpoints=None,
+                 model_hessian="auto", hessian_update="auto",
+                 gpr_history=8, gpr_length_scale=0.5):
         """Create an optimization engine.
 
         Parameters
@@ -119,6 +124,19 @@ class OQPEngine:
             OpenQP enables this for non-QM/MM jobs. The standalone default is
             false because an external field or fixed embedding can give genuine
             lab-frame rigid-motion curvature.
+        model_hessian : {"auto", "constant", "lindh"}, optional
+            Auto selects Lindh for supported isolated unconstrained molecular
+            model-Hessian min/TS searches, otherwise constant. Lindh uses the
+            modified covalent-radius model for H--Ar with explicit positive Cartesian regularization.
+        hessian_update : {"auto", "gpr"}, optional
+            Auto retains BFGS/Bofill. GPR adds an experimental local correction
+            from actual energy/gradient history after that update, rejecting
+            uncertain fits. Both controls require unconstrained model-Hessian
+            minimum or TS searches.
+        gpr_history : int, optional
+            Maximum number of observations, 3--20 (default 8).
+        gpr_length_scale : float, optional
+            Fixed Cartesian kernel length in bohr, 0.001--10 (default 0.5).
         frozen_distances : sequence of pair, optional
             One-based atom-index pairs whose initial distances are held fixed.
             The optimizer projects gradients into the linearized constraint
@@ -146,12 +164,51 @@ class OQPEngine:
             for first, second in self.frozen_distances
         ]
         self.mode = mode
+        self.requested_model_hessian = str(model_hessian).strip().lower()
+        self.model_hessian = self.requested_model_hessian
+        self.hessian_update = str(hessian_update).lower()
+        if self.model_hessian not in {"auto", "constant", "lindh"}:
+            raise ValueError("model_hessian must be auto, constant or lindh")
+        if self.model_hessian == "auto":
+            supported = (mode in {"min", "ts"} and initial_hessian is None
+                         and not self.frozen_distances and self.project_global_rigid_modes
+                         and self.atoms.size > 1 and np.all((self.atoms >= 1) & (self.atoms <= 18)))
+            self.model_hessian = "lindh" if supported else "constant"
+        if self.hessian_update not in {"auto", "gpr"}:
+            raise ValueError("hessian_update must be auto or gpr")
+        if ((self.model_hessian != "constant" or self.hessian_update != "auto")
+                and (mode not in {"min", "ts"} or initial_hessian is not None
+                     or frozen_distances)):
+            raise ValueError("Model curvature options require unconstrained min/TS model-Hessian searches")
+        if self.hessian_update == "auto" and (gpr_history != 8 or gpr_length_scale != 0.5):
+            raise ValueError("Nondefault GPR controls require hessian_update=gpr")
+        self.gpr = (GPRCurvature(gpr_history, gpr_length_scale)
+                    if self.hessian_update == "gpr" else None)
+        self.gpr_accepted_steps = 0
+        self.gpr_rejected_steps = 0
         self.trust = float(trust)
         self.trust_min = float(trust_min)
         self.trust_max = float(trust_max)
         self.maxiter = int(maxiter)
         self.follow_mode = int(follow_mode)
+        self.transit_endpoints = None
+        self._transit_steps = 0
+        self._transit_direction = None
+        if transit_endpoints is not None:
+            if initial_hessian is not None or frozen_distances:
+                raise ValueError("Transit searches require an unconstrained model Hessian")
+            endpoints = [np.asarray(v, dtype=float).reshape(-1).copy()
+                         for v in transit_endpoints]
+            if (mode != "ts" or len(endpoints) != 2
+                    or any(v.shape != np.asarray(x0).reshape(-1).shape
+                           or not np.isfinite(v).all() for v in endpoints)
+                    or np.linalg.norm(endpoints[1]-endpoints[0]) < 1e-10):
+                raise ValueError("Transit endpoints require a TS search and distinct finite geometries")
+            self.transit_endpoints = endpoints
+
         self.logger = logger
+        if self.logger is not None and self.requested_model_hessian == "auto":
+            self.logger("PyOQP: Model Hessian selected [auto -> %s]" % self.model_hessian)
 
         requested_coordsys = (coordsys or "auto").lower()
         # DLC intentionally removes whole-system translations and rotations.
@@ -167,6 +224,16 @@ class OQPEngine:
         self.coords = build_coordinates(
             self.atoms, self.x, coordsys=effective_coordsys
         )
+        if (self.transit_endpoints is not None
+                and not isinstance(self.coords, CartesianCoordinates)):
+            reactant, product = self.transit_endpoints
+            chord = self.coords.q_displacement(
+                self.coords.q(product), self.coords.q(reactant))
+            # Distinct inversion endpoints can have identical bonds/angles.
+            # Choose Cartesians before constructing the model Hessian so the
+            # transit tangent, gradient and curvature use the same coordinates.
+            if not np.isfinite(chord).all() or _scaled_norm(chord) < 1e-12:
+                self.coords = CartesianCoordinates(self.atoms.size)
         # Report the requested coordinate system by name (TRIC and RIC are both
         # RedundantInternalCoordinates objects, so the class name is ambiguous),
         # and flag when it fell back to Cartesians (e.g. for a linear molecule).
@@ -189,7 +256,7 @@ class OQPEngine:
             label = "DLC->RIC(fallback)"
         self.coordsys = label
         self.nonfinite_step_rejections = 0
-        model_hessian = self.coords.guess_hessian(self.x)
+        model_hessian = self._guess_hessian()
         if initial_hessian is None:
             self.H = model_hessian
         else:
@@ -197,6 +264,13 @@ class OQPEngine:
                                                      model_hessian,
                                                      initial_gradient)
         self._prev = None
+
+    def _guess_hessian(self):
+        default = self.coords.guess_hessian(self.x)
+        if self.model_hessian == "constant":
+            return default
+        cartesian = lindh_cartesian_hessian(self.atoms, self.x)
+        return self._transform_initial_hessian(cartesian, default)
 
     def _validate_frozen_distances(self, pairs):
         validated = []
@@ -316,38 +390,7 @@ class OQPEngine:
         # a stationary point, but a TS guess can retain a non-negligible
         # gradient.  Numerically differentiate the already available B matrix
         # so injected real Hessians preserve curvature/mode ordering there too.
-        coordinate_curvature = np.zeros_like(h_cart)
-        if initial_gradient is not None:
-            try:
-                g_cart = np.asarray(initial_gradient, dtype=float).reshape(-1)
-            except (TypeError, ValueError) as exc:
-                raise ValueError("initial_gradient must be a numeric Cartesian vector") from exc
-            if g_cart.shape != (ncart,):
-                raise ValueError(
-                    "initial_gradient must have shape (%d,), got %s"
-                    % (ncart, g_cart.shape)
-                )
-            if not np.all(np.isfinite(g_cart)):
-                raise ValueError("initial_gradient must contain only finite values")
-            if not isinstance(self.coords, CartesianCoordinates) \
-                    and np.linalg.norm(g_cart) > 0.0:
-                g_work = np.asarray(
-                    self.coords.grad_to_q(self.x, g_cart), dtype=float
-                ).reshape(-1)
-                fd_step = 1.0e-4
-                for column in range(ncart):
-                    xp = self.x.copy()
-                    xm = self.x.copy()
-                    xp[column] += fd_step
-                    xm[column] -= fd_step
-                    dbdx = (
-                        np.asarray(self.coords.b_matrix(xp), dtype=float)
-                        - np.asarray(self.coords.b_matrix(xm), dtype=float)
-                    ) / (2.0 * fd_step)
-                    coordinate_curvature[:, column] = g_work @ dbdx
-                coordinate_curvature = 0.5 * (
-                    coordinate_curvature + coordinate_curvature.T
-                )
+        coordinate_curvature = self._coordinate_curvature(initial_gradient)
 
         h_work = b_pinv.T @ (h_cart - coordinate_curvature) @ b_pinv
 
@@ -394,6 +437,43 @@ class OQPEngine:
         if not np.all(np.isfinite(h_work)):
             raise ValueError("initial_hessian produced a non-finite working Hessian")
         return h_work
+
+    def _coordinate_curvature(self, gradient):
+        """Coordinate-map curvature only; no electronic Hessian evaluation."""
+        coordinate_curvature = np.zeros((self.x.size, self.x.size))
+        if gradient is not None:
+            try:
+                g_cart = np.asarray(gradient, dtype=float).reshape(-1)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("initial_gradient must be a numeric Cartesian vector") from exc
+            if g_cart.shape != (self.x.size,):
+                raise ValueError(
+                    "initial_gradient must have shape (%d,), got %s"
+                    % (self.x.size, g_cart.shape)
+                )
+            if not np.all(np.isfinite(g_cart)):
+                raise ValueError("initial_gradient must contain only finite values")
+            if not isinstance(self.coords, CartesianCoordinates) \
+                    and np.linalg.norm(g_cart) > 0.0:
+                g_work = np.asarray(
+                    self.coords.grad_to_q(self.x, g_cart), dtype=float
+                ).reshape(-1)
+                fd_step = 1.0e-4
+                for column in range(self.x.size):
+                    xp = self.x.copy()
+                    xm = self.x.copy()
+                    xp[column] += fd_step
+                    xm[column] -= fd_step
+                    dbdx = (
+                        np.asarray(self.coords.b_matrix(xp), dtype=float)
+                        - np.asarray(self.coords.b_matrix(xm), dtype=float)
+                    ) / (2.0 * fd_step)
+                    coordinate_curvature[:, column] = g_work @ dbdx
+                coordinate_curvature = 0.5 * (
+                    coordinate_curvature + coordinate_curvature.T
+                )
+
+        return coordinate_curvature
 
     def _global_external_mass_weighted_basis(self):
         """Mass-weighted basis for whole-system rigid motions."""
@@ -448,6 +528,8 @@ class OQPEngine:
         Returns ``False`` before the first step, when no previous point exists.
         """
 
+        if self.gpr is not None:
+            self.gpr.clear("objective_rebased")
         if self._prev is None:
             return False
 
@@ -527,6 +609,12 @@ class OQPEngine:
         self.nonfinite_step_rejections += 1
         self.trust = max(self.trust * 0.5, self.trust_min)
         followed_cart = self._cartesian_follow_direction()
+        # Cached QST tangents belong to the old coordinate basis. Invalidate
+        # before any recovery/early return; the next QST step recomputes it.
+        # Store the converted followed mode now, including zero/invalid-gradient
+        # exits, so repeated recovery never interprets internal modes as Cartesian.
+        self._transit_direction = None
+        self._followed = followed_cart
         # An internal-coordinate map that has already overflowed is not a
         # useful basis for the next trial point.  Switch this engine instance
         # permanently to Cartesian coordinates; the outer native ladder may
@@ -534,7 +622,9 @@ class OQPEngine:
         if not isinstance(self.coords, CartesianCoordinates):
             self.coords = CartesianCoordinates(self.atoms.size)
             self.coordsys = "%s->CART(nonfinite recovery)" % self.coordsys
-        self.H = self.coords.guess_hessian(self.x)
+        self.H = self._guess_hessian()
+        if self.gpr is not None:
+            self.gpr.clear("coordinate_recovery")
         self._prev = None
         gradient = np.asarray(gradient, dtype=float).reshape(-1)
         if not np.all(np.isfinite(gradient)):
@@ -568,6 +658,32 @@ class OQPEngine:
             self.x + direction * (self.trust / rms)
         )
 
+    def _apply_gpr_curvature(self, energy, gradient, bmat):
+        self.gpr.add(self.x, energy, gradient)
+        try:
+            # Hx = B.T Hq B + coordinate curvature. The GP residual is
+            # reanchored to zero value/gradient at the current observation.
+            # Hence its second derivative adds to this model without changing
+            # the actual gradient or the coordinate-curvature correction.
+            curvature = self._coordinate_curvature(gradient)
+            prior_cart = bmat.T @ self.H @ bmat + curvature
+            correction = self.gpr.correction(prior_cart)
+            if correction is not None:
+                updated = self._transform_initial_hessian(
+                    prior_cart + correction, self._guess_hessian(), gradient)
+                if np.isfinite(updated).all():
+                    self.H = updated
+                    self.gpr_accepted_steps += 1
+                else:
+                    self.gpr.status = "nonfinite_transformation"
+        except (ValueError, np.linalg.LinAlgError, FloatingPointError):
+            self.gpr.status = "invalid_transformation"
+        if self.gpr.status != "accepted":
+            self.gpr_rejected_steps += 1
+        if self.logger is not None:
+            self.logger("PyOQP: GPR model curvature [%s, samples=%d, rank=%d]"
+                        % (self.gpr.status, len(self.gpr.samples), self.gpr.rank))
+
     def _take_step(self, e, g_cart):
         b = self.coords.b_matrix(self.x)
         g_cart = self._project_constraint_tangent(g_cart, self.x)
@@ -590,7 +706,28 @@ class OQPEngine:
             pred = self._prev["pred"]
             self._update_trust(actual, pred, self._prev["cart_step"])
 
-        dq = self._rfo_step(self.H, g_q)
+        if self.gpr is not None:
+            self._apply_gpr_curvature(e, g_cart, b)
+
+        if self.transit_endpoints is not None and self._transit_steps < 5:
+            self._transit_direction = transit_tangent(
+                self.coords, self.x, *self.transit_endpoints)
+            t = self._transit_direction
+            curvature, force = float(t @ self.H @ t), float(t @ g_q)
+            upper = 0.5 * (curvature + np.hypot(curvature, 2 * force))
+            denominator = curvature - upper
+            ascent = -force / denominator if abs(denominator) > 1e-14 else 0.0
+            self._transit_steps += 1
+            # Peng/Schlegel: climb on steps 1-2; on 3-4 only if the
+            # tangent displacement exceeds 0.05 au; P-RFO from step 5.
+            climb = self._transit_steps <= 2 or (
+                self._transit_steps <= 4 and abs(ascent) > 0.05)
+            dq = ascent * t if climb else self._rfo_step(self.H, g_q)
+            if climb:
+                self._followed = t.copy()
+        else:
+            self._transit_direction = None
+            dq = self._rfo_step(self.H, g_q)
         dq = self._restrict_to_trust(b, dq)
         if not np.all(np.isfinite(dq)):
             return self._bounded_cartesian_recovery(g_cart)
@@ -685,6 +822,11 @@ class OQPEngine:
 
     def _select_follow_mode(self, w, v):
         """Pick the mode to maximize: lowest curvature, with mode following."""
+        if self._transit_direction is not None:
+            overlaps = np.abs(v.T @ self._transit_direction)
+            if float(np.max(overlaps)) > 0.8:
+                return int(np.argmax(overlaps))
+            return int(np.argmin(w))
         prev = getattr(self, "_followed", None)
         if prev is not None:
             overlaps = np.abs(v.T @ prev)

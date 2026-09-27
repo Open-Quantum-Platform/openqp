@@ -416,7 +416,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "neb": _keys("product nimage"),
     "oqp": _keys("""
         coordsys trust trust_max auto_recovery recovery_maxit recovery_trust
-        freeze follow init_hessian spring climb fmax frms climb_fmax neb_dt
+        freeze follow init_hessian model_hessian hessian_update gpr_history gpr_length_scale ts_search ts_product ts_guess neb_interpolation spring climb fmax frms climb_fmax neb_dt
         maxmove align opt_ends end_fmax neb_output irc_step irc_direction
         mep_step path_gtol
     """),
@@ -622,6 +622,9 @@ _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
 }
+_NATIVE_CURVATURE_OPTIONS = {
+    "model_hessian", "hessian_update", "gpr_history", "gpr_length_scale",
+}
 _NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
 _MECI_PUBLIC_OPTIONS = {
     "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
@@ -647,7 +650,7 @@ DRIVER_OPTIONS = {
     "grad": {"td_prop", "export", "title"},
     "optimize": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
                  | set(_NATIVE_ENGINE_OPTIONS)
-                 | set(_NATIVE_CONSTRAINT_OPTIONS)
+                 | set(_NATIVE_CURVATURE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS)
                  | set(_QMMM_OPT_OPTIONS)),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     # MECP reads none of the MECI-only controls, and silently ignoring them
@@ -659,13 +662,13 @@ DRIVER_OPTIONS = {
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": (set(_GEOMETRY_CONVERGENCE_OPTIONS)
-           | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"}),
+           | set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | {"follow", "hessian", "search", "product", "guess"}),
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
     "neb": {
         "maxit",
         "product", "images", "nimage", "spring", "climb", "fmax",
         "frms", "climb_fmax", "dt", "neb_dt", "maxmove", "align",
-        "opt_ends", "end_fmax", "output",
+        "opt_ends", "end_fmax", "output", "interpolation",
     },
     # symmetry_unique (#319) selects the symmetry-unique displacement set, so
     # it is a hess driver option like dx/nproc rather than a generic key.
@@ -704,16 +707,16 @@ DRIVER_OPTIONS = {
 # geometry engine. It remains a read-time compatibility alias only: parsing
 # folds it into the primary driver and canonical rendering never writes it.
 OQP_DRIVER_OPTIONS = {
-    "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
+    "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
     "meci": set(_NATIVE_ENGINE_OPTIONS),
     "mecp": set(_NATIVE_ENGINE_OPTIONS),
     "tci": set(_NATIVE_ENGINE_OPTIONS),
-    "ts": set(_NATIVE_ENGINE_OPTIONS) | {"follow", "init_hessian"},
+    "ts": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CURVATURE_OPTIONS) | {"follow", "init_hessian", "ts_search", "ts_product", "ts_guess"},
     "mep": {"mep_step", "path_gtol"},
     "irc": {"irc_step", "irc_direction", "path_gtol"},
     "neb": {
         "spring", "climb", "fmax", "frms", "climb_fmax", "neb_dt",
-        "maxmove", "align", "opt_ends", "end_fmax", "neb_output",
+        "maxmove", "align", "opt_ends", "end_fmax", "neb_output", "neb_interpolation",
     },
 }
 
@@ -743,6 +746,8 @@ def _fold_native_section_into_driver(
 
     rename = {
         "init_hessian": "hessian",
+        "ts_search": "search", "ts_product": "product", "ts_guess": "guess",
+        "neb_interpolation": "interpolation",
         "path_gtol": "gtol",
         "irc_direction": "direction",
         "neb_dt": "dt",
@@ -2499,7 +2504,8 @@ def rebase_calculation_paths(
             if (call.name, key) == ("input", "system2"):
                 kwargs[key] = _normalize_geometry(value, source_dir)
             elif (call.name, key) in {
-                ("neb", "product"), ("guess", "file"), ("guess", "file2"),
+                ("neb", "product"), ("oqp", "ts_product"), ("oqp", "ts_guess"),
+                ("guess", "file"), ("guess", "file2"),
                 ("dftb", "parameter_path"), ("dftb", "library_path"),
                 ("geometric", "constraints_file"), ("oqp", "neb_output"),
             }:
@@ -2771,7 +2777,13 @@ def lower_to_legacy(
     elif name in {"optimize", "mep", "ts", "irc", "neb"}:
         put("optimize", "istate", roots[0] if roots else 0)
         for key, value in driver_options.items():
-            if name == "neb" and key in {"product", "images", "nimage"}:
+            if name == "ts" and key in {"search", "product", "guess"}:
+                if key != "search":
+                    value = _resolve_path(value, source_dir)
+                put("oqp", "ts_" + key, value)
+            elif name == "neb" and key == "interpolation":
+                put("oqp", "neb_interpolation", value)
+            elif name == "neb" and key in {"product", "images", "nimage"}:
                 target_key = "nimage" if key in {"images", "nimage"} else "product"
                 if target_key == "product":
                     value = _resolve_path(value, source_dir)
@@ -2803,10 +2815,10 @@ def lower_to_legacy(
                 elif key == "gtol":
                     put("oqp", "path_gtol", value)
             elif name == "ts" and key in (
-                    _NATIVE_ENGINE_OPTIONS | {"follow", "hessian"}):
+                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CURVATURE_OPTIONS | {"follow", "hessian"}):
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
             elif name == "optimize" and key in (
-                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
+                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CURVATURE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
                 put("oqp", key, value)
             else:
                 put("optimize", key, value)
