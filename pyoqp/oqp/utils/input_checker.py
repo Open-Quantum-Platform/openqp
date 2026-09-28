@@ -46,15 +46,17 @@ DFTB_TYPES = {
 }
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
 
-# Canonical model keywords are "dtcam", "dtcam2"/"dtcam-erf" and "ob2".  The
-# historical spellings stay ACCEPTED ALIASES so committed inputs keep working;
-# "dftb+" in particular was renamed because DFTB+ is a different program and
-# the preset is really the conventional OB2 / LC-DFTB2 protocol.  This set must
-# stay in sync with openqp_dftb_preset_by_name in the native library.
+# Canonical model keywords are "dtcam", "dtcam-gap", "dtcam2"/"dtcam-erf" and
+# "ob2".  The historical spellings stay ACCEPTED ALIASES so committed inputs
+# keep working; "dftb+" in particular was renamed because DFTB+ is a different
+# program and the preset is really the conventional OB2 / LC-DFTB2 protocol.
+# This set must stay in sync with openqp_dftb_preset_by_name in the native
+# library.
 DFTB_MODELS = {
     # canonical
     "dtcam",
     "dtcam2", "dtcam-erf", "dtcam_erf", "dtcamerf",
+    "dtcam-gap", "dtcam_gap", "dtcamgap",
     "ob2",
     # legacy aliases
     "dtcam-tb", "dtcam_tb", "dtcamtb",
@@ -1540,8 +1542,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                 value=model,
                 expected=", ".join(sorted(DFTB_MODELS)),
                 action="Use model=dtcam (DTCAM-TB paper vector), "
-                       "model=ob2 (conventional OB2/LC-DFTB2 protocol), or "
-                       "omit model and set the operator keys individually.",
+                       "model=dtcam-gap (DTCAM-TB refitted on singlet-triplet "
+                       "gaps), model=ob2 (conventional OB2/LC-DFTB2 "
+                       "protocol), or omit model and set the operator keys "
+                       "individually.",
             )
         if backend == "probe":
             report.add(
