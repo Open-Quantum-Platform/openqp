@@ -540,44 +540,6 @@ class TestRestartAndSnapshots(unittest.TestCase):
         # np.savez would append .npz: the name actually written is what counts
         with self.assertRaisesRegex(ValueError, "would overwrite the input"):
             build(energy_file="src.snapshot.00000002")
-
-    def test_no_output_or_input_may_be_a_numbered_snapshot_of_the_run(self):
-        """The numbered snapshots are generated step by step, so they are
-        checked against every other output and every input, including a link
-        with another name that points at one of them."""
-        from oqp.library.qmmm_md import QMMM_MD
-        pdb = EXAMPLES / "formaldehyde_water.pdb"
-
-        def build(md, **names):
-            text = DECK.format(
-                pdb=pdb, ff=EXAMPLES / "formaldehyde.xml", tip=EXAMPLES / "tip3p.xml",
-                nsteps=2, ensemble="nve", fmt="pdb", name="run", md=md)
-            for key, value in names.items():
-                text = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", text)
-            deck = Path("family.inp")
-            deck.write_text(text)
-            return QMMM_MD(oqp_cfg=str(deck))
-
-        md = "velocity = zero\ncommon_control_keys = velocity\nsnapshot_interval = 2"
-        for key in ("energy_file", "trajectory_file", "log_file"):
-            with self.subTest(output=key):
-                with self.assertRaisesRegex(ValueError, "numbered snapshot this run "
-                                                        "writes at step 2"):
-                    build(md, **{key: "run.snapshot.00000002.npz"})
-        # np.savez appends .npz to the energy table
-        with self.assertRaisesRegex(ValueError, "at step 2"):
-            build(md, energy_file="run.snapshot.00000002")
-        # a step that is never written is not a collision
-        build(md, energy_file="run.snapshot.00000003.npz")
-
-        # a snapshot input reached through a link with another name
-        _run("src", 2, md=md)
-        before = Path("src.snapshot.00000002.npz").read_bytes()
-        os.symlink("src.snapshot.00000002.npz", "start.npz")
-        with self.assertRaisesRegex(ValueError, "would overwrite the starting point"):
-            build("snapshot = start.npz\nsnapshot_interval = 2",
-                  restart_file="src.restart.npz")
-        self.assertEqual(Path("src.snapshot.00000002.npz").read_bytes(), before)
         with self.assertRaisesRegex(ValueError, "pdb_file"):
             build(trajectory_file=pdb)
         with self.assertRaisesRegex(ValueError, "outputs must be distinct"):
@@ -629,6 +591,44 @@ class TestRestartAndSnapshots(unittest.TestCase):
         self.assertEqual(pdb.read_bytes(), pdb_before)
         build().run()                                    # distinct names still run
         self.assertEqual(snapshot.read_bytes(), before)
+
+    def test_no_output_or_input_may_be_a_numbered_snapshot_of_the_run(self):
+        """The numbered snapshots are generated step by step, so they are
+        checked against every other output and every input, including a link
+        with another name that points at one of them."""
+        from oqp.library.qmmm_md import QMMM_MD
+        pdb = EXAMPLES / "formaldehyde_water.pdb"
+
+        def build(md, **names):
+            text = DECK.format(
+                pdb=pdb, ff=EXAMPLES / "formaldehyde.xml", tip=EXAMPLES / "tip3p.xml",
+                nsteps=2, ensemble="nve", fmt="pdb", name="run", md=md)
+            for key, value in names.items():
+                text = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", text)
+            deck = Path("family.inp")
+            deck.write_text(text)
+            return QMMM_MD(oqp_cfg=str(deck))
+
+        md = "velocity = zero\ncommon_control_keys = velocity\nsnapshot_interval = 2"
+        for key in ("energy_file", "trajectory_file", "log_file"):
+            with self.subTest(output=key):
+                with self.assertRaisesRegex(ValueError, "numbered snapshot this run "
+                                                        "writes at step 2"):
+                    build(md, **{key: "run.snapshot.00000002.npz"})
+        # np.savez appends .npz to the energy table
+        with self.assertRaisesRegex(ValueError, "at step 2"):
+            build(md, energy_file="run.snapshot.00000002")
+        # a step that is never written is not a collision
+        build(md, energy_file="run.snapshot.00000003.npz")
+
+        # a snapshot input reached through a link with another name
+        _run("src", 2, md=md)
+        before = Path("src.snapshot.00000002.npz").read_bytes()
+        os.symlink("src.snapshot.00000002.npz", "start.npz")
+        with self.assertRaisesRegex(ValueError, "would overwrite the starting point"):
+            build("snapshot = start.npz\nsnapshot_interval = 2",
+                  restart_file="src.restart.npz")
+        self.assertEqual(Path("src.snapshot.00000002.npz").read_bytes(), before)
 
     def test_restart_keeps_the_energy_table_when_the_text_log_is_gone(self):
         zero = "velocity = zero\ncommon_control_keys = velocity"
