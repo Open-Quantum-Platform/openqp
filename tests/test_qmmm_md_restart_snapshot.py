@@ -130,6 +130,12 @@ def test_numbered_snapshot_step_finds_the_file_a_name_points_to(tmp_path, monkey
     probe.mkdir()
     insensitive = (tmp_path / "cASEpROBE").exists()
     assert md_snapshot._case_insensitive_directory(probe) is insensitive
+    # a directory that the run's first write will create answers like the
+    # filesystem it will be created on
+    later = tmp_path / "newdir" / "deeper"
+    assert md_snapshot._case_insensitive_directory(later) is insensitive
+    assert f(str(later / "run.restart.npz"), later / "RUN.SNAPSHOT.00000002.NPZ") == (
+        2 if insensitive else None)
     expected = 10 if insensitive else None
     assert f(restart, tmp_path / "RUN.SNAPSHOT.00000010.NPZ") == expected
     for forced, answer in ((True, 10), (False, None)):

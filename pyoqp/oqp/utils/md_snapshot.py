@@ -204,8 +204,16 @@ def _case_insensitive_directory(directory):
     Probed on the filesystem itself: the nearest path component that contains
     letters is looked up under its swapped-case spelling, which reaches the
     same inode only where names are compared without regard to case (the
-    macOS default) and does not exist on a case-sensitive filesystem."""
+    macOS default) and does not exist on a case-sensitive filesystem.  A
+    directory that does not exist yet (outputs create it on first write) gets
+    the answer of its nearest existing ancestor, whose filesystem it will be
+    created on."""
     current = os.path.realpath(str(directory))
+    while not os.path.lexists(current):
+        parent = os.path.dirname(current)
+        if parent == current:
+            return False
+        current = parent
     while True:
         name, parent = os.path.basename(current), os.path.dirname(current)
         if name.swapcase() != name:
