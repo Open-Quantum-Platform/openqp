@@ -124,9 +124,21 @@ def test_numbered_snapshot_step_finds_the_file_a_name_points_to(tmp_path, monkey
     # link: the middle entry is what step 8 replaces
     (tmp_path / "energy.npz").symlink_to(tmp_path / "run.snapshot.00000008.npz")
     assert f(restart, tmp_path / "energy.npz") == 8
-    # case-only variants name the same file on a case-insensitive filesystem
-    assert f(restart, tmp_path / "RUN.SNAPSHOT.00000010.NPZ") == 10
-    assert f(restart, tmp_path / "Run.Snapshot.00000010.npz") == 10
+    # a case-only variant is the generated file exactly where the filesystem
+    # says so: probe this directory, then force each answer
+    probe = tmp_path / "CaseProbe"
+    probe.mkdir()
+    insensitive = (tmp_path / "cASEpROBE").exists()
+    assert md_snapshot._case_insensitive_directory(probe) is insensitive
+    expected = 10 if insensitive else None
+    assert f(restart, tmp_path / "RUN.SNAPSHOT.00000010.NPZ") == expected
+    for forced, answer in ((True, 10), (False, None)):
+        monkeypatch.setattr(md_snapshot, "_case_insensitive_directory",
+                            lambda directory, forced=forced: forced)
+        assert f(restart, tmp_path / "Run.Snapshot.00000010.npz") == answer
+        assert f(restart, tmp_path / "run.snapshot.00000010.npz") == 10
+    monkeypatch.undo()
+    monkeypatch.chdir(tmp_path)
     # a link loop ends the walk instead of hanging
     (tmp_path / "loop-a.npz").symlink_to(tmp_path / "loop-b.npz")
     (tmp_path / "loop-b.npz").symlink_to(tmp_path / "loop-a.npz")

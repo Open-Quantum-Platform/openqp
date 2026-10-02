@@ -198,6 +198,28 @@ def _link_chain(path, limit=40):
     yield os.path.realpath(str(path))
 
 
+def _case_insensitive_directory(directory):
+    """Whether entries of ``directory`` that differ only in case name one file.
+
+    Probed on the filesystem itself: the nearest path component that contains
+    letters is looked up under its swapped-case spelling, which reaches the
+    same inode only where names are compared without regard to case (the
+    macOS default) and does not exist on a case-sensitive filesystem."""
+    current = os.path.realpath(str(directory))
+    while True:
+        name, parent = os.path.basename(current), os.path.dirname(current)
+        if name.swapcase() != name:
+            try:
+                same = os.lstat(current)
+                other = os.lstat(os.path.join(parent, name.swapcase()))
+            except OSError:
+                return False
+            return (same.st_dev, same.st_ino) == (other.st_dev, other.st_ino)
+        if parent == current:
+            return False
+        current = parent
+
+
 def numbered_snapshot_step(restart_file, path):
     """The step whose numbered snapshot of ``restart_file`` ``path`` reaches.
 
@@ -205,10 +227,9 @@ def numbered_snapshot_step(restart_file, path):
     referent: a snapshot is written by replacing the directory entry
     (``os.replace``), so a link standing at the destination is itself the file
     that is replaced, and a name that reaches the destination through it is
-    redirected to the new snapshot afterwards.  Names are compared without
-    regard to case, because on a case-insensitive filesystem (the macOS
-    default) two spellings name one file; refusing a case-only variant on a
-    case-sensitive one costs nothing.  Returns None when ``path`` never reaches
+    redirected to the new snapshot afterwards.  A spelling that differs only
+    in case counts where the filesystem treats it as the same file (the macOS
+    default) and not where it names a distinct one.  Returns None when ``path`` never reaches
     one of the numbered snapshots this checkpoint name generates.
     """
     for entry in _link_chain(path):
@@ -218,6 +239,8 @@ def numbered_snapshot_step(restart_file, path):
             continue
         step = int(match.group(1))
         destination = _directory_entry(numbered_snapshot_path(restart_file, step))
-        if destination.casefold() == entry.casefold():
+        if destination == entry or (
+                destination.casefold() == entry.casefold()
+                and _case_insensitive_directory(os.path.dirname(entry))):
             return step
     return None
