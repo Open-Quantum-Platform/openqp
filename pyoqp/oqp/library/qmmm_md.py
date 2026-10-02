@@ -3,7 +3,6 @@ import openmm as mm
 import openmm.unit as unit
 import numpy as np
 import os
-import re
 import time
 from copy import deepcopy
 import sys
@@ -22,6 +21,7 @@ from oqp.utils.md_controls import (
 from oqp.utils.md_snapshot import (
     check_snapshot_matches,
     numbered_snapshot_path,
+    numbered_snapshot_step,
     read_snapshot,
     write_snapshot,
 )
@@ -722,16 +722,28 @@ class QMMM_MD:
                     f"{hit}={outputs[hit]!r} would overwrite the input "
                     f"{input_label} ({input_path!r}); give the output another name")
 
-        if self.snapshot_file and self.snapshot_interval:
-            # a numbered snapshot of this run's own family is an output too
-            number = re.search(r"\.snapshot\.(\d+)\.npz$", self.snapshot_file)
-            if number is not None and os.path.realpath(numbered_snapshot_path(
-                    self.restart_file, int(number.group(1)))) == os.path.realpath(
-                        self.snapshot_file):
+        if self.snapshot_interval:
+            # The numbered snapshots of this run's own family are outputs too,
+            # but their names are generated step by step, so they are not in
+            # the table above.  Any other output or any input that one of them
+            # lands on, directly or through a link, would be replaced at that
+            # step (or would replace the snapshot when it is written next).
+            for label, path in list(outputs.items()) + inputs:
+                if label == "restart_file":
+                    continue
+                step = numbered_snapshot_step(self.restart_file, path)
+                if step is None or step <= 0 or step % self.snapshot_interval:
+                    continue
+                if label == "[md] snapshot":
+                    raise ValueError(
+                        f"[md] snapshot={self.snapshot_file!r} is one of the "
+                        "numbered snapshots this run would write, which would "
+                        "overwrite the starting point. Give restart_file a "
+                        "different name.")
                 raise ValueError(
-                    f"[md] snapshot={self.snapshot_file!r} is one of the numbered "
-                    "snapshots this run would write, which would overwrite the "
-                    "starting point. Give restart_file a different name.")
+                    f"{label}={path!r} is the numbered snapshot this run writes "
+                    f"at step {step} (snapshot_interval={self.snapshot_interval}, "
+                    f"restart_file={self.restart_file!r}); give it another name")
 
     def _apply_start_state(self):
         """Replace the PDB coordinates (and the cell of a periodic system) by

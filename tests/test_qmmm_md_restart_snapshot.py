@@ -100,6 +100,57 @@ def test_numbered_snapshot_names():
     assert f("/a/b/state.npz", 12) == "/a/b/state.snapshot.00000012.npz"
 
 
+def test_numbered_snapshot_step_finds_the_file_a_name_points_to(tmp_path, monkeypatch):
+    f = md_snapshot.numbered_snapshot_step
+    restart = str(tmp_path / "run.restart.npz")
+    assert f(restart, tmp_path / "run.snapshot.00000002.npz") == 2
+    assert f(restart, tmp_path / "run.snapshot.00000100.npz") == 100
+    # not this family: another run name, unpadded number, no number
+    assert f(restart, tmp_path / "other.snapshot.00000002.npz") is None
+    assert f(restart, tmp_path / "run.snapshot.2.npz") is None
+    assert f(restart, tmp_path / "run.npz") is None
+    # a relative name and an absolute name of the same file
+    monkeypatch.chdir(tmp_path)
+    assert f("run.restart.npz", tmp_path / "run.snapshot.00000004.npz") == 4
+    # a link with another name that points into the family is the family file
+    (tmp_path / "run.snapshot.00000006.npz").write_bytes(b"x")
+    (tmp_path / "start.npz").symlink_to(tmp_path / "run.snapshot.00000006.npz")
+    assert f(restart, tmp_path / "start.npz") == 6
+    # a family name that is itself a link to elsewhere is replaced, not followed
+    (tmp_path / "keep.npz").write_bytes(b"x")
+    (tmp_path / "run.snapshot.00000008.npz").symlink_to(tmp_path / "keep.npz")
+    assert f(restart, tmp_path / "keep.npz") is None
+    # a name whose link chain passes through a destination that is itself a
+    # link: the middle entry is what step 8 replaces
+    (tmp_path / "energy.npz").symlink_to(tmp_path / "run.snapshot.00000008.npz")
+    assert f(restart, tmp_path / "energy.npz") == 8
+    # a case-only variant is the generated file exactly where the filesystem
+    # says so: probe this directory, then force each answer
+    probe = tmp_path / "CaseProbe"
+    probe.mkdir()
+    insensitive = (tmp_path / "cASEpROBE").exists()
+    assert md_snapshot._case_insensitive_directory(probe) is insensitive
+    # a directory that the run's first write will create answers like the
+    # filesystem it will be created on
+    later = tmp_path / "newdir" / "deeper"
+    assert md_snapshot._case_insensitive_directory(later) is insensitive
+    assert f(str(later / "run.restart.npz"), later / "RUN.SNAPSHOT.00000002.NPZ") == (
+        2 if insensitive else None)
+    expected = 10 if insensitive else None
+    assert f(restart, tmp_path / "RUN.SNAPSHOT.00000010.NPZ") == expected
+    for forced, answer in ((True, 10), (False, None)):
+        monkeypatch.setattr(md_snapshot, "_case_insensitive_directory",
+                            lambda directory, forced=forced: forced)
+        assert f(restart, tmp_path / "Run.Snapshot.00000010.npz") == answer
+        assert f(restart, tmp_path / "run.snapshot.00000010.npz") == 10
+    monkeypatch.undo()
+    monkeypatch.chdir(tmp_path)
+    # a link loop ends the walk instead of hanging
+    (tmp_path / "loop-a.npz").symlink_to(tmp_path / "loop-b.npz")
+    (tmp_path / "loop-b.npz").symlink_to(tmp_path / "loop-a.npz")
+    assert f(restart, tmp_path / "loop-a.npz") is None
+
+
 # ------------------------------------------------------------- the driver ---
 
 DECK = """[input]
@@ -569,6 +620,44 @@ class TestRestartAndSnapshots(unittest.TestCase):
         self.assertEqual(pdb.read_bytes(), pdb_before)
         build().run()                                    # distinct names still run
         self.assertEqual(snapshot.read_bytes(), before)
+
+    def test_no_output_or_input_may_be_a_numbered_snapshot_of_the_run(self):
+        """The numbered snapshots are generated step by step, so they are
+        checked against every other output and every input, including a link
+        with another name that points at one of them."""
+        from oqp.library.qmmm_md import QMMM_MD
+        pdb = EXAMPLES / "formaldehyde_water.pdb"
+
+        def build(md, **names):
+            text = DECK.format(
+                pdb=pdb, ff=EXAMPLES / "formaldehyde.xml", tip=EXAMPLES / "tip3p.xml",
+                nsteps=2, ensemble="nve", fmt="pdb", name="run", md=md)
+            for key, value in names.items():
+                text = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", text)
+            deck = Path("family.inp")
+            deck.write_text(text)
+            return QMMM_MD(oqp_cfg=str(deck))
+
+        md = "velocity = zero\ncommon_control_keys = velocity\nsnapshot_interval = 2"
+        for key in ("energy_file", "trajectory_file", "log_file"):
+            with self.subTest(output=key):
+                with self.assertRaisesRegex(ValueError, "numbered snapshot this run "
+                                                        "writes at step 2"):
+                    build(md, **{key: "run.snapshot.00000002.npz"})
+        # np.savez appends .npz to the energy table
+        with self.assertRaisesRegex(ValueError, "at step 2"):
+            build(md, energy_file="run.snapshot.00000002")
+        # a step that is never written is not a collision
+        build(md, energy_file="run.snapshot.00000003.npz")
+
+        # a snapshot input reached through a link with another name
+        _run("src", 2, md=md)
+        before = Path("src.snapshot.00000002.npz").read_bytes()
+        os.symlink("src.snapshot.00000002.npz", "start.npz")
+        with self.assertRaisesRegex(ValueError, "would overwrite the starting point"):
+            build("snapshot = start.npz\nsnapshot_interval = 2",
+                  restart_file="src.restart.npz")
+        self.assertEqual(Path("src.snapshot.00000002.npz").read_bytes(), before)
 
     def test_restart_keeps_the_energy_table_when_the_text_log_is_gone(self):
         zero = "velocity = zero\ncommon_control_keys = velocity"

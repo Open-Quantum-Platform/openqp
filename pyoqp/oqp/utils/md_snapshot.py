@@ -16,6 +16,7 @@ OpenMM topology: nm, nm/ps, dalton, ps.  This module needs neither OpenMM nor
 the OpenQP runtime.
 """
 import os
+import re
 import tempfile
 
 import numpy as np
@@ -173,3 +174,81 @@ def numbered_snapshot_path(restart_file, step):
     if base.lower().endswith(".restart"):
         base = base[:-8]
     return f"{base}.snapshot.{int(step):08d}.npz"
+
+
+def _directory_entry(path):
+    """Where a write to ``path`` lands: the directory resolved through links,
+    the last component not -- ``os.replace`` replaces a link standing there."""
+    path = os.path.abspath(str(path))
+    return os.path.join(os.path.realpath(os.path.dirname(path)),
+                        os.path.basename(path))
+
+
+def _link_chain(path, limit=40):
+    """Every directory entry a name passes through, then its final referent."""
+    current = _directory_entry(path)
+    seen = set()
+    while len(seen) < limit:
+        yield current
+        if current in seen or not os.path.islink(current):
+            break
+        seen.add(current)
+        current = _directory_entry(
+            os.path.join(os.path.dirname(current), os.readlink(current)))
+    yield os.path.realpath(str(path))
+
+
+def _case_insensitive_directory(directory):
+    """Whether entries of ``directory`` that differ only in case name one file.
+
+    Probed on the filesystem itself: the nearest path component that contains
+    letters is looked up under its swapped-case spelling, which reaches the
+    same inode only where names are compared without regard to case (the
+    macOS default) and does not exist on a case-sensitive filesystem.  A
+    directory that does not exist yet (outputs create it on first write) gets
+    the answer of its nearest existing ancestor, whose filesystem it will be
+    created on."""
+    current = os.path.realpath(str(directory))
+    while not os.path.lexists(current):
+        parent = os.path.dirname(current)
+        if parent == current:
+            return False
+        current = parent
+    while True:
+        name, parent = os.path.basename(current), os.path.dirname(current)
+        if name.swapcase() != name:
+            try:
+                same = os.lstat(current)
+                other = os.lstat(os.path.join(parent, name.swapcase()))
+            except OSError:
+                return False
+            return (same.st_dev, same.st_ino) == (other.st_dev, other.st_ino)
+        if parent == current:
+            return False
+        current = parent
+
+
+def numbered_snapshot_step(restart_file, path):
+    """The step whose numbered snapshot of ``restart_file`` ``path`` reaches.
+
+    Every entry on the link chain of ``path`` is compared, not only its final
+    referent: a snapshot is written by replacing the directory entry
+    (``os.replace``), so a link standing at the destination is itself the file
+    that is replaced, and a name that reaches the destination through it is
+    redirected to the new snapshot afterwards.  A spelling that differs only
+    in case counts where the filesystem treats it as the same file (the macOS
+    default) and not where it names a distinct one.  Returns None when ``path`` never reaches
+    one of the numbered snapshots this checkpoint name generates.
+    """
+    for entry in _link_chain(path):
+        match = re.search(r"\.snapshot\.(\d+)\.npz$", os.path.basename(entry),
+                          re.IGNORECASE)
+        if match is None:
+            continue
+        step = int(match.group(1))
+        destination = _directory_entry(numbered_snapshot_path(restart_file, step))
+        if destination == entry or (
+                destination.casefold() == entry.casefold()
+                and _case_insensitive_directory(os.path.dirname(entry))):
+            return step
+    return None
