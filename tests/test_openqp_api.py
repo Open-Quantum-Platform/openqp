@@ -80,23 +80,32 @@ SCHEMA = {
         "soc": {"type": bool, "default": "False"},
         "soc_basis": {"type": _string, "default": "adiabatic"},
         "init_state": {"type": _string, "default": ""},
-        "thrshe": {"type": float, "default": "0.1"},
+        "thrshe": {"type": float, "default": "0.367493"},
+        "tdc": {"type": _string, "default": "npi"},
+        "rescale": {"type": _string, "default": "auto"},
+        "frustrated": {"type": _string, "default": "reflect"},
         "init_temp": {"type": float, "default": "300.0"},
+        "thermostat": {"type": _string, "default": "off"},
+        "ensemble": {"type": _string, "default": "nve"},
+        "thermostat_temperature": {"type": float, "default": "300.0"},
+        "thermostat_friction": {"type": float, "default": "0.001"},
+        "common_controls": {"type": bool, "default": "False"},
+        "common_control_keys": {"type": _string, "default": ""},
         "seed": {"type": int, "default": "0"},
         "rng_stream": {"type": int, "default": "1"},
         "first_hop_step": {"type": int, "default": "1"},
         "nacme_check": {"type": _string, "default": "baeck_an"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
-        "nacme_gate": {"type": _string, "default": "off"},
-        "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
-        "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
-        "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
-        "nacme_gate_consecutive": {"type": int, "default": "3"},
-        "nve_gate": {"type": _string, "default": "warn"},
-        "nve_gate_abs_tol": {"type": float, "default": "5.0e-3"},
-        "nve_gate_step_tol": {"type": float, "default": "1.0e-3"},
-        "nve_gate_transition_tol": {"type": float, "default": "1.0e-6"},
-        "nve_gate_consecutive": {"type": int, "default": "3"},
+        "nacme_policy": {"type": _string, "default": "off"},
+        "nacme_policy_invariant_tol": {"type": float, "default": "1.0e-10"},
+        "nacme_policy_abs_tol": {"type": float, "default": "1.0e-4"},
+        "nacme_policy_rel_tol": {"type": float, "default": "1.0"},
+        "nacme_policy_consecutive": {"type": int, "default": "3"},
+        "nve_policy": {"type": _string, "default": "warn"},
+        "nve_policy_abs_tol": {"type": float, "default": "5.0e-3"},
+        "nve_policy_step_tol": {"type": float, "default": "1.0e-3"},
+        "nve_policy_transition_tol": {"type": float, "default": "1.0e-6"},
+        "nve_policy_consecutive": {"type": int, "default": "3"},
         "trajectory_interval": {"type": int, "default": "0"},
         "restart_interval": {"type": int, "default": "0"},
         "trajectory_file": {"type": _string, "default": ""},
@@ -286,6 +295,7 @@ def load_openqp_module():
         "oqp.utils.geometry",
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
+        "oqp.utils.oqp_input",
         "oqp.utils.tb_backends",
         "oqp.utils.state_labels",
         "openqp_under_test",
@@ -316,6 +326,7 @@ def load_openqp_module():
         _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
+        _load_module("oqp.utils.oqp_input", ROOT / "pyoqp/oqp/utils/oqp_input.py")
         _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
         _load_module("oqp.utils.state_labels", ROOT / "pyoqp/oqp/utils/state_labels.py")
 
@@ -1320,6 +1331,7 @@ $$$$
             .qmmm(cutoff="PME")
         )
         job.workflow.namd(
+            scheme="Overlap",
             soc=True,
             soc_basis="mch",
             nstep=200,
@@ -1343,6 +1355,116 @@ $$$$
         self.assertEqual(config["md"]["rng_stream"], "9")
         self.assertEqual(config["md"]["first_hop_step"], "2")
         self.assertEqual(config["md"]["nacme_check"], "off")
+
+    def test_workflow_namd_scheme_expands_complete_table_1_treatment(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_preset")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        job.workflow.namd(scheme="TDC_NAC", nstep=10)
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["tdc"], "npi")
+        self.assertEqual(config["md"]["rescale"], "hop_analytic_nac")
+        self.assertEqual(config["md"]["thrshe"], "0.367493")
+        self.assertEqual(config["md"]["frustrated"], "reflect")
+
+        with self.assertRaisesRegex(ValueError, "already defines rescale"):
+            job.workflow.namd(scheme="NAC", rescale="analytic_nac")
+
+    def test_workflow_md_composes_with_namd_in_either_call_order(self):
+        openqp = load_openqp_module()
+        for md_first in (True, False):
+            job = (
+                openqp.OpenQP(project="composed_namd")
+                .molecule("h2co.xyz", basis="6-31g*")
+                .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            )
+            if md_first:
+                job.workflow.md(nstep=20, dt=0.5, temperature=300.0)
+                job.workflow.namd(scheme="TDC_NAC")
+            else:
+                job.workflow.namd(scheme="TDC_NAC")
+                job.workflow.md(nstep=20, dt=0.5, temperature=300.0)
+            config = job.to_input_dict()
+            self.assertEqual(config["input"]["runtype"], "namd")
+            self.assertEqual(config["md"]["nstep"], "20")
+            self.assertEqual(config["md"]["dt"], "0.5")
+            self.assertEqual(config["md"]["init_temp"], "300.0")
+            self.assertEqual(config["md"]["common_controls"], "True")
+            self.assertEqual(
+                config["md"]["common_control_keys"],
+                "dt,nstep,temperature",
+            )
+
+    def test_md_schema_proxy_assignments_track_explicit_controls(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="md_proxy_provenance")
+
+        job.workflow.md()
+        job.workflow.md.dt = 0.1
+        self.assertEqual(
+            job.to_input_dict()["md"]["common_control_keys"], "dt"
+        )
+
+        job.settings.md(
+            thermostat="langevin",
+            thermostat_temperature=500.0,
+            thermostat_friction=2.0,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(
+            config["md"]["common_control_keys"],
+            "dt,thermostat,thermostat_friction,thermostat_temperature",
+        )
+        self.assertEqual(config["md"]["common_controls"], "True")
+
+    def test_workflow_md_ensemble_is_canonical(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="md_ensemble")
+
+        job.workflow.md(ensemble="NVT", temperature=310.0, friction=1.5)
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["ensemble"], "nvt")
+        self.assertEqual(config["md"]["thermostat"], "langevin")
+        self.assertEqual(
+            config["md"]["common_control_keys"],
+            "ensemble,friction,temperature",
+        )
+
+        with self.assertRaisesRegex(ValueError, "barostat trial box"):
+            job.workflow.md(ensemble="npt")
+        with self.assertRaisesRegex(ValueError, "legacy thermostat"):
+            job.workflow.md(ensemble="nvt", thermostat="langevin")
+
+    def test_workflow_namd_policy_names_are_pythonic(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_policy")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        job.workflow.namd(
+            scheme="TDC_NAC", nacme_policy="warn", nve_policy="error"
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["nacme_policy"], "warn")
+        self.assertEqual(config["md"]["nve_policy"], "error")
+
+    def test_legacy_namd_policy_names_work_through_all_python_setters(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="legacy_namd_policy")
+
+        job.settings.md(nve_gate="off")
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "off")
+
+        job.md.nve_gate = "warn"
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "warn")
+
+        job.set(**{"md.nve_gate": "error"})
+        self.assertEqual(job.to_input_dict()["md"]["nve_policy"], "error")
+        self.assertEqual(job.md.nve_gate, "error")
 
     def test_namd_droplet_restraint_controls_are_pythonic(self):
         openqp = load_openqp_module()
@@ -1383,8 +1505,11 @@ $$$$
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
         )
         with self.assertRaisesRegex(ValueError, "does not support nacme_check"):
-            job.workflow.namd(soc=True, nacme_check="baeck_an")
+            job.workflow.namd(
+                scheme="Overlap", soc=True, nacme_check="baeck_an"
+            )
         job.workflow.namd(
+            scheme="TDC_NAC",
             soc=False,
             nacme_check="baeck_an",
             ba_gap_max=0.05,
@@ -1397,10 +1522,10 @@ $$$$
         self.assertEqual(config["md"]["soc"], "False")
         self.assertEqual(config["md"]["nacme_check"], "baeck_an")
         self.assertEqual(config["md"]["ba_gap_max"], "0.05")
-        self.assertEqual(config["md"]["nacme_gate"], "error")
-        self.assertEqual(config["md"]["nacme_gate_abs_tol"], "0.0002")
-        self.assertEqual(config["md"]["nacme_gate_rel_tol"], "0.5")
-        self.assertEqual(config["md"]["nacme_gate_consecutive"], "4")
+        self.assertEqual(config["md"]["nacme_policy"], "error")
+        self.assertEqual(config["md"]["nacme_policy_abs_tol"], "0.0002")
+        self.assertEqual(config["md"]["nacme_policy_rel_tol"], "0.5")
+        self.assertEqual(config["md"]["nacme_policy_consecutive"], "4")
 
     def test_workflow_namd_requires_mrsf_theory(self):
         openqp = load_openqp_module()
@@ -1410,7 +1535,7 @@ $$$$
             .theory("dft", functional="bhhlyp", basis="6-31g*")
         )
         with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
-            job.workflow.namd(nstep=10)
+            job.workflow.namd(scheme="TDC_NAC", nstep=10)
 
     def test_soc_helper_rejects_response_multiplicity(self):
         openqp = load_openqp_module()

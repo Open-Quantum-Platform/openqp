@@ -145,7 +145,7 @@ def _validate_gate_tolerances(label, *values):
     tolerances = np.asarray(values, dtype=float)
     if not np.all(np.isfinite(tolerances)) or np.any(tolerances < 0.0):
         raise ValueError(
-            f"[md] {label} gate tolerances must be finite and non-negative")
+            f"[md] {label} policy tolerances must be finite and non-negative")
 
 
 def _validate_thermostat_parameters(temperature, friction, enabled):
@@ -164,7 +164,7 @@ def _validate_nacme_gate_activation(check, gate):
     """Reject a policy that cannot observe any NACME reference diagnostic."""
     if check == 'off' and gate != 'off':
         raise ValueError(
-            "[md] nacme_gate must be off when nacme_check is off; enable "
+            "[md] nacme_policy must be off when nacme_check is off; enable "
             "nacme_check=baeck_an before selecting warn or error")
 
 
@@ -211,8 +211,9 @@ def _validate_distinct_output_paths(*, protected_paths=(), **paths):
 _ANALYTIC_NAC_CONV_MAX = 1.0e-8
 
 _TRAJECTORY_CONTROL_KEYS = (
-    'mo_reuse', 'scf_fail', 'scf_guess_retry', 'ref_follow',
-    'ref_switch_rescale', 'somo_tol', 'frustrated', 'disc_rescale',
+    'continuity', 'mo_reuse', 'scf_fail', 'scf_guess_retry', 'ref_follow',
+    'ref_switch_rescale', 'somo_tol', 'state_check', 'state_tol',
+    'frustrated', 'disc_rescale',
     'disc_tol', 'disc_substeps')
 
 
@@ -245,6 +246,47 @@ def _non_default_md_controls(md, keys):
         if value != default:
             controls[key] = value
     return controls
+
+
+def _validate_namd_continuity_config(md, tdhf):
+    """Validate the automatic A--D numerical-continuity treatment."""
+    mode = str(md.get('continuity', 'on')).strip().lower()
+    if mode not in ('on', 'manual'):
+        raise ValueError("[md] continuity must be on or manual")
+    try:
+        exact_overlap = int(tdhf.get('tlf', 0)) == 0
+    except (TypeError, ValueError):
+        exact_overlap = False
+    if not exact_overlap:
+        raise ValueError(
+            "[tdhf] tlf is fixed at 0 (exact state-overlap minors) for NAMD")
+    if mode == 'manual':
+        return mode
+
+    expected = {
+        'mo_reuse': True,
+        'scf_fail': 'escalate',
+        'scf_guess_retry': True,
+        'ref_follow': 'soscf',
+        'ref_switch_rescale': True,
+        'somo_tol': 0.5,
+        'state_check': True,
+        'state_tol': 0.7,
+        'disc_rescale': True,
+        'disc_tol': 0.002,
+        'disc_substeps': 10,
+    }
+    changed = [
+        key for key, value in expected.items()
+        if _normalized_md_control(key, md.get(key, value))
+        != _normalized_md_control(key, value)
+    ]
+    if changed:
+        raise ValueError(
+            "[md] continuity=on fixes the analytic-NAC A--D settings; "
+            "use continuity=manual before changing %s"
+            % ', '.join(changed))
+    return mode
 
 
 def _config_flag(value):
@@ -286,11 +328,16 @@ def analytic_nac_model_issue(config):
 
 
 def analytic_nac_route_issue(config):
-    """Return why a NAMD route cannot use analytic NAC, including SOC/QM/MM."""
+    """Return why a NAMD route cannot use the resident analytic NAC.
+
+    QM/MM is not a model-level exclusion.  Same-spin QM/MM NAMD evaluates the
+    resident MRSF NAC in the QM subsystem at the instantaneous frozen embedding
+    and uses it for the QM velocity contraction and hop rescaling.  The SOC
+    route remains separate because its spin-adiabatic coupling is not this
+    singlet MRSF derivative coupling.
+    """
     if bool(config.get('md', {}).get('soc', False)):
         return 'spin-orbit NAMD'
-    if _config_flag(config.get('input', {}).get('qmmm_flag', False)):
-        return 'QM/MM NAMD'
     return analytic_nac_model_issue(config)
 
 
@@ -681,6 +728,14 @@ class NAMD:
             self.rescale_provider = (
                 'hop_analytic_nac' if self._rescale_auto_issue is None
                 else 'isotropic')
+        # The analytic-NAC NAMD study separates numerical continuity into
+        # four cases: exact overlap under occupied-orbital rotations (A),
+        # reference continuation (B), retained-state character (C), and
+        # finite-step nuclear integration error (D).  The production setting
+        # keeps the published criteria together.  Users who intentionally
+        # alter one case must say continuity=manual so a partial treatment is
+        # never mistaken for the validated set.
+        self.continuity = _validate_namd_continuity_config(md, cfg['tdhf'])
         # Carry the converged orbitals of the previous geometry into the SCF
         # of the next geometry (guess type 'previous' after the first step).
         # Reuse the previous orbitals by default. Repeating the configured
@@ -718,6 +773,13 @@ class NAMD:
         self.ref_switch_rescale = str(md.get('ref_switch_rescale', 'true')).strip().lower() in (
             'true', '1', 'on', 'yes')
         self.somo_tol = float(md.get('somo_tol', 0.5))
+        if not np.isfinite(self.somo_tol) or not 0.0 < self.somo_tol <= 1.0:
+            raise ValueError("[md] somo_tol must be in (0, 1]")
+        self.state_check = str(md.get('state_check', 'true')).strip().lower() in (
+            'true', '1', 'on', 'yes')
+        self.state_tol = float(md.get('state_tol', 0.7))
+        if not np.isfinite(self.state_tol) or not 0.0 < self.state_tol <= 1.0:
+            raise ValueError("[md] state_tol must be in (0, 1]")
         # Frustrated-hop treatment for derivative-coupling (directional)
         # rescaling: 'none' leaves the velocity unchanged (Tully 1990);
         # 'reflect' reverses the momentum component along d_IJ
@@ -772,35 +834,45 @@ class NAMD:
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
         if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
             raise ValueError("[md] ba_gap_max must be positive and finite")
-        self.nacme_gate = str(md.get('nacme_gate', 'off')).strip().lower()
+        self.nacme_gate = str(md.get(
+            'nacme_policy', md.get('nacme_gate', 'off'))).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
-            raise ValueError("[md] nacme_gate must be off, warn, or error")
+            raise ValueError("[md] nacme_policy must be off, warn, or error")
         _validate_nacme_gate_activation(self.nacme_check, self.nacme_gate)
         self.nacme_gate_invariant_tol = float(
-            md.get('nacme_gate_invariant_tol', 1.0e-10))
-        self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
-        self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
-        self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
+            md.get('nacme_policy_invariant_tol',
+                   md.get('nacme_gate_invariant_tol', 1.0e-10)))
+        self.nacme_gate_abs_tol = float(md.get(
+            'nacme_policy_abs_tol', md.get('nacme_gate_abs_tol', 1.0e-4)))
+        self.nacme_gate_rel_tol = float(md.get(
+            'nacme_policy_rel_tol', md.get('nacme_gate_rel_tol', 1.0)))
+        self.nacme_gate_consecutive = int(md.get(
+            'nacme_policy_consecutive', md.get('nacme_gate_consecutive', 3)))
         _validate_gate_tolerances('NACME', (
             self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
             self.nacme_gate_rel_tol,
         ))
         if self.nacme_gate_consecutive < 1:
-            raise ValueError("[md] nacme_gate_consecutive must be at least 1")
-        self.nve_gate = str(md.get('nve_gate', 'warn')).strip().lower()
+            raise ValueError("[md] nacme_policy_consecutive must be at least 1")
+        self.nve_gate = str(md.get(
+            'nve_policy', md.get('nve_gate', 'warn'))).strip().lower()
         if self.nve_gate not in ('off', 'warn', 'error'):
-            raise ValueError("[md] nve_gate must be off, warn, or error")
-        self.nve_gate_abs_tol = float(md.get('nve_gate_abs_tol', 5.0e-3))
-        self.nve_gate_step_tol = float(md.get('nve_gate_step_tol', 1.0e-3))
+            raise ValueError("[md] nve_policy must be off, warn, or error")
+        self.nve_gate_abs_tol = float(md.get(
+            'nve_policy_abs_tol', md.get('nve_gate_abs_tol', 5.0e-3)))
+        self.nve_gate_step_tol = float(md.get(
+            'nve_policy_step_tol', md.get('nve_gate_step_tol', 1.0e-3)))
         self.nve_gate_transition_tol = float(
-            md.get('nve_gate_transition_tol', 1.0e-6))
-        self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
+            md.get('nve_policy_transition_tol',
+                   md.get('nve_gate_transition_tol', 1.0e-6)))
+        self.nve_gate_consecutive = int(md.get(
+            'nve_policy_consecutive', md.get('nve_gate_consecutive', 3)))
         _validate_gate_tolerances('NVE', (
             self.nve_gate_abs_tol, self.nve_gate_step_tol,
             self.nve_gate_transition_tol,
         ))
         if self.nve_gate_consecutive < 1:
-            raise ValueError("[md] nve_gate_consecutive must be at least 1")
+            raise ValueError("[md] nve_policy_consecutive must be at least 1")
         self.ensemble = str(md.get('ensemble', 'nve')).strip().lower()
         self.thermostat = str(md.get('thermostat', 'off')).strip().lower()
         if self.ensemble not in ('nve', 'nvt'):
@@ -819,7 +891,7 @@ class NAMD:
             self.nve_gate = 'off'
         if self.ensemble == 'nvt' and self.nve_gate != 'off':
             raise ValueError(
-                "[md] nve_gate does not apply to NVT; thermostat exchange is recorded separately"
+                "[md] nve_policy does not apply to NVT; thermostat exchange is recorded separately"
             )
         self.thermostat_temperature = float(
             md.get('thermostat_temperature', self.init_temp))
@@ -859,6 +931,21 @@ class NAMD:
         self.restart_manifest_file = self._restart_manifest_path()
         self._restart_manifest_written = False
         self.velocity_source = str(md['velocity'])
+        # A full-system phase-space snapshot (oqp.utils.md_snapshot) to start
+        # from.  It describes QM and MM atoms together, so only the QM/MM
+        # drivers can consume it; a gas-phase run starts from its geometry and
+        # velocity= instead.
+        self.snapshot_file = str(md.get('snapshot', '') or '').strip()
+        if self.snapshot_file and not isinstance(self, NAMD_QMMM):
+            raise ValueError(
+                "[md] snapshot is a QM/MM phase-space point (all atoms of the "
+                "embedded system); a gas-phase trajectory takes its geometry "
+                "from the input and its velocities from velocity=")
+        if self.snapshot_file and self.velocity_source.strip().lower() not in (
+                'maxwell', ''):
+            raise ValueError(
+                "[md] velocity cannot be combined with snapshot: the stored "
+                "velocities are the starting velocities")
         self._validate_sidecar_paths()
         # Capture external guess inputs before the first electronic step. A
         # save_mol target can be rewritten at every geometry, but that output
@@ -1426,6 +1513,12 @@ class NAMD:
         for name in ('continuation_checkpoint', 'continuation_trajectory'):
             if getattr(self, name, ''):
                 inputs[name] = getattr(self, name)
+        # The snapshot a trajectory starts from is an input, usually shared by
+        # a swarm.  restart_file=<the same file> would replace it with this
+        # run's step-0 checkpoint, a different format, and no later
+        # trajectory could start from it.
+        if getattr(self, 'snapshot_file', ''):
+            inputs['snapshot'] = self.snapshot_file
         original_source = getattr(self.mol, 'oqp_input_source', None)
         resolved_input = getattr(self.mol, 'input_file', None)
         source = original_source or resolved_input
@@ -2064,15 +2157,16 @@ class NAMD:
             leak = float(np.linalg.norm(col))
         except Exception:
             leak = np.nan
-        if np.isfinite(leak) and leak < 0.7:
+        if self.state_check and np.isfinite(leak) and leak < self.state_tol:
             self._window_leak_count += 1
             self._window_leak_step = True
             dump_log(
                 self.mol,
-                title=('NAMD WARNING: active-state overlap column norm %.3f < 0.7 '
+                title=('NAMD WARNING: active-state overlap column norm %.3f < %.3f '
                        'at step %s; %.0f%% of the state lies outside the retained '
                        'window (consider a larger nstate); event %d'
-                       % (leak, istep, 100.0*(1.0 - leak**2), self._window_leak_count)),
+                       % (leak, self.state_tol, istep,
+                          100.0*(1.0 - leak**2), self._window_leak_count)),
                 section='input')
         self._update_baeck_an_check(istep, state_overlap)
         if update_analytic and self._needs_analytic_nac():
@@ -2457,7 +2551,7 @@ class NAMD:
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
                         center_step=None, evaluation_step=None, signed=False):
-        """Run the common resident-Fortran NACME validation gate.
+        """Run the common resident-Fortran NACME verification policy.
 
         The analytic NAC path contracts the phase-aligned coupling vector with
         the nuclear velocity and calls this method with ``signed=True``.
@@ -2502,7 +2596,7 @@ class NAMD:
             # matrices. Preserve that fatal status, but populate the dense
             # diagnostic state before enforcing it after trajectory output.
             native_error = RuntimeError(
-                f"native NACME validation gate failed for {source} "
+                f"native NACME verification policy failed for {source} "
                 f"(status={status})"
             )
             metrics[:] = np.nan
@@ -2569,7 +2663,7 @@ class NAMD:
         )
         dump_log(
             self.mol,
-            title='NACME validation gate',
+            title='NACME verification policy',
             section='text',
             info={'text': table},
         )
@@ -2577,11 +2671,11 @@ class NAMD:
         if error is None and self.nacme_gate == 'error':
             if invariant_failures:
                 error = RuntimeError(
-                    f"NACME invariant gate failed for {source} at step {center_step}"
+                    f"NACME invariant policy failed for {source} at step {center_step}"
                 )
             elif self._nacme_gate_failures >= self.nacme_gate_consecutive:
                 error = RuntimeError(
-                    f"NACME reference gate failed {self._nacme_gate_failures} "
+                    f"NACME reference policy failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
         if error is not None and self._pending_nacme_gate_error is None:
@@ -2669,7 +2763,7 @@ class NAMD:
                 f"{drift_rate:13.5e}  {self._nve_gate_failures:6d}"
             )
             dump_log(
-                self.mol, title='NVE energy validation gate', section='text',
+                self.mol, title='NVE energy verification policy', section='text',
                 info={'text': table},
             )
         if self.nve_gate == 'error':
@@ -2679,12 +2773,12 @@ class NAMD:
                 )
             elif transition_failure:
                 self._pending_nve_gate_error = RuntimeError(
-                    f'NVE transition-energy gate failed at step {istep}: '
+                    f'NVE transition-energy policy failed at step {istep}: '
                     f'{transition_jump:.8e} Ha'
                 )
             elif self._nve_gate_failures >= self.nve_gate_consecutive:
                 self._pending_nve_gate_error = RuntimeError(
-                    f'NVE energy gate failed {self._nve_gate_failures} '
+                    f'NVE energy policy failed {self._nve_gate_failures} '
                     f'consecutive times at step {istep}'
                 )
         return result
@@ -2702,6 +2796,37 @@ class NAMD:
         self._pending_nacme_gate_error = None
         if error is not None:
             raise error
+
+    def _trajectory_hop_direction(self, coords):
+        """Place the hop direction on the atom set this trajectory records.
+
+        The directional rescaling vector d_IJ is defined on the QM subsystem,
+        while a QM/MM trajectory records every atom (QM + MM).  Write the QM
+        rows and leave the MM rows zero; a shape that cannot be mapped is
+        recorded as zeros rather than aborting a trajectory over a diagnostic
+        field.
+        """
+        coords = np.asarray(coords, dtype=float)
+        mapped = np.zeros_like(coords)
+        direction = getattr(self, '_last_hop_direction', None)
+        if direction is None:
+            return mapped
+        direction = np.asarray(direction, dtype=float)
+        if direction.shape == coords.shape:
+            return direction
+        rows = np.asarray(
+            getattr(self, 'qm_atoms', ()), dtype=np.int64).reshape(-1)
+        if (direction.ndim == coords.ndim
+                and direction.shape[1:] == coords.shape[1:]
+                and rows.size == direction.shape[0] and rows.size
+                and rows.min() >= 0 and rows.max() < coords.shape[0]):
+            mapped[rows] = direction
+            return mapped
+        dump_log(self.mol, title=(
+            'NAMD WARNING: hop-direction shape %s does not match the %d-atom '
+            'trajectory record; writing zeros for this diagnostic field'
+            % (direction.shape, coords.shape[0])), section='input')
+        return mapped
 
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
@@ -2889,8 +3014,7 @@ class NAMD:
         record['rescale_gamma'] = getattr(self, '_last_rescale_gamma', np.nan)
         record['rescale_discriminant'] = getattr(
             self, '_last_rescale_discriminant', np.nan)
-        record['hop_direction'] = getattr(
-            self, '_last_hop_direction', np.zeros_like(coords))
+        record['hop_direction'] = self._trajectory_hop_direction(coords)
         record['rng'] = self._last_hop_random
         record['e_unbiased_pot_hartree'] = getattr(
             self, '_unbiased_potential_energy', epot)
@@ -3461,12 +3585,20 @@ class NAMD:
             'independent_controls': self._independent_settings_record(),
             'nac_align': cfg.get('nac', {}).get('align', ''),
             'gate_policy': {
-                key: md.get(key, '') for key in (
-                    'nacme_check', 'ba_gap_max', 'nacme_gate',
-                    'nacme_gate_invariant_tol', 'nacme_gate_abs_tol',
-                    'nacme_gate_rel_tol', 'nacme_gate_consecutive',
-                    'nve_gate', 'nve_gate_abs_tol', 'nve_gate_step_tol',
-                    'nve_gate_transition_tol', 'nve_gate_consecutive')
+                legacy: md.get(public, md.get(legacy, ''))
+                for legacy, public in (
+                    ('nacme_check', 'nacme_check'),
+                    ('ba_gap_max', 'ba_gap_max'),
+                    ('nacme_gate', 'nacme_policy'),
+                    ('nacme_gate_invariant_tol', 'nacme_policy_invariant_tol'),
+                    ('nacme_gate_abs_tol', 'nacme_policy_abs_tol'),
+                    ('nacme_gate_rel_tol', 'nacme_policy_rel_tol'),
+                    ('nacme_gate_consecutive', 'nacme_policy_consecutive'),
+                    ('nve_gate', 'nve_policy'),
+                    ('nve_gate_abs_tol', 'nve_policy_abs_tol'),
+                    ('nve_gate_step_tol', 'nve_policy_step_tol'),
+                    ('nve_gate_transition_tol', 'nve_policy_transition_tol'),
+                    ('nve_gate_consecutive', 'nve_policy_consecutive'))
             },
         }
         # Controls that change which reference is followed, how frustrated
@@ -3805,6 +3937,8 @@ class NAMD:
         if (isinstance(velocity, str)
                 and velocity.strip().lower() not in ('maxwell', 'zero')):
             driver_kwargs['velocity'] = absolute_path(velocity)
+        if 'snapshot' in driver_kwargs:
+            driver_kwargs['snapshot'] = absolute_path(driver_kwargs['snapshot'])
         driver = CallSpec(
             spec.driver.name, spec.driver.args, driver_kwargs,
             spec.driver.explicit)
@@ -3815,6 +3949,7 @@ class NAMD:
             'guess': {'file', 'file2'},
             'dftb': {'parameter_path', 'library_path'},
             'geometric': {'constraints_file'},
+            'md': {'snapshot'},
             'oqp': {'neb_output'},
             'qmmm': {
                 'pdb_file', 'qm_atoms_xyz', 'trajectory_file', 'log_file',
@@ -3881,19 +4016,45 @@ class NAMD:
         kwargs = dict(spec.driver.kwargs)
         kwargs.pop('continuation_checkpoint', None)
         kwargs.pop('continuation_trajectory', None)
-        kwargs.update({
-            'restart': True,
+        modifiers = list(spec.modifiers)
+        md_index = next(
+            (index for index, call in enumerate(modifiers)
+             if call.name == 'md'),
+            None,
+        )
+        common_restart = {
             # Freeze a date-derived default so restarting on a later day keeps
             # exactly the original stochastic stream and signature.
             'seed': self.seed,
+            'trajectory_file': os.path.relpath(
+                self.trajectory_file, directory),
+            # The restart pair belongs here too, not on namd(...): both are
+            # public md(...) controls, so stamping them on the driver while a
+            # composed input already carries restart_file on md(...) rendered
+            # a manifest that fails to parse ("Option 'restart_file' is
+            # specified in both namd(...) and md(...)").
+            'restart': True,
             'restart_file': os.path.relpath(self.restart_file, directory),
-            'trajectory_file': os.path.relpath(self.trajectory_file, directory),
-        })
+        }
+        if md_index is None:
+            # Legacy one-call NAMD inputs keep common nuclear controls on the
+            # NAMD driver itself.
+            kwargs.update(common_restart)
+        else:
+            # Composed namd(...) md(...) inputs must retain option ownership;
+            # duplicating either key on namd(...) makes the manifest invalid.
+            for key in common_restart:
+                kwargs.pop(key, None)
+            md_call = modifiers[md_index]
+            md_kwargs = dict(md_call.kwargs)
+            md_kwargs.update(common_restart)
+            modifiers[md_index] = CallSpec(
+                md_call.name, md_call.args, md_kwargs, md_call.explicit)
         driver = CallSpec(
             spec.driver.name, spec.driver.args, kwargs, spec.driver.explicit)
         restart_spec = CalculationSpec(
             spec.model, spec.functional, spec.basis, spec.model_options,
-            spec.options, driver, spec.modifiers, spec.source_text)
+            spec.options, driver, tuple(modifiers), spec.source_text)
         rendered = render_canonical_oqp(restart_spec)
         descriptor, temporary = tempfile.mkstemp(
             prefix='.restart-oqp-', suffix='.tmp', dir=directory)
@@ -5054,12 +5215,38 @@ class NAMD_QMMM(NAMD):
       * QM-only FSSH hop with rescaling of QM velocities only.
     """
 
+    def _uses_qmmm_analytic_nac(self):
+        return (self._needs_analytic_nac()
+                or self.rescale_provider == 'hop_analytic_nac')
+
+    def _validate_qmmm_analytic_nac_scope(self):
+        """Fail closed where the QM-only NAC direction is not well defined."""
+        requested = str(self.mol.config.get('md', {}).get(
+            'rescale', 'auto')).strip().lower()
+        if (self.link_atoms and requested == 'auto'
+                and self.rescale_provider == 'hop_analytic_nac'
+                and not self._needs_analytic_nac()):
+            # rescale=auto was resolved before the link atoms were known, by a
+            # gate that only looks at the electronic model.  It is a default,
+            # not a request: fall back to isotropic rescaling instead of
+            # refusing a trajectory that ran before the SCF thresholds were
+            # tightened to 1e-8.  An analytic mode the input NAMES is still
+            # rejected below.
+            self.rescale_provider = 'isotropic'
+            self._rescale_auto_issue = 'QM region has link atoms'
+        if self.link_atoms and self._uses_qmmm_analytic_nac():
+            raise NotImplementedError(
+                "QM/MM analytic NAC schemes currently require a QM region "
+                "without link atoms; projecting a link-centre NAC direction "
+                "onto its QM and MM hosts is not yet implemented")
+
+    def _prepare_qmmm_hop_couplings(self, istep):
+        """Install current QM velocities before overlap/analytic couplings."""
+        self.vel = self._qm_velocities()
+        return self._state_overlap(istep)
+
     def __init__(self, mol):
         super().__init__(mol)
-        if (self._needs_analytic_nac()
-                or self.rescale_provider == 'hop_analytic_nac'):
-            raise NotImplementedError(
-                "analytic NAC TDC/rescaling/check is not yet available for QM/MM NAMD")
         import openmm as mm
         import openmm.app as app
         import openmm.unit as u
@@ -5102,6 +5289,27 @@ class NAMD_QMMM(NAMD):
         mm_charge_width = None if _w in (None, '', 'none', 'None', 0, 0.0, '0') else float(_w)
 
         self.pdb = app.PDBFile(pdb_file)
+        # Start from an equilibrated phase-space point: the snapshot replaces
+        # the PDB coordinates and, for a periodic system, the cell -- before
+        # any OpenMM context is built from them.  The cell is taken from it on
+        # a restart too, since a surface-hopping checkpoint stores none.
+        self._snapshot = None
+        if self.snapshot_file:
+            from oqp.utils.md_snapshot import read_snapshot
+            snapshot = read_snapshot(self.snapshot_file)
+            if snapshot['natom'] != self.pdb.topology.getNumAtoms():
+                raise ValueError(
+                    "[md] snapshot %s has %d atoms, the PDB has %d" % (
+                        snapshot['path'], snapshot['natom'],
+                        self.pdb.topology.getNumAtoms()))
+            self.pdb.positions = u.Quantity(
+                [mm.Vec3(*row) for row in snapshot['positions_nm']], u.nanometer)
+            if snapshot['box_nm'] is not None:
+                lx, ly, lz = (float(v) for v in snapshot['box_nm'])
+                self.pdb.topology.setPeriodicBoxVectors(u.Quantity(
+                    [mm.Vec3(lx, 0.0, 0.0), mm.Vec3(0.0, ly, 0.0),
+                     mm.Vec3(0.0, 0.0, lz)], u.nanometer))
+            self._snapshot = snapshot
         self.forcefield = app.ForceField(*ff_files)
         self.driver = OpenQpQMMM(
             positions=self.pdb.positions,
@@ -5126,6 +5334,7 @@ class NAMD_QMMM(NAMD):
         self.link_atoms = list(self.driver.link_atoms)
         self.nqm = int(len(self.qm_atoms))
         self._validate_qm_molecule_layout()
+        self._validate_qmmm_analytic_nac_scope()
 
         # full-system state (atomic units)
         self.natom_all = self.pdb.topology.getNumAtoms()
@@ -5151,6 +5360,38 @@ class NAMD_QMMM(NAMD):
         # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
         if self.restart_requested:
             self.v_all = np.zeros((self.natom_all, 3))
+        elif self._snapshot is not None:
+            # The equilibrated velocities of every atom, exactly as stored: no
+            # Maxwell draw and no rescaling to init_temp (_thermalize_initial
+            # stands down), or the equilibration would be thrown away.
+            from oqp.utils.md_snapshot import (
+                AU_VELOCITY_TO_NM_PER_PS, check_snapshot_matches)
+            check_snapshot_matches(
+                self._snapshot, self.m_all / AMU_TO_AU, label='[md] snapshot')
+            self.v_all = (np.array(self._snapshot['velocities_nm_ps'], dtype=float)
+                          / AU_VELOCITY_TO_NM_PER_PS)
+            self.v_all[self.m_all <= 0.0] = 0.0
+            self._hold_velocities()
+            if self._has_constraints:
+                # This driver keeps MM water rigid.  A snapshot from a run with
+                # flexible water would be snapped onto the constraints at the
+                # first step, with its bond-stretch kinetic energy discarded.
+                sep = self.r_all[self._ci] - self.r_all[self._cj]
+                worst = float(np.max(np.abs(
+                    np.sqrt(np.sum(sep * sep, axis=1)) - np.sqrt(self._cd2))))
+                if worst > 1.0e-3:
+                    raise ValueError(
+                        "[md] snapshot %s holds flexible MM water (a constrained "
+                        "distance is off by %.4f bohr), but QM/MM surface hopping "
+                        "keeps MM water rigid. Equilibrate with "
+                        "qmmm(rigidwater=true)." % (self._snapshot['path'], worst))
+            dump_log(mol, title=(
+                'QM/MM NAMD initial conditions: positions, velocities%s of all '
+                '%d atoms from snapshot %s (step %d of its run); no velocities '
+                'drawn or rescaled' % (
+                    '' if self._snapshot['box_nm'] is None else ' and cell',
+                    self.natom_all, self._snapshot['path'],
+                    self._snapshot['step'])), section='input')
         else:
             self._draw_maxwell_velocities()
             # A held atom is not thermalised and carries no momentum.  With
@@ -5493,6 +5734,8 @@ class NAMD_QMMM(NAMD):
         initial RATTLE has projected out the rigid-water internal velocities,
         which otherwise leaves the system below the target temperature.  Uniform
         scaling preserves both the RATTLE projection and zero COM momentum."""
+        if getattr(self, '_snapshot', None) is not None:
+            return          # snapshot velocities are already equilibrated
         ncon = len(self._ci) if self._has_constraints else 0
         # Only propagated atoms carry kinetic degrees of freedom, and a massless
         # virtual site is not an independent particle: OpenMM places it from its
@@ -6236,6 +6479,15 @@ class NAMD_QMMM(NAMD):
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: QM/MM Tully FSSH Nonadiabatic Molecular Dynamics')
+        if self._uses_qmmm_analytic_nac():
+            dump_log(
+                mol,
+                title=(
+                    'QM/MM analytic NAC scope: QM-centre derivative coupling '
+                    'at the instantaneous frozen MM embedding contribution; '
+                    'embedding-operator and MM-coordinate NAC derivatives are '
+                    'omitted, and hop rescaling changes QM velocities only'),
+                section='input')
         self._prepare_md_outputs()
         restart = self._load_restart()
         if restart is None:
@@ -6250,6 +6502,9 @@ class NAMD_QMMM(NAMD):
             accel = f_all / self.m_all[:, None]
             self._rattle(self.r_all, self.v_all)      # constrained velocities
             self._thermalize_initial()
+            self.vel = self._qm_velocities()
+            if self._needs_analytic_nac():
+                self._update_analytic_nac(0, compare_overlap=False)
             self.prev_xyz = copy.deepcopy(self._qm_positions_bohr().reshape(-1))
             self.prev_data = copy.deepcopy(mol.get_data())
             self._log_qmmm(0, epot)
@@ -6288,9 +6543,11 @@ class NAMD_QMMM(NAMD):
             self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt * self._move_mask
             self._rattle(self.r_all, self.v_all)
 
-            # couplings + QM-only FSSH hop
-            self._state_overlap(istep)
-            self.vel = self._qm_velocities()       # hop sees QM velocities
+            # Couplings + QM-only FSSH hop.  Install the current constrained
+            # QM velocities before evaluating an analytic NAC: NAC propagation
+            # contracts d_IJ with this velocity, and TDC_NAC may reuse the same
+            # vector for the selected hop pair.
+            self._prepare_qmmm_hop_couplings(istep)
             active_old = self.active
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
@@ -7933,7 +8190,7 @@ def _dftb_spatial_overlap(mol, multiplicity):
     data = mol.data
     dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
     nbf, noca, nocb = (int(round(v)) for v in dims[:3])
-    tlf = int(mol.config.get('tdhf', {}).get('tlf', 2))
+    tlf = 0
     _, s_st = adapter.states_overlap(
         np.asarray(data['OQP::xyz_old']).ravel(),
         np.asarray(mol.get_system(), dtype=float).ravel(),

@@ -36,14 +36,11 @@ def parray(strng):
 
 
 def tlf_order(value):
-    """State-overlap minor evaluation: 0/notlf/exact = exact minors, 1/2 = TLF order."""
+    """Require exact state-overlap minors; truncated TLF is not supported."""
     text = str(value).strip().lower()
-    if text in ('notlf', 'no_tlf', 'no-tlf', 'exact', 'none', 'no', 'off'):
+    if text in ('0', 'notlf', 'no_tlf', 'no-tlf', 'exact', 'none', 'no', 'off'):
         return 0
-    order = int(text)
-    if order not in (0, 1, 2):
-        raise ValueError("tdhf.tlf must be 0 (notlf/exact), 1 or 2")
-    return order
+    raise ValueError("tdhf.tlf is fixed at 0 (exact state-overlap minors)")
 
 
 def string(strng):
@@ -825,14 +822,19 @@ OQP_CONFIG_SCHEMA = {
 
     },
     'md': {
+        # Internal marker set by the split concise/Python md(...) interface.
+        # It lets the QM/MM driver distinguish explicit common MD controls
+        # from schema defaults while retaining old qmmm.n_steps inputs.
+        'common_controls': {'type': bool, 'default': 'False'},
+        'common_control_keys': {'type': str, 'default': ''},
         'nstep': {'type': int, 'default': '100'},
         'dt': {'type': float, 'default': '0.5'},            # fs
         'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
         'substep': {'type': int, 'default': '50000'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        # Largest finite double disables the gap gate without invalidating restarts.
-        'thrshe': {'type': float, 'default': '1.7976931348623157e308'},  # Hartree
+        # Default hop-gap ceiling: 10 eV in Hartree.
+        'thrshe': {'type': float, 'default': '0.367493'},  # 10 eV in Hartree
         'tdc': {'type': string, 'default': 'npi'},           # 'fd' | 'npi' | 'analytic' | 'baeck_an'
         # 'auto' uses hop-triggered analytic NAC where the model supports it
         # (gas-phase same-spin MRSF singlets on a ROHF/ROKS triplet reference,
@@ -851,23 +853,29 @@ OQP_CONFIG_SCHEMA = {
         'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
         'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
         'nacme_check': {'type': str, 'default': 'off'}, # 'off' | 'baeck_an' | 'analytic'
-        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
-        'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
-        'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
-        'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
-        'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
-        'nacme_gate_consecutive': {'type': int, 'default': '3'},
-        'nve_gate': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
-        'nve_gate_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
-        'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
-        'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
-        'nve_gate_consecutive': {'type': int, 'default': '3'},
+        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair cutoff
+        'nacme_policy': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
+        'nacme_policy_invariant_tol': {'type': float, 'default': '1.0e-10'},
+        'nacme_policy_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
+        'nacme_policy_rel_tol': {'type': float, 'default': '1.0'},
+        'nacme_policy_consecutive': {'type': int, 'default': '3'},
+        'nve_policy': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
+        'nve_policy_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
+        'nve_policy_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
+        'nve_policy_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
+        'nve_policy_consecutive': {'type': int, 'default': '3'},
+        # Numerical-continuity treatment described as cases A--D in the
+        # analytic-NAC NAMD study. ``on`` fixes the validated production
+        # settings as one set; ``manual`` exposes the case-specific controls.
+        'continuity': {'type': str, 'default': 'on'},       # on | manual
         'mo_reuse': {'type': bool, 'default': 'true'},  # reuse previous-step orbitals as the SCF guess
         'scf_guess_retry': {'type': bool, 'default': 'true'},  # one fresh-guess retry after failed continuation SCF
         'scf_fail': {'type': str, 'default': 'escalate'},  # escalate | restart (GAMESS-style restart boundary)
         'ref_follow': {'type': str, 'default': 'soscf'},   # off | soscf | diis_vshift: SOMO-preserving SCF continuation
         'ref_switch_rescale': {'type': bool, 'default': 'true'},  # conserve total energy across a reference switch
         'somo_tol': {'type': float, 'default': '0.5'},   # SOMO overlap threshold for a reference switch event
+        'state_check': {'type': bool, 'default': 'true'}, # diagnose loss from the retained state space
+        'state_tol': {'type': float, 'default': '0.7'},  # retained-space projection-norm threshold
         'frustrated': {'type': str, 'default': 'reflect'},   # none | reflect (reverse momentum along d_IJ on a frustrated directional hop)
         'disc_rescale': {'type': bool, 'default': 'true'}, # rescale velocities across any non-hop total-energy discontinuity > disc_tol
         'disc_tol': {'type': float, 'default': '0.002'},  # Hartree
@@ -875,10 +883,18 @@ OQP_CONFIG_SCHEMA = {
         'trajectory_interval': {'type': int, 'default': '1'},  # steps; 0 = automatic, approximately every 10 fs
         'restart_interval': {'type': int, 'default': '10'},    # steps; 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
+        'energy_file': {'type': str, 'default': ''},          # ground-state BOMD energy table
         'restart_file': {'type': str, 'default': ''},
         'continuation_checkpoint': {'type': str, 'default': ''},
         'continuation_trajectory': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
+        # Full-system phase-space snapshots (oqp.utils.md_snapshot): positions,
+        # velocities and cell of every atom.  ``snapshot`` starts a QM/MM run
+        # (ground-state MD or surface hopping) from one; ``snapshot_interval``
+        # makes ground-state QM/MM MD write a numbered one every N steps
+        # (0 = none), e.g. the initial conditions of a swarm of trajectories.
+        'snapshot': {'type': str, 'default': ''},
+        'snapshot_interval': {'type': int, 'default': '0'},
         # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
         # ground-state OpenMM MD driver and must not silently thermostat FSSH.
         'ensemble': {'type': string, 'default': 'nve'},

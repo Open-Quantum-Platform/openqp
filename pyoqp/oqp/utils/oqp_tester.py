@@ -426,6 +426,11 @@ class OQPTester:
             # build without the optional DFTB backend still produces a green suite.
             needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
             needs_xtb_missing = 'openqp-xtb not found' in str(err).lower()
+            needs_serial_ground_state_md = (
+                usempi
+                and "ground-state all-qm md currently requires a single mpi rank"
+                in str(err).lower()
+            )
 
             # The native optimizer covers the ordinary geometry workflows,
             # but legacy constrained inputs may still explicitly select the
@@ -451,6 +456,12 @@ class OQPTester:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional openqp-xtb backend "
                                      "(not installed); skipped")
+            elif needs_serial_ground_state_md:
+                result["status"] = "SKIPPED"
+                result["message"] = (
+                    "ground-state all-QM MD is serial-only; skipped in the "
+                    "MPI regression lane"
+                )
             elif needs_geometric_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional geomeTRIC optimizer "

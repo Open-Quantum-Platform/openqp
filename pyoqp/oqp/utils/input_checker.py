@@ -15,9 +15,9 @@ from oqp.utils.mpi_utils import MPIManager
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt", "soc",
-    "namd",
+    "md", "namd",
 }
-NOT_AVAILABLE_RUNTYPES = {"md"}
+NOT_AVAILABLE_RUNTYPES = set()
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {
     "hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb",
@@ -44,7 +44,18 @@ DFTB_TYPES = {
     "tddftb", "tda", "td-dftb", "sf", "sftddftb", "sf-tddftb",
     "mrsf", "mrsftddftb", "mrsf-tddftb",
 }
+_DFTB_TYPE_CANON = {
+    "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
+    "td-dftb": "tddftb", "tda": "tddftb",
+    "sftddftb": "sf", "sf-tddftb": "sf",
+    "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
+}
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
+
+
+def _canonical_tb_type(value: Any) -> str:
+    route = _as_lower(value or "auto")
+    return _DFTB_TYPE_CANON.get(route, route)
 
 # Canonical model keywords are "dtcam", "dtcam2"/"dtcam-erf" and "ob2".  The
 # historical spellings stay ACCEPTED ALIASES so committed inputs keep working;
@@ -220,7 +231,7 @@ NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
+    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, md, namd, soc, prop, or data. md runs ground-state Born-Oppenheimer molecular dynamics; namd runs excited-state nonadiabatic dynamics.",
     "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend, method=fci for legacy FCI-style CI, method=casci for fixed-orbital active-space CI, method=casscf for native CASSCF macroiterations, method=sa-casscf with [state_average] enabled=true for native SA-CASSCF, method=caspt2 for native determinant-space state-specific PT2, method=ms-caspt2 for native determinant-space multistate PT2, method=xms-caspt2 for native determinant-space extended multistate PT2, or the GAMESS-convention QDPT family: method=mrmp2 (single-state), method=mcqdpt2 (multistate, single-set), method=xmcqdpt2 (Granovsky extended H0).",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
@@ -1376,13 +1387,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     dftb_type = _as_lower(_get(config, section, "type", "auto"))
     # Canonicalize response-type aliases so the runtype/NAMD/SOC gates below see
     # a single spelling per family (e.g. mrsftddftb/mrsf-tddftb -> mrsf).
-    _DFTB_TYPE_CANON = {
-        "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
-        "td-dftb": "tddftb", "tda": "tddftb",
-        "sftddftb": "sf", "sf-tddftb": "sf",
-        "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
-    }
-    dftb_type_canon = _DFTB_TYPE_CANON.get(dftb_type, dftb_type)
+    dftb_type_canon = _canonical_tb_type(dftb_type)
     parameter_path = _get(config, section, "parameter_path", "")
     executable = _get(config, section, "executable", "")
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -1654,7 +1659,11 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     auto_ground = (
         dftb_type == "auto"
         and (
-            (runtype in {"energy", "grad"} and not any(int(state) > 0 for state in grad_states))
+            runtype == "md"
+            or (
+                runtype in {"energy", "grad"}
+                and not any(int(state) > 0 for state in grad_states)
+            )
             or (runtype in {"optimize", "mep"} and int(istate) == 0)
         )
     )
@@ -1896,7 +1905,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                     action=f"Use [qmmm] embedding=electrostatic for {short} QM/MM NAMD.",
                 )
 
-    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
+    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "md", "data"}
     td_type_for_namd = _as_lower(_get(config, "tdhf", "type", "rpa"))
     if td_type_for_namd == "mrsf" and dftb_type_canon in {"auto", "mrsf"}:
         # MRSF-TDDFTB has a state-overlap (TLF) backend and one-center SOC:
@@ -1919,7 +1928,7 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
             f"{disp} is currently wired only through energy/gradient-driven workflows.",
             value=runtype,
             expected=", ".join(sorted(allowed_runtype)),
-            action=f"Use energy, grad, data, optimize, meci, or mep until Hessian/NAC/SOC {short} hooks are implemented.",
+            action=f"Use energy, grad, data, md, optimize, meci, or mep until Hessian/NAC/SOC {short} hooks are implemented.",
         )
 
     # [properties] nac also routes into the NAC state-overlap path (e.g. inside
@@ -1937,7 +1946,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
         )
 
     ground_like = dftb_type in {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
-    if dftb_type == "auto" and runtype in {"optimize", "mep"} and int(istate) == 0:
+    if dftb_type == "auto" and (
+        runtype == "md"
+        or (runtype in {"optimize", "mep"} and int(istate) == 0)
+    ):
         ground_like = True
 
     if not ground_like and td_type not in {"rpa", "tda", "sf", "mrsf"}:
@@ -5833,6 +5845,32 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             wiki=WIKI_HELP["input.method"],
         )
         return
+
+    if runtype == "md":
+        # The BOMD driver evaluates energy/gradient slot 0.  For a response
+        # method that slot is the electronic reference (the high-spin
+        # reference for MRSF), not the physical S0 surface.  Keep this check at
+        # the shared validation boundary so concise, sectioned, and Python API
+        # inputs all reject the same unsupported request before evaluation.
+        response_route = method == "tdhf"
+        route = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if method in {"dftb", "xtb"}:
+            route = _canonical_tb_type(_get(config, method, "type", "auto"))
+            response_route = route in {"tddftb", "sf", "mrsf"}
+        if response_route:
+            report.add(
+                "ERROR",
+                "input.method",
+                "Ground-state MD cannot propagate a response-model reference surface.",
+                value=f"{method}/{route}",
+                expected="a ground-state HF/DFT, DFTB, or xTB route",
+                action=(
+                    "Use a ground-state model with runtype=md, or use "
+                    "runtype=namd for MRSF excited-state dynamics."
+                ),
+                wiki=WIKI_HELP["input.runtype"],
+            )
+            return
 
     if runtype == "ekt":
         td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))

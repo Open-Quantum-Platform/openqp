@@ -244,18 +244,19 @@ lc_gamma = ok
         report = check_input_values(config, raise_error=False, emit=False)
         self.assertTrue(report.ok, report.to_text())
 
-    def test_input_checker_blocks_xtb_md_like_dftb(self):
+    def test_input_checker_allows_xtb_and_dftb_ground_state_md(self):
         check_input_values = _import_or_skip("oqp.utils.input_checker").check_input_values
 
         for method in ("xtb", "dftb"):
             config = _base_xtb_config(runtype="md")
             config["input"]["method"] = method
-            if method == "dftb":
-                config["dftb"] = {"backend": "native", "type": "mrsf",
+            if method == "xtb":
+                config["xtb"]["type"] = "auto"
+            else:
+                config["dftb"] = {"backend": "native", "type": "auto",
                                   "parameter_path": "/tmp/minimal.opdftb"}
             report = check_input_values(config, raise_error=False, emit=False)
-            self.assertFalse(report.ok)
-            self.assertIn("recognized but not implemented", report.to_text())
+            self.assertTrue(report.ok, report.to_text())
 
     def test_input_checker_rejects_xtb_probe_backend(self):
         check_input_values = _import_or_skip("oqp.utils.input_checker").check_input_values

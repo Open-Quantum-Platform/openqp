@@ -182,13 +182,15 @@ def compute_grad(mol):
     LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
 
 def compute_md(mol):
+    """Run gas-phase ground-state Born--Oppenheimer dynamics.
 
-    # prepare guess orbital
-    prep_guess(mol)
-    
-    #Run MD
-#    qmmm_md = QMMM_MD(mol)
-    qmmm_md.run_md()
+    Ground-state QM/MM MD is dispatched separately to ``QMMM_MD`` before this
+    function is reached.  Keeping the all-QM driver here gives ``runtype=md``
+    one unambiguous meaning in the ordinary Runner dispatch.
+    """
+    from oqp.library.ground_state_md import GroundStateMD
+
+    GroundStateMD(mol).run()
 
 def compute_nacme(mol):
     # compute reference energy

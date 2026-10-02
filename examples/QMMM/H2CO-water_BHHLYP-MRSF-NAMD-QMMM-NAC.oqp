@@ -1,0 +1,21 @@
+# QM/MM surface hopping driven by the ANALYTIC MRSF NAC (scheme=NAC), the
+# route this branch enables for embedded dynamics: tdc=analytic evaluates the
+# S0/S1 derivative coupling analytically at every overlap interval inside the
+# ESPF field, and rescale=analytic_nac contracts the velocity along it.
+#
+# Formaldehyde (QM, atoms 0-3) in 5 TIP3P waters (MM), non-periodic.  The QM
+# region is a whole molecule, so the partition cuts no bond and there are no
+# link atoms -- analytic NAC is refused with a link atom, because a
+# link-centre coupling direction cannot be projected onto real atoms.
+#
+# The analytic route has an accuracy guard: it needs a two-SOMO ROHF/ROKS
+# triplet reference, singlet MRSF states, and scf/tdhf conv <= 1e-8, hence the
+# tightened thresholds below.  nstep=2 reaches the second overlap interval,
+# which is where the coupling is first evaluated.  velocity=zero keeps the two
+# steps reproducible.  Requires the optional OpenMM backend.
+mrsf(nstate=2)/bhhlyp/6-31g* namd(S1,scheme=NAC)
+md(nstep=2,dt=0.5,velocity=zero,seed=3,trajectory_interval=1,trajectory_file="H2CO-water-nac.namd.trj")
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff)
+scf(conv=1e-9,maxit=200)
+tdhf(conv=1e-9,maxit=100)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"

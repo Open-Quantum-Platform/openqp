@@ -1,0 +1,8 @@
+# Ground-state QM/MM Born-Oppenheimer dynamics in the unified form: md(...)
+# owns the nuclear controls, qmmm(...) owns the embedding.  The QM region is
+# the alanine-dipeptide backbone fragment, the rest is amber14 MM, and
+# cutoff=NoCutoff treats the system as a non-periodic cluster.
+# velocity=zero makes the two steps reproducible.
+rks/bhhlyp/6-31g md(nstep=2,dt=0.5,velocity=zero,ensemble=nve,trajectory_file="ala-gsmd.pdb")
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",cutoff=NoCutoff)
+geom="ala.pdb"

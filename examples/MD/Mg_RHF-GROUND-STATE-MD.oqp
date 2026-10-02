@@ -1,0 +1,3 @@
+rhf/lanl2dz md(nstep=2,dt=0.5,velocity=zero,seed=20260929,trajectory_file="Mg_RHF-GROUND-STATE-MD.xyz")
+dftgrid(rad_type=becke)
+geom="../geometries/Mg-21a9b71503dd.xyz"
