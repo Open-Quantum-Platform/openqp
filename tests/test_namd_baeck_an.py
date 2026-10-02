@@ -16,6 +16,46 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize(
+    ("md_change", "tlf", "keyword"),
+    [
+        ({"state_tol": 0.8}, 0, "state_tol"),
+        ({"disc_substeps": 4}, 0, "disc_substeps"),
+        ({}, 1, "fixed at 0"),
+    ],
+)
+def test_automatic_continuity_rejects_partial_case_overrides(
+        md_change, tlf, keyword):
+    from oqp.library.namd import _validate_namd_continuity_config
+
+    md = {
+        "nstep": 1, "dt": 0.5, "active": 1, "substep": 10,
+        "decoherence": "edc", "edc_c": 0.1, "thrshe": 0.367493,
+        "tdc": "npi", "rescale": "isotropic", "continuity": "on",
+    }
+    md.update(md_change)
+    with pytest.raises(ValueError, match=keyword):
+        _validate_namd_continuity_config(md, {"tlf": tlf})
+
+
+def test_manual_continuity_accepts_independent_case_controls():
+    from oqp.library.namd import _validate_namd_continuity_config
+
+    md = {
+        "continuity": "manual", "state_check": False, "state_tol": 0.8,
+        "disc_rescale": False, "disc_substeps": 0,
+    }
+    assert _validate_namd_continuity_config(md, {"tlf": 0}) == "manual"
+
+
+def test_manual_continuity_still_requires_exact_state_overlap():
+    from oqp.library.namd import _validate_namd_continuity_config
+
+    with pytest.raises(ValueError, match="fixed at 0"):
+        _validate_namd_continuity_config(
+            {"continuity": "manual"}, {"tlf": 2})
+
+
 def test_zero_seed_resolves_to_run_date_and_explicit_seed_is_unchanged():
     from oqp.library.namd import _resolve_namd_seed
 
@@ -122,10 +162,10 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
             'restart_file="H2CO-water.namd.restart.npz"'):
         assert sidecar in restart_oqp
     for keyword in (
-            "nacme_gate_invariant_tol=", "nacme_gate_abs_tol=",
-            "nacme_gate_rel_tol=", "nacme_gate_consecutive=",
-            "nve_gate_abs_tol=", "nve_gate_step_tol=",
-            "nve_gate_transition_tol=", "nve_gate_consecutive="):
+            "nacme_policy_invariant_tol=", "nacme_policy_abs_tol=",
+            "nacme_policy_rel_tol=", "nacme_policy_consecutive=",
+            "nve_policy_abs_tol=", "nve_policy_step_tol=",
+            "nve_policy_transition_tol=", "nve_policy_consecutive="):
         assert keyword in example_inp
         assert keyword in example_oqp
 
@@ -406,7 +446,7 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     namd.mol = SimpleNamespace(
         oqp_canonical_input=(
             'mrsf(nstate=2)/bhhlyp/6-31g*\n'
-            'namd(S1,nstep=40,dt=0.5,velocity=zero)\n'
+            'namd(S1,scheme=TDC_NAC,nstep=40,dt=0.5,velocity=zero)\n'
             'geom="h2o.xyz"\n'),
         oqp_input_source=None, input_file=None,
     )
@@ -435,6 +475,109 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     assert "was not generated" in notices[0]
 
 
+def test_composed_restart_manifest_moves_common_controls_to_md(tmp_path):
+    from oqp.library.namd import NAMD
+    from oqp.utils.oqp_input import parse_canonical_oqp
+
+    manifest = tmp_path / "restart.oqp"
+    namd = NAMD.__new__(NAMD)
+    namd.restart_manifest_file = str(manifest)
+    namd.restart_file = str(tmp_path / "new.restart.npz")
+    namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.seed = 20260929
+    namd.mol = SimpleNamespace(
+        oqp_canonical_input=(
+            "mrsf(nstate=2)/bhhlyp/6-31g*\n"
+            "namd(S1,scheme=Overlap,seed=17,"
+            'trajectory_file="legacy.trj") md(nstep=2)\n'
+            'geom="h2o.xyz"\n'
+        ),
+        oqp_input_source=None,
+        input_file=None,
+    )
+
+    namd._write_restart_manifest()
+    spec = parse_canonical_oqp(manifest.read_text(encoding="utf-8"))
+
+    assert "seed" not in spec.driver.kwargs
+    assert "trajectory_file" not in spec.driver.kwargs
+    md_call = next(call for call in spec.modifiers if call.name == "md")
+    assert md_call.kwargs["seed"] == 20260929
+    assert md_call.kwargs["trajectory_file"] == "new.trj"
+
+
+def test_composed_restart_manifest_keeps_the_restart_pair_on_md(tmp_path):
+    """A manifest from a deck that already sets md(restart_file=...) must parse.
+
+    restart/restart_file became public md(...) controls, so stamping them on
+    namd(...) while the composed input still carried restart_file on md(...)
+    rendered a manifest that dies with "Option 'restart_file' is specified in
+    both namd(...) and md(...)" -- i.e. the continuation input a user is told
+    to run was invalid.  They belong in common_restart, beside seed and
+    trajectory_file.
+    """
+    from oqp.library.namd import NAMD
+    from oqp.utils.oqp_input import parse_canonical_oqp
+
+    manifest = tmp_path / "restart.oqp"
+    namd = NAMD.__new__(NAMD)
+    namd.restart_manifest_file = str(manifest)
+    namd.restart_file = str(tmp_path / "new.restart.npz")
+    namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.seed = 20260929
+    namd.mol = SimpleNamespace(
+        oqp_canonical_input=(
+            "mrsf(nstate=2)/bhhlyp/6-31g*\n"
+            "namd(S1,scheme=Overlap) "
+            'md(nstep=2,restart_file="old.restart.npz",'
+            'trajectory_file="old.trj")\n'
+            'geom="h2o.xyz"\n'
+        ),
+        oqp_input_source=None,
+        input_file=None,
+    )
+
+    namd._write_restart_manifest()
+    # parse_canonical_oqp is what rejected the old manifest
+    spec = parse_canonical_oqp(manifest.read_text(encoding="utf-8"))
+
+    assert "restart" not in spec.driver.kwargs
+    assert "restart_file" not in spec.driver.kwargs
+    md_call = next(call for call in spec.modifiers if call.name == "md")
+    assert md_call.kwargs["restart"] is True
+    assert md_call.kwargs["restart_file"] == "new.restart.npz"
+    assert md_call.kwargs["trajectory_file"] == "new.trj"
+
+
+def test_legacy_one_call_restart_manifest_keeps_the_restart_pair_on_namd(tmp_path):
+    """Without an md(...) modifier the pair stays on namd(...), as before."""
+    from oqp.library.namd import NAMD
+    from oqp.utils.oqp_input import parse_canonical_oqp
+
+    manifest = tmp_path / "restart.oqp"
+    namd = NAMD.__new__(NAMD)
+    namd.restart_manifest_file = str(manifest)
+    namd.restart_file = str(tmp_path / "new.restart.npz")
+    namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.seed = 7
+    namd.mol = SimpleNamespace(
+        oqp_canonical_input=(
+            "mrsf(nstate=2)/bhhlyp/6-31g*\n"
+            "namd(S1,scheme=Overlap,nstep=2)\n"
+            'geom="h2o.xyz"\n'
+        ),
+        oqp_input_source=None,
+        input_file=None,
+    )
+
+    namd._write_restart_manifest()
+    spec = parse_canonical_oqp(manifest.read_text(encoding="utf-8"))
+
+    assert not any(call.name == "md" for call in spec.modifiers)
+    assert spec.driver.kwargs["restart"] is True
+    assert spec.driver.kwargs["restart_file"] == "new.restart.npz"
+
+
 def test_soc_namd_accepts_nve_and_dense_trajectory_controls(tmp_path):
     script = r"""
 import json
@@ -448,6 +591,7 @@ base_md = {
     'decoherence': 'edc', 'edc_c': 0.1, 'thrshe': 0.01, 'tdc': 'fd',
     'trivial': False, 'trivial_thresh': 0.1, 'init_temp': 0.0,
     'velocity': 'zero', 'seed': 1, 'soc': True, 'rescale': 'isotropic',
+    'continuity': 'manual',
 }
 
 class Mol:
@@ -459,7 +603,7 @@ class Mol:
         self.config = {
             'input': {'method': 'tdhf', 'functional': 'bhhlyp',
                       'basis': '6-31g*'},
-            'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
+            'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 0},
             'properties': {}, 'nac': {}, 'md': md,
         }
     def get_mass(self):
@@ -585,7 +729,7 @@ class Mol:
     input_file = oqp_input_source
     oqp_canonical_input = (
         'mrsf(nstate=2)/bhhlyp/6-31g*\n'
-        'namd(S1,nstep=20,dt=0.5,velocity="vel.dat")\n'
+        'namd(S1,scheme=TDC_NAC,nstep=20,dt=0.5,velocity="vel.dat")\n'
         'qmmm(pdb_file="water.pdb",forcefield_files="local.xml tip3p.xml",'
         'qm_atoms="0-2")\ngeom="h2o.xyz"\n'
     )
@@ -593,7 +737,7 @@ class Mol:
         'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*',
                   'charge': 0, 'multiplicity': 3},
         'scf': {'type': 'rohf', 'multiplicity': 3},
-        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2, 'multiplicity': 3},
+        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 0, 'multiplicity': 3},
     }
     data = {'OQP::td_energies': np.array([0.0, 0.1])}
     atoms = np.array([8, 1, 1])
@@ -1036,9 +1180,10 @@ def _controls_signature(provider=None, **md):
     if provider is not None:
         driver.rescale_provider = provider
     return driver._restart_signature()
-controls_base = dict(frustrated='reflect', mo_reuse=True, scf_fail='escalate',
+controls_base = dict(continuity='on', frustrated='reflect', mo_reuse=True, scf_fail='escalate',
                      scf_guess_retry=True, ref_follow='soscf',
-                     ref_switch_rescale=True, somo_tol=0.5, disc_rescale=True,
+                     ref_switch_rescale=True, somo_tol=0.5,
+                     state_check=True, state_tol=0.7, disc_rescale=True,
                      disc_tol=0.002, disc_substeps=10)
 trajectory_controls_bound = all(
     _controls_signature(**controls_base)
@@ -1046,7 +1191,8 @@ trajectory_controls_bound = all(
     for key, value in (('frustrated', 'none'), ('mo_reuse', False),
                        ('scf_fail', 'restart'), ('scf_guess_retry', False),
                        ('ref_follow', 'off'), ('ref_switch_rescale', False),
-                       ('somo_tol', 0.3), ('disc_rescale', False),
+                       ('somo_tol', 0.3), ('state_check', False),
+                       ('state_tol', 0.8), ('disc_rescale', False),
                        ('disc_tol', 0.01), ('disc_substeps', 4)))
 # Default controls (spelled as parsed values) sign like a checkpoint written
 # before the controls were bound, and rescale=auto signs as its resolution.
@@ -1158,7 +1304,7 @@ initial_basis_file_bound = (
 from oqp.utils.oqp_input import parse_canonical_oqp, render_canonical_oqp
 file_basis_spec = parse_canonical_oqp(
     'mrsf(nstate=2)/bhhlyp/file:custom-basis.json\n'
-    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'namd(S1,scheme=TDC_NAC,nstep=2,dt=0.5,velocity="zero")\n'
     'scf(init_basis="file:custom-basis.json")\n'
     'geom="h2o.xyz"\n')
 rebased_basis_spec = d._rebase_restart_spec_paths(file_basis_spec, input_root)
@@ -1270,7 +1416,7 @@ else:
 # resolution when a different file with the same name exists in input_dir.
 forcefield_spec = parse_canonical_oqp(
     'mrsf(nstate=2)/bhhlyp/6-31g*\n'
-    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'namd(S1,scheme=Overlap,nstep=2,dt=0.5,velocity="zero")\n'
     'qmmm(pdb_file="water.pdb",forcefield_files="shared.xml tip3p.xml",'
     'qm_atoms="0-2")\ngeom="h2o.xyz"\n')
 original_cwd = os.getcwd()
@@ -1298,7 +1444,7 @@ with open(input_guess, 'w', encoding='utf-8') as stream:
     stream.write('{"source": "input"}\n')
 guess_spec = parse_canonical_oqp(
     'mrsf(nstate=2)/bhhlyp/6-31g*\n'
-    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'namd(S1,scheme=TDC_NAC,nstep=2,dt=0.5,velocity="zero")\n'
     'guess(type="json",file="shared-guess.json")\ngeom="h2o.xyz"\n')
 original_cwd = os.getcwd()
 os.chdir(root)

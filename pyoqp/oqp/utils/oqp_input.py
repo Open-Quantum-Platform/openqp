@@ -428,16 +428,18 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "md": _keys("""
         nstep dt active substep decoherence edc_c thrshe tdc rescale trivial
         trivial_thresh init_temp velocity seed rng_stream first_hop_step
-        nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
-        nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
-        nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
-        nve_gate_consecutive mo_reuse scf_fail scf_guess_retry ref_follow ref_switch_rescale somo_tol frustrated disc_rescale disc_tol disc_substeps
+        nacme_check ba_gap_max nacme_policy nacme_policy_invariant_tol
+        nacme_policy_abs_tol nacme_policy_rel_tol nacme_policy_consecutive
+        nve_policy nve_policy_abs_tol nve_policy_step_tol nve_policy_transition_tol
+        nve_policy_consecutive continuity mo_reuse scf_fail scf_guess_retry ref_follow ref_switch_rescale somo_tol state_check state_tol frustrated disc_rescale disc_tol disc_substeps
         trajectory_interval restart_interval trajectory_file
         restart_file restart continuation_checkpoint continuation_trajectory
+        snapshot snapshot_interval
         ensemble thermostat thermostat_temperature
         thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
-        dt_adaptive dt_min dx_max
+        dt_adaptive dt_min dx_max energy_file common_controls
+        common_control_keys
     """),
     "odp": _keys("enabled cv scale reference_r reference_p center k_parallel k_perpendicular window"),
 }
@@ -645,6 +647,23 @@ _MECP_OPTION_ALIASES = {
     "gap": "energy_gap",
 }
 _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
+
+# Public md(...) owns controls that describe nuclear propagation, independent
+# of whether the electronic force is ground-state BOMD or excited-state NAMD.
+MD_COMMON_OPTIONS = {
+    "nstep", "dt", "velocity", "temperature", "ensemble", "thermostat",
+    "friction",
+    "seed", "rng_stream", "mo_reuse",
+    # Output controls belong with the nuclear propagation that produces them.
+    # Each driver honours the subset it supports: ground-state BOMD writes
+    # trajectory_file and energy_file, surface hopping writes the trajectory
+    # and checkpoint pair on their intervals.
+    "trajectory_file", "trajectory_interval",
+    "energy_file", "restart_file", "restart_interval", "restart",
+    # A full-system phase-space point to start from, and the cadence at which
+    # ground-state QM/MM MD writes numbered ones for later runs.
+    "snapshot", "snapshot_interval",
+}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
@@ -678,18 +697,18 @@ DRIVER_OPTIONS = {
     "bp": {"type", "dx", "nproc", "restart", "clean", "align"},
     "nacme": {"dt", "align"},
     "soc": {"soc_2e", "ns", "nt"},
-    # QM/MM MD controls live in qmmm(...).  The similarly named [md]
-    # controls below belong to the nonadiabatic-dynamics driver only.
-    "md": set(),
-    "namd": {
+    "md": set(MD_COMMON_OPTIONS),
+    # Common options remain accepted here for compatibility with pre-split
+    # namd(...) inputs.  New inputs put them in the separate md(...) call.
+    "namd": set(MD_COMMON_OPTIONS) | {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
         "thrshe", "tdc", "rescale", "trivial", "trivial_thresh", "init_temp",
         "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
-        "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
-        "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
-        "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
-        "nve_gate_transition_tol", "nve_gate_consecutive", "mo_reuse", "scf_fail", "scf_guess_retry",
-        "ref_follow", "ref_switch_rescale", "somo_tol", "frustrated", "disc_rescale", "disc_tol", "disc_substeps",
+        "ba_gap_max", "nacme_policy", "nacme_policy_invariant_tol",
+        "nacme_policy_abs_tol", "nacme_policy_rel_tol", "nacme_policy_consecutive",
+        "nve_policy", "nve_policy_abs_tol", "nve_policy_step_tol",
+        "nve_policy_transition_tol", "nve_policy_consecutive", "continuity", "mo_reuse", "scf_fail", "scf_guess_retry",
+        "ref_follow", "ref_switch_rescale", "somo_tol", "state_check", "state_tol", "frustrated", "disc_rescale", "disc_tol", "disc_substeps",
         "trajectory_interval", "restart_interval", "trajectory_file",
         "restart_file", "restart", "continuation_checkpoint", "continuation_trajectory", "soc", "soc_basis",
         "ensemble", "thermostat", "thermostat_temperature",
@@ -719,6 +738,109 @@ OQP_DRIVER_OPTIONS = {
         "maxmove", "align", "opt_ends", "end_fmax", "neb_output", "neb_interpolation",
     },
 }
+
+
+# Complete surface-hopping schemes from Table 1 of the NAMD comparison.
+# ``scheme`` is a concise-driver pseudo-option rather than an [md] schema
+# keyword: lowering expands it to the established runtime controls below.
+NAMD_SCHEME_PRESETS = {
+    "baeckan": {
+        "tdc": "baeck_an",
+        "rescale": "isotropic",
+        "thrshe": 0.015936,
+        "frustrated": "none",
+    },
+    "overlap": {
+        "tdc": "npi",
+        "rescale": "isotropic",
+        "thrshe": 0.015936,
+        "frustrated": "none",
+    },
+    "tdcnac": {
+        "tdc": "npi",
+        "rescale": "hop_analytic_nac",
+        "thrshe": 0.367493,
+        "frustrated": "reflect",
+    },
+    "nac": {
+        "tdc": "analytic",
+        "rescale": "analytic_nac",
+        "thrshe": 0.367493,
+        "frustrated": "reflect",
+    },
+}
+NAMD_SCHEME_NAMES = {
+    "baeckan": "BaeckAn",
+    "overlap": "Overlap",
+    "tdcnac": "TDC_NAC",
+    "nac": "NAC",
+}
+
+NAMD_POLICY_ALIASES = {
+    "nacme_gate": "nacme_policy",
+    "nacme_gate_invariant_tol": "nacme_policy_invariant_tol",
+    "nacme_gate_abs_tol": "nacme_policy_abs_tol",
+    "nacme_gate_rel_tol": "nacme_policy_rel_tol",
+    "nacme_gate_consecutive": "nacme_policy_consecutive",
+    "nve_gate": "nve_policy",
+    "nve_gate_abs_tol": "nve_policy_abs_tol",
+    "nve_gate_step_tol": "nve_policy_step_tol",
+    "nve_gate_transition_tol": "nve_policy_transition_tol",
+    "nve_gate_consecutive": "nve_policy_consecutive",
+}
+
+
+def normalize_namd_policy_options(options: Mapping[str, Any]) -> Dict[str, Any]:
+    """Lower legacy NAMD ``gate`` names to public ``policy`` names."""
+
+    normalized = dict(options)
+    for legacy, public in NAMD_POLICY_ALIASES.items():
+        if legacy not in normalized:
+            continue
+        if public in normalized:
+            raise OQPInputError(
+                "namd options %s and legacy %s specify the same policy; use %s"
+                % (public, legacy, public)
+            )
+        normalized[public] = normalized.pop(legacy)
+    return normalized
+
+
+def expand_namd_scheme(options: Mapping[str, Any]) -> Dict[str, Any]:
+    """Expand one complete NAMD scheme into existing [md] controls."""
+
+    expanded = dict(options)
+    if "scheme" not in expanded:
+        raise OQPInputError(
+            "namd requires scheme=BaeckAn, Overlap, TDC_NAC, NAC, or custom"
+        )
+
+    requested = str(expanded.pop("scheme")).strip()
+    normalized = re.sub(r"[\s_-]+", "", requested).lower()
+    controls = {"tdc", "rescale", "thrshe", "frustrated"}
+    if normalized == "custom":
+        missing = sorted(controls.difference(expanded))
+        if missing:
+            raise OQPInputError(
+                "namd scheme=custom requires explicit %s"
+                % ", ".join(missing)
+            )
+        return expanded
+    if normalized not in NAMD_SCHEME_PRESETS:
+        raise OQPInputError(
+            "namd scheme must be BaeckAn, Overlap, TDC_NAC, NAC, or custom"
+        )
+
+    preset = NAMD_SCHEME_PRESETS[normalized]
+    conflicts = sorted(set(preset).intersection(expanded))
+    if conflicts:
+        raise OQPInputError(
+            "namd scheme=%s already defines %s; use scheme=custom for an "
+            "advanced combination"
+            % (NAMD_SCHEME_NAMES[normalized], ", ".join(conflicts))
+        )
+    expanded.update(preset)
+    return expanded
 
 
 def _fold_native_section_into_driver(
@@ -1408,6 +1530,13 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             close = difflib.get_close_matches(normalized, choices, n=1, cutoff=0.6)
             hint = " Did you mean '%s(...)'?" % close[0] if close else ""
             raise OQPInputError("Unknown .oqp call: %s.%s" % (call.name, hint))
+    # Excited-state dynamics is the composition namd(...) md(...): namd owns
+    # the electronic transition model and md owns nuclear propagation.  Keep
+    # md as an ordinary primary driver when namd is absent.
+    if len(primary) == 2 and {call.name for call in primary} == {"md", "namd"}:
+        md_call = next(call for call in primary if call.name == "md")
+        primary = [next(call for call in primary if call.name == "namd")]
+        modifiers.append(md_call)
     if len(primary) > 1:
         names = ", ".join(call.name for call in primary)
         raise OQPInputError(
@@ -1587,6 +1716,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         "mrsf", "mrsf-hf", "mrsf-dftb"
     }:
         raise OQPInputError("%s currently requires an MRSF route" % driver.name)
+    if driver.name == "md" and model in RESPONSE_MODELS:
+        raise OQPInputError(
+            "md(...) is ground-state Born-Oppenheimer dynamics and requires a "
+            "ground-state model route; use namd(...) md(...) for excited-state "
+            "nonadiabatic dynamics"
+        )
 
     expected_counts = {"mecp": 2, "tci": 3, "nac": 2, "bp": 2, "nacme": 2}
     if driver.name == "meci" and len(states) < 2:
@@ -1622,6 +1757,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         options = _normalized_mecp_options(driver)
     else:
         options = _driver_options(driver)
+    if driver.name == "namd":
+        options = normalize_namd_policy_options(options)
+        options = expand_namd_scheme(options)
     if driver.name == "mecp":
         algorithm = str(options.get("mecp_search", "auto")).strip().lower()
         if algorithm not in {"auto", "auglag", "sqp", "penalty", "quad"}:
@@ -1948,9 +2086,6 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     has_qmmm = qmmm_section is not None or any(
         requested(value) for _, value in qmmm_flag_sources
     )
-    if driver.name == "md":
-        if not has_qmmm:
-            raise OQPInputError("md(...) is the QM/MM molecular-dynamics driver and requires qmmm(...)")
     if has_qmmm and driver.name not in ACTIVE_QMMM_DRIVERS:
         raise OQPInputError(
             "The active QM/MM backend supports energy, optimize, md, and namd. "
@@ -2179,7 +2314,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 "automatically." % (call.name, key_text)
             )
         if call.name in SECTION_NAMES:
-            unknown = set(call.kwargs) - OQP_SCHEMA_KEYS[call.name]
+            allowed_section_options = (
+                DRIVER_OPTIONS["md"]
+                if call.name == "md" and driver.name == "namd"
+                else OQP_SCHEMA_KEYS[call.name]
+            )
+            unknown = set(call.kwargs) - allowed_section_options
             if unknown:
                 key = sorted(unknown)[0]
                 close = difflib.get_close_matches(
@@ -2209,6 +2349,38 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "qmmm nsteps and n_steps specify the same QM/MM MD step count; use one"
             )
+        if call.name == "qmmm" and driver.name in {"md", "namd"}:
+            common_md = dict(driver.kwargs) if driver.name == "md" else {}
+            if driver.name == "namd":
+                common_md.update({
+                    key: value for key, value in driver.kwargs.items()
+                    if key in MD_COMMON_OPTIONS
+                })
+                md_modifier = modifier_by_name.get("md")
+                if md_modifier is not None:
+                    common_md.update(md_modifier.kwargs)
+            qmmm_aliases = {
+                "nstep": {"nsteps", "n_steps"},
+                "dt": {"timestep"},
+                "temperature": {"temperature"},
+                "ensemble": {"ensemble"},
+                "thermostat": {"ensemble"},
+                "friction": {"friction"},
+                "trajectory_file": {"trajectory_file"},
+            }
+            duplicate = next((
+                (md_key, qmmm_key)
+                for md_key, qmmm_keys in qmmm_aliases.items()
+                if md_key in common_md
+                for qmmm_key in sorted(qmmm_keys)
+                if qmmm_key in call.kwargs
+            ), None)
+            if duplicate is not None:
+                raise OQPInputError(
+                    "Dynamics control %s is specified in both md(%s=...) and "
+                    "qmmm(%s=...); keep nuclear propagation in md(...)"
+                    % (duplicate[0], duplicate[0], duplicate[1])
+                )
         if call.name == "pcm" and call.args and "solvent" in call.kwargs:
             raise OQPInputError("PCM solvent is specified twice; use pcm(water) or pcm(solvent=water)")
         conflict = reserved.get(call.name, set()).intersection(call.kwargs)
@@ -2519,8 +2691,10 @@ def rebase_calculation_paths(
                 "forcefield", "forcefield_files",
             }:
                 kwargs[key] = _resolve_search_path_list(value, source_dir)
-            elif call.name == "namd" and key == "velocity":
+            elif call.name in {"md", "namd"} and key == "velocity":
                 kwargs[key] = _resolve_velocity_source(value, source_dir)
+            elif call.name in {"md", "namd"} and key == "snapshot":
+                kwargs[key] = _resolve_path(value, source_dir)
         return CallSpec(call.name, call.args, kwargs, call.explicit)
 
     return CalculationSpec(
@@ -2549,6 +2723,77 @@ def lower_to_legacy(
 
     def put(section: str, key: str, value: Any) -> None:
         config.setdefault(section, {})[key] = _as_config_string(value)
+
+    def put_md_options(options: Mapping[str, Any]) -> None:
+        """Lower the concise common nuclear controls to legacy [md] keys."""
+        if "ensemble" in options and "thermostat" in options:
+            ensemble = str(options["ensemble"]).strip().lower()
+            thermostat = str(options["thermostat"]).strip().lower()
+            expected = "langevin" if ensemble == "nvt" else "off"
+            if ensemble not in {"nve", "nvt"}:
+                if ensemble == "npt":
+                    raise OQPInputError(
+                        "md ensemble=npt is not available: a QM/MM barostat would "
+                        "need the QM/MM energy at each barostat trial box. "
+                        "Equilibrate the cell classically and start from it "
+                        "with md(snapshot=...)"
+                    )
+                raise OQPInputError("md ensemble must be nve or nvt")
+            if thermostat not in {"off", "langevin"}:
+                raise OQPInputError("md thermostat must be off or langevin")
+            if thermostat != expected:
+                raise OQPInputError(
+                    "md ensemble and legacy thermostat are inconsistent; "
+                    "use ensemble only"
+                )
+        put("md", "common_controls", True)
+        existing_keys = {
+            key.strip()
+            for key in config.get("md", {}).get(
+                "common_control_keys", ""
+            ).replace(",", " ").split()
+            if key.strip()
+        }
+        existing_keys.update(options)
+        put("md", "common_control_keys", ",".join(sorted(existing_keys)))
+        for key, value in options.items():
+            if key == "velocity":
+                value = _resolve_velocity_source(value, source_dir)
+                put("md", key, value)
+            elif key == "snapshot":
+                # an input file, looked up next to the deck like velocity=
+                put("md", key, _resolve_path(value, source_dir))
+            elif key == "temperature":
+                put("md", "init_temp", value)
+                put("md", "thermostat_temperature", value)
+            elif key == "friction":
+                put("md", "thermostat_friction", value)
+            elif key == "ensemble":
+                ensemble = str(value).strip().lower()
+                if ensemble not in {"nve", "nvt"}:
+                    if ensemble == "npt":
+                        raise OQPInputError(
+                            "md ensemble=npt is not available: a QM/MM barostat would "
+                            "need the QM/MM energy at each barostat trial box. "
+                            "Equilibrate the cell classically and start from it "
+                            "with md(snapshot=...)"
+                        )
+                    raise OQPInputError("md ensemble must be nve or nvt")
+                put("md", "ensemble", ensemble)
+                put(
+                    "md", "thermostat",
+                    "langevin" if ensemble == "nvt" else "off",
+                )
+            elif key == "thermostat":
+                thermostat = str(value).strip().lower()
+                if thermostat not in {"off", "langevin"}:
+                    raise OQPInputError(
+                        "md thermostat must be off or langevin"
+                    )
+                put("md", "thermostat", thermostat)
+                put("md", "ensemble", "nvt" if thermostat == "langevin" else "nve")
+            else:
+                put("md", key, value)
 
     put("input", "system", _normalize_geometry(spec.options["geom"], source_dir))
     if "geom2" in spec.options:
@@ -2675,6 +2920,9 @@ def lower_to_legacy(
     # Apply advanced section calls.  Semantic/internal state keys were rejected
     # by _validate_semantics, so these cannot undo the safe route mapping.
     for call in spec.modifiers:
+        if call.name == "md" and spec.driver.name == "namd":
+            put_md_options(call.kwargs)
+            continue
         if call.name == "d4":
             put("input", "d4", True)
             for key, value in call.kwargs.items():
@@ -2770,6 +3018,9 @@ def lower_to_legacy(
     roots = [_internal_root(spec.model, state) for state in states]
     driver_options = _driver_options(spec.driver)
     name = spec.driver.name
+    if name == "namd":
+        driver_options = normalize_namd_policy_options(driver_options)
+        driver_options = expand_namd_scheme(driver_options)
     if name == "grad":
         put("properties", "grad", roots[0] if roots else 0)
         for key, value in driver_options.items():
@@ -2869,6 +3120,7 @@ def lower_to_legacy(
             put("nac", key, value)
     elif name == "md":
         put("properties", "grad", roots[0] if roots else 0)
+        put_md_options(driver_options)
     elif name == "namd":
         # Analytic NAC directions require converged SCF and response states.
         for section, key in (("scf", "conv"), ("tdhf", "conv"), ("tdhf", "zvconv")):
@@ -2878,10 +3130,14 @@ def lower_to_legacy(
                 put("md", "init_state", states[0].label)
             else:
                 put("md", "active", roots[0])
+        common = {
+            key: value for key, value in driver_options.items()
+            if key in MD_COMMON_OPTIONS
+        }
+        put_md_options(common)
         for key, value in driver_options.items():
-            if key == "velocity":
-                value = _resolve_velocity_source(value, source_dir)
-            put("md", key, value)
+            if key not in MD_COMMON_OPTIONS:
+                put("md", key, value)
     elif name == "ekt":
         if roots:
             put("tdhf", "target", roots[0])
@@ -3446,6 +3702,16 @@ def compile_natural_request(text: str) -> CalculationSpec:
     args: List[Any] = state_labels[:required]
 
     driver_kwargs: Dict[str, Any] = {}
+    if driver_name == "namd":
+        scheme = re.search(
+            r"\bscheme\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([A-Za-z][\w-]*))",
+            text,
+            re.I,
+        )
+        if scheme:
+            driver_kwargs["scheme"] = next(
+                value for value in scheme.groups() if value is not None
+            )
     maxit = re.search(r"\bmaxit\s*=\s*(\d+)\b|최대\s*(?:반복|iteration)?\s*(\d+)\s*회", text, re.I)
     if maxit and driver_name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         driver_kwargs["maxit"] = int(maxit.group(1) or maxit.group(2))
@@ -3564,8 +3830,10 @@ __all__ = [
     "SCHEMA_KEY_OWNERS",
     "StateRef",
     "compile_natural_request",
+    "expand_namd_scheme",
     "looks_canonical",
     "lower_to_legacy",
+    "normalize_namd_policy_options",
     "parse_canonical_oqp",
     "rebase_calculation_paths",
     "render_canonical_oqp",

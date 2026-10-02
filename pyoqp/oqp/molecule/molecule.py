@@ -2657,6 +2657,26 @@ class Molecule:
 
         return config
 
+    def _reconcile_qm_selection(self):
+        """Make one definition of the QM region enough for a QM/MM job.
+
+        ``[qmmm] qm_atoms`` (0-based) and the indices after the PDB name in
+        ``[input] system`` (1-based) name the same atoms; whichever is missing
+        is derived from the other, and two that disagree are an error."""
+        input_cfg = self.config.get('input', {})
+        flag = input_cfg.get('qmmm_flag', False)
+        if not (flag is True or str(flag).strip().lower() in ('true', '1', 'yes', 'on')):
+            return
+        from oqp.utils.qm_selection import reconcile_qm_selection
+        qmmm_cfg = self.config.setdefault('qmmm', {})
+        system, qm_atoms = reconcile_qm_selection(
+            input_cfg.get('system'), qmmm_cfg.get('qm_atoms'),
+            qmmm_cfg.get('pdb_file'))
+        if system is not None:
+            input_cfg['system'] = system
+        if qm_atoms is not None:
+            qmmm_cfg['qm_atoms'] = qm_atoms
+
     def load_config(self, input_source):
         """
         Load calculation parameters from a file or a dictionary based on the input type.
@@ -2666,6 +2686,7 @@ class Molecule:
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
         self._resolve_perf(input_source)
+        self._reconcile_qm_selection()
         self._resolve_system_pdb_path()
         # deck-relative [qmmm] forcefield_files for the PDB-based molecule builder
         from oqp.utils import qmmm as _qmmm_utils

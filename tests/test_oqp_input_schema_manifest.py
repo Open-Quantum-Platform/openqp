@@ -88,7 +88,8 @@ def _value_text(value, converter):
 def _generic_input(section, key, value_text):
     if section in {"droplet", "solute_com"}:
         return (
-            'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2o.xyz" namd(S1) '
+            'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2o.xyz" '
+            'namd(S1,scheme=TDC_NAC) '
             "%s(%s=%s)" % (section, key, value_text)
         )
     if section == "qmmm":
@@ -137,9 +138,10 @@ def test_namd_scientific_safety_defaults_are_minimal_input_defaults():
     assert defaults["seed"] == ("0", "int")
     assert defaults["rng_stream"] == ("1", "int")
     assert defaults["first_hop_step"] == ("1", "int")
-    assert defaults["thrshe"] == ("1.7976931348623157e308", "float")
+    assert defaults["thrshe"] == ("0.367493", "float")
+    assert defaults["frustrated"] == ("reflect", "str")
     assert defaults["nacme_check"] == ("off", "str")
-    assert defaults["nve_gate"] == ("warn", "str")
+    assert defaults["nve_policy"] == ("warn", "str")
     # Analytic hop rescaling is chosen per route (see analytic_nac_route_issue)
     # so legacy, triplet, SOC, QM/MM and tight-binding inputs keep isotropic.
     assert defaults["rescale"] == ("auto", "string")
@@ -302,7 +304,11 @@ def test_route_driver_manifest_matches_public_driver_coverage():
         | set(oqp_input.DRIVER_OPTIONS["nacme"])
         | {"bp", "states"}
     )
-    assert owners["md"] == set(oqp_input.DRIVER_OPTIONS["namd"])
+    assert owners["md"] == (
+        (set(oqp_input.DRIVER_OPTIONS["namd"])
+         - {"temperature", "friction"})
+        | {"energy_file", "common_controls", "common_control_keys"}
+    )
     assert owners["ekt"] == set(oqp_input.DRIVER_OPTIONS["ekt"])
 
     internally_lowered = {

@@ -67,7 +67,8 @@ jobs:
             # configuration. The Linux x86_64 SOURCE-build mandate (LINALG_LIB=auto
             # -> Intel MKL ILP64) is not exercised here -- installing oneAPI on
             # runners is impractical; it is validated manually on MKL machines.
-            sudo apt-get install libopenblas64-dev
+            sudo apt-get update
+            sudo apt-get install -y libopenblas64-dev
          - name: Install MPI (ubuntu)
            if: ${{ contains(matrix.os, 'ubuntu') }}
            run: |

@@ -491,6 +491,24 @@ def _driver_and_sections(
             driver_kwargs["active"] = active
         else:
             states = [_state(model, active, target_mult)]
+        md_values = oqp_input.normalize_namd_policy_options(md_values)
+        treatment = {
+            "tdc": md_values.pop("tdc", "npi"),
+            "rescale": md_values.pop("rescale", "auto"),
+            "thrshe": _coerce(md_values.pop("thrshe", "0.367493")),
+            "frustrated": md_values.pop("frustrated", "reflect"),
+        }
+        matched_scheme = next(
+            (
+                oqp_input.NAMD_SCHEME_NAMES[name]
+                for name, preset in oqp_input.NAMD_SCHEME_PRESETS.items()
+                if treatment == preset
+            ),
+            None,
+        )
+        driver_kwargs["scheme"] = matched_scheme or "custom"
+        if matched_scheme is None:
+            driver_kwargs.update(treatment)
         driver_kwargs.update(_typed(md_values))
         if consumer.has("properties", "grad"):
             consumer.pop("properties", "grad")

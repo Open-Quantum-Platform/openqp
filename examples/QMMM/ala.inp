@@ -1,9 +1,19 @@
+# Minimal QM/MM smoke deck (legacy-section form of ala.oqp): one step of
+# ground-state QM/MM dynamics, i.e. the embedded QM/MM energy and forces at
+# the input geometry.  QM = the C-terminal amide of the alanine dipeptide,
+# named 1-based in [input] system (which builds the QM molecule) and 0-based
+# in [qmmm] qm_atoms.  Requires OpenMM.
+#
+# This used to be a runtype=energy deck.  The plain single-point route never
+# builds the ESPF embedding records (OQP::ESPF_CORR / OQP::POTQM) -- only the
+# force-based QM/MM driver behind runtype=md/optimize/namd does -- so it
+# aborted inside the SCF.  One md step is the supported spelling.
 [input]
 system=ala.pdb 9 10 17 18 19
 charge=0
-runtype=energy
+runtype=md
 functional=bhhlyp
-basis=6-31gs
+basis=6-31g*
 method=hf
 qmmm_flag=True
 
@@ -17,3 +27,12 @@ type=rhf
 [dftgrid]
 rad_type=becke
 
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic
+n_steps=1
+timestep=0.5
+ensemble=nve

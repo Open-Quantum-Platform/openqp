@@ -93,7 +93,7 @@ def test_odp_rejects_nvt_in_legacy_and_semantic_inputs():
     with pytest.raises(OQPInputError, match="ensemble=nve"):
         parse_canonical_oqp(
             'mrsf(nstate=2)/bhhlyp/sto-3g '
-            'namd(S1,nstep=2,ensemble=nvt,thermostat=langevin) '
+            'namd(S1,scheme=Overlap,nstep=2,ensemble=nvt,thermostat=langevin) '
             'odp(enabled=true,cv="distance(1,2)",scale="1",'
             'reference_r="1",reference_p="2",k_parallel=0.1) '
             'geom="h2.xyz"'
@@ -289,7 +289,7 @@ class Mol:
     log = os.path.join(root, "job.log")
     oqp_canonical_input = (
         "mrsf(nstate=2)/bhhlyp/6-31g*\n"
-        "namd(S1,nstep=2,dt=0.5)\n"
+        "namd(S1,scheme=TDC_NAC,nstep=2,dt=0.5)\n"
         "odp(enabled=true,cv=\"distance(1,2)\",scale=\"1.0\","
         "reference_r=\"1.0\",reference_p=\"2.0\",center=0.5,"
         "k_parallel=0.1,window=4)\ngeom=\"h2.xyz\"\n"

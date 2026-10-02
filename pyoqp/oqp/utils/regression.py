@@ -410,6 +410,9 @@ EXEMPT_FLAGS = {
     'nac.restart': 'reload cached .dcme scratch in numerical NAC (IO restart)',
     'nac.clean': 'rmtree numerical-NAC scratch after run (IO cleanup)',
     'tests.exception': 'test-harness toggle (raise vs exit on non-convergence)',
+    'md.common_controls': 'internal lowering marker that distinguishes explicit '
+                          'md(...) controls from legacy qmmm defaults; not a '
+                          'user-selectable dynamics capability',
     'md.restart': 'reload saved NAMD trajectory state (IO restart)',
     'md.econs': 'per-step velocity rescale to conserve E_tot; numerical stabilizer sub-knob',
     'md.soc_du_dt_corr': 'SOC adiabatic-basis dU/dt gradient correction; diagnostic numerical sub-knob',

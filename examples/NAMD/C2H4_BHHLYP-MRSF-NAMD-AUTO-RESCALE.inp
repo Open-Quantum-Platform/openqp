@@ -40,4 +40,4 @@ active=2
 init_temp=300
 seed=663617
 first_hop_step=1
-nve_gate=off
+nve_policy=off

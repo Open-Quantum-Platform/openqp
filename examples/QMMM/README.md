@@ -14,6 +14,69 @@ build without ddX), so the suite stays green either way. Run one directly:
 openqp examples/QMMM/H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp
 ```
 
+## Defining the QM region
+
+Name the QM atoms **once**, with `qmmm(qm_atoms=...)`: 0-based indices in PDB
+order, as ranges or lists (`"0-3"`, `"8,9,16,17,18"`, `"0-10,21,22"`). With
+`geom="file.pdb"` the QM molecule is built from that list, including one
+hydrogen link atom per covalent bond the selection cuts.
+
+```
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",cutoff=NoCutoff)
+geom="ala.pdb"
+```
+
+- `charge=` is the charge of the QM region, not of the whole system.
+- The older spelling that repeats the atoms 1-based after the PDB name
+  (`geom="ala.pdb 9 10 17 18 19"`, or `[input] system = ala.pdb 9 10 17 18 19`)
+  is still accepted, alone or together with `qm_atoms`. Given together, the two
+  lists must name the same atoms; a mismatch is an error rather than a QM
+  molecule that differs from the embedded region
+  (`ala-dipeptide_RHF-QMMM-OPT-constraints.oqp` keeps both).
+- A QM region of whole molecules may instead take its atoms from an xyz file
+  (`geom="solute.xyz"`), as the formaldehyde NAMD decks do. The coordinates
+  are then taken from the PDB, so the xyz only supplies the elements, in PDB
+  order. It cannot add link atoms.
+
+## The four dynamics combinations
+
+`md(...)` owns the nuclear propagation, `namd(...)` the electronic/hopping side
+and `qmmm(...)` the embedding, so the same controls read the same way whether
+the dynamics is ground state or nonadiabatic, gas phase or embedded. One
+runnable two-step `.oqp` deck per combination:
+
+| | gas phase | QM/MM |
+| --- | --- | --- |
+| **ground state** (`md`) | [`examples/MD/Mg_RHF-GROUND-STATE-MD.oqp`](../MD/Mg_RHF-GROUND-STATE-MD.oqp) | [`ala-dipeptide_RKS-QMMM-GROUND-STATE-MD.oqp`](ala-dipeptide_RKS-QMMM-GROUND-STATE-MD.oqp) |
+| **surface hopping** (`namd` + `md`) | [`examples/NAMD/C2H4_BHHLYP-MRSF-NAMD-SCHEME.oqp`](../NAMD/C2H4_BHHLYP-MRSF-NAMD-SCHEME.oqp) | [`H2CO-water_BHHLYP-MRSF-NAMD-QMMM-SCHEME.oqp`](H2CO-water_BHHLYP-MRSF-NAMD-QMMM-SCHEME.oqp) |
+
+Adding `qmmm(...)` is the only difference between a column, and adding
+`namd(...)` the only difference between a row:
+
+```
+rks/bhhlyp/6-31g md(nstep=2,dt=0.5,velocity=zero,ensemble=nve,trajectory_file="ala-gsmd.pdb")
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",cutoff=NoCutoff)
+geom="ala.pdb 9 10 17 18 19"
+```
+
+```
+mrsf(nstate=2)/bhhlyp/6-31g* namd(S1,scheme=Overlap,nacme_check=baeck_an,nacme_policy=warn)
+md(nstep=2,dt=0.5,velocity=zero,seed=3,trajectory_interval=1,trajectory_file="H2CO-water-scheme.namd.trj")
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"
+```
+
+Check any of them with the regression runner (`Passed: 1` means the deck ran):
+
+```bash
+openqp --run_tests examples/QMMM/ala-dipeptide_RKS-QMMM-GROUND-STATE-MD.oqp
+```
+
+Both QM/MM decks need OpenMM; the two gas-phase ones do not. `cutoff=NoCutoff`
+is the schema default and is spelled out here only because these systems are
+non-periodic clusters — see `ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp` for the
+periodic counterpart.
+
 ## NAMD-QMMM (surface-hopping dynamics)
 
 Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
@@ -26,6 +89,7 @@ Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.restart.oqp` | Paired continuation that loads the step-2 checkpoint and advances through step 3. `openqp --run_tests all` schedules it after the producer and reuses the same isolated run directory. |
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NVT.inp` | One-step NVT smoke run with the independent Langevin thermostat and separately recorded energy exchange. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NAC.oqp` | Embedded **analytic** MRSF NAC (`namd(S1,scheme=NAC)`): `tdc=analytic` evaluates the S0/S1 derivative coupling analytically inside the ESPF field and `rescale=analytic_nac` contracts the velocity along it. Needs a link-free QM region (a link-centre coupling direction cannot be projected onto real atoms) and `scf`/`tdhf` `conv <= 1e-8`. |
 | `ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp` | Two-step MRSF-TDDFT FSSH across a **covalent QM/MM boundary** (hydrogen link atom): alanine dipeptide, QM = the C-terminal amide, `NoCutoff`. |
 | `ala-dipeptide_RHF-QMMM-OPT-linkatom.inp` | **QM/MM geometry optimisation** across the same covalent boundary (RHF/6-31G): minimises the embedded QM/MM energy over the QM atoms with the MM fixed (`[optimize] qmmm_radius=0`), 12 steps, writes the full-system PDB. |
 | `ala-dipeptide_RHF-QMMM-OPT-constraints.inp` | **QM/MM optimisation with held bonds**: as above, with the MM atoms within 3 Å of the QM region free to move (`[optimize] qmmm_radius=3.0`) and their X–H bond lengths held by `[qmmm] constraints=HBonds` (frozen distances in the native optimizer), 6 steps; writes the geometry to the file named by `[optimize] qmmm_output`. |
@@ -54,11 +118,82 @@ the [SOC-NAMD-QMMM workflow](https://open-quantum-platform.github.io/openqp-docs
 and the `[md]` / `[qmmm]` keyword pages in the manual for the full input
 contract and the compact `job.qmmm(...)` / `job.workflow.namd(...)` Python API.
 
-## Single-point / ground-state QM/MM
+## Ground-state QM/MM energy at a fixed geometry
 
-`ala.inp` and `2E4E_RHF-DFT-QMMM_energy.inp` are QM/MM single-point energy decks
-(QM selection via `[input] system = file.pdb <indices>`); `run.inp` is a
-ground-state OpenMM-integrator QM/MM MD deck.
+`ala.oqp` (the alanine dipeptide) and `2E4E_RHF-DFT-QMMM_energy.oqp` (a 129-atom
+peptide) take **one** `md(nstep=1)` step, which evaluates the embedded QM/MM
+energy and forces at the input geometry; `run.oqp` is a two-step ground-state
+QM/MM MD of a water dimer in a periodic box.
+
+### Restart, and snapshots for surface hopping
+
+Initial conditions for QM/MM surface hopping come from an equilibrated
+ground-state trajectory. The usual protocol and the piece of input that
+connects each stage:
+
+| stage | level | ensemble | connects to the next stage by |
+| --- | --- | --- | --- |
+| 1 | classical (pure MM, run in OpenMM) | NPT, ~ns | a snapshot written with `oqp.utils.md_snapshot.write_snapshot`, read by `md(snapshot=...)` |
+| 2 | QM/MM ground state | NVT, a few ps | `md(restart=true)` to continue; `md(snapshot_interval=N)` to save a point every N steps |
+| 3 | QM/MM surface hopping | NVE | `md(snapshot="...")`, one trajectory per saved point |
+
+A **snapshot** is one small `.npz` file holding the positions, the velocities
+and the cell of every atom, QM and MM (`pyoqp/oqp/utils/md_snapshot.py`).
+
+- **Checkpoint and restart.** Ground-state QM/MM MD rewrites
+  `md(restart_file=...)` (default `qmmm_md.restart.npz`) every
+  `restart_interval` steps and at the end of the run. Adding `restart=true` to
+  the same deck continues it: same step counter, trajectory and energy log
+  appended, rows and frames written after the checkpoint dropped. `nstep` is
+  the **total** length, so raise it. The ensemble may change between stages
+  (NVT, then NVE). An NVE run stopped and continued reproduces the
+  uninterrupted run.
+- **Numbered snapshots.** `md(snapshot_interval=N)` also writes
+  `<name>.snapshot.<step>.npz` every N steps
+  (`H2CO-water_RKS-QMMM-MD-SNAPSHOTS.oqp`). Space them 50-100 fs apart.
+- **Starting from a snapshot.** `md(snapshot="file.npz")` starts a new
+  trajectory from that point, for ground-state QM/MM MD and for QM/MM surface
+  hopping (`H2CO-water_BHHLYP-MRSF-NAMD-QMMM-SNAPSHOT.oqp`). No velocities are
+  drawn and none are rescaled to a temperature; without it QM/MM NAMD always
+  starts from fresh Maxwell-Boltzmann velocities. It cannot be combined with
+  `velocity=`.
+- **Rigid water.** QM/MM surface hopping keeps MM water rigid, so equilibrate
+  with `qmmm(rigidwater=true)`; a snapshot with flexible water is refused.
+- **From a classical run.** In the OpenMM script of stage 1:
+
+  ```python
+  from oqp.utils.md_snapshot import write_snapshot
+  state = simulation.context.getState(getPositions=True, getVelocities=True)
+  box = state.getPeriodicBoxVectors()
+  write_snapshot("classical.npz",
+      positions_nm=state.getPositions(asNumpy=True).value_in_unit(nanometer),
+      velocities_nm_ps=state.getVelocities(asNumpy=True).value_in_unit(nanometer/picosecond),
+      masses_dalton=[system.getParticleMass(i).value_in_unit(dalton)
+                     for i in range(system.getNumParticles())],
+      box_nm=[box[i][i].value_in_unit(nanometer) for i in range(3)])
+  ```
+
+  The atom order must be that of the PDB given to `qmmm(pdb_file=...)`; a
+  snapshot of a different system is refused. The cell of the snapshot replaces
+  the `CRYST1` cell of the PDB.
+
+### Constant pressure
+
+There is no `ensemble=npt`, for any driver. A QM/MM barostat would need the
+full QM/MM energy at every trial cell, and a QM/MM run covers a few
+picoseconds, far too short for a density to equilibrate. Equilibrate the cell
+in the classical stage and hand it over with `md(snapshot=...)`, as above; the
+snapshot's cell replaces the `CRYST1` cell of the PDB.
+
+There is deliberately no `runtype=energy` QM/MM deck: the plain single-point
+route never builds the ESPF embedding records (`OQP::ESPF_CORR` / `OQP::POTQM`)
+— only the force-based driver behind `md`, `optimize` and `namd` does — so it
+aborts inside the SCF. One `md` step is the supported spelling.
+
+`run.inp` and `ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp` omit `[input] system`
+on purpose: they are the fixtures for the legacy converter's
+synthesize-`geom`-from-`[qmmm] pdb_file` path, and they run, since the QM
+molecule is built from `qm_atoms` (see below).
 
 ## Covalent QM/MM boundary — `[qmmm] frontier_scheme`
 
@@ -68,8 +203,8 @@ density. `[qmmm] frontier_scheme` selects how that frontier charge is treated in
 the ESPF electrostatics. Covalent QM/MM boundaries are handled by both the
 ground-state QM/MM MD path (`QMMM_MD`) and the nonadiabatic `runtype=namd`
 paths (FSSH, SOC-NAMD). For NAMD the QM molecule must contain the link
-hydrogens: build it from the PDB with `[input] system = file.pdb <QM indices>`
-(**1-based** indices there; `[qmmm] qm_atoms` stays 0-based), which appends one
+hydrogens, so build it from the PDB (`geom="file.pdb"` with
+`qmmm(qm_atoms=...)`), which appends one
 H per cut bond in the order the driver detects them. The link atoms carry no
 dynamical degrees of freedom: their positions follow the two host atoms, their
 forces are chain-ruled onto the hosts, and the surface-hopping velocity
@@ -88,13 +223,13 @@ input (`[qmmm] frontier_scheme = rcd`) or the Python API
 regions (no cut bond).
 
 A runnable covalent-boundary deck is
-`ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp` — the alanine dipeptide (ACE-ALA-NH2) with
+`ala-dipeptide_BHHLYP-QMMM-MD-RCD.oqp` — the alanine dipeptide (ACE-ALA-NH2) with
 AMBER-14, QM = the C-terminal amide so the QM/MM partition cuts the `ALA C–CA`
-backbone bond, run as ground-state QM/MM MD (`runtype=md`) with
+backbone bond, run as ground-state QM/MM MD (`md(...)`) with
 `frontier_scheme=rcd`:
 
 ```bash
-cd examples/QMMM && openqp ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp
+openqp --run_tests examples/QMMM/ala-dipeptide_BHHLYP-QMMM-MD-RCD.oqp
 ```
 
 Like the other ground-state QM/MM decks it is skipped by `openqp --run_tests all`.

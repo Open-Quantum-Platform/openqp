@@ -145,6 +145,8 @@ def resolved_dftb_type(config):
     inp = _section(config, "input")
     runtype = str(inp.get("runtype", "energy")).strip().lower()
     istate = _int(_section(config, "optimize").get("istate", 0))
+    if runtype == "md":
+        return "ground"
     if runtype in {"optimize", "mep"} and istate == 0:
         return "ground"
 

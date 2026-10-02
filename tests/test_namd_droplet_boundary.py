@@ -366,15 +366,15 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
     ))
     drivers = {
         "nve": (
-            "namd(T0,nstep=1,dt=0.5,substep=50,init_temp=300,"
+            "namd(T0,scheme=Overlap,nstep=1,dt=0.5,substep=50,init_temp=300,"
             "velocity=maxwell,seed=8128,rng_stream=7,first_hop_step=1,"
-            "nacme_check=off,nacme_gate=off,nve_gate=warn,ensemble=nve,"
+            "nacme_check=off,nacme_policy=off,nve_policy=warn,ensemble=nve,"
             "thermostat=off,trajectory_interval=1,restart_interval=1)"
         ),
         "nvt": (
-            "namd(T0,nstep=1,dt=0.5,substep=50,init_temp=300,"
+            "namd(T0,scheme=Overlap,nstep=1,dt=0.5,substep=50,init_temp=300,"
             "velocity=maxwell,seed=8128,rng_stream=7,first_hop_step=1,"
-            "nacme_check=off,nacme_gate=off,nve_gate=off,ensemble=nvt,"
+            "nacme_check=off,nacme_policy=off,nve_policy=off,ensemble=nvt,"
             "thermostat=langevin,thermostat_temperature=300,"
             "thermostat_friction=1,trajectory_interval=1,restart_interval=1)"
         ),

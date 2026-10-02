@@ -2709,7 +2709,7 @@ class BasisOverlap(Calculator):
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
         mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
-        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        tlf = 0
 
         def compute():
             return adapter.states_overlap(
@@ -3042,7 +3042,7 @@ class NACME(BasisOverlap):
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
         mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
-        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        tlf = 0
         _, s_st = adapter.states_overlap(
             np.asarray(data["OQP::xyz_old"]).ravel(),
             np.asarray(self.mol.get_system(), dtype=float).ravel(),

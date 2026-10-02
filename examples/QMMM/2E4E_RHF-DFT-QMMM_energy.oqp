@@ -1,2 +1,15 @@
-rks/bhhlyp/6-31gs charge=1 qmmm_flag=true dftgrid(rad_type=becke)
-geom="2E4E.pdb 1 2 5 6 7 8 9 3 4 10 22 11 23"
+# QM/MM on a real peptide (2E4E, a de novo designed GPM12 mutant, 129 atoms,
+# AMBER-14): one step of ground-state QM/MM dynamics, i.e. the embedded QM/MM
+# energy and forces at the input geometry.
+# QM = GLY1 plus the TYR2 backbone N/CA, so the partition cuts the TYR2 CA-CB
+# bond; the cut is capped with a hydrogen link atom and the default
+# frontier_scheme=none (full-field ESPF) is used.  The N-terminal NH3+ gives
+# the QM region charge +1.  Requires OpenMM.
+#
+# This used to be a runtype=energy deck.  The plain single-point route never
+# builds the ESPF embedding records (OQP::ESPF_CORR / OQP::POTQM) -- only the
+# force-based QM/MM driver behind md(...), optimize(...) and namd(...) does --
+# so it aborted inside the SCF.  One md step is the supported spelling.
+rks/bhhlyp/6-31g* charge=1 md(nstep=1,dt=0.5,velocity=zero,ensemble=nve) dftgrid(rad_type=becke)
+qmmm(forcefield_files="amber14-all.xml",qm_atoms="0-10,21,22",cutoff=NoCutoff)
+geom="2E4E.pdb"

@@ -68,8 +68,34 @@ class TestEnergyIsSampledBeforeTheStep(unittest.TestCase):
         self.assertNotIn("app.StateDataReporter(", self.src)
 
     def test_backend_energy_is_recorded_by_the_force_update(self):
+        # the update evaluates and then installs; the install step (shared with
+        # an accepted NPT volume move) is what records the backend energy
         m = re.search(r"\n    def _update_qmmm_force\(self, positions\):.*?\n    def ", self.src, re.S)
-        self.assertIn("self._qmmm_energy_kJ = _to_kJmol(qmmm_energy)", m.group(0))
+        self.assertIn("self._install_qmmm_force(positions, qmmm_energy, qmmm_force)", m.group(0))
+        i = re.search(r"\n    def _install_qmmm_force\(self, positions, qmmm_energy, qmmm_force\):.*?\n    def ", self.src, re.S)
+        self.assertIn("self._qmmm_energy_kJ = _to_kJmol(qmmm_energy)", i.group(0))
+
+
+class TestCutoffDefaultFollowsTheSchema(unittest.TestCase):
+    """One documented default for [qmmm] cutoff.
+
+    The drivers used to fall back to "PME" when the key was absent, while the
+    schema default is NoCutoff.  A concise ``qmmm(...)`` call omits unset keys,
+    so ground-state QM/MM MD asked OpenMM for periodic boundaries on a
+    non-periodic PDB and aborted.  These assertions need no OpenMM, so they run
+    wherever the suite runs, unlike the decks that exercise the drivers.
+    """
+
+    def test_schema_default_is_nocutoff(self):
+        schema = (ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py").read_text()
+        self.assertIn("'cutoff': {'type': str, 'default': 'NoCutoff'}", schema)
+
+    def test_md_and_opt_drivers_take_the_default_from_the_schema(self):
+        for rel in ("qmmm_md.py", "qmmm_opt.py"):
+            src = (ROOT / "pyoqp" / "oqp" / "library" / rel).read_text()
+            with self.subTest(driver=rel):
+                self.assertIn('OQP_CONFIG_SCHEMA["qmmm"]["cutoff"]["default"]', src)
+                self.assertNotIn('qmmm_cfg.get("cutoff", "PME")', src)
 
 
 @unittest.skipUnless(_HAVE, "OpenMM unavailable")
@@ -80,10 +106,12 @@ class TestRigidWaterIsWired(unittest.TestCase):
         src = (ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py").read_text()
         self.assertIn("'rigidwater': {'type': bool, 'default': 'False'}", src)
 
-    def test_the_md_driver_is_reached_only_with_the_raw_deck(self):
-        # Runner-built molecules carry the materialised schema, but the input
-        # checker stops runtype=md there; the command line passes the deck
-        # itself to QMMM_MD (config mode), where an omitted key stays omitted.
+    def test_the_md_driver_is_reached_with_a_qmmm_deck(self):
+        # runtype=md is now a first-class ground-state driver (gas phase goes
+        # to GroundStateMD), so the input checker no longer rejects it; a
+        # QM/MM deck is dispatched to QMMM_MD before the ordinary run
+        # functions.  The command line passes the deck itself to QMMM_MD
+        # (config mode), where an omitted key stays omitted.
         from oqp.utils.input_checker import check_input_values
         cfg = {"input": {"runtype": "md", "qmmm_flag": True, "method": "hf", "basis": "sto-3g",
                          "system": "formaldehyde_water.pdb 1 2 3 4", "charge": 0},
@@ -91,7 +119,8 @@ class TestRigidWaterIsWired(unittest.TestCase):
                "qmmm": {"pdb_file": "formaldehyde_water.pdb", "qm_atoms": "0-3",
                         "forcefield_files": "formaldehyde.xml tip3p.xml", "cutoff": "NoCutoff"}}
         report = check_input_values(cfg, raise_error=False, emit=False)
-        self.assertIn(("ERROR", "input.runtype"), [(d.severity, d.path) for d in report.diagnostics])
+        self.assertNotIn("input.runtype",
+                         [d.path for d in report.diagnostics if d.severity == "ERROR"])
         main = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
         self.assertIn("if qmmm_flag and runtype_l == 'md':", main)
         self.assertIn("md = QMMM_MD(oqp_cfg=", main)
@@ -337,7 +366,10 @@ class TestLoggedEnergyIsTheBackendEnergy(unittest.TestCase):
         # ever held the last step)
         self.assertEqual(qm_log.count("OpenQP calculation"), 1)
         self.assertEqual(qm_log.count("Open Quantum Platform"), 1)       # the native banner, once
-        self.assertGreaterEqual(qm_log.count("next QM/MM evaluation"), 4)
+        # The per-geometry "next QM/MM evaluation" banner came from rebuilding
+        # a Runner at every geometry.  MD now carries one electronic context
+        # across the trajectory, so the evaluations are marked by their SCF
+        # sections instead -- one per step of both run() calls.
         self.assertGreaterEqual(qm_log.count("SCF"), 5)
         self.assertEqual(list(z["step"]), [0, 1, 2, 3, 4])
         self.assertEqual([int(round(t / 0.0005)) for t in rows[:, 0]], [0, 1, 2, 3, 4])

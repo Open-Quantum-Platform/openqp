@@ -506,7 +506,7 @@ class OpenQpQMMM:
             xyz_atoms.append(f"H {pos[0]:.12f} {pos[1]:.12f} {pos[2]:.12f}")
         return '; '.join(xyz_atoms)
 
-    def _update_mol_positions(self):
+    def _update_mol_positions(self, target_mol=None):
         qm_xyz = self._qm_xyz_angstrom(self.positions)
         coords = [list(qm_xyz[atom.index]) for atom in self.topology.atoms()
                   if atom.index in self.qm_atoms]
@@ -515,10 +515,32 @@ class OpenQpQMMM:
             coords.append([pos[0], pos[1], pos[2]])
         coords = np.array(coords)
         ang2bohr = 1.8897259886
-        # Molecule has no set_atoms2 (this branch was unreachable until the
-        # QM/MM optimiser used mol mode); update_system writes the bohr
-        # coordinates straight into the Fortran xyz buffer.
-        self.mol.update_system((coords * ang2bohr).ravel())
+        # update_system writes the bohr coordinates straight into the Fortran
+        # xyz buffer.  In mol mode the caller's Molecule is updated; config
+        # mode can pass the Molecule retained by its OPENQP wrapper so that
+        # moving-geometry MD does not have to discard converged orbitals.
+        target = self.mol if target_mol is None else target_mol
+        target.update_system((coords * ang2bohr).ravel())
+
+    def _prepare_config_continuation(self):
+        """Reuse config-mode orbitals for the same or next MD geometry."""
+        if self.op is None:
+            return False
+        image_warm = bool(getattr(self, "_image_warm", False))
+        moving_reuse = bool(getattr(self, "_reuse_orbitals", False))
+        if not image_warm and not moving_reuse:
+            return False
+
+        method = str(self.op.mol.config["input"]["method"])
+        if moving_reuse and not image_warm:
+            self._update_mol_positions(self.op.mol)
+            if not is_tb_method(method):
+                # Rebuild the production basis at the new centres while
+                # retaining the converged MO coefficients as the SCF guess.
+                oqp.library.set_basis(self.op.mol)
+        if not is_tb_method(method):
+            ints_1e(self.op.mol)
+        return True
 
     def forces_qm_openqp(self, potmm=None, potqm=None):
 
@@ -578,11 +600,8 @@ class OpenQpQMMM:
 
         else:
             # ---- Config mode ---------------------------------------------
-            if getattr(self, "_image_warm", False) and getattr(self, "op", None) is not None:
-                # image iteration > 1: same geometry, keep the converged
-                # orbitals and only rebuild the bare one-electron integrals
-                ints_1e(self.op.mol)
-            else:
+            continued = self._prepare_config_continuation()
+            if not continued:
                 xyz_atoms = self._build_xyz_string()
                 self.oqp_cfg_base["input.system"] = xyz_atoms
                 # one log per run: the first geometry opens it, later ones append
@@ -593,6 +612,9 @@ class OpenQpQMMM:
                     tb_potmm = None if self.Embedding == "mechanical" else potmm
                     return self._forces_qm_dftb(self.op.mol, tb_potmm)
                 self.op.sp._prep_guess()
+            elif is_tb_method(str(self.op.mol.config['input']['method'])):
+                tb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.op.mol, tb_potmm)
 
             self.op.mol.data["OQP::POTMM"] = potmm
             self.op.mol.data["OQP::POTQM"] = potqm

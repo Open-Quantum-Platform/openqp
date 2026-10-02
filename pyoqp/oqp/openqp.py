@@ -15,6 +15,11 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.oqp_input import (
+    MD_COMMON_OPTIONS,
+    expand_namd_scheme,
+    normalize_namd_policy_options,
+)
 from oqp.utils.tb_backends import is_tb_method
 from oqp.utils.state_labels import canonical_dftb_type
 
@@ -30,6 +35,12 @@ def dump_strings_from_parser(parser):
 
 
 OPTIMIZER_RUNTYPES = {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}
+_MD_COMMON_SCHEMA_OPTIONS = frozenset(MD_COMMON_OPTIONS) | {
+    "ensemble",
+    "init_temp",
+    "thermostat_temperature",
+    "thermostat_friction",
+}
 # Spellings `theory()` accepts for the CASPT2 family -> the input `method`.
 # Both the hyphenated and the run-together forms, since `[input] method`
 # accepts both.
@@ -73,6 +84,12 @@ class _SectionProxy:
         schema = OQP_CONFIG_SCHEMA.get(self._section, {})
         if option in schema:
             return self._owner.config_typed.get(self._section, {}).get(option)
+        try:
+            section, canonical = resolve_param_key(f"{self._section}.{option}")
+        except KeyError:
+            pass
+        else:
+            return self._owner.config_typed.get(section, {}).get(canonical)
         if self._section == "optimize":
             backend = self._owner._optimizer_backend_section()
             backend_schema = OQP_CONFIG_SCHEMA.get(backend, {})
@@ -306,6 +323,8 @@ class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
         super().__init__(owner, "md", runtype="namd", workflow_name="NAMD")
 
     def __call__(self, **kwargs):
+        kwargs = normalize_namd_policy_options(kwargs)
+        kwargs = expand_namd_scheme(kwargs)
         current = self._owner.config_typed.get("md", {})
         soc = kwargs.get("soc", current.get("soc", False))
         nacme_explicit = "nacme_check" in kwargs
@@ -322,6 +341,75 @@ class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
             # The global default is the same-spin Baeck-An diagnostic.  SOC
             # stores its complex spin-adiabatic overlap/TDC instead.
             kwargs["nacme_check"] = "off"
+        return super().__call__(**kwargs)
+
+
+class _WorkflowMDProxy(_WorkflowSectionProxy):
+    """Ground-state MD selector and common nuclear-propagation controls."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "md", runtype="md")
+
+    def __call__(self, **kwargs):
+        kwargs = dict(kwargs)
+        if "ensemble" in kwargs and "thermostat" in kwargs:
+            raise ValueError(
+                "Use ensemble, not ensemble together with legacy thermostat."
+            )
+        explicit_controls = set(kwargs)
+        kwargs["common_controls"] = True
+        if "temperature" in kwargs:
+            temperature = kwargs.pop("temperature")
+            if "init_temp" in kwargs or "thermostat_temperature" in kwargs:
+                raise ValueError(
+                    "Use temperature, not temperature together with legacy "
+                    "init_temp/thermostat_temperature."
+                )
+            kwargs["init_temp"] = temperature
+            kwargs["thermostat_temperature"] = temperature
+        if "friction" in kwargs:
+            if "thermostat_friction" in kwargs:
+                raise ValueError(
+                    "Use friction or legacy thermostat_friction, not both."
+                )
+            kwargs["thermostat_friction"] = kwargs.pop("friction")
+        if "ensemble" in kwargs:
+            ensemble = str(kwargs["ensemble"]).strip().lower()
+            if ensemble not in {"nve", "nvt"}:
+                if ensemble == "npt":
+                    raise ValueError(
+                        "ensemble='npt' is not available: a QM/MM barostat "
+                        "would need the QM/MM energy at each barostat trial "
+                        "box. Equilibrate the cell classically and start from "
+                        "it with md(snapshot=...)."
+                    )
+                raise ValueError("ensemble must be 'nve' or 'nvt'.")
+            kwargs["ensemble"] = ensemble
+            kwargs["thermostat"] = (
+                "langevin" if ensemble == "nvt" else "off"
+            )
+        elif "thermostat" in kwargs:
+            thermostat = str(kwargs["thermostat"]).strip().lower()
+            if thermostat not in {"off", "langevin"}:
+                raise ValueError("thermostat must be 'off' or 'langevin'.")
+            kwargs["thermostat"] = thermostat
+            kwargs["ensemble"] = "nvt" if thermostat == "langevin" else "nve"
+        current_keys = str(
+            self._owner.config_typed.get("md", {}).get(
+                "common_control_keys", "")
+        )
+        explicit_controls.update(
+            key.strip() for key in current_keys.replace(",", " ").split()
+            if key.strip()
+        )
+        kwargs["common_control_keys"] = ",".join(sorted(explicit_controls))
+        current_runtype = str(
+            self._owner.config_typed.get("input", {}).get("runtype", "energy")
+        ).strip().lower()
+        if current_runtype == "namd":
+            # ``md`` composes common nuclear controls with NAMD.  Preserve the
+            # electronic-dynamics driver regardless of Python call order.
+            return _SectionProxy.__call__(self, **kwargs)
         return super().__call__(**kwargs)
 
 
@@ -440,6 +528,7 @@ class _WorkflowProxy:
         object.__setattr__(self, "pcm", _WorkflowPcmProxy(owner))
         object.__setattr__(self, "nmr", _WorkflowNmrProxy(owner))
         object.__setattr__(self, "soc", _WorkflowSocProxy(owner))
+        object.__setattr__(self, "md", _WorkflowMDProxy(owner))
         # Nonadiabatic MD (Tully surface hopping); MRSF-TDDFT only, [md] section.
         # Gas-phase by default; combine with job.qmmm(...) for QM/MM NAMD and
         # pass soc=True (with optional soc_basis) for SOC-NAMD.
@@ -2065,6 +2154,38 @@ class OpenQP:
                     flat_updates[f"{key}.{opt}"] = opt_value
             else:
                 flat_updates[key] = value
+
+        marker_key = "md.common_control_keys"
+        existing_controls = {
+            key.strip()
+            for key in str(
+                self.config_typed.get("md", {}).get(
+                    "common_control_keys", ""
+                ) or ""
+            ).replace(",", " ").split()
+            if key.strip()
+        }
+        marker_provided = marker_key in flat_updates
+        if marker_provided:
+            existing_controls.update(
+                key.strip()
+                for key in str(flat_updates[marker_key] or "")
+                .replace(",", " ").split()
+                if key.strip()
+            )
+        else:
+            for key in tuple(flat_updates):
+                canonical_key, _ = self._canonicalize_key_value(
+                    key, flat_updates[key]
+                )
+                section, option = resolve_param_key(canonical_key)
+                if (section == "md"
+                        and option in _MD_COMMON_SCHEMA_OPTIONS):
+                    existing_controls.add(option)
+            if existing_controls:
+                flat_updates["md.common_controls"] = True
+        if marker_provided or existing_controls:
+            flat_updates[marker_key] = ",".join(sorted(existing_controls))
 
         for key, value in flat_updates.items():
             canonical_key, canonical_value = self._canonicalize_key_value(key, value)

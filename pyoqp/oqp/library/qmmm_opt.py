@@ -67,7 +67,14 @@ class QMMM_Opt:
             raise ValueError("'qmmm.qm_atoms' is required for a QM/MM optimisation.")
         self.qm_atoms = np.array(sorted(_parse_int_list(qm_raw)), dtype=int)
 
-        cutoff = _resolve_cutoff(qmmm_cfg.get("cutoff", "PME"))
+        # Same documented [qmmm] cutoff default as the MD driver: a concise
+        # qmmm(...) call omits unset keys, and a "PME" fallback here would ask
+        # for periodic boundaries on a non-periodic PDB.
+        from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+        _cut = qmmm_cfg.get("cutoff")
+        cutoff = _resolve_cutoff(
+            _cut if _cut not in (None, "")
+            else OQP_CONFIG_SCHEMA["qmmm"]["cutoff"]["default"])
         _et = qmmm_cfg.get("ewald_tol", None)
         _w = qmmm_cfg.get("mm_charge_width", None)
         _flag = lambda k: str(qmmm_cfg.get(k, "false")).strip().lower() in ("1", "true", "yes", "on")

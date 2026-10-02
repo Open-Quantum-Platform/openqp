@@ -26,6 +26,39 @@ def _parse(text, source_dir=None):
     return spec, oqp_input.lower_to_legacy(spec, source_dir=source_dir)
 
 
+def test_response_route_requires_namd_for_excited_state_dynamics():
+    with pytest.raises(
+        OQPInputError, match=r"md\(\.\.\.\) is ground-state Born-Oppenheimer"
+    ):
+        _parse('mrsf/bhhlyp/6-31g* geom="h2.xyz" md(nstep=2)')
+
+    spec, _ = _parse(
+        'mrsf/bhhlyp/6-31g* geom="h2.xyz" '
+        'namd(S1,scheme=TDC_NAC) md(nstep=2)'
+    )
+    assert spec.driver.name == "namd"
+
+
+@pytest.mark.parametrize(
+    "qmmm_option",
+    [
+        "n_steps=20", "timestep=0.5", "temperature=300",
+        "ensemble=nvt", "friction=1.0",
+    ],
+)
+def test_md_and_qmmm_reject_duplicate_propagation_controls(qmmm_option):
+    md_key = {
+        "n_steps": "nstep", "timestep": "dt", "temperature": "temperature",
+        "ensemble": "ensemble", "friction": "friction",
+    }[qmmm_option.split("=", 1)[0]]
+    with pytest.raises(OQPInputError, match="specified in both md"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" '
+            f'md({md_key}={qmmm_option.split("=", 1)[1]}) '
+            f'qmmm(forcefield_files="ff.xml",qm_atoms="0-2",{qmmm_option})'
+        )
+
+
 @pytest.mark.parametrize(
     ("slash_route", "spaced_route"),
     [
@@ -816,7 +849,8 @@ def test_lowered_values_are_accepted_by_configparser():
 
 def test_string_enums_are_not_globally_coerced_to_bool_or_null():
     _, legacy = _parse(
-        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" namd(S1,decoherence=off) '
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,scheme=TDC_NAC,decoherence=off) '
         'scf(init_scf=no,init_basis=none)'
     )
     assert legacy["md"]["decoherence"] == "off"
@@ -839,7 +873,7 @@ def test_string_enums_are_not_globally_coerced_to_bool_or_null():
 def test_namd_counter_rng_controls_lower_to_md_section():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-        'namd(S1,seed=20260803,rng_stream=7,first_hop_step=2)'
+        'namd(S1,scheme=TDC_NAC,seed=20260803,rng_stream=7,first_hop_step=2)'
     )
     assert legacy["md"]["seed"] == "20260803"
     assert legacy["md"]["rng_stream"] == "7"
@@ -849,7 +883,7 @@ def test_namd_counter_rng_controls_lower_to_md_section():
 def test_namd_baeck_an_check_controls_lower_to_md_section():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-        'namd(S1,nacme_check=baeck_an,ba_gap_max=0.05,nacme_gate=error,'
+        'namd(S1,scheme=TDC_NAC,nacme_check=baeck_an,ba_gap_max=0.05,nacme_gate=error,'
         'nacme_gate_invariant_tol=1e-11,nacme_gate_abs_tol=2e-4,'
         'nacme_gate_rel_tol=0.5,nacme_gate_consecutive=4,'
         'nve_gate=warn,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,'
@@ -859,36 +893,107 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     )
     assert legacy["md"]["nacme_check"] == "baeck_an"
     assert legacy["md"]["ba_gap_max"] == "0.05"
-    assert legacy["md"]["nacme_gate"] == "error"
-    assert legacy["md"]["nacme_gate_invariant_tol"] == "1e-11"
-    assert legacy["md"]["nacme_gate_abs_tol"] == "0.0002"
-    assert legacy["md"]["nacme_gate_rel_tol"] == "0.5"
-    assert legacy["md"]["nacme_gate_consecutive"] == "4"
-    assert legacy["md"]["nve_gate"] == "warn"
-    assert legacy["md"]["nve_gate_abs_tol"] == "0.004"
-    assert legacy["md"]["nve_gate_step_tol"] == "0.0008"
-    assert legacy["md"]["nve_gate_transition_tol"] == "1e-07"
-    assert legacy["md"]["nve_gate_consecutive"] == "2"
+    assert legacy["md"]["nacme_policy"] == "error"
+    assert legacy["md"]["nacme_policy_invariant_tol"] == "1e-11"
+    assert legacy["md"]["nacme_policy_abs_tol"] == "0.0002"
+    assert legacy["md"]["nacme_policy_rel_tol"] == "0.5"
+    assert legacy["md"]["nacme_policy_consecutive"] == "4"
+    assert legacy["md"]["nve_policy"] == "warn"
+    assert legacy["md"]["nve_policy_abs_tol"] == "0.004"
+    assert legacy["md"]["nve_policy_step_tol"] == "0.0008"
+    assert legacy["md"]["nve_policy_transition_tol"] == "1e-07"
+    assert legacy["md"]["nve_policy_consecutive"] == "2"
     assert legacy["md"]["trajectory_interval"] == "1"
     assert legacy["md"]["restart_interval"] == "1"
     assert legacy["md"]["trajectory_file"] == "dense.trj"
     assert legacy["md"]["restart_file"] == "state.npz"
 
 
+def test_namd_policy_names_remain_canonical_runtime_keys():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,scheme=TDC_NAC,nacme_check=baeck_an,nacme_policy=warn,'
+        'nacme_policy_abs_tol=2e-4,nve_policy=error,'
+        'nve_policy_step_tol=8e-4)'
+    )
+    assert legacy["md"]["nacme_policy"] == "warn"
+    assert legacy["md"]["nacme_policy_abs_tol"] == "0.0002"
+    assert legacy["md"]["nve_policy"] == "error"
+    assert legacy["md"]["nve_policy_step_tol"] == "0.0008"
+    assert not {key for key in legacy["md"] if "gate" in key}
+
+    with pytest.raises(OQPInputError, match="specify the same policy"):
+        _parse(
+            'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+            'namd(S1,scheme=TDC_NAC,nve_policy=warn,nve_gate=warn)'
+        )
+
+    _, legacy_alias = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,scheme=TDC_NAC,nve_gate=off)'
+    )
+    assert legacy_alias["md"]["nve_policy"] == "off"
+
+
 def test_namd_baeck_an_tdc_provider_lowers_to_md_section():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-        'namd(S1,tdc=baeck_an,rescale=isotropic,nacme_check=off)'
+        'namd(S1,scheme=BaeckAn,nacme_check=off)'
     )
     assert legacy["md"]["tdc"] == "baeck_an"
     assert legacy["md"]["rescale"] == "isotropic"
     assert legacy["md"]["nacme_check"] == "off"
 
 
+@pytest.mark.parametrize(
+    ("scheme", "expected"),
+    [
+        ("BaeckAn", dict(tdc="baeck_an", rescale="isotropic",
+                         thrshe="0.015936", frustrated="none")),
+        ("Overlap", dict(tdc="npi", rescale="isotropic",
+                         thrshe="0.015936", frustrated="none")),
+        ("TDC_NAC", dict(tdc="npi", rescale="hop_analytic_nac",
+                         thrshe="0.367493", frustrated="reflect")),
+        ("NAC", dict(tdc="analytic", rescale="analytic_nac",
+                     thrshe="0.367493", frustrated="reflect")),
+    ],
+)
+def test_namd_scheme_lowers_complete_table_1_treatment(scheme, expected):
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        f'namd(S1,scheme={scheme})'
+    )
+    assert {key: legacy["md"][key] for key in expected} == expected
+    assert "scheme" not in legacy["md"]
+
+
+def test_namd_scheme_rejects_unknown_and_mixed_low_level_controls():
+    prefix = 'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+    with pytest.raises(OQPInputError, match="requires scheme"):
+        _parse(prefix + 'namd(S1)')
+    with pytest.raises(
+        OQPInputError,
+        match="BaeckAn, Overlap, TDC_NAC, NAC, or custom",
+    ):
+        _parse(prefix + 'namd(S1,scheme=maybe)')
+    with pytest.raises(OQPInputError, match="already defines tdc"):
+        _parse(prefix + 'namd(S1,scheme=NAC,tdc=analytic)')
+
+    with pytest.raises(OQPInputError, match="requires explicit"):
+        _parse(prefix + 'namd(S1,scheme=custom,tdc=npi)')
+
+    _, custom = _parse(
+        prefix + 'namd(S1,scheme=custom,tdc=npi,rescale=isotropic,'
+        'thrshe=0.02,frustrated=none)'
+    )
+    assert custom["md"]["tdc"] == "npi"
+    assert custom["md"]["rescale"] == "isotropic"
+
+
 def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
     _, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
-        'namd(S1,nstep=10,ensemble=nvt,thermostat=langevin,'
+        'namd(S1,scheme=Overlap,nstep=10,ensemble=nvt,thermostat=langevin,'
         'thermostat_temperature=310,thermostat_friction=2.5) '
         'qmmm(pdb_file="drop.pdb",forcefield_files="tip3p.xml",'
         'qm_atoms="0-2",cutoff=NoCutoff) '
@@ -937,7 +1042,7 @@ def test_restart_manifest_paths_can_be_rebased_to_the_source_directory(tmp_path)
     source_dir.mkdir()
     spec = oqp_input.parse_canonical_oqp(
         'mrsf(nstate=2)/bhhlyp/sto-3g '
-        'namd(S1,velocity="velocities.dat") '
+        'namd(S1,scheme=Overlap,velocity="velocities.dat") '
         'guess(type=json,file="guess.json") '
         'qmmm(pdb_file="cluster.pdb",forcefield_files="./local.xml amber14/tip3p.xml",qm_atoms="0-1") '
         'geom="geometry.xyz"'
@@ -1019,6 +1124,17 @@ def test_natural_request_with_grad_and_opt_is_ambiguous():
         oqp_input.compile_natural_request(
             "MRSF-TDDFT/BHHLYP/6-31G* h2o.xyz에서 S1 gradient와 구조 최적화"
         )
+
+
+def test_natural_namd_request_preserves_required_scheme():
+    spec = oqp_input.compile_natural_request(
+        'MRSF/BHHLYP/6-31G* NAMD S1 geom="h2.xyz" scheme=Overlap'
+    )
+    canonical = oqp_input.render_canonical_oqp(spec)
+    legacy = oqp_input.lower_to_legacy(spec)
+    assert "namd(S1,scheme=Overlap)" in canonical
+    assert legacy["md"]["tdc"] == "npi"
+    assert legacy["md"]["rescale"] == "isotropic"
 
 
 def test_natural_energy_correction_preserves_triplet_manifold():
@@ -1119,7 +1235,7 @@ def test_qmmm_call_enables_qmmm_and_resolves_local_paths(tmp_path):
 def test_qmmm_pdb_file_is_inferred_from_the_last_geometry_line(tmp_path):
     text = """\
 mrsf(nstate=3)/bhhlyp/6-31g*
-namd(S1,soc=true,soc_basis=mch,nstep=200)
+namd(S1,scheme=Overlap,soc=true,soc_basis=mch,nstep=200)
 qmmm(forcefield_files="amber14-all.xml,amber14/tip3p.xml",qm_atoms="0-14")
 geom="chromophore_water.pdb 0-14"
 """
@@ -1163,19 +1279,24 @@ def test_qmmm_md_step_alias_collision_is_rejected():
         )
 
 
-def test_md_requires_qmmm_and_physical_state_cannot_be_overridden():
-    with pytest.raises(OQPInputError, match=r"requires qmmm\(\.\.\.\)"):
-        oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="h2o.xyz" md(S0)'
-        )
+def test_md_is_ground_state_with_or_without_qmmm_and_state_cannot_be_overridden():
+    gas = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="h2o.xyz" md(S0,nstep=4,dt=0.2)'
+    )
+    gas_legacy = oqp_input.lower_to_legacy(gas)
+    assert gas_legacy["input"]["runtype"] == "md"
+    assert gas_legacy["properties"]["grad"] == "0"
+    assert gas_legacy["md"]["nstep"] == "4"
+    assert gas_legacy["md"]["dt"] == "0.2"
     with pytest.raises(OQPInputError, match="internal state selector"):
         oqp_input.parse_canonical_oqp(
-            'mrsf/bhhlyp/6-31g* geom="h2o.xyz" namd(S1,active=1)'
+            'mrsf/bhhlyp/6-31g* geom="h2o.xyz" '
+            'namd(S1,scheme=TDC_NAC,active=1)'
         )
-    with pytest.raises(OQPInputError, match="does not define option 'nstep'"):
-        oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="h2o.xyz" md(S0,nstep=10) qmmm()'
-        )
+    embedded = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp geom="h2o.xyz" md(S0,nstep=10) qmmm()'
+    )
+    assert oqp_input.lower_to_legacy(embedded)["input"]["qmmm_flag"] == "True"
     _, energy = _parse(
         'dft/pbe0/def2-svp geom="ala.pdb 9 10" energy '
         'qmmm(pdb_file="system.pdb")'
@@ -1210,10 +1331,130 @@ def test_md_requires_qmmm_and_physical_state_cannot_be_overridden():
         )
 
 
+def test_namd_composes_with_md_nuclear_controls():
+    spec = oqp_input.parse_canonical_oqp(
+        'mrsf/bhhlyp/6-31g* geom="ethene.xyz" '
+        'namd(S1,scheme=TDC_NAC) '
+        'md(nstep=200,dt=0.25,temperature=300,ensemble=nvt,friction=2.0)'
+    )
+    legacy = oqp_input.lower_to_legacy(spec)
+    assert legacy["input"]["runtype"] == "namd"
+    assert legacy["md"]["nstep"] == "200"
+    assert legacy["md"]["dt"] == "0.25"
+    assert legacy["md"]["init_temp"] == "300"
+    assert legacy["md"]["thermostat_temperature"] == "300"
+    assert legacy["md"]["thermostat_friction"] == "2.0"
+    assert legacy["md"]["thermostat"] == "langevin"
+    assert legacy["md"]["ensemble"] == "nvt"
+    assert legacy["md"]["common_control_keys"] == (
+        "dt,ensemble,friction,nstep,temperature"
+    )
+    assert legacy["md"]["tdc"] == "npi"
+    assert legacy["md"]["rescale"] == "hop_analytic_nac"
+
+
+def test_md_owns_the_dynamics_output_controls():
+    # Output names belong with the nuclear propagation that produces them, so
+    # the whole set is accepted in public md(...) -- md(restart_file=...) used
+    # to be rejected as "Unknown option 'md.restart_file'", which left the
+    # NAMD checkpoint reachable only through the legacy [md] section.
+    _, legacy = _parse(
+        'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2co.xyz" '
+        'namd(S1,scheme=Overlap) '
+        'md(nstep=2,trajectory_file="t.trj",trajectory_interval=1,'
+        'restart_file="r.npz",restart_interval=2,energy_file="e.csv")'
+    )
+    assert legacy["md"]["trajectory_file"] == "t.trj"
+    assert legacy["md"]["trajectory_interval"] == "1"
+    assert legacy["md"]["restart_file"] == "r.npz"
+    assert legacy["md"]["restart_interval"] == "2"
+    assert legacy["md"]["energy_file"] == "e.csv"
+    # ... and they are recorded as explicitly supplied, which is what carries
+    # them into the QM/MM driver's own config (merge_explicit_md_controls).
+    explicit = set(legacy["md"]["common_control_keys"].split(","))
+    assert {"trajectory_file", "trajectory_interval", "restart_file",
+            "restart_interval", "energy_file"} <= explicit
+
+    # an unknown md key is still a hard error
+    with pytest.raises(OQPInputError, match=r"trajectry_file"):
+        _parse('dft/pbe0/def2-svp geom="h2o.xyz" md(trajectry_file="t.xyz")')
+
+
+def test_md_ensemble_is_canonical_and_thermostat_remains_compatible():
+    _, nve = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" md(ensemble=NVE)'
+    )
+    assert nve["md"]["ensemble"] == "nve"
+    assert nve["md"]["thermostat"] == "off"
+
+    _, legacy_nvt = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" md(thermostat=langevin)'
+    )
+    assert legacy_nvt["md"]["ensemble"] == "nvt"
+    assert legacy_nvt["md"]["thermostat"] == "langevin"
+
+    _, compatible = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" '
+        'md(ensemble=nvt,thermostat=langevin)'
+    )
+    assert compatible["md"]["ensemble"] == "nvt"
+    assert compatible["md"]["thermostat"] == "langevin"
+
+    with pytest.raises(OQPInputError, match="inconsistent"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" '
+            'md(ensemble=nve,thermostat=langevin)'
+        )
+
+    with pytest.raises(OQPInputError, match="barostat trial box"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" md(ensemble=npt)'
+        )
+
+
+def test_md_snapshot_controls_lower_and_resolve_next_to_the_deck(tmp_path):
+    # snapshot= is an input file, so like velocity= it is looked up next to
+    # the deck; snapshot_interval and the restart pair are plain md controls.
+    for driver in ('rks/bhhlyp/6-31g geom="w.pdb 1 2 3" md(nstep=4,%s) ',
+                   'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2co.xyz" '
+                   'namd(S1,scheme=Overlap) md(nstep=4,%s) '):
+        _, legacy = _parse(
+            driver % 'snapshot="eq.snapshot.00000100.npz"'
+            + 'qmmm(pdb_file="w.pdb",forcefield_files="tip3p.xml",qm_atoms="0-2")',
+            source_dir=tmp_path)
+        assert legacy["md"]["snapshot"] == str(
+            (tmp_path / "eq.snapshot.00000100.npz").resolve())
+        assert "snapshot" in legacy["md"]["common_control_keys"].split(",")
+
+    _, legacy = _parse(
+        'rks/bhhlyp/6-31g geom="w.pdb 1 2 3" '
+        'md(nstep=4,snapshot_interval=200,restart_interval=50,'
+        'restart_file="eq.restart.npz",restart=true) '
+        'qmmm(pdb_file="w.pdb",forcefield_files="tip3p.xml",qm_atoms="0-2")')
+    assert legacy["md"]["snapshot_interval"] == "200"
+    assert legacy["md"]["restart_interval"] == "50"
+    assert legacy["md"]["restart_file"] == "eq.restart.npz"
+    assert legacy["md"]["restart"] == "True"
+
+
+def test_md_npt_is_rejected_everywhere_with_the_working_route():
+    # No barostat in any driver: the cell is equilibrated classically and
+    # handed over as a snapshot, and the message says so.
+    for deck in (
+        'dft/pbe0/def2-svp geom="h2o.xyz" md(ensemble=npt)',
+        'rks/bhhlyp/6-31g geom="w.pdb 1 2 3" md(nstep=3,ensemble=npt) '
+        'qmmm(forcefield_files="tip3p.xml",qm_atoms="0-2",cutoff=PME)',
+        'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2co.xyz" '
+        'namd(S1,scheme=Overlap,ensemble=npt)',
+    ):
+        with pytest.raises(OQPInputError, match=r"barostat trial box.*snapshot"):
+            _parse(deck)
+
+
 def test_soc_namd_numeric_active_surface_is_not_rewritten_as_mch_state():
     _, legacy = _parse(
         'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2co.xyz" '
-        'namd(active=5,soc=true,nstep=1)'
+        'namd(active=5,scheme=Overlap,soc=true,nstep=1)'
     )
     assert legacy["tdhf"]["nstate"] == "2"
     assert legacy["md"]["active"] == "5"
@@ -2441,7 +2682,7 @@ def test_natural_cc_support_matches_the_established_mp2_spelling(tmp_path):
 def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
     text = (
         'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '
-        'namd(T0,nstep=1,dt=0.1,velocity=zero) '
+        'namd(T0,scheme=TDC_NAC,nstep=1,dt=0.1,velocity=zero) '
         'odp(enabled=true,cv="distance(1,2);angle(3,1,4)",'
         'scale="0.5,1.0",reference_r="2.1,1.9",'
         'reference_p="2.5,2.2",center=0.5,k_parallel=0.02,'
@@ -2486,37 +2727,67 @@ def test_namd_scf_guess_retry_example_parses():
 
 def test_minimal_namd_uses_directional_stable_defaults_and_file_velocities():
     spec, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
-                          'namd(S2,nstep=1000,dt=0.5,velocity="velocity.au")')
+                          'namd(S2,scheme=TDC_NAC,nstep=1000,dt=0.5,'
+                          'velocity="velocity.au")')
     values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
-    expected = dict(tdc='npi', rescale='auto', decoherence='edc',
+    expected = dict(tdc='npi', rescale='hop_analytic_nac', decoherence='edc',
                     frustrated='reflect', mo_reuse=True, ref_follow='soscf',
                     ref_switch_rescale=True, disc_rescale=True, disc_substeps=10,
+                    continuity='on', state_check=True, state_tol=0.7,
                     velocity='velocity.au', nstep=1000, dt=0.5)
     for key, value in expected.items():
         assert values['md', key] == value
-    assert values['md', 'thrshe'] == sys.float_info.max
+    assert values['md', 'thrshe'] == 0.367493
     assert values['dftgrid', 'pruned'] == 'sg2'
     assert values['scf', 'conv'] == values['tdhf', 'conv'] == 1e-8
 
 
 def test_namd_explicit_controls_override_recommended_defaults():
     _, config = _parse('mrsf/bhhlyp/6-31g* geom="thymine.xyz" '
-                       'namd(S2,tdc=fd,rescale=isotropic,disc_substeps=0,'
-                       'disc_rescale=false,velocity=zero) scf(conv=1e-10)')
+                       'namd(S2,scheme=custom,continuity=manual,tdc=fd,rescale=isotropic,'
+                       'thrshe=0.02,frustrated=none,disc_substeps=0,'
+                       'disc_rescale=false,state_check=false,state_tol=0.8,'
+                       'velocity=zero) scf(conv=1e-10)')
     values = oqp_input._effective_config(config, oqp_input._load_schema_defaults())
     assert values['md', 'tdc'] == 'fd'
     assert values['md', 'rescale'] == 'isotropic'
     assert values['md', 'disc_substeps'] == 0
     assert values['md', 'disc_rescale'] is False
+    assert values['md', 'continuity'] == 'manual'
+    assert values['md', 'state_check'] is False
+    assert values['md', 'state_tol'] == 0.8
     assert values['md', 'velocity'] == 'zero'
     assert values['scf', 'conv'] == 1e-10
 
 
+def test_state_overlap_minor_evaluation_is_fixed_to_exact():
+    from oqp.molecule.oqpdata import tlf_order
+
+    assert tlf_order(0) == 0
+    assert tlf_order('exact') == 0
+    with pytest.raises(ValueError, match='fixed at 0'):
+        tlf_order(1)
+    with pytest.raises(ValueError, match='fixed at 0'):
+        tlf_order(2)
+
+
 @pytest.mark.parametrize("path", sorted((ROOT / "examples" / "QMMM").glob("*NAMD*.oqp")))
 def test_qmmm_namd_examples_explicitly_select_supported_rescaling(path):
+    # Every QM/MM NAMD deck must NAME its rescaling. `auto` is what must not
+    # appear: it resolves from the convergence thresholds, so the same deck can
+    # take the analytic route or the isotropic one depending on [scf] conv.
+    # Analytic rescaling used to be excluded outright for QM/MM; it is now
+    # supported for a link-free QM region, which is why this no longer pins
+    # isotropic for every deck.
     spec, config = _parse(path.read_text(), source_dir=path.parent)
-    assert config['md']['rescale'] == 'isotropic'
-    if config['md'].get('nacme_gate') == 'warn':
+    rescale = config['md']['rescale']
+    assert rescale in ('isotropic', 'analytic_nac', 'hop_analytic_nac')
+    if rescale != 'isotropic':
+        # the resident analytic NAC has an accuracy guard; a deck that selects
+        # it without the thresholds would fail at the first coupling
+        for section in ('scf', 'tdhf'):
+            assert float(config[section]['conv']) <= 1.0e-8, section
+    if config['md'].get('nacme_policy') == 'warn':
         assert config['md']['nacme_check'] == 'baeck_an'
 
 
