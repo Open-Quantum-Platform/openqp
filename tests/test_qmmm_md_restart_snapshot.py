@@ -120,6 +120,17 @@ def test_numbered_snapshot_step_finds_the_file_a_name_points_to(tmp_path, monkey
     (tmp_path / "keep.npz").write_bytes(b"x")
     (tmp_path / "run.snapshot.00000008.npz").symlink_to(tmp_path / "keep.npz")
     assert f(restart, tmp_path / "keep.npz") is None
+    # a name whose link chain passes through a destination that is itself a
+    # link: the middle entry is what step 8 replaces
+    (tmp_path / "energy.npz").symlink_to(tmp_path / "run.snapshot.00000008.npz")
+    assert f(restart, tmp_path / "energy.npz") == 8
+    # case-only variants name the same file on a case-insensitive filesystem
+    assert f(restart, tmp_path / "RUN.SNAPSHOT.00000010.NPZ") == 10
+    assert f(restart, tmp_path / "Run.Snapshot.00000010.npz") == 10
+    # a link loop ends the walk instead of hanging
+    (tmp_path / "loop-a.npz").symlink_to(tmp_path / "loop-b.npz")
+    (tmp_path / "loop-b.npz").symlink_to(tmp_path / "loop-a.npz")
+    assert f(restart, tmp_path / "loop-a.npz") is None
 
 
 # ------------------------------------------------------------- the driver ---

@@ -176,23 +176,48 @@ def numbered_snapshot_path(restart_file, step):
     return f"{base}.snapshot.{int(step):08d}.npz"
 
 
-def numbered_snapshot_step(restart_file, path):
-    """The step whose numbered snapshot of ``restart_file`` lands on ``path``.
+def _directory_entry(path):
+    """Where a write to ``path`` lands: the directory resolved through links,
+    the last component not -- ``os.replace`` replaces a link standing there."""
+    path = os.path.abspath(str(path))
+    return os.path.join(os.path.realpath(os.path.dirname(path)),
+                        os.path.basename(path))
 
-    ``path`` is resolved through symbolic links, because what a run would
-    destroy is the file a name points to, not the name.  The destination is
-    resolved through its directory only: a snapshot is written by replacing
-    the directory entry, so a link standing at the destination is replaced,
-    not followed.  Returns None when ``path`` is not one of the numbered
-    snapshots this checkpoint name generates.
+
+def _link_chain(path, limit=40):
+    """Every directory entry a name passes through, then its final referent."""
+    current = _directory_entry(path)
+    seen = set()
+    while len(seen) < limit:
+        yield current
+        if current in seen or not os.path.islink(current):
+            break
+        seen.add(current)
+        current = _directory_entry(
+            os.path.join(os.path.dirname(current), os.readlink(current)))
+    yield os.path.realpath(str(path))
+
+
+def numbered_snapshot_step(restart_file, path):
+    """The step whose numbered snapshot of ``restart_file`` ``path`` reaches.
+
+    Every entry on the link chain of ``path`` is compared, not only its final
+    referent: a snapshot is written by replacing the directory entry
+    (``os.replace``), so a link standing at the destination is itself the file
+    that is replaced, and a name that reaches the destination through it is
+    redirected to the new snapshot afterwards.  Names are compared without
+    regard to case, because on a case-insensitive filesystem (the macOS
+    default) two spellings name one file; refusing a case-only variant on a
+    case-sensitive one costs nothing.  Returns None when ``path`` never reaches
+    one of the numbered snapshots this checkpoint name generates.
     """
-    target = os.path.realpath(str(path))
-    match = re.search(r"\.snapshot\.(\d+)\.npz$", os.path.basename(target))
-    if match is None:
-        return None
-    step = int(match.group(1))
-    destination = numbered_snapshot_path(restart_file, step)
-    destination = os.path.join(
-        os.path.realpath(os.path.dirname(os.path.abspath(destination))),
-        os.path.basename(destination))
-    return step if destination == target else None
+    for entry in _link_chain(path):
+        match = re.search(r"\.snapshot\.(\d+)\.npz$", os.path.basename(entry),
+                          re.IGNORECASE)
+        if match is None:
+            continue
+        step = int(match.group(1))
+        destination = _directory_entry(numbered_snapshot_path(restart_file, step))
+        if destination.casefold() == entry.casefold():
+            return step
+    return None
