@@ -16,6 +16,7 @@ OpenMM topology: nm, nm/ps, dalton, ps.  This module needs neither OpenMM nor
 the OpenQP runtime.
 """
 import os
+import re
 import tempfile
 
 import numpy as np
@@ -173,3 +174,25 @@ def numbered_snapshot_path(restart_file, step):
     if base.lower().endswith(".restart"):
         base = base[:-8]
     return f"{base}.snapshot.{int(step):08d}.npz"
+
+
+def numbered_snapshot_step(restart_file, path):
+    """The step whose numbered snapshot of ``restart_file`` lands on ``path``.
+
+    ``path`` is resolved through symbolic links, because what a run would
+    destroy is the file a name points to, not the name.  The destination is
+    resolved through its directory only: a snapshot is written by replacing
+    the directory entry, so a link standing at the destination is replaced,
+    not followed.  Returns None when ``path`` is not one of the numbered
+    snapshots this checkpoint name generates.
+    """
+    target = os.path.realpath(str(path))
+    match = re.search(r"\.snapshot\.(\d+)\.npz$", os.path.basename(target))
+    if match is None:
+        return None
+    step = int(match.group(1))
+    destination = numbered_snapshot_path(restart_file, step)
+    destination = os.path.join(
+        os.path.realpath(os.path.dirname(os.path.abspath(destination))),
+        os.path.basename(destination))
+    return step if destination == target else None

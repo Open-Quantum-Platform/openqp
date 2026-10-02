@@ -100,6 +100,28 @@ def test_numbered_snapshot_names():
     assert f("/a/b/state.npz", 12) == "/a/b/state.snapshot.00000012.npz"
 
 
+def test_numbered_snapshot_step_finds_the_file_a_name_points_to(tmp_path, monkeypatch):
+    f = md_snapshot.numbered_snapshot_step
+    restart = str(tmp_path / "run.restart.npz")
+    assert f(restart, tmp_path / "run.snapshot.00000002.npz") == 2
+    assert f(restart, tmp_path / "run.snapshot.00000100.npz") == 100
+    # not this family: another run name, unpadded number, no number
+    assert f(restart, tmp_path / "other.snapshot.00000002.npz") is None
+    assert f(restart, tmp_path / "run.snapshot.2.npz") is None
+    assert f(restart, tmp_path / "run.npz") is None
+    # a relative name and an absolute name of the same file
+    monkeypatch.chdir(tmp_path)
+    assert f("run.restart.npz", tmp_path / "run.snapshot.00000004.npz") == 4
+    # a link with another name that points into the family is the family file
+    (tmp_path / "run.snapshot.00000006.npz").write_bytes(b"x")
+    (tmp_path / "start.npz").symlink_to(tmp_path / "run.snapshot.00000006.npz")
+    assert f(restart, tmp_path / "start.npz") == 6
+    # a family name that is itself a link to elsewhere is replaced, not followed
+    (tmp_path / "keep.npz").write_bytes(b"x")
+    (tmp_path / "run.snapshot.00000008.npz").symlink_to(tmp_path / "keep.npz")
+    assert f(restart, tmp_path / "keep.npz") is None
+
+
 # ------------------------------------------------------------- the driver ---
 
 DECK = """[input]
@@ -518,6 +540,44 @@ class TestRestartAndSnapshots(unittest.TestCase):
         # np.savez would append .npz: the name actually written is what counts
         with self.assertRaisesRegex(ValueError, "would overwrite the input"):
             build(energy_file="src.snapshot.00000002")
+
+    def test_no_output_or_input_may_be_a_numbered_snapshot_of_the_run(self):
+        """The numbered snapshots are generated step by step, so they are
+        checked against every other output and every input, including a link
+        with another name that points at one of them."""
+        from oqp.library.qmmm_md import QMMM_MD
+        pdb = EXAMPLES / "formaldehyde_water.pdb"
+
+        def build(md, **names):
+            text = DECK.format(
+                pdb=pdb, ff=EXAMPLES / "formaldehyde.xml", tip=EXAMPLES / "tip3p.xml",
+                nsteps=2, ensemble="nve", fmt="pdb", name="run", md=md)
+            for key, value in names.items():
+                text = re.sub(rf"(?m)^{key} = .*$", f"{key} = {value}", text)
+            deck = Path("family.inp")
+            deck.write_text(text)
+            return QMMM_MD(oqp_cfg=str(deck))
+
+        md = "velocity = zero\ncommon_control_keys = velocity\nsnapshot_interval = 2"
+        for key in ("energy_file", "trajectory_file", "log_file"):
+            with self.subTest(output=key):
+                with self.assertRaisesRegex(ValueError, "numbered snapshot this run "
+                                                        "writes at step 2"):
+                    build(md, **{key: "run.snapshot.00000002.npz"})
+        # np.savez appends .npz to the energy table
+        with self.assertRaisesRegex(ValueError, "at step 2"):
+            build(md, energy_file="run.snapshot.00000002")
+        # a step that is never written is not a collision
+        build(md, energy_file="run.snapshot.00000003.npz")
+
+        # a snapshot input reached through a link with another name
+        _run("src", 2, md=md)
+        before = Path("src.snapshot.00000002.npz").read_bytes()
+        os.symlink("src.snapshot.00000002.npz", "start.npz")
+        with self.assertRaisesRegex(ValueError, "would overwrite the starting point"):
+            build("snapshot = start.npz\nsnapshot_interval = 2",
+                  restart_file="src.restart.npz")
+        self.assertEqual(Path("src.snapshot.00000002.npz").read_bytes(), before)
         with self.assertRaisesRegex(ValueError, "pdb_file"):
             build(trajectory_file=pdb)
         with self.assertRaisesRegex(ValueError, "outputs must be distinct"):
