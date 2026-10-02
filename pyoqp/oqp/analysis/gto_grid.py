@@ -8,8 +8,10 @@ analytic McMurchie-Davidson overlap, and on a grid to <=1e-3).
 Convention (from the OQP molden writer):
   * shells store OQP-internal contraction coefficients; the molden/standard
     normalized-primitive coefficient is ``d = coef * NORMS[L] * (2a)^-(L/2+3/4)``.
-  * Cartesian component order: L=0 [s]; L=1 [x,y,z]; L=2 [xx,yy,zz,xy,xz,yz];
-    L=3 [xxx,yyy,zzz,xyy,xxy,xxz,xzz,yzz,yyz,xyz].
+  * Cartesian component order is the engine's CART_X/Y/Z order
+    (source/constants.F90): L=0 [s]; L=1 [x,y,z]; L=2 [xx,yy,zz,xy,xz,yz];
+    L=3 [xxx,yyy,zzz,xxy,xxz,xyy,yyz,xzz,yzz,xyz].  This is NOT the Molden
+    10F label order; the Molden writer permutes to that order on output.
 """
 import numpy as np
 
@@ -17,13 +19,14 @@ import numpy as np
 _NORMS = np.sqrt(np.pi * np.sqrt(np.pi) *
                  np.array([1.0, 0.5, 0.75, 1.875, 6.5625, 29.53125, 162.421875]))
 
-# Cartesian components per L in OQP order (lx, ly, lz).
+# Cartesian components per L in OQP engine order (lx, ly, lz); must match
+# CART_X/Y/Z in source/constants.F90 (asserted against OQP::SM in tests).
 _CART = {
     0: [(0, 0, 0)],
     1: [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
     2: [(2, 0, 0), (0, 2, 0), (0, 0, 2), (1, 1, 0), (1, 0, 1), (0, 1, 1)],
-    3: [(3, 0, 0), (0, 3, 0), (0, 0, 3), (1, 2, 0), (2, 1, 0),
-        (2, 0, 1), (1, 0, 2), (0, 1, 2), (0, 2, 1), (1, 1, 1)],
+    3: [(3, 0, 0), (0, 3, 0), (0, 0, 3), (2, 1, 0), (2, 0, 1),
+        (1, 2, 0), (0, 2, 1), (1, 0, 2), (0, 1, 2), (1, 1, 1)],
 }
 
 
