@@ -1,0 +1,3 @@
+rhf/cc-pv5z ispher=false scf(save_molden=false)
+properties(scf_prop="nmr,acid",nmr_gauge=giao,acid_spacing=0.5,acid_padding=3.0)
+geom="../geometries/Ne-6c6328e9e40d.xyz"
