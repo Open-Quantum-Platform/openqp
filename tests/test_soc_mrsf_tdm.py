@@ -286,31 +286,48 @@ SEQUENCE_DRIVER = textwrap.dedent('''
     import json, math, sys
     import numpy as np
     from oqp.pyoqp import Runner
-    # cases "basis:nstate", run one after another in THIS interpreter
+    # cases "basis:nstate:soc_2e:verbose", run one after another on ONE Runner /
+    # Molecule / tagarray container (the legacy OPENQP API pattern:
+    # mol.load_config(dict) followed by runner.run()), so every later case
+    # replaces, resizes or erases the records of the previous one.
+    H2O = "\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n   H -0.7731277 0.55567785 0.0"
+    def cfg(basis, nstate, soc_2e, verbose):
+        return {"input": {"system": H2O, "charge": "0", "runtype": "soc", "basis": basis,
+                          "method": "tdhf", "functional": "bhhlyp", "ispher": "false",
+                          "soc_2e": soc_2e, "verbose": verbose},
+                "scf": {"type": "rohf", "multiplicity": "3", "conv": "1e-10", "maxit": "300"},
+                "tdhf": {"type": "mrsf", "nstate": nstate, "multiplicity": "3", "conv": "1e-9"}}
+    cases = [c.split(":") for c in sys.argv[1].split(",")]
+    first = cfg(*cases[0])
+    text = "".join("[%s]\\n%s\\n" % (sec, "".join("%s=%s\\n" % kv for kv in opts.items()))
+                   for sec, opts in first.items())
+    open("seq.inp", "w").write(text)
+    r = Runner(project="seq", input_file="seq.inp", log="seq.log", silent=1, usempi=False)
     out = []
-    for k, case in enumerate(sys.argv[1].split(",")):
-        basis, nstate = case.split(":")
-        inp = ("[input]\\nsystem=\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n"
-               "   H -0.7731277 0.55567785 0.0\\ncharge=0\\nruntype=soc\\nbasis=" + basis + "\\n"
-               "method=tdhf\\nfunctional=bhhlyp\\nispher=false\\nsoc_2e=1\\nverbose=3\\n\\n"
-               "[scf]\\ntype=rohf\\nmultiplicity=3\\nconv=1e-10\\nmaxit=300\\n\\n"
-               "[tdhf]\\ntype=mrsf\\nnstate=" + nstate + "\\nmultiplicity=3\\nconv=1e-9\\n")
-        name = "seq_%d" % k
-        open(name + ".inp", "w").write(inp)
-        r = Runner(project=name, input_file=name + ".inp", log=name + ".log", silent=1, usempi=False)
+    for k, case in enumerate(cases):
+        if k > 0:
+            r.mol.load_config(cfg(*case))
         r.run()
         d = r.mol.data
+        def present(tag):
+            try:
+                return int(np.asarray(d[tag]).size) > 0
+            except Exception:
+                return False
+        def shape(tag):
+            return list(np.asarray(d[tag]).shape) if present(tag) else []
         nbf = int(round(math.sqrt(np.asarray(d["OQP::VEC_MO_A"]).size)))
         n = int(np.asarray(d["OQP::soc_eval"]).size)
-        out.append({"case": case, "nbf": nbf, "n": n,
-                    "shape_l1e": list(np.asarray(d["OQP::soc_lmo_1e"]).shape),
-                    "shape_l2e": list(np.asarray(d["OQP::soc_lmo_2e"]).shape),
-                    "shape_hsoc": list(np.asarray(d["OQP::soc_hsoc_re"]).shape),
-                    "eval": np.asarray(d["OQP::soc_eval"]).ravel().tolist(),
-                    "l1e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_1e"]))),
-                    "l2e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_2e"]))),
-                    "hsoc_abs": np.abs(np.asarray(d["OQP::soc_hsoc_re"]).ravel()
-                                       + 1j * np.asarray(d["OQP::soc_hsoc_im"]).ravel()).tolist()})
+        rec = {"case": ":".join(case), "nbf": nbf, "n": n,
+               "l1e": present("OQP::soc_lmo_1e"), "l2e": present("OQP::soc_lmo_2e"),
+               "shape_l1e": shape("OQP::soc_lmo_1e"), "shape_l2e": shape("OQP::soc_lmo_2e"),
+               "shape_hsoc": list(np.asarray(d["OQP::soc_hsoc_re"]).shape),
+               "eval": np.asarray(d["OQP::soc_eval"]).ravel().tolist(),
+               "l1e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_1e"]))) if present("OQP::soc_lmo_1e") else None,
+               "l2e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_2e"]))) if present("OQP::soc_lmo_2e") else None,
+               "hsoc_abs": np.abs(np.asarray(d["OQP::soc_hsoc_re"]).ravel()
+                                  + 1j * np.asarray(d["OQP::soc_hsoc_im"]).ravel()).tolist()}
+        out.append(rec)
     print("SOCSEQ_RESULT " + json.dumps(out))
 ''')
 
@@ -403,29 +420,36 @@ class SOCTransitionDensities(unittest.TestCase):
             return json.loads(lines[-1][len("SOCSEQ_RESULT "):])
 
     def test_persistent_soc_records_resize_in_one_process(self):
-        """Several SOC calculations in one interpreter with the persistent
-        OQP::soc_lmo_1e/_2e, soc_hsoc_* and soc_eval records replaced at
-        INCREASING (nbf 13 -> 19, n 8 -> 16) and then DECREASING (-> 7, 8)
-        dimensions must give the shapes and values of fresh processes."""
-        cases = ["6-31g:2", "6-31g*:4", "sto-3g:2"]
+        """One Runner / Molecule / tagarray container, five SOC calculations:
+        the persistent OQP::soc_lmo_1e/_2e, soc_hsoc_* and soc_eval records are
+        REPLACED at increasing dimensions (nbf 13 -> 19, n_soc 8 -> 16), the 2e
+        record is ERASED when soc_2e is switched off at unchanged dimensions,
+        both integral records are ERASED when the verbosity drops while the
+        dimensions DECREASE (nbf 7, n_soc 8), and they are RECREATED when debug
+        mode returns.  Every case must reproduce a fresh-process calculation."""
+        cases = ["6-31g:2:1:3", "6-31g*:4:1:3", "6-31g*:4:0:3", "sto-3g:2:1:1", "sto-3g:2:1:3"]
+        expect = [(13, 8, True, True), (19, 16, True, True), (19, 16, True, False),
+                  (7, 8, False, False), (7, 8, True, True)]
         seq = self._run_sequence(cases)
         fresh = [self._run_sequence([c])[0] for c in cases]
-        nbfs = [r["nbf"] for r in seq]
-        self.assertEqual(nbfs, [13, 19, 7])
-        self.assertEqual([r["n"] for r in seq], [8, 16, 8])
-        for r_seq, r_fresh in zip(seq, fresh):
-            nbf, n = r_seq["nbf"], r_seq["n"]
-            self.assertEqual(r_seq["shape_l1e"], [nbf, nbf, 3])
-            self.assertEqual(r_seq["shape_l2e"], [nbf, nbf, 3])
+        self.assertEqual(len(seq), len(cases))
+        for r_seq, r_fresh, (nbf, n, has1, has2) in zip(seq, fresh, expect):
+            self.assertEqual((r_seq["nbf"], r_seq["n"]), (nbf, n), r_seq["case"])
+            self.assertEqual((r_seq["l1e"], r_seq["l2e"]), (has1, has2), r_seq["case"])
+            self.assertEqual((r_fresh["l1e"], r_fresh["l2e"]), (has1, has2), r_seq["case"])
             self.assertEqual(r_seq["shape_hsoc"], [n, n])
-            self.assertEqual(r_seq["shape_l1e"], r_fresh["shape_l1e"])
-            self.assertEqual(r_seq["shape_hsoc"], r_fresh["shape_hsoc"])
-            self.assertAlmostEqual(r_seq["l1e_norm"], r_fresh["l1e_norm"], delta=1e-9 * max(r_fresh["l1e_norm"], 1.0))
-            self.assertAlmostEqual(r_seq["l2e_norm"], r_fresh["l2e_norm"], delta=1e-9 * max(r_fresh["l2e_norm"], 1.0))
-            # SCF/Davidson start from different guesses in a reused process:
+            if has1:
+                self.assertEqual(r_seq["shape_l1e"], [nbf, nbf, 3])
+                self.assertAlmostEqual(r_seq["l1e_norm"], r_fresh["l1e_norm"],
+                                       delta=1e-9 * max(r_fresh["l1e_norm"], 1.0))
+            if has2:
+                self.assertEqual(r_seq["shape_l2e"], [nbf, nbf, 3])
+                self.assertAlmostEqual(r_seq["l2e_norm"], r_fresh["l2e_norm"],
+                                       delta=1e-9 * max(r_fresh["l2e_norm"], 1.0))
+            # SCF/Davidson start from different guesses in a reused molecule:
             # agreement to 1e-5 cm-1 on eigenvalues and 1e-5 (a.u.) on |H_SOC|
-            self.assertLess(np.abs(np.array(r_seq["eval"]) - np.array(r_fresh["eval"])).max(), 1e-5)
-            self.assertLess(np.abs(np.array(r_seq["hsoc_abs"]) - np.array(r_fresh["hsoc_abs"])).max(), 1e-5)
+            self.assertLess(np.abs(np.array(r_seq["eval"]) - np.array(r_fresh["eval"])).max(), 1e-5, r_seq["case"])
+            self.assertLess(np.abs(np.array(r_seq["hsoc_abs"]) - np.array(r_fresh["hsoc_abs"])).max(), 1e-5, r_seq["case"])
 
 
 if __name__ == "__main__":

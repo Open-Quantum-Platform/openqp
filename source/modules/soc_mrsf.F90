@@ -262,25 +262,31 @@ contains
     ! Debug-mode export of the MO integrals (independent regression of H_SOC
     ! in tests/test_soc_mrsf_tdm.py).  Gated like the other MRSF developer
     ! dumps (infos%tddft%debug_mode, [input] verbose=3): a production run
-    ! does not retain these 3*nbf*nbf records.
-    if (infos%tddft%debug_mode) then
-      block
-        real(kind=dp), contiguous, pointer :: lout(:,:,:)
-        integer :: ta_status
+    ! does not retain these 3*nbf*nbf records.  A record whose export
+    ! condition is false now is erased, so a molecule re-run with lower
+    ! verbosity or soc_2e=0 does not keep a stale copy from an earlier run.
+    block
+      real(kind=dp), contiguous, pointer :: lout(:,:,:)
+      integer :: ta_status
+      if (infos%tddft%debug_mode) then
         ta_status = infos%dat%alloc(OQP_soc_lmo_1e, [nbf, nbf, 3], lout, &
           description="MO SOC 1e integrals l_b(t,u) (x,y,z), L_b = -i l_b, a.u. (no alpha^2/2)", &
           override=.true.)
         if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_1e', WITH_ABORT)
         lout(:,:,1) = lx_mo; lout(:,:,2) = ly_mo; lout(:,:,3) = lz_mo
-        if (do_2e_soc) then
-          ta_status = infos%dat%alloc(OQP_soc_lmo_2e, [nbf, nbf, 3], lout, &
-            description="MO SOC mean-field 2e integrals (x,y,z), same convention", &
-            override=.true.)
-          if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_2e', WITH_ABORT)
-          lout(:,:,1) = lx_2e_mo; lout(:,:,2) = ly_2e_mo; lout(:,:,3) = lz_2e_mo
-        end if
-      end block
-    end if
+      else
+        call infos%dat%erase((/ character(len=80) :: OQP_soc_lmo_1e /))
+      end if
+      if (infos%tddft%debug_mode .and. do_2e_soc) then
+        ta_status = infos%dat%alloc(OQP_soc_lmo_2e, [nbf, nbf, 3], lout, &
+          description="MO SOC mean-field 2e integrals (x,y,z), same convention", &
+          override=.true.)
+        if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_2e', WITH_ABORT)
+        lout(:,:,1) = lx_2e_mo; lout(:,:,2) = ly_2e_mo; lout(:,:,3) = lz_2e_mo
+      else
+        call infos%dat%erase((/ character(len=80) :: OQP_soc_lmo_2e /))
+      end if
+    end block
 
     ! --- Step 3: Build spin-dependent transition density matrices ---
     allocate(t00aa (ns, nt, nbf, nbf), &
