@@ -259,6 +259,39 @@ DRIVER = textwrap.dedent('''
 ''')
 
 
+SEQUENCE_DRIVER = textwrap.dedent('''
+    import json, math, sys
+    import numpy as np
+    from oqp.pyoqp import Runner
+    # cases "basis:nstate", run one after another in THIS interpreter
+    out = []
+    for k, case in enumerate(sys.argv[1].split(",")):
+        basis, nstate = case.split(":")
+        inp = ("[input]\\nsystem=\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n"
+               "   H -0.7731277 0.55567785 0.0\\ncharge=0\\nruntype=soc\\nbasis=" + basis + "\\n"
+               "method=tdhf\\nfunctional=bhhlyp\\nispher=false\\nsoc_2e=1\\n\\n"
+               "[scf]\\ntype=rohf\\nmultiplicity=3\\nconv=1e-10\\nmaxit=300\\n\\n"
+               "[tdhf]\\ntype=mrsf\\nnstate=" + nstate + "\\nmultiplicity=3\\nconv=1e-9\\n")
+        name = "seq_%d" % k
+        open(name + ".inp", "w").write(inp)
+        r = Runner(project=name, input_file=name + ".inp", log=name + ".log", silent=1, usempi=False)
+        r.run()
+        d = r.mol.data
+        nbf = int(round(math.sqrt(np.asarray(d["OQP::VEC_MO_A"]).size)))
+        n = int(np.asarray(d["OQP::soc_eval"]).size)
+        out.append({"case": case, "nbf": nbf, "n": n,
+                    "shape_l1e": list(np.asarray(d["OQP::soc_lmo_1e"]).shape),
+                    "shape_l2e": list(np.asarray(d["OQP::soc_lmo_2e"]).shape),
+                    "shape_hsoc": list(np.asarray(d["OQP::soc_hsoc_re"]).shape),
+                    "eval": np.asarray(d["OQP::soc_eval"]).ravel().tolist(),
+                    "l1e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_1e"]))),
+                    "l2e_norm": float(np.linalg.norm(np.asarray(d["OQP::soc_lmo_2e"]))),
+                    "hsoc_abs": np.abs(np.asarray(d["OQP::soc_hsoc_re"]).ravel()
+                                       + 1j * np.asarray(d["OQP::soc_hsoc_im"]).ravel()).tolist()})
+    print("SOCSEQ_RESULT " + json.dumps(out))
+''')
+
+
 def _oqp_available():
     try:
         from oqp import lib  # noqa: F401
@@ -304,6 +337,45 @@ class SOCTransitionDensities(unittest.TestCase):
 
     def test_mrsf_bhhlyp(self):
         self._check("bhhlyp")
+
+    def _run_sequence(self, cases):
+        with tempfile.TemporaryDirectory(prefix="socseq_") as wd:
+            drv = os.path.join(wd, "driver.py")
+            with open(drv, "w") as f:
+                f.write(SEQUENCE_DRIVER)
+            env = dict(os.environ)
+            env.setdefault("OMP_NUM_THREADS", "4")
+            proc = subprocess.run([sys.executable, drv, ",".join(cases)], cwd=wd, env=env,
+                                  capture_output=True, text=True, timeout=3600)
+            lines = [l for l in proc.stdout.splitlines() if l.startswith("SOCSEQ_RESULT ")]
+            if proc.returncode != 0 or not lines:
+                self.fail(f"sequence driver failed:\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}")
+            return json.loads(lines[-1][len("SOCSEQ_RESULT "):])
+
+    def test_persistent_soc_records_resize_in_one_process(self):
+        """Several SOC calculations in one interpreter with the persistent
+        OQP::soc_lmo_1e/_2e, soc_hsoc_* and soc_eval records replaced at
+        INCREASING (nbf 13 -> 19, n 8 -> 16) and then DECREASING (-> 7, 8)
+        dimensions must give the shapes and values of fresh processes."""
+        cases = ["6-31g:2", "6-31g*:4", "sto-3g:2"]
+        seq = self._run_sequence(cases)
+        fresh = [self._run_sequence([c])[0] for c in cases]
+        nbfs = [r["nbf"] for r in seq]
+        self.assertEqual(nbfs, [13, 19, 7])
+        self.assertEqual([r["n"] for r in seq], [8, 16, 8])
+        for r_seq, r_fresh in zip(seq, fresh):
+            nbf, n = r_seq["nbf"], r_seq["n"]
+            self.assertEqual(r_seq["shape_l1e"], [nbf, nbf, 3])
+            self.assertEqual(r_seq["shape_l2e"], [nbf, nbf, 3])
+            self.assertEqual(r_seq["shape_hsoc"], [n, n])
+            self.assertEqual(r_seq["shape_l1e"], r_fresh["shape_l1e"])
+            self.assertEqual(r_seq["shape_hsoc"], r_fresh["shape_hsoc"])
+            self.assertAlmostEqual(r_seq["l1e_norm"], r_fresh["l1e_norm"], delta=1e-9 * max(r_fresh["l1e_norm"], 1.0))
+            self.assertAlmostEqual(r_seq["l2e_norm"], r_fresh["l2e_norm"], delta=1e-9 * max(r_fresh["l2e_norm"], 1.0))
+            # SCF/Davidson start from different guesses in a reused process:
+            # agreement to 1e-5 cm-1 on eigenvalues and 1e-5 (a.u.) on |H_SOC|
+            self.assertLess(np.abs(np.array(r_seq["eval"]) - np.array(r_fresh["eval"])).max(), 1e-5)
+            self.assertLess(np.abs(np.array(r_seq["hsoc_abs"]) - np.array(r_fresh["hsoc_abs"])).max(), 1e-5)
 
 
 if __name__ == "__main__":

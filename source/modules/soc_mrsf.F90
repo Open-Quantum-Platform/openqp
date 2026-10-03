@@ -10,9 +10,16 @@ module soc_mrsf_mod
 
   !> Determinant expansion of an MRSF state in the sector representation
   !> described above compute_tdm's configuration algebra.
+  !> The one-hole/one-particle sector is kept factorized: an MRSF core->virtual
+  !> excitation populates two open/spin patterns per (c,w) with the same
+  !> amplitude, and the spin ladder acts on the pattern only, so
+  !>   hp(2c+sr, o, 2w+sv) = hc(sr, o, sv) * xcv(c, w)
+  !> exactly (no dense 64*nc*nv tensor is ever formed).
   type sector_state_t
     integer :: nc = 0, nv = 0
-    real(kind=dp), allocatable :: nn(:), hn(:,:), np(:,:), hp(:,:,:)
+    real(kind=dp), allocatable :: nn(:), hn(:,:), np(:,:)
+    real(kind=dp) :: hc(0:1, 0:15, 0:1) = 0.0_dp
+    real(kind=dp), allocatable :: xcv(:,:)
   end type sector_state_t
 
   logical, save :: open_tables_ready = .false.
@@ -657,7 +664,7 @@ subroutine compute_tdm(bvec_s, bvec_t, xvec_dim, nocca, noccb, nbf, ns, nt, &
     tt1(j)%nn = tt1(j)%nn / sqrt(2.0_dp)
     tt1(j)%hn = tt1(j)%hn / sqrt(2.0_dp)
     tt1(j)%np = tt1(j)%np / sqrt(2.0_dp)
-    tt1(j)%hp = tt1(j)%hp / sqrt(2.0_dp)
+    tt1(j)%hc = tt1(j)%hc / sqrt(2.0_dp)
   end do
 
   allocate(d(0:2*nbf-1, 0:2*nbf-1))
@@ -707,7 +714,7 @@ end subroutine compute_tdm
 !     nn(o)        no core hole, no virtual electron
 !     hn(r, o)     core hole r,  no virtual electron
 !     np(o, v)     no core hole, virtual electron v
-!     hp(r, o, v)  core hole r,  virtual electron v
+!     hp(r, o, v)  core hole r,  virtual electron v  (= hc(sr,o,sv) xcv(c,w))
 ! with o = 0..15 the open-shell occupation bit pattern (bit 0 O1a, 1 O1b,
 ! 2 O2a, 3 O2b), r = 2c+s the core spin orbital (s = 0 alpha, 1 beta) and
 ! v = 2w+s the virtual spin orbital.  The basis vectors are occupation-number
@@ -775,12 +782,12 @@ subroutine alloc_sector_state(st, nc, nv)
   integer, intent(in) :: nc, nv
   st%nc = nc
   st%nv = nv
-  allocate(st%nn(0:15), st%hn(0:2*nc-1, 0:15), st%np(0:15, 0:2*nv-1), &
-           st%hp(0:2*nc-1, 0:15, 0:2*nv-1))
+  allocate(st%nn(0:15), st%hn(0:2*nc-1, 0:15), st%np(0:15, 0:2*nv-1), st%xcv(0:nc-1, 0:nv-1))
   st%nn = 0.0_dp
   st%hn = 0.0_dp
   st%np = 0.0_dp
-  st%hp = 0.0_dp
+  st%hc = 0.0_dp
+  st%xcv = 0.0_dp
 end subroutine alloc_sector_state
 
 !> MRSF M_S = 0 state of one packed response vector x (slot (i,a) at
@@ -803,18 +810,16 @@ subroutine mrsf_sector_state(x, mult, nocca, noccb, nbf, st)
   if (mult == 1) lam = -1.0_dp
   call alloc_sector_state(st, nc, nv)
 
-  ! core -> virtual
+  ! core -> virtual: E+ puts (hole c alpha, pattern O1a O2a, particle w beta),
+  ! E- puts (hole c beta, pattern O1b O2b, particle w alpha); the phases
+  ! (-1)**(n_open + r) are +1 and -1 for every c, so the sector factorizes.
   do c = 0, nc - 1
-    ra = 2*c
-    rb = 2*c + 1
     do w = 0, nv - 1
-      val = xslot(c, w + 2) * isq2
-      st%hp(ra, ref_plus,  2*w + 1) = st%hp(ra, ref_plus,  2*w + 1) &
-        + parity_sign(pop_tab(ref_plus) + ra) * val
-      st%hp(rb, ref_minus, 2*w)     = st%hp(rb, ref_minus, 2*w) &
-        + lam * parity_sign(pop_tab(ref_minus) + rb) * val
+      st%xcv(c, w) = xslot(c, w + 2)
     end do
   end do
+  st%hc(0, ref_plus, 1)  = isq2 * parity_sign(pop_tab(ref_plus))
+  st%hc(1, ref_minus, 0) = lam * isq2 * parity_sign(pop_tab(ref_minus) + 1)
 
   ! core -> O_m
   do m = 0, 1
@@ -873,36 +878,40 @@ subroutine spin_raise(st, out)
   integer :: o1, o2, c, w
 
   call alloc_sector_state(out, st%nc, st%nv)
+  out%xcv = st%xcv
   do o1 = 0, 15
     do o2 = 0, 15
       if (splus_open(o1, o2) == 0.0_dp) cycle
       out%nn(o1) = out%nn(o1) + splus_open(o1, o2) * st%nn(o2)
       out%hn(:, o1) = out%hn(:, o1) + splus_open(o1, o2) * st%hn(:, o2)
       out%np(o1, :) = out%np(o1, :) + splus_open(o1, o2) * st%np(o2, :)
-      out%hp(:, o1, :) = out%hp(:, o1, :) + splus_open(o1, o2) * st%hp(:, o2, :)
+      out%hc(:, o1, :) = out%hc(:, o1, :) + splus_open(o1, o2) * st%hc(:, o2, :)
     end do
   end do
   ! virtual electron (w beta) -> (w alpha)
   do w = 0, st%nv - 1
     out%np(:, 2*w) = out%np(:, 2*w) + st%np(:, 2*w + 1)
-    out%hp(:, :, 2*w) = out%hp(:, :, 2*w) + st%hp(:, :, 2*w + 1)
   end do
+  out%hc(:, :, 0) = out%hc(:, :, 0) + st%hc(:, :, 1)
   ! core hole: a+(c alpha) a(c beta) moves the hole from (c alpha) to (c beta)
   do c = 0, st%nc - 1
     out%hn(2*c + 1, :) = out%hn(2*c + 1, :) + st%hn(2*c, :)
-    out%hp(2*c + 1, :, :) = out%hp(2*c + 1, :, :) + st%hp(2*c, :, :)
   end do
+  out%hc(1, :, :) = out%hc(1, :, :) + st%hc(0, :, :)
 end subroutine spin_raise
 
 !> D(P,Q) = <bra| a+_P a_Q |ket>, P = 2m+s over all spin orbitals.
+!> The hp sector enters only through the factorized form, so every contraction
+!> over it is an O(nc nv) (or nc^2 / nv^2) product of the compact amplitudes.
 subroutine transition_density(bra, ket, d)
   implicit none
   type(sector_state_t), intent(in) :: bra, ket
   real(kind=dp), intent(out) :: d(0:, 0:)
 
-  integer :: nc, nv, nh, npv, o0, v0, p, q, a, b, o, k, pk, of, ox, r, m
-  real(kind=dp) :: overlap, ph, s
-  real(kind=dp), allocatable :: mc(:,:), gam(:,:)
+  integer :: nc, nv, nh, npv, o0, v0, p, q, a, b, o, k, pk, of, ox, r, m, c, w, sr, sp, sq, sv
+  real(kind=dp) :: overlap, ph, s, sx
+  real(kind=dp) :: gvv(0:1, 0:1), gcc(0:1, 0:1), goo(0:15, 0:15), acv(0:1, 0:1), avc(0:1, 0:1)
+  real(kind=dp), allocatable :: mc(:,:), gam(:,:), mvv(:,:), mcc(:,:), qb(:,:), qk(:,:), ub(:,:), uk(:,:)
 
   nc = ket%nc
   nv = ket%nv
@@ -912,13 +921,31 @@ subroutine transition_density(bra, ket, d)
   v0 = 2*nc + 4
   d = 0.0_dp
 
+  ! contractions of the factorized hp sectors
+  sx = sum(bra%xcv * ket%xcv)                                   ! sum_cw xb xk
+  allocate(mvv(0:nv-1, 0:nv-1), mcc(0:nc-1, 0:nc-1))
+  mvv = matmul(transpose(bra%xcv), ket%xcv)                     ! (w, w')
+  mcc = matmul(bra%xcv, transpose(ket%xcv))                     ! (c, c')
+  do sq = 0, 1
+    do sp = 0, 1
+      gvv(sp, sq) = sum(bra%hc(:, :, sp) * ket%hc(:, :, sq))
+      gcc(sp, sq) = sum(bra%hc(sp, :, :) * ket%hc(sq, :, :))
+    end do
+  end do
+  do m = 0, 15
+    do o = 0, 15
+      goo(o, m) = sum(bra%hc(:, o, :) * ket%hc(:, m, :))
+    end do
+  end do
+
   overlap = sum(bra%nn * ket%nn) + sum(bra%hn * ket%hn) + sum(bra%np * ket%np) &
-          + sum(bra%hp * ket%hp)
+          + sx * sum(bra%hc * ket%hc)
 
   ! virtual <- virtual (no intervening occupied mode)
   do q = 0, npv - 1
     do p = 0, npv - 1
-      d(v0 + p, v0 + q) = sum(bra%np(:, p) * ket%np(:, q)) + sum(bra%hp(:, :, p) * ket%hp(:, :, q))
+      d(v0 + p, v0 + q) = sum(bra%np(:, p) * ket%np(:, q)) &
+                        + mvv(p/2, q/2) * gvv(mod(p, 2), mod(q, 2))
     end do
   end do
 
@@ -926,7 +953,7 @@ subroutine transition_density(bra, ket, d)
   allocate(mc(0:nh-1, 0:nh-1))
   do b = 0, nh - 1
     do a = 0, nh - 1
-      mc(a, b) = sum(bra%hn(a, :) * ket%hn(b, :)) + sum(bra%hp(a, :, :) * ket%hp(b, :, :))
+      mc(a, b) = sum(bra%hn(a, :) * ket%hn(b, :)) + mcc(a/2, b/2) * gcc(mod(a, 2), mod(b, 2))
     end do
   end do
   do b = 0, nh - 1
@@ -945,7 +972,7 @@ subroutine transition_density(bra, ket, d)
   do m = 0, 15
     do o = 0, 15
       gam(o, m) = bra%nn(o) * ket%nn(m) + sum(bra%hn(:, o) * ket%hn(:, m)) &
-                + sum(bra%np(o, :) * ket%np(m, :)) + sum(bra%hp(:, o, :) * ket%hp(:, m, :))
+                + sum(bra%np(o, :) * ket%np(m, :)) + sx * goo(o, m)
     end do
   end do
   do k = 0, 3
@@ -955,50 +982,88 @@ subroutine transition_density(bra, ket, d)
   end do
   deallocate(gam)
 
-  ! open <-> core, open <-> virtual
+  ! open <-> core, open <-> virtual.  qb(c,sp) = sum_w xb(c,w) np_ket(o,2w+sp)
+  ! (and qk with bra/ket exchanged); ub(w,sr) = sum_c xb(c,w) hn_ket(2c+sr,o).
+  allocate(qb(0:nc-1, 0:1), qk(0:nc-1, 0:1), ub(0:nv-1, 0:1), uk(0:nv-1, 0:1))
   do k = 0, 3
     pk = ishft(1, k)
     do o = 0, 15
       if (.not. has_tab(k, o)) then
         of = ior(o, pk)
+        do sp = 0, 1
+          qb(:, sp) = matmul(bra%xcv, ket%np(o, sp:npv-1:2))
+        end do
+        do sr = 0, 1
+          uk(:, sr) = matmul(bra%hn(sr:nh-1:2, of), ket%xcv)
+        end do
+        ! O <- C
         do r = 0, nh - 1
+          c = r/2
+          sr = mod(r, 2)
           ph = parity_sign(after_tab(k, o) + r)
-          s = bra%hn(r, of) * ket%nn(o) + sum(bra%hp(r, of, :) * ket%np(o, :))
+          s = bra%hn(r, of) * ket%nn(o) + sum(bra%hc(sr, of, :) * qb(c, :))
           d(o0 + k, r) = d(o0 + k, r) + ph * s
         end do
+        ! O <- V
         ph = parity_sign(before_tab(k, o))
         do p = 0, npv - 1
-          s = bra%nn(of) * ket%np(o, p) + sum(bra%hn(:, of) * ket%hp(:, o, p))
+          w = p/2
+          sp = mod(p, 2)
+          s = bra%nn(of) * ket%np(o, p) + sum(ket%hc(:, o, sp) * uk(w, :))
           d(o0 + k, v0 + p) = d(o0 + k, v0 + p) + ph * s
         end do
       else
         ox = ieor(o, pk)
+        do sp = 0, 1
+          qk(:, sp) = matmul(ket%xcv, bra%np(ox, sp:npv-1:2))
+        end do
+        do sr = 0, 1
+          ub(:, sr) = matmul(ket%hn(sr:nh-1:2, o), bra%xcv)
+        end do
+        ! C <- O
         do r = 0, nh - 1
+          c = r/2
+          sr = mod(r, 2)
           ph = parity_sign(after_tab(k, o) + r)
-          s = bra%nn(ox) * ket%hn(r, o) + sum(bra%np(ox, :) * ket%hp(r, o, :))
+          s = bra%nn(ox) * ket%hn(r, o) + sum(ket%hc(sr, o, :) * qk(c, :))
           d(r, o0 + k) = d(r, o0 + k) + ph * s
         end do
+        ! V <- O
         ph = parity_sign(before_tab(k, o))
         do p = 0, npv - 1
-          s = bra%np(ox, p) * ket%nn(o) + sum(bra%hp(:, ox, p) * ket%hn(:, o))
+          w = p/2
+          sp = mod(p, 2)
+          s = bra%np(ox, p) * ket%nn(o) + sum(bra%hc(:, ox, sp) * ub(w, :))
           d(v0 + p, o0 + k) = d(v0 + p, o0 + k) + ph * s
         end do
       end if
     end do
   end do
+  deallocate(qb, qk, ub, uk)
 
-  ! virtual <- core and core <- virtual
-  do r = 0, nh - 1
-    do p = 0, npv - 1
-      s = 0.0_dp
+  ! virtual <- core and core <- virtual: phase (-1)**(n_open + r) = (-1)**(n_open + sr)
+  do sp = 0, 1
+    do sr = 0, 1
+      avc(sr, sp) = 0.0_dp
+      acv(sr, sp) = 0.0_dp
       do o = 0, 15
-        ph = parity_sign(pop_tab(o) + r)
-        s = s + ph * bra%hp(r, o, p) * ket%nn(o)
-        d(r, v0 + p) = d(r, v0 + p) + ph * bra%nn(o) * ket%hp(r, o, p)
+        ph = parity_sign(pop_tab(o) + sr)
+        avc(sr, sp) = avc(sr, sp) + ph * bra%hc(sr, o, sp) * ket%nn(o)
+        acv(sr, sp) = acv(sr, sp) + ph * bra%nn(o) * ket%hc(sr, o, sp)
       end do
-      d(v0 + p, r) = s
     end do
   end do
+  do r = 0, nh - 1
+    c = r/2
+    sr = mod(r, 2)
+    do p = 0, npv - 1
+      w = p/2
+      sp = mod(p, 2)
+      d(v0 + p, r) = bra%xcv(c, w) * avc(sr, sp)
+      d(r, v0 + p) = ket%xcv(c, w) * acv(sr, sp)
+    end do
+  end do
+  deallocate(mvv, mcc)
 
 end subroutine transition_density
 
