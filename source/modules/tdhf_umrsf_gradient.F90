@@ -9,8 +9,8 @@
 !> character-followed S1/S2/S3 checks pass. Higher-root energy-index finite differences require
 !> overlap/character following near crossings, so the supplied DFT regressions check separated root 1.
 !> LIMITATIONS: CAM/LRC, meta-GGA, double-hybrid, and nondefault or functional-specific SPC
-!> parameterizations are rejected before gradient assembly. XC atom-partition moving-grid weight
-!> derivatives are not included, leaving a grid-dependent analytic-versus-FD floor.
+!> parameterizations are rejected before gradient assembly. The linear XC
+!> probe includes the moving-grid partition-weight and owner-motion response.
 !>
 !> The z-vector entry computes and caches the UMRSF response contribution:
 !> full-block Z-vector (oo+ov+vv) + full G^f (re-align, carries the dV/dC alignment Jacobian) +
@@ -819,23 +819,13 @@ contains
     allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), de_m1(3,natom), &
              de_xc(3,natom), source=0.0_dp)
 
-    ! Toggles: UMRSF_ZW (z weight in P_eff, default 0.5 = the c03/c04 split prefactor); UMRSF_W2E /
-    ! UMRSF_WRR (include the 2e / refrelax pieces of the raw aligned G̃, default on). Ablations for the
-    ! §16 fix: UMRSF_ZOV=1 → ov-only Z-vector (drops oo/vv → the wall); UMRSF_GVT=1 → G^f = V G̃ Vᵀ
-    ! only (drops the dV/dC alignment Jacobian ΔG^f → the wall). Both off ⇒ the full c06 closed form.
+    ! Keep every required response term enabled in production. Development
+    ! ablations must not be inherited from the process environment.
     block
       character(len=16) :: e ; integer :: ios
       dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false.
       l_m1 = .true. ; l_m1fd = .false.
       l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false. ; l_gffd = .false.
-      call get_environment_variable("UMRSF_ZW", e, status=ios)
-      if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
-      call get_environment_variable("UMRSF_W2E", e, status=ios) ; if (ios==0) dbg_w2e = (trim(e)/="0")
-      call get_environment_variable("UMRSF_WRR", e, status=ios) ; if (ios==0) dbg_wrr = (trim(e)/="0")
-      call get_environment_variable("UMRSF_ZOV", e, status=ios) ; if (ios==0) l_zov = (trim(e)=="1")
-      call get_environment_variable("UMRSF_GVT", e, status=ios) ; if (ios==0) l_gvt = (trim(e)=="1")
-      call get_environment_variable("UMRSF_M1",  e, status=ios) ; if (ios==0) l_m1  = (trim(e)/="0")
-      call get_environment_variable("UMRSF_M1FD", e, status=ios) ; if (ios==0) l_m1fd = (trim(e)=="1")
       ! Z-vector solver: default = matrix-free reduce+PCG (umrsf_zvector_iter). UMRSF_ZDENSE=1 →
       ! the dense dgelss oracle (umrsf_zvector_fullblock, rank-deficient-safe). UMRSF_ZCMP=1 → run BOTH
       ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
@@ -855,7 +845,6 @@ contains
       ! D2; W_m1 = cac Tbar cbcᵀ, the reverse-mode S-VJP of Φ=μ·r(s_align) — SAME μ/Tbar/gauge as the D1
       ! ΔG^f). UMRSF_M1FD=1 → the numerical geometry central-FD oracle umrsf_m1_overlap_grad (6·natom
       ! re-aligns, ~1e-6 floor). D2 .
-      call get_environment_variable("UMRSF_M1FD",   e, status=ios) ; if (ios==0) l_m1fd   = (trim(e)=="1")
     end block
 
     ! ---- Stage-2 XC context (the development rules / ) ----
@@ -866,11 +855,6 @@ contains
     ! ONCE here (reference density + molGrid at the BASE geometry) for umrsf_meanfield (T3) + de_xc (T2).
     dft_run = (infos%control%hamilton == 20)
     l_xck = dft_run ; l_xcg = dft_run
-    block
-      character(len=16) :: e ; integer :: ios
-      call get_environment_variable("UMRSF_XCK", e, status=ios) ; if (ios==0) l_xck = (trim(e)/="0")
-      call get_environment_variable("UMRSF_XCG", e, status=ios) ; if (ios==0) l_xcg = (trim(e)/="0")
-    end block
     xc_meanfield_on = .false.
     if (dft_run .and. (l_xck .or. l_xcg)) then
       call dft_initialize(infos, basis, xc_molgrid, verbose=.false.)
@@ -1180,7 +1164,8 @@ contains
         allocate(pxa(nbf,nbf,1), pxb(nbf,nbf,1))
         pxa(:,:,1) = peffa ; pxb(:,:,1) = peffb
         call utddft_xc_gradient(basis, xc_molgrid, de_xc, xc_refa, xc_refb, pxa, pxb, &
-                                nMtx=1, threshold=xc_thresh, infos=infos, include_ground_state=.false.)
+                                nMtx=1, threshold=xc_thresh, infos=infos, &
+                                include_ground_state=.false., include_weight_derivative=.true.)
         deallocate(pxa, pxb)
       end block
     end if

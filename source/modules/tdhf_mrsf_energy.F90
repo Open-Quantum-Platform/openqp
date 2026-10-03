@@ -475,7 +475,6 @@ contains
     logical :: tamm_dancoff
     integer :: imax
     integer :: ierr
-    integer :: env_len, env_status
     logical :: converged
     real(kind=dp) :: rc_save, rc_new
     real(kind=dp) :: mxerr, cnvtol, scale_exch
@@ -501,8 +500,6 @@ contains
     character(len=16) :: method_name
 
     logical :: umrsf
-    logical :: target_only_gradient
-    character(len=16) :: target_only_env
 
     ! OQP_ROUTEC_SIG seam: when .true., the per-vector sigma triple (mrsfcbc ->
     ! int2 -> mrsfmntoia+mrsfesum) is replaced by a device-resident sigma-session
@@ -556,16 +553,9 @@ contains
    ! Input parameters
     mrst = infos%tddft%mult
     nstates = infos%tddft%nstate
-    target_state = infos%tddft%target_state
     maxvec = infos%tddft%maxvec
     cnvtol = infos%tddft%cnvtol
     debug_mode = infos%tddft%debug_mode
-    target_only_gradient = .false.
-    call get_environment_variable('OQP_MRSF_TARGET_ONLY_GRAD', target_only_env, &
-                                  length=env_len, status=env_status)
-    target_only_gradient = env_status == 0 .and. env_len > 0 &
-                           .and. target_only_env(1:1) /= '0' &
-                           .and. target_state >= 1 .and. target_state <= nstates
 
     mol_mult = infos%mol_prop%mult
     if (umrsf) then
@@ -1002,9 +992,6 @@ contains
     iter = 0
     mxiter = infos%control%maxit_dav
     ierr = 0
-    if (target_only_gradient) then
-      write(*,'(5X,"MRSF-family gradient target-root convergence enabled for state ",I0)') target_state
-    end if
 
     do iter = 1, mxiter
       nv = iend-ist+1
@@ -1234,18 +1221,9 @@ contains
           mxerr = max(mxerr, rnorm(ivec))
       end do
 
-!     Check convergence. A gradient run may follow the target root only, but the same intrusion
-!     argument applies to it: any other root (reported or extra) whose Ritz value lies within
-!     ||r|| of the target energy could still descend below the target and change which
-!     eigenvector is the requested energy-ordered state, so those roots must converge as well.
-      if (target_only_gradient) then
-        mxerr = rnorm(target_state)
-        do ivec = 1, nsolve
-          if (ivec == target_state) cycle
-          if (eex(ivec) - sqrt(rnorm(ivec)) <= eex(target_state)) &
-            mxerr = max(mxerr, rnorm(ivec))
-        end do
-      end if
+!     Every root in the public nstates window must meet the residual threshold.
+!     The additional tracked roots matter only when their residual permits them
+!     to enter that window before convergence.
       converged = mxerr<=cnvtol
       if (converged) exit
 
@@ -1270,17 +1248,7 @@ contains
       write(*,'(/,2X,"MRSF-TD-DFT energies NOT CONVERGED after ",I4," iterations"/)') mxiter
       infos%mol_energy%Davidson_converged=.false.
     case (0)
-      if (target_only_gradient) then
-        if (umrsf) then
-          write(*,'(/,2X,"UMRSF-TD-DFT target state ",I0," converged in ",I4," iterations"/)') &
-            target_state, iter
-        else
-          write(*,'(/,2X,"MRSF-TD-DFT target state ",I0," converged in ",I4," iterations"/)') &
-            target_state, iter
-        end if
-      else
-        write(*,'(/,2X,"MRSF-TD-DFT energies converged in ",I4," iterations"/)') iter
-      end if
+      write(*,'(/,2X,"MRSF-TD-DFT energies converged in ",I4," iterations"/)') iter
       infos%mol_energy%Davidson_converged=.true.
     case (1)
       write(*,'(/,2X,"..something is wrong.. nvec = mxvec")')
@@ -1482,16 +1450,6 @@ contains
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
     infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
-    if (target_only_gradient) then
-      if (umrsf) then
-        write(*,'(2X,"Only target state ",I0," is converged for this UMRSF gradient run.")') &
-          target_state
-      else
-        write(*,'(2X,"Only target state ",I0," is converged for this MRSF gradient run.")') &
-          target_state
-      end if
-      write(*,'(2X,"Other listed excited states are intermediate Davidson roots.")')
-    end if
     call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates, &
                        physical_mrsf_labels=.true.)
     call flush(iw)

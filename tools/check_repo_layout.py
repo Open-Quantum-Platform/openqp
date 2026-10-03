@@ -41,7 +41,6 @@ DEVKIT = "Open-Quantum-Platform/openqp-devkit"
 # the comment naming that consumer is part of the entry, not decoration.
 TOOLS_ALLOWED = {
     "check_blas_wrapper.py": ".github/workflows/pr-policy.yml (rule 1)",
-    "check_ecp_charges.py": ".github/workflows/pr-policy.yml (rule 8)",
     "check_repo_layout.py": ".github/workflows/pr-policy.yml (rule 5, this gate)",
     # Landed ahead of the script itself: this gate runs the TRUSTED
     # base-branch copy of check_repo_layout.py, so the allowlist that

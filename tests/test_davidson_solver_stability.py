@@ -64,19 +64,18 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("d3=>mrsf_density(:iv,:,:,:)", compact_src)
         self.assertIn("d2=fmrq1(:,:,:iv)", compact_src)
 
-    def test_mrsf_family_gradient_can_converge_only_target_root(self):
-        """Single-root MRSF/UMRSF gradients should not wait for unrelated roots."""
+    def test_mrsf_family_converges_every_published_root(self):
+        """A gradient run must not publish unconverged roots as final results."""
         src = TDHF_MRSF_ENERGY_SRC.read_text()
         runfunc = RUNFUNC_SRC.read_text()
 
-        self.assertIn("OQP_MRSF_TARGET_ONLY_GRAD", src)
-        self.assertIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
-        self.assertIn("target_only_gradient", src)
-        self.assertIn("mxerr = rnorm(target_state)", src)
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", src)
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
+        self.assertNotIn("target_only_gradient", src)
         self.assertIn("maxval(rnorm(1:nstates))", src)
-        # The single-root shortcut is UMRSF-only; RO-MRSF gradients keep multi-root convergence.
+        # The target remains selected for the state-specific gradient, while
+        # the public nstate spectrum meets the ordinary Davidson threshold.
         self.assertIn('target_types=("umrsf",)', runfunc)
-        self.assertNotIn('target_types=("mrsf", "umrsf")', runfunc)
         self.assertIn("mol.data.set_tdhf_target(target)", runfunc)
 
     def test_rpa_residual_preconditioner_uses_finite_floor_guard(self):

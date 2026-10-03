@@ -213,15 +213,13 @@ MRSF examples were energy-only, and every other gradient and NAC validation
 was all-electron — so CI was green while HBr/LANL2DZ gave a 6.3 Ha/Bohr
 gradient error and an analytic coupling 140 times the numerical one.
 
-**Enforced by CI:** `tools/check_ecp_charges.py` (the `PR policy` workflow on
-GitHub and the GitLab `source-policy` job)
-requires, per enclosing subroutine, that the charge argument of every
+**Reviewer check:** For each enclosing subroutine, verify that the charge argument of every
 `grad_en_hellman_feynman` / `grad_en_pulay` / `der_nucattr_matrix` call is
 ECP-screened (in the argument itself or in the line that defines it), and
 that a subroutine contracting a density with `dV_en/dx` also references
 `grad_1e_ecp` or `ecp_deriv_ints`.
 
-**Reviewer check:** the gate proves only that the terms are present. A new
+The presence of these terms alone is insufficient. A new
 gradient, Hessian, NAC or response-property term must be exercised with an
 ECP on an atom whose core is actually removed — HBr/LANL2DZ or NaCl/SBKJC,
 not C/H with LANL2DZ — against central finite differences (gradients), the

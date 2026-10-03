@@ -137,6 +137,18 @@ def _umrsf_guard_errors(report):
 
 
 class UMRSFEnergyRegressionTests(unittest.TestCase):
+    def test_umrsf_xc_probe_includes_moving_grid_response(self):
+        gradient = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates").replace("&", "")
+        self.assertIn("include_ground_state=.false.,include_weight_derivative=.true.", gradient)
+        self.assertNotIn("weight_derivative_only=.true.", gradient)
+
+    def test_required_response_terms_cannot_be_disabled_by_environment(self):
+        gradient = UMRSF_GRAD.read_text()
+        for name in ("UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
+                     "UMRSF_GVT", "UMRSF_M1", "UMRSF_M1FD", "UMRSF_XCK",
+                     "UMRSF_XCG"):
+            self.assertNotIn(f'get_environment_variable("{name}"', gradient)
+
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
         expected_updates = (
