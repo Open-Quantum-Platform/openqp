@@ -151,6 +151,7 @@ struct control_parameters {
     double    conf_print_threshold;
     bool      rstctmo;
     int64_t   scal_rel;
+    int64_t   scal_rel_decontract;
     int64_t   soc_2e;
     int64_t   converger_type;
     double    soscf_lvl_shift;
