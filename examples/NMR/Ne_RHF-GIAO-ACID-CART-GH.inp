@@ -1,0 +1,28 @@
+# RHF/cc-pV5Z GIAO NMR shielding of Ne with Cartesian shells (ispher=false),
+# followed by ACID cubes.  cc-pV5Z puts a g and an h shell on Ne, so the cube
+# grid evaluator (oqp.analysis.gto_grid.AOBasis) runs over Cartesian g and h
+# functions, which must follow the engine's CART_X/Y/Z component order.
+[input]
+system=
+   10   0.000000000   0.000000000   0.000000000
+charge=0
+runtype=energy
+basis=cc-pv5z
+ispher=false
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+# Molden defines shells only up to g, so no Molden file can be written here.
+save_molden=false
+
+[properties]
+scf_prop=nmr,acid
+nmr_gauge=giao
+# Coarse grid to keep the example fast and its cubes small.
+acid_spacing=0.5
+acid_padding=3.0
