@@ -144,7 +144,7 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
     def test_required_response_terms_cannot_be_disabled_by_environment(self):
         gradient = UMRSF_GRAD.read_text()
-        for name in ("UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
+        for name in ("UMRSF_ZTOL", "UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
                      "UMRSF_GVT", "UMRSF_M1", "UMRSF_M1FD", "UMRSF_XCK",
                      "UMRSF_XCG"):
             self.assertNotIn(f'get_environment_variable("{name}"', gradient)
