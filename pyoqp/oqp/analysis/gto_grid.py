@@ -10,8 +10,9 @@ Convention (from the OQP molden writer):
     normalized-primitive coefficient is ``d = coef * NORMS[L] * (2a)^-(L/2+3/4)``.
   * Cartesian component order is the engine's CART_X/Y/Z order
     (source/constants.F90): L=0 [s]; L=1 [x,y,z]; L=2 [xx,yy,zz,xy,xz,yz];
-    L=3 [xxx,yyy,zzz,xxy,xxz,xyy,yyz,xzz,yzz,xyz].  This is NOT the Molden
-    10F label order; the Molden writer permutes to that order on output.
+    L=3 [xxx,yyy,zzz,xxy,xxz,xyy,yyz,xzz,yzz,xyz]; g and h follow the same
+    table.  This is NOT the Molden 10F label order; the Molden writer permutes
+    to that order on output.
 """
 import numpy as np
 
@@ -27,6 +28,14 @@ _CART = {
     2: [(2, 0, 0), (0, 2, 0), (0, 0, 2), (1, 1, 0), (1, 0, 1), (0, 1, 1)],
     3: [(3, 0, 0), (0, 3, 0), (0, 0, 3), (2, 1, 0), (2, 0, 1),
         (1, 2, 0), (0, 2, 1), (1, 0, 2), (0, 1, 2), (1, 1, 1)],
+    4: [(4, 0, 0), (0, 4, 0), (0, 0, 4), (3, 1, 0), (3, 0, 1),
+        (1, 3, 0), (0, 3, 1), (1, 0, 3), (0, 1, 3), (2, 2, 0),
+        (2, 0, 2), (0, 2, 2), (2, 1, 1), (1, 2, 1), (1, 1, 2)],
+    5: [(5, 0, 0), (0, 5, 0), (0, 0, 5), (4, 1, 0), (4, 0, 1),
+        (1, 4, 0), (0, 4, 1), (1, 0, 4), (0, 1, 4), (3, 2, 0),
+        (3, 0, 2), (2, 3, 0), (0, 3, 2), (2, 0, 3), (0, 2, 3),
+        (3, 1, 1), (1, 3, 1), (1, 1, 3), (2, 2, 1), (2, 1, 2),
+        (1, 2, 2)],
 }
 
 
@@ -69,12 +78,13 @@ class AOBasis:
             raise ValueError(
                 f"AOBasis: nbf={self.nbf} matches neither the Cartesian ({n_cart}) "
                 f"nor spherical ({n_sph}) shell count for this basis.")
-        # The Cartesian component table stops at f; a g shell would otherwise
+        # The Cartesian component table stops at h; an i shell would otherwise
         # fail deep inside the loop below with a bare KeyError.
         max_am = int(max(angs)) if len(angs) else 0
         if max_am > max(_CART):
             raise NotImplementedError(
-                f"AOBasis supports angular momenta up to L={max(_CART)} (f); this "
+                f"AOBasis supports angular momenta up to L={max(_CART)} "
+                f"({'spdfghi'[max(_CART)]}); this "
                 f"basis contains an L={max_am} shell. Use a smaller basis or "
                 "evaluate on OQP's own grid.")
         p0 = 0

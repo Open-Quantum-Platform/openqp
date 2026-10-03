@@ -52,8 +52,8 @@ occupations and the exchange scale, and no scalar summary of those -- or of the
 density they produce -- identifies them, so the SCF drops the response instead.
 
 Basis limits: the grid evaluator (``oqp.analysis.gto_grid.AOBasis``) walks
-Cartesian components up to f, so a spherical-harmonic basis needs
-``[input] ispher=false`` and a Cartesian basis containing g or higher shells is
+Cartesian components up to h, so a spherical-harmonic basis needs
+``[input] ispher=false`` and a Cartesian basis containing i or higher shells is
 not supported.  Both are rejected with an explicit message rather than a partial
 map.  The native ``OQP::nmr_pdens`` response itself carries no such restriction.
 """
