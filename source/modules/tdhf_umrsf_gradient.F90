@@ -832,13 +832,13 @@ contains
       call get_environment_variable("UMRSF_GFFD",   e, status=ios) ; if (ios==0) l_gffd   = (trim(e)=="1")
       ! de_m1 (M1 alignment explicit-overlap Pulay): default = ANALYTIC −Tr(W_m1·S^x) (umrsf_m1_analytic,
       ! D2; W_m1 = cac Tbar cbcᵀ, the reverse-mode S-VJP of Φ=μ·r(s_align) — SAME μ/Tbar/gauge as the D1
-      ! ΔG^f). UMRSF_M1FD=1 → the numerical geometry central-FD oracle umrsf_m1_overlap_grad (6·natom
-      ! re-aligns, ~1e-6 floor). D2 .
+      ! ΔG^f). The numerical geometry central-FD oracle umrsf_m1_overlap_grad remains available
+      ! internally for comparison (6·natom re-aligns, ~1e-6 floor). D2.
     end block
 
     ! ---- Stage-2 XC context (the development rules / ) ----
-    ! DFT runs only. UMRSF_XCK (T3): add f_xc[ρ_ref]·P to the reference mean field ⇒ Z-vector Hessian /
-    ! refrelax G^f / G^z / W. UMRSF_XCG (T2): add the difference-density XC gradient d/dR Tr(V_xc[ρ_ref]·P_eff).
+    ! DFT runs only. T3 adds f_xc[ρ_ref]·P to the reference mean field ⇒ Z-vector Hessian /
+    ! refrelax G^f / G^z / W. T2 adds the difference-density XC gradient d/dR Tr(V_xc[ρ_ref]·P_eff).
     ! Both default ON for DFT (the response is otherwise missing all XC ⇒ the ~3.5e-2 BHHLYP S1 gap). The grid
     ! f_xc·(X+Y)(X+Y) term is ABSENT for MRSF (the energy A-matrix has no grid f_xc). Set the module XC context
     ! ONCE here (reference density + molGrid at the BASE geometry) for umrsf_meanfield (T3) + de_xc (T2).
@@ -872,7 +872,8 @@ contains
       real(kind=dp), allocatable :: gfa(:,:), gfb(:,:), gza(:,:), gzb(:,:), wao(:,:), wpack(:)
       real(kind=dp) :: zrms, statio, tolw, wsa, wsb, tcpu, tcpu_response
       real(kind=dp) :: z_bnorm2, z_rnorm2, z_full_rel, z_rtol, z_bra, z_brb, z_ra, z_rb
-      integer :: ij, ii, si, sj, pp, qq, twall, twall_response
+      real(kind=dp) :: z_dense_matrix_bytes
+      integer :: ij, ii, si, sj, pp, qq, twall, twall_response, z_attempt, z_ndof
       logical :: used_iterative_z, keep_a, keep_b
       tolw = tol_int*log(10.0_dp)
       used_iterative_z = .false.
@@ -996,38 +997,57 @@ contains
       write(iw,'(2x,a)') 'UMRSF response stage: W overlap term'
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
-      call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
       ! Authoritative convergence gate for M z = -R. It reuses the G^z needed by W, combines alpha
       ! and beta in one norm, and includes every kept oo/ov/vv row. Thus a regularized diagonal
       ! denominator or a failed reduced solve cannot be hidden by the ov-only residual.
-      z_bnorm2 = 0.0_dp ; z_rnorm2 = 0.0_dp
-      do pp = 1, nbf ; do qq = 1, pp-1
-        keep_a = (.not. l_zov) .or. (pp > nocca .and. qq <= nocca)
-        keep_b = (.not. l_zov) .or. (pp > noccb .and. qq <= noccb)
-        if (keep_a) then
-          z_bra = gfa(pp,qq) - gfa(qq,pp)
-          z_ra = z_bra + gza(pp,qq) - gza(qq,pp)
-          z_bnorm2 = z_bnorm2 + z_bra*z_bra
-          z_rnorm2 = z_rnorm2 + z_ra*z_ra
-        end if
-        if (keep_b) then
-          z_brb = gfb(pp,qq) - gfb(qq,pp)
-          z_rb = z_brb + gzb(pp,qq) - gzb(qq,pp)
-          z_bnorm2 = z_bnorm2 + z_brb*z_brb
-          z_rnorm2 = z_rnorm2 + z_rb*z_rb
-        end if
-      end do ; end do
-      if (sqrt(z_bnorm2) > tiny(1.0_dp)) then
-        z_full_rel = sqrt(z_rnorm2/z_bnorm2)
-      else
-        z_full_rel = sqrt(z_rnorm2)
-      end if
       z_rtol = umrsf_z_requested_tolerance(infos)
-      write(iw,'(2x,a,es12.3,a,es12.3)') 'full coupled Z relative residual = ', z_full_rel, &
-                                         '   requested = ', z_rtol
-      if (used_iterative_z .and. (.not. ieee_is_finite(z_full_rel) .or. z_full_rel > z_rtol)) then
+      do z_attempt = 1, 2
+        call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
+        z_bnorm2 = 0.0_dp ; z_rnorm2 = 0.0_dp
+        do pp = 1, nbf ; do qq = 1, pp-1
+          keep_a = (.not. l_zov) .or. (pp > nocca .and. qq <= nocca)
+          keep_b = (.not. l_zov) .or. (pp > noccb .and. qq <= noccb)
+          if (keep_a) then
+            z_bra = gfa(pp,qq) - gfa(qq,pp)
+            z_ra = z_bra + gza(pp,qq) - gza(qq,pp)
+            z_bnorm2 = z_bnorm2 + z_bra*z_bra
+            z_rnorm2 = z_rnorm2 + z_ra*z_ra
+          end if
+          if (keep_b) then
+            z_brb = gfb(pp,qq) - gfb(qq,pp)
+            z_rb = z_brb + gzb(pp,qq) - gzb(qq,pp)
+            z_bnorm2 = z_bnorm2 + z_brb*z_brb
+            z_rnorm2 = z_rnorm2 + z_rb*z_rb
+          end if
+        end do ; end do
+        if (sqrt(z_bnorm2) > tiny(1.0_dp)) then
+          z_full_rel = sqrt(z_rnorm2/z_bnorm2)
+        else
+          z_full_rel = sqrt(z_rnorm2)
+        end if
+        write(iw,'(2x,a,es12.3,a,es12.3)') 'full coupled Z relative residual = ', z_full_rel, &
+                                           '   requested = ', z_rtol
+        if (ieee_is_finite(z_full_rel) .and. z_full_rel <= z_rtol) exit
+
+        ! The reduced solve approximates the oo/vv block by orbital-energy differences. If that
+        ! approximation fails the full residual, use the exact dense operator only at bounded size.
+        ! dgelss also needs workspace beyond its ndof-by-ndof matrix, hence both limits below.
+        z_ndof = nbf*(nbf-1)
+        if (l_zov) z_ndof = nocca*(nbf-nocca) + noccb*(nbf-noccb)
+        z_dense_matrix_bytes = 8.0_dp*real(z_ndof,dp)**2
+        if (z_attempt == 1 .and. used_iterative_z .and. .not. l_zcmp .and. &
+            z_ndof <= 2000 .and. z_dense_matrix_bytes <= 64.0_dp*1024.0_dp**2) then
+          write(iw,'(2x,a,i0,a,f8.1,a)') 'UMRSF Z auto fallback: dense full-block solve, DOFs = ', &
+            z_ndof, ', matrix MiB = ', z_dense_matrix_bytes/1024.0_dp**2, &
+            ' (reduced oo/vv approximation exceeded the full residual limit)'
+          call flush(iw)
+          call umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                       hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+          used_iterative_z = .false.
+          cycle
+        end if
         call show_message('UMRSF coupled Z-vector did not reach the requested relative residual.', WITH_ABORT)
-      end if
+      end do
       wao = matmul(cac, matmul(0.25_dp*(gfa+transpose(gfa)), transpose(cac))) &
           + matmul(cbc, matmul(0.25_dp*(gfb+transpose(gfb)), transpose(cbc))) &
           + matmul(cac, matmul(0.25_dp*(gza+transpose(gza)), transpose(cac))) &
@@ -1041,7 +1061,7 @@ contains
       ! ---- de_m1 (D2): ANALYTIC alignment explicit-overlap Pulay −Tr(W_m1·S^x). Done HERE (inside the
       ! block) because it reuses the SAME raw aligned gen-Fock G̃ (gta,gtb) as umrsf_genfock_analytic ⇒
       ! the SAME μ/Tbar and hence the SAME unseeded gauge as the ΔG^f above (D1/D2 must share the gauge).
-      ! UMRSF_M1FD=1 defers to the numerical geometry-FD oracle umrsf_m1_overlap_grad (called after the block).
+      ! The numerical geometry-FD oracle can be selected internally and runs after this block.
       if (l_m1 .and. .not. l_m1fd) then
         write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
         call flush(iw)
@@ -1121,7 +1141,7 @@ contains
       deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, g2ea, g2eb, gfa, gfb, gza, gzb, wao, wpack)
     end block
 
-    ! de_m1 ORACLE (UMRSF_M1FD=1): the numerical geometry central-FD of the alignment's EXPLICIT-S response
+    ! de_m1 ORACLE: the numerical geometry central-FD of the alignment's EXPLICIT-S response
     ! −∂(ω∘align)/∂S·∂S/∂x — re-align the canonical orbitals at S(x±θ) (orbitals/ERIs/F^ref frozen at base;
     ! D^ref get_jacobi-invariant), central-difference ω. Needs int2_driver live (umrsf_omega_eval). The
     ! DEFAULT analytic de_m1 (umrsf_m1_analytic) was already computed inside the block above; this is the
