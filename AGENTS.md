@@ -189,3 +189,44 @@ library patches, not only to the numerical kernel that uses them.
 **Reviewer check:** report PASS with the relevant tests, NOT APPLICABLE with a
 reason, or identify the missing evidence. Static pattern checks and an ordinary
 CI pass alone cannot prove initialization or resource lifetime correctness.
+
+
+### 8. Every derivative of the nuclear attraction is ECP-aware, and is tested with a core actually removed
+
+With an effective core potential the valence electrons see a nucleus of charge
+`Z - N_core` and a semilocal potential. `infos%basis%ecp_zn_num` holds `N_core`
+per atom, and the derivative of the semilocal part is `grad_1e_ecp` (packed
+density) or `ecp_deriv_ints` (AO derivative matrices). A one-electron gradient
+or coupling assembly is therefore complete only when it (a) passes
+`infos%atoms%zn - infos%basis%ecp_zn_num` to `grad_en_hellman_feynman`,
+`grad_en_pulay` and `der_nucattr_matrix`, and (b) contracts the same density
+with the ECP derivative. `hf_gradient`, `tdhf_gradient` and the CASSCF/PT2
+gradients received both when ECPs arrived (#46).
+
+Two assemblies did not, and nothing noticed for eight months. `sf_1e_grad`
+(SF-TDDFT and RO-MRSF-TDDFT gradients) kept the full `Z`; the analytic MRSF
+NAC 1e term (`mrsf_nac_esum`) kept the full `Z` and had no ECP derivative;
+the UMRSF gradient arrived without the ECP derivative of its relaxed
+difference density. The only ECP MRSF gradient example used LANL2DZ on C and
+H, which removes no core electrons (`ecp_zn_num = 0`), the heavy-atom ECP
+MRSF examples were energy-only, and every other gradient and NAC validation
+was all-electron — so CI was green while HBr/LANL2DZ gave a 6.3 Ha/Bohr
+gradient error and an analytic coupling 140 times the numerical one.
+
+**Enforced by CI:** `tools/check_ecp_charges.py` (the `PR policy` workflow on
+GitHub and the GitLab `source-policy` job)
+requires, per enclosing subroutine, that the charge argument of every
+`grad_en_hellman_feynman` / `grad_en_pulay` / `der_nucattr_matrix` call is
+ECP-screened (in the argument itself or in the line that defines it), and
+that a subroutine contracting a density with `dV_en/dx` also references
+`grad_1e_ecp` or `ecp_deriv_ints`.
+
+**Reviewer check:** the gate proves only that the terms are present. A new
+gradient, Hessian, NAC or response-property term must be exercised with an
+ECP on an atom whose core is actually removed — HBr/LANL2DZ or NaCl/SBKJC,
+not C/H with LANL2DZ — against central finite differences (gradients), the
+numerical NAC (couplings), or GAMESS with the identical Basis Set Exchange
+basis and ECP (energies). Ship that case as an example under `examples/ECP/`
+(rule 2); the reference must fail on the pre-fix code. Report PASS with the
+case, NOT APPLICABLE when no `dV_en/dx` or ECP integral is touched, or name
+the missing evidence.

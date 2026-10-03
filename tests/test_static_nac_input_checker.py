@@ -110,7 +110,7 @@ def test_legacy_static_analytic_nac_accepts_threshold_boundary(inputs, runtype, 
 @pytest.mark.parametrize("section, key, value, message", [
     ("input", "method", "hf", "NAC workflows require method=tdhf"),
     ("tdhf", "type", "rpa", "require tdhf.type=mrsf"),
-    ("tdhf", "type", "umrsf", "UMRSF-TDDFT only supports runtype=energy"),
+    ("tdhf", "type", "umrsf", "NAC (nac/nacme) are not implemented yet"),
     ("scf", "type", "uhf", "requires an ROHF/ROKS reference"),
     ("scf", "multiplicity", "5", "requires a two-SOMO triplet reference"),
     ("tdhf", "multiplicity", "3", "implements singlet states only"),
