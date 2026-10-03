@@ -1,0 +1,22 @@
+# DKH2/x2c-TZVPall/RHF/ENERGY of HBr: decoupling in the decontracted basis (default scal_rel_decontract=1), projected onto the contracted basis.
+# DKH2 scalar-relativistic RHF single point of HBr in the relativistically
+# contracted x2c-TZVPall basis (ispher=true).
+[input]
+system=
+   35   0.000000000   0.000000000   0.000000000
+   1    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=energy
+basis=x2c-tzvpall
+method=hf
+ispher=true
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+scal_rel=2
+scal_rel_decontract=1
+conv=1.0e-8

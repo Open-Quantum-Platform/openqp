@@ -110,6 +110,7 @@ contains
     real(kind=dp), allocatable :: cproj(:,:)    ! contraction matrix C (nbfp x nbf)
     real(kind=dp), allocatable :: hcore_p(:), smat_p(:), tmat_p(:)  ! primitive-basis 1e matrices
     real(kind=dp), allocatable :: delta_c(:)    ! C^T (.) C result, packed (nbf2)
+    real(kind=dp), allocatable :: hdk_tmp(:)    ! V_prim scratch for the potential gate (nbfp2)
 
 
     dk_debug = (infos%control%verbose >= 3)
@@ -159,7 +160,7 @@ contains
       write(iw, '(1x,a,i0,a,i0,a,i0,a,i0)') '  contracted: nshell = ', basis%nshell, ', nbf = ', nbf, &
         ';  primitive: nshell = ', pbasis%nshell, ', nbf = ', nbfp
 
-      allocate(hcore_p(nbfp2), smat_p(nbfp2), tmat_p(nbfp2), delta_c(nbf2), stat=ok)
+      allocate(hcore_p(nbfp2), smat_p(nbfp2), tmat_p(nbfp2), delta_c(nbf2), hdk_tmp(nbfp2), stat=ok)
       if (ok /= 0) call show_message('dk_scalar: cannot allocate primitive-basis arrays', WITH_ABORT)
 
       tol = log(10.0_dp)*tol_int
@@ -183,6 +184,16 @@ contains
       write(iw, '(1x,a,es10.2)') '  contraction gate max |C^T T_prim C - T| = ', gate_err
       if (gate_err > cproj_gate_tol*max(1.0_dp, maxval(abs(tmat(1:nbf2))))) &
         call show_message('dk_scalar: contraction matrix does not reproduce the kinetic energy matrix', WITH_ABORT)
+
+      ! Gate: V = C^T V_prim C with V = Hcore - T (nuclear attraction plus any
+      ! effective core potential), so the ECP path of omp_hst on the primitive
+      ! basis is covered as well.
+      hdk_tmp = hcore_p(1:nbfp2) - tmat_p(1:nbfp2)
+      call orthogonal_transform_sym(nbfp, nbf, hdk_tmp, cproj, nbfp, delta_c)
+      gate_err = maxval(abs(delta_c(1:nbf2) - (hcore(1:nbf2) - tmat(1:nbf2))))
+      write(iw, '(1x,a,es10.2)') '  contraction gate max |C^T V_prim C - V| = ', gate_err
+      if (gate_err > cproj_gate_tol*max(1.0_dp, maxval(abs(hcore(1:nbf2) - tmat(1:nbf2))))) &
+        call show_message('dk_scalar: contraction matrix does not reproduce the potential matrix', WITH_ABORT)
 
       ! ---- Steps 1-7 in the primitive basis ----
       allocate(hdk(nbfp2), stat=ok)
@@ -210,7 +221,7 @@ contains
     if (allocated(SXU)) deallocate(SXU)
     if (allocated(hdk)) deallocate(hdk)
     if (decontract) then
-      deallocate(cproj, hcore_p, smat_p, tmat_p, delta_c)
+      deallocate(cproj, hcore_p, smat_p, tmat_p, delta_c, hdk_tmp)
       call pbasis%destroy()
     end if
 

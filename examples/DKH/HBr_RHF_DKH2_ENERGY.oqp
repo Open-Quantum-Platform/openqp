@@ -1,0 +1,2 @@
+rhf/x2c-tzvpall ispher=true scf(scal_rel=2,conv=1e-08)
+geom="geometries/BrH-a6a9d6f6a6f3.xyz"
