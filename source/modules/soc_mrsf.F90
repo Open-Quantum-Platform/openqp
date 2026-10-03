@@ -8,6 +8,24 @@ module soc_mrsf_mod
   character(len=*), parameter :: module_name = "soc_mrsf_mod"
 
 
+  !> Determinant expansion of an MRSF state in the sector representation
+  !> described above compute_tdm's configuration algebra.
+  type sector_state_t
+    integer :: nc = 0, nv = 0
+    real(kind=dp), allocatable :: nn(:), hn(:,:), np(:,:), hp(:,:,:)
+  end type sector_state_t
+
+  logical, save :: open_tables_ready = .false.
+  integer, save :: pop_tab(0:15), before_tab(0:3, 0:15), after_tab(0:3, 0:15)
+  logical, save :: has_tab(0:3, 0:15)
+  real(kind=dp), save :: lop_tab(0:3, 0:3, 0:15, 0:15), splus_open(0:15, 0:15)
+
+  !> MO-basis SOC integrals, exported for independent checks of H_SOC
+  !> (tests/test_soc_mrsf_tdm.py): shape (nbf, nbf, 3) = (t, u, x/y/z), the real
+  !> antisymmetric l_b(t,u) with L_b = -i l_b; 1e and mean-field 2e parts.
+  character(len=*), parameter :: OQP_soc_lmo_1e = "OQP::soc_lmo_1e"
+  character(len=*), parameter :: OQP_soc_lmo_2e = "OQP::soc_lmo_2e"
+
   private
   public soc_mrsf
 
@@ -139,6 +157,22 @@ contains
     nocca = infos%mol_prop%nelec_a
     noccb = infos%mol_prop%nelec_b
 
+    ! compute_tdm addresses the stock packed grid nocca*(nbf-noccb) per state.
+    ! A vector of any other length (e.g. an extended response space) would be
+    ! read with the states misaligned; refuse it instead of returning garbage.
+    ! Only the total size is checked: the Python side may store the tag with
+    ! its two dimensions in either order, the memory layout being the same.
+    if (size(bvec_mo_s) /= nocca*(nbf-noccb)*ns .or. size(bvec_mo_t) /= nocca*(nbf-noccb)*nt) then
+      if (pe%rank == 0) then
+        write(iw,'(/,a,i0,a,i0,a,i0,a)') 'soc_mrsf: MRSF response vectors do not have the stock '// &
+          'layout: expected ', nocca*(nbf-noccb), ' per state, found ', &
+          size(bvec_mo_s)/max(ns,1), ' (singlet) / ', size(bvec_mo_t)/max(nt,1), ' (triplet)'
+        call flush(iw)
+        close(iw)
+      end if
+      call show_message('soc_mrsf: response-vector layout is not the stock MRSF grid', WITH_ABORT)
+    end if
+
     ! --- Step 1: Compute SOC 1e AO integrals <mu|Z*L/r^3|nu> ---
     allocate(lx_ao(nbf2), ly_ao(nbf2), lz_ao(nbf2), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate AO L matrices', WITH_ABORT)
@@ -216,12 +250,32 @@ contains
 
     deallocate(lx_ao, ly_ao, lz_ao)
 
+    ! Export the MO integrals (independent regression of H_SOC in Python).
+    block
+      real(kind=dp), contiguous, pointer :: lout(:,:,:)
+      integer :: ta_status
+      ta_status = infos%dat%alloc(OQP_soc_lmo_1e, [nbf, nbf, 3], lout, &
+        description="MO SOC 1e integrals l_b(t,u) (x,y,z), L_b = -i l_b, a.u. (no alpha^2/2)", &
+        override=.true.)
+      if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_1e', WITH_ABORT)
+      lout(:,:,1) = lx_mo; lout(:,:,2) = ly_mo; lout(:,:,3) = lz_mo
+      ta_status = infos%dat%alloc(OQP_soc_lmo_2e, [nbf, nbf, 3], lout, &
+        description="MO SOC mean-field 2e integrals (x,y,z), same convention; zero if soc_2e=0", &
+        override=.true.)
+      if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_2e', WITH_ABORT)
+      if (do_2e_soc) then
+        lout(:,:,1) = lx_2e_mo; lout(:,:,2) = ly_2e_mo; lout(:,:,3) = lz_2e_mo
+      else
+        lout = 0.0_dp
+      end if
+    end block
+
     ! --- Step 3: Build spin-dependent transition density matrices ---
     allocate(t00aa (ns, nt, nbf, nbf), &
              t110aa(nt, nt, nbf, nbf), &
              t11ab (nt, nt, nbf, nbf), stat=ok)
     if (ok /= 0) call show_message('soc_mrsf: cannot allocate TDM arrays', WITH_ABORT)
-    call compute_tdm(bvec_mo_s, bvec_mo_t, nocca, noccb, nbf, ns, nt, &
+    call compute_tdm(bvec_mo_s, bvec_mo_t, nocca*(nbf-noccb), nocca, noccb, nbf, ns, nt, &
                      t00aa, t110aa, t11ab)
 
     ! --- Step 4: Assemble the 1e SOC Hamiltonian H_SOC ---
@@ -537,293 +591,416 @@ subroutine ao2mo_soc(l_tri, l_mo, cmo, nbf)
 
 end subroutine ao2mo_soc
 
-!> @brief Build spin-dependent transition density matrices from MRSF Davidson vectors
+!> @brief Spin-component transition density matrices of the MRSF states
 !> @details
-!>  Constructs the TDMs needed to assemble the SOC Hamiltonian matrix elements:
-!>    t00aa(I,J,t,u)  -- singlet I / triplet J TDM in the alpha-alpha spin sector
-!>    t110aa(I,J,t,u) -- triplet I / triplet J, Ms=0 component (alpha-alpha)
-!>    t11ab(I,J,t,u)  -- triplet I / triplet J, Ms=+1/-1 component (alpha-beta)
+!>  Every MRSF M_S = 0 state is expanded in determinants (configuration
+!>  algebra below) and the one-particle transition densities
+!>  D[P,Q] = <bra| a+_P a_Q |ket> over spin orbitals P = 2m+s are evaluated
+!>  exactly; nothing is hand-coded per configuration class.  The arrays
+!>  returned keep the convention of compute_soc_matrix (second index of the
+!>  TDM pairs with the first index of the MO integral, l(t,u) <-> D(u,t)):
+!>    t00aa (I,J,t,u) = <S_I  | a+_{u a} a_{t a} |T_J,0 >
+!>    t110aa(I,J,t,u) = <T_I,0| a+_{u a} a_{t a} |T_J,0 >
+!>    t11ab (I,J,t,u) = <T_I,0| a+_{u b} a_{t a} |T_J,+1>,  |T,+1> = S+|T,0>/sqrt2
+!>  The former implementation built the core-open elements for the top core
+!>  orbital only, transposed the core-core block and omitted every term of
+!>  first order in the core->virtual amplitudes.
 !>
-!>  The Davidson eigenvectors are first reordered to the Ms-resolved form required
-!>  by the OpenQP SOC convention (see compute_soc_matrix for the state ordering).
-!>  The open-shell ROHF reference determines the active MO indices (iO1, iO2, iC).
+!>  State map (two-SOMO MRSF, packed slot (i,a) = alpha-occupied i -> beta-virtual a):
+!>    Psi = 2^-1/2 sum_{(i,a) not OO} X(i,a) [E+(i,a) + lam E-(i,a)]
+!>        + 2^-1/2 X(O1,O1) [L + lam R] + [singlet] X(O2,O1) G + X(O1,O2) D
+!>    E+(i,a) = a+(a b) a(i a) R+,  E-(i,a) = a+(a a) a(i b) R-,
+!>    R+ = |closed O1a O2a>, R- = |closed O1b O2b>, L = E+(O1,O1), R = E+(O2,O2),
+!>    G = E+(O2,O1), D = E+(O1,O2), lam = -1 (singlet) / +1 (triplet).
 !>
 !> @param[in]  bvec_s   Singlet Davidson vectors (xvec_dim x ns)
 !> @param[in]  bvec_t   Triplet Davidson vectors (xvec_dim x nt)
+!> @param[in]  xvec_dim nocca*(nbf-noccb)
 !> @param[in]  nocca    Number of alpha occupied MOs
 !> @param[in]  noccb    Number of beta  occupied MOs
 !> @param[in]  nbf      Number of basis functions
 !> @param[in]  ns, nt   Number of singlet/triplet states
 !> @param[out] t00aa    Singlet-triplet TDM (ns x nt x nbf x nbf)
 !> @param[out] t110aa   Triplet-triplet TDM, Ms=0 sector (nt x nt x nbf x nbf)
-!> @param[out] t11ab    Triplet-triplet TDM, Ms=±1 sector (nt x nt x nbf x nbf)
-subroutine compute_tdm(bvec_s, bvec_t, nocca, noccb, nbf, ns, nt, &
+!> @param[out] t11ab    Triplet-triplet TDM, Ms=0/+1 sector (nt x nt x nbf x nbf)
+subroutine compute_tdm(bvec_s, bvec_t, xvec_dim, nocca, noccb, nbf, ns, nt, &
                        t00aa, t110aa, t11ab)
   use precision, only: dp
+  use messages, only: show_message, with_abort
   implicit none
 
-  real(kind=dp), intent(in)  :: bvec_s(nocca*(nbf-noccb), ns)
-  real(kind=dp), intent(in)  :: bvec_t(nocca*(nbf-noccb), nt)
-  integer,       intent(in)  :: nocca, noccb, nbf, ns, nt
-
+  integer,       intent(in)  :: xvec_dim, nocca, noccb, nbf, ns, nt
+  real(kind=dp), intent(in)  :: bvec_s(xvec_dim, ns)
+  real(kind=dp), intent(in)  :: bvec_t(xvec_dim, nt)
   real(kind=dp), intent(out) :: t00aa (ns, nt, nbf, nbf)
   real(kind=dp), intent(out) :: t110aa(nt, nt, nbf, nbf)
   real(kind=dp), intent(out) :: t11ab (nt, nt, nbf, nbf)
 
-  real(kind=dp), allocatable :: xs(:,:), xt(:,:)
+  type(sector_state_t), allocatable :: sst(:), tt0(:), tt1(:)
+  real(kind=dp), allocatable :: d(:,:)
+  integer :: i, j, t, u
 
-  integer :: xvec_dim
-  integer :: iV, iO2, iO1, iC
-  integer :: ijLR1, ijG, ijD, ijLR2
-  integer :: ist, jst, i, it, iu
-  integer :: ijiO1, ijiO2, ijO1a, ijO2a
-  integer :: iO1a, jO1a, iO2a, jO2a
-  integer :: iiO1, jiO1, iiO2, jiO2
+  if (nocca - noccb /= 2) &
+    call show_message('soc_mrsf: two-SOMO MRSF requires nocca - noccb = 2', WITH_ABORT)
+  if (xvec_dim /= nocca*(nbf - noccb)) &
+    call show_message('soc_mrsf: response vectors do not have the stock MRSF layout', WITH_ABORT)
 
-  real(kind=dp), parameter :: half  = 0.5_dp
-  real(kind=dp), parameter :: sqrt2 = 1.0_dp / sqrt(2.0_dp)
+  call init_open_tables()
 
-  iV   = nocca + 1
-  iO2  = nocca
-  iO1  = nocca - 1
-  iC   = nocca - 2
-
-  xvec_dim = size(bvec_s, 1)
-
-  ijLR1 = (iO1 - noccb - 1)*nocca + iO1
-  ijG   = (iO1 - noccb - 1)*nocca + iO2
-  ijD   = (iO2 - noccb - 1)*nocca + iO1
-  ijLR2 = (iO2 - noccb - 1)*nocca + iO2
-
-  allocate(xs(xvec_dim, ns), xt(xvec_dim, nt))
-
-  do ist = 1, ns
-    xs(:, ist) = bvec_s(:, ist)
-    xs(ijLR2, ist) = -bvec_s(ijLR1, ist)
+  allocate(sst(ns), tt0(nt), tt1(nt))
+  do i = 1, ns
+    call mrsf_sector_state(bvec_s(:, i), 1, nocca, noccb, nbf, sst(i))
+  end do
+  do j = 1, nt
+    call mrsf_sector_state(bvec_t(:, j), 3, nocca, noccb, nbf, tt0(j))
+    call spin_raise(tt0(j), tt1(j))
+    tt1(j)%nn = tt1(j)%nn / sqrt(2.0_dp)
+    tt1(j)%hn = tt1(j)%hn / sqrt(2.0_dp)
+    tt1(j)%np = tt1(j)%np / sqrt(2.0_dp)
+    tt1(j)%hp = tt1(j)%hp / sqrt(2.0_dp)
   end do
 
-  do jst = 1, nt
-    xt(:, jst) = bvec_t(:, jst)
-    xt(ijLR2, jst) =  bvec_t(ijLR1, jst)
-    xt(ijG,   jst) = 0.0_dp
-    xt(ijD,   jst) = 0.0_dp
-  end do
-
+  allocate(d(0:2*nbf-1, 0:2*nbf-1))
   t00aa  = 0.0_dp
   t110aa = 0.0_dp
   t11ab  = 0.0_dp
 
-  ! Diagonal t=u block. Only triplet-triplet TDMs are nonzero.
-  do ist = 1, nt
-    do jst = 1, nt
-      do iu = 1, nbf
-        it = iu
-        do i = 1, noccb
-          ijiO1 = (iO1 - noccb - 1)*nocca + i
-          ijiO2 = (iO2 - noccb - 1)*nocca + i
-          t110aa(ist, jst, it, iu) = t110aa(ist, jst, it, iu) &
-            + xt(ijiO1, ist) * xt(ijiO1, jst) &
-            + xt(ijiO2, ist) * xt(ijiO2, jst)
-        end do
-        t110aa(ist, jst, it, iu) = t110aa(ist, jst, it, iu) &
-          + xt(ijLR1, ist) * xt(ijLR1, jst)
-      end do
-    end do
-  end do
-
-  ! Core-open blocks: singlet-triplet part.
-  do ist = 1, ns
-    do jst = 1, nt
-      ijiO1 = (iO1 - noccb - 1)*nocca + iC
-      ijiO2 = (iO2 - noccb - 1)*nocca + iC
-      t00aa(ist, jst, iO1, iC) = -half  * xs(ijLR1, ist) * xt(ijiO1, jst) &
-                                  -sqrt2 * xs(ijD,   ist) * xt(ijiO2, jst)
-      t00aa(ist, jst, iC, iO1) = -half  * xs(ijiO1, ist) * xt(ijLR1, jst)
-      t00aa(ist, jst, iO2, iC) = -sqrt2 * xs(ijG,   ist) * xt(ijiO1, jst) &
-                                  +half  * xs(ijLR2, ist) * xt(ijiO2, jst)
-      t00aa(ist, jst, iC, iO2) = -half  * xs(ijiO2, ist) * xt(ijLR2, jst)
-    end do
-  end do
-
-  ! Core-open blocks: triplet-triplet part.
-  do ist = 1, nt
-    do jst = 1, nt
-      ijiO1 = (iO1 - noccb - 1)*nocca + iC
-      ijiO2 = (iO2 - noccb - 1)*nocca + iC
-      t110aa(ist, jst, iO1, iC) = -half  * xt(ijLR1, ist) * xt(ijiO1, jst)
-      t11ab (ist, jst, iO1, iC) = +sqrt2 * xt(ijLR1, ist) * xt(ijiO1, jst)
-      t110aa(ist, jst, iC, iO1) = -half  * xt(ijiO1, ist) * xt(ijLR1, jst)
-      t11ab (ist, jst, iC, iO1) = +sqrt2 * xt(ijiO1, ist) * xt(ijLR1, jst)
-      t110aa(ist, jst, iO2, iC) = -half  * xt(ijLR2, ist) * xt(ijiO2, jst)
-      t11ab (ist, jst, iO2, iC) = +sqrt2 * xt(ijLR2, ist) * xt(ijiO2, jst)
-      t110aa(ist, jst, iC, iO2) = -half  * xt(ijiO2, ist) * xt(ijLR2, jst)
-      t11ab (ist, jst, iC, iO2) = +sqrt2 * xt(ijiO2, ist) * xt(ijLR1, jst)
-    end do
-  end do
-
-  ! Open-open blocks: singlet-triplet part.
-  do ist = 1, ns
-    do jst = 1, nt
-      do i = 1, noccb
-        ijiO1 = (iO1 - noccb - 1)*nocca + i
-        ijiO2 = (iO2 - noccb - 1)*nocca + i
-        t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
-          - half * xs(ijiO1, ist) * xt(ijiO2, jst)
-        t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
-          - half * xs(ijiO2, ist) * xt(ijiO1, jst)
-      end do
-      t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
-        - sqrt2 * xs(ijG, ist) * xt(ijLR1, jst)
-      t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
-        - sqrt2 * xs(ijD, ist) * xt(ijLR2, jst)
-      do i = 1, nbf - nocca
-        ijO2a = (nocca + i - noccb - 1)*nocca + iO2
-        ijO1a = (nocca + i - noccb - 1)*nocca + iO1
-        t00aa(ist, jst, iO2, iO1) = t00aa(ist, jst, iO2, iO1) &
-          - half * xs(ijO2a, ist) * xt(ijO1a, jst)
-        t00aa(ist, jst, iO1, iO2) = t00aa(ist, jst, iO1, iO2) &
-          - half * xs(ijO1a, ist) * xt(ijO2a, jst)
-      end do
-    end do
-  end do
-
-  ! Open-open blocks: triplet-triplet part.
-  do ist = 1, nt
-    do jst = 1, nt
-      do i = 1, noccb
-        ijiO1 = (iO1 - noccb - 1)*nocca + i
-        ijiO2 = (iO2 - noccb - 1)*nocca + i
-        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
-          + half * xt(ijiO1, ist) * xt(ijiO2, jst)
-        t11ab(ist, jst, iO2, iO1) = t11ab(ist, jst, iO2, iO1) &
-          - sqrt2 * xt(ijiO1, ist) * xt(ijiO2, jst)
-        t110aa(ist, jst, iO1, iO2) = t110aa(ist, jst, iO1, iO2) &
-          + half * xt(ijiO2, ist) * xt(ijiO1, jst)
-        t11ab(ist, jst, iO1, iO2) = t11ab(ist, jst, iO1, iO2) &
-          - sqrt2 * xt(ijiO2, ist) * xt(ijiO1, jst)
-      end do
-      do i = 1, nbf - nocca
-        ijO2a = (nocca + i - noccb - 1)*nocca + iO2
-        ijO1a = (nocca + i - noccb - 1)*nocca + iO1
-        t110aa(ist, jst, iO2, iO1) = t110aa(ist, jst, iO2, iO1) &
-          - half * xt(ijO2a, ist) * xt(ijO1a, jst)
-        t11ab(ist, jst, iO2, iO1) = t11ab(ist, jst, iO2, iO1) &
-          - sqrt2 * xt(ijO2a, ist) * xt(ijO1a, jst)
-        t110aa(ist, jst, iO1, iO2) = t110aa(ist, jst, iO1, iO2) &
-          - half * xt(ijO1a, ist) * xt(ijO2a, jst)
-        t11ab(ist, jst, iO1, iO2) = t11ab(ist, jst, iO1, iO2) &
-          - sqrt2 * xt(ijO1a, ist) * xt(ijO2a, jst)
-      end do
-    end do
-  end do
-
-  ! Virtual-open blocks: singlet-triplet part.
-  do ist = 1, ns
-    do jst = 1, nt
-      do it = iV, nbf
-        ijO1a = (it - noccb - 1)*nocca + iO1
-        ijO2a = (it - noccb - 1)*nocca + iO2
-        t00aa(ist, jst, it, iO1) = -sqrt2 * xs(ijG,   ist) * xt(ijO2a, jst) &
-                                    -half  * xs(ijLR2, ist) * xt(ijO1a, jst)
-        t00aa(ist, jst, iO1, it) = -half  * xs(ijO1a, ist) * xt(ijLR2, jst)
-        t00aa(ist, jst, it, iO2) = +half  * xs(ijLR1, ist) * xt(ijO2a, jst) &
-                                    -sqrt2 * xs(ijD,   ist) * xt(ijO1a, jst)
-        t00aa(ist, jst, iO2, it) = -half  * xs(ijO2a, ist) * xt(ijLR1, jst)
-      end do
-    end do
-  end do
-
-  ! Virtual-open blocks: triplet-triplet part.
-  do ist = 1, nt
-    do jst = 1, nt
-      do it = iV, nbf
-        ijO1a = (it - noccb - 1)*nocca + iO1
-        ijO2a = (it - noccb - 1)*nocca + iO2
-        t110aa(ist, jst, it, iO1) = +half  * xt(ijLR2, ist) * xt(ijO1a, jst)
-        t11ab (ist, jst, it, iO1) = +sqrt2 * xt(ijLR1, ist) * xt(ijO1a, jst)
-        t110aa(ist, jst, iO1, it) = +half  * xt(ijO1a, ist) * xt(ijLR2, jst)
-        t11ab (ist, jst, iO1, it) = +sqrt2 * xt(ijO1a, ist) * xt(ijLR1, jst)
-        t110aa(ist, jst, it, iO2) = +half  * xt(ijLR1, ist) * xt(ijO2a, jst)
-        t11ab (ist, jst, it, iO2) = +sqrt2 * xt(ijLR2, ist) * xt(ijO2a, jst)
-        t110aa(ist, jst, iO2, it) = +half  * xt(ijO2a, ist) * xt(ijLR1, jst)
-        t11ab (ist, jst, iO2, it) = +sqrt2 * xt(ijO2a, ist) * xt(ijLR1, jst)
-      end do
-    end do
-  end do
-
-  ! Off-diagonal virtual-virtual blocks.
-  do ist = 1, ns
-    do jst = 1, nt
-      do iu = iV, nbf
-        do it = iV, nbf
-          if (iu == it) cycle
-          iO1a = (iu - noccb - 1)*nocca + iO1
-          jO1a = (it - noccb - 1)*nocca + iO1
-          iO2a = (iu - noccb - 1)*nocca + iO2
-          jO2a = (it - noccb - 1)*nocca + iO2
-          t00aa(ist, jst, it, iu) = -half * (xs(iO1a, ist)*xt(jO1a, jst) &
-                                            + xs(iO2a, ist)*xt(jO2a, jst))
+  do j = 1, nt
+    do i = 1, ns
+      call transition_density(sst(i), tt0(j), d)
+      do u = 1, nbf
+        do t = 1, nbf
+          t00aa(i, j, t, u) = d(2*(u-1), 2*(t-1))
         end do
       end do
     end do
   end do
 
-  do ist = 1, nt
-    do jst = 1, nt
-      do iu = iV, nbf
-        do it = iV, nbf
-          if (iu == it) cycle
-          iO1a = (iu - noccb - 1)*nocca + iO1
-          jO1a = (it - noccb - 1)*nocca + iO1
-          iO2a = (iu - noccb - 1)*nocca + iO2
-          jO2a = (it - noccb - 1)*nocca + iO2
-          t110aa(ist, jst, it, iu) = +half  * (xt(iO1a, ist)*xt(jO1a, jst) &
-                                              + xt(iO2a, ist)*xt(jO2a, jst))
-          t11ab (ist, jst, it, iu) = +sqrt2 * (xt(iO1a, ist)*xt(jO1a, jst) &
-                                              + xt(iO2a, ist)*xt(jO2a, jst))
+  do j = 1, nt
+    do i = 1, nt
+      call transition_density(tt0(i), tt0(j), d)
+      do u = 1, nbf
+        do t = 1, nbf
+          t110aa(i, j, t, u) = d(2*(u-1), 2*(t-1))
+        end do
+      end do
+      call transition_density(tt0(i), tt1(j), d)
+      do u = 1, nbf
+        do t = 1, nbf
+          t11ab(i, j, t, u) = d(2*(u-1)+1, 2*(t-1))
         end do
       end do
     end do
   end do
 
-  ! Off-diagonal core-core blocks.
-  do ist = 1, ns
-    do jst = 1, nt
-      do iu = 1, noccb
-        do it = 1, noccb
-          if (iu == it) cycle
-          iiO1 = (iO1 - noccb - 1)*nocca + iu
-          jiO1 = (iO1 - noccb - 1)*nocca + it
-          iiO2 = (iO2 - noccb - 1)*nocca + iu
-          jiO2 = (iO2 - noccb - 1)*nocca + it
-          t00aa(ist, jst, it, iu) = -half * (xs(iiO1, ist)*xt(jiO1, jst) &
-                                            + xs(iiO2, ist)*xt(jiO2, jst))
-        end do
-      end do
-    end do
-  end do
-
-  do ist = 1, nt
-    do jst = 1, nt
-      do iu = 1, noccb
-        do it = 1, noccb
-          if (iu == it) cycle
-          iiO1 = (iO1 - noccb - 1)*nocca + iu
-          jiO1 = (iO1 - noccb - 1)*nocca + it
-          iiO2 = (iO2 - noccb - 1)*nocca + iu
-          jiO2 = (iO2 - noccb - 1)*nocca + it
-          t110aa(ist, jst, it, iu) = +half  * (xt(iiO1, ist)*xt(jiO1, jst) &
-                                              + xt(iiO2, ist)*xt(jiO2, jst))
-          t11ab (ist, jst, it, iu) = +sqrt2 * (xt(iiO1, ist)*xt(jiO1, jst) &
-                                              + xt(iiO2, ist)*xt(jiO2, jst))
-        end do
-      end do
-    end do
-  end do
-
-  deallocate(xs, xt)
+  deallocate(d, sst, tt0, tt1)
 
 end subroutine compute_tdm
+
+! ---------------------------------------------------------------------------
+! Configuration algebra for two-SOMO MRSF states
+!
+! A determinant of an MRSF state (or of its S+- partners) has a doubly
+! occupied closed set with at most one hole, any occupation of the four open
+! spin orbitals (O1a, O1b, O2a, O2b) and at most one electron in the virtual
+! set.  A state is stored as four sector tensors
+!     nn(o)        no core hole, no virtual electron
+!     hn(r, o)     core hole r,  no virtual electron
+!     np(o, v)     no core hole, virtual electron v
+!     hp(r, o, v)  core hole r,  virtual electron v
+! with o = 0..15 the open-shell occupation bit pattern (bit 0 O1a, 1 O1b,
+! 2 O2a, 3 O2b), r = 2c+s the core spin orbital (s = 0 alpha, 1 beta) and
+! v = 2w+s the virtual spin orbital.  The basis vectors are occupation-number
+! vectors in the fermion-mode order (virtual, open, core); a+_p a_q (p /= q)
+! carries (-1)**N with N the number of occupied modes strictly between p and q.
+! The spin-orbital index of the transition density is 2m+s, m = core 0..nc-1,
+! O1 = nc, O2 = nc+1, virtuals nc+2.. ; the mode order coincides with it.
+! ---------------------------------------------------------------------------
+
+!> Bit tables of the four open modes and the one-body operators
+!> lop(k,l,o1,o2) = <o1| a+_k a_l |o2>.
+subroutine init_open_tables()
+  implicit none
+  integer :: k, l, o1, o2, lo, hi, between
+
+  if (open_tables_ready) return
+  do o2 = 0, 15
+    pop_tab(o2) = popcnt(o2)
+    do k = 0, 3
+      has_tab(k, o2) = btest(o2, k)
+      before_tab(k, o2) = popcnt(iand(o2, ishft(1, k) - 1))
+      after_tab(k, o2) = popcnt(ishft(o2, -(k+1)))
+    end do
+  end do
+  lop_tab = 0.0_dp
+  do k = 0, 3
+    do l = 0, 3
+      do o2 = 0, 15
+        if (.not. btest(o2, l)) cycle
+        if (k == l) then
+          lop_tab(k, l, o2, o2) = 1.0_dp
+          cycle
+        end if
+        if (btest(o2, k)) cycle
+        lo = min(k, l)
+        hi = max(k, l)
+        between = popcnt(iand(ishft(o2, -(lo+1)), ishft(1, hi-lo-1) - 1))
+        o1 = ior(iand(o2, not(ishft(1, l))), ishft(1, k))
+        if (mod(between, 2) == 1) then
+          lop_tab(k, l, o1, o2) = -1.0_dp
+        else
+          lop_tab(k, l, o1, o2) = 1.0_dp
+        end if
+      end do
+    end do
+  end do
+  splus_open = lop_tab(0, 1, :, :) + lop_tab(2, 3, :, :)
+  open_tables_ready = .true.
+end subroutine init_open_tables
+
+pure function parity_sign(n) result(s)
+  implicit none
+  integer, intent(in) :: n
+  real(kind=dp) :: s
+  if (mod(n, 2) == 0) then
+    s = 1.0_dp
+  else
+    s = -1.0_dp
+  end if
+end function parity_sign
+
+subroutine alloc_sector_state(st, nc, nv)
+  implicit none
+  type(sector_state_t), intent(out) :: st
+  integer, intent(in) :: nc, nv
+  st%nc = nc
+  st%nv = nv
+  allocate(st%nn(0:15), st%hn(0:2*nc-1, 0:15), st%np(0:15, 0:2*nv-1), &
+           st%hp(0:2*nc-1, 0:15, 0:2*nv-1))
+  st%nn = 0.0_dp
+  st%hn = 0.0_dp
+  st%np = 0.0_dp
+  st%hp = 0.0_dp
+end subroutine alloc_sector_state
+
+!> MRSF M_S = 0 state of one packed response vector x (slot (i,a) at
+!> (a-noccb-1)*nocca + i), mult = 1 or 3.
+subroutine mrsf_sector_state(x, mult, nocca, noccb, nbf, st)
+  implicit none
+  real(kind=dp), intent(in) :: x(:)
+  integer, intent(in) :: mult, nocca, noccb, nbf
+  type(sector_state_t), intent(out) :: st
+
+  integer, parameter :: ref_plus = 5     ! O1a O2a  (bits 0 and 2)
+  integer, parameter :: ref_minus = 10   ! O1b O2b  (bits 1 and 3)
+  real(kind=dp), parameter :: isq2 = 1.0_dp / sqrt(2.0_dp)
+  integer :: nc, nv, c, w, m, k, l, o, ra, rb
+  real(kind=dp) :: lam, val
+
+  nc = noccb
+  nv = nbf - nocca
+  lam = 1.0_dp
+  if (mult == 1) lam = -1.0_dp
+  call alloc_sector_state(st, nc, nv)
+
+  ! core -> virtual
+  do c = 0, nc - 1
+    ra = 2*c
+    rb = 2*c + 1
+    do w = 0, nv - 1
+      val = xslot(c, w + 2) * isq2
+      st%hp(ra, ref_plus,  2*w + 1) = st%hp(ra, ref_plus,  2*w + 1) &
+        + parity_sign(pop_tab(ref_plus) + ra) * val
+      st%hp(rb, ref_minus, 2*w)     = st%hp(rb, ref_minus, 2*w) &
+        + lam * parity_sign(pop_tab(ref_minus) + rb) * val
+    end do
+  end do
+
+  ! core -> O_m
+  do m = 0, 1
+    do c = 0, nc - 1
+      ra = 2*c
+      rb = 2*c + 1
+      val = xslot(c, m) * isq2
+      k = 2*m + 1
+      st%hn(ra, ior(ref_plus, ishft(1, k))) = st%hn(ra, ior(ref_plus, ishft(1, k))) &
+        + parity_sign(after_tab(k, ref_plus) + ra) * val
+      k = 2*m
+      st%hn(rb, ior(ref_minus, ishft(1, k))) = st%hn(rb, ior(ref_minus, ishft(1, k))) &
+        + lam * parity_sign(after_tab(k, ref_minus) + rb) * val
+    end do
+  end do
+
+  ! O_m -> virtual
+  do m = 0, 1
+    do w = 0, nv - 1
+      val = xslot(nc + m, w + 2) * isq2
+      l = 2*m
+      st%np(ieor(ref_plus, ishft(1, l)), 2*w + 1) = st%np(ieor(ref_plus, ishft(1, l)), 2*w + 1) &
+        + parity_sign(before_tab(l, ref_plus)) * val
+      l = 2*m + 1
+      st%np(ieor(ref_minus, ishft(1, l)), 2*w) = st%np(ieor(ref_minus, ishft(1, l)), 2*w) &
+        + lam * parity_sign(before_tab(l, ref_minus)) * val
+    end do
+  end do
+
+  ! open -> open: L + lam R, and G, D for singlets
+  do o = 0, 15
+    st%nn(o) = st%nn(o) + xslot(nc, 0) * isq2 &
+      * (lop_tab(1, 0, o, ref_plus) + lam * lop_tab(3, 2, o, ref_plus))
+    if (mult == 1) then
+      st%nn(o) = st%nn(o) + xslot(nc + 1, 0) * lop_tab(1, 2, o, ref_plus) &
+                          + xslot(nc, 1)     * lop_tab(3, 0, o, ref_plus)
+    end if
+  end do
+
+contains
+
+  !> packed amplitude X(i, a) for 0-based alpha-occupied i and 0-based a-noccb
+  pure function xslot(i0, a0) result(v)
+    integer, intent(in) :: i0, a0
+    real(kind=dp) :: v
+    v = x(a0*nocca + i0 + 1)
+  end function xslot
+
+end subroutine mrsf_sector_state
+
+!> S+ = sum_p a+(p alpha) a(p beta) applied to a sector state.
+subroutine spin_raise(st, out)
+  implicit none
+  type(sector_state_t), intent(in) :: st
+  type(sector_state_t), intent(out) :: out
+  integer :: o1, o2, c, w
+
+  call alloc_sector_state(out, st%nc, st%nv)
+  do o1 = 0, 15
+    do o2 = 0, 15
+      if (splus_open(o1, o2) == 0.0_dp) cycle
+      out%nn(o1) = out%nn(o1) + splus_open(o1, o2) * st%nn(o2)
+      out%hn(:, o1) = out%hn(:, o1) + splus_open(o1, o2) * st%hn(:, o2)
+      out%np(o1, :) = out%np(o1, :) + splus_open(o1, o2) * st%np(o2, :)
+      out%hp(:, o1, :) = out%hp(:, o1, :) + splus_open(o1, o2) * st%hp(:, o2, :)
+    end do
+  end do
+  ! virtual electron (w beta) -> (w alpha)
+  do w = 0, st%nv - 1
+    out%np(:, 2*w) = out%np(:, 2*w) + st%np(:, 2*w + 1)
+    out%hp(:, :, 2*w) = out%hp(:, :, 2*w) + st%hp(:, :, 2*w + 1)
+  end do
+  ! core hole: a+(c alpha) a(c beta) moves the hole from (c alpha) to (c beta)
+  do c = 0, st%nc - 1
+    out%hn(2*c + 1, :) = out%hn(2*c + 1, :) + st%hn(2*c, :)
+    out%hp(2*c + 1, :, :) = out%hp(2*c + 1, :, :) + st%hp(2*c, :, :)
+  end do
+end subroutine spin_raise
+
+!> D(P,Q) = <bra| a+_P a_Q |ket>, P = 2m+s over all spin orbitals.
+subroutine transition_density(bra, ket, d)
+  implicit none
+  type(sector_state_t), intent(in) :: bra, ket
+  real(kind=dp), intent(out) :: d(0:, 0:)
+
+  integer :: nc, nv, nh, npv, o0, v0, p, q, a, b, o, k, pk, of, ox, r, m
+  real(kind=dp) :: overlap, ph, s
+  real(kind=dp), allocatable :: mc(:,:), gam(:,:)
+
+  nc = ket%nc
+  nv = ket%nv
+  nh = 2*nc
+  npv = 2*nv
+  o0 = 2*nc
+  v0 = 2*nc + 4
+  d = 0.0_dp
+
+  overlap = sum(bra%nn * ket%nn) + sum(bra%hn * ket%hn) + sum(bra%np * ket%np) &
+          + sum(bra%hp * ket%hp)
+
+  ! virtual <- virtual (no intervening occupied mode)
+  do q = 0, npv - 1
+    do p = 0, npv - 1
+      d(v0 + p, v0 + q) = sum(bra%np(:, p) * ket%np(:, q)) + sum(bra%hp(:, :, p) * ket%hp(:, :, q))
+    end do
+  end do
+
+  ! core <- core: ket hole b, bra hole a, phase (-1)**(|a-b|-1)
+  allocate(mc(0:nh-1, 0:nh-1))
+  do b = 0, nh - 1
+    do a = 0, nh - 1
+      mc(a, b) = sum(bra%hn(a, :) * ket%hn(b, :)) + sum(bra%hp(a, :, :) * ket%hp(b, :, :))
+    end do
+  end do
+  do b = 0, nh - 1
+    do a = 0, nh - 1
+      if (a == b) then
+        d(a, a) = overlap - mc(a, a)
+      else
+        d(a, b) = parity_sign(abs(a - b) - 1) * mc(b, a)
+      end if
+    end do
+  end do
+  deallocate(mc)
+
+  ! open <- open
+  allocate(gam(0:15, 0:15))
+  do m = 0, 15
+    do o = 0, 15
+      gam(o, m) = bra%nn(o) * ket%nn(m) + sum(bra%hn(:, o) * ket%hn(:, m)) &
+                + sum(bra%np(o, :) * ket%np(m, :)) + sum(bra%hp(:, o, :) * ket%hp(:, m, :))
+    end do
+  end do
+  do k = 0, 3
+    do m = 0, 3
+      d(o0 + k, o0 + m) = sum(gam * lop_tab(k, m, :, :))
+    end do
+  end do
+  deallocate(gam)
+
+  ! open <-> core, open <-> virtual
+  do k = 0, 3
+    pk = ishft(1, k)
+    do o = 0, 15
+      if (.not. has_tab(k, o)) then
+        of = ior(o, pk)
+        do r = 0, nh - 1
+          ph = parity_sign(after_tab(k, o) + r)
+          s = bra%hn(r, of) * ket%nn(o) + sum(bra%hp(r, of, :) * ket%np(o, :))
+          d(o0 + k, r) = d(o0 + k, r) + ph * s
+        end do
+        ph = parity_sign(before_tab(k, o))
+        do p = 0, npv - 1
+          s = bra%nn(of) * ket%np(o, p) + sum(bra%hn(:, of) * ket%hp(:, o, p))
+          d(o0 + k, v0 + p) = d(o0 + k, v0 + p) + ph * s
+        end do
+      else
+        ox = ieor(o, pk)
+        do r = 0, nh - 1
+          ph = parity_sign(after_tab(k, o) + r)
+          s = bra%nn(ox) * ket%hn(r, o) + sum(bra%np(ox, :) * ket%hp(r, o, :))
+          d(r, o0 + k) = d(r, o0 + k) + ph * s
+        end do
+        ph = parity_sign(before_tab(k, o))
+        do p = 0, npv - 1
+          s = bra%np(ox, p) * ket%nn(o) + sum(bra%hp(:, ox, p) * ket%hn(:, o))
+          d(v0 + p, o0 + k) = d(v0 + p, o0 + k) + ph * s
+        end do
+      end if
+    end do
+  end do
+
+  ! virtual <- core and core <- virtual
+  do r = 0, nh - 1
+    do p = 0, npv - 1
+      s = 0.0_dp
+      do o = 0, 15
+        ph = parity_sign(pop_tab(o) + r)
+        s = s + ph * bra%hp(r, o, p) * ket%nn(o)
+        d(r, v0 + p) = d(r, v0 + p) + ph * bra%nn(o) * ket%hp(r, o, p)
+      end do
+      d(v0 + p, r) = s
+    end do
+  end do
+
+end subroutine transition_density
 
 
 subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
