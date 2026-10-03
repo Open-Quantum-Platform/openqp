@@ -568,6 +568,8 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("relres=errout/bnorm", grad)
         self.assertIn("remaining=max(0,mxit-pcg_iters)", grad)
         self.assertIn("z_full_rel=sqrt(z_rnorm2/z_bnorm2)", grad)
+        self.assertIn("umrsfzautofallback:densefull-blocksolve", grad)
+        self.assertIn("z_ndof<=2000.and.z_dense_matrix_bytes<=64.0_dp*1024.0_dp**2", grad)
         self.assertIn("umrsfcoupledz-vectordidnotreachtherequestedrelativeresidual", grad)
         self.assertIn("if(infos%dft%cam_flag)then", grad)
         self.assertIn("if(infos%functional%needtau)then", grad)

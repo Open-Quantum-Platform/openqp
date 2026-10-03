@@ -104,14 +104,18 @@ def test_umrsf_gradient_buffers_survive_basis_changes_in_one_process(tmp_path):
     assert abs(e1 - e_ref) < 1e-7 and np.max(np.abs(g1 - g_ref)) < REF_TOL
 
     # 2. larger basis: packed and square scratch must grow
-    e2, g2, _ = _run(tmp_path, "step2_ccpvdz", _example(h2co_big))
+    # The tighter request exercises the bounded fallback on this build. A reduced
+    # solve that passes directly on another platform is accepted below.
+    e2, g2, _ = _run(tmp_path, "step2_ccpvdz", _example(h2co_big, tdhf={"zvconv": "5e-10"}))
     assert abs(e2 - e_big_ref) < 1e-7 and np.max(np.abs(g2 - g_big_ref)) < REF_TOL
     z_log = (tmp_path / "step2_ccpvdz.log").read_text()
-    assert "UMRSF Z auto fallback: dense full-block solve" in z_log
-    full_residuals = re.findall(r"full coupled Z relative residual =\s*([\d.E+-]+)", z_log)
-    assert len(full_residuals) == 2
-    assert float(full_residuals[0]) > 1e-9
-    assert float(full_residuals[1]) <= 1e-9
+    full_residuals = [float(value) for value in re.findall(
+        r"full coupled Z relative residual =\s*([\d.E+-]+)", z_log
+    )]
+    assert full_residuals and full_residuals[-1] <= 5e-10
+    if full_residuals[0] > 5e-10:
+        assert "UMRSF Z auto fallback: dense full-block solve" in z_log
+        assert len(full_residuals) == 2
 
     # 3. much smaller system and HF: scratch shrinks, XC state must be released
     e3, g3, _ = _run(tmp_path, "step3_h2_hf", _example(h2))
