@@ -7,7 +7,7 @@ system=
    1    0.000000000   0.000000000   1.407611000
 charge=0
 runtype=energy
-basis=file:x2c-tzvpall_uncontracted_HBr.json
+basis=file:x2c-tzvpall_uncontracted_hbr.json
 method=hf
 ispher=true
 

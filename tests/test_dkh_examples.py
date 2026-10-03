@@ -33,22 +33,46 @@ def _reference_energy(name):
 
 class TestDKHExamples(unittest.TestCase):
 
-    def _run_example(self, name):
+    def _run_example(self, name, suffix):
         from oqp.utils.oqp_tester import OQPTester
         from oqp.utils.mpi_utils import MPIManager
         tester = OQPTester(output_dir="openqp_dkh_test_tmp", omp_threads=2,
                            mpi_manager=MPIManager())
-        tester.run(str(DKH_EXAMPLES / f"{name}.inp"))
+        tester.run(str(DKH_EXAMPLES / f"{name}{suffix}"))
         result = tester.results[0]
         self.assertEqual(result["status"], "PASSED",
-                         f"{name} regression failed:\n{result['message']}")
+                         f"{name}{suffix} regression failed:\n{result['message']}")
+
+    def _run_both_forms(self, name):
+        # The example suite prefers the concise .oqp companion, whose basis and
+        # geometry references are resolved verbatim (case-sensitive on Linux);
+        # run it as well as the legacy .inp deck.
+        for suffix in (".inp", ".oqp"):
+            with self.subTest(form=suffix):
+                self._run_example(name, suffix)
+
+    def test_referenced_files_match_exact_case(self):
+        import os
+        import re
+        for name in ALL:
+            for suffix in (".inp", ".oqp"):
+                path = DKH_EXAMPLES / f"{name}{suffix}"
+                text = path.read_text(encoding="utf-8")
+                refs = re.findall(r"file:([^\s/]+\.json)", text)
+                refs += re.findall(r'geom="([^"]+)"', text)
+                for ref in refs:
+                    target = os.path.normpath(os.path.join(path.parent, ref))
+                    folder, base = os.path.split(target)
+                    self.assertIn(base, os.listdir(folder),
+                                  f"{path.name} references {ref}, which does not exist "
+                                  "with exactly this case")
 
     def test_example_files_present(self):
         for name in ALL:
-            for suffix in (".inp", ".json"):
+            for suffix in (".inp", ".oqp", ".json"):
                 self.assertTrue((DKH_EXAMPLES / f"{name}{suffix}").is_file(),
                                 f"missing: {name}{suffix}")
-        self.assertTrue((DKH_EXAMPLES / "x2c-tzvpall_uncontracted_HBr.json").is_file())
+        self.assertTrue((DKH_EXAMPLES / "x2c-tzvpall_uncontracted_hbr.json").is_file())
 
     def test_reference_uncontracted_routes_coincide(self):
         # C is the identity for an uncontracted basis: both routes must agree to
@@ -67,16 +91,16 @@ class TestDKHExamples(unittest.TestCase):
         self.assertLess(e_old, e_unc)
 
     def test_contracted_default(self):
-        self._run_example(CONTRACTED)
+        self._run_both_forms(CONTRACTED)
 
     def test_contracted_legacy(self):
-        self._run_example(CONTRACTED_LEGACY)
+        self._run_both_forms(CONTRACTED_LEGACY)
 
     def test_uncontracted_default(self):
-        self._run_example(UNCONTRACTED)
+        self._run_both_forms(UNCONTRACTED)
 
     def test_uncontracted_legacy(self):
-        self._run_example(UNCONTRACTED_LEGACY)
+        self._run_both_forms(UNCONTRACTED_LEGACY)
 
 
 if __name__ == "__main__":
