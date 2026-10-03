@@ -19,6 +19,7 @@ same input must reuse (or correctly resize) the buffers without contamination.
 import configparser
 import json
 import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -105,6 +106,12 @@ def test_umrsf_gradient_buffers_survive_basis_changes_in_one_process(tmp_path):
     # 2. larger basis: packed and square scratch must grow
     e2, g2, _ = _run(tmp_path, "step2_ccpvdz", _example(h2co_big))
     assert abs(e2 - e_big_ref) < 1e-7 and np.max(np.abs(g2 - g_big_ref)) < REF_TOL
+    z_log = (tmp_path / "step2_ccpvdz.log").read_text()
+    assert "UMRSF Z auto fallback: dense full-block solve" in z_log
+    full_residuals = re.findall(r"full coupled Z relative residual =\s*([\d.E+-]+)", z_log)
+    assert len(full_residuals) == 2
+    assert float(full_residuals[0]) > 1e-9
+    assert float(full_residuals[1]) <= 1e-9
 
     # 3. much smaller system and HF: scratch shrinks, XC state must be released
     e3, g3, _ = _run(tmp_path, "step3_h2_hf", _example(h2))
