@@ -27,9 +27,11 @@ module soc_mrsf_mod
   logical, save :: has_tab(0:3, 0:15)
   real(kind=dp), save :: lop_tab(0:3, 0:3, 0:15, 0:15), splus_open(0:15, 0:15)
 
-  !> MO-basis SOC integrals, exported for independent checks of H_SOC
+  !> MO-basis SOC integrals, exported only in debug mode ([input] verbose=3,
+  !> infos%tddft%debug_mode) for independent checks of H_SOC
   !> (tests/test_soc_mrsf_tdm.py): shape (nbf, nbf, 3) = (t, u, x/y/z), the real
-  !> antisymmetric l_b(t,u) with L_b = -i l_b; 1e and mean-field 2e parts.
+  !> antisymmetric l_b(t,u) with L_b = -i l_b; the 2e record exists only when
+  !> the mean-field 2e part was computed (soc_2e=1).
   character(len=*), parameter :: OQP_soc_lmo_1e = "OQP::soc_lmo_1e"
   character(len=*), parameter :: OQP_soc_lmo_2e = "OQP::soc_lmo_2e"
 
@@ -257,25 +259,28 @@ contains
 
     deallocate(lx_ao, ly_ao, lz_ao)
 
-    ! Export the MO integrals (independent regression of H_SOC in Python).
-    block
-      real(kind=dp), contiguous, pointer :: lout(:,:,:)
-      integer :: ta_status
-      ta_status = infos%dat%alloc(OQP_soc_lmo_1e, [nbf, nbf, 3], lout, &
-        description="MO SOC 1e integrals l_b(t,u) (x,y,z), L_b = -i l_b, a.u. (no alpha^2/2)", &
-        override=.true.)
-      if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_1e', WITH_ABORT)
-      lout(:,:,1) = lx_mo; lout(:,:,2) = ly_mo; lout(:,:,3) = lz_mo
-      ta_status = infos%dat%alloc(OQP_soc_lmo_2e, [nbf, nbf, 3], lout, &
-        description="MO SOC mean-field 2e integrals (x,y,z), same convention; zero if soc_2e=0", &
-        override=.true.)
-      if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_2e', WITH_ABORT)
-      if (do_2e_soc) then
-        lout(:,:,1) = lx_2e_mo; lout(:,:,2) = ly_2e_mo; lout(:,:,3) = lz_2e_mo
-      else
-        lout = 0.0_dp
-      end if
-    end block
+    ! Debug-mode export of the MO integrals (independent regression of H_SOC
+    ! in tests/test_soc_mrsf_tdm.py).  Gated like the other MRSF developer
+    ! dumps (infos%tddft%debug_mode, [input] verbose=3): a production run
+    ! does not retain these 3*nbf*nbf records.
+    if (infos%tddft%debug_mode) then
+      block
+        real(kind=dp), contiguous, pointer :: lout(:,:,:)
+        integer :: ta_status
+        ta_status = infos%dat%alloc(OQP_soc_lmo_1e, [nbf, nbf, 3], lout, &
+          description="MO SOC 1e integrals l_b(t,u) (x,y,z), L_b = -i l_b, a.u. (no alpha^2/2)", &
+          override=.true.)
+        if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_1e', WITH_ABORT)
+        lout(:,:,1) = lx_mo; lout(:,:,2) = ly_mo; lout(:,:,3) = lz_mo
+        if (do_2e_soc) then
+          ta_status = infos%dat%alloc(OQP_soc_lmo_2e, [nbf, nbf, 3], lout, &
+            description="MO SOC mean-field 2e integrals (x,y,z), same convention", &
+            override=.true.)
+          if (ta_status /= TA_OK) call show_message('soc_mrsf: cannot allocate OQP::soc_lmo_2e', WITH_ABORT)
+          lout(:,:,1) = lx_2e_mo; lout(:,:,2) = ly_2e_mo; lout(:,:,3) = lz_2e_mo
+        end if
+      end block
+    end if
 
     ! --- Step 3: Build spin-dependent transition density matrices ---
     allocate(t00aa (ns, nt, nbf, nbf), &

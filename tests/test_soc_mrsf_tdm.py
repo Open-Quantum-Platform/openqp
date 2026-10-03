@@ -10,8 +10,9 @@ integrals (compute_soc_matrix).  This test rebuilds H_SOC without that code:
 * the triplet sublevels are |T,+-1> = S+-|T,0>/sqrt2 (no Wigner-Eckart
   assumption);
 * the spin-orbital transition densities D[P,Q] = <bra|a+_P a_Q|ket> are
-  contracted with the MO integrals the native run exports (OQP::soc_lmo_1e,
-  OQP::soc_lmo_2e; l_b real antisymmetric, L_b = -i l_b);
+  contracted with the MO integrals the native run exports in debug mode
+  ([input] verbose=3 -> OQP::soc_lmo_1e, OQP::soc_lmo_2e; l_b real
+  antisymmetric, L_b = -i l_b; the records are not retained otherwise);
 * the singlet-triplet block uses the native Wigner-Eckart form from <S|D|T,0>
   (D_bb = -D_aa), the triplet-triplet block the explicit sublevels.
 
@@ -229,6 +230,28 @@ def oracle_hsoc(xs, xt, nbf, nocca, noccb, lmo):
     return h
 
 
+NOEXPORT_DRIVER = textwrap.dedent('''
+    import json, sys
+    import numpy as np
+    from oqp.pyoqp import Runner
+    inp = ("[input]\\nsystem=\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n"
+           "   H -0.7731277 0.55567785 0.0\\ncharge=0\\nruntype=soc\\nbasis=sto-3g\\n"
+           "method=tdhf\\nfunctional=bhhlyp\\nispher=false\\nsoc_2e=" + sys.argv[1] + "\\nverbose=" + sys.argv[2] + "\\n\\n"
+           "[scf]\\ntype=rohf\\nmultiplicity=3\\nconv=1e-10\\nmaxit=300\\n\\n"
+           "[tdhf]\\ntype=mrsf\\nnstate=2\\nmultiplicity=3\\nconv=1e-9\\n")
+    open("noexp.inp", "w").write(inp)
+    r = Runner(project="noexp", input_file="noexp.inp", log="noexp.log", silent=1, usempi=False)
+    r.run()
+    d = r.mol.data
+    def present(tag):
+        try:
+            return int(np.asarray(d[tag]).size) > 0
+        except Exception:
+            return False
+    print("SOCNOEXP_RESULT " + json.dumps({"l1e": present("OQP::soc_lmo_1e"), "l2e": present("OQP::soc_lmo_2e"),
+                                           "eval": present("OQP::soc_eval")}))
+''')
+
 DRIVER = textwrap.dedent('''
     import json, math, sys
     import numpy as np
@@ -236,7 +259,7 @@ DRIVER = textwrap.dedent('''
     functional = sys.argv[1]
     inp = ("[input]\\nsystem=\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n"
            "   H -0.7731277 0.55567785 0.0\\ncharge=0\\nruntype=soc\\nbasis=6-31g\\n"
-           "method=tdhf\\nfunctional=" + functional + "\\nispher=false\\nsoc_2e=1\\n\\n"
+           "method=tdhf\\nfunctional=" + functional + "\\nispher=false\\nsoc_2e=1\\nverbose=3\\n\\n"
            "[scf]\\ntype=rohf\\nmultiplicity=3\\nconv=1e-10\\nmaxit=300\\n\\n"
            "[tdhf]\\ntype=mrsf\\nnstate=3\\nmultiplicity=3\\nconv=1e-9\\n")
     name = "h2o_soc"
@@ -269,7 +292,7 @@ SEQUENCE_DRIVER = textwrap.dedent('''
         basis, nstate = case.split(":")
         inp = ("[input]\\nsystem=\\n   O 0.0 0.0 0.0\\n   H 0.77259794 0.55567785 0.0\\n"
                "   H -0.7731277 0.55567785 0.0\\ncharge=0\\nruntype=soc\\nbasis=" + basis + "\\n"
-               "method=tdhf\\nfunctional=bhhlyp\\nispher=false\\nsoc_2e=1\\n\\n"
+               "method=tdhf\\nfunctional=bhhlyp\\nispher=false\\nsoc_2e=1\\nverbose=3\\n\\n"
                "[scf]\\ntype=rohf\\nmultiplicity=3\\nconv=1e-10\\nmaxit=300\\n\\n"
                "[tdhf]\\ntype=mrsf\\nnstate=" + nstate + "\\nmultiplicity=3\\nconv=1e-9\\n")
         name = "seq_%d" % k
@@ -337,6 +360,33 @@ class SOCTransitionDensities(unittest.TestCase):
 
     def test_mrsf_bhhlyp(self):
         self._check("bhhlyp")
+
+    def _run_noexport(self, soc_2e, verbose):
+        with tempfile.TemporaryDirectory(prefix="socnoexp_") as wd:
+            drv = os.path.join(wd, "driver.py")
+            with open(drv, "w") as f:
+                f.write(NOEXPORT_DRIVER)
+            env = dict(os.environ)
+            env.setdefault("OMP_NUM_THREADS", "4")
+            proc = subprocess.run([sys.executable, drv, soc_2e, verbose], cwd=wd, env=env,
+                                  capture_output=True, text=True, timeout=3600)
+            lines = [l for l in proc.stdout.splitlines() if l.startswith("SOCNOEXP_RESULT ")]
+            if proc.returncode != 0 or not lines:
+                self.fail(f"driver failed:\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}")
+            return json.loads(lines[-1][len("SOCNOEXP_RESULT "):])
+
+    def test_integral_records_are_not_retained_without_debug_mode(self):
+        """A production run (default verbosity) must not keep the 3*nbf*nbf
+        integral records, with or without the 2e part; in debug mode with
+        soc_2e=0 only the 1e record may exist."""
+        for soc_2e in ("1", "0"):
+            r = self._run_noexport(soc_2e, "1")
+            self.assertTrue(r["eval"])
+            self.assertFalse(r["l1e"], "OQP::soc_lmo_1e retained in a production run")
+            self.assertFalse(r["l2e"], "OQP::soc_lmo_2e retained in a production run")
+        r = self._run_noexport("0", "3")
+        self.assertTrue(r["eval"] and r["l1e"])
+        self.assertFalse(r["l2e"], "OQP::soc_lmo_2e allocated although soc_2e=0")
 
     def _run_sequence(self, cases):
         with tempfile.TemporaryDirectory(prefix="socseq_") as wd:
