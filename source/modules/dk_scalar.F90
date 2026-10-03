@@ -7,13 +7,24 @@
 !>          obtained by diagonalising the kinetic energy matrix T.
 !>
 !>          Pipeline (called once per SCF):
+!>            0. (default) Decontract the AO basis: one shell per unique primitive
+!>               exponent per (atom, l, harmonic); build the contraction matrix C
+!>               (nbf_prim x nbf) with chi_c = sum_p C(p,c) chi_p and compute
+!>               S, T, V (and pVp) in that primitive basis.
 !>            1. Compute pVp integrals  <mu|p(-sum_A Z_A/r_A)p|nu>
 !>            2. Build p-space basis:   S^{-1/2} -> XU, SXU, p^2 eigenvalues
 !>            3. Compute kinematic factors: E_p, A, R
 !>            4. Transform V and pVp to p-space
 !>            5. Build H^DK1 in p-space (DK1 correction)
 !>            6. Add H^DK2 correction in p-space (DK2 correction)
-!>            7. Back-transform to AO basis -> overwrite OQP::Hcore
+!>            7. Back-transform to AO basis
+!>            8. (default) Project the relativistic correction H^rel - (T+V) from the
+!>               primitive basis onto the contracted basis with C^T (.) C and add it
+!>               to OQP::Hcore.  With scal_rel_decontract=0 steps 0/8 are skipped and
+!>               the decoupling is done directly in the contracted basis (legacy; this
+!>               is non-variational for contracted relativistic basis sets: measured
+!>               Hg/Sapporo-DKH3-DZP DKH2 -21860 Eh contracted vs about -19625 Eh
+!>               decontracted).
 !>
 !> @author Vladimir Makhnev
 !> @date   March 2026
@@ -27,7 +38,12 @@ module dk_scalar_mod
   !> Set to .true. to enable diagnostic output from DK routines
   logical :: dk_debug = .false.
 
+  !> Tolerance of the contraction-matrix gate: max |C^T S_prim C - S| must not exceed it
+  real(kind=8), parameter :: cproj_gate_tol = 1.0d-8
+
   private compute_and_check_pvp
+  private dk_core
+  private build_decontracted_basis
   public dk_scalar
 
 contains
@@ -45,8 +61,10 @@ contains
   !> @brief Apply scalar relativistic Douglas-Kroll correction to H_core
   !>
   !> @details Reads OQP::SM (overlap), OQP::TM (kinetic energy), and
-  !>          OQP::Hcore (= T + V) from the tagarray, performs the DK1+DK2
-  !>          transformation, and overwrites OQP::Hcore with H^DK.
+  !>          OQP::Hcore (= T + V) from the tagarray, performs the DK1/DK2
+  !>          transformation (by default in the decontracted primitive basis,
+  !>          projected back onto the contracted basis), and overwrites
+  !>          OQP::Hcore with H^DK.
   !>
   !> @param[inout] infos  OQP information struct (basis, atoms, tagarray, log)
   subroutine dk_scalar(infos)
@@ -58,6 +76,9 @@ contains
     use basis_tools,         only: basis_set
     use messages,            only: show_message, WITH_ABORT
     use printing,            only: print_module_info
+    use constants,           only: tol_int
+    use int1,                only: omp_hst
+    use mathlib,             only: orthogonal_transform_sym
 
     implicit none
 
@@ -65,11 +86,16 @@ contains
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
+    type(basis_set), target  :: pbasis   ! decontracted (primitive) basis
 
-    integer :: nbf    ! number of AO basis functions
+    integer :: nbf    ! number of contracted AO basis functions
     integer :: nbf2   ! triangular size nbf*(nbf+1)/2
+    integer :: nbfp   ! number of primitive AO basis functions (decontracted route)
+    integer :: nbfp2
     integer :: ok     ! allocation status
-    integer :: i, j, idx
+    integer :: qrnk   ! effective p-space rank
+    logical :: decontract
+    real(kind=dp) :: tol, gate_err
 
     ! --- tagarray pointers (no copy: point into tagarray storage) ---
     real(kind=dp), contiguous, pointer :: hcore(:), tmat(:), smat(:)
@@ -78,21 +104,13 @@ contains
       OQP_SM, OQP_TM, OQP_Hcore /)
 
     ! --- working arrays ---
-    real(kind=dp), allocatable :: &
-      pvp(:),    &  ! <mu|p V p|nu>,  packed triangular (nbf2)
-      XU(:,:),   &  ! X*U:  columns are the p-space basis vectors in AO rep.
-      SXU(:,:),  &  ! S*X*U: used for the back-transformation to AO basis
-      psq(:),    &  ! p_i^2: eigenvalues of 2T in the orthonormal basis
-      Ep(:),     &  ! relativistic kinetic energy  E_p = c*sqrt(p^2 + c^2)
-      Akin(:),   &  ! kinematic factor  A_i = sqrt((E_p+c^2)/(2*E_p))
-      Rkin(:),   &  ! kinematic factor  R_i = c/(E_p+c^2)
-      hdk(:)        ! H^DK in AO basis, packed triangular (nbf2)
-    real(kind=dp), allocatable :: hdkp(:)  ! H^DK in p-space, packed triangular
+    real(kind=dp), allocatable :: hdk(:)        ! H^rel in the working AO basis, packed
+    real(kind=dp), allocatable :: XU(:,:), SXU(:,:)
+    ! decontracted route
+    real(kind=dp), allocatable :: cproj(:,:)    ! contraction matrix C (nbfp x nbf)
+    real(kind=dp), allocatable :: hcore_p(:), smat_p(:), tmat_p(:)  ! primitive-basis 1e matrices
+    real(kind=dp), allocatable :: delta_c(:)    ! C^T (.) C result, packed (nbf2)
 
-    real(kind=dp), allocatable :: &
-        Vp(:),    &  ! V = Hcore-T transformed to p-space, packed triangular
-        PVPp(:)      ! pVp transformed to p-space, packed triangular
-    integer :: qrnk  ! effective rank after removing linear dependencies in S
 
     dk_debug = (infos%control%verbose >= 3)
 
@@ -129,17 +147,129 @@ contains
     call tagarray_get_data(infos%dat, OQP_TM,    tmat)
     call tagarray_get_data(infos%dat, OQP_Hcore, hcore)
 
-    ! --- allocate main working arrays ---
-    allocate( pvp(nbf2),       &
-              XU(nbf,nbf),     &
-              SXU(nbf,nbf),    &
-              psq(nbf),        &
-              Ep(nbf),         &
-              Akin(nbf),       &
-              Rkin(nbf),       &
-              hdk(nbf2),       &
-              stat=ok)
-    if (ok /= 0) call show_message('dk_scalar: cannot allocate', WITH_ABORT)
+    decontract = (infos%control%scal_rel_decontract /= 0)
+
+    if (decontract) then
+      ! ---- Step 0: decontract the basis and compute S, T, V there ----
+      call build_decontracted_basis(basis, pbasis, cproj)
+      nbfp  = pbasis%nbf
+      nbfp2 = nbfp*(nbfp+1)/2
+      write(iw, '(1x,a)') 'scal_rel_decontract = 1: decoupling in the decontracted (primitive) basis,'
+      write(iw, '(1x,a)') '  relativistic correction projected back onto the contracted basis.'
+      write(iw, '(1x,a,i0,a,i0,a,i0,a,i0)') '  contracted: nshell = ', basis%nshell, ', nbf = ', nbf, &
+        ';  primitive: nshell = ', pbasis%nshell, ', nbf = ', nbfp
+
+      allocate(hcore_p(nbfp2), smat_p(nbfp2), tmat_p(nbfp2), delta_c(nbf2), stat=ok)
+      if (ok /= 0) call show_message('dk_scalar: cannot allocate primitive-basis arrays', WITH_ABORT)
+
+      tol = log(10.0_dp)*tol_int
+      call omp_hst(pbasis, infos%atoms%xyz, infos%atoms%zn - basis%ecp_zn_num, &
+                   hcore_p, smat_p, tmat_p, logtol=tol, &
+                   comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
+
+      ! Gate: the contraction matrix must reproduce the contracted overlap exactly,
+      ! S = C^T S_prim C.  A violation means the primitive/contracted normalization
+      ! conventions disagree and the projected Hamiltonian would be silently wrong.
+      call orthogonal_transform_sym(nbfp, nbf, smat_p, cproj, nbfp, delta_c)
+      gate_err = maxval(abs(delta_c(1:nbf2) - smat(1:nbf2)))
+      write(iw, '(1x,a,es10.2,a,es8.1,a)') '  contraction gate max |C^T S_prim C - S| = ', gate_err, &
+        '  (tolerance ', cproj_gate_tol, ')'
+      if (gate_err > cproj_gate_tol) &
+        call show_message('dk_scalar: contraction matrix does not reproduce the overlap matrix', WITH_ABORT)
+
+      ! Gate: T = C^T T_prim C (same identity for the kinetic energy)
+      call orthogonal_transform_sym(nbfp, nbf, tmat_p, cproj, nbfp, delta_c)
+      gate_err = maxval(abs(delta_c(1:nbf2) - tmat(1:nbf2)))
+      write(iw, '(1x,a,es10.2)') '  contraction gate max |C^T T_prim C - T| = ', gate_err
+      if (gate_err > cproj_gate_tol*max(1.0_dp, maxval(abs(tmat(1:nbf2))))) &
+        call show_message('dk_scalar: contraction matrix does not reproduce the kinetic energy matrix', WITH_ABORT)
+
+      ! ---- Steps 1-7 in the primitive basis ----
+      allocate(hdk(nbfp2), stat=ok)
+      if (ok /= 0) call show_message('dk_scalar: cannot allocate hdk', WITH_ABORT)
+      call dk_core(infos, pbasis, hcore_p, smat_p, tmat_p, nbfp, hdk, XU, SXU, qrnk)
+
+      ! ---- Step 8: project the relativistic correction onto the contracted basis ----
+      ! Hcore_c <- Hcore_c + C^T [H^rel_prim - (T+V)_prim] C.  The correction form
+      ! leaves any non-(T+V) content of Hcore (none at this call site) untouched and
+      ! is exact for T+V because (T+V)_c = C^T (T+V)_prim C.
+      hdk(1:nbfp2) = hdk(1:nbfp2) - hcore_p(1:nbfp2)
+      call orthogonal_transform_sym(nbfp, nbf, hdk, cproj, nbfp, delta_c)
+      hcore(1:nbf2) = hcore(1:nbf2) + delta_c(1:nbf2)
+    else
+      write(iw, '(1x,a)') 'scal_rel_decontract = 0: decoupling directly in the contracted basis (legacy).'
+      write(iw, '(1x,a)') '  WARNING: for contracted relativistic basis sets this route is non-variational'
+      write(iw, '(1x,a)') '  (the kinetic-balance space is truncated by the contraction).'
+      allocate(hdk(nbf2), stat=ok)
+      if (ok /= 0) call show_message('dk_scalar: cannot allocate hdk', WITH_ABORT)
+      call dk_core(infos, basis, hcore, smat, tmat, nbf, hdk, XU, SXU, qrnk)
+      hcore(1:nbf2) = hdk(1:nbf2)
+    end if
+
+    if (allocated(XU))  deallocate(XU)
+    if (allocated(SXU)) deallocate(SXU)
+    if (allocated(hdk)) deallocate(hdk)
+    if (decontract) then
+      deallocate(cproj, hcore_p, smat_p, tmat_p, delta_c)
+      call pbasis%destroy()
+    end if
+
+    write(iw,'(/1X,"...... End Of DK Scalar Correction ......"/)')
+    close(iw)
+
+  end subroutine dk_scalar
+
+  !> @brief DKH pipeline (steps 1-7) in a given AO basis
+  !>
+  !> @details Computes pVp in `basis`, builds the p-space from (S, T), forms the
+  !>          relativistic one-electron Hamiltonian in p-space and back-transforms
+  !>          it to the AO basis of `basis`.  Pure function of its inputs apart
+  !>          from the log output.
+  !>
+  !> @param[inout] infos   OQP information struct (atoms, ECP charges, log, control)
+  !> @param[in]    basis   AO basis in which the decoupling is carried out
+  !> @param[in]    hcore   T + V in that basis, packed triangular
+  !> @param[in]    smat    S, packed triangular
+  !> @param[in]    tmat    T, packed triangular
+  !> @param[in]    nbf     dimension of that basis
+  !> @param[out]   hdk     H^DK in that basis, packed triangular (nbf*(nbf+1)/2)
+  !> @param[out]   xu,sxu  p-space vectors (nbf x nbf; columns 1:qrnk valid)
+  !> @param[out]   qrnk    effective p-space rank
+  subroutine dk_core(infos, basis, hcore, smat, tmat, nbf, hdk, xu, sxu, qrnk)
+
+    use types,        only: information
+    use precision,    only: dp
+    use io_constants, only: iw
+    use basis_tools,  only: basis_set
+    use messages,     only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set),   intent(in)    :: basis
+    real(kind=dp),     intent(in)    :: hcore(*), smat(*), tmat(*)
+    integer,           intent(in)    :: nbf
+    real(kind=dp),     intent(out)   :: hdk(*)
+    real(kind=dp), allocatable, intent(out) :: xu(:,:), sxu(:,:)
+    integer,           intent(out)   :: qrnk
+
+    integer :: nbf2, ok, i, j, idx
+
+    real(kind=dp), allocatable :: &
+      pvp(:),    &  ! <mu|p V p|nu>,  packed triangular (nbf2)
+      psq(:),    &  ! p_i^2: eigenvalues of 2T in the orthonormal basis
+      Ep(:),     &  ! relativistic kinetic energy  E_p = c*sqrt(p^2 + c^2)
+      Akin(:),   &  ! kinematic factor  A_i = sqrt((E_p+c^2)/(2*E_p))
+      Rkin(:)       ! kinematic factor  R_i = c/(E_p+c^2)
+    real(kind=dp), allocatable :: hdkp(:)  ! H^DK in p-space, packed triangular
+    real(kind=dp), allocatable :: &
+        Vp(:),    &  ! V = Hcore-T transformed to p-space, packed triangular
+        PVPp(:)      ! pVp transformed to p-space, packed triangular
+
+    nbf2 = nbf*(nbf+1)/2
+
+    allocate( pvp(nbf2), xu(nbf,nbf), sxu(nbf,nbf), psq(nbf), Ep(nbf), Akin(nbf), Rkin(nbf), stat=ok)
+    if (ok /= 0) call show_message('dk_core: cannot allocate', WITH_ABORT)
 
     ! --- Step 1: compute <mu|pVp|nu> integrals ---
     call compute_and_check_pvp(basis, infos, pvp)
@@ -149,23 +279,19 @@ contains
       do i = 14, min(19, nbf)
         write(iw, '(2x,i5,es16.6)') i, hcore(i*(i-1)/2 + i)
       end do
-      if (nbf >= 19) then
-        write(iw, '(a)') '  Hcore(17,17), (18,18), (19,19) vs (14,14):'
-        write(iw, '(3es16.6)') hcore(17*16/2+17), hcore(14*13/2+14)
-      end if
     end if
 
     ! --- Step 2: build p-space basis ---
-    call build_p_space(smat, tmat, nbf, XU, SXU, psq, qrnk)
+    call build_p_space(smat, tmat, nbf, xu, sxu, psq, qrnk)
 
     if (dk_debug) then
       write(iw, '(a,2i5)') '  nbf, qrnk = ', nbf, qrnk
     end if
 
-    call check_p_space(smat, tmat, nbf, qrnk, XU, SXU, psq)
+    call check_p_space(smat, tmat, nbf, qrnk, xu, sxu, psq)
 
     allocate( Vp(qrnk*(qrnk+1)/2), PVPp(qrnk*(qrnk+1)/2), hdkp(qrnk*(qrnk+1)/2), stat=ok )
-    if (ok /= 0) call show_message('dk_scalar: cannot allocate p-space arrays', WITH_ABORT)
+    if (ok /= 0) call show_message('dk_core: cannot allocate p-space arrays', WITH_ABORT)
 
     ! --- Step 3: kinematic factors E_p, A, R ---
     call compute_kinematic_factors(psq, qrnk, Ep, Akin, Rkin)
@@ -176,7 +302,7 @@ contains
     end if
 
     ! --- Step 4: transform V and pVp to p-space ---
-    call transform_to_p_space(hcore, tmat, pvp, XU, nbf, qrnk, Vp, PVPp)
+    call transform_to_p_space(hcore, tmat, pvp, xu, nbf, qrnk, Vp, PVPp)
 
     if (dk_debug) then
       write(iw, '(/,a)') '  Vp diagonal (first 5):'
@@ -191,7 +317,7 @@ contains
       call build_hdk2_p(Ep, Akin, Rkin, psq, Vp, PVPp, qrnk, hdkp)
 
     ! --- Step 7: back-transform to AO basis ---
-    call back_transform_hdk(hdkp, SXU, nbf, qrnk, hdk)
+    call back_transform_hdk(hdkp, sxu, nbf, qrnk, hdk)
 
     if (dk_debug) then
       write(iw, '(/,a)') '  === NR limit check: hdk vs hcore ==='
@@ -211,15 +337,135 @@ contains
       end do
     end if
 
-    ! --- overwrite OQP::Hcore with H^DK ---
-    hcore(:) = hdk(:)
+    deallocate(pvp, psq, Ep, Akin, Rkin, Vp, PVPp, hdkp)
 
-    deallocate(pvp, XU, SXU, psq, Ep, Akin, Rkin, hdk, Vp, PVPp, hdkp)
+  end subroutine dk_core
 
-    write(iw,'(/1X,"...... End Of DK Scalar Correction ......"/)')
-    close(iw)
+  !> @brief Build the fully decontracted (primitive) basis and the contraction matrix
+  !>
+  !> @details One primitive shell per unique exponent per (atom, angular momentum,
+  !>          harmonic flag), in order of first appearance, so that generally
+  !>          contracted shells sharing exponents are not duplicated.  Each primitive
+  !>          shell gets ncontr = 1 and coefficient 1 before primitive normalization,
+  !>          so its coefficient is the primitive normalization constant N_p and
+  !>          chi_p = N_p g_p.  A contracted function is chi_c = sum_ig cc(ig) g_ig,
+  !>          hence chi_c = sum_ig [cc(ig)/N_p(ig)] chi_p(ig) and
+  !>
+  !>            C(ao_p(prim(ig)) + k, ao_c(ish) + k) = cc(ig) / N_p(prim(ig))
+  !>
+  !>          for every angular component k of the shell.  The per-component
+  !>          normalization factors (bfnrm) and the Cartesian-to-spherical
+  !>          transformation are identical for the contracted shell and its
+  !>          primitive shells (same l, same harmonic flag), so the relation holds
+  !>          for the normalized AO matrices used throughout OpenQP:
+  !>          M_c = C^T M_p C for every one-electron operator M.
+  !>
+  !> @param[in]  basis   contracted basis (must have atoms associated)
+  !> @param[out] pbasis  decontracted basis (allocated here; caller destroys)
+  !> @param[out] cproj   contraction matrix C (pbasis%nbf x basis%nbf)
+  subroutine build_decontracted_basis(basis, pbasis, cproj)
 
-  end subroutine dk_scalar
+    use precision,   only: dp
+    use basis_tools, only: basis_set
+    use messages,    only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(basis_set), intent(in)            :: basis
+    type(basis_set), intent(inout), target :: pbasis
+    real(kind=dp), allocatable, intent(out) :: cproj(:,:)
+
+    real(kind=dp), parameter :: ex_reltol = 1.0e-10_dp  ! two exponents closer than this are the same primitive
+
+    integer, allocatable :: prim_of(:)   ! primitive shell index of every contracted primitive
+    integer, allocatable :: porig(:), pam(:), pharm(:), pnaos(:)
+    real(kind=dp), allocatable :: pex(:)
+    integer :: ish, ig, jp, nps, k, nbfp, ok, ao_c, ao_p
+    logical :: found
+
+    allocate(prim_of(basis%nprim), porig(basis%nprim), pam(basis%nprim), pharm(basis%nprim), &
+             pnaos(basis%nprim), pex(basis%nprim), stat=ok)
+    if (ok /= 0) call show_message('build_decontracted_basis: cannot allocate', WITH_ABORT)
+
+    ! --- pass 1: unique primitive shells per (atom, l, harmonic) ---
+    nps = 0
+    do ish = 1, basis%nshell
+      do ig = basis%g_offset(ish), basis%g_offset(ish) + basis%ncontr(ish) - 1
+        found = .false.
+        do jp = 1, nps
+          if (porig(jp) /= basis%origin(ish)) cycle
+          if (pam(jp)   /= basis%am(ish))     cycle
+          if (pharm(jp) /= basis%harmonic(ish)) cycle
+          if (abs(pex(jp) - basis%ex(ig)) > ex_reltol*max(pex(jp), basis%ex(ig))) cycle
+          found = .true.
+          prim_of(ig) = jp
+          exit
+        end do
+        if (.not. found) then
+          nps = nps + 1
+          porig(nps) = basis%origin(ish)
+          pam(nps)   = basis%am(ish)
+          pharm(nps) = basis%harmonic(ish)
+          pnaos(nps) = basis%naos(ish)
+          pex(nps)   = basis%ex(ig)
+          prim_of(ig) = nps
+        end if
+      end do
+    end do
+
+    nbfp = sum(pnaos(1:nps))
+
+    ! --- pass 2: fill the primitive basis_set ---
+    call pbasis%reserve(nps, nps, nbfp)
+    pbasis%nshell  = nps
+    pbasis%nprim   = nps
+    pbasis%nbf     = nbfp
+    pbasis%mxcontr = 1
+    pbasis%mxam    = maxval(pam(1:nps))
+    pbasis%atoms  => basis%atoms
+
+    ao_p = 1
+    do jp = 1, nps
+      pbasis%ex(jp)        = pex(jp)
+      pbasis%cc(jp)        = 1.0_dp
+      pbasis%g_offset(jp)  = jp
+      pbasis%origin(jp)    = porig(jp)
+      pbasis%am(jp)        = pam(jp)
+      pbasis%harmonic(jp)  = pharm(jp)
+      pbasis%ncontr(jp)    = 1
+      pbasis%naos(jp)      = pnaos(jp)
+      pbasis%ao_offset(jp) = ao_p
+      ao_p = ao_p + pnaos(jp)
+    end do
+
+    if (allocated(basis%ecp_zn_num)) then
+      allocate(pbasis%ecp_zn_num(size(basis%ecp_zn_num)))
+      pbasis%ecp_zn_num = basis%ecp_zn_num
+    end if
+    pbasis%ecp_params = basis%ecp_params
+
+    call pbasis%set_bfnorms()
+    call pbasis%normalize_primitives()   ! cc(jp) <- N_p
+    call pbasis%init_shell_centers()
+
+    ! --- contraction matrix ---
+    allocate(cproj(nbfp, basis%nbf), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('build_decontracted_basis: cannot allocate cproj', WITH_ABORT)
+
+    do ish = 1, basis%nshell
+      ao_c = basis%ao_offset(ish)
+      do ig = basis%g_offset(ish), basis%g_offset(ish) + basis%ncontr(ish) - 1
+        jp   = prim_of(ig)
+        ao_p = pbasis%ao_offset(jp)
+        do k = 0, basis%naos(ish) - 1
+          cproj(ao_p + k, ao_c + k) = cproj(ao_p + k, ao_c + k) + basis%cc(ig) / pbasis%cc(jp)
+        end do
+      end do
+    end do
+
+    deallocate(prim_of, porig, pam, pharm, pnaos, pex)
+
+  end subroutine build_decontracted_basis
 
   !> @brief Compute the <mu|pVp|nu> integrals and apply AO normalisation
   !>

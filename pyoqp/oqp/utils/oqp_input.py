@@ -323,7 +323,7 @@ GENERIC_SCHEMA_KEYS = {
         pscreen_k pscreen_cap pscreen_tight pscreen_xc_dcut pscreen_xc_aocut
         pscreen_grid_rad pscreen_grid_ang xc_c2f xc_phi_cache xc_incdft
         grad_cutoff init_scf init_basis init_library init_it init_conv
-        init_converger save_molden rstctmo converger_type scal_rel stability
+        init_converger save_molden rstctmo converger_type scal_rel scal_rel_decontract stability
         soscf_lvl_shift alternative_scf escalation verbose trh_stab trh_ls
         trh_sub_solver trh_nrtv trh_r0 trh_jd_start trh_nmic trh_gred
         trh_lred trh_impl

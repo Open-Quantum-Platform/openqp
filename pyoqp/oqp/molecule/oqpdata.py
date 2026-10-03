@@ -414,6 +414,11 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'scal_rel': {'type': int, 'default': '0'},
+        # DKH decoupling basis: 1 = decontracted (primitive) basis with the
+        # correction projected onto the contracted basis (default); 0 = legacy
+        # decoupling directly in the contracted basis (non-variational for
+        # contracted relativistic basis sets).
+        'scal_rel_decontract': {'type': int, 'default': '1'},
         'stability': {'type': bool, 'default': 'False'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
@@ -1031,6 +1036,7 @@ class OQPData:
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
+            "scal_rel_decontract": "set_scf_scal_rel_decontract",
             "converger_type": "set_scf_converger_type",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
@@ -1322,8 +1328,12 @@ class OQPData:
         self._data.control.conv = conv
 
     def set_scf_scal_rel(self, scal_rel):
-        """Set SCF convergence threshold"""
+        """Set the scalar-relativistic one-electron Hamiltonian (0 none, 1 DKH1, 2 DKH2)"""
         self._data.control.scal_rel = scal_rel
+
+    def set_scf_scal_rel_decontract(self, flag):
+        """Set the DKH decoupling basis (1 decontracted + projection, 0 contracted/legacy)"""
+        self._data.control.scal_rel_decontract = 1 if int(flag) else 0
 
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""

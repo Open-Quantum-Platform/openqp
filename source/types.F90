@@ -158,6 +158,11 @@ module types
                                                      !< 0   - no DKH correction
                                                      !< 1   - first-order  DKH
                                                      !< 2   - second-order DKH
+    integer(c_int64_t) :: scal_rel_decontract = 1    !< DKH decoupling basis: 1 = decontracted
+                                                     !< (primitive) basis, correction projected back
+                                                     !< onto the contracted basis (default);
+                                                     !< 0 = directly in the contracted basis (legacy,
+                                                     !< non-variational for contracted basis sets)
     integer(c_int64_t) :: soc_2e   = 1               !< SOC 2e solution: 0=off (1e only), 1=on (1e+2e)
     ! SCF converger selection
     integer(c_int64_t) :: converger_type = 0       !< SCF converger: 0=DIIS, 1=SOSCF, 2=TRAH
