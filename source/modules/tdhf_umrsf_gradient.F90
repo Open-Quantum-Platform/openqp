@@ -3851,7 +3851,8 @@ contains
 !> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (UMRSF_ZDENSE=1)
 !> is still preferred. The relative residual and iteration limit default to infos%tddft%zvconv and
 !> infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
-!> unconverged response. UMRSF_ZTOL / UMRSF_ZMAXIT can override them for diagnostics.
+!> unconverged response. UMRSF_ZMAXIT can adjust the iteration limit for diagnostics;
+!> only the input zvconv sets the accepted relative residual.
 !> Other tunables:
 !> UMRSF_ZCG_TRIAL (default min(64,maxit_zv/2)), UMRSF_ZMINRES (1 => skip CG),
 !> UMRSF_ZPCG (1 => force pure PCG).
