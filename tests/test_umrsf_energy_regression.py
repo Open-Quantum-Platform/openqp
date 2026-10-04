@@ -217,27 +217,44 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
+        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+            "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        mixed = kernel.split("doc=9,10", 1)[1].split("enddo", 2)
+        mixed = mixed[0] + "enddo" + mixed[1]
         expected_updates = (
-            "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,k,j)",
-            "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,j,k)",
-            "f3(:nf,9:10,k,j)=f3(:nf,9:10,k,j)-xval*d3(:nf,9:10,i,l)",
-            "f3(:nf,9:10,j,k)=f3(:nf,9:10,j,k)-xval*d3(:nf,9:10,l,i)",
-            "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,l,j)",
-            "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,j,l)",
-            "f3(:nf,9:10,l,j)=f3(:nf,9:10,l,j)-xval*d3(:nf,9:10,i,k)",
-            "f3(:nf,9:10,j,l)=f3(:nf,9:10,j,l)-xval*d3(:nf,9:10,k,i)",
+            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,k,j)",
+            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,j,k)",
+            "f3(v,c,k,j)=f3(v,c,k,j)-xval*d3(v,c,i,l)",
+            "f3(v,c,j,k)=f3(v,c,j,k)-xval*d3(v,c,l,i)",
+            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,l,j)",
+            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,j,l)",
+            "f3(v,c,l,j)=f3(v,c,l,j)-xval*d3(v,c,i,k)",
+            "f3(v,c,j,l)=f3(v,c,j,l)-xval*d3(v,c,k,i)",
         )
         bad_head_updates = (
-            "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,j,l)",
-            "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,l,j)",
-            "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,j,k)",
-            "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,k,j)",
+            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,j,l)",
+            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,l,j)",
+            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,j,k)",
+            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,k,j)",
         )
 
         for update in expected_updates:
-            self.assertIn(update, source)
+            self.assertIn(update, mixed)
         for update in bad_head_updates:
-            self.assertNotIn(update, source)
+            self.assertNotIn(update, mixed)
+
+    def test_umrsf_coulomb_digestion_folds_symmetric_density(self):
+        source = compact(LIB.read_text())
+        kernel = source.split("subroutineint2_umrsf_data_t_update", 1)[1].split(
+            "endsubroutineint2_umrsf_data_t_update", 1)[0]
+        # One symmetric ds slab per Coulomb target, as in the MRSF kernel; ds must
+        # cover all eight alpha/beta Coulomb columns on the UMRSF path.
+        self.assertIn("f3(v,c,i,j)=f3(v,c,i,j)+cval*ds(v,c,k,l)", kernel)
+        self.assertIn("f3(v,c,l,k)=f3(v,c,l,k)+cval*ds(v,c,i,j)", kernel)
+        self.assertNotIn("cval*d3(", kernel)
+        self.assertNotIn("f3(:nf,", kernel)
+        self.assertIn("typeis(int2_umrsf_data_t)ncoul=8", source)
+        self.assertIn("this%d3(:,1:ncoul,mu,nu)+this%d3(:,1:ncoul,nu,mu)", source)
 
     def test_umrsf_mixed_exchange_gradient_differentiates_the_energy_permutation(self):
         density = _fortran_subroutine(
