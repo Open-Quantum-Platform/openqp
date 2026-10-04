@@ -53,6 +53,12 @@ The default build applies the following build-time changes:
 
 - `external/fix_tagarray_linelen.py` wraps an overlong Fortran source line in
   tagarray so it compiles with current GNU Fortran compilers.
+- `external/fix_libecpint_accuracy.py` changes two libecpint 1.0.7 sources:
+  its code generator writes the type-2 angular coefficients at full double
+  precision instead of six significant digits, and its one-point
+  Gauss-Chebyshev rule sums the full tabulated grid instead of stopping at the
+  first level that passes its convergence test. Both change the ECP integrals
+  and their derivatives that `liboqp` uses.
 - `external/CMakeLists.txt` patches mctc-lib and DFT-D4 build files to omit
   their test subdirectories and DFT-D4's test-only `mstore` lookup. These
   patches do not alter the DFT-D4, multicharge, or mctc-lib library

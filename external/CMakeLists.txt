@@ -400,7 +400,12 @@ ExternalProject_Add(libtagarray
         )
 endif()
 
-oqp_set_external_paths(LIBECPINT libecpint
+# fix_libecpint_accuracy.py changes the integrals libecpint returns, so its
+# hash names a libecpint-only cache entry: a cached unpatched build is never
+# reused, and the other cached externals are left alone.
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/fix_libecpint_accuracy.py" _OQP_LIBECPINT_PATCH_KEY)
+string(SUBSTRING "${_OQP_LIBECPINT_PATCH_KEY}" 0 12 _OQP_LIBECPINT_PATCH_KEY)
+oqp_set_external_paths(LIBECPINT libecpint-p${_OQP_LIBECPINT_PATCH_KEY}
         "${CMAKE_SOURCE_DIR}/external/libecpint"
         "${CMAKE_SOURCE_DIR}/external/libecpint/src/libecpint"
         "${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}"
@@ -425,6 +430,10 @@ ExternalProject_Add(libecpint
         STAMP_DIR  ${LIBECPINT_STAMP_DIR}
 	INSTALL_DIR ${LIBECPINT_INSTALL_DIR}
         UPDATE_COMMAND ""
+        # v1.0.7 truncates the generated type-2 angular coefficients to six
+        # digits and stops its one-point radial quadrature early; both leave
+        # ECP gradient errors of 1e-5 Ha/bohr (idempotent).
+        PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_libecpint_accuracy.py ${LIBECPINT_SOURCE_DIR}
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                     -DLIBECPINT_BUILD_DOCS=OFF
                    -DLIBECPINT_BUILD_TESTS=OFF
