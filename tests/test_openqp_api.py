@@ -491,6 +491,23 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertEqual(config["tdhf"]["nstate"], "3")
         self.assertEqual(config["properties"]["grad"], "1")
 
+    def test_sf_tddft_accepts_a_uhf_reference(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_sf_uhf_grad").molecule(geometry="water")
+        job.theory.sf_tddft("bhhlyp", basis="6-31g*", reference="uhf", nstate=3)
+        job.workflow.gradient(grad=1)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "sf")
+        self.assertEqual(config["properties"]["grad"], "1")
+        # The default stays ROHF.
+        rohf = openqp.OpenQP(project="h2o_sf_rohf").molecule(geometry="water")
+        rohf.theory.sf_tddft("bhhlyp", basis="6-31g*")
+        self.assertEqual(rohf.to_input_dict()["scf"]["type"], "rohf")
+
     def test_molecule_accepts_second_geometry_and_multiplicity(self):
         openqp = load_openqp_module()
 
