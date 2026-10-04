@@ -451,6 +451,24 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         report = checker.check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(any(error.path == "tdhf.multiplicity" for error in report.errors))
 
+    def test_umrsf_mecp_rejects_quintet_surfaces(self):
+        checker = _load_input_checker()
+        for imult, jmult, bad in ((1, 5, "optimize.jmult"), (5, 3, "optimize.imult")):
+            with self.subTest(imult=imult, jmult=jmult):
+                config = _umrsf_config("mecp")
+                config.setdefault("optimize", {}).update(imult=imult, jmult=jmult)
+                report = checker.check_input_values(config, raise_error=False, emit=False)
+                self.assertTrue(
+                    any(error.path == bad and error.severity == "ERROR" for error in report.errors),
+                    report.to_text(),
+                )
+        config = _umrsf_config("mecp")
+        config.setdefault("optimize", {}).update(imult=1, jmult=3)
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        self.assertFalse(any(error.path in ("optimize.imult", "optimize.jmult")
+                             and "MECP surfaces" in error.message for error in report.errors),
+                         report.to_text())
+
     def test_umrsf_gradient_rejects_qmmm(self):
         checker = _load_input_checker()
         for runtype in ("grad", "optimize", "meci", "mecp", "tci"):

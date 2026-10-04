@@ -6057,6 +6057,27 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
                 action="Use tdhf.multiplicity=1 or 3 for gradient-driven UMRSF runtypes; "
                        "quintet UMRSF remains available for runtype=energy.",
             )
+        if runtype == "mecp":
+            # MECPOpt switches the native response multiplicity to imult and jmult before each
+            # gradient, so both must lie in the implemented singlet/triplet set; tdhf.multiplicity
+            # alone does not describe the two surfaces.
+            for key in ("imult", "jmult"):
+                raw = _get(config, "optimize", key, 1)
+                try:
+                    mecp_mult = int(raw)
+                except (TypeError, ValueError):
+                    continue
+                if mecp_mult not in (1, 3):
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "UMRSF analytic gradients support singlet (1) and triplet (3) "
+                        "MECP surfaces only.",
+                        value=mecp_mult,
+                        expected="1 or 3",
+                        action="Use optimize.imult and optimize.jmult from {1, 3} for UMRSF MECP; "
+                               "use tdhf.type=mrsf for a surface of another multiplicity.",
+                    )
         functional = _as_lower(_get(config, "input", "functional", ""))
         cam_value = _get(config, "dftgrid", "cam_flag", False)
         cam_flag = (cam_value if isinstance(cam_value, bool)
