@@ -2345,13 +2345,21 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         mecp_mults = {
             key: _get(config, "optimize", key, 1) for key in ("imult", "jmult")
         }
-        if any(int(mult) != 1 for mult in mecp_mults.values()):
+        def _non_singlet(mult):
+            # A malformed value is reported by _check_optimize; only a
+            # readable multiplicity other than 1 is judged here.
+            try:
+                return int(mult) != 1
+            except (TypeError, ValueError):
+                return False
+
+        if any(_non_singlet(mult) for mult in mecp_mults.values()):
             report.add(
                 "ERROR",
                 "input.runtype",
                 "Conventional RPA/TDA response computes singlet excited states only, "
-                "so MECP cannot evaluate a second spin multiplicity with it; the "
-                "triplet surface would be the singlet root manifold.",
+                "so MECP cannot evaluate a non-singlet surface with it; that surface "
+                "would be the singlet root manifold.",
                 value=f"{td_type} with imult={mecp_mults['imult']}, "
                       f"jmult={mecp_mults['jmult']}",
                 expected="tdhf.type=mrsf or umrsf for MECP",

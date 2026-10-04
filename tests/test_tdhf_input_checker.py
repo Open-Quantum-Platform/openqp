@@ -74,7 +74,7 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
         # MECPOpt switches tdhf.multiplicity to imult/jmult, so a singlet
         # tdhf.multiplicity alone does not keep the triplet surface away.
         for td_type in ("rpa", "tda"):
-            for imult, jmult in ((1, 3), (3, 1)):
+            for imult, jmult in ((1, 3), (3, 1), (3, 3)):
                 with self.subTest(td_type=td_type, imult=imult, jmult=jmult):
                     config = tdhf_config(td_type, 1, "mecp")
                     config["optimize"] = {"imult": imult, "jmult": jmult}
@@ -82,6 +82,13 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
                     self.input_checker._check_tdhf(config, report)
                     self.assertFalse(report.ok)
                     self.assertIn("MECP cannot evaluate", report.to_text())
+
+    def test_rpa_mecp_malformed_multiplicity_does_not_raise(self):
+        config = tdhf_config("rpa", 1, "mecp")
+        config["optimize"] = {"imult": "abc", "jmult": 1}
+        report = self.input_checker.CheckReport()
+        self.input_checker._check_tdhf(config, report)
+        self.assertNotIn("MECP cannot evaluate", report.to_text())
 
     def test_mrsf_mecp_is_still_accepted(self):
         config = tdhf_config("mrsf", 1, "mecp")
