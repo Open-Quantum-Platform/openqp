@@ -417,6 +417,11 @@ if(BUILD_TESTING)
   target_link_libraries(oqp_test_int2_rys_pure PRIVATE oqp)
   add_dependencies(oqp_test_int2_rys_pure oqp)
   add_test(NAME oqp_int2_rys_pure COMMAND oqp_test_int2_rys_pure)
+  add_executable(oqp_test_int2_rotaxis_pure tests/fortran/test_int2_rotaxis_pure.F90)
+  target_include_directories(oqp_test_int2_rotaxis_pure PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/source")
+  target_link_libraries(oqp_test_int2_rotaxis_pure PRIVATE oqp)
+  add_dependencies(oqp_test_int2_rotaxis_pure oqp)
+  add_test(NAME oqp_int2_rotaxis_pure COMMAND oqp_test_int2_rotaxis_pure)
   # The dependency check inspects ELF/Mach-O load commands; it has no Windows
   # equivalent (the DLLs are found by search path, not by recorded SONAME).
   if(BUILD_SHARED_LIBS AND ENABLE_DFTD4 AND NOT WIN32)
