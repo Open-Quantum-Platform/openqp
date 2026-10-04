@@ -9,7 +9,7 @@ module tdhf_mrsf_lib
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
-      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
+      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4 MRSF, 1:8 UMRSF), precomputed once
       real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
