@@ -2337,6 +2337,37 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
+    # MECPOpt evaluates its two surfaces by switching [tdhf] multiplicity to
+    # optimize.imult and optimize.jmult, so tdhf.multiplicity=1 does not keep a
+    # conventional RPA/TDA MECP away from the missing triplet path: the
+    # "triplet" surface would be the singlet root manifold again.
+    if td_type in {"rpa", "tda"} and runtype == "mecp":
+        mecp_mults = {
+            key: _get(config, "optimize", key, 1) for key in ("imult", "jmult")
+        }
+        def _non_singlet(mult):
+            # A malformed value is reported by _check_optimize; only a
+            # readable multiplicity other than 1 is judged here.
+            try:
+                return int(mult) != 1
+            except (TypeError, ValueError):
+                return False
+
+        if any(_non_singlet(mult) for mult in mecp_mults.values()):
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "Conventional RPA/TDA response computes singlet excited states only, "
+                "so MECP cannot evaluate a non-singlet surface with it; that surface "
+                "would be the singlet root manifold.",
+                value=f"{td_type} with imult={mecp_mults['imult']}, "
+                      f"jmult={mecp_mults['jmult']}",
+                expected="tdhf.type=mrsf or umrsf for MECP",
+                action="Use [tdhf] type=mrsf (ROHF) or type=umrsf (UHF) with a triplet "
+                       "reference for singlet-triplet MECP searches.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+
     if td_type in {"sf", "mrsf"} and scf_mult == td_mult:
         report.add(
             "INFO",
