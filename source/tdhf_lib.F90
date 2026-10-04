@@ -1455,9 +1455,11 @@ contains
     bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
     mythread = thread_id
 
+    ! Inactive response images may have only one copy; the guarded branches
+    ! below never write those images. Keep their borrowed views in bounds.
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
                 d2 => this%d2 &
                 )
 

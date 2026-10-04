@@ -171,3 +171,78 @@ contains
     end subroutine
   end subroutine
 end module
+
+! Exercise the compact inactive-image contract used by response workspace reuse.
+! The packed reference retains full images, independent of that optimization.
+subroutine int2_td_shell_images_selftest(error, checks, failures) bind(C)
+  use iso_c_binding, only: c_double,c_int
+  use precision, only: dp
+  use basis_tools, only: basis_set
+  use int2_compute, only: int2_storage_t,int2_shell_block_t
+  use tdhf_lib, only: int2_td_data_t
+  implicit none
+  real(c_double), intent(out) :: error
+  integer(c_int), intent(out) :: checks,failures
+  type(basis_set) :: basis
+  type(int2_td_data_t) :: old,new
+  type(int2_storage_t) :: buf(3)
+  type(int2_shell_block_t) :: block
+  real(dp), target :: density(4,4,2), value(1,1,1,1)
+  real(dp) :: delta
+  integer :: flags,ns,t,i,j,v
+  logical :: ap,am,tda
+  error=0;checks=0;failures=0
+  basis%nbf=4;basis%nshell=4
+  basis%ao_offset=[1,2,3,4];basis%naos=[1,1,1,1]
+  do v=1,2
+    do j=1,4
+      do i=1,4
+        density(i,j,v)=sin(real(3*i+7*j+v,dp))
+      end do
+    end do
+  end do
+  old%d2=>density;new%d2=>density
+  block%shells=[4,3,2,1];block%dims=1;block%offsets=[3,2,1,0]
+  value=0.25_dp;block%values=>value
+  do ns=1,3,2
+    do flags=0,7
+      ap=btest(flags,0);am=btest(flags,1);tda=btest(flags,2)
+      old%int_apb=ap;new%int_apb=ap
+      old%int_amb=am;new%int_amb=am
+      old%tamm_dancoff=tda;new%tamm_dancoff=tda
+      old%tamm_dancoff_coulomb=.true.;new%tamm_dancoff_coulomb=.true.
+      old%cur_pass=1;new%cur_pass=1
+      call old%parallel_start(basis,ns);call new%parallel_start(basis,ns)
+      if (.not.ap) then
+        deallocate(new%apb)
+        allocate(new%apb(4,4,2,1),source=0.0_dp)
+      end if
+      if (.not.(am.or.tda)) then
+        deallocate(new%amb)
+        allocate(new%amb(4,4,2,1),source=0.0_dp)
+      end if
+      do t=1,ns
+        call buf(t)%init(1)
+        buf(t)%thread_id=t;buf(t)%ncur=1
+        buf(t)%ids(:,1)=[4,3,2,1];buf(t)%ints(1)=value(1,1,1,1)
+      end do
+      !$omp parallel do num_threads(ns) default(shared) private(t) schedule(static)
+      do t=1,ns
+        call old%update(buf(t))
+        call new%consume_shell(block,t)
+      end do
+      !$omp end parallel do
+      delta=max(maxval(abs(sum(old%apb,dim=4)-sum(new%apb,dim=4))), &
+                maxval(abs(sum(old%amb,dim=4)-sum(new%amb,dim=4))))
+      error=max(error,delta);checks=checks+1
+      if (delta>2e-12_dp) failures=failures+1
+      if (.not.ap .and. any(new%apb/=0)) failures=failures+1
+      if (.not.(am.or.tda) .and. any(new%amb/=0)) failures=failures+1
+      do t=1,ns
+        call buf(t)%clean()
+      end do
+    end do
+  end do
+  call old%clean();call new%clean()
+  call old%clean();call new%clean()
+end subroutine
