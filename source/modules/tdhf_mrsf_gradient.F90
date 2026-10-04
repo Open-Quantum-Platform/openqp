@@ -1564,7 +1564,7 @@ contains
     use tdhf_mrsf_lib, only: mrsf_interstate_tden
     use fock_deriv_mod, only: fock_deriv_contract_os
     use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, &
-                    grad_ee_overlap
+                    grad_ee_overlap, grad_1e_ecp
     use mod_dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
@@ -1703,14 +1703,20 @@ contains
     end block
 
   ! (3) explicit 1e: Tr[(P^IJ_a + P^IJ_b) . dh/dR]
-  !     kinetic + nuclear attraction ONLY -- grad_ee_overlap is EXCLUDED on
-  !     purpose (the W.dS^x term is part of d_ov, and including it was one of
-  !     the contaminations that made the p20 esum ~20x too big).
+  !     kinetic + nuclear attraction + ECP ONLY -- grad_ee_overlap is EXCLUDED
+  !     on purpose (the W.dS^x term is part of d_ov, and including it was one
+  !     of the contaminations that made the p20 esum ~20x too big).
+  !     With an ECP, h = T + V_ne(Z - Z_core) + V_ecp: the nuclear attraction
+  !     uses the screened charge and the ECP derivative is added, exactly as
+  !     in every gradient driver and in the NAC response (dva + dvecp).
     scr = pij_a + pij_b
     call pack_matrix(scr, p1e)
     call grad_ee_kinetic(basis, p1e, gx)
-    call grad_en_hellman_feynman(basis, infos%atoms%xyz, infos%atoms%zn, p1e, gx)
-    call grad_en_pulay(basis, infos%atoms%xyz, infos%atoms%zn, p1e, gx)
+    associate (zn => infos%atoms%zn - infos%basis%ecp_zn_num)
+      call grad_en_hellman_feynman(basis, infos%atoms%xyz, zn, p1e, gx)
+      call grad_en_pulay(basis, infos%atoms%xyz, zn, p1e, gx)
+    end associate
+    call grad_1e_ecp(infos, basis, infos%atoms%xyz, p1e, gx)
 
   ! diagnostic split: export the 1e part alone so the 1e/2e balance can be checked
     block
