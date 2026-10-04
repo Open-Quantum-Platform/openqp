@@ -2285,16 +2285,53 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             action="This can be intentional; verify the target state labeling if results look unexpected.",
         )
 
-    if td_type in {"sf", "mrsf"} and scf_type != "rohf":
+    if td_type == "mrsf" and scf_type != "rohf":
         report.add(
             "ERROR",
             "scf.type",
-            "SF/MRSF requires an ROHF reference in the current code path.",
+            "MRSF requires an ROHF reference in the current code path.",
             value=scf_type,
             expected="rohf",
-            action="Set [scf] type=rohf.",
+            action="Set [scf] type=rohf, or use tdhf.type=umrsf with a UHF reference.",
             wiki=WIKI_HELP["tdhf.type"],
         )
+
+    if td_type == "sf" and scf_type not in {"rohf", "uhf"}:
+        report.add(
+            "ERROR",
+            "scf.type",
+            "SF requires an ROHF or UHF reference.",
+            value=scf_type,
+            expected="rohf or uhf",
+            action="Set [scf] type=rohf or type=uhf.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
+    if td_type == "sf" and scf_type == "uhf":
+        # The UHF spin-flip path provides energies and the analytic gradient (with the
+        # gradient-driven optimizers built on it).  Hessians, couplings and spin-orbit
+        # properties still use ROHF-specific code.
+        sf_uhf_runtypes = {"energy", "grad", "optimize", "meci", "mecp", "tci"}
+        if runtype not in sf_uhf_runtypes:
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "SF-TDDFT with a UHF reference supports energies and analytic gradients only.",
+                value=runtype,
+                expected=", ".join(sorted(sf_uhf_runtypes)),
+                action="Use [scf] type=rohf for this runtype.",
+            )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        cam_on = _is_true(_get(config, "dftgrid", "cam_flag", False)) or any(
+            tag in functional for tag in ("cam", "wb97", "lc-", "lrc"))
+        if runtype != "energy" and cam_on:
+            report.add(
+                "ERROR",
+                "input.functional",
+                "The UHF SF-TDDFT gradient does not support range-separated (CAM/LRC) exchange.",
+                value=functional or "dftgrid.cam_flag=true",
+                action="Use a global hybrid or GGA functional, or an ROHF reference.",
+            )
 
     if td_type == "umrsf" and scf_type != "uhf":
         report.add(
