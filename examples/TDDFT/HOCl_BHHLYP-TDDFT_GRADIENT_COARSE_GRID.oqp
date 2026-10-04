@@ -1,0 +1,3 @@
+tddft(nstate=3)/bhhlyp/6-31g* grad(S1) scf(conv=1e-08) dftgrid(rad_npts=30,ang_npts=86,pruned=none)
+tdhf(conv=1e-08,zvconv=1e-08)
+geom="../geometries/ClHO-064fbc437e0d.xyz"
