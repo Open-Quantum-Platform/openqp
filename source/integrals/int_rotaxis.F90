@@ -86,12 +86,200 @@ contains
     real(kind=dp), optional :: emu2
 
     real(kind=dp) :: prot(3,3)
-    integer :: jtype
+    integer :: jtype, am(4), pair_p, pair_q, pslot
+
+    am = basis%am(shell_ids)
+    if (all(am == 0)) then
+      flips = [1,2,3,4]
+      call ssss_direct(ppairs, shell_ids, cutoffs, grotspd(1), emu2)
+      return
+    end if
+
+    if (sum(am) == 1) then
+      pair_p = max(shell_ids(1),shell_ids(2))*(max(shell_ids(1),shell_ids(2))-1)/2 &
+        + min(shell_ids(1),shell_ids(2))
+      pair_q = max(shell_ids(3),shell_ids(4))*(max(shell_ids(3),shell_ids(4))-1)/2 &
+        + min(shell_ids(3),shell_ids(4))
+      if (ppairs%ppid(1,pair_p) == 1 .and. ppairs%ppid(1,pair_q) == 1) then
+        pslot = maxloc(am,dim=1)
+        select case (pslot)
+        case (1)
+          flips = [3,4,2,1]
+        case (2)
+          flips = [3,4,1,2]
+        case (3)
+          flips = [1,2,4,3]
+        case (4)
+          flips = [1,2,3,4]
+        end select
+        if (pslot <= 2) then
+          call sssp_primitive(ppairs, ppairs%ppid(2,pair_q), ppairs%ppid(2,pair_p), &
+            cutoffs, grotspd(1:3), emu2)
+        else
+          call sssp_primitive(ppairs, ppairs%ppid(2,pair_p), ppairs%ppid(2,pair_q), &
+            cutoffs, grotspd(1:3), emu2)
+        end if
+        return
+      end if
+    end if
 
     call genr22_core(basis, ppairs, grotspd, shell_ids, flips, cutoffs, prot, jtype, emu2)
     call r30s1d(jtype, grotspd, prot)
 
   end subroutine genr22
+
+  ! The scalar ssss integral is invariant under rotation. Evaluate the same
+  ! Boys interpolation and screening directly from the Gaussian product centers.
+  subroutine ssss_direct(ppairs, ids, cutoffs, value, mu2)
+    type(int2_pair_storage), intent(in) :: ppairs
+    integer, intent(in) :: ids(4)
+    type(int2_cutoffs_t), intent(in) :: cutoffs
+    real(dp), intent(out) :: value
+    real(dp), optional, intent(in) :: mu2
+    integer :: pair_p, pair_q, ip, iq, first_p, first_q, np, nq, grid
+    real(dp) :: sp, sq, prefactor, total_exp, inv_exp, rho, distance(3), arg, efr
+    real(dp) :: tv, f0, partial
+
+    pair_p = max(ids(1),ids(2))*(max(ids(1),ids(2))-1)/2 + min(ids(1),ids(2))
+    pair_q = max(ids(3),ids(4))*(max(ids(3),ids(4))-1)/2 + min(ids(3),ids(4))
+    np = ppairs%ppid(1,pair_p)
+    nq = ppairs%ppid(1,pair_q)
+    first_p = ppairs%ppid(2,pair_p)
+    first_q = ppairs%ppid(2,pair_q)
+    if (np*nq > 1) then
+      call ssss_contracted(ppairs, first_p, np, first_q, nq, cutoffs, value, mu2)
+      return
+    end if
+    value = 0.0_dp
+    do iq = first_q, first_q+nq-1
+      sq = ppairs%k(iq)*ppairs%ginv(iq)
+      if (abs(sq) < cutoffs%quartet_cutoff) cycle
+      partial = 0.0_dp
+      do ip = first_p, first_p+np-1
+        sp = ppairs%k(ip)*ppairs%ginv(ip)
+        if (abs(sp) < cutoffs%quartet_cutoff) cycle
+        prefactor = sp*sq
+        total_exp = ppairs%g(ip)+ppairs%g(iq)
+        if (prefactor*prefactor < cutoffs%quartet_cutoff_squared*total_exp) cycle
+        inv_exp = 1.0_dp/total_exp
+        rho = ppairs%g(ip)*ppairs%g(iq)*inv_exp
+        if (present(mu2)) then
+          efr = mu2/(mu2+rho)
+          rho = rho*efr
+          prefactor = prefactor*sqrt(efr)
+        end if
+        distance = ppairs%p(:,ip)-ppairs%p(:,iq)
+        arg = sum(distance*distance)*rho
+        if (arg <= tmax) then
+          tv = arg*rfinc(0)
+          grid = nint(tv)
+          f0 = fgrid(4,grid,0)*tv
+          f0 = (f0+fgrid(3,grid,0))*tv
+          f0 = (f0+fgrid(2,grid,0))*tv
+          f0 = (f0+fgrid(1,grid,0))*tv
+          f0 = f0+fgrid(0,grid,0)
+          partial = partial+f0*(prefactor*sqrt(inv_exp))
+        else
+          partial = partial+prefactor*sqrt(pi4*(1.0_dp/arg)*inv_exp)
+        end if
+      end do
+      value = value+partial
+    end do
+  end subroutine ssss_direct
+
+  ! For contracted s shells only the projection along AB is required.
+  ! The perpendicular distance is formed as a vector to avoid cancellation
+  ! in |Q-A|**2 - ((Q-A).axis)**2 for nearly collinear centers.
+  subroutine ssss_contracted(ppairs, first_p, np, first_q, nq, cutoffs, value, mu2)
+    type(int2_pair_storage), intent(in) :: ppairs
+    integer, intent(in) :: first_p, np, first_q, nq
+    type(int2_cutoffs_t), intent(in) :: cutoffs
+    real(dp), intent(out) :: value
+    real(dp), optional, intent(in) :: mu2
+    type(rotaxis_data_t) :: rdat
+    real(dp) :: origin(3), axis(3), offset(3), transverse(3), sp
+    integer :: ip, iq, n
+
+    value = 0.0_dp
+    if (np == 0 .or. nq == 0) return
+    origin = ppairs%p(:,first_p)-ppairs%pa(:,first_p)
+    axis = [0.0_dp,0.0_dp,1.0_dp]
+    rdat%rab = ppairs%rab(first_p)
+    if (rdat%rab > 0.0_dp) then
+      axis = (ppairs%pa(:,first_p)-ppairs%pb(:,first_p))*ppairs%uab(first_p)
+    end if
+    rdat%cutoff = cutoffs%quartet_cutoff_squared
+    if (present(mu2)) then
+      rdat%lrint = .true.
+      rdat%emu2 = mu2
+    end if
+    n = 0
+    do ip = first_p, first_p+np-1
+      sp = ppairs%k(ip)*ppairs%ginv(ip)
+      if (abs(sp) < cutoffs%quartet_cutoff) cycle
+      n = n+1
+      rdat%tx12(n) = ppairs%g(ip)
+      rdat%ty02(n) = ppairs%alpha_b(ip)*ppairs%ginv(ip)*rdat%rab
+      rdat%sp(n) = sp
+    end do
+    rdat%ngangb = n
+    do iq = first_q, first_q+nq-1
+      rdat%sq = ppairs%k(iq)*ppairs%ginv(iq)
+      if (abs(rdat%sq) < cutoffs%quartet_cutoff) cycle
+      rdat%x34 = ppairs%g(iq)
+      offset = ppairs%p(:,iq)-origin
+      rdat%aqz = dot_product(offset,axis)
+      transverse = offset-rdat%aqz*axis
+      rdat%qps = sum(transverse*transverse)
+      call intj_01(rdat)
+      value = value+rdat%fq0(1)
+    end do
+  end subroutine ssss_contracted
+
+  ! (ss|sp) in the laboratory frame for a single primitive quartet.
+  ! ppairs orders the s shell before the p shell, so PB is Q-D.
+  subroutine sssp_primitive(ppairs, ip, iq, cutoffs, values, mu2)
+    type(int2_pair_storage), intent(in) :: ppairs
+    integer, intent(in) :: ip, iq
+    type(int2_cutoffs_t), intent(in) :: cutoffs
+    real(dp), intent(out) :: values(3)
+    real(dp), optional, intent(in) :: mu2
+    integer :: n, grid
+    real(dp) :: sp,sq,prefactor,total_exp,inv_exp,rho,delta(3),arg,efr,tv,f(0:1),fx
+
+    values = 0.0_dp
+    sp = ppairs%k(ip)*ppairs%ginv(ip)
+    sq = ppairs%k(iq)*ppairs%ginv(iq)
+    if (abs(sp) < cutoffs%quartet_cutoff .or. abs(sq) < cutoffs%quartet_cutoff) return
+    prefactor = sp*sq
+    total_exp = ppairs%g(ip)+ppairs%g(iq)
+    if (prefactor*prefactor < cutoffs%quartet_cutoff_squared*total_exp) return
+    inv_exp = 1.0_dp/total_exp
+    rho = ppairs%g(ip)*ppairs%g(iq)*inv_exp
+    if (present(mu2)) then
+      efr = mu2/(mu2+rho)
+      rho = rho*efr
+      prefactor = prefactor*sqrt(efr)
+    end if
+    delta = ppairs%p(:,ip)-ppairs%p(:,iq)
+    arg = sum(delta*delta)*rho
+    if (arg <= tmax) then
+      do n = 0,1
+        tv = arg*rfinc(n)
+        grid = nint(tv)
+        fx = fgrid(4,grid,n)*tv
+        fx = (fx+fgrid(3,grid,n))*tv
+        fx = (fx+fgrid(2,grid,n))*tv
+        fx = (fx+fgrid(1,grid,n))*tv
+        f(n) = fx+fgrid(0,grid,n)
+      end do
+      f = f*(prefactor*sqrt(inv_exp))
+    else
+      f(0) = prefactor*sqrt(pi4*(1.0_dp/arg)*inv_exp)
+      f(1) = 0.5_dp*f(0)/arg
+    end if
+    values = ppairs%pb(:,iq)*f(0) + (rho*ppairs%ginv(iq)*f(1))*delta
+  end subroutine sssp_primitive
 
   !> Shared body of the rotated-axis ERI evaluation: geometry setup,
   !> primitive q-loop accumulation, and assembly of the rotated-frame
@@ -14609,62 +14797,57 @@ contains
       end subroutine r30s1d_05
 
       subroutine r30s1d_06(f,p)
-
       implicit none
+      real(dp), intent(inout) :: f(3,3,3,3)
+      real(dp), intent(in) :: p(3,3)
+      real(dp) :: work(3,3,3,3)
+      integer :: i,j,k,l
 
-      real(kind=dp) :: f(3,3,3,*), p(3,3)
-      real(kind=dp) :: t(6)
-      integer :: i, j, k, l
-
-         do k = 1, 3
-            do j = 1, 3
-               do i = 1, 3
-                  t(1) = f(i,j,k,1)
-                  t(2) = f(i,j,k,2)
-                  t(3) = f(i,j,k,3)
-                  f(i,j,k,1) = t(1) * p(1,1) + t(2) * p(2,1) + t(3) * p(3,1)
-                  f(i,j,k,2) = t(1) * p(1,2) + t(2) * p(2,2) + t(3) * p(3,2)
-                  f(i,j,k,3) = t(1) * p(1,3) + t(2) * p(2,3) + t(3) * p(3,3)
-               end do
+      ! Rotate into distinct arrays so each output is assigned once.
+      do l=1,3
+        do k=1,3
+          do j=1,3
+            do i=1,3
+              work(i,j,k,l) = f(i,j,k,1)*p(1,l) + &
+                f(i,j,k,2)*p(2,l) + &
+                f(i,j,k,3)*p(3,l)
             end do
-         end do
-         do l = 1, 3
-            do j = 1, 3
-               do i = 1, 3
-                  t(1) = f(i,j,1,l)
-                  t(2) = f(i,j,2,l)
-                  t(3) = f(i,j,3,l)
-                  f(i,j,1,l) = t(1) * p(1,1) + t(2) * p(2,1) + t(3) * p(3,1)
-                  f(i,j,2,l) = t(1) * p(1,2) + t(2) * p(2,2) + t(3) * p(3,2)
-                  f(i,j,3,l) = t(1) * p(1,3) + t(2) * p(2,3) + t(3) * p(3,3)
-               end do
+          end do
+        end do
+      end do
+      do l=1,3
+        do k=1,3
+          do j=1,3
+            do i=1,3
+              f(i,j,k,l) = work(i,j,1,l)*p(1,k) + &
+                work(i,j,2,l)*p(2,k) + &
+                work(i,j,3,l)*p(3,k)
             end do
-         end do
-         do l = 1, 3
-            do k = 1, 3
-               do i = 1, 3
-                  t(1) = f(i,1,k,l)
-                  t(2) = f(i,2,k,l)
-                  t(3) = f(i,3,k,l)
-                  f(i,1,k,l) = t(1) * p(1,1) + t(2) * p(2,1) + t(3) * p(3,1)
-                  f(i,2,k,l) = t(1) * p(1,2) + t(2) * p(2,2) + t(3) * p(3,2)
-                  f(i,3,k,l) = t(1) * p(1,3) + t(2) * p(2,3) + t(3) * p(3,3)
-               end do
+          end do
+        end do
+      end do
+      do l=1,3
+        do k=1,3
+          do j=1,3
+            do i=1,3
+              work(i,j,k,l) = f(i,1,k,l)*p(1,j) + &
+                f(i,2,k,l)*p(2,j) + &
+                f(i,3,k,l)*p(3,j)
             end do
-         end do
-         do l = 1, 3
-            do k = 1, 3
-               do j = 1, 3
-                  t(1) = f(1,j,k,l)
-                  t(2) = f(2,j,k,l)
-                  t(3) = f(3,j,k,l)
-                  f(1,j,k,l) = t(1) * p(1,1) + t(2) * p(2,1) + t(3) * p(3,1)
-                  f(2,j,k,l) = t(1) * p(1,2) + t(2) * p(2,2) + t(3) * p(3,2)
-                  f(3,j,k,l) = t(1) * p(1,3) + t(2) * p(2,3) + t(3) * p(3,3)
-               end do
+          end do
+        end do
+      end do
+      do l=1,3
+        do k=1,3
+          do j=1,3
+            do i=1,3
+              f(i,j,k,l) = work(1,j,k,l)*p(1,i) + &
+                work(2,j,k,l)*p(2,i) + &
+                work(3,j,k,l)*p(3,i)
             end do
-         end do
-
+          end do
+        end do
+      end do
       end subroutine r30s1d_06
 
 

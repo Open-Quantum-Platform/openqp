@@ -8,7 +8,7 @@
 module functionals
   use xc_f03_lib_m
   use iso_c_binding, only: C_INT, C_SIZE_T
-  use precision, only: fp
+  use precision, only: fp, i8b
   implicit none
   private
   !> LibXC ids whose description and literature references have already been
@@ -32,7 +32,9 @@ module functionals
                         SECOND_ERROR   = 3, & !< second derivatives calculation error
                         THIRD_ERROR    = 4, & !< third derivatives calculation error
                         MGGA_3RD_ERROR = 5    !< TD-DFT gradient is not allowed for meta-GGA functionals
+  integer(i8b), save :: functional_revision = 0_i8b
   type functional_t
+    integer(i8b) :: cache_revision = 0_i8b
     type(xc_f03_func_t),      dimension(:), allocatable, private :: functionals_list
     type(xc_f03_func_info_t), dimension(:), allocatable, private :: functionals_info
     real(kind=fp),            dimension(:), allocatable, private :: coefficients
@@ -195,6 +197,8 @@ contains
     this%functionals_list(size(this%functionals_list)) = xc_func
     this%functionals_info(size(this%functionals_info)) = xc_f03_func_get_info(xc_func)
     this%coefficients    (size(this%coefficients    )) = coeff
+    functional_revision = functional_revision + 1_i8b
+    this%cache_revision = functional_revision
   end subroutine add_functional
   !> @brief  Checking that at least one functional is selected
   !> @author Igor S. Gerasimov
@@ -219,6 +223,8 @@ contains
     if(allocated(this%functionals_list)) deallocate(this%functionals_list)
     if(allocated(this%functionals_info)) deallocate(this%functionals_info)
     if(allocated(this%coefficients    )) deallocate(this%coefficients    )
+    functional_revision = functional_revision + 1_i8b
+    this%cache_revision = functional_revision
   end subroutine destroy
   !> @brief  Perform DFT energy and its first derivatives calculation
   !> @author Igor S. Gerasimov

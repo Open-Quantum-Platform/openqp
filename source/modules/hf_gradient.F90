@@ -474,6 +474,8 @@ contains
     dabmax = 0
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
+    ! The ground-state density is symmetric. Vary its first index with l
+    ! so each density column is read contiguously with the output block.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
@@ -485,10 +487,10 @@ contains
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*d2a(i1,j1)*d2a(k1,l1)
+            df1 = coulfact*d2a(i1,j1)*d2a(l1,k1)
             if (do_exchange) then
-              dq1 = d2a(i1,k1)*d2a(j1,l1) &
-                  + d2a(i1,l1)*d2a(j1,k1)
+              dq1 = d2a(i1,k1)*d2a(l1,j1) &
+                  + d2a(l1,i1)*d2a(j1,k1)
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
@@ -550,6 +552,8 @@ contains
     dabmax = 0
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
+    ! The ground-state density is symmetric. Vary its first index with l
+    ! so each density column is read contiguously with the output block.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
@@ -561,12 +565,12 @@ contains
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*d2a(i1,j1)*d2a(k1,l1)
+            df1 = coulfact*d2a(i1,j1)*d2a(l1,k1)
             if (do_exchange) then
-              dq1 = d2a(i1,k1)*d2a(j1,l1) &
-                  + d2a(i1,l1)*d2a(j1,k1) &
-                  + d2b(i1,k1)*d2b(j1,l1) &
-                  + d2b(i1,l1)*d2b(j1,k1)
+              dq1 = d2a(i1,k1)*d2a(l1,j1) &
+                  + d2a(l1,i1)*d2a(j1,k1) &
+                  + d2b(i1,k1)*d2b(l1,j1) &
+                  + d2b(l1,i1)*d2b(j1,k1)
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))

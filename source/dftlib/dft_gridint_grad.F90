@@ -1,4 +1,5 @@
 module mod_dft_gridint_grad
+  use mod_dft_gridint_response_cache, only: response_cache_t
 
   use precision, only: fp
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t
@@ -381,7 +382,7 @@ contains
 !> @author Vladimir Mironov
   subroutine derexc_blk(basis, molGrid, da, db, dedft, &
                         totele, totkin, &
-                        mxAngMom, nbf, dft_threshold, urohf, infos)
+                        mxAngMom, nbf, dft_threshold, urohf, infos, cache)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -402,6 +403,7 @@ contains
 
     type(xc_consumer_grad_t) :: dat
     type(xc_options_t) :: xc_opts
+    type(response_cache_t), target, intent(inout), optional :: cache
 
     integer :: j
 
@@ -449,6 +451,7 @@ contains
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
+    if(present(cache)) xc_opts%response_cache=>cache
     call run_xc(xc_opts, dat, basis)
 
     totele = dat%N_elec

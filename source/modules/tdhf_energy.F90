@@ -60,7 +60,8 @@ contains
       rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
       tdhf_unrelaxed_density
     use mod_dft, only: dft_initialize, dftclean
-    use mod_dft_gridint_fxc, only: tddft_fxc
+    use mod_dft_gridint_fxc, only: tddft_fxc, xc_consumer_tde_t
+    use mod_dft_gridint_response_cache, only: response_cache_t
     use util, only: measure_time
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
@@ -107,6 +108,8 @@ contains
     type(int2_compute_t) :: int2_driver
     type(int2_td_data_t), target :: int2_data
     type(dft_grid_t) :: molGrid
+    type(response_cache_t), target :: xc_cache
+    type(xc_consumer_tde_t), target :: xc_consumer
 
     logical :: dft
 
@@ -245,7 +248,7 @@ contains
                nmtx=iv, &
                !threshold=1.0d-15, &
                threshold=0.0d0, &
-               infos=infos)
+               infos=infos, cache=xc_cache, consumer=xc_consumer)
       end if
 
 !$omp parallel private(iv,ivec)

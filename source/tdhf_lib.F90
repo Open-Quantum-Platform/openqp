@@ -2,7 +2,7 @@ module tdhf_lib
 
     use, intrinsic :: ieee_arithmetic
     use precision, only : dp
-    use int2_compute, only: int2_fock_data_t, int2_storage_t
+    use int2_compute, only: int2_fock_data_t, int2_storage_t, int2_shell_block_t
     use basis_tools, only: basis_set
     use oqp_linalg
 
@@ -20,6 +20,7 @@ module tdhf_lib
         procedure :: parallel_start => int2_td_data_t_parallel_start
         procedure :: parallel_stop => int2_td_data_t_parallel_stop
         procedure :: init_screen => int2_td_data_t_init_screen
+        procedure :: consume_shell => int2_td_consume_shell
         procedure :: update => int2_td_data_t_update
         procedure :: clean => int2_td_data_t_clean
     end type
@@ -63,6 +64,13 @@ contains
     integer, intent(in) :: nthreads
     integer :: nbf, nsh
 
+    this%shell_blocks=.false.
+    ! Keep batching ordinary TDHF/TDDFT until direct blocks show a net gain.
+    this%shell_block_min=huge(0)
+    select type(this)
+    type is(int2_td_data_t)
+      this%shell_blocks=.true.
+    end select
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
     this%nfocks = ubound(this%d2,size(shape(this%d2)))
@@ -70,14 +78,17 @@ contains
     nsh = basis%nshell
 
     if (this%cur_pass == 1) then
-      if (allocated(this%apb)) deallocate(this%apb)
-      if (allocated(this%amb)) deallocate(this%amb)
-      if (allocated(this%dsh)) deallocate(this%dsh)
-
-      allocate(this%apb(nbf, nbf, this%nfocks, nthreads), &
-               this%amb(nbf, nbf, this%nfocks, nthreads), &
-               this%dsh(nsh,nsh), &
-               source=0.0d0)
+      ! Keep one zero image for inactive components: callers may still borrow
+      ! it, but it needs neither per-thread replication nor a reduction.
+      call resize_td_image(this%apb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_apb))
+      call resize_td_image(this%amb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_amb .or. this%tamm_dancoff))
+      if (allocated(this%dsh)) then
+        if (any(shape(this%dsh) /= [nsh,nsh])) deallocate(this%dsh)
+      end if
+      if (.not.allocated(this%dsh)) allocate(this%dsh(nsh,nsh))
+      this%dsh = 0.0_dp
     end if
 
     call this%init_screen(basis)
@@ -89,28 +100,42 @@ contains
   subroutine int2_td_data_t_parallel_stop(this)
     use mathlib, only: symmetrize_matrix
     implicit none
-    integer :: flast, amblast, nbf, i
+    integer :: nbf, i, it
     class(int2_td_data_t), intent(inout) :: this
     if (this%cur_pass /= this%num_passes) return
-    flast  = size(shape(this%apb))
-    amblast = size(shape(this%amb))
-    nbf = ubound(this%amb, 1)
-    if (this%nthreads /= 1) then
-      this%apb(:,:,:,lbound(this%apb, flast)) = sum(this%apb, dim=flast)
-      this%amb(:,:,:,lbound(this%amb, amblast)) = sum(this%amb, dim=amblast)
+    nbf = size(this%apb, 1)
+    if (this%int_apb) then
+      ! Stream contiguous slabs rather than reducing along a large stride.
+      do it = 2, size(this%apb,4)
+        this%apb(:,:,:,1) = this%apb(:,:,:,1) + this%apb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%apb(:,:,:,1), size(this%apb(:,:,:,1)))
+      do i = 1, this%nfocks
+        call symmetrize_matrix(this%apb(:,:,i,1), nbf)
+      end do
     end if
-    call this%pe%allreduce(this%apb(:,:,:,1), &
-                       size(this%apb(:,:,:,1)))
-    call this%pe%allreduce(this%amb(:,:,:,1), &
-                         size(this%amb(:,:,:,1)))
-
-    do i = lbound(this%apb,3), ubound(this%apb,3)
-      call symmetrize_matrix(this%apb(:,:,i,1), nbf)
-    end do
+    if (this%int_amb .or. this%tamm_dancoff) then
+      do it = 2, size(this%amb,4)
+        this%amb(:,:,:,1) = this%amb(:,:,:,1) + this%amb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%amb(:,:,:,1), size(this%amb(:,:,:,1)))
+    end if
     this%nthreads = 1
   end subroutine
 
 !###############################################################################
+
+  ! Reuse allocations within a response solve, including changes of batch or
+  ! thread count. Every first CAM pass clears the entire current image.
+  subroutine resize_td_image(image, nbf, nfocks, ncopy)
+    real(kind=dp), allocatable, intent(inout) :: image(:,:,:,:)
+    integer, intent(in) :: nbf, nfocks, ncopy
+    if (allocated(image)) then
+      if (any(shape(image) /= [nbf,nbf,nfocks,ncopy])) deallocate(image)
+    end if
+    if (.not.allocated(image)) allocate(image(nbf,nbf,nfocks,ncopy))
+    image = 0.0_dp
+  end subroutine resize_td_image
 
   subroutine int2_td_data_t_clean(this)
     implicit none
@@ -153,8 +178,8 @@ contains
     mythread = buf%thread_id
 
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
                 d2 => this%d2 &
                 )
 
@@ -239,8 +264,8 @@ contains
     mythread = buf%thread_id
 
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
                 d2 => this%d2 &
                 )
 
@@ -1425,5 +1450,130 @@ contains
     end do
 
   end subroutine sym_response_project
+
+  subroutine int2_td_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_td_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n
+    real(kind=dp) :: xval1, cval2, val2c, cval4, &
+                     val, val1, val4c
+    integer :: ifock, mythread
+
+    xval1 = this%scale_exchange
+    cval2 = 2 * this%scale_coulomb
+    cval4 = 4 * this%scale_coulomb
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    ! Inactive response images may have only one copy; the guarded branches
+    ! below never write those images. Keep their borrowed views in bounds.
+    associate (&
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                d2 => this%d2 &
+                )
+
+      do ifock = 1, this%nfocks
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          if (this%tamm_dancoff) then
+            val1 = val*xval1
+            val2c = val*cval2
+            !A
+            amb(i,k,ifock) = amb(i,k,ifock) - val1 * d2(j,l,ifock)
+            amb(k,i,ifock) = amb(k,i,ifock) - val1 * d2(l,j,ifock)
+            amb(i,l,ifock) = amb(i,l,ifock) - val1 * d2(j,k,ifock)
+            amb(l,i,ifock) = amb(l,i,ifock) - val1 * d2(k,j,ifock)
+            amb(j,k,ifock) = amb(j,k,ifock) - val1 * d2(i,l,ifock)
+            amb(k,j,ifock) = amb(k,j,ifock) - val1 * d2(l,i,ifock)
+            amb(j,l,ifock) = amb(j,l,ifock) - val1 * d2(i,k,ifock)
+            amb(l,j,ifock) = amb(l,j,ifock) - val1 * d2(k,i,ifock)
+            if (this%tamm_dancoff_coulomb) then
+              amb(i,j,ifock) = amb(i,j,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(j,i,ifock) = amb(j,i,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(k,l,ifock) = amb(k,l,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+              amb(l,k,ifock) = amb(l,k,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+            end if
+          else
+            val1 = val*xval1
+            val4c = val*cval4
+
+            if (this%int_apb) then
+              ! A+B
+              ! Coulomb
+              apb(i,j,ifock) = apb(i,j,ifock) + val4c * (d2(k,l,ifock)+d2(l,k,ifock))
+              apb(k,l,ifock) = apb(k,l,ifock) + val4c * (d2(i,j,ifock)+d2(j,i,ifock))
+
+              ! Exchange
+              apb(i,k,ifock) = apb(i,k,ifock) - val1 * (d2(j,l,ifock)+d2(l,j,ifock))
+              apb(i,l,ifock) = apb(i,l,ifock) - val1 * (d2(j,k,ifock)+d2(k,j,ifock))
+              apb(j,k,ifock) = apb(j,k,ifock) - val1 * (d2(i,l,ifock)+d2(l,i,ifock))
+              apb(j,l,ifock) = apb(j,l,ifock) - val1 * (d2(i,k,ifock)+d2(k,i,ifock))
+            end if
+
+            if (this%int_amb) then
+              ! A-B
+              amb(i,k,ifock) = amb(i,k,ifock) + val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(i,l,ifock) = amb(i,l,ifock) + val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(j,k,ifock) = amb(j,k,ifock) + val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(j,l,ifock) = amb(j,l,ifock) + val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+
+              amb(k,i,ifock) = amb(k,i,ifock) - val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(l,i,ifock) = amb(l,i,ifock) - val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(k,j,ifock) = amb(k,j,ifock) - val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(l,j,ifock) = amb(l,j,ifock) - val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+            end if
+          end if
+              end do
+            end do
+          end do
+        end do
+      end do
+
+    end associate
+
+
+
+  end subroutine
 
 end module tdhf_lib
