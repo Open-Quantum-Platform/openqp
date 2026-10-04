@@ -1703,19 +1703,18 @@ contains
     end block
 
   ! (3) explicit 1e: Tr[(P^IJ_a + P^IJ_b) . dh/dR]
-  !     kinetic + nuclear attraction + ECP ONLY -- grad_ee_overlap is EXCLUDED
-  !     on purpose (the W.dS^x term is part of d_ov, and including it was one
-  !     of the contaminations that made the p20 esum ~20x too big).
-  !     With an ECP, h = T + V_ne(Z - Z_core) + V_ecp: the nuclear attraction
-  !     uses the screened charge and the ECP derivative is added, exactly as
-  !     in every gradient driver and in the NAC response (dva + dvecp).
+  !     kinetic + nuclear attraction ONLY -- grad_ee_overlap is EXCLUDED on
+  !     purpose (the W.dS^x term is part of d_ov, and including it was one of
+  !     the contaminations that made the p20 esum ~20x too big).
     scr = pij_a + pij_b
     call pack_matrix(scr, p1e)
+    ! ECP-screened nuclear charges and the ECP derivative, as in hf_gradient/sf_1e_grad;
+    ! with the full Z the analytic NAC of HBr/LANL2DZ was 140x the numerical value.
     call grad_ee_kinetic(basis, p1e, gx)
-    associate (zn => infos%atoms%zn - infos%basis%ecp_zn_num)
-      call grad_en_hellman_feynman(basis, infos%atoms%xyz, zn, p1e, gx)
-      call grad_en_pulay(basis, infos%atoms%xyz, zn, p1e, gx)
-    end associate
+    call grad_en_hellman_feynman(basis, infos%atoms%xyz, &
+                                 infos%atoms%zn - infos%basis%ecp_zn_num, p1e, gx)
+    call grad_en_pulay(basis, infos%atoms%xyz, &
+                       infos%atoms%zn - infos%basis%ecp_zn_num, p1e, gx)
     call grad_1e_ecp(infos, basis, infos%atoms%xyz, p1e, gx)
 
   ! diagnostic split: export the 1e part alone so the 1e/2e balance can be checked

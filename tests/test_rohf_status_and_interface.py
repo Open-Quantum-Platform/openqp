@@ -228,7 +228,8 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertIn('"rohf": 3', oqpdata)
         self.assertIn("SCF_TYPES", checker)
         self.assertIn('"rohf"', checker)
-        self.assertIn("SF/MRSF requires an ROHF reference", checker)
+        self.assertIn("MRSF requires an ROHF reference", checker)
+        self.assertIn("SF requires an ROHF or UHF reference", checker)
 
     def test_real_input_checker_rejects_rohf_cgo_nmr(self):
         input_checker = load_input_checker_with_minimal_stubs()
@@ -249,6 +250,66 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertIn("CGO NMR shielding supports closed-shell RHF", report.to_text())
         self.assertIn("nmr_gauge=giao", report.to_text())
         self.assertEqual(config["scf"]["type"], "rohf")
+
+    def _sf_report(self, scf_type, runtype, functional="bhhlyp", td_type="sf"):
+        input_checker = load_input_checker_with_minimal_stubs()
+        config = {
+            "input": {"method": "tdhf", "runtype": runtype, "basis": "6-31g*",
+                      "functional": functional,
+                      "system": "\nO 0 0 0\nH 0 0 1\nH 0 1 0"},
+            "scf": {"type": scf_type, "multiplicity": 3},
+            "tdhf": {"type": td_type, "nstate": 3},
+            "properties": {"grad": [1]},
+        }
+        return input_checker.check_input_values(config, raise_error=False, emit=False)
+
+    def _errors(self, report):
+        return [(e.path, e.message) for e in report.errors if e.severity == "ERROR"]
+
+    def test_sf_accepts_uhf_reference_for_energies_and_gradients(self):
+        for runtype in ("energy", "grad"):
+            errors = self._errors(self._sf_report("uhf", runtype))
+            self.assertFalse(any(p == "scf.type" for p, _ in errors), errors)
+            self.assertFalse(any(p == "input.runtype" for p, _ in errors), errors)
+
+    def test_sf_uhf_rejects_runtypes_without_a_uhf_path(self):
+        errors = self._errors(self._sf_report("uhf", "hess"))
+        self.assertTrue(any(p == "input.runtype" and "UHF reference" in m for p, m in errors), errors)
+
+    def test_sf_rejects_mecp_because_multiplicity_does_not_reach_the_kernel(self):
+        for scf_type in ("uhf", "rohf"):
+            errors = self._errors(self._sf_report(scf_type, "mecp"))
+            self.assertTrue(any(p == "input.runtype" and "MECP" in m for p, m in errors),
+                            (scf_type, errors))
+        for runtype in ("optimize", "meci", "tci"):
+            errors = self._errors(self._sf_report("uhf", runtype))
+            self.assertFalse(any(p == "input.runtype" for p, _ in errors), (runtype, errors))
+
+    def test_sf_uhf_gradient_rejects_range_separated_exchange(self):
+        errors = self._errors(self._sf_report("uhf", "grad", functional="cam-b3lyp"))
+        self.assertTrue(any(p == "input.functional" for p, _ in errors), errors)
+        errors = self._errors(self._sf_report("uhf", "energy", functional="cam-b3lyp"))
+        self.assertFalse(any(p == "input.functional" and "UHF SF-TDDFT" in m for p, m in errors), errors)
+
+    def test_range_separated_set_matches_runtime_libxc_labels(self):
+        import re
+        root = INPUT_CHECKER.parents[3]
+        runtime, case = set(), None
+        for line in (root / "source" / "dftlib" / "libxc.F90").read_text().splitlines():
+            match = re.match(r"\s*case\s*\((.*)\)", line, re.I)
+            if match:
+                case = [x.strip("\"'").lower() for x in re.findall(r"\"[^\"]*\"|'[^']*'", match.group(1))]
+            if re.search(r"cam_flag\s*=\s*\.true\.", line, re.I) and case:
+                runtime.update(case)
+        checker = load_input_checker_with_minimal_stubs()
+        self.assertEqual(set(checker._RANGE_SEPARATED_FUNCTIONALS), runtime)
+        for name in ("hse06", "n12-sx", "whpbe0", "lcwpbe"):
+            errors = self._errors(self._sf_report("uhf", "grad", functional=name))
+            self.assertTrue(any(p == "input.functional" for p, _ in errors), (name, errors))
+
+    def test_mrsf_still_requires_rohf(self):
+        errors = self._errors(self._sf_report("uhf", "energy", td_type="mrsf"))
+        self.assertTrue(any(p == "scf.type" and "MRSF requires an ROHF" in m for p, m in errors), errors)
 
     def test_rohf_has_native_scf_driver_scaffold(self):
         scf = SCF.read_text()

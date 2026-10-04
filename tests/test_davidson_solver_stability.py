@@ -16,6 +16,7 @@ TDHF_SF_LIB_SRC = ROOT / "source" / "tdhf_sf_lib.F90"
 TDHF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_energy.F90"
 TDHF_SF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_sf_energy.F90"
 TDHF_MRSF_ENERGY_SRC = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+RUNFUNC_SRC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 
 
 class DavidsonAutoRestartTests(unittest.TestCase):
@@ -50,6 +51,33 @@ class DavidsonAutoRestartTests(unittest.TestCase):
 
 
 class DavidsonSolverStabilityTests(unittest.TestCase):
+    def test_mrsf_energy_uses_larger_integral_buffer_and_active_slice(self):
+        """MRSF/UMRSF Davidson builds should avoid small-buffer update overhead."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+
+        self.assertIn("mrsf_int2_buffer_size = 200000", src)
+        self.assertRegex(
+            src,
+            r"int2_driver%buf_size\s*=\s*max\(int2_driver%buf_size,\s*mrsf_int2_buffer_size\)",
+        )
+        compact_src = re.sub(r"\s+", "", src)
+        self.assertIn("d3=>mrsf_density(:iv,:,:,:)", compact_src)
+        self.assertIn("d2=fmrq1(:,:,:iv)", compact_src)
+
+    def test_mrsf_family_converges_every_published_root(self):
+        """A gradient run must not publish unconverged roots as final results."""
+        src = TDHF_MRSF_ENERGY_SRC.read_text()
+        runfunc = RUNFUNC_SRC.read_text()
+
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", src)
+        self.assertNotIn("OQP_MRSF_TARGET_ONLY_GRAD", runfunc)
+        self.assertNotIn("target_only_gradient", src)
+        self.assertIn("maxval(rnorm(1:nstates))", src)
+        # The target remains selected for the state-specific gradient, while
+        # the public nstate spectrum meets the ordinary Davidson threshold.
+        self.assertIn('target_types=("umrsf",)', runfunc)
+        self.assertIn("mol.data.set_tdhf_target(target)", runfunc)
+
     def test_rpa_residual_preconditioner_uses_finite_floor_guard(self):
         """RPA/TDA Davidson q vectors must not divide by tiny or non-finite gaps."""
         src = TDHF_LIB_SRC.read_text()

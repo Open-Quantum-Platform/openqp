@@ -1,0 +1,35 @@
+# Analytic MRSF-TDDFT S0/S1 nonadiabatic coupling of HBr with the LANL2DZ effective core potential
+# on Br (spherical basis). Regression for the ECP-screened charges and ECP derivative in the 1e term
+# of mrsf_nac_esum: with the full Z(Br)=35 the analytic d_01 was -13.81 (Br z) against the numerical
+# value -0.1008 1/Bohr; with the screened charge and the ECP derivative it is -0.1010.
+[input]
+system=
+ Br   0.000000000   0.000000000   0.000000000
+ H    0.000000000   0.000000000   1.407611000
+charge=0
+runtype=nac
+method=tdhf
+functional=bhhlyp
+basis=lanl2dz
+ispher=true
+[guess]
+type=huckel
+[scf]
+type=rohf
+multiplicity=3
+conv=1e-10
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+[tdhf]
+type=mrsf
+nstate=3
+multiplicity=1
+conv=1e-10
+zvconv=1e-10
+[properties]
+grad=1
+nac=nac
+[nac]
+type=analytical

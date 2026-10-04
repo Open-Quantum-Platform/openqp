@@ -396,5 +396,87 @@ class MECIObjectiveTest(unittest.TestCase):
         self.assertAlmostEqual(coordinates[0], X0, places=6)
 
 
+class MECPClippedBlockTest(unittest.TestCase):
+    """The second multiplicity block starts after the roots actually solved.
+
+    A small response space clips the first solve below nstate.  The second
+    solve must start again from the input nstate, and state j must be read
+    after the clipped block rather than after nstate entries.
+    """
+
+    def _optimizer(self, solved, istate=1, jstate=1):
+        opt = object.__new__(libscipy.MECPOpt)
+        opt.istate, opt.jstate, opt.nstate = istate, jstate, 3
+        opt.imult, opt.jmult = 3, 1
+        opt.itr, opt.init_scf = 0, True
+        calls = {"nstate": [], "mult": []}
+        current = {"mult": None}
+
+        class Data:
+            def set_tdhf_multiplicity(self, mult):
+                calls["mult"].append(mult)
+                current["mult"] = mult
+
+            def set_tdhf_nstate(self, nstate):
+                calls["nstate"].append(nstate)
+
+        class Mol:
+            config = {"tdhf": {"multiplicity": 3}}
+            data = Data()
+            energies = grads = None
+
+            def update_system(self, coordinates):
+                pass
+
+        class SP:
+            def reference(self, do_init_scf):
+                return [-1.0]
+
+            def excitation(self, ref_energy):
+                n = solved[current["mult"]]
+                return ref_energy + [-1.0 + 0.1 * current["mult"] + 0.01 * k
+                                     for k in range(1, n + 1)]
+
+        class Grad:
+            grads = None
+
+            def gradient(self):
+                # Production gradients always hold nstate + 1 rows; rows past
+                # the solved roots are padding.
+                n = solved[current["mult"]]
+                rows = [np.full(2, 10.0 * current["mult"] + k) for k in range(n + 1)]
+                rows += [np.zeros(2)] * (opt.nstate - n)
+                return np.array(rows)
+
+        class LS:
+            def compute(self, mol, grad_list):
+                calls["grad_list"] = grad_list
+                return np.asarray(mol.energies), np.asarray(mol.grads)
+
+        opt.mol, opt.sp, opt.grad, opt.ls = Mol(), SP(), Grad(), LS()
+        def work_func(coordinates, energies, grads):
+            calls["pair"] = opt.state_pair(energies, grads)
+            return 0.0, np.zeros_like(coordinates)
+
+        opt.work_func = work_func
+        return opt, calls
+
+    def test_state_j_follows_the_clipped_first_block(self):
+        opt, calls = self._optimizer({3: 1, 1: 3})
+        opt.one_step(np.zeros(2))
+        energy_i, energy_j, grad_i, grad_j = calls["pair"]
+        self.assertEqual(calls["nstate"][:2], [3, 3])
+        self.assertEqual(calls["grad_list"], [1, 2])
+        self.assertAlmostEqual(energy_i, -1.0 + 0.3 + 0.01)
+        self.assertAlmostEqual(energy_j, -1.0 + 0.1 + 0.01)
+        np.testing.assert_allclose(grad_i, [31.0, 31.0])
+        np.testing.assert_allclose(grad_j, [11.0, 11.0])
+
+    def test_unavailable_state_is_rejected_before_its_gradient(self):
+        opt, _ = self._optimizer({3: 1, 1: 3}, istate=2)
+        with self.assertRaisesRegex(ValueError, "only 1 roots are solved"):
+            opt.one_step(np.zeros(2))
+
+
 if __name__ == "__main__":
     unittest.main()

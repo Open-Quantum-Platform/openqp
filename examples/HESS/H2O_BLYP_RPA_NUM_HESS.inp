@@ -24,4 +24,6 @@ zvconv=1.0e-10
 [hess]
 type=numerical
 state=1
-clean=True
+dx=0.001
+nproc=1
+clean=False

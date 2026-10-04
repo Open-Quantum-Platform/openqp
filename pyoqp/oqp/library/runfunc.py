@@ -3,6 +3,8 @@ import os
 
 import numpy as np
 
+from contextlib import contextmanager
+
 import oqp
 import oqp.library
 from oqp.utils.tb_backends import is_tb_method, tb_section_name
@@ -55,6 +57,24 @@ def compute_namd(mol):
     else:
         from oqp.library.namd import NAMD
         NAMD(mol).run()
+
+@contextmanager
+def _single_gradient_target(mol, target_types=("umrsf",)):
+    grad_list = mol.config.get("properties", {}).get("grad", [])
+    method = mol.config.get("input", {}).get("method")
+    td_type = mol.config.get("tdhf", {}).get("type")
+    if isinstance(td_type, str):
+        td_type = td_type.lower()
+
+    target = None
+    if method == "tdhf" and td_type in target_types and len(grad_list) == 1:
+        target = int(grad_list[0])
+
+    if target is not None and target > 0:
+        # Select the gradient state before the energy solve. Davidson still
+        # converges every reported root, since all are published downstream.
+        mol.data.set_tdhf_target(target)
+    yield
 
 
 def compute_energy(mol):
@@ -168,7 +188,9 @@ def compute_scf_prop(mol):
 
 def compute_grad(mol):
     # compute energy
-    SinglePoint(mol).energy()
+    # Set the requested response state while converging the full reported spectrum.
+    with _single_gradient_target(mol):
+        SinglePoint(mol).energy()
 
     # compute gradient
     Gradient(mol).gradient()
@@ -308,7 +330,8 @@ def compute_properties(mol):
     BasisOverlap(mol).overlap()
 
     # compute excitation energy
-    sp.excitation(ref_energy)
+    with _single_gradient_target(mol):
+        sp.excitation(ref_energy)
 
     # Transport the central-geometry response-vector gauge before gradients,
     # numerical-NAC workers, and the checkpoint JSON are produced.  PyRAI2MD
@@ -334,7 +357,8 @@ def compute_properties(mol):
 
 def compute_data(mol):
     # compute reference energy
-    SinglePoint(mol).energy()
+    with _single_gradient_target(mol):
+        SinglePoint(mol).energy()
 
     # compute gradient
     Gradient(mol).gradient()

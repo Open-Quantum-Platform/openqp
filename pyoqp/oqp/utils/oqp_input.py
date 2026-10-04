@@ -2178,9 +2178,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("%s only supports the ground-state label S0" % model)
         if model in {
             "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
-        } and state.label:
-            if state.label.startswith("Q"):
-                raise OQPInputError("Conventional TD calculations accept singlet or triplet labels")
+        } and state.label and not state.label.startswith("S"):
+            # The closed-shell RPA/TDA response has no triplet path.
+            raise OQPInputError(
+                "Conventional TD calculations support singlet labels only; "
+                "use mrsf or sf for triplet-state calculations"
+            )
         if model == "mrsf-dftb" and state.label and state.label.startswith("Q"):
             raise OQPInputError("MRSF-TDDFTB supports singlet or triplet labels, not quintet")
 
