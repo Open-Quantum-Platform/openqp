@@ -1,0 +1,649 @@
+{
+  "atoms": [
+    8,
+    1,
+    35
+  ],
+  "coord": [
+    0.0,
+    0.0,
+    0.0,
+    1.8330343408869971,
+    0.0,
+    0.0,
+    -0.7780002455084296,
+    3.3695706528202107,
+    0.0
+  ],
+  "energy": -88.72844259952144,
+  "symmetry_metadata": {
+    "status": "enabled",
+    "enabled": true,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "cs",
+    "subgroup": "cs",
+    "detected_point_group": "cs",
+    "detected_subgroup": "cs",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": true,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "true",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "true",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    },
+    "detection": {
+      "point_group": "cs",
+      "abelian_subgroup": "cs",
+      "origin": [
+        -0.5772039602706373,
+        2.680340292016077,
+        0.0
+      ],
+      "orientation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "operations": [
+        {
+          "name": "E",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1,
+            2
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "name": "sxy",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1,
+            2
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -1.0
+            ]
+          ]
+        }
+      ],
+      "irreps": [
+        "a'",
+        "a''"
+      ],
+      "character_table": {
+        "a'": [
+          1,
+          1
+        ],
+        "a''": [
+          1,
+          -1
+        ]
+      },
+      "tolerance": 1e-05,
+      "n_atoms": 3
+    },
+    "requested_matches_detected": true,
+    "integral_symmetry": {
+      "status": "active",
+      "group": "cs",
+      "n_operations": 2,
+      "full_group": false,
+      "reoriented": false,
+      "frame": "input",
+      "gradient_symmetrized": true
+    },
+    "reduction_maps": {
+      "n_operations": 2,
+      "operation_names": [
+        "E",
+        "sxy"
+      ],
+      "shell_permutation": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      ],
+      "ao_sign": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          -1,
+          1,
+          1,
+          -1
+        ]
+      ],
+      "ao_target": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18
+        ]
+      ],
+      "shell_orbit_representative": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "shell_orbit_size": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "n_shells": 11,
+      "n_ao": 19,
+      "status": "metadata_only_no_reductions"
+    },
+    "mo_labels": {
+      "status": "ok",
+      "alpha": {
+        "labels": [
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a''",
+          "a''",
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a''",
+          "a'",
+          "a''",
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a'"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "max_deviation": 0.0,
+        "status": "label_only_no_reductions"
+      },
+      "beta": {
+        "labels": [
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a''",
+          "a'",
+          "a''",
+          "a'",
+          "a'",
+          "a'",
+          "a''",
+          "a'",
+          "a''",
+          "a'",
+          "a'",
+          "a'",
+          "a'",
+          "a'"
+        ],
+        "characters": [
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            -1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "max_deviation": 0.0,
+        "status": "label_only_no_reductions"
+      },
+      "scf_state": {
+        "irrep": "a''",
+        "nelec_alpha": 9,
+        "nelec_beta": 7,
+        "multiplicity": 1,
+        "term": "1A''"
+      },
+      "geometry_key": "d24b726b449f1f49f66640805fde1082"
+    },
+    "mo_irreps": {
+      "status": "active",
+      "irreps": [
+        "a'",
+        "a''"
+      ],
+      "xor_codes": [
+        0,
+        2
+      ],
+      "spins": {
+        "alpha": {
+          "n_mo": 19,
+          "n_unclassified": 0
+        },
+        "beta": {
+          "n_mo": 19,
+          "n_unclassified": 0
+        }
+      }
+    },
+    "response_symmetry": {
+      "status": "pair_table_staged",
+      "projection": false,
+      "td_type": "sf",
+      "n_pairs": 108,
+      "irreps": [
+        "a'",
+        "a''"
+      ]
+    },
+    "state_labels": {
+      "labels": [
+        "a''",
+        "a'",
+        "a'"
+      ],
+      "transition_labels": [
+        "a''",
+        "a'",
+        "a'"
+      ],
+      "reference_labels": [
+        "a'",
+        "a'"
+      ],
+      "characters": [
+        [
+          1.0000000000000007,
+          -1.0000000000000007
+        ],
+        [
+          1.0000000000000007,
+          1.0000000000000007
+        ],
+        [
+          1.0000000000000007,
+          1.0000000000000007
+        ]
+      ],
+      "max_deviation": 6.661338147750939e-16,
+      "status": "ok",
+      "td_type": "sf",
+      "terms": [
+        "1A''",
+        "1A'",
+        "1A'"
+      ]
+    }
+  },
+  "td_energies": [
+    -0.09178764411929648,
+    0.026868515212295725,
+    0.04826759439682029
+  ],
+  "grad": [
+    -0.013893407493409615,
+    0.025725419042720965,
+    0.0,
+    -0.0029022573967649734,
+    0.014008525393163107,
+    0.0,
+    0.016795664890162154,
+    -0.03973394443582512,
+    0.0
+  ],
+  "json": {
+    "scf_type": "uhf",
+    "basis": "lanl2dz",
+    "library": "",
+    "ispher": "true",
+    "nbf": 19,
+    "nbf_cartesian": 19,
+    "spherical_harmonics": false
+  }
+}

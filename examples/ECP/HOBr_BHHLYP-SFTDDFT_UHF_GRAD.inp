@@ -1,0 +1,42 @@
+# Analytic SF-TDDFT gradient of HOBr from a UHF triplet reference, with the LANL2DZ effective core
+# potential on Br (spherical basis). Exercises the ECP derivative term of the UHF SF relaxed
+# density: the UHF Z-vector density is contracted with the shared ECP derivative integrals.
+# Against five-point central finite differences (symmetry off, tight convergence) the analytic
+# gradient agrees to 6.5e-6 Ha/Bohr for both UHF and ROHF references. The ground-state DFT
+# gradient of the same molecule shows the same 1e-5 O-Br residual, so it comes from the shared
+# ECP derivative, not from the SF response. Bent HOBr is used because the triplet UHF solution
+# of linear HBr breaks the pi degeneracy and does not converge reliably at displaced geometries.
+[input]
+system=
+ O    0.000000000   0.000000000   0.000000000
+ H    0.970000000   0.000000000   0.000000000
+ Br  -0.411700000   1.783100000   0.000000000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=lanl2dz
+ispher=true
+
+[guess]
+type=sap
+
+[scf]
+type=uhf
+multiplicity=3
+conv=1e-10
+maxit=200
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=sf
+nstate=3
+conv=1e-10
+zvconv=1e-10
+
+[properties]
+grad=1
