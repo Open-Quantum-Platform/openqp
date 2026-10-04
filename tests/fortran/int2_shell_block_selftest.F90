@@ -16,9 +16,9 @@ contains
     class(int2_compute_data_t), allocatable :: old, new
     type(eri_data_t) :: eri
     type(int2_storage_t) :: legacy_buf, block_buf
-    real(dp), allocatable,target :: den(:,:),td(:,:,:),mr(:,:,:,:),raw(:,:,:,:),saved(:,:,:,:)
-    integer :: kind,mode,pass,a,b,c,d,flip,off,i,j,k,l,na,nb,nc,nd,nold,nnew,nbf,slot
-    integer :: q(4),r(4),dims(4),nchecks
+    real(dp), allocatable,target :: den(:,:),td(:,:,:),mr(:,:,:,:),raw(:,:,:,:)
+    integer :: kind,mode,pass,a,b,c,d,flip,i,j,k,l,nold,nnew,nbf,slot
+    integer :: q(4),r(4),dims(4)
     integer, parameter :: perms(4,8)=reshape([1,2,3,4,2,1,3,4,1,2,4,3,2,1,4,3, &
                                             3,4,1,2,4,3,1,2,3,4,2,1,4,3,2,1],[4,8])
     real(dp) :: delta,cut
@@ -46,7 +46,8 @@ contains
     call mrsf_set_fp32(0)
     ! Include all spin channels, CAM's two passes, TDA, and full A+B/A-B.
     do kind=1,5
-      do mode=1,2
+      do mode=1,4
+        call mrsf_set_fp32(merge(1,0,mode>2))
         select case(kind)
         case(1)
           allocate(int2_rhf_data_t::old,new)
@@ -63,11 +64,12 @@ contains
         old%scale_coulomb=0.7_dp;new%scale_coulomb=0.7_dp
         old%scale_exchange=-0.3_dp;new%scale_exchange=-0.3_dp
         old%num_passes=2;new%num_passes=2
-        call legacy_buf%init(17);call block_buf%init(0)
+        call legacy_buf%init(17);call block_buf%init(17)
         do pass=1,2
           old%cur_pass=pass;new%cur_pass=pass
           call old%parallel_start(basis,2);call new%parallel_start(basis,2)
           old%shell_blocks=.false.;new%shell_blocks=.true.
+          new%shell_block_min=merge(256,0,mode==2)
           nold=0;nnew=0
           do a=1,4
             do b=1,a
@@ -76,8 +78,8 @@ contains
                   q=[a,b,c,d]
                   do flip=1,8
                     r=q(perms(:,flip));dims=basis%naos(r)
-                    eri%ids=r;eri%flips=[1,2,3,4];eri%nbf=dims
-                    eri%weight=real(mode,dp);eri%weighted_cutoff=mode==2
+                    eri%ids=q;eri%flips=perms(:,flip);eri%nbf=dims
+                    eri%weight=real(mode,dp);eri%weighted_cutoff=modulo(mode,2)==0
                     allocate(raw(dims(4),dims(3),dims(2),dims(1)),source=0.0_dp)
                     do i=1,dims(1)
                       do j=1,dims(2)
@@ -92,10 +94,11 @@ contains
                     slot=1+modulo(flip,2)
                     if (legacy_buf%ncur>0) call old%update(legacy_buf)
                     legacy_buf%thread_id=slot;block_buf%thread_id=slot
-                    cut=merge(0.005_dp,1e-14_dp,mode==2)
+                    cut=merge(0.005_dp,1e-14_dp,modulo(mode,2)==0)
                     call int2_compute_data_t_storeints(old,basis,eri,legacy_buf,cut,nold)
                     call old%update(legacy_buf)
                     call int2_compute_data_t_storeints(new,basis,eri,block_buf,cut,nnew)
+                    call new%update(block_buf)
                     nullify(eri%pints)
                     deallocate(raw)
                     call compare(delta)
@@ -115,6 +118,7 @@ contains
         deallocate(old,new)
       end do
     end do
+    call mrsf_set_fp32(0)
   contains
     subroutine attach(x)
       class(int2_compute_data_t),intent(inout)::x
@@ -125,7 +129,7 @@ contains
         x%d=>den
       type is(int2_td_data_t)
         x%d2=>td
-        x%tamm_dancoff=mode==1
+        x%tamm_dancoff=modulo(mode,2)==1
         x%tamm_dancoff_coulomb=.true.
         x%int_apb=.true.;x%int_amb=.true.
       type is(int2_mrsf_data_t)
@@ -156,6 +160,7 @@ contains
         select type(new)
         type is(int2_mrsf_data_t)
           delta=maxval(abs(old%f3-new%f3))
+          if (allocated(old%f3s)) delta=max(delta,real(maxval(abs(old%f3s-new%f3s)),dp))
         end select
       type is(int2_umrsf_data_t)
         select type(new)

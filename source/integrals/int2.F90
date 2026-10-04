@@ -85,6 +85,7 @@ module int2_compute
 
   type, abstract :: int2_compute_data_t
     logical :: shell_blocks = .false.
+    integer :: shell_block_min = 0
     logical :: multipass = .false.
     integer :: num_passes = 1
     integer :: cur_pass = 1
@@ -744,7 +745,12 @@ contains
     block
       character(16) :: layout
       integer :: status
+      ! Small quartets amortize dispatch through the packed batch; larger
+      ! quartets are contracted while their contiguous ERIs are still resident.
+      ! OQP_INT2_LAYOUT is an internal regression/benchmark override.
+      int2_consumer%shell_block_min = 256
       call get_environment_variable('OQP_INT2_LAYOUT', layout, status=status)
+      if (status == 0 .and. trim(layout) == 'shell') int2_consumer%shell_block_min = 0
       if (status == 0 .and. trim(layout) == 'legacy') int2_consumer%shell_blocks = .false.
     end block
 !$omp end master
@@ -768,7 +774,7 @@ contains
     end if
     call eri_data%gdat%init(lmax, this%cutoffs, ok)
 
-    if (int2_consumer%shell_blocks) then
+    if (int2_consumer%shell_blocks .and. int2_consumer%shell_block_min == 0) then
       call int2_storage%init(0)
     else
       call int2_storage%init(this%buf_size)
@@ -1822,7 +1828,7 @@ contains
     real(kind=dp) :: val
     type(int2_shell_block_t) :: shell_block
 
-    if (consumer%shell_blocks) then
+    if (consumer%shell_blocks .and. size(eri_data%pints) >= consumer%shell_block_min) then
       call prepare_shell_block(basis, eri_data, cutoff, nint, shell_block)
       call consumer%consume_shell(shell_block, buf%thread_id)
       return
@@ -1948,7 +1954,7 @@ jc:   do j = 1, maxj
     type(int2_shell_block_t), intent(out) :: block
     integer :: a,b,c,d,maxb,maxd,nij,nkl,ia,ib,ic,id
     real(dp) :: val
-    logical :: same, ab, cd
+    logical :: same, ab, cd, retained
     block%shells=eri%ids(eri%flips)
     block%dims=eri%nbf
     block%offsets=basis%ao_offset(block%shells)-1
@@ -1974,11 +1980,15 @@ jc:   do j = 1, maxj
           do d=1,maxd
             val=block%values(d,c,b,a)
             if (eri%weighted_cutoff) then
-              if (abs(val)*eri%weight < cutoff) val=0.0_dp
+              retained = abs(val)*eri%weight >= cutoff
             else
-              if (abs(val) < cutoff) val=0.0_dp
+              retained = abs(val) >= cutoff
             end if
-            if (val /= 0.0_dp) nint=nint+1
+            if (retained) then
+              nint=nint+1
+            else
+              val=0.0_dp
+            end if
             val=val*eri%weight
             if (ab .and. a==b) val=val*0.5_dp
             if (cd .and. c==d) val=val*0.5_dp
