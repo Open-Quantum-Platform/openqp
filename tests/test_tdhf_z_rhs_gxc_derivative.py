@@ -74,3 +74,22 @@ def test_every_gxc_accumulator_is_zeroed_immediately_before_use():
         index = lines.index(call)
         accumulator = "gm=0.0_dp" if ",cm,gm," in call else "gp=0.0_dp"
         assert lines[index-1] == accumulator
+
+
+def test_explicit_xc_kernel_derivative_differentiates_the_moving_grid():
+    """Both polarization probes must include point motion and weight terms.
+
+    The analytic Hessian differentiates the moving-grid TDDFT gradient, so the
+    explicit kernel derivative used by the Z-vector RHS, the amplitude
+    actions and the relaxed density must differentiate the same quadrature.
+    The ground-state XC term cancels in E(b+q)-E(b-q) and is skipped.
+    """
+    body = Z_RHS.split("subroutine explicit_channel_derivative_matrix", 1)[1].split(
+        "end subroutine explicit_channel_derivative_matrix", 1)[0]
+    calls = body.split("call tddft_xc_gradient(")[1:]
+    assert len(calls) == 2
+    for c in calls:
+        # Each statement ends at the next executable line of the probe loop.
+        stmt = "".join(c.split("\n        x", 1)[0].split())
+        assert "include_weight_derivative=.true." in stmt
+        assert "include_ground_state=.false." in stmt

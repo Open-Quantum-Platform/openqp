@@ -118,3 +118,21 @@ def test_sf_gradient_requests_probe_only_moving_grid_response():
     assert "use mod_dft_gridint_grad, only: derexc_blk" in body
     assert "call derexc_blk" in body
     assert "include_ground_state=.true." not in body
+
+
+def test_tddft_gradient_requests_the_moving_grid_response():
+    source = _source("source/modules/tdhf_gradient.F90")
+    body = source.split("subroutine tdhf_gradient(infos)", 1)[1]
+    body = body.split("end subroutine tdhf_gradient", 1)[0]
+    call = body.split("call tddft_xc_gradient(", 1)[1].split("call dftclean", 1)[0]
+    assert "include_weight_derivative=.true." in "".join(call.split())
+
+
+def test_fxc_weight_probe_contains_the_gga_first_derivative_term():
+    # The weight response of the f_xc term needs the whole second variation of
+    # e_xc along rho(X+Y), including d_s . (2 grad rho_X . grad rho_X).
+    source = _source("source/dftlib/dft_gridint_tdxc_grad.F90")
+    body = source.split("subroutine grad_f_xc_np(", 1)[1]
+    body = body.split("end subroutine", 1)[0]
+    compact = "".join(body.split()).replace("&", "")
+    assert "dot_product(f_s,sigma)+dot_product(d_s,ssigma)" in compact

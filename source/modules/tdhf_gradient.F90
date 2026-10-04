@@ -177,6 +177,10 @@ contains
       d(:,:,2) = d(:,:,1)
       p(:,:,2) = p(:,:,1)
       xpy2(:,:,2) = xpy2(:,:,1)
+      ! On an atom-centred quadrature the nuclear derivative also contains the
+      ! response of the normalized partition weights and the motion of each grid
+      ! slice with its owner atom.  include_weight_derivative adds both for the
+      ! reference XC energy, the relaxed linear probe and the f_xc term.
       call tddft_xc_gradient(basis=basis, &
              molGrid=molGrid, &
              dedft=infos%atoms%grad, &
@@ -185,7 +189,8 @@ contains
              xa=xpy2(:,:,1:1), &
              nmtx=1, &
              threshold=1.0d-14, &
-             infos=infos)
+             infos=infos, &
+             include_weight_derivative=.true.)
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
       call flush(iw)

@@ -950,11 +950,17 @@ contains
                 g_r, g_s, g_t)
 
         if (dat%do_weight_derivative) then
+          ! Second variation of the XC energy along rho(X+Y), the integrand
+          ! whose quadrature weights move with the nuclei:
+          !   f_r.rho_X + f_s.sigma_X + d_s.(2 grad rho_X . grad rho_X) [+ f_t.tau_X].
+          ! The last GGA term is first order in e_xc but quadratic in rho_X; it is
+          ! the d_s part of grad_x below and must enter the weight response too.
           dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                       + dot_product(f_r,rhoab)
           if (xce%funTyp /= OQP_FUNTYP_LDA) &
             dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
-                                        + dot_product(f_s,sigma)
+                                        + dot_product(f_s,sigma) &
+                                        + dot_product(d_s,ssigma)
           if (xce%funTyp == OQP_FUNTYP_MGGA) &
             dat%probe_value(i,j,mythread) = dat%probe_value(i,j,mythread) &
                                         + dot_product(f_t,tauab)
