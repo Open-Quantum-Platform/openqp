@@ -1,5 +1,6 @@
 # UMRSF-TDDFT counterpart of examples/OPT/H2O_BHHLYP-MRSFTDDFT_OPTIMIZE.inp: same geometry and step limits,
-# with a UHF triplet reference ([scf] type=uhf) and [tdhf] type=umrsf.
+# with a UHF triplet reference ([scf] type=uhf) and [tdhf] type=umrsf.  The SAP guess reaches the
+# lowest UHF triplet here; the default Huckel guess converges to one 0.08 Hartree higher.
 [input]
 system=
    O  -0.0000000000   0.0000000000  -0.0410615540
@@ -10,6 +11,9 @@ functional=bhhlyp
 basis=6-31g*
 runtype=optimize
 method=tdhf
+
+[guess]
+type=sap
 
 [scf]
 type=uhf
