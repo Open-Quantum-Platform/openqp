@@ -207,6 +207,14 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         for path in (UMRSF_GRAD, LIB, UMRSF_ZVEC):
             self.assertNotIn('get_environment_variable("UMRSF', path.read_text(), path.name)
 
+    def test_unused_validation_oracles_are_not_in_the_engine(self):
+        source = compact(UMRSF_GRAD.read_text())
+        for name in ("umrsf_w_analytic", "umrsf_w_numerical", "umrsf_w_rigorous",
+                     "umrsf_w_2e_numerical", "umrsf_zvector_analytic", "umrsf_zvector_relax",
+                     "umrsf_lagrangian_eval", "umrsf_m1_overlap_grad_adjoint",
+                     "umrsf_resp_2e_grad_split"):
+            self.assertNotIn(f"subroutine{name}(", source)
+
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
         expected_updates = (
@@ -275,15 +283,6 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         fill = _fortran_subroutine(UMRSF_GRAD, "umrsf_resp_2pdm_fill")
         self.assertEqual(fill.count("gcomp%transpose_exchange=.false."), 1)
         self.assertEqual(fill.count("gcomp%transpose_exchange(9:10)=.true."), 1)
-        split = _fortran_subroutine(
-            UMRSF_GRAD, "umrsf_resp_2e_grad_split"
-        )
-        self.assertEqual(
-            split.count(
-                "one%transpose_exchange(1)=gcomp%transpose_exchange(ch)"
-            ),
-            1,
-        )
 
     def test_umrsf_mixed_exchange_quartet_matches_k_of_transposed_density(self):
         # Use four distinct AO indices so the ERI's eight symmetry-related
