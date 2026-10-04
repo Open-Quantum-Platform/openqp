@@ -3346,18 +3346,13 @@ contains
 !>   umrsf_zov_precond = the floored (eps_a-eps_i)^-1 Jacobi diagonal).  UMRSF's ov block can be
 !>   indefinite, so the default keeps CG as the fast path at the practical gradient tolerance and
 !>   automatically restarts MINRES only if CG does not converge in the trial budget.
-!>   Force pure PCG with UMRSF_ZPCG=1, or skip CG with UMRSF_ZMINRES=1.  Both callbacks read a
-!>   umrsf_zov_ctx_t passed through the solvers' c_ptr `dat`.
+!>   Both callbacks read a umrsf_zov_ctx_t passed through the solvers' c_ptr `dat`.
 !> Returns IDENTICAL outputs to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms, statio =
 !> ||antisym(G^f+G^z(z))|| = the M z = -R residual). For the SOMO-degenerate rank-deficient case
 !> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (UMRSF_ZDENSE=1)
 !> is still preferred. The relative residual and iteration limit default to infos%tddft%zvconv and
 !> infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
-!> unconverged response. UMRSF_ZMAXIT can adjust the iteration limit for diagnostics;
-!> only the input zvconv sets the accepted relative residual.
-!> Other tunables:
-!> UMRSF_ZCG_TRIAL (default min(64,maxit_zv/2)), UMRSF_ZMINRES (1 => skip CG),
-!> UMRSF_ZPCG (1 => force pure PCG).
+!> unconverged response.  The CG trial budget is min(64, maxit_zv/2).
   subroutine umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                 hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio, skip_check)
     use io_constants, only: iw
@@ -3486,17 +3481,8 @@ contains
         end if
       end do
 
-      block
-        character(len=24) :: e ; integer :: ios, iv
-        call get_environment_variable("UMRSF_ZMAXIT", e, status=ios)
-        if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) mxit = iv ; end if
-        call get_environment_variable("UMRSF_ZCG_TRIAL", e, status=ios)
-        if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) pcg_limit = iv ; end if
-        call get_environment_variable("UMRSF_ZMINRES", e, status=ios)
-        if (ios==0 .and. trim(e)=="1") force_minres = .true.
-        call get_environment_variable("UMRSF_ZPCG", e, status=ios)
-        if (ios==0 .and. trim(e)=="1") force_pcg = .true.
-      end block
+      ! The iteration budget comes from [tdhf] maxit_zv and the solver order is fixed
+      ! (CG trial, then MINRES); neither is taken from the process environment.
       pcg_limit = min(max(pcg_limit, 1), mxit)
       if (force_pcg) force_minres = .false.
 
@@ -3543,7 +3529,7 @@ contains
 
           if (pcg_bad .and. force_pcg) then
             call pcg%clean()
-            call show_message('UMRSF-Z PCG broke down; unset UMRSF_ZPCG to allow MINRES fallback.', WITH_ABORT)
+            call show_message('UMRSF-Z PCG broke down.', WITH_ABORT)
           end if
 
           if (pcg_done .or. force_pcg) then

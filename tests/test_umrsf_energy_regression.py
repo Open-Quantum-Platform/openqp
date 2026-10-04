@@ -212,7 +212,8 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
                      "UMRSF_XCG", "UMRSF_TRACK", "UMRSF_TRKDENSE", "UMRSF_TRKCMP",
                      "UMRSF_TRKTOL", "UMRSF_TRKMAXSUB", "UMRSF_G2EFD", "UMRSF_G2ECMP",
                      "UMRSF_GFFD", "UMRSF_GFCMP", "UMRSF_TH", "UMRSF_GFSERIAL",
-                     "UMRSF_SELFTEST"):
+                     "UMRSF_SELFTEST", "UMRSF_ZMAXIT", "UMRSF_ZCG_TRIAL", "UMRSF_ZMINRES",
+                     "UMRSF_ZPCG"):
             self.assertNotIn(f'get_environment_variable("{name}"', gradient)
 
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
