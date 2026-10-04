@@ -298,10 +298,9 @@ contains
     real(kind=dp), allocatable, intent(out) :: de2e_out(:,:)
 
     type(grd2_umrsf_resp_t) :: gcomp
-    real(kind=dp), allocatable :: de2e(:,:), de2e_fd(:,:)
+    real(kind=dp), allocatable :: de2e(:,:)
     real(kind=dp), allocatable, target :: densym(:,:,:,:)
     integer :: natom, iat, icmp
-    real(kind=dp) :: omega_p, omega_m, hfd, omega_base, maxd2e
     ! unrelaxed difference density P^Δ,u + orbital-part gradient
     real(kind=dp), allocatable :: talpha(:,:), tbeta(:,:), pda(:,:), pdb(:,:)
     real(kind=dp), allocatable :: tua(:,:), tub(:,:)            ! standard-CIS T_u (SOMO-gate diagnostic only)
@@ -310,10 +309,8 @@ contains
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
     real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
-    logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1, l_m1fd     ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
+    logical :: dbg_w2e, dbg_wrr, l_zov, l_m1                    ! G̃ 2e/refrelax ; ov-only Z (fixed off) ; M1 overlap term
     logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
-    logical :: l_g2efd, l_g2ecmp                                ! G̃ 2e: FD oracle (UMRSF_G2EFD) ; analytic-vs-FD compare (UMRSF_G2ECMP)
-    logical :: l_gffd                                           ! ΔG^f: numerical re-align oracle (UMRSF_GFFD) ; default = analytic adjoint-IFT (D1)
     logical :: l_2e_split, l_g1_diag, l_orb_diag                 ! response 2e gradient diagnostic; opt-in response-energy/orbital gates
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
@@ -602,7 +599,7 @@ contains
     natom = ubound(infos%atoms%zn,1)
     call umrsf_resp_2pdm_fill(gcomp, dens(1,:,:,:), brad, nbf, mrst, hfs, &
                               scale_exch, spc_coco, spc_ovov, spc_coov)
-    allocate(de2e(3,natom), de2e_fd(3,natom), densym(1,11,nbf,nbf), source=0.0_dp)
+    allocate(de2e(3,natom), densym(1,11,nbf,nbf), source=0.0_dp)
     do k = 1, 11
       densym(1,k,:,:) = gcomp%dden(k,:,:)
     end do
@@ -648,52 +645,6 @@ contains
     call flush(iw)
     close(iw)
 
-    ! frozen-density central FD self-test of ω_2e (G1b): validates the analytic de2e above. 6·natom int2
-    ! builds, DIAGNOSTIC ONLY (de2e_fd is NOT added to the gradient). Pure production overhead ⇒ default
-    ! OFF; set UMRSF_SELFTEST=1 to run it. (The term it checks is analytic; the gate already proved it.)
-    block
-      character(len=8) :: e ; integer :: ios ; logical :: l_selftest
-      l_selftest = .false.
-      call get_environment_variable("UMRSF_SELFTEST", e, status=ios)
-      if (ios==0) l_selftest = (trim(e)=="1")
-      if (l_selftest) then
-        call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_base)
-        hfd = 1.0e-3_dp
-        do iat = 1, natom
-          do icmp = 1, 3
-            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
-            call basis%init_shell_centers()
-            call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_p)
-            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) - 2.0_dp*hfd
-            call basis%init_shell_centers()
-            call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_m)
-            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
-            call basis%init_shell_centers()
-            de2e_fd(icmp,iat) = (omega_p - omega_m)/(2.0_dp*hfd)
-          end do
-        end do
-        maxd2e = maxval(abs(de2e - de2e_fd))
-        open(unit=iw, file=infos%log_filename, position="append")
-        write(iw,'(/2x,a)') '========= UMRSF 2e response gradient (G1b: frozen-density FD) ========='
-        write(iw,'(2x,a,f18.10)') 'omega_2e (frozen-density, base) = ', omega_base
-        if (l_g1_diag) write(iw,'(2x,a,f18.10)') '  (cf. back-transform omega_2e)  = ', omega_2e_mv
-        write(iw,'(2x,a)') '   atom  comp     analytic dω2e/dx        frozen-FD          |Δ|'
-        do iat = 1, natom
-          do icmp = 1, 3
-            write(iw,'(2x,2i5,3es20.10)') iat, icmp, de2e(icmp,iat), de2e_fd(icmp,iat), &
-                                          abs(de2e(icmp,iat)-de2e_fd(icmp,iat))
-          end do
-        end do
-        write(iw,'(2x,a,es12.3)') 'max|analytic - frozen-FD| 2e    = ', maxd2e
-        if (maxd2e <= 1.0e-6_dp) then
-          write(iw,'(2x,a)') 'VERDICT: 2e response gradient PASS (custom grd2 2-PDM validated)'
-        else
-          write(iw,'(2x,a)') 'VERDICT: 2e response gradient CHECK (see |Δ| above)'
-        end if
-        write(iw,'(2x,a)') '======================================================================'
-        close(iw)
-      end if
-    end block
     call gcomp%clean()
 
     ! ===== SOMO-corrected unrelaxed difference density P_eff = sym(∂omega_orb/∂F̃)/ M3) =====
@@ -793,9 +744,9 @@ contains
     ! ablations must not be inherited from the process environment.
     block
       character(len=16) :: e ; integer :: ios
-      dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false.
-      l_m1 = .true. ; l_m1fd = .false.
-      l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false. ; l_gffd = .false.
+      dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false.
+      l_m1 = .true.
+      l_zdense = .false. ; l_zcmp = .false.
       ! Z-vector solver: default = matrix-free reduce+PCG (umrsf_zvector_iter). UMRSF_ZDENSE=1 →
       ! the dense dgelss oracle (umrsf_zvector_fullblock, rank-deficient-safe). UMRSF_ZCMP=1 → run BOTH
       ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
@@ -810,20 +761,8 @@ contains
           l_zdense = .false. ; l_zcmp = .false.
         end if
       end if
-      ! G̃ 2e gen-Fock: default = analytic (umrsf_g2e_analytic, 2 int2 builds). UMRSF_G2EFD=1 →
-      ! the FD oracle umrsf_g2e_onesided (4·nbf² builds). UMRSF_G2ECMP=1 → run BOTH and print
-      ! max|analytic − FD| per spin (the perf-port GATE: reproduce the FD g2e to ≤1e-9).
-      call get_environment_variable("UMRSF_G2EFD",  e, status=ios) ; if (ios==0) l_g2efd  = (trim(e)=="1")
-      call get_environment_variable("UMRSF_G2ECMP", e, status=ios) ; if (ios==0) l_g2ecmp = (trim(e)=="1")
-      ! ΔG^f (M1 alignment Jacobian): default = ANALYTIC adjoint-IFT (umrsf_genfock_analytic, D1).
-      ! UMRSF_GFFD=1 → the numerical re-align oracle umrsf_genfock_full (4·nbf² smooth re-aligns, ~1e-8
-      ! floor). Both give the same full gradient (the alignment gauge cancels in assembly); the analytic
-      ! is O(nbf³) matmuls (no int2, no per-(p,q) re-align). D1
-      call get_environment_variable("UMRSF_GFFD",   e, status=ios) ; if (ios==0) l_gffd   = (trim(e)=="1")
-      ! de_m1 (M1 alignment explicit-overlap Pulay): default = ANALYTIC −Tr(W_m1·S^x) (umrsf_m1_analytic,
-      ! D2; W_m1 = cac Tbar cbcᵀ, the reverse-mode S-VJP of Φ=μ·r(s_align) — SAME μ/Tbar/gauge as the D1
-      ! ΔG^f). The numerical geometry central-FD oracle umrsf_m1_overlap_grad remains available
-      ! internally for comparison (6·natom re-aligns, ~1e-6 floor). D2.
+      ! The 2e generalized Fock, the alignment Jacobian ΔG^f and the M1 overlap term are always
+      ! evaluated analytically; their finite-difference oracles are not part of the engine.
     end block
 
     ! ---- Stage-2 XC context (the development rules / ) ----
@@ -855,7 +794,7 @@ contains
     !  (1) FULL-BLOCK Z-vector (oo+ov+vv) — the aligned 11-channel ω is NOT stationary to oo/vv rotations;
     !  (2) G^f carrying the dV/dC alignment Jacobian ΔG^f (via the numerical re-align, not V G̃ Vᵀ).
     ! W = Σ_σ C_σ ½sym(G^f+G^z)_σ C_σᵀ in the CANONICAL basis (full G^f). de_zexplicit folds into the
-    ! P_eff = P^Δu + ½P_z orbital gradient (with the full-block P_z). Ablations: l_zov / l_gvt.
+    ! P_eff = P^Δu + ½P_z orbital gradient (with the full-block P_z).
     block
       real(kind=dp), allocatable :: famoa(:,:), famob(:,:), ya(:,:), yb(:,:), tmp(:,:)
       real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:), g2ea(:,:), g2eb(:,:)
@@ -889,18 +828,7 @@ contains
         write(iw,'(2x,a)') 'UMRSF response stage: 2e generalized Fock'
         call flush(iw)
         call umrsf_clock_start(twall, tcpu)
-        if (l_g2ecmp) then       ! GATE: analytic vs FD oracle (reproduce ≤1e-9), use analytic
-          call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
-          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2e)
-          write(iw,'(/2x,a,es12.3)') 'G2e GATE max|analytic − FD| α (must ≤1e-9) = ', maxval(abs(g2ea-g2e))
-          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2e)
-          write(iw,'(2x,a,es12.3)')  'G2e GATE max|analytic − FD| β (must ≤1e-9) = ', maxval(abs(g2eb-g2e))
-        else if (l_g2efd) then   ! FD oracle fallback (4·nbf² builds)
-          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2ea)
-          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2eb)
-        else                     ! production: analytic, both spins one call
-          call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
-        end if
+        call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
         gta = gta + g2ea ; gtb = gtb + g2eb
         call umrsf_timing_log(iw, '2e generalized Fock', twall, tcpu)
       end if
@@ -913,36 +841,10 @@ contains
       write(iw,'(2x,a)') 'UMRSF response stage: aligned-to-canonical generalized Fock'
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
-      have_tbar = .false.
-      if (l_gvt) then
-        ! ABLATION: G^f = V G̃ Vᵀ only (drop ΔG^f) — reproduces the wall.  V_σ = C_can,σᵀ S C̃_σ.
-        tmp = matmul(transpose(cac), matmul(smat_full, va))     ! V_α
-        gfa = matmul(tmp, matmul(gta, transpose(tmp)))
-        tmp = matmul(transpose(cbc), matmul(smat_full, vb))     ! V_β
-        gfb = matmul(tmp, matmul(gtb, transpose(tmp)))
-      else if (l_gffd) then
-        ! ORACLE: numerical re-align ΔG^f (4·nbf² smooth re-aligns; the D1 in-model FD ground truth).
-        call umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
-        ! UMRSF_GFCMP=1: byte-identity gate — recompute G^f SERIALLY on the SAME inputs and compare
-        ! (isolates the OMP loop from int2's run-to-run thread-reduction noise; must be EXACTLY 0).
-        block
-          character(len=8) :: e ; integer :: ios
-          real(kind=dp), allocatable :: gfas(:,:), gfbs(:,:)
-          call get_environment_variable("UMRSF_GFCMP", e, status=ios)
-          if (ios==0 .and. trim(e)=="1") then
-            allocate(gfas(nbf,nbf), gfbs(nbf,nbf))
-            call umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfas, gfbs, serial=.true.)
-            write(iw,'(/2x,a,2es12.3)') 'G^f OMP byte-identity gate max|parallel − serial| α/β (must = 0) = ', &
-                                        maxval(abs(gfa-gfas)), maxval(abs(gfb-gfbs))
-            deallocate(gfas, gfbs)
-          end if
-        end block
-      else
-        ! DEFAULT (D1): analytic adjoint-IFT ΔG^f (reverse-mode of Φ=μ·r(s_align); O(nbf³), no int2).
-        ! Also exports T̄ so the de_m1 (M1) term below skips its redundant alignment-adjoint block solve.
-        call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, tbar_shared)
-        have_tbar = .true.
-      end if
+      ! Analytic adjoint-IFT ΔG^f (reverse mode of Φ=μ·r(s_align); O(nbf³), no int2). It also
+      ! exports T̄, so the M1 overlap term below skips its redundant alignment-adjoint block solve.
+      call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, tbar_shared)
+      have_tbar = .true.
       call umrsf_timing_log(iw, 'aligned-to-canonical generalized Fock', twall, tcpu)
 
       ! ---- FULL-BLOCK Z-vector: M z = -R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
@@ -1051,14 +953,13 @@ contains
       ! ---- de_m1 (D2): ANALYTIC alignment explicit-overlap Pulay −Tr(W_m1·S^x). Done HERE (inside the
       ! block) because it reuses the SAME raw aligned gen-Fock G̃ (gta,gtb) as umrsf_genfock_analytic ⇒
       ! the SAME μ/Tbar and hence the SAME unseeded gauge as the ΔG^f above (D1/D2 must share the gauge).
-      ! The numerical geometry-FD oracle can be selected internally and runs after this block.
-      if (l_m1 .and. .not. l_m1fd) then
+      if (l_m1) then
         write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
         call flush(iw)
         call umrsf_clock_start(twall, tcpu)
         ! The DEFAULT ΔG^f path (umrsf_genfock_analytic) already produced the alignment-adjoint VJP T̄
         ! from the SAME hmat/μ that de_m1 needs, so reuse it and skip the (dominant) redundant block
-        ! solve. The G^f oracle/ablation branches (l_gffd / l_gvt) do not produce T̄ ⇒ fall back to the
+        ! solve. Without T̄ (have_tbar false) the standalone analytic M1 below is used instead; it is the
         ! standalone analytic M1 (which rebuilds hmat/μ/T̄ itself).
         if (have_tbar) then
           call umrsf_m1_from_tbar(basis, cac, cbc, tbar_shared, tolw, de_m1)
@@ -1076,7 +977,7 @@ contains
       do sj = nocca, nbf ; do si = nocca, nbf
         wsb = max(wsb, abs(0.5_dp*(gtb(si,sj)-gtb(sj,si)))) ; end do ; end do
       write(iw,'(/2x,a)') '----- §16 full-block Z + full G^f diagnostics -----'
-      write(iw,'(2x,a,l1,a,l1)') 'ablations: ov-only Z = ', l_zov, '   V-transform G^f = ', l_gvt
+      write(iw,'(2x,a,l1)') 'ov-only Z = ', l_zov
       write(iw,'(2x,a,2es12.3)') 'within-seg antisym G̃ α/β (c06: ~1e-3 NONZERO)  = ', wsa, wsb
       block
         real(kind=dp) :: aoo, avv, boo, bvv
@@ -1131,19 +1032,6 @@ contains
       deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, g2ea, g2eb, gfa, gfb, gza, gzb, wao, wpack)
     end block
 
-    ! de_m1 ORACLE: the numerical geometry central-FD of the alignment's EXPLICIT-S response
-    ! −∂(ω∘align)/∂S·∂S/∂x — re-align the canonical orbitals at S(x±θ) (orbitals/ERIs/F^ref frozen at base;
-    ! D^ref get_jacobi-invariant), central-difference ω. Needs int2_driver live (umrsf_omega_eval). The
-    ! DEFAULT analytic de_m1 (umrsf_m1_analytic) was already computed inside the block above; this is the
-    ! ~1e-6-floor oracle the analytic is gated against (D2). c06: NONZERO, unlike the c05 within-seg-invariant toy.
-    if (l_m1 .and. l_m1fd) then
-      call flush(iw)
-      close(iw)
-      call umrsf_m1_overlap_grad(infos, int2_driver, basis, cac, cbc, va, vb, &
-                                 fock_a, fock_b, smat_full, xamp, scale_exch, de_m1)
-      open(unit=iw, file=infos%log_filename, position="append")
-    end if
-
     call int2_driver%clean()
 
     ! de_orb = umrsf_orbital_grad(P_eff = P^Δ,u + ½ P_z) = de_explicit_orbital + de_zexplicit
@@ -1191,7 +1079,7 @@ contains
     end if
 
     deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, xamp, dens, brad)
-    deallocate(de2e, de2e_fd, densym)
+    deallocate(de2e, densym)
     deallocate(talpha, tbeta, tua, tub, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
     deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
@@ -1395,37 +1283,6 @@ contains
     end do
     deallocate(s_mo, ri, rj)
   end subroutine umrsf_jacobi_smooth
-
-!###############################################################################
-!> ω_2e = Σ_k s_k ⟨B_k, int2_k(D_k)⟩ at the CURRENT geometry with FIXED AO densities
-!> (re-inits the int2 engine for the moved nuclei; Schwarz screening off for a clean FD).
-  subroutine umrsf_frozen_omega2e(infos, idrv, densym, gcomp, scale_exch, omega)
-    use int2_compute, only: int2_compute_t
-    use tdhf_mrsf_lib, only: int2_umrsf_data_t
-    implicit none
-    type(information), target, intent(inout) :: infos
-    type(int2_compute_t), intent(inout) :: idrv
-    real(kind=dp), intent(in), target :: densym(:,:,:,:)
-    type(grd2_umrsf_resp_t), intent(in) :: gcomp
-    real(kind=dp), intent(in) :: scale_exch
-    real(kind=dp), intent(out) :: omega
-    type(int2_umrsf_data_t), target :: ud
-    real(kind=dp), pointer :: f3(:,:,:,:)
-    integer :: k
-
-    call idrv%clean()
-    call idrv%init(infos%basis, infos)
-    call idrv%set_screening()
-    idrv%schwarz = .false.
-    ud = int2_umrsf_data_t(d3=densym, tamm_dancoff=.true., &
-                           scale_exchange=scale_exch, scale_coulomb=scale_exch)
-    call idrv%run(ud)
-    f3 => ud%f3(:,:,:,:,1)
-    omega = 0.0_dp
-    do k = 1, 11
-      omega = omega + gcomp%sgn(k)*sum(gcomp%bden(k,:,:)*f3(1,k,:,:))
-    end do
-  end subroutine umrsf_frozen_omega2e
 
 !###############################################################################
 !> Overlap-Pulay W term: −Tr(W S^x) for the (difference-density) energy-weighted density
@@ -1704,93 +1561,6 @@ contains
   end subroutine umrsf_w_analytic
 
 !###############################################################################
-!> M1 (two-reference) gradient term = the get_jacobi ALIGNMENT's explicit overlap (dS/dx) response.
-!> The aligned va,vb satisfy [va^T S vb]_offdiag = 0 within the two segments (get_jacobi). That
-!> condition involves S(x), so as the nuclei move the alignment rotates — a Pulay-like term NOT
-!> captured by the fixed-alignment W or the Z-vector. The alignment is a REDUNDANT rotation (within
-!> α-occ {1..nocca-1} and β-virt {nocca..nbf}), so it leaves the reference density / F^ref / ERIs
-!> unchanged ⇒ ω responds ONLY through the rotated orbitals, with BASE integrals. Computed EXACTLY
-!> (same get_jacobi the energy uses) by re-aligning to S(x±θ) — orbitals + ERIs held at base — and
-!> central-differencing ω. Smooth for small θ (no Jacobi pairing flips), UNLIKE the symmetric-variation
-!> FD-of-L (the proven dead end). The full ω is orthonormal here (get_jacobi preserves it), so
-!> umrsf_omega_eval (umrsfmntoia back-transform + FROZEN base Fock = F^ref since the density is fixed)
-!> is exact.  de_m1 is added alongside de2e/de_orb/de_w.
-!>
-!> KEY: get_jacobi only rotates when an off-diagonal exceeds its 1e-3 threshold. Feeding the already-
-!> aligned va/vb gives sub-threshold off-diagonals under a small dS ⇒ NO rotation ⇒ de_m1=0 (wrong).
-!> So start from the UN-ALIGNED canonical cac/cbc (same span; get_jacobi does a FULL alignment, exactly
-!> as the Z-vector RHS does), then SIGN-FIX each column against va/vb (get_jacobi(cac)=va up to per-
-!> column signs — verified min|col overlap|=1.0). The sign-fix is smooth for a small dS perturbation.
-  subroutine umrsf_m1_overlap_grad(infos, idrv, basis, cac, cbc, va, vb, fock_a, fock_b, &
-                                   smat_full, xv, scale_exch, de_m1)
-    use io_constants, only: iw
-    use int2_compute, only: int2_compute_t
-    use int1, only: omp_hst
-    use mathlib, only: unpack_matrix
-    use constants, only: tol_int
-    implicit none
-    type(information), target, intent(inout) :: infos
-    type(int2_compute_t), intent(inout) :: idrv
-    type(basis_set), intent(inout) :: basis
-    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:)
-    real(kind=dp), intent(in) :: fock_a(:), fock_b(:), smat_full(:,:), xv(:), scale_exch
-    real(kind=dp), intent(out) :: de_m1(:,:)
-    real(kind=dp), allocatable :: cwa(:,:), cwb(:,:), spack(:), sfull(:,:)
-    real(kind=dp), allocatable :: hbuf(:), tbuf(:), zq(:)
-    integer :: nbf, nbf2, nocca, natom, iat, icmp, p
-    real(kind=dp) :: tol, th, omp, omm, schk, ocheck, dum
-
-    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2 ; nocca = infos%mol_prop%nelec_a
-    natom = ubound(infos%atoms%zn,1) ; tol = tol_int*log(10.0_dp) ; th = 1.0d-3
-    allocate(cwa(nbf,nbf), cwb(nbf,nbf), spack(nbf2), sfull(nbf,nbf), &
-             hbuf(nbf2), tbuf(nbf2), zq(natom), source=0.0_dp)
-    zq = infos%atoms%zn - infos%basis%ecp_zn_num
-
-    open(unit=iw, file=infos%log_filename, position="append")
-    ! convention sanity: omp_hst overlap at base reproduces stored S; sign-fixed get_jacobi(cac,S_base)==ω_base
-    call omp_hst(basis, infos%atoms%xyz, zq, hbuf, spack, tbuf, logtol=tol, &
-                 comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
-    call unpack_matrix(spack, sfull, nbf, 'U')
-    schk = maxval(abs(sfull - smat_full))
-    cwa = cac ; cwb = cbc
-    call umrsf_jacobi_smooth(cwa, cwb, sfull, nocca, dum)
-    call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
-    call umrsf_omega_eval(infos, idrv, cwa, cwb, fock_a, fock_b, xv, scale_exch, ocheck)
-    write(iw,'(/2x,a,es12.3,a,f16.10)') 'M1: overlap() base vs stored S max|Δ| = ', schk, &
-      '   ω(get_jacobi(cac),signfix) base = ', ocheck
-
-    de_m1 = 0.0_dp
-    do iat = 1, natom
-      do icmp = 1, 3
-        ! +θ: recompute S(x+θ); canonical orbitals + ERIs stay at base; full re-align + sign-fix
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + th
-        call basis%init_shell_centers()
-        call omp_hst(basis, infos%atoms%xyz, zq, hbuf, spack, tbuf, logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) - th
-        call basis%init_shell_centers() ; call unpack_matrix(spack, sfull, nbf, 'U')
-        cwa = cac ; cwb = cbc
-        call umrsf_jacobi_smooth(cwa, cwb, sfull, nocca, dum)
-        call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
-        call umrsf_omega_eval(infos, idrv, cwa, cwb, fock_a, fock_b, xv, scale_exch, omp)
-        ! -θ
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) - th
-        call basis%init_shell_centers()
-        call omp_hst(basis, infos%atoms%xyz, zq, hbuf, spack, tbuf, logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + th
-        call basis%init_shell_centers() ; call unpack_matrix(spack, sfull, nbf, 'U')
-        cwa = cac ; cwb = cbc
-        call umrsf_jacobi_smooth(cwa, cwb, sfull, nocca, dum)
-        call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
-        call umrsf_omega_eval(infos, idrv, cwa, cwb, fock_a, fock_b, xv, scale_exch, omm)
-        de_m1(icmp,iat) = (omp - omm)/(2.0_dp*th)
-      end do
-    end do
-    write(iw,'(2x,a)') 'M1 alignment-overlap (dS/dx) response computed (de_m1).'
-    close(iw)
-    deallocate(cwa, cwb, spack, sfull, hbuf, tbuf, zq)
-  end subroutine umrsf_m1_overlap_grad
-
-!###############################################################################
 !> Fix per-column signs of (cwa,cwb) to match the reference aligned (va,vb): if cwσ(:,p)·S·vσ(:,p)<0,
 !> flip column p. get_jacobi(cac) matches va up to column signs (min|col overlap|=1.0), and the V_S/V_T
 !> SOMO combos in ω are sign-sensitive ⇒ must restore va's convention before evaluating ω.
@@ -1973,44 +1743,6 @@ contains
     umrsf_mf_calls = umrsf_mf_calls + 1
     call umrsf_timing_accum(wall0, cpu0, umrsf_mf_wall, umrsf_mf_cpu)
   end subroutine umrsf_meanfield
-
-!###############################################################################
-!> Full ONE-SIDED 2e generalized Fock  G2e_pq = ∂ω_2e/∂U^ispin_pq  in the aligned basis va,vb,
-!> via central FD of the EXACT explicit-bra ω_2e (umrsf_omega2e_explicit; the clean bilinear in C —
-!> valid under non-orthonormal column variation, unlike the umrsfmntoia back-transform). Column
-!> variation dC^ispin_q += th·C^ispin_p (one-sided, NOT symmetric ⇒ the full non-sym gen-Fock that R
-!> needs; W later takes ½sym). This realizes the c04/c05 "2e channel-adjoint" factor to FD precision
-!> (c05 verified analytic == this FD oracle to ~5e-11). th = 1e-5 (FD truncation ~1e-10; int2 clean,
-!> Schwarz off). Cost = 2·nbf² int2 builds/spin — paid once per gradient.
-  subroutine umrsf_g2e_onesided(infos, idrv, va, vb, xamp, scale_exch, ispin, g2e)
-    use int2_compute, only: int2_compute_t
-    implicit none
-    type(information), target, intent(inout) :: infos
-    type(int2_compute_t), intent(inout) :: idrv
-    real(kind=dp), intent(in) :: va(:,:), vb(:,:), xamp(:), scale_exch
-    integer, intent(in) :: ispin
-    real(kind=dp), intent(out) :: g2e(:,:)
-    real(kind=dp), allocatable :: cwa(:,:), cwb(:,:)
-    integer :: nbf, p, q
-    real(kind=dp) :: th, omp, omm
-    nbf = size(va,1) ; th = 1.0d-5
-    allocate(cwa(nbf,nbf), cwb(nbf,nbf))
-    g2e = 0.0_dp
-    do q = 1, nbf
-      do p = 1, nbf
-        cwa = va ; cwb = vb
-        if (ispin == 1) then ; cwa(:,q) = va(:,q) + th*va(:,p)
-        else                 ; cwb(:,q) = vb(:,q) + th*vb(:,p) ; end if
-        call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xamp, scale_exch, omp)
-        cwa = va ; cwb = vb
-        if (ispin == 1) then ; cwa(:,q) = va(:,q) - th*va(:,p)
-        else                 ; cwb(:,q) = vb(:,q) - th*vb(:,p) ; end if
-        call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xamp, scale_exch, omm)
-        g2e(p,q) = (omp - omm)/(2.0_dp*th)
-      end do
-    end do
-    deallocate(cwa, cwb)
-  end subroutine umrsf_g2e_onesided
 
 !###############################################################################
 !> ANALYTIC 11-channel 2e generalized Fock  g2e^σ_pq = ∂ω_2e/∂U^σ_pq  (BOTH spins, one call),
@@ -2927,84 +2659,6 @@ contains
     gzb(:,1:noccb) = gzb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb)
     deallocate(pza, pzb, ya, yb, tmp, tmp2)
   end subroutine umrsf_genfock_z
-
-!###############################################################################
-!> FULL generalized Fock G^f of f = ω∘align at the CANONICAL orbitals cac/cbc — it CARRIES the
-!> alignment Jacobian dV/dC (the M1 term the V-transform G^f = V G̃ Vᵀ drops). c06 §16: the real
-!> 11-channel ω is NOT within-segment invariant, so ΔG^f = G^f − V G̃ Vᵀ ≠ 0 (concentrated in the
-!> oo-α / vv-β antisym blocks) and is REQUIRED in both the Z-vector RHS and W (dropping it leaves the
-!> ~1e-3 wall). Computed by the re-alignment response (c06 Gf_fdalign / the FD-oracle, CLEAN — no
-!> int2/fock in the loop): for each canonical rotation (p,q,spin), one-sided perturb cac/cbc, re-align
-!> with the SMOOTH (converged) get_jacobi + sign-fix to va/vb, form the induced ALIGNED-basis rotation
-!> dU_σ = C̃_σᵀ S dC̃_σ, and contract with the raw aligned gen-Fock G̃ (gta/gtb):
-!>   G^f_pq = Σ_rs G̃a_rs dUa_rs + Σ_rs G̃b_rs dUb_rs       (both spins respond to one spin's rotation).
-!> Central difference (th=1e-4). Returns G^f in the CANONICAL (cac/cbc) basis. (In-model: unseeded
-!> smooth re-align reproduces the FD-oracle G^f and closes the gradient to ~5e-9.)
-!> PERF: the (isp,q,p) iterations are INDEPENDENT — each writes a unique gfa(p,q)/gfb(p,q) with no
-!> cross-iteration accumulation, and umrsf_jacobi_smooth/m1_sign_fix touch only their args + locally-
-!> allocated scratch ⇒ the (isp,q) loops are OMP-parallelized with per-thread private scratch. The
-!> result is BYTE-IDENTICAL to serial (no reduction reordering; each element's two sums are computed
-!> wholly within one iteration). This removes the last O(nbf²) serial bottleneck (4·nbf² re-aligns).
-  subroutine umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, serial)
-!$  use omp_lib, only: omp_get_max_threads
-    implicit none
-    type(information), target, intent(inout) :: infos
-    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
-    real(kind=dp), intent(in) :: gta(:,:), gtb(:,:)
-    integer, intent(in) :: nocca
-    real(kind=dp), intent(out) :: gfa(:,:), gfb(:,:)
-    logical, intent(in), optional :: serial   ! force this loop serial (byte-identity gate)
-    real(kind=dp), allocatable :: cwa(:,:), cwb(:,:), ctap(:,:), ctbp(:,:), dua(:,:), dub(:,:)
-    integer :: nbf, p, q, isp, nthr
-
-    real(kind=dp) :: th, dum
-
-    nbf = size(cac,1) ; th = 1.0d-4
-    block   ! UMRSF_TH: re-align FD step for G^f (diagnostic — S2's large within-seg antisym stresses it)
-      character(len=24) :: e ; integer :: ios ; real(kind=dp) :: thv
-      call get_environment_variable("UMRSF_TH", e, status=ios)
-      if (ios==0) then ; read(e,*,iostat=ios) thv ; if (ios==0 .and. thv>0.0_dp) th = thv ; end if
-    end block
-    nthr = 1
-!$  nthr = omp_get_max_threads()
-    block   ! UMRSF_GFSERIAL=1 (or serial=.true.) forces this loop serial (byte-identity gate: serial≡parallel)
-      character(len=8) :: e ; integer :: ios
-      call get_environment_variable("UMRSF_GFSERIAL", e, status=ios)
-      if (ios==0 .and. trim(e)=="1") nthr = 1
-    end block
-    if (present(serial)) then ; if (serial) nthr = 1 ; end if
-    gfa = 0.0_dp ; gfb = 0.0_dp
-    !$omp parallel default(shared) private(isp,q,p,cwa,cwb,ctap,ctbp,dua,dub,dum) num_threads(nthr)
-    allocate(cwa(nbf,nbf), cwb(nbf,nbf), ctap(nbf,nbf), ctbp(nbf,nbf), dua(nbf,nbf), dub(nbf,nbf))
-    !$omp do collapse(2) schedule(dynamic)
-    do isp = 1, 2
-      do q = 1, nbf
-        do p = 1, nbf
-          ! +th : one-sided perturbation of canonical column q in the direction of column p
-          cwa = cac ; cwb = cbc
-          if (isp == 1) then ; cwa(:,q) = cac(:,q) + th*cac(:,p)
-          else               ; cwb(:,q) = cbc(:,q) + th*cbc(:,p) ; end if
-          call umrsf_jacobi_smooth(cwa, cwb, smat_full, nocca, dum)
-          call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
-          ctap = cwa ; ctbp = cwb
-          ! -th
-          cwa = cac ; cwb = cbc
-          if (isp == 1) then ; cwa(:,q) = cac(:,q) - th*cac(:,p)
-          else               ; cwb(:,q) = cbc(:,q) - th*cbc(:,p) ; end if
-          call umrsf_jacobi_smooth(cwa, cwb, smat_full, nocca, dum)
-          call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
-          ! induced aligned-basis rotation dU_σ = C̃_σᵀ S dC̃_σ (base aligned C̃ = va/vb)
-          dua = matmul(transpose(va), matmul(smat_full, ctap - cwa)) / (2.0_dp*th)
-          dub = matmul(transpose(vb), matmul(smat_full, ctbp - cwb)) / (2.0_dp*th)
-          if (isp == 1) then ; gfa(p,q) = sum(gta*dua) + sum(gtb*dub)
-          else               ; gfb(p,q) = sum(gta*dua) + sum(gtb*dub) ; end if
-        end do
-      end do
-    end do
-    !$omp end do
-    deallocate(cwa, cwb, ctap, ctbp, dua, dub)
-    !$omp end parallel
-  end subroutine umrsf_genfock_full
 
 !###############################################################################
 !> ANALYTIC full generalized Fock G^f = V G̃ Vᵀ + ΔG^f  (D1 — replaces the 4·nbf² numerical re-align

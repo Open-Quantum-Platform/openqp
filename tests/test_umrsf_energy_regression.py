@@ -201,7 +201,9 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         for name in ("UMRSF_ZTOL", "UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
                      "UMRSF_GVT", "UMRSF_M1", "UMRSF_M1FD", "UMRSF_XCK",
                      "UMRSF_XCG", "UMRSF_TRACK", "UMRSF_TRKDENSE", "UMRSF_TRKCMP",
-                     "UMRSF_TRKTOL", "UMRSF_TRKMAXSUB"):
+                     "UMRSF_TRKTOL", "UMRSF_TRKMAXSUB", "UMRSF_G2EFD", "UMRSF_G2ECMP",
+                     "UMRSF_GFFD", "UMRSF_GFCMP", "UMRSF_TH", "UMRSF_GFSERIAL",
+                     "UMRSF_SELFTEST"):
             self.assertNotIn(f'get_environment_variable("{name}"', gradient)
 
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
