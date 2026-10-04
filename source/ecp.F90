@@ -56,7 +56,7 @@ module ecp_tool
   use basis_tools, only: basis_set
   use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use messages, only: show_message, WITH_ABORT
-  use oqp_linalg, only: dgemm
+  use oqp_linalg
 
   implicit none
 
