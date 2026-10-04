@@ -310,7 +310,7 @@ contains
     real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_m1                    ! G̃ 2e/refrelax ; ov-only Z (fixed off) ; M1 overlap term
-    logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
+    logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense oracle / dense-vs-iterative comparison (fixed off)
     logical :: l_2e_split, l_g1_diag, l_orb_diag                 ! response 2e gradient diagnostic; opt-in response-energy/orbital gates
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
@@ -414,19 +414,9 @@ contains
     allocate(dens(1,11,nbf,nbf), brad(11,nbf,nbf), source=0.0_dp)
 
     open(unit=iw, file=infos%log_filename, position="append")
-    block
-      character(len=8) :: e
-      integer :: ios
-      l_g1_diag = .false.
-      l_orb_diag = .false.
-      call get_environment_variable("UMRSF_G1", e, status=ios)
-      if (ios == 0 .and. trim(e) == "1") then
-        l_g1_diag = .true.
-        l_orb_diag = .true.
-      end if
-      call get_environment_variable("UMRSF_ORBGATE", e, status=ios)
-      if (ios == 0) l_orb_diag = (trim(e) == "1")
-    end block
+    ! Development diagnostics stay off; no UMRSF setting is read from the process environment.
+    l_g1_diag = .false.
+    l_orb_diag = .false.
 
     va = mo_a ; vb = mo_b ; ea = mo_energy_a ; eb = mo_energy_b
     call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -486,12 +476,6 @@ contains
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
     int2_driver%schwarz = .false.         ! tracking/G1 validation path: old no-screen mode is faster here
-    block
-      character(len=8) :: e
-      integer :: ios
-      call get_environment_variable("UMRSF_TRACK_SCREEN", e, status=ios)
-      if (ios==0 .and. trim(e)=="1") int2_driver%schwarz = .true.
-    end block
 
     ! ---- RE-DIAGONALIZE A in the SMOOTH basis → genuine eigenvector xamp (§15 / c05) ----
     ! The stored bvec is the eigenvector in the energy's THRESHOLD basis (non-stationary here ~1.5e-6).
@@ -587,7 +571,7 @@ contains
       omega_recon = td_en(tstate)
       omega_2e_mv = 0.0_dp
       omega_2e_tr = 0.0_dp
-      write(iw,'(/2x,a)') 'UMRSF production mode: skipped G1 response-energy diagnostic (set UMRSF_G1=1 to run it)'
+      write(iw,'(/2x,a)') 'UMRSF production mode: G1 response-energy diagnostic not run'
     end if
     close(iw)
 
@@ -607,15 +591,7 @@ contains
     ! analytic 2e response gradient (base geometry) - this is the PRODUCTION term (added to the gradient).
     ! Default follows the mature MRSF pattern: one screened grd2 pass with a lean callback.  The
     ! split-channel path is kept only as a diagnostic because it repeats the shell-quartet walk.
-    block
-      character(len=8) :: e
-      integer :: ios
-      l_2e_split = .false.
-      call get_environment_variable("UMRSF_2E_SPLIT", e, status=ios)
-      if (ios==0 .and. trim(e)=="1") l_2e_split = .true.
-      call get_environment_variable("UMRSF_2E_FUSED", e, status=ios)
-      if (ios==0 .and. trim(e)=="1") l_2e_split = .false.
-    end block
+    l_2e_split = .false.
     open(unit=iw, file=infos%log_filename, position="append")
     if (l_2e_split) then
       write(iw,'(/2x,a,i0,a,i0,a)') 'UMRSF 2e response gradient: split-channel grd2 start (', &
@@ -721,7 +697,7 @@ contains
       write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(P_eff F̃) − omega_orb| (the FIX; must → ~0)        = ', abs(omega_orb_chk-omega_orb)
       write(iw,'(2x,a,es12.3)') 'orbital matvec |X·esum_mine − omega_orb|  (clean-room == mrsfesum)    = ', abs(omega_orb_mine-omega_orb)
     else
-      write(iw,'(2x,a)') 'UMRSF production mode: skipped orbital consistency gates (set UMRSF_ORBGATE=1 to run them)'
+      write(iw,'(2x,a)') 'UMRSF production mode: orbital consistency gates not run'
     end if
     call umrsf_timing_reset()
 
@@ -729,12 +705,6 @@ contains
     call int2_driver%clean()
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
-    block
-      character(len=8) :: e
-      integer :: ios
-      call get_environment_variable("UMRSF_INT2_NOSCREEN", e, status=ios)
-      if (ios==0 .and. trim(e)=="1") int2_driver%schwarz = .false.
-    end block
 
     allocate(pza(nbf,nbf), pzb(nbf,nbf), zmata(nbf,nbf), zmatb(nbf,nbf), source=0.0_dp)
     allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), de_m1(3,natom), &
@@ -742,28 +712,12 @@ contains
 
     ! Keep every required response term enabled in production. Development
     ! ablations must not be inherited from the process environment.
-    block
-      character(len=16) :: e ; integer :: ios
-      dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false.
-      l_m1 = .true.
-      l_zdense = .false. ; l_zcmp = .false.
-      ! Z-vector solver: default = matrix-free reduce+PCG (umrsf_zvector_iter). UMRSF_ZDENSE=1 →
-      ! the dense dgelss oracle (umrsf_zvector_fullblock, rank-deficient-safe). UMRSF_ZCMP=1 → run BOTH
-      ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
-      call get_environment_variable("UMRSF_ZDENSE", e, status=ios) ; if (ios==0) l_zdense = (trim(e)=="1")
-      call get_environment_variable("UMRSF_ZCMP",   e, status=ios) ; if (ios==0) l_zcmp   = (trim(e)=="1")
-      ! The dense oracle forms an ndof-by-ndof matrix. Honour the request only within the same
-      ! limits as the automatic dense fallback, so an inherited setting cannot exhaust memory.
-      if (l_zdense .or. l_zcmp) then
-        if (nbf*(nbf-1) > 2000 .or. 8.0_dp*real(nbf*(nbf-1),dp)**2 > 64.0_dp*1024.0_dp**2) then
-          write(iw,'(2x,a,i0,a)') 'UMRSF_ZDENSE/UMRSF_ZCMP ignored: dense Z oracle needs ', &
-            nbf*(nbf-1), ' DOFs, above the 2000-DOF / 64 MiB limit; using the matrix-free solve.'
-          l_zdense = .false. ; l_zcmp = .false.
-        end if
-      end if
-      ! The 2e generalized Fock, the alignment Jacobian ΔG^f and the M1 overlap term are always
-      ! evaluated analytically; their finite-difference oracles are not part of the engine.
-    end block
+    dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false.
+    l_m1 = .true.
+    ! Z-vector: the matrix-free reduced solve (umrsf_zvector_iter), with the bounded automatic dense
+    ! fallback below.  The 2e generalized Fock, the alignment Jacobian ΔG^f and the M1 overlap term
+    ! are always evaluated analytically.
+    l_zdense = .false. ; l_zcmp = .false.
 
     ! ---- Stage-2 XC context (the development rules / ) ----
     ! DFT runs only. T3 adds f_xc[ρ_ref]·P to the reference mean field ⇒ Z-vector Hessian /
@@ -854,9 +808,8 @@ contains
       ! The unknown is one coupled super-vector, but its entries are independent alpha and beta
       ! MO-rotation amplitudes. The Fock/XC response couples the two spin blocks, so solving them
       ! as two uncoupled equations would miss cross-spin response.
-      ! Default = matrix-free reduce+PCG (umrsf_zvector_iter, ~tens of Fock builds). UMRSF_ZDENSE=1
-      ! = the dense dgelss oracle (~ndof Fock builds, rank-deficient-safe). UMRSF_ZCMP=1 = run BOTH and
-      ! print max|z_iter − z_dense| (the perf-port GATE; the gradient uses the iterative z).
+      ! Matrix-free reduce+PCG (umrsf_zvector_iter, ~tens of Fock builds); the dense dgelss solve is
+      ! used only as the bounded automatic fallback when the full residual is not met.
       write(iw,'(2x,a)') 'UMRSF response stage: coupled alpha/beta z-vector'
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
@@ -2999,7 +2952,7 @@ contains
 !> |diag| Jacobi precond, O(niter·nb²)) for the large β SOMO/virtual block where the dense O(nb³) LU
 !> dominates the whole UMRSF gradient. MINRES returns the min-norm solution for the rank-deficient
 !> (SOMO-degenerate) case, matching the dgelss fallback; a residual check drops back to the dense
-!> dgesv→dgelss path if MINRES ever fails to converge. UMRSF_ALIGN_DENSE=1 forces the dense oracle.
+!> dgesv→dgelss path if MINRES ever fails to converge (blocks below 512 rotations only).
 !> H is NOT passed in: the iterative path applies it matrix-free from the segment block of s_align
 !> (umrsf_align_apply), and the dense small-block path forms only that block from umrsf_align_hentry.
 !> Segments: seg0 = orbitals 1..nocca−1 (row generators), seg1 = nocca..nbf (column generators).
@@ -3030,31 +2983,11 @@ contains
 
     npair = size(prseg)
     rcond = 1.0d-9
+    ! Fixed solver settings: blocks of 512 or more rotations use the matrix-free solve (a dense
+    ! n(n-1)/2 block grows as n^4), smaller ones the dense LU/SVD path; CG first with MINRES fallback,
+    ! matching the MRSF / UMRSF z-vector convention.  None of these is read from the environment.
     force_svd = .false. ; force_dense = .false. ; itermin = 512 ; itol = 1.0d-10
-    call get_environment_variable("UMRSF_ALIGN_SVD", e, status=ios)
-    if (ios == 0 .and. trim(e) == "1") force_svd = .true.
-    call get_environment_variable("UMRSF_ALIGN_DENSE", e, status=ios)
-    if (ios == 0 .and. trim(e) == "1") force_dense = .true.
-    call get_environment_variable("UMRSF_ALIGN_ITERMIN", e, status=ios)
-    if (ios == 0) then ; read(e,*,iostat=ios) i ; if (ios == 0 .and. i > 0) itermin = i ; end if
-    call get_environment_variable("UMRSF_ALIGN_ITOL", e, status=ios)
-    if (ios == 0) then
-      block
-        real(kind=dp) :: itol_env
-        read(e,*,iostat=ios) itol_env
-        if (ios == 0 .and. itol_env > 0.0d0) itol = itol_env   ! malformed input keeps the default
-      end block
-    end if
-    ! Diagnostic settings may only tighten the accepted residual and may not move blocks above the
-    ! default dense size onto a dense solve: an n(n-1)/2-dimensional dense block grows as n^4.
-    itol = min(itol, 1.0d-10)
-    itermin = min(itermin, 512)
-    ! Alignment adjoint solver: default = CG primary with MINRES fallback (AUTO), matching the MRSF /
-    ! UMRSF z-vector convention (CG is cheap when H is SPD; MINRES is the robust symmetric-indefinite
-    ! fallback). UMRSF_ALIGN_CG=0 forces MINRES-only.
     use_cg = .true.
-    call get_environment_variable("UMRSF_ALIGN_CG", e, status=ios)
-    if (ios == 0 .and. trim(e) == "0") use_cg = .false.
     do seg = 0, 1
       nb = count(prseg == seg)
       if (nb <= 0) cycle
@@ -3073,11 +3006,6 @@ contains
       ! Large SYMMETRIC block ⇒ matrix-free CG→MINRES (O(n³) matvec on the s_align block + |diag|
       ! Jacobi precond); H itself is never formed or stored.
       use_iter = (nb >= itermin) .and. (.not. force_dense) .and. (.not. force_svd)
-      if (.not. use_iter .and. nb >= 512) then
-        write(iw,'(2x,2a,i0,a)') trim(label), ': forced dense alignment solve ignored for a block of ', &
-          nb, ' rotations (dense limit 511); using the matrix-free solve.'
-        use_iter = .true.
-      end if
       iter_ok = .false.
       if (use_iter) then
         actx%nb = nb ; actx%n = n ; actx%seg = seg
@@ -3349,7 +3277,7 @@ contains
 !>   Both callbacks read a umrsf_zov_ctx_t passed through the solvers' c_ptr `dat`.
 !> Returns IDENTICAL outputs to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms, statio =
 !> ||antisym(G^f+G^z(z))|| = the M z = -R residual). For the SOMO-degenerate rank-deficient case
-!> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (UMRSF_ZDENSE=1)
+!> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (the bounded fallback)
 !> is still preferred. The relative residual and iteration limit default to infos%tddft%zvconv and
 !> infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
 !> unconverged response.  The CG trial budget is min(64, maxit_zv/2).

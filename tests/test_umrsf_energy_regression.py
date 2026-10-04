@@ -182,15 +182,11 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
                         td_grad.index("calliatogen(xpy(:,infos%tddft%target_state)"))
 
     def test_environment_cannot_force_an_unbounded_dense_solve(self):
-        gates = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates")
-        self.assertIn("if(l_zdense.or.l_zcmp)then", gates)
-        self.assertIn("umrsf_zdense/umrsf_zcmpignored", gates)
         align = _fortran_subroutine(UMRSF_GRAD, "umrsf_solve_alignment_adjoint_blocks")
-        self.assertIn("itol=min(itol,1.0d-10)", align)
-        self.assertIn("itermin=min(itermin,512)", align)
-        self.assertIn("if(.not.use_iter.and.nb>=512)then", align)
+        self.assertIn("itermin=512", align)
         self.assertIn("if(.not.iter_ok.and.nb>=512)then", align)
-        self.assertIn("if(ios==0.and.itol_env>0.0d0)itol=itol_env", align)
+        gates = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates")
+        self.assertIn("z_ndof<=2000.and.z_dense_matrix_bytes<=64.0_dp*1024.0_dp**2", gates)
 
     def test_unconverged_jacobi_alignment_aborts(self):
         lib = _fortran_subroutine(LIB, "get_jacobi")
@@ -206,15 +202,10 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertNotIn("calldiag_symm_full(1,nbf,fac,nbf,epsca,ierr)", gradient)
 
     def test_required_response_terms_cannot_be_disabled_by_environment(self):
-        gradient = UMRSF_GRAD.read_text()
-        for name in ("UMRSF_ZTOL", "UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
-                     "UMRSF_GVT", "UMRSF_M1", "UMRSF_M1FD", "UMRSF_XCK",
-                     "UMRSF_XCG", "UMRSF_TRACK", "UMRSF_TRKDENSE", "UMRSF_TRKCMP",
-                     "UMRSF_TRKTOL", "UMRSF_TRKMAXSUB", "UMRSF_G2EFD", "UMRSF_G2ECMP",
-                     "UMRSF_GFFD", "UMRSF_GFCMP", "UMRSF_TH", "UMRSF_GFSERIAL",
-                     "UMRSF_SELFTEST", "UMRSF_ZMAXIT", "UMRSF_ZCG_TRIAL", "UMRSF_ZMINRES",
-                     "UMRSF_ZPCG"):
-            self.assertNotIn(f'get_environment_variable("{name}"', gradient)
+        # No UMRSF setting may come from the process environment: an inherited value would change
+        # the reported gradient or its cost without appearing in the input or result provenance.
+        for path in (UMRSF_GRAD, LIB, UMRSF_ZVEC):
+            self.assertNotIn('get_environment_variable("UMRSF', path.read_text(), path.name)
 
     def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
