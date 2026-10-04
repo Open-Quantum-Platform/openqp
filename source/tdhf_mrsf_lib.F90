@@ -67,6 +67,7 @@ contains
     integer :: nbf, nsh, nmatrix, mu, nu, ncoul
 
     this%shell_blocks=.false.
+    this%shell_block_min=256
     select type(this)
     type is(int2_mrsf_data_t)
       this%shell_blocks=.true.

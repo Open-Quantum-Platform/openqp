@@ -65,6 +65,8 @@ contains
     integer :: nbf, nsh
 
     this%shell_blocks=.false.
+    ! Keep batching ordinary TDHF/TDDFT until direct blocks show a net gain.
+    this%shell_block_min=huge(0)
     select type(this)
     type is(int2_td_data_t)
       this%shell_blocks=.true.

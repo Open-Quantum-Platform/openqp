@@ -748,9 +748,9 @@ contains
       ! Small quartets amortize dispatch through the packed batch; larger
       ! quartets are contracted while their contiguous ERIs are still resident.
       ! OQP_INT2_LAYOUT is an internal regression/benchmark override.
-      int2_consumer%shell_block_min = 256
       call get_environment_variable('OQP_INT2_LAYOUT', layout, status=status)
       if (status == 0 .and. trim(layout) == 'shell') int2_consumer%shell_block_min = 0
+      if (int2_consumer%shell_block_min == huge(0)) int2_consumer%shell_blocks = .false.
       if (status == 0 .and. trim(layout) == 'legacy') int2_consumer%shell_blocks = .false.
     end block
 !$omp end master
@@ -1394,7 +1394,10 @@ contains
     this%fockdim = basis%nbf*(basis%nbf+1) / 2
     this%nfocks = ubound(this%d, size(shape(this%d)))
 
+    ! Direct blocks are available for comparison, but scalar Fock builds
+    ! did not show a repeatable gain over the packed batch.
     this%shell_blocks = .true.
+    this%shell_block_min = huge(0)
     call this%int2_fock_data_t_parallel_start(basis, nthreads)
 
   end subroutine
@@ -1417,7 +1420,10 @@ contains
         WITH_ABORT)
     end if
 
+    ! Direct blocks are available for comparison, but scalar Fock builds
+    ! did not show a repeatable gain over the packed batch.
     this%shell_blocks = .true.
+    this%shell_block_min = huge(0)
     call this%int2_fock_data_t_parallel_start(basis, nthreads)
 
   end subroutine
@@ -1980,9 +1986,9 @@ jc:   do j = 1, maxj
           do d=1,maxd
             val=block%values(d,c,b,a)
             if (eri%weighted_cutoff) then
-              retained = abs(val)*eri%weight >= cutoff
+              retained = .not.(abs(val)*eri%weight < cutoff)
             else
-              retained = abs(val) >= cutoff
+              retained = .not.(abs(val) < cutoff)
             end if
             if (retained) then
               nint=nint+1
