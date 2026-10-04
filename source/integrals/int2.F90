@@ -1396,13 +1396,16 @@ contains
 
     implicit none
     class(int2_fock_data_t), intent(inout) :: this
+    integer :: it
 
     call this%pe%barrier()
     if (this%cur_pass /= this%num_passes) return
     ! atomic_fock already accumulated into the single shared copy (dim3==1);
     ! only the replicated mode needs the cross-thread reduction.
     if (this%nthreads /= 1 .and. .not.this%atomic_fock) then
-      this%f(:,:,lbound(this%f,3)) = sum(this%f, dim=size(shape(this%f)))
+      do it = 2, size(this%f,3)
+        this%f(:,:,1) = this%f(:,:,1) + this%f(:,:,it)
+      end do
     end if
 
     call this%pe%allreduce(this%f(:,:,1), &

@@ -202,7 +202,8 @@ contains
     real(kind=dp) :: cutoff, cutoff2, dabcut
     real(kind=dp) :: dabmax, gmax
     real(kind=dp) :: zbig
-    integer :: numint, i, ij, skip1, skip2, mpi_ij
+    integer :: numint, i, ij, skip1, skip2, mpi_ij, ipair, npair
+    integer, allocatable :: pair_i(:), pair_j(:)
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
     integer :: q4, sym_nops
@@ -316,30 +317,39 @@ contains
 !   Square dtol for use in grd2_rys_compute
     dtol = dtol*dtol
 
+! Build the rank-local bra-pair list once; one workshare covers all pairs.
+    allocate(pair_i(basis%nshell*(basis%nshell+1)/2), &
+             pair_j(basis%nshell*(basis%nshell+1)/2))
+    npair = 0
+    mpi_ij = 0
+    do i = 1, basis%nshell
+      do j = 1, i
+        ij = i*(i-1)/2+j
+        if (ppairs%ppid(1,ij)==0) cycle
+        mpi_ij = mpi_ij+1
+        if (infos%mpiinfo%usempi) then
+          if (mod(mpi_ij, pe%size) /= pe%rank) cycle
+        end if
+        npair = npair+1
+        pair_i(npair) = i
+        pair_j(npair) = j
+      end do
+    end do
+
 !$omp parallel &
 !$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij, q4) &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, ipair, q4) &
 !$omp   reduction(+:skip1, skip2, numint, de)
 
      allocate(dab(maxnbf**4))
 
     call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
 
-!$omp barrier
-    if (infos%mpiinfo%usempi) then
-       mpi_ij = 0
-    end if
-
-    do i = 1, basis%nshell
-      do j = 1, i
+!$omp do schedule(dynamic,1)
+    do ipair = 1, npair
+        i = pair_i(ipair)
+        j = pair_j(ipair)
         ij = i*(i-1)/2+j
-        if (ppairs%ppid(1,ij)==0) cycle
-        if (infos%mpiinfo%usempi) then
-           mpi_ij=mpi_ij+1
-           if (mod(mpi_ij, pe%size) /= pe%rank) cycle
-        end if
-
-!$omp do schedule(dynamic,4) collapse(2)
         do k = 1, i
           do l = 1, i
           maxl = k
@@ -394,10 +404,8 @@ contains
 
           end do
         end do
-!$omp end do
-
-      end do
     end do
+!$omp end do
 
     call gdat%clean()
 !$omp end parallel

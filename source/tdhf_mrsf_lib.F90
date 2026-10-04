@@ -128,19 +128,18 @@ contains
 
     implicit none
 
-    integer :: f3last, t
+    integer :: t
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
-    f3last = size(shape(this%f3))
-
     ! Reduce the FP64 accumulator across threads first. This holds the pass-2
     ! (CAM short-range exchange) contributions, and is zero in the FP32
     ! pass-1-only case -- so the subsequent add is exact in both cases.
-    if (this%nthreads /= 1) then
-      this%f3(:,:,:,:,1) = sum(this%f3, dim=f3last)
-    end if
+    ! Each vector/component/AO slab is contiguous; stream whole thread slabs.
+    do t = 2, size(this%f3,5)
+      this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + this%f3(:,:,:,:,t)
+    end do
     ! Then add the FP32 per-thread accumulator (folded to FP64) when present.
     if (allocated(this%f3s)) then
       do t = 1, this%nthreads

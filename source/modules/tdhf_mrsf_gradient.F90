@@ -96,6 +96,7 @@ contains
     use mod_dft, only: dft_initialize, dftclean
     use mathlib, only: symmetrize_matrix
     use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_response_cache, only: response_cache_t
     use mod_dft_gridint_grad, only: derexc_blk
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use mathlib, only: unpack_matrix
@@ -118,6 +119,7 @@ contains
     logical :: roref
 
     type(dft_grid_t) :: molGrid
+    type(response_cache_t), target :: ao_cache
 
   ! General data
     logical :: dft, log_was_open
@@ -222,7 +224,7 @@ contains
            !threshold=1.0d-15, &
            threshold=0.0d0, &
            infos=infos, &
-           include_ground_state=.false.)
+           include_ground_state=.false., cache=ao_cache)
 
       ! Lee Eq. (3.16) identifies P=T+Z as the relaxed linear XC probe.
       ! The call above contains the established ground-state and fixed-grid
@@ -253,7 +255,7 @@ contains
              infos=infos, &
              include_ground_state=.false., &
              include_weight_derivative=.true., &
-             weight_derivative_only=.true.)
+             weight_derivative_only=.true., cache=ao_cache)
         infos%atoms%grad = infos%atoms%grad + grid_correction
 
         ! The total excited-state energy also contains the ROKS reference
@@ -269,7 +271,7 @@ contains
                da=grid_d(:,:,1), db=grid_d(:,:,2), &
                dedft=grid_correction, totele=xc_electronic, &
                totkin=xc_kinetic, mxAngMom=basis%mxam+2, nbf=nbf, &
-               dft_threshold=0.0_dp, urohf=.true., infos=infos)
+               dft_threshold=0.0_dp, urohf=.true., infos=infos, cache=ao_cache)
         end block
         infos%atoms%grad = infos%atoms%grad + grid_correction
         deallocate(grid_correction, grid_d, grid_p)
