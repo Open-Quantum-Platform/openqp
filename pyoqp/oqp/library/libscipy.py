@@ -902,8 +902,12 @@ class MECPOpt(Optimizer):
         # State j follows the roots actually solved for multiplicity i, which
         # clipping can make fewer than the configured nstate.
         self.jblock = len(energies_1) - 1
+        # Gradient arrays always carry nstate + 1 rows, so trim each block to
+        # its returned energies before joining; otherwise padded rows of the
+        # first block would sit where state j is read.
         self.mol.energies = np.concatenate((energies_1, energies_2[1:]))
-        self.mol.grads = np.concatenate((grads_1, grads_2[1:]))
+        self.mol.grads = np.concatenate((np.asarray(grads_1)[:len(energies_1)],
+                                         np.asarray(grads_2)[1:len(energies_2)]))
         energies, grads = self.ls.compute(self.mol, grad_list=[self.istate, self.jstate + self.jblock])
         self.mol.energies = energies
         self.mol.grads = grads

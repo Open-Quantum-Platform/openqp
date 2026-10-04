@@ -441,9 +441,12 @@ class MECPClippedBlockTest(unittest.TestCase):
             grads = None
 
             def gradient(self):
+                # Production gradients always hold nstate + 1 rows; rows past
+                # the solved roots are padding.
                 n = solved[current["mult"]]
-                return np.array([np.full(2, 10.0 * current["mult"] + k)
-                                 for k in range(n + 1)])
+                rows = [np.full(2, 10.0 * current["mult"] + k) for k in range(n + 1)]
+                rows += [np.zeros(2)] * (opt.nstate - n)
+                return np.array(rows)
 
         class LS:
             def compute(self, mol, grad_list):
@@ -466,6 +469,7 @@ class MECPClippedBlockTest(unittest.TestCase):
         self.assertEqual(calls["grad_list"], [1, 2])
         self.assertAlmostEqual(energy_i, -1.0 + 0.3 + 0.01)
         self.assertAlmostEqual(energy_j, -1.0 + 0.1 + 0.01)
+        np.testing.assert_allclose(grad_i, [31.0, 31.0])
         np.testing.assert_allclose(grad_j, [11.0, 11.0])
 
     def test_unavailable_state_is_rejected_before_its_gradient(self):
