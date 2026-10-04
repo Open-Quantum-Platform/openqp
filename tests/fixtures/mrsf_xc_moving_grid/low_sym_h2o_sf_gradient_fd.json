@@ -1,0 +1,99 @@
+{
+  "molecule": "low-symmetry H2O",
+  "coordinates_angstrom": [
+    [
+      8,
+      0.07,
+      0.02,
+      0.01
+    ],
+    [
+      1,
+      0.95,
+      0.06,
+      -0.03
+    ],
+    [
+      1,
+      -0.25,
+      0.93,
+      0.1
+    ]
+  ],
+  "method": "SF-TDDFT (TDA), ROHF triplet reference",
+  "functional": "bhhlyp",
+  "basis": "6-31g*",
+  "grid": {
+    "rad_npts": 96,
+    "ang_npts": 302,
+    "pruned": false,
+    "grid_ao_pruned": false
+  },
+  "symmetry": "disabled (with point-group detection on, the out-of-plane displacements of this planar molecule give a spurious 1.3e-6 Ha/Bohr finite-difference residual)",
+  "convergence": {
+    "scf": 1e-10,
+    "tdhf": 1e-09,
+    "zvconv": 1e-09
+  },
+  "finite_difference": "five-point central",
+  "step_bohr": 0.001,
+  "build": "TPX, GCC 13.3 + MKL ILP64; before = 8f37aa82 (main), after = this change",
+  "cases": [
+    {
+      "state": "SF root 1 (OpenQP S0)",
+      "max_abs_error_before_hartree_per_bohr": 3.5595387588571725e-06,
+      "max_abs_error_after_hartree_per_bohr": 2.332480158653144e-07
+    },
+    {
+      "state": "SF root 2",
+      "max_abs_error_before_hartree_per_bohr": 2.7551253440616374e-06,
+      "max_abs_error_after_hartree_per_bohr": 5.343190444540014e-07
+    }
+  ],
+  "example_cases": [
+    {
+      "input": "examples/SF-TDDFT/H2O_BHHLYP-SFTDDFT_GRADIENT.inp",
+      "functional": "bhhlyp",
+      "basis": "6-31g*",
+      "grid": "default (SG2 pruned)",
+      "symmetry": "disabled",
+      "step_bohr": 0.001,
+      "results": [
+        {
+          "state": "SF root 1",
+          "max_abs_error_before_hartree_per_bohr": 8.675e-05,
+          "max_abs_error_after_hartree_per_bohr": 1.307e-07
+        },
+        {
+          "state": "SF root 3",
+          "max_abs_error_before_hartree_per_bohr": 5.576e-05,
+          "max_abs_error_after_hartree_per_bohr": 1.74e-07
+        }
+      ]
+    },
+    {
+      "input": "examples/other/h2o_rohf_sf_6-31g_m06-2x.inp",
+      "functional": "m06-2x (meta-GGA)",
+      "basis": "6-31g",
+      "grid": {
+        "rad_npts": 96,
+        "ang_npts": 302,
+        "pruned": false
+      },
+      "symmetry": "disabled",
+      "step_bohr": 0.001,
+      "results": [
+        {
+          "state": "SF root 1",
+          "max_abs_error_before_hartree_per_bohr": 7.747e-05,
+          "max_abs_error_after_hartree_per_bohr": 1.136e-06
+        },
+        {
+          "state": "SF root 3",
+          "max_abs_error_before_hartree_per_bohr": 0.0001004,
+          "max_abs_error_after_hartree_per_bohr": 3.475e-07
+        }
+      ]
+    }
+  ]
+}
