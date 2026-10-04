@@ -1,0 +1,27 @@
+# SF-TDDFT/6-31G*/BHHLYP/ENERGY of H2O with a UHF triplet reference ([scf] type=uhf).
+# The spin-flip amplitudes take the alpha-occupied orbitals as holes and the beta-virtual
+# orbitals as particles; the gradient solves the open-shell (UHF) Z-vector.
+# The core-Hamiltonian guess reaches the lowest UHF triplet here; the Huckel guess converges
+# to a triplet 0.08 Hartree higher at this geometry.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=3
+type=uhf
+
+[tdhf]
+type=sf
+nstate=3
+
