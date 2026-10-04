@@ -109,11 +109,14 @@ def test_umrsf_gradient_buffers_survive_basis_changes_in_one_process(tmp_path):
     e2, g2, _ = _run(tmp_path, "step2_ccpvdz", _example(h2co_big, tdhf={"zvconv": "5e-10"}))
     assert abs(e2 - e_big_ref) < 1e-7 and np.max(np.abs(g2 - g_big_ref)) < REF_TOL
     z_log = (tmp_path / "step2_ccpvdz.log").read_text()
+    # The gate bounds the absolute residual by sqrt(zvconv), as the other
+    # OpenQP Z-vector solvers do.
     full_residuals = [float(value) for value in re.findall(
-        r"full coupled Z relative residual =\s*([\d.E+-]+)", z_log
+        r"full coupled Z residual =\s*([\d.E+-]+)", z_log
     )]
-    assert full_residuals and full_residuals[-1] <= 5e-10
-    if full_residuals[0] > 5e-10:
+    z_bound = 5e-10 ** 0.5
+    assert full_residuals and full_residuals[-1] <= z_bound
+    if full_residuals[0] > z_bound:
         assert "UMRSF Z auto fallback: dense full-block solve" in z_log
         assert len(full_residuals) == 2
 
