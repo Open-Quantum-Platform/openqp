@@ -66,6 +66,11 @@ class NativeEcpSelfTest(unittest.TestCase):
         err = oqp.ffi.new("double[9]")
         oqp.lib.oqp_ecp_native_selftest(err)
         cls.err = [err[i] for i in range(9)]
+        # repeated calls in one process: every buffer is per call, so the
+        # second run must reproduce the first exactly
+        err2 = oqp.ffi.new("double[9]")
+        oqp.lib.oqp_ecp_native_selftest(err2)
+        cls.err_repeat = [err2[i] for i in range(9)]
 
     def test_off_centre_element_matches_independent_quadrature(self):
         self.assertLess(self.err[0], 1e-12)
@@ -82,6 +87,9 @@ class NativeEcpSelfTest(unittest.TestCase):
 
     def test_first_derivatives_are_translationally_invariant(self):
         self.assertLess(self.err[5], 1e-14)
+
+    def test_repeated_calls_reproduce_the_first(self):
+        self.assertEqual(self.err, self.err_repeat)
 
     def test_f_g_element_matches_independent_quadrature(self):
         self.assertLess(self.err[6], 1e-13)

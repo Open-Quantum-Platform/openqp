@@ -98,6 +98,7 @@ contains
     ! finite differences: the ECP moves with atom 2
     call fd_check(b, coord, 2, err(4), err(5))
     call ecp_native_raw(b, coord, 1, d1)
+    err(6) = 0.0_dp
     do k = 1, 3
       err(6) = max(err(6), maxval(abs(d1((k - 1)*NN + 1:k*NN) + d1((k + 2)*NN + 1:(k + 3)*NN))))
     end do
