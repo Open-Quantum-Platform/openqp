@@ -1,0 +1,43 @@
+# TDDFT(RPA)/6-31G*/BHHLYP S1 gradient of HOCl on a coarse unpruned (30,86) grid.
+# The XC energy is integrated on an atom-centred quadrature whose points move
+# with their owner atoms and whose partition weights depend on the nuclear
+# positions.  On a coarse grid these moving-grid terms are large (about 1e-3
+# Ha/bohr here), so this reference fails if the analytic gradient omits them.
+# With tighter settings ([scf] conv=1e-10, [tdhf] conv=1e-12 zvconv=1e-14,
+# symmetry off) the same gradient agrees with five-point finite differences of
+# the S1 energy to 2e-8 Ha/bohr, and its components sum to zero.  The looser
+# settings below shift the gradient by 8e-6 Ha/bohr from that run.
+[input]
+system=
+ 8   0.0000000000   0.0000000000   0.0000000000
+ 1   0.9700000000   0.0000000000   0.1000000000
+ 17 -0.4117000000   1.7831000000   0.0000000000
+charge=0
+runtype=grad
+method=tdhf
+basis=6-31g*
+functional=bhhlyp
+d4=False
+
+[guess]
+type=huckel
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-8
+
+[dftgrid]
+rad_npts=30
+ang_npts=86
+pruned=
+
+[tdhf]
+type=rpa
+multiplicity=1
+nstate=3
+conv=1.0e-8
+zvconv=1.0e-8
+
+[properties]
+grad=1
