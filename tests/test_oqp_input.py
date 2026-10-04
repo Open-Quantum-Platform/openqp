@@ -314,11 +314,19 @@ def test_response_spin_is_selected_only_by_physical_state():
     assert "spin" not in legacy["tdhf"]
 
     _, conventional = _parse(
-        'tddft(nstate=4)/pbe0/def2-svp geom="h2o.xyz" grad(T0)'
+        'tddft(nstate=4)/pbe0/def2-svp geom="h2o.xyz" grad(S1)'
     )
     assert conventional["scf"]["multiplicity"] == "1"
-    assert conventional["tdhf"]["multiplicity"] == "3"
+    assert conventional["tdhf"]["multiplicity"] == "1"
     assert conventional["properties"]["grad"] == "1"
+
+    # The closed-shell RPA/TDA response has no triplet path, so a triplet
+    # label must not be turned into a [tdhf] multiplicity=3 that the solver
+    # would silently answer with the singlet roots.
+    for route in ("tddft(nstate=4)/pbe0/def2-svp", "tda(nstate=4)/pbe0/def2-svp",
+                  "tdhf(nstate=4)/def2-svp", "tda-tdhf(nstate=4)/def2-svp"):
+        with pytest.raises(OQPInputError, match="singlet labels only"):
+            oqp_input.parse_canonical_oqp('%s geom="h2o.xyz" grad(T0)' % route)
 
     with pytest.raises(OQPInputError, match="does not take spin"):
         oqp_input.parse_canonical_oqp(
