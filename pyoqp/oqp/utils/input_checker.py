@@ -2319,13 +2319,22 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
-    if td_type in {"rpa", "tda"} and scf_mult != td_mult:
+    # The conventional RPA/TDA response (tdhf_energy, tdhf_z_vector,
+    # tdhf_gradient) builds only the closed-shell singlet A and B matrices: the
+    # Coulomb term is always present and the XC kernel is the alpha-plus-beta
+    # one.  There is no triplet (exchange-only, alpha-minus-beta kernel) path,
+    # so a triplet request silently returns the singlet roots.
+    if td_type in {"rpa", "tda"} and int(td_mult) != 1:
         report.add(
-            "INFO",
+            "ERROR",
             "tdhf.multiplicity",
-            "Response multiplicity differs from the SCF reference multiplicity.",
+            "Conventional RPA/TDA response computes singlet excited states only; "
+            "closed-shell triplet response is not implemented and would return the singlet roots.",
             value=td_mult,
-            action="This is valid for state-specific singlet/triplet targets; keep it if intentional.",
+            expected="1",
+            action="Set [tdhf] multiplicity=1, or use [tdhf] type=mrsf (or sf) "
+                   "with an ROHF triplet reference for triplet states.",
+            wiki=WIKI_HELP["tdhf.type"],
         )
 
     if td_type in {"sf", "mrsf"} and scf_mult == td_mult:
