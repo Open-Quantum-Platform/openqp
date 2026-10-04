@@ -377,7 +377,8 @@ contains
     xmy = vlo(:,:nstates)
 
     td_energies = eex(:nstates)
-    infos%mol_energy%excited_energy = td_energies(infos%tddft%target_state)
+    ! Bound the index; the gradient rejects a target above the solved roots.
+    infos%mol_energy%excited_energy = td_energies(max(1, min(int(infos%tddft%target_state), nstates)))
 
     call int2_driver%clean()
 

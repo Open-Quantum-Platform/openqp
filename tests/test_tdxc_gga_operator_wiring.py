@@ -85,14 +85,17 @@ def test_restricted_xc_gradient_accumulates_into_the_total_gradient():
     assert "tddft_gga_fixed_hessian" in TDHESS_XC
 
 
-def test_production_tddft_gradient_preserves_the_validated_fixed_grid_path():
-    # The standard restricted TDDFT gradient already matches an independent
-    # PySCF reference.  Moving-grid probes are used by the MRSF correction and
-    # Hessian response machinery, but must not be added to this production call.
+def test_production_tddft_gradient_differentiates_the_finite_quadrature():
+    # A fixed-grid gradient (PySCF's default grid_response=False) misses the
+    # moving-point and partition-weight terms, about 1e-4 Ha/Bohr against
+    # central finite differences.  The production call requests the weight
+    # derivative; the ground-state XC term stays in the same consumer.
     body = TDHF_GRAD.split("subroutine tdhf_gradient(infos)", 1)[1].split(
         "end subroutine", 1
     )[0]
-    assert "include_weight_derivative" not in body
+    call = "".join(body.split("call tddft_xc_gradient(", 1)[1].split(
+        "call dftclean", 1)[0].split())
+    assert "include_weight_derivative=.true." in call
     assert "include_ground_state" not in body
     assert "call derexc_blk" not in body
     assert "threshold=1.0d-14" in body

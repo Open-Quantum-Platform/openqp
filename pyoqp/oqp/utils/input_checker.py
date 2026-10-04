@@ -255,6 +255,43 @@ WIKI_HELP = {
 _FALSE_BOOL = {"false", "0", "f", ".false.", "off", "no"}
 _TRUE_BOOL = {"true", "1", "t", ".true.", "on", "yes"}
 
+# Native LibXC aliases whose resolved metadata falls outside the implemented
+# UMRSF analytic-gradient equations.  The native Fortran entry repeats these
+# checks from resolved cam_flag/needTau/dh_flag metadata so API callers cannot
+# bypass this early, actionable diagnostic.
+_UMRSF_RANGE_SEPARATED_FUNCTIONALS = frozenset("""
+lb07 m11-l m11l cam-lda0 wb97 wb97x wb97x-d hse03 hse06 hse12 hse12-s hsesol
+mcam-b3lyp mcamb3lyp cam-b3lyp camb3lyp camh-b3lyp camhb3lyp dtcam-tune cdtcamtune
+dtcam-vaee dtcamvaee dtcam-xiv dtcamxiv dtcam-xi dtcamxi dtcam-aee dtcamaee
+dtcam-vee dtcamvee dtcam-stg dtcamstg rcam-b3lyp rcamb3lyp tuncam-b3lyp
+tunedcam-b3lyp cam-qtp00 camqtp00 cam-qtp(00) cam-qtp-00 cam-qtp01 camqtp01
+cam-qtp(01) cam-qtp-01 cam-qtp02 camqtp02 cam-qtp(02) cam-qtp-02 cam-pbeh
+lrc-wpbeh lrc-wpbe lc-wpbe lcwpbe whpbe0 n12-sx n12sx lc-qtp lc-blyp
+m06-sx m06sx m11 revm11 mn12-sx mn12sx
+""".split())
+
+_UMRSF_META_GGA_FUNCTIONALS = frozenset("""
+pkzb tpss revtpss modtpss tpssloc tpss-loc rtpss regtpss mvs mvsb mvsb* mvsbs
+ms0 ms1 ms2 ms2b ms2b* ms2bs scan rscan regscan rppscan r++scan r2scan r2scan01
+r4scan revscan task tm revtm regtm rregtm mggac rmggac tauhcth thcth vsxc
+tpsslyp1w m06-l m06l revm06-l revm06l m11-l m11l mn12-l mn12l mn15-l mn15l
+hle17 hlta tpssh tpss0 revtpssh ms2h mvsh scan0 revscan0 hybtauhcth hybthcth
+hyb-thcth hyb-tauhcth thcthhyb tauhcthhyb bmk dldf m05 m05-2x m052x m06
+revm06 m06-2x m062x m06-hf m06hf m08-so m08-hx mn15 pw86bc95 pw86b95 bb1k
+mpw1bc95 mpw1b95 mpw1b1k pw6bc95 pw6b95 pwb6k mpw1kcis mpwkcis1k b0kcis
+pbe1kcis tpss1kcis x1bc95 x1b95 xb1k b88bc95 bbc95 b88b95 bb95 b86bc95
+b86b95 m06-sx m06sx m11 revm11 mn12-sx mn12sx tpss0-dh scan0-dh tpss-qidh
+scan-qidh tpss0-2 scan0-2
+""".split())
+
+_UMRSF_DOUBLE_HYBRID_FUNCTIONALS = frozenset("""
+pbe0-dh tpss0-dh scan0-dh pbe-qidh tpss-qidh scan-qidh pbe0-2 tpss0-2 scan0-2
+b2-plyp b2plyp b2gp-plyp b2gpplyp b2t-plyp b2tplyp b2k-plyp b2kplyp
+mpw2-plyp mpw2plyp mpwk-plyp mpwkplyp
+""".split())
+
+_UMRSF_FUNCTIONAL_SPECIFIC_SPC = frozenset({"stg1x"})
+
 @dataclass
 class Diagnostic:
     severity: str
@@ -2231,6 +2268,21 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
+# Functionals whose libxc setup in source/dftlib/libxc.F90 sets infos%dft%cam_flag (range-separated
+# exchange).  tests/test_rohf_status_and_interface.py keeps this set equal to the runtime labels.
+_RANGE_SEPARATED_FUNCTIONALS = frozenset({
+    "cam-b3lyp", "cam-lda0", "cam-pbeh", "cam-qtp(00)", "cam-qtp(01)", "cam-qtp(02)",
+    "cam-qtp-00", "cam-qtp-01", "cam-qtp-02", "cam-qtp00", "cam-qtp01", "cam-qtp02",
+    "camb3lyp", "camh-b3lyp", "camhb3lyp", "camqtp00", "camqtp01", "camqtp02", "cdtcamtune",
+    "dtcam-aee", "dtcam-stg", "dtcam-tune", "dtcam-vaee", "dtcam-vee", "dtcam-xi", "dtcam-xiv",
+    "dtcamaee", "dtcamstg", "dtcamvaee", "dtcamvee", "dtcamxi", "dtcamxiv", "hse03", "hse06",
+    "hse12", "hse12-s", "hsesol", "lb07", "lc-blyp", "lc-qtp", "lc-wpbe", "lcwpbe", "lrc-wpbe",
+    "lrc-wpbeh", "m06-sx", "m06sx", "m11", "m11-l", "m11l", "mcam-b3lyp", "mcamb3lyp",
+    "mn12-sx", "mn12sx", "n12-sx", "n12sx", "rcam-b3lyp", "rcamb3lyp", "revm11",
+    "tuncam-b3lyp", "tunedcam-b3lyp", "wb97", "wb97x", "wb97x-d", "whpbe0"
+})
+
+
 def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method != "tdhf":
@@ -2267,13 +2319,22 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
-    if td_type in {"rpa", "tda"} and scf_mult != td_mult:
+    # The conventional RPA/TDA response (tdhf_energy, tdhf_z_vector,
+    # tdhf_gradient) builds only the closed-shell singlet A and B matrices: the
+    # Coulomb term is always present and the XC kernel is the alpha-plus-beta
+    # one.  There is no triplet (exchange-only, alpha-minus-beta kernel) path,
+    # so a triplet request silently returns the singlet roots.
+    if td_type in {"rpa", "tda"} and int(td_mult) != 1:
         report.add(
-            "INFO",
+            "ERROR",
             "tdhf.multiplicity",
-            "Response multiplicity differs from the SCF reference multiplicity.",
+            "Conventional RPA/TDA response computes singlet excited states only; "
+            "closed-shell triplet response is not implemented and would return the singlet roots.",
             value=td_mult,
-            action="This is valid for state-specific singlet/triplet targets; keep it if intentional.",
+            expected="1",
+            action="Set [tdhf] multiplicity=1, or use [tdhf] type=mrsf (or sf) "
+                   "with an ROHF triplet reference for triplet states.",
+            wiki=WIKI_HELP["tdhf.type"],
         )
 
     if td_type in {"sf", "mrsf"} and scf_mult == td_mult:
@@ -2285,16 +2346,69 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             action="This can be intentional; verify the target state labeling if results look unexpected.",
         )
 
-    if td_type in {"sf", "mrsf"} and scf_type != "rohf":
+    if td_type == "mrsf" and scf_type != "rohf":
         report.add(
             "ERROR",
             "scf.type",
-            "SF/MRSF requires an ROHF reference in the current code path.",
+            "MRSF requires an ROHF reference in the current code path.",
             value=scf_type,
             expected="rohf",
-            action="Set [scf] type=rohf.",
+            action="Set [scf] type=rohf, or use tdhf.type=umrsf with a UHF reference.",
             wiki=WIKI_HELP["tdhf.type"],
         )
+
+    if td_type == "sf" and scf_type not in {"rohf", "uhf"}:
+        report.add(
+            "ERROR",
+            "scf.type",
+            "SF requires an ROHF or UHF reference.",
+            value=scf_type,
+            expected="rohf or uhf",
+            action="Set [scf] type=rohf or type=uhf.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
+    # MECPOpt separates its two surfaces only by switching [tdhf] multiplicity.
+    # The SF-TDDFT energy, Z-vector and gradient (ROHF and UHF) read that value
+    # for state labels only, so both MECP surfaces would be the same SF root
+    # manifold and the crossing objective would be meaningless.
+    if td_type == "sf" and runtype == "mecp":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "SF-TDDFT does not resolve spin multiplicity, so MECP cannot evaluate two "
+            "different-multiplicity surfaces with it.",
+            value=runtype,
+            expected="energy, grad, optimize, meci, or tci",
+            action="Use [tdhf] type=mrsf (ROHF) or type=umrsf (UHF) for MECP.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
+    if td_type == "sf" and scf_type == "uhf":
+        # The UHF spin-flip path provides energies and the analytic gradient (with the
+        # gradient-driven optimizers built on it).  Hessians, couplings and spin-orbit
+        # properties still use ROHF-specific code.
+        sf_uhf_runtypes = {"energy", "grad", "optimize", "meci", "tci"}
+        if runtype not in sf_uhf_runtypes and runtype != "mecp":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "SF-TDDFT with a UHF reference supports energies and analytic gradients only.",
+                value=runtype,
+                expected=", ".join(sorted(sf_uhf_runtypes)),
+                action="Use [scf] type=rohf for this runtype.",
+            )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        cam_on = (_is_true(_get(config, "dftgrid", "cam_flag", False))
+                  or functional in _RANGE_SEPARATED_FUNCTIONALS)
+        if runtype != "energy" and cam_on:
+            report.add(
+                "ERROR",
+                "input.functional",
+                "The UHF SF-TDDFT gradient does not support range-separated (CAM/LRC) exchange.",
+                value=functional or "dftgrid.cam_flag=true",
+                action="Use a global hybrid or GGA functional, or an ROHF reference.",
+            )
 
     if td_type == "umrsf" and scf_type != "uhf":
         report.add(
@@ -5938,24 +6052,166 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             )
         return
 
-    # UMRSF-TDDFT only implements the energy path. Every other runtype
-    # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
-    # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
-    # which exist for UMRSF yet. Reject them here at the single choke point
-    # so validation fails early instead of dying at runtime.
+    # UMRSF-TDDFT implements the energy and gradient paths (and the gradient-driven
+    # optimizers built on them). Runtypes that need a Hessian (hess/thermo/ts/irc) or a
+    # nonadiabatic-coupling vector (nac/nacme) do not exist for UMRSF yet. Reject those here
+    # at the single choke point so validation fails early instead of dying at runtime.
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if method == "tdhf" and td_type == "umrsf" and runtype != "energy":
+    if method == "tdhf" and td_type == "umrsf" and runtype not in (
+            "energy", "grad", "optimize", "meci", "mecp", "tci"):
         report.add(
             "ERROR",
             "tdhf.type",
-            "UMRSF-TDDFT only supports runtype=energy; "
-            "gradients, Hessians, and Z-vectors are not implemented.",
+            "UMRSF-TDDFT supports runtype=energy, grad, optimize, meci, mecp, and tci; "
+            "Hessians (hess/ts/irc) and NAC (nac/nacme) are not implemented yet.",
             value=f"{td_type}/{runtype}",
-            expected="energy",
-            action="Use runtype=energy for UMRSF-TDDFT until UMRSF-TDDFT gradients/Z-vectors are implemented.",
+            expected="energy, grad, optimize, meci, mecp, or tci",
+            action="Use runtype=energy, grad, optimize, meci, mecp, or tci for UMRSF-TDDFT.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
+
+    # The implemented UMRSF analytic-gradient Lagrangian uses full-range
+    # LDA/GGA exchange-correlation response and default spin-pair scales.
+    # UMRSF energy calculations support broader parameterizations, but their
+    # gradient equations would require additional response terms.
+    if method == "tdhf" and td_type == "umrsf" and runtype in (
+            "grad", "optimize", "meci", "mecp", "tci"):
+        # The native gradient (umrsf_grad_run_gates) implements singlet and triplet response
+        # states only; a quintet request would pass the energy stage and abort in the response
+        # stage, so reject it here while keeping quintet energies available.
+        td_prop_value = _get(config, "properties", "td_prop", False)
+        td_prop_on = (td_prop_value if isinstance(td_prop_value, bool)
+                      else _as_lower(str(td_prop_value)) in _TRUE_BOOL)
+        if td_prop_on:
+            # electric_moments_excited / mulliken_excited consume the relaxed density (OQP::td_p),
+            # which the UMRSF response stage does not produce; the run would abort after the
+            # Z-vector stage instead of returning its gradient.
+            report.add(
+                "ERROR",
+                "properties.td_prop",
+                "Relaxed excited-state properties (td_prop) are not available with UMRSF gradients.",
+                value=td_prop_value,
+                expected="False",
+                action="Set properties.td_prop=False for gradient-driven UMRSF runtypes.",
+            )
+        qmmm_value = _get(config, "input", "qmmm_flag", False)
+        qmmm_on = (qmmm_value if isinstance(qmmm_value, bool)
+                   else _as_lower(str(qmmm_value)) in _TRUE_BOOL)
+        if qmmm_on:
+            # qmmm_driver's excited-state ESPF force (grad_esp_qmmm_excited) consumes the relaxed
+            # density OQP::td_p and OQP::td_abxc, which the UMRSF response stage does not produce.
+            report.add(
+                "ERROR",
+                "input.qmmm_flag",
+                "QM/MM is not available with UMRSF gradients (no relaxed density / ESPF charges).",
+                value=qmmm_value,
+                expected="False",
+                action="Run UMRSF gradient-driven jobs in the gas phase, or use tdhf.type=mrsf for QM/MM.",
+            )
+        ixcore_value = str(_get(config, "tdhf", "ixcore", "-1")).strip()
+        if ixcore_value not in ("", "-1"):
+            # The gradient rebuilds the MO Fock with the same -1e6 core level shift as the energy
+            # path and then diagonalizes it for the canonical reference orbitals of the Z-vector
+            # solve, so the shifted eigenvalues would enter the reference response.
+            report.add(
+                "ERROR",
+                "tdhf.ixcore",
+                "UMRSF analytic gradients do not support core-excitation selection (tdhf.ixcore).",
+                value=ixcore_value,
+                expected="-1 (default)",
+                action="Drop tdhf.ixcore for gradient-driven UMRSF runtypes; "
+                       "ixcore-selected UMRSF remains available for runtype=energy.",
+            )
+        response_mult = int(_get(config, "tdhf", "multiplicity", 1))
+        if response_mult not in (1, 3):
+            report.add(
+                "ERROR",
+                "tdhf.multiplicity",
+                "UMRSF analytic gradients support singlet (1) and triplet (3) response states only.",
+                value=response_mult,
+                expected="1 or 3",
+                action="Use tdhf.multiplicity=1 or 3 for gradient-driven UMRSF runtypes; "
+                       "quintet UMRSF remains available for runtype=energy.",
+            )
+        if runtype == "mecp":
+            # MECPOpt switches the native response multiplicity to imult and jmult before each
+            # gradient, so both must lie in the implemented singlet/triplet set; tdhf.multiplicity
+            # alone does not describe the two surfaces.
+            for key in ("imult", "jmult"):
+                raw = _get(config, "optimize", key, 1)
+                try:
+                    mecp_mult = int(raw)
+                except (TypeError, ValueError):
+                    continue
+                if mecp_mult not in (1, 3):
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        "UMRSF analytic gradients support singlet (1) and triplet (3) "
+                        "MECP surfaces only.",
+                        value=mecp_mult,
+                        expected="1 or 3",
+                        action="Use optimize.imult and optimize.jmult from {1, 3} for UMRSF MECP; "
+                               "use tdhf.type=mrsf for a surface of another multiplicity.",
+                    )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        cam_value = _get(config, "dftgrid", "cam_flag", False)
+        cam_flag = (cam_value if isinstance(cam_value, bool)
+                    else _as_lower(str(cam_value)) in _TRUE_BOOL)
+        if cam_flag or functional in _UMRSF_RANGE_SEPARATED_FUNCTIONALS:
+            report.add(
+                "ERROR",
+                "input.functional",
+                "UMRSF analytic gradients do not yet support range-separated CAM/LRC response.",
+                value=functional or "dftgrid.cam_flag=true",
+                action="Use HF, an LDA/GGA functional, or a global hybrid such as BHHLYP/PBE0; "
+                       "range-separated UMRSF remains available for runtype=energy.",
+            )
+        elif functional in _UMRSF_DOUBLE_HYBRID_FUNCTIONALS:
+            report.add(
+                "ERROR",
+                "input.functional",
+                "UMRSF analytic gradients do not support double-hybrid response.",
+                value=functional,
+                action="Use HF, an LDA/GGA functional, or a conventional global hybrid; "
+                       "double-hybrid UMRSF remains available for runtype=energy.",
+            )
+        elif functional in _UMRSF_META_GGA_FUNCTIONALS:
+            report.add(
+                "ERROR",
+                "input.functional",
+                "UMRSF analytic gradients do not support meta-GGA response.",
+                value=functional,
+                action="Use HF, an LDA/GGA functional, or a conventional global-hybrid GGA; "
+                       "meta-GGA UMRSF remains available for runtype=energy.",
+            )
+        spc = {
+            key: _get(config, "tdhf", key, -1.0)
+            for key in ("spc_coco", "spc_ovov", "spc_coov")
+        }
+        if (functional in _UMRSF_FUNCTIONAL_SPECIFIC_SPC
+                or any(float(value) != -1.0 for value in spc.values())):
+            report.add(
+                "ERROR",
+                "tdhf.spc_coco/spc_ovov/spc_coov",
+                "UMRSF analytic gradients require the default spin-pair-coupling scales.",
+                value=functional if functional in _UMRSF_FUNCTIONAL_SPECIFIC_SPC else spc,
+                expected="all unset (-1, inheriting the response HF scale)",
+                action="Remove explicit SPC overrides for gradient-driven UMRSF; custom SPC "
+                       "parameters remain available for runtype=energy.",
+            )
+        z_solver = int(_get(config, "tdhf", "z_solver", 0))
+        if z_solver != 0:
+            report.add(
+                "ERROR",
+                "tdhf.z_solver",
+                "tdhf.z_solver does not configure the dedicated UMRSF analytic-gradient solver.",
+                value=z_solver,
+                expected="0 (default)",
+                action="Leave z_solver at its default; the UMRSF solver automatically uses "
+                       "a PCG trial with MINRES fallback.",
+            )
 
     if runtype == "grad":
         if method == "hf":
@@ -7016,7 +7272,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "mrsf":
             return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "umrsf":
-            return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
+            return "unsupported_tdhf_type", "UMRSF-TDDFT Hessians are not implemented; both analytical and numerical runtype=hess requests are currently unsupported."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if (td_type == "rpa" and scf_type == "rhf"

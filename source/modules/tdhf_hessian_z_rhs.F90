@@ -195,6 +195,14 @@ contains
     ! contribution uses its existing finite-difference oracle independently;
     ! it does not invoke grd2 and therefore cannot reintroduce derivative-ERI
     ! traversals.
+    !
+    ! The XC part is the polarization 1/4 [E(b+q) - E(b-q)] of the explicit
+    ! nuclear derivative of E(x) = <x|f_xc|x>.  It must differentiate the same
+    ! finite quadrature as the production gradient: points move with their
+    ! owner atom and the Becke/SSF partition weights depend on every nucleus.
+    ! The weight probe of tddft_xc_gradient is quadratic in x, so the
+    ! polarization identity holds for it exactly.  The ground-state XC term
+    ! is independent of x and cancels in the difference; it is not evaluated.
     if(infos%control%hamilton==20 .and. channel>0 .and. enable_tddft_explicit_gxc) then
       allocate(p(nbf,nbf,1),xp(nbf,nbf,1),dxc(nbf,nbf),probe(nbf,nbf), &
         quse(nbf,nbf),gp(3,ncart/3),gm(3,ncart/3),xcval(ncart),source=0.0_dp)
@@ -224,9 +232,11 @@ contains
         probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
         quse=0.5_dp*(probe+transpose(probe))
         xp(:,:,1)=buse+quse; gp=0.0_dp
-        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos)
+        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos, &
+          include_weight_derivative=.true.,include_ground_state=.false.)
         xp(:,:,1)=buse-quse; gm=0.0_dp
-        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos)
+        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos, &
+          include_weight_derivative=.true.,include_ground_state=.false.)
         xcval=reshape(0.25_dp*(gp-gm),[ncart])
         result(i,j,:)=result(i,j,:)+xcval
         if(i/=j) result(j,i,:)=result(j,i,:)+xcval

@@ -1,0 +1,27 @@
+# Analytic nuclear gradient of the UMRSF S0 state of H2 at the UMRSF-TDHF (HF reference) level, 6-31G.
+# Two electrons in a triplet reference: both alpha electrons are the two SOMOs, so the closed-shell
+# block is empty and the corresponding-orbital alignment segments and the response-space blocks
+# have zero size. This exercises the empty-block paths of the gradient.
+[input]
+system=
+ H   0.000000000   0.000000000   0.000000000
+ H   0.000000000   0.000000000   0.760000000
+charge=0
+runtype=grad
+method=tdhf
+basis=6-31g
+
+[scf]
+type=uhf
+multiplicity=3
+conv=1e-10
+
+[tdhf]
+type=umrsf
+nstate=2
+multiplicity=1
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1
