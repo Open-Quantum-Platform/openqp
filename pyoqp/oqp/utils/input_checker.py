@@ -2368,12 +2368,28 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["tdhf.type"],
         )
 
+    # MECPOpt separates its two surfaces only by switching [tdhf] multiplicity.
+    # The SF-TDDFT energy, Z-vector and gradient (ROHF and UHF) read that value
+    # for state labels only, so both MECP surfaces would be the same SF root
+    # manifold and the crossing objective would be meaningless.
+    if td_type == "sf" and runtype == "mecp":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "SF-TDDFT does not resolve spin multiplicity, so MECP cannot evaluate two "
+            "different-multiplicity surfaces with it.",
+            value=runtype,
+            expected="energy, grad, optimize, meci, or tci",
+            action="Use [tdhf] type=mrsf (ROHF) or type=umrsf (UHF) for MECP.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+
     if td_type == "sf" and scf_type == "uhf":
         # The UHF spin-flip path provides energies and the analytic gradient (with the
         # gradient-driven optimizers built on it).  Hessians, couplings and spin-orbit
         # properties still use ROHF-specific code.
-        sf_uhf_runtypes = {"energy", "grad", "optimize", "meci", "mecp", "tci"}
-        if runtype not in sf_uhf_runtypes:
+        sf_uhf_runtypes = {"energy", "grad", "optimize", "meci", "tci"}
+        if runtype not in sf_uhf_runtypes and runtype != "mecp":
             report.add(
                 "ERROR",
                 "input.runtype",

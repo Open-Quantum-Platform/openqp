@@ -276,6 +276,15 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         errors = self._errors(self._sf_report("uhf", "hess"))
         self.assertTrue(any(p == "input.runtype" and "UHF reference" in m for p, m in errors), errors)
 
+    def test_sf_rejects_mecp_because_multiplicity_does_not_reach_the_kernel(self):
+        for scf_type in ("uhf", "rohf"):
+            errors = self._errors(self._sf_report(scf_type, "mecp"))
+            self.assertTrue(any(p == "input.runtype" and "MECP" in m for p, m in errors),
+                            (scf_type, errors))
+        for runtype in ("optimize", "meci", "tci"):
+            errors = self._errors(self._sf_report("uhf", runtype))
+            self.assertFalse(any(p == "input.runtype" for p, _ in errors), (runtype, errors))
+
     def test_sf_uhf_gradient_rejects_range_separated_exchange(self):
         errors = self._errors(self._sf_report("uhf", "grad", functional="cam-b3lyp"))
         self.assertTrue(any(p == "input.functional" for p, _ in errors), errors)
