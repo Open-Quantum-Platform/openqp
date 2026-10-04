@@ -1,0 +1,7 @@
+! Analytic S0/S1 MRSF NAC with an ECP (LANL2DZ on Br, spherical basis).
+! The 1e explicit term uses the ECP-screened nuclear charge plus the ECP
+! derivative; with the full charge the coupling is ~23x too large.
+mrsf(nstate=3)/bhhlyp/lanl2dz ispher=true nac(S0,S1,type=analytical) guess(type=sap)
+symmetry(enabled=false) scf(conv=1e-10,maxit=200) tdhf(conv=1e-10,zvconv=1e-10,maxit=100)
+dftgrid(pruned=none)
+geom="../geometries/BrHO-d2f83d767999.xyz"
