@@ -71,7 +71,7 @@ if(WIN32)
   # the platform dynamic loader; on Windows that is kernel32, not libdl.
   target_compile_definitions(oqp PRIVATE OQP_DL_WIN32)
 endif()
-# TagArray is C++, and liboqp has no C++ source of its own (the libecpint
+# TagArray is C++, and liboqp has no C++ source of its own (the C++ ECP
 # wrapper that used to make CMake link with the C++ driver is gone), so the
 # Fortran link must name the C++ runtime for every compiler, not just GNU.
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
