@@ -24,6 +24,7 @@ objdir*
 external/*
 !external/dftd4-corresponding-source/
 !external/dftd4-corresponding-source/README.md
+!external/fix_libecpint_accuracy.py
 basis_sets/*
 bin/*
 lib/*
