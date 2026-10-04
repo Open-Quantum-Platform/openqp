@@ -376,8 +376,12 @@ contains
     real(dp), intent(out) :: kb(0:lmax)
     integer :: l, l0, j
     real(dp) :: e2, k0, ex, term, s
-    real(dp) :: f(0:3*max(lmax, 0) + 34)   ! l0 + 1 <= lmax + 17 + max(16, 2 lmax)
+    ! fixed size: an automatic array here would be heap-allocated on every
+    ! call (once per quadrature point); l0 + 1 <= lmax + 17 + max(16, 2 lmax)
+    integer, parameter :: KB_LMAX = 40
+    real(dp) :: f(0:3*KB_LMAX + 34)
 
+    if (lmax > KB_LMAX) error stop "ecp_native: kbessel order above KB_LMAX"
     if (x <= 0.0_dp) then
       kb = 0.0_dp
       kb(0) = 1.0_dp
@@ -618,8 +622,32 @@ contains
     end do
   end subroutine expand_about
 
-  !> One shell pair with one ECP centre: weighted primitive sums, then the value
-  !> and derivative blocks, scattered into res
+  !> Type-1 angular factors  t(s, lam) = 4 pi sum_mu Y_lam,mu(d) om1(s, lam mu)
+  !> for every tuple s with deg s <= nmax (zero unless lam <= deg s, same parity)
+  subroutine angular_type1(tab, nmax, d, y, t)
+    type(tables_t), intent(in) :: tab
+    integer, intent(in) :: nmax
+    real(dp), intent(in) :: d(3)
+    real(dp), intent(inout) :: y(:)
+    real(dp), intent(out) :: t(:, 0:)
+    integer :: s, n, lam, mu
+    real(dp) :: e
+    call ylm_at(tab, nmax, d, y)
+    t = 0.0_dp
+    do s = 1, ntup_upto(nmax)
+      n = tab%tn(s)
+      do lam = mod(n, 2), n, 2
+        e = 0.0_dp
+        do mu = -lam, lam
+          e = e + y(lmi(lam, mu))*tab%om1(s, lmi(lam, mu))
+        end do
+        t(s, lam) = FOURPI*e
+      end do
+    end do
+  end subroutine angular_type1
+
+  !> One shell pair with one ECP centre: sizes the work arrays for
+  !> shell_pair_core, which evaluates it
   subroutine shell_pair(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res)
     type(tables_t), intent(in) :: tab
     type(basis_set), intent(in) :: basis
@@ -628,18 +656,50 @@ contains
     type(gtab_t), intent(in) :: gt(:)
     integer, intent(in) :: off(:)
     real(dp), intent(inout) :: res(:)
+    integer :: na, nb, lamA, lamB
 
-    integer :: la, lb, na, nb, nab, ntA, ntB, nw, iata, iatb, ipa, ipb, it, l, n
-    integer :: ta, tb, ia, ib, lamA, lamB, lm, mm, nA_, nB_, lam1, lam2
+    na = basis%am(s1) + deriv
+    nb = basis%am(s2) + deriv
+    lamA = 0
+    lamB = 0
+    if (lecp >= 1) then
+      if (sum(abs(coord(:, basis%origin(s1)) - c)) >= ONCENTRE) lamA = lecp - 1 + na
+      if (sum(abs(coord(:, basis%origin(s2)) - c)) >= ONCENTRE) lamB = lecp - 1 + nb
+    end if
+    call shell_pair_core(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res, &
+                         na, nb, na + nb, ntup_upto(na), ntup_upto(nb), merge(1, merge(3, 6, deriv == 1), deriv == 0), &
+                         ntup_upto(max(na, nb)), lamA, lamB)
+  end subroutine shell_pair
+
+  !> One shell pair with one ECP centre: weighted primitive sums, then the value
+  !> and derivative blocks, scattered into res
+  subroutine shell_pair_core(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res, &
+                             na, nb, nab, ntA, ntB, nw, nsmax, lamA, lamB)
+    type(tables_t), intent(in) :: tab
+    type(basis_set), intent(in) :: basis
+    real(dp), intent(in) :: coord(:,:), c(3)
+    integer, intent(in) :: iatc, t1, t2, lecp, deriv, s1, s2, nraw, natm
+    type(gtab_t), intent(in) :: gt(:)
+    integer, intent(in) :: off(:)
+    real(dp), intent(inout) :: res(:)
+    integer, intent(in) :: na, nb, nab, ntA, ntB, nw, nsmax, lamA, lamB
+
+    integer :: la, lb, iata, iatb, ipa, ipb, it, l, n
+    integer :: ta, tb, ia, ib, lm, mm, nA_, nB_, lam1, lam2
     real(dp) :: a(3), b(3), an, bn, ea, eb, ca, cb, wts(6), pv(3), pn, p, pref, phat(3)
-    real(dp) :: logamp, q, r0, dw, lo, hi, rr, g, zt, dc, ecoef, prod
+    real(dp) :: logamp, q, r0, dw, lo, hi, rr, g, zt, dc, prod
     logical :: onA, onB, havelocal
     integer :: nterm
-    real(dp), allocatable :: iw(:,:,:), sw(:,:), s(:), r1(:,:), y(:)
-    real(dp), allocatable :: r2(:,:,:), r2w(:,:,:,:), x(:,:,:), kba(:), kbb(:)
-    integer, allocatable :: sidxa(:,:), sidxb(:,:), nsa(:), nsb(:)
-    real(dp), allocatable :: scoa(:,:), scob(:,:)
-    integer :: ig, nsmax
+    logical :: fixdir
+    integer :: ig
+    ! work arrays sized by the shell pair (automatic: no heap traffic per pair)
+    real(dp) :: iw(nw, ntA, ntB)
+    integer :: sidxa(nsmax, ntA), sidxb(nsmax, ntB), nsa(ntA), nsb(ntB)
+    real(dp) :: scoa(nsmax, ntA), scob(nsmax, ntB)
+    real(dp) :: sw(nw, ntup_upto(nab)), s(ntup_upto(nab)), r1(0:nab, 0:nab), y((nab + 1)**2)
+    real(dp) :: tang(ntup_upto(nab), 0:nab), kb1(0:nab)
+    real(dp) :: r2(0:nab, 0:lamA, 0:lamB), r2w(nw, 0:nab, 0:lamA, 0:lamB), x(ntA, 0:nb, 0:lamB)
+    real(dp) :: kba(0:lamA), kbb(0:lamB)
 
     la = basis%am(s1)
     lb = basis%am(s2)
@@ -651,18 +711,9 @@ contains
     bn = sqrt(sum(b*b))
     onA = sum(abs(a)) < ONCENTRE
     onB = sum(abs(b)) < ONCENTRE
-    na = la + deriv
-    nb = lb + deriv
-    nab = na + nb
-    ntA = ntup_upto(na)
-    ntB = ntup_upto(nb)
-    nw = merge(1, merge(3, 6, deriv == 1), deriv == 0)
-    allocate(iw(nw, ntA, ntB), source=0.0_dp)
+    iw = 0.0_dp
 
     ! expansions of (r-A)^t and (r-B)^t about the ECP centre
-    nsmax = ntup_upto(max(na, nb))
-    allocate(sidxa(nsmax, ntA), scoa(nsmax, ntA), nsa(ntA))
-    allocate(sidxb(nsmax, ntB), scob(nsmax, ntB), nsb(ntB))
     do ta = 1, ntA
       call expand_about(ta, a, nsa(ta), sidxa(:, ta), scoa(:, ta))
     end do
@@ -676,9 +727,18 @@ contains
       if (basis%ecp_params%ecp_am(it) == lecp) havelocal = .true.
     end do
     if (havelocal) then
-      allocate(sw(nw, ntup_upto(nab)), source=0.0_dp)
-      allocate(s(ntup_upto(nab)), r1(0:nab, 0:nab), y((nab + 1)**2))
-      allocate(kba(0:nab))
+      sw = 0.0_dp
+      fixdir = iata == iatb .or. onA .or. onB
+      if (fixdir) then
+        if (.not. onA) then
+          phat = a/an
+        else if (.not. onB) then
+          phat = b/bn
+        else
+          phat = [0.0_dp, 0.0_dp, 1.0_dp]
+        end if
+        call angular_type1(tab, nab, phat, y, tang)
+      end if
       do ipa = 0, basis%ncontr(s1) - 1
         ea = basis%ex(basis%g_offset(s1) + ipa)
         ca = basis%cc(basis%g_offset(s1) + ipa)
@@ -708,33 +768,31 @@ contains
               rr = 0.5_dp*(hi - lo)*tab%glx(ig) + 0.5_dp*(hi + lo)
               g = dc*0.5_dp*(hi - lo)*tab%glw(ig) &
                 * exp(-zt*rr*rr - p*(rr - pn)**2 + pref)*ipow(rr, n)
-              call kbessel(nab, 2.0_dp*p*pn*rr, kba)
+              call kbessel(nab, 2.0_dp*p*pn*rr, kb1)
               do l = 0, nab
                 do lam1 = mod(l, 2), l, 2
-                  r1(l, lam1) = r1(l, lam1) + g*kba(lam1)
+                  r1(l, lam1) = r1(l, lam1) + g*kb1(lam1)
                 end do
                 g = g*rr
               end do
             end do
           end do
           if (nterm == 0) cycle
-          ! angular factors at P^
-          if (pn > 1.0e-12_dp) then
-            phat = pv/pn
-          else
-            phat = [0.0_dp, 0.0_dp, 1.0_dp]
+          ! angular factors at P^; the direction is fixed for the whole shell
+          ! pair when both shells share an atom or one sits on the ECP centre
+          if (.not. fixdir) then
+            if (pn > 1.0e-12_dp) then
+              phat = pv/pn
+            else
+              phat = [0.0_dp, 0.0_dp, 1.0_dp]
+            end if
+            call angular_type1(tab, nab, phat, y, tang)
           end if
-          call ylm_at(tab, nab, phat, y)
           do ta = 1, ntup_upto(nab)
             n = tab%tn(ta)
             prod = 0.0_dp
             do lam1 = mod(n, 2), n, 2
-              if (r1(n, lam1) == 0.0_dp) cycle
-              ecoef = 0.0_dp
-              do mm = -lam1, lam1
-                ecoef = ecoef + y(lmi(lam1, mm))*tab%om1(ta, lmi(lam1, mm))
-              end do
-              prod = prod + FOURPI*ecoef*r1(n, lam1)
+              prod = prod + tang(ta, lam1)*r1(n, lam1)
             end do
             s(ta) = prod
           end do
@@ -756,16 +814,10 @@ contains
           end do
         end do
       end do
-      deallocate(sw, s, r1, y, kba)
     end if
 
     !------------------------------------------------------------------ type 2
     if (lecp >= 1 .and. gt(iata)%used .and. gt(iatb)%used) then
-      lamA = merge(0, lecp - 1 + na, onA)
-      lamB = merge(0, lecp - 1 + nb, onB)
-      allocate(r2(0:nab, 0:lamA, 0:lamB), r2w(nw, 0:nab, 0:lamA, 0:lamB))
-      allocate(kba(0:lamA), kbb(0:lamB))
-      allocate(x(ntA, 0:nb, 0:lamB))
       do l = 0, lecp - 1
         r2w = 0.0_dp
         nterm = 0
@@ -838,12 +890,11 @@ contains
           end do
         end do
       end do
-      deallocate(r2, r2w, kba, kbb, x)
     end if
 
     call scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res)
 
-  end subroutine shell_pair
+  end subroutine shell_pair_core
 
   !> Primitive weights: 1, a, b, a^2, ab, b^2
   pure subroutine weights(nw, ea, eb, w)
