@@ -7,6 +7,7 @@ module tdhf_z_vector_mod
   use tdhf_lib, only: int2_td_data_t, &
     int2_fock_data_t, int2_tdgrd_data_t
   use mod_dft_molgrid, only: dft_grid_t
+  use mod_dft_gridint_response_cache, only: response_cache_t
   use oqp_linalg
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use zvector_common, only: sanitize_zvector_preconditioner, &
@@ -26,6 +27,7 @@ module tdhf_z_vector_mod
     type(int2_compute_t), pointer :: int2_driver
     class(int2_fock_data_t), pointer :: int2_data
     type(dft_grid_t), pointer :: molGrid
+    type(response_cache_t), pointer :: xc_cache=>null()
 
     real(kind=dp), pointer :: wrk(:,:)
     real(kind=dp), pointer :: mo(:,:)
@@ -90,6 +92,7 @@ contains
     type(int2_compute_t), target :: int2_driver
     class(int2_fock_data_t), allocatable, target :: int2_data
     type(tdhf_cg_data) :: cgdata
+    type(response_cache_t), target :: xc_cache
     type(pcg_t) :: pcg
 
     real(kind=dp), allocatable :: hpp(:,:,:), hpt(:,:,:), hmm(:,:,:), gxp(:,:,:)
@@ -249,7 +252,7 @@ contains
 
     cgdata = tdhf_cg_data( &
         infos=infos, int2_driver=int2_driver, &
-        int2_data=int2_data, molgrid=molgrid, &
+        int2_data=int2_data, molgrid=molgrid, xc_cache=xc_cache, &
         wrk=wrk1, mo=mo_a, pa=pa, xm=xm, xminv=xminv, &
         nbf=nbf, nocc = nocc, dft = dft &
       )
@@ -375,7 +378,7 @@ contains
              nmtx=1, &
              !threshold=1.0d-15, &
              threshold=0.0d0, &
-             infos=infos)
+             infos=infos, cache=xc_cache)
     end if
 
     ! Transform H+[P], H+[X+Y], H-[X-Y] from AO to MO basis
@@ -709,7 +712,7 @@ contains
                nmtx=1, &
                !threshold=1.0d-15, &
                threshold=0.0d0, &
-               infos=infos)
+               infos=infos, cache=p%xc_cache)
       end if
 
       call mntoia(apb(:,:,1), y, mo, mo, nocc, nocc)

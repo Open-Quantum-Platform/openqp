@@ -70,14 +70,17 @@ contains
     nsh = basis%nshell
 
     if (this%cur_pass == 1) then
-      if (allocated(this%apb)) deallocate(this%apb)
-      if (allocated(this%amb)) deallocate(this%amb)
-      if (allocated(this%dsh)) deallocate(this%dsh)
-
-      allocate(this%apb(nbf, nbf, this%nfocks, nthreads), &
-               this%amb(nbf, nbf, this%nfocks, nthreads), &
-               this%dsh(nsh,nsh), &
-               source=0.0d0)
+      ! Keep one zero image for inactive components: callers may still borrow
+      ! it, but it needs neither per-thread replication nor a reduction.
+      call resize_td_image(this%apb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_apb))
+      call resize_td_image(this%amb, nbf, this%nfocks, &
+                           merge(nthreads, 1, this%int_amb .or. this%tamm_dancoff))
+      if (allocated(this%dsh)) then
+        if (any(shape(this%dsh) /= [nsh,nsh])) deallocate(this%dsh)
+      end if
+      if (.not.allocated(this%dsh)) allocate(this%dsh(nsh,nsh))
+      this%dsh = 0.0_dp
     end if
 
     call this%init_screen(basis)
@@ -89,28 +92,42 @@ contains
   subroutine int2_td_data_t_parallel_stop(this)
     use mathlib, only: symmetrize_matrix
     implicit none
-    integer :: flast, amblast, nbf, i
+    integer :: nbf, i, it
     class(int2_td_data_t), intent(inout) :: this
     if (this%cur_pass /= this%num_passes) return
-    flast  = size(shape(this%apb))
-    amblast = size(shape(this%amb))
-    nbf = ubound(this%amb, 1)
-    if (this%nthreads /= 1) then
-      this%apb(:,:,:,lbound(this%apb, flast)) = sum(this%apb, dim=flast)
-      this%amb(:,:,:,lbound(this%amb, amblast)) = sum(this%amb, dim=amblast)
+    nbf = size(this%apb, 1)
+    if (this%int_apb) then
+      ! Stream contiguous slabs rather than reducing along a large stride.
+      do it = 2, size(this%apb,4)
+        this%apb(:,:,:,1) = this%apb(:,:,:,1) + this%apb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%apb(:,:,:,1), size(this%apb(:,:,:,1)))
+      do i = 1, this%nfocks
+        call symmetrize_matrix(this%apb(:,:,i,1), nbf)
+      end do
     end if
-    call this%pe%allreduce(this%apb(:,:,:,1), &
-                       size(this%apb(:,:,:,1)))
-    call this%pe%allreduce(this%amb(:,:,:,1), &
-                         size(this%amb(:,:,:,1)))
-
-    do i = lbound(this%apb,3), ubound(this%apb,3)
-      call symmetrize_matrix(this%apb(:,:,i,1), nbf)
-    end do
+    if (this%int_amb .or. this%tamm_dancoff) then
+      do it = 2, size(this%amb,4)
+        this%amb(:,:,:,1) = this%amb(:,:,:,1) + this%amb(:,:,:,it)
+      end do
+      call this%pe%allreduce(this%amb(:,:,:,1), size(this%amb(:,:,:,1)))
+    end if
     this%nthreads = 1
   end subroutine
 
 !###############################################################################
+
+  ! Reuse allocations within a response solve, including changes of batch or
+  ! thread count. Every first CAM pass clears the entire current image.
+  subroutine resize_td_image(image, nbf, nfocks, ncopy)
+    real(kind=dp), allocatable, intent(inout) :: image(:,:,:,:)
+    integer, intent(in) :: nbf, nfocks, ncopy
+    if (allocated(image)) then
+      if (any(shape(image) /= [nbf,nbf,nfocks,ncopy])) deallocate(image)
+    end if
+    if (.not.allocated(image)) allocate(image(nbf,nbf,nfocks,ncopy))
+    image = 0.0_dp
+  end subroutine resize_td_image
 
   subroutine int2_td_data_t_clean(this)
     implicit none
@@ -153,8 +170,8 @@ contains
     mythread = buf%thread_id
 
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
                 d2 => this%d2 &
                 )
 
@@ -239,8 +256,8 @@ contains
     mythread = buf%thread_id
 
     associate (&
-                apb => this%apb(:,:,:,mythread), &
-                amb => this%amb(:,:,:,mythread), &
+                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
+                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
                 d2 => this%d2 &
                 )
 

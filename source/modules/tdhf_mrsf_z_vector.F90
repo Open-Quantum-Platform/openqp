@@ -5,6 +5,8 @@ module tdhf_mrsf_z_vector_mod
   use types, only: information
   use basis_tools, only: basis_set
   use int2_compute, only: int2_compute_t
+  use mod_dft_gridint_response_cache, only: response_cache_t
+  use tdhf_lib, only: int2_tdgrd_data_t
   use mod_dft_molgrid, only: dft_grid_t
 
   use mrsf_nac_fusion_buffer_mod, only: mrsf_nac_fusion_set_rhs, &
@@ -21,6 +23,8 @@ module tdhf_mrsf_z_vector_mod
   real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
   real(kind=8), allocatable, target :: gmres_pa(:,:,:)
   real(kind=8), allocatable :: gmres_ab1_mo_a(:,:), gmres_ab1_mo_b(:,:)
+  type(response_cache_t), target :: z_xc_cache
+  type(int2_tdgrd_data_t), target :: gmres_int2_data
   logical :: gmres_work_allocated = .false.
   integer :: gmres_nbf = 0
   integer :: gmres_nocca = 0
@@ -400,6 +404,8 @@ contains
   subroutine cleanup_gmres_work()
     implicit none
     
+    call z_xc_cache%free()
+    call gmres_int2_data%clean()
     if (allocated(gmres_wrk1)) deallocate(gmres_wrk1)
     if (allocated(gmres_wrk2)) deallocate(gmres_wrk2)
     if (allocated(gmres_wrk3)) deallocate(gmres_wrk3)
@@ -999,7 +1005,7 @@ contains
     
     ! Local variables
     real(kind=dp), pointer :: ab1(:,:,:)
-    type(int2_tdgrd_data_t), allocatable, target :: int2_data
+    type(int2_tdgrd_data_t), pointer :: int2_data
     integer :: nvira, nvirb
     real(kind=dp) :: t0_op
 
@@ -1020,6 +1026,8 @@ contains
       call init_gmres_work(nbf, nocca, noccb)
     end if
     
+    int2_data => gmres_int2_data
+
     ! Clear work arrays
     gmres_wrk1 = 0.0_dp
     gmres_wrk2 = 0.0_dp
@@ -1040,21 +1048,13 @@ contains
     call orthogonal_transform('t', nbf, mo_b, gmres_wrk2, gmres_pa(:,:,2), gmres_wrk3)
     if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
 
-    ! Initialize ERI calculation with proper allocation.
-    !
-    ! Sourced allocation, not allocate-then-assign: intrinsic assignment onto
-    ! an allocatable derived type carrying allocatable components is the
-    ! pattern #357 traced its ifx `forrtl: severe` aborts to, and both sibling
-    ! modules (tdhf_z_vector, tdhf_sf_z_vector) were converted then. This site
-    ! was missed. It runs once per GMRES iteration, so a long multi-step job
-    ! executes it far more often than a single-point one.
-    if (allocated(int2_data)) deallocate(int2_data)
-    allocate(int2_data, source=int2_tdgrd_data_t( &
-        d2 = gmres_pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch))
+    ! The solve owns the accumulator. Rebind the trial density after any
+    ! workspace resize; parallel_start clears it on the first operator pass.
+    int2_data%d2 => gmres_pa
+    int2_data%int_apb = .true.
+    int2_data%int_amb = .false.
+    int2_data%tamm_dancoff = .false.
+    int2_data%scale_exchange = scale_exch
 
     if (zv_tmr_on) t0_op = zv_wtime()
     call int2_driver%run(int2_data, &
@@ -1082,7 +1082,7 @@ contains
           dxb = gmres_pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
       if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0_op)
     end if
 
@@ -1090,7 +1090,6 @@ contains
       x_out = ieee_value(0.0_dp, ieee_quiet_nan)
       write(*,'(" MRSF z-vector operator rejected non-finite response")')
       call int2_data%clean()
-      deallocate(int2_data)
       return
     end if
     
@@ -1104,8 +1103,6 @@ contains
                  nocca, noccb)
     if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
 
-    call int2_data%clean()
-    deallocate(int2_data)
     
   end subroutine apply_z_operator
 
@@ -1883,7 +1880,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
       if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
       if (zv_tmr_on) t0 = zv_wtime()
@@ -1983,7 +1980,7 @@ contains
             dxb = pa(:,:,2:2), &
             nmtx = 1, &
             threshold = 1.0d-15, &
-            infos = infos)
+            infos = infos, cache=z_xc_cache)
         if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
         if (zv_tmr_on) t0 = zv_wtime()
@@ -2199,7 +2196,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
 
   !   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
       call dgemm('n', 'n', nbf, nocca, nbf,  &
@@ -2327,7 +2324,7 @@ contains
           dxb = pa(:,:,2:2), &
           nmtx = 1, &
           threshold = 1.0d-15, &
-          infos = infos)
+          infos = infos, cache=z_xc_cache)
 
   !   ALPHA: AO(M,N) -> MO(IA+)
       call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)

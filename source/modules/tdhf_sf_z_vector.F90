@@ -38,6 +38,7 @@ contains
       pcgb, sfropcal, sfrowcal, sfdmat
     use mod_dft, only: dft_initialize, dftclean
     use mod_dft_gridint_fxc, only: utddft_fxc
+    use mod_dft_gridint_response_cache, only: response_cache_t
     use mathlib, only: symmetrize_matrix, orthogonal_transform_sym, orthogonal_transform
     use mod_dft_molgrid, only: dft_grid_t
     use mathlib, only: pack_matrix, unpack_matrix
@@ -76,6 +77,7 @@ contains
     type(int2_compute_t) :: int2_driver
     class(int2_td_data_t), allocatable, target :: int2_data
     type(dft_grid_t) :: molGrid
+    type(response_cache_t), target :: xc_cache
 
   ! scr data
     real(kind=dp), allocatable, target :: wrk1(:,:), wrk2(:,:), wrk3(:,:)
@@ -291,7 +293,7 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, cache=xc_cache)
 
 !   ALPHA: AO(M,N) -> MO(IA+)
     call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
@@ -419,7 +421,7 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, cache=xc_cache)
 
 !   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
     call dgemm('n', 'n', nbf, nocca, nbf,  &
@@ -531,7 +533,7 @@ contains
                nmtx=1, &
                !threshold=1.0d-15, &
                threshold=0.0d0, &
-               infos=infos)
+               infos=infos, cache=xc_cache)
 
   !     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
         call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)

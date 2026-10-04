@@ -27,6 +27,7 @@ module cphf_mod
   use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
   use mod_dft_gridint_fxc, only: xc_consumer_tde_t
+  use mod_dft_gridint_response_cache, only: response_cache_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
   use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
   use io_constants, only: iw
@@ -37,6 +38,7 @@ module cphf_mod
 
   !> Opaque data passed to the PCG callbacks (the A-matrix action).
   type :: cphf_cg_data
+    type(response_cache_t), pointer :: xc_cache=>null()
     type(information), pointer :: infos => null()
     type(int2_compute_t), pointer :: int2_driver => null()
     class(int2_fock_data_t), pointer :: int2_data => null()
@@ -55,6 +57,7 @@ module cphf_mod
   !> is the concatenation of the alpha occ-vir block (length la = nocca*nvira)
   !> and the beta occ-vir block (length lb = noccb*nvirb).
   type :: cphf_cg_data_uhf
+    type(response_cache_t), pointer :: xc_cache=>null()
     type(information), pointer :: infos => null()
     type(basis_set), pointer :: basis => null()
     type(dft_grid_t), pointer :: molgrid => null()
@@ -87,6 +90,7 @@ module cphf_mod
   !> non-canonical ROHF orbitals; their coupling to the socc-docc/virt-socc
   !> rotations is exactly the term the canonical form drops.
   type :: cphf_cg_data_rohf
+    type(response_cache_t), pointer :: xc_cache=>null()
     type(information), pointer :: infos => null()
     type(basis_set), pointer :: basis => null()
     type(dft_grid_t), pointer :: molgrid => null()
@@ -180,6 +184,7 @@ contains
     type(int2_compute_t), target :: int2_driver
     type(int2_td_data_t), target :: int2_data
     type(cphf_cg_data), target :: cgdata
+    type(response_cache_t), target :: xc_cache
     type(pcg_t) :: pcg
 
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_energy_a(:)
@@ -239,6 +244,7 @@ contains
             int_apb=.true., int_amb=.false., &
             tamm_dancoff=.false., scale_exchange=scale_exch)
 
+    cgdata%xc_cache=>xc_cache
     cgdata%infos => infos
     cgdata%int2_driver => int2_driver
     cgdata%int2_data => int2_data
@@ -362,7 +368,7 @@ contains
 
       if (dft) then
         call tddft_fxc(basis=infos%basis, molGrid=molGrid, isVecs=.true., wf=mo, &
-                       fx=apb(:,:,1:1), dx=pa(:,:,1:1), nmtx=1, threshold=0.0d0, infos=infos)
+                       fx=apb(:,:,1:1), dx=pa(:,:,1:1), nmtx=1, threshold=0.0d0, infos=infos, cache=p%xc_cache)
       end if
 
       call mntoia(apb(:,:,1), y, mo, mo, nocc, nocc)
@@ -534,6 +540,7 @@ contains
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
     type(cphf_cg_data_uhf), target :: cgdata
+    type(response_cache_t), target :: xc_cache
     type(pcg_t) :: pcg
 
     real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:), epsa(:), epsb(:)
@@ -596,6 +603,7 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
 
+    cgdata%xc_cache=>xc_cache
     cgdata%infos => infos
     cgdata%basis => basis
     cgdata%molgrid => molgrid
@@ -707,7 +715,7 @@ contains
       dxa(:,:,1) = pa_ao; dxb(:,:,1) = pb_ao
       call utddft_fxc(basis=p%infos%basis, molGrid=p%molgrid, isVecs=.true., &
                       wfa=p%moa, wfb=p%mob, fxa=ga, fxb=gb, dxa=dxa, dxb=dxb, &
-                      nmtx=1, threshold=0.0d0, infos=p%infos)
+                      nmtx=1, threshold=0.0d0, infos=p%infos, cache=p%xc_cache)
       deallocate(dxa, dxb)
     end if
 
@@ -957,6 +965,7 @@ contains
     type(int2_compute_t), target :: int2_driver_batch
     class(int2_fock_data_t), allocatable, target :: int2_data_batch
     type(cphf_cg_data_rohf), target :: cgdata
+    type(response_cache_t), target :: xc_cache
     type(xc_consumer_tde_t), target :: xc_consumer
     type(pcg_t) :: pcg
     type(minres_t), allocatable :: minres_batch(:)
@@ -1105,6 +1114,7 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
 
+    cgdata%xc_cache=>xc_cache
     cgdata%infos => infos
     cgdata%basis => basis
     cgdata%molgrid => molgrid
@@ -1438,7 +1448,7 @@ contains
     call pack_matrix(dm, dm_tri(:,2))
 
     ! response Fock from the trial density (open-shell: J[dPa+dPb] - cx K[dP^s])
-    call get_response_packed(p%basis, p%infos, p%molgrid, p%mo, dm_tri, pfock, p%mo)
+    call get_response_packed(p%basis, p%infos, p%molgrid, p%mo, dm_tri, pfock, p%mo, cache=p%xc_cache)
 
     ! Add only the MO virtual-occupied block of the response Fock.  Computing
     ! Cv^T V Co directly avoids the two full nbf-by-nbf output transforms per
@@ -1610,7 +1620,7 @@ contains
            wfa=p%mo, wfb=p%mo, fxa=p%fxa_batch(:,:,1:nvec), &
            fxb=p%fxb_batch(:,:,1:nvec), dxa=p%dxa_batch(:,:,1:nvec), &
            dxb=p%dxb_batch(:,:,1:nvec), nMtx=nvec, threshold=0.0_dp, &
-           infos=p%infos, consumer=p%xc_consumer)
+           infos=p%infos, consumer=p%xc_consumer, cache=p%xc_cache)
     end if
 
     do ivec = 1, nvec

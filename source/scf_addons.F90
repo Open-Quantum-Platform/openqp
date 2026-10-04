@@ -1636,13 +1636,14 @@ contains
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine get_response_packed(basis, infos, molGrid, mo_a, dm1_tri, &
-                                 v1_tri, mo_b, vjk_tri)
+                                 v1_tri, mo_b, vjk_tri, cache)
       use precision,           only: dp
       use basis_tools,         only: basis_set
       use types,               only: information
       use mathlib,             only: unpack_matrix, pack_matrix,symmetrize_matrix
       use mod_dft_molgrid,     only: dft_grid_t
       use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc
+      use mod_dft_gridint_response_cache, only: response_cache_t
       implicit none
 
       type(basis_set),   intent(in)    :: basis
@@ -1654,6 +1655,7 @@ contains
       real(dp), optional, intent(inout) :: mo_b(:,:)
       real(dp), optional, intent(out) :: vjk_tri(:,:)
 
+      type(response_cache_t), target, intent(inout), optional :: cache
       integer :: nbf, nbf2, ok
       logical :: is_dft
 
@@ -1690,7 +1692,7 @@ contains
           dx3(:,:,1) = dm1_full
           fx3(:,:,1) = 0.0_dp
           call tddft_fxc( basis=basis, molGrid=molGrid, isVecs=.true., wf=mo_a, &
-                          fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos )
+                          fx=fx3, dx=dx3, nmtx=1, threshold=0.0_dp, infos=infos, cache=cache )
           fx_full = fx3(:,:,1)*0.5
           call pack_matrix(fx_full, fx_pack)
           v1_tri(:,1) = v1_tri(:,1) + fx_pack
@@ -1709,7 +1711,7 @@ contains
                      wfa=mo_a, wfb=mo_b, &
                      fxa=fxa, fxb=fxb, &
                      dxa=dxa, dxb=dxb, &
-                     nMtx=1, threshold=0.0_dp, infos=infos)
+                     nMtx=1, threshold=0.0_dp, infos=infos, cache=cache)
           fx_full = fxa(:,:,1)
           fx_pack = 0.0_dp
           call pack_matrix(fx_full, fx_pack)

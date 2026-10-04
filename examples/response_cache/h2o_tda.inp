@@ -1,0 +1,34 @@
+[input]
+system=
+ O  0.000000000   0.000000000  -0.041061554
+ H -0.533194329   0.533194329  -0.614469223
+ H  0.533194329  -0.533194329  -0.614469223
+method=tdhf
+basis=6-31g*
+functional=bhhlyp
+runtype=grad
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-11
+save_molden=False
+
+[tdhf]
+type=tda
+multiplicity=1
+nstate=6
+conv=1e-10
+zvconv=1e-10
+zv_warmstart=False
+
+[properties]
+grad=1
+
+[symmetry]
+enabled=False

@@ -1,5 +1,6 @@
 module mod_dft_gridint_fxc
 
+  use mod_dft_gridint_response_cache, only: response_cache_t
   use precision, only: fp
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t
   use mod_dft_gridint, only: X__, Y__, Z__
@@ -672,7 +673,7 @@ contains
                   wfa, wfb, &
                   fxa, fxb, &
                   dxa, dxb, &
-                  nMtx, threshold, infos, consumer)
+                  nMtx, threshold, infos, consumer, cache)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -692,6 +693,7 @@ contains
     real(kind=fp), intent(inout), target :: dxa(:,:,:), dxb(:,:,:)
     real(kind=fp), intent(inout) :: fxa(:,:,:), fxb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    type(response_cache_t), target, intent(inout), optional :: cache
     type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
 
     type(xc_consumer_tde_t), target :: local_consumer
@@ -757,6 +759,7 @@ contains
     xc_opts%wfBeta  => d2b
     xc_opts%dft_threshold = threshold
     xc_opts%molGrid => molGrid
+    if (present(cache)) xc_opts%response_cache => cache
 
     dat%da => dxa
     dat%db => dxb
@@ -815,7 +818,7 @@ contains
 !> @param[in]    infos     OQP metadata
 !> @author Vladimir Mironov
   subroutine tddft_fxc(basis, molGrid, isVecs, wf, fx, dx, &
-                       nMtx, threshold, infos)
+                       nMtx, threshold, infos, cache, consumer)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -836,13 +839,22 @@ contains
     real(kind=fp), intent(inout) :: fx(:,:,:)
     real(kind=fp), intent(in) :: threshold
 
-    type(xc_consumer_tde_t) :: dat
+    type(response_cache_t), target, intent(inout), optional :: cache
+    type(xc_consumer_tde_t), target, intent(inout), optional :: consumer
+    type(xc_consumer_tde_t), target :: local_consumer
+    type(xc_consumer_tde_t), pointer :: dat
     type(xc_options_t) :: xc_opts
 
     integer :: i, j, nbf
 
     real(kind=fp), allocatable, target :: d2(:,:)
 
+    if(present(consumer)) then
+      dat=>consumer
+    else
+      dat=>local_consumer
+    end if
+    if(present(cache)) xc_opts%response_cache=>cache
     nbf = ubound(wf,1)
 
     ! Scale w.f. by B.F. norms
@@ -914,7 +926,7 @@ contains
       end do
     end do
 
-    call dat%clean()
+    if(.not.present(consumer)) call dat%clean()
 
   end subroutine
 

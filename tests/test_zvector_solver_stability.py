@@ -423,7 +423,7 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("if (any(.not. ieee_is_finite(x_in))) then", block)
         self.assertIn("x_out = ieee_value(0.0_dp, ieee_quiet_nan)", block)
         self.assertIn("MRSF z-vector operator rejected non-finite input", block)
-        self.assertLess(block.index("if (any(.not. ieee_is_finite(x_in)))"), block.index("allocate(int2_data)"))
+        self.assertLess(block.index("if (any(.not. ieee_is_finite(x_in)))"), block.index("call init_gmres_work(nbf, nocca, noccb)"))
 
     def test_mrsf_zvector_preconditioner_sanitizes_nonfinite_values_before_solver_choice(self):
         """MRSF z-vector CG/GMRES/MINRES must not seed any solver with NaN/Inf preconditioners."""
@@ -473,7 +473,8 @@ class ZVectorSolverStabilityTests(unittest.TestCase):
         self.assertIn("MRSF z-vector operator rejected non-finite response", cleanup_block)
         self.assertIn("x_out = ieee_value(0.0_dp, ieee_quiet_nan)", cleanup_block)
         self.assertIn("call int2_data%clean()", cleanup_block)
-        self.assertIn("deallocate(int2_data)", cleanup_block)
+        self.assertIn("int2_data => gmres_int2_data", block)
+        self.assertNotIn("deallocate(int2_data)", block)
         self.assertRegex(cleanup_block, r"return\b")
 
     def test_mrsf_zvector_preserves_legacy_gmres_selector_and_adds_minres_option(self):
