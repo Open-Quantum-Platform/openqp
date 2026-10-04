@@ -59,6 +59,7 @@ contains
     use mathlib, only: symmetrize_matrix
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
+    use mod_dft_gridint_grad, only: derexc_blk
     use mathlib, only: unpack_matrix
     use printing, only: print_module_info
 
@@ -148,6 +149,8 @@ contains
     if (dft) then
       call dft_initialize(infos, basis, molGrid, verbose=.true.)
 
+      ! Relaxed linear XC probe on the fixed grid: AO/basis-function terms
+      ! only.  The reference energy is differentiated separately below.
       call utddft_xc_gradient(basis=basis, &
            molGrid=molGrid, &
            dedft=infos%atoms%grad, &
@@ -158,7 +161,52 @@ contains
            nmtx=1, &
            !threshold=1.0d-15, &
            threshold=0.0d0, &
-           infos=infos)
+           infos=infos, &
+           include_ground_state=.false.)
+
+      ! On an atom-centred quadrature the derivative also contains the
+      ! response of the normalized partition weights and the motion of each
+      ! grid slice with its owner atom.  Add those two terms for the linear
+      ! probe in a separate sweep, then the complete finite-grid XC gradient
+      ! of the high-spin reference.  This is the same split as the RO-MRSF
+      ! gradient; combining the reference and probe sweeps would differentiate
+      ! a different quantity and double count terms.
+      block
+        real(kind=dp), allocatable :: grid_correction(:,:), grid_d(:,:,:), &
+                                      grid_p(:,:,:)
+        real(kind=dp) :: xc_electronic, xc_kinetic
+        allocate(grid_correction(3,infos%mol_prop%natom), &
+                 grid_d(nbf,nbf,2), grid_p(nbf,nbf,2), source=0.0_dp)
+        ! utddft_xc_gradient applies AO normalization to its density
+        ! arguments in place; copies keep d and p intact for sf_2e_grad.
+        grid_d = d
+        grid_p = p
+        call utddft_xc_gradient(basis=basis, &
+             molGrid=molGrid, &
+             dedft=grid_correction, &
+             da=grid_d(:,:,1), &
+             db=grid_d(:,:,2), &
+             pa=grid_p(:,:,1:1), &
+             pb=grid_p(:,:,2:2), &
+             nmtx=1, &
+             threshold=0.0_dp, &
+             infos=infos, &
+             include_ground_state=.false., &
+             include_weight_derivative=.true., &
+             weight_derivative_only=.true.)
+        infos%atoms%grad = infos%atoms%grad + grid_correction
+
+        grid_correction = 0.0_dp
+        xc_electronic = 0.0_dp
+        xc_kinetic = 0.0_dp
+        call derexc_blk(basis=basis, molGrid=molGrid, &
+             da=grid_d(:,:,1), db=grid_d(:,:,2), &
+             dedft=grid_correction, totele=xc_electronic, &
+             totkin=xc_kinetic, mxAngMom=basis%mxam+2, nbf=nbf, &
+             dft_threshold=0.0_dp, urohf=.true., infos=infos)
+        infos%atoms%grad = infos%atoms%grad + grid_correction
+        deallocate(grid_correction, grid_d, grid_p)
+      end block
 
       call dftclean(infos)
       call measure_time(print_total=1, log_unit=iw)
