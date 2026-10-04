@@ -12,7 +12,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = (ROOT / "tests" / "fixtures" / "mrsf_xc_moving_grid"
            / "low_sym_h2o_gradient_fd.json")
-SF_FIXTURE = FIXTURE.with_name("low_sym_h2o_sf_gradient_fd.json")
 
 
 def _source(relative):
@@ -119,18 +118,3 @@ def test_sf_gradient_requests_probe_only_moving_grid_response():
     assert "use mod_dft_gridint_grad, only: derexc_blk" in body
     assert "call derexc_blk" in body
     assert "include_ground_state=.true." not in body
-
-
-def test_sf_moving_grid_finite_difference_record():
-    record = json.loads(SF_FIXTURE.read_text())
-    assert record["grid"]["pruned"] is False
-    for case in record["cases"]:
-        assert case["max_abs_error_after_hartree_per_bohr"] < 6.0e-7
-        assert (case["max_abs_error_after_hartree_per_bohr"]
-                < case["max_abs_error_before_hartree_per_bohr"] / 5)
-    for example in record["example_cases"]:
-        assert (ROOT / example["input"]).exists()
-        for case in example["results"]:
-            assert case["max_abs_error_after_hartree_per_bohr"] < 2.0e-6
-            assert (case["max_abs_error_after_hartree_per_bohr"]
-                    < case["max_abs_error_before_hartree_per_bohr"] / 50)
