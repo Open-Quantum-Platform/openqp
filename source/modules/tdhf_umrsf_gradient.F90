@@ -299,19 +299,15 @@ contains
 
     type(grd2_umrsf_resp_t) :: gcomp
     real(kind=dp), allocatable :: de2e(:,:)
-    real(kind=dp), allocatable, target :: densym(:,:,:,:)
     integer :: natom, iat, icmp
     ! unrelaxed difference density P^Δ,u + orbital-part gradient
     real(kind=dp), allocatable :: talpha(:,:), tbeta(:,:), pda(:,:), pdb(:,:)
-    real(kind=dp), allocatable :: tua(:,:), tub(:,:)            ! standard-CIS T_u (SOMO-gate diagnostic only)
     real(kind=dp), allocatable :: peffa(:,:), peffb(:,:)        ! P_eff = P^Δ,u + ½ P_z (c03/c04 split)
     real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:), de_m1(:,:), de_xc(:,:)
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
-    real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_m1                    ! G̃ 2e/refrelax ; ov-only Z (fixed off) ; M1 overlap term
     logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense oracle / dense-vs-iterative comparison (fixed off)
-    logical :: l_g1_diag, l_orb_diag                             ! response-energy / orbital diagnostics (fixed off)
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
@@ -332,15 +328,13 @@ contains
     ! locals
     real(kind=dp), allocatable :: va(:,:), vb(:,:), fa(:,:), fb(:,:), smat_full(:,:)
     real(kind=dp), allocatable :: ea(:), eb(:), wrk1(:,:), wrk2(:,:), scr(:)
-    real(kind=dp), allocatable :: xmat(:,:), amo(:,:), amo2e(:,:), xamp(:)
+    real(kind=dp), allocatable :: xmat(:,:), xamp(:)
     real(kind=dp), allocatable :: brad(:,:,:)
     real(kind=dp), allocatable, target :: dens(:,:,:,:)
-    real(kind=dp), pointer :: fmrst2(:,:,:,:)
     type(int2_compute_t) :: int2_driver
-    type(int2_umrsf_data_t), target :: int2_udata
     integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, nstates, tstate
     integer :: k, it, diag_index
-    real(kind=dp) :: scale_exch, hfs, omega_recon, omega_2e_mv, omega_2e_tr, omega_eig
+    real(kind=dp) :: scale_exch, hfs, omega_eig
     real(kind=dp) :: spc_coco, spc_ovov, spc_coov
 
     integer(4) :: status
@@ -410,13 +404,10 @@ contains
 
     allocate(va(nbf,nbf), vb(nbf,nbf), fa(nbf,nbf), fb(nbf,nbf), smat_full(nbf,nbf), &
              ea(nbf), eb(nbf), wrk1(nbf,nbf), wrk2(nbf,nbf), scr(nbf2), &
-             xmat(nbf,nbf), amo(xvec_dim,1), amo2e(xvec_dim,1), xamp(xvec_dim), source=0.0_dp)
+             xmat(nbf,nbf), xamp(xvec_dim), source=0.0_dp)
     allocate(dens(1,11,nbf,nbf), brad(11,nbf,nbf), source=0.0_dp)
 
     open(unit=iw, file=infos%log_filename, position="append")
-    ! Development diagnostics stay off; no UMRSF setting is read from the process environment.
-    l_g1_diag = .false.
-    l_orb_diag = .false.
 
     va = mo_a ; vb = mo_b ; ea = mo_energy_a ; eb = mo_energy_b
     call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -516,63 +507,6 @@ contains
 
     call umrsf_bra_density(infos, va, vb, xmat, brad)
 
-    if (l_g1_diag) then
-      int2_udata = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
-                                     scale_exchange=scale_exch, scale_coulomb=scale_exch)
-      call int2_driver%run(int2_udata)
-      fmrst2 => int2_udata%f3(:,:,:,:,1)
-
-      if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
-      ! Spin-pair coupling (no-op for the HF defaults spc==hfscale).
-      if (abs(hfs) > epsilon(1.0_dp)) then
-        if (spc_coco /= hfs) fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * (spc_coco/hfs)
-        if (spc_ovov /= hfs) fmrst2(:,9,:,:)  = fmrst2(:,9,:,:)  * (spc_ovov/hfs)
-        if (spc_coov /= hfs) fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * (spc_coov/hfs)
-      end if
-
-      ! 2e part of A.X via the back-transform (the energy path)
-      amo2e = 0.0_dp
-      call umrsfmntoia(infos, fmrst2(1,:,:,:), amo2e, va, vb, 1)
-      omega_2e_mv = dot_product(xamp, amo2e(:,1))
-
-      ! 2e part via the response 2-PDM bra densities B_k = adjoint(umrsfmntoia).X :
-      ! omega_2e = sum_k <B_k, F_k>  with  F_k = int2_k(D_k),  D_k = umrsfcbc(X).
-      ! This is the contraction the analytic 2e gradient differentiates (B_k vs D_k pair).
-      omega_2e_tr = 0.0_dp
-      do k = 1, 11
-        omega_2e_tr = omega_2e_tr + sum(brad(k,:,:)*fmrst2(1,k,:,:))
-      end do
-
-      ! full omega = 2e part + orbital-energy (Fock-diagonal) part
-      amo(:,1) = amo2e(:,1)
-      call iatogen(xamp, xmat, nocca, noccb)
-      call mrsfesum(infos, xmat, fa, fb, amo, 1)
-      omega_recon = dot_product(xamp, amo(:,1))
-
-      write(iw,'(/2x,a)') '================ UMRSF gradient NON-FD gate G1 ================'
-      write(iw,'(2x,a,i0,a,i0)') 'target_state = ', tstate, '   mrst = ', mrst
-      write(iw,'(2x,a,f18.12)')  'X^T X (amplitude norm)          = ', dot_product(xamp,xamp)
-      write(iw,'(2x,a,f18.10)')  'omega reconstructed (X^T A X)   = ', omega_recon
-      write(iw,'(2x,a,f18.10)')  'omega smooth-basis eigenvalue   = ', omega_eig
-      write(iw,'(2x,a,f18.10)')  'omega stored      (td_energies) = ', td_en(tstate)
-      write(iw,'(2x,a,es12.3)')  '  |delta| omega vs smooth eig   = ', abs(omega_recon-omega_eig)
-      write(iw,'(2x,a,es12.3)')  '  |delta| omega vs stored td    = ', abs(omega_recon-td_en(tstate))
-      write(iw,'(2x,a,f18.10)')  'omega_2e (back-transform)       = ', omega_2e_mv
-      write(iw,'(2x,a,f18.10)')  'omega_orb (X.esum)              = ', omega_recon-omega_2e_mv
-      write(iw,'(2x,a,f18.10)')  'omega_2e via bra-density 2-PDM  = ', omega_2e_tr
-      write(iw,'(2x,a,es12.3)')  '  |delta| 2e (G1 2-PDM routing) = ', abs(omega_2e_mv-omega_2e_tr)
-      if (abs(omega_recon-omega_eig) <= 1.0e-9_dp .and. abs(omega_2e_mv-omega_2e_tr) <= 1.0e-9_dp) then
-        write(iw,'(2x,a)')       'VERDICT: G1 PASS (matvec + response 2-PDM routing validated)'
-      else
-        write(iw,'(2x,a)')       'VERDICT: G1 CHECK (see deltas above)'
-      end if
-      write(iw,'(2x,a)')         '=============================================================='
-    else
-      omega_recon = td_en(tstate)
-      omega_2e_mv = 0.0_dp
-      omega_2e_tr = 0.0_dp
-      write(iw,'(/2x,a)') 'UMRSF production mode: G1 response-energy diagnostic not run'
-    end if
     close(iw)
 
     ! ================= 2e RESPONSE GRADIENT + frozen-density FD self-test =================
@@ -583,10 +517,7 @@ contains
     natom = ubound(infos%atoms%zn,1)
     call umrsf_resp_2pdm_fill(gcomp, dens(1,:,:,:), brad, nbf, mrst, hfs, &
                               scale_exch, spc_coco, spc_ovov, spc_coov)
-    allocate(de2e(3,natom), densym(1,11,nbf,nbf), source=0.0_dp)
-    do k = 1, 11
-      densym(1,k,:,:) = gcomp%dden(k,:,:)
-    end do
+    allocate(de2e(3,natom), source=0.0_dp)
 
     ! analytic 2e response gradient (base geometry) - this is the PRODUCTION term (added to the gradient).
     ! Default follows the mature MRSF pattern: one screened grd2 pass with a lean callback.  The
@@ -621,21 +552,8 @@ contains
     ! SOMO-SOMO amplitudes vanish ⇒ S1/S3/non-SOMO untouched). P_eff REPLACES T_u as talpha/tbeta and
     ! propagates to pda/pdb (de_orb, refrelax), the frozen G̃ (gta=2 F̃ P_eff), G^f, the full-block Z, W.
     ! c09_peff_closure.py (≤1e-9), CAS c09_cas_peff.py.
-    allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), &
-             tua(nbf,nbf), tub(nbf,nbf), source=0.0_dp)
+    allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), source=0.0_dp)
     call iatogen(xamp, xmat, nocca, noccb)
-    if (l_orb_diag) then
-      ! standard-CIS T_u (DIAGNOSTIC ONLY — its gate Tr(T_u F̃)−omega_orb is the SOMO tell: ~0 S1, ~2.4e-4 S2)
-      do j = 1, nocca ; do i = 1, nocca ; do ia = noccb+1, nbf
-        tua(i,j) = tua(i,j) - xmat(i,ia)*xmat(j,ia)
-      end do ; end do ; end do
-      do ib = noccb+1, nbf ; do ia = noccb+1, nbf ; do i = 1, nocca
-        tub(ia,ib) = tub(ia,ib) + xmat(i,ia)*xmat(i,ib)
-      end do ; end do ; end do
-      omega_orb_tu = sum(tua*fa) + sum(tub*fb)
-    else
-      omega_orb_tu = 0.0_dp
-    end if
     ! SOMO-corrected difference density P_eff (the FIX) → talpha/tbeta
     block
       integer :: twall
@@ -647,18 +565,7 @@ contains
       close(iw)
     end block
     omega_orb_chk = sum(talpha*fa) + sum(tbeta*fb)
-    if (l_g1_diag) then
-      omega_orb = omega_recon - omega_2e_mv
-    else
-      omega_orb = omega_orb_chk
-    end if
-    if (l_orb_diag) then
-      ! cross-check: my clean-room orbital matvec reproduces omega_orb (== the energy-path mrsfesum)
-      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, fa, fb, xmat, wrk1)
-      omega_orb_mine = sum(xmat*wrk1)
-    else
-      omega_orb_mine = omega_orb
-    end if
+    omega_orb = omega_orb_chk
     pda = matmul(matmul(va, talpha), transpose(va))     ! AO P_eff,α = C̃_α P_eff_α C̃_αᵀ
     pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P_eff,β = C̃_β P_eff_β C̃_βᵀ
 
@@ -682,16 +589,9 @@ contains
 
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/2x,a)') '====== UMRSF response: c06 §16 CLOSED FORM (full G^f + FULL-BLOCK Z + W) ======'
-    if (l_orb_diag) then
-      write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u  F̃) − omega_orb| (SOMO tell; S1~0, S2~2.4e-4) = ', abs(omega_orb_tu-omega_orb)
-      write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(P_eff F̃) − omega_orb| (the FIX; must → ~0)        = ', abs(omega_orb_chk-omega_orb)
-      write(iw,'(2x,a,es12.3)') 'orbital matvec |X·esum_mine − omega_orb|  (clean-room == mrsfesum)    = ', abs(omega_orb_mine-omega_orb)
-    else
-      write(iw,'(2x,a)') 'UMRSF production mode: orbital consistency gates not run'
-    end if
     call umrsf_timing_reset()
 
-    ! Re-init int2 at the BASE geometry (the frozen-density 2e FD self-test left it displaced).
+    ! Fresh int2 driver for the response stage.
     call int2_driver%clean()
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
@@ -1021,9 +921,9 @@ contains
       xc_meanfield_on = .false.
     end if
 
-    deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, xamp, dens, brad)
-    deallocate(de2e, densym)
-    deallocate(talpha, tbeta, tua, tub, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
+    deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, xamp, dens, brad)
+    deallocate(de2e)
+    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
     deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
   end subroutine umrsf_grad_run_gates
