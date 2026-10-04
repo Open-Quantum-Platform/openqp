@@ -855,6 +855,19 @@ class MECPOpt(Optimizer):
             # helpers with the native target actually being evaluated.
             td_config['multiplicity'] = mult
             self.mol.data.set_tdhf_multiplicity(mult)
+            # The previous solve may have clipped the native state count to
+            # its own response space; each multiplicity starts from the input.
+            self.mol.data.set_tdhf_nstate(self.nstate)
+
+        def check_root(energies, state, mult):
+            # excitation() returns the reference energy followed by the
+            # roots actually solved, which clipping can make fewer than nstate.
+            solved = len(energies) - 1
+            if not 1 <= state <= solved:
+                raise ValueError(
+                    f'MECP state {state} of multiplicity {mult} is not available: '
+                    f'only {solved} roots are solved in that response space '
+                    f'(nstate={self.nstate}). Request a lower state or a larger basis.')
 
         try:
             # set multiplicity for state i
@@ -864,6 +877,7 @@ class MECPOpt(Optimizer):
             dump_log(self.mol, title='PyOQP: PES 1 = %s' % pes1, section='input')
             select_multiplicity(self.imult)
             energies_1 = self.sp.excitation(ref_energy)
+            check_root(energies_1, self.istate, self.imult)
 
             # compute gradient for state i
             self.grad.grads = [self.istate]
@@ -876,6 +890,7 @@ class MECPOpt(Optimizer):
             dump_log(self.mol, title='PyOQP: PES 2 = %s' % pes2, section='input')
             select_multiplicity(self.jmult)
             energies_2 = self.sp.excitation(ref_energy)
+            check_root(energies_2, self.jstate, self.jmult)
 
             # compute gradient for state j
             self.grad.grads = [self.jstate]
@@ -884,9 +899,12 @@ class MECPOpt(Optimizer):
             select_multiplicity(saved_mult)
 
         # compute dftd4
+        # State j follows the roots actually solved for multiplicity i, which
+        # clipping can make fewer than the configured nstate.
+        self.jblock = len(energies_1) - 1
         self.mol.energies = np.concatenate((energies_1, energies_2[1:]))
         self.mol.grads = np.concatenate((grads_1, grads_2[1:]))
-        energies, grads = self.ls.compute(self.mol, grad_list=[self.istate, self.jstate + self.nstate])
+        energies, grads = self.ls.compute(self.mol, grad_list=[self.istate, self.jstate + self.jblock])
         self.mol.energies = energies
         self.mol.grads = grads
 
@@ -898,13 +916,14 @@ class MECPOpt(Optimizer):
         """Return the two crossing states as (E_i, E_j, G_i, G_j).
 
         State j lives in the second multiplicity block, which one_step appends
-        after the nstate energies of the first.
+        after the roots solved for the first (nstate unless clipping reduced it).
         """
+        jblock = getattr(self, 'jblock', self.nstate)
         energy_i = energies[self.istate]
-        energy_j = energies[self.jstate + self.nstate]
+        energy_j = energies[self.jstate + jblock]
 
         grad_i = grads[self.istate].reshape(-1)
-        grad_j = grads[self.jstate + self.nstate].reshape(-1)
+        grad_j = grads[self.jstate + jblock].reshape(-1)
 
         return energy_i, energy_j, grad_i, grad_j
 

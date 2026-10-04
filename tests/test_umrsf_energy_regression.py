@@ -143,12 +143,43 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertNotIn("weight_derivative_only=.true.", gradient)
 
     def test_target_state_is_checked_against_the_clipped_response_space(self):
+        # The shared energy stage only bounds its index, because MECP and SOC
+        # sequences can leave a target from the other multiplicity.
         energy = _fortran_subroutine(ENERGY, "tdhf_mrsf_energy").replace("&", "")
         clip = energy.index("infos%tddft%nstate=nstates")
-        guard = energy.index("if(target_state>nstates)then")
-        use = energy.index("mrsf_energies(infos%tddft%target_state)")
-        self.assertLess(clip, guard)
-        self.assertLess(guard, use)
+        bound = energy.index("target_state=max(1,min(int(infos%tddft%target_state),nstates))")
+        use = energy.index("mrsf_energies(target_state)")
+        self.assertLess(clip, bound)
+        self.assertLess(bound, use)
+        self.assertNotIn("mrsf_energies(infos%tddft%target_state)", energy)
+        # The UMRSF gradient, which needs that exact state, rejects it.
+        gates = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates").replace("&", "")
+        self.assertIn("if(tstate>nstates)then", gates)
+        self.assertIn("umrsfgradienttargetstateliesoutsidetheclippedresponsespace", gates)
+
+    def test_failed_svd_solves_abort_instead_of_returning_rhs(self):
+        alignment = _fortran_subroutine(UMRSF_GRAD, "umrsf_solve_alignment_adjoint_blocks")
+        dense_z = _fortran_subroutine(UMRSF_GRAD, "umrsf_zvector_fullblock")
+        for body, tag in ((alignment, "umrsfalignmentadjoint"), (dense_z, "umrsfdensez-vector")):
+            self.assertIn("useme" + "ssages,only:show_message,with_abort", body)
+            self.assertIn(tag + ":dgelssworkspacequeryfailed", body)
+            self.assertIn(tag + ":dgelsssvdfailed", body)
+
+    def test_sf_and_tddft_targets_are_bounded_and_rejected_by_their_gradients(self):
+        root = UMRSF_GRAD.parents[0]
+        sf_energy = compact((root / "tdhf_sf_energy.F90").read_text())
+        td_energy = compact((root / "tdhf_energy.F90").read_text())
+        self.assertIn("sf_energies(target_state)", sf_energy)
+        self.assertNotIn("sf_energies(infos%tddft%target_state)", sf_energy)
+        self.assertIn("td_energies(max(1,min(int(infos%tddft%target_state),nstates)))", td_energy)
+        sf_z = compact((root / "tdhf_sf_z_vector.F90").read_text())
+        td_grad = compact((root / "tdhf_gradient.F90").read_text())
+        self.assertIn("if(infos%tddft%target_state>size(bvec_mo,2))then", sf_z)
+        self.assertLess(sf_z.index("size(bvec_mo,2))then"),
+                        sf_z.index("callsfdmat(bvec_mo(:,infos%tddft%target_state)"))
+        self.assertIn("if(infos%tddft%target_state>size(xpy,2))then", td_grad)
+        self.assertLess(td_grad.index("size(xpy,2))then"),
+                        td_grad.index("calliatogen(xpy(:,infos%tddft%target_state)"))
 
     def test_canonical_orbital_diagonalization_aborts_on_failure(self):
         gradient = compact(UMRSF_GRAD.read_text())

@@ -362,6 +362,12 @@ contains
     ! mrst is the RESPONSE multiplicity (1=singlet / 3=triplet response states); both use the
     ! same MRSF machinery off the UHF triplet reference. The triplet sign-flip below is mrst==3 only.
     if (mrst /= 1 .and. mrst /= 3) return
+    if (tstate > nstates) then
+      write(*,'(2x,a,i0,a,i0,a)') 'Requested gradient state ', tstate, ' exceeds the ', &
+        nstates, ' states solved in this response space.'
+      call show_message('UMRSF gradient target state lies outside the clipped response space; '// &
+                        'request a lower state or a larger basis.', with_abort)
+    end if
     xvec_dim = nocca*nvirb
 
     ! Effective exact-exchange scale for the response (HF limit -> 1.0).
@@ -3559,6 +3565,7 @@ contains
 !> Segments: seg0 = orbitals 1..nocca−1 (row generators), seg1 = nocca..nbf (column generators).
   subroutine umrsf_solve_alignment_adjoint_blocks(sstar, pri, prj, prseg, nocca, muvec, label)
     use io_constants, only: iw
+    use messages, only: show_message, with_abort
     use iso_c_binding, only: c_ptr
     use minres_mod, only: minres_optimize
     use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
@@ -3698,10 +3705,15 @@ contains
         end if
         if (force_svd .or. info /= 0) then
           call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, wq, -1, info)
+          if (info /= 0) call show_message('UMRSF alignment adjoint: dgelss workspace query failed.', with_abort)
           lwork = max(int(wq(1)), 1)
           allocate(work(lwork))
           call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, work, lwork, info)
-          if (info /= 0) write(iw,'(2x,2a,i0,a,i0)') trim(label), ': dgelss info = ', info, ' segment ', seg
+          if (info /= 0) then
+            write(iw,'(2x,2a,i0,a,i0)') trim(label), ': dgelss info = ', info, ' segment ', seg
+            ! A failed SVD leaves rhs unspecified; it must not enter the alignment adjoint.
+            call show_message('UMRSF alignment adjoint: dgelss SVD failed.', with_abort)
+          end if
           if (rank < nb) write(iw,'(2x,2a,i0,a,i0,a,i0)') trim(label), ': rank ', rank, ' / ', nb, ' segment ', seg
           deallocate(work)
         end if
@@ -3731,6 +3743,7 @@ contains
 !> residual; → 0 confirms M z = −R, i.e. the full-block stationarity the ov-only Z cannot reach).
   subroutine umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                      hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio)
+    use messages, only: show_message, with_abort
     implicit none
     type(information), target, intent(inout) :: infos
     type(basis_set), intent(inout) :: basis
@@ -3805,9 +3818,14 @@ contains
       allocate(svals(ndof))
       rcond = 1.0e-9_dp                                   ! drop σ ≤ rcond·σ_max (the degenerate null space)
       call dgelss(ndof, ndof, 1, mmat, ndof, rhs, ndof, svals, rcond, rank, wq, -1, info)
+      if (info /= 0) call show_message('UMRSF dense Z-vector: dgelss workspace query failed.', with_abort)
       lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
       call dgelss(ndof, ndof, 1, mmat, ndof, rhs, ndof, svals, rcond, rank, work, lwork, info)
-      if (info /= 0) write(iw,'(2x,a,i0)') 'umrsf_zvector_fullblock: dgelss info = ', info
+      if (info /= 0) then
+        write(iw,'(2x,a,i0)') 'umrsf_zvector_fullblock: dgelss info = ', info
+        ! A failed SVD leaves rhs unspecified; it must not become the Z-vector.
+        call show_message('UMRSF dense Z-vector: dgelss SVD failed.', with_abort)
+      end if
       if (rank < ndof) write(iw,'(2x,a,i0,a,i0,a,es10.2)') &
         'umrsf_zvector_fullblock: M rank-deficient (SOMO degeneracy) rank ', rank, ' / ', ndof, &
         '; σ_min(kept)/σ_max = ', svals(rank)/max(svals(1), tiny(1.0_dp))

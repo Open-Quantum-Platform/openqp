@@ -600,16 +600,11 @@ contains
 
     infos%tddft%nstate = nstates
 
-!   The requested state (for example a single grad= root) must survive the
-!   clipping above; otherwise the published target energy would be read
-!   beyond the solved spectrum.
-    target_state = infos%tddft%target_state
-    if (target_state > nstates) then
-      write(*,'(2X,A,I0,A,I0,A)') 'Requested target state ', target_state, &
-        ' exceeds the ', nstates, ' states available in this response space.'
-      call show_message('MRSF target state lies outside the clipped response space; '// &
-                        'request a lower state or a larger basis.', with_abort)
-    end if
+!   The stored target can exceed the clipped count, for example a state left
+!   over from the other multiplicity in an MECP or SOC sequence. Index the
+!   solved spectrum only within its bounds; a state-specific gradient rejects
+!   such a target itself before using it.
+    target_state = max(1, min(int(infos%tddft%target_state), nstates))
 
     ! The Davidson expands only on the residuals of the roots it TRACKS.  When
     ! the tracked set is the reported set, a symmetry block whose crude
@@ -1460,7 +1455,7 @@ contains
 
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
-    infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
+    infos%mol_energy%excited_energy = mrsf_energies(target_state)
     call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates, &
                        physical_mrsf_labels=.true.)
     call flush(iw)
