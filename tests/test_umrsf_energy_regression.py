@@ -192,6 +192,13 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("if(.not.iter_ok.and.nb>=512)then", align)
         self.assertIn("if(ios==0.and.itol_env>0.0d0)itol=itol_env", align)
 
+    def test_unconverged_jacobi_alignment_aborts(self):
+        lib = _fortran_subroutine(LIB, "get_jacobi")
+        self.assertIn("if(max_off>=thresh)then", lib)
+        self.assertIn("get_jacobi:corresponding-orbitalalignmentdidnotconverge", lib)
+        smooth = _fortran_subroutine(UMRSF_GRAD, "umrsf_jacobi_smooth")
+        self.assertIn("if(off>=tol)callshow_message(", smooth)
+
     def test_canonical_orbital_diagonalization_aborts_on_failure(self):
         gradient = compact(UMRSF_GRAD.read_text())
         self.assertIn("calldiag_symm_full(1,nbf,fac,nbf,epsca)", gradient)

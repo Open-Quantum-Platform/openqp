@@ -3645,6 +3645,14 @@ contains
         exit
       end if
     end do
+    ! The UMRSF energy and gradient both assume a stationary alignment gauge; publishing an
+    ! underconverged one would make the gradient differentiate a different quantity.
+    if (max_off >= thresh) then
+      write(iw,'("segment ",I1," NOT converged after ",I0," sweeps; max|btt| = ",ES12.4, &
+                &", threshold = ",ES12.4)') isegm, max_iter, max_off, thresh
+      call flush(iw)
+      call show_message('get_jacobi: corresponding-orbital alignment did not converge.', with_abort)
+    end if
 
     if (dgprint) then
       write(iw,'(A)') '-----------------------------------------'

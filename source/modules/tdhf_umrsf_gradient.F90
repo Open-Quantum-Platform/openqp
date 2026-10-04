@@ -1211,6 +1211,7 @@ contains
 !> aligned va,vb (already in the right basin + sign convention) ⇒ polishing preserves ω (span-invariance)
 !> and reaches the EXACT fixed point. Returns the post-convergence max within-seg |btt| in offmax.
   subroutine umrsf_jacobi_smooth(va, vb, smat_full, nocca, offmax)
+    use messages, only: show_message, with_abort
     implicit none
     real(kind=dp), intent(inout) :: va(:,:), vb(:,:)
     real(kind=dp), intent(in) :: smat_full(:,:)
@@ -1260,6 +1261,9 @@ contains
         end do
         if (off < tol) exit
       end do
+      ! The gradient assumes a stationary alignment gauge; never continue from an unconverged one.
+      if (off >= tol) call show_message('UMRSF gradient: smooth corresponding-orbital alignment '// &
+                                        'did not converge.', with_abort)
     end do
 
     ! sign fix: flip β column p so s_mo(p,p) ≥ 0 (faithful to check_sign / c05)
