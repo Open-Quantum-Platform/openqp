@@ -37,7 +37,7 @@ for method, keyword, and build references.
 | Method | References / variants | Available calculations | Learn |
 | --- | --- | --- | --- |
 | **MRSF-TDDFT** | ROHF mixed reference with [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Ground and excited states, analytic gradients, properties, NAC/NACME, SOC, optimization, and dynamics | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) |
-| **UMRSF-TDDFT** | Unrestricted mixed reference based on UHF orbitals | Excitation energies for unrestricted mixed-reference calculations | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/) |
+| **UMRSF-TDDFT** | Unrestricted mixed reference based on UHF orbitals | Excitation energies and analytic nuclear gradients (HF, LDA/GGA, global hybrids) for unrestricted mixed-reference calculations | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/) |
 | **MRSF-EKT** | [Extended Koopmans' theorem](https://doi.org/10.1021/acs.jpclett.1c02494) applied to MRSF states | Ionization and electron-attachment energies, Dyson orbitals, and pole strengths | [Guide](https://open-quantum-platform.github.io/openqp-docs/workflows/ekt/) |
 | **SF-TDDFT** | Spin-flip TDA from a high-spin reference | Excitation energies and analytic state-specific nuclear gradients | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) |
 | TDHF / TDDFT | RPA and TDA response from HF and DFT references | Excitation energies, analytic state-specific nuclear gradients, and excited-state properties | [Tutorial](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) |

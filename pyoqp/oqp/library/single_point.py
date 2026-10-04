@@ -1281,6 +1281,7 @@ class Gradient(Calculator):
             'tda': oqp.tdhf_z_vector,
             'sf': oqp.tdhf_sf_z_vector,
             'mrsf': oqp.tdhf_mrsf_z_vector,
+            'umrsf': oqp.tdhf_umrsf_z_vector,
         }
 
         # Every native gradient kernel writes mol.data._data.grad in place, so
@@ -1295,6 +1296,7 @@ class Gradient(Calculator):
                 'tda': oqp.tdhf_gradient,
                 'sf': oqp.tdhf_sf_gradient,
                 'mrsf': oqp.tdhf_mrsf_gradient,
+                'umrsf': oqp.tdhf_umrsf_gradient,
             }.items()
         }
 
@@ -1743,9 +1745,7 @@ class Gradient(Calculator):
         return placed
 
     def tddft_grad(self):
-        if self.td == 'umrsf':
-            raise NotImplementedError('UMRSF-TDDFT gradients are not implemented; run UMRSF-TDDFT with runtype=energy only.')
-        if self.td not in ['rpa', 'tda', 'sf', 'mrsf']:
+        if self.td not in ['rpa', 'tda', 'sf', 'mrsf', 'umrsf']:
             raise ValueError(f'Unknown tdhf type {self.td}')
 
         if self.nstate < max(self.grads):

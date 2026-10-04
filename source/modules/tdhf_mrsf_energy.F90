@@ -424,6 +424,7 @@ contains
     implicit none
 
     character(len=*), parameter :: subroutine_name = "tdhf_mrsf_energy"
+    integer, parameter :: mrsf_int2_buffer_size = 200000
 
     type(basis_set), pointer :: basis
     type(information), target, intent(inout) :: infos
@@ -552,7 +553,6 @@ contains
    ! Input parameters
     mrst = infos%tddft%mult
     nstates = infos%tddft%nstate
-    target_state = infos%tddft%target_state
     maxvec = infos%tddft%maxvec
     cnvtol = infos%tddft%cnvtol
     debug_mode = infos%tddft%debug_mode
@@ -599,6 +599,12 @@ contains
     end if
 
     infos%tddft%nstate = nstates
+
+!   The stored target can exceed the clipped count, for example a state left
+!   over from the other multiplicity in an MECP or SOC sequence. Index the
+!   solved spectrum only within its bounds; a state-specific gradient rejects
+!   such a target itself before using it.
+    target_state = max(1, min(int(infos%tddft%target_state), nstates))
 
     ! The Davidson expands only on the residuals of the roots it TRACKS.  When
     ! the tracked set is the reported set, a symmetry block whose crude
@@ -849,6 +855,7 @@ contains
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
+    int2_driver%buf_size = max(int2_driver%buf_size, mrsf_int2_buffer_size)
     call int2_driver%set_screening()
     call flush(iw)
 
@@ -1220,7 +1227,9 @@ contains
           mxerr = max(mxerr, rnorm(ivec))
       end do
 
-!     Check convergence
+!     Every root in the public nstates window must meet the residual threshold.
+!     The additional tracked roots matter only when their residual permits them
+!     to enter that window before convergence.
       converged = mxerr<=cnvtol
       if (converged) exit
 
@@ -1446,7 +1455,7 @@ contains
 
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
-    infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
+    infos%mol_energy%excited_energy = mrsf_energies(target_state)
     call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates, &
                        physical_mrsf_labels=.true.)
     call flush(iw)

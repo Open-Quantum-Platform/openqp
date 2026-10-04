@@ -151,6 +151,13 @@ contains
              wrk2(nbf,nbf), &
              source=0.0d0)
 
+    if (infos%tddft%target_state > size(xpy,2)) then
+      write(*,'(2x,a,i0,a,i0,a)') 'Requested gradient state ', infos%tddft%target_state, &
+        ' exceeds the ', size(xpy,2), ' states solved.'
+      call show_message('TDDFT gradient target state lies outside the solved states; '// &
+                        'increase [tdhf] nstate.', with_abort)
+    end if
+
     call iatogen(xpy(:,infos%tddft%target_state), wrk1, nocc, nocc)
     call symmetrize_matrix(wrk1, nbf)
     wrk1 = wrk1*0.5

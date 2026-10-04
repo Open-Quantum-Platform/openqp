@@ -417,7 +417,10 @@ contains
 
     sf_energies = eex(:nstates)
     bvec_mo_out = bvec_mo(:,:nstates)
-    infos%mol_energy%excited_energy = sf_energies(infos%tddft%target_state)
+    ! nstates may have been clipped to the response-space size above; bound the
+    ! index here and let the gradient reject an unavailable target.
+    target_state = max(1, min(int(infos%tddft%target_state), nstates))
+    infos%mol_energy%excited_energy = sf_energies(target_state)
     call print_results(infos, bvec_mo, eex, trans, dip, spin_square, nstates)
     call flush(iw)
 

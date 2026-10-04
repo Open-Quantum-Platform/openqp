@@ -194,6 +194,15 @@ contains
     call tagarray_get_data(infos%dat, OQP_td_t, td_t)
     call tagarray_get_data(infos%dat, OQP_td_energies, sf_energies)
 
+    ! The energy stage clips nstate to the response-space size, so the target
+    ! must lie within the vectors actually solved.
+    if (infos%tddft%target_state > size(bvec_mo,2)) then
+      write(*,'(2x,a,i0,a,i0,a)') 'Requested gradient state ', infos%tddft%target_state, &
+        ' exceeds the ', size(bvec_mo,2), ' states solved in this response space.'
+      call show_message('SF-TDDFT gradient target state lies outside the solved response space; '// &
+                        'request a lower state or a larger basis.', with_abort)
+    end if
+
     ta          => td_t(:,1)
     tb          => td_t(:,2)
 

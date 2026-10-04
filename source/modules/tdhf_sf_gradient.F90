@@ -229,7 +229,7 @@ contains
 
     associate( grad   => infos%atoms%grad &
              , xyz    => infos%atoms%xyz &
-             , zn     => infos%atoms%zn &
+             , zn     => infos%atoms%zn - infos%basis%ecp_zn_num &   ! ECP-screened charges, as in hf_gradient
              , p      => td_p &
              , w      => wao &
              , urohf  => infos%control%scftype>=2 &
