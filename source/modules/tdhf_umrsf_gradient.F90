@@ -801,6 +801,15 @@ contains
       ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
       call get_environment_variable("UMRSF_ZDENSE", e, status=ios) ; if (ios==0) l_zdense = (trim(e)=="1")
       call get_environment_variable("UMRSF_ZCMP",   e, status=ios) ; if (ios==0) l_zcmp   = (trim(e)=="1")
+      ! The dense oracle forms an ndof-by-ndof matrix. Honour the request only within the same
+      ! limits as the automatic dense fallback, so an inherited setting cannot exhaust memory.
+      if (l_zdense .or. l_zcmp) then
+        if (nbf*(nbf-1) > 2000 .or. 8.0_dp*real(nbf*(nbf-1),dp)**2 > 64.0_dp*1024.0_dp**2) then
+          write(iw,'(2x,a,i0,a)') 'UMRSF_ZDENSE/UMRSF_ZCMP ignored: dense Z oracle needs ', &
+            nbf*(nbf-1), ' DOFs, above the 2000-DOF / 64 MiB limit; using the matrix-free solve.'
+          l_zdense = .false. ; l_zcmp = .false.
+        end if
+      end if
       ! G̃ 2e gen-Fock: default = analytic (umrsf_g2e_analytic, 2 int2 builds). UMRSF_G2EFD=1 →
       ! the FD oracle umrsf_g2e_onesided (4·nbf² builds). UMRSF_G2ECMP=1 → run BOTH and print
       ! max|analytic − FD| per spin (the perf-port GATE: reproduce the FD g2e to ≤1e-9).
@@ -3372,6 +3381,10 @@ contains
     if (ios == 0) then ; read(e,*,iostat=ios) i ; if (ios == 0 .and. i > 0) itermin = i ; end if
     call get_environment_variable("UMRSF_ALIGN_ITOL", e, status=ios)
     if (ios == 0) then ; read(e,*,iostat=ios) itol ; if (itol <= 0.0d0) itol = 1.0d-10 ; end if
+    ! Diagnostic settings may only tighten the accepted residual and may not move blocks above the
+    ! default dense size onto a dense solve: an n(n-1)/2-dimensional dense block grows as n^4.
+    itol = min(itol, 1.0d-10)
+    itermin = min(itermin, 512)
     ! Alignment adjoint solver: default = CG primary with MINRES fallback (AUTO), matching the MRSF /
     ! UMRSF z-vector convention (CG is cheap when H is SPD; MINRES is the robust symmetric-indefinite
     ! fallback). UMRSF_ALIGN_CG=0 forces MINRES-only.
@@ -3396,6 +3409,11 @@ contains
       ! Large SYMMETRIC block ⇒ matrix-free CG→MINRES (O(n³) matvec on the s_align block + |diag|
       ! Jacobi precond); H itself is never formed or stored.
       use_iter = (nb >= itermin) .and. (.not. force_dense) .and. (.not. force_svd)
+      if (.not. use_iter .and. nb >= 512) then
+        write(iw,'(2x,2a,i0,a)') trim(label), ': forced dense alignment solve ignored for a block of ', &
+          nb, ' rotations (dense limit 511); using the matrix-free solve.'
+        use_iter = .true.
+      end if
       iter_ok = .false.
       if (use_iter) then
         actx%nb = nb ; actx%n = n ; actx%seg = seg

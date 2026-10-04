@@ -181,6 +181,15 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertLess(td_grad.index("size(xpy,2))then"),
                         td_grad.index("calliatogen(xpy(:,infos%tddft%target_state)"))
 
+    def test_environment_cannot_force_an_unbounded_dense_solve(self):
+        gates = _fortran_subroutine(UMRSF_GRAD, "umrsf_grad_run_gates")
+        self.assertIn("if(l_zdense.or.l_zcmp)then", gates)
+        self.assertIn("umrsf_zdense/umrsf_zcmpignored", gates)
+        align = _fortran_subroutine(UMRSF_GRAD, "umrsf_solve_alignment_adjoint_blocks")
+        self.assertIn("itol=min(itol,1.0d-10)", align)
+        self.assertIn("itermin=min(itermin,512)", align)
+        self.assertIn("if(.not.use_iter.and.nb>=512)then", align)
+
     def test_canonical_orbital_diagonalization_aborts_on_failure(self):
         gradient = compact(UMRSF_GRAD.read_text())
         self.assertIn("calldiag_symm_full(1,nbf,fac,nbf,epsca)", gradient)
