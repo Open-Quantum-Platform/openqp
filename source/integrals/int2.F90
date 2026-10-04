@@ -1946,7 +1946,7 @@ jc:   do j = 1, maxj
     real(dp), intent(in) :: cutoff
     integer, intent(inout) :: nint
     type(int2_shell_block_t), intent(out) :: block
-    integer :: a,b,c,d,maxb,maxd,nij,nkl,ij,kl
+    integer :: a,b,c,d,maxb,maxd,nij,nkl,ia,ib,ic,id
     real(dp) :: val
     logical :: same, ab, cd
     block%shells=eri%ids(eri%flips)
@@ -1982,7 +1982,9 @@ jc:   do j = 1, maxj
             val=val*eri%weight
             if (ab .and. a==b) val=val*0.5_dp
             if (cd .and. c==d) val=val*0.5_dp
-            if (same .and. a==c .and. b==d) val=val*0.5_dp
+            ia=block%offsets(1)+a; ib=block%offsets(2)+b
+            ic=block%offsets(3)+c; id=block%offsets(4)+d
+            if ((ia==ic .and. ib==id) .or. (ia==id .and. ib==ic)) val=val*0.5_dp
             block%values(d,c,b,a)=val
           end do
         end do
