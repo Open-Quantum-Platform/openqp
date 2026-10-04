@@ -5,10 +5,9 @@
 !> @author Mohsen Mazaherifar
 !> @date November 2025
 module basis_api
-    use iso_c_binding, only: c_f_pointer, c_ptr, c_double
+    use iso_c_binding, only: c_f_pointer, c_ptr, c_double, c_int
     use iso_fortran_env, only: real64
     use physical_constants, only: UNITS_ANGSTROM
-    use libecpint_wrapper
     implicit none
 
 !###############################################################################

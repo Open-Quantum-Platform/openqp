@@ -2,13 +2,13 @@ include(ExternalProject)
 
 set(_OQP_EXTERNALS_CACHE_REVISION "2")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
-# NLopt is no longer built or linked. Keep its former aggregate-key fragment
-# verbatim so this removal does not select a fresh cache namespace and rebuild
-# otherwise ABI-compatible Libxc/libecpint/TagArray artifacts.
+# NLopt and libecpint are no longer built or linked. Keep their former
+# aggregate-key fragments verbatim so these removals do not select a fresh
+# cache namespace and rebuild otherwise ABI-compatible Libxc/TagArray artifacts.
 set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")
+set(_OQP_LEGACY_LIBECPINT_CACHE_TOKEN "ecp1.0.7")
 set(_OQP_LIBXC_VERSION "7.0.0")
 set(_OQP_TAGARRAY_VERSION "1.0.0")
-set(_OQP_LIBECPINT_VERSION "1.0.7")
 set(_OQP_LAPACK_VERSION "3.10.0")
 set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
 set(_OQP_FPRETTIFY_VERSION "0.3.7")
@@ -72,11 +72,11 @@ endif()
 endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
 
 set(_OQP_EXTERNALS_VERSION_KEY
-    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
+    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-${_OQP_LEGACY_LIBECPINT_CACHE_TOKEN}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
 # Give only the DFT-D4 stack a new nested cache namespace.  Putting these
 # tokens in _OQP_EXTERNALS_VERSION_KEY would invalidate unrelated heavy cached
-# libraries (Libxc, libecpint, and friends).  OpenMP changes the D4 ABI/runtime
+# libraries (Libxc, TagArray, and friends).  OpenMP changes the D4 ABI/runtime
 # dependencies and must be part of this subkey as well.
 set(_OQP_DFTD4_PLATFORM_KEY "")
 if(APPLE)
@@ -145,7 +145,7 @@ if(OQP_REUSE_EXTERNALS)
     # scikit-build-core / pip place ninja in a per-build temporary isolated env
     # (/tmp/build-env-XXXX/.../ninja), so the absolute path -- and thus an MD5 of
     # it -- changes on EVERY build. Hashing the path made the externals cache key
-    # unique per run, so the cached externals (libecpint, LAPACK, ...) never
+    # unique per run, so the cached externals (Libxc, LAPACK, ...) never
     # matched and were recompiled every single time. The basename still
     # distinguishes ninja vs make/gmake, which is all that affects the build.
     get_filename_component(_oqp_external_make_name "${CMAKE_MAKE_PROGRAM}" NAME_WE)
@@ -400,52 +400,6 @@ ExternalProject_Add(libtagarray
         )
 endif()
 
-# fix_libecpint_accuracy.py changes the integrals libecpint returns, so its
-# hash names a libecpint-only cache entry: a cached unpatched build is never
-# reused, and the other cached externals are left alone.
-file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/fix_libecpint_accuracy.py" _OQP_LIBECPINT_PATCH_KEY)
-string(SUBSTRING "${_OQP_LIBECPINT_PATCH_KEY}" 0 12 _OQP_LIBECPINT_PATCH_KEY)
-oqp_set_external_paths(LIBECPINT libecpint-p${_OQP_LIBECPINT_PATCH_KEY}
-        "${CMAKE_SOURCE_DIR}/external/libecpint"
-        "${CMAKE_SOURCE_DIR}/external/libecpint/src/libecpint"
-        "${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-build-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/libecpint/src/libecpint-stamp-${CMAKE_Fortran_COMPILER_ID}"
-        "${CMAKE_BINARY_DIR}/external/libecpint/install")
-set(LIBECPINT_LIBRARY_DIR "${LIBECPINT_BUILD_DIR}/src" CACHE INTERNAL "LIBECPINT_LIBRARY_DIR" FORCE)
-set(FADDEEVA_LIBRARY_DIR "${LIBECPINT_BUILD_DIR}/external/Faddeeva" CACHE INTERNAL "FADDEEVA_LIBRARY_DIR" FORCE)
-set(LIBECPINT_INCLUDE_DIRS
-    "${LIBECPINT_INSTALL_DIR}/include/libecpint;${LIBECPINT_INSTALL_DIR}/include"
-    CACHE INTERNAL "LIBECPINT_INCLUDE_DIRS" FORCE)
-oqp_reuse_or_build(libecpint
-        "${LIBECPINT_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}ecpint${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        "${FADDEEVA_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}Faddeeva${CMAKE_STATIC_LIBRARY_SUFFIX}"
-        "${LIBECPINT_INSTALL_DIR}/include/libecpint")
-if(NOT TARGET libecpint)
-ExternalProject_Add(libecpint
-        PREFIX ${LIBECPINT_PREFIX}
-        URL https://github.com/robashaw/libecpint/archive/refs/tags/v${_OQP_LIBECPINT_VERSION}.tar.gz
-        URL_HASH SHA256=e9c60fddb2614f113ab59ec620799d961db73979845e6e637c4a6fb72aee51cc
-        SOURCE_DIR ${LIBECPINT_SOURCE_DIR}
-        BINARY_DIR ${LIBECPINT_BUILD_DIR}
-        STAMP_DIR  ${LIBECPINT_STAMP_DIR}
-	INSTALL_DIR ${LIBECPINT_INSTALL_DIR}
-        UPDATE_COMMAND ""
-        # v1.0.7 truncates the generated type-2 angular coefficients to six
-        # digits and stops its one-point radial quadrature early; both leave
-        # ECP gradient errors of 1e-5 Ha/bohr (idempotent).
-        PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_libecpint_accuracy.py ${LIBECPINT_SOURCE_DIR}
-        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-                    -DLIBECPINT_BUILD_DOCS=OFF
-                   -DLIBECPINT_BUILD_TESTS=OFF
-		   -DLIBECPINT_USE_PUGIXML=OFF
-                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   ${OQP_EXTERNAL_GENERATOR_ARGS}
-		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-        INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
-        )
-endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   set(BLA_LIB_SUFFIX "64")
   if(BUILD_SHARED_LIBS)

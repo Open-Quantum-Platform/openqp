@@ -1,6 +1,6 @@
 # DFT/LANL2DZ/BHHLYP/RHF/GRADIENT of SiO with a Si effective core potential.
-# The O p shells lie 1.51 Angstrom from the Si ECP. Before the libecpint
-# integral-accuracy patch the analytic gradient differed from central finite
+# The O p shells lie 1.51 Angstrom from the Si ECP. With the unpatched libecpint
+# 1.0.7 integrals the analytic gradient differed from central finite
 # differences of the energy by 1.2e-4 Ha/bohr; the reference gradient agrees
 # with five-point finite differences (step 1e-3 bohr) to 1e-9 Ha/bohr.
 [input]

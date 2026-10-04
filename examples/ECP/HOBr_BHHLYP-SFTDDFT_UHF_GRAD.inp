@@ -4,8 +4,9 @@
 # Against five-point central finite differences (h = 1e-3 bohr, symmetry off, [tdhf]
 # conv=1e-12 zvconv=1e-14) the analytic state gradient agrees to 6.8e-8 Ha/Bohr for the UHF
 # reference and 2.2e-9 for ROHF; the ground-state DFT gradient agrees to 7.4e-9 (UHF) and
-# 7.3e-9 (ROHF). Before external/fix_libecpint_accuracy.py the shared ECP derivative left a
-# 1e-5 O-Br residual in all four.
+# 7.3e-9 (ROHF); with the native ECP integrals the UHF SF state gradient agrees to 6.8e-8.
+# With the unpatched libecpint 1.0.7 integrals the shared ECP derivative left a 1e-5 O-Br
+# residual in all four.
 # Bent HOBr is used because the triplet UHF solution
 # of linear HBr breaks the pi degeneracy and does not converge reliably at displaced geometries.
 [input]
