@@ -56,6 +56,7 @@ module ecp_tool
   use basis_tools, only: basis_set
   use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use messages, only: show_message, WITH_ABORT
+  use oqp_linalg, only: dgemm
 
   implicit none
 
@@ -79,6 +80,10 @@ module ecp_tool
   real(dp), parameter :: ONCENTRE = 1.0e-12_dp
   real(dp), parameter :: PI = 3.14159265358979323846264338327950288_dp
   real(dp), parameter :: FOURPI = 4.0_dp*PI
+  !> Bessel table: spacing 1/KB_DENS, Taylor order KB_TAY (error ~ (h/2)^7/7!)
+  integer, parameter :: KB_DENS = 64, KB_TAY = 6
+  real(dp), parameter :: KB_XLO = 1.0_dp, KB_XHI = 16.0_dp
+  integer, parameter :: KB_NTAB = 16*KB_DENS + 1
 
   !> Per-atom angular projection table for one ECP centre (type 2)
   type gtab_t
@@ -97,6 +102,10 @@ module ecp_tool
     real(dp), allocatable :: om2(:,:,:)       ! (tuple, lm, lam mu)
     real(dp) :: glx(NGL), glw(NGL)
     integer, allocatable :: tx(:), ty(:), tz(:), tn(:)   ! components and degree of each tuple
+    ! K_l(x) = exp(-x) i_l(x) and its first TAY derivatives on x = i/KB_DENS,
+    ! i = 0..KB_NTAB, for Taylor evaluation on KB_XLO <= x < KB_XHI
+    integer :: kbl = -1
+    real(dp), allocatable :: kbt(:,:,:)       ! (0:TAY, 0:kbl, 0:KB_NTAB)
   end type tables_t
 
 contains
@@ -738,6 +747,7 @@ contains
       tab%tn(s) = tab%tx(s) + tab%ty(s) + tab%tz(s)
     end do
     call build_gl(tab)
+    call build_kbtab(tab, max(2*lb, max(le - 1, 0) + lb))
 
     ! om1
     allocate(tab%om1(ntup_upto(2*lb), (2*lb + 1)**2), source=0.0_dp)
@@ -878,6 +888,56 @@ contains
     end if
   end subroutine kbessel
 
+  !> Tabulate K_l and its derivatives for l <= lmax (kbt holds l <= lmax + KB_TAY
+  !> while the derivatives are formed, from
+  !>   K_l' = -K_l + (l K_(l-1) + (l+1) K_(l+1))/(2l+1))
+  subroutine build_kbtab(tab, lmax)
+    type(tables_t), intent(inout) :: tab
+    integer, intent(in) :: lmax
+    integer :: i, l, n, lt
+    real(dp) :: x
+    real(dp), allocatable :: d(:,:), k0(:)
+    lt = lmax + KB_TAY + 1
+    tab%kbl = lmax
+    allocate(tab%kbt(0:KB_TAY, 0:lmax, 0:KB_NTAB), d(0:KB_TAY, 0:lt), k0(0:lt))
+    do i = 0, KB_NTAB
+      x = real(i, dp)/real(KB_DENS, dp)
+      call kbessel(lt, x, k0)
+      d(0, :) = k0
+      do n = 1, KB_TAY
+        do l = 0, lt - n
+          d(n, l) = -d(n - 1, l) + real(l + 1, dp)*d(n - 1, l + 1)/real(2*l + 1, dp)
+          if (l > 0) d(n, l) = d(n, l) + real(l, dp)*d(n - 1, l - 1)/real(2*l + 1, dp)
+        end do
+      end do
+      tab%kbt(:, :, i) = d(:, 0:lmax)
+    end do
+  end subroutine build_kbtab
+
+  !> K_l(x), l = 0..lmax: Taylor series from the table on [KB_XLO, KB_XHI),
+  !> kbessel elsewhere
+  pure subroutine kbessel_t(tab, lmax, x, kb)
+    type(tables_t), intent(in) :: tab
+    integer, intent(in) :: lmax
+    real(dp), intent(in) :: x
+    real(dp), intent(out) :: kb(0:lmax)
+    integer :: i, n
+    real(dp) :: dz, dzn(0:KB_TAY)
+    if (x < KB_XLO .or. x >= KB_XHI .or. lmax > tab%kbl) then
+      call kbessel(lmax, x, kb)
+      return
+    end if
+    i = nint(x*real(KB_DENS, dp))
+    dz = x - real(i, dp)/real(KB_DENS, dp)
+    dzn(0) = 1.0_dp
+    do n = 1, KB_TAY
+      dzn(n) = dzn(n - 1)*dz/real(n, dp)
+    end do
+    do n = 0, lmax
+      kb(n) = dot_product(dzn, tab%kbt(:, n, i))
+    end do
+  end subroutine kbessel_t
+
 !###############################################################################
 ! Main driver
 !###############################################################################
@@ -1012,9 +1072,10 @@ contains
 
       call build_gtabs(tab, basis, coord, c, lecp, deriv, gt)
 
+      ! largest shells first: their pairs are the most expensive (load balance)
       if (contract) then
         !$omp parallel do schedule(dynamic) private(s1, s2) reduction(+:hloc)
-        do s1 = 1, nsh
+        do s1 = nsh, 1, -1
           do s2 = 1, s1
             call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
                             deriv, gt, s1, s2, off, nraw, natm, res, dens, hloc)
@@ -1023,7 +1084,7 @@ contains
         !$omp end parallel do
       else
         !$omp parallel do schedule(dynamic) private(s1, s2)
-        do s1 = 1, nsh
+        do s1 = nsh, 1, -1
           do s2 = 1, s1
             call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
                             deriv, gt, s1, s2, off, nraw, natm, res)
@@ -1222,7 +1283,16 @@ contains
     real(dp) :: scoa(nsmax, ntA), scob(nsmax, ntB)
     real(dp) :: sw(nw, ntup_upto(nab)), s(ntup_upto(nab)), r1(0:nab, 0:nab), y((nab + 1)**2)
     real(dp) :: tang(ntup_upto(nab), 0:nab), kb1(0:nab)
-    real(dp) :: r2(0:nab, 0:lamA, 0:lamB), r2w(nw, 0:nab, 0:lamA, 0:lamB), x(ntA, 0:nb, 0:lamB)
+    real(dp) :: r2w(nw, 0:nab, 0:lamA, 0:lamB)
+    real(dp) :: ga(ntA, (na + 1)*(lamA + 1)), gb(ntB, (nb + 1)*(lamB + 1))
+    real(dp) :: rmat((na + 1)*(lamA + 1), (nb + 1)*(lamB + 1))
+    real(dp) :: xm(ntA, (nb + 1)*(lamB + 1)), ym(ntA, ntB)
+    ! type-2 radial sums as one matrix product over all quadrature points:
+    !   r2w(ia, N, l1, l2) = sum_pts [w_ia g K_l1(A)] [r^N K_l2(B)]
+    integer, parameter :: CHUNK = 128
+    real(dp) :: amat(nw*(lamA + 1), CHUNK), bmat((nab + 1)*(lamB + 1), CHUNK)
+    real(dp) :: cmat(nw*(lamA + 1), (nab + 1)*(lamB + 1)), wfac(6), rp
+    integer :: npt, ma, nbc, col, ka2, kb2
     real(dp) :: kba(0:lamA), kbb(0:lamB)
 
     la = basis%am(s1)
@@ -1292,7 +1362,7 @@ contains
               rr = 0.5_dp*(hi - lo)*tab%glx(ig) + 0.5_dp*(hi + lo)
               g = dc*0.5_dp*(hi - lo)*tab%glw(ig) &
                 * exp(-zt*rr*rr - p*(rr - pn)**2 + pref)*ipow(rr, n)
-              call kbessel(nab, 2.0_dp*p*pn*rr, kb1)
+              call kbessel_t(tab, nab, 2.0_dp*p*pn*rr, kb1)
               do l = 0, nab
                 do lam1 = mod(l, 2), l, 2
                   r1(l, lam1) = r1(l, lam1) + g*kb1(lam1)
@@ -1342,8 +1412,13 @@ contains
 
     !------------------------------------------------------------------ type 2
     if (lecp >= 1 .and. gt(iata)%used .and. gt(iatb)%used) then
+      ma = nw*(lamA + 1)
+      nbc = (nab + 1)*(lamB + 1)
+      ka2 = (na + 1)*(lamA + 1)
+      kb2 = (nb + 1)*(lamB + 1)
       do l = 0, lecp - 1
-        r2w = 0.0_dp
+        cmat = 0.0_dp
+        npt = 0
         nterm = 0
         do ipa = 0, basis%ncontr(s1) - 1
           ea = basis%ex(basis%g_offset(s1) + ipa)
@@ -1351,7 +1426,8 @@ contains
           do ipb = 0, basis%ncontr(s2) - 1
             eb = basis%ex(basis%g_offset(s2) + ipb)
             cb = basis%cc(basis%g_offset(s2) + ipb)
-            r2 = 0.0_dp
+            call weights(nw, ea, eb, wts)
+            wfac = wts*ca*cb
             do it = t1, t2
               if (basis%ecp_params%ecp_am(it) /= l) cycle
               zt = basis%ecp_params%ecp_ex(it)
@@ -1369,48 +1445,62 @@ contains
                 rr = 0.5_dp*(hi - lo)*tab%glx(ig) + 0.5_dp*(hi + lo)
                 g = dc*0.5_dp*(hi - lo)*tab%glw(ig) &
                   * exp(-zt*rr*rr - ea*(rr - an)**2 - eb*(rr - bn)**2)*ipow(rr, n)
-                call kbessel(lamA, 2.0_dp*ea*an*rr, kba)
-                call kbessel(lamB, 2.0_dp*eb*bn*rr, kbb)
-                do mm = 0, nab
-                  do lam2 = 0, lamB
-                    do lam1 = 0, lamA
-                      r2(mm, lam1, lam2) = r2(mm, lam1, lam2) + g*kba(lam1)*kbb(lam2)
-                    end do
-                  end do
-                  g = g*rr
+                call kbessel_t(tab, lamA, 2.0_dp*ea*an*rr, kba)
+                call kbessel_t(tab, lamB, 2.0_dp*eb*bn*rr, kbb)
+                npt = npt + 1
+                do ia = 1, nw
+                  amat((ia - 1)*(lamA + 1) + 1:ia*(lamA + 1), npt) = (wfac(ia)*g)*kba
                 end do
+                rp = 1.0_dp
+                do mm = 0, nab
+                  bmat(mm*(lamB + 1) + 1:(mm + 1)*(lamB + 1), npt) = rp*kbb
+                  rp = rp*rr
+                end do
+                if (npt == CHUNK) then
+                  call dgemm('N', 'T', ma, nbc, npt, 1.0_dp, amat, ma, bmat, nbc, 1.0_dp, cmat, ma)
+                  npt = 0
+                end if
               end do
             end do
-            call weights(nw, ea, eb, wts)
-            do ia = 1, nw
-              r2w(ia, :, :, :) = r2w(ia, :, :, :) + wts(ia)*ca*cb*r2
+          end do
+        end do
+        if (npt > 0) call dgemm('N', 'T', ma, nbc, npt, 1.0_dp, amat, ma, bmat, nbc, 1.0_dp, cmat, ma)
+        do lam2 = 0, lamB
+          do mm = 0, nab
+            col = mm*(lamB + 1) + lam2 + 1
+            do lam1 = 0, lamA
+              do ia = 1, nw
+                r2w(ia, mm, lam1, lam2) = cmat((ia - 1)*(lamA + 1) + lam1 + 1, col)
+              end do
             end do
           end do
         end do
         if (nterm == 0) cycle
-        do ia = 1, nw
-          do lm = l*l + 1, (l + 1)**2
-            ! x(ta, Nb, lam2) = sum_{Na, lam1} gA(ta, lm, Na, lam1) r2w(Na+Nb, lam1, lam2)
-            x = 0.0_dp
+        ! iw(ia, ta, tb) += sum_m sum_(Na,l1),(Nb,l2) gA(ta,m,Na,l1) r2w(ia,Na+Nb,l1,l2) gB(tb,m,Nb,l2)
+        do lm = l*l + 1, (l + 1)**2
+          do lam1 = 0, lamA
+            do nA_ = 0, na
+              ga(:, nA_ + (na + 1)*lam1 + 1) = gt(iata)%g(1:ntA, lm, nA_, lam1)
+            end do
+          end do
+          do lam2 = 0, lamB
+            do nB_ = 0, nb
+              gb(:, nB_ + (nb + 1)*lam2 + 1) = gt(iatb)%g(1:ntB, lm, nB_, lam2)
+            end do
+          end do
+          do ia = 1, nw
             do lam2 = 0, lamB
               do nB_ = 0, nb
                 do lam1 = 0, lamA
                   do nA_ = 0, na
-                    if (r2w(ia, nA_ + nB_, lam1, lam2) == 0.0_dp) cycle
-                    x(:, nB_, lam2) = x(:, nB_, lam2) &
-                        + gt(iata)%g(1:ntA, lm, nA_, lam1)*r2w(ia, nA_ + nB_, lam1, lam2)
+                    rmat(nA_ + (na + 1)*lam1 + 1, nB_ + (nb + 1)*lam2 + 1) = r2w(ia, nA_ + nB_, lam1, lam2)
                   end do
                 end do
               end do
             end do
-            do tb = 1, ntB
-              do lam2 = 0, lamB
-                do nB_ = 0, nb
-                  if (gt(iatb)%g(tb, lm, nB_, lam2) == 0.0_dp) cycle
-                  iw(ia, :, tb) = iw(ia, :, tb) + x(:, nB_, lam2)*gt(iatb)%g(tb, lm, nB_, lam2)
-                end do
-              end do
-            end do
+            call dgemm('N', 'N', ntA, kb2, ka2, 1.0_dp, ga, ntA, rmat, ka2, 0.0_dp, xm, ntA)
+            call dgemm('N', 'T', ntA, ntB, kb2, 1.0_dp, xm, ntA, gb, ntB, 0.0_dp, ym, ntA)
+            iw(ia, :, :) = iw(ia, :, :) + ym
           end do
         end do
       end do
