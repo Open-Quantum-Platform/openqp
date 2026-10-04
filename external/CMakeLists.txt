@@ -271,6 +271,14 @@ oqp_set_external_paths(LIBINT2 libint
     "${CMAKE_BINARY_DIR}/external/libint/build-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/libint/stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/install/libint")
+# Retire the pre-fix Libint artifacts WITHOUT invalidating every other cached
+# external.  The CMAKE_BUILD_TYPE forwarding added below changes how Libint is
+# compiled but not the aggregate externals key, so oqp_reuse_or_build() would
+# keep serving the old -O0 libint2.a from "build-<id>" forever.  The externals
+# key is shared by all dependencies, so bumping it would also rebuild Libxc and
+# the rest; tagging only Libint's own build directory is the scoped equivalent.
+set(LIBINT2_BUILD_DIR "${LIBINT2_BUILD_DIR}-opt" CACHE INTERNAL "LIBINT2_BUILD_DIR" FORCE)
+set(LIBINT2_STAMP_DIR "${LIBINT2_STAMP_DIR}-opt" CACHE INTERNAL "LIBINT2_STAMP_DIR" FORCE)
 set(LIBINT2_LIBRARY "${LIBINT2_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}int2${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "LIBINT2_LIBRARY" FORCE)
 
 oqp_reuse_or_build(libint2 "${LIBINT2_LIBRARY}" "${LIBINT2_BUILD_DIR}/fortran" "${LIBINT2_BUILD_DIR}/include")
@@ -285,7 +293,14 @@ ExternalProject_Add(libint2
     BUILD_BYPRODUCTS ${LIBINT2_LIBRARY}
     UPDATE_COMMAND ""
     INSTALL_COMMAND ""
-    CMAKE_ARGS -DENABLE_FORTRAN=ON
+    # Libint's own CMakeLists sets neither a default CMAKE_BUILD_TYPE nor any
+    # optimization flags, and ExternalProject does not inherit the outer one.
+    # Omitting it here compiled every generated ERI kernel at the compiler
+    # default -O0 (verified: build.ninja carried only "-arch <arch> -fPIC"),
+    # so a USE_LIBINT=ON build silently replaced the optimized native Rys path
+    # with an unoptimized engine.  Every other external here already forwards it.
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+               -DENABLE_FORTRAN=ON
                -DREQUIRE_CXX_API=OFF
                -DENABLE_MPFR=OFF
                -DLIBINT2_SHGAUSS_ORDERING=standard
