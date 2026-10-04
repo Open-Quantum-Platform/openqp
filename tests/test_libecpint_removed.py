@@ -1,8 +1,8 @@
 """Dependency-light guards for the complete removal of libecpint.
 
 Effective-core-potential integrals and their first and second nuclear
-derivatives come from source/ecp_native.F90 (validated by
-tests/test_ecp_native.py).
+derivatives come from source/ecp.F90 (validated by
+tests/test_ecp_integrals.py).
 """
 
 import unittest
@@ -21,7 +21,8 @@ class LibecpintRemovalTests(unittest.TestCase):
         self.assertNotIn("libecpint_wrapper", ecp)
         self.assertNotIn("libecp_result", ecp)
         self.assertNotIn("set_integrator", ecp)
-        self.assertIn("use ecp_native, only: ecp_native_raw", ecp)
+        self.assertIn("subroutine ecp_raw_ints(", ecp)
+        self.assertFalse((ROOT / "source" / "ecp_native.F90").exists())
         basis_api = (ROOT / "source" / "basis_api.F90").read_text().lower()
         self.assertNotIn("libecpint", basis_api)
 

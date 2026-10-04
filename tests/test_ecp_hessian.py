@@ -1,6 +1,6 @@
 """Validate the native analytic Hessian with effective core potentials (ECP).
 
-ECP second derivatives are supplied by ecp_native (derivative order 2):
+ECP second derivatives are supplied by ecp_tool::ecp_raw_ints (derivative order 2):
   * the ECP skeleton d^2 V_ECP/dR^2 (fixed density) is contracted analytically
     via ecp_tool::add_ecphess into the Cartesian Hessian, packed in the
     atom-pair convention {AA, AB, AC, ..., BB, ...};

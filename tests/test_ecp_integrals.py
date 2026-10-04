@@ -1,7 +1,7 @@
-"""Native ECP integrals (source/ecp_native.F90) against independent references.
+"""Native ECP integrals (source/ecp.F90) against independent references.
 
-Drives the ``oqp_ecp_native_selftest`` bind(C) harness
-(tests/fortran/ecp_native_selftest.F90): an O p primitive and a Br s and p
+Drives the ``oqp_ecp_selftest`` bind(C) harness
+(tests/fortran/ecp_selftest.F90): an O p primitive and a Br s and p
 primitive with the LANL2DZ Br ECP at the HOBr O-Br separation.
 
 - An off-centre matrix element is compared with an mpmath (local channel) and
@@ -33,8 +33,8 @@ def _runtime_available():
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp
 
-        if not hasattr(oqp.lib, "oqp_ecp_native_selftest"):
-            _RUNTIME_ERROR = "missing native symbol: oqp_ecp_native_selftest"
+        if not hasattr(oqp.lib, "oqp_ecp_selftest"):
+            _RUNTIME_ERROR = "missing native symbol: oqp_ecp_selftest"
             return False
         return True
     except Exception as exc:
@@ -64,12 +64,12 @@ class NativeEcpSelfTest(unittest.TestCase):
         import oqp
 
         err = oqp.ffi.new("double[9]")
-        oqp.lib.oqp_ecp_native_selftest(err)
+        oqp.lib.oqp_ecp_selftest(err)
         cls.err = [err[i] for i in range(9)]
         # repeated calls in one process: every buffer is per call, so the
         # second run must reproduce the first exactly
         err2 = oqp.ffi.new("double[9]")
-        oqp.lib.oqp_ecp_native_selftest(err2)
+        oqp.lib.oqp_ecp_selftest(err2)
         cls.err_repeat = [err2[i] for i in range(9)]
 
     def test_off_centre_element_matches_independent_quadrature(self):

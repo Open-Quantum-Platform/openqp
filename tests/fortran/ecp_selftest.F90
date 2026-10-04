@@ -1,4 +1,4 @@
-!> Self-test of the native ECP integrals (source/ecp_native.F90) against
+!> Self-test of the native ECP integrals (source/ecp.F90) against
 !> references that do not use its expansion machinery.
 !>
 !> System: one O p primitive at the origin; one s and one p primitive on Br at
@@ -23,8 +23,8 @@
 !>   err(7)  F f_zzz, g_zzzz: |native - (-2.699075746770718e-4)|, independent
 !>           mpmath (type 1) + numerical projection/adaptive radial (type 2)
 !>   err(8), err(9)  as err(4), err(5) for system 2
-module ecp_native_selftest_mod
-  use ecp_native, only: ecp_native_raw, ecp_native_hess_start
+module ecp_selftest_mod
+  use ecp_tool, only: ecp_raw_ints, ecp_hess_start
   use basis_tools, only: basis_set
   use precision, only: dp
   use, intrinsic :: iso_c_binding, only: c_double
@@ -32,7 +32,7 @@ module ecp_native_selftest_mod
 
 contains
 
-  subroutine oqp_ecp_native_selftest(err) bind(C, name='oqp_ecp_native_selftest')
+  subroutine oqp_ecp_selftest(err) bind(C, name='oqp_ecp_selftest')
     real(c_double), intent(out) :: err(9)
 
     real(dp), parameter :: ANG = 1.0_dp/0.529177210903_dp
@@ -75,7 +75,7 @@ contains
     allocate(b%ecp_params%ecp_ex(NT), source=ECP_Z)
     allocate(b%ecp_params%ecp_cc(NT), source=ECP_D)
 
-    call ecp_native_raw(b, coord, 0, v)
+    call ecp_raw_ints(b, coord, 0, v)
     ! raw order: O px py pz | Br s | Br px py pz
     err(1) = abs(v(1*NR + 2) - 0.16376847398766514_dp)
 
@@ -97,14 +97,14 @@ contains
 
     ! finite differences: the ECP moves with atom 2
     call fd_check(b, coord, 2, err(4), err(5))
-    call ecp_native_raw(b, coord, 1, d1)
+    call ecp_raw_ints(b, coord, 1, d1)
     err(6) = 0.0_dp
     do k = 1, 3
       err(6) = max(err(6), maxval(abs(d1((k - 1)*NN + 1:k*NN) + d1((k + 2)*NN + 1:(k + 3)*NN))))
     end do
 
     call system2(err(7), err(8), err(9))
-  end subroutine oqp_ecp_native_selftest
+  end subroutine oqp_ecp_selftest
 
   subroutine system2(eref, e1, e2)
     real(c_double), intent(out) :: eref, e1, e2
@@ -146,7 +146,7 @@ contains
     allocate(b%ecp_params%ecp_ex(NT), source=ECP_Z)
     allocate(b%ecp_params%ecp_cc(NT), source=ECP_D)
 
-    call ecp_native_raw(b, coord, 0, v)
+    call ecp_raw_ints(b, coord, 0, v)
     ! raw order: f (10 components, zzz last) | g (15 components, zzzz last); nraw = 25
     eref = abs(v((10 - 1)*25 + 25) - (-2.699075746770718e-4_dp))
     call fd_check(b, coord, 1, e1, e2)
@@ -167,12 +167,12 @@ contains
     integer(8) :: nn
 
     natm = size(coord, 2)
-    call ecp_native_raw(b, coord, 0, v)
+    call ecp_raw_ints(b, coord, 0, v)
     nn = size(v, kind=8)
     nraw = nint(sqrt(real(nn, dp)))
     nmat1 = 3*natm
-    call ecp_native_raw(b, coord, 1, d1)
-    call ecp_native_raw(b, coord, 2, d2)
+    call ecp_raw_ints(b, coord, 1, d1)
+    call ecp_raw_ints(b, coord, 2, d2)
     c0 = coord
     fdw = [1.0_dp, -8.0_dp, 8.0_dp, -1.0_dp]/(12.0_dp*H)
     e1 = 0.0_dp
@@ -187,9 +187,9 @@ contains
           coord = c0
           coord(k, ia) = coord(k, ia) + isgn*H
           b%ecp_params%ecp_coord = coord(:, iecp)
-          call ecp_native_raw(b, coord, 0, v)
+          call ecp_raw_ints(b, coord, 0, v)
           fp = fp + fdw(step)*v
-          call ecp_native_raw(b, coord, 1, v)
+          call ecp_raw_ints(b, coord, 1, v)
           f2 = f2 + fdw(step)*v
         end do
         coord = c0
@@ -201,10 +201,10 @@ contains
             gj = 3*(ib - 1) + kb
             if (gi > gj) cycle
             if (ia == ib) then
-              mat = ecp_native_hess_start(ia - 1, ia - 1, natm) + 3 &
+              mat = ecp_hess_start(ia - 1, ia - 1, natm) + 3 &
                   + (k - 1)*3 - ((k - 1)*(k - 2))/2 + (kb - k)
             else
-              mat = ecp_native_hess_start(ia - 1, ib - 1, natm) + (k - 1)*3 + (kb - 1)
+              mat = ecp_hess_start(ia - 1, ib - 1, natm) + (k - 1)*3 + (kb - 1)
             end if
             e2 = max(e2, maxval(abs(f2((gj - 1)*nn + 1:gj*nn) &
                                     - d2(int(mat, 8)*nn + 1:int(mat + 1, 8)*nn))))
@@ -214,4 +214,4 @@ contains
     end do
   end subroutine fd_check
 
-end module ecp_native_selftest_mod
+end module ecp_selftest_mod

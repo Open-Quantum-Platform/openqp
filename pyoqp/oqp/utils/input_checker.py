@@ -7284,7 +7284,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
-    #   * ECP second derivatives -- ecp_native deriv order 2, contracted in
+    #   * ECP second derivatives -- ecp_raw_ints deriv order 2, contracted in
     #     hf_hessian via add_ecphess + the ECP core-derivative in the CPHF response;
     #   * range-separated (CAM/LC) functionals -- the erfc-attenuated two-pass split
     #     in grd2_hess_driver (skeleton), grd2_driver (fock_deriv_contract response)

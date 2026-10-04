@@ -85,7 +85,7 @@ for attr_name in dir(lib):
             'oqp_namd_rescale_directional',
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
             'oqp_simplex_qp_solve', 'oqp_simplex_qp_solve_avoid',
-            'oqp_ecp_native_selftest',
+            'oqp_ecp_selftest',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

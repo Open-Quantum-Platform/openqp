@@ -45,7 +45,7 @@ DFT-D4.
 
 libecpint and the Faddeeva copy it bundled have been removed from the OpenQP
 source, build graph, and default binary; effective-core-potential integrals and
-their derivatives are computed by OpenQP's own `source/ecp_native.F90`.
+their derivatives are computed by OpenQP's own `source/ecp.F90`.
 
 ## OpenQP build changes to upstream source trees
 

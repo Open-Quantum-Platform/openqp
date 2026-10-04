@@ -61,7 +61,7 @@ contains
 
     ! Unsupported-feature guards (apply to ALL references, RHF/RKS included).
     ! Effective-core-potential (ECP) second derivatives ARE supported: RHF/UHF
-    ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, ecp_native
+    ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, ecp_raw_ints
     ! deriv order 2) plus the ECP core-derivative in the CPHF response; ROHF folds
     ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.
     ! Range-separated (CAM/LC) functionals are also supported: the 2e derivative
