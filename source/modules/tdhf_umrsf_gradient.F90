@@ -771,10 +771,11 @@ contains
     allocate(cac(nbf,nbf), cbc(nbf,nbf), epsca(nbf), epscb(nbf))
     block
       real(kind=dp), allocatable :: fac(:,:), fbc(:,:)
-      integer :: ierr
       allocate(fac, source=fa) ; allocate(fbc, source=fb)
-      call diag_symm_full(1, nbf, fac, nbf, epsca, ierr)   ! fac -> Vα (eigenvectors)
-      call diag_symm_full(1, nbf, fbc, nbf, epscb, ierr)   ! fbc -> Vβ
+      ! No status argument: diag_symm_full then aborts on an allocation or DSYEVD failure
+      ! instead of returning unconverged eigenvectors to the Z-vector frame.
+      call diag_symm_full(1, nbf, fac, nbf, epsca)   ! fac -> Vα (eigenvectors)
+      call diag_symm_full(1, nbf, fbc, nbf, epscb)   ! fbc -> Vβ
       cac = matmul(va, fac) ; cbc = matmul(vb, fbc)
       deallocate(fac, fbc)
     end block

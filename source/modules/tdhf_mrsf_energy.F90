@@ -600,6 +600,17 @@ contains
 
     infos%tddft%nstate = nstates
 
+!   The requested state (for example a single grad= root) must survive the
+!   clipping above; otherwise the published target energy would be read
+!   beyond the solved spectrum.
+    target_state = infos%tddft%target_state
+    if (target_state > nstates) then
+      write(*,'(2X,A,I0,A,I0,A)') 'Requested target state ', target_state, &
+        ' exceeds the ', nstates, ' states available in this response space.'
+      call show_message('MRSF target state lies outside the clipped response space; '// &
+                        'request a lower state or a larger basis.', with_abort)
+    end if
+
     ! The Davidson expands only on the residuals of the roots it TRACKS.  When
     ! the tracked set is the reported set, a symmetry block whose crude
     ! diagonal estimate starts just above the reported window is never enriched:

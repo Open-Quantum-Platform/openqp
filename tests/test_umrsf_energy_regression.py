@@ -142,6 +142,20 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("include_ground_state=.false.,include_weight_derivative=.true.", gradient)
         self.assertNotIn("weight_derivative_only=.true.", gradient)
 
+    def test_target_state_is_checked_against_the_clipped_response_space(self):
+        energy = _fortran_subroutine(ENERGY, "tdhf_mrsf_energy").replace("&", "")
+        clip = energy.index("infos%tddft%nstate=nstates")
+        guard = energy.index("if(target_state>nstates)then")
+        use = energy.index("mrsf_energies(infos%tddft%target_state)")
+        self.assertLess(clip, guard)
+        self.assertLess(guard, use)
+
+    def test_canonical_orbital_diagonalization_aborts_on_failure(self):
+        gradient = compact(UMRSF_GRAD.read_text())
+        self.assertIn("calldiag_symm_full(1,nbf,fac,nbf,epsca)", gradient)
+        self.assertIn("calldiag_symm_full(1,nbf,fbc,nbf,epscb)", gradient)
+        self.assertNotIn("calldiag_symm_full(1,nbf,fac,nbf,epsca,ierr)", gradient)
+
     def test_required_response_terms_cannot_be_disabled_by_environment(self):
         gradient = UMRSF_GRAD.read_text()
         for name in ("UMRSF_ZTOL", "UMRSF_ZW", "UMRSF_W2E", "UMRSF_WRR", "UMRSF_ZOV",
