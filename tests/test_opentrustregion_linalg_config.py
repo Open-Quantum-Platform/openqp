@@ -103,14 +103,14 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
     def test_external_projects_receive_top_level_compilers(self):
         external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
 
-        libecpint_block = external_cmake[
-            external_cmake.index("ExternalProject_Add(libecpint"):
+        tagarray_block = external_cmake[
+            external_cmake.index("ExternalProject_Add(libtagarray"):
             external_cmake.index("if(_LINALG_LIB_TYPE STREQUAL NetLib)")
         ]
 
-        self.assertIn("CMAKE_C_COMPILER=${CMAKE_C_COMPILER}", libecpint_block)
-        self.assertIn("CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}", libecpint_block)
-        self.assertIn("CMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}", libecpint_block)
+        self.assertIn("CMAKE_C_COMPILER=${CMAKE_C_COMPILER}", tagarray_block)
+        self.assertIn("CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}", tagarray_block)
+        self.assertIn("CMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}", tagarray_block)
 
     def test_external_projects_receive_make_program_when_set(self):
         external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()

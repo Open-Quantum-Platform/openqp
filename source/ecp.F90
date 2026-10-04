@@ -1,15 +1,12 @@
-!> @brief ECP (effective core potential) interface built on libecpint.
-!> @detail Provides ECP one-electron integrals and first derivatives, handling
-!>         AO-label remapping and shell-origin geometry. Wraps libecpint’s C API
-!>         and exposes simple Fortran-callable routines for OpenQP.
+!> @brief ECP (effective core potential) one-electron integrals for OpenQP.
+!> @detail Contracts the raw Cartesian ECP integrals and nuclear derivatives of
+!>         @ref ecp_native with densities, or returns them in OpenQP AO order
+!>         (canonical Cartesian order, spherical transformation).
 !> @author Mohsen Mazaherifar
 !> @date January 2025
 module ecp_tool
-    use iso_c_binding, only: c_double, c_ptr, c_int, c_int64_t,&
-            c_f_pointer, C_LOC, c_null_ptr
+    use iso_c_binding, only: c_double, c_int, c_int64_t
     use, intrinsic :: iso_fortran_env, only: real64
-    use libecpint_wrapper
-    use libecp_result, only : ecp_result
     use basis_tools, only: basis_set
     use precision, only: dp
     use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
@@ -24,7 +21,7 @@ module ecp_tool
 
 contains
     !> @brief Add ECP one-electron contribution to the AO-core Hamiltonian (packed).
-    !> @detail Computes scalar ECP integrals with libecpint (deriv order 0),
+    !> @detail Computes scalar ECP integrals with ecp_native (deriv order 0),
     !>         remaps them into OpenQP AO ordering via @ref transform_ecp_matrix,
     !>         and accumulates into upper-triangular packed Hcore.
     !> @param[in]  basis   Basis set (contains ECP params and AO metadata).
@@ -37,9 +34,7 @@ contains
         real(real64), contiguous, intent(in) :: coord(:,:)
         type(basis_set), intent(in) :: basis
         real(real64), contiguous, intent(inout) :: hcore(:)
-        type(c_ptr) :: integrator
-        type(ecp_result) :: result_ptr
-        real(c_double), pointer :: libecp_res(:)
+        real(c_double), allocatable :: raw_res(:)
         real(c_double), allocatable :: ecp_mat(:)
         integer :: i, j, c
         integer(c_int) :: driv_order
@@ -49,13 +44,10 @@ contains
         end if
         driv_order = 0
 
-        call set_integrator(integrator, basis, coord, driv_order)
-
-        result_ptr = compute_integrals(integrator)
-        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+        call ecp_raw(basis, coord, driv_order, raw_res)
 
 
-        call transform_ecp_matrix(basis, libecp_res, ecp_mat)
+        call transform_ecp_matrix(basis, raw_res, ecp_mat)
 
         c = 0
         do i = 1, basis%nbf
@@ -65,21 +57,15 @@ contains
             end do
         end do
 
-        ! free the C-side buffer BEFORE nulling the local handle: free_result
-        ! takes the struct by value, so nulling first would leak the buffer
-        call free_result(result_ptr)
-        result_ptr%data = c_null_ptr
-        result_ptr%size = 0
-        nullify(libecp_res)
+        deallocate(raw_res)
         deallocate(ecp_mat)
 
-        call free_integrator(integrator)
 
     end subroutine add_ecpint
 
     !> @brief Add ECP force contribution (first derivatives) to nuclear gradients.
     !> @detail Computes dV_ECP/dR_A in AO full-square form for each atom using
-    !>         libecpint (deriv order 1), transforms to OpenQP AO ordering, and
+    !>         ecp_native (deriv order 1), transforms to OpenQP AO ordering, and
     !>         contracts with the symmetric density `denab` (packed) to accumulate
     !>         into atomic gradient components `de(:,A)`.
     !> @param[in]    basis  Basis set (with ECP params).
@@ -96,9 +82,7 @@ contains
         REAL(kind=dp), INTENT(INOUT) :: denab(:)
         REAL(kind=dp), intent(INOUT) :: de(:,:)
 
-        type(ecp_result) :: result_ptr
-        type(c_ptr) :: integrator
-        real(c_double), pointer :: libecp_res(:)
+        real(c_double), allocatable :: raw_res(:)
         real(c_double), allocatable :: raw_block(:), ecp_mat(:)
         real(real64), allocatable :: deloc(:,:)
         integer :: i, j, c, n, natm, prim, cc, nbf_raw
@@ -121,16 +105,12 @@ contains
         allocate(deloc(3, natm))
         deloc = 0
 
-        call set_integrator(integrator, basis, coord, driv_order)
-
-        result_ptr = compute_first_derivs(integrator)
-
-        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+        call ecp_raw(basis, coord, driv_order, raw_res)
 
 
         do n = 1, natm
             do cc = 1, 3
-                raw_block = libecp_res(full_size * (3 * (n - 1) + cc - 1) + 1 : &
+                raw_block = raw_res(full_size * (3 * (n - 1) + cc - 1) + 1 : &
                                        full_size * (3 * (n - 1) + cc))
                 call transform_ecp_matrix(basis, raw_block, ecp_mat)
 
@@ -153,21 +133,16 @@ contains
 
         de(:, 1:natm) = de(:, 1:natm) + deloc(:, 1:natm)
 
-        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
-        call free_result(result_ptr)
-        result_ptr%data = c_null_ptr
-        result_ptr%size = 0
-        nullify(libecp_res)
+        deallocate(raw_res)
         if (allocated(ecp_mat)) deallocate(ecp_mat)
         deallocate(raw_block)
 
-        call free_integrator(integrator)
 
     end subroutine add_ecpder
 
     !> @brief Return ECP one-electron first-derivative integrals (uncontracted).
     !> @detail Computes dV_ECP_{mu,nu}/dR_{I,c} for every atom I and Cartesian
-    !>         direction c using libecpint (deriv order 1), transforms each block
+    !>         direction c using ecp_native (deriv order 1), transforms each block
     !>         to OpenQP AO ordering, and stores the full-square AO matrices into
     !>         `dVecp(mu,nu,c,I)`.  These are the response counterpart of
     !>         @ref add_ecpder (which contracts the same integrals with a density);
@@ -187,9 +162,7 @@ contains
         type(basis_set), intent(in) :: basis
         real(kind=dp), intent(out) :: dVecp(:,:,:,:)
 
-        type(ecp_result) :: result_ptr
-        type(c_ptr) :: integrator
-        real(c_double), pointer :: libecp_res(:)
+        real(c_double), allocatable :: raw_res(:)
         real(c_double), allocatable :: raw_block(:), ecp_mat(:)
         integer :: nbf, nbf_raw, natm, n, cc, i, j
         ! 64-bit: slice offsets reach 3*natm*nbf^2 and overflow default integers
@@ -208,14 +181,11 @@ contains
         natm = size(coord, dim=2)
         allocate(raw_block(full_size))
 
-        call set_integrator(integrator, basis, coord, driv_order)
-
-        result_ptr = compute_first_derivs(integrator)
-        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+        call ecp_raw(basis, coord, driv_order, raw_res)
 
         do n = 1, natm
             do cc = 1, 3
-                raw_block = libecp_res(full_size*(3*(n - 1) + cc - 1) + 1 : &
+                raw_block = raw_res(full_size*(3*(n - 1) + cc - 1) + 1 : &
                                        full_size*(3*(n - 1) + cc))
                 call transform_ecp_matrix(basis, raw_block, ecp_mat)
                 do j = 1, nbf
@@ -226,27 +196,22 @@ contains
             end do
         end do
 
-        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
-        call free_result(result_ptr)
-        result_ptr%data = c_null_ptr
-        result_ptr%size = 0
-        nullify(libecp_res)
+        deallocate(raw_res)
         if (allocated(ecp_mat)) deallocate(ecp_mat)
 
-        call free_integrator(integrator)
         deallocate(raw_block)
 
     end subroutine ecp_deriv_ints
 
     !> @brief Add ECP second-derivative contribution to the nuclear Hessian.
     !> @detail Computes d^2 V_ECP/dR_I dR_J in AO full-square form for every atom
-    !>         pair using libecpint (deriv order 2), transforms each block to
+    !>         pair using ecp_native (deriv order 2), transforms each block to
     !>         OpenQP AO ordering, and contracts with the symmetric density
     !>         `denab` (packed) to accumulate the fixed-density ECP skeleton into
     !>         the Cartesian Hessian `hess` (3*natm x 3*natm, atom-major layout
     !>         hess(3*(I-1)+a, 3*(J-1)+b)).
     !>
-    !>         libecpint returns the packed upper triangle of atom-coordinate
+    !>         ecp_native returns the packed upper triangle of atom-coordinate
     !>         pairs: matrix index H_START(I,J,natm) (0-based) starts each (I<=J)
     !>         atom block.  Diagonal blocks (I==J) store 6 matrices in the order
     !>         {xx,xy,xz,yy,yz,zz}; off-diagonal blocks (I<J) store 9 matrices in
@@ -266,9 +231,7 @@ contains
         real(kind=dp), intent(in) :: denab(:)
         real(kind=dp), intent(inout) :: hess(:,:)
 
-        type(ecp_result) :: result_ptr
-        type(c_ptr) :: integrator
-        real(c_double), pointer :: libecp_res(:)
+        real(c_double), allocatable :: raw_res(:)
         real(c_double), allocatable :: raw_block(:), ecp_mat(:)
         integer :: nbf, nbf_raw, natm
         integer :: iat, jat, ia0, ja0, hstart, base, ncomp, n
@@ -290,10 +253,7 @@ contains
         natm = size(coord, dim=2)
         allocate(raw_block(mat_sz))
 
-        call set_integrator(integrator, basis, coord, driv_order)
-
-        result_ptr = compute_second_derivs(integrator)
-        call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
+        call ecp_raw(basis, coord, driv_order, raw_res)
 
         do iat = 1, natm
             do jat = iat, natm
@@ -314,7 +274,7 @@ contains
                 end if
 
                 do n = 1, ncomp
-                    raw_block = libecp_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
+                    raw_block = raw_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
                     call transform_ecp_matrix(basis, raw_block, ecp_mat)
 
                     val = 0.0_dp
@@ -343,86 +303,26 @@ contains
             end do
         end do
 
-        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
-        call free_result(result_ptr)
-        result_ptr%data = c_null_ptr
-        result_ptr%size = 0
-        nullify(libecp_res)
+        deallocate(raw_res)
         if (allocated(ecp_mat)) deallocate(ecp_mat)
 
-        call free_integrator(integrator)
         deallocate(raw_block)
 
     end subroutine add_ecphess
 
-    !> @brief Construct and initialize a libecpint integrator instance.
-    !> @detail Marshals Gaussian basis (centers, exponents, contractions, AMs) and
-    !>         ECP basis (centers, exponents, coefficients, AMs, powers) from
-    !>         OpenQP’s `basis_set` into libecpint arrays, assigns the ECP data,
-    !>         and finalizes the integrator for the requested derivative order.
-    !> @param[out] integrator    Opaque libecpint handle (C pointer).
-    !> @param[in]  basis         Basis + ECP data.
-    !> @param[in]  coord         Nuclear coordinates (3×natm).
-    !> @param[in]  deriv_order   0 = value, 1 = first derivatives.
-    !> @pre `basis%ecp_params` fields are allocated when is_ecp is true.
-    !> @author Mohsen Mazaherifar
-    !> @date January 2025
-    subroutine set_integrator(integrator, basis, coord, deriv_order)
-
-        real(c_double), intent(in), contiguous :: coord(:,:)
+    !> @brief Raw Cartesian ECP integrals or nuclear derivatives (see ecp_native).
+    subroutine ecp_raw(basis, coord, deriv_order, raw)
+        use ecp_native, only: ecp_native_raw
         type(basis_set), intent(in) :: basis
+        real(real64), contiguous, intent(in) :: coord(:,:)
         integer(c_int), intent(in) :: deriv_order
+        real(c_double), allocatable, intent(out) :: raw(:)
 
-        type(c_ptr) :: integrator
-        real(c_double), allocatable :: g_coords(:), g_exps(:), g_coefs(:)
-        integer(c_int), allocatable :: g_ams(:), g_lengths(:)
-        real(c_double), allocatable :: u_coords(:), u_exps(:), u_coefs(:)
-        integer(c_int), allocatable :: u_ams(:), u_ns(:), u_lengths(:)
-        integer(c_int) :: num_ecps, num_gaussians, n_coord, f_expo_len
-        integer :: tri_size, full_size, natm
+        call ecp_native_raw(basis, coord, int(deriv_order), raw)
 
-
-        tri_size = basis%nbf * (basis%nbf + 1) / 2
-        full_size = basis%nbf * basis%nbf
-
-        f_expo_len = sum(basis%ecp_params%n_expo)
-        natm = size(coord, dim=2)
-
-        num_gaussians = basis%nshell
-        n_coord = num_gaussians * 3
-
-        allocate(g_coords(n_coord), g_exps(basis%nprim), g_coefs(basis%nprim))
-        allocate(g_ams(basis%nshell), g_lengths(basis%nshell))
-
-        allocate(u_coords(size(basis%ecp_params%ecp_coord)), u_exps(f_expo_len))
-        allocate(u_coefs(f_expo_len), u_ams(f_expo_len))
-        allocate(u_ns(f_expo_len), u_lengths(size(basis%ecp_params%n_expo)))
-
-        call libecp_g_coords(basis, coord, g_coords)
-        g_exps = real(basis%ex, kind=c_double)
-        g_coefs = real(basis%cc, kind=c_double)
-        g_ams = int(basis%am, kind=c_int)
-        g_lengths = int(basis%ncontr, kind=c_int)
-
-        num_ecps = int(size(basis%ecp_params%n_expo), kind=c_int)
-        u_coords = real(basis%ecp_params%ecp_coord, kind=c_double)
-        u_exps = real(basis%ecp_params%ecp_ex, kind=c_double)
-        u_coefs = real(basis%ecp_params%ecp_cc, kind=c_double)
-        u_ams = int(basis%ecp_params%ecp_am, kind=c_int)
-        u_ns = int(basis%ecp_params%ecp_r_ex, kind=c_int)
-        u_lengths = int(basis%ecp_params%n_expo, kind=c_int)
-
-
-        integrator = init_integrator(num_gaussians, g_coords, g_exps, g_coefs, &
-                                     g_ams, g_lengths)
-
-        call set_ecp_basis(integrator, num_ecps, u_coords, u_exps, u_coefs, &
-                           u_ams, u_ns, u_lengths)
-
-        call init_integrator_instance(integrator, deriv_order)
-
-    end subroutine set_integrator
-  !> @brief Build AO index remapping from libecpint canonical order to OpenQP AO order.
+    end subroutine ecp_raw
+  !> @brief Build AO index remapping from the raw Cartesian order (x power descending,
+  !>        then y) to OpenQP AO order.
   !> @detail Fills `label_map(i_old)=i_new` using shell origins and angular-momentum
   !>         layout so that full-square AO matrices can be permuted consistently.
   !> @param[in]    basis     Basis set (AO layout and shell metadata).
@@ -458,7 +358,7 @@ contains
 
   end subroutine ecp_cart_offsets
 
-  subroutine libecpint_map(basis, cart_off, label_map)
+  subroutine raw_cart_map(basis, cart_off, label_map)
 
     use basis_tools, only: basis_set
     use constants, only: map_canonical
@@ -476,36 +376,15 @@ contains
       end do
     end do
 
-  end  subroutine libecpint_map
-  !> @brief Pack Gaussian-center coordinates per shell for libecpint.
-  !> @detail Writes (x,y,z) per shell index using `basis%origin(shell)` to select
-  !>         the parent atom for the shell center as expected by libecpint.
-  !> @param[in]  basis    Basis set.
-  !> @param[in]  coord    Nuclear coordinates (3×natm).
-  !> @param[out] g_coords Flat array of size 3*nshell: [x1,y1,z1, x2,y2,z2, ...].
-  !> @note Coordinates are cast to C double precision for the C API.
-  !> @author Mohsen Mazaherifar
-  !> @date January 2025
-  subroutine libecp_g_coords(basis, coord, g_coords)
-
-      type(basis_set), intent(in) :: basis
-      real(real64), intent(in) :: coord(:,:)
-      real(c_double), intent(out) :: g_coords(:)
-
-      integer :: shell
-
-      do shell = 1, basis%nshell
-          g_coords(3*shell-2:3*shell) = real(coord(1:3, basis%origin(shell)),c_double)
-      end do
-  end subroutine libecp_g_coords
+  end  subroutine raw_cart_map
 
   !> @brief Permute a full AO square matrix into OpenQP AO ordering.
-  !> @detail Applies the mapping from @ref libecpint_map to reorder rows/cols
+  !> @detail Applies the mapping from @ref raw_cart_map to reorder rows/cols
   !>         of `matrix` in-place (via a temporary copy). Expects size nbf×nbf.
   !> @param[in]    basis   Basis set (provides AO label map).
   !> @param[inout] matrix  Full AO square matrix flattened (size nbf*nbf).
   !> @throws Stops if `size(matrix) != nbf*nbf`.
-  !> @see libecpint_map
+  !> @see raw_cart_map
   !> @author Mohsen Mazaherifar
   !> @date January 2025
   subroutine transform_ecp_matrix(basis, raw_matrix, matrix)
@@ -532,7 +411,7 @@ contains
       stop
     end if
 
-    call libecpint_map(basis, cart_off, label_map)
+    call raw_cart_map(basis, cart_off, label_map)
     allocate(cart_matrix(nbf_raw * nbf_raw))
     allocate(matrix(nbf_sph * nbf_sph))
 
@@ -582,7 +461,7 @@ contains
           end do
         end do
 
-        ! libecpint blocks are in the same pure-power Cartesian convention as
+        ! Raw ECP blocks are in the same pure-power Cartesian convention as
         ! the native 1e primitives (bas_norm_matrix folds shells_pnrm2 for
         ! Cartesian shells later, but bfnrm = 1 for pure shells), so the
         ! transform must fold shells_pnrm2 along each pure index itself.

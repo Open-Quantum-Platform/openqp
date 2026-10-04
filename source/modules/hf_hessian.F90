@@ -61,7 +61,7 @@ contains
 
     ! Unsupported-feature guards (apply to ALL references, RHF/RKS included).
     ! Effective-core-potential (ECP) second derivatives ARE supported: RHF/UHF
-    ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, libecpint
+    ! contract the ECP skeleton d^2 V_ECP/dR^2 analytically (add_ecphess, ecp_native
     ! deriv order 2) plus the ECP core-derivative in the CPHF response; ROHF folds
     ! the ECP gradient (add_ecpder) into its semi-numerical resp_grad.
     ! Range-separated (CAM/LC) functionals are also supported: the 2e derivative
@@ -144,7 +144,7 @@ contains
     ! ECP first-derivative integrals enter the core-Hamiltonian derivative
     ! dHcore/dR (added into dVa, the nuclear-attraction derivative tensor), so the
     ! ECP contributes to the CPHF right-hand side and the orbital-relaxation
-    ! response exactly as point-charge nuclear attraction does.  libecpint returns
+    ! response exactly as point-charge nuclear attraction does.  ecp_tool returns
     ! these already in the OpenQP normalized convention, hence added AFTER the
     ! bfnrm scaling above.  No-op for non-ECP bases.
     block

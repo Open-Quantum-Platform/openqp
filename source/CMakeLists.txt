@@ -34,6 +34,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fci_symmetry_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/cholesky_eri_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_native_selftest.F90"
 )
 
 message(STATUS ${SOURCES})
@@ -56,8 +57,8 @@ if(WIN32)
 else()
   set(_OQP_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
-add_dependencies(oqp libxc libtagarray libecpint)
-target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva)
+add_dependencies(oqp libxc libtagarray)
+target_link_libraries(oqp xcf03 xc tagarray_f tagarray)
 if(ENABLE_OPENTRAH)
   add_dependencies(oqp libopentrustregion)
   target_link_libraries(oqp ${OTR_LIB_NAME})
@@ -79,9 +80,6 @@ target_link_directories(oqp PUBLIC ${LIBXC_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${LIBXC_INCLUDE_DIR})
 target_link_directories(oqp PUBLIC ${TAGARRAY_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${TAGARRAY_INCLUDE_DIRS})
-target_link_directories(oqp PUBLIC ${LIBECPINT_LIBRARY_DIR}
-	                              ${FADDEEVA_LIBRARY_DIR})
-target_include_directories(oqp PUBLIC ${LIBECPINT_INCLUDE_DIRS})
 if(ENABLE_OPENTRAH)
   target_link_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
   target_include_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
@@ -108,8 +106,6 @@ if(ENABLE_MPI)
     target_compile_definitions(oqp PRIVATE ENABLE_MPI)
     target_link_libraries(oqp MPI::MPI_Fortran)
 endif()
-set(WRAPPER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/wrapper/libecpint_wrapper.cpp)
-target_sources(oqp PRIVATE ${WRAPPER_SOURCES})
 if(USE_LIBINT)
   target_compile_definitions(oqp PRIVATE OQP_LIBINT_ENABLE)
   add_dependencies(oqp libint2)

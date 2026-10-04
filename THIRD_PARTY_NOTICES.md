@@ -16,8 +16,6 @@ configuration.
 | --- | --- | --- | --- | --- |
 | Libxc | 7.0.0 | Statically linked into `liboqp` | MPL-2.0 | <https://gitlab.com/libxc/libxc/-/tree/7.0.0> |
 | tagarray | 1.0.0 | Statically linked into `liboqp` | MIT; Copyright (c) 2023 Igor S. Gerasimov | <https://github.com/Open-Quantum-Platform/tagarray/tree/v1.0.0> |
-| libecpint | 1.0.7 | Statically linked into `liboqp` | MIT; Copyright (c) 2021 Robert A. Shaw | <https://github.com/robashaw/libecpint/tree/v1.0.7> |
-| Faddeeva implementation bundled by libecpint | libecpint 1.0.7 copy | Statically linked into `liboqp` | MIT; Copyright (c) 2012 Massachusetts Institute of Technology | <http://ab-initio.mit.edu/Faddeeva> |
 | mctc-lib | 0.4.2 | Package-local, separately replaceable shared library in the DFT-D4 stack (SOVERSION 0) | Apache-2.0; Copyright 2020-2025 Sebastian Ehlert | <https://github.com/grimme-lab/mctc-lib/tree/v0.4.2> |
 | multicharge | 0.3.0 | Package-local, separately replaceable shared library in the DFT-D4 stack (SOVERSION 0) | Apache-2.0; Copyright 2021 Sebastian Ehlert | <https://github.com/grimme-lab/multicharge/tree/v0.3.0> |
 | DFT-D4 | 3.7.0 | Package-local, separately replaceable shared library (SOVERSION 3) | LGPL-3.0-or-later; Copyright 2017-2021 E. Caldeweyher, S. Ehlert, S. Grimme | <https://github.com/dftd4/dftd4/tree/v3.7.0> |
@@ -39,13 +37,15 @@ should also be inspected after repair.
 - GNU LGPL version 2.1: `licenses/third_party/lgpl-2.1.txt`
 - GNU LGPL version 3: `licenses/third_party/lgpl-3.0.txt`
 - Libxc MPL-2.0: `licenses/third_party/libxc-mpl-2.0.txt`
-- libecpint MIT license: `licenses/third_party/libecpint-mit.txt`
-- Faddeeva MIT notice: `licenses/third_party/faddeeva-mit.txt`
 - tagarray MIT license: `licenses/third_party/tagarray-mit.txt`
 
 The Apache-2.0 text is shared by mctc-lib and multicharge. The GPLv3 and
 LGPLv3 texts together constitute the license documents shipped upstream with
 DFT-D4.
+
+libecpint and the Faddeeva copy it bundled have been removed from the OpenQP
+source, build graph, and default binary; effective-core-potential integrals and
+their derivatives are computed by OpenQP's own `source/ecp_native.F90`.
 
 ## OpenQP build changes to upstream source trees
 
@@ -53,12 +53,6 @@ The default build applies the following build-time changes:
 
 - `external/fix_tagarray_linelen.py` wraps an overlong Fortran source line in
   tagarray so it compiles with current GNU Fortran compilers.
-- `external/fix_libecpint_accuracy.py` changes two libecpint 1.0.7 sources:
-  its code generator writes the type-2 angular coefficients at full double
-  precision instead of six significant digits, and its one-point
-  Gauss-Chebyshev rule sums the full tabulated grid instead of stopping at the
-  first level that passes its convergence test. Both change the ECP integrals
-  and their derivatives that `liboqp` uses.
 - `external/CMakeLists.txt` patches mctc-lib and DFT-D4 build files to omit
   their test subdirectories and DFT-D4's test-only `mstore` lookup. These
   patches do not alter the DFT-D4, multicharge, or mctc-lib library
