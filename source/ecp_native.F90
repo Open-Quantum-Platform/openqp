@@ -47,6 +47,7 @@ module ecp_native
   use precision, only: dp
   use basis_tools, only: basis_set
   use constants, only: NUM_CART_BF
+  use messages, only: show_message, WITH_ABORT
 
   implicit none
 
@@ -490,8 +491,10 @@ contains
           exit
         end if
       end do
-      if (iatc == 0 .and. deriv > 0) &
-          error stop "ecp_native: an ECP centre does not coincide with any atom"
+      ! derivatives must be attributed to the atom that carries the ECP
+      if (iatc == 0 .and. deriv > 0) call show_message( &
+          'ECP centre does not coincide with any atom; cannot assign its nuclear derivatives', &
+          WITH_ABORT)
       lecp = 0
       do it = toff(ic) + 1, toff(ic + 1)
         lecp = max(lecp, basis%ecp_params%ecp_am(it))
