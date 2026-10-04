@@ -135,12 +135,20 @@ module tdhf_umrsf_gradient_mod
 
 contains
 
-  function umrsf_z_requested_tolerance(infos) result(rtol)
+  !> Absolute Euclidean residual bound of the coupled UMRSF Z-vector equation.
+  !> OpenQP's other Z-vector solvers accept ||M z - b||^2 < zvconv, i.e.
+  !> ||M z - b|| < sqrt(zvconv): the closed-shell TDDFT and MRSF CG loops test
+  !> the squared residual against zvconv, and cphf_solve_uhf (UHF SF-TDDFT)
+  !> passes tol = sqrt(zvconv) to its PCG.  UMRSF used a relative residual at a
+  !> tenth of zvconv, which for the same [tdhf] zvconv is orders of magnitude
+  !> stricter and cost three to four times as many Fock builds.
+  function umrsf_z_requested_tolerance(infos) result(tol_abs)
     implicit none
     type(information), intent(in) :: infos
-    real(kind=dp) :: rtol
-    rtol = infos%tddft%zvconv
-    if (rtol <= 0.0_dp) rtol = 1.0e-6_dp
+    real(kind=dp) :: tol_abs
+    tol_abs = infos%tddft%zvconv
+    if (tol_abs <= 0.0_dp) tol_abs = 1.0e-6_dp
+    tol_abs = sqrt(tol_abs)
   end function umrsf_z_requested_tolerance
 
   subroutine umrsf_clock_start(w0, c0)
@@ -760,9 +768,9 @@ contains
         else
           z_full_rel = sqrt(z_rnorm2)
         end if
-        write(iw,'(2x,a,es12.3,a,es12.3)') 'full coupled Z relative residual = ', z_full_rel, &
-                                           '   requested = ', z_rtol
-        if (ieee_is_finite(z_full_rel) .and. z_full_rel <= z_rtol) exit
+        write(iw,'(2x,a,es12.3,a,es12.3,a,es12.3)') 'full coupled Z residual = ', sqrt(z_rnorm2), &
+          '   requested = ', z_rtol, '   relative = ', z_full_rel
+        if (ieee_is_finite(z_rnorm2) .and. sqrt(z_rnorm2) <= z_rtol) exit
 
         ! The reduced solve approximates the oo/vv block by orbital-energy differences. If that
         ! approximation fails the full residual, use the exact dense operator only at bounded size.
@@ -781,7 +789,7 @@ contains
           used_iterative_z = .false.
           cycle
         end if
-        call show_message('UMRSF coupled Z-vector did not reach the requested relative residual.', WITH_ABORT)
+        call show_message('UMRSF coupled Z-vector did not reach the requested residual.', WITH_ABORT)
       end do
       wao = matmul(cac, matmul(0.25_dp*(gfa+transpose(gfa)), transpose(cac))) &
           + matmul(cbc, matmul(0.25_dp*(gfb+transpose(gfb)), transpose(cbc))) &
@@ -2160,8 +2168,8 @@ contains
 !> Returns IDENTICAL outputs to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms, statio =
 !> ||antisym(G^f+G^z(z))|| = the M z = -R residual). For the SOMO-degenerate rank-deficient case
 !> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (the bounded fallback)
-!> is still preferred. The relative residual and iteration limit default to infos%tddft%zvconv and
-!> infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
+!> is still preferred. The residual bound is sqrt(infos%tddft%zvconv) and the iteration limit
+!> is infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
 !> unconverged response.  The CG trial budget is min(64, maxit_zv/2).
   subroutine umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                 hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio, skip_check)
@@ -2299,22 +2307,23 @@ contains
       bnorm = sqrt(sum(rhsov**2))
       if (bnorm > tiny(1.0_dp)) then
         rhsov0 = rhsov
-        ! pcg/minres tol is on the residual NORM (absolute); target the relative tolerance rtol.
-        ! The reduced ov solve needs a stricter tolerance than the public
-        ! full coupled oo+ov+vv residual. A half-tolerance ov solve can still
-        ! leave the full residual above zvconv on a spherical cc-pVDZ basis.
-        ! Keep the independent full-residual acceptance test authoritative.
+        ! pcg/minres tol is on the absolute residual NORM, as is rtol (sqrt(zvconv)).
+        ! The reduced ov solve targets a tenth of the public bound.  At half of it the
+        ! default zvconv=1e-6 left 1e-4 Ha/Bohr gradient errors on H2CO/cc-pVDZ, six
+        ! times the MRSF error at the same zvconv; a tenth brings UMRSF to the MRSF level
+        ! for three to four more iterations.  The independent full-residual acceptance
+        ! test in the caller stays authoritative.
         if (force_minres) then
           used_minres = .true.
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
-                               tol=0.1_dp*rtol*bnorm, err=errout, iters=minres_iters)
+                               tol=0.1_dp*rtol, err=errout, iters=minres_iters)
           iters = minres_iters
           sname = 'MINRES'
         else
           if (force_pcg) pcg_limit = mxit
           pcg_done = .false. ; pcg_bad = .false. ; pcg_iters = 0
           call pcg%init(b=rhsov0, update=umrsf_zov_matvec, precond=umrsf_zov_precond, &
-                        dat=ctx, tol=0.1_dp*rtol*bnorm)
+                        dat=ctx, tol=0.1_dp*rtol)
           select case (pcg%errcode)
           case (PCG_CONVERGED)
             pcg_done = .true.
@@ -2357,7 +2366,7 @@ contains
               used_minres = .true.
               rhsov = rhsov0
               call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
-                                   x0=ztrial, tol=0.1_dp*rtol*bnorm, err=errout, iters=minres_iters)
+                                   x0=ztrial, tol=0.1_dp*rtol, err=errout, iters=minres_iters)
             else
               rhsov(1:ndofov) = ztrial(1:ndofov)
             end if
@@ -2376,15 +2385,15 @@ contains
         ! Euclidean criterion -- PCG's convergence test as much as MINRES's Lanczos norm; observed for
         ! the C12-C18 polyenes, where PCG reported convergence at 2-8 x zvconv -- continue with MINRES
         ! from the current candidate using the unspent aggregate budget.
-        if (relres > 0.1_dp*rtol .and. iters < mxit) then
+        if (errout > 0.1_dp*rtol .and. iters < mxit) then
           used_minres = .true.
           remaining = mxit-iters
           ztrial(1:ndofov) = rhsov(1:ndofov)
           rhsov = rhsov0
-          ! Stop at a tenth of the requested tolerance (not at tol=0, which spent the whole remaining budget:
+          ! Stop at a tenth of the requested bound (not at tol=0, which spent the whole remaining budget:
           ! 300 iterations to 1e-11 for C12H14 where 1e-6 was requested).
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
-                               x0=ztrial, tol=0.1_dp*rtol*bnorm, err=errout, iters=extra_iters)
+                               x0=ztrial, tol=0.1_dp*rtol, err=errout, iters=extra_iters)
           iters = iters + extra_iters
           minres_iters = minres_iters + extra_iters
           if (sname == 'PCG') sname = 'AUTO(CG->MINRES)'
@@ -2440,15 +2449,13 @@ contains
     write(iw,'(2x,a,i0,a,i0,a,i0,a,i0)') 'iterative Z spin DOFs: alpha = ', ndofa, ', beta = ', ndofb, &
       ', ov-alpha = ', ndofova, ', ov-beta = ', ndofovb
 
-    solver_converged = ieee_is_finite(relres) .and. &
-      ((bnorm <= tiny(1.0_dp) .and. errout <= rtol) .or. &
-       (bnorm > tiny(1.0_dp) .and. relres <= rtol))
+    solver_converged = ieee_is_finite(errout) .and. errout <= rtol
     deallocate(dsp, dpr, dqr, isov, bvec, zvec, diagm, pcinv, rhsov, rhsov0, resov, ztrial, &
                za1, zb1, gza, gzb)
     if (.not. solver_converged) then
-      write(iw,'(2x,a,2es12.3)') 'UMRSF iterative Z failed: achieved/requested relative residual = ', &
-        relres, rtol
-      call show_message('UMRSF Z-vector did not reach the requested relative residual.', WITH_ABORT)
+      write(iw,'(2x,a,2es12.3)') 'UMRSF iterative Z failed: achieved/requested residual = ', &
+        errout, rtol
+      call show_message('UMRSF Z-vector did not reach the requested residual.', WITH_ABORT)
     end if
   end subroutine umrsf_zvector_iter
 
