@@ -3034,7 +3034,13 @@ contains
     call get_environment_variable("UMRSF_ALIGN_ITERMIN", e, status=ios)
     if (ios == 0) then ; read(e,*,iostat=ios) i ; if (ios == 0 .and. i > 0) itermin = i ; end if
     call get_environment_variable("UMRSF_ALIGN_ITOL", e, status=ios)
-    if (ios == 0) then ; read(e,*,iostat=ios) itol ; if (itol <= 0.0d0) itol = 1.0d-10 ; end if
+    if (ios == 0) then
+      block
+        real(kind=dp) :: itol_env
+        read(e,*,iostat=ios) itol_env
+        if (ios == 0 .and. itol_env > 0.0d0) itol = itol_env   ! malformed input keeps the default
+      end block
+    end if
     ! Diagnostic settings may only tighten the accepted residual and may not move blocks above the
     ! default dense size onto a dense solve: an n(n-1)/2-dimensional dense block grows as n^4.
     itol = min(itol, 1.0d-10)
@@ -3129,7 +3135,15 @@ contains
       end if
 
       ! Dense path: small blocks, forced dense/SVD, or MINRES fallback. Only this segment's block is
-      ! formed, entry by entry from umrsf_align_hentry (no full npair×npair matrix).
+      ! formed, entry by entry from umrsf_align_hentry (no full npair×npair matrix).  A block of 512
+      ! or more rotations is never solved densely: its storage grows as n^4, so an iterative failure
+      ! there stops with the convergence diagnostic instead of exhausting memory.
+      if (.not. iter_ok .and. nb >= 512) then
+        write(iw,'(2x,2a,i0,a,i0)') trim(label), ': iterative alignment solve failed for a block of ', &
+          nb, ' rotations in segment ', seg
+        call show_message('UMRSF alignment adjoint: CG and MINRES did not converge for a block too '// &
+                          'large for the dense solve.', with_abort)
+      end if
       if (.not. iter_ok) then
         allocate(hb(nb,nb), hsolve(nb,nb), ipiv(nb), svals(nb))
         do j = 1, nb

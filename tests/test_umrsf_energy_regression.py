@@ -189,6 +189,8 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("itol=min(itol,1.0d-10)", align)
         self.assertIn("itermin=min(itermin,512)", align)
         self.assertIn("if(.not.use_iter.and.nb>=512)then", align)
+        self.assertIn("if(.not.iter_ok.and.nb>=512)then", align)
+        self.assertIn("if(ios==0.and.itol_env>0.0d0)itol=itol_env", align)
 
     def test_canonical_orbital_diagonalization_aborts_on_failure(self):
         gradient = compact(UMRSF_GRAD.read_text())
