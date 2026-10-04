@@ -282,6 +282,22 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         errors = self._errors(self._sf_report("uhf", "energy", functional="cam-b3lyp"))
         self.assertFalse(any(p == "input.functional" and "UHF SF-TDDFT" in m for p, m in errors), errors)
 
+    def test_range_separated_set_matches_runtime_libxc_labels(self):
+        import re
+        root = INPUT_CHECKER.parents[3]
+        runtime, case = set(), None
+        for line in (root / "source" / "dftlib" / "libxc.F90").read_text().splitlines():
+            match = re.match(r"\s*case\s*\((.*)\)", line, re.I)
+            if match:
+                case = [x.strip("\"'").lower() for x in re.findall(r"\"[^\"]*\"|'[^']*'", match.group(1))]
+            if re.search(r"cam_flag\s*=\s*\.true\.", line, re.I) and case:
+                runtime.update(case)
+        checker = load_input_checker_with_minimal_stubs()
+        self.assertEqual(set(checker._RANGE_SEPARATED_FUNCTIONALS), runtime)
+        for name in ("hse06", "n12-sx", "whpbe0", "lcwpbe"):
+            errors = self._errors(self._sf_report("uhf", "grad", functional=name))
+            self.assertTrue(any(p == "input.functional" for p, _ in errors), (name, errors))
+
     def test_mrsf_still_requires_rohf(self):
         errors = self._errors(self._sf_report("uhf", "energy", td_type="mrsf"))
         self.assertTrue(any(p == "scf.type" and "MRSF requires an ROHF" in m for p, m in errors), errors)

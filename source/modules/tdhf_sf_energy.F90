@@ -402,7 +402,8 @@ contains
 
     call trfrmb(bvec_mo,for_trnsf_b_vec,nvec,nstates)
 
-    call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
+    ! Spin-flip amplitudes are alpha-occupied x beta-virtual: (nocca, noccb) in iatogen order
+    call get_transition_density(trden, bvec_mo, nbf, nocca, noccb, nstates)
 
     ! The second MO index of the spin-flip amplitudes is beta.  An ROHF reference has one
     ! spatial set; a UHF reference must use its beta orbitals for the particle side.
