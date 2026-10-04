@@ -517,7 +517,7 @@ contains
 !>   This is the genuine static CPHF operator (not the TDDFT A+B), so it serves
 !>   the open-shell analytic Hessian nuclear-perturbation response and the
 !>   open-shell static dipole polarizability on the same footing.
-  subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit)
+  subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit, converged)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_E_MO_A, OQP_VEC_MO_A, OQP_E_MO_B, OQP_VEC_MO_B
     use mod_dft, only: dft_initialize, dftclean
@@ -528,6 +528,8 @@ contains
     real(kind=dp), intent(out) :: uvec(:,:)
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
+    !> .true. when every right-hand side reached the tolerance
+    logical, intent(out), optional :: converged
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
@@ -646,6 +648,7 @@ contains
             nconv, nrhs, iter_min, iter_max
     if (nconv < nrhs) write(iw,'(6x,"WARNING: UHF CPHF did not converge for",I5," of",I5," right-hand sides")') &
             nrhs - nconv, nrhs
+    if (present(converged)) converged = (nconv == nrhs)
     ! Analytic open-shell Hessians write this unit through the captured fort.6
     ! file; flush so the summary is there when the capture is read.
     call flush(iw)

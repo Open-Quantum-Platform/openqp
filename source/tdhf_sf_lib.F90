@@ -162,7 +162,7 @@ contains
   end subroutine trfrmb
 
   subroutine sfdmat(bvec,abxc,mo_a,ta,tb, &
-                    noca,nocb)
+                    noca,nocb,mo_b)
     use precision, only: dp
     use tdhf_lib, only: iatogen
     use mathlib, only: pack_matrix
@@ -171,10 +171,14 @@ contains
     implicit none
 
     real(kind=dp), intent(in), dimension(:) :: bvec
-    real(kind=dp), intent(in), dimension(:,:) :: mo_a
+    real(kind=dp), intent(in), dimension(:,:), target :: mo_a
     real(kind=dp), intent(inout), dimension(:,:) :: abxc
     real(kind=dp), intent(out), dimension(:) :: ta, tb
     integer, intent(in) :: noca, nocb
+    !> Orbitals of the beta-virtual (particle) side.  An ROHF reference shares one
+    !> spatial set, so the default is mo_a; a UHF reference passes its beta set.
+    real(kind=dp), intent(in), dimension(:,:), optional, target :: mo_b
+    real(kind=dp), pointer :: mo_p(:,:)
 
     integer :: nvirb, nbf, nbf_tri, xvec_dim
     real(kind=dp), allocatable, dimension(:,:) :: scr1, scr2
@@ -188,9 +192,17 @@ contains
 
   ! MO(I+,A-) -> AO(M,N)
     nvirb = nbf-nocb
+    mo_p => mo_a
+    if (present(mo_b)) mo_p => mo_b
 
     call iatogen(bvec,scr1,noca,nocb)
-    call orthogonal_transform('t', nbf, mo_a, scr1, abxc, scr2)
+    if (present(mo_b)) then
+      ! D = C_alpha X C_beta^T: holes from the alpha set, particles from the beta set
+      call dgemm('n','n',nbf,nbf,nbf, 1.0_dp,mo_a,nbf, scr1,nbf, 0.0_dp,scr2,nbf)
+      call dgemm('n','t',nbf,nbf,nbf, 1.0_dp,scr2,nbf, mo_p,nbf, 0.0_dp,abxc,nbf)
+    else
+      call orthogonal_transform('t', nbf, mo_a, scr1, abxc, scr2)
+    end if
 
   ! Unrelaxed difference density matrix -----
 
@@ -218,12 +230,12 @@ contains
 
   ! MO(A-,B-) -> AO(M,N)
     call dgemm('n','n',nbf,nvirb,nvirb, &
-               1.0_dp,mo_a(:,nocb+1:),nbf, &
+               1.0_dp,mo_p(:,nocb+1:),nbf, &
                       scr1,nvirb, &
                0.0_dp,scr2,nbf)
     call dgemm('n','t',nbf,nbf,nvirb, &
                1.0_dp,scr2,nbf, &
-                      mo_a(:,nocb+1:),nbf, &
+                      mo_p(:,nocb+1:),nbf, &
                0.0_dp,scr1,nbf)
     call pack_matrix(scr1,tb)
 
@@ -1127,7 +1139,7 @@ contains
 
   end subroutine get_transition_density
 
-  subroutine get_transition_dipole(basis, dip, mo_a, trden, nstates)
+  subroutine get_transition_dipole(basis, dip, mo_a, trden, nstates, mo_b)
     use precision, only: dp
     use int1
 !   use types, only: information
@@ -1142,6 +1154,8 @@ contains
     real(kind=dp), intent(in) :: trden(:,:,:,:), mo_a(:,:)
     real(kind=dp), intent(out) :: dip(:,:,:)
     integer, intent(in) :: nstates
+    !> Beta orbitals for a UHF reference (the second MO index of trden is beta)
+    real(kind=dp), intent(in), optional :: mo_b(:,:)
 
     real(kind=dp) :: center_of_mass(3)
     real(kind=dp), allocatable :: mints(:,:), trden_ao(:,:)
@@ -1170,7 +1184,12 @@ contains
         if (ist==jst) cycle
 
         ! Convert transition density from MO to AO basis
-        call orthogonal_transform('t', nbf, mo_a, trden(:,:,ist,jst), trden_ao, tmp)
+        if (present(mo_b)) then
+          call dgemm('n','n',nbf,nbf,nbf, 1.0_dp,mo_a,nbf, trden(:,:,ist,jst),nbf, 0.0_dp,tmp,nbf)
+          call dgemm('n','t',nbf,nbf,nbf, 1.0_dp,tmp,nbf, mo_b,nbf, 0.0_dp,trden_ao,nbf)
+        else
+          call orthogonal_transform('t', nbf, mo_a, trden(:,:,ist,jst), trden_ao, tmp)
+        end if
 
         tmp2(1:nbf2) => tmp
         call symmetrize_matrix(trden_ao, nbf)

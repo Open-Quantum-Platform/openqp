@@ -104,3 +104,17 @@ def test_low_symmetry_h2o_matches_five_point_energy_derivatives():
     spread = max(case["max_abs_error_after_hartree_per_bohr"] for case in mrsf) \
         - min(case["max_abs_error_after_hartree_per_bohr"] for case in mrsf)
     assert spread < 5.0e-10
+
+
+def test_sf_gradient_requests_probe_only_moving_grid_response():
+    source = _source("source/modules/tdhf_sf_gradient.F90")
+    body = source.split("subroutine tdhf_sf_gradient(infos)", 1)[1]
+    body = body.split("end subroutine tdhf_sf_gradient", 1)[0]
+
+    assert "grid_correction" in body
+    assert "include_ground_state=.false." in body
+    assert "include_weight_derivative=.true." in body
+    assert "weight_derivative_only=.true." in body
+    assert "use mod_dft_gridint_grad, only: derexc_blk" in body
+    assert "call derexc_blk" in body
+    assert "include_ground_state=.true." not in body

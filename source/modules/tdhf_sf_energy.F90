@@ -402,12 +402,23 @@ contains
 
     call trfrmb(bvec_mo,for_trnsf_b_vec,nvec,nstates)
 
-    call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
+    ! Spin-flip amplitudes are alpha-occupied x beta-virtual: (nocca, noccb) in iatogen order
+    call get_transition_density(trden, bvec_mo, nbf, nocca, noccb, nstates)
 
-    call get_transition_dipole(basis, dip, mo_a, trden, nstates)
+    ! The second MO index of the spin-flip amplitudes is beta.  An ROHF reference has one
+    ! spatial set; a UHF reference must use its beta orbitals for the particle side.
+    if (roref) then
+      call get_transition_dipole(basis, dip, mo_a, trden, nstates)
+    else
+      call get_transition_dipole(basis, dip, mo_a, trden, nstates, mo_b=mo_b)
+    end if
 
     do ist = 1, nstates
-      call sfdmat(bvec_mo(:,ist),abxc,mo_a,ta,tb,nocca,noccb)
+      if (roref) then
+        call sfdmat(bvec_mo(:,ist),abxc,mo_a,ta,tb,nocca,noccb)
+      else
+        call sfdmat(bvec_mo(:,ist),abxc,mo_a,ta,tb,nocca,noccb,mo_b=mo_b)
+      end if
       spin_square(ist) = get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,noccb,nocca)
     end do
 
