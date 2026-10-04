@@ -27,6 +27,8 @@ module int2e_rys
       ! nothing for Cartesian-only runs.
       integer :: pure_flags(4) = 0
       type(int2_shell_projection_t), allocatable :: proj_cache(:,:)
+      ! Reused Cartesian contraction and one-index projection buffers.
+      real(kind=dp), allocatable :: pure_work(:,:)
       real(kind=dp), allocatable :: gijkl(:)
       real(kind=dp), allocatable :: gnkl (:)
       real(kind=dp), allocatable :: gnm  (:)
@@ -103,6 +105,8 @@ contains
     implicit none
 
     class(int2_rys_data_t), intent(inout) :: gdat
+    if (allocated(gdat%pure_work)) deallocate(gdat%pure_work)
+    if (allocated(gdat%proj_cache)) deallocate(gdat%proj_cache)
     if (allocated(gdat%gijkl)) deallocate(gdat%gijkl)
     if (allocated(gdat%gnkl )) deallocate(gdat%gnkl )
     if (allocated(gdat%gnm  )) deallocate(gdat%gnm  )
@@ -271,7 +275,10 @@ contains
       zero_shq = .false.
     end if
 
-    if (gdat%direct_pure) gdat%nbf = gdat%nbf_direct
+    if (gdat%direct_pure .and. .not. zero_shq) then
+      call project_contracted_pure(gdat, ints)
+      gdat%nbf = gdat%nbf_direct
+    end if
 
   end subroutine int2_rys_compute
 
@@ -323,7 +330,7 @@ contains
     type(basis_set), intent(in) :: basis
 
     integer :: pure_s(4)
-    integer :: s
+    integer :: s, ncart
 
     gdat%direct_pure = .false.
     if (.not. HARMONIC_ACTIVE) return
@@ -334,11 +341,19 @@ contains
     gdat%direct_pure = .true.
     if (.not. allocated(gdat%proj_cache)) then
       block
-        integer :: l
+        integer :: l, c, pure
         allocate(gdat%proj_cache(0:bas_mxang, 0:1))
         do l = 0, bas_mxang
           call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))
           call int2_init_shell_projection(l, 1, gdat%proj_cache(l,1))
+          ! Fold Cartesian normalization into each one-index map, including
+          ! Cartesian-flagged indices in a mixed spherical/Cartesian quartet.
+          do pure = 0, 1
+            do c = 1, num_cart_bf(l)
+              gdat%proj_cache(l,pure)%coeff(:,c) = &
+                gdat%proj_cache(l,pure)%coeff(:,c) * shells_pnrm2(c,l)
+            end do
+          end do
         end do
       end block
     end if
@@ -346,6 +361,11 @@ contains
       gdat%pure_flags(s) = merge(1, 0, pure_s(s) == 1)
       gdat%nbf_direct(s) = gdat%proj_cache(gdat%am(s), gdat%pure_flags(s))%nout
     end do
+    ncart = product(gdat%nbf_cart)
+    if (allocated(gdat%pure_work)) then
+      if (size(gdat%pure_work,1) < ncart) deallocate(gdat%pure_work)
+    end if
+    if (.not. allocated(gdat%pure_work)) allocate(gdat%pure_work(ncart,2))
   end subroutine prepare_direct_pure
 
   subroutine compute(gdat, ng, nmax, mmax, ints)
@@ -375,7 +395,7 @@ contains
 
 !   compute integrals
     if (gdat%direct_pure) then
-      call compute_ints_direct_pure(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+      call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, gdat%pure_work(:,1))
     else
       call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
     end if
@@ -628,7 +648,7 @@ contains
     real(kind=dp) ::   dkl(3,*) ! dkl(ng)
     integer :: ng,nr,nmax,mmax,nimax,njmax,nkmax,nlmax
 
-    integer :: ni, nk, nl, ig, m1, n1, xyz
+    integer :: ni, nk, nl, ig, ir, m, n, k, l, m1, n1, xyz
 
 !   g(n,k,l)
     do nk=1, nkmax
@@ -637,10 +657,17 @@ contains
       end do
       if(nk == nkmax) exit
       m1 = mmax-nk
-      do xyz = 1, 3
-        do ig = 1, ng
-          gnm(ig,:,xyz,:,1:m1) = dkl(xyz,ig)*gnm(ig,:,xyz,:,1:m1) &
-                               +             gnm(ig,:,xyz,:,2:m1+1)
+      ! Ascending m reads the next, still unmodified recurrence slice.
+      ! Contiguous primitive indices avoid overlapping array-section temporaries.
+      do m = 1, m1
+        do n = 1, nmax
+          do xyz = 1, 3
+            do ir = 1, nr
+              do ig = 1, ng
+                gnm(ig,ir,xyz,n,m) = dkl(xyz,ig)*gnm(ig,ir,xyz,n,m) + gnm(ig,ir,xyz,n,m+1)
+              end do
+            end do
+          end do
         end do
       end do
     end do
@@ -650,10 +677,18 @@ contains
       ijkl(:,:,:,:,:,1:njmax,ni) = gnkl(:,:,:,:,:,1:njmax)
       if (ni == nimax) exit
       n1 = nmax-ni
-      do xyz = 1, 3
-        do ig = 1, ng
-          gnkl(ig,:,xyz,:,:,1:n1) = dij(xyz,ig)*gnkl(ig,:,xyz,:,:,1:n1) &
-                                  +             gnkl(ig,:,xyz,:,:,2:n1+1)
+      ! The same forward traversal is required for the bra recurrence.
+      do n = 1, n1
+        do k = 1, nkmax
+          do l = 1, nlmax
+            do xyz = 1, 3
+              do ir = 1, nr
+                do ig = 1, ng
+                  gnkl(ig,ir,xyz,l,k,n) = dij(xyz,ig)*gnkl(ig,ir,xyz,l,k,n) + gnkl(ig,ir,xyz,l,k,n+1)
+                end do
+              end do
+            end do
+          end do
         end do
       end do
     end do
@@ -667,7 +702,7 @@ contains
     type(int2_rys_data_t) :: gdat
     real(kind=dp) :: ints(*)
     if (gdat%direct_pure) then
-      ints(1:product(gdat%nbf_direct)) = 0
+      gdat%pure_work(1:product(gdat%nbf_cart),1) = 0
     else
       ints(1:product(gdat%nbf)) = 0
     end if
@@ -712,77 +747,49 @@ contains
 
   end subroutine compute_ints
 
-  subroutine compute_ints_direct_pure(gdat,ngnr,ijklxyz,g0,ints)
+  ! Project after all primitive batches have been contracted. Each shell
+  ! index is transformed once instead of scattering every Cartesian integral
+  ! into the tensor product of four sparse projection rows in every batch.
+  subroutine project_contracted_pure(gdat, ints)
+    type(int2_rys_data_t), intent(inout) :: gdat
+    real(dp), intent(out) :: ints(*)
+    integer :: dims(4), k, s, nleft, nright, src, dst
 
-    implicit none
+    dims = gdat%nbf_cart([4,3,2,1])
+    src = 1
+    do k = 1, 4
+      s = 5-k
+      if (gdat%am(s) < 2) cycle  ! s and p maps are identity, including normalization
+      nleft = product(dims(:k-1))
+      nright = product(dims(k+1:))
+      dst = 3-src
+      call project_pure_index(gdat%pure_work(:,src), gdat%pure_work(:,dst), &
+        nleft, dims(k), gdat%nbf_direct(s), nright, &
+        gdat%proj_cache(gdat%am(s),gdat%pure_flags(s)))
+      dims(k) = gdat%nbf_direct(s)
+      src = dst
+    end do
+    ints(1:product(dims)) = gdat%pure_work(1:product(dims),src)
+  end subroutine project_contracted_pure
 
-    type(int2_rys_data_t) :: gdat
-    integer :: ngnr
-    integer :: ijklxyz(:,:,:)
-    real(kind=dp) ::  g0(ngnr,3,*)
-    real(kind=dp), target :: ints(*)
+  subroutine project_pure_index(src, dst, nleft, ni, no, nright, proj)
+    use int2_pure_generated, only: int2_shell_projection_t
+    integer, intent(in) :: nleft, ni, no, nright
+    real(dp), intent(in) :: src(nleft,ni,nright)
+    real(dp), intent(out) :: dst(nleft,no,nright)
+    type(int2_shell_projection_t), intent(in) :: proj
+    integer :: b, c, t, o
 
-    integer :: i, j, k, l
-    integer :: nx, ny, nz
-    integer :: ti, tj, tk, tl
-    integer :: oi, oj, ok, ol
-    real(kind=dp) :: val, vi, vij, vijk
-    real(kind=dp), pointer :: p(:,:,:,:)
-
-    p(1:gdat%nbf_direct(4),1:gdat%nbf_direct(3),1:gdat%nbf_direct(2),1:gdat%nbf_direct(1)) &
-        => ints(1:product(gdat%nbf_direct))
-
-    associate ( pr1 => gdat%proj_cache(gdat%am(1), gdat%pure_flags(1)) &
-              , pr2 => gdat%proj_cache(gdat%am(2), gdat%pure_flags(2)) &
-              , pr3 => gdat%proj_cache(gdat%am(3), gdat%pure_flags(3)) &
-              , pr4 => gdat%proj_cache(gdat%am(4), gdat%pure_flags(4)) &
-              )
-
-    do i = 1, gdat%nbf_cart(1)
-      do j = 1, gdat%nbf_cart(2)
-        do k = 1, gdat%nbf_cart(3)
-          do l = 1, gdat%nbf_cart(4)
-            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
-            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
-            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
-
-            associate ( x  => g0(:,1,nx) &
-                      , y  => g0(:,2,ny) &
-                      , z  => g0(:,3,nz) &
-                      )
-                val = sum(x*y*z) &
-                    * shells_pnrm2(i,gdat%am(1)) &
-                    * shells_pnrm2(j,gdat%am(2)) &
-                    * shells_pnrm2(k,gdat%am(3)) &
-                    * shells_pnrm2(l,gdat%am(4))
-            end associate
-            if (val == 0.0_dp) cycle
-
-            do ti = 1, pr1%nterm(i)
-              oi = pr1%out_idx(ti,i)
-              vi = val * pr1%coeff(ti,i)
-              do tj = 1, pr2%nterm(j)
-                oj = pr2%out_idx(tj,j)
-                vij = vi * pr2%coeff(tj,j)
-                do tk = 1, pr3%nterm(k)
-                  ok = pr3%out_idx(tk,k)
-                  vijk = vij * pr3%coeff(tk,k)
-                  do tl = 1, pr4%nterm(l)
-                    ol = pr4%out_idx(tl,l)
-                    p(ol,ok,oj,oi) = p(ol,ok,oj,oi) + vijk * pr4%coeff(tl,l)
-                  end do
-                end do
-              end do
-            end do
-
-          end do
+    dst = 0.0_dp
+    do b = 1, nright
+      do c = 1, ni
+        do t = 1, proj%nterm(c)
+          o = proj%out_idx(t,c)
+          dst(:,o,b) = dst(:,o,b) + proj%coeff(t,c)*src(:,c,b)
         end do
       end do
     end do
-
-    end associate
-
-  end subroutine compute_ints_direct_pure
+  end subroutine project_pure_index
 
   subroutine rys_print_eri(gdat, ints)
     use constants, only: shells_pnrm2
