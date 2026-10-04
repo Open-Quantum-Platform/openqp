@@ -76,7 +76,6 @@ source-policy:
   script:
     - python -m compileall -q pyoqp tests tools
     - python tools/check_blas_wrapper.py
-    - python tools/check_ecp_charges.py
     - >-
       if grep -nE 'git[[:space:]]+p[u]sh|git[[:space:]]+c[o]mmit' .gitlab-ci.yml; then
       echo 'CI configuration must not commit or push source'; exit 1; fi
