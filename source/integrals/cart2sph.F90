@@ -359,7 +359,7 @@ contains
 
   !> @brief Transform a rectangular 1e shell-pair block that is already in the
   !>        unit-normalized Cartesian convention.
-  !> @details This is used by backends such as libecpint that return normalized
+  !> @details This is for backends that return normalized
   !>          Cartesian matrices directly. Unlike cart2sph_mat, this does not
   !>          fold in shells_pnrm2 before applying the c2s coefficients.
   subroutine cart2sph_mat_unit(blk, l_fast, pure_fast, l_slow, pure_slow)

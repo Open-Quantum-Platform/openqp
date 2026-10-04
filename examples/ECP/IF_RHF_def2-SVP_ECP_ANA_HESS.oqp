@@ -1,0 +1,3 @@
+rhf/def2-svp ispher=true hess(S0,type=analytical,clean=true) guess(type=sap) symmetry(enabled=false)
+scf(conv=1e-10,maxit=200)
+geom="../geometries/FI-4f3831edff97.xyz"

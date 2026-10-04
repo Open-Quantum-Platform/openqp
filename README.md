@@ -81,7 +81,6 @@ for method, keyword, and build references.
 | --- | --- |
 | [LibXC](https://gitlab.com/libxc/libxc) | Wide library of exchange-correlation functionals |
 | [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) | Standard basis sets |
-| [libecpint](https://github.com/robashaw/libecpint) | Effective Core Potentials |
 | [DFT-D4](https://dftd4.readthedocs.io/en/latest/) | Dispersion correction |
 | [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) | Machine-learning-assisted nonadiabatic molecular dynamics |
 | [Molden](https://www.theochem.ru.nl/molden/) format | Standards-oriented geometry, basis, SCF/Dyson orbitals, and optional frequency sections for common graphics tools |

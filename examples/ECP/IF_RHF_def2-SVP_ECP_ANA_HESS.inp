@@ -1,0 +1,34 @@
+# Analytic RHF Hessian of IF with the def2 effective core potential on iodine
+# (28 core electrons removed) and def2-SVP. Exercises the ECP second-derivative
+# integrals (skeleton) and the ECP first-derivative integrals in the CPHF
+# right-hand side. The d shell on F needs g-type terms in the second
+# derivative; libecpint 1.0.7 got those ECP integrals wrong by 2e-4, which
+# moved the I-F stretching frequency by 0.005 cm^-1 (this reference fails
+# with it). The native analytic Hessian agrees with the numerical one to
+# 2e-5 a.u. (finite-difference truncation of the numerical Hessian).
+[input]
+system=
+   53   0.000000000   0.000000000   0.000000000
+    9   0.100000000   0.200000000   1.910000000
+charge=0
+runtype=hess
+method=hf
+basis=def2-svp
+ispher=true
+
+[guess]
+type=sap
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1e-10
+maxit=200
+
+[symmetry]
+enabled=false
+
+[hess]
+type=analytical
+state=0
+clean=True
