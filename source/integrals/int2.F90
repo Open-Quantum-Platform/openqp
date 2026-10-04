@@ -27,6 +27,8 @@ module int2_compute
 
   private
   public int2_compute_t
+  public eri_data_t, int2_compute_data_t_storeints
+  public int2_shell_block_t
   public int2_storage_t
   public int2_compute_data_t
   public int2_fock_data_t
@@ -60,6 +62,14 @@ module int2_compute
 
 !###############################################################################
 
+  ! Borrowed, synchronous view of one generated quartet. The integral driver
+  ! owns values; consumers must not retain the pointer after consume_shell.
+  ! Values are screened and permutation-weighted once, in shell storage order.
+  type :: int2_shell_block_t
+    integer :: shells(4) = 0, offsets(4) = 0, dims(4) = 0
+    real(dp), pointer :: values(:,:,:,:) => null()
+  end type
+
   type :: int2_storage_t
     integer :: ncur = 0
     integer :: buf_size = 0
@@ -74,6 +84,7 @@ module int2_compute
 !###############################################################################
 
   type, abstract :: int2_compute_data_t
+    logical :: shell_blocks = .false.
     logical :: multipass = .false.
     integer :: num_passes = 1
     integer :: cur_pass = 1
@@ -84,6 +95,7 @@ module int2_compute
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure(int2_compute_data_parallel_start), deferred, pass :: parallel_start
     procedure(int2_compute_data_parallel_stop), deferred, pass :: parallel_stop
+    procedure :: consume_shell => int2_unsupported_shell
     procedure(int2_compute_data_update), deferred, pass :: update
     procedure(int2_compute_data_clean), deferred, pass :: clean
     procedure, pass :: screen_ij => int2_compute_data_t_screen_ij
@@ -123,12 +135,14 @@ module int2_compute
   type, extends(int2_fock_data_t) :: int2_rhf_data_t
   contains
     procedure :: parallel_start => int2_rhf_data_t_parallel_start
+    procedure :: consume_shell => int2_rhf_consume_shell
     procedure :: update => int2_rhf_data_t_update
   end type
 
   type, extends(int2_fock_data_t) :: int2_urohf_data_t
   contains
     procedure :: parallel_start => int2_urohf_data_t_parallel_start
+    procedure :: consume_shell => int2_urohf_consume_shell
     procedure :: update => int2_urohf_data_t_update
   end type
 
@@ -727,6 +741,12 @@ contains
 
 !$omp master
     call int2_consumer%parallel_start(this%basis, nthreads)
+    block
+      character(16) :: layout
+      integer :: status
+      call get_environment_variable('OQP_INT2_LAYOUT', layout, status=status)
+      if (status == 0 .and. trim(layout) == 'legacy') int2_consumer%shell_blocks = .false.
+    end block
 !$omp end master
 !$omp barrier
 
@@ -748,7 +768,11 @@ contains
     end if
     call eri_data%gdat%init(lmax, this%cutoffs, ok)
 
-    call int2_storage%init(this%buf_size)
+    if (int2_consumer%shell_blocks) then
+      call int2_storage%init(0)
+    else
+      call int2_storage%init(this%buf_size)
+    end if
     int2_storage%thread_id = ithread + 1
 
 !$omp barrier
@@ -1364,6 +1388,7 @@ contains
     this%fockdim = basis%nbf*(basis%nbf+1) / 2
     this%nfocks = ubound(this%d, size(shape(this%d)))
 
+    this%shell_blocks = .true.
     call this%int2_fock_data_t_parallel_start(basis, nthreads)
 
   end subroutine
@@ -1386,6 +1411,7 @@ contains
         WITH_ABORT)
     end if
 
+    this%shell_blocks = .true.
     call this%int2_fock_data_t_parallel_start(basis, nthreads)
 
   end subroutine
@@ -1794,6 +1820,13 @@ contains
       l, l1, ll, locl
     integer :: ids(4), flips(4), nbf(4)
     real(kind=dp) :: val
+    type(int2_shell_block_t) :: shell_block
+
+    if (consumer%shell_blocks) then
+      call prepare_shell_block(basis, eri_data, cutoff, nint, shell_block)
+      call consumer%consume_shell(shell_block, buf%thread_id)
+      return
+    end if
 
     ids = eri_data%ids(eri_data%flips)
 
@@ -1898,5 +1931,322 @@ jc:   do j = 1, maxj
   end subroutine int2_compute_data_t_storeints
 
 !###############################################################################
+
+
+  subroutine int2_unsupported_shell(this, shell_block, thread_id)
+    class(int2_compute_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    call show_message('Integral consumer has no shell-block contraction.', WITH_ABORT)
+  end subroutine
+
+  subroutine prepare_shell_block(basis, eri, cutoff, nint, block)
+    type(basis_set), intent(in) :: basis
+    type(eri_data_t), intent(inout) :: eri
+    real(dp), intent(in) :: cutoff
+    integer, intent(inout) :: nint
+    type(int2_shell_block_t), intent(out) :: block
+    integer :: a,b,c,d,maxb,maxd,nij,nkl,ij,kl
+    real(dp) :: val
+    logical :: same, ab, cd
+    block%shells=eri%ids(eri%flips)
+    block%dims=eri%nbf
+    block%offsets=basis%ao_offset(block%shells)-1
+    block%values=>eri%pints
+    ab=block%shells(1)==block%shells(2)
+    cd=block%shells(3)==block%shells(4)
+    same=all(block%shells(1:2)==block%shells(3:4))
+    nij=0
+    do a=1,block%dims(1)
+      maxb=block%dims(2)
+      if (ab) maxb=a
+      do b=1,maxb
+        nij=nij+1
+        nkl=nij
+        do c=1,block%dims(3)
+          maxd=block%dims(4)
+          if (cd) maxd=c
+          if (same) then
+            maxd=min(maxd,nkl)
+            if (maxd==0) exit
+            nkl=nkl-maxd
+          end if
+          do d=1,maxd
+            val=block%values(d,c,b,a)
+            if (eri%weighted_cutoff) then
+              if (abs(val)*eri%weight < cutoff) val=0.0_dp
+            else
+              if (abs(val) < cutoff) val=0.0_dp
+            end if
+            if (val /= 0.0_dp) nint=nint+1
+            val=val*eri%weight
+            if (ab .and. a==b) val=val*0.5_dp
+            if (cd .and. c==d) val=val*0.5_dp
+            if (same .and. a==c .and. b==d) val=val*0.5_dp
+            block%values(d,c,b,a)=val
+          end do
+        end do
+      end do
+    end do
+  end subroutine
+
+  subroutine int2_rhf_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_rhf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: ii, jj, kk, ll, ij, ik, il, jk, jl, kl, n, ii2, jj2, kk2
+    real(kind=dp) :: xval1, xval4, val, val1, val4
+    real(kind=dp) :: aij, akl, aik, ajl, ail, ajk
+    integer :: ifock, mythread
+
+    xval1 = this%scale_exchange
+    xval4 = 4 * this%scale_coulomb
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+    if (this%atomic_fock) mythread = 1
+
+    do ifock = 1, this%nfocks
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                ii=shell_block%offsets(1)+ba
+                jj=shell_block%offsets(2)+bb
+                kk=shell_block%offsets(3)+bc
+                ll=shell_block%offsets(4)+bd
+                if (ii<jj) then
+                  swap_index=ii; ii=jj; jj=swap_index
+                end if
+                if (kk<ll) then
+                  swap_index=kk; kk=ll; ll=swap_index
+                end if
+                if (ii<kk) then
+                  swap_index=ii; ii=kk; kk=swap_index
+                  swap_index=jj; jj=ll; ll=swap_index
+                else if (ii==kk .and. jj<ll) then
+                  swap_index=jj; jj=ll; ll=swap_index
+                end if
+
+        ii2 = ii*(ii-1)/2
+        jj2 = jj*(jj-1)/2
+        kk2 = kk*(kk-1)/2
+
+        ij = ii2+jj
+        ik = ii2+kk
+        il = ii2+ll
+        jk = jj2+kk
+        jl = jj2+ll
+        kl = kk2+ll
+        if (jj<kk) jk = kk2 + jj
+        if (jj<ll) jl = ll*(ll-1)/2 + jj
+
+        val1 = val*xval1
+        val4 = val*xval4
+
+        if (this%atomic_fock) then
+          ! single shared Fock: atomic accumulation (low-memory mode).
+          ! Contributions are precomputed into locals so the atomic statement's
+          ! RHS references no component of `this` (gfortran atomic requirement).
+          aij = val4*this%d(kl,ifock); akl = val4*this%d(ij,ifock)
+          aik = -val1*this%d(jl,ifock); ajl = -val1*this%d(ik,ifock)
+          ail = -val1*this%d(jk,ifock); ajk = -val1*this%d(il,ifock)
+          !$omp atomic update
+          this%f(ij,ifock,1) = this%f(ij,ifock,1) + aij
+          !$omp atomic update
+          this%f(kl,ifock,1) = this%f(kl,ifock,1) + akl
+          !$omp atomic update
+          this%f(ik,ifock,1) = this%f(ik,ifock,1) + aik
+          !$omp atomic update
+          this%f(jl,ifock,1) = this%f(jl,ifock,1) + ajl
+          !$omp atomic update
+          this%f(il,ifock,1) = this%f(il,ifock,1) + ail
+          !$omp atomic update
+          this%f(jk,ifock,1) = this%f(jk,ifock,1) + ajk
+        else
+          this%f(ij,ifock,mythread) = this%f(ij,ifock,mythread) + val4*this%d(kl,ifock)
+          this%f(kl,ifock,mythread) = this%f(kl,ifock,mythread) + val4*this%d(ij,ifock)
+          this%f(ik,ifock,mythread) = this%f(ik,ifock,mythread) - val1*this%d(jl,ifock)
+          this%f(jl,ifock,mythread) = this%f(jl,ifock,mythread) - val1*this%d(ik,ifock)
+          this%f(il,ifock,mythread) = this%f(il,ifock,mythread) - val1*this%d(jk,ifock)
+          this%f(jk,ifock,mythread) = this%f(jk,ifock,mythread) - val1*this%d(il,ifock)
+        end if
+              end do
+            end do
+          end do
+        end do
+    end do
+
+
+
+  end subroutine int2_rhf_consume_shell
+
+  subroutine int2_urohf_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_urohf_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: ii, jj, kk, ll, ij, ik, il, jk, jl, kl, n, ii2, jj2, kk2
+    real(kind=dp) :: xval2, xval4, val, val1, val4, cij, ckl
+    real(kind=dp) :: a1ik, a1jl, a1il, a1jk, a2ik, a2jl, a2il, a2jk
+    integer :: ifock, mythread
+
+    xval2 = 2 * this%scale_exchange
+    xval4 = 4 * this%scale_coulomb
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+    if (this%atomic_fock) mythread = 1
+
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                ii=shell_block%offsets(1)+ba
+                jj=shell_block%offsets(2)+bb
+                kk=shell_block%offsets(3)+bc
+                ll=shell_block%offsets(4)+bd
+                if (ii<jj) then
+                  swap_index=ii; ii=jj; jj=swap_index
+                end if
+                if (kk<ll) then
+                  swap_index=kk; kk=ll; ll=swap_index
+                end if
+                if (ii<kk) then
+                  swap_index=ii; ii=kk; kk=swap_index
+                  swap_index=jj; jj=ll; ll=swap_index
+                else if (ii==kk .and. jj<ll) then
+                  swap_index=jj; jj=ll; ll=swap_index
+                end if
+
+      ii2 = ii*(ii-1)/2
+      jj2 = jj*(jj-1)/2
+      kk2 = kk*(kk-1)/2
+
+      ij = ii2+jj
+      ik = ii2+kk
+      il = ii2+ll
+      jk = jj2+kk
+      jl = jj2+ll
+      kl = kk2+ll
+      if (jj<kk) jk = kk2 + jj
+      if (jj<ll) jl = ll*(ll-1)/2 + jj
+
+      val1 = val*xval2
+      val4 = val*xval4
+
+      ! Each adjacent alpha/beta density pair is an independent open-shell
+      ! response.  Processing all pairs here shares the ERI traversal while
+      ! preserving the usual Coulomb sum and spin-specific exchange.
+      do ifock = 1, this%nfocks, 2
+        cij = val4*sum(this%d(ij,ifock:ifock+1))
+        ckl = val4*sum(this%d(kl,ifock:ifock+1))
+
+        if (this%atomic_fock) then
+          ! locals so atomic RHS references no component of `this`
+          a1ik = -val1*this%d(jl,ifock)
+          a1jl = -val1*this%d(ik,ifock)
+          a1il = -val1*this%d(jk,ifock)
+          a1jk = -val1*this%d(il,ifock)
+          a2ik = -val1*this%d(jl,ifock+1)
+          a2jl = -val1*this%d(ik,ifock+1)
+          a2il = -val1*this%d(jk,ifock+1)
+          a2jk = -val1*this%d(il,ifock+1)
+          !$omp atomic update
+          this%f(ij,ifock,1) = this%f(ij,ifock,1) + ckl
+          !$omp atomic update
+          this%f(kl,ifock,1) = this%f(kl,ifock,1) + cij
+          !$omp atomic update
+          this%f(ik,ifock,1) = this%f(ik,ifock,1) + a1ik
+          !$omp atomic update
+          this%f(jl,ifock,1) = this%f(jl,ifock,1) + a1jl
+          !$omp atomic update
+          this%f(il,ifock,1) = this%f(il,ifock,1) + a1il
+          !$omp atomic update
+          this%f(jk,ifock,1) = this%f(jk,ifock,1) + a1jk
+          !$omp atomic update
+          this%f(ij,ifock+1,1) = this%f(ij,ifock+1,1) + ckl
+          !$omp atomic update
+          this%f(kl,ifock+1,1) = this%f(kl,ifock+1,1) + cij
+          !$omp atomic update
+          this%f(ik,ifock+1,1) = this%f(ik,ifock+1,1) + a2ik
+          !$omp atomic update
+          this%f(jl,ifock+1,1) = this%f(jl,ifock+1,1) + a2jl
+          !$omp atomic update
+          this%f(il,ifock+1,1) = this%f(il,ifock+1,1) + a2il
+          !$omp atomic update
+          this%f(jk,ifock+1,1) = this%f(jk,ifock+1,1) + a2jk
+        else
+          this%f(ij,ifock,mythread) = &
+            this%f(ij,ifock,mythread) + ckl
+          this%f(kl,ifock,mythread) = &
+            this%f(kl,ifock,mythread) + cij
+          this%f(ik,ifock,mythread) = this%f(ik,ifock,mythread) &
+            - val1*this%d(jl,ifock)
+          this%f(jl,ifock,mythread) = this%f(jl,ifock,mythread) &
+            - val1*this%d(ik,ifock)
+          this%f(il,ifock,mythread) = this%f(il,ifock,mythread) &
+            - val1*this%d(jk,ifock)
+          this%f(jk,ifock,mythread) = this%f(jk,ifock,mythread) &
+            - val1*this%d(il,ifock)
+
+          this%f(ij,ifock+1,mythread) = &
+            this%f(ij,ifock+1,mythread) + ckl
+          this%f(kl,ifock+1,mythread) = &
+            this%f(kl,ifock+1,mythread) + cij
+          this%f(ik,ifock+1,mythread) = this%f(ik,ifock+1,mythread) &
+            - val1*this%d(jl,ifock+1)
+          this%f(jl,ifock+1,mythread) = this%f(jl,ifock+1,mythread) &
+            - val1*this%d(ik,ifock+1)
+          this%f(il,ifock+1,mythread) = this%f(il,ifock+1,mythread) &
+            - val1*this%d(jk,ifock+1)
+          this%f(jk,ifock+1,mythread) = this%f(jk,ifock+1,mythread) &
+            - val1*this%d(il,ifock+1)
+        end if
+      end do
+              end do
+            end do
+          end do
+        end do
+
+
+
+  end subroutine int2_urohf_consume_shell
 
 end module int2_compute

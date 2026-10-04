@@ -2,7 +2,7 @@ module tdhf_lib
 
     use, intrinsic :: ieee_arithmetic
     use precision, only : dp
-    use int2_compute, only: int2_fock_data_t, int2_storage_t
+    use int2_compute, only: int2_fock_data_t, int2_storage_t, int2_shell_block_t
     use basis_tools, only: basis_set
     use oqp_linalg
 
@@ -20,6 +20,7 @@ module tdhf_lib
         procedure :: parallel_start => int2_td_data_t_parallel_start
         procedure :: parallel_stop => int2_td_data_t_parallel_stop
         procedure :: init_screen => int2_td_data_t_init_screen
+        procedure :: consume_shell => int2_td_consume_shell
         procedure :: update => int2_td_data_t_update
         procedure :: clean => int2_td_data_t_clean
     end type
@@ -63,6 +64,11 @@ contains
     integer, intent(in) :: nthreads
     integer :: nbf, nsh
 
+    this%shell_blocks=.false.
+    select type(this)
+    type is(int2_td_data_t)
+      this%shell_blocks=.true.
+    end select
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
     this%nfocks = ubound(this%d2,size(shape(this%d2)))
@@ -1425,5 +1431,128 @@ contains
     end do
 
   end subroutine sym_response_project
+
+  subroutine int2_td_consume_shell(this, shell_block, thread_id)
+    implicit none
+    class(int2_td_data_t), intent(inout) :: this
+    type(int2_shell_block_t), intent(in) :: shell_block
+    integer, intent(in) :: thread_id
+    integer :: ba,bb,bc,bd,bmaxb,bmaxd,bnij,bnkl,swap_index
+    logical :: bab,bcd,bsame
+    integer :: i, j, k, l, n
+    real(kind=dp) :: xval1, cval2, val2c, cval4, &
+                     val, val1, val4c
+    integer :: ifock, mythread
+
+    xval1 = this%scale_exchange
+    cval2 = 2 * this%scale_coulomb
+    cval4 = 4 * this%scale_coulomb
+
+    bab=shell_block%shells(1)==shell_block%shells(2)
+    bcd=shell_block%shells(3)==shell_block%shells(4)
+    bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
+    mythread = thread_id
+
+    associate (&
+                apb => this%apb(:,:,:,mythread), &
+                amb => this%amb(:,:,:,mythread), &
+                d2 => this%d2 &
+                )
+
+      do ifock = 1, this%nfocks
+        bnij=0
+        do ba=1,shell_block%dims(1)
+          bmaxb=shell_block%dims(2)
+          if (bab) bmaxb=ba
+          do bb=1,bmaxb
+            bnij=bnij+1
+            bnkl=bnij
+            do bc=1,shell_block%dims(3)
+              bmaxd=shell_block%dims(4)
+              if (bcd) bmaxd=bc
+              if (bsame) then
+                bmaxd=min(bmaxd,bnkl)
+                if (bmaxd==0) exit
+                bnkl=bnkl-bmaxd
+              end if
+              do bd=1,bmaxd
+                val=shell_block%values(bd,bc,bb,ba)
+                if (val==0.0_dp) cycle
+                i=shell_block%offsets(1)+ba
+                j=shell_block%offsets(2)+bb
+                k=shell_block%offsets(3)+bc
+                l=shell_block%offsets(4)+bd
+                if (i<j) then
+                  swap_index=i; i=j; j=swap_index
+                end if
+                if (k<l) then
+                  swap_index=k; k=l; l=swap_index
+                end if
+                if (i<k) then
+                  swap_index=i; i=k; k=swap_index
+                  swap_index=j; j=l; l=swap_index
+                else if (i==k .and. j<l) then
+                  swap_index=j; j=l; l=swap_index
+                end if
+
+          if (this%tamm_dancoff) then
+            val1 = val*xval1
+            val2c = val*cval2
+            !A
+            amb(i,k,ifock) = amb(i,k,ifock) - val1 * d2(j,l,ifock)
+            amb(k,i,ifock) = amb(k,i,ifock) - val1 * d2(l,j,ifock)
+            amb(i,l,ifock) = amb(i,l,ifock) - val1 * d2(j,k,ifock)
+            amb(l,i,ifock) = amb(l,i,ifock) - val1 * d2(k,j,ifock)
+            amb(j,k,ifock) = amb(j,k,ifock) - val1 * d2(i,l,ifock)
+            amb(k,j,ifock) = amb(k,j,ifock) - val1 * d2(l,i,ifock)
+            amb(j,l,ifock) = amb(j,l,ifock) - val1 * d2(i,k,ifock)
+            amb(l,j,ifock) = amb(l,j,ifock) - val1 * d2(k,i,ifock)
+            if (this%tamm_dancoff_coulomb) then
+              amb(i,j,ifock) = amb(i,j,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(j,i,ifock) = amb(j,i,ifock) + val2c * (d2(k,l,ifock)+d2(l,k,ifock))
+              amb(k,l,ifock) = amb(k,l,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+              amb(l,k,ifock) = amb(l,k,ifock) + val2c * (d2(i,j,ifock)+d2(j,i,ifock))
+            end if
+          else
+            val1 = val*xval1
+            val4c = val*cval4
+
+            if (this%int_apb) then
+              ! A+B
+              ! Coulomb
+              apb(i,j,ifock) = apb(i,j,ifock) + val4c * (d2(k,l,ifock)+d2(l,k,ifock))
+              apb(k,l,ifock) = apb(k,l,ifock) + val4c * (d2(i,j,ifock)+d2(j,i,ifock))
+
+              ! Exchange
+              apb(i,k,ifock) = apb(i,k,ifock) - val1 * (d2(j,l,ifock)+d2(l,j,ifock))
+              apb(i,l,ifock) = apb(i,l,ifock) - val1 * (d2(j,k,ifock)+d2(k,j,ifock))
+              apb(j,k,ifock) = apb(j,k,ifock) - val1 * (d2(i,l,ifock)+d2(l,i,ifock))
+              apb(j,l,ifock) = apb(j,l,ifock) - val1 * (d2(i,k,ifock)+d2(k,i,ifock))
+            end if
+
+            if (this%int_amb) then
+              ! A-B
+              amb(i,k,ifock) = amb(i,k,ifock) + val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(i,l,ifock) = amb(i,l,ifock) + val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(j,k,ifock) = amb(j,k,ifock) + val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(j,l,ifock) = amb(j,l,ifock) + val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+
+              amb(k,i,ifock) = amb(k,i,ifock) - val1 * (d2(l,j,ifock)-d2(j,l,ifock))
+              amb(l,i,ifock) = amb(l,i,ifock) - val1 * (d2(k,j,ifock)-d2(j,k,ifock))
+              amb(k,j,ifock) = amb(k,j,ifock) - val1 * (d2(l,i,ifock)-d2(i,l,ifock))
+              amb(l,j,ifock) = amb(l,j,ifock) - val1 * (d2(k,i,ifock)-d2(i,k,ifock))
+            end if
+          end if
+              end do
+            end do
+          end do
+        end do
+      end do
+
+    end associate
+
+
+
+  end subroutine
 
 end module tdhf_lib

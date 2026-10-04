@@ -33,6 +33,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/grd2_hess_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fci_symmetry_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/cholesky_eri_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/int2_shell_block_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/simplex_qp_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
 )
