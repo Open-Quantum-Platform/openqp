@@ -228,3 +228,32 @@ basis and ECP (energies). Ship that case as an example under `examples/ECP/`
 (rule 2); the reference must fail on the pre-fix code. Report PASS with the
 case, NOT APPLICABLE when no `dV_en/dx` or ECP integral is touched, or name
 the missing evidence.
+
+### 9. Numerical performance changes need measured evidence
+
+For a PR or MR that changes SCF, integral contraction, Davidson, or another
+numerical hot path, assess BLAS and parallel execution explicitly.
+
+- Use existing ILP64 BLAS/LAPACK wrappers. Prefer matrix operations and Level-3
+  BLAS when they reduce total work; account for packing, transposes, copies,
+  temporary storage, and small-matrix overhead in the measurement.
+- Explain the OpenMP/MPI decomposition, thread ownership, reductions, and memory
+  growth. Avoid nested BLAS/OpenMP oversubscription. Check both serial and the
+  intended parallel configuration, including any supported low-memory path.
+- Compare baseline and changed code on identical inputs, basis, convergence
+  tolerances, precision, hardware, compiler, and thread counts. Record commits,
+  linked BLAS, affinity where available, warm-up policy, repeated timings, and
+  peak or estimated extra memory. Include representative small and larger cases.
+- Report kernel and whole-calculation time separately where measurable. For SCF
+  and Davidson, also compare iteration counts and residuals; reduced iteration
+  count alone does not establish a speedup or the same converged state.
+- Verify numerical results at the changed boundary (signed Fock/response
+  matrices when applicable), final energies and state identity. Preserve
+  screening, symmetry factors, spin conventions, and the requested tolerance.
+- Disclose regressions and unsupported cases. A default-path change needs
+  evidence for its intended workload; retain a tested fallback or restrict the
+  optimization when dispatch, memory, or parallel overhead outweighs the gain.
+
+**Reviewer check:** state PASS with the timing and numerical evidence, NOT
+APPLICABLE with a reason, or identify the missing BLAS/parallel assessment.
+Claims of faster execution require measurements, not only a plausible design.
