@@ -9,7 +9,7 @@ module tdhf_mrsf_lib
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
-      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
+      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4 MRSF, 1:8 UMRSF), precomputed once
       real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
       real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
@@ -62,7 +62,7 @@ contains
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
     integer, intent(in) :: nthreads
-    integer :: nbf, nsh, nmatrix, mu, nu
+    integer :: nbf, nsh, nmatrix, mu, nu, ncoul
 
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
@@ -80,14 +80,20 @@ contains
                source=0.0d0)
 
       ! Precompute the symmetrized Coulomb density ds(:,c,mu,nu)=d3(mu,nu)+d3(nu,mu)
-      ! for the Coulomb components (1:4) once per run. d3 is constant over the
-      ! Davidson sigma build, so this lets the digestion kernel read a single
-      ! (symmetric) slab per integral instead of summing two scattered d3 reads.
+      ! for the Coulomb components once per run (1:4 for MRSF, the alpha/beta
+      ! pairs 1:8 for UMRSF). d3 is constant over the Davidson sigma build, so
+      ! this lets the digestion kernel read a single (symmetric) slab per
+      ! integral instead of summing two scattered d3 reads.
+      ncoul = 4
+      select type (this)
+      type is (int2_umrsf_data_t)
+        ncoul = 8
+      end select
       if (allocated(this%ds)) deallocate(this%ds)
-      allocate(this%ds(this%nfocks, 4, nbf, nbf))
+      allocate(this%ds(this%nfocks, ncoul, nbf, nbf))
       do nu = 1, nbf
         do mu = 1, nbf
-          this%ds(:,:,mu,nu) = this%d3(:,1:4,mu,nu) + this%d3(:,1:4,nu,mu)
+          this%ds(:,:,mu,nu) = this%d3(:,1:ncoul,mu,nu) + this%d3(:,1:ncoul,nu,mu)
         end do
       end do
 
@@ -365,7 +371,7 @@ contains
 
     class(int2_umrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    integer :: i, j, k, l, n
+    integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
     integer :: mythread
 
@@ -375,75 +381,95 @@ contains
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
+                ds => this%ds, &
                 nf => this%nfocks &
       )
 
-      do n = 1, buf%ncur
-        i = buf%ids(1,n)
-        j = buf%ids(2,n)
-        k = buf%ids(3,n)
-        l = buf%ids(4,n)
-        val = buf%ints(n)
+      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
+      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
+      ! Explicit loops with the stride-1 v index innermost: the former
+      ! whole-slice assignments read the pointer d3, which the compiler cannot
+      ! prove disjoint from f3, so each of them could build an array temporary.
 
-        xval = val * this%scale_exchange
-        cval = val * this%scale_coulomb
+      if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
 
-        if (this%cur_pass==1) then
-          ! Coulomb-like updates (MRSF columns :4 -> :8, alpha/beta pairs)
-          f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,k,l)   ! (ij|lk)
-          f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,i,j)   ! (kl|ji)
-          f3(:nf,1:8,i,j) = f3(:nf,1:8,i,j) + cval*d3(:nf,1:8,l,k)   ! (ij|kl)
-          f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,i,j)   ! (lk|ji)
-          f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,k,l)   ! (ji|lk)
-          f3(:nf,1:8,k,l) = f3(:nf,1:8,k,l) + cval*d3(:nf,1:8,j,i)   ! (kl|ij)
-          f3(:nf,1:8,j,i) = f3(:nf,1:8,j,i) + cval*d3(:nf,1:8,l,k)   ! (ji|kl)
-          f3(:nf,1:8,l,k) = f3(:nf,1:8,l,k) + cval*d3(:nf,1:8,j,i)   ! (lk|ij)
+          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
 
-          ! Exchange-like updates (MRSF columns :7 -> :11, incl. alpha/beta)
-          f3(:nf,1:8,i,k) = f3(:nf,1:8,i,k) - xval*d3(:nf,1:8,j,l) ! (ij|lk)
-          f3(:nf,1:8,k,i) = f3(:nf,1:8,k,i) - xval*d3(:nf,1:8,l,j) ! (kl|ji)
-          f3(:nf,1:8,i,l) = f3(:nf,1:8,i,l) - xval*d3(:nf,1:8,j,k) ! (ij|kl)
-          f3(:nf,1:8,l,i) = f3(:nf,1:8,l,i) - xval*d3(:nf,1:8,k,j) ! (lk|ji)
-          f3(:nf,1:8,j,k) = f3(:nf,1:8,j,k) - xval*d3(:nf,1:8,i,l) ! (ji|lk)
-          f3(:nf,1:8,k,j) = f3(:nf,1:8,k,j) - xval*d3(:nf,1:8,l,i) ! (kl|ij)
-          f3(:nf,1:8,j,l) = f3(:nf,1:8,j,l) - xval*d3(:nf,1:8,i,k) ! (ji|kl)
-          f3(:nf,1:8,l,j) = f3(:nf,1:8,l,j) - xval*d3(:nf,1:8,k,i) ! (lk|ij)
+          ! Exchange (columns 1:8 and the general column 11).
+          do c = 1, 8
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
 
           ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
           ! exchange permutation for UMRSF open-shell pair densities.
-          f3(:nf,9:10,i,l) = f3(:nf,9:10,i,l) - xval*d3(:nf,9:10,k,j)
-          f3(:nf,9:10,l,i) = f3(:nf,9:10,l,i) - xval*d3(:nf,9:10,j,k)
-          f3(:nf,9:10,k,j) = f3(:nf,9:10,k,j) - xval*d3(:nf,9:10,i,l)
-          f3(:nf,9:10,j,k) = f3(:nf,9:10,j,k) - xval*d3(:nf,9:10,l,i)
-          f3(:nf,9:10,i,k) = f3(:nf,9:10,i,k) - xval*d3(:nf,9:10,l,j)
-          f3(:nf,9:10,k,i) = f3(:nf,9:10,k,i) - xval*d3(:nf,9:10,j,l)
-          f3(:nf,9:10,l,j) = f3(:nf,9:10,l,j) - xval*d3(:nf,9:10,i,k)
-          f3(:nf,9:10,j,l) = f3(:nf,9:10,j,l) - xval*d3(:nf,9:10,k,i)
+          do c = 9, 10
+            do v = 1, nf
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
 
-          ! General component agdlr is column 11 (spin-independent)
-          f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
-          f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
-          f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
-          f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
-          f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
-          f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
-          f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
-          f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
+      else if (this%cur_pass==2) then
+        ! In pass 2 only the general component agdlr (column 11) is updated,
+        ! as in the MRSF version (column 7 there).
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
+            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
+            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
+            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
+            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
+            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
+            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
+            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+          end do
+        end do
+      end if
 
-        else if (this%cur_pass==2) then
-          ! In pass 2 only the general component agdlr (column 11) is updated,
-          ! as in the MRSF version (column 7 there).
-          f3(1:nf,11,i,k) = f3(1:nf,11,i,k) - xval*d3(1:nf,11,j,l)
-          f3(1:nf,11,k,i) = f3(1:nf,11,k,i) - xval*d3(1:nf,11,l,j)
-          f3(1:nf,11,i,l) = f3(1:nf,11,i,l) - xval*d3(1:nf,11,j,k)
-          f3(1:nf,11,l,i) = f3(1:nf,11,l,i) - xval*d3(1:nf,11,k,j)
-          f3(1:nf,11,j,k) = f3(1:nf,11,j,k) - xval*d3(1:nf,11,i,l)
-          f3(1:nf,11,k,j) = f3(1:nf,11,k,j) - xval*d3(1:nf,11,l,i)
-          f3(1:nf,11,j,l) = f3(1:nf,11,j,l) - xval*d3(1:nf,11,i,k)
-          f3(1:nf,11,l,j) = f3(1:nf,11,l,j) - xval*d3(1:nf,11,k,i)
-        end if
-
-      end do
     end associate
 
     buf%ncur = 0
