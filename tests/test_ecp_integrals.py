@@ -63,14 +63,14 @@ class NativeEcpSelfTest(unittest.TestCase):
     def setUpClass(cls):
         import oqp
 
-        err = oqp.ffi.new("double[9]")
+        err = oqp.ffi.new("double[10]")
         oqp.lib.oqp_ecp_selftest(err)
-        cls.err = [err[i] for i in range(9)]
+        cls.err = [err[i] for i in range(10)]
         # repeated calls in one process: every buffer is per call, so the
         # second run must reproduce the first exactly
-        err2 = oqp.ffi.new("double[9]")
+        err2 = oqp.ffi.new("double[10]")
         oqp.lib.oqp_ecp_selftest(err2)
-        cls.err_repeat = [err2[i] for i in range(9)]
+        cls.err_repeat = [err2[i] for i in range(10)]
 
     def test_off_centre_element_matches_independent_quadrature(self):
         self.assertLess(self.err[0], 1e-12)
@@ -97,6 +97,9 @@ class NativeEcpSelfTest(unittest.TestCase):
     def test_f_g_derivatives_match_finite_differences(self):
         self.assertLess(self.err[7], 1e-9)
         self.assertLess(self.err[8], 1e-7)
+
+    def test_contracted_second_derivatives_match_the_stored_matrices(self):
+        self.assertLess(self.err[9], 1e-13)
 
 
 if __name__ == "__main__":

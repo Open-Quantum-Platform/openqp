@@ -9,7 +9,7 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
                                 int64_t forbid_vertices_before, double *x,
                                 double *value, int *status);
 
-/* Internal ECP-integral self-test: err[0..8] (see tests/fortran/ecp_selftest.F90). */
+/* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
 
 typedef double xyz_t[3];

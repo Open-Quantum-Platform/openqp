@@ -66,6 +66,7 @@ module ecp_tool
   public ecp_deriv_ints
   public ecp_raw_ints
   public ecp_hess_start
+  public ecp_hess_contract
 
   !> Gauss-Legendre points per radial window
   integer, parameter :: NGL = 64
@@ -283,21 +284,17 @@ contains
     end subroutine ecp_deriv_ints
 
     !> @brief Add ECP second-derivative contribution to the nuclear Hessian.
-    !> @detail Computes d^2 V_ECP/dR_I dR_J in AO full-square form for every atom
-    !>         pair using ecp_raw_ints (deriv order 2), transforms each block to
-    !>         OpenQP AO ordering, and contracts with the symmetric density
-    !>         `denab` (packed) to accumulate the fixed-density ECP skeleton into
-    !>         the Cartesian Hessian `hess` (3*natm x 3*natm, atom-major layout
-    !>         hess(3*(I-1)+a, 3*(J-1)+b)).
+    !> @detail Accumulates the fixed-density ECP skeleton
     !>
-    !>         ecp_raw_ints returns the packed upper triangle of atom-coordinate
-    !>         pairs: matrix index H_START(I,J,natm) (0-based) starts each (I<=J)
-    !>         atom block.  Diagonal blocks (I==J) store 6 matrices in the order
-    !>         {xx,xy,xz,yy,yz,zz}; off-diagonal blocks (I<J) store 9 matrices in
-    !>         row-major {xx,xy,xz,yx,yy,yz,zx,zy,zz} (first index = coordinate of
-    !>         atom I, second = coordinate of atom J).  Each block is the AO matrix
-    !>         packed M(k,l) = (k-1)*nbf + l.  We scatter symmetrically so the
-    !>         returned Hessian is exactly symmetric.
+    !>           hess(3(I-1)+a, 3(J-1)+b) += sum_{mu nu} D_{mu nu} d^2 V_{mu nu} / dR_Ia dR_Jb
+    !>
+    !>         without forming the second-derivative matrices.  The packed AO
+    !>         density is taken once to the raw Cartesian order of ecp_raw_ints
+    !>         with the adjoint of @ref transform_ecp_matrix (per shell pair
+    !>         D_cart = B'_i D B'_j^T with B' = B * shells_pnrm2 for pure shells,
+    !>         then the inverse canonical-order permutation), and contracted per
+    !>         shell pair by ecp_hess_contract.  Memory is O(nbf^2) instead of
+    !>         O(nbf^2 * natm^2).
     !> @param[in]    basis  Basis set (with ECP params).
     !> @param[in]    coord  Nuclear coordinates (3 x natm).
     !> @param[in]    denab  Packed AO density (size nbf*(nbf+1)/2), upper triangle.
@@ -310,84 +307,75 @@ contains
         real(kind=dp), intent(in) :: denab(:)
         real(kind=dp), intent(inout) :: hess(:,:)
 
-        real(c_double), allocatable :: raw_res(:)
-        real(c_double), allocatable :: raw_block(:), ecp_mat(:)
-        integer :: nbf, nbf_raw, natm
-        integer :: iat, jat, ia0, ja0, hstart, base, ncomp, n
-        integer :: a, b, i, j, c, prim
-        ! 64-bit: block offsets reach 3N(3N+1)/2 * nbf^2 and overflow default integers
-        integer(c_int64_t) :: mat_sz
-        integer(c_int) :: driv_order
-        integer :: amap(9), bmap(9)
-        real(real64) :: val
+        real(dp), allocatable :: draw(:,:)
 
         if (.not.(basis%ecp_params%is_ecp)) then
             return
         end if
 
-        driv_order = 2
+        call ecp_density_to_raw(basis, denab, draw)
+        call ecp_hess_contract(basis, coord, draw, hess)
+
+    end subroutine add_ecphess
+
+    !> @brief Packed OpenQP AO density -> symmetric density in the raw Cartesian
+    !>        order of ecp_raw_ints, such that
+    !>        sum_kl draw(k,l) V_raw(k,l) = sum_{mu nu} D(mu,nu) V(mu,nu)
+    !>        for V = transform_ecp_matrix(V_raw).
+    subroutine ecp_density_to_raw(basis, denab, draw)
+        use cart2sph, only: c2s_expand_block
+
+        type(basis_set), intent(in) :: basis
+        real(kind=dp), intent(in) :: denab(:)
+        real(dp), allocatable, intent(out) :: draw(:,:)
+
+        real(dp), allocatable :: dfull(:,:), dcart(:,:)
+        integer, allocatable :: cart_off(:), label_map(:)
+        integer :: nbf, nbf_raw, i, j, ish, jsh, nci, ncj, nsi, nsj
+        integer :: coi, coj, soi, soj, pure_i, pure_j
+
         nbf = basis%nbf
-        nbf_raw = ecp_cart_nbf(basis)
-        mat_sz = int(nbf_raw, c_int64_t) * nbf_raw
-        natm = size(coord, dim=2)
-        allocate(raw_block(mat_sz))
-
-        call ecp_raw_ints(basis, coord, int(driv_order), raw_res)
-
-        do iat = 1, natm
-            do jat = iat, natm
-                ia0 = iat - 1
-                ja0 = jat - 1
-                ! 0-based starting matrix index of the (iat,jat) atom block
-                hstart = 9*ja0 + 3*(3*natm - 1)*ia0 - (9*ia0*(ia0 + 1))/2 - 3
-                if (iat == jat) then
-                    base = hstart + 3
-                    ncomp = 6
-                    amap(1:6) = [1, 1, 1, 2, 2, 3]
-                    bmap(1:6) = [1, 2, 3, 2, 3, 3]
-                else
-                    base = hstart
-                    ncomp = 9
-                    amap(1:9) = [1, 1, 1, 2, 2, 2, 3, 3, 3]
-                    bmap(1:9) = [1, 2, 3, 1, 2, 3, 1, 2, 3]
-                end if
-
-                do n = 1, ncomp
-                    raw_block = raw_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
-                    call transform_ecp_matrix(basis, raw_block, ecp_mat)
-
-                    val = 0.0_dp
-                    do j = 1, nbf
-                        do i = 1, j
-                            c = j*(j - 1)/2 + i
-                            if (i == j) then
-                                prim = 1
-                            else
-                                prim = 2
-                            end if
-                            val = val + prim * ecp_mat((i - 1)*nbf + j) * denab(c)
-                        end do
-                    end do
-
-                    a = amap(n)
-                    b = bmap(n)
-                    hess(3*(iat - 1) + a, 3*(jat - 1) + b) = &
-                        hess(3*(iat - 1) + a, 3*(jat - 1) + b) + val
-                    ! symmetric partner (skip if it is the same matrix element)
-                    if (.not. (iat == jat .and. a == b)) then
-                        hess(3*(jat - 1) + b, 3*(iat - 1) + a) = &
-                            hess(3*(jat - 1) + b, 3*(iat - 1) + a) + val
-                    end if
-                end do
+        allocate(dfull(nbf, nbf))
+        do j = 1, nbf
+            do i = 1, j
+                dfull(i, j) = denab(j*(j - 1)/2 + i)
+                dfull(j, i) = dfull(i, j)
             end do
         end do
 
-        deallocate(raw_res)
-        if (allocated(ecp_mat)) deallocate(ecp_mat)
+        call ecp_cart_offsets(basis, cart_off, nbf_raw)
+        allocate(dcart(nbf_raw, nbf_raw))
+        do ish = 1, basis%nshell
+            nci = NUM_CART_BF(basis%am(ish))
+            nsi = basis%naos(ish)
+            coi = cart_off(ish)
+            soi = basis%ao_offset(ish)
+            pure_i = 0
+            if (HARMONIC_ACTIVE) pure_i = basis%harmonic(ish)
+            do jsh = 1, basis%nshell
+                ncj = NUM_CART_BF(basis%am(jsh))
+                nsj = basis%naos(jsh)
+                coj = cart_off(jsh)
+                soj = basis%ao_offset(jsh)
+                pure_j = 0
+                if (HARMONIC_ACTIVE) pure_j = basis%harmonic(jsh)
+                call c2s_expand_block(dfull(soi:soi + nsi - 1, soj:soj + nsj - 1), &
+                                      dcart(coi:coi + nci - 1, coj:coj + ncj - 1), &
+                                      basis%am(ish), pure_i, basis%am(jsh), pure_j)
+            end do
+        end do
+        deallocate(dfull)
 
-        deallocate(raw_block)
+        allocate(label_map(nbf_raw))
+        call raw_cart_map(basis, cart_off, label_map)
+        allocate(draw(nbf_raw, nbf_raw))
+        do j = 1, nbf_raw
+            do i = 1, nbf_raw
+                draw(i, j) = dcart(label_map(i), label_map(j))
+            end do
+        end do
 
-    end subroutine add_ecphess
+    end subroutine ecp_density_to_raw
 
   !> @brief Build AO index remapping from the raw Cartesian order (x power descending,
   !>        then y) to OpenQP AO order.
@@ -905,21 +893,11 @@ contains
     integer, intent(in) :: deriv
     real(dp), allocatable, intent(out) :: res(:)
 
-    type(tables_t) :: tab
-    type(gtab_t), allocatable :: gt(:)
-    integer, allocatable :: off(:), toff(:)
-    integer :: natm, nsh, nraw, nmat, ish, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2
-    integer(8) :: nraw2
-    real(dp) :: c(3)
+    integer, allocatable :: off(:)
+    integer :: natm, nraw, nmat
 
     natm = size(coord, 2)
-    nsh = basis%nshell
-    allocate(off(nsh))
-    nraw = 0
-    do ish = 1, nsh
-      off(ish) = nraw
-      nraw = nraw + NUM_CART_BF(basis%am(ish))
-    end do
+    call raw_offsets(basis, off, nraw)
     select case (deriv)
     case (0)
       nmat = 1
@@ -928,9 +906,77 @@ contains
     case default
       nmat = (3*natm*(3*natm + 1))/2
     end select
-    nraw2 = int(nraw, 8)*int(nraw, 8)
-    allocate(res(nraw2*nmat), source=0.0_dp)
+    allocate(res(int(nraw, 8)*int(nraw, 8)*nmat), source=0.0_dp)
     if (.not. basis%ecp_params%is_ecp) return
+
+    call ecp_centres(basis, coord, deriv, off, nraw, res)
+  end subroutine ecp_raw_ints
+
+  !> @brief Second nuclear derivatives of the ECP energy, contracted per shell pair.
+  !> @detail hess(3(I-1)+a, 3(J-1)+b) += sum_kl dens(k,l) d^2 V_kl / dR_Ia dR_Jb,
+  !>         with dens in the raw Cartesian order of @ref ecp_raw_ints.  The
+  !>         derivative matrices are never stored, so the memory is that of dens
+  !>         and one 3N x 3N accumulator per thread.
+  !> @param[in]    dens  Symmetric density, nraw x nraw, raw Cartesian order.
+  !> @param[inout] hess  Cartesian Hessian (3*natm x 3*natm), incremented.
+  subroutine ecp_hess_contract(basis, coord, dens, hess)
+    type(basis_set), intent(in) :: basis
+    real(dp), intent(in) :: coord(:,:)
+    real(dp), intent(in) :: dens(:,:)
+    real(dp), intent(inout) :: hess(:,:)
+
+    integer, allocatable :: off(:)
+    integer :: nraw
+    real(dp) :: dummy(1)
+
+    if (.not. basis%ecp_params%is_ecp) return
+    call raw_offsets(basis, off, nraw)
+    call ecp_centres(basis, coord, 2, off, nraw, dummy, dens, hess)
+  end subroutine ecp_hess_contract
+
+  !> Offsets of the shells in the raw Cartesian order and its dimension
+  subroutine raw_offsets(basis, off, nraw)
+    type(basis_set), intent(in) :: basis
+    integer, allocatable, intent(out) :: off(:)
+    integer, intent(out) :: nraw
+    integer :: ish
+
+    allocate(off(basis%nshell))
+    nraw = 0
+    do ish = 1, basis%nshell
+      off(ish) = nraw
+      nraw = nraw + NUM_CART_BF(basis%am(ish))
+    end do
+  end subroutine raw_offsets
+
+  !> Loop over ECP centres and shell pairs.  Without dens/hess the derivative
+  !> matrices are added to res; with them (deriv = 2 only) they are contracted
+  !> into hess instead and res is not referenced.
+  subroutine ecp_centres(basis, coord, deriv, off, nraw, res, dens, hess)
+    type(basis_set), intent(in) :: basis
+    real(dp), intent(in) :: coord(:,:)
+    integer, intent(in) :: deriv, nraw
+    integer, intent(in) :: off(:)
+    real(dp), intent(inout) :: res(:)
+    real(dp), intent(in), optional :: dens(:,:)
+    real(dp), intent(inout), optional :: hess(:,:)
+
+    type(tables_t) :: tab
+    type(gtab_t), allocatable :: gt(:)
+    integer, allocatable :: toff(:)
+    integer :: natm, nsh, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2
+    real(dp) :: c(3)
+    real(dp), allocatable :: hloc(:,:)
+    logical :: contract
+
+    natm = size(coord, 2)
+    nsh = basis%nshell
+    contract = present(hess)
+    if (contract) then
+      allocate(hloc(3*natm, 3*natm), source=0.0_dp)
+    else
+      allocate(hloc(1, 1), source=0.0_dp)
+    end if
 
     nc = size(basis%ecp_params%n_expo)
     allocate(toff(nc + 1))
@@ -966,21 +1012,34 @@ contains
 
       call build_gtabs(tab, basis, coord, c, lecp, deriv, gt)
 
-      !$omp parallel do schedule(dynamic) private(s1, s2)
-      do s1 = 1, nsh
-        do s2 = 1, s1
-          call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
-                          deriv, gt, s1, s2, off, nraw, natm, res)
+      if (contract) then
+        !$omp parallel do schedule(dynamic) private(s1, s2) reduction(+:hloc)
+        do s1 = 1, nsh
+          do s2 = 1, s1
+            call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
+                            deriv, gt, s1, s2, off, nraw, natm, res, dens, hloc)
+          end do
         end do
-      end do
-      !$omp end parallel do
+        !$omp end parallel do
+      else
+        !$omp parallel do schedule(dynamic) private(s1, s2)
+        do s1 = 1, nsh
+          do s2 = 1, s1
+            call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
+                            deriv, gt, s1, s2, off, nraw, natm, res)
+          end do
+        end do
+        !$omp end parallel do
+      end if
 
       do iat = 1, natm
         if (allocated(gt(iat)%g)) deallocate(gt(iat)%g)
         gt(iat)%used = .false.
       end do
     end do
-  end subroutine ecp_raw_ints
+
+    if (contract) hess(1:3*natm, 1:3*natm) = hess(1:3*natm, 1:3*natm) + hloc
+  end subroutine ecp_centres
 
   !> Type-2 projection tables of every atom that carries shells, for one ECP
   !>   g(t, lm, N, lam) = sum_{s <= t, deg s = N} c_t(s) 4pi sum_mu Y_lam,mu(A^) om2(s, lm, lam mu)
@@ -1108,7 +1167,8 @@ contains
 
   !> One shell pair with one ECP centre: sizes the work arrays for
   !> shell_pair_core, which evaluates it
-  subroutine shell_pair(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res)
+  subroutine shell_pair(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res, &
+                        dens, hess)
     type(tables_t), intent(in) :: tab
     type(basis_set), intent(in) :: basis
     real(dp), intent(in) :: coord(:,:), c(3)
@@ -1116,6 +1176,8 @@ contains
     type(gtab_t), intent(in) :: gt(:)
     integer, intent(in) :: off(:)
     real(dp), intent(inout) :: res(:)
+    real(dp), intent(in), optional :: dens(:,:)
+    real(dp), intent(inout), optional :: hess(:,:)
     integer :: na, nb, lamA, lamB
 
     na = basis%am(s1) + deriv
@@ -1128,13 +1190,13 @@ contains
     end if
     call shell_pair_core(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res, &
                          na, nb, na + nb, ntup_upto(na), ntup_upto(nb), merge(1, merge(3, 6, deriv == 1), deriv == 0), &
-                         ntup_upto(max(na, nb)), lamA, lamB)
+                         ntup_upto(max(na, nb)), lamA, lamB, dens, hess)
   end subroutine shell_pair
 
   !> One shell pair with one ECP centre: weighted primitive sums, then the value
   !> and derivative blocks, scattered into res
   subroutine shell_pair_core(tab, basis, coord, c, iatc, t1, t2, lecp, deriv, gt, s1, s2, off, nraw, natm, res, &
-                             na, nb, nab, ntA, ntB, nw, nsmax, lamA, lamB)
+                             na, nb, nab, ntA, ntB, nw, nsmax, lamA, lamB, dens, hess)
     type(tables_t), intent(in) :: tab
     type(basis_set), intent(in) :: basis
     real(dp), intent(in) :: coord(:,:), c(3)
@@ -1143,6 +1205,8 @@ contains
     integer, intent(in) :: off(:)
     real(dp), intent(inout) :: res(:)
     integer, intent(in) :: na, nb, nab, ntA, ntB, nw, nsmax, lamA, lamB
+    real(dp), intent(in), optional :: dens(:,:)
+    real(dp), intent(inout), optional :: hess(:,:)
 
     integer :: la, lb, iata, iatb, ipa, ipb, it, l, n
     integer :: ta, tb, ia, ib, lm, mm, nA_, nB_, lam1, lam2
@@ -1352,7 +1416,7 @@ contains
       end do
     end if
 
-    call scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res)
+    call scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res, dens, hess)
 
   end subroutine shell_pair_core
 
@@ -1365,19 +1429,26 @@ contains
     if (nw < 6) w(nw + 1:) = 0.0_dp
   end subroutine weights
 
-  !> Value and derivative blocks from the weighted tuple integrals, added to res
-  subroutine scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res)
+  !> Value and derivative blocks from the weighted tuple integrals, added to res;
+  !> with dens and hess (deriv = 2), the second-derivative elements are instead
+  !> contracted with dens and added to hess
+  subroutine scatter(iw, nw, la, lb, deriv, iata, iatb, iatc, s1, s2, off, nraw, natm, res, dens, hess)
     integer, intent(in) :: nw, la, lb, deriv, iata, iatb, iatc, s1, s2, nraw, natm
     real(dp), intent(in) :: iw(:,:,:)
     integer, intent(in) :: off(:)
     real(dp), intent(inout) :: res(:)
+    real(dp), intent(in), optional :: dens(:,:)
+    real(dp), intent(inout), optional :: hess(:,:)
 
     integer, parameter :: W1 = 1, WA = 2, WB = 3, WAA = 4, WAB = 5, WBB = 6
     integer :: ca_, cb_, ta, tb, ka(3), kb(3), k, k2, row, col, nca, ncb
     integer :: x, y, ix, iy, kk, gi, gj, iat, jat, mat, n0
     integer(8) :: nn
-    real(dp) :: val, dA(3), dB(3), AA(3,3), AB(3,3), BB(3,3), m9(9,9)
+    real(dp) :: val, dA(3), dB(3), AA(3,3), AB(3,3), BB(3,3), m9(9,9), wd
     integer :: atomof(3)
+    logical :: contract
+
+    contract = present(hess)
 
     nca = NUM_CART_BF(la)
     ncb = NUM_CART_BF(lb)
@@ -1438,6 +1509,18 @@ contains
                 gi = 3*(iat - 1) + ix
                 gj = 3*(jat - 1) + iy
                 if (gi > gj) cycle
+                if (contract) then
+                  ! put() adds v at (row,col) and (col,row); dens is symmetric
+                  if (row == col) then
+                    wd = dens(row, col)
+                  else
+                    wd = 2.0_dp*dens(row, col)
+                  end if
+                  val = wd*m9(3*(x - 1) + ix, 3*(y - 1) + iy)
+                  hess(gi, gj) = hess(gi, gj) + val
+                  if (gi /= gj) hess(gj, gi) = hess(gj, gi) + val
+                  cycle
+                end if
                 if (iat == jat) then
                   n0 = ecp_hess_start(iat - 1, iat - 1, natm) + 3
                   ! {xx,xy,xz,yy,yz,zz}

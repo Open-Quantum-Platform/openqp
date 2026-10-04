@@ -23,8 +23,11 @@
 !>   err(7)  F f_zzz, g_zzzz: |native - (-2.699075746770718e-4)|, independent
 !>           mpmath (type 1) + numerical projection/adaptive radial (type 2)
 !>   err(8), err(9)  as err(4), err(5) for system 2
+!>   err(10) max over both systems of |ecp_hess_contract - explicit contraction
+!>           of the stored second-derivative matrices| / max |Hessian|, for a
+!>           fixed symmetric density
 module ecp_selftest_mod
-  use ecp_tool, only: ecp_raw_ints, ecp_hess_start
+  use ecp_tool, only: ecp_raw_ints, ecp_hess_start, ecp_hess_contract
   use basis_tools, only: basis_set
   use precision, only: dp
   use, intrinsic :: iso_c_binding, only: c_double
@@ -33,7 +36,7 @@ module ecp_selftest_mod
 contains
 
   subroutine oqp_ecp_selftest(err) bind(C, name='oqp_ecp_selftest')
-    real(c_double), intent(out) :: err(9)
+    real(c_double), intent(out) :: err(10)
 
     real(dp), parameter :: ANG = 1.0_dp/0.529177210903_dp
     real(dp), parameter :: PI = 3.14159265358979323846264338327950288_dp
@@ -103,11 +106,14 @@ contains
       err(6) = max(err(6), maxval(abs(d1((k - 1)*NN + 1:k*NN) + d1((k + 2)*NN + 1:(k + 3)*NN))))
     end do
 
-    call system2(err(7), err(8), err(9))
+    call contract_check(b, coord, err(10))
+    call system2(err(7), err(8), err(9), q)
+    err(10) = max(err(10), q)
   end subroutine oqp_ecp_selftest
 
-  subroutine system2(eref, e1, e2)
+  subroutine system2(eref, e1, e2, ec)
     real(c_double), intent(out) :: eref, e1, e2
+    real(dp), intent(out) :: ec
     real(dp), parameter :: ANG = 1.0_dp/0.529177210903_dp
     integer, parameter :: NT = 29
     integer, parameter :: ECP_L(NT) = [3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, &
@@ -150,7 +156,56 @@ contains
     ! raw order: f (10 components, zzz last) | g (15 components, zzzz last); nraw = 25
     eref = abs(v((10 - 1)*25 + 25) - (-2.699075746770718e-4_dp))
     call fd_check(b, coord, 1, e1, e2)
+    call contract_check(b, coord, ec)
   end subroutine system2
+
+  !> The contracted second derivatives against the stored matrices of
+  !> ecp_raw_ints (deriv 2) contracted with the same symmetric density
+  subroutine contract_check(b, coord, e)
+    type(basis_set), intent(in) :: b
+    real(dp), intent(in) :: coord(:,:)
+    real(dp), intent(out) :: e
+    real(dp), allocatable :: d2(:), dens(:,:), ref(:,:), h(:,:)
+    integer :: natm, nraw, i, j, ia, ib, k, kb, gi, gj, mat
+    integer(8) :: nn
+    real(dp) :: val
+
+    natm = size(coord, 2)
+    call ecp_raw_ints(b, coord, 2, d2)
+    nraw = sum([(merge(3, merge(1, (b%am(i) + 1)*(b%am(i) + 2)/2, b%am(i) == 0), &
+                 b%am(i) == 1), i = 1, b%nshell)])
+    nn = int(nraw, 8)*nraw
+    allocate(dens(nraw, nraw), ref(3*natm, 3*natm), h(3*natm, 3*natm))
+    do j = 1, nraw
+      do i = 1, nraw
+        dens(i, j) = 1.0_dp/real(i + j - 1, dp) + 0.1_dp*cos(real(i*j, dp))
+      end do
+    end do
+    ref = 0.0_dp
+    do ia = 1, natm
+      do k = 1, 3
+        gi = 3*(ia - 1) + k
+        do ib = 1, natm
+          do kb = 1, 3
+            gj = 3*(ib - 1) + kb
+            if (gi > gj) cycle
+            if (ia == ib) then
+              mat = ecp_hess_start(ia - 1, ia - 1, natm) + 3 &
+                  + (k - 1)*3 - ((k - 1)*(k - 2))/2 + (kb - k)
+            else
+              mat = ecp_hess_start(ia - 1, ib - 1, natm) + (k - 1)*3 + (kb - 1)
+            end if
+            val = sum(reshape(d2(int(mat, 8)*nn + 1:int(mat + 1, 8)*nn), [nraw, nraw])*dens)
+            ref(gi, gj) = val
+            ref(gj, gi) = val
+          end do
+        end do
+      end do
+    end do
+    h = 0.0_dp
+    call ecp_hess_contract(b, coord, dens, h)
+    e = maxval(abs(h - ref))/max(1.0_dp, maxval(abs(ref)))
+  end subroutine contract_check
 
   !> Five-point finite differences (h = 1e-3 bohr) of the value and of the
   !> first derivative against the first and second derivatives.  The ECP
