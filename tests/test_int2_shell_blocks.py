@@ -2,6 +2,7 @@
 import ctypes
 import os
 import unittest
+from unittest.mock import patch
 
 
 class ShellBlockContractions(unittest.TestCase):
@@ -9,9 +10,16 @@ class ShellBlockContractions(unittest.TestCase):
         self._check("int2_td_shell_images_selftest", 16)
 
     def test_all_shell_permutations_and_spin_channels(self):
-        # Includes the unmodified consumer defaults with 1/2/4 thread images,
-        # in addition to the forced direct/mixed, CAM and FP32 cases.
-        self._check("int2_shell_block_selftest", 30800)
+        # Includes both cutoffs with default 1/2/4 thread images, in addition
+        # to forced direct/mixed, CAM and FP32 cases. The consumer-level check
+        # must be independent of the driver's environment override.
+        for layout in (None, "legacy", "shell"):
+            with self.subTest(layout=layout), patch.dict(os.environ):
+                if layout is None:
+                    os.environ.pop("OQP_INT2_LAYOUT", None)
+                else:
+                    os.environ["OQP_INT2_LAYOUT"] = layout
+                self._check("int2_shell_block_selftest", 44000)
 
     def _check(self, symbol, expected_count):
         try:

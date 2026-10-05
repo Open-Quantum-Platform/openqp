@@ -46,14 +46,16 @@ contains
     call mrsf_set_fp32(0)
     ! Include all spin channels, CAM's two passes, TDA, and full A+B/A-B.
     do kind=1,5
-      do trial=1,7
+      do trial=1,10
         ! Four forced-layout cases, then the actual consumer defaults with
-        ! one, two and four thread images. Do not override the latter: the
-        ! default mixture of packed and direct quartets must agree as well.
-        mode=min(trial,5)
+        ! one, two and four thread images at both screening cutoffs.
+        ! Do not override the default mixture of packed and direct quartets.
+        mode=trial
         nthreads=2
-        if (trial==5) nthreads=1
-        if (trial==7) nthreads=4
+        if (trial>=5) then
+          mode=5+modulo(trial-5,2)
+          nthreads=2**((trial-5)/2)
+        end if
         call mrsf_set_fp32(merge(1,0,mode==3.or.mode==4))
         select case(kind)
         case(1)
@@ -76,6 +78,12 @@ contains
           old%cur_pass=pass;new%cur_pass=pass
           call old%parallel_start(basis,nthreads);call new%parallel_start(basis,nthreads)
           old%shell_blocks=.false.
+          ! The driver reads OQP_INT2_LAYOUT after parallel_start; this
+          ! harness calls the consumer directly. Ensure the MRSF defaults
+          ! cannot silently turn this into a packed-versus-packed comparison.
+          if (mode>=5.and.kind>=4) then
+            if (.not.new%shell_blocks.or.new%shell_block_min/=256) failures=failures+1
+          end if
           if (mode<=4) then
             new%shell_blocks=.true.
             new%shell_block_min=merge(256,0,mode==2)
