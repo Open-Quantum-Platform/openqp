@@ -1013,6 +1013,8 @@ contains
   !> matrices are added to res; with them (deriv = 2 only) they are contracted
   !> into hess instead and res is not referenced.
   subroutine ecp_centres(basis, coord, deriv, off, nraw, res, dens, hess)
+    use blas_thread, only: blas_thread_count, blas_thread_set
+!$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads, omp_in_parallel
     type(basis_set), intent(in) :: basis
     real(dp), intent(in) :: coord(:,:)
     integer, intent(in) :: deriv, nraw
@@ -1028,6 +1030,19 @@ contains
     real(dp) :: c(3)
     real(dp), allocatable :: hloc(:,:)
     logical :: contract
+    integer :: nOmpThreads
+    integer(c_int64_t) :: nBlasThreads
+
+    ! Shell pairs own the parallel decomposition; their small GEMMs use one
+    ! BLAS thread. Save OpenMP width before a BLAS setter can change it (an
+    ! OpenMP OpenBLAS backend shares that setting with the application).
+    nOmpThreads = 1
+!$  nOmpThreads = omp_get_max_threads()
+    nBlasThreads = -1
+!$  if (nOmpThreads > 1 .and. .not. omp_in_parallel()) then
+!$    nBlasThreads = blas_thread_count()
+!$    if (nBlasThreads > 1) call blas_thread_set(1_c_int64_t)
+!$  end if
 
     natm = size(coord, 2)
     nsh = basis%nshell
@@ -1074,7 +1089,7 @@ contains
 
       ! largest shells first: their pairs are the most expensive (load balance)
       if (contract) then
-        !$omp parallel do schedule(dynamic) private(s1, s2) reduction(+:hloc)
+        !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2) reduction(+:hloc)
         do s1 = nsh, 1, -1
           do s2 = 1, s1
             call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
@@ -1083,7 +1098,7 @@ contains
         end do
         !$omp end parallel do
       else
-        !$omp parallel do schedule(dynamic) private(s1, s2)
+        !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2)
         do s1 = nsh, 1, -1
           do s2 = 1, s1
             call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
@@ -1098,6 +1113,9 @@ contains
         gt(iat)%used = .false.
       end do
     end do
+
+    call blas_thread_set(nBlasThreads)
+!$  if (nBlasThreads > 0) call omp_set_num_threads(nOmpThreads)
 
     if (contract) hess(1:3*natm, 1:3*natm) = hess(1:3*natm, 1:3*natm) + hloc
   end subroutine ecp_centres

@@ -1,6 +1,11 @@
 include(ExternalProject)
 
-set(_OQP_EXTERNALS_CACHE_REVISION "3")
+# Preserve the aggregate namespace of unchanged dependencies. Removed projects
+# remain only as historical key fragments; they are never fetched or linked.
+set(_OQP_EXTERNALS_CACHE_REVISION "2")
+set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")
+set(_OQP_LEGACY_ECP_CACHE_TOKEN "ecp1.0.7")
+set(_OQP_LEGACY_OTR_CACHE_TOKEN "otr2.0.0")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_LIBXC_VERSION "7.0.0")
 set(_OQP_TAGARRAY_VERSION "1.0.0")
@@ -66,7 +71,7 @@ endif()
 endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
 
 set(_OQP_EXTERNALS_VERSION_KEY
-    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-lapack${_OQP_LAPACK_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
+    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-${_OQP_LEGACY_ECP_CACHE_TOKEN}-lapack${_OQP_LAPACK_VERSION}-${_OQP_LEGACY_OTR_CACHE_TOKEN}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
 # Give only the DFT-D4 stack a new nested cache namespace.  Putting these
 # tokens in _OQP_EXTERNALS_VERSION_KEY would invalidate unrelated heavy cached
