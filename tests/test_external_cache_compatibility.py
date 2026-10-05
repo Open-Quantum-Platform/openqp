@@ -16,7 +16,7 @@ class ExternalCacheCompatibilityTests(unittest.TestCase):
         source = (ROOT / "external/CMakeLists.txt").read_text()
         # Evaluate the real key declarations without configuring, fetching, or
         # populating any shared cache. DFT-D4 is a separately versioned subkey.
-        prefix = source.split("# Give only the DFT-D4 stack", 1)[0]
+        prefix = source.split('set(_OQP_DFTD4_PLATFORM_KEY', 1)[0]
         prefix = prefix.replace("include(ExternalProject)", "")
         expected = ("ext2-libint2.7.1.1-am4-nlopt2.9.1-libxc7.0.0-tag1.0.0-"
                     "ecp1.0.7-lapack3.10.0-otr2.0.0-fmt0.3.7-ddx0.8.0")
