@@ -189,15 +189,13 @@ round-trip, not the eigensolve -- which is exactly why the measured gain is
 x1.04-1.40 and shrinks as ``n_par`` grows.  Anyone tempted to reach for the
 arrowhead shortcut inside the engine should read the paragraph above first.
 
-OpenTrustRegion note: the compiled core ships an OTR bridge
-(``source/otr_interface.F90``), but its callbacks are hard-wired to the SCF
-Fock/density machinery (``trah_converger``) and it is not linked in builds
-configured with ``ENABLE_OPENTRAH=OFF``; there is no generic Python-facing
-orbital-rotation entry point.  The ``ah`` converger here is therefore a native
-NumPy implementation of the same trust-region AH idea; if a generic OTR
-binding (objective + gradient + Hessian-vector callbacks) is exposed to Python
-later, it can replace ``_ah_model_step``/``_ah_inner`` behind the same
-``converger=ah`` key.
+Trust-region AH note: the engine's TRAH solver (``trah_converger`` /
+``trah_native``) has callbacks hard-wired to the SCF Fock/density machinery and
+exposes no generic Python-facing orbital-rotation entry point.  The ``ah``
+converger here is therefore a native NumPy implementation of the same
+trust-region AH idea; if a generic binding (objective + gradient +
+Hessian-vector callbacks) is exposed to Python later, it can replace
+``_ah_model_step``/``_ah_inner`` behind the same ``converger=ah`` key.
 
 ``[casscf]`` keys read here (all optional, ``dict.get`` defaults)
 -----------------------------------------------------------------

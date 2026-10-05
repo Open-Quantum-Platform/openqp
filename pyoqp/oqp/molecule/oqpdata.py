@@ -1521,12 +1521,27 @@ class OQPData:
         Valid values:
           auto   : native Fortran trust-region augmented-Hessian solver
           native : native Fortran trust-region augmented-Hessian solver
-          otr    : external OpenTrustRegion library
+
+        The external OpenTrustRegion backend has been removed, so "otr" is no
+        longer accepted and raises instead of silently selecting the native
+        solver.
         """
-        impl_map = {"otr": 0, "native": 1, "auto": 1}
+        impl_map = {"native": 1, "auto": 1}
         if not isinstance(trh_impl, str):
             raise TypeError("trh_impl must be a string")
-        self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
+        key = trh_impl.strip().lower()
+        if key not in impl_map:
+            # Not a KeyError: parse_section() wraps every handler in
+            # `except KeyError: continue` to skip keys it has no handler for,
+            # and that also swallows a KeyError raised inside the handler --
+            # the value would silently fall through to the Fortran default
+            # instead of being rejected.
+            raise ValueError(
+                "trh_impl must be one of %s; got %r. The external "
+                "OpenTrustRegion backend was removed."
+                % (sorted(impl_map), trh_impl)
+            )
+        self._data.control.trh_impl = impl_map[key]
 
     def set_sd_scf(self, sd_scf):
         """prevent running the first SD-SCF calculation"""
@@ -1872,8 +1887,7 @@ class OQPData:
 
         molecule = self._data
 
-        # Native TRAH is the default implementation. Explicit trh_impl=otr still
-        # selects the external OpenTrustRegion implementation when it is compiled.
+        # Native TRAH is the only implementation; 'auto' resolves to it.
         trh_choice = str(config.get('scf', {}).get('trh_impl', 'auto')).strip().lower()
         if trh_choice == 'auto':
             molecule.control.trh_impl = 1

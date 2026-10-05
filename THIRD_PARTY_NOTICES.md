@@ -79,7 +79,7 @@ prove that a particular binary artifact preserved this arrangement.
 
 ## Optional configurations
 
-The default PyPI wheel disables Libint, ddX, OpenTrustRegion, and MPI.
+The default PyPI wheel disables Libint, ddX, and MPI.
 Enabling any optional component can add further third-party license and
 redistribution requirements. A distributor of a
 non-default build must audit that artifact separately and include the

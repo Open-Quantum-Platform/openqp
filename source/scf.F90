@@ -675,19 +675,8 @@ contains
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
-#ifdef OQP_HAVE_OPENTRAH
-      if (infos%control%trh_impl == 1) then
-        write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
-              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
-      else
-        write(IW,"(/,5x,'OpenTRAH (external OpenTrustRegion library)', &
-              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021);', &
-              &/,5x,' https://github.com/eriksen-lab/opentrustregion]')")
-      end if
-#else
       write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
             &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
-#endif
 
     else
       write(IW,fmt="&
@@ -926,7 +915,7 @@ contains
       !----------------------------------------------------------------------------
       call conv%run(conv_res)
       if (use_trah .and. trim(conv_res%active_converger_name) == 'TRAH' ) then
-        call run_otr(infos, molgrid, conv , conv_res, energy)
+        call run_trah(infos, molgrid, conv , conv_res, energy)
         if (conv_res%ierr /= 0 .or. .not. (conv_res%error < infos%control%conv)) exit
         call conv_res%get_fock(pfock,istat=stat)
         call conv_res%get_mo_a(mo_a, istat=stat)
@@ -946,7 +935,10 @@ contains
         ! canonical MOs and orbital energies (same density/energy at the stationary
         ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
         ! and is left to the existing ROHF handling.
-        if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
+        ! Not gated on trh_impl: this branch already requires that TRAH ran, and
+        ! run_trah now always runs the native solver, so a caller setting the C
+        ! control field to anything but 1 would otherwise skip canonicalization.
+        if (scf_type /= scf_rohf) then
           if (do_mom) then
             ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
             ! state-specific occupation TRAH converged to (TRAH itself preserves
@@ -1813,13 +1805,10 @@ contains
 
   end subroutine set_trah_parametres
 
-  subroutine run_otr(infos, mol_grid, conv, res, energy)
+  subroutine run_trah(infos, mol_grid, conv, res, energy)
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger, scf_conv_result
-#ifdef OQP_HAVE_OPENTRAH
-    use otr_interface, only: init_trah_solver, run_trah_solver
-#endif
     use trah_native,   only: trah_native_run
     use scf_addons, only: scf_energy_t
     use io_constants, only: IW
@@ -1838,26 +1827,11 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
-#ifdef OQP_HAVE_OPENTRAH
-          if (infos%control%trh_impl == 1) then
-            ! native Fortran trust-region augmented-Hessian solver (default)
-            call trah_native_run(infos, mol_grid, sc, res, energy)
-          else
-            ! external OpenTrustRegion library (explicit trh_impl=otr)
-            call init_trah_solver(infos, mol_grid, sc , energy)
-            call run_trah_solver(res)
-          end if
-#else
-          ! OpenTRAH not compiled (-DENABLE_OPENTRAH=OFF): use the native solver for
-          ! every trh_impl (the external gradient/MRSF reference paths are unavailable).
-          if (infos%control%trh_impl /= 1) &
-            write(IW,'(5X,A)') 'NOTE: OpenTRAH (OpenTrustRegion) is not compiled; using native TRAH.'
           call trah_native_run(infos, mol_grid, sc, res, energy)
-#endif
       end select
     end do
 
-  end subroutine run_otr
+  end subroutine run_trah
 
 
   !> @brief Forms the ROHF Fock matrix in the MO basis using the Guest-Saunders method.

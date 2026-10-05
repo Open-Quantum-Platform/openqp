@@ -22,7 +22,7 @@
 !> Sign and scale convention
 !> -------------------------
 !> The SCF callbacks `calc_g_h` / `calc_h_op` return HALF the true orbital
-!> gradient / Hessian, which is the convention `otr_interface` shares with them
+!> gradient / Hessian, which is the convention shared with them
 !> (it scales by 2).  That convention is NOT re-invented here and it is NOT
 !> pushed onto other methods: a provider returns the TRUE gradient, Hessian
 !> diagonal and Hessian-vector product, and the SCF provider applies the

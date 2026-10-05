@@ -3485,7 +3485,6 @@ contains
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine trah_run(self, res)
-!    use otr_interface, only: init_trah_solver, run_trah_solver
     class(trah_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
     ! --- Step 1: Extract current data from converger_data ---
