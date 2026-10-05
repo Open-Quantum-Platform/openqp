@@ -719,28 +719,67 @@ contains
     real(kind=dp) ::  g0(ngnr,3,*)
     real(kind=dp), target :: ints(*)
 
-    integer :: i, j, k, l
-    integer :: nx, ny, nz
+    integer :: i, j, k, l, g, nl, nfull
+    integer :: kx, ky, kz
+    integer :: n1x, n1y, n1z, n2x, n2y, n2z, n3x, n3y, n3z, n4x, n4y, n4z
+    integer :: jx, jy, jz
+    real(kind=dp) :: s1, s2, s3, s4
     real(kind=dp), pointer :: p(:,:,:,:)
 
     p(1:gdat%nbf(4),1:gdat%nbf(3),1:gdat%nbf(2),1:gdat%nbf(1)) => ints(1:product(gdat%nbf))
 
+    ! This is the hottest stage of the Rys path: measured at 26.7 s of the
+    ! 56.0 s Rys total (47.7%) for a single-threaded RHF/cc-pVTZ benzene Fock
+    ! build.  Two changes, both arithmetic-order preserving per integral:
+    !
+    !  * the x/y/z address is a sum of four per-index offsets, so the i/j/k
+    !    parts are loop-invariant in l; hoist them instead of re-adding four
+    !    terms for every l.
+    !  * the reduction length is ng*nroots (7 for an ffff quartet), far too
+    !    short to amortise one horizontal sum per integral: the emitted code
+    !    was mulpd/mulpd then addsd+unpckhpd+addsd, folding the vector every
+    !    iteration.  Running four l at once gives four independent accumulator
+    !    chains over the SAME g order, so each integral keeps its previous
+    !    summation sequence while the dependency stalls overlap.
+    nl = gdat%nbf(4)
+    nfull = (nl/4)*4
     do i = 1, gdat%nbf(1)
       do j = 1, gdat%nbf(2)
+        jx = ijklxyz(1,i,1)+ijklxyz(1,j,2)
+        jy = ijklxyz(2,i,1)+ijklxyz(2,j,2)
+        jz = ijklxyz(3,i,1)+ijklxyz(3,j,2)
         do k = 1, gdat%nbf(3)
-          do l = 1, gdat%nbf(4)
-            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
-            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
-            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
+          kx = jx + ijklxyz(1,k,3)
+          ky = jy + ijklxyz(2,k,3)
+          kz = jz + ijklxyz(3,k,3)
 
-            associate ( x  => g0(:,1,nx) &
-                      , y  => g0(:,2,ny) &
-                      , z  => g0(:,3,nz) &
-                      )
-                p(l,k,j,i) = p(l,k,j,i) + sum(x*y*z)
-            end associate
-
+          do l = 1, nfull, 4
+            n1x = kx+ijklxyz(1,l  ,4); n1y = ky+ijklxyz(2,l  ,4); n1z = kz+ijklxyz(3,l  ,4)
+            n2x = kx+ijklxyz(1,l+1,4); n2y = ky+ijklxyz(2,l+1,4); n2z = kz+ijklxyz(3,l+1,4)
+            n3x = kx+ijklxyz(1,l+2,4); n3y = ky+ijklxyz(2,l+2,4); n3z = kz+ijklxyz(3,l+2,4)
+            n4x = kx+ijklxyz(1,l+3,4); n4y = ky+ijklxyz(2,l+3,4); n4z = kz+ijklxyz(3,l+3,4)
+            s1 = 0.0_dp; s2 = 0.0_dp; s3 = 0.0_dp; s4 = 0.0_dp
+            do g = 1, ngnr
+              s1 = s1 + g0(g,1,n1x)*g0(g,2,n1y)*g0(g,3,n1z)
+              s2 = s2 + g0(g,1,n2x)*g0(g,2,n2y)*g0(g,3,n2z)
+              s3 = s3 + g0(g,1,n3x)*g0(g,2,n3y)*g0(g,3,n3z)
+              s4 = s4 + g0(g,1,n4x)*g0(g,2,n4y)*g0(g,3,n4z)
+            end do
+            p(l  ,k,j,i) = p(l  ,k,j,i) + s1
+            p(l+1,k,j,i) = p(l+1,k,j,i) + s2
+            p(l+2,k,j,i) = p(l+2,k,j,i) + s3
+            p(l+3,k,j,i) = p(l+3,k,j,i) + s4
           end do
+
+          do l = nfull+1, nl
+            n1x = kx+ijklxyz(1,l,4); n1y = ky+ijklxyz(2,l,4); n1z = kz+ijklxyz(3,l,4)
+            s1 = 0.0_dp
+            do g = 1, ngnr
+              s1 = s1 + g0(g,1,n1x)*g0(g,2,n1y)*g0(g,3,n1z)
+            end do
+            p(l,k,j,i) = p(l,k,j,i) + s1
+          end do
+
         end do
       end do
     end do
