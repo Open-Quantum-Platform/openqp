@@ -108,6 +108,29 @@ jobs:
           retry_gitlab_network git "${git_auth[@]}" push "$GITLAB_PROJECT_URL" \
             "$GITHUB_SHA:refs/heads/$sync_branch"
 
+          # Git refs can be visible over Git before GitLab's repository API
+          # catches up. Pin the observed SHA and wait only for this 404 race.
+          branch_url="$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/repository/branches/$(jq -rn --arg branch "$sync_branch" '$branch | @uri')"
+          branch_response="$sync_tmp/branch.json"
+          for branch_attempt in 1 2 3; do
+            branch_http_code=$(curl --connect-timeout 10 --max-time 30 \
+              --silent --show-error --output "$branch_response" \
+              --write-out '%{http_code}' \
+              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$branch_url")
+            if [ "$branch_http_code" = "200" ]; then
+              if [ "$(jq -r '.commit.id // empty' "$branch_response")" != "$GITHUB_SHA" ]; then
+                echo "::error::GitLab sync branch does not point to the requested GitHub SHA"
+                exit 1
+              fi
+              break
+            fi
+            if [ "$branch_http_code" != "404" ] || [ "$branch_attempt" -eq 3 ]; then
+              echo "::error::GitLab sync branch lookup failed with HTTP $branch_http_code"
+              exit 1
+            fi
+            sleep 3
+          done
+
           mr_list_response="$sync_tmp/mr-list.json"
           mr_create_response="$sync_tmp/mr-create.json"
           mr_create_error="$sync_tmp/mr-create-error.log"
@@ -171,7 +194,17 @@ jobs:
 
                 create_message=$(jq -r '.message // .error // "unknown GitLab response"' \
                   "$mr_create_response" 2>/dev/null || printf 'non-JSON response')
-                if [ "$create_http_code" != "408" ] && [ "$create_http_code" != "409" ] && \
+                # MR creation can lag even after the branch API catches up.
+                # Only this exact 400 is retryable; other validation failures
+                # remain permanent. Recovery lookup below prevents duplicates.
+                branch_not_ready=false
+                if [ "$create_http_code" = "400" ] && jq -e \
+                  '(.message.source_branch? // .source_branch?) == ["does not exist"]' \
+                  "$mr_create_response" >/dev/null 2>&1; then
+                  branch_not_ready=true
+                fi
+                if [ "$branch_not_ready" != "true" ] && \
+                  [ "$create_http_code" != "408" ] && [ "$create_http_code" != "409" ] && \
                   [ "$create_http_code" != "429" ] && \
                   ! [[ "$create_http_code" =~ ^5[0-9][0-9]$ ]]; then
                   echo "::error::GitLab MR creation failed with HTTP $create_http_code: $create_message"
