@@ -588,6 +588,11 @@ class SinglePoint(Calculator):
         if len(functional) == 0:
             functional = 'hf'
         basis = self.basis.replace('*', 's')
+        if basis.lower().startswith('file:'):
+            # A custom-basis spec is an input path, not a filename component.
+            # Its colon/separators are invalid on Windows; a short stable ID
+            # also leaves room for the project's name in CI output paths.
+            basis = 'custom-' + hashlib.sha256(self.basis.encode('utf-8')).hexdigest()[:12]
         if self.mol.idx != 1:
             guess_file = self.mol.log.replace('.log', '_%s_%s_%s_%s_%s.molden' % (
                 self.mol.idx, cal_type, scf_type, functional, basis))

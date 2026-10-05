@@ -35,6 +35,15 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/ecp_selftest.F90"
 )
 
+# Keep module data accesses inside liboqp. Windows DLL import libraries expose
+# procedure calls, but a standalone Fortran program cannot directly use these
+# module data objects without additional compiler-specific import declarations.
+if(BUILD_TESTING)
+  list(APPEND SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/test_int2_rys_pure.F90"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/test_int2_rotaxis_pure.F90")
+endif()
+
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 add_library(oqp ${SOURCES})

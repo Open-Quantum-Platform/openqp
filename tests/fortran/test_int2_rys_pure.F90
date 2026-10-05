@@ -1,4 +1,4 @@
-program test_int2_rys_pure
+subroutine test_int2_rys_pure() bind(C, name="oqp_test_int2_rys_pure")
   ! Compare the contracted spherical path against independently evaluated
   ! Cartesian ERIs followed by the established cart2sph transformation.
   use precision, only: dp
@@ -131,4 +131,4 @@ contains
       end do
     end do
   end subroutine normalize_cart
-end program test_int2_rys_pure
+end subroutine test_int2_rys_pure

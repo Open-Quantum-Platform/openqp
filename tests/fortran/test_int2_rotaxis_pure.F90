@@ -1,4 +1,4 @@
-program test_int2_rotaxis_pure
+subroutine test_int2_rotaxis_pure() bind(C, name="oqp_test_int2_rotaxis_pure")
   ! Compare fused rotation/projection with Cartesian rotation followed by
   ! the established spherical transformation, for all s/p/d shell orders.
   use precision, only: dp
@@ -151,4 +151,4 @@ program test_int2_rotaxis_pure
   call gd%clean()
   print *, 'SP_RYS_REFERENCE',worst_rys
   print *, 'ROTAXIS_PURE_PASS',ncase,'max absolute error',worst
-end program test_int2_rotaxis_pure
+end subroutine test_int2_rotaxis_pure
