@@ -298,15 +298,27 @@ foreach(_oqp_libint_lang C CXX)
         "-DCMAKE_${_oqp_libint_lang}_FLAGS=${CMAKE_${_oqp_libint_lang}_FLAGS}")
   endif()
 endforeach()
-string(TOUPPER "${CMAKE_BUILD_TYPE}" _OQP_LIBINT_CFG)
-if(NOT "${_OQP_LIBINT_CFG}" STREQUAL "")
-  foreach(_oqp_libint_lang C CXX)
-    if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}" STREQUAL "")
-      list(APPEND _OQP_LIBINT_FLAG_ARGS
-          "-DCMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}=${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}")
-    endif()
-  endforeach()
+# A multi-config generator (Xcode, Visual Studio, Ninja Multi-Config) leaves
+# CMAKE_BUILD_TYPE empty and lists the active configurations in
+# CMAKE_CONFIGURATION_TYPES, so keying only off CMAKE_BUILD_TYPE would skip
+# every CMAKE_<LANG>_FLAGS_<CONFIG> there and leave this forwarding ineffective
+# for exactly the builds whose flags the externals cache key already hashes.
+# Iterate the same way the cache-key block above does.
+set(_OQP_LIBINT_CFGS "${CMAKE_BUILD_TYPE}")
+if(CMAKE_CONFIGURATION_TYPES)
+  set(_OQP_LIBINT_CFGS "${CMAKE_CONFIGURATION_TYPES}")
 endif()
+foreach(_oqp_libint_cfg IN LISTS _OQP_LIBINT_CFGS)
+  string(TOUPPER "${_oqp_libint_cfg}" _OQP_LIBINT_CFG)
+  if(NOT "${_OQP_LIBINT_CFG}" STREQUAL "")
+    foreach(_oqp_libint_lang C CXX)
+      if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}" STREQUAL "")
+        list(APPEND _OQP_LIBINT_FLAG_ARGS
+            "-DCMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}=${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}")
+      endif()
+    endforeach()
+  endif()
+endforeach()
 
 if(NOT TARGET libint2)
 ExternalProject_Add(libint2
