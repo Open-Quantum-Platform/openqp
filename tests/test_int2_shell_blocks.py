@@ -10,10 +10,10 @@ class ShellBlockContractions(unittest.TestCase):
         self._check("int2_td_shell_images_selftest", 16)
 
     def test_all_shell_permutations_and_spin_channels(self):
-        # Includes both cutoffs with default 1/2/4 thread images, in addition
-        # to forced direct/mixed, CAM and FP32 cases. The consumer-level check
-        # must be independent of the driver's environment override.
-        for layout in (None, "legacy", "shell"):
+        # Exercise the driver's final layout resolution, both cutoffs and
+        # 1/2/4 thread images, plus the forced direct/mixed, CAM and FP32 cases.
+        # The native check asserts the expected configuration for every kind.
+        for layout in (None, "legacy", "shell", "unknown", "x" * 17):
             with self.subTest(layout=layout), patch.dict(os.environ):
                 if layout is None:
                     os.environ.pop("OQP_INT2_LAYOUT", None)
