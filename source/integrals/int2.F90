@@ -28,6 +28,7 @@ module int2_compute
   private
   public int2_compute_t
   public eri_data_t, int2_compute_data_t_storeints
+  public int2_resolve_layout
   public int2_shell_block_t
   public int2_storage_t
   public int2_compute_data_t
@@ -742,17 +743,7 @@ contains
 
 !$omp master
     call int2_consumer%parallel_start(this%basis, nthreads)
-    block
-      character(16) :: layout
-      integer :: status
-      ! Small quartets amortize dispatch through the packed batch; larger
-      ! quartets are contracted while their contiguous ERIs are still resident.
-      ! OQP_INT2_LAYOUT is an internal regression/benchmark override.
-      call get_environment_variable('OQP_INT2_LAYOUT', layout, status=status)
-      if (status == 0 .and. trim(layout) == 'shell') int2_consumer%shell_block_min = 0
-      if (int2_consumer%shell_block_min == huge(0)) int2_consumer%shell_blocks = .false.
-      if (status == 0 .and. trim(layout) == 'legacy') int2_consumer%shell_blocks = .false.
-    end block
+    call int2_resolve_layout(int2_consumer)
 !$omp end master
 !$omp barrier
 
@@ -1811,6 +1802,21 @@ contains
   end subroutine ints_exchange
 
 !###############################################################################
+
+  ! Resolve consumer defaults after parallel_start, before any quartet is stored.
+  ! Shared with the native regression so it exercises the production selection.
+  subroutine int2_resolve_layout(consumer)
+    class(int2_compute_data_t), intent(inout) :: consumer
+    character(16) :: layout
+    integer :: status
+
+    ! Small quartets use the packed batch; larger quartets can be contracted
+    ! directly. OQP_INT2_LAYOUT is an internal regression/benchmark override.
+    call get_environment_variable('OQP_INT2_LAYOUT', layout, status=status)
+    if (status == 0 .and. trim(layout) == 'shell') consumer%shell_block_min = 0
+    if (consumer%shell_block_min == huge(0)) consumer%shell_blocks = .false.
+    if (status == 0 .and. trim(layout) == 'legacy') consumer%shell_blocks = .false.
+  end subroutine int2_resolve_layout
 
   subroutine int2_compute_data_t_storeints(consumer, basis, eri_data, &
                   buf, cutoff, nint)
