@@ -9,7 +9,9 @@ class ShellBlockContractions(unittest.TestCase):
         self._check("int2_td_shell_images_selftest", 16)
 
     def test_all_shell_permutations_and_spin_channels(self):
-        self._check("int2_shell_block_selftest", 17600)
+        # Includes the unmodified consumer defaults with 1/2/4 thread images,
+        # in addition to the forced direct/mixed, CAM and FP32 cases.
+        self._check("int2_shell_block_selftest", 30800)
 
     def _check(self, symbol, expected_count):
         try:

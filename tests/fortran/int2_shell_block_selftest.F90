@@ -17,7 +17,7 @@ contains
     type(eri_data_t) :: eri
     type(int2_storage_t) :: legacy_buf, block_buf
     real(dp), allocatable,target :: den(:,:),td(:,:,:),mr(:,:,:,:),raw(:,:,:,:)
-    integer :: kind,mode,pass,a,b,c,d,flip,i,j,k,l,nold,nnew,nbf,slot
+    integer :: kind,mode,trial,nthreads,pass,a,b,c,d,flip,i,j,k,l,nold,nnew,nbf,slot
     integer :: q(4),r(4),dims(4)
     integer, parameter :: perms(4,8)=reshape([1,2,3,4,2,1,3,4,1,2,4,3,2,1,4,3, &
                                             3,4,1,2,4,3,1,2,3,4,2,1,4,3,2,1],[4,8])
@@ -46,8 +46,15 @@ contains
     call mrsf_set_fp32(0)
     ! Include all spin channels, CAM's two passes, TDA, and full A+B/A-B.
     do kind=1,5
-      do mode=1,4
-        call mrsf_set_fp32(merge(1,0,mode>2))
+      do trial=1,7
+        ! Four forced-layout cases, then the actual consumer defaults with
+        ! one, two and four thread images. Do not override the latter: the
+        ! default mixture of packed and direct quartets must agree as well.
+        mode=min(trial,5)
+        nthreads=2
+        if (trial==5) nthreads=1
+        if (trial==7) nthreads=4
+        call mrsf_set_fp32(merge(1,0,mode==3.or.mode==4))
         select case(kind)
         case(1)
           allocate(int2_rhf_data_t::old,new)
@@ -67,9 +74,12 @@ contains
         call legacy_buf%init(17);call block_buf%init(17)
         do pass=1,2
           old%cur_pass=pass;new%cur_pass=pass
-          call old%parallel_start(basis,2);call new%parallel_start(basis,2)
-          old%shell_blocks=.false.;new%shell_blocks=.true.
-          new%shell_block_min=merge(256,0,mode==2)
+          call old%parallel_start(basis,nthreads);call new%parallel_start(basis,nthreads)
+          old%shell_blocks=.false.
+          if (mode<=4) then
+            new%shell_blocks=.true.
+            new%shell_block_min=merge(256,0,mode==2)
+          end if
           nold=0;nnew=0
           do a=1,4
             do b=1,a
@@ -91,7 +101,7 @@ contains
                       end do
                     end do
                     eri%pints=>raw
-                    slot=1+modulo(flip,2)
+                    slot=1+modulo(flip,nthreads)
                     if (legacy_buf%ncur>0) call old%update(legacy_buf)
                     legacy_buf%thread_id=slot;block_buf%thread_id=slot
                     cut=merge(0.005_dp,1e-14_dp,modulo(mode,2)==0)
