@@ -13,7 +13,7 @@
 !>         `casscf_driver.F90` supplies a different provider over the same core.
 !>
 !>         Convention: calc_g_h / calc_h_op return HALF the true orbital
-!>         gradient / Hessian (the same convention otr_interface shares with
+!>         gradient / Hessian (the convention shared with
 !>         them, which is why it scales by 2). The factor of 2 is applied HERE,
 !>         at exactly the places it was applied before, so the core sees the
 !>         true gradient/Hessian and no second convention is introduced.

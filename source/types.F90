@@ -168,7 +168,7 @@ module types
     integer(c_int64_t) :: converger_type = 0       !< SCF converger: 0=DIIS, 1=SOSCF, 2=TRAH
     real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
     integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
-    ! Opentrustregion Parameter
+    ! Trust-region augmented-Hessian (TRAH) parameters
     logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
     logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
     integer(c_int64_t)     :: trh_sub_solver=0      !< subsystem solver. 0: "davidson", 1 :"jacobi-davidson",2: "tcg" 
@@ -178,7 +178,7 @@ module types
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
-    integer(c_int64_t)     :: trh_impl = 1          !< TRAH solver: 1=native Fortran (default), 0=OpenTrustRegion (external)
+    integer(c_int64_t)     :: trh_impl = 1          !< TRAH solver: 1=native Fortran (the only implementation)
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
     ! PCM implicit solvent (energy-only, ddX backend; off by default)

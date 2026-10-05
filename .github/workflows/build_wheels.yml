@@ -414,7 +414,6 @@ jobs:
             -DLINALG_LIB=Intel10_64ilp
             -DENABLE_MPI=OFF
             -DUSE_LIBINT=OFF
-            -DENABLE_OPENTRAH=OFF
             -DBUILD_TESTING=OFF"
         run: python -m cibuildwheel --output-dir dist
 

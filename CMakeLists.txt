@@ -216,7 +216,14 @@ option(ENABLE_LSAN       "Enable LeakSanitizer"              OFF)
 option(ENABLE_UBSAN      "Enable UndefinedBehaviorSanitizer" OFF)
 option(ENABLE_TSAN       "Enable ThreadSanitizer"            OFF)
 
-option(ENABLE_Formatter  "Enable source-code formatters"     ON)
+# Source-code formatter (fprettify) for the `format` target.  Default OFF: it is
+# a development-only tool, and with it ON every `pip install .` downloads the
+# formatter tarball and requires find_package(Python3).  Note the `format`
+# target still points at ${CMAKE_SOURCE_DIR}/modules, a directory this
+# repository no longer has (sources live under source/), so the target is stale
+# independently of this default; redirecting it at source/ would reformat
+# production Fortran and is left as a separate maintainer decision.
+option(ENABLE_Formatter  "Enable source-code formatters"     OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -280,8 +287,6 @@ endif()
 # ILP64 everywhere (unconditional): 8-byte BLAS integers and 8-byte default
 # Fortran integers. See the LINALG_LIB_INT64 tombstone above.
 set(BLA_SIZEOF_INTEGER 8)
-set(OTR_SUFFIX "_64")
-set(OTR_DEFS "-DUSE_ILP64")
 if(WIN32 AND ("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel"
               OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM"))
   # Intel Fortran on Windows links the STATIC Fortran runtime by default, so
@@ -316,11 +321,6 @@ elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPI
     add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-traceback>)
 endif()
 
-# Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
-# external library is neither downloaded nor compiled, otr_interface.F90 is dropped
-# from the build, and the TRAH dispatch falls back to the native solver for every
-# trh_impl. Default ON preserves the validated gradient/MRSF reference paths.
-option(ENABLE_OPENTRAH "Build and link the external OpenTrustRegion (OpenTRAH) solver" ON)
 if(ENABLE_OPENMP)
   find_package(OpenMP 3.1 REQUIRED)
 endif()
@@ -365,13 +365,14 @@ endif()
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 if(${LINALG_LIB} STREQUAL none)
-    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
+    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP and its bundled externals require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
 endif()
 
-# Resolve BLAS/LAPACK before configuring external projects. OpenTrustRegion
-# needs the same BLAS integer-size decision as OpenQP; early resolution also
-# lets a failed system BLAS search fall back to the bundled NetLib target before
-# the external project graph is generated. Linking to oqp happens when
+# Resolve BLAS/LAPACK before configuring external projects. The bundled
+# externals that link BLAS/LAPACK (multicharge through DFT-D4, ddX, the NetLib
+# fallback itself) need the same integer-size decision as OpenQP; early
+# resolution also lets a failed system BLAS search fall back to the bundled
+# NetLib target before the external project graph is generated. Linking to oqp happens when
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
 

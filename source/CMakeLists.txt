@@ -3,11 +3,6 @@ set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SOURCES)
 file(GLOB SOURCES CONFIGURE_DEPENDS "*.F90" "*.c")
 
-# otr_interface.F90 binds against the external OpenTrustRegion module; drop it when
-# OpenTRAH is disabled (run_otr then dispatches everything to the native solver).
-if(NOT ENABLE_OPENTRAH)
-  list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/otr_interface.F90")
-endif()
 
 # dftd4_interface.F90 is the bind(C) shim over the external DFT-D4 library;
 # drop it when the backend is disabled (see ENABLE_DFTD4 in the top-level
@@ -42,7 +37,6 @@ list(APPEND SOURCES
 
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
-set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 add_library(oqp ${SOURCES})
 # The log banner prints this; PROJECT_VERSION comes from the VERSION in the
 # top-level project() call, which the release-metadata test keeps in sync with
@@ -62,11 +56,6 @@ else()
 endif()
 add_dependencies(oqp libxc libtagarray)
 target_link_libraries(oqp xcf03 xc tagarray_f tagarray)
-if(ENABLE_OPENTRAH)
-  add_dependencies(oqp libopentrustregion)
-  target_link_libraries(oqp ${OTR_LIB_NAME})
-  target_compile_definitions(oqp PRIVATE OQP_HAVE_OPENTRAH)
-endif()
 # dlsym() in mathlib/blas_thread_ctl.c
 target_link_libraries(oqp ${CMAKE_DL_LIBS})
 if(WIN32)
@@ -88,10 +77,6 @@ target_link_directories(oqp PUBLIC ${LIBXC_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${LIBXC_INCLUDE_DIR})
 target_link_directories(oqp PUBLIC ${TAGARRAY_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${TAGARRAY_INCLUDE_DIRS})
-if(ENABLE_OPENTRAH)
-  target_link_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
-  target_include_directories(oqp PUBLIC ${OPENTRUSTREGION_BUILD_DIR})
-endif()
 
 set_target_properties(oqp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(ENABLE_OPENMP)

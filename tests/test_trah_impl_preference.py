@@ -17,7 +17,6 @@ class TRAHImplementationPreferenceTests(unittest.TestCase):
 
         self.assertIn('"auto": 1', src)
         self.assertIn('"native": 1', src)
-        self.assertIn('"otr": 0', src)
         self.assertIn("molecule.control.trh_impl = 1", src)
 
         auto_block = re.search(
@@ -33,13 +32,6 @@ class TRAHImplementationPreferenceTests(unittest.TestCase):
         src = TYPES.read_text()
         self.assertRegex(src, r"trh_impl\s*=\s*1\s*!< TRAH solver: 1=native")
 
-    def test_otr_remains_explicit_second_choice(self):
-        src = SCF.read_text()
-        self.assertIn("infos%control%trh_impl == 1", src)
-        self.assertIn("call trah_native_run", src)
-        self.assertIn("explicit trh_impl=otr", src)
-        self.assertIn("call init_trah_solver", src)
-        self.assertIn("call run_trah_solver", src)
 
 
 if __name__ == "__main__":

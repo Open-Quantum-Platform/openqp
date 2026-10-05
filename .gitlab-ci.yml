@@ -102,7 +102,6 @@ linux-openblas64-full:
       --config-settings=cmake.define.LINALG_LIB=OpenBLAS
       --config-settings=cmake.define.USE_LIBINT=OFF
       --config-settings=cmake.define.ENABLE_OPENMP=ON
-      --config-settings=cmake.define.ENABLE_OPENTRAH=OFF
       --config-settings=cmake.define.ENABLE_DDX=ON
       --config-settings=cmake.define.ENABLE_MPI=OFF
       --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
@@ -189,7 +188,6 @@ linux-openblas64-mpi:
       --config-settings=cmake.define.LINALG_LIB=OpenBLAS
       --config-settings=cmake.define.USE_LIBINT=OFF
       --config-settings=cmake.define.ENABLE_OPENMP=ON
-      --config-settings=cmake.define.ENABLE_OPENTRAH=OFF
       --config-settings=cmake.define.ENABLE_DDX=OFF
       --config-settings=cmake.define.ENABLE_MPI=ON
       --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON
@@ -240,7 +238,7 @@ linux-openblas64-mpi:
       -DCMAKE_CXX_COMPILER=$HOMEBREW_PREFIX/bin/g++-15
       -DCMAKE_Fortran_COMPILER=$HOMEBREW_PREFIX/bin/gfortran-15
       -DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DLINALG_LIB=auto
-      -DENABLE_OPENTRAH=OFF -DOQP_REUSE_EXTERNALS=ON
+      -DOQP_REUSE_EXTERNALS=ON
       -DOQP_EXTERNALS_ROOT=$OQP_EXTERNALS_ROOT"
       "$CI_PROJECT_DIR/.venv-ci/bin/python" -m pip install -v . --no-deps --force-reinstall
       2>&1 | tee "build-macos-$EXPECTED_ARCH.log"
@@ -351,8 +349,7 @@ windows-intel-mkl-ilp64:
         --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
         --config-settings=cmake.define.ENABLE_MPI=OFF `
         --config-settings=cmake.define.ENABLE_OPENMP=ON `
-        --config-settings=cmake.define.USE_LIBINT=OFF `
-        --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
+        --config-settings=cmake.define.USE_LIBINT=OFF ` `
         "--config-settings=cmake.define.OQP_DFTD4_PATCH_EXECUTABLE=$patchExe" `
         --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON `
         --config-settings=cmake.define.OQP_EXTERNALS_ROOT=$env:OQP_EXTERNALS_ROOT `
@@ -404,7 +401,7 @@ windows-source-regression:
       .\.venv-windows-ci\Scripts\python.exe -m pytest -q --tb=short -rf
       tests\test_cmake_mpi_linking.py
       tests\test_ddx_cmake_scaffold.py
-      tests\test_opentrustregion_linalg_config.py
+      tests\test_linalg_external_config.py
       tests\test_oqp_input_schema_manifest.py
   artifacts:
     when: always

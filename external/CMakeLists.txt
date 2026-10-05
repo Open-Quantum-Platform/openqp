@@ -1,16 +1,10 @@
 include(ExternalProject)
 
-set(_OQP_EXTERNALS_CACHE_REVISION "2")
+set(_OQP_EXTERNALS_CACHE_REVISION "3")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
-# NLopt and libecpint are no longer built or linked. Keep their former
-# aggregate-key fragments verbatim so these removals do not select a fresh
-# cache namespace and rebuild otherwise ABI-compatible Libxc/TagArray artifacts.
-set(_OQP_LEGACY_NLOPT_CACHE_TOKEN "nlopt2.9.1")
-set(_OQP_LEGACY_LIBECPINT_CACHE_TOKEN "ecp1.0.7")
 set(_OQP_LIBXC_VERSION "7.0.0")
 set(_OQP_TAGARRAY_VERSION "1.0.0")
 set(_OQP_LAPACK_VERSION "3.10.0")
-set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
 set(_OQP_FPRETTIFY_VERSION "0.3.7")
 set(_OQP_DDX_VERSION "0.8.0")
 set(_OQP_MCTC_LIB_VERSION "0.4.2")
@@ -72,7 +66,7 @@ endif()
 endif()  # ENABLE_DFTD4 (source-transformation prerequisites + cache key)
 
 set(_OQP_EXTERNALS_VERSION_KEY
-    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-${_OQP_LEGACY_NLOPT_CACHE_TOKEN}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-${_OQP_LEGACY_LIBECPINT_CACHE_TOKEN}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
+    "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-lapack${_OQP_LAPACK_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
 # Give only the DFT-D4 stack a new nested cache namespace.  Putting these
 # tokens in _OQP_EXTERNALS_VERSION_KEY would invalidate unrelated heavy cached
@@ -504,100 +498,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         )
   endif()
 endif()
-if(ENABLE_OPENTRAH)
-oqp_set_external_paths(OPENTRUSTREGION opentrustregion
-    "${CMAKE_SOURCE_DIR}/external/opentrustregion"
-    "${CMAKE_SOURCE_DIR}/external/opentrustregion/src/libopentrustregion"
-    "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-stamp-${CMAKE_Fortran_COMPILER_ID}"
-    "${CMAKE_BINARY_DIR}/external/install/opentrustregion")
-# ILP64-only: default integers are always 8 bytes.
-set(otr_integer_flags "")
-if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-    set(otr_integer_flags "-fdefault-integer-8")
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-    set(otr_integer_flags "-i8")
-endif()
-set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
-if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
-    set(otr_fortran_flags "${otr_fortran_flags} -fallow-argument-mismatch")
-endif()
-set(OTR_CMAKE_ARGS
-        -DCMAKE_INSTALL_PREFIX=${OPENTRUSTREGION_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
-        -DINTEGER_SIZE=${BLA_SIZEOF_INTEGER}
-        -DBUILD_SHARED_LIBS=OFF
-        -DBUILD_TESTS=OFF
-        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-        -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
-        ${OQP_EXTERNAL_GENERATOR_ARGS}
-)
-if(CMAKE_PREFIX_PATH)
-    oqp_external_cmake_list_arg(_otr_prefix_path_arg CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
-    list(APPEND OTR_CMAKE_ARGS "${_otr_prefix_path_arg}")
-endif()
-if(_LINALG_LIB_TYPE STREQUAL NetLib)
-    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${LIBBLAS})
-    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
-    list(APPEND OTR_CMAKE_ARGS
-        "${_otr_blas_arg}"
-        "${_otr_lapack_arg}"
-    )
-elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
-    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
-    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
-    list(APPEND OTR_CMAKE_ARGS
-        "${_otr_blas_arg}"
-        "${_otr_lapack_arg}"
-    )
-elseif(DEFINED BLA_VENDOR)
-    list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
-    if(DEFINED BLA_PREFER_PKGCONFIG)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PREFER_PKGCONFIG=${BLA_PREFER_PKGCONFIG})
-    endif()
-    if(DEFINED BLA_PKGCONFIG_BLAS)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_BLAS=${BLA_PKGCONFIG_BLAS})
-    endif()
-    if(DEFINED BLA_PKGCONFIG_LAPACK)
-        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
-    endif()
-endif()
 
-# Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
-# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE). Two problems with leaving it:
-#   * -march=native on an AVX-512 build host emits AVX-512 into level_shifted_davidson,
-#     which SIGILLs (exit 132) on AVX2-only compute nodes (the original bug report);
-#   * a newer gfortran driver resolves -march=native to a microarch *level* name
-#     (e.g. x86-64-v3) that an OLDER backend rejects -- "bad value ('x86-64-v3') for
-#     '-march=' switch" -- breaking the Docker build.
-# Strip the host-tuning flags entirely so OTR builds with a generic -O2: portable
-# across toolchains (old/new gfortran, x86, aarch64) and free of the SIGILL. OTR is a
-# small solver, so losing -march tuning is negligible; main OpenQP uses no -march.
-set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
-oqp_reuse_or_build(libopentrustregion
-    "${OPENTRUSTREGION_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-if(NOT TARGET libopentrustregion)
-ExternalProject_Add(libopentrustregion
-    PREFIX ${OPENTRUSTREGION_PREFIX}
-    URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v${_OQP_OPENTRUSTREGION_VERSION}.tar.gz
-    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c
-    SOURCE_DIR ${OPENTRUSTREGION_SOURCE_DIR}
-    UPDATE_COMMAND ""
-    PATCH_COMMAND /usr/bin/perl -0pi -e "${_OTR_ARCH_SED}" <SOURCE_DIR>/CMakeLists.txt
-    LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
-    CMAKE_ARGS ${OTR_CMAKE_ARGS}
-    BINARY_DIR ${OPENTRUSTREGION_BUILD_DIR}
-    STAMP_DIR  ${OPENTRUSTREGION_STAMP_DIR}
-)
-endif()
-if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  add_dependencies(libopentrustregion LAPACK)
-endif()
-endif() # ENABLE_OPENTRAH
-
-set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)
   find_package(Python3 REQUIRED)
   if(OQP_REUSE_EXTERNALS)
