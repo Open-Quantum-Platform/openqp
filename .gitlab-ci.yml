@@ -349,7 +349,7 @@ windows-intel-mkl-ilp64:
         --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
         --config-settings=cmake.define.ENABLE_MPI=OFF `
         --config-settings=cmake.define.ENABLE_OPENMP=ON `
-        --config-settings=cmake.define.USE_LIBINT=OFF ` `
+        --config-settings=cmake.define.USE_LIBINT=OFF `
         "--config-settings=cmake.define.OQP_DFTD4_PATCH_EXECUTABLE=$patchExe" `
         --config-settings=cmake.define.OQP_REUSE_EXTERNALS=ON `
         --config-settings=cmake.define.OQP_EXTERNALS_ROOT=$env:OQP_EXTERNALS_ROOT `
