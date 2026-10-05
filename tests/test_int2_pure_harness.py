@@ -22,6 +22,9 @@ class PureEriHarnessTests(unittest.TestCase):
             self.skipTest(str(exc))
         script = """
 import ctypes, sys
+from oqp import runtime
+# Initialize each child's DLL search directories and package preloads.
+runtime.library_path(sys.argv[3])
 library = ctypes.CDLL(sys.argv[1])
 check = getattr(library, sys.argv[2])
 check.argtypes = []
@@ -33,7 +36,7 @@ check()
                 # Fortran ERROR STOP terminates its process. Keep pytest alive
                 # and retain the native diagnostic as an ordinary test failure.
                 result = subprocess.run(
-                    [sys.executable, "-c", script, str(library_path), name],
+                    [sys.executable, "-c", script, str(library_path), name, str(root)],
                     capture_output=True, text=True, timeout=120)
                 self.assertEqual(result.returncode, 0,
                                  f"{name} exited {result.returncode}:\n"
