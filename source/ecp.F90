@@ -1114,8 +1114,12 @@ contains
       end do
     end do
 
-    call blas_thread_set(nBlasThreads)
-!$  if (nBlasThreads > 0) call omp_set_num_threads(nOmpThreads)
+    ! Restore only when the entry setting was actually changed. In particular,
+    ! do not call a process-wide setter for an already single-threaded BLAS.
+    if (nBlasThreads > 1) then
+      call blas_thread_set(nBlasThreads)
+!$    call omp_set_num_threads(nOmpThreads)
+    end if
 
     if (contract) hess(1:3*natm, 1:3*natm) = hess(1:3*natm, 1:3*natm) + hloc
   end subroutine ecp_centres
