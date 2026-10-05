@@ -16,10 +16,17 @@ import unittest
 CHILD = r'''
 import ctypes, json, sys
 fixture = ctypes.CDLL(sys.argv[1], mode=ctypes.RTLD_GLOBAL)
-import oqp
-from oqp import runtime
-root, suffix = runtime.resolve_oqp_root()
-native = ctypes.CDLL(str(runtime.library_path(root, suffix)))
+try:
+    import oqp
+    from oqp import runtime
+    root, suffix = runtime.resolve_oqp_root()
+    native = ctypes.CDLL(str(runtime.library_path(root, suffix)))
+    if not hasattr(oqp.lib, 'oqp_ecp_selftest'):
+        raise RuntimeError('Missing native ECP selftest')
+except Exception:
+    if sys.argv[3] == '1':
+        raise
+    sys.exit(77)
 native.oqp_have_openmp.restype = ctypes.c_int
 if not native.oqp_have_openmp():
     sys.exit(77)
@@ -78,8 +85,9 @@ class NativeEcpThreadControlTests(unittest.TestCase):
                     env = os.environ.copy()
                     env['OMP_NUM_THREADS'] = str(width)
                     env.pop('LD_PRELOAD', None)
-                    result = subprocess.run([sys.executable, '-c', CHILD, str(fixture), str(width)],
+                    result = subprocess.run([sys.executable, '-c', CHILD, str(fixture), str(width),
+                                             '1' if required else '0'],
                                             env=env, capture_output=True, text=True, timeout=180)
                     if result.returncode == 77:
-                        self.skipTest('ECP thread control requires an OpenMP build')
+                        self.skipTest('Native OpenMP ECP runtime is unavailable')
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
