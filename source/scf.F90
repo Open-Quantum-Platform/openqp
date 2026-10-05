@@ -935,7 +935,10 @@ contains
         ! canonical MOs and orbital energies (same density/energy at the stationary
         ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
         ! and is left to the existing ROHF handling.
-        if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
+        ! Not gated on trh_impl: this branch already requires that TRAH ran, and
+        ! run_trah now always runs the native solver, so a caller setting the C
+        ! control field to anything but 1 would otherwise skip canonicalization.
+        if (scf_type /= scf_rohf) then
           if (do_mom) then
             ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
             ! state-specific occupation TRAH converged to (TRAH itself preserves
