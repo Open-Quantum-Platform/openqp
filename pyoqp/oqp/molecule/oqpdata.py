@@ -1529,7 +1529,19 @@ class OQPData:
         impl_map = {"native": 1, "auto": 1}
         if not isinstance(trh_impl, str):
             raise TypeError("trh_impl must be a string")
-        self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
+        key = trh_impl.strip().lower()
+        if key not in impl_map:
+            # Not a KeyError: parse_section() wraps every handler in
+            # `except KeyError: continue` to skip keys it has no handler for,
+            # and that also swallows a KeyError raised inside the handler --
+            # the value would silently fall through to the Fortran default
+            # instead of being rejected.
+            raise ValueError(
+                "trh_impl must be one of %s; got %r. The external "
+                "OpenTrustRegion backend was removed."
+                % (sorted(impl_map), trh_impl)
+            )
+        self._data.control.trh_impl = impl_map[key]
 
     def set_sd_scf(self, sd_scf):
         """prevent running the first SD-SCF calculation"""
