@@ -112,11 +112,24 @@ jobs:
           # catches up. Pin the observed SHA and wait only for this 404 race.
           branch_url="$GITLAB_API_URL/projects/$GITLAB_PROJECT_ID/repository/branches/$(jq -rn --arg branch "$sync_branch" '$branch | @uri')"
           branch_response="$sync_tmp/branch.json"
-          for branch_attempt in 1 2 3; do
-            branch_http_code=$(curl --connect-timeout 10 --max-time 30 \
+          lookup_branch_once() {
+            local http_code
+            # curl can print 000 before a transport failure. Discard failed
+            # stdout so retry attempts cannot concatenate HTTP status codes.
+            if http_code=$(curl --connect-timeout 10 --max-time 30 \
               --silent --show-error --output "$branch_response" \
               --write-out '%{http_code}' \
-              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$branch_url")
+              --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$branch_url"); then
+              printf '%s' "$http_code"
+            else
+              return $?
+            fi
+          }
+          for branch_attempt in 1 2 3; do
+            if ! branch_http_code=$(retry_gitlab_network lookup_branch_once); then
+              echo "::error::Unable to query the GitLab sync branch after network retries"
+              exit 1
+            fi
             if [ "$branch_http_code" = "200" ]; then
               if [ "$(jq -r '.commit.id // empty' "$branch_response")" != "$GITHUB_SHA" ]; then
                 echo "::error::GitLab sync branch does not point to the requested GitHub SHA"
