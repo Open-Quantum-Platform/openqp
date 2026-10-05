@@ -17,8 +17,10 @@ contains
     type(eri_data_t) :: eri
     type(int2_storage_t) :: legacy_buf, block_buf
     real(dp), allocatable,target :: den(:,:),td(:,:,:),mr(:,:,:,:),raw(:,:,:,:)
-    integer :: kind,mode,pass,a,b,c,d,flip,i,j,k,l,nold,nnew,nbf,slot
-    integer :: q(4),r(4),dims(4)
+    integer :: kind,mode,trial,nthreads,pass,a,b,c,d,flip,i,j,k,l,nold,nnew,nbf,slot
+    integer :: q(4),r(4),dims(4),layout_status,expected_min
+    character(16) :: layout
+    logical :: expected_blocks
     integer, parameter :: perms(4,8)=reshape([1,2,3,4,2,1,3,4,1,2,4,3,2,1,4,3, &
                                             3,4,1,2,4,3,1,2,3,4,2,1,4,3,2,1],[4,8])
     real(dp) :: delta,cut
@@ -43,11 +45,21 @@ contains
         end do
       end do
     end do
+    call get_environment_variable('OQP_INT2_LAYOUT',layout,status=layout_status)
+    if (layout_status/=0) layout=''
     call mrsf_set_fp32(0)
     ! Include all spin channels, CAM's two passes, TDA, and full A+B/A-B.
     do kind=1,5
-      do mode=1,4
-        call mrsf_set_fp32(merge(1,0,mode>2))
+      do trial=1,10
+        ! Four forced-layout cases, then production layout resolution with
+        ! one, two and four thread images at both screening cutoffs.
+        mode=trial
+        nthreads=2
+        if (trial>=5) then
+          mode=5+modulo(trial-5,2)
+          nthreads=2**((trial-5)/2)
+        end if
+        call mrsf_set_fp32(merge(1,0,mode==3.or.mode==4))
         select case(kind)
         case(1)
           allocate(int2_rhf_data_t::old,new)
@@ -67,9 +79,27 @@ contains
         call legacy_buf%init(17);call block_buf%init(17)
         do pass=1,2
           old%cur_pass=pass;new%cur_pass=pass
-          call old%parallel_start(basis,2);call new%parallel_start(basis,2)
-          old%shell_blocks=.false.;new%shell_blocks=.true.
-          new%shell_block_min=merge(256,0,mode==2)
+          call old%parallel_start(basis,nthreads);call new%parallel_start(basis,nthreads)
+          old%shell_blocks=.false.
+          if (mode<=4) then
+            new%shell_blocks=.true.
+            new%shell_block_min=merge(256,0,mode==2)
+          else
+            call int2_resolve_layout(new)
+            ! Assert the final configuration for every consumer, including
+            ! RHF/UHF/TD's huge-cutoff normalization and both driver overrides.
+            expected_min=merge(256,huge(0),kind>=4)
+            expected_blocks=kind>=4
+            select case(trim(layout))
+            case('shell')
+              expected_min=0
+              expected_blocks=.true.
+            case('legacy')
+              expected_blocks=.false.
+            end select
+            if (new%shell_blocks.neqv.expected_blocks) failures=failures+1
+            if (new%shell_block_min/=expected_min) failures=failures+1
+          end if
           nold=0;nnew=0
           do a=1,4
             do b=1,a
@@ -91,7 +121,7 @@ contains
                       end do
                     end do
                     eri%pints=>raw
-                    slot=1+modulo(flip,2)
+                    slot=1+modulo(flip,nthreads)
                     if (legacy_buf%ncur>0) call old%update(legacy_buf)
                     legacy_buf%thread_id=slot;block_buf%thread_id=slot
                     cut=merge(0.005_dp,1e-14_dp,modulo(mode,2)==0)
