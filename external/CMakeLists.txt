@@ -282,6 +282,32 @@ set(LIBINT2_STAMP_DIR "${LIBINT2_STAMP_DIR}-opt" CACHE INTERNAL "LIBINT2_STAMP_D
 set(LIBINT2_LIBRARY "${LIBINT2_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}int2${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "LIBINT2_LIBRARY" FORCE)
 
 oqp_reuse_or_build(libint2 "${LIBINT2_LIBRARY}" "${LIBINT2_BUILD_DIR}/fortran" "${LIBINT2_BUILD_DIR}/include")
+# Forward the project's own compiler flags as well as the configuration name.
+# CMAKE_BUILD_TYPE alone only selects WHICH flag variable the child uses; the
+# child then fills it with ITS defaults, so a parent that overrides e.g.
+# CMAKE_CXX_FLAGS_RELEASE to -O1 (packaging) or -O0 (diagnostics) would still
+# get Libint at -O3.  The reusable-externals key already hashes these parent
+# flags, so the cache would report a match that does not hold.
+# Only non-empty values are forwarded: passing an empty
+# CMAKE_CXX_FLAGS_<CONFIG> would wipe the child's own -O3 -DNDEBUG and put us
+# back at the unoptimised build this block exists to prevent.
+set(_OQP_LIBINT_FLAG_ARGS)
+foreach(_oqp_libint_lang C CXX)
+  if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS}" STREQUAL "")
+    list(APPEND _OQP_LIBINT_FLAG_ARGS
+        "-DCMAKE_${_oqp_libint_lang}_FLAGS=${CMAKE_${_oqp_libint_lang}_FLAGS}")
+  endif()
+endforeach()
+string(TOUPPER "${CMAKE_BUILD_TYPE}" _OQP_LIBINT_CFG)
+if(NOT "${_OQP_LIBINT_CFG}" STREQUAL "")
+  foreach(_oqp_libint_lang C CXX)
+    if(NOT "${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}" STREQUAL "")
+      list(APPEND _OQP_LIBINT_FLAG_ARGS
+          "-DCMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}=${CMAKE_${_oqp_libint_lang}_FLAGS_${_OQP_LIBINT_CFG}}")
+    endif()
+  endforeach()
+endif()
+
 if(NOT TARGET libint2)
 ExternalProject_Add(libint2
     PREFIX ${LIBINT2_PREFIX}
@@ -308,6 +334,7 @@ ExternalProject_Add(libint2
                -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                -DLIBINT2_BUILD_SHARED_AND_STATIC_LIBS=${BUILD_SHARED_LIBS}
+               ${_OQP_LIBINT_FLAG_ARGS}
                ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
 endif()
