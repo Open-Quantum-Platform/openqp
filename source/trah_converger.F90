@@ -1,7 +1,8 @@
 !> @brief SCF wiring for the trust-region augmented-Hessian (TRAH) solver.
 !> @detail Method: Helmich-Paris, J. Chem. Phys. 154, 164104 (2021); the
 !>         augmented-Hessian/level-shift lineage traces to Bacskay, Chem. Phys.
-!>         61, 385 (1981). Selected by control%trh_impl = 1.
+!>         61, 385 (1981). This is the only TRAH implementation; control%trh_impl
+!>         is retained as an accepted input but selects nothing.
 !>
 !>         The optimizer itself -- the macro trust-region loop, the
 !>         Steihaug-Toint preconditioned CG, the augmented-Hessian Davidson step
