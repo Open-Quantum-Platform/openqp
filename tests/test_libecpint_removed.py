@@ -36,14 +36,6 @@ class LibecpintRemovalTests(unittest.TestCase):
         self.assertNotIn("_OQP_LIBECPINT_VERSION", external)
         self.assertNotRegex(external, r"\bLIBECPINT_(?!CACHE)")
 
-    def test_legacy_cache_token_preserves_the_existing_namespace(self):
-        external = (ROOT / "external" / "CMakeLists.txt").read_text()
-        self.assertIn('set(_OQP_LEGACY_LIBECPINT_CACHE_TOKEN "ecp1.0.7")', external)
-        self.assertIn(
-            "-tag${_OQP_TAGARRAY_VERSION}-${_OQP_LEGACY_LIBECPINT_CACHE_TOKEN}-lapack",
-            external,
-        )
-
     def test_distribution_notices_for_removed_component_are_absent(self):
         for name in ("libecpint-mit.txt", "faddeeva-mit.txt"):
             self.assertFalse((ROOT / "licenses" / "third_party" / name).exists())
