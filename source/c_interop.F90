@@ -8,6 +8,10 @@ module c_interop
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: oqp_alloc, oqp_clean, oqp_del, oqp_get, &
+            oqp_get_basis, oqp_get_basis_spherical, oqp_get_natom, oqp_get_nbf, &
+            oqp_set_atoms
 
   public oqp_handle_t
 

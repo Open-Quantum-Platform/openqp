@@ -6,6 +6,8 @@ module nmr_giao_shielding_mod
   character(len=*), parameter :: module_name = "nmr_giao_shielding_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: nmr_giao_shielding_C, nmr_giao_shielding_debug_C
   public nmr_giao_shielding_debug
 
 contains

@@ -53,6 +53,8 @@ module namd_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: namd_counter_random_C, namd_hop_C, namd_rescale_directional_C
 
   character(len=*), parameter :: module_name = "namd_mod"
 
