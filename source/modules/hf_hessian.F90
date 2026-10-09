@@ -2720,9 +2720,10 @@ contains
 !###############################################################################
 
 !> @brief Whether the caller wants the IR/Raman property derivatives.
-!> @details The Python driver sets OQP::hess_properties = 0 when only the
-!>   Cartesian Hessian is needed (native TS/IRC, analysis=False); absent or
-!>   nonzero means compute them.
+!> @details Opt-in: only a nonzero OQP::hess_properties computes them. The
+!>   Python ground-state driver sets it (0 for matrix-only native TS/IRC or
+!>   analysis=False). Callers that never set it, such as the TD Hessian's
+!>   internal ground-state call, skip the field-response solves.
   logical function hf_hess_properties_wanted(infos) result(want)
     use types, only: information
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_hess_properties, ta_ok
@@ -2730,7 +2731,7 @@ contains
     type(information), target, intent(inout) :: infos
     integer(c_int64_t), contiguous, pointer :: flag(:)
     integer(4) :: status
-    want = .true.
+    want = .false.
     call tagarray_get_data(infos%dat, OQP_hess_properties, flag, status)
     if (status == ta_ok) then
       if (size(flag) > 0) want = flag(1) /= 0
