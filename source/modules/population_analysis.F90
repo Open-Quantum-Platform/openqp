@@ -8,6 +8,8 @@ module population_analysis
   integer, parameter :: POP_LOWDIN = 1
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: lowdin_C, mulliken_C, mulliken_excited_C
   public mulliken
   public lowdin
   public run_population_analysis

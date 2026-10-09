@@ -64,10 +64,16 @@ class XiGridIngredientsTest(unittest.TestCase):
             self.assertEqual(g[key].shape, (npts, ncol), key)
         w = g["xyzw"][:, 3]
         nelec = float(np.sum(w * (g["rho"][:, 0] + g["rho"][:, 1])))
-        self.assertAlmostEqual(nelec, 10.0, places=4)
-        # xi^1 == tau, xi^0- == n/2
-        self.assertLess(np.max(np.abs(g["xi"][:, 0:2] - g["tau"])), 1e-10)
+        self.assertAlmostEqual(nelec, 10.0, places=3)  # 48x110 grid: 7e-5
+        # xi^1 == tau (the tau pass screens far Gaussian shells, the xi pass does
+        # not, so far points differ at the 1e-7 level; the weighted integral agrees
+        # to 4e-8), xi^0- == n/2
+        self.assertLess(np.max(np.abs(g["xi"][:, 0:2] - g["tau"])), 1e-5)
+        self.assertLess(float(np.sum(w[:, None] * np.abs(g["xi"][:, 0:2] - g["tau"]))), 1e-6)  # Gaussian screening of the tau pass: 4e-8
         self.assertLess(np.max(np.abs(g["xi"][:, 4:6] - 0.5 * g["rho"])), 1e-10)
+        # integrals: N_alpha/2 for xi^0-, the alpha kinetic energy for xi^1
+        self.assertAlmostEqual(float(np.sum(w * g["xi"][:, 4])), 2.5, places=4)
+        self.assertAlmostEqual(float(np.sum(w * g["xi"][:, 0])), float(np.sum(w * g["tau"][:, 0])), places=6)
         # fractional orders: non-negative, finite, different from tau
         self.assertTrue(np.all(np.isfinite(g["xi"])))
         self.assertGreaterEqual(float(np.min(g["xi"])), -1e-14)

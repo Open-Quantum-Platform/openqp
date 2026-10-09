@@ -7,6 +7,8 @@ module qmmm_mod
   character(len=*), parameter :: module_name = "qmmm_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: espf_op_corr_C, form_esp_charges_C, grad_esp_qmmm_C, grad_esp_qmmm_excited_C
   public get_mm_energy
   public form_esp_charges
   public print_mm_energy

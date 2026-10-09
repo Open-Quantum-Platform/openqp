@@ -7,6 +7,9 @@ module mrsf_nac_interchange_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: mrsf_nac_pair_accumulate_C, mrsf_nac_pair_accumulator_init_C, mrsf_nac_pair_finalize_C, mrsf_nac_rohf_hf_adjoint_C, &
+            mrsf_nac_rohf_pair_overlap_C, mrsf_nac_rohf_solve_C, mrsf_nac_rohf_zvector_C, mrsf_nac_xc_adjoint_C
   public :: mrsf_nac_rohf_zvector
   public :: mrsf_nac_rohf_zvector_batch
   public :: mrsf_nac_rohf_solve
