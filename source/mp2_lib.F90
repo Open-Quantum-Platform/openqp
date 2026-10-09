@@ -4,11 +4,15 @@
 !>        energy for RHF/UHF/ROHF references.
 !>
 !> The correlation energy is built in the spin-blocked (aa, bb, ab) form on
-!> semicanonicalized orbitals, reusing the validated two-electron driver
-!> (`int2_compute`) via per-occupied-MO-pair Coulomb builds -- so no full O(N^4)
-!> MO integral tensor is ever stored.  A ROHF reference is semicanonicalized first
-!> (occ-occ and vir-vir Fock blocks diagonalized) so the canonical MP2 amplitude
-!> denominators are well defined.  Validated to 1e-8 Ha against PySCF UMP2.
+!> semicanonicalized orbitals.  Two paths are provided:
+!>
+!>  1. Direct-J (O(N⁶)): per-occupied-MO-pair Coulomb builds via int2_driver,
+!>     fast for small systems.  Guarded by MAX_JBUILDS.
+!>
+!>  2. Batched half-transform (O(N⁵)): collect packed AO integrals once, then
+!>     two half-transforms produce the (ia|jb) block.  No per-pair J-build
+!>     limit.  Used automatically when nocc×nvir exceeds MAX_JBUILDS or nbf
+!>     exceeds 120 (O(N⁵) is always cheaper for large bases).
 module mp2_lib
 
   use precision, only: dp
@@ -76,6 +80,7 @@ contains
     real(kind=dp) :: e_opp_scratch
     real(kind=dp) :: ss_scale, os_scale
     logical :: restricted_ref, need_same_spin, need_opposite_spin
+    logical :: try_n5, n5_ok
 
     e_mp2 = 0.0_dp; e_aa = 0.0_dp; e_bb = 0.0_dp; e_ab = 0.0_dp; e_s = 0.0_dp
     computed = .false.
@@ -90,7 +95,11 @@ contains
     vira = nbf - nocca
     virb = nbf - noccb
 
-    if (.not. mp2_build_is_affordable(nbf, nocca, noccb)) return
+    ! Decide whether the O(N⁵) path should be attempted.
+    ! try_n5 = true when direct-J is unaffordable, or when the basis is large
+    ! enough that O(N⁵) is always preferable.
+    try_n5 = .not. mp2_build_is_affordable(nbf, nocca, noccb)
+    if (.not. try_n5 .and. nbf > 120) try_n5 = .true.
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -109,50 +118,59 @@ contains
     need_opposite_spin = abs(os_scale) > 1.0e-14_dp
 
     ! Semicanonicalize each spin so the MP2 denominators use canonical orbital
-    ! energies (Fock occ-occ / vir-vir sub-blocks diagonalized).  For a UHF
-    ! reference this is a no-op (orbitals already canonical); for ROHF it yields
-    ! the standard ROHF-MP2 amplitudes.
+    ! energies (Fock occ-occ / vir-vir sub-blocks diagonalized).
     allocate(mo_a_sc(nbf,nbf), mo_b_sc(nbf,nbf), e_a_sc(nbf), e_b_sc(nbf), &
              source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('mp2: cannot allocate semicanonical MOs', with_abort)
     call semicanonicalize(nbf, nocca, mo_a, fock_a, mo_a_sc, e_a_sc)
     call semicanonicalize(nbf, noccb, mo_b, fock_b, mo_b_sc, e_b_sc)
 
-    ! Second-order singles.  Semicanonicalisation diagonalises the occ-occ and
-    ! vir-vir Fock blocks but leaves the occupied-virtual block alone, and for
-    ! ROHF that block does not vanish: the ROHF stationarity condition fixes
-    ! only one combination of the two spins, not each spin separately.  The
-    ! resulting singles contribution
-    !
-    !   E_S = sum_(ia,sigma) |f^sigma_ia|^2 / (e^sigma_i - e^sigma_a)
-    !
-    ! is a genuine part of the second-order energy on such a reference -- this
-    ! is what makes the treatment ROHF-MBPT(2) rather than a doubles-only
-    ! truncation of it.  It is identically zero for RHF and for canonical UHF,
-    ! where f_ia vanishes, so no reference type needs special-casing here.
+    ! Second-order singles.
     e_s = mp2_singles(nbf, nocca, mo_a_sc, fock_a, e_a_sc) &
         + mp2_singles(nbf, noccb, mo_b_sc, fock_b, e_b_sc)
 
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
-    ! Same-spin alpha block + opposite-spin block share the alpha (i,a) Coulomb
-    ! builds, so they are accumulated together.
-    call mp2_spin_block(int2_driver, basis, nbf, nbf2, &
-                        mo_a_sc, e_a_sc, nocca, vira, &    ! "left"  = alpha occ/vir
-                        mo_a_sc, e_a_sc, nocca, vira, &    ! same-spin partner = alpha
-                        mo_b_sc, e_b_sc, noccb, virb, &    ! opposite-spin partner = beta
-                        same_spin=need_same_spin, do_opposite=need_opposite_spin, &
-                        e_same=e_aa, e_opp=e_ab)
+    if (try_n5) then
+      ! O(N⁵) batched half-transform path.  Falls back to direct-J when the
+      ! packed AO integral allocation fails.
+      call mp2_corr_n5(int2_driver, basis, nbf, nbf2, &
+          mo_a_sc, e_a_sc, nocca, vira, &
+          mo_a_sc, e_a_sc, nocca, vira, &
+          mo_b_sc, e_b_sc, noccb, virb, &
+          need_same_spin, need_opposite_spin, e_aa, e_ab, &
+          success=n5_ok)
+      if (n5_ok) computed = .true.
+    end if
 
-    ! Same-spin beta block (opposite-spin already counted once above).
-    e_opp_scratch = 0.0_dp
-    call mp2_spin_block(int2_driver, basis, nbf, nbf2, &
-                        mo_b_sc, e_b_sc, noccb, virb, &
-                        mo_b_sc, e_b_sc, noccb, virb, &
-                        mo_a_sc, e_a_sc, nocca, vira, &
-                        same_spin=need_same_spin, do_opposite=.false., &
-                        e_same=e_bb, e_opp=e_opp_scratch)
+    if (.not. computed) then
+      ! Direct-J (O(N⁶)) path: original per-(i,a) J-builds.
+      if (.not. mp2_build_is_affordable(nbf, nocca, noccb)) then
+        deallocate(mo_a_sc, mo_b_sc, e_a_sc, e_b_sc)
+        call int2_driver%clean()
+        return
+      end if
+
+      ! Same-spin alpha block + opposite-spin block.
+      call mp2_spin_block(int2_driver, basis, nbf, nbf2, &
+                          mo_a_sc, e_a_sc, nocca, vira, &
+                          mo_a_sc, e_a_sc, nocca, vira, &
+                          mo_b_sc, e_b_sc, noccb, virb, &
+                          same_spin=need_same_spin, do_opposite=need_opposite_spin, &
+                          e_same=e_aa, e_opp=e_ab)
+
+      ! Same-spin beta block (opposite-spin already counted above).
+      e_opp_scratch = 0.0_dp
+      call mp2_spin_block(int2_driver, basis, nbf, nbf2, &
+                          mo_b_sc, e_b_sc, noccb, virb, &
+                          mo_b_sc, e_b_sc, noccb, virb, &
+                          mo_a_sc, e_a_sc, nocca, vira, &
+                          same_spin=need_same_spin, do_opposite=.false., &
+                          e_same=e_bb, e_opp=e_opp_scratch)
+
+      computed = .true.
+    end if
 
     deallocate(mo_a_sc, mo_b_sc, e_a_sc, e_b_sc)
 
@@ -161,9 +179,336 @@ contains
     ! The spin-component scales are defined for the doubles components; the
     ! singles term is neither same- nor opposite-spin, so it enters unscaled.
     e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab + e_s
-    computed = .true.
 
   end subroutine mp2_correlation
+
+
+  !###########################################################################
+  ! O(N⁵) batched half-transform path
+  !###########################################################################
+
+  !> @brief MP2 correlation via batched half-transform (O(N⁵)).
+  !>
+  !> Collects packed AO integrals once, then two half-transforms over the
+  !> (occupied, virtual) MO block produce (ia|jb) without per-pair J-builds.
+  !> The old O(N⁶) direct-J path has no per-pair limit and raises the
+  !> effective MAX_JBUILDS to infinity.
+  !>
+  !> @param[in]  int2_driver  initialised two-electron driver
+  !> @param[in]  basis        basis set
+  !> @param[in]  nbf, nbf2    basis size and packed length
+  !> @param[in]  cmo_l, e_l   left-spin semicanonical MOs and energies
+  !> @param[in]  nocc_l, nvir_l  left-spin occupied/virtual counts
+  !> @param[in]  cmo_s, e_s   same-spin partner MOs and energies
+  !> @param[in]  nocc_s, nvir_s  same-spin occ/vir counts
+  !> @param[in]  cmo_o, e_o   opposite-spin partner MOs and energies
+  !> @param[in]  nocc_o, nvir_o  opposite-spin occ/vir counts
+  !> @param[in]  same_spin    .true. to include same-spin aa/bb contribution
+  !> @param[in]  do_opposite  .true. to include opposite-spin ab contribution
+  !> @param[out] e_same       same-spin energy accumulated
+  !> @param[out] e_opp        opposite-spin energy accumulated
+  !> @param[out] success      .true. if the n5 path completed
+  subroutine mp2_corr_n5(int2_driver, basis, nbf, nbf2, &
+                         cmo_l, e_l, nocc_l, nvir_l, &
+                         cmo_s, e_s, nocc_s, nvir_s, &
+                         cmo_o, e_o, nocc_o, nvir_o, &
+                         same_spin, do_opposite, e_same, e_opp, success)
+
+    use basis_tools, only: basis_set
+    use int2_compute, only: int2_compute_t
+    use cc_ao2mo, only: cc_eri_collect_t, cc_packed_length
+    use messages, only: show_message, WITH_ABORT
+
+    type(int2_compute_t), intent(inout) :: int2_driver
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: nbf, nbf2
+    real(kind=dp), intent(in) :: cmo_l(nbf,nbf), e_l(nbf)
+    integer, intent(in) :: nocc_l, nvir_l
+    real(kind=dp), intent(in) :: cmo_s(nbf,nbf), e_s(nbf)
+    integer, intent(in) :: nocc_s, nvir_s
+    real(kind=dp), intent(in) :: cmo_o(nbf,nbf), e_o(nbf)
+    integer, intent(in) :: nocc_o, nvir_o
+    logical, intent(in) :: same_spin, do_opposite
+    real(kind=dp), intent(inout) :: e_same, e_opp
+    logical, intent(out) :: success
+
+    integer(8) :: packed_len
+    integer :: npair, nov_l, nov_s, nov_o, idx, i, a, j, b, q, ip, ok
+    real(kind=dp) :: denom, num, val
+
+    ! Packed AO integrals
+    real(kind=dp), allocatable :: g(:)
+
+    ! Half-transform intermediate: (i a | lambda sigma) for every AO ket pair
+    real(kind=dp), allocatable :: half(:,:)
+
+    ! Precomputed pair tables
+    integer, allocatable :: prow(:), pcol(:)
+
+    ! ovov(i,a,j,b) for same-spin antisymmetrisation
+    real(kind=dp), allocatable :: ovov(:,:,:,:)
+
+    success = .false.
+
+    npair = nbf2  ! nbf*(nbf+1)/2
+    packed_len = cc_packed_length(nbf)
+    nov_l = nocc_l * nvir_l
+    nov_s = nocc_s * nvir_s
+    nov_o = nocc_o * nvir_o
+
+    ! --- Step 0: allocate packed AO integrals and collect -------------------
+    allocate(g(packed_len), source=0.0_dp, stat=ok)
+    if (ok /= 0) return  ! fall back to direct-J
+
+    block
+      type(cc_eri_collect_t), target :: collector
+      collector%g => g
+      collector%nbf = nbf
+      collector%npair = npair
+      call int2_driver%run(collector)
+    end block
+
+    ! --- Precompute AO pair tables -----------------------------------------
+    allocate(prow(npair), pcol(npair), stat=ok)
+    if (ok /= 0) then; deallocate(g); return; end if
+    !$omp parallel do schedule(static) private(q, lambda, sigma)
+    do q = 1, npair
+      ! compute lambda, sigma from q
+      ! q = lambda*(lambda-1)/2 + sigma, with lambda >= sigma
+    end do
+    !$omp end parallel do
+
+    ! Actually compute the pair tables serially (trivial O(npair) work)
+    do q = 1, npair
+      do lambda = 1, nbf
+        if (q <= lambda*(lambda-1)/2) cycle
+        if (q > lambda*(lambda+1)/2) cycle
+        sigma = q - lambda*(lambda-1)/2
+        prow(q) = lambda
+        pcol(q) = sigma
+        exit
+      end do
+    end do
+
+    ! --- Step 1: first half-transform (O(N⁵)) --------------------------------
+    ! For each AO ket pair q = pair(lambda,sigma):
+    !   m(i,a) = (i a | lambda sigma)
+    !          = sum_{mu,nu} C_mu_i * C_nu_a * g(pair(mu,nu), pair(lambda,sigma))
+    ! Store in half(q, idx(i,a)).
+    allocate(half(npair, nov_l), source=0.0_dp, stat=ok)
+    if (ok /= 0) then; deallocate(g, prow, pcol); return; end if
+
+    !$omp parallel default(shared) private(q, ip, mu, nu, idx)
+    block
+      real(kind=dp), allocatable :: d(:,:), scr(:,:), m(:,:)
+      allocate(d(nbf,nbf), scr(nbf,nvir_l), m(nocc_l,nvir_l))
+      !$omp do schedule(static)
+      do q = 1, npair
+        ! Unpack g column q into d(mu,nu)
+        !$omp simd
+        do ip = 1, npair
+          mu = prow(ip); nu = pcol(ip)
+          d(mu,nu) = g(mp2_packed_idx(ip, q))
+          d(nu,mu) = d(mu,nu)
+        end do
+
+        ! scr_na = sum_mu d(mu,nu) * cmo_l(mu, nocc_l + a)  (all a)
+        call dgemm('n','n', nbf, nvir_l, nbf, 1.0_dp, d, nbf, &
+                   cmo_l(1, nocc_l+1), nbf, 0.0_dp, scr, nbf)
+        ! m(i,a) = sum_nu cmo_l(nu,i) * scr_na(nu,a)
+        call dgemm('t','n', nocc_l, nvir_l, nbf, 1.0_dp, &
+                   cmo_l, nbf, scr, nbf, 0.0_dp, m, nocc_l)
+
+        ! Store into half
+        do a = 1, nvir_l
+          do i = 1, nocc_l
+            idx = (i-1)*nvir_l + a
+            half(q, idx) = m(i, a)
+          end do
+        end do
+      end do
+      !$omp end do
+      deallocate(d, scr, m)
+    end block
+    !$omp end parallel
+
+    ! Free AO integrals — no longer needed after first half
+    deallocate(g)
+
+    ! --- Step 2: second half-transform and energy accumulation --------------
+    ! Same-spin needs the full ovov(i,a,j,b) for antisymmetrisation
+    if (same_spin) then
+      allocate(ovov(nocc_l, nvir_l, nocc_s, nvir_s), source=0.0_dp, stat=ok)
+      if (ok /= 0) then
+        deallocate(half, prow, pcol); return
+      end if
+
+      call mp2_n5_second_half(nbf, npair, nov_l, &
+          nocc_l, nvir_l, nocc_s, nvir_s, &
+          cmo_l, cmo_s, half, prow, pcol, ovov)
+
+      ! Antisymmetrised accumulation
+      ! E_aa = 0.25 * sum_{ijab} ((ia|jb) - (ib|ja))^2 / D
+      do i = 1, nocc_l
+        do a = 1, nvir_l
+          do j = 1, nocc_s
+            do b = 1, nvir_s
+              denom = e_l(i) + e_s(j) - e_l(nocc_l + a) - e_s(nocc_s + b)
+              if (abs(denom) < 1.0e-10_dp) cycle
+              num = ovov(i, a, j, b) - ovov(i, b, j, a)
+              e_same = e_same + 0.25_dp * num * num / denom
+            end do
+          end do
+        end do
+      end do
+
+      deallocate(ovov)
+    end if
+
+    ! Opposite-spin: accumulate on the fly (no antisymmetrisation needed)
+    if (do_opposite) then
+      call mp2_n5_opposite(nbf, npair, nov_l, &
+          nocc_l, nvir_l, nocc_o, nvir_o, &
+          cmo_l, e_l, cmo_o, e_o, &
+          half, prow, pcol, e_opp)
+    end if
+
+    deallocate(half, prow, pcol)
+    success = .true.
+
+  end subroutine mp2_corr_n5
+
+
+  !> @brief Second half-transform: (ia|jb) from (ia|lambda sigma).
+  !>
+  !> For each (i,a) of the left spin, reconstruct the (ia|λσ) matrix from
+  !> the packed half-transform intermediate, then transform the ket indices
+  !> to MO basis.  Fills ovov(i,a,j,b) = (ia|jb).
+  subroutine mp2_n5_second_half(nbf, npair, nov_l, &
+      nocc_l, nvir_l, nocc_s, nvir_s, &
+      cmo_l, cmo_s, half, prow, pcol, ovov)
+
+    integer, intent(in) :: nbf, npair, nov_l
+    integer, intent(in) :: nocc_l, nvir_l, nocc_s, nvir_s
+    real(kind=dp), intent(in) :: cmo_l(nbf,nbf), cmo_s(nbf,nbf)
+    real(kind=dp), intent(in) :: half(npair, nov_l)
+    integer, intent(in) :: prow(npair), pcol(npair)
+    real(kind=dp), intent(out) :: ovov(nocc_l, nvir_l, nocc_s, nvir_s)
+
+    integer :: idx, i, a, j, b, lambda, sigma, q
+    real(kind=dp), allocatable :: e_mat(:,:), scr2(:,:), vv(:,:)
+
+    allocate(e_mat(nbf,nbf), scr2(nbf,nocc_s), vv(nocc_s,nvir_s))
+
+    !$omp parallel do private(idx, i, a, q, lambda, sigma, e_mat, scr2, vv) &
+    !$omp   schedule(dynamic, 4)
+    do idx = 1, nov_l
+      i = (idx - 1) / nvir_l + 1
+      a = mod(idx - 1, nvir_l) + 1
+
+      ! Reconstruct full (ia|lambda,sigma) from packed half
+      !$omp simd
+      do q = 1, npair
+        lambda = prow(q); sigma = pcol(q)
+        e_mat(lambda, sigma) = half(q, idx)
+        e_mat(sigma, lambda) = half(q, idx)
+      end do
+
+      ! Transform ket: (ia|jb)
+      ! scr2(j, sigma) = sum_lambda C_s(j, lambda) * e_mat(lambda, sigma)
+      call dgemm('t', 'n', nocc_s, nbf, nbf, 1.0_dp, &
+                 cmo_s, nbf, e_mat, nbf, 0.0_dp, scr2, nocc_s)
+      ! vv(j, b) = sum_sigma scr2(j, sigma) * C_s(sigma, nocc_s+b)
+      call dgemm('n', 'n', nocc_s, nvir_s, nbf, 1.0_dp, &
+                 scr2, nocc_s, cmo_s(1, nocc_s+1), nbf, 0.0_dp, vv, nocc_s)
+
+      do b = 1, nvir_s
+        do j = 1, nocc_s
+          ovov(i, a, j, b) = vv(j, b)
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
+    deallocate(e_mat, scr2, vv)
+
+  end subroutine mp2_n5_second_half
+
+
+  !> @brief Opposite-spin contribution (ia|jb)^2 / denom, no antisym.
+  subroutine mp2_n5_opposite(nbf, npair, nov_l, &
+      nocc_l, nvir_l, nocc_o, nvir_o, &
+      cmo_l, e_l, cmo_o, e_o, &
+      half, prow, pcol, e_opp)
+
+    integer, intent(in) :: nbf, npair, nov_l
+    integer, intent(in) :: nocc_l, nvir_l, nocc_o, nvir_o
+    real(kind=dp), intent(in) :: cmo_l(nbf,nbf), e_l(nbf)
+    real(kind=dp), intent(in) :: cmo_o(nbf,nbf), e_o(nbf)
+    real(kind=dp), intent(in) :: half(npair, nov_l)
+    integer, intent(in) :: prow(npair), pcol(npair)
+    real(kind=dp), intent(inout) :: e_opp
+
+    integer :: idx, i, a, j, b, q, lambda, sigma
+    real(kind=dp) :: denom, val
+    real(kind=dp), allocatable :: e_mat(:,:), scr2(:,:), vv(:,:)
+
+    allocate(e_mat(nbf,nbf), scr2(nbf,nocc_o), vv(nocc_o,nvir_o))
+
+    !$omp parallel do private(idx, i, a, q, lambda, sigma, &
+    !$omp   e_mat, scr2, vv, j, b, denom, val) &
+    !$omp   schedule(dynamic, 4) reduction(+:e_opp)
+    do idx = 1, nov_l
+      i = (idx - 1) / nvir_l + 1
+      a = mod(idx - 1, nvir_l) + 1
+
+      ! Reconstruct full (ia|lambda,sigma) from packed half
+      !$omp simd
+      do q = 1, npair
+        lambda = prow(q); sigma = pcol(q)
+        e_mat(lambda, sigma) = half(q, idx)
+        e_mat(sigma, lambda) = half(q, idx)
+      end do
+
+      ! Transform ket to opposite-spin MO basis
+      call dgemm('t', 'n', nocc_o, nbf, nbf, 1.0_dp, &
+                 cmo_o, nbf, e_mat, nbf, 0.0_dp, scr2, nocc_o)
+      call dgemm('n', 'n', nocc_o, nvir_o, nbf, 1.0_dp, &
+                 scr2, nocc_o, cmo_o(1, nocc_o+1), nbf, 0.0_dp, vv, nocc_o)
+
+      do b = 1, nvir_o
+        do j = 1, nocc_o
+          denom = e_l(i) + e_o(j) - e_l(nocc_l + a) - e_o(nocc_o + b)
+          if (abs(denom) < 1.0e-10_dp) cycle
+          val = vv(j, b)
+          e_opp = e_opp + val * val / denom
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
+    deallocate(e_mat, scr2, vv)
+
+  end subroutine mp2_n5_opposite
+
+
+  !> @brief Triangular packed index for the symmetrised pair-pair store.
+  !>
+  !> For AO pair p = pair(mu,nu) and q = pair(lambda,sigma), returns
+  !> g_offset such that the canonical 1/8-of-tensor value (mu nu | lambda sigma)
+  !> with p >= q is stored at g(g_offset).
+  pure integer(8) function mp2_packed_idx(p, q) result(idx)
+    integer, intent(in) :: p, q
+    integer(8) :: hi, lo
+    hi = int(max(p, q), 8)
+    lo = int(min(p, q), 8)
+    idx = hi * (hi - 1_8) / 2_8 + lo
+  end function mp2_packed_idx
+
+
+  !###########################################################################
+  ! Original direct-J path (O(N⁶))
+  !###########################################################################
 
   subroutine mp2_spin_block(int2_driver, basis, nbf, nbf2, &
                             cmo_l, e_l, nocc_l, nvir_l, &
@@ -266,9 +611,7 @@ contains
           end do
         end if
       end do
-      ! Same-spin contraction with antisymmetrized integrals.  Only the
-      ! virtual-virtual blocks for the current occupied i are retained, avoiding
-      ! the previous (nocc*nvir)^2 tensor.
+      ! Same-spin contraction with antisymmetrized integrals.
       if (same_spin) then
         do j = 1, nocc_s
           do a = 1, nvir_l
