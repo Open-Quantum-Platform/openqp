@@ -234,10 +234,11 @@ contains
 
     integer(8) :: packed_len
     integer :: npair, nov_l, nov_s, nov_o, idx, i, a, j, b, q, ip, ok
+    integer :: lambda, sigma, mu, nu
     real(kind=dp) :: denom, num, val
 
-    ! Packed AO integrals
-    real(kind=dp), allocatable :: g(:)
+    ! Packed AO integrals (TARGET because cc_eri_collect_t%g points here)
+    real(kind=dp), allocatable, target :: g(:)
 
     ! Half-transform intermediate: (i a | lambda sigma) for every AO ket pair
     real(kind=dp), allocatable :: half(:,:)
@@ -271,14 +272,8 @@ contains
     ! --- Precompute AO pair tables -----------------------------------------
     allocate(prow(npair), pcol(npair), stat=ok)
     if (ok /= 0) then; deallocate(g); return; end if
-    !$omp parallel do schedule(static) private(q, lambda, sigma)
-    do q = 1, npair
-      ! compute lambda, sigma from q
-      ! q = lambda*(lambda-1)/2 + sigma, with lambda >= sigma
-    end do
-    !$omp end parallel do
 
-    ! Actually compute the pair tables serially (trivial O(npair) work)
+    ! Compute the pair tables (trivial O(npair) work)
     do q = 1, npair
       do lambda = 1, nbf
         if (q <= lambda*(lambda-1)/2) cycle
