@@ -1589,8 +1589,9 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
                 "them. Remove the shift, or use contraction=none for the "
                 "uncontracted variant."
                 % ", ".join(_unapplied))
-                                    coeffs[:, root],
-                                    max_memory=_pt2_memory(options, settings)[0])
+        e2, comp = _e2func(h1e, eri, eps, ncore, nact, active_nelec,
+                           coeffs[:, root],
+                           max_memory=_pt2_memory(options, settings)[0])
         e_caspt2 = e_casci + e2
         e_ref_check = e_casci
         min_denom = float("inf")
