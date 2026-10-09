@@ -165,7 +165,30 @@ contains
     ! RHF Hessian.  The remaining fixed and response terms are strictly the
     ! excitation-energy contribution, avoiding both omission and double count
     ! of the ground-state CPHF response.
-    call hf_hessian(infos)
+    ! The ground-state IR/Raman tensors are not used here, and an opt-in
+    ! OQP::hess_properties left on the data handle by an earlier
+    ! ground-state analytic Hessian must not re-enable them for this
+    ! internal call: switch it off and restore it afterwards.
+    block
+      use oqp_tagarray_driver, only: OQP_hess_properties, ta_ok
+      use iso_c_binding, only: c_int64_t
+      integer(c_int64_t), contiguous, pointer :: pflag(:)
+      integer(c_int64_t) :: saved_flag
+      integer(4) :: pstatus
+      logical :: had_flag
+      call tagarray_get_data(infos%dat, OQP_hess_properties, pflag, pstatus)
+      had_flag = pstatus == ta_ok
+      if (had_flag) had_flag = size(pflag) > 0
+      if (had_flag) then
+        saved_flag = pflag(1)
+        pflag(1) = 0_c_int64_t
+      end if
+      call hf_hessian(infos)
+      if (had_flag) then
+        call tagarray_get_data(infos%dat, OQP_hess_properties, pflag, pstatus)
+        if (pstatus == ta_ok) pflag(1) = saved_flag
+      end if
+    end block
     call hess_tick('TD ground-state hf_hessian', infos%log_filename)
     call tagarray_get_data(infos%dat,OQP_hf_hessian,hground)
     if (.not.zero_orbital_connection) hfixed=hfixed-hground_fixed+hground
