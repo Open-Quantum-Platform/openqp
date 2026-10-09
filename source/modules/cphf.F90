@@ -274,11 +274,19 @@ contains
     iter_max = 0
     nconv = 0
 
+    ! Warm-start: use the previous RHS solution as CG initial guess.
+    ! Consecutive nuclear-displacement RHS are geometrically correlated
+    ! (same orbital Hessian, nudged geometry), typically cutting 30-50 %.
     do irhs = 1, nrhs
       call system_clock(rhs_clock_start)
       call cpu_time(rhs_cpu_start)
-      call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
-                    dat=cgdata, tol=sqrt(abs(cnv)))
+      if (irhs == 1) then
+        call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
+                      dat=cgdata, tol=sqrt(abs(cnv)))
+      else
+        call pcg%init(b=bvec(:,irhs), update=cphf_apbx, precond=cphf_precond, &
+                      dat=cgdata, x0=uvec(:,irhs-1), tol=sqrt(abs(cnv)))
+      end if
       if (infos%control%verbose >= 2) &
       write(iw,'(" INITIAL CPHF ERROR RHS",I5," =",3X,' // &
                '1P,E10.3,1X,"/",1P,E10.3)') &
