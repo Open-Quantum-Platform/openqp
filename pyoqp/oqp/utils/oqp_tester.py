@@ -98,11 +98,12 @@ def _read_inp_config(input_file):
     return {sec: dict(parser.items(sec)) for sec in parser.sections()}
 
 
-def _resolved_hessian_type(cfg):
+def _resolved_hessian_type(cfg, input_file=None):
     """What [hess] type=auto (or an omitted type) resolves to for this input."""
     try:
         from oqp.utils.input_checker import resolve_hessian_type
-        return resolve_hessian_type(cfg or {})[0]
+        input_dir = os.path.dirname(os.path.abspath(input_file)) if input_file else None
+        return resolve_hessian_type(cfg or {}, input_dir)[0]
     except Exception:
         return 'numerical'
 
@@ -834,7 +835,7 @@ class OQPTester:
             }
             method = str(input_cfg.get('method', 'hf')).strip().lower()
             if runtype == 'hess' and hess_type in ('', 'auto'):
-                hess_type = _resolved_hessian_type(cfg)
+                hess_type = _resolved_hessian_type(cfg, input_file)
             return (
                 runtype == 'irc'
                 or (runtype == 'hess' and hess_type != 'analytical')
@@ -851,7 +852,7 @@ class OQPTester:
         if 'runtype=hess' in text and 'type=analytical' not in text:
             # An omitted type (or type=auto) may still resolve to the analytic
             # Hessian; only skip what actually runs numerically.
-            if 'type=numerical' in text or _resolved_hessian_type(_read_inp_config(input_file)) != 'analytical':
+            if 'type=numerical' in text or _resolved_hessian_type(_read_inp_config(input_file), input_file) != 'analytical':
                 return True
         if 'qmmm_flag=true' in text and 'runtype=namd' not in text:
             return True

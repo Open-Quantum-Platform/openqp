@@ -6308,7 +6308,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         _check_soc(config, report)
 
     if runtype == "hess":
-        _check_hess(config, report)
+        _check_hess(config, report, input_dir)
 
 
 def _check_model_curvature(config: dict[str, Any], report: CheckReport) -> None:
@@ -7376,7 +7376,8 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
 
 
-def resolve_hessian_type(config: dict[str, Any]) -> tuple[str, str]:
+def resolve_hessian_type(config: dict[str, Any],
+                         input_dir: str | None = None) -> tuple[str, str]:
     """Resolve ``[hess] type`` to ``analytical`` or ``numerical`` with a reason.
 
     An explicit ``analytical`` or ``numerical`` is returned unchanged. ``auto``
@@ -7421,7 +7422,7 @@ def resolve_hessian_type(config: dict[str, Any]) -> tuple[str, str]:
         blockers.append("fractional occupations (pfon)")
     if _is_true(_get(config, "hess", "symmetry_unique", False)):
         blockers.append("hess.symmetry_unique (numerical-only option)")
-    max_l = _basis_max_angular_momentum(config)
+    max_l = _basis_max_angular_momentum(config, input_dir)
     if max_l is None:
         blockers.append("basis angular momentum could not be inspected")
     elif max_l >= 4:
@@ -7431,29 +7432,60 @@ def resolve_hessian_type(config: dict[str, Any]) -> tuple[str, str]:
     return "analytical", "auto: native ground-state analytic Hessian."
 
 
-def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
+def _basis_max_angular_momentum(config: dict[str, Any],
+                                input_dir: str | None = None) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
+    return _basis_max_l_detail(config, input_dir)[0]
+
+
+def _read_custom_basis(name: str, input_dir: str | None) -> dict | None:
+    """BSE-style data of a ``file:`` basis, resolved as set_basis does
+    (relative to the input directory), or None if it cannot be read."""
+    import json
+    path = name[len("file:"):]
+    if not os.path.isabs(path) and input_dir:
+        path = os.path.join(input_dir, path)
+    try:
+        if path.endswith(".json"):
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        else:
+            import basis_set_exchange as bse
+            data = bse.read_formatted_basis_file(path)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) and "elements" in data else None
+
+
+def _basis_max_l_detail(config: dict[str, Any],
+                        input_dir: str | None = None) -> tuple[int | None, str | None]:
+    """(max L, None), or (None, why) with why = 'basis' when the basis itself
+    cannot be inspected and 'geometry' when the atoms cannot be listed."""
     try:
         import basis_set_exchange as bse
     except Exception:
-        return None
+        return None, "basis"
 
     basis = _get(config, "input", "basis", "")
     system = _get(config, "input", "system", "")
     library = _get(config, "input", "library", "")
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     lines = inline_lines
-    if xyz_path and os.path.exists(os.path.abspath(xyz_path)):
-        with open(os.path.abspath(xyz_path), "r", encoding="utf-8") as handle:
-            xyz_lines = handle.read().splitlines()
-        try:
-            num_atoms = int(xyz_lines[0])
-            lines = xyz_lines[2:2 + num_atoms]
-        except (IndexError, ValueError):
-            lines = xyz_lines
+    if xyz_path:
+        xyz_file = xyz_path.split()[0]
+        if not os.path.isabs(xyz_file) and input_dir:
+            xyz_file = os.path.join(input_dir, xyz_file)
+        if os.path.exists(os.path.abspath(xyz_file)):
+            with open(os.path.abspath(xyz_file), "r", encoding="utf-8") as handle:
+                xyz_lines = handle.read().splitlines()
+            try:
+                num_atoms = int(xyz_lines[0])
+                lines = xyz_lines[2:2 + num_atoms]
+            except (IndexError, ValueError):
+                lines = xyz_lines
 
     if not lines:
-        return None
+        return None, "geometry"
 
     per_atom_basis: list[str] = []
     if basis == "library":
@@ -7474,26 +7506,46 @@ def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
             per_atom_basis = names
 
     if len(per_atom_basis) != len(lines):
-        return None
+        return None, "geometry"
 
+    custom: dict[str, dict | None] = {}
     max_l = 0
     for line, basis_name in zip(lines, per_atom_basis):
         parts = line.split()
         if not parts:
             continue
         element = parts[0]
-        try:
-            data = bse.get_basis(basis_name, elements=[element])
-        except Exception:
-            # Custom (file:...) or otherwise unknown basis: not inspectable here.
-            return None
-        for item in data.get("elements", {}).values():
-            for shell in item.get("electron_shells", []):
-                max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
-    return max_l
+        if basis_name.lower().startswith("file:"):
+            if basis_name not in custom:
+                custom[basis_name] = _read_custom_basis(basis_name, input_dir)
+            data = custom[basis_name]
+            if data is None:
+                return None, "basis"
+            try:
+                z = int(float(element))
+            except ValueError:
+                try:
+                    z = int(bse.lut.element_Z_from_sym(element))
+                except Exception:
+                    return None, "basis"
+            entry = data["elements"].get(str(z))
+            if entry is None:
+                return None, "basis"
+            shells = entry.get("electron_shells", [])
+        else:
+            try:
+                data = bse.get_basis(basis_name, elements=[element])
+            except Exception:
+                return None, "basis"
+            shells = [shell for item in data.get("elements", {}).values()
+                      for shell in item.get("electron_shells", [])]
+        for shell in shells:
+            max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [0])))
+    return max_l, None
 
 
-def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
+def _check_hess(config: dict[str, Any], report: CheckReport,
+                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
     requested_type = _as_lower(_get(config, "hess", "type", "auto"))
@@ -7514,7 +7566,7 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
         )
         return
     if hess_type == "auto":
-        hess_type, _ = resolve_hessian_type(config)
+        hess_type, _ = resolve_hessian_type(config, input_dir)
 
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)
@@ -7527,7 +7579,16 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
                 expected="supported analytical Hessian capability",
                 action="Set [hess] type=numerical or use a supported analytic-Hessian method/state.",
             )
-        max_l = _basis_max_angular_momentum(config)
+        max_l, why = _basis_max_l_detail(config, input_dir)
+        if max_l is None and why == "basis":
+            report.add(
+                "ERROR",
+                "input.basis",
+                "The basis cannot be inspected, so the analytical Hessian's L<=3 limit cannot be checked.",
+                value=str(_get(config, "input", "basis", "")),
+                expected="a readable basis with no g or higher functions",
+                action="Fix the basis reference, or set [hess] type=numerical (or auto).",
+            )
         if max_l is not None and max_l >= 4:
             report.add(
                 "ERROR",

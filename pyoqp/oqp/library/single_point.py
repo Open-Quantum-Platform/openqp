@@ -1802,7 +1802,9 @@ class Hessian(Calculator):
         self.hess_type_reason = f'[hess] type={self.hess_type} requested explicitly.'
         if self.hess_type == 'auto':
             from oqp.utils.input_checker import resolve_hessian_type
-            self.hess_type, self.hess_type_reason = resolve_hessian_type(mol.config)
+            input_file = getattr(mol, 'input_file', None)
+            self.hess_type, self.hess_type_reason = resolve_hessian_type(
+                mol.config, os.path.dirname(os.path.abspath(input_file)) if input_file else None)
         self.state = mol.config['hess']['state']
         self.read = mol.config['hess']['read']
         self.restart = mol.config['hess']['restart']
