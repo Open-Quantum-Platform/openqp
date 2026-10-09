@@ -185,6 +185,10 @@ module mod_dft_gridint
     !< consumer update so consumers can associate points with their owning
     !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
     integer :: currAtom = 0
+    !< Index of the current grid slice (molGrid slice numbering); set by the
+    !< slice driver together with currAtom so consumers can address points
+    !< deterministically across repeated runs on the same grid.
+    integer :: currSlice = 0
     ! Atom owning the current atom-centred grid slice.  run_xc uses a
     ! thread-private engine, so consumers may safely use this as slice
     ! context (e.g. for fuzzy-cell weight derivatives).
@@ -3030,6 +3034,7 @@ contains
 !$      end if
 
         xce%currAtom = iAtom
+        xce%currSlice = iSlice
 
         if(kernel_on) then
           call response_comp_xc(xce,rcache,iSlice,xc_opts%functional,skip)
@@ -3208,6 +3213,7 @@ contains
         IF (skip) CYCLE
 
         xce%currAtom = iAtom
+        xce%currSlice = iSlice
 
         call xc_dat%update(xce, myThread)
 

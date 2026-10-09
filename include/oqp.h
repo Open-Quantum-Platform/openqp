@@ -750,6 +750,7 @@ int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void xi_fock_selftest(struct oqp_handle_t *inf);
+void oqp_xi_grid_ingredients(struct oqp_handle_t *inf, int64_t nalpha, const double *alphas, const int64_t *ps, int64_t scale, double cutoff);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
 void cholesky_eri_selftest(struct oqp_handle_t *inf);
 void hess_skel_selftest(struct oqp_handle_t *inf);
