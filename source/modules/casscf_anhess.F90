@@ -156,14 +156,15 @@ contains
     n4 = int(n, i8)**4
 
     ! Decide mode: use_mf overrides; otherwise dense stack allocated only when
-    ! it fits in budget AND benefits from merged DGEMM (nact^2*ndet^2 < ~2 MiB,
-    ! the sblk_max crossover in casscf_hess_kernel).
+    ! it fits in budget AND benefits from merged DGEMM.
     lmf = .false.
     if (present(use_mf)) lmf = use_mf
     if (.not. lmf) then
-      nstk = 8_i8 * na2 * nd * nd
-      ! Sblk_max in doubles = 262144, or ~2 MiB.  Beyond that the matrix-free
-      ! path is at least as fast and uses dramatically less memory.
+      nstk = 8_i8 * na2 * nd * nd          ! bytes: ndet^2 * nact^2 * 8
+      ! sblk_max = 262144 doubles (2 MiB)  —  the step-1 DGEMM crossover in
+      ! casscf_hess_kernel.  Up to 2× sblk_max (4 MiB, ~ndet×nact² = 4096×16)
+      ! the dense DGEMM path is competitive; beyond that the matrix-free path
+      ! is at least as fast and uses dramatically less peak memory.
       if (nstk > 2_i8 * 262144_i8 * 8_i8 .or. nstk <= 0_i8) lmf = .true.
     end if
     ctx%use_mf = lmf

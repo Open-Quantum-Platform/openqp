@@ -274,7 +274,7 @@ contains
     real(dp), intent(inout) :: amp(0:*)
 
     integer :: na, na2, na4, np, nd, nb, ncols, kbase, nchunk
-    integer :: chunk, kk, t, u, w
+    integer :: chunk, kk, t, u, w, ierr
     integer(i8) :: need
     real(dp) :: acc
     real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:)
@@ -291,9 +291,12 @@ contains
     nb = int(max(1_i8, min(int(np, i8), x_budget / max(1_i8, need))))
     nchunk = (np + nb - 1) / nb
 
-    allocate(sigma(0:nd-1, 0:nb-1))
-    allocate(xbuf(0:need*int(nb, i8) - 1_i8))
-    allocate(gtr(0:int(na2, i8)*int(nb, i8) - 1_i8))
+    allocate(sigma(0:nd-1, 0:nb-1), stat=ierr)
+    if (ierr /= 0) return
+    allocate(xbuf(0:need*int(nb, i8) - 1_i8), stat=ierr)
+    if (ierr /= 0) return
+    allocate(gtr(0:int(na2, i8)*int(nb, i8) - 1_i8), stat=ierr)
+    if (ierr /= 0) return
 
     do chunk = 0, nchunk - 1
       kbase = chunk * nb

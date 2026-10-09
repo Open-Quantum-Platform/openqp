@@ -17,7 +17,7 @@ module casscf_exc_stack_mf_mod
   integer, parameter :: dp = c_double
 
   public :: mf_sort_keys_perm, mf_bsearch
-  public :: casscf_exc_stack_apply_wmat, casscf_exc_stack_apply_step4
+  public :: casscf_exc_stack_apply_wmat
 
 contains
 
@@ -93,14 +93,14 @@ contains
     real(dp) :: ci
 
     na = int(nact)
+    n2 = int(na, i8) * int(na, i8)
     if (na <= 0 .or. ndet <= 0_i8) return
     if (2 * na > 62) return
 
     offs(1) = 0
     offs(2) = na
-    n2 = int(na, i8) * int(na, i8)
 
-    ! Zero output
+    ! Zero output (before any early return so wmat is always safe)
     wmat(0:n2*ndet - 1_i8) = 0.0_dp
 
     !$omp parallel do default(shared) schedule(static) if(ndet >= 64_i8) &
@@ -127,10 +127,9 @@ contains
             call mf_bsearch(ndet, skeys, det_tu, row)
             if (row < 0_i8) cycle
             row = sperm(row)
-            ! wmat_c(tu, ket) = sum_bra E_tu(bra, ket) * civec(bra)
-            ! E_tu(bra=row, ket=col) = ±1
             ! wmat(tu, ket=col) += E_tu(bra=row, ket=col) * civec(bra=row)
-            !$omp atomic update
+            ! Each (tu,col) slot is written by exactly one thread (the owner of
+            ! col), so no atomic needed.
             wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + col) = &
                 wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + col) &
                 + real(phase_u * phase_t, dp) * civec(row)
@@ -140,85 +139,5 @@ contains
     end do
     !$omp end parallel do
   end subroutine casscf_exc_stack_apply_wmat
-
-
-  !> On-the-fly sigma += 0.5 * stack^T * x (step 4 of casscf_hess_amp).
-  !>
-  !> For each non-zero in E_tu(b,a) = ±1, accumulates
-  !>   sigma(a,k) += 0.5 * phase * x(k,tu,b)
-  !>
-  !> x layout: C-order [ncols, nact, nact, ndet] with leading dimension na2*ndet.
-  !> sigma is Fortran [ndet, ncols].
-  !>
-  !> @param[in]  nact    active orbitals
-  !> @param[in]  ndet    determinants
-  !> @param[in]  ncols   number of active pair columns in this chunk
-  !> @param[in]  na2     nact² (precomputed)
-  !> @param[in]  dets    determinant keys in CI order
-  !> @param[in]  skeys   sorted determinant keys
-  !> @param[in]  sperm   permutation back to CI ordering
-  !> @param[in]  xbuf    intermediate, C-order [ncols,na,na,ndet]
-  !> @param[inout] sigma  accumulator, Fortran [ndet,ncols]
-  subroutine casscf_exc_stack_apply_step4(nact, ndet, ncols, na2, &
-                                          dets, skeys, sperm, xbuf, sigma) &
-      bind(C, name="casscf_exc_stack_apply_step4")
-    integer(c_int32_t), value :: nact, ncols
-    integer(i8), value :: ndet
-    integer(c_int32_t), value :: na2
-    integer(i8), intent(in) :: dets(0:ndet-1), skeys(0:ndet-1), sperm(0:ndet-1)
-    real(dp), intent(in) :: xbuf(0:*)
-    real(dp), intent(inout) :: sigma(0:ndet-1, 0:*)
-
-    integer :: na, off, t, u, kk, offs(2)
-    integer :: ioff
-    integer(i8) :: col, det, det_u, det_tu, ubit, tbit, row
-    integer(i8) :: xbase
-    real(dp) :: half, phase
-
-    na = int(nact)
-    if (na <= 0 .or. ndet <= 0_i8 .or. ncols <= 0) return
-    if (2 * na > 62) return
-
-    offs(1) = 0
-    offs(2) = na
-    half = 0.5_dp
-
-    !$omp parallel do default(shared) schedule(static) if(ndet >= 64_i8) &
-    !$omp   private(col, det, ioff, off, u, ubit, det_u, t, tbit, det_tu, &
-    !$omp           row, phase, kk, xbase)
-    do col = 0_i8, ndet - 1_i8
-      det = dets(col)
-      ! xbase = tu*ndet + col  is the starting index in xbuf for this column
-      ! across all (t,u) pairs.  Will be incremented per (t,u).
-      do ioff = 1, 2
-        off = offs(ioff)
-        do u = 0, na - 1
-          ubit = ishft(1_i8, u + off)
-          if (iand(det, ubit) == 0_i8) cycle
-          phase = 1.0_dp
-          if (mod(popcnt(iand(det, ubit - 1_i8)), 2) /= 0) phase = -half
-          det_u = ieor(det, ubit)
-          do t = 0, na - 1
-            tbit = ishft(1_i8, t + off)
-            if (iand(det_u, tbit) /= 0_i8) cycle
-            if (mod(popcnt(iand(det_u, tbit - 1_i8)), 2) /= 0) phase = -phase
-            det_tu = ior(det_u, tbit)
-            call mf_bsearch(ndet, skeys, det_tu, row)
-            if (row < 0_i8) cycle
-            row = sperm(row)
-            ! xbuf(k, tu, b) -> offset = k*(na2*ndet) + tu*ndet + b
-            ! tu = t*na + u
-            xbase = int(t*na + u, i8) * ndet + col
-            do kk = 0, ncols - 1
-              !$omp atomic update
-              sigma(row, kk) = sigma(row, kk) &
-                  + half * phase * xbuf(int(kk, i8)*int(na2, i8)*ndet + xbase)
-            end do
-          end do
-        end do
-      end do
-    end do
-    !$omp end parallel do
-  end subroutine casscf_exc_stack_apply_step4
 
 end module casscf_exc_stack_mf_mod

@@ -473,8 +473,9 @@ int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
     double *stack);
 /* Matrix-free excitation-matrix products (casscf_exc_stack_mf.F90):
    W_tua = (E_tu|c>)_a without materialising the dense stack.  Returns 0 on
-   success and -1 on internal allocation failure (the caller falls back). */
-int64_t casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
+   success.  wmat is zeroed on entry; on early return (invalid args) it is
+   left zeroed, safe for the caller. */
+void casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
     const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
     const double *civec, double *wmat);
 /* Matrix-free CI-relaxation amplitudes (casscf_hess_kernel.F90).  Identical
