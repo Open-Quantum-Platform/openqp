@@ -238,11 +238,14 @@ def _caspt2_options(config: dict) -> CASPT2Options:
             f" variant, but [pt2] contraction='{contraction_raw}' was requested."
             "  Drop [pt2] contraction, or select the method that matches it "
             "(nevpt2 = uncontracted, sc-nevpt2 = strongly contracted).")
-    if contraction == "strong" and h0 != "dyall":
+    if contraction == "strong" and h0 not in {"dyall", "fock"}:
         raise ValueError(
-            "pt2.contraction='strong' (SC-NEVPT2) requires h0='dyall'; "
-            "the strong contraction is defined for Dyall's H0 only."
-        )
+            "pt2.contraction='strong' requires h0='dyall' (SC-NEVPT2) or "
+            "h0='fock' (IC-CASPT2).")
+    if contraction == "strong" and h0 == "fock" and family != "caspt2":
+        raise ValueError("pt2.contraction='strong' with h0='fock' is IC-CASPT2 "
+                         "(requires method=caspt2 or ms-caspt2)")
+
     if family == "qdpt" and contraction != "none":
         raise ValueError("MRMP2/MCQDPT2/XMCQDPT2 are uncontracted; "
                          "drop [pt2] contraction.")
@@ -1483,7 +1486,19 @@ def native_caspt2_energy(mol, ref_energy=None):
     # singles/doubles interacting space streamed from the reference support.
     # auto = the NumPy streaming path (measured fastest at scale); the liboqp
     # hash kernel is the explicit engine=fortran opt-in (see qdpt2_direct.py).
-    use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    #
+    # Single-state CASPT2 with the default Fock H0 also uses a diagonal H0
+    # (diag(eps)), so the direct engine applies to it as well.  Multi-state
+    # CASPT2 / MS-CASPT2 / XMS-CASPT2 keep the dense path because the H0
+    # Fock matrix or the Dyall H0 have off-diagonal external blocks.
+    use_direct = (
+        options.engine in {"auto", "direct", "fortran"}
+        and (options.family == "qdpt"
+             or (options.family == "caspt2"
+                 and options.variant == "caspt2"
+                 and options.h0 == "fock"
+                 and not (float(getattr(options, "ipea_shift", 0.0) or 0.0))))
+    )
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
@@ -1587,10 +1602,14 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
     active_occ = np.diag(D_sa)[ncore:ncore + nact]
 
     if options.contraction == "strong":
-        # RDM-based strongly contracted NEVPT2 (SC-NEVPT2); reproduces PySCF/ORCA
-        # to <~1 uEh.  No external determinant space: the contracted perturbers
-        # are formed directly from the active 1-/2-/3-/4-RDM and integral blocks.
-        from oqp.library.nevpt2_sc import sc_nevpt2_energy
+        if options.h0 == "dyall":
+            from oqp.library.nevpt2_sc import sc_nevpt2_energy
+            _e2func = sc_nevpt2_energy
+        elif options.h0 == "fock":
+            from oqp.library.caspt2_ic import ic_caspt2_energy
+            _e2func = ic_caspt2_energy
+        else:
+            raise ValueError("pt2.contraction=strong: internal h0 error")
         # sc_nevpt2_energy takes no regularisation: the contracted denominators
         # are built inside it.  Accepting a shift and returning the unshifted
         # energy -- while the PT2 summary prints the shift back to the user --
@@ -1604,13 +1623,14 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
             ("ipea_shift", options.ipea_shift),
             ("edshft", options.edshft)) if value]
         if _unapplied:
+        if _unapplied:
             raise ValueError(
-                "[pt2] %s cannot be applied to strongly contracted NEVPT2 "
-                "(h0=dyall, contraction=strong): the contracted denominators are "
-                "formed internally and no shift reaches them. Remove the shift, "
-                "or use contraction=none for a shifted NEVPT2."
+                "[pt2] %s cannot be applied to internally contracted "
+                "(h0=dyall or fock, contraction=strong): the contracted "
+                "denominators are formed internally and no shift reaches "
+                "them. Remove the shift, or use contraction=none for the "
+                "uncontracted variant."
                 % ", ".join(_unapplied))
-        e2, comp = sc_nevpt2_energy(h1e, eri, eps, ncore, nact, active_nelec,
                                     coeffs[:, root],
                                     max_memory=_pt2_memory(options, settings)[0])
         e_caspt2 = e_casci + e2
@@ -1706,7 +1726,13 @@ def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom, s2, mult, wall,
                sc_components=None, root=None):
     ref_label = "CASSCF" if options.reference == "casscf" else "CASCI"
-    if options.contraction == "strong":
+    if options.contraction == "strong" and options.h0 == "fock":
+        method_name, title = "IC-CASPT2", "IC-CASPT2 (internally contracted, Fock zeroth order)"
+    elif options.contraction == "strong" and options.h0 == "dyall":
+        method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
+    elif options.contraction == "strong":
+        method_name, title = "SC-NEVPT2 (contracted, unknown H0)", "SC-NEVPT2"
+    if options.contraction == "strong" and options.h0 == "dyall":
         method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
     elif options.h0 == "dyall":
         method_name, title = "NEVPT2", "NEVPT2 (uncontracted, Dyall zeroth order)"
