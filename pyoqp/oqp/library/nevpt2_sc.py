@@ -242,6 +242,46 @@ def _koopmans_lib():
     return _lib_backend()
 
 
+def _lib_make_f3(ci, norb, det_list, h2e):
+    """dm1, dm2, dm3 and f3ca/f3ac through the Fortran engine.
+    dm4 is built as internal Fortran scratch and freed before return.
+    Returns None when the symbol is unavailable."""
+    try:
+        from oqp.library.fci import _lib_backend
+    except Exception:
+        return None
+    backend = _lib_backend()
+    if backend is None or norb > 31:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_make_f3"):
+        return None
+    dets = np.ascontiguousarray(np.asarray(det_list, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(ci, dtype=np.float64).reshape(-1))
+    g = np.ascontiguousarray(np.asarray(h2e, dtype=np.float64).reshape(-1))
+    dm1 = np.zeros(norb * norb, dtype=np.float64)
+    dm2 = np.zeros(norb**4, dtype=np.float64)
+    dm3 = np.zeros(norb**6, dtype=np.float64)
+    f3ca = np.zeros(norb**6, dtype=np.float64)
+    f3ac = np.zeros(norb**6, dtype=np.float64)
+    lib.nevpt2_make_f3(
+        int(norb), int(dets.size),
+        ffi.cast("int64_t *", dets.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        ffi.cast("double *", g.ctypes.data),
+        ffi.cast("double *", dm1.ctypes.data),
+        ffi.cast("double *", dm2.ctypes.data),
+        ffi.cast("double *", dm3.ctypes.data),
+        ffi.cast("double *", f3ca.ctypes.data),
+        ffi.cast("double *", f3ac.ctypes.data))
+    dm1 = dm1.reshape(norb, norb)
+    dm2 = dm2.reshape(norb, norb, norb, norb)
+    dm3 = dm3.reshape(norb, norb, norb, norb, norb, norb)
+    f3ca = f3ca.reshape(norb, norb, norb, norb, norb, norb)
+    f3ac = f3ac.reshape(norb, norb, norb, norb, norb, norb)
+    return dm1, dm2, dm3, (f3ca, f3ac)
+
+
 def _f3ca_f3ac(h2e, dm4):
     """The two eri-folded 4-pdm intermediates that PySCF computes via the
     compiled ``NEVPTkern_cedf_aedf`` / ``NEVPTkern_aedf_ecdf`` kernels,
@@ -804,17 +844,24 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
                _dm3_bytes / 1024 ** 3, _live_bytes / 1024 ** 3,
                _cap / 1024 ** 3,
                "" if max_memory is None else " ([cas] max_memory)"))
-    dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
     B = _blocks(h1e_mo, eri_mo, ncore, nact, eps)
     h1e, h2e = B['h1e'], B['h2e']
     ec, ev = B['e_core'], B['e_virt']
 
+    # Build dm1-dm3 and f3ca/f3ac.  When the Fortran engine is available
+    # (nevpt2_make_f3), dm4 is allocated only as internal scratch and never
+    # materialised as a Python tensor.  Otherwise fall back to the pure-Python
+    # path which builds dm4 explicitly.
+    det_list = _determinants(nact, active_nelec)
+    f3_result = _lib_make_f3(ci_vector, nact, det_list, h2e)
+    if f3_result is not None:
+        dm1, dm2, dm3, f3 = f3_result
+    else:
+        dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
+        f3 = _f3ca_f3ac(h2e, dm4)
+        del dm4  # release n^8 tensor as soon as f3 is ready
+
     comp = {}
-    # Sr and Si consume the SAME pair of eri-folded 4-pdm intermediates -- they
-    # depend only on (h2e, dm4).  Building them once instead of once per subspace
-    # removes the single most expensive contraction in the module (measured 1.9 s
-    # of a 11.0 s CAS(8,8) block before the einsum-order fix).
-    f3 = _f3ca_f3ac(h2e, dm4)
     v, h1v = B['Sr']
     comp['Sr'] = _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ev, f3=f3)[1]
     v, h1v = B['Si']

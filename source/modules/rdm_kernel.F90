@@ -36,7 +36,7 @@ module rdm_kernel_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms
+  public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms, nevpt2_make_f3
   public :: rdm1_spatial, rdm2_spatial
 
 contains
@@ -630,5 +630,50 @@ contains
     end do
     deallocate(kets, e2, bras, blk, e1, cnt, rows, cols, sgns)
   end function nevpt2_make_rdms
+
+!> Build dm1-dm3 and the 4-RDM, then contract the 4-RDM to f3ca/f3ac
+!> in a single routine.  The full n^8 dm4 tensor is allocated as internal
+!> scratch and freed before return — the caller never materialises it.
+!>
+!> Returns dm1-dm3 and f3ca/f3ac; dm4 is ephemeral.
+  subroutine nevpt2_make_f3(norb, ndet, dets, civec, h2e, &
+      dm1, dm2, dm3, f3ca, f3ac) bind(C, name="nevpt2_make_f3")
+    integer(c_int32_t), value :: norb
+    integer(i8), value :: ndet
+    integer(i8), intent(in) :: dets(0:ndet-1)
+    real(dp), intent(in) :: civec(0:ndet-1), h2e(0:*)
+    real(dp), intent(inout) :: dm1(0:*), dm2(0:*), dm3(0:*)
+    real(dp), intent(inout) :: f3ca(0:*), f3ac(0:*)
+    integer(i8) :: norb1, norb8, info
+    real(dp), allocatable :: dm4(:)
+    integer :: ierr
+    norb1 = int(norb, i8)
+    norb8 = norb1**8
+    if (norb8 == 0_i8) return
+    allocate(dm4(0:norb8-1), stat=ierr)
+    if (ierr /= 0) return
+    dm4 = 0.0_dp
+    info = nevpt2_make_rdms(norb, ndet, dets, civec, int(4, c_int32_t), &
+                             dm1, dm2, dm3, dm4)
+    if (info /= 0_i8) then
+      deallocate(dm4)
+      return
+    end if
+    ! Contract dm4 to f3ca/f3ac via the existing bind(C) entry point.
+    block
+      interface
+        subroutine nd2f3(nact, h2e_ext, dm4_ext, f3ca_ext, f3ac_ext) &
+            bind(C, name="nevpt2_f3ca_f3ac")
+          use iso_c_binding, only: c_int32_t, c_double
+          implicit none
+          integer(c_int32_t), value :: nact
+          real(c_double), intent(in) :: h2e_ext(0:*), dm4_ext(0:*)
+          real(c_double), intent(inout) :: f3ca_ext(0:*), f3ac_ext(0:*)
+        end subroutine
+      end interface
+      call nd2f3(norb, h2e, dm4, f3ca, f3ac)
+    end block
+    deallocate(dm4)
+  end subroutine nevpt2_make_f3
 
 end module rdm_kernel_mod
