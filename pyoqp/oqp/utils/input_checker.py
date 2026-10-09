@@ -7452,7 +7452,8 @@ def _read_custom_basis(name: str, input_dir: str | None) -> dict | None:
         else:
             import basis_set_exchange as bse
             data = bse.read_formatted_basis_file(path)
-    except Exception:
+    except (OSError, ValueError, KeyError, RuntimeError):
+        # unreadable / unparsable custom basis: reported as "cannot inspect"
         return None
     return data if isinstance(data, dict) and "elements" in data else None
 
@@ -7463,7 +7464,7 @@ def _basis_max_l_detail(config: dict[str, Any],
     cannot be inspected and 'geometry' when the atoms cannot be listed."""
     try:
         import basis_set_exchange as bse
-    except Exception:
+    except ImportError:
         return None, "basis"
 
     basis = _get(config, "input", "basis", "")
@@ -7526,7 +7527,7 @@ def _basis_max_l_detail(config: dict[str, Any],
             except ValueError:
                 try:
                     z = int(bse.lut.element_Z_from_sym(element))
-                except Exception:
+                except KeyError:   # unknown element symbol
                     return None, "basis"
             entry = data["elements"].get(str(z))
             if entry is None:
@@ -7535,7 +7536,7 @@ def _basis_max_l_detail(config: dict[str, Any],
         else:
             try:
                 data = bse.get_basis(basis_name, elements=[element])
-            except Exception:
+            except KeyError:   # basis or element not in the BSE library
                 return None, "basis"
             shells = [shell for item in data.get("elements", {}).values()
                       for shell in item.get("electron_shells", [])]

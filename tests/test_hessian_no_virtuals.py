@@ -72,9 +72,6 @@ class AutoHessianWithoutVirtuals(unittest.TestCase):
             self.assertEqual(kind, "analytical")
 
     def test_meta_gga_uses_the_numerical_hessian(self):
-        import oqp
-        if not hasattr(oqp, "oqp_functional_needs_tau"):
-            self.skipTest("runtime predates oqp_functional_needs_tau")
         with tempfile.TemporaryDirectory() as tmp:
             kind, reason = self._hessian_type(tmp, "h2o_tpss", H2O, "functional=tpss")
             self.assertEqual(kind, "numerical")

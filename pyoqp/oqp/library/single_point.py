@@ -2157,13 +2157,7 @@ class Hessian(Calculator):
         functional = str(self.mol.config.get('input', {}).get('functional', '') or '').strip()
         if not functional:
             return False
-        probe = getattr(oqp, 'oqp_functional_needs_tau', None)
-        if probe is None:
-            return False
-        try:
-            return bool(probe(self.mol))
-        except Exception:
-            return False
+        return bool(oqp.lib.oqp_functional_needs_tau(self.mol.data._data))
 
     def _no_virtual_orbitals(self):
         """True when the occupied space fills the basis (nocc >= nbf)."""
@@ -2195,11 +2189,8 @@ class Hessian(Calculator):
             raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
         # Matrix-only callers (native TS/IRC, analysis=False) skip the IR/Raman
         # property derivatives in the native kernel.
-        try:
-            self.mol.data["OQP::hess_properties"] = np.array(
-                [1 if getattr(self, '_analysis', True) else 0], dtype=np.int64)
-        except Exception:
-            pass
+        self.mol.data["OQP::hess_properties"] = np.array(
+            [1 if getattr(self, '_analysis', True) else 0], dtype=np.int64)
         native_hess_func(self.mol)
         self._collect_native_fort6_logs(self.mol)
 
