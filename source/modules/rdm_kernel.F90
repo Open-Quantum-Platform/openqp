@@ -461,8 +461,8 @@ contains
   !> Replaces rdm.py `make_rdm2_spatial`.  Uses the string-driven `rdm12_strings`
   !> engine from fci_sigma_strings.F90 first (OpenMP, block-wise, no `cap`
   !> limit).  Falls back to `rdm2_gram` when the determinant list is not a
-  !> canonical CAS product (non-zero status from `rdm12_strings`) or when `cap`
-  !> is exceeded.
+  !> full CAS product (non-zero status from `rdm12_strings`).  Non-product
+  !> lists (spin-filtered, truncated) get no speedup from the string engine.
   !>
   !> `rdm12_strings` fills both d1 and d2; d2 is written in the same
   !> C-order [norb,norb,norb,norb] layout `rdm2_spatial`'s caller expects.
