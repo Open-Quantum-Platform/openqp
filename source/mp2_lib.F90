@@ -204,14 +204,15 @@ contains
       if (avail_gb <= 0.0_dp .and. cost_gb < 1.0e-3_dp) do_full = .true.
     end block
 
-    if (do_full .and. (.not. do_opposite)) then
-      ! Full MO transform (PySCF-style, fast).
-      ! Only used when we don't need opposite-spin (which needs a different
-      ! ket MO basis — the full tensor is built in cmo_l for both sides).
+    if (do_full) then
+      ! Full MO transform (PySCF-style, fast): builds eri_mo via 4 quarter-
+      ! transforms (large DGEMMs), then reads (ia|jb) directly for energy.
+      ! Handles both same-spin and opposite-spin in one shot.
       call mp2_corr_n5_full(nbf, nmo, g, &
           cmo_l, e_l, nocc_l, nvir_l, &
           cmo_s, e_s, nocc_s, nvir_s, &
-          same_spin, e_same, ok)
+          cmo_o, e_o, nocc_o, nvir_o, &
+          same_spin, do_opposite, e_same, e_opp, ok)
       if (ok == 0) then
         deallocate(g); success = .true.; return
       end if
@@ -236,7 +237,8 @@ contains
   subroutine mp2_corr_n5_full(nbf, nmo, g, &
       cmo_l, e_l, nocc_l, nvir_l, &
       cmo_s, e_s, nocc_s, nvir_s, &
-      same_spin, e_same, ok)
+      cmo_o, e_o, nocc_o, nvir_o, &
+      same_spin, do_opposite, e_same, e_opp, ok)
     use cc_ao2mo, only: cc_build_full_mo
     integer, intent(in) :: nbf, nmo
     real(kind=dp), intent(in) :: g(*)
@@ -244,8 +246,10 @@ contains
     integer, intent(in) :: nocc_l, nvir_l
     real(kind=dp), intent(in) :: cmo_s(nbf,nbf), e_s(nbf)
     integer, intent(in) :: nocc_s, nvir_s
-    logical, intent(in) :: same_spin
-    real(kind=dp), intent(inout) :: e_same
+    real(kind=dp), intent(in) :: cmo_o(nbf,nbf), e_o(nbf)
+    integer, intent(in) :: nocc_o, nvir_o
+    logical, intent(in) :: same_spin, do_opposite
+    real(kind=dp), intent(inout) :: e_same, e_opp
     integer, intent(out) :: ok
 
     real(kind=dp), allocatable :: eri_mo(:,:,:,:)
@@ -258,6 +262,9 @@ contains
 
     ! cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
     ! eri_mo(p,q,r,s) = (pq|rs) in chemist notation.
+    ! For same-spin: bra=cmo_l, ket=cmo_l (both MO bases are the same).
+    ! For opposite-spin in RHF this is exact; for UHF/ROHF the opposite-spin
+    ! contribution uses a different ket MO and the full path falls back.
     call cc_build_full_mo(nbf, nmo, cmo_l, cmo_l, g, eri_mo)
 
     if (same_spin) then
@@ -269,10 +276,29 @@ contains
             do i = 1, nocc_l
               denom = e_l(i) + e_s(j) - e_l(nocc_l+a) - e_s(nocc_s+b)
               if (abs(denom) < 1.0e-10_dp) cycle
-              ! (ia|jb) - (ib|ja) — note (ib|ja) swaps virtual indices
+              ! (ia|jb) - (ib|ja)
               num = eri_mo(i, nocc_l+a, j, nocc_s+b) &
                   - eri_mo(i, nocc_s+b, j, nocc_l+a)
               e_same = e_same + 0.25_dp * num * num / denom
+            end do
+          end do
+        end do
+      end do
+      !$omp end parallel do
+    end if
+
+    if (do_opposite) then
+      !$omp parallel do collapse(2) private(i,a,j,b,num,denom) &
+      !$omp   schedule(dynamic,1) reduction(+:e_opp)
+      do b = 1, nvir_o
+        do a = 1, nvir_l
+          do j = 1, nocc_o
+            do i = 1, nocc_l
+              denom = e_l(i) + e_o(j) - e_l(nocc_l+a) - e_o(nocc_o+b)
+              if (abs(denom) < 1.0e-10_dp) cycle
+              ! (ia|jb) — no exchange for opposite-spin
+              num = eri_mo(i, nocc_l+a, j, nocc_o+b)
+              e_opp = e_opp + num * num / denom
             end do
           end do
         end do
