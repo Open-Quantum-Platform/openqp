@@ -222,20 +222,20 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         mixed = kernel.split("doc=9,10", 1)[1].split("enddo", 2)
         mixed = mixed[0] + "enddo" + mixed[1]
         expected_updates = (
-            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,k,j)",
-            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,j,k)",
-            "f3(v,c,k,j)=f3(v,c,k,j)-xval*d3(v,c,i,l)",
-            "f3(v,c,j,k)=f3(v,c,j,k)-xval*d3(v,c,l,i)",
-            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,l,j)",
-            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,j,l)",
-            "f3(v,c,l,j)=f3(v,c,l,j)-xval*d3(v,c,i,k)",
-            "f3(v,c,j,l)=f3(v,c,j,l)-xval*d3(v,c,k,i)",
+            "!$ompatomicupdatef3_ex(v,c-8,i,l)=f3_ex(v,c-8,i,l)-xval*d3(v,c,k,j)",
+            "!$ompatomicupdatef3_ex(v,c-8,l,i)=f3_ex(v,c-8,l,i)-xval*d3(v,c,j,k)",
+            "!$ompatomicupdatef3_ex(v,c-8,k,j)=f3_ex(v,c-8,k,j)-xval*d3(v,c,i,l)",
+            "!$ompatomicupdatef3_ex(v,c-8,j,k)=f3_ex(v,c-8,j,k)-xval*d3(v,c,l,i)",
+            "!$ompatomicupdatef3_ex(v,c-8,i,k)=f3_ex(v,c-8,i,k)-xval*d3(v,c,l,j)",
+            "!$ompatomicupdatef3_ex(v,c-8,k,i)=f3_ex(v,c-8,k,i)-xval*d3(v,c,j,l)",
+            "!$ompatomicupdatef3_ex(v,c-8,l,j)=f3_ex(v,c-8,l,j)-xval*d3(v,c,i,k)",
+            "!$ompatomicupdatef3_ex(v,c-8,j,l)=f3_ex(v,c-8,j,l)-xval*d3(v,c,k,i)",
         )
         bad_head_updates = (
-            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,j,l)",
-            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,l,j)",
-            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,j,k)",
-            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,k,j)",
+            "f3_ex(v,c-8,i,k)=f3_ex(v,c-8,i,k)-xval*d3(v,c,l,j)",
+            "f3_ex(v,c-8,k,i)=f3_ex(v,c-8,k,i)-xval*d3(v,c,j,l)",
+            "f3_ex(v,c-8,i,l)=f3_ex(v,c-8,i,l)-xval*d3(v,c,k,j)",
+            "f3_ex(v,c-8,l,i)=f3_ex(v,c-8,l,i)-xval*d3(v,c,j,k)",
         )
 
         for update in expected_updates:
