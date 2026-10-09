@@ -2630,7 +2630,7 @@ contains
     real(dp), intent(in) :: dsa(:,:,:,:), dha(:,:,:,:), uvec(:,:), hfscale
     real(dp), intent(out) :: dpol(:,:,:)
 
-    logical :: field_ok
+    logical :: field_ok, field_conv(3)
     type(basis_set), pointer :: basis
     real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
     real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:), xb(:,:)
@@ -2674,7 +2674,8 @@ contains
       call rohf_pack_trial(bF(:,a), xa, xb, nbf, nocca, noccb)
     end do
     deallocate(mints)
-    call cphf_solve_rohf(infos, 3, bF, uF, converged=field_ok)
+    call cphf_solve_rohf(infos, 3, bF, uF, converged=field_conv)
+    field_ok = all(field_conv)
     if (.not. field_ok) then
       ! Never publish tensors from unconverged field responses: NaN makes the
       ! Python driver reject the analytic tensor and finite-difference the
