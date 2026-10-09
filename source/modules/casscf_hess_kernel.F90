@@ -54,6 +54,7 @@
 !> what lets each contraction above be a GEMM with no repacking.
 module casscf_hess_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+  use casscf_exc_stack_mf_mod, only: mf_bsearch
   implicit none
   private
 
@@ -515,26 +516,5 @@ contains
     deallocate(factors)
   end function casscf_hess_relax
 
-
-  !> Binary search used by the matrix-free routines.
-  pure subroutine mf_bsearch(n, keys, key, pos)
-    integer(i8), intent(in) :: n, keys(0:), key
-    integer(i8), intent(out) :: pos
-    integer(i8) :: lo, hi, mid
-    lo = 0_i8
-    hi = n - 1_i8
-    pos = -1_i8
-    do while (lo <= hi)
-      mid = (lo + hi) / 2_i8
-      if (keys(mid) == key) then
-        pos = mid
-        return
-      else if (keys(mid) < key) then
-        lo = mid + 1_i8
-      else
-        hi = mid - 1_i8
-      end if
-    end do
-  end subroutine mf_bsearch
 
 end module casscf_hess_kernel_mod
