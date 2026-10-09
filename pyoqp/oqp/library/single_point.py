@@ -1810,6 +1810,15 @@ class Hessian(Calculator):
                 # not store a Hessian then (e.g. He2/STO-3G).
                 self.hess_type = 'numerical'
                 self.hess_type_reason = 'auto: no virtual orbitals (empty response space).'
+            if self.hess_type == 'analytical' and self._functional_needs_tau():
+                self.hess_type = 'numerical'
+                self.hess_type_reason = ('auto: meta-GGA functional (LibXC tau-dependent '
+                                         'family); the analytic Hessian has no tau channel.')
+        elif self.hess_type == 'analytical' and self._functional_needs_tau():
+            raise ValueError(
+                '[hess] type=analytical is not available for meta-GGA functionals: the '
+                'analytic Hessian does not differentiate the kinetic-energy-density (tau) '
+                'channel. Use [hess] type=numerical (or auto).')
         self.state = mol.config['hess']['state']
         self.read = mol.config['hess']['read']
         self.restart = mol.config['hess']['restart']
@@ -2140,6 +2149,21 @@ class Hessian(Calculator):
         raise NotImplementedError(
             f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
         )
+
+    def _functional_needs_tau(self):
+        """True for a LibXC meta-GGA / hybrid meta-GGA functional (DFT runs only)."""
+        if str(self.mol.config.get('input', {}).get('method', 'hf')).strip().lower() != 'hf':
+            return False
+        functional = str(self.mol.config.get('input', {}).get('functional', '') or '').strip()
+        if not functional:
+            return False
+        probe = getattr(oqp, 'oqp_functional_needs_tau', None)
+        if probe is None:
+            return False
+        try:
+            return bool(probe(self.mol))
+        except Exception:
+            return False
 
     def _no_virtual_orbitals(self):
         """True when the occupied space fills the basis (nocc >= nbf)."""

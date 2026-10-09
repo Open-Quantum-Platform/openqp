@@ -28,6 +28,39 @@ contains
 
 !###############################################################################
 
+!> @brief 1 when the configured XC functional depends on the kinetic-energy
+!>        density (LibXC meta-GGA or hybrid meta-GGA family), else 0.
+!> @details The functional is built from its name on copies of the DFT
+!>          parameters, silently, so the caller's state is untouched.  The
+!>          analytic HF/DFT Hessians do not differentiate the tau channel.
+  integer(c_int) function oqp_functional_needs_tau(c_handle) result(needs) &
+      bind(C, name="oqp_functional_needs_tau")
+    use iso_c_binding, only: c_int
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information, dft_parameters, tddft_parameters
+    use strings, only: c_f_char
+    use functionals, only: functional_t
+    use libxc, only: libxc_input
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    type(functional_t) :: func
+    type(dft_parameters) :: dp
+    type(tddft_parameters) :: tp
+    character(len=:), allocatable :: name
+    needs = 0_c_int
+    inf => oqp_handle_get_info(c_handle)
+    name = trim(c_f_char(inf%dft%xc_functional_name))
+    if (len(name) == 0) return
+    dp = inf%dft
+    tp = inf%tddft
+    call libxc_input(functional_name=name, dft_params=dp, tddft_params=tp, &
+                     functional=func, announce=.false.)
+    if (func%needtau) needs = 1_c_int
+    call func%destroy()
+  end function oqp_functional_needs_tau
+
+!###############################################################################
+
   subroutine hf_hessian(infos)
     ! Native OpenQP HF/DFT Hessian CPHF response prepass.
     !
