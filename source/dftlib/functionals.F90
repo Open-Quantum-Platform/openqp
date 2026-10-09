@@ -42,6 +42,13 @@ module functionals
     logical :: needgrd  = .false. !< toggles calculation of density gradient
     logical :: needtau  = .false. !< toggles calculation of tau (\sum dot_product(\nabla \phi, \nabla \phi))
     logical :: needlapl = .false. !< toggles calculation of lapl (\nabla^2 \rho)
+    !> Apply the chain rule of libxc's Fermi-hole-curvature input clamp
+    !> (XC_FLAGS_ENFORCE_FHC: sigma_ss <- min(sigma_ss, 8 rho_s tau_s), and
+    !> sigma_ab <- clamp(+-s_ave)) to the returned first derivatives, so that
+    !> they are the exact derivatives of the energy libxc evaluates.  The clamp
+    !> is never active for a genuine tau (tau >= tau_W), but it is for the
+    !> xi^alpha ingredient in the tau slot; the engine sets this when xi is on.
+    logical :: fhc_chain_rule = .false.
   contains
     procedure :: add_functional, can_calculate, destroy
     procedure :: calc_evxc, calc_evfxc, calc_xc
@@ -290,6 +297,9 @@ contains
         case(XC_FAMILY_MGGA, XC_FAMILY_HYB_MGGA)
           call xc_f03_mgga_exc_vxc(this%functionals_list(i), libxc_int, rho, sigma, lapl, tau, &
             tmp_energy, tmp_dedrho, tmp_dedsigma, tmp_dedlapl, tmp_dedtau)
+          if (this%fhc_chain_rule .and. &
+              iand(int(xc_f03_func_info_get_flags(this%functionals_info(i))), XC_FLAGS_ENFORCE_FHC) /= 0) &
+            call fhc_clamp_chain_rule(npoints, rho, sigma, tau, tmp_dedrho, tmp_dedsigma, tmp_dedtau)
           energy   (1:1*npoints) = energy   (1:1*npoints) + tmp_energy   * coefficient
           dedrho   (1:2*npoints) = dedrho   (1:2*npoints) + tmp_dedrho   * coefficient
           dedsigma (1:3*npoints) = dedsigma (1:3*npoints) + tmp_dedsigma * coefficient
@@ -663,4 +673,50 @@ contains
     call show_message(error_line)
     call show_message("Abort was produced by LibXC interface...", WITH_ABORT)
   end subroutine write_error
+
+  !> @brief Chain rule of libxc's XC_FLAGS_ENFORCE_FHC input clamp (work_mgga_inc.c):
+  !>   sigma_ss' = min(sigma_ss, 8 rho_s tau_s);  s_ave = (sigma_aa'+sigma_bb')/2;
+  !>   sigma_ab' = clamp(sigma_ab, -s_ave, +s_ave).
+  !> libxc differentiates with respect to the clamped inputs; this routine converts
+  !> those derivatives into derivatives with respect to the inputs actually passed.
+  !> Layout per point: rho(2), sigma(3: aa, ab, bb), tau(2).
+  subroutine fhc_clamp_chain_rule(npoints, rho, sigma, tau, dedrho, dedsigma, dedtau)
+    integer, intent(in) :: npoints
+    real(kind=fp), dimension(*), intent(in) :: rho, sigma, tau
+    real(kind=fp), dimension(*), intent(inout) :: dedrho, dedsigma, dedtau
+    integer :: ip, ir, is
+    real(kind=fp) :: saa, sbb, sab, s_ave, vab, half
+    logical :: ca, cb, cab
+    do ip = 1, npoints
+      ir = 2*ip - 1
+      is = 3*ip - 2
+      saa = sigma(is); sab = sigma(is+1); sbb = sigma(is+2)
+      ca = saa > 8.0_fp*rho(ir)*tau(ir)
+      cb = sbb > 8.0_fp*rho(ir+1)*tau(ir+1)
+      if (ca) saa = 8.0_fp*rho(ir)*tau(ir)
+      if (cb) sbb = 8.0_fp*rho(ir+1)*tau(ir+1)
+      s_ave = 0.5_fp*(saa + sbb)
+      cab = abs(sab) > s_ave
+      ! sigma_ab clamp: d sigma_ab'/d s_ave = sign(sab), s_ave depends on the clamped sigma_ss'
+      if (cab) then
+        vab = dedsigma(is+1)
+        half = 0.5_fp*sign(1.0_fp, sab)*vab
+        dedsigma(is+1) = 0.0_fp
+        ! route through sigma_aa' and sigma_bb' (each enters s_ave with weight 1/2)
+        dedsigma(is)   = dedsigma(is)   + half
+        dedsigma(is+2) = dedsigma(is+2) + half
+      end if
+      if (ca) then
+        dedrho(ir) = dedrho(ir) + 8.0_fp*tau(ir)*dedsigma(is)
+        dedtau(ir) = dedtau(ir) + 8.0_fp*rho(ir)*dedsigma(is)
+        dedsigma(is) = 0.0_fp
+      end if
+      if (cb) then
+        dedrho(ir+1) = dedrho(ir+1) + 8.0_fp*tau(ir+1)*dedsigma(is+2)
+        dedtau(ir+1) = dedtau(ir+1) + 8.0_fp*rho(ir+1)*dedsigma(is+2)
+        dedsigma(is+2) = 0.0_fp
+      end if
+    end do
+  end subroutine fhc_clamp_chain_rule
+
 end module functionals
