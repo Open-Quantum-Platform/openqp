@@ -135,7 +135,7 @@ contains
                    this%d3_sp(this%nfocks, nmatrix, nbf, nbf))
           this%ds_sp = real(this%ds, sp)
           this%d3_sp = real(this%d3, sp)
-          allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+          allocate(this%f3s(this%nfocks, 4, nbf, nbf, nthreads), source=0.0_sp)
         end select
       end if
     end if
