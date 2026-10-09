@@ -17,6 +17,9 @@ to the guess Fock.  Checked here, with integral symmetry disabled:
     pairs (7 sigma + 5 pi pairs for 17 occupied orbitals);
   * alpha has the bond axis as an eigenvector with two equal perpendicular
     eigenvalues, and alpha(R x) = R alpha(x) R^T for a rigid rotation R.
+The alpha tolerances (5e-4 a.u., alpha ~ 27) sit at the CPHF solver level:
+HCl/def2-SVP and all-electron IF/3-21G show 2e-5 to 8e-5 asymmetry and
+rotation error; the broken-symmetry solution gave 0.16.
 
 Skipped unless the compiled OpenQP runtime is importable.
 """
@@ -54,6 +57,8 @@ COORDS = np.array([[0.0, 0.0, 0.0], [0.1, 0.2, 1.91]])  # Angstrom
 ZNUC = (53, 9)
 # 25 I valence (def2 ECP, 28 core e-) + 9 F electrons
 NOCC = 17
+# CPHF-solver level for alpha (a.u.)
+ALPHA_TOL = 5.0e-4
 
 
 def _runtime_available():
@@ -126,18 +131,18 @@ class EcpSapGuess(unittest.TestCase):
         axis = COORDS[1] - COORDS[0]
         axis /= np.linalg.norm(axis)
         alpha = self.ref["alpha"]
-        self.assertLess(np.max(np.abs(alpha - alpha.T)), 1.0e-8)
-        self.assertLess(np.linalg.norm(alpha @ axis - (axis @ alpha @ axis) * axis), 1.0e-5)
+        self.assertLess(np.max(np.abs(alpha - alpha.T)), ALPHA_TOL)
+        self.assertLess(np.linalg.norm(alpha @ axis - (axis @ alpha @ axis) * axis), ALPHA_TOL)
         w = np.linalg.eigvalsh(alpha)
         a_par = axis @ alpha @ axis
         perp = sorted(w, key=lambda v: abs(v - a_par))[1:]
-        self.assertLess(abs(perp[0] - perp[1]), 1.0e-5)
+        self.assertLess(abs(perp[0] - perp[1]), ALPHA_TOL)
 
     def test_alpha_rotationally_covariant(self):
         r = self.rot
         self.assertAlmostEqual(self.rotated["energy"], self.ref["energy"], delta=1.0e-8)
         err = np.max(np.abs(self.rotated["alpha"] - r @ self.ref["alpha"] @ r.T))
-        self.assertLess(err, 1.0e-5)
+        self.assertLess(err, ALPHA_TOL)
 
 
 if __name__ == "__main__":
