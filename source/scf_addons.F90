@@ -1830,7 +1830,8 @@ contains
     ! Calculate exchange-correlation based on SCF type
     if (sym_active) then
       if (scf_type == scf_rhf) then
-        call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+        infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
+    call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
                       nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
       else if (scf_type == scf_uhf) then
         call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
@@ -1901,6 +1902,9 @@ contains
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
     nang = maxval(basis%am)+1+1
+    ! xi^alpha in the tau slot: make the libxc derivatives consistent with its
+    ! Fermi-hole-curvature input clamp (see functionals::fhc_clamp_chain_rule)
+    infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
     allocate(da(nbf,nbf), source=0.0_dp)
     call unpack_matrix(dmat(:,1), da, nbf, "U")
     allocate(db(nbf,nbf), source=0.0_dp)
