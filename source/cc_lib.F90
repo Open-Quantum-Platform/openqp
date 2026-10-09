@@ -199,6 +199,7 @@ end subroutine cc_wall_time
 !> column (transb='n') or row (transb='t') of B, so there is no reduction.
 !> Otherwise this is a plain DGEMM.
 subroutine cc_gemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+  use oqp_linalg
 !$ use omp_lib, only: omp_get_max_threads
   character(len=1), intent(in) :: transa, transb
   integer, intent(in) :: m, n, k, lda, ldb, ldc

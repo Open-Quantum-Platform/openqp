@@ -1801,6 +1801,7 @@ contains
 !>   two Vxc and six f_xc builds per coordinate.
   subroutine hf_polder_rhf(infos, mo, eps, pfull, sflat, hflat, uvec, dPx, &
                            nocc, nvir, hfscale, dpol)
+    use oqp_linalg
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -2078,6 +2079,7 @@ contains
 !>   the moving grid, as in the closed-shell routine.
   subroutine hf_polder_uhf(infos, moa, mob, epsa, epsb, pa, pb, nocca, noccb, &
                            sflat, hflat, uvec, dpxa, dpxb, hfscale, dpol)
+    use oqp_linalg
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -2413,6 +2415,7 @@ contains
 !>   the relaxed path with the moving grid.
   subroutine hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
                             dsa, dha, uvec, hfscale, dpol)
+    use oqp_linalg
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
