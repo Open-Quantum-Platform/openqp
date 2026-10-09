@@ -2084,6 +2084,7 @@ class Hessian(Calculator):
             (True, False): 'native_openqp_analytic_dipole_finite_difference_polarizability',
             (False, False): 'native_openqp_finite_difference',
         }[(analytic_dip is not None, analytic_pol is not None and analytic_dip is not None)]
+        dump_log(self.mol, title=f'PyOQP: IR/Raman intensities from {backend}')
 
         nmode = modes.shape[0]
         ir = np.zeros(nmode, dtype=np.float64)
