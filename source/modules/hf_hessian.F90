@@ -9,7 +9,7 @@ module hf_hessian_mod
   real(kind=8), parameter :: G2E_OPERATOR_SCALE = 0.125d0
   ! Open shell: Tr[M (J^x[Ptot] - c_x K^x[P^s])] (fock_deriv_contract_os) in
   ! terms of the Coulomb-only and exchange-only channel operators.
-  real(kind=8), parameter :: OS_J_SCALE = 1.0d0, OS_K_SCALE = 1.0d0
+  real(kind=8), parameter :: OS_J_SCALE = 0.25d0, OS_K_SCALE = 0.5d0
 
 contains
 
@@ -125,6 +125,7 @@ contains
 
     allocate(pfull(nbf,nbf)); call unpack_matrix(dmat_a, pfull)
     allocate(dSa(nbf,nbf,3,natom), dTa(nbf,nbf,3,natom), dVa(nbf,nbf,3,natom))
+    call hess_tick('start')
     call der_overlap_matrix(basis, dSa)
     call der_kinetic_matrix(basis, dTa)
     call der_nucattr_matrix(basis, basis%atoms%xyz, &
@@ -175,6 +176,7 @@ contains
     ! every Cartesian component, so evaluate it once per occ-vir pair here
     ! instead of once per pair AND per coordinate (an ncart-fold redundant grd2
     ! sweep).  Same scheme as hf_hessian_uhf.
+    call hess_tick('1e derivative integrals')
     allocate(g2e(nocc*nvir,ncart), source=0.0_dp)
     if (.not. infos%dft%cam_flag .and. .not. infos%mpiinfo%usempi) then
       ! One blocked derivative-ERI traversal assembles C^T G^x[P] C for all
@@ -216,6 +218,7 @@ contains
       end do
     end if
 
+    call hess_tick('2e response skeleton g2e')
     icart = 0
     do kc = 1, natom
       do cc = 1, 3
@@ -311,7 +314,9 @@ contains
       end do
     end do
 
+    call hess_tick('CPHF right-hand sides')
     call cphf_solve(infos, ncart, bvec, uvec)
+    call hess_tick('CPHF solve')
 
     ! ===== CPHF orbital-relaxation response =====
     ! H^resp_xy = 4 Tr[F^x dm1^y] - 4 Tr[S^x (eps.dm1^y)] - 2 Tr[s1oo^x mo_e1^y]
@@ -424,6 +429,7 @@ contains
 
       ! 2e traces: A2(x,y)=Tr[dP^y G[P]^x]; tGP(x,y)=Tr[M^x G[P]^y]
       ! with M^x = sum_kl s1oo^x_kl C_k C_l^T
+      call hess_tick('dP/dR, response Fock, IR/Raman')
       allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
       if (allocated(gop)) then
         ! Both traces from the stored AO operator: two GEMMs, no ERI pass.
@@ -457,6 +463,7 @@ contains
         end do
       end if
 
+      call hess_tick('2e traces A2/tGP')
       ! assemble response  hresp(x,y) = 4Tr[F^x dm1^y]-4Tr[S^x eps.dm1^y]-2Tr[s1oo^x mo_e1^y]
       !   = (Tr[dP^y h^x] + A2) - 4 A3 - 2 (sum_kl s1oo^x_kl moe1a^y_kl) - 2 tGP
       allocate(hresp(ncart,ncart), source=0.0_dp)
@@ -567,6 +574,7 @@ contains
                  Mi, gxy, A2, tGP, hresp, s1, s2, bMO, dpp, gpp, gfl, cocc, tmpno)
     end block
 
+    call hess_tick('response assembly + XC')
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
 
     ! --- One-electron + Pulay second-derivative skeleton (fixed density) ------
@@ -607,6 +615,7 @@ contains
       call gcomp%clean()
     end block
 
+    call hess_tick('skeleton second derivatives')
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP HF/DFT analytic Hessian matrix')
     hess_store = hess_native
@@ -3151,5 +3160,26 @@ contains
     write(iw,'(A,A,A,ES12.4,A,ES12.4)') '  trace check ', tag, '  max|ref|=', maxval(abs(ref)), &
       '  max|ref-op|=', maxval(abs(ref-col))
   end subroutine check_trace_operator
+
+
+!###############################################################################
+
+!> @brief Opt-in wall-clock section timer (OQP_HESS_TIMERS=1): prints the time
+!>        since the previous call; label 'start' only resets the clock.
+  subroutine hess_tick(label)
+    use io_constants, only: iw
+    character(len=*), intent(in) :: label
+    integer(8), save :: last = -1_8
+    integer(8) :: now, rate
+    character(len=8) :: envs
+    integer :: st
+    call get_environment_variable('OQP_HESS_TIMERS', envs, status=st)
+    if (st /= 0) return
+    if (trim(adjustl(envs)) /= '1') return
+    call system_clock(now, rate)
+    if (label /= 'start' .and. last >= 0_8) &
+      write(iw,'(A,A40,F10.3,A)') '  hess timer: ', label, real(now-last,8)/real(rate,8), ' s'
+    last = now
+  end subroutine hess_tick
 
 end module hf_hessian_mod
