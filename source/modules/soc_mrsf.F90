@@ -36,6 +36,8 @@ module soc_mrsf_mod
   character(len=*), parameter :: OQP_soc_lmo_2e = "OQP::soc_lmo_2e"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: soc_mrsf_C
   public soc_mrsf
 
 contains

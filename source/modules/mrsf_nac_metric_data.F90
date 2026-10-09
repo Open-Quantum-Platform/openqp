@@ -11,6 +11,8 @@ module mrsf_nac_metric_data_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: mrsf_nac_metric_column_C, mrsf_nac_metric_data_C
   public :: mrsf_nac_metric_data
   public :: mrsf_nac_metric_column
 

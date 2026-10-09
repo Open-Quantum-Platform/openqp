@@ -25,6 +25,8 @@ module mp2_gradient_mod
 
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: mp2_gradient_C
 
   character(len=*), parameter :: module_name = 'mp2_gradient_mod'
   integer, parameter :: DEFAULT_MAX_NBF = 60

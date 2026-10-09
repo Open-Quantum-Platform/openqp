@@ -5,6 +5,8 @@ module electric_moments_mod
   character(len=*), parameter :: module_name = "electric_moments_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: electric_moments_C, electric_moments_excited_C
   public electric_moments
   public electric_moments_excited
   public electric_dipole_au_C

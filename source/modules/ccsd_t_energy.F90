@@ -16,6 +16,8 @@ module ccsd_t_energy_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: ccsd_t_energy_C
   public :: ccsd_t_energy
 
   character(len=*), parameter :: module_name = "ccsd_t_energy_mod"
