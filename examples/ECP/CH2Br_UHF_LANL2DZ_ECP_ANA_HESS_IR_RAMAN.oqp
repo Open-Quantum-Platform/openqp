@@ -1,0 +1,3 @@
+uhf/lanl2dz mult=2 ispher=true hess(S0,type=analytical,clean=true) symmetry(enabled=false)
+scf(conv=1e-10,maxit=200)
+geom="../geometries/CH2Br-af4ffc4e7e96.xyz"

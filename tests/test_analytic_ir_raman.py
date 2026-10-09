@@ -7,13 +7,15 @@ runs, so they are checked here against exactly that finite-difference path
 (Hessian._native_property_tensors_at, central differences, h = 1e-3 bohr):
 
   * RHF in a spherical basis (cc-pVDZ, ispher on),
-  * RHF with an ECP (HBr / LANL2DZ, 28 core electrons on Br).
+  * RHF with an ECP (HBr / LANL2DZ, 28 core electrons on Br),
+  * UHF and ROHF with an ECP: the CH2Br radical (non-degenerate doublet) with
+    LANL2DZ, so the open-shell hf_polder_uhf / hf_polder_rohf paths are
+    checked with the core-removing ECP derivative integrals in their
+    right-hand sides.
 
-The open-shell code paths are checked without finite differences, whose
-reference is the noisier one for open shells: closed-shell water run through
-the UHF and ROHF kernels must reproduce the RHF tensors, and the H2O+ UHF and
-ROHF tensors must rotate with the molecule, sum_A (n x R_A).dalpha/dR_A =
-[Omega_n, alpha].
+In addition, closed-shell water run through the UHF and ROHF kernels must
+reproduce the RHF tensors, and the H2O+ UHF and ROHF tensors must rotate with
+the molecule, sum_A (n x R_A).dalpha/dR_A = [Omega_n, alpha].
 
 Everything runs in one process, one molecule after another, so state left
 behind by a previous molecule (basis size, atom count, spin) would show up as
@@ -40,11 +42,17 @@ WATER = """   8   0.000000000   0.000000000   0.117300000
    1   0.000000000  -0.757200000  -0.469200000"""
 HBR = """   35  0.000000000   0.000000000   0.000000000
     1  0.100000000   0.050000000   1.414000000"""
+CH2BR = """    6  0.000  0.000  0.000
+   35  0.050  0.030  1.880
+    1  0.930  0.000 -0.520
+    1 -0.930  0.060 -0.540"""
 
 FD_CASES = [
     # name, geometry, charge, basis, scf type, multiplicity, extra input lines
     ("rhf_ccpvdz_spherical", WATER, 0, "cc-pvdz", "rhf", 1, "ispher=true"),
     ("rhf_hbr_lanl2dz_ecp", HBR, 0, "lanl2dz", "rhf", 1, ""),
+    ("uhf_ch2br_lanl2dz_ecp", CH2BR, 0, "lanl2dz", "uhf", 2, "ispher=true"),
+    ("rohf_ch2br_lanl2dz_ecp", CH2BR, 0, "lanl2dz", "rohf", 2, "ispher=true"),
 ]
 
 INPUT_TMPL = """[input]
@@ -61,6 +69,7 @@ type=huckel
 type={scftype}
 multiplicity={mult}
 conv=1.0e-10
+maxit=200
 [symmetry]
 enabled=false
 [hess]
