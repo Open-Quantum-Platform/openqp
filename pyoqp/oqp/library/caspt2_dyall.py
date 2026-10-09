@@ -1567,6 +1567,11 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
         elif options.h0 == "fock":
             from oqp.library.caspt2_ic import ic_caspt2_energy
             _e2func = ic_caspt2_energy
+            import warnings
+            warnings.warn(
+                "IC-CASPT2 (contraction=strong, h0=fock) is a work in progress "
+                "with h_k=0 approximation. Not yet validated for production use."
+            )
         else:
             raise ValueError("pt2.contraction=strong: internal h0 error")
         # sc_nevpt2_energy takes no regularisation: the contracted denominators
