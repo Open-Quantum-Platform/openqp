@@ -346,22 +346,20 @@ contains
         call hf_dipder_store(infos, dmu)
       end block
 
-      ! analytic polarizability derivatives (Raman activities); ECP systems
-      ! keep the finite-difference path (not yet validated here)
-      if (all(basis%ecp_zn_num == 0)) then
-        block
-          use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
-          real(dp), allocatable :: dpol(:,:,:)
-          real(dp), contiguous, pointer :: pstore(:,:,:)
-          allocate(dpol(3,3,ncart))
-          call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
-                             nocc, nvir, hfscale, dpol)
-          call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
-            description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
-          pstore = dpol
-          deallocate(dpol)
-        end block
-      end if
+      ! analytic polarizability derivatives (Raman activities); the ECP enters
+      ! only through h^x (ecp_deriv_ints is folded into dVa above)
+      block
+        use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+        real(dp), allocatable :: dpol(:,:,:)
+        real(dp), contiguous, pointer :: pstore(:,:,:)
+        allocate(dpol(3,3,ncart))
+        call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
+                           nocc, nvir, hfscale, dpol)
+        call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+          description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+        pstore = dpol
+        deallocate(dpol)
+      end block
 
       ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
       allocate(moe1a(nocc,nocc,ncart))
@@ -1119,23 +1117,21 @@ contains
       call hf_dipder_store(infos, dmu)
     end block
 
-    ! analytic polarizability derivatives (Raman activities); ECP systems
-    ! keep the finite-difference path
-    if (all(basis%ecp_zn_num == 0)) then
-      block
-        use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
-        real(dp), allocatable :: dpol(:,:,:)
-        real(dp), contiguous, pointer :: pstore(:,:,:)
-        allocate(dpol(3,3,ncart))
-        call hf_polder_uhf(infos, sp(1)%mo, sp(2)%mo, sp(1)%eps, sp(2)%eps, sp(1)%p, sp(2)%p, &
-                           sp(1)%nocc, sp(2)%nocc, sflat, hflat, uvec, sp(1)%dPx, sp(2)%dPx, &
-                           hfscale, dpol)
-        call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
-          description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
-        pstore = dpol
-        deallocate(dpol)
-      end block
-    end if
+    ! analytic polarizability derivatives (Raman activities); the ECP enters
+    ! only through h^x (ecp_deriv_ints is folded into dVa above)
+    block
+      use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+      real(dp), allocatable :: dpol(:,:,:)
+      real(dp), contiguous, pointer :: pstore(:,:,:)
+      allocate(dpol(3,3,ncart))
+      call hf_polder_uhf(infos, sp(1)%mo, sp(2)%mo, sp(1)%eps, sp(2)%eps, sp(1)%p, sp(2)%p, &
+                         sp(1)%nocc, sp(2)%nocc, sflat, hflat, uvec, sp(1)%dPx, sp(2)%dPx, &
+                         hfscale, dpol)
+      call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+        description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+      pstore = dpol
+      deallocate(dpol)
+    end block
 
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
