@@ -1545,63 +1545,77 @@ contains
     real(kind=fp), intent(in) :: xyz(:,:)
 
     integer, parameter :: NMAX = BAS_MXANG + 2
-    integer :: iPt, ish, ityp, ix, iy, iz, n, k1, k2, ig, am, off, nc, ns, v
-    real(kind=fp) :: u(3), rsq, zeta, cc, kk(0:NMAX), scal
+    integer :: np, iPt, ish, ityp, ix, iy, iz, n, k1, k2, ig, am, off, nc, ns, v, iatm
+    real(kind=fp) :: zeta, cc, s0p, s2p
     real(kind=fp) :: pw(-1:NMAX, 3)
     real(kind=fp) :: cv(NUM_CART_BF(BAS_MXANG), 3)
     real(kind=fp) :: sv(NUM_SPH_BF(BAS_MXANG))
-    ! per-shell accumulated kernel sums  sum_prims cc*K_n and cc*zeta*K_(n+2)
-    real(kind=fp) :: s0, s2
+    ! per-point work (thread-private engine): displacement, |u|^2, kernel sums
+    real(kind=fp), allocatable :: u(:,:), rsq(:), xx(:), kn(:), kn2(:), s0(:), s2(:), ug(:), b1(:), b2(:)
+    integer, allocatable :: idx(:)
 
+    np = ubound(xyz, 1)
+    allocate(u(3, np), rsq(np), xx(np), kn(np), kn2(np), s0(np), s2(np), ug(np), b1(np), b2(np), idx(np))
     pw(-1,:) = 0.0_fp
     pw(0,:) = 1.0_fp
 
-    do iPt = 1, ubound(xyz, 1)
-      do ish = 1, basis%nshell
-        am = basis%am(ish)
-        off = basis%ao_offset(ish)
-        k1 = basis%g_offset(ish)
-        k2 = k1 + basis%ncontr(ish) - 1
-        u = xyz(iPt, 1:3) - basis%atoms%xyz(:3, basis%origin(ish))
-        rsq = sum(u*u)
-        n = am
-
-        ! accumulate the contracted kernel sums (both branches need K_n;
-        ! the derivative branch also needs zeta*K_(n+2))
-        s0 = 0.0_fp
-        s2 = 0.0_fp
-        do ig = k1, k2
-          zeta = basis%ex(ig)
-          cc = basis%cc(ig)
-          call self%xiK%eval(n + 2, zeta*rsq, kk(0:n+2))
-          s0 = s0 + cc*kk(n)
-          s2 = s2 + cc*zeta*kk(n + 2)
+    iatm = -1
+    do ish = 1, basis%nshell
+      am = basis%am(ish)
+      off = basis%ao_offset(ish)
+      k1 = basis%g_offset(ish)
+      k2 = k1 + basis%ncontr(ish) - 1
+      n = am
+      if (basis%origin(ish) /= iatm) then
+        iatm = basis%origin(ish)
+        do iPt = 1, np
+          u(:, iPt) = xyz(iPt, 1:3) - basis%atoms%xyz(:3, iatm)
+          rsq(iPt) = u(1, iPt)**2 + u(2, iPt)**2 + u(3, iPt)**2
         end do
+      end if
 
-        scal = 1.0_fp
-        if (self%xiScale == 1 .and. self%xiK%c > 0.0_fp .and. rsq > 0.0_fp) &
-          scal = rsq**(0.5_fp*self%xiK%c)
-        s0 = s0*scal
-        s2 = s2*scal
+      ! contracted kernel sums over the slice: s0 = sum cc K_n, s2 = sum cc zeta K_(n+2)
+      s0 = 0.0_fp
+      s2 = 0.0_fp
+      do ig = k1, k2
+        zeta = basis%ex(ig)
+        cc = basis%cc(ig)
+        xx = zeta*rsq
+        call self%xiK%eval_pair_block(n, np, xx, kn, kn2, ug, b1, b2, idx)
+        if (self%xiDim == 1) then
+          s0 = s0 + cc*kn
+        else
+          s0 = s0 + cc*kn
+          s2 = s2 + (cc*zeta)*kn2
+        end if
+      end do
+      if (self%xiScale == 1 .and. self%xiK%c > 0.0_fp) then
+        do iPt = 1, np
+          if (rsq(iPt) > 0.0_fp) then
+            s0(iPt) = s0(iPt)*rsq(iPt)**(0.5_fp*self%xiK%c)
+            s2(iPt) = s2(iPt)*rsq(iPt)**(0.5_fp*self%xiK%c)
+          end if
+        end do
+      end if
 
+      nc = NUM_CART_BF(am)
+      ns = NUM_SPH_BF(am)
+      do iPt = 1, np
+        s0p = s0(iPt); s2p = s2(iPt)
         do v = 1, am + 1
-          pw(v, :) = pw(v - 1, :)*u
+          pw(v, :) = pw(v - 1, :)*u(:, iPt)
         end do
-
-        nc = NUM_CART_BF(am)
         do ityp = 1, nc
           ix = cart_x(ityp, am); iy = cart_y(ityp, am); iz = cart_z(ityp, am)
           if (self%xiDim == 1) then
-            cv(ityp, 1) = pw(ix, 1)*pw(iy, 2)*pw(iz, 3)*s0
+            cv(ityp, 1) = pw(ix, 1)*pw(iy, 2)*pw(iz, 3)*s0p
           else
-            cv(ityp, 1) = (ix*pw(ix - 1, 1)*s0 - 2.0_fp*pw(ix + 1, 1)*s2)*pw(iy, 2)*pw(iz, 3)
-            cv(ityp, 2) = (iy*pw(iy - 1, 2)*s0 - 2.0_fp*pw(iy + 1, 2)*s2)*pw(ix, 1)*pw(iz, 3)
-            cv(ityp, 3) = (iz*pw(iz - 1, 3)*s0 - 2.0_fp*pw(iz + 1, 3)*s2)*pw(ix, 1)*pw(iy, 2)
+            cv(ityp, 1) = (ix*pw(ix - 1, 1)*s0p - 2.0_fp*pw(ix + 1, 1)*s2p)*pw(iy, 2)*pw(iz, 3)
+            cv(ityp, 2) = (iy*pw(iy - 1, 2)*s0p - 2.0_fp*pw(iy + 1, 2)*s2p)*pw(ix, 1)*pw(iz, 3)
+            cv(ityp, 3) = (iz*pw(iz - 1, 3)*s0p - 2.0_fp*pw(iz + 1, 3)*s2p)*pw(ix, 1)*pw(iy, 2)
           end if
         end do
-
         if (HARMONIC_ACTIVE .and. basis%harmonic(ish) == 1) then
-          ns = NUM_SPH_BF(am)
           do v = 1, self%xiDim
             call cart2sph_vec(cv(1:nc, v), sv(1:ns), am)
             self%xiD(off:off + ns - 1, iPt, v) = sv(1:ns)

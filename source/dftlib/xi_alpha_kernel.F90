@@ -35,9 +35,14 @@ module xi_alpha_kernel
     real(fp) :: clo(0:DEG_LO, 0:NMAX_TAB, NPAN) = 0.0_fp
     real(fp) :: chi(0:DEG_HI, 0:NMAX_TAB) = 0.0_fp
     real(fp) :: s_edge(0:NPAN) = 0.0_fp
+    real(fp) :: pan_scale = 0.0_fp          !< NPAN/sqrt(x0)
+    integer  :: mlo(0:NMAX_TAB, NPAN) = DEG_LO  !< effective Chebyshev degree per (n, panel)
+    integer  :: mhi(0:NMAX_TAB) = DEG_HI
   contains
     procedure :: init => xi_kernel_init
     procedure :: eval => xi_kernel_eval
+    procedure :: eval_pair => xi_kernel_eval_pair
+    procedure :: eval_pair_block => xi_kernel_eval_pair_block
     procedure :: eval_quad => xi_kernel_eval_quad
     procedure, private :: build_tables => xi_kernel_build_tables
   end type xi_kernel_t
@@ -125,6 +130,26 @@ contains
       end do
     end do
     call cheb_fit(DEG_HI, u(0:DEG_HI), f(0:DEG_HI, :), this%chi)
+    ! adaptive truncation: drop trailing coefficients below 1e-15 of the leading one
+    this%pan_scale = real(NPAN, fp)/sqrt(this%x0)
+    do ip = 1, NPAN
+      do n = 0, NMAX_TAB
+        m = DEG_LO
+        do while (m > 2 .and. abs(this%clo(m, n, ip)) < 1.0e-15_fp*abs(this%clo(0, n, ip)) &
+                  .and. abs(this%clo(m-1, n, ip)) < 1.0e-15_fp*abs(this%clo(0, n, ip)))
+          m = m - 1
+        end do
+        this%mlo(n, ip) = m
+      end do
+    end do
+    do n = 0, NMAX_TAB
+      m = DEG_HI
+      do while (m > 2 .and. abs(this%chi(m, n)) < 1.0e-15_fp*abs(this%chi(0, n)) &
+                .and. abs(this%chi(m-1, n)) < 1.0e-15_fp*abs(this%chi(0, n)))
+        m = m - 1
+      end do
+      this%mhi(n) = m
+    end do
   contains
     !> Chebyshev coefficients from values at the (deg+1) Chebyshev nodes u(j)
     !> (first-kind nodes): c_m = 2/(deg+1) sum_j f_j T_m(u_j), c_0 halved.
@@ -173,7 +198,7 @@ contains
       fac = inv
       do n = 0, nmax
         b1 = 0.0_fp; b2 = 0.0_fp
-        do m = DEG_LO, 1, -1
+        do m = this%mlo(n, ip), 1, -1
           b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n, ip)
           b2 = b1; b1 = b0
         end do
@@ -186,7 +211,7 @@ contains
       fac = inv
       do n = 0, nmax
         b1 = 0.0_fp; b2 = 0.0_fp
-        do m = DEG_HI, 1, -1
+        do m = this%mhi(n), 1, -1
           b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n)
           b2 = b1; b1 = b0
         end do
@@ -195,6 +220,187 @@ contains
       end do
     end if
   end subroutine xi_kernel_eval
+
+  !> K_n(x) and K_(n+2)(x) only (what the derivative branch needs): same tables,
+  !> no intermediate orders.
+  subroutine xi_kernel_eval_pair(this, n, x, kn, kn2)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: n
+    real(fp), intent(in) :: x
+    real(fp), intent(out) :: kn, kn2
+    integer :: ip, m
+    real(fp) :: sv, u, b0, b1, b2, inv, fac, k(0:1)
+    real(fp) :: kk(0:n+2)
+
+    if (this%c == 0.0_fp) then
+      kn = exp(-x); kn2 = kn
+      return
+    end if
+    if (.not. this%use_table .or. n + 2 > NMAX_TAB) then
+      call this%eval_quad(n + 2, x, kk)
+      kn = kk(n); kn2 = kk(n + 2)
+      return
+    end if
+    if (x <= this%x0) then
+      sv = sqrt(x)
+      ip = min(NPAN, int(sv*this%pan_scale) + 1)
+      u = (2.0_fp*sv - (this%s_edge(ip - 1) + this%s_edge(ip)))/(this%s_edge(ip) - this%s_edge(ip - 1))
+      inv = 1.0_fp/sqrt(1.0_fp + x)
+      fac = inv**(n + 1)
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mlo(n, ip), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n, ip); b2 = b1; b1 = b0
+      end do
+      k(0) = (u*b1 - b2 + this%clo(0, n, ip))*fac
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mlo(n + 2, ip), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n + 2, ip); b2 = b1; b1 = b0
+      end do
+      k(1) = (u*b1 - b2 + this%clo(0, n + 2, ip))*fac*inv*inv
+    else
+      u = 2.0_fp*sqrt(this%x0/x) - 1.0_fp
+      inv = 1.0_fp/sqrt(x)
+      fac = inv**(n + 1)
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mhi(n), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n); b2 = b1; b1 = b0
+      end do
+      k(0) = (u*b1 - b2 + this%chi(0, n))*fac
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mhi(n + 2), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n + 2); b2 = b1; b1 = b0
+      end do
+      k(1) = (u*b1 - b2 + this%chi(0, n + 2))*fac*inv*inv
+    end if
+    kn = k(0); kn2 = k(1)
+  end subroutine xi_kernel_eval_pair
+
+  !> Block version of eval_pair: K_n(x_i), K_(n+2)(x_i) for np points.  Points are
+  !> grouped by Chebyshev panel so that each Clenshaw recurrence runs as a
+  !> branch-free loop over contiguous points (SIMD).  Work arrays are the
+  !> caller's (size >= np): ug, b1, b2, idx.
+  subroutine xi_kernel_eval_pair_block(this, n, np, x, kn, kn2, ug, b1, b2, idx)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: n, np
+    real(fp), intent(in) :: x(np)
+    real(fp), intent(out) :: kn(np), kn2(np)
+    real(fp), intent(inout) :: ug(np), b1(np), b2(np)
+    integer, intent(inout) :: idx(np)
+    integer :: i, j, g, ng, m, ip, cnt(0:NPAN), start(0:NPAN+1), pos(0:NPAN)
+    real(fp) :: sv, inv, fac, cm, c0, kk(0:n+2)
+
+    if (this%c == 0.0_fp) then
+      do i = 1, np
+        kn(i) = exp(-x(i)); kn2(i) = kn(i)
+      end do
+      return
+    end if
+    if (.not. this%use_table .or. n + 2 > NMAX_TAB) then
+      do i = 1, np
+        call this%eval_quad(n + 2, x(i), kk)
+        kn(i) = kk(n); kn2(i) = kk(n + 2)
+      end do
+      return
+    end if
+    ! panel of each point: 1..NPAN low regime, 0 = high regime
+    cnt = 0
+    do i = 1, np
+      if (x(i) <= this%x0) then
+        ip = min(NPAN, int(sqrt(x(i))*this%pan_scale) + 1)
+      else
+        ip = 0
+      end if
+      idx(i) = ip                      ! temporary: panel id
+      cnt(ip) = cnt(ip) + 1
+    end do
+    start(0) = 1
+    do ip = 0, NPAN
+      start(ip + 1) = start(ip) + cnt(ip)
+    end do
+    pos = start(0:NPAN)
+    ! counting sort of point indices by panel; b2 temporarily holds the panel id
+    do i = 1, np
+      b2(i) = real(idx(i), fp)
+    end do
+    do i = 1, np
+      ip = int(b2(i))
+      idx(pos(ip)) = i
+      pos(ip) = pos(ip) + 1
+    end do
+    do ip = 0, NPAN
+      ng = cnt(ip)
+      if (ng == 0) cycle
+      g = start(ip)
+      if (ip == 0) then
+        do j = 0, ng - 1
+          ug(j + 1) = 2.0_fp*sqrt(this%x0/x(idx(g + j))) - 1.0_fp
+        end do
+        ! K_n
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mhi(n), 1, -1
+          cm = this%chi(m, n)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%chi(0, n)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(x(i))
+          kn(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 1)
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mhi(n + 2), 1, -1
+          cm = this%chi(m, n + 2)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%chi(0, n + 2)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(x(i))
+          kn2(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 3)
+        end do
+      else
+        fac = 1.0_fp/(this%s_edge(ip) - this%s_edge(ip - 1))
+        cm = this%s_edge(ip - 1) + this%s_edge(ip)
+        do j = 0, ng - 1
+          ug(j + 1) = (2.0_fp*sqrt(x(idx(g + j))) - cm)*fac
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mlo(n, ip), 1, -1
+          cm = this%clo(m, n, ip)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%clo(0, n, ip)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(1.0_fp + x(i))
+          kn(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 1)
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mlo(n + 2, ip), 1, -1
+          cm = this%clo(m, n + 2, ip)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%clo(0, n + 2, ip)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(1.0_fp + x(i))
+          kn2(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 3)
+        end do
+      end if
+    end do
+  end subroutine xi_kernel_eval_pair_block
 
   !> K_n(x) for n = 0..nmax by quadrature (reference path).
   subroutine xi_kernel_eval_quad(this, nmax, x, k)
