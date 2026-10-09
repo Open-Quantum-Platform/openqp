@@ -60,6 +60,16 @@ module cc_lib
   !> DGEMM stays large.
   integer, parameter :: BLOCKS_PER_RANK = 4
 
+  !> True while the solver has pinned a recognised BLAS (OpenBLAS, MKL, BLIS)
+  !> to one thread.  The large DGEMMs called outside any OpenMP region (ring,
+  !> oooo) then split their output columns over the OpenMP team themselves
+  !> instead of running on one core.  Left false for a BLAS that cannot be
+  !> pinned (Accelerate, reference): such a library keeps its own threading.
+  logical :: split_gemm = .false.
+
+  !> Below this many multiply-adds a split DGEMM is not worth a parallel region.
+  integer(c_int64_t), parameter :: SPLIT_MIN_MADDS = 10000000_c_int64_t
+
   !> Runtime controls for the coupled-cluster solver.
   type :: cc_options_t
     integer  :: maxit     = 50        !< max CCSD iterations
@@ -134,6 +144,7 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   ! to one thread for the whole solver and restore the caller's setting after.
   nblas_save = blas_thread_count()
   if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
+  split_gemm = nblas_save > 0
 
   call cc_wall_time(t0)
   call ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
@@ -153,6 +164,7 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   end if
 
   if (nblas_save > 0) call blas_thread_set(nblas_save)
+  split_gemm = .false.
 
   deallocate(t1, t2)
 
@@ -176,6 +188,52 @@ subroutine cc_wall_time(t)
   call system_clock(c, r)
   t = real(c, dp) / real(r, dp)
 end subroutine cc_wall_time
+
+!###############################################################################
+
+!> @brief DGEMM for the large products called outside any OpenMP region.
+!>
+!> When the solver has pinned the BLAS to one thread (@c split_gemm), the
+!> output columns are divided among the OpenMP team and each thread calls a
+!> serial DGEMM on its slice; every column of C depends only on the matching
+!> column (transb='n') or row (transb='t') of B, so there is no reduction.
+!> Otherwise this is a plain DGEMM.
+subroutine cc_gemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+!$ use omp_lib, only: omp_get_max_threads
+  character(len=1), intent(in) :: transa, transb
+  integer, intent(in) :: m, n, k, lda, ldb, ldc
+  real(dp), intent(in) :: alpha, beta
+  ! Assumed size, so the slice offsets below are element references.
+  real(dp), intent(in) :: a(*), b(0:*)
+  real(dp), intent(inout) :: c(0:*)
+
+  integer :: nchunk, ic, j0, jlen
+  integer(c_int64_t) :: boff
+
+  nchunk = 1
+!$ if (split_gemm) nchunk = min(omp_get_max_threads(), n)
+  if (nchunk <= 1 .or. int(m, c_int64_t)*int(n, c_int64_t)*int(k, c_int64_t) &
+                       < SPLIT_MIN_MADDS) then
+    call dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+    return
+  end if
+
+  !$omp parallel do default(shared) private(ic, j0, jlen, boff) schedule(static)
+  do ic = 0, nchunk - 1
+    j0   = int(int(n, c_int64_t)*ic / nchunk)
+    jlen = int(int(n, c_int64_t)*(ic + 1) / nchunk) - j0
+    if (jlen > 0) then
+      if (transb == 'n' .or. transb == 'N') then
+        boff = int(j0, c_int64_t)*int(ldb, c_int64_t)
+      else
+        boff = int(j0, c_int64_t)
+      end if
+      call dgemm(transa, transb, m, jlen, k, alpha, a, lda, b(boff), ldb, &
+                 beta, c(int(j0, c_int64_t)*int(ldc, c_int64_t)), ldc)
+    end if
+  end do
+  !$omp end parallel do
+end subroutine cc_gemm
 
 !###############################################################################
 
@@ -404,7 +462,7 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
     ! ================= Woooo ==============================================
     ! W(k,l,i,j) = (ki|lj) + sum_c (ki|lc) t1(j,c) + sum_c (lj|kc) t1(i,c)
     !            + sum_cd (kc|ld) tau(i,j,c,d)
-    call dgemm('n','t', no2, no2, nv2, 1.0_dp, Wklcd, no2, tau, no2, 0.0_dp, Woooo, no2)
+    call cc_gemm('n','t', no2, no2, nv2, 1.0_dp, Wklcd, no2, tau, no2, 0.0_dp, Woooo, no2)
     !$omp parallel do collapse(3) private(i,j,k,l,c) schedule(static)
     do j = 1, no
       do i = 1, no
@@ -436,8 +494,8 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
     end do
     !$omp end parallel do
     ! WA(i,a,k,c) = sum_ld M1(i,a,l,d) (ld|kc)  +  sum_ld M2(i,a,l,d) (lc|kd)
-    call dgemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, ovov, nov, 0.0_dp, WA, nov)
-    call dgemm('n','n', nov, nov, nov, 1.0_dp, M2, nov, ovov_s, nov, 1.0_dp, WA, nov)
+    call cc_gemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, ovov, nov, 0.0_dp, WA, nov)
+    call cc_gemm('n','n', nov, nov, nov, 1.0_dp, M2, nov, ovov_s, nov, 1.0_dp, WA, nov)
 
     !$omp parallel do collapse(3) private(i,a,l,d) schedule(static)
     do d = 1, nv
@@ -450,7 +508,7 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
       end do
     end do
     !$omp end parallel do
-    call dgemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, ovov_s, nov, 0.0_dp, WB, nov)
+    call cc_gemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, ovov_s, nov, 0.0_dp, WB, nov)
 
     !$omp parallel do collapse(3) private(i,a,k,c,d,l) schedule(static)
     do c = 1, nv
@@ -535,7 +593,7 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
     !$omp end parallel do
 
     ! (b) Woooo ladder :  sum_kl W(k,l,i,j) tau(k,l,a,b)
-    call dgemm('t','n', no2, nv2, no2, 1.0_dp, Woooo, no2, tau, no2, 1.0_dp, t2n, no2)
+    call cc_gemm('t','n', no2, nv2, no2, 1.0_dp, Woooo, no2, tau, no2, 1.0_dp, t2n, no2)
 
     ! (c) particle-particle ladder, blocked over d and distributed over MPI
     call ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
@@ -573,9 +631,9 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
       end do
     end do
     !$omp end parallel do
-    call dgemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, t2q, nov, 0.0_dp, rbuf, nov)
-    call dgemm('n','n', nov, nov, nov, -1.0_dp, WA, nov, t2q2, nov, 1.0_dp, rbuf, nov)
-    call dgemm('n','n', nov, nov, nov, -1.0_dp, WB, nov, t2q2, nov, 0.0_dp, rbuf2, nov)
+    call cc_gemm('n','n', nov, nov, nov, 1.0_dp, M1, nov, t2q, nov, 0.0_dp, rbuf, nov)
+    call cc_gemm('n','n', nov, nov, nov, -1.0_dp, WA, nov, t2q2, nov, 1.0_dp, rbuf, nov)
+    call cc_gemm('n','n', nov, nov, nov, -1.0_dp, WB, nov, t2q2, nov, 0.0_dp, rbuf2, nov)
 
     !$omp parallel do collapse(3) private(i,j,a,b) schedule(static)
     do b = 1, nv
