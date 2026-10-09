@@ -536,6 +536,10 @@ contains
     do k = 1, nrhs
       iter_min = min(iter_min, iters(k))
       iter_max = max(iter_max, iters(k))
+      ! same per-RHS line as the one-at-a-time solver (timing is per block)
+      if (p%infos%control%verbose >= 2) &
+        write(iw,'(" CPHF RHS",I5," completed in",I5," iterations;",' // &
+                 '" block solve")') k, iters(k)
       if (state(k) == DONE) then
         nconv = nconv + 1
       else
