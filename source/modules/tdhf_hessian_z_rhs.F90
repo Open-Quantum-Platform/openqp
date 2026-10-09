@@ -224,8 +224,10 @@ contains
   !> 3N Cartesian coordinates x, where O^x is the channel operator assembled by
   !> accumulate_tdhf_channel_quartet (channel>0: symmetric Coulomb/exchange,
   !> channel<0: antisymmetric exchange).  `base` must already carry the
-  !> channel's symmetry.  No XC term; one MPI rank (grd2_operator_driver).
-  subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result)
+  !> channel's symmetry.  `coulscale` (default 1) scales the Coulomb part, so
+  !> open-shell callers can build J^x[Ptot] and K^x[P_s] separately.  No XC
+  !> term; one MPI rank (grd2_operator_driver).
+  subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result,coulscale)
     use types, only: information
     use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
     use grd2, only: grd2_operator_driver
@@ -233,6 +235,7 @@ contains
     real(dp),intent(in)::coeff(:,:),base(:,:),hfscale
     integer,intent(in)::channel
     real(dp),intent(out)::result(:,:,:)
+    real(dp),intent(in),optional::coulscale
     type(basis_set),pointer::basis
     type(tdhf_channel_operator_consumer_t)::consumer
     real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
@@ -251,6 +254,7 @@ contains
     consumer%operator=>operator_cart
     consumer%channel=channel
     consumer%coulscale=1.0_dp
+    if(present(coulscale)) consumer%coulscale=coulscale
     consumer%hfscale=hfscale
     call grd2_operator_driver(infos,basis,consumer)
 

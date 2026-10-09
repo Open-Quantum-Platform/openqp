@@ -7,6 +7,9 @@ module hf_hessian_mod
   ! g2e(ia,x) = 1/2 Tr[probe_ia G^x[P]] (fock_deriv_contract convention) in
   ! terms of the channel operator of eri_derivative_operator_mo.
   real(kind=8), parameter :: G2E_OPERATOR_SCALE = 1.0d0
+  ! Open shell: Tr[M (J^x[Ptot] - c_x K^x[P^s])] (fock_deriv_contract_os) in
+  ! terms of the Coulomb-only and exchange-only channel operators.
+  real(kind=8), parameter :: OS_J_SCALE = 1.0d0, OS_K_SCALE = 1.0d0
 
 contains
 
@@ -775,23 +778,30 @@ contains
     ! occ-vir probe C^s_a C^s_i^T is geometry-independent, so a single open-shell
     ! derivative-Fock contraction per occ-vir pair yields every Cartesian
     ! component at once (avoids an ncart-fold redundant grd2 sweep).
-    do s = 1, 2
-      allocate(sp(s)%g2e(sp(s)%nocc*sp(s)%nvir, ncart), source=0.0_dp)
-      do a = 1, sp(s)%nvir
-        do i = 1, sp(s)%nocc
-          do mu = 1, nbf
-            do nu = 1, nbf
-              probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
-                                    + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+    if (os_operator_path(infos)) then
+      ! Three blocked derivative-ERI traversals (J^x[Ptot], K^x[Pa], K^x[Pb])
+      ! instead of one per occ-vir pair and spin.
+      call os_g2e_from_operators(infos, basis, ptot, sp(1)%p, sp(2)%p, hfscale, &
+        sp(1)%mo, sp(1)%nocc, sp(2)%mo, sp(2)%nocc, sp(1)%g2e, sp(2)%g2e)
+    else
+      do s = 1, 2
+        allocate(sp(s)%g2e(sp(s)%nocc*sp(s)%nvir, ncart), source=0.0_dp)
+        do a = 1, sp(s)%nvir
+          do i = 1, sp(s)%nocc
+            do mu = 1, nbf
+              do nu = 1, nbf
+                probe(mu,nu) = 0.5_dp*( sp(s)%mo(mu,sp(s)%nocc+a)*sp(s)%mo(nu,i) &
+                                      + sp(s)%mo(mu,i)*sp(s)%mo(nu,sp(s)%nocc+a) )
+              end do
             end do
+            gx = 0.0_dp
+            call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
+            ia = (a-1)*sp(s)%nocc + i
+            sp(s)%g2e(ia,:) = reshape(gx, [ncart])
           end do
-          gx = 0.0_dp
-          call fock_deriv_contract_os(infos, basis, ptot, sp(s)%p, probe, hfscale, gx)
-          ia = (a-1)*sp(s)%nocc + i
-          sp(s)%g2e(ia,:) = reshape(gx, [ncart])
         end do
       end do
-    end do
+    end if
 
     icart = 0
     do kc = 1, natom
@@ -1369,6 +1379,27 @@ contains
     ! 2e response-Fock skeleton  G^{s,x}[P]_ai  for all coordinates (per spin)
     allocate(ga2e(nvira,nocca,ncart), gb2e(nvirb,noccb,ncart), source=0.0_dp)
     allocate(probe(nbf,nbf))
+    if (os_operator_path(infos)) then
+      ! Three blocked derivative-ERI traversals instead of one per pair/spin.
+      block
+        real(dp), allocatable :: gva(:,:), gvb(:,:)
+        integer :: x
+        call os_g2e_from_operators(infos, basis, ptot, pa, pb, hfscale, &
+          mo, nocca, mo, noccb, gva, gvb)
+        do x = 1, ncart
+          do a = 1, nvira
+            do i = 1, nocca
+              ga2e(a,i,x) = gva((a-1)*nocca+i,x)
+            end do
+          end do
+          do a = 1, nvirb
+            do i = 1, noccb
+              gb2e(a,i,x) = gvb((a-1)*noccb+i,x)
+            end do
+          end do
+        end do
+      end block
+    else
     do a = 1, nvira
       do i = 1, nocca
         do mu = 1, nbf
@@ -1393,6 +1424,7 @@ contains
         gb2e(a,i,:) = reshape(gx, [ncart])
       end do
     end do
+    end if
 
     ! ===== CPHF right-hand sides (non-canonical Pulay form), packed =====
     allocate(d0a(nbf,nbf), d0b(nbf,nbf), gfull(nbf,nbf), Gd0(nbf,nbf))
@@ -2919,5 +2951,148 @@ contains
         '  ref/op=', num/max(den, tiny(1.0_dp))
     end do
   end subroutine check_g2e_operator
+
+
+!###############################################################################
+
+!> @brief The blocked operator path needs one MPI rank and no attenuated
+!>        (range-separated) exchange pass.
+  logical function os_operator_path(infos) result(ok)
+    use types, only: information
+    type(information), intent(in) :: infos
+    ok = .not. infos%dft%cam_flag .and. .not. infos%mpiinfo%usempi
+  end function os_operator_path
+
+!###############################################################################
+
+!> @brief Open-shell 2e response skeleton g2e_s(ia,x) = Tr[probe_ia G^{s,x}]
+!>        with G^{s,x} = J^x[Ptot] - c_x K^x[P^s], from three blocked
+!>        derivative-ERI traversals (J on Ptot, K on Pa and on Pb) assembled
+!>        as AO operators and transformed to each spin's occ-vir MO block.
+!>        Layout of g2ea/g2eb: ((a-1)*nocc+i, x).
+  subroutine os_g2e_from_operators(infos, basis, ptot, pa, pb, hfscale, &
+                                   moa, nocca, mob, noccb, g2ea, g2eb)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use tdhf_hessian_z_rhs_mod, only: eri_derivative_operator_mo
+    use oqp_linalg
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: ptot(:,:), pa(:,:), pb(:,:), hfscale
+    real(kind=dp), intent(in) :: moa(:,:), mob(:,:)
+    integer, intent(in) :: nocca, noccb
+    real(kind=dp), allocatable, intent(out) :: g2ea(:,:), g2eb(:,:)
+    real(kind=dp), allocatable :: eye(:,:), jao(:,:,:), kao(:,:,:)
+    integer :: nbf, ncart, k
+    nbf = size(moa,1); ncart = 3*size(infos%atoms%xyz,2)
+    allocate(eye(nbf,nbf), source=0.0_dp)
+    do k = 1, nbf
+      eye(k,k) = 1.0_dp
+    end do
+    allocate(jao(nbf,nbf,ncart), kao(nbf,nbf,ncart))
+    ! Coulomb only (exchange scale 0) on the total density
+    call eri_derivative_operator_mo(infos, eye, ptot, 1, 0.0_dp, jao)
+    jao = OS_J_SCALE*jao
+    call spin_block(pa, moa, nocca, g2ea)
+    call spin_block(pb, mob, noccb, g2eb)
+    call check_os_g2e_operator(infos, basis, ptot, pa, moa, nocca, hfscale, g2ea)
+    deallocate(eye, jao, kao)
+  contains
+    subroutine spin_block(ps, mo, nocc, g2e)
+      real(kind=dp), intent(in) :: ps(:,:), mo(:,:)
+      integer, intent(in) :: nocc
+      real(kind=dp), allocatable, intent(out) :: g2e(:,:)
+      real(kind=dp), allocatable :: g(:,:), t(:,:), gov(:,:)
+      integer :: nvir, x, a, i
+      nvir = nbf - nocc
+      allocate(g2e(nocc*nvir,ncart), g(nbf,nbf), t(nbf,nvir), gov(nocc,nvir))
+      if (hfscale /= 0.0_dp) then
+        ! exchange only (Coulomb scale 0) on the spin density
+        call eri_derivative_operator_mo(infos, eye, ps, 1, hfscale, kao, coulscale=0.0_dp)
+      else
+        kao = 0.0_dp
+      end if
+      do x = 1, ncart
+        g = jao(:,:,x) + OS_K_SCALE*kao(:,:,x)
+        call dgemm('n','n',nbf,nvir,nbf,1.0_dp,g,nbf,mo(:,nocc+1:),nbf,0.0_dp,t,nbf)
+        call dgemm('t','n',nocc,nvir,nbf,1.0_dp,mo(:,1:nocc),nbf,t,nbf,0.0_dp,gov,nocc)
+        do a = 1, nvir
+          do i = 1, nocc
+            g2e((a-1)*nocc+i,x) = gov(i,a)
+          end do
+        end do
+      end do
+    end subroutine spin_block
+  end subroutine os_g2e_from_operators
+
+!###############################################################################
+
+!> @brief Opt-in cross-check (OQP_HESS_G2E_CHECK=1) of the open-shell operator
+!>        path against fock_deriv_contract_os for three alpha occ-vir pairs.
+  subroutine check_os_g2e_operator(infos, basis, ptot, pa, mo, nocc, hfscale, g2e)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: ptot(:,:), pa(:,:), mo(:,:), hfscale, g2e(:,:)
+    integer, intent(in) :: nocc
+    real(kind=dp), allocatable :: probe(:,:), gx(:,:), ref(:)
+    character(len=8) :: envs
+    integer :: st, nbf, nvir, ncart, a, i, k, mu, nu, ia
+    real(kind=dp) :: num, den
+    call get_environment_variable('OQP_HESS_G2E_CHECK', envs, status=st)
+    if (st /= 0) return
+    if (trim(adjustl(envs)) /= '1') return
+    nbf = size(mo,1); nvir = nbf - nocc; ncart = size(g2e,2)
+    allocate(probe(nbf,nbf), gx(3,ncart/3), ref(ncart))
+    do k = 0, 2
+      a = 1 + k*(nvir-1)/2
+      i = nocc - k*(nocc-1)/2
+      do mu = 1, nbf
+        do nu = 1, nbf
+          probe(mu,nu) = 0.5_dp*( mo(mu,nocc+a)*mo(nu,i) + mo(mu,i)*mo(nu,nocc+a) )
+        end do
+      end do
+      call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
+      ref = reshape(gx, [ncart])
+      ia = (a-1)*nocc + i
+      num = dot_product(ref, g2e(ia,:)); den = dot_product(g2e(ia,:), g2e(ia,:))
+      write(iw,'(A,2I5,A,ES12.4,A,ES12.4,A,ES18.10)') '  os g2e check i,a=', i, a, &
+        '  max|ref|=', maxval(abs(ref)), '  max|ref-op|=', maxval(abs(ref-g2e(ia,:))), &
+        '  ref/op=', num/max(den, tiny(1.0_dp))
+    end do
+    ! separate Coulomb / exchange ratios for calibration (one pair)
+    call os_part_ratio('J', ptot, 0.0_dp*pa, 1.0_dp, 0.0_dp)
+    call os_part_ratio('K', 0.0_dp*ptot, pa, 0.0_dp, hfscale)
+  contains
+    subroutine os_part_ratio(tag, pc, px, cs, hs)
+      use tdhf_hessian_z_rhs_mod, only: eri_derivative_operator_mo
+      character(len=*), intent(in) :: tag
+      real(kind=dp), intent(in) :: pc(:,:), px(:,:), cs, hs
+      real(kind=dp), allocatable :: op(:,:,:), v(:)
+      if (hs == 0.0_dp .and. cs == 0.0_dp) return
+      a = 1; i = nocc
+      do mu = 1, nbf
+        do nu = 1, nbf
+          probe(mu,nu) = 0.5_dp*( mo(mu,nocc+a)*mo(nu,i) + mo(mu,i)*mo(nu,nocc+a) )
+        end do
+      end do
+      call fock_deriv_contract_os(infos, basis, pc, px, probe, hfscale, gx)
+      ref = reshape(gx, [ncart])
+      allocate(op(nbf,nbf,ncart), v(ncart))
+      if (cs /= 0.0_dp) then
+        call eri_derivative_operator_mo(infos, mo, pc, 1, 0.0_dp, op)
+      else
+        call eri_derivative_operator_mo(infos, mo, px, 1, hs, op, coulscale=0.0_dp)
+      end if
+      v = op(i,nocc+a,:)
+      write(iw,'(A,A,A,ES18.10,A,ES12.4)') '  os g2e part ', tag, '  ref/op=', &
+        dot_product(ref,v)/max(dot_product(v,v), tiny(1.0_dp)), '  max|ref|=', maxval(abs(ref))
+    end subroutine os_part_ratio
+  end subroutine check_os_g2e_operator
 
 end module hf_hessian_mod
