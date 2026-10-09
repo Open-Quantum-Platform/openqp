@@ -46,14 +46,15 @@ contains
     type(functional_t) :: func
     type(dft_parameters) :: dp
     type(tddft_parameters) :: tp
-    character(len=:), allocatable :: name
+    ! same fixed-length handling of the name as dft_initialize (dft.F90)
+    character(len=20) :: name
     needs = 0_c_int
     inf => oqp_handle_get_info(c_handle)
-    name = trim(c_f_char(inf%dft%xc_functional_name))
-    if (len(name) == 0) return
+    name = c_f_char(inf%dft%xc_functional_name)
+    if (len_trim(name) == 0) return
     dp = inf%dft
     tp = inf%tddft
-    call libxc_input(functional_name=name, dft_params=dp, tddft_params=tp, &
+    call libxc_input(functional_name=trim(name), dft_params=dp, tddft_params=tp, &
                      functional=func, announce=.false.)
     if (func%needtau) needs = 1_c_int
     call func%destroy()
