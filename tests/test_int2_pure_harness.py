@@ -35,9 +35,14 @@ check()
             with self.subTest(check=name):
                 # Fortran ERROR STOP terminates its process. Keep pytest alive
                 # and retain the native diagnostic as an ordinary test failure.
+                # The rys check alone takes ~10-20 s on one core; under
+                # `pytest -n auto` it shares a small CI runner with workers
+                # running multithreaded OpenQP jobs, and 120 s was exceeded
+                # repeatedly on ubuntu-24.04 x86 (MPI OFF) without any change
+                # to the ERI code.  The limit only guards against a hang.
                 result = subprocess.run(
                     [sys.executable, "-c", script, str(library_path), name, str(root)],
-                    capture_output=True, text=True, timeout=120)
+                    capture_output=True, text=True, timeout=600)
                 self.assertEqual(result.returncode, 0,
                                  f"{name} exited {result.returncode}:\n"
                                  + result.stdout + result.stderr)
