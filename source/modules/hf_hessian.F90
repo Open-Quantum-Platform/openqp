@@ -6,7 +6,7 @@ module hf_hessian_mod
 
   ! g2e(ia,x) = 1/2 Tr[probe_ia G^x[P]] (fock_deriv_contract convention) in
   ! terms of the channel operator of eri_derivative_operator_mo.
-  real(kind=8), parameter :: G2E_OPERATOR_SCALE = 1.0d0
+  real(kind=8), parameter :: G2E_OPERATOR_SCALE = 0.125d0
   ! Open shell: Tr[M (J^x[Ptot] - c_x K^x[P^s])] (fock_deriv_contract_os) in
   ! terms of the Coulomb-only and exchange-only channel operators.
   real(kind=8), parameter :: OS_J_SCALE = 1.0d0, OS_K_SCALE = 1.0d0
@@ -181,17 +181,27 @@ contains
       ! 3N coordinates at once, instead of one full traversal per occ-vir
       ! pair (nocc*nvir traversals).  Range-separated functionals (two
       ! attenuated passes) and MPI keep the per-pair contraction below.
-      allocate(gop(nbf,nbf,ncart))
-      call eri_derivative_operator_mo(infos, mo_a, pfull, 1, hfscale, gop)
-      do icart = 1, ncart
-        do a = 1, nvir
-          do i = 1, nocc
-            g2e((a-1)*nocc+i,icart) = G2E_OPERATOR_SCALE*gop(i,nocc+a,icart)
+      ! gop keeps the AO operator O^x (fock_deriv_contract(P,M) =
+      ! G2E_OPERATOR_SCALE*Tr[M O^x]) for the 2e traces after the CPHF solve.
+      block
+        real(kind=dp), allocatable :: eye(:,:), t(:,:), gov(:,:)
+        allocate(eye(nbf,nbf), source=0.0_dp)
+        do mu = 1, nbf
+          eye(mu,mu) = 1.0_dp
+        end do
+        allocate(gop(nbf,nbf,ncart), t(nbf,nvir), gov(nocc,nvir))
+        call eri_derivative_operator_mo(infos, eye, pfull, 1, hfscale, gop)
+        do icart = 1, ncart
+          call dgemm('n','n',nbf,nvir,nbf,1.0_dp,gop(:,:,icart),nbf,mo_a(:,nocc+1:),nbf,0.0_dp,t,nbf)
+          call dgemm('t','n',nocc,nvir,nbf,G2E_OPERATOR_SCALE,mo_a(:,1:nocc),nbf,t,nbf,0.0_dp,gov,nocc)
+          do a = 1, nvir
+            do i = 1, nocc
+              g2e((a-1)*nocc+i,icart) = gov(i,a)
+            end do
           end do
         end do
-      end do
+      end block
       call check_g2e_operator(infos, basis, mo_a, pfull, hfscale, nocc, g2e)
-      deallocate(gop)
     else
       do a = 1, nvir
         do i = 1, nocc
@@ -415,18 +425,37 @@ contains
       ! 2e traces: A2(x,y)=Tr[dP^y G[P]^x]; tGP(x,y)=Tr[M^x G[P]^y]
       ! with M^x = sum_kl s1oo^x_kl C_k C_l^T
       allocate(gxy(3,natom), A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
-      do yy = 1, ncart
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, dPx(:,:,yy), hfscale, gxy)
-        A2(:,yy) = 2.0_dp*reshape(gxy, [ncart])
-      end do
-      do x = 1, ncart
-        call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
-        call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mi,nbf)
-        gxy = 0.0_dp
-        call fock_deriv_contract(infos, basis, pfull, Mi, hfscale, gxy)
-        tGP(x,:) = 2.0_dp*reshape(gxy, [ncart])
-      end do
+      if (allocated(gop)) then
+        ! Both traces from the stored AO operator: two GEMMs, no ERI pass.
+        block
+          real(kind=dp), allocatable :: mall(:,:,:)
+          allocate(mall(nbf,nbf,ncart))
+          do x = 1, ncart
+            call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
+            call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,mall(:,:,x),nbf)
+          end do
+          call dgemm('t','n',ncart,ncart,nbf*nbf,2.0_dp*G2E_OPERATOR_SCALE,gop,nbf*nbf, &
+                     dPx,nbf*nbf,0.0_dp,A2,ncart)
+          call dgemm('t','n',ncart,ncart,nbf*nbf,2.0_dp*G2E_OPERATOR_SCALE,mall,nbf*nbf, &
+                     gop,nbf*nbf,0.0_dp,tGP,ncart)
+          call check_trace_operator(infos, basis, pfull, hfscale, dPx(:,:,1), A2(:,1), 'A2')
+          call check_trace_operator(infos, basis, pfull, hfscale, mall(:,:,1), tGP(1,:), 'tGP')
+        end block
+        deallocate(gop)
+      else
+        do yy = 1, ncart
+          gxy = 0.0_dp
+          call fock_deriv_contract(infos, basis, pfull, dPx(:,:,yy), hfscale, gxy)
+          A2(:,yy) = 2.0_dp*reshape(gxy, [ncart])
+        end do
+        do x = 1, ncart
+          call dgemm('n','n',nbf,nocc,nocc,1.0_dp,cocc,nbf,s1oo(:,:,x),nocc,0.0_dp,tmpno,nbf)
+          call dgemm('n','t',nbf,nbf,nocc,1.0_dp,tmpno,nbf,cocc,nbf,0.0_dp,Mi,nbf)
+          gxy = 0.0_dp
+          call fock_deriv_contract(infos, basis, pfull, Mi, hfscale, gxy)
+          tGP(x,:) = 2.0_dp*reshape(gxy, [ncart])
+        end do
+      end if
 
       ! assemble response  hresp(x,y) = 4Tr[F^x dm1^y]-4Tr[S^x eps.dm1^y]-2Tr[s1oo^x mo_e1^y]
       !   = (Tr[dP^y h^x] + A2) - 4 A3 - 2 (sum_kl s1oo^x_kl moe1a^y_kl) - 2 tGP
@@ -3094,5 +3123,33 @@ contains
         dot_product(ref,v)/max(dot_product(v,v), tiny(1.0_dp)), '  max|ref|=', maxval(abs(ref))
     end subroutine os_part_ratio
   end subroutine check_os_g2e_operator
+
+
+!###############################################################################
+
+!> @brief Opt-in cross-check (OQP_HESS_G2E_CHECK=1) of one 2e-trace column
+!>        built from the stored operator against fock_deriv_contract.
+  subroutine check_trace_operator(infos, basis, pfull, hfscale, m, col, tag)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use fock_deriv_mod, only: fock_deriv_contract
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: pfull(:,:), hfscale, m(:,:), col(:)
+    character(len=*), intent(in) :: tag
+    real(kind=dp), allocatable :: gx(:,:), ref(:)
+    character(len=8) :: envs
+    integer :: st
+    call get_environment_variable('OQP_HESS_G2E_CHECK', envs, status=st)
+    if (st /= 0) return
+    if (trim(adjustl(envs)) /= '1') return
+    allocate(gx(3,size(col)/3), ref(size(col)))
+    call fock_deriv_contract(infos, basis, pfull, m, hfscale, gx)
+    ref = 2.0_dp*reshape(gx, [size(col)])
+    write(iw,'(A,A,A,ES12.4,A,ES12.4)') '  trace check ', tag, '  max|ref|=', maxval(abs(ref)), &
+      '  max|ref-op|=', maxval(abs(ref-col))
+  end subroutine check_trace_operator
 
 end module hf_hessian_mod
