@@ -13,8 +13,112 @@ module mod_dft_gga_nuclear_point
     5,10,8, 10,7,9, 8,9,3], [3,3,3])
 
   public :: gga_density_nuclear_point
+  public :: gga_density_nuclear_point_reference
 
 contains
+
+!> Same results as gga_density_nuclear_point_reference, evaluated without the
+!> atom-pair loop.  A center derivative of AO mu is nonzero only for its own
+!> atom, so every term reduces to per-AO vectors and atom-block sums:
+!>   u   = P phi + P^T phi,   w^c = P g^c + P^T g^c,
+!>   S(X,Y)_AB = sum_{mu in A, nu in B} X_mu P_mu,nu Y_nu   (X,Y in {g, h}),
+!>   drho(a,A)        = -sum_{mu in A} g^a u
+!>   dgrho(c,a,A)     = -sum_{mu in A} (h^ac u + g^a w^c)
+!>   d2rho(a,b,A,B)   = d_AB sum_{mu in A} h^ab u + S(g^a,g^b)_AB + S(g^b,g^a)_BA
+!>   d2grho(c,a,b,A,B)= d_AB sum_{mu in A} (t^abc u + h^ab w^c)
+!>                      + S(h^ac,g^b)_AB + S(h^bc,g^a)_BA
+!>                      + S(g^a,h^bc)_AB + S(g^b,h^ac)_BA
+!> (g = first, h = second, t = third electronic AO derivatives).  Cost per
+!> point: O(nao^2) contractions plus O(nao*nat) block sums, instead of
+!> O(nao^2 nat^2).
+  subroutine gga_density_nuclear_point(density, ao_atom, aov, aog1, aog2, &
+                                       aog3, drho, dgrho, d2rho, d2grho)
+    real(fp), intent(in) :: density(:,:)
+    integer, intent(in) :: ao_atom(:)
+    real(fp), intent(in) :: aov(:), aog1(:,:), aog2(:,:), aog3(:,:)
+    real(fp), intent(out) :: drho(:,:), dgrho(:,:,:)
+    real(fp), intent(out) :: d2rho(:,:,:,:), d2grho(:,:,:,:,:)
+
+    integer :: mu, nu, a, b, c, k, kx, ky, ia, ib, nao, nat
+    real(fp) :: p
+    real(fp), allocatable :: y(:,:), u(:), w(:,:), r(:,:,:), sblk(:,:,:,:)
+
+    nao = size(aov)
+    nat = size(drho,2)
+    if (size(density,1) /= nao .or. size(density,2) /= nao .or. size(ao_atom) /= nao) &
+      error stop 'gga_density_nuclear_point: AO dimension mismatch'
+    if (any(shape(d2rho) /= [3,3,nat,nat]) .or. &
+        any(shape(d2grho) /= [3,3,3,nat,nat])) &
+      error stop 'gga_density_nuclear_point: second derivative output mismatch'
+
+    ! y(:,1:3) = g^x,y,z ; y(:,3+k) = h column k (k = hmap index)
+    allocate(y(nao,9), u(nao), w(nao,3), r(nao,9,nat), sblk(9,9,nat,nat))
+    y(:,1:3) = aog1(:,1:3)
+    y(:,4:9) = aog2(:,1:6)
+
+    u = 0.0_fp; w = 0.0_fp; r = 0.0_fp
+    do nu = 1, nao
+      ib = ao_atom(nu)
+      do mu = 1, nao
+        p = density(mu,nu)
+        if (p == 0.0_fp) cycle
+        u(mu) = u(mu) + p*aov(nu)
+        u(nu) = u(nu) + p*aov(mu)
+        do c = 1, 3
+          w(mu,c) = w(mu,c) + p*aog1(nu,c)
+          w(nu,c) = w(nu,c) + p*aog1(mu,c)
+        end do
+        do k = 1, 9
+          r(mu,k,ib) = r(mu,k,ib) + p*y(nu,k)
+        end do
+      end do
+    end do
+    sblk = 0.0_fp
+    do mu = 1, nao
+      ia = ao_atom(mu)
+      do ib = 1, nat
+        do ky = 1, 9
+          if (r(mu,ky,ib) == 0.0_fp) cycle
+          do kx = 1, 9
+            sblk(kx,ky,ia,ib) = sblk(kx,ky,ia,ib) + y(mu,kx)*r(mu,ky,ib)
+          end do
+        end do
+      end do
+    end do
+
+    drho = 0.0_fp; dgrho = 0.0_fp; d2rho = 0.0_fp; d2grho = 0.0_fp
+    do mu = 1, nao
+      ia = ao_atom(mu)
+      do a = 1, 3
+        drho(a,ia) = drho(a,ia) - aog1(mu,a)*u(mu)
+        do c = 1, 3
+          dgrho(c,a,ia) = dgrho(c,a,ia) - aog2(mu,hmap(a,c))*u(mu) - aog1(mu,a)*w(mu,c)
+        end do
+        do b = 1, 3
+          d2rho(a,b,ia,ia) = d2rho(a,b,ia,ia) + aog2(mu,hmap(a,b))*u(mu)
+          do c = 1, 3
+            d2grho(c,a,b,ia,ia) = d2grho(c,a,b,ia,ia) &
+              + aog3(mu,tmap(a,b,c))*u(mu) + aog2(mu,hmap(a,b))*w(mu,c)
+          end do
+        end do
+      end do
+    end do
+    do ib = 1, nat
+      do ia = 1, nat
+        do b = 1, 3
+          do a = 1, 3
+            d2rho(a,b,ia,ib) = d2rho(a,b,ia,ib) + sblk(a,b,ia,ib) + sblk(b,a,ib,ia)
+            do c = 1, 3
+              d2grho(c,a,b,ia,ib) = d2grho(c,a,b,ia,ib) &
+                + sblk(3+hmap(a,c),b,ia,ib) + sblk(3+hmap(b,c),a,ib,ia) &
+                + sblk(a,3+hmap(b,c),ia,ib) + sblk(b,3+hmap(a,c),ib,ia)
+            end do
+          end do
+        end do
+      end do
+    end do
+    deallocate(y, u, w, r, sblk)
+  end subroutine gga_density_nuclear_point
 
 !> Compute fixed-grid first and second nuclear derivatives of rho and grad(rho).
 !>
@@ -25,7 +129,7 @@ contains
 !> Thus this routine supplies the DRA/GDA/DGGA data underlying the GAMESS
 !> DDDENCNST and TDHXG1G/TDHXGPG construction, without grid-weight or
 !> grid-center translation terms.
-  subroutine gga_density_nuclear_point(density, ao_atom, aov, aog1, aog2, &
+  subroutine gga_density_nuclear_point_reference(density, ao_atom, aov, aog1, aog2, &
                                        aog3, drho, dgrho, d2rho, d2grho)
     real(fp), intent(in) :: density(:,:)
     integer, intent(in) :: ao_atom(:)
@@ -140,6 +244,6 @@ contains
         error stop 'gga_density_nuclear_point: second derivative output mismatch'
     end subroutine check_shapes
 
-  end subroutine gga_density_nuclear_point
+  end subroutine gga_density_nuclear_point_reference
 
 end module mod_dft_gga_nuclear_point
