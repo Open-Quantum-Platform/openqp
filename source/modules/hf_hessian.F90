@@ -349,6 +349,7 @@ contains
       end do
 
       ! analytic dipole derivatives (IR intensities) from the relaxed dP^y
+      if (hf_hess_properties_wanted(infos)) then
       block
         real(dp), allocatable :: dipf(:,:,:), dmu(:,:)
         call hf_dipder_init(infos, pfull, dipf, dmu)
@@ -372,6 +373,7 @@ contains
         pstore = dpol
         deallocate(dpol)
       end block
+      end if
 
       ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
       allocate(moe1a(nocc,nocc,ncart))
@@ -1119,6 +1121,7 @@ contains
     end block
 
     ! analytic dipole derivatives (IR intensities) from the relaxed dP^y
+    if (hf_hess_properties_wanted(infos)) then
     block
       real(dp), allocatable :: dipf(:,:,:), dmu(:,:)
       integer :: yd
@@ -1144,6 +1147,7 @@ contains
       pstore = dpol
       deallocate(dpol)
     end block
+    end if
 
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
@@ -1209,6 +1213,7 @@ contains
     real(dp), contiguous, pointer :: hess_store(:,:)
     real(dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
     real(dp), allocatable :: dipf(:,:,:), dmu(:,:), dptx(:,:)
+    logical :: want_props
     real(dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(dp), allocatable :: faMO(:,:), fbMO(:,:)
     real(dp), allocatable :: scr(:,:), tmp(:,:), SxMO(:,:), hxMO(:,:), probe(:,:)
@@ -1555,8 +1560,11 @@ contains
     allocate(xa(nvira,nocca), xb(nvirb,noccb), dCa(nbf,nocca), dCb(nbf,noccb))
     allocate(gp(3,natom), gm(3,natom), hresp(ncart,ncart), source=0.0_dp)
     allocate(faop(nbf2), fbop(nbf2))
-    allocate(dptx(nbf,nbf))
-    call hf_dipder_init(infos, ptot, dipf, dmu)
+    want_props = hf_hess_properties_wanted(infos)
+    if (want_props) then
+      allocate(dptx(nbf,nbf))
+      call hf_dipder_init(infos, ptot, dipf, dmu)
+    end if
     do x = 1, ncart
       cc = mod(x-1,3)+1; kc = (x-1)/3+1
       call rohf_unpack_trial(uvec(:,x), xa, xb, nbf, nocca, noccb)
@@ -1586,16 +1594,19 @@ contains
       hresp(:,x) = reshape((gp - gm)/(2.0_dp*hstep), [ncart])
 
       ! relaxed total density derivative -> dipole derivative (IR intensities)
-      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, dCa, nbf, mo, nbf, 0.0_dp, dptx, nbf)
-      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, dCb, nbf, mo, nbf, 1.0_dp, dptx, nbf)
-      dptx = dptx + transpose(dptx)
-      call hf_dipder_add_response(dipf, dptx, dmu(:,x))
+      if (want_props) then
+        call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, dCa, nbf, mo, nbf, 0.0_dp, dptx, nbf)
+        call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, dCb, nbf, mo, nbf, 1.0_dp, dptx, nbf)
+        dptx = dptx + transpose(dptx)
+        call hf_dipder_add_response(dipf, dptx, dmu(:,x))
+      end if
     end do
-    call hf_dipder_store(infos, dmu)
-    deallocate(dipf, dmu, dptx)
 
     ! analytic polarizability derivatives (Raman activities); the ECP enters
     ! only through h^x (ecp_deriv_ints is folded into dVa above)
+    if (want_props) then
+    call hf_dipder_store(infos, dmu)
+    deallocate(dipf, dmu, dptx)
     block
       use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
       real(dp), allocatable :: dpol(:,:,:), fa_ao(:,:), fb_ao(:,:)
@@ -1610,6 +1621,7 @@ contains
       pstore = dpol
       deallocate(dpol, fa_ao, fb_ao)
     end block
+    end if
 
     ! The central difference of the ELECTRONIC gradient over geometry AND the
     ! relaxed orbital path already contains the full electronic Hessian (skeleton
@@ -2701,6 +2713,26 @@ contains
       deallocate(mos, dmo, fra, frb, vxc, fxa, fxb, dxa, dxb, pts)
     end subroutine add_xc_terms_rohf
   end subroutine hf_polder_rohf
+
+!###############################################################################
+
+!> @brief Whether the caller wants the IR/Raman property derivatives.
+!> @details The Python driver sets OQP::hess_properties = 0 when only the
+!>   Cartesian Hessian is needed (native TS/IRC, analysis=False); absent or
+!>   nonzero means compute them.
+  logical function hf_hess_properties_wanted(infos) result(want)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_hess_properties, ta_ok
+    use iso_c_binding, only: c_int64_t
+    type(information), target, intent(inout) :: infos
+    integer(c_int64_t), contiguous, pointer :: flag(:)
+    integer(4) :: status
+    want = .true.
+    call tagarray_get_data(infos%dat, OQP_hess_properties, flag, status)
+    if (status == ta_ok) then
+      if (size(flag) > 0) want = flag(1) /= 0
+    end if
+  end function hf_hess_properties_wanted
 
 !###############################################################################
 

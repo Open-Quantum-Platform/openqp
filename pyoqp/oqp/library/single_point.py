@@ -1864,6 +1864,7 @@ class Hessian(Calculator):
         workflow unchanged.
         """
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
+        self._analysis = analysis
         if not self.read:
             dump_log(self.mol, title=f'PyOQP: Hessian type {self.hess_type} -- {self.hess_type_reason}')
 
@@ -2152,6 +2153,13 @@ class Hessian(Calculator):
         native_hess_func = self.native_hess_func['hf']
         if native_hess_func is None:
             raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
+        # Matrix-only callers (native TS/IRC, analysis=False) skip the IR/Raman
+        # property derivatives in the native kernel.
+        try:
+            self.mol.data["OQP::hess_properties"] = np.array(
+                [1 if getattr(self, '_analysis', True) else 0], dtype=np.int64)
+        except Exception:
+            pass
         native_hess_func(self.mol)
         self._collect_native_fort6_logs(self.mol)
 

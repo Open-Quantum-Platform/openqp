@@ -1,0 +1,19 @@
+# H2O RHF/6-31G Hessian with no [hess] type: the default type=auto selects the
+# native analytic Hessian (and analytic IR/Raman) for this ground-state HF run.
+[input]
+system=
+   8   0.000000000   0.000000000   0.117300000
+   1   0.000000000   0.757200000  -0.469200000
+   1   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=hess
+basis=6-31g
+method=hf
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-10
+
+[hess]
+clean=True

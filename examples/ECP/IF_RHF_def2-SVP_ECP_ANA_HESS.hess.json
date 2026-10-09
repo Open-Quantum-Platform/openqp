@@ -366,42 +366,42 @@
     218.2259866338813
   ],
   "infrared_intensities": [
-    1.994257077645204
+    1.994231532933547
   ],
   "raman_activities": [
-    220.39037398421456
+    220.38729761073284
   ],
   "vibrational_intensity_metadata": {
     "status": "computed",
-    "backend": "native_openqp_finite_difference",
+    "backend": "native_openqp_analytic",
     "property_kernels": "electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native",
-    "displacement_bohr": 0.001,
+    "displacement_bohr": 0.0,
     "ir_units": "km/mol",
     "raman_units": "a.u."
   },
   "infrared_mode_dipole_derivatives": [
     [
-      -0.01129697839801515,
-      -0.022593954347906377,
-      -0.21577223444751062
+      -0.011297412276989318,
+      -0.022594785525365646,
+      -0.21577072382128526
     ]
   ],
   "raman_mode_polarizability_derivatives": [
     [
       [
-        -0.11655644105853281,
-        0.02402053759266152,
-        0.2293961270530775
+        -0.11655597968811111,
+        0.024021407078059318,
+        0.22941153431123337
       ],
       [
-        0.02402221522607117,
-        -0.08052141349450524,
-        0.4588242961336589
+        0.024021407078059318,
+        -0.08052321491977033,
+        0.45882770669226963
       ],
       [
-        0.22941303105110658,
-        0.45882606169372353,
-        4.253410815069334
+        0.22941153431123337,
+        0.45882770669226963,
+        4.253378525927406
       ]
     ]
   ],

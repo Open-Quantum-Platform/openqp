@@ -89,6 +89,9 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_tdhf_hessian = OQP_prefix // "tdhf_hessian"
   character(len=*), parameter, public :: OQP_hf_dipole_derivatives = OQP_prefix // "hf_dipole_derivatives"
   character(len=*), parameter, public :: OQP_hf_polarizability_derivatives = OQP_prefix // "hf_polarizability_derivatives"
+  !> int64 flag set by the Python Hessian driver: 0 = matrix only (TS/IRC
+  !> analysis=False), skip the IR/Raman property derivatives; absent or 1 = compute
+  character(len=*), parameter, public :: OQP_hess_properties = OQP_prefix // "hess_properties"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
@@ -235,7 +238,7 @@ module oqp_tagarray_driver
     OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
     OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, &
     OQP_hf_hessian, OQP_tdhf_hessian, OQP_hf_dipole_derivatives, &
-    OQP_hf_polarizability_derivatives, &
+    OQP_hf_polarizability_derivatives, OQP_hess_properties, &
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
