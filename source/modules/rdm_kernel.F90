@@ -38,6 +38,7 @@ module rdm_kernel_mod
 
   public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms
   public :: rdm1_spatial, rdm2_spatial
+  public :: nevpt2_f3ca_f3ac_direct
 
 contains
 
@@ -630,5 +631,119 @@ contains
     end do
     deallocate(kets, e2, bras, blk, e1, cnt, rows, cols, sgns)
   end function nevpt2_make_rdms
+
+  function nevpt2_f3ca_f3ac_direct(norb, ndet, dets, civec, h2e, &
+      f3ca, f3ac) result(info) bind(C, name="nevpt2_f3ca_f3ac_direct")
+    use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+    implicit none
+    integer(c_int32_t), value :: norb
+    integer(c_int64_t), value :: ndet
+    integer(c_int64_t), intent(in) :: dets(0:ndet-1)
+    real(c_double), intent(in) :: civec(0:ndet-1)
+    real(c_double), intent(in) :: h2e(0:*)
+    real(c_double), intent(inout) :: f3ca(0:*), f3ac(0:*)
+    integer(c_int64_t) :: info
+    integer(i8) :: k, maxnnz, m_i8, qq
+    integer :: n, n2, n3, n4, npair, t, u, v, w, vw, tu
+    integer :: o4, o5, pq, rs, ierr, nb
+    integer(i8), allocatable :: skeys(:), sperm(:), cnt(:), rows(:,:), cols(:,:)
+    real(dp), allocatable :: sgns(:,:), e1(:,:), bras(:,:), tmp(:)
+    real(dp), allocatable :: kets(:,:), blk(:,:), dm4_t(:,:), panel(:,:)
+
+    info = 0_i8; n = int(norb); if (n <= 0) return
+    n2 = n*n; n3 = n2*n; n4 = n3*n; npair = n2
+    maxnnz = 2_i8 * ndet
+
+    allocate(skeys(0:ndet-1), sperm(0:ndet-1), stat=ierr)
+    if (ierr /= 0) then; info = -1_i8; return; end if
+    do k = 0_i8, ndet - 1_i8; skeys(k) = dets(k); sperm(k) = k; end do
+    call sort_keys_perm(ndet, skeys, sperm)
+    allocate(cnt(0:npair-1), rows(0:maxnnz-1, 0:npair-1), &
+             cols(0:maxnnz-1, 0:npair-1), sgns(0:maxnnz-1, 0:npair-1), stat=ierr)
+    if (ierr /= 0) then; info = -1_i8; return; end if
+    call build_epq(norb, ndet, dets, skeys, sperm, cnt, rows, cols, sgns)
+    deallocate(skeys, sperm)
+
+    allocate(e1(0:ndet-1, 0:npair-1), stat=ierr)
+    if (ierr /= 0) then; info = -1_i8; return; end if
+    do pq = 0, npair - 1
+      call apply_epq(ndet, cnt(pq), rows(:,pq), cols(:,pq), sgns(:,pq), civec, e1(:,pq))
+    end do
+    allocate(bras(0:ndet-1, 0:npair-1), blk(0:npair-1, 0:npair-1), stat=ierr)
+    if (ierr /= 0) then; info = -1_i8; return; end if
+    do p = 0, n - 1
+      do q = 0, n - 1
+        bras(:, p*n + q) = e1(:, q*n + p)
+      end do
+    end do
+
+    allocate(tmp(0:ndet-1), kets(0:ndet-1, 0:npair-1), &
+             dm4_t(0:n3-1, 0:n4-1), panel(0:n-1, 0:n4-1), stat=ierr)
+    if (ierr /= 0) then; info = -1_i8; return; end if
+    nb = n
+
+    ! --- Precompute B[o5, m] = h2e[k,o5,i,j], m = j*n2+k*n+i ----------------
+    block
+      real(dp), allocatable :: bmat(:,:)
+      allocate(bmat(0:n-1, 0:n3-1))
+      do j = 0, n - 1; do k = 0, n - 1; do i = 0, n - 1
+        m_i8 = int(j, i8)*int(n2, i8) + int(k, i8)*int(n, i8) + int(i, i8)
+        do o5 = 0, n - 1
+          bmat(o5, m_i8) = h2e((((int(k, i8)*int(n, i8)+int(o5, i8))*int(n, i8) &
+                                 +int(i, i8))*int(n, i8)+int(j, i8)))
+        end do
+      end do; end do; end do
+
+      do t = 0, n - 1
+        dm4_t = 0.0_dp
+        do vw = 0, npair - 1
+          do u = 0, n - 1
+            tu = t*n + u
+            call apply_epq(ndet, cnt(tu), rows(:,tu), cols(:,tu), sgns(:,tu), e1(:, vw), tmp)
+            do rs = 0, npair - 1
+              call apply_epq(ndet, cnt(rs), rows(:,rs), cols(:,rs), sgns(:,rs), tmp, kets(:, rs))
+            end do
+            call dgemm('T', 'N', npair, npair, int(ndet, 4), 1.0_dp, &
+                       bras, int(ndet, 4), kets, int(ndet, 4), 0.0_dp, blk, npair)
+            m_i8 = int(u, i8)*int(n2, i8) + int(vw, i8)
+            do pq = 0, npair - 1
+              do rs = 0, npair - 1
+                dm4_t(m_i8, int(pq, i8)*int(npair, i8) + int(rs, i8)) = blk(pq, rs)
+              end do
+            end do
+          end do
+        end do
+        ! f3ca: B[n,n3] · dm4_t[n3,n4] → panel[n,n4]
+        call dgemm('N', 'N', nb, n4, n3, 1.0_dp, bmat, nb, dm4_t, n3, 0.0_dp, panel, nb)
+        do qq = 0_i8, int(n4, i8) - 1_i8
+          do o5 = 0, n - 1
+            f3ca((qq*int(n, i8) + int(t, i8))*int(n, i8) + int(o5, i8)) = panel(o5, qq)
+          end do
+        end do
+        ! f3ac: per-Q A_t[n,n2] · dm4_s[n2,n] → f3ac_q[n,n]
+        block
+          real(dp) :: a_t(0:n-1, 0:n2-1), dm4_s(0:n2-1, 0:n-1), f3ac_q(0:n-1, 0:n-1)
+          do qq = 0_i8, int(n4, i8) - 1_i8
+            do v = 0, n - 1; do w = 0, n - 1
+              m_i8 = int(v, i8)*int(n, i8) + int(w, i8)
+              do o4 = 0, n - 1
+                a_t(o4, m_i8) = h2e((((int(v, i8)*int(n, i8)+int(t, i8))*int(n, i8) &
+                                      +int(w, i8))*int(n, i8)+int(o4, i8)))
+              end do
+              do o5 = 0, n - 1
+                dm4_s(m_i8, o5) = dm4_t(int(o5, i8)*int(n2, i8) + m_i8, qq)
+              end do
+            end do; end do
+            call dgemm('N', 'N', nb, nb, n2, 1.0_dp, a_t, nb, dm4_s, n2, 0.0_dp, f3ac_q, nb)
+            do o4 = 0, n - 1; do o5 = 0, n - 1
+              f3ac((qq*int(n, i8)+int(o4, i8))*int(n, i8)+int(o5, i8)) = f3ac_q(o4, o5)
+            end do; end do
+          end do
+        end block
+      end do
+      deallocate(bmat)
+    end block
+    deallocate(dm4_t, tmp, kets, panel, e1, bras, blk, cnt, rows, cols, sgns)
+  end function nevpt2_f3ca_f3ac_direct
 
 end module rdm_kernel_mod
