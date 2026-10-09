@@ -232,10 +232,10 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
             "!$ompatomicupdatef3_ex(v,c-8,j,l)=f3_ex(v,c-8,j,l)-xval*d3(v,c,k,i)",
         )
         bad_head_updates = (
-            "f3_ex(v,c-8,i,k)=f3_ex(v,c-8,i,k)-xval*d3(v,c,l,j)",
-            "f3_ex(v,c-8,k,i)=f3_ex(v,c-8,k,i)-xval*d3(v,c,j,l)",
-            "f3_ex(v,c-8,i,l)=f3_ex(v,c-8,i,l)-xval*d3(v,c,k,j)",
-            "f3_ex(v,c-8,l,i)=f3_ex(v,c-8,l,i)-xval*d3(v,c,j,k)",
+            "f3(v,c,i,k)=f3(v,c,i,k)-xval*d3(v,c,l,j)",
+            "f3(v,c,k,i)=f3(v,c,k,i)-xval*d3(v,c,l,j)",
+            "f3(v,c,i,l)=f3(v,c,i,l)-xval*d3(v,c,l,j)",
+            "f3(v,c,l,i)=f3(v,c,l,i)-xval*d3(v,c,k,j)",
         )
 
         for update in expected_updates:
