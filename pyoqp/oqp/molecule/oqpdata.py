@@ -450,6 +450,10 @@ OQP_CONFIG_SCHEMA = {
         'grid_ao_pruned': {'type': bool, 'default': 'True'},
         'grid_ao_threshold': {'type': float, 'default': '1.0e-15'},
         'grid_ao_sparsity_ratio': {'type': float, 'default': '0.9'},
+        'xi_mode': {'type': int, 'default': '0'},
+        'xi_alpha': {'type': float, 'default': '1.0'},
+        'xi_p': {'type': int, 'default': '-1'},
+        'xi_scale': {'type': int, 'default': '0'},
     },
     'tdhf': {
         'type': {'type': string, 'default': 'rpa'},
@@ -1066,6 +1070,10 @@ class OQPData:
             "cam_alpha": "set_dftgrid_cam_alpha",
             "cam_beta": "set_dftgrid_cam_beta",
             "cam_mu": "set_dftgrid_cam_mu",
+            "xi_mode": "set_dftgrid_xi_mode",
+            "xi_alpha": "set_dftgrid_xi_alpha",
+            "xi_p": "set_dftgrid_xi_p",
+            "xi_scale": "set_dftgrid_xi_scale",
         },
         "tdhf": {
             "type": "set_tdhf_type",
@@ -1844,6 +1852,31 @@ class OQPData:
     def set_dftgrid_cam_mu(self, cam_mu):
         """Set range separation parameter mu in DFT calculation"""
         self._data.dft.cam_mu = cam_mu
+
+    def set_dftgrid_xi_mode(self, xi_mode):
+        """Fractional-derivative ingredient xi^alpha: 0 off, 1 replaces tau"""
+        self._data.dft.xi_mode = int(xi_mode)
+
+    def set_dftgrid_xi_alpha(self, xi_alpha):
+        """Order alpha (<= 1) of the xi^alpha ingredient"""
+        xi_alpha = float(xi_alpha)
+        if xi_alpha > 1.0:
+            raise ValueError('dftgrid.xi_alpha must be <= 1')
+        self._data.dft.xi_alpha = xi_alpha
+
+    def set_dftgrid_xi_p(self, xi_p):
+        """Inner integer derivative order p of xi^alpha (0 or 1, -1 = auto)"""
+        xi_p = int(xi_p)
+        if xi_p not in (-1, 0, 1):
+            raise ValueError('dftgrid.xi_p must be -1, 0 or 1')
+        self._data.dft.xi_p = xi_p
+
+    def set_dftgrid_xi_scale(self, xi_scale):
+        """xi^alpha path scaling: 0 normalised [0,1] (paper), 1 physical path length"""
+        xi_scale = int(xi_scale)
+        if xi_scale not in (0, 1):
+            raise ValueError('dftgrid.xi_scale must be 0 or 1')
+        self._data.dft.xi_scale = xi_scale
 
     def set_system(self, system):
         """Set up atomic data"""
