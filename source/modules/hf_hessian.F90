@@ -348,6 +348,31 @@ contains
         call dgemm('t','n',nocc,nocc,nbf,1.0_dp,cocc,nbf,tmpno,nbf,0.0_dp,GdpMOoo(:,:,yy),nocc)
       end do
 
+      ! analytic dipole derivatives (IR intensities) from the relaxed dP^y
+      block
+        real(dp), allocatable :: dipf(:,:,:), dmu(:,:)
+        call hf_dipder_init(infos, pfull, dipf, dmu)
+        do yy = 1, ncart
+          call hf_dipder_add_response(dipf, dPx(:,:,yy), dmu(:,yy))
+        end do
+        call hf_dipder_store(infos, dmu)
+      end block
+
+      ! analytic polarizability derivatives (Raman activities); the ECP enters
+      ! only through h^x (ecp_deriv_ints is folded into dVa above)
+      block
+        use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+        real(dp), allocatable :: dpol(:,:,:)
+        real(dp), contiguous, pointer :: pstore(:,:,:)
+        allocate(dpol(3,3,ncart))
+        call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
+                           nocc, nvir, hfscale, dpol)
+        call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+          description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+        pstore = dpol
+        deallocate(dpol)
+      end block
+
       ! mo_e1 without the G[P]^y part (added via Mi trick in term3)
       allocate(moe1a(nocc,nocc,ncart))
       do yy = 1, ncart
@@ -1093,6 +1118,33 @@ contains
       call gcomp%clean()
     end block
 
+    ! analytic dipole derivatives (IR intensities) from the relaxed dP^y
+    block
+      real(dp), allocatable :: dipf(:,:,:), dmu(:,:)
+      integer :: yd
+      call hf_dipder_init(infos, ptot, dipf, dmu)
+      do yd = 1, ncart
+        call hf_dipder_add_response(dipf, sp(1)%dPx(:,:,yd) + sp(2)%dPx(:,:,yd), dmu(:,yd))
+      end do
+      call hf_dipder_store(infos, dmu)
+    end block
+
+    ! analytic polarizability derivatives (Raman activities); the ECP enters
+    ! only through h^x (ecp_deriv_ints is folded into dVa above)
+    block
+      use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+      real(dp), allocatable :: dpol(:,:,:)
+      real(dp), contiguous, pointer :: pstore(:,:,:)
+      allocate(dpol(3,3,ncart))
+      call hf_polder_uhf(infos, sp(1)%mo, sp(2)%mo, sp(1)%eps, sp(2)%eps, sp(1)%p, sp(2)%p, &
+                         sp(1)%nocc, sp(2)%nocc, sflat, hflat, uvec, sp(1)%dPx, sp(2)%dPx, &
+                         hfscale, dpol)
+      call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+        description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+      pstore = dpol
+      deallocate(dpol)
+    end block
+
     call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
       description='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
     hess_store = hess_native
@@ -1156,6 +1208,7 @@ contains
     real(dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), focka(:), fockb(:), hcore(:)
     real(dp), contiguous, pointer :: hess_store(:,:)
     real(dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
+    real(dp), allocatable :: dipf(:,:,:), dmu(:,:), dptx(:,:)
     real(dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(dp), allocatable :: faMO(:,:), fbMO(:,:)
     real(dp), allocatable :: scr(:,:), tmp(:,:), SxMO(:,:), hxMO(:,:), probe(:,:)
@@ -1502,6 +1555,8 @@ contains
     allocate(xa(nvira,nocca), xb(nvirb,noccb), dCa(nbf,nocca), dCb(nbf,noccb))
     allocate(gp(3,natom), gm(3,natom), hresp(ncart,ncart), source=0.0_dp)
     allocate(faop(nbf2), fbop(nbf2))
+    allocate(dptx(nbf,nbf))
+    call hf_dipder_init(infos, ptot, dipf, dmu)
     do x = 1, ncart
       cc = mod(x-1,3)+1; kc = (x-1)/3+1
       call rohf_unpack_trial(uvec(:,x), xa, xb, nbf, nocca, noccb)
@@ -1529,7 +1584,32 @@ contains
       call resp_grad( 1.0_dp, gp)
       call resp_grad(-1.0_dp, gm)
       hresp(:,x) = reshape((gp - gm)/(2.0_dp*hstep), [ncart])
+
+      ! relaxed total density derivative -> dipole derivative (IR intensities)
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, dCa, nbf, mo, nbf, 0.0_dp, dptx, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, dCb, nbf, mo, nbf, 1.0_dp, dptx, nbf)
+      dptx = dptx + transpose(dptx)
+      call hf_dipder_add_response(dipf, dptx, dmu(:,x))
     end do
+    call hf_dipder_store(infos, dmu)
+    deallocate(dipf, dmu, dptx)
+
+    ! analytic polarizability derivatives (Raman activities); the ECP enters
+    ! only through h^x (ecp_deriv_ints is folded into dVa above)
+    block
+      use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+      real(dp), allocatable :: dpol(:,:,:), fa_ao(:,:), fb_ao(:,:)
+      real(dp), contiguous, pointer :: pstore(:,:,:)
+      allocate(dpol(3,3,ncart), fa_ao(nbf,nbf), fb_ao(nbf,nbf))
+      call unpack_matrix(focka, fa_ao)
+      call unpack_matrix(fockb, fb_ao)
+      call hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
+                          dSa, dTa + dVa, uvec, hfscale, dpol)
+      call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+        description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+      pstore = dpol
+      deallocate(dpol, fa_ao, fb_ao)
+    end block
 
     ! The central difference of the ELECTRONIC gradient over geometry AND the
     ! relaxed orbital path already contains the full electronic Hessian (skeleton
@@ -1678,6 +1758,1036 @@ contains
     end subroutine resp_grad
 
   end subroutine hf_hessian_rohf
+
+!###############################################################################
+
+!> @brief Analytic nuclear derivatives of the static dipole polarizability,
+!>        closed-shell HF (Raman activities).
+!> @details  With the field responses U^a (A U^a = -mu^a) the polarizability is
+!>   the stationary value of the Hylleraas functional
+!>     alpha_ab = -4 [ mu^a.U^b + mu^b.U^a + U^a.A.U^b ],
+!>   so (2n+1 rule) its nuclear derivative needs no second-order response: keep
+!>   U^a, U^b fixed and differentiate the MO-basis quantities along the relaxed
+!>   orbital path dC = C T^x with T_vo = U^x, T_oo = -S^x_oo/2,
+!>   T_vv = -S^x_vv/2, T_ov = -U^x' - S^x_ov:
+!>     d alpha_ab/dx = -4 [ mu^a(x).U^b + mu^b(x).U^a + (U^a.A.U^b)(x) ].
+!>   With Pt^a = Co U^a Cv' + Cv U^a' Co', Y = U^a'U^b, Z = U^a U^b',
+!>   W = Cv Y Cv' - Co Z Co' and G the closed-shell response Fock (fock_jk),
+!>     U^a.A.U^b = Tr[F_vv Y] - Tr[F_oo Z] + Tr[Pt^a G[Pt^b]],
+!>   whose derivative is
+!>     Tr[(h^x + G^x[P] + G[dP^x]) W] - Tr[S^x_vv/2 (eps.Y + Y.eps)]
+!>       + Tr[S^x_oo/2 (eps.Z + Z.eps)] + Tr[Pt^a G^x[Pt^b]]
+!>       + 2 Tr[T W^a G^b] + 2 Tr[T W^b G^a]   (W^a, G^b in the MO basis).
+!>   The derivative-integral traces come from fock_deriv_contract (one
+!>   traversal per field pair for G^x[P].W and one for Pt^a.G^x[Pt^b]), so the
+!>   whole tensor costs 3 CPHF right-hand sides, 9 response Fock builds and 12
+!>   derivative-integral traversals, independent of the number of atoms.
+!>   For Kohn-Sham the exchange-correlation pieces -- Tr[dVxc/dx W] and the
+!>   derivative of 1/2 Tr[Pt^a f_xc[Pt^b]] -- are taken by central differences
+!>   along the relaxed path (R +/- h, C +/- h C T^x) with the moving grid, the
+!>   same treatment the Hessian uses for its XC terms: no SCF or CPKS re-solve,
+!>   two Vxc and six f_xc builds per coordinate.
+  subroutine hf_polder_rhf(infos, mo, eps, pfull, sflat, hflat, uvec, dPx, &
+                           nocc, nvir, hfscale, dpol)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: multipole_integrals
+    use grd1, only: der_dipole_matrix
+    use mathlib, only: unpack_matrix, pack_matrix
+    use fock_deriv_mod, only: fock_deriv_contract
+    use scf_addons, only: fock_jk
+    use cphf_mod, only: cphf_solve
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: mo(:,:), eps(:), pfull(:,:), sflat(:,:,:), hflat(:,:,:)
+    real(dp), intent(in) :: uvec(:,:), dPx(:,:,:), hfscale
+    integer, intent(in) :: nocc, nvir
+    real(dp), intent(out) :: dpol(:,:,:)            ! (3,3,ncart)
+
+    type(basis_set), pointer :: basis
+    real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
+    real(dp), allocatable :: bF(:,:), uF(:,:), ua(:,:,:), xa(:,:,:), pta(:,:,:)
+    real(dp), allocatable :: ga(:,:,:), gamo(:,:,:), wsym(:,:,:), gw(:,:,:)
+    real(dp), allocatable :: gwx(:,:,:), gppx(:,:,:), yab(:,:,:), zab(:,:,:)
+    real(dp), allocatable :: tmat(:,:), smo(:,:), scr(:,:), scr2(:,:), wmo(:,:)
+    real(dp), allocatable :: dpk(:,:), fpk(:,:), gx(:,:), ux(:,:)
+    real(dp) :: origin(3), t1(3,3), t2, t3, alpha(3,3), hyl, a1, a2
+    integer :: nbf, nbf2, natom, ncart, lexc, a, b, q, i, j, k, x, kc, cc, ia, ip
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2)
+    ncart = 3*natom
+    lexc = nocc*nvir
+    origin = 0.0_dp
+
+    ! ---- dipole integrals (normalized), MO dipole, field CPHF -------------
+    allocate(mints(nbf2,19), source=0.0_dp)
+    call multipole_integrals(basis, mints, origin, 3)
+    allocate(dfull(nbf,nbf,3), mmo(nbf,nbf,3), scr(nbf,nbf), scr2(nbf,nbf))
+    do a = 1, 3
+      call unpack_matrix(mints(:,a), dfull(:,:,a))
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,dfull(:,:,a),nbf,0.0_dp,scr,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,mmo(:,:,a),nbf)
+    end do
+    deallocate(mints)
+    allocate(bF(lexc,3), uF(lexc,3), source=0.0_dp)
+    do a = 1, 3
+      do q = 1, nvir
+        do i = 1, nocc
+          bF((q-1)*nocc+i,a) = -mmo(i,nocc+q,a)
+        end do
+      end do
+    end do
+    call cphf_solve(infos, 3, bF, uF)
+    do b = 1, 3
+      do a = 1, 3
+        alpha(a,b) = 4.0_dp*sum(bF(:,a)*uF(:,b))
+      end do
+    end do
+
+    ! ---- field-response matrices -----------------------------------------
+    allocate(ua(nocc,nvir,3), xa(nbf,nbf,3), pta(nbf,nbf,3), ga(nbf,nbf,3), gamo(nbf,nbf,3))
+    allocate(dpk(nbf2,1), fpk(nbf2,1))
+    do a = 1, 3
+      ua(:,:,a) = reshape(uF(:,a), [nocc,nvir])
+      call dgemm('n','n',nbf,nvir,nocc,1.0_dp,mo,nbf,ua(:,:,a),nocc,0.0_dp,scr,nbf)
+      call dgemm('n','t',nbf,nbf,nvir,1.0_dp,scr,nbf,mo(:,nocc+1:),nbf,0.0_dp,xa(:,:,a),nbf)
+      pta(:,:,a) = xa(:,:,a) + transpose(xa(:,:,a))
+      call pack_matrix(pta(:,:,a), dpk(:,1))
+      fpk = 0.0_dp
+      call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+      call unpack_from_packed(fpk(:,1), ga(:,:,a), nbf)
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,ga(:,:,a),nbf,0.0_dp,scr,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,gamo(:,:,a),nbf)
+    end do
+
+    ! Self-check of the conventions: the Hylleraas value equals alpha.
+    if (infos%control%verbose >= 2) then
+      do b = 1, 3
+        do a = 1, 3
+          hyl = sum(bF(:,a)*uF(:,b)) + sum(bF(:,b)*uF(:,a))        ! = -(mu^a.U^b + mu^b.U^a)
+          a1 = 0.0_dp
+          do q = 1, nvir
+            do i = 1, nocc
+              a1 = a1 + ua(i,q,a)*ua(i,q,b)*(eps(nocc+q) - eps(i))
+            end do
+          end do
+          a2 = sum(pta(:,:,a)*ga(:,:,b))
+          write(iw,'(A,2I2,3ES16.8)') '  polder Hylleraas check a b, alpha, -4[..], diff:', a, b, &
+            alpha(a,b), 4.0_dp*hyl - 4.0_dp*(a1 + a2), alpha(a,b) - (4.0_dp*hyl - 4.0_dp*(a1 + a2))
+        end do
+      end do
+    end if
+
+    ! ---- pair intermediates: W_ab, G[W_ab], derivative-integral traces ---
+    allocate(yab(nvir,nvir,6), zab(nocc,nocc,6), wsym(nbf,nbf,6), gw(nbf,nbf,6))
+    allocate(gwx(3,natom,6), gppx(3,natom,6), gx(3,natom))
+    ip = 0
+    do b = 1, 3
+      do a = 1, b
+        ip = ip + 1
+        call dgemm('t','n',nvir,nvir,nocc,1.0_dp,ua(:,:,a),nocc,ua(:,:,b),nocc,0.0_dp,yab(:,:,ip),nvir)
+        call dgemm('n','t',nocc,nocc,nvir,1.0_dp,ua(:,:,a),nocc,ua(:,:,b),nocc,0.0_dp,zab(:,:,ip),nocc)
+        call dgemm('n','n',nbf,nvir,nvir,1.0_dp,mo(:,nocc+1:),nbf,yab(:,:,ip),nvir,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nvir,1.0_dp,scr,nbf,mo(:,nocc+1:),nbf,0.0_dp,scr2,nbf)
+        call dgemm('n','n',nbf,nocc,nocc,1.0_dp,mo,nbf,zab(:,:,ip),nocc,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nocc,-1.0_dp,scr,nbf,mo,nbf,1.0_dp,scr2,nbf)
+        wsym(:,:,ip) = 0.5_dp*(scr2 + transpose(scr2))
+        call pack_matrix(wsym(:,:,ip), dpk(:,1))
+        fpk = 0.0_dp
+        call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+        call unpack_from_packed(fpk(:,1), gw(:,:,ip), nbf)
+        call fock_deriv_contract(infos, basis, pfull, wsym(:,:,ip), hfscale, gx)
+        gwx(:,:,ip) = 2.0_dp*gx
+        call fock_deriv_contract(infos, basis, pta(:,:,b), pta(:,:,a), hfscale, gx)
+        gppx(:,:,ip) = 2.0_dp*gx
+      end do
+    end do
+
+    ! ---- dipole-integral derivatives -------------------------------------
+    allocate(dD(nbf,nbf,3,natom,3))
+    call der_dipole_matrix(basis, origin, dD)
+    do a = 1, 3
+      do k = 1, natom
+        do cc = 1, 3
+          do j = 1, nbf
+            dD(:,j,cc,k,a) = dD(:,j,cc,k,a)*basis%bfnrm(:)*basis%bfnrm(j)
+          end do
+        end do
+      end do
+    end do
+
+    ! ---- per nuclear coordinate ------------------------------------------
+    allocate(tmat(nbf,nbf), smo(nbf,nbf), wmo(nbf,nbf), ux(nocc,nvir))
+    dpol = 0.0_dp
+    do x = 1, ncart
+      cc = mod(x-1,3) + 1; kc = (x-1)/3 + 1
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,sflat(:,:,x),nbf,0.0_dp,scr,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,smo,nbf)
+      ux = reshape(uvec(:,x), [nocc,nvir])
+      tmat = -0.5_dp*smo
+      tmat(nocc+1:,1:nocc) = transpose(ux)
+      tmat(1:nocc,nocc+1:) = -ux - smo(1:nocc,nocc+1:)
+
+      ! mu^a(x).U^b = Tr[D_a^x X^b] + sum_ia U^b_ia ([T'M_a]_ia + [M_a T]_ia)
+      do a = 1, 3
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,mmo(:,:,a),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mmo(:,:,a),nbf,tmat,nbf,1.0_dp,scr,nbf)
+        do b = 1, 3
+          t1(a,b) = sum(dD(:,:,cc,kc,a)*xa(:,:,b)) + sum(ua(:,:,b)*scr(1:nocc,nocc+1:))
+        end do
+      end do
+
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          ! F part: Tr[(h^x + G^x[P] + G[dP^x]) W] and the S^x energy weights
+          t2 = sum(hflat(:,:,x)*wsym(:,:,ip)) + gwx(cc,kc,ip) + sum(dPx(:,:,x)*gw(:,:,ip))
+          do j = 1, nvir
+            do i = 1, nvir
+              t2 = t2 - 0.5_dp*smo(nocc+i,nocc+j)*(eps(nocc+i) + eps(nocc+j))*yab(i,j,ip)
+            end do
+          end do
+          do j = 1, nocc
+            do i = 1, nocc
+              t2 = t2 + 0.5_dp*smo(i,j)*(eps(i) + eps(j))*zab(i,j,ip)
+            end do
+          end do
+          ! two-electron part: Tr[Pt^a G^x[Pt^b]] + 2Tr[T W^a G^b] + 2Tr[T W^b G^a]
+          t3 = gppx(cc,kc,ip) + 2.0_dp*tw_g(a, b) + 2.0_dp*tw_g(b, a)
+          dpol(a,b,x) = -4.0_dp*(t1(a,b) + t1(b,a) + t2 + t3)
+          dpol(b,a,x) = dpol(a,b,x)
+        end do
+      end do
+    end do
+
+    if (infos%control%hamilton == 20) call add_xc_terms()
+
+    deallocate(dfull, mmo, dD, bF, uF, ua, xa, pta, ga, gamo, wsym, gw, gwx, gppx, &
+               yab, zab, tmat, smo, scr, scr2, wmo, dpk, fpk, gx, ux)
+
+  contains
+
+    !> Kohn-Sham exchange-correlation contributions by central differences
+    !> along the relaxed orbital path with the moving grid.
+    subroutine add_xc_terms()
+      use mod_dft, only: dft_initialize, dftclean, dftexcor
+      use mod_dft_molgrid, only: dft_grid_t
+      use mod_dft_gridint_fxc, only: tddft_fxc
+      type(dft_grid_t) :: mg
+      real(dp), parameter :: hxc = 1.0e-3_dp
+      real(dp), allocatable :: mos(:,:), dmo(:,:), fr(:), vxc(:,:,:), fx(:,:,:), dx(:,:,:), pts(:,:,:)
+      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn
+      integer :: is, xx, kx, cx, ipx, aa, bb
+
+      allocate(mos(nbf,nbf), dmo(nbf,nbf), fr(nbf2), vxc(nbf,nbf,2), &
+               fx(nbf,nbf,3), dx(nbf,nbf,3), pts(nbf,nbf,3))
+      do xx = 1, ncart
+        cx = mod(xx-1,3) + 1; kx = (xx-1)/3 + 1
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,sflat(:,:,xx),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,smo,nbf)
+        ux = reshape(uvec(:,xx), [nocc,nvir])
+        tmat = -0.5_dp*smo
+        tmat(nocc+1:,1:nocc) = transpose(ux)
+        tmat(1:nocc,nocc+1:) = -ux - smo(1:nocc,nocc+1:)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,tmat,nbf,0.0_dp,dmo,nbf)
+        do is = 1, 2
+          sgn = merge(1.0_dp, -1.0_dp, is == 1)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) + sgn*hxc
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          mos = mo + sgn*hxc*dmo
+          fr = 0.0_dp
+          call dftexcor(basis, mg, 1, fr, fr, mos, mos, nbf, nbf2, exr, telr, tknr, infos)
+          call unpack_from_packed(fr, vxc(:,:,is), nbf)
+          do bb = 1, 3
+            wmo = 0.0_dp
+            wmo(1:nocc,nocc+1:) = ua(:,:,bb)
+            wmo(nocc+1:,1:nocc) = transpose(ua(:,:,bb))
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mos,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+            call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr2,nbf,mos,nbf,0.0_dp,pts(:,:,bb),nbf)
+          end do
+          dx = pts
+          fx = 0.0_dp
+          call tddft_fxc(basis=basis, molGrid=mg, isVecs=.true., wf=mos, fx=fx, dx=dx, &
+                         nmtx=3, threshold=0.0_dp, infos=infos)
+          do bb = 1, 3
+            do aa = 1, 3
+              sab(aa,bb,is) = sum(pts(:,:,aa)*fx(:,:,bb))
+            end do
+          end do
+          call dftclean(infos)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) - sgn*hxc
+          call basis%init_shell_centers()
+        end do
+        vxc(:,:,1) = (vxc(:,:,1) - vxc(:,:,2))/(2.0_dp*hxc)
+        ipx = 0
+        do bb = 1, 3
+          do aa = 1, bb
+            ipx = ipx + 1
+            dpol(aa,bb,xx) = dpol(aa,bb,xx) - 4.0_dp*( sum(vxc(:,:,1)*wsym(:,:,ipx)) &
+                + 0.25_dp*(sab(aa,bb,1) + sab(bb,aa,1) - sab(aa,bb,2) - sab(bb,aa,2))/(2.0_dp*hxc) )
+            dpol(bb,aa,xx) = dpol(aa,bb,xx)
+          end do
+        end do
+      end do
+      deallocate(mos, dmo, fr, vxc, fx, dx, pts)
+    end subroutine add_xc_terms
+
+    !> Tr[T W^a G^b] with W^a the symmetric MO matrix carrying U^a in its
+    !> occ-vir and vir-occ blocks and G^b = C' G[Pt^b] C.
+    real(dp) function tw_g(ia_, ib_)
+      integer, intent(in) :: ia_, ib_
+      wmo = 0.0_dp
+      wmo(1:nocc,nocc+1:) = ua(:,:,ia_)
+      wmo(nocc+1:,1:nocc) = transpose(ua(:,:,ia_))
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+      tw_g = sum(scr2*transpose(gamo(:,:,ib_)))
+    end function tw_g
+  end subroutine hf_polder_rhf
+
+!###############################################################################
+
+!> @brief Analytic nuclear derivatives of the static polarizability, UHF/UKS.
+!> @details Spin-unrestricted counterpart of hf_polder_rhf. With
+!>   alpha_ab = -2 sum_s mu^{a,s}.U^{b,s}, the Hylleraas functional is
+!>   -2 [ mu^a.U^b + mu^b.U^a + U^a.A.U^b ] with
+!>     U^a.A.U^b = sum_s ( Tr[F^s_vv Y^s] - Tr[F^s_oo Z^s] )
+!>               + 1/2 sum_s Tr[Pt^{a,s} G^s[Pt^b]],
+!>   G^s[D] = J[D^a+D^b] - c K[D^s] (fock_jk, open shell). Each spin follows
+!>   its own relaxed orbital path T^{x,s}; the derivative-integral traces use
+!>   fock_deriv_contract_os, which returns Tr[M G^{s,x}[P]] directly. The
+!>   Kohn-Sham XC pieces are central differences along the relaxed path with
+!>   the moving grid, as in the closed-shell routine.
+  subroutine hf_polder_uhf(infos, moa, mob, epsa, epsb, pa, pb, nocca, noccb, &
+                           sflat, hflat, uvec, dpxa, dpxb, hfscale, dpol)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: multipole_integrals
+    use grd1, only: der_dipole_matrix
+    use mathlib, only: unpack_matrix, pack_matrix
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use cphf_mod, only: cphf_solve_uhf
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: moa(:,:), mob(:,:), epsa(:), epsb(:), pa(:,:), pb(:,:)
+    integer, intent(in) :: nocca, noccb
+    real(dp), intent(in) :: sflat(:,:,:), hflat(:,:,:), uvec(:,:), dpxa(:,:,:), dpxb(:,:,:)
+    real(dp), intent(in) :: hfscale
+    real(dp), intent(out) :: dpol(:,:,:)
+
+    type(basis_set), pointer :: basis
+    real(dp), allocatable :: mo(:,:,:), eps(:,:), mints(:,:), dfull(:,:,:), mmo(:,:,:,:), dD(:,:,:,:,:)
+    real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:,:,:), pta(:,:,:,:), ga(:,:,:,:), gamo(:,:,:,:)
+    real(dp), allocatable :: wsym(:,:,:,:), gw(:,:,:,:), gwx(:,:,:), gppx(:,:,:), ptot(:,:), psp(:,:,:)
+    real(dp), allocatable :: tmat(:,:,:), smo(:,:), scr(:,:), scr2(:,:), wmo(:,:), dpk(:,:), fpk(:,:), gx(:,:)
+    real(dp) :: origin(3), t1(3,3), t2, t3, alpha(3,3)
+    integer :: nbf, nbf2, natom, ncart, s, no(2), nv(2), loff(2), ltot
+    !> field responses U^{a,s} as (nocc,nvir,3) per spin
+    type :: spin_resp_t
+      real(dp), allocatable :: u(:,:,:)
+    end type
+    type(spin_resp_t) :: us(2)
+    integer :: a, b, q, i, j, k, x, kc, cc, ip
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf; nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2); ncart = 3*natom
+    no = [nocca, noccb]; nv = nbf - no
+    loff = [0, nocca*(nbf-nocca)]; ltot = loff(2) + noccb*(nbf-noccb)
+    origin = 0.0_dp
+    allocate(mo(nbf,nbf,2), eps(nbf,2), psp(nbf,nbf,2), ptot(nbf,nbf))
+    mo(:,:,1) = moa; mo(:,:,2) = mob; eps(:,1) = epsa; eps(:,2) = epsb
+    psp(:,:,1) = pa; psp(:,:,2) = pb; ptot = pa + pb
+
+    allocate(mints(nbf2,19), source=0.0_dp)
+    call multipole_integrals(basis, mints, origin, 3)
+    allocate(dfull(nbf,nbf,3), mmo(nbf,nbf,3,2), scr(nbf,nbf), scr2(nbf,nbf))
+    allocate(bF(ltot,3), uF(ltot,3), source=0.0_dp)
+    do a = 1, 3
+      call unpack_matrix(mints(:,a), dfull(:,:,a))
+      do s = 1, 2
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo(:,:,s),nbf,dfull(:,:,a),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo(:,:,s),nbf,0.0_dp,mmo(:,:,a,s),nbf)
+        do q = 1, nv(s)
+          do i = 1, no(s)
+            bF(loff(s)+(q-1)*no(s)+i,a) = -mmo(i,no(s)+q,a,s)
+          end do
+        end do
+      end do
+    end do
+    deallocate(mints)
+    call cphf_solve_uhf(infos, 3, bF, uF)
+    do s = 1, 2
+      allocate(us(s)%u(no(s), nv(s), 3))
+      do a = 1, 3
+        us(s)%u(:,:,a) = reshape(uF(loff(s)+1:loff(s)+no(s)*nv(s), a), [no(s), nv(s)])
+      end do
+    end do
+    do b = 1, 3
+      do a = 1, 3
+        alpha(a,b) = 2.0_dp*sum(bF(:,a)*uF(:,b))
+      end do
+    end do
+
+    allocate(xa(nbf,nbf,3,2), pta(nbf,nbf,3,2), ga(nbf,nbf,3,2), gamo(nbf,nbf,3,2))
+    allocate(dpk(nbf2,2), fpk(nbf2,2))
+    do a = 1, 3
+      do s = 1, 2
+        call dgemm('n','n',nbf,nv(s),no(s),1.0_dp,mo(:,:,s),nbf,us(s)%u(:,:,a),no(s),0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nv(s),1.0_dp,scr,nbf,mo(:,no(s)+1:,s),nbf,0.0_dp,xa(:,:,a,s),nbf)
+        pta(:,:,a,s) = xa(:,:,a,s) + transpose(xa(:,:,a,s))
+        call pack_matrix(pta(:,:,a,s), dpk(:,s))
+      end do
+      fpk = 0.0_dp
+      call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+      do s = 1, 2
+        call unpack_from_packed(fpk(:,s), ga(:,:,a,s), nbf)
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo(:,:,s),nbf,ga(:,:,a,s),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo(:,:,s),nbf,0.0_dp,gamo(:,:,a,s),nbf)
+      end do
+    end do
+
+    if (infos%control%verbose >= 2) then
+      do b = 1, 3
+        do a = 1, 3
+          t2 = 0.0_dp
+          do s = 1, 2
+            do q = 1, nv(s)
+              do i = 1, no(s)
+                t2 = t2 + uF(loff(s)+(q-1)*no(s)+i,a)*uF(loff(s)+(q-1)*no(s)+i,b) &
+                          *(eps(no(s)+q,s) - eps(i,s))
+              end do
+            end do
+            t2 = t2 + 0.5_dp*sum(pta(:,:,a,s)*ga(:,:,b,s))
+          end do
+          write(iw,'(A,2I2,2ES16.8)') '  polder(UHF) Hylleraas check a b, alpha, diff:', a, b, alpha(a,b), &
+            alpha(a,b) - (2.0_dp*(sum(bF(:,a)*uF(:,b)) + sum(bF(:,b)*uF(:,a))) - 2.0_dp*t2)
+        end do
+      end do
+    end if
+
+    ! pair intermediates
+    allocate(wsym(nbf,nbf,6,2), gw(nbf,nbf,6,2), gwx(3,natom,6), gppx(3,natom,6), gx(3,natom))
+    gwx = 0.0_dp; gppx = 0.0_dp
+    ip = 0
+    do b = 1, 3
+      do a = 1, b
+        ip = ip + 1
+        do s = 1, 2
+          ! W^s = Cv (U^a' U^b) Cv' - Co (U^a U^b') Co'
+          scr2 = 0.0_dp
+          call vv_oo_w(a, b, s, scr2)
+          wsym(:,:,ip,s) = 0.5_dp*(scr2 + transpose(scr2))
+          call pack_matrix(wsym(:,:,ip,s), dpk(:,s))
+          call fock_deriv_contract_os(infos, basis, ptot, psp(:,:,s), wsym(:,:,ip,s), hfscale, gx)
+          gwx(:,:,ip) = gwx(:,:,ip) + gx
+          call fock_deriv_contract_os(infos, basis, pta(:,:,b,1) + pta(:,:,b,2), pta(:,:,b,s), &
+                                      pta(:,:,a,s), hfscale, gx)
+          gppx(:,:,ip) = gppx(:,:,ip) + 0.5_dp*gx
+        end do
+        fpk = 0.0_dp
+        call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+        do s = 1, 2
+          call unpack_from_packed(fpk(:,s), gw(:,:,ip,s), nbf)
+        end do
+      end do
+    end do
+
+    allocate(dD(nbf,nbf,3,natom,3))
+    call der_dipole_matrix(basis, origin, dD)
+    do a = 1, 3
+      do k = 1, natom
+        do cc = 1, 3
+          do j = 1, nbf
+            dD(:,j,cc,k,a) = dD(:,j,cc,k,a)*basis%bfnrm(:)*basis%bfnrm(j)
+          end do
+        end do
+      end do
+    end do
+
+    allocate(tmat(nbf,nbf,2), smo(nbf,nbf), wmo(nbf,nbf))
+    dpol = 0.0_dp
+    do x = 1, ncart
+      cc = mod(x-1,3) + 1; kc = (x-1)/3 + 1
+      t1 = 0.0_dp
+      do s = 1, 2
+        call build_t(x, s)
+        do a = 1, 3
+          call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat(:,:,s),nbf,mmo(:,:,a,s),nbf,0.0_dp,scr,nbf)
+          call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mmo(:,:,a,s),nbf,tmat(:,:,s),nbf,1.0_dp,scr,nbf)
+          do b = 1, 3
+            t1(a,b) = t1(a,b) + sum(dD(:,:,cc,kc,a)*xa(:,:,b,s)) &
+                      + sum(us(s)%u(:,:,b)*scr(1:no(s),no(s)+1:))
+          end do
+        end do
+      end do
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          t2 = gwx(cc,kc,ip) + sum(dpxa(:,:,x)*gw(:,:,ip,1)) + sum(dpxb(:,:,x)*gw(:,:,ip,2))
+          t3 = gppx(cc,kc,ip)
+          do s = 1, 2
+            t2 = t2 + sum(hflat(:,:,x)*wsym(:,:,ip,s)) + sw_terms(a, b, s, x)
+            t3 = t3 + tw_g(a, b, s) + tw_g(b, a, s)
+          end do
+          dpol(a,b,x) = -2.0_dp*(t1(a,b) + t1(b,a) + t2 + t3)
+          dpol(b,a,x) = dpol(a,b,x)
+        end do
+      end do
+    end do
+
+    if (infos%control%hamilton == 20) call add_xc_terms_uhf()
+
+    deallocate(mo, eps, psp, ptot, dfull, mmo, dD, bF, uF, xa, pta, ga, gamo, wsym, gw, gwx, gppx, &
+               tmat, smo, scr, scr2, wmo, dpk, fpk, gx)
+
+  contains
+
+
+    !> w = Cv (U^a' U^b) Cv' - Co (U^a U^b') Co' for spin s
+    subroutine vv_oo_w(a_, b_, s_, w)
+      integer, intent(in) :: a_, b_, s_
+      real(dp), intent(out) :: w(:,:)
+      real(dp), allocatable :: y(:,:), z(:,:), t(:,:)
+      allocate(y(nv(s_),nv(s_)), z(no(s_),no(s_)), t(nbf,max(nv(s_),no(s_))))
+      y = matmul(transpose(us(s_)%u(:,:,a_)), us(s_)%u(:,:,b_))
+      z = matmul(us(s_)%u(:,:,a_), transpose(us(s_)%u(:,:,b_)))
+      call dgemm('n','n',nbf,nv(s_),nv(s_),1.0_dp,mo(:,no(s_)+1:,s_),nbf,y,nv(s_),0.0_dp,t,nbf)
+      call dgemm('n','t',nbf,nbf,nv(s_),1.0_dp,t,nbf,mo(:,no(s_)+1:,s_),nbf,0.0_dp,w,nbf)
+      call dgemm('n','n',nbf,no(s_),no(s_),1.0_dp,mo(:,:,s_),nbf,z,no(s_),0.0_dp,t,nbf)
+      call dgemm('n','t',nbf,nbf,no(s_),-1.0_dp,t,nbf,mo(:,:,s_),nbf,1.0_dp,w,nbf)
+    end subroutine vv_oo_w
+
+    !> S^x energy-weight terms of the Fock-block derivative for spin s
+    real(dp) function sw_terms(a_, b_, s_, x_)
+      integer, intent(in) :: a_, b_, s_, x_
+      real(dp), allocatable :: y(:,:), z(:,:), sm(:,:)
+      integer :: ii, jj
+      allocate(sm(nbf,nbf))
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo(:,:,s_),nbf,sflat(:,:,x_),nbf,0.0_dp,scr2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr2,nbf,mo(:,:,s_),nbf,0.0_dp,sm,nbf)
+      y = matmul(transpose(us(s_)%u(:,:,a_)), us(s_)%u(:,:,b_))
+      z = matmul(us(s_)%u(:,:,a_), transpose(us(s_)%u(:,:,b_)))
+      sw_terms = 0.0_dp
+      do jj = 1, nv(s_)
+        do ii = 1, nv(s_)
+          sw_terms = sw_terms - 0.5_dp*sm(no(s_)+ii,no(s_)+jj)*(eps(no(s_)+ii,s_) + eps(no(s_)+jj,s_))*y(ii,jj)
+        end do
+      end do
+      do jj = 1, no(s_)
+        do ii = 1, no(s_)
+          sw_terms = sw_terms + 0.5_dp*sm(ii,jj)*(eps(ii,s_) + eps(jj,s_))*z(ii,jj)
+        end do
+      end do
+    end function sw_terms
+
+    !> relaxed orbital-path generator T^{x,s}
+    subroutine build_t(x_, s_)
+      integer, intent(in) :: x_, s_
+      real(dp), allocatable :: ux(:,:)
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo(:,:,s_),nbf,sflat(:,:,x_),nbf,0.0_dp,scr2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr2,nbf,mo(:,:,s_),nbf,0.0_dp,smo,nbf)
+      ux = reshape(uvec(loff(s_)+1:loff(s_)+no(s_)*nv(s_), x_), [no(s_), nv(s_)])
+      tmat(:,:,s_) = -0.5_dp*smo
+      tmat(no(s_)+1:,1:no(s_),s_) = transpose(ux)
+      tmat(1:no(s_),no(s_)+1:,s_) = -ux - smo(1:no(s_),no(s_)+1:)
+    end subroutine build_t
+
+    !> 1/2 * 2 Tr[T^s W^{a,s} G^{b,s}] (the 1/2 of the spin-resolved 2e term)
+    real(dp) function tw_g(a_, b_, s_)
+      integer, intent(in) :: a_, b_, s_
+      wmo = 0.0_dp
+      wmo(1:no(s_),no(s_)+1:) = us(s_)%u(:,:,a_)
+      wmo(no(s_)+1:,1:no(s_)) = transpose(us(s_)%u(:,:,a_))
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmat(:,:,s_),nbf,wmo,nbf,0.0_dp,scr2,nbf)
+      tw_g = sum(scr2*transpose(gamo(:,:,b_,s_)))
+    end function tw_g
+
+    subroutine add_xc_terms_uhf()
+      use mod_dft, only: dft_initialize, dftclean, dftexcor
+      use mod_dft_molgrid, only: dft_grid_t
+      use mod_dft_gridint_fxc, only: utddft_fxc
+      type(dft_grid_t) :: mg
+      real(dp), parameter :: hxc = 1.0e-3_dp
+      real(dp), allocatable :: mos(:,:,:), dmo(:,:,:), fra(:), frb(:), vxc(:,:,:,:)
+      real(dp), allocatable :: fxa(:,:,:), fxb(:,:,:), dxa(:,:,:), dxb(:,:,:), pts(:,:,:,:)
+      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn
+      integer :: is, xx, kx, cx, ipx, aa, bb, ss
+
+      allocate(mos(nbf,nbf,2), dmo(nbf,nbf,2), fra(nbf2), frb(nbf2), vxc(nbf,nbf,2,2), &
+               fxa(nbf,nbf,3), fxb(nbf,nbf,3), dxa(nbf,nbf,3), dxb(nbf,nbf,3), pts(nbf,nbf,3,2))
+      do xx = 1, ncart
+        cx = mod(xx-1,3) + 1; kx = (xx-1)/3 + 1
+        do ss = 1, 2
+          call build_t(xx, ss)
+          call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo(:,:,ss),nbf,tmat(:,:,ss),nbf,0.0_dp,dmo(:,:,ss),nbf)
+        end do
+        do is = 1, 2
+          sgn = merge(1.0_dp, -1.0_dp, is == 1)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) + sgn*hxc
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          mos = mo + sgn*hxc*dmo
+          fra = 0.0_dp; frb = 0.0_dp
+          call dftexcor(basis, mg, int(infos%control%scftype), fra, frb, mos(:,:,1), mos(:,:,2), &
+                        nbf, nbf2, exr, telr, tknr, infos)
+          call unpack_from_packed(fra, vxc(:,:,1,is), nbf)
+          call unpack_from_packed(frb, vxc(:,:,2,is), nbf)
+          do ss = 1, 2
+            do bb = 1, 3
+              wmo = 0.0_dp
+              wmo(1:no(ss),no(ss)+1:) = us(ss)%u(:,:,bb)
+              wmo(no(ss)+1:,1:no(ss)) = transpose(us(ss)%u(:,:,bb))
+              call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mos(:,:,ss),nbf,wmo,nbf,0.0_dp,scr2,nbf)
+              call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr2,nbf,mos(:,:,ss),nbf,0.0_dp,pts(:,:,bb,ss),nbf)
+            end do
+          end do
+          dxa = pts(:,:,:,1); dxb = pts(:,:,:,2)
+          fxa = 0.0_dp; fxb = 0.0_dp
+          call utddft_fxc(basis=basis, molGrid=mg, isVecs=.true., wfa=mos(:,:,1), wfb=mos(:,:,2), &
+                          fxa=fxa, fxb=fxb, dxa=dxa, dxb=dxb, nmtx=3, threshold=0.0_dp, infos=infos)
+          do bb = 1, 3
+            do aa = 1, 3
+              sab(aa,bb,is) = sum(pts(:,:,aa,1)*fxa(:,:,bb)) + sum(pts(:,:,aa,2)*fxb(:,:,bb))
+            end do
+          end do
+          call dftclean(infos)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) - sgn*hxc
+          call basis%init_shell_centers()
+        end do
+        ipx = 0
+        do bb = 1, 3
+          do aa = 1, bb
+            ipx = ipx + 1
+            dpol(aa,bb,xx) = dpol(aa,bb,xx) - 2.0_dp*( &
+                sum((vxc(:,:,1,1) - vxc(:,:,1,2))*wsym(:,:,ipx,1))/(2.0_dp*hxc) &
+              + sum((vxc(:,:,2,1) - vxc(:,:,2,2))*wsym(:,:,ipx,2))/(2.0_dp*hxc) &
+              + 0.25_dp*(sab(aa,bb,1) + sab(bb,aa,1) - sab(aa,bb,2) - sab(bb,aa,2))/(2.0_dp*hxc) )
+            dpol(bb,aa,xx) = dpol(aa,bb,xx)
+          end do
+        end do
+      end do
+      deallocate(mos, dmo, fra, frb, vxc, fxa, fxb, dxa, dxb, pts)
+    end subroutine add_xc_terms_uhf
+  end subroutine hf_polder_uhf
+
+!###############################################################################
+
+!> @brief Analytic nuclear derivatives of the static polarizability, ROHF/ROKS.
+!> @details The ROHF response lives in the docc/socc/virt rotation space
+!>   theta (rohf_pack_trial layout); the CPHF operator of cphf_apbx_rohf is
+!>   the UHF-form operator on the embedded spin rotations x^s = unpack(theta),
+!>   with the exact commutator [F^s_MO, K]_vo of the non-canonical spin Fock
+!>   matrices (K the common antisymmetric generator) instead of
+!>   F_vv x - x F_oo. With alpha_ab = -2 mu.theta the Hylleraas functional is
+!>     -2 [ mu^a.theta^b + mu^b.theta^a + theta^a.H.theta^b ],
+!>     theta^a.H.theta^b = sum_s Tr[F^s_MO M^s_ab] + 1/2 sum_s Tr[Pt^{a,s} G^s[Pt^b]],
+!>     M^s_ab = K^b X^{a,s}' - X^{a,s}' K^b,
+!>   X^{a,s} carrying x^{a,s} in its vir-occ block. Its derivative along the
+!>   common relaxed orbital path dC = C T (T_vo = theta^x including the
+!>   socc-docc rotation, symmetric part -S^x/2) uses the same derivative-Fock
+!>   contractions as the UHF routine; T^x' F + F T^x replaces the canonical
+!>   orbital-energy weights. Kohn-Sham XC pieces are central differences along
+!>   the relaxed path with the moving grid.
+  subroutine hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
+                            dsa, dha, uvec, hfscale, dpol)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: multipole_integrals
+    use grd1, only: der_dipole_matrix
+    use mathlib, only: unpack_matrix, pack_matrix
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: mo(:,:), fa_ao(:,:), fb_ao(:,:), pa(:,:), pb(:,:)
+    integer, intent(in) :: nocca, noccb
+    real(dp), intent(in) :: dsa(:,:,:,:), dha(:,:,:,:), uvec(:,:), hfscale
+    real(dp), intent(out) :: dpol(:,:,:)
+
+    type(basis_set), pointer :: basis
+    real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
+    real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:), xb(:,:)
+    real(dp), allocatable :: xmo(:,:,:,:), kmo(:,:,:), xao(:,:,:,:), pta(:,:,:,:)
+    real(dp), allocatable :: ga(:,:,:,:), gamo(:,:,:,:), fmo(:,:,:), psp(:,:,:), ptot(:,:)
+    real(dp), allocatable :: msym(:,:,:,:), wsym(:,:,:,:), gw(:,:,:,:), gwx(:,:,:), gppx(:,:,:)
+    real(dp), allocatable :: tmat(:,:), smo(:,:), scr(:,:), scr2(:,:), wmo(:,:), dps(:,:,:)
+    real(dp), allocatable :: dpk(:,:), fpk(:,:), gx(:,:), occ(:,:)
+    real(dp) :: origin(3), t1(3,3), t2, t3, alpha(3,3), hyl
+    integer :: nbf, nbf2, natom, ncart, ltot, nvira, nvirb, offset, no(2)
+    integer :: a, b, s, i, j, k, x, kc, cc, ip, iv
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf; nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2); ncart = 3*natom
+    nvira = nbf - nocca; nvirb = nbf - noccb; offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    no = [nocca, noccb]
+    origin = 0.0_dp
+    allocate(psp(nbf,nbf,2), ptot(nbf,nbf), fmo(nbf,nbf,2), occ(nbf,2), source=0.0_dp)
+    psp(:,:,1) = pa; psp(:,:,2) = pb; ptot = pa + pb
+    occ(1:nocca,1) = 1.0_dp; occ(1:noccb,2) = 1.0_dp
+    allocate(scr(nbf,nbf), scr2(nbf,nbf), wmo(nbf,nbf), tmat(nbf,nbf), smo(nbf,nbf))
+    call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,fa_ao,nbf,0.0_dp,scr,nbf)
+    call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,fmo(:,:,1),nbf)
+    call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,fb_ao,nbf,0.0_dp,scr,nbf)
+    call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,fmo(:,:,2),nbf)
+
+    ! ---- dipole, field CPHF over the ROHF rotation space ------------------
+    allocate(mints(nbf2,19), source=0.0_dp)
+    call multipole_integrals(basis, mints, origin, 3)
+    allocate(dfull(nbf,nbf,3), mmo(nbf,nbf,3), xa(nvira,nocca), xb(nvirb,noccb))
+    allocate(bF(ltot,3), uF(ltot,3), source=0.0_dp)
+    do a = 1, 3
+      call unpack_matrix(mints(:,a), dfull(:,:,a))
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,dfull(:,:,a),nbf,0.0_dp,scr,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,mmo(:,:,a),nbf)
+      xa = -mmo(nocca+1:,1:nocca,a)
+      xb = -mmo(noccb+1:,1:noccb,a)
+      call rohf_pack_trial(bF(:,a), xa, xb, nbf, nocca, noccb)
+    end do
+    deallocate(mints)
+    call cphf_solve_rohf(infos, 3, bF, uF)
+    do b = 1, 3
+      do a = 1, 3
+        alpha(a,b) = 2.0_dp*sum(bF(:,a)*uF(:,b))
+      end do
+    end do
+
+    ! ---- embedded spin rotations, generators, response Fock ---------------
+    allocate(xmo(nbf,nbf,3,2), kmo(nbf,nbf,3), xao(nbf,nbf,3,2), pta(nbf,nbf,3,2), &
+             ga(nbf,nbf,3,2), gamo(nbf,nbf,3,2), source=0.0_dp)
+    allocate(dpk(nbf2,2), fpk(nbf2,2))
+    do a = 1, 3
+      call rohf_unpack_trial(uF(:,a), xa, xb, nbf, nocca, noccb)
+      xmo(nocca+1:,1:nocca,a,1) = xa
+      xmo(noccb+1:,1:noccb,a,2) = xb
+      do i = 1, nocca
+        do iv = 1, nvira
+          kmo(nocca+iv,i,a) = xa(iv,i)
+          kmo(i,nocca+iv,a) = -xa(iv,i)
+        end do
+      end do
+      do j = 1, noccb
+        do iv = 1, offset
+          kmo(noccb+iv,j,a) = kmo(noccb+iv,j,a) + xb(iv,j)
+          kmo(j,noccb+iv,a) = kmo(j,noccb+iv,a) - xb(iv,j)
+        end do
+      end do
+      do s = 1, 2
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,xmo(:,:,a,s),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,xao(:,:,a,s),nbf)
+        pta(:,:,a,s) = xao(:,:,a,s) + transpose(xao(:,:,a,s))
+        call pack_matrix(pta(:,:,a,s), dpk(:,s))
+      end do
+      fpk = 0.0_dp
+      call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+      do s = 1, 2
+        call unpack_from_packed(fpk(:,s), ga(:,:,a,s), nbf)
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,ga(:,:,a,s),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,gamo(:,:,a,s),nbf)
+      end do
+    end do
+
+    ! ---- pair intermediates ------------------------------------------------
+    allocate(msym(nbf,nbf,6,2), wsym(nbf,nbf,6,2), gw(nbf,nbf,6,2), gwx(3,natom,6), &
+             gppx(3,natom,6), gx(3,natom), source=0.0_dp)
+    ip = 0
+    do b = 1, 3
+      do a = 1, b
+        ip = ip + 1
+        do s = 1, 2
+          ! M^s_ab = K^b X^{a,s}' - X^{a,s}' K^b, symmetrized in a<->b
+          call dgemm('n','t',nbf,nbf,nbf,0.5_dp,kmo(:,:,b),nbf,xmo(:,:,a,s),nbf,0.0_dp,scr,nbf)
+          call dgemm('t','n',nbf,nbf,nbf,-0.5_dp,xmo(:,:,a,s),nbf,kmo(:,:,b),nbf,1.0_dp,scr,nbf)
+          call dgemm('n','t',nbf,nbf,nbf,0.5_dp,kmo(:,:,a),nbf,xmo(:,:,b,s),nbf,1.0_dp,scr,nbf)
+          call dgemm('t','n',nbf,nbf,nbf,-0.5_dp,xmo(:,:,b,s),nbf,kmo(:,:,a),nbf,1.0_dp,scr,nbf)
+          msym(:,:,ip,s) = scr
+          scr2 = 0.5_dp*(scr + transpose(scr))
+          call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,scr2,nbf,0.0_dp,scr,nbf)
+          call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,wsym(:,:,ip,s),nbf)
+          call pack_matrix(wsym(:,:,ip,s), dpk(:,s))
+          call fock_deriv_contract_os(infos, basis, ptot, psp(:,:,s), wsym(:,:,ip,s), hfscale, gx)
+          gwx(:,:,ip) = gwx(:,:,ip) + gx
+          call fock_deriv_contract_os(infos, basis, pta(:,:,b,1) + pta(:,:,b,2), pta(:,:,b,s), &
+                                      pta(:,:,a,s), hfscale, gx)
+          gppx(:,:,ip) = gppx(:,:,ip) + 0.5_dp*gx
+        end do
+        fpk = 0.0_dp
+        call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+        do s = 1, 2
+          call unpack_from_packed(fpk(:,s), gw(:,:,ip,s), nbf)
+        end do
+      end do
+    end do
+
+    if (infos%control%verbose >= 2) then
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          hyl = 0.0_dp
+          do s = 1, 2
+            hyl = hyl + sum(fmo(:,:,s)*msym(:,:,ip,s)) + 0.5_dp*sum(pta(:,:,a,s)*ga(:,:,b,s))
+          end do
+          write(iw,'(A,2I2,2ES16.8)') '  polder(ROHF) Hylleraas check a b, alpha, diff:', a, b, alpha(a,b), &
+            alpha(a,b) - (2.0_dp*(sum(bF(:,a)*uF(:,b)) + sum(bF(:,b)*uF(:,a))) - 2.0_dp*hyl)
+        end do
+      end do
+    end if
+
+    allocate(dD(nbf,nbf,3,natom,3))
+    call der_dipole_matrix(basis, origin, dD)
+    do a = 1, 3
+      do k = 1, natom
+        do cc = 1, 3
+          do j = 1, nbf
+            dD(:,j,cc,k,a) = dD(:,j,cc,k,a)*basis%bfnrm(:)*basis%bfnrm(j)
+          end do
+        end do
+      end do
+    end do
+
+    ! ---- per nuclear coordinate ------------------------------------------
+    allocate(dps(nbf,nbf,2))
+    dpol = 0.0_dp
+    do x = 1, ncart
+      cc = mod(x-1,3) + 1; kc = (x-1)/3 + 1
+      call build_t(x)
+      ! relaxed spin-density derivatives dP^s = C (T O^s + O^s T') C'
+      do s = 1, 2
+        do j = 1, nbf
+          scr2(:,j) = tmat(:,j)*occ(j,s)
+        end do
+        scr2 = scr2 + transpose(scr2)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,scr2,nbf,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,dps(:,:,s),nbf)
+      end do
+      t1 = 0.0_dp
+      do a = 1, 3
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,mmo(:,:,a),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mmo(:,:,a),nbf,tmat,nbf,1.0_dp,scr,nbf)
+        do b = 1, 3
+          do s = 1, 2
+            t1(a,b) = t1(a,b) + sum(dD(:,:,cc,kc,a)*xao(:,:,b,s)) + sum(xmo(:,:,b,s)*scr)
+          end do
+        end do
+      end do
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          t2 = gwx(cc,kc,ip)
+          t3 = gppx(cc,kc,ip)
+          do s = 1, 2
+            ! (T'F + F T) contracted with M^s
+            call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,fmo(:,:,s),nbf,0.0_dp,scr,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,fmo(:,:,s),nbf,tmat,nbf,1.0_dp,scr,nbf)
+            t2 = t2 + sum(dha(:,:,cc,kc)*wsym(:,:,ip,s)) + sum(dps(:,:,s)*gw(:,:,ip,s)) &
+                    + sum(scr*msym(:,:,ip,s))
+            t3 = t3 + tw_g(a, b, s) + tw_g(b, a, s)
+          end do
+          dpol(a,b,x) = -2.0_dp*(t1(a,b) + t1(b,a) + t2 + t3)
+          dpol(b,a,x) = dpol(a,b,x)
+        end do
+      end do
+    end do
+
+    if (infos%control%hamilton == 20) call add_xc_terms_rohf()
+
+    deallocate(psp, ptot, fmo, occ, scr, scr2, wmo, tmat, smo, dfull, mmo, xa, xb, bF, uF, &
+               xmo, kmo, xao, pta, ga, gamo, dpk, fpk, msym, wsym, gw, gwx, gppx, gx, dD, dps)
+
+  contains
+
+    !> common relaxed orbital-path generator T^x of the ROHF orbitals
+    subroutine build_t(x_)
+      integer, intent(in) :: x_
+      integer :: cx_, kx_
+      cx_ = mod(x_-1,3) + 1; kx_ = (x_-1)/3 + 1
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,dsa(:,:,cx_,kx_),nbf,0.0_dp,scr2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr2,nbf,mo,nbf,0.0_dp,smo,nbf)
+      call rohf_unpack_trial(uvec(:,x_), xa, xb, nbf, nocca, noccb)
+      tmat = -0.5_dp*smo
+      tmat(nocca+1:,1:nocca) = xa
+      tmat(1:nocca,nocca+1:) = -transpose(xa) - smo(1:nocca,nocca+1:)
+      if (offset > 0) then
+        tmat(noccb+1:nocca,1:noccb) = xb(1:offset,:)
+        tmat(1:noccb,noccb+1:nocca) = -transpose(xb(1:offset,:)) - smo(1:noccb,noccb+1:nocca)
+      end if
+    end subroutine build_t
+
+    !> Tr[T W^{a,s} G^{b,s}] (W^{a,s} = X^{a,s} + X^{a,s}' in the MO basis)
+    real(dp) function tw_g(a_, b_, s_)
+      integer, intent(in) :: a_, b_, s_
+      wmo = xmo(:,:,a_,s_) + transpose(xmo(:,:,a_,s_))
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+      tw_g = sum(scr2*transpose(gamo(:,:,b_,s_)))
+    end function tw_g
+
+    subroutine add_xc_terms_rohf()
+      use mod_dft, only: dft_initialize, dftclean, dftexcor
+      use mod_dft_molgrid, only: dft_grid_t
+      use mod_dft_gridint_fxc, only: utddft_fxc
+      type(dft_grid_t) :: mg
+      real(dp), parameter :: hxc = 1.0e-3_dp
+      real(dp), allocatable :: mos(:,:), dmo(:,:), fra(:), frb(:), vxc(:,:,:,:)
+      real(dp), allocatable :: fxa(:,:,:), fxb(:,:,:), dxa(:,:,:), dxb(:,:,:), pts(:,:,:,:)
+      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn
+      integer :: is, xx, kx, cx, ipx, aa, bb, ss
+
+      allocate(mos(nbf,nbf), dmo(nbf,nbf), fra(nbf2), frb(nbf2), vxc(nbf,nbf,2,2), &
+               fxa(nbf,nbf,3), fxb(nbf,nbf,3), dxa(nbf,nbf,3), dxb(nbf,nbf,3), pts(nbf,nbf,3,2))
+      do xx = 1, ncart
+        cx = mod(xx-1,3) + 1; kx = (xx-1)/3 + 1
+        call build_t(xx)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,tmat,nbf,0.0_dp,dmo,nbf)
+        do is = 1, 2
+          sgn = merge(1.0_dp, -1.0_dp, is == 1)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) + sgn*hxc
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          mos = mo + sgn*hxc*dmo
+          fra = 0.0_dp; frb = 0.0_dp
+          call dftexcor(basis, mg, int(infos%control%scftype), fra, frb, mos, mos, &
+                        nbf, nbf2, exr, telr, tknr, infos)
+          call unpack_from_packed(fra, vxc(:,:,1,is), nbf)
+          call unpack_from_packed(frb, vxc(:,:,2,is), nbf)
+          do ss = 1, 2
+            do bb = 1, 3
+              wmo = xmo(:,:,bb,ss) + transpose(xmo(:,:,bb,ss))
+              call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mos,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+              call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr2,nbf,mos,nbf,0.0_dp,pts(:,:,bb,ss),nbf)
+            end do
+          end do
+          dxa = pts(:,:,:,1); dxb = pts(:,:,:,2)
+          fxa = 0.0_dp; fxb = 0.0_dp
+          call utddft_fxc(basis=basis, molGrid=mg, isVecs=.true., wfa=mos, wfb=mos, &
+                          fxa=fxa, fxb=fxb, dxa=dxa, dxb=dxb, nmtx=3, threshold=0.0_dp, infos=infos)
+          do bb = 1, 3
+            do aa = 1, 3
+              sab(aa,bb,is) = sum(pts(:,:,aa,1)*fxa(:,:,bb)) + sum(pts(:,:,aa,2)*fxb(:,:,bb))
+            end do
+          end do
+          call dftclean(infos)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) - sgn*hxc
+          call basis%init_shell_centers()
+        end do
+        ipx = 0
+        do bb = 1, 3
+          do aa = 1, bb
+            ipx = ipx + 1
+            dpol(aa,bb,xx) = dpol(aa,bb,xx) - 2.0_dp*( &
+                sum((vxc(:,:,1,1) - vxc(:,:,1,2))*wsym(:,:,ipx,1))/(2.0_dp*hxc) &
+              + sum((vxc(:,:,2,1) - vxc(:,:,2,2))*wsym(:,:,ipx,2))/(2.0_dp*hxc) &
+              + 0.25_dp*(sab(aa,bb,1) + sab(bb,aa,1) - sab(aa,bb,2) - sab(bb,aa,2))/(2.0_dp*hxc) )
+            dpol(bb,aa,xx) = dpol(aa,bb,xx)
+          end do
+        end do
+      end do
+      deallocate(mos, dmo, fra, frb, vxc, fxa, fxb, dxa, dxb, pts)
+    end subroutine add_xc_terms_rohf
+  end subroutine hf_polder_rohf
+
+!###############################################################################
+
+!> @brief Nuclear-coordinate derivatives of the electric dipole moment from the
+!>        relaxed density derivatives of the analytic Hessian.
+!> @details  dmu_a/dR_x = Z_eff(A) delta_{a,c(x)}
+!>                       - Tr[P dD_a/dR_x] - Tr[dP/dR_x D_a],
+!>   with D_a the AO dipole integrals about the origin used by
+!>   electric_dipole_au (so the result is the derivative of that dipole, also
+!>   for ions) and dP/dR_x the total relaxed density derivative the CPHF step
+!>   already built. No further response solve is needed.
+!>   hf_dipder_init returns the normalized D_a and dD_a/dR and the static
+!>   (nuclear + integral-derivative) part; hf_dipder_add_response subtracts
+!>   Tr[dP^x D_a] for one coordinate; hf_dipder_store saves (3,3N) in
+!>   OQP::hf_dipole_derivatives.
+  subroutine hf_dipder_init(infos, ptot, dfull, dmu)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: multipole_integrals
+    use grd1, only: der_dipole_matrix
+    use mathlib, only: unpack_matrix
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: ptot(:,:)
+    real(dp), allocatable, intent(out) :: dfull(:,:,:), dmu(:,:)
+
+    type(basis_set), pointer :: basis
+    real(dp), allocatable :: mints(:,:), dD(:,:,:,:,:)
+    real(dp) :: origin(3), z
+    integer :: nbf, natom, a, c, k, x, mu, nu
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    natom = size(basis%atoms%xyz, 2)
+    origin = 0.0_dp
+
+    allocate(mints(nbf*(nbf+1)/2,19), source=0.0_dp)
+    call multipole_integrals(basis, mints, origin, 3)
+    allocate(dfull(nbf,nbf,3))
+    do a = 1, 3
+      call unpack_matrix(mints(:,a), dfull(:,:,a))
+    end do
+    deallocate(mints)
+
+    allocate(dD(nbf,nbf,3,natom,3))
+    call der_dipole_matrix(basis, origin, dD)
+    allocate(dmu(3,3*natom), source=0.0_dp)
+    do a = 1, 3
+      do k = 1, natom
+        z = basis%atoms%zn(k) - basis%ecp_zn_num(k)
+        do c = 1, 3
+          x = 3*(k-1) + c
+          do nu = 1, nbf
+            do mu = 1, nbf
+              dmu(a,x) = dmu(a,x) - ptot(mu,nu)*dD(mu,nu,c,k,a) &
+                                    *basis%bfnrm(mu)*basis%bfnrm(nu)
+            end do
+          end do
+          if (a == c) dmu(a,x) = dmu(a,x) + z
+        end do
+      end do
+    end do
+    deallocate(dD)
+  end subroutine hf_dipder_init
+
+  subroutine hf_dipder_add_response(dfull, dptot, dmu_x)
+    use precision, only: dp
+    real(dp), intent(in) :: dfull(:,:,:), dptot(:,:)
+    real(dp), intent(inout) :: dmu_x(3)
+    integer :: a
+    do a = 1, 3
+      dmu_x(a) = dmu_x(a) - sum(dptot*dfull(:,:,a))
+    end do
+  end subroutine hf_dipder_add_response
+
+  subroutine hf_dipder_store(infos, dmu)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver, only: OQP_hf_dipole_derivatives
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: dmu(:,:)
+    real(dp), contiguous, pointer :: store(:,:)
+    call infos%dat%alloc_or_die(OQP_hf_dipole_derivatives, (/ 3, size(dmu,2) /), store, &
+      description='Analytic nuclear derivatives of the electric dipole (a.u.), (3,3N)')
+    store = dmu
+  end subroutine hf_dipder_store
 
 !###############################################################################
 
