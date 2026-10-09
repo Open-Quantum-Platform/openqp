@@ -383,7 +383,7 @@ contains
   subroutine l2_to_ao_2rdm(n, no, c, l2, gao)
     integer, intent(in) :: n, no
     real(dp), intent(in) :: c(n,n), l2(no,no,n-no,n-no)
-    real(dp), intent(inout) :: gao(n,n,n,n)
+    real(dp), intent(out) :: gao(n,n,n,n)
     integer :: nv, j, a, b, mu, nu, la, si, i
     real(dp), allocatable :: w1(:,:,:), w2(:,:,:), w3(:,:,:)
 
