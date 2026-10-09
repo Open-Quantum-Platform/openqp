@@ -13,6 +13,8 @@ module mp2_energy_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: mp2_energy_C
   public :: mp2_energy
 
   character(len=*), parameter :: module_name = "mp2_energy_mod"

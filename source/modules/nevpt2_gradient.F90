@@ -52,6 +52,8 @@ module nevpt2_gradient_mod
 
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: nevpt2_gradient_C
 
   public :: nevpt2_gradient
 
