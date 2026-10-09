@@ -853,14 +853,17 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     # materialised as a Python tensor.  Otherwise fall back to the pure-Python
     # path which builds dm4 explicitly.
     det_list = _determinants(nact, active_nelec)
-    f3_result = _lib_make_f3(ci_vector, nact, det_list, h2e)
+    try:
+        f3_result = _lib_make_f3(ci_vector, nact, det_list, h2e)
+    except Exception:
+        f3_result = None
     if f3_result is not None:
         dm1, dm2, dm3, f3 = f3_result
         dm4 = None  # _Sr/_Si only use dm4 when f3 is None
     else:
         dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
         f3 = _f3ca_f3ac(h2e, dm4)
-        del dm4  # release n^8 tensor as soon as f3 is ready
+        dm4 = None  # release n^8 tensor; keep variable alive for _Sr/_Si signature
 
     comp = {}
     v, h1v = B['Sr']
