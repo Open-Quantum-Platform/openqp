@@ -1483,7 +1483,19 @@ def native_caspt2_energy(mol, ref_energy=None):
     # singles/doubles interacting space streamed from the reference support.
     # auto = the NumPy streaming path (measured fastest at scale); the liboqp
     # hash kernel is the explicit engine=fortran opt-in (see qdpt2_direct.py).
-    use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    #
+    # Single-state CASPT2 with the default Fock H0 also uses a diagonal H0
+    # (diag(eps)), so the direct engine applies to it as well.  Multi-state
+    # CASPT2 / MS-CASPT2 / XMS-CASPT2 keep the dense path because the H0
+    # Fock matrix or the Dyall H0 have off-diagonal external blocks.
+    use_direct = (
+        options.engine in {"auto", "direct", "fortran"}
+        and (options.family == "qdpt"
+             or (options.family == "caspt2"
+                 and options.variant == "caspt2"
+                 and options.h0 == "fock"
+                 and not (float(getattr(options, "ipea_shift", 0.0) or 0.0))))
+    )
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
