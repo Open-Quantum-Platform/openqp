@@ -178,6 +178,12 @@ contains
     call this%pe%allreduce(this%f3(:,:,:,:,1), &
               size(this%f3(:,:,:,:,1)))
 
+    ! f3_ex_shared (comps 5:7, exchange-only) was not reduced above:
+    ! it is a single shared array, not a per-thread accumulator.  MPI ranks
+    ! must exchange their contributions before the rebuild.
+    if (allocated(this%f3_ex_shared)) &
+      call this%pe%allreduce(this%f3_ex_shared, size(this%f3_ex_shared))
+
     ! Rebuild the full 7-component Fock array so consumers (fmrst2 =>
     ! f3(:,:,:,:,1)) see the same layout as before.
     block
@@ -212,6 +218,11 @@ contains
 
     call this%pe%allreduce(this%f3(:,:,:,:,1), &
               size(this%f3(:,:,:,:,1)))
+
+    ! f3_ex_shared (comps 9:11, UMRSF exchange-only) was not reduced:
+    ! it is a single shared array, not per-thread.  MPI ranks must exchange.
+    if (allocated(this%f3_ex_shared)) &
+      call this%pe%allreduce(this%f3_ex_shared, size(this%f3_ex_shared))
 
     ! Rebuild the full 11-component Fock array so consumers see the
     ! same layout: comps 1:8 from f3, 9:11 from f3_ex_shared.

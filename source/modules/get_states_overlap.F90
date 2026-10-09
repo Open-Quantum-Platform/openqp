@@ -436,7 +436,23 @@ contains
             end do
           end do
         else
-          s_ij(:,:) = 0.0_dp
+          ! LU factorisation failed (singular or rank-deficient S_occ).
+          ! Fall back to explicit cofactor expansion via tlf_exp (case-1 path).
+          ! This handles rank noca-1 matrices where cofactors are nonzero
+          ! (reviewer's standalone test: max|s_ij| = 0.25 for a rank-3 case).
+          block
+            real(kind=dp) :: precomp
+            precomp = 1.0_dp
+            do j = 1, noca
+              precomp = precomp * s_mo(j,j)
+            end do
+            do i1 = 1, noca
+              do i2 = 1, noca
+                call tlf_exp(s_ij(i1,i2), 11, i1, i2, s_mo, precomp, noca, nbf)
+                if (i1 /= i2) s_ij(i1,i2) = -s_ij(i1,i2)
+              end do
+            end do
+          end block
         end if
       end block
 

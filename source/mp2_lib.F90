@@ -100,7 +100,7 @@ contains
       call mp2_corr_n5(int2_driver, basis, nbf, nbf2, &
           mo_a_sc, e_a_sc, nocca, vira, mo_a_sc, e_a_sc, nocca, vira, &
           mo_b_sc, e_b_sc, noccb, virb, &
-          need_same_spin, need_opposite_spin, e_aa, e_ab, success=n5_ok)
+          need_same_spin, need_opposite_spin, restricted_ref, e_aa, e_ab, success=n5_ok)
       if (n5_ok .and. need_same_spin) then
         call mp2_corr_n5(int2_driver, basis, nbf, nbf2, &
             mo_b_sc, e_b_sc, noccb, virb, mo_b_sc, e_b_sc, noccb, virb, &
@@ -153,7 +153,7 @@ contains
                          cmo_l, e_l, nocc_l, nvir_l, &
                          cmo_s, e_s, nocc_s, nvir_s, &
                          cmo_o, e_o, nocc_o, nvir_o, &
-                         same_spin, do_opposite, e_same, e_opp, success)
+                         restricted_ref, same_spin, do_opposite, e_same, e_opp, success)
     use basis_tools, only: basis_set
     use int2_compute, only: int2_compute_t
     use cc_ao2mo, only: cc_eri_collect_t, cc_packed_length, cc_build_full_mo
@@ -171,6 +171,7 @@ contains
     logical, intent(in) :: same_spin, do_opposite
     real(kind=dp), intent(inout) :: e_same, e_opp
     logical, intent(out) :: success
+    logical, intent(in) :: restricted_ref
 
     integer(8) :: packed_len
     integer :: nmo, ok
@@ -212,7 +213,7 @@ contains
           cmo_l, e_l, nocc_l, nvir_l, &
           cmo_s, e_s, nocc_s, nvir_s, &
           cmo_o, e_o, nocc_o, nvir_o, &
-          same_spin, do_opposite, e_same, e_opp, ok)
+          restricted_ref, same_spin, do_opposite, e_same, e_opp, ok)
       if (ok == 0) then
         deallocate(g); success = .true.; return
       end if
@@ -238,7 +239,7 @@ contains
       cmo_l, e_l, nocc_l, nvir_l, &
       cmo_s, e_s, nocc_s, nvir_s, &
       cmo_o, e_o, nocc_o, nvir_o, &
-      same_spin, do_opposite, e_same, e_opp, ok)
+      restricted_ref, same_spin, do_opposite, e_same, e_opp, ok)
     use cc_ao2mo, only: cc_build_full_mo
     integer, intent(in) :: nbf, nmo
     real(kind=dp), intent(in) :: g(*)
@@ -248,7 +249,7 @@ contains
     integer, intent(in) :: nocc_s, nvir_s
     real(kind=dp), intent(in) :: cmo_o(nbf,nbf), e_o(nbf)
     integer, intent(in) :: nocc_o, nvir_o
-    logical, intent(in) :: same_spin, do_opposite
+    logical, intent(in) :: restricted_ref, same_spin, do_opposite
     real(kind=dp), intent(inout) :: e_same, e_opp
     integer, intent(out) :: ok
 
@@ -262,9 +263,11 @@ contains
 
     ! cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
     ! eri_mo(p,q,r,s) = (pq|rs) in chemist notation.
-    ! For same-spin: bra=cmo_l, ket=cmo_l (both MO bases are the same).
-    ! For opposite-spin in RHF this is exact; for UHF/ROHF the opposite-spin
-    ! contribution uses a different ket MO and the full path falls back.
+    ! For RHF (restricted_ref=.true.) cmo_l == cmo_o, so the single transform
+    ! is correct for both same-spin and opposite-spin.
+    ! For UHF/ROHF (restricted_ref=.false.) the opposite-spin (ia|jb) needs
+    ! cmo_o on the ket pair; this path handles same-spin only, and opposite-spin
+    ! is computed by the batched half-transform path in the caller.
     call cc_build_full_mo(nbf, nmo, cmo_l, cmo_l, g, eri_mo)
 
     if (same_spin) then
@@ -288,6 +291,12 @@ contains
     end if
 
     if (do_opposite) then
+      if (.not. restricted_ref) then
+        ! UHF/ROHF opposite-spin is computed by the batched path in the caller.
+        ! This guard exists because cc_build_full_mo with cmo_l on all four
+        ! indices is incorrect for opposite-spin when cmo_l != cmo_o.
+        ok = -1; return
+      end if
       !$omp parallel do collapse(2) private(i,a,j,b,num,denom) &
       !$omp   schedule(dynamic,1) reduction(+:e_opp)
       do b = 1, nvir_o

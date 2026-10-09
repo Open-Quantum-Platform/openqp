@@ -486,6 +486,12 @@ void casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
     const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
     const double *fder, const double *gder, const double *wmat,
     const double *vecs, double *amp);
+/* Spin-free active-space density-matrix engine: dm1, dm2, dm3, and the
+   contracted f3ca/f3ac intermediates from one CI vector (rdm_kernel.F90).
+   dm4 is freed before return.  Returns 0 on success. */
+int64_t nevpt2_make_f3(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, const double *h2e, double *dm1, double *dm2,
+    double *dm3, double *f3ca, double *f3ac);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external

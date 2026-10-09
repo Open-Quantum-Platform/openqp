@@ -649,22 +649,28 @@ contains
 !> scratch and freed before return — the caller never materialises it.
 !>
 !> Returns dm1-dm3 and f3ca/f3ac; dm4 is ephemeral.
-  subroutine nevpt2_make_f3(norb, ndet, dets, civec, h2e, &
-      dm1, dm2, dm3, f3ca, f3ac) bind(C, name="nevpt2_make_f3")
+  function nevpt2_make_f3(norb, ndet, dets, civec, h2e, &
+      dm1, dm2, dm3, f3ca, f3ac) result(info) &
+      bind(C, name="nevpt2_make_f3")
+    integer(c_int64_t) :: info
     integer(c_int32_t), value :: norb
     integer(i8), value :: ndet
     integer(i8), intent(in) :: dets(0:ndet-1)
     real(dp), intent(in) :: civec(0:ndet-1), h2e(0:*)
     real(dp), intent(inout) :: dm1(0:*), dm2(0:*), dm3(0:*)
     real(dp), intent(inout) :: f3ca(0:*), f3ac(0:*)
-    integer(i8) :: norb1, norb8, info
+    integer(i8) :: norb1, norb8
     real(dp), allocatable :: dm4(:)
     integer :: ierr
     norb1 = int(norb, i8)
     norb8 = norb1**8
-    if (norb8 == 0_i8) return
+    if (norb8 == 0_i8) then
+      info = -1_i8; return
+    end if
     allocate(dm4(0:norb8-1), stat=ierr)
-    if (ierr /= 0) return
+    if (ierr /= 0) then
+      info = -1_i8; return
+    end if
     dm4 = 0.0_dp
     info = nevpt2_make_rdms(norb, ndet, dets, civec, int(4, c_int32_t), &
                              dm1, dm2, dm3, dm4)
@@ -687,6 +693,6 @@ contains
       call nd2f3(norb, h2e, dm4, f3ca, f3ac)
     end block
     deallocate(dm4)
-  end subroutine nevpt2_make_f3
+  end function nevpt2_make_f3
 
 end module rdm_kernel_mod

@@ -127,12 +127,14 @@ contains
             call mf_bsearch(ndet, skeys, det_tu, row)
             if (row < 0_i8) cycle
             row = sperm(row)
-            ! wmat(tu, ket=col) += E_tu(bra=row, ket=col) * civec(bra=row)
-            ! Each (tu,col) slot is written by exactly one thread (the owner of
-            ! col), so no atomic needed.
-            wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + col) = &
-                wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + col) &
-                + real(phase_u * phase_t, dp) * civec(row)
+            ! wmat(tu, bra=row) += E_tu(bra=row, ket=col) * civec(ket=col)
+            ! The dense kernel casscf_hess_wmat computes the same contraction:
+            !   wmat(tu, a) = (E_tu * civec)(a) = sum_b E_tu(a,b) * civec(b)
+            ! Each (tu,row) slot is written by exactly one thread (the owner of
+            ! the bra index row's column), so no atomic needed.
+            wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) = &
+                wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) &
+                + real(phase_u * phase_t, dp) * civec(col)
           end do
         end do
       end do
