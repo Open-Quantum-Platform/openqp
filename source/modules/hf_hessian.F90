@@ -86,6 +86,7 @@ contains
     use messages, only: show_message, WITH_ABORT
 
     implicit none
+    logical :: nuc_ok
 
     type(information), target, intent(inout) :: infos
 
@@ -352,7 +353,11 @@ contains
     end do
 
     call hess_tick('CPHF right-hand sides')
-    call cphf_solve(infos, ncart, bvec, uvec)
+    call cphf_solve(infos, ncart, bvec, uvec, converged=nuc_ok)
+    if (.not. nuc_ok) then
+      call show_message('Analytic Hessian: the nuclear-response CPHF did not converge; '// &
+        'the Hessian would be built from partial iterates. Use [hess] type=numerical.', WITH_ABORT)
+    end if
     call hess_tick('CPHF solve')
 
     ! ===== CPHF orbital-relaxation response =====
@@ -734,7 +739,9 @@ contains
     use cphf_mod, only: cphf_solve_uhf
     use io_constants, only: iw
 
+    use messages, only: show_message, WITH_ABORT
     implicit none
+    logical :: nuc_ok
 
     type(information), target, intent(inout) :: infos
 
@@ -1025,7 +1032,11 @@ contains
       end do
     end do
 
-    call cphf_solve_uhf(infos, ncart, bvec, uvec)
+    call cphf_solve_uhf(infos, ncart, bvec, uvec, converged=nuc_ok)
+    if (.not. nuc_ok) then
+      call show_message('Analytic Hessian: the nuclear-response CPHF did not converge; '// &
+        'the Hessian would be built from partial iterates. Use [hess] type=numerical.', WITH_ABORT)
+    end if
 
     ! ===== open-shell CPHF orbital-relaxation response =====
     ! relaxed dC^s, spin density derivative dP^s
@@ -1363,6 +1374,7 @@ contains
     use messages, only: show_message, WITH_ABORT
 
     implicit none
+    logical :: nuc_ok
 
     type(information), target, intent(inout) :: infos
 
@@ -1695,7 +1707,16 @@ contains
       end do
     end do
 
-    call cphf_solve_rohf(infos, ncart, bvec, uvec)
+    block
+      logical, allocatable :: nuc_conv(:)
+      allocate(nuc_conv(ncart))
+      call cphf_solve_rohf(infos, ncart, bvec, uvec, converged=nuc_conv)
+      nuc_ok = all(nuc_conv)
+    end block
+    if (.not. nuc_ok) then
+      call show_message('Analytic Hessian: the nuclear-response CPHF did not converge; '// &
+        'the Hessian would be built from partial iterates. Use [hess] type=numerical.', WITH_ABORT)
+    end if
 
     if (nac_dump_rohf_response) then
       block
