@@ -876,6 +876,8 @@ contains
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
     integer :: c1, c2, a1, a2, r0, c0
+    integer :: ipair, npair
+    integer, allocatable :: pair_i(:), pair_j(:)
     real(kind=dp) :: rtol, dtol
 
     type(grd2_int_data_t) :: gdat
@@ -985,21 +987,14 @@ contains
     maxnbf = (basis%mxam+1)*(basis%mxam+2)/2
     dtol = dtol*dtol
 
-!$omp parallel &
-!$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij, &
-!$omp   c1, c2, a1, a2, r0, c0) &
-!$omp   reduction(+:skip1, skip2, numint, hess)
-
-    allocate(dab(maxnbf**4))
-
-    call gdat%init(basis%mxam, 2, dtol, dabcut, iok)
-
-!$omp barrier
-    if (infos%mpiinfo%usempi) then
-       mpi_ij = 0
-    end if
-
+    ! Shell pairs (i,j) of this MPI rank, distributed dynamically over OpenMP
+    ! threads with the (k,l) loop inside, as in grd2_driver_gen.  (A worksharing
+    ! loop over (k,l) per pair synchronized every thread once per shell pair
+    ! and left most threads idle on the small-i pairs.)
+    npair = basis%nshell*(basis%nshell+1)/2
+    allocate(pair_i(npair), pair_j(npair))
+    npair = 0
+    mpi_ij = 0
     do i = 1, basis%nshell
       do j = 1, i
         ij = i*(i-1)/2+j
@@ -1008,13 +1003,31 @@ contains
            mpi_ij=mpi_ij+1
            if (mod(mpi_ij, pe%size) /= pe%rank) cycle
         end if
+        npair = npair + 1
+        pair_i(npair) = i
+        pair_j(npair) = j
+      end do
+    end do
 
-!$omp do schedule(dynamic,4) collapse(2)
+!$omp parallel &
+!$omp   private ( &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, ipair, &
+!$omp   c1, c2, a1, a2, r0, c0) &
+!$omp   reduction(+:skip1, skip2, numint, hess)
+
+    allocate(dab(maxnbf**4))
+
+    call gdat%init(basis%mxam, 2, dtol, dabcut, iok)
+
+!$omp do schedule(dynamic,1)
+    do ipair = 1, npair
+      i = pair_i(ipair)
+      j = pair_j(ipair)
+      ij = i*(i-1)/2+j
         do k = 1, i
-          do l = 1, i
           maxl = k
           if (k == i) maxl = j
-          if (l > maxl) cycle
+          do l = 1, maxl
 
             kl = k*(k-1)/2+l
             if (ppairs%ppid(1,kl)==0) cycle
@@ -1063,13 +1076,12 @@ contains
 
           end do
         end do
-!$omp end do
-
-      end do
     end do
+!$omp end do
 
     call gdat%clean()
 !$omp end parallel
+    deallocate(pair_i, pair_j)
 
     call pe%allreduce(skip1, 1)
     call pe%allreduce(skip2, 1)
