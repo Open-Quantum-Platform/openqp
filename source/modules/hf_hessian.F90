@@ -58,6 +58,9 @@ contains
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: dmat_a(:), mo_a(:,:), eps(:)
     real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:), g2e(:,:), gop(:,:,:)
+    ! XC response-assembly pieces produced on the shared displaced grids of the
+    ! IR/Raman XC terms (DFT with intensities only)
+    real(kind=dp), allocatable :: xc_dhse(:,:), xc_dfxc(:,:,:)
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
@@ -407,8 +410,14 @@ contains
         real(dp), allocatable :: dpol(:,:,:)
         real(dp), contiguous, pointer :: pstore(:,:,:)
         allocate(dpol(3,3,ncart))
-        call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
-                           nocc, nvir, hfscale, dpol)
+        if (infos%control%hamilton == 20) then
+          allocate(xc_dhse(ncart,ncart), xc_dfxc(nbf,nbf,ncart))
+          call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
+                             nocc, nvir, hfscale, dpol, xc_dhse, xc_dfxc)
+        else
+          call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
+                             nocc, nvir, hfscale, dpol)
+        end if
         call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
           description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
         pstore = dpol
@@ -527,6 +536,22 @@ contains
           allocate(mop(nbf,nbf), frp(nbf2), frm(nbf2), dFxc(nbf,nbf), dFoo(nocc,nocc))
           allocate(tmpn(nbf,nocc), dHse(ncart,ncart), dHt3(ncart,ncart))
           dHt3 = 0.0_dp
+          if (allocated(xc_dhse)) then
+            ! already evaluated on the IR/Raman displaced grids
+            dHse = xc_dhse
+            do yy2 = 1, ncart
+              call dgemm('n','n',nbf,nocc,nbf,1.0_dp,xc_dfxc(:,:,yy2),nbf,mo_a,nbf,0.0_dp,tmpn,nbf)
+              call dgemm('t','n',nocc,nocc,nbf,1.0_dp,mo_a,nbf,tmpn,nbf,0.0_dp,dFoo,nocc)
+              do x2 = 1, ncart
+                do ll2 = 1, nocc
+                  do kk2 = 1, nocc
+                    dHt3(x2,yy2) = dHt3(x2,yy2) - 2.0_dp*s1oo(kk2,ll2,x2)*dFoo(kk2,ll2)
+                  end do
+                end do
+              end do
+            end do
+            deallocate(xc_dhse, xc_dfxc)
+          else
           ! warm-up to flush any stale grid state left by the CPHF solver
           call dft_initialize(infos, basis, mg); call dftclean(infos)
           do yy2 = 1, ncart
@@ -564,6 +589,7 @@ contains
               end do
             end do
           end do
+          end if
           hess_native = hess_native + 0.5_dp*(dHse + transpose(dHse)) &
                                     + 0.5_dp*(dHt3 + transpose(dHt3))
           deallocate(dap, dedp, dedm, mop, frp, frm, dFxc, dFoo, tmpn, dHse, dHt3)
@@ -1917,7 +1943,7 @@ contains
 !>   same treatment the Hessian uses for its XC terms: no SCF or CPKS re-solve,
 !>   two Vxc and six f_xc builds per coordinate.
   subroutine hf_polder_rhf(infos, mo, eps, pfull, sflat, hflat, uvec, dPx, &
-                           nocc, nvir, hfscale, dpol)
+                           nocc, nvir, hfscale, dpol, xc_dhse, xc_dfxc)
     use oqp_linalg
     use precision, only: dp
     use types, only: information
@@ -1934,6 +1960,13 @@ contains
     real(dp), intent(in) :: uvec(:,:), dPx(:,:,:), hfscale
     integer, intent(in) :: nocc, nvir
     real(dp), intent(out) :: dpol(:,:,:)            ! (3,3,ncart)
+    !> Optional (DFT): while the XC terms below displace every coordinate on
+    !> the moving grid, also return the two XC pieces of the Hessian response
+    !> assembly that use the same displaced grids and the same relaxed
+    !> occupied orbitals, so the caller does not rebuild them:
+    !>   xc_dhse(:,y)   = d/dR_y of the XC gradient along R+l, P+l dP^y
+    !>   xc_dfxc(:,:,y) = d/dR_y of the XC Fock matrix along the relaxed path
+    real(dp), intent(out), optional :: xc_dhse(:,:), xc_dfxc(:,:,:)
 
     type(basis_set), pointer :: basis
     real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
@@ -2109,14 +2142,25 @@ contains
       use mod_dft, only: dft_initialize, dftclean, dftexcor
       use mod_dft_molgrid, only: dft_grid_t
       use mod_dft_gridint_fxc, only: tddft_fxc
+      use mod_dft_gridint_grad, only: derexc_blk
       type(dft_grid_t) :: mg
       real(dp), parameter :: hxc = 1.0e-3_dp
       real(dp), allocatable :: mos(:,:), dmo(:,:), fr(:), vxc(:,:,:), fx(:,:,:), dx(:,:,:), pts(:,:,:)
-      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn
-      integer :: is, xx, kx, cx, ipx, aa, bb
+      real(dp), allocatable :: dap(:,:), ded(:,:,:)
+      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn, tele, tkin
+      integer :: is, xx, kx, cx, ipx, aa, bb, nang
+      logical :: share
 
+      share = present(xc_dhse) .and. present(xc_dfxc)
+      nang = maxval(basis%am) + 2
       allocate(mos(nbf,nbf), dmo(nbf,nbf), fr(nbf2), vxc(nbf,nbf,2), &
                fx(nbf,nbf,3), dx(nbf,nbf,3), pts(nbf,nbf,3))
+      if (share) allocate(dap(nbf,nbf), ded(3,natom,2))
+      ! same warm-up as the Hessian response-assembly loop: flush grid state
+      ! left by the CPHF solves
+      if (share) then
+        call dft_initialize(infos, basis, mg); call dftclean(infos)
+      end if
       do xx = 1, ncart
         cx = mod(xx-1,3) + 1; kx = (xx-1)/3 + 1
         call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,sflat(:,:,xx),nbf,0.0_dp,scr,nbf)
@@ -2131,6 +2175,12 @@ contains
           basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) + sgn*hxc
           call basis%init_shell_centers()
           call dft_initialize(infos, basis, mg)
+          if (share) then
+            ! skeleton + density response of the XC gradient (Hessian dHse)
+            dap = pfull + sgn*hxc*dPx(:,:,xx); ded(:,:,is) = 0.0_dp
+            call derexc_blk(basis, mg, dap, dap, ded(:,:,is), tele, tkin, nang, nbf, &
+                            infos%dft%grid_density_cutoff, .false., infos)
+          end if
           mos = mo + sgn*hxc*dmo
           fr = 0.0_dp
           call dftexcor(basis, mg, 1, fr, fr, mos, mos, nbf, nbf2, exr, telr, tknr, infos)
@@ -2156,6 +2206,10 @@ contains
           call basis%init_shell_centers()
         end do
         vxc(:,:,1) = (vxc(:,:,1) - vxc(:,:,2))/(2.0_dp*hxc)
+        if (share) then
+          xc_dhse(:,xx) = reshape((ded(:,:,1) - ded(:,:,2))/(2.0_dp*hxc), [ncart])
+          xc_dfxc(:,:,xx) = vxc(:,:,1)
+        end if
         ipx = 0
         do bb = 1, 3
           do aa = 1, bb
@@ -2167,6 +2221,7 @@ contains
         end do
       end do
       deallocate(mos, dmo, fr, vxc, fx, dx, pts)
+      if (share) deallocate(dap, ded)
     end subroutine add_xc_terms
 
     !> Tr[T W^a G^b] with W^a the symmetric MO matrix carrying U^a in its
