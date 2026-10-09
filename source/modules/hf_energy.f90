@@ -5,6 +5,8 @@ module hf_energy_mod
   character(len=*), parameter :: module_name = "hf_energy_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: hf_energy_C
 
   public hf_energy
 

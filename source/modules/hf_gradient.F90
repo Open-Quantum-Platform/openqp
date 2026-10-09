@@ -47,6 +47,8 @@ module hf_gradient_mod
 !###############################################################################
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: hf_gradient_C
 
   public hf_gradient
   public grd2_rhf_compute_data_t

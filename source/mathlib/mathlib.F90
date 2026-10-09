@@ -6,6 +6,8 @@ module mathlib
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: PACK_F77, UNPACK_F77
   public orb_to_dens
   public traceprod_sym_packed
   public solve_linear_equations

@@ -55,6 +55,8 @@ module basis_api
     type(ecpdata) :: ecp_head
 
     private
+    ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+    public :: print_all_shells
     public append_shell
     public append_ecp
     public map_shell2basis_set
