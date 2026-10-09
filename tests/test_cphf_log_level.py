@@ -113,11 +113,10 @@ class CphfLogLevel(unittest.TestCase):
     def test_open_shell_solvers_report_their_summary(self):
         """The UHF and ROHF solvers write through the captured fort.6 unit, so
         the summary is lost unless it is flushed before the capture is read."""
-        # The UHF analytic Hessian solves twice -- the 3N nuclear right-hand
-        # sides and the three field right-hand sides of the analytic Raman
-        # polarizability derivatives -- and each solve reports one summary.
-        # ROHF Raman still uses finite differences, so its Hessian solves once.
-        for reference, nsolve in (("uhf", 2), ("rohf", 1)):
+        # The open-shell analytic Hessians solve twice -- the 3N nuclear
+        # right-hand sides and the three field right-hand sides of the analytic
+        # Raman polarizability derivatives -- and each solve reports one summary.
+        for reference, nsolve in (("uhf", 2), ("rohf", 2)):
             text = self._run(OPEN_SHELL_DECK.format(reference=reference))
             self.assertEqual(len(SUMMARY.findall(text)), nsolve, reference)
             self.assertIsNone(re.search(r"(UHF|ROHF) CPHF RHS +\d+ completed", text), reference)

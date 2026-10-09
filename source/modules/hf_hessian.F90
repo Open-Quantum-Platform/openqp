@@ -1586,6 +1586,25 @@ contains
     call hf_dipder_store(infos, dmu)
     deallocate(dipf, dmu, dptx)
 
+    ! analytic polarizability derivatives (Raman activities); ECP systems
+    ! keep the finite-difference path
+    if (all(basis%ecp_zn_num == 0)) then
+      block
+        use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+        real(dp), allocatable :: dpol(:,:,:), fa_ao(:,:), fb_ao(:,:)
+        real(dp), contiguous, pointer :: pstore(:,:,:)
+        allocate(dpol(3,3,ncart), fa_ao(nbf,nbf), fb_ao(nbf,nbf))
+        call unpack_matrix(focka, fa_ao)
+        call unpack_matrix(fockb, fb_ao)
+        call hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
+                            dSa, dTa + dVa, uvec, hfscale, dpol)
+        call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+          description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+        pstore = dpol
+        deallocate(dpol, fa_ao, fb_ao)
+      end block
+    end if
+
     ! The central difference of the ELECTRONIC gradient over geometry AND the
     ! relaxed orbital path already contains the full electronic Hessian (skeleton
     ! + orbital-relaxation response); only the (orbital-independent) nuclear
@@ -2355,6 +2374,327 @@ contains
       deallocate(mos, dmo, fra, frb, vxc, fxa, fxb, dxa, dxb, pts)
     end subroutine add_xc_terms_uhf
   end subroutine hf_polder_uhf
+
+!###############################################################################
+
+!> @brief Analytic nuclear derivatives of the static polarizability, ROHF/ROKS.
+!> @details The ROHF response lives in the docc/socc/virt rotation space
+!>   theta (rohf_pack_trial layout); the CPHF operator of cphf_apbx_rohf is
+!>   the UHF-form operator on the embedded spin rotations x^s = unpack(theta),
+!>   with the exact commutator [F^s_MO, K]_vo of the non-canonical spin Fock
+!>   matrices (K the common antisymmetric generator) instead of
+!>   F_vv x - x F_oo. With alpha_ab = -2 mu.theta the Hylleraas functional is
+!>     -2 [ mu^a.theta^b + mu^b.theta^a + theta^a.H.theta^b ],
+!>     theta^a.H.theta^b = sum_s Tr[F^s_MO M^s_ab] + 1/2 sum_s Tr[Pt^{a,s} G^s[Pt^b]],
+!>     M^s_ab = K^b X^{a,s}' - X^{a,s}' K^b,
+!>   X^{a,s} carrying x^{a,s} in its vir-occ block. Its derivative along the
+!>   common relaxed orbital path dC = C T (T_vo = theta^x including the
+!>   socc-docc rotation, symmetric part -S^x/2) uses the same derivative-Fock
+!>   contractions as the UHF routine; T^x' F + F T^x replaces the canonical
+!>   orbital-energy weights. Kohn-Sham XC pieces are central differences along
+!>   the relaxed path with the moving grid.
+  subroutine hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
+                            dsa, dha, uvec, hfscale, dpol)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use int1, only: multipole_integrals
+    use grd1, only: der_dipole_matrix
+    use mathlib, only: unpack_matrix, pack_matrix
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    real(dp), intent(in) :: mo(:,:), fa_ao(:,:), fb_ao(:,:), pa(:,:), pb(:,:)
+    integer, intent(in) :: nocca, noccb
+    real(dp), intent(in) :: dsa(:,:,:,:), dha(:,:,:,:), uvec(:,:), hfscale
+    real(dp), intent(out) :: dpol(:,:,:)
+
+    type(basis_set), pointer :: basis
+    real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
+    real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:), xb(:,:)
+    real(dp), allocatable :: xmo(:,:,:,:), kmo(:,:,:), xao(:,:,:,:), pta(:,:,:,:)
+    real(dp), allocatable :: ga(:,:,:,:), gamo(:,:,:,:), fmo(:,:,:), psp(:,:,:), ptot(:,:)
+    real(dp), allocatable :: msym(:,:,:,:), wsym(:,:,:,:), gw(:,:,:,:), gwx(:,:,:), gppx(:,:,:)
+    real(dp), allocatable :: tmat(:,:), smo(:,:), scr(:,:), scr2(:,:), wmo(:,:), dps(:,:,:)
+    real(dp), allocatable :: dpk(:,:), fpk(:,:), gx(:,:), occ(:,:)
+    real(dp) :: origin(3), t1(3,3), t2, t3, alpha(3,3), hyl
+    integer :: nbf, nbf2, natom, ncart, ltot, nvira, nvirb, offset, no(2)
+    integer :: a, b, s, i, j, k, x, kc, cc, ip, iv
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf; nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2); ncart = 3*natom
+    nvira = nbf - nocca; nvirb = nbf - noccb; offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    no = [nocca, noccb]
+    origin = 0.0_dp
+    allocate(psp(nbf,nbf,2), ptot(nbf,nbf), fmo(nbf,nbf,2), occ(nbf,2), source=0.0_dp)
+    psp(:,:,1) = pa; psp(:,:,2) = pb; ptot = pa + pb
+    occ(1:nocca,1) = 1.0_dp; occ(1:noccb,2) = 1.0_dp
+    allocate(scr(nbf,nbf), scr2(nbf,nbf), wmo(nbf,nbf), tmat(nbf,nbf), smo(nbf,nbf))
+    call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,fa_ao,nbf,0.0_dp,scr,nbf)
+    call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,fmo(:,:,1),nbf)
+    call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,fb_ao,nbf,0.0_dp,scr,nbf)
+    call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,fmo(:,:,2),nbf)
+
+    ! ---- dipole, field CPHF over the ROHF rotation space ------------------
+    allocate(mints(nbf2,19), source=0.0_dp)
+    call multipole_integrals(basis, mints, origin, 3)
+    allocate(dfull(nbf,nbf,3), mmo(nbf,nbf,3), xa(nvira,nocca), xb(nvirb,noccb))
+    allocate(bF(ltot,3), uF(ltot,3), source=0.0_dp)
+    do a = 1, 3
+      call unpack_matrix(mints(:,a), dfull(:,:,a))
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,dfull(:,:,a),nbf,0.0_dp,scr,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,mmo(:,:,a),nbf)
+      xa = -mmo(nocca+1:,1:nocca,a)
+      xb = -mmo(noccb+1:,1:noccb,a)
+      call rohf_pack_trial(bF(:,a), xa, xb, nbf, nocca, noccb)
+    end do
+    deallocate(mints)
+    call cphf_solve_rohf(infos, 3, bF, uF)
+    do b = 1, 3
+      do a = 1, 3
+        alpha(a,b) = 2.0_dp*sum(bF(:,a)*uF(:,b))
+      end do
+    end do
+
+    ! ---- embedded spin rotations, generators, response Fock ---------------
+    allocate(xmo(nbf,nbf,3,2), kmo(nbf,nbf,3), xao(nbf,nbf,3,2), pta(nbf,nbf,3,2), &
+             ga(nbf,nbf,3,2), gamo(nbf,nbf,3,2), source=0.0_dp)
+    allocate(dpk(nbf2,2), fpk(nbf2,2))
+    do a = 1, 3
+      call rohf_unpack_trial(uF(:,a), xa, xb, nbf, nocca, noccb)
+      xmo(nocca+1:,1:nocca,a,1) = xa
+      xmo(noccb+1:,1:noccb,a,2) = xb
+      do i = 1, nocca
+        do iv = 1, nvira
+          kmo(nocca+iv,i,a) = xa(iv,i)
+          kmo(i,nocca+iv,a) = -xa(iv,i)
+        end do
+      end do
+      do j = 1, noccb
+        do iv = 1, offset
+          kmo(noccb+iv,j,a) = kmo(noccb+iv,j,a) + xb(iv,j)
+          kmo(j,noccb+iv,a) = kmo(j,noccb+iv,a) - xb(iv,j)
+        end do
+      end do
+      do s = 1, 2
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,xmo(:,:,a,s),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,xao(:,:,a,s),nbf)
+        pta(:,:,a,s) = xao(:,:,a,s) + transpose(xao(:,:,a,s))
+        call pack_matrix(pta(:,:,a,s), dpk(:,s))
+      end do
+      fpk = 0.0_dp
+      call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+      do s = 1, 2
+        call unpack_from_packed(fpk(:,s), ga(:,:,a,s), nbf)
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,ga(:,:,a,s),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,gamo(:,:,a,s),nbf)
+      end do
+    end do
+
+    ! ---- pair intermediates ------------------------------------------------
+    allocate(msym(nbf,nbf,6,2), wsym(nbf,nbf,6,2), gw(nbf,nbf,6,2), gwx(3,natom,6), &
+             gppx(3,natom,6), gx(3,natom), source=0.0_dp)
+    ip = 0
+    do b = 1, 3
+      do a = 1, b
+        ip = ip + 1
+        do s = 1, 2
+          ! M^s_ab = K^b X^{a,s}' - X^{a,s}' K^b, symmetrized in a<->b
+          call dgemm('n','t',nbf,nbf,nbf,0.5_dp,kmo(:,:,b),nbf,xmo(:,:,a,s),nbf,0.0_dp,scr,nbf)
+          call dgemm('t','n',nbf,nbf,nbf,-0.5_dp,xmo(:,:,a,s),nbf,kmo(:,:,b),nbf,1.0_dp,scr,nbf)
+          call dgemm('n','t',nbf,nbf,nbf,0.5_dp,kmo(:,:,a),nbf,xmo(:,:,b,s),nbf,1.0_dp,scr,nbf)
+          call dgemm('t','n',nbf,nbf,nbf,-0.5_dp,xmo(:,:,b,s),nbf,kmo(:,:,a),nbf,1.0_dp,scr,nbf)
+          msym(:,:,ip,s) = scr
+          scr2 = 0.5_dp*(scr + transpose(scr))
+          call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,scr2,nbf,0.0_dp,scr,nbf)
+          call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,wsym(:,:,ip,s),nbf)
+          call pack_matrix(wsym(:,:,ip,s), dpk(:,s))
+          call fock_deriv_contract_os(infos, basis, ptot, psp(:,:,s), wsym(:,:,ip,s), hfscale, gx)
+          gwx(:,:,ip) = gwx(:,:,ip) + gx
+          call fock_deriv_contract_os(infos, basis, pta(:,:,b,1) + pta(:,:,b,2), pta(:,:,b,s), &
+                                      pta(:,:,a,s), hfscale, gx)
+          gppx(:,:,ip) = gppx(:,:,ip) + 0.5_dp*gx
+        end do
+        fpk = 0.0_dp
+        call fock_jk(basis, d=dpk, f=fpk, scale_exch=hfscale, infos=infos)
+        do s = 1, 2
+          call unpack_from_packed(fpk(:,s), gw(:,:,ip,s), nbf)
+        end do
+      end do
+    end do
+
+    if (infos%control%verbose >= 2) then
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          hyl = 0.0_dp
+          do s = 1, 2
+            hyl = hyl + sum(fmo(:,:,s)*msym(:,:,ip,s)) + 0.5_dp*sum(pta(:,:,a,s)*ga(:,:,b,s))
+          end do
+          write(iw,'(A,2I2,2ES16.8)') '  polder(ROHF) Hylleraas check a b, alpha, diff:', a, b, alpha(a,b), &
+            alpha(a,b) - (2.0_dp*(sum(bF(:,a)*uF(:,b)) + sum(bF(:,b)*uF(:,a))) - 2.0_dp*hyl)
+        end do
+      end do
+    end if
+
+    allocate(dD(nbf,nbf,3,natom,3))
+    call der_dipole_matrix(basis, origin, dD)
+    do a = 1, 3
+      do k = 1, natom
+        do cc = 1, 3
+          do j = 1, nbf
+            dD(:,j,cc,k,a) = dD(:,j,cc,k,a)*basis%bfnrm(:)*basis%bfnrm(j)
+          end do
+        end do
+      end do
+    end do
+
+    ! ---- per nuclear coordinate ------------------------------------------
+    allocate(dps(nbf,nbf,2))
+    dpol = 0.0_dp
+    do x = 1, ncart
+      cc = mod(x-1,3) + 1; kc = (x-1)/3 + 1
+      call build_t(x)
+      ! relaxed spin-density derivatives dP^s = C (T O^s + O^s T') C'
+      do s = 1, 2
+        do j = 1, nbf
+          scr2(:,j) = tmat(:,j)*occ(j,s)
+        end do
+        scr2 = scr2 + transpose(scr2)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,scr2,nbf,0.0_dp,scr,nbf)
+        call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr,nbf,mo,nbf,0.0_dp,dps(:,:,s),nbf)
+      end do
+      t1 = 0.0_dp
+      do a = 1, 3
+        call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,mmo(:,:,a),nbf,0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mmo(:,:,a),nbf,tmat,nbf,1.0_dp,scr,nbf)
+        do b = 1, 3
+          do s = 1, 2
+            t1(a,b) = t1(a,b) + sum(dD(:,:,cc,kc,a)*xao(:,:,b,s)) + sum(xmo(:,:,b,s)*scr)
+          end do
+        end do
+      end do
+      ip = 0
+      do b = 1, 3
+        do a = 1, b
+          ip = ip + 1
+          t2 = gwx(cc,kc,ip)
+          t3 = gppx(cc,kc,ip)
+          do s = 1, 2
+            ! (T'F + F T) contracted with M^s
+            call dgemm('t','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,fmo(:,:,s),nbf,0.0_dp,scr,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,fmo(:,:,s),nbf,tmat,nbf,1.0_dp,scr,nbf)
+            t2 = t2 + sum(dha(:,:,cc,kc)*wsym(:,:,ip,s)) + sum(dps(:,:,s)*gw(:,:,ip,s)) &
+                    + sum(scr*msym(:,:,ip,s))
+            t3 = t3 + tw_g(a, b, s) + tw_g(b, a, s)
+          end do
+          dpol(a,b,x) = -2.0_dp*(t1(a,b) + t1(b,a) + t2 + t3)
+          dpol(b,a,x) = dpol(a,b,x)
+        end do
+      end do
+    end do
+
+    if (infos%control%hamilton == 20) call add_xc_terms_rohf()
+
+    deallocate(psp, ptot, fmo, occ, scr, scr2, wmo, tmat, smo, dfull, mmo, xa, xb, bF, uF, &
+               xmo, kmo, xao, pta, ga, gamo, dpk, fpk, msym, wsym, gw, gwx, gppx, gx, dD, dps)
+
+  contains
+
+    !> common relaxed orbital-path generator T^x of the ROHF orbitals
+    subroutine build_t(x_)
+      integer, intent(in) :: x_
+      integer :: cx_, kx_
+      cx_ = mod(x_-1,3) + 1; kx_ = (x_-1)/3 + 1
+      call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo,nbf,dsa(:,:,cx_,kx_),nbf,0.0_dp,scr2,nbf)
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr2,nbf,mo,nbf,0.0_dp,smo,nbf)
+      call rohf_unpack_trial(uvec(:,x_), xa, xb, nbf, nocca, noccb)
+      tmat = -0.5_dp*smo
+      tmat(nocca+1:,1:nocca) = xa
+      tmat(1:nocca,nocca+1:) = -transpose(xa) - smo(1:nocca,nocca+1:)
+      if (offset > 0) then
+        tmat(noccb+1:nocca,1:noccb) = xb(1:offset,:)
+        tmat(1:noccb,noccb+1:nocca) = -transpose(xb(1:offset,:)) - smo(1:noccb,noccb+1:nocca)
+      end if
+    end subroutine build_t
+
+    !> Tr[T W^{a,s} G^{b,s}] (W^{a,s} = X^{a,s} + X^{a,s}' in the MO basis)
+    real(dp) function tw_g(a_, b_, s_)
+      integer, intent(in) :: a_, b_, s_
+      wmo = xmo(:,:,a_,s_) + transpose(xmo(:,:,a_,s_))
+      call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmat,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+      tw_g = sum(scr2*transpose(gamo(:,:,b_,s_)))
+    end function tw_g
+
+    subroutine add_xc_terms_rohf()
+      use mod_dft, only: dft_initialize, dftclean, dftexcor
+      use mod_dft_molgrid, only: dft_grid_t
+      use mod_dft_gridint_fxc, only: utddft_fxc
+      type(dft_grid_t) :: mg
+      real(dp), parameter :: hxc = 1.0e-3_dp
+      real(dp), allocatable :: mos(:,:), dmo(:,:), fra(:), frb(:), vxc(:,:,:,:)
+      real(dp), allocatable :: fxa(:,:,:), fxb(:,:,:), dxa(:,:,:), dxb(:,:,:), pts(:,:,:,:)
+      real(dp) :: sab(3,3,2), exr, telr, tknr, sgn
+      integer :: is, xx, kx, cx, ipx, aa, bb, ss
+
+      allocate(mos(nbf,nbf), dmo(nbf,nbf), fra(nbf2), frb(nbf2), vxc(nbf,nbf,2,2), &
+               fxa(nbf,nbf,3), fxb(nbf,nbf,3), dxa(nbf,nbf,3), dxb(nbf,nbf,3), pts(nbf,nbf,3,2))
+      do xx = 1, ncart
+        cx = mod(xx-1,3) + 1; kx = (xx-1)/3 + 1
+        call build_t(xx)
+        call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mo,nbf,tmat,nbf,0.0_dp,dmo,nbf)
+        do is = 1, 2
+          sgn = merge(1.0_dp, -1.0_dp, is == 1)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) + sgn*hxc
+          call basis%init_shell_centers()
+          call dft_initialize(infos, basis, mg)
+          mos = mo + sgn*hxc*dmo
+          fra = 0.0_dp; frb = 0.0_dp
+          call dftexcor(basis, mg, int(infos%control%scftype), fra, frb, mos, mos, &
+                        nbf, nbf2, exr, telr, tknr, infos)
+          call unpack_from_packed(fra, vxc(:,:,1,is), nbf)
+          call unpack_from_packed(frb, vxc(:,:,2,is), nbf)
+          do ss = 1, 2
+            do bb = 1, 3
+              wmo = xmo(:,:,bb,ss) + transpose(xmo(:,:,bb,ss))
+              call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mos,nbf,wmo,nbf,0.0_dp,scr2,nbf)
+              call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr2,nbf,mos,nbf,0.0_dp,pts(:,:,bb,ss),nbf)
+            end do
+          end do
+          dxa = pts(:,:,:,1); dxb = pts(:,:,:,2)
+          fxa = 0.0_dp; fxb = 0.0_dp
+          call utddft_fxc(basis=basis, molGrid=mg, isVecs=.true., wfa=mos, wfb=mos, &
+                          fxa=fxa, fxb=fxb, dxa=dxa, dxb=dxb, nmtx=3, threshold=0.0_dp, infos=infos)
+          do bb = 1, 3
+            do aa = 1, 3
+              sab(aa,bb,is) = sum(pts(:,:,aa,1)*fxa(:,:,bb)) + sum(pts(:,:,aa,2)*fxb(:,:,bb))
+            end do
+          end do
+          call dftclean(infos)
+          basis%atoms%xyz(cx,kx) = basis%atoms%xyz(cx,kx) - sgn*hxc
+          call basis%init_shell_centers()
+        end do
+        ipx = 0
+        do bb = 1, 3
+          do aa = 1, bb
+            ipx = ipx + 1
+            dpol(aa,bb,xx) = dpol(aa,bb,xx) - 2.0_dp*( &
+                sum((vxc(:,:,1,1) - vxc(:,:,1,2))*wsym(:,:,ipx,1))/(2.0_dp*hxc) &
+              + sum((vxc(:,:,2,1) - vxc(:,:,2,2))*wsym(:,:,ipx,2))/(2.0_dp*hxc) &
+              + 0.25_dp*(sab(aa,bb,1) + sab(bb,aa,1) - sab(aa,bb,2) - sab(bb,aa,2))/(2.0_dp*hxc) )
+            dpol(bb,aa,xx) = dpol(aa,bb,xx)
+          end do
+        end do
+      end do
+      deallocate(mos, dmo, fra, frb, vxc, fxa, fxb, dxa, dxb, pts)
+    end subroutine add_xc_terms_rohf
+  end subroutine hf_polder_rohf
 
 !###############################################################################
 
