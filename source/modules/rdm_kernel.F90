@@ -30,6 +30,7 @@
 !> fastest, matching the numpy arrays the caller allocates.
 module rdm_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+  use fci_sigma_strings_mod, only: rdm12_strings
   implicit none
   private
 
@@ -457,17 +458,16 @@ contains
   !>
   !> which contracts with spatial integrals as 0.5 * sum (pq|rs) D[p,q,r,s].
   !>
-  !> Replaces rdm.py `make_rdm2_spatial`.  The Python builds the [2n,2n,2n,2n]
-  !> spin-orbital D2 -- sixteen times the spatial size -- and then sums four
-  !> transposed spin blocks out of it.  In terms of the Gram matrix the whole
-  !> reduction is
+  !> Replaces rdm.py `make_rdm2_spatial`.  Uses the string-driven `rdm12_strings`
+  !> engine from fci_sigma_strings.F90 first (OpenMP, block-wise, no `cap`
+  !> limit).  Falls back to `rdm2_gram` when the determinant list is not a
+  !> canonical CAS product (non-zero status from `rdm12_strings`) or when `cap`
+  !> is exceeded.
   !>
-  !>     D[p,q,r,s] = sum_{so,to} gram[(p+so)*2n + (r+to), (q+so)*2n + (s+to)]
+  !> `rdm12_strings` fills both d1 and d2; d2 is written in the same
+  !> C-order [norb,norb,norb,norb] layout `rdm2_spatial`'s caller expects.
   !>
-  !> so the spin-orbital tensor is never materialised: the four spin blocks are
-  !> read straight off the Gram matrix that the build already produces.
-  !>
-  !> Returns 0 on success, or -1 if `cap` was too small (Python fallback).
+  !> Returns 0 on success, or -1 if both engines declined.
   function rdm2_spatial(norb, ndet, dets, civec, cap, d2, nthreads) result(info) &
       bind(C, name="rdm2_spatial")
     integer(c_int32_t), value :: norb, nthreads
@@ -477,6 +477,8 @@ contains
     real(dp), intent(inout) :: d2(0:norb*norb*norb*norb-1)
     integer(i8) :: info
 
+    integer :: status
+    real(dp), allocatable :: d1(:)
     real(dp), allocatable :: gram(:,:)
     integer(c_int32_t) :: nspin
     integer :: p, q, r, s, so, to
@@ -484,6 +486,17 @@ contains
 
     info = 0_i8
     if (norb <= 0) return
+
+    ! Try the string-driven engine first (OpenMP, no cap limit).
+    allocate(d1(0:norb*norb-1))
+    d1 = 0.0_dp
+    d2 = 0.0_dp
+    status = rdm12_strings(int(norb, i8), ndet, dets, civec, d1, d2, int(nthreads, i8))
+    deallocate(d1)
+    if (status == 0) return
+
+    ! String engine declined (non-product list).  Fall back to the
+    ! determinant-pair grammar matrix (serial, cap-limited).
     nspin = 2 * norb
     call rdm2_gram(nspin, ndet, dets, civec, cap, gram, info)
     if (info /= 0_i8) return
