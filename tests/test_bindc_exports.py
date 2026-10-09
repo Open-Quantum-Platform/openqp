@@ -100,11 +100,19 @@ class BindCExportTest(unittest.TestCase):
 
     @unittest.skipIf(importlib.util.find_spec("oqp") is None, "oqp is not installed")
     def test_installed_library_exports_entry_points(self):
+        import oqp
         from oqp import runtime
         root, suffix = runtime.resolve_oqp_root()
         lib = ctypes.CDLL(str(runtime.library_path(root, suffix)))
-        missing = sorted({lbl for _, _, _, lbl, _ in bind_c_definitions()
-                          if not hasattr(lib, lbl)})
+        missing = {lbl for _, _, _, lbl, _ in bind_c_definitions() if not hasattr(lib, lbl)}
+        # ENABLE_DFTD4=OFF leaves dftd4_interface.F90 out of liboqp on purpose
+        # (source/CMakeLists.txt), and PyOQP tolerates exactly these entry
+        # points being absent.  Only a backend that is missing as a whole is
+        # excused; losing part of it is still a visibility defect.
+        optional = set(oqp._OPTIONAL_ENTRY_POINTS)
+        if optional and optional <= missing:
+            missing -= optional
+        missing = sorted(missing)
         self.assertEqual(missing, [], "liboqp does not export these bind(C) entry points: "
                          + ", ".join(missing))
 
