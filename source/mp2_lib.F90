@@ -141,6 +141,16 @@ contains
           mo_b_sc, e_b_sc, noccb, virb, &
           need_same_spin, need_opposite_spin, e_aa, e_ab, &
           success=n5_ok)
+      if (n5_ok .and. need_same_spin) then
+        ! Beta same-spin block (opposite-spin already counted from alpha side)
+        call mp2_corr_n5(int2_driver, basis, nbf, nbf2, &
+            mo_b_sc, e_b_sc, noccb, virb, &
+            mo_b_sc, e_b_sc, noccb, virb, &
+            mo_a_sc, e_a_sc, nocca, vira, &
+            same_spin=.true., do_opposite=.false., &
+            e_same=e_bb, e_opp=e_opp_scratch, &
+            success=n5_ok)
+      end if
       if (n5_ok) computed = .true.
     end if
 
