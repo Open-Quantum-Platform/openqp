@@ -7472,7 +7472,7 @@ def _basis_max_l_detail(config: dict[str, Any],
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     lines = inline_lines
     if xyz_path:
-        xyz_file = xyz_path.split()[0]
+        xyz_file, _ = _split_geometry_reference(xyz_path)
         if not os.path.isabs(xyz_file) and input_dir:
             xyz_file = os.path.join(input_dir, xyz_file)
         if os.path.exists(os.path.abspath(xyz_file)):

@@ -106,6 +106,19 @@ class CustomBasisHessianCheck(unittest.TestCase):
                 raise_error=False, emit=False, input_dir=tmp)
             self.assertTrue(basis_errors(report), report.to_text())
 
+    def test_geometry_path_with_spaces_is_inspected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            geom_dir = Path(tmp) / "my geometries"
+            geom_dir.mkdir()
+            (geom_dir / "h2.xyz").write_text("2\nH2\nH 0.0 0.0 0.0\nH 0.0 0.0 0.74\n")
+            write_basis(tmp, "spdfg.json", 4)
+            cfg = config("file:spdfg.json", "analytical")
+            cfg["input"]["system"] = "my geometries/h2.xyz"
+            report = self.checker.check_input_values(
+                cfg, raise_error=False, emit=False, input_dir=tmp)
+            self.assertTrue(any("L=4" in str(d.value) for d in basis_errors(report)),
+                            report.to_text())
+
     def test_explicit_analytical_accepts_a_readable_custom_basis(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_basis(tmp, "spd.json", 2)
