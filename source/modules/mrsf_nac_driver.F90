@@ -15,6 +15,8 @@ module mrsf_nac_driver_mod
   implicit none
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: mrsf_nac_lagrangian_C, mrsf_nac_lagrangian_pair_C
   public :: mrsf_nac_lagrangian, mrsf_nac_lagrangian_fused_buffered
 
   character(len=*), parameter :: module_name = "mrsf_nac_driver_mod"

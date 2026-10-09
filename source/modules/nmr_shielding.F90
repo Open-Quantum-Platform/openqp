@@ -5,6 +5,8 @@ module nmr_shielding_mod
   character(len=*), parameter :: module_name = "nmr_shielding_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: nmr_shielding_C
   public nmr_shielding
 
 contains

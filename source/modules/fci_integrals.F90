@@ -9,6 +9,8 @@ module fci_integrals_mod
   character(len=*), parameter :: module_name = "fci_integrals_mod"
 
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: fci_ao_integrals_C
 
   public fci_ao_integrals
 

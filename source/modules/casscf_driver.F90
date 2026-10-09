@@ -137,6 +137,8 @@ module casscf_driver_mod
   use oqp_linalg
   implicit none
   private
+  ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
+  public :: casscf_energy_C
 
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
