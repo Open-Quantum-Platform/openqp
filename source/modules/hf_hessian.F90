@@ -49,7 +49,7 @@ contains
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: dmat_a(:), mo_a(:,:), eps(:)
-    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:)
+    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:), g2e(:,:)
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
@@ -162,6 +162,24 @@ contains
     allocate(d0(nbf,nbf), d0p(nbf2,1), gp(nbf2,1), gfull(nbf,nbf))
     allocate(bvec(nocc*nvir,ncart), uvec(nocc*nvir,ncart), source=0.0_dp)
 
+    ! 2e response-Fock skeleton  G^x[P]_ia  for ALL 3N coordinates.  The occ-vir
+    ! probe is geometry-independent and one derivative-Fock contraction returns
+    ! every Cartesian component, so evaluate it once per occ-vir pair here
+    ! instead of once per pair AND per coordinate (an ncart-fold redundant grd2
+    ! sweep).  Same scheme as hf_hessian_uhf.
+    allocate(g2e(nocc*nvir,ncart), source=0.0_dp)
+    do a = 1, nvir
+      do i = 1, nocc
+        do mu = 1, nbf
+          do nu = 1, nbf
+            probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
+          end do
+        end do
+        call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
+        g2e((a-1)*nocc+i,:) = reshape(gx, [ncart])
+      end do
+    end do
+
     icart = 0
     do kc = 1, natom
       do cc = 1, 3
@@ -173,13 +191,7 @@ contains
         F0x = hx
         do a = 1, nvir
           do i = 1, nocc
-            do mu = 1, nbf
-              do nu = 1, nbf
-                probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
-              end do
-            end do
-            call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
-            F0x(i,nocc+a) = hx(i,nocc+a) + 2.0_dp*gx(cc,kc)
+            F0x(i,nocc+a) = hx(i,nocc+a) + 2.0_dp*g2e((a-1)*nocc+i,icart)
           end do
         end do
 
@@ -521,7 +533,7 @@ contains
     end if
     close(iw)
 
-    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, &
+    deallocate(pfull, dSa, dTa, dVa, scr, col, Sx, hx, F0x, Gd0, probe, gx, g2e, &
                d0, d0p, gp, gfull, bvec, uvec, hess_native)
   end subroutine hf_hessian
 
