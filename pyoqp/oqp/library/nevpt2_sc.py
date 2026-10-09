@@ -242,14 +242,34 @@ def _koopmans_lib():
     return _lib_backend()
 
 
-def _f3ca_f3ac(h2e, dm4):
-    """The two eri-folded 4-pdm intermediates that PySCF computes via the
-    compiled ``NEVPTkern_cedf_aedf`` / ``NEVPTkern_aedf_ecdf`` kernels,
-    reconstructed here from the genuine spin-free 4-RDM (machine precision).
+def _f3ca_f3ac(h2e, dm4=None, ci=None, det_list=None):
+    """The two eri-folded 4-pdm intermediates.
 
-    The liboqp engine (``nevpt2_f3ca_f3ac``) evaluates the same two tensors with
-    the einsum transposes folded into the index expression, which turns f3ca into
-    a single DGEMM; the NumPy path below stays as the fallback and the pin."""
+    Two entry paths:
+      1. **Direct** (preferred): pass ``ci`` and ``det_list`` — the Fortran engine
+         ``nevpt2_f3ca_f3ac_direct`` builds f3ca/f3ac without forming dm4(n⁸),
+         peak memory ≈ 290 MiB for CAS(12,6).
+      2. **via dm4** (fallback): pass ``dm4`` — the existing ``nevpt2_f3ca_f3ac``
+         or the NumPy einsum path; this is the legacy route.
+
+    The direct path is preferred when the native symbol is present (liboqp
+    > f1058be54) and the CI vector/determinants are available, because it
+    skips the e2(ndet×n⁴) and dm4(n⁸) intermediates that exhaust memory for
+    nact ≥ 10.
+
+    The liboqp engine (``nevpt2_f3ca_f3ac_direct``) builds f3ca via one
+    DGEMM(B, dm4_t) per t and f3ac via per-Q DGEMM(A_t, dm4_slice); the
+    NumPy path below stays as the fallback and the pin.
+    """
+    # --- path 1: direct CI-to-f3 (no dm4) ---
+    if ci is not None and det_list is not None:
+        result = _f3ca_f3ac_direct(h2e, ci, det_list)
+        if result is not None:
+            return result
+
+    # --- path 2: dm4-based (legacy) ---
+    if dm4 is None:
+        raise ValueError("_f3ca_f3ac needs either dm4 or (ci, det_list)")
     backend = _koopmans_lib()
     if backend is not None:
         lib, ffi = backend
@@ -270,6 +290,37 @@ def _f3ca_f3ac(h2e, dm4):
         np.argsort((1, 4, 0, 2, 5, 3)))
     f3ac = _ein('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(
         np.argsort((1, 2, 0, 4, 3, 5)))
+    return f3ca, f3ac
+
+
+def _f3ca_f3ac_direct(h2e, ci, det_list):
+    """f3ca/f3ac directly from the CI vector, skipping dm4(n⁸).
+
+    Uses the Fortran engine ``nevpt2_f3ca_f3ac_direct`` when available.
+    Returns ``None`` when the symbol is missing (caller falls back to dm4 path).
+    """
+    backend = _koopmans_lib()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_f3ca_f3ac_direct"):
+        return None
+    n = int(h2e.shape[0])
+    ndet = len(det_list)
+    dets = np.ascontiguousarray(np.asarray(det_list, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(ci, dtype=np.float64).reshape(-1))
+    g = _as_f64c(h2e)
+    f3ca = np.zeros((n,) * 6, dtype=np.float64)
+    f3ac = np.zeros((n,) * 6, dtype=np.float64)
+    info = lib.nevpt2_f3ca_f3ac_direct(
+        int(n), int(ndet),
+        ffi.cast("int64_t *", dets.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        ffi.cast("double *", g.ctypes.data),
+        ffi.cast("double *", f3ca.ctypes.data),
+        ffi.cast("double *", f3ac.ctypes.data))
+    if int(info) != 0:
+        return None
     return f3ca, f3ac
 
 
@@ -749,6 +800,15 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
                      max_memory=None):
     """Strongly contracted NEVPT2 correlation energy.
 
+    Two execution paths:
+
+    1. **Direct** (preferred): ``nevpt2_f3ca_f3ac_direct`` builds f3ca/f3ac
+       directly from the CI vector, skipping dm4(n⁸). Only dm1..dm3 are
+       formed; peak memory ≈ dm3(nact⁶) + e2(ndet×nact⁴) ≈ 290 MiB for
+       CAS(12,6).  The memory ceiling below applies only to the fallback.
+    2. **via dm4** (fallback): builds the full dense 4-RDM (nact⁸) before
+       computing f3ca/f3ac.  Used when the native symbol is absent.
+
     Parameters
     ----------
     h1e_mo, eri_mo : full-MO bare one-electron matrix and chemist (pq|rs) tensor
@@ -763,62 +823,64 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     (e2, components) : total SC-NEVPT2 correlation and a dict of the eight
         per-subspace energies.
     """
-    # dm4 is nact^8 doubles and is built before anything else looks at size:
-    # CAS(2,12) is only 144 determinants and sails through [cas] max_det, yet
-    # dm4 alone is ~3.4 GiB.  The module docstring claims `[pt2] max_active`
-    # guards this, but no such key or check exists anywhere in the tree, so the
-    # calculation simply exhausts memory.  Refuse up front with a message that
-    # names the real number instead.
-    # The ceiling is [cas] max_memory when the caller passes it.  A hard-coded
-    # 2 GiB ignored the configured budget in both directions: CAS(2,10) is 100
-    # determinants with a ~763 MiB dm4, so it cleared a 2 GiB cap while blowing
-    # a max_memory=256 budget.  make_rdms holds dm1..dm4 simultaneously, and
-    # dm3 (nact^6) is the only other one large enough to matter, so both are
-    # counted.
-    _dm4_bytes = 8 * int(nact) ** 8
-    _dm3_bytes = 8 * int(nact) ** 6
-    # nevpt2_make_rdms allocates an e2(ndet, nact^4) workspace while the output
-    # tensors are already live -- at CAS(8,8) that is ~153 MiB against a 128 MiB
-    # dm4, so counting only the finished tensors let a 256 MiB job through and
-    # then blew past the ceiling during construction.
     from math import comb as _comb
-    _ndet_sc = _comb(int(nact), int(active_nelec[0])) * _comb(int(nact), int(active_nelec[1]))
-    _work_bytes = 8 * int(_ndet_sc) * int(nact) ** 4
-    # After construction the RDMs stay live while _f3ca_f3ac builds two nact^6
-    # tensors and _Sr allocates a16 alongside them, so the post-construction
-    # peak can exceed the construction peak.  Admit on the larger of the two.
-    _post_bytes = _dm4_bytes + _dm3_bytes + 3 * (8 * int(nact) ** 6)
-    _live_bytes = max(_dm4_bytes + _dm3_bytes + _work_bytes, _post_bytes)
-    _cap = (2 * 1024 ** 3 if max_memory is None
-            else max(1, int(max_memory)) * 1024 ** 2)
-    if _live_bytes > _cap:
-        raise ValueError(
-            "strongly contracted NEVPT2 needs a dense four-particle RDM of "
-            "nact^8 = %d doubles (~%.1f GiB) for nact=%d, and holds the "
-            "three-particle RDM (~%.2f GiB) and the RDM construction "
-            "workspace alongside it -- ~%.1f GiB total, "
-            "above the %.2f GiB ceiling%s. Reduce [cas] active_orbitals, "
-            "raise [cas] max_memory, or use [pt2] contraction=none for the "
-            "uncontracted NEVPT2, which does not form dm4."
-            % (int(nact) ** 8, _dm4_bytes / 1024 ** 3, int(nact),
-               _dm3_bytes / 1024 ** 3, _live_bytes / 1024 ** 3,
-               _cap / 1024 ** 3,
-               "" if max_memory is None else " ([cas] max_memory)"))
-    dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
+    det_list = _determinants(nact, active_nelec)
+
+    # --- probe direct path (no dm4) ---
+    b = _koopmans_lib()
+    _f3_direct_avail = (b is not None and
+                        hasattr(b[0], "nevpt2_f3ca_f3ac_direct"))
+
+    if _f3_direct_avail:
+        # direct path: only need dm1..dm3
+        dm1, dm2, dm3 = make_rdms(ci_vector, nact, active_nelec, upto=3)
+    else:
+        # dm4 memory check (legacy path)
+        _dm4_bytes = 8 * int(nact) ** 8
+        _dm3_bytes = 8 * int(nact) ** 6
+        _ndet_sc = _comb(int(nact), int(active_nelec[0])) * _comb(int(nact), int(active_nelec[1]))
+        _work_bytes = 8 * int(_ndet_sc) * int(nact) ** 4
+        _post_bytes = _dm4_bytes + _dm3_bytes + 3 * (8 * int(nact) ** 6)
+        _live_bytes = max(_dm4_bytes + _dm3_bytes + _work_bytes, _post_bytes)
+        _cap = (2 * 1024 ** 3 if max_memory is None
+                else max(1, int(max_memory)) * 1024 ** 2)
+        if _live_bytes > _cap:
+            raise ValueError(
+                "strongly contracted NEVPT2 needs a dense four-particle RDM of "
+                "nact^8 = %d doubles (~%.1f GiB) for nact=%d, and holds the "
+                "three-particle RDM (~%.2f GiB) and the RDM construction "
+                "workspace alongside it -- ~%.1f GiB total, "
+                "above the %.2f GiB ceiling%s. Reduce [cas] active_orbitals, "
+                "raise [cas] max_memory, or use [pt2] contraction=none for the "
+                "uncontracted NEVPT2, which does not form dm4.\n\n"
+                "Alternatively, rebuild liboqp with nevpt2_f3ca_f3ac_direct "
+                "(needs commit f1058be54+) -- the direct path avoids dm4(n⁸) "
+                "entirely and needs only ~%.2f GiB for this active space."
+                % (int(nact) ** 8, _dm4_bytes / 1024 ** 3, int(nact),
+                   _dm3_bytes / 1024 ** 3, _live_bytes / 1024 ** 3,
+                   _cap / 1024 ** 3,
+                   "" if max_memory is None else " ([cas] max_memory)",
+                   (_dm3_bytes + _work_bytes) / 1024 ** 3))
+        dm1, dm2, dm3, dm4 = make_rdms(ci_vector, nact, active_nelec, upto=4)
+
     B = _blocks(h1e_mo, eri_mo, ncore, nact, eps)
     h1e, h2e = B['h1e'], B['h2e']
     ec, ev = B['e_core'], B['e_virt']
 
+    # build f3ca/f3ac once
+    if _f3_direct_avail:
+        f3 = _f3ca_f3ac_direct(h2e, ci_vector, det_list)
+        # dm4 is unused when f3 is passed; pass a dummy
+        _dm4_dummy = dm1
+    else:
+        f3 = _f3ca_f3ac(h2e, dm4)
+        _dm4_dummy = dm4
+
     comp = {}
-    # Sr and Si consume the SAME pair of eri-folded 4-pdm intermediates -- they
-    # depend only on (h2e, dm4).  Building them once instead of once per subspace
-    # removes the single most expensive contraction in the module (measured 1.9 s
-    # of a 11.0 s CAS(8,8) block before the einsum-order fix).
-    f3 = _f3ca_f3ac(h2e, dm4)
     v, h1v = B['Sr']
-    comp['Sr'] = _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ev, f3=f3)[1]
+    comp['Sr'] = _Sr(dm1, dm2, dm3, _dm4_dummy, h1e, h2e, h1v, v, ev, f3=f3)[1]
     v, h1v = B['Si']
-    comp['Si'] = _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ec, f3=f3)[1]
+    comp['Si'] = _Si(dm1, dm2, dm3, _dm4_dummy, h1e, h2e, h1v, v, ec, f3=f3)[1]
     comp['Sijrs'] = _Sijrs(ec, ev, B['Sijrs'])[1]
     comp['Sijr'] = _Sijr(dm1, dm2, h1e, h2e, B['Sijr'], ec, ev)[1]
     comp['Srsi'] = _Srsi(dm1, dm2, h1e, h2e, B['Srsi'], ec, ev)[1]

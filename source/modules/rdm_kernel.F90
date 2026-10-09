@@ -646,6 +646,7 @@ contains
     integer(i8) :: k, maxnnz, m_i8, qq
     integer :: n, n2, n3, n4, npair, t, u, v, w, vw, tu
     integer :: o4, o5, pq, rs, ierr, nb
+    integer :: p, q, i, j
     integer(i8), allocatable :: skeys(:), sperm(:), cnt(:), rows(:,:), cols(:,:)
     real(dp), allocatable :: sgns(:,:), e1(:,:), bras(:,:), tmp(:)
     real(dp), allocatable :: kets(:,:), blk(:,:), dm4_t(:,:), panel(:,:)
@@ -703,8 +704,8 @@ contains
             do rs = 0, npair - 1
               call apply_epq(ndet, cnt(rs), rows(:,rs), cols(:,rs), sgns(:,rs), tmp, kets(:, rs))
             end do
-            call dgemm('T', 'N', npair, npair, int(ndet, 4), 1.0_dp, &
-                       bras, int(ndet, 4), kets, int(ndet, 4), 0.0_dp, blk, npair)
+            call dgemm('T', 'N', npair, npair, int(ndet), 1.0_dp, &
+                       bras, int(ndet), kets, int(ndet), 0.0_dp, blk, npair)
             m_i8 = int(u, i8)*int(n2, i8) + int(vw, i8)
             do pq = 0, npair - 1
               do rs = 0, npair - 1
@@ -736,7 +737,8 @@ contains
             end do; end do
             call dgemm('N', 'N', nb, nb, n2, 1.0_dp, a_t, nb, dm4_s, n2, 0.0_dp, f3ac_q, nb)
             do o4 = 0, n - 1; do o5 = 0, n - 1
-              f3ac((qq*int(n, i8)+int(o4, i8))*int(n, i8)+int(o5, i8)) = f3ac_q(o4, o5)
+              f3ac((qq*int(n, i8)+int(o4, i8))*int(n, i8)+int(o5, i8)) &
+                  = f3ac((qq*int(n, i8)+int(o4, i8))*int(n, i8)+int(o5, i8)) + f3ac_q(o4, o5)
             end do; end do
           end do
         end block
