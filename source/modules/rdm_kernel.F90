@@ -30,13 +30,14 @@
 !> fastest, matching the numpy arrays the caller allocates.
 module rdm_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+  use fci_sigma_strings_mod, only: rdm12_strings
   implicit none
   private
 
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms
+  public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms, nevpt2_make_f3
   public :: rdm1_spatial, rdm2_spatial
 
 contains
@@ -457,17 +458,16 @@ contains
   !>
   !> which contracts with spatial integrals as 0.5 * sum (pq|rs) D[p,q,r,s].
   !>
-  !> Replaces rdm.py `make_rdm2_spatial`.  The Python builds the [2n,2n,2n,2n]
-  !> spin-orbital D2 -- sixteen times the spatial size -- and then sums four
-  !> transposed spin blocks out of it.  In terms of the Gram matrix the whole
-  !> reduction is
+  !> Replaces rdm.py `make_rdm2_spatial`.  Uses the string-driven `rdm12_strings`
+  !> engine from fci_sigma_strings.F90 first (OpenMP, block-wise, no `cap`
+  !> limit).  Falls back to `rdm2_gram` when the determinant list is not a
+  !> full CAS product (non-zero status from `rdm12_strings`).  Non-product
+  !> lists (spin-filtered, truncated) get no speedup from the string engine.
   !>
-  !>     D[p,q,r,s] = sum_{so,to} gram[(p+so)*2n + (r+to), (q+so)*2n + (s+to)]
+  !> `rdm12_strings` fills both d1 and d2; d2 is written in the same
+  !> C-order [norb,norb,norb,norb] layout `rdm2_spatial`'s caller expects.
   !>
-  !> so the spin-orbital tensor is never materialised: the four spin blocks are
-  !> read straight off the Gram matrix that the build already produces.
-  !>
-  !> Returns 0 on success, or -1 if `cap` was too small (Python fallback).
+  !> Returns 0 on success, or -1 if both engines declined.
   function rdm2_spatial(norb, ndet, dets, civec, cap, d2, nthreads) result(info) &
       bind(C, name="rdm2_spatial")
     integer(c_int32_t), value :: norb, nthreads
@@ -477,6 +477,8 @@ contains
     real(dp), intent(inout) :: d2(0:norb*norb*norb*norb-1)
     integer(i8) :: info
 
+    integer :: status
+    real(dp), allocatable :: d1(:)
     real(dp), allocatable :: gram(:,:)
     integer(c_int32_t) :: nspin
     integer :: p, q, r, s, so, to
@@ -484,6 +486,17 @@ contains
 
     info = 0_i8
     if (norb <= 0) return
+
+    ! Try the string-driven engine first (OpenMP, no cap limit).
+    allocate(d1(0:norb*norb-1))
+    d1 = 0.0_dp
+    d2 = 0.0_dp
+    status = rdm12_strings(int(norb, i8), ndet, dets, civec, d1, d2, int(nthreads, i8))
+    deallocate(d1)
+    if (status == 0) return
+
+    ! String engine declined (non-product list).  Fall back to the
+    ! determinant-pair grammar matrix (serial, cap-limited).
     nspin = 2 * norb
     call rdm2_gram(nspin, ndet, dets, civec, cap, gram, info)
     if (info /= 0_i8) return
@@ -630,5 +643,50 @@ contains
     end do
     deallocate(kets, e2, bras, blk, e1, cnt, rows, cols, sgns)
   end function nevpt2_make_rdms
+
+!> Build dm1-dm3 and the 4-RDM, then contract the 4-RDM to f3ca/f3ac
+!> in a single routine.  The full n^8 dm4 tensor is allocated as internal
+!> scratch and freed before return — the caller never materialises it.
+!>
+!> Returns dm1-dm3 and f3ca/f3ac; dm4 is ephemeral.
+  subroutine nevpt2_make_f3(norb, ndet, dets, civec, h2e, &
+      dm1, dm2, dm3, f3ca, f3ac) bind(C, name="nevpt2_make_f3")
+    integer(c_int32_t), value :: norb
+    integer(i8), value :: ndet
+    integer(i8), intent(in) :: dets(0:ndet-1)
+    real(dp), intent(in) :: civec(0:ndet-1), h2e(0:*)
+    real(dp), intent(inout) :: dm1(0:*), dm2(0:*), dm3(0:*)
+    real(dp), intent(inout) :: f3ca(0:*), f3ac(0:*)
+    integer(i8) :: norb1, norb8, info
+    real(dp), allocatable :: dm4(:)
+    integer :: ierr
+    norb1 = int(norb, i8)
+    norb8 = norb1**8
+    if (norb8 == 0_i8) return
+    allocate(dm4(0:norb8-1), stat=ierr)
+    if (ierr /= 0) return
+    dm4 = 0.0_dp
+    info = nevpt2_make_rdms(norb, ndet, dets, civec, int(4, c_int32_t), &
+                             dm1, dm2, dm3, dm4)
+    if (info /= 0_i8) then
+      deallocate(dm4)
+      return
+    end if
+    ! Contract dm4 to f3ca/f3ac via the existing bind(C) entry point.
+    block
+      interface
+        subroutine nd2f3(nact, h2e_ext, dm4_ext, f3ca_ext, f3ac_ext) &
+            bind(C, name="nevpt2_f3ca_f3ac")
+          use iso_c_binding, only: c_int32_t, c_double
+          implicit none
+          integer(c_int32_t), value :: nact
+          real(c_double), intent(in) :: h2e_ext(0:*), dm4_ext(0:*)
+          real(c_double), intent(inout) :: f3ca_ext(0:*), f3ac_ext(0:*)
+        end subroutine
+      end interface
+      call nd2f3(norb, h2e, dm4, f3ca, f3ac)
+    end block
+    deallocate(dm4)
+  end subroutine nevpt2_make_f3
 
 end module rdm_kernel_mod

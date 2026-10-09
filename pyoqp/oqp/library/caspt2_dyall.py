@@ -95,7 +95,6 @@ _BOOL_FALSE = {"false", "f", "no", "n", "0", "off", ""}
 _COUPLING_CUTOFF = 1.0e-12
 _INTRUDER_DENOM = 0.1   # |denominator| below this flags a likely intruder state
 
-
 def _intruder_note(min_denom, options):
     """Return a log annotation when a small denominator signals an intruder."""
     if min_denom >= _INTRUDER_DENOM:
@@ -103,7 +102,6 @@ def _intruder_note(min_denom, options):
     if options.imaginary_shift or options.level_shift or options.edshft:
         return "   (small; a level shift is applied)"
     return "   <-- WARNING: likely intruder; set [pt2] imaginary_shift (e.g. 0.1)"
-
 
 # --------------------------------------------------------------------------- options
 @dataclass
@@ -135,7 +133,6 @@ class CASPT2Options:
     max_memory: int = 0              # [pt2] max_memory in MiB; 0 = inherit
                                      # [cas] max_memory
 
-
 def _as_bool(value, label):
     if isinstance(value, bool):
         return value
@@ -146,7 +143,6 @@ def _as_bool(value, label):
         return False
     raise ValueError(f"{label} must be a boolean")
 
-
 def _as_int_tuple(value):
     if value is None:
         return ()
@@ -155,7 +151,6 @@ def _as_int_tuple(value):
     else:
         items = str(value).replace(",", " ").split()
     return tuple(int(v) for v in items if str(v).strip() != "")
-
 
 #: The PT2 methods that name their own zeroth-order Hamiltonian and
 #: contraction, rather than leaving them to `[pt2] h0` / `contraction`.
@@ -172,7 +167,6 @@ _METHOD_IMPLIED_PT2 = {
     "sc-nevpt2": ("dyall", "strong"),
     "scnevpt2": ("dyall", "strong"),
 }
-
 
 def _caspt2_options(config: dict) -> CASPT2Options:
     raw = config.get("pt2", {}) or {}
@@ -238,11 +232,14 @@ def _caspt2_options(config: dict) -> CASPT2Options:
             f" variant, but [pt2] contraction='{contraction_raw}' was requested."
             "  Drop [pt2] contraction, or select the method that matches it "
             "(nevpt2 = uncontracted, sc-nevpt2 = strongly contracted).")
-    if contraction == "strong" and h0 != "dyall":
+    if contraction == "strong" and h0 not in {"dyall", "fock"}:
         raise ValueError(
-            "pt2.contraction='strong' (SC-NEVPT2) requires h0='dyall'; "
-            "the strong contraction is defined for Dyall's H0 only."
-        )
+            "pt2.contraction='strong' requires h0='dyall' (SC-NEVPT2) or "
+            "h0='fock' (IC-CASPT2).")
+    if contraction == "strong" and h0 == "fock" and family != "caspt2":
+        raise ValueError("pt2.contraction='strong' with h0='fock' is IC-CASPT2 "
+                         "(requires method=caspt2 or ms-caspt2)")
+
     if family == "qdpt" and contraction != "none":
         raise ValueError("MRMP2/MCQDPT2/XMCQDPT2 are uncontracted; "
                          "drop [pt2] contraction.")
@@ -315,7 +312,6 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         max_memory=max(0, int(raw.get("max_memory", 0) or 0)),
     )
 
-
 def _pt2_memory(options, settings) -> tuple:
     """(budget_MiB, label) for the PT2 allocation guards: the TIGHTER of the
     two configured ceilings.
@@ -340,7 +336,6 @@ def _pt2_memory(options, settings) -> tuple:
         return pt2_mem, "[pt2]"
     return cas_mem, "[cas]"
 
-
 def _reference_roots(options) -> list:
     if options.variant == "caspt2":
         # A single-state run used to DISCARD target_roots and always correct
@@ -364,7 +359,6 @@ def _reference_roots(options) -> list:
     nroot = max(2, int(options.nroot) or 0)
     return list(range(nroot))
 
-
 # --------------------------------------------------------------------------- log
 def _log(mol, text: str = "") -> None:
     # Direct append, so it bypasses the mpi_dump guard the shared log relies on.
@@ -377,7 +371,6 @@ def _log(mol, text: str = "") -> None:
         return
     with open(mol.log, "a") as handle:
         handle.write(text + "\n")
-
 
 # --------------------------------------------------------------------------- native engine
 def _pt2_lib():
@@ -394,14 +387,11 @@ def _pt2_lib():
         return None
     return _lib_backend()
 
-
 def _dptr(ffi, arr):
     return ffi.cast("double *", arr.ctypes.data)
 
-
 def _iptr(ffi, arr):
     return ffi.cast("int64_t *", arr.ctypes.data)
-
 
 # --------------------------------------------------------------------------- Fock
 def _effective_fock(h1e, eri, D):
@@ -426,7 +416,6 @@ def _effective_fock(h1e, eri, D):
     J = np.einsum("rs,pqrs->pq", D, eri, optimize=True)
     K = np.einsum("rs,prsq->pq", D, eri, optimize=True)
     return h1e + J - 0.5 * K
-
 
 # --------------------------------------------------------------------------- semicanonical reference
 def _semicanonicalize(hcore_ao, eri_ao, coeff, ncore, nact, active_nelec, enuc,
@@ -468,7 +457,6 @@ def _semicanonicalize(hcore_ao, eri_ao, coeff, ncore, nact, active_nelec, enuc,
     eps = np.diag(_effective_fock(h1e, eri, D)).copy()
     return C, h1e, eri, coeffs, np.asarray(energies), dets, eps, D
 
-
 # --------------------------------------------------------------------------- determinant operators
 def _embed_reference(ci, act_dets, ncore, nact, norb, det_index):
     """Embed an active-space CI vector into the full (correlated) determinant
@@ -485,7 +473,6 @@ def _embed_reference(ci, act_dets, ncore, nact, norb, det_index):
             raise ValueError("CASPT2 reference embedding failed (determinant missing)")
         vec[idx] = ci[k]
     return vec
-
 
 def _external_indices(full_dets, ncore, nact, norb):
     """Indices of the external (first-order) determinants: every determinant that
@@ -517,7 +504,6 @@ def _external_indices(full_dets, ncore, nact, norb):
         if not internal:
             external.append(idx)
     return np.asarray(external, dtype=int)
-
 
 def _h0_integrals(h1e, eri, eps, ncore, nact, h0, active_occ=None, ipea=0.0):
     """Zeroth-order one-/two-electron integrals for the chosen H0.
@@ -565,7 +551,6 @@ def _h0_integrals(h1e, eri, eps, ncore, nact, h0, active_occ=None, ipea=0.0):
             h0_1e[P, P] += 0.5 * ipea * (1.0 - n_P / 2.0)
     return h0_1e, g0_2e
 
-
 def _core_orbitals_for_z(z):
     """Standard frozen-core orbital count for atomic number ``z`` (the deep, chemically
     inert shells OpenMolcas auto-freezes in CASPT2): 0 for H/He, 1 for Li-Ne (1s), ..."""
@@ -574,7 +559,6 @@ def _core_orbitals_for_z(z):
         if z <= limit:
             return ncore
     return 43
-
 
 def _standard_core_count(mol):
     """Number of deep atomic-core orbitals to freeze in the PT2 (sum over atoms).
@@ -585,7 +569,6 @@ def _standard_core_count(mol):
     except Exception:
         return 0
     return int(sum(_core_orbitals_for_z(z) for z in atoms))
-
 
 def _freeze_core(h1e, eri, eps, D_sa, ncore, norb, enuc, nfrozen):
     """Fold the ``nfrozen`` deepest (semicanonical) core orbitals into a dressed closed
@@ -608,7 +591,6 @@ def _freeze_core(h1e, eri, eps, D_sa, ncore, norb, enuc, nfrozen):
     eps_d = np.asarray(eps)[f:].copy()
     D_sa_d = None if D_sa is None else np.asarray(D_sa)[f:, f:].copy()
     return h1e_d, eri_d, eps_d, D_sa_d, ncore - f, norb - f, enuc + e_fc
-
 
 def _diagonal_zeroth_order(full_dets, h0_1e, g0_2e, norb):
     """Determinant-basis diagonal of H0 when H0 is exactly diagonal, else ``None``.
@@ -658,7 +640,6 @@ def _diagonal_zeroth_order(full_dets, h0_1e, g0_2e, norb):
         diag += float(eps0[p]) * occ
     return diag
 
-
 def _occupation_blocks(full_dets, external, ncore, nact, norb):
     """Partition the external determinants into H0-invariant occupation blocks.
 
@@ -702,7 +683,6 @@ def _occupation_blocks(full_dets, external, ncore, nact, norb):
     order = np.argsort(sig, kind="stable")
     edges = np.flatnonzero(np.diff(sig[order])) + 1
     return np.split(order, edges)
-
 
 class _ZerothOrder:
     """The PT2 zeroth-order Hamiltonian, in the cheapest *exact* representation.
@@ -781,7 +761,6 @@ class _ZerothOrder:
 
         w, U = _symmetric_eigh(blk)
         return w, ((slice(None), U),)
-
 
 def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0="fock",
                      active_occ=None, ipea=0.0, max_memory=None):
@@ -862,7 +841,6 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
 
     return full_dets, det_index, hfull, h0op, external
 
-
 def _first_order(hfull, h0op, vec, external, options):
     """First-order amplitudes and second-order energy for one reference vector.
 
@@ -897,14 +875,12 @@ def _first_order(hfull, h0op, vec, external, options):
     min_denom = float(np.min(np.abs(w))) if w.size else float("inf")
     return V, C, float(V @ C), min_denom
 
-
 # --------------------------------------------------------------------------- multi-set MS-CASPT2
 def _occ_tuples(norb, nelec):
     """Occupied-orbital index tuples for each single-spin string, in the SAME
     order as :func:`oqp.library.fci._string_basis` (lexicographic ``combinations``)."""
     from itertools import combinations
     return [tuple(occ) for occ in combinations(range(norb), nelec)]
-
 
 def _minor_transform(R, occ):
     """T[t, s] = det( R[ix_(t_occ, s_occ)] ): the single-spin orbital-rotation
@@ -934,7 +910,6 @@ def _minor_transform(R, occ):
             T[it, js] = np.linalg.det(R[np.ix_(rows, list(s))])
     return T
 
-
 def _rotate_det_vector(vec, R, norb, nelec):
     """Transform a determinant-space vector built in MO set ``src`` into MO set
     ``dst`` where ``C_src = C_dst @ R`` (R unitary).  ``vec`` is indexed over
@@ -948,7 +923,6 @@ def _rotate_det_vector(vec, R, norb, nelec):
     na, nb = len(occ_a), len(occ_b)
     return (Ta @ vec.reshape(na, nb) @ Tb.T).reshape(-1)
 
-
 def _h0_fock_matrix_dets(h1e, eri, D_state, full_dets, det_index, norb):
     """Full generalized-Fock MATRIX zeroth-order Hamiltonian for a per-state (multi-
     set) reference: F_pq = h_pq + sum_rs D_rs[(pq|rs)-1/2(pr|sq)] from the STATE'S
@@ -959,7 +933,6 @@ def _h0_fock_matrix_dets(h1e, eri, D_state, full_dets, det_index, norb):
     F = _effective_fock(h1e, eri, D_state)
     hspin0, gspin0 = _spin_orbital_integrals(F, np.zeros_like(eri))
     return _build_dense_hamiltonian(full_dets, det_index, hspin0, gspin0, 2 * norb, 0.0)
-
 
 def _active_ci_from_full(vec, det_index, act_dets, ncore, nact, norb):
     """Inverse of :func:`_embed_reference`: pull the active-space CI vector (flat,
@@ -973,7 +946,6 @@ def _active_ci_from_full(vec, det_index, act_dets, ncore, nact, norb):
         b_full = core_mask | ((ad >> nact) << ncore)
         out[k] = vec[det_index[a_full | (b_full << norb)]]
     return out
-
 
 def _lift_to_full(vec_frozen, det_index_frozen, det_index_full, nfrozen,
                   norbf, norb, active_nelec, ncf, ncore):
@@ -996,7 +968,6 @@ def _lift_to_full(vec_frozen, det_index_frozen, det_index_full, nfrozen,
         out[det_index_full[a_full | (b_full << norb)]] = v
     return out
 
-
 def _multiset_spin_diagnostics(hcore_ao, eri_ao, coeff_ref, ncore, nact,
                                active_nelec, enuc, settings, roots):
     """<S^2>/multiplicity of the reference roots (CASCI in the reference orbitals)."""
@@ -1005,7 +976,6 @@ def _multiset_spin_diagnostics(hcore_ao, eri_ao, coeff_ref, ncore, nact,
     _e, coeffs, dets, _D, _G = _solve_active(
         h1e_r, eri_r, ncore, nact, active_nelec, enuc, settings, weights, roots)
     return fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
-
 
 def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact,
                          active_nelec, nbf, enuc, roots, options, nfrozen):
@@ -1191,7 +1161,6 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
         "multiset": True,
     }
 
-
 def _xms_rotation(h1e, eri, D_sa, coeffs, dets, ncore, nact, norb, roots, det_index, hfull):
     """XMS pre-rotation: diagonalize the state-averaged Fock in the model space.
     Returns the rotation matrix R (columns = rotated states) over the roots."""
@@ -1216,7 +1185,6 @@ def _xms_rotation(h1e, eri, D_sa, coeffs, dets, ncore, nact, norb, roots, det_in
     # shipped example that reported it (2 x 7.038e-02 Hartree).  The rotation
     # columns are vectors over the model space, so the same convention applies.
     return canonicalize_ci_phase(R)
-
 
 def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                 active_nelec, norb, enuc, roots, options, max_memory=None):
@@ -1273,7 +1241,6 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
         "ref_drift": ref_drift,
     }
 
-
 # --------------------------------------------------------------------------- shared setup
 @dataclass
 class CASPT2Setup:
@@ -1299,7 +1266,6 @@ class CASPT2Setup:
     coeff: np.ndarray            # reference orbitals, BEFORE semicanonicalization
     orbital_source: str          # 'casscf', 'rhf', or 'json:<path>' etc.
     enuc: float
-
 
 def _caspt2_setup(mol, ref_energy=None, run_reference=True) -> CASPT2Setup:
     """Validate the run, resolve the active space and load the AO integrals."""
@@ -1375,7 +1341,6 @@ def _caspt2_setup(mol, ref_energy=None, run_reference=True) -> CASPT2Setup:
                        weights=weights, hcore_ao=hcore_ao, eri_ao=eri_ao,
                        coeff=coeff, orbital_source=orb_source, enuc=enuc)
 
-
 def _pt2_frozen_count(mol, options, ncore):
     """Resolve ``[pt2] frozen`` against the available inactive orbitals."""
     if options.frozen < 0:
@@ -1394,7 +1359,6 @@ def _pt2_frozen_count(mol, options, ncore):
             "[cas] frozen_core, or use frozen=auto for the standard deep "
             "cores." % (nfrozen, ncore, ncore))
     return max(0, nfrozen)
-
 
 # --------------------------------------------------------------------------- driver
 def native_caspt2_energy(mol, ref_energy=None):
@@ -1483,7 +1447,19 @@ def native_caspt2_energy(mol, ref_energy=None):
     # singles/doubles interacting space streamed from the reference support.
     # auto = the NumPy streaming path (measured fastest at scale); the liboqp
     # hash kernel is the explicit engine=fortran opt-in (see qdpt2_direct.py).
-    use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    #
+    # Single-state CASPT2 with the default Fock H0 also uses a diagonal H0
+    # (diag(eps)), so the direct engine applies to it as well.  Multi-state
+    # CASPT2 / MS-CASPT2 / XMS-CASPT2 keep the dense path because the H0
+    # Fock matrix or the Dyall H0 have off-diagonal external blocks.
+    use_direct = (
+        options.engine in {"auto", "direct", "fortran"}
+        and (options.family == "qdpt"
+             or (options.family == "caspt2"
+                 and options.variant == "caspt2"
+                 and options.h0 == "fock"
+                 and not (float(getattr(options, "ipea_shift", 0.0) or 0.0))))
+    )
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
@@ -1529,7 +1505,6 @@ def native_caspt2_energy(mol, ref_energy=None):
                            roots, result, s2, mult, time.time() - t0)
     return mol.energies
 
-
 def _run_casscf_reference(mol, ref_energy, roots, weights):
     """Run the native (SA-)CASSCF to provide reference orbitals."""
     cfg = mol.config["input"]
@@ -1573,7 +1548,6 @@ def _run_casscf_reference(mol, ref_energy, roots, weights):
         else:
             mol.config.pop("state_average", None)
 
-
 def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                          norb, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa, s2, mult, wall,
                          root=None):
@@ -1587,10 +1561,14 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
     active_occ = np.diag(D_sa)[ncore:ncore + nact]
 
     if options.contraction == "strong":
-        # RDM-based strongly contracted NEVPT2 (SC-NEVPT2); reproduces PySCF/ORCA
-        # to <~1 uEh.  No external determinant space: the contracted perturbers
-        # are formed directly from the active 1-/2-/3-/4-RDM and integral blocks.
-        from oqp.library.nevpt2_sc import sc_nevpt2_energy
+        if options.h0 == "dyall":
+            from oqp.library.nevpt2_sc import sc_nevpt2_energy
+            _e2func = sc_nevpt2_energy
+        elif options.h0 == "fock":
+            from oqp.library.caspt2_ic import ic_caspt2_energy
+            _e2func = ic_caspt2_energy
+        else:
+            raise ValueError("pt2.contraction=strong: internal h0 error")
         # sc_nevpt2_energy takes no regularisation: the contracted denominators
         # are built inside it.  Accepting a shift and returning the unshifted
         # energy -- while the PT2 summary prints the shift back to the user --
@@ -1605,14 +1583,15 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
             ("edshft", options.edshft)) if value]
         if _unapplied:
             raise ValueError(
-                "[pt2] %s cannot be applied to strongly contracted NEVPT2 "
-                "(h0=dyall, contraction=strong): the contracted denominators are "
-                "formed internally and no shift reaches them. Remove the shift, "
-                "or use contraction=none for a shifted NEVPT2."
+                "[pt2] %s cannot be applied to internally contracted "
+                "(h0=dyall or fock, contraction=strong): the contracted "
+                "denominators are formed internally and no shift reaches "
+                "them. Remove the shift, or use contraction=none for the "
+                "uncontracted variant."
                 % ", ".join(_unapplied))
-        e2, comp = sc_nevpt2_energy(h1e, eri, eps, ncore, nact, active_nelec,
-                                    coeffs[:, root],
-                                    max_memory=_pt2_memory(options, settings)[0])
+        e2, comp = _e2func(h1e, eri, eps, ncore, nact, active_nelec,
+                           coeffs[:, root],
+                           max_memory=_pt2_memory(options, settings)[0])
         e_caspt2 = e_casci + e2
         e_ref_check = e_casci
         min_denom = float("inf")
@@ -1648,7 +1627,6 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
                e_casci, e2, e_caspt2, len(external), e_ref_check, min_denom,
                float(s2[root]), int(mult[root]), wall, root=root)
 
-
 def _multistate_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                        roots, result, s2, mult, wall):
     ms = result["ms_energies"]
@@ -1664,7 +1642,6 @@ def _multistate_finish(mol, ref_energy, options, settings, ncore, nact, active_n
 
     _write_ms_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                   roots, result, s2, mult, wall)
-
 
 # --------------------------------------------------------------------------- log blocks
 def _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_label, title):
@@ -1701,12 +1678,17 @@ def _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_l
     _log(mol, f"   PyOQP imaginary shift:              {options.imaginary_shift:.4f}")
     _log(mol, f"   PyOQP ISA shift (edshft):           {options.edshft:.4f}")
 
-
 def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom, s2, mult, wall,
                sc_components=None, root=None):
     ref_label = "CASSCF" if options.reference == "casscf" else "CASCI"
-    if options.contraction == "strong":
+    if options.contraction == "strong" and options.h0 == "fock":
+        method_name, title = "IC-CASPT2", "IC-CASPT2 (internally contracted, Fock zeroth order)"
+    elif options.contraction == "strong" and options.h0 == "dyall":
+        method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
+    elif options.contraction == "strong":
+        method_name, title = "SC-NEVPT2 (contracted, unknown H0)", "SC-NEVPT2"
+    if options.contraction == "strong" and options.h0 == "dyall":
         method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
     elif options.h0 == "dyall":
         method_name, title = "NEVPT2", "NEVPT2 (uncontracted, Dyall zeroth order)"
@@ -1740,7 +1722,6 @@ def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
     _log(mol)
     _log(mol, f"   PyOQP timing:                       {wall:.2f} s")
     _log(mol)
-
 
 def _write_ms_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                   roots, result, s2, mult, wall):

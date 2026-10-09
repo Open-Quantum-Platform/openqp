@@ -61,7 +61,8 @@ module nevpt2_koopmans_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22
+  public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
+  public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27
 
 contains
 
@@ -1294,5 +1295,220 @@ contains
 
     deallocate(v, b5, b6, b7, b8, r5, r6, r7, w)
   end subroutine nevpt2_a13
+
+  subroutine nevpt2_hdm1(nact, dm1, hdm1) bind(C, name="nevpt2_hdm1")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: dm1(0:*)
+    real(dp), intent(inout) :: hdm1(0:*)
+    integer :: n, p, a
+    n = int(nact)
+    if (n <= 0) return
+    do a = 0, n - 1
+      do p = 0, n - 1
+        hdm1(p + a*n) = -dm1(a + p*n)
+      end do
+      hdm1(a + a*n) = hdm1(a + a*n) + 2.0_dp
+    end do
+  end subroutine nevpt2_hdm1
+
+  subroutine nevpt2_a17(nact, h1e, h2e, dm2, dm3, a17) &
+      bind(C, name="nevpt2_a17")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm2(0:*), dm3(0:*)
+    real(dp), intent(inout) :: a17(0:*)
+    integer :: n, a, b, c, p, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do a = 0, n - 1
+      do b = 0, n - 1
+        do c = 0, n - 1
+          do p = 0, n - 1
+            s = 0.0_dp
+            do i = 0, n - 1
+              s = s - h1e(p + i*n) * dm2((((c*n + a)*n + b)*n + i))
+            end do
+            do i = 0, n - 1
+              do j = 0, n - 1
+                do k = 0, n - 1
+                  s = s - h2e(((k*n + p)*n + i)*n + j) &
+                      * dm3((((c*n + a)*n + b)*n*n + j*n + k)*n + i)
+                end do
+              end do
+            end do
+            a17((((a*n + b)*n + c)*n + p)) = s
+          end do
+        end do
+      end do
+    end do
+  end subroutine nevpt2_a17
+
+  subroutine nevpt2_a19(nact, h1e, h2e, dm1, dm2, a19) &
+      bind(C, name="nevpt2_a19")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm1(0:*), dm2(0:*)
+    real(dp), intent(inout) :: a19(0:*)
+    integer :: n, a, p, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do a = 0, n - 1
+      do p = 0, n - 1
+        s = 0.0_dp
+        do i = 0, n - 1
+          s = s - h1e(p + i*n) * dm1(a + i*n)
+        end do
+        do i = 0, n - 1
+          do j = 0, n - 1
+            do k = 0, n - 1
+              s = s - h2e(((k*n + p)*n + i)*n + j) &
+                  * dm2((((a*n + j)*n + k)*n + i))
+            end do
+          end do
+        end do
+        a19(p + a*n) = s
+      end do
+    end do
+  end subroutine nevpt2_a19
+
+  subroutine nevpt2_a23(nact, h1e, h2e, dm1, dm2, dm3, a23) &
+      bind(C, name="nevpt2_a23")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm1(0:*), dm2(0:*), dm3(0:*)
+    real(dp), intent(inout) :: a23(0:*)
+    integer :: n, a, b, c, p, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do a = 0, n - 1
+      do b = 0, n - 1
+        do c = 0, n - 1
+          do p = 0, n - 1
+            s = 0.0_dp
+            do i = 0, n - 1
+              s = s - h1e(i + p*n) * dm2((((c*n + a)*n + i)*n + b))
+            end do
+            do i = 0, n - 1
+              do j = 0, n - 1
+                do k = 0, n - 1
+                  s = s - h2e(((p*n + i)*n + j)*n + k) &
+                      * dm3((((c*n + a)*n + j)*n*n + b*n + i)*n + k)
+                end do
+              end do
+            end do
+            s = s + 2.0_dp * h1e(b + p*n) * dm1(c + a*n)
+            do i = 0, n - 1
+              do k = 0, n - 1
+                s = s + 2.0_dp * h2e(((p*n + i)*n + b)*n + k) &
+                    * dm2((((c*n + a)*n + i)*n + k))
+              end do
+            end do
+            a23((((a*n + b)*n + c)*n + p)) = s
+          end do
+        end do
+      end do
+    end do
+  end subroutine nevpt2_a23
+
+  subroutine nevpt2_a25(nact, h1e, h2e, dm1, dm2, a25) &
+      bind(C, name="nevpt2_a25")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm1(0:*), dm2(0:*)
+    real(dp), intent(inout) :: a25(0:*)
+    integer :: n, a, p, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do a = 0, n - 1
+      do p = 0, n - 1
+        s = 0.0_dp
+        do i = 0, n - 1
+          s = s - h1e(p + i*n) * dm1(a + i*n)
+        end do
+        do i = 0, n - 1
+          do j = 0, n - 1
+            do k = 0, n - 1
+              s = s - h2e(((p*n + i)*n + j)*n + k) &
+                  * dm2((((j*n + a)*n + i)*n + k))
+            end do
+          end do
+        end do
+        s = s + 2.0_dp * h1e(p + a*n)
+        do i = 0, n - 1
+          do j = 0, n - 1
+            s = s + 2.0_dp * h2e(((p*n + i)*n + a)*n + j) &
+                * dm1(i + j*n)
+          end do
+        end do
+        a25(p + a*n) = s
+      end do
+    end do
+  end subroutine nevpt2_a25
+
+  subroutine nevpt2_a3(nact, h1e, h2e, dm1, dm2, hdm1, a3) &
+      bind(C, name="nevpt2_a3")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm1(0:*), dm2(0:*), hdm1(0:*)
+    real(dp), intent(inout) :: a3(0:*)
+    integer :: n, p, a, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do p = 0, n - 1
+      do a = 0, n - 1
+        s = 0.0_dp
+        do i = 0, n - 1
+          s = s + h1e(i + a*n) * hdm1(i + p*n)
+        end do
+        do i = 0, n - 1
+          do k = 0, n - 1
+            s = s + 2.0_dp * h2e(((i*n + p)*n + k)*n + a) * dm1(i + k*n)
+          end do
+        end do
+        do i = 0, n - 1
+          do j = 0, n - 1
+            do k = 0, n - 1
+              s = s - h2e(((i*n + j)*n + k)*n + a) &
+                  * dm2((((j*n + p)*n + i)*n + k))
+            end do
+          end do
+        end do
+        a3(p + a*n) = s
+      end do
+    end do
+  end subroutine nevpt2_a3
+
+  subroutine nevpt2_k27(nact, h1e, h2e, dm1, dm2, k27) &
+      bind(C, name="nevpt2_k27")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h1e(0:*), h2e(0:*), dm1(0:*), dm2(0:*)
+    real(dp), intent(inout) :: k27(0:*)
+    integer :: n, p, a, i, j, k
+    real(dp) :: s
+    n = int(nact)
+    if (n <= 0) return
+    do p = 0, n - 1
+      do a = 0, n - 1
+        s = 0.0_dp
+        do i = 0, n - 1
+          s = s - h1e(a + i*n) * dm1(p + i*n)
+        end do
+        do i = 0, n - 1
+          do j = 0, n - 1
+            do k = 0, n - 1
+              s = s - h2e(((i*n + a)*n + j)*n + k) &
+                  * dm2((((p*n + k)*n + i)*n + j))
+            end do
+          end do
+        end do
+        do j = 0, n - 1
+          do i = 0, n - 1
+            s = s + h2e(((i*n + a)*n + j)*n + i) * dm1(p + j*n)
+          end do
+        end do
+        k27(p + a*n) = s
+      end do
+    end do
+  end subroutine nevpt2_k27
 
 end module nevpt2_koopmans_mod

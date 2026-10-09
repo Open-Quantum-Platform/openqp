@@ -50,8 +50,10 @@ module casscf_anhess_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
   use casscf_hess_bmat_mod, only: casscf_hess_bmat
   use casscf_hess_kernel_mod, only: casscf_hess_amp, casscf_hess_wmat, &
-                                    casscf_hess_relax
+                                    casscf_hess_relax, casscf_hess_amp_mf
   use casscf_exc_stack_mod, only: casscf_excitation_stack
+  ! On-the-fly excitation-matrix products (avoids dense O(nact^2*ndet^2) stack)
+  use casscf_exc_stack_mf_mod, only: casscf_exc_stack_apply_wmat
   use fci_setup_mod, only: fci_spin_orbital_integrals
   use fci_hamiltonian_mod, only: fci_sort_dets, fci_dense_build, oqp_dsyevd_f
   use rdm_kernel_mod, only: rdm1_spatial, rdm2_spatial
@@ -83,9 +85,12 @@ module casscf_anhess_mod
   !> Every buffer one analytic Hessian build needs, allocated once per run.
   !>
   !> `stack` is the expensive one (nact^2 * ndet^2 doubles) and depends only on
-  !> the active space, so it survives every build.  The rest are scratch and are
-  !> kept only to avoid an allocate/deallocate storm across macroiterations.
+  !> the active space, so it survives every build.  When `use_mf` is true the
+  !> dense stack is never allocated -- excitation-matrix products are evaluated
+  !> on the fly (matrix-free mode).  The rest are scratch and are kept only to
+  !> avoid an allocate/deallocate storm across macroiterations.
   type :: cas_anhess_ctx_t
+    logical :: use_mf = .false.      !< matrix-free excitation stack
     integer :: n = 0, nc = 0, na = 0, npar = 0, nstate = 0, nthreads = 1
     integer(i8) :: ndet = 0
     real(dp), allocatable :: stack(:)              !< [na,na,ndet,ndet] C-order
@@ -105,21 +110,27 @@ contains
 
   !> Allocate the context and build the excitation stack for this active space.
   !>
-  !> Returns CAS_HESS_ERR_STACK when the dense-spectrum stack would exceed the
-  !> memory guard -- the same refusal the Python raises, and the caller turns it
-  !> back into that message.
+  !> When `use_mf` is true the dense stack is never materialised; excitation
+  !> matrix products are evaluated on the fly (matrix-free).  The old
+  !> `CAS_HESS_ERR_STACK` guard is replaced by an automatic fallback to
+  !> matrix-free mode: the dense stack is allocated only when both it fits in
+  !> budget AND the active space is small enough to benefit from the merged
+  !> DGEMM path (nact^2 * ndet^2 < ~2 MiB).  Larger active spaces always use
+  !> the matrix-free path.
   function cas_anhess_init(ctx, n, nc, na, nalpha, nbeta, npar, nstate, &
-                           nthreads, ndet, dets) result(status)
+                           nthreads, ndet, dets, use_mf) result(status)
     type(cas_anhess_ctx_t), intent(inout) :: ctx
     integer, intent(in) :: n, nc, na, nalpha, nbeta, npar, nstate, nthreads
     integer(i8), intent(in) :: ndet
     ! assumed-SIZE throughout, as everywhere else in this stack: these arrays
     ! reach bind(C) kernels whose own dummies are assumed-size.
     integer(i8), intent(in) :: dets(0:*)
+    logical, intent(in), optional :: use_mf
     integer(i8) :: status
 
     integer :: ierr, ns
     integer(i8) :: n2, n4, na2, na4, nd, nstk, ns2, ns4
+    logical :: lmf
 
     status = CAS_HESS_OK
     if (n <= 0 .or. na <= 0 .or. npar <= 0 .or. nstate <= 0 .or. ndet <= 0_i8) then
@@ -143,11 +154,20 @@ contains
     na4 = int(na, i8)**4
     n2 = int(n, i8)**2
     n4 = int(n, i8)**4
-    nstk = 8_i8 * na2 * nd * nd
-    if (nstk > CAS_HESS_MAX_STACK .or. nstk < 0_i8) then
-      status = CAS_HESS_ERR_STACK
-      return
+
+    ! Decide mode: use_mf overrides; otherwise dense stack allocated only when
+    ! it fits in budget AND benefits from merged DGEMM.
+    lmf = .false.
+    if (present(use_mf)) lmf = use_mf
+    if (.not. lmf) then
+      nstk = 8_i8 * na2 * nd * nd          ! bytes: ndet^2 * nact^2 * 8
+      ! sblk_max = 262144 doubles (2 MiB)  —  the step-1 DGEMM crossover in
+      ! casscf_hess_kernel.  Up to 2× sblk_max (4 MiB, ~ndet×nact² = 4096×16)
+      ! the dense DGEMM path is competitive; beyond that the matrix-free path
+      ! is at least as fast and uses dramatically less peak memory.
+      if (nstk > 2_i8 * 262144_i8 * 8_i8 .or. nstk <= 0_i8) lmf = .true.
     end if
+    ctx%use_mf = lmf
 
     ctx%n = n
     ctx%nc = nc
@@ -161,8 +181,7 @@ contains
     ns4 = int(ns, i8)**4
 
     call cas_anhess_free(ctx)
-    allocate(ctx%stack(0:na2*nd*nd - 1_i8), &
-             ctx%dmat(0:n2 - 1_i8), ctx%rdm2(0:n4 - 1_i8), &
+    allocate(ctx%dmat(0:n2 - 1_i8), ctx%rdm2(0:n4 - 1_i8), &
              ctx%gam1(0:na2 - 1_i8), ctx%gam2(0:na4 - 1_i8), &
              ctx%gacc(0:na4 - 1_i8), &
              ctx%bmat(0:int(npar, i8)**2 - 1_i8), &
@@ -182,13 +201,24 @@ contains
       return
     end if
 
-    ! The stack is written in full (including its structural zeros) by the
-    ! kernel, which clears it itself in parallel; nothing to pre-zero here.
-    if (casscf_excitation_stack(int(na, c_int32_t), nd, dets, ctx%stack) &
-        /= 0_i8) then
-      status = CAS_HESS_ERR_ALLOC
-      call cas_anhess_free(ctx)
-      return
+    ! Build the dense excitation stack only when not using matrix-free mode.
+    ! In matrix-free mode, the sorted keys/perm are still needed for on-the-fly
+    ! determinant walk (same binary search on skeys as the stack builder).
+    if (.not. lmf) then
+      ! The stack is written in full (including its structural zeros) by the
+      ! kernel, which clears it itself in parallel; nothing to pre-zero here.
+      allocate(ctx%stack(0:na2*nd*nd - 1_i8), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_HESS_ERR_ALLOC
+        call cas_anhess_free(ctx)
+        return
+      end if
+      if (casscf_excitation_stack(int(na, c_int32_t), nd, dets, ctx%stack) &
+          /= 0_i8) then
+        status = CAS_HESS_ERR_ALLOC
+        call cas_anhess_free(ctx)
+        return
+      end if
     end if
   end function cas_anhess_init
 
@@ -396,10 +426,19 @@ contains
                  0.0_dp, ctx%hc, 1)
       e_i = sum(ctx%cvec * ctx%hc)
 
-      call casscf_hess_wmat(int(na, c_int32_t), nd, ctx%stack, ctx%cvec, ctx%wmat)
-      call casscf_hess_amp(int(na, c_int32_t), nd, int(npar, c_int32_t), &
-                           ctx%stack, ctx%fder, ctx%gder, ctx%wmat, ctx%vt, &
-                           ctx%amp)
+      if (ctx%use_mf) then
+        call casscf_exc_stack_apply_wmat(int(na, c_int32_t), nd, dets, &
+                                         ctx%skeys, ctx%sperm, ctx%cvec, ctx%wmat)
+        call casscf_hess_amp_mf(int(na, c_int32_t), nd, int(npar, c_int32_t), &
+                                dets, ctx%skeys, ctx%sperm, &
+                                ctx%fder, ctx%gder, ctx%wmat, ctx%vt, &
+                                ctx%amp)
+      else
+        call casscf_hess_wmat(int(na, c_int32_t), nd, ctx%stack, ctx%cvec, ctx%wmat)
+        call casscf_hess_amp(int(na, c_int32_t), nd, int(npar, c_int32_t), &
+                             ctx%stack, ctx%fder, ctx%gder, ctx%wmat, ctx%vt, &
+                             ctx%amp)
+      end if
       rc = casscf_hess_relax(int(npar, c_int32_t), nd, int(nstate, c_int32_t), &
                              int(k, c_int32_t), ctx%ovl, weights, ctx%eps, &
                              e_i, CAS_HESS_DEGEN_TOL, CAS_HESS_NOISE, &
