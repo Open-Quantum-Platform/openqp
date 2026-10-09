@@ -2065,6 +2065,11 @@ contains
     real(dp), allocatable :: tmat(:,:,:), smo(:,:), scr(:,:), scr2(:,:), wmo(:,:), dpk(:,:), fpk(:,:), gx(:,:)
     real(dp) :: origin(3), t1(3,3), t2, t3, alpha(3,3)
     integer :: nbf, nbf2, natom, ncart, s, no(2), nv(2), loff(2), ltot
+    !> field responses U^{a,s} as (nocc,nvir,3) per spin
+    type :: spin_resp_t
+      real(dp), allocatable :: u(:,:,:)
+    end type
+    type(spin_resp_t) :: us(2)
     integer :: a, b, q, i, j, k, x, kc, cc, ip
 
     basis => infos%basis
@@ -2096,6 +2101,12 @@ contains
     end do
     deallocate(mints)
     call cphf_solve_uhf(infos, 3, bF, uF)
+    do s = 1, 2
+      allocate(us(s)%u(no(s), nv(s), 3))
+      do a = 1, 3
+        us(s)%u(:,:,a) = reshape(uF(loff(s)+1:loff(s)+no(s)*nv(s), a), [no(s), nv(s)])
+      end do
+    end do
     do b = 1, 3
       do a = 1, 3
         alpha(a,b) = 2.0_dp*sum(bF(:,a)*uF(:,b))
@@ -2106,7 +2117,7 @@ contains
     allocate(dpk(nbf2,2), fpk(nbf2,2))
     do a = 1, 3
       do s = 1, 2
-        call dgemm('n','n',nbf,nv(s),no(s),1.0_dp,mo(:,:,s),nbf,ufs(a,s),no(s),0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nv(s),no(s),1.0_dp,mo(:,:,s),nbf,us(s)%u(:,:,a),no(s),0.0_dp,scr,nbf)
         call dgemm('n','t',nbf,nbf,nv(s),1.0_dp,scr,nbf,mo(:,no(s)+1:,s),nbf,0.0_dp,xa(:,:,a,s),nbf)
         pta(:,:,a,s) = xa(:,:,a,s) + transpose(xa(:,:,a,s))
         call pack_matrix(pta(:,:,a,s), dpk(:,s))
@@ -2190,7 +2201,7 @@ contains
           call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mmo(:,:,a,s),nbf,tmat(:,:,s),nbf,1.0_dp,scr,nbf)
           do b = 1, 3
             t1(a,b) = t1(a,b) + sum(dD(:,:,cc,kc,a)*xa(:,:,b,s)) &
-                      + sum(ufs(b,s)*scr(1:no(s),no(s)+1:))
+                      + sum(us(s)%u(:,:,b)*scr(1:no(s),no(s)+1:))
           end do
         end do
       end do
@@ -2217,12 +2228,6 @@ contains
 
   contains
 
-    !> U^{a,s} as an (nocc,nvir) matrix
-    function ufs(a_, s_) result(u)
-      integer, intent(in) :: a_, s_
-      real(dp) :: u(no(s_), nv(s_))
-      u = reshape(uF(loff(s_)+1:loff(s_)+no(s_)*nv(s_), a_), [no(s_), nv(s_)])
-    end function ufs
 
     !> w = Cv (U^a' U^b) Cv' - Co (U^a U^b') Co' for spin s
     subroutine vv_oo_w(a_, b_, s_, w)
@@ -2230,8 +2235,8 @@ contains
       real(dp), intent(out) :: w(:,:)
       real(dp), allocatable :: y(:,:), z(:,:), t(:,:)
       allocate(y(nv(s_),nv(s_)), z(no(s_),no(s_)), t(nbf,max(nv(s_),no(s_))))
-      y = matmul(transpose(ufs(a_,s_)), ufs(b_,s_))
-      z = matmul(ufs(a_,s_), transpose(ufs(b_,s_)))
+      y = matmul(transpose(us(s_)%u(:,:,a_)), us(s_)%u(:,:,b_))
+      z = matmul(us(s_)%u(:,:,a_), transpose(us(s_)%u(:,:,b_)))
       call dgemm('n','n',nbf,nv(s_),nv(s_),1.0_dp,mo(:,no(s_)+1:,s_),nbf,y,nv(s_),0.0_dp,t,nbf)
       call dgemm('n','t',nbf,nbf,nv(s_),1.0_dp,t,nbf,mo(:,no(s_)+1:,s_),nbf,0.0_dp,w,nbf)
       call dgemm('n','n',nbf,no(s_),no(s_),1.0_dp,mo(:,:,s_),nbf,z,no(s_),0.0_dp,t,nbf)
@@ -2246,8 +2251,8 @@ contains
       allocate(sm(nbf,nbf))
       call dgemm('t','n',nbf,nbf,nbf,1.0_dp,mo(:,:,s_),nbf,sflat(:,:,x_),nbf,0.0_dp,scr2,nbf)
       call dgemm('n','n',nbf,nbf,nbf,1.0_dp,scr2,nbf,mo(:,:,s_),nbf,0.0_dp,sm,nbf)
-      y = matmul(transpose(ufs(a_,s_)), ufs(b_,s_))
-      z = matmul(ufs(a_,s_), transpose(ufs(b_,s_)))
+      y = matmul(transpose(us(s_)%u(:,:,a_)), us(s_)%u(:,:,b_))
+      z = matmul(us(s_)%u(:,:,a_), transpose(us(s_)%u(:,:,b_)))
       sw_terms = 0.0_dp
       do jj = 1, nv(s_)
         do ii = 1, nv(s_)
@@ -2277,8 +2282,8 @@ contains
     real(dp) function tw_g(a_, b_, s_)
       integer, intent(in) :: a_, b_, s_
       wmo = 0.0_dp
-      wmo(1:no(s_),no(s_)+1:) = ufs(a_,s_)
-      wmo(no(s_)+1:,1:no(s_)) = transpose(ufs(a_,s_))
+      wmo(1:no(s_),no(s_)+1:) = us(s_)%u(:,:,a_)
+      wmo(no(s_)+1:,1:no(s_)) = transpose(us(s_)%u(:,:,a_))
       call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmat(:,:,s_),nbf,wmo,nbf,0.0_dp,scr2,nbf)
       tw_g = sum(scr2*transpose(gamo(:,:,b_,s_)))
     end function tw_g
@@ -2316,8 +2321,8 @@ contains
           do ss = 1, 2
             do bb = 1, 3
               wmo = 0.0_dp
-              wmo(1:no(ss),no(ss)+1:) = ufs(bb,ss)
-              wmo(no(ss)+1:,1:no(ss)) = transpose(ufs(bb,ss))
+              wmo(1:no(ss),no(ss)+1:) = us(ss)%u(:,:,bb)
+              wmo(no(ss)+1:,1:no(ss)) = transpose(us(ss)%u(:,:,bb))
               call dgemm('n','n',nbf,nbf,nbf,1.0_dp,mos(:,:,ss),nbf,wmo,nbf,0.0_dp,scr2,nbf)
               call dgemm('n','t',nbf,nbf,nbf,1.0_dp,scr2,nbf,mos(:,:,ss),nbf,0.0_dp,pts(:,:,bb,ss),nbf)
             end do
