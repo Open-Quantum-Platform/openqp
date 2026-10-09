@@ -1805,6 +1805,11 @@ class Hessian(Calculator):
             input_file = getattr(mol, 'input_file', None)
             self.hess_type, self.hess_type_reason = resolve_hessian_type(
                 mol.config, os.path.dirname(os.path.abspath(input_file)) if input_file else None)
+            if self.hess_type == 'analytical' and self._no_virtual_orbitals():
+                # The native kernel has no response space to solve for and does
+                # not store a Hessian then (e.g. He2/STO-3G).
+                self.hess_type = 'numerical'
+                self.hess_type_reason = 'auto: no virtual orbitals (empty response space).'
         self.state = mol.config['hess']['state']
         self.read = mol.config['hess']['read']
         self.restart = mol.config['hess']['restart']
@@ -2135,6 +2140,15 @@ class Hessian(Calculator):
         raise NotImplementedError(
             f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
         )
+
+    def _no_virtual_orbitals(self):
+        """True when the occupied space fills the basis (nocc >= nbf)."""
+        try:
+            nbf = int(self.mol.data.get_basis()['nbf'])
+            nocc = max(int(self.mol.data['nelec_A']), int(self.mol.data['nelec_B']))
+        except Exception:
+            return False
+        return nbf - nocc <= 0
 
     def _spherical_ao_active(self):
         """Return True when the current basis is dimension-reduced by ispher."""
