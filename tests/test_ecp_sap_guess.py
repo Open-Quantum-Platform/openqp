@@ -21,6 +21,10 @@ The alpha tolerances (5e-4 a.u., alpha ~ 27) sit at the CPHF solver level:
 HCl/def2-SVP and all-electron IF/3-21G show 2e-5 to 8e-5 asymmetry and
 rotation error; the broken-symmetry solution gave 0.16.
 
+HBr/LANL2DZ covers a tabulated ECP atom (Br, Z = 35, 28 core electrons),
+where Z_eff is capped at Z_val: SAP and Hueckel give the same energy and the
+pi pair of the valence shell is degenerate.
+
 Skipped unless the compiled OpenQP runtime is importable.
 """
 
@@ -32,6 +36,25 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+
+HBR_INPUT = """[input]
+system=
+   35   0.000000000   0.000000000   0.000000000
+    1   0.100000000   0.200000000   1.395000000
+charge=0
+runtype=energy
+method=hf
+basis=lanl2dz
+[guess]
+type={guess}
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-10
+maxit=200
+[symmetry]
+enabled=false
+"""
 
 INPUT_TMPL = """[input]
 system=
@@ -143,6 +166,28 @@ class EcpSapGuess(unittest.TestCase):
         self.assertAlmostEqual(self.rotated["energy"], self.ref["energy"], delta=1.0e-8)
         err = np.max(np.abs(self.rotated["alpha"] - r @ self.ref["alpha"] @ r.T))
         self.assertLess(err, ALPHA_TOL)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+class EcpSapGuessTabulated(unittest.TestCase):
+    def _run(self, guess, workdir):
+        from oqp.pyoqp import Runner
+
+        inp = Path(workdir) / f"hbr_{guess}.inp"
+        inp.write_text(HBR_INPUT.format(guess=guess))
+        runner = Runner(project=f"hbr_{guess}", input_file=str(inp),
+                        log=str(Path(workdir) / f"hbr_{guess}.log"), silent=1, usempi=False)
+        runner.run()
+        # 7 Br valence + 1 H electrons: sigma, sigma, pi pair
+        mo = np.sort(np.array(runner.mol.data["OQP::E_MO_A"], dtype=float)[:4])
+        return float(runner.mol.mol_energy.energy), mo
+
+    def test_sap_matches_huckel_with_capped_zeff(self):
+        with tempfile.TemporaryDirectory(prefix="oqp_ecp_sap_hbr_") as tmp:
+            e_sap, mo = self._run("sap", tmp)
+            e_huckel, _ = self._run("huckel", tmp)
+        self.assertAlmostEqual(e_sap, e_huckel, delta=1.0e-8)
+        self.assertEqual(int(np.sum(np.diff(mo) < 1.0e-6)), 1)
 
 
 if __name__ == "__main__":
