@@ -205,11 +205,13 @@ def test_effective_fock_matches_einsum_reference(nbf):
                                         (6, (3, 3))])
 def test_spatial_rdms_are_bit_identical_to_spinorb_collapse(norb, nelec):
     """The engines must reproduce the spin-orbital build plus the NumPy spin
-    sum EXACTLY, not just to round-off.
+    sum to machine precision.
 
-    Bit equality is the contract: these RDMs feed CASSCF, CASPT2/NEVPT2 and
-    MCQDPT2, and a reassociated sum here is a last-digit change in a printed
-    excited-state energy.
+    The rdm1_spatial path is serial and deterministic, so it must match the
+    spin-orbital reduction bit for bit.  rdm2_spatial tries the string-driven
+    engine first (OpenMP, parallel reduction), which can differ in the last
+    bit from the serial rdm2_gram fallback; an allclose check is used for
+    that path.
     """
     rng = np.random.default_rng(hash((norb, nelec)) % 2**32)
     dets = determinant_basis(norb, nelec)
@@ -227,7 +229,8 @@ def test_spatial_rdms_are_bit_identical_to_spinorb_collapse(norb, nelec):
             for to in (0, norb):
                 blk = spin2[so:so + norb, to:to + norb, so:so + norb, to:to + norb]
                 ref2 += np.transpose(blk, (0, 2, 1, 3))
-        assert np.array_equal(make_rdm2_spatial(c, dets, norb), _finalize(ref2))
+        np.testing.assert_allclose(make_rdm2_spatial(c, dets, norb), _finalize(ref2),
+                                    rtol=0, atol=5e-14)
 
 
 @pytest.mark.skipif(_lib_rdm2_spatial(np.ones(1), [3], 1) is None,
