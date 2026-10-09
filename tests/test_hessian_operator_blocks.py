@@ -5,8 +5,10 @@ nuclear coordinates at a time; the block size follows
 OQP_HESS_OPERATOR_MEM_MB.  The default budget keeps a small molecule in one
 block, and OQP_HESS_OPERATOR_MEM_MB=0 forces one atom per block, i.e. one
 derivative-ERI traversal per atom.  Both must give the same analytic RHF and
-UHF Hessians (the UHF path builds J and K operators separately), with one and
-with two OpenMP threads, and the blocked run must report its block layout.
+UHF/ROHF Hessians (the open-shell paths build J and K operators separately),
+with one and with two OpenMP threads.  The blocked run must report its block
+layout in the calculation log, and no run may leave a stray fort.N file (the
+open-shell kernels once wrote to an unopened log unit).
 
 Each case runs in a subprocess so OMP_NUM_THREADS and the budget are read by a
 fresh runtime.  Skipped unless the compiled OpenQP runtime is importable.
@@ -47,7 +49,8 @@ state=0
 """
 
 CASES = {"rhf": dict(charge=0, scf="rhf", mult=1),
-         "uhf": dict(charge=1, scf="uhf", mult=2)}
+         "uhf": dict(charge=1, scf="uhf", mult=2),
+         "rohf": dict(charge=1, scf="rohf", mult=2)}
 
 CHILD = """
 import json, sys
@@ -84,6 +87,9 @@ def _hessian(tmp, case, threads, budget):
     proc = subprocess.run([sys.executable, "-c", CHILD, str(inp), str(log), str(out)],
                           cwd=work, env=env, capture_output=True, text=True, timeout=900)
     text = log.read_text() if log.exists() else ""
+    stray = sorted(p.name for p in work.glob("fort.*"))
+    if stray:
+        raise AssertionError(f"{tag} wrote to an unopened unit: {stray}")
     if proc.returncode != 0 or not out.exists():
         raise AssertionError(f"{tag} failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}\n{text[-2000:]}")
     return np.array(json.loads(out.read_text())), text

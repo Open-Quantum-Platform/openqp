@@ -120,12 +120,17 @@ contains
     ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)
     ! and treats nocc as doubly occupied, so it must never run on an open-shell
     ! SCF.  UHF (scftype==2) -> hf_hessian_uhf, ROHF (scftype==3) -> hf_hessian_rohf
-    ! (both HF and DFT, finite-difference validated).
-    if (infos%control%scftype == 2) then
-      call hf_hessian_uhf(infos)
-      return
-    else if (infos%control%scftype == 3) then
-      call hf_hessian_rohf(infos)
+    ! (both HF and DFT, finite-difference validated).  The open-shell kernels
+    ! and the CPHF solver write to unit iw, so the log is opened before the
+    ! dispatch; an unopened iw sends their output to a stray fort.N file.
+    if (infos%control%scftype == 2 .or. infos%control%scftype == 3) then
+      open(unit=iw, file=infos%log_filename, position="append")
+      if (infos%control%scftype == 2) then
+        call hf_hessian_uhf(infos)
+      else
+        call hf_hessian_rohf(infos)
+      end if
+      close(iw)
       return
     else if (infos%control%scftype > 3) then
       call show_message('Native analytic Hessian supports RHF/RKS, UHF (HF) '// &
