@@ -1623,7 +1623,6 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
             ("ipea_shift", options.ipea_shift),
             ("edshft", options.edshft)) if value]
         if _unapplied:
-        if _unapplied:
             raise ValueError(
                 "[pt2] %s cannot be applied to internally contracted "
                 "(h0=dyall or fock, contraction=strong): the contracted "
@@ -1631,8 +1630,6 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
                 "them. Remove the shift, or use contraction=none for the "
                 "uncontracted variant."
                 % ", ".join(_unapplied))
-                                    coeffs[:, root],
-                                    max_memory=_pt2_memory(options, settings)[0])
         e_caspt2 = e_casci + e2
         e_ref_check = e_casci
         min_denom = float("inf")
