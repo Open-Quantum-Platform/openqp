@@ -20,6 +20,9 @@ module tdhf_hessian_z_rhs_mod
     integer :: channel = 0
     real(dp) :: coulscale = 1.0_dp
     real(dp) :: hfscale = 1.0_dp
+    ! Cartesian coordinates held in operator(:,:,1:coord_hi-coord_lo+1)
+    integer :: coord_lo = 1
+    integer :: coord_hi = huge(1)
   contains
     procedure :: accumulate => accumulate_tdhf_channel_operator
     procedure :: thread_buffer_bytes => tdhf_channel_buffer_bytes
@@ -256,18 +259,27 @@ contains
     deallocate(buse)
   end subroutine explicit_channel_derivative_matrix
 
-  !> ERI part of an explicit nuclear-derivative operator in one blocked
-  !> derivative-ERI traversal: result(:,:,x) = coeff^T O^x[base] coeff for all
+  !> ERI part of an explicit nuclear-derivative operator in blocked
+  !> derivative-ERI traversals: result(:,:,x) = coeff^T O^x[base] coeff for all
   !> 3N Cartesian coordinates x, where O^x is the channel operator assembled by
   !> accumulate_tdhf_channel_quartet (channel>0: symmetric Coulomb/exchange,
   !> channel<0: antisymmetric exchange).  `base` must already carry the
   !> channel's symmetry.  `coulscale` (default 1) scales the Coulomb part, so
   !> open-shell callers can build J^x[Ptot] and K^x[P_s] separately.  No XC
   !> term; one MPI rank (grd2_operator_driver).
+  !>
+  !> Memory: besides the caller's result, the Cartesian operator is held for
+  !> one block of coordinates at a time.  The block holds as many coordinates
+  !> (whole atoms) as fit OQP_HESS_OPERATOR_MEM_MB (default 4096 MiB), at least
+  !> one atom, so small and medium systems take one traversal and a large one
+  !> takes ceil(3N/block) traversals instead of an nwork**2*3N allocation.
+  !> grd2_operator_driver separately caps its thread-private copies of the
+  !> block with OQP_GRD2_OPERATOR_MEM_MB.
   subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result,coulscale)
     use types, only: information
     use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
     use grd2, only: grd2_operator_driver
+    use io_constants, only: iw
     type(information),target,intent(inout)::infos
     real(dp),intent(in)::coeff(:,:),base(:,:),hfscale
     integer,intent(in)::channel
@@ -277,7 +289,10 @@ contains
     type(tdhf_channel_operator_consumer_t)::consumer
     real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
     real(dp),allocatable::operator_ao(:,:,:),work(:,:)
-    integer::k,nbf,ncart,nwork
+    integer::k,nbf,ncart,nwork,nblock,lo,hi,st
+    integer(8)::budget,per_coord
+    character(len=16)::envs
+    logical::opened
     basis=>infos%basis; basis%atoms=>infos%atoms
     nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
     ! Match the exact density convention consumed by grd2 under pure
@@ -287,27 +302,47 @@ contains
     call bas_norm_matrix(bwork,basis%bfnrm,nbf)
     call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
     consumer%base=>base_cart
-    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
-    consumer%operator=>operator_cart
     consumer%channel=channel
     consumer%coulscale=1.0_dp
     if(present(coulscale)) consumer%coulscale=coulscale
     consumer%hfscale=hfscale
-    call grd2_operator_driver(infos,basis,consumer)
 
-    do k=1,ncart
-      if(channel>0) then
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
-      else
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
-      end if
-    end do
-    allocate(operator_ao(nbf,nbf,ncart))
-    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
-    allocate(work(nbf,nbf))
-    do k=1,ncart
-      work=matmul(operator_ao(:,:,k),coeff)
-      result(:,:,k)=matmul(transpose(coeff),work)
+    budget=4096_8
+    call get_environment_variable('OQP_HESS_OPERATOR_MEM_MB',envs,status=st)
+    if(st==0) then
+      read(envs,*,iostat=st) budget
+      if(st/=0 .or. budget<0_8) budget=4096_8
+    end if
+    budget=budget*1024_8*1024_8
+    per_coord=8_8*int(nwork,8)*int(nwork,8)
+    nblock=int(min(int(ncart,8),max(3_8,budget/per_coord)))
+    nblock=max(3,3*(nblock/3))
+    if(nblock<ncart) then
+      inquire(unit=iw,opened=opened)
+      if(opened) write(iw,'(6x,"derivative operator: ",I6," coordinates in blocks of",I6, &
+        & " (OQP_HESS_OPERATOR_MEM_MB)")') ncart,nblock
+    end if
+
+    allocate(operator_cart(nwork,nwork,nblock),operator_ao(nbf,nbf,1),work(nbf,nbf))
+    do lo=1,ncart,nblock
+      hi=min(ncart,lo+nblock-1)
+      operator_cart(:,:,1:hi-lo+1)=0.0_dp
+      consumer%operator=>operator_cart(:,:,1:hi-lo+1)
+      consumer%coord_lo=lo; consumer%coord_hi=hi
+      call grd2_operator_driver(infos,basis,consumer)
+      do k=lo,hi
+        associate(op=>operator_cart(:,:,k-lo+1))
+          if(channel>0) then
+            op=0.5_dp*(op+transpose(op))
+          else
+            op=0.5_dp*(op-transpose(op))
+          end if
+        end associate
+        call reduce_cartesian_operator(basis,consumer%cart_off, &
+          operator_cart(:,:,k-lo+1:k-lo+1),operator_ao)
+        work=matmul(operator_ao(:,:,1),coeff)
+        result(:,:,k)=matmul(transpose(coeff),work)
+      end do
     end do
     nullify(consumer%base,consumer%operator)
     deallocate(bwork,base_cart,operator_cart,operator_ao,work)
@@ -358,7 +393,8 @@ contains
         value=derivative(axis,center)
         if(value==0.0_dp) cycle
         coord=3*(atom_ids(center)-1)+axis
-        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord), &
+        if(coord<this%coord_lo .or. coord>this%coord_hi) cycle
+        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord-this%coord_lo+1), &
           [gi,gj,gk,gl],this%channel,this%coulscale,this%hfscale,value)
       end do
     end do
