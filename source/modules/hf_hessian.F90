@@ -414,6 +414,9 @@ contains
           allocate(xc_dhse(ncart,ncart), xc_dfxc(nbf,nbf,ncart))
           call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
                              nocc, nvir, hfscale, dpol, xc_dhse, xc_dfxc)
+          ! an unconverged field response returns before the XC terms: let the
+          ! response assembly evaluate its own XC pieces
+          if (any(dpol /= dpol)) deallocate(xc_dhse, xc_dfxc)
         else
           call hf_polder_rhf(infos, mo_a, eps, pfull, sflat, hflat, uvec, dPx, &
                              nocc, nvir, hfscale, dpol)
@@ -1945,6 +1948,7 @@ contains
   subroutine hf_polder_rhf(infos, mo, eps, pfull, sflat, hflat, uvec, dPx, &
                            nocc, nvir, hfscale, dpol, xc_dhse, xc_dfxc)
     use oqp_linalg
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -1968,6 +1972,7 @@ contains
     !>   xc_dfxc(:,:,y) = d/dR_y of the XC Fock matrix along the relaxed path
     real(dp), intent(out), optional :: xc_dhse(:,:), xc_dfxc(:,:,:)
 
+    logical :: field_ok
     type(basis_set), pointer :: basis
     real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
     real(dp), allocatable :: bF(:,:), uF(:,:), ua(:,:,:), xa(:,:,:), pta(:,:,:)
@@ -2005,7 +2010,16 @@ contains
         end do
       end do
     end do
-    call cphf_solve(infos, 3, bF, uF)
+    call cphf_solve(infos, 3, bF, uF, converged=field_ok)
+    if (.not. field_ok) then
+      ! Never publish tensors from unconverged field responses: NaN makes the
+      ! Python driver reject the analytic tensor and finite-difference the
+      ! polarizability instead (it also overwrites any stale tag value).
+      write(iw,'(6x,"WARNING: field-response CPHF did not converge; analytic ",' // &
+               '"polarizability derivatives withheld")')
+      dpol = ieee_value(1.0_dp, ieee_quiet_nan)
+      return
+    end if
     do b = 1, 3
       do a = 1, 3
         alpha(a,b) = 4.0_dp*sum(bF(:,a)*uF(:,b))
@@ -2252,6 +2266,7 @@ contains
   subroutine hf_polder_uhf(infos, moa, mob, epsa, epsb, pa, pb, nocca, noccb, &
                            sflat, hflat, uvec, dpxa, dpxb, hfscale, dpol)
     use oqp_linalg
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -2269,6 +2284,7 @@ contains
     real(dp), intent(in) :: hfscale
     real(dp), intent(out) :: dpol(:,:,:)
 
+    logical :: field_ok
     type(basis_set), pointer :: basis
     real(dp), allocatable :: mo(:,:,:), eps(:,:), mints(:,:), dfull(:,:,:), mmo(:,:,:,:), dD(:,:,:,:,:)
     real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:,:,:), pta(:,:,:,:), ga(:,:,:,:), gamo(:,:,:,:)
@@ -2311,7 +2327,16 @@ contains
       end do
     end do
     deallocate(mints)
-    call cphf_solve_uhf(infos, 3, bF, uF)
+    call cphf_solve_uhf(infos, 3, bF, uF, converged=field_ok)
+    if (.not. field_ok) then
+      ! Never publish tensors from unconverged field responses: NaN makes the
+      ! Python driver reject the analytic tensor and finite-difference the
+      ! polarizability instead (it also overwrites any stale tag value).
+      write(iw,'(6x,"WARNING: field-response CPHF did not converge; analytic ",' // &
+               '"polarizability derivatives withheld")')
+      dpol = ieee_value(1.0_dp, ieee_quiet_nan)
+      return
+    end if
     do s = 1, 2
       allocate(us(s)%u(no(s), nv(s), 3))
       do a = 1, 3
@@ -2588,6 +2613,7 @@ contains
   subroutine hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
                             dsa, dha, uvec, hfscale, dpol)
     use oqp_linalg
+    use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -2604,6 +2630,7 @@ contains
     real(dp), intent(in) :: dsa(:,:,:,:), dha(:,:,:,:), uvec(:,:), hfscale
     real(dp), intent(out) :: dpol(:,:,:)
 
+    logical :: field_ok
     type(basis_set), pointer :: basis
     real(dp), allocatable :: mints(:,:), dfull(:,:,:), mmo(:,:,:), dD(:,:,:,:,:)
     real(dp), allocatable :: bF(:,:), uF(:,:), xa(:,:), xb(:,:)
@@ -2647,7 +2674,16 @@ contains
       call rohf_pack_trial(bF(:,a), xa, xb, nbf, nocca, noccb)
     end do
     deallocate(mints)
-    call cphf_solve_rohf(infos, 3, bF, uF)
+    call cphf_solve_rohf(infos, 3, bF, uF, converged=field_ok)
+    if (.not. field_ok) then
+      ! Never publish tensors from unconverged field responses: NaN makes the
+      ! Python driver reject the analytic tensor and finite-difference the
+      ! polarizability instead (it also overwrites any stale tag value).
+      write(iw,'(6x,"WARNING: field-response CPHF did not converge; analytic ",' // &
+               '"polarizability derivatives withheld")')
+      dpol = ieee_value(1.0_dp, ieee_quiet_nan)
+      return
+    end if
     do b = 1, 3
       do a = 1, 3
         alpha(a,b) = 2.0_dp*sum(bF(:,a)*uF(:,b))
