@@ -4,6 +4,10 @@ module hf_hessian_mod
 
   character(len=*), parameter :: module_name = "hf_hessian_mod"
 
+  ! g2e(ia,x) = 1/2 Tr[probe_ia G^x[P]] (fock_deriv_contract convention) in
+  ! terms of the channel operator of eri_derivative_operator_mo.
+  real(kind=8), parameter :: G2E_OPERATOR_SCALE = 1.0d0
+
 contains
 
 !###############################################################################
@@ -38,6 +42,7 @@ contains
     use mathlib, only: unpack_matrix, pack_matrix
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix, hess_nn
     use fock_deriv_mod, only: fock_deriv_contract
+    use tdhf_hessian_z_rhs_mod, only: eri_derivative_operator_mo
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve
     use io_constants, only: iw
@@ -49,7 +54,7 @@ contains
 
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: dmat_a(:), mo_a(:,:), eps(:)
-    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:), g2e(:,:)
+    real(kind=dp), allocatable :: pfull(:,:), probe(:,:), gx(:,:), g2e(:,:), gop(:,:,:)
     real(kind=dp), allocatable :: dSa(:,:,:,:), dTa(:,:,:,:), dVa(:,:,:,:)
     real(kind=dp), allocatable :: Sx(:,:), hx(:,:), F0x(:,:), Gd0(:,:)
     real(kind=dp), allocatable :: d0(:,:), d0p(:,:), gp(:,:), gfull(:,:)
@@ -168,17 +173,35 @@ contains
     ! instead of once per pair AND per coordinate (an ncart-fold redundant grd2
     ! sweep).  Same scheme as hf_hessian_uhf.
     allocate(g2e(nocc*nvir,ncart), source=0.0_dp)
-    do a = 1, nvir
-      do i = 1, nocc
-        do mu = 1, nbf
-          do nu = 1, nbf
-            probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
+    if (.not. infos%dft%cam_flag .and. .not. infos%mpiinfo%usempi) then
+      ! One blocked derivative-ERI traversal assembles C^T G^x[P] C for all
+      ! 3N coordinates at once, instead of one full traversal per occ-vir
+      ! pair (nocc*nvir traversals).  Range-separated functionals (two
+      ! attenuated passes) and MPI keep the per-pair contraction below.
+      allocate(gop(nbf,nbf,ncart))
+      call eri_derivative_operator_mo(infos, mo_a, pfull, 1, hfscale, gop)
+      do icart = 1, ncart
+        do a = 1, nvir
+          do i = 1, nocc
+            g2e((a-1)*nocc+i,icart) = G2E_OPERATOR_SCALE*gop(i,nocc+a,icart)
           end do
         end do
-        call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
-        g2e((a-1)*nocc+i,:) = reshape(gx, [ncart])
       end do
-    end do
+      call check_g2e_operator(infos, basis, mo_a, pfull, hfscale, nocc, g2e)
+      deallocate(gop)
+    else
+      do a = 1, nvir
+        do i = 1, nocc
+          do mu = 1, nbf
+            do nu = 1, nbf
+              probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
+            end do
+          end do
+          call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
+          g2e((a-1)*nocc+i,:) = reshape(gx, [ncart])
+        end do
+      end do
+    end if
 
     icart = 0
     do kc = 1, natom
@@ -2852,5 +2875,49 @@ contains
       end do
     end do
   end subroutine unpack_from_packed
+
+
+!###############################################################################
+
+!> @brief Opt-in cross-check of the blocked operator path for the RHF 2e
+!>        response skeleton: OQP_HESS_G2E_CHECK=1 recomputes a few occ-vir
+!>        pairs with the per-pair fock_deriv_contract and prints both.
+  subroutine check_g2e_operator(infos, basis, mo_a, pfull, hfscale, nocc, g2e)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use fock_deriv_mod, only: fock_deriv_contract
+    use io_constants, only: iw
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: mo_a(:,:), pfull(:,:), g2e(:,:), hfscale
+    integer, intent(in) :: nocc
+    real(kind=dp), allocatable :: probe(:,:), gx(:,:)
+    real(kind=dp), allocatable :: ref(:)
+    character(len=8) :: envs
+    integer :: st, nbf, nvir, ncart, a, i, k, mu, nu, ia
+    real(kind=dp) :: num, den
+    call get_environment_variable('OQP_HESS_G2E_CHECK', envs, status=st)
+    if (st /= 0) return
+    if (trim(adjustl(envs)) /= '1') return
+    nbf = size(mo_a,1); nvir = nbf - nocc; ncart = size(g2e,2)
+    allocate(probe(nbf,nbf), gx(3,ncart/3), ref(ncart))
+    do k = 0, 2
+      a = 1 + k*(nvir-1)/2
+      i = nocc - k*(nocc-1)/2
+      do mu = 1, nbf
+        do nu = 1, nbf
+          probe(mu,nu) = 0.5_dp*( mo_a(mu,nocc+a)*mo_a(nu,i) + mo_a(mu,i)*mo_a(nu,nocc+a) )
+        end do
+      end do
+      call fock_deriv_contract(infos, basis, pfull, probe, hfscale, gx)
+      ref = reshape(gx, [ncart])
+      ia = (a-1)*nocc + i
+      num = dot_product(ref, g2e(ia,:)); den = dot_product(g2e(ia,:), g2e(ia,:))
+      write(iw,'(A,2I5,A,ES12.4,A,ES12.4,A,ES18.10)') '  g2e check i,a=', i, a, &
+        '  max|ref|=', maxval(abs(ref)), '  max|ref-op|=', maxval(abs(ref-g2e(ia,:))), &
+        '  ref/op=', num/max(den, tiny(1.0_dp))
+    end do
+  end subroutine check_g2e_operator
 
 end module hf_hessian_mod

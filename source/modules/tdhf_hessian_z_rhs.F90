@@ -9,6 +9,7 @@ module tdhf_hessian_z_rhs_mod
   public :: differentiated_channel
   public :: explicit_channel_derivative_matrix
   public :: accumulate_tdhf_channel_quartet
+  public :: eri_derivative_operator_mo
   logical, parameter :: enable_tddft_explicit_gxc = .true.
 
   type, extends(grd2_operator_consumer_t) :: tdhf_channel_operator_consumer_t
@@ -115,8 +116,7 @@ contains
   subroutine explicit_channel_derivative_matrix(infos, coeff, base, channel, result, blocks)
     use types, only: information
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
-    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
-    use grd2, only: grd2_operator_driver
+    use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A
     use mathlib, only: unpack_matrix
     use mod_dft, only: dft_initialize, dftclean
@@ -128,14 +128,12 @@ contains
     real(dp),intent(out)::result(:,:,:)
     integer,intent(in),optional::blocks
     type(basis_set),pointer::basis
-    type(tdhf_channel_operator_consumer_t)::consumer
     type(dft_grid_t)::grid
     real(dp),contiguous,pointer::dpk(:)
     real(dp),allocatable,target::p(:,:,:),xp(:,:,:),dxc(:,:)
-    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
-    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),operator_ao(:,:,:), &
-      work(:,:),gp(:,:),gm(:,:),xcval(:)
-    integer::i,j,k,nbf,ncart,nwork,nocc,blk
+    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:), &
+      gp(:,:),gm(:,:),xcval(:)
+    integer::i,j,k,nbf,ncart,nocc,blk
     logical::poison
     character(len=8)::envs
     real(dp)::scale_exch
@@ -162,34 +160,7 @@ contains
       buse=0.5_dp*(base+transpose(base))
     end if
 
-    ! Match the exact density convention consumed by grd2 under pure
-    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
-    ! Cartesian effective densities.
-    bwork=buse
-    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
-    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
-    consumer%base=>base_cart
-    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
-    consumer%operator=>operator_cart
-    consumer%channel=channel
-    consumer%coulscale=1.0_dp
-    consumer%hfscale=scale_exch
-    call grd2_operator_driver(infos,basis,consumer)
-
-    do k=1,ncart
-      if(channel>0) then
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
-      else
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
-      end if
-    end do
-    allocate(operator_ao(nbf,nbf,ncart))
-    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
-    allocate(work(nbf,nbf))
-    do k=1,ncart
-      work=matmul(operator_ao(:,:,k),coeff)
-      result(:,:,k)=matmul(transpose(coeff),work)
-    end do
+    call eri_derivative_operator_mo(infos,coeff,buse,channel,scale_exch,result)
 
     ! The ERI term above is now one blocked quartet traversal.  The XC grid
     ! contribution uses its existing finite-difference oracle independently;
@@ -245,9 +216,61 @@ contains
       deallocate(p,xp,dxc,probe,quse,gp,gm,xcval)
     end if
     if (channel > 0) call channel_cache_store(coeff, base, channel, blk, result)
-    nullify(consumer%base,consumer%operator)
-    deallocate(buse,bwork,base_cart,operator_cart,operator_ao,work)
+    deallocate(buse)
   end subroutine explicit_channel_derivative_matrix
+
+  !> ERI part of an explicit nuclear-derivative operator in one blocked
+  !> derivative-ERI traversal: result(:,:,x) = coeff^T O^x[base] coeff for all
+  !> 3N Cartesian coordinates x, where O^x is the channel operator assembled by
+  !> accumulate_tdhf_channel_quartet (channel>0: symmetric Coulomb/exchange,
+  !> channel<0: antisymmetric exchange).  `base` must already carry the
+  !> channel's symmetry.  No XC term; one MPI rank (grd2_operator_driver).
+  subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result)
+    use types, only: information
+    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+    use grd2, only: grd2_operator_driver
+    type(information),target,intent(inout)::infos
+    real(dp),intent(in)::coeff(:,:),base(:,:),hfscale
+    integer,intent(in)::channel
+    real(dp),intent(out)::result(:,:,:)
+    type(basis_set),pointer::basis
+    type(tdhf_channel_operator_consumer_t)::consumer
+    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
+    real(dp),allocatable::operator_ao(:,:,:),work(:,:)
+    integer::k,nbf,ncart,nwork
+    basis=>infos%basis; basis%atoms=>infos%atoms
+    nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
+    ! Match the exact density convention consumed by grd2 under pure
+    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
+    ! Cartesian effective densities.
+    bwork=base
+    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
+    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
+    consumer%base=>base_cart
+    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
+    consumer%operator=>operator_cart
+    consumer%channel=channel
+    consumer%coulscale=1.0_dp
+    consumer%hfscale=hfscale
+    call grd2_operator_driver(infos,basis,consumer)
+
+    do k=1,ncart
+      if(channel>0) then
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
+      else
+        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
+      end if
+    end do
+    allocate(operator_ao(nbf,nbf,ncart))
+    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
+    allocate(work(nbf,nbf))
+    do k=1,ncart
+      work=matmul(operator_ao(:,:,k),coeff)
+      result(:,:,k)=matmul(transpose(coeff),work)
+    end do
+    nullify(consumer%base,consumer%operator)
+    deallocate(bwork,base_cart,operator_cart,operator_ao,work)
+  end subroutine eri_derivative_operator_mo
 
   subroutine accumulate_tdhf_channel_operator(this,basis,shell_ids,atom_ids, &
                                                local_ids,derivative)
