@@ -1583,6 +1583,10 @@ contains
       iok=0
       if(.not.allocated(tdb)) allocate(tdb(nbf,nbf), stat=iok)
       if(iok/=0) call show_message('Cannot allocate memory',WITH_ABORT)
+    else
+      ! derexc_blk reads db only for urohf, but an unallocated allocatable
+      ! is not a valid actual argument for its explicit db dummy
+      allocate(tdb(0,0))
     end if
 
 !   RHF
