@@ -389,33 +389,78 @@ contains
   end subroutine add_packed_symmetric
 
   subroutine mo2ao_4index(n, c, gmo, gao)
+    !> MO-to-AO four-index transformation of the MP2 transition 2-RDM.
+    !>
+    !> Transforms each MO index sequentially, reusing |gmo| and |gao| as
+    !> scratch to avoid 3 × nbf⁴ temporary arrays (was 3 temp arrays before
+    !> this rewrite — the dominant peak-memory consumer).
     integer, intent(in) :: n
-    real(dp), intent(in) :: c(n,n), gmo(n,n,n,n)
+    real(dp), intent(in) :: c(n,n)
+    real(dp), intent(inout) :: gmo(n,n,n,n)
     real(dp), intent(out) :: gao(n,n,n,n)
-    real(dp), allocatable :: t1(:,:,:,:), t2w(:,:,:,:), t3(:,:,:,:)
+    real(dp), allocatable :: t(:,:,:,:)
     integer :: mu, nu, la, si, p, q, r, s
-    allocate(t1(n,n,n,n), t2w(n,n,n,n), t3(n,n,n,n), source=0.0_dp)
-    do s=1,n; do r=1,n; do q=1,n; do mu=1,n
-      do p=1,n
-        t1(mu,q,r,s)=t1(mu,q,r,s)+c(mu,p)*gmo(p,q,r,s)
+
+    ! Step 1: t(mu,q,r,s) = Σ_p c(mu,p) * gmo(p,q,r,s)
+    ! gmo is consumed — reuse gmo as scratch after this step.
+    allocate(t(n,n,n,n), source=0.0_dp)
+    do s = 1, n
+      do r = 1, n
+        do q = 1, n
+          do mu = 1, n
+            do p = 1, n
+              t(mu,q,r,s) = t(mu,q,r,s) + c(mu,p)*gmo(p,q,r,s)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
-    do s=1,n; do r=1,n; do nu=1,n; do mu=1,n
-      do q=1,n
-        t2w(mu,nu,r,s)=t2w(mu,nu,r,s)+c(nu,q)*t1(mu,q,r,s)
+    end do
+
+    ! Step 2: gmo(mu,nu,r,s) = Σ_q c(nu,q) * t(mu,q,r,s)
+    ! Overwrite gmo — t is consumed.
+    gmo = 0.0_dp
+    do s = 1, n
+      do r = 1, n
+        do nu = 1, n
+          do mu = 1, n
+            do q = 1, n
+              gmo(mu,nu,r,s) = gmo(mu,nu,r,s) + c(nu,q)*t(mu,q,r,s)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
-    do s=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do r=1,n
-        t3(mu,nu,la,s)=t3(mu,nu,la,s)+c(la,r)*t2w(mu,nu,r,s)
+    end do
+
+    ! Step 3: t(mu,nu,la,s) = Σ_r c(la,r) * gmo(mu,nu,r,s)
+    ! Overwrite t — gmo is consumed.
+    t = 0.0_dp
+    do s = 1, n
+      do la = 1, n
+        do nu = 1, n
+          do mu = 1, n
+            do r = 1, n
+              t(mu,nu,la,s) = t(mu,nu,la,s) + c(la,r)*gmo(mu,nu,r,s)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
+    end do
+
+    ! Step 4: gao(mu,nu,la,si) = Σ_s c(si,s) * t(mu,nu,la,s)
     gao = 0.0_dp
-    do si=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do s=1,n
-        gao(mu,nu,la,si)=gao(mu,nu,la,si)+c(si,s)*t3(mu,nu,la,s)
+    do si = 1, n
+      do la = 1, n
+        do nu = 1, n
+          do mu = 1, n
+            do s = 1, n
+              gao(mu,nu,la,si) = gao(mu,nu,la,si) + c(si,s)*t(mu,nu,la,s)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
+    end do
+
+    deallocate(t)
   end subroutine mo2ao_4index
 
   subroutine symmetrize_eri_density(n, g)
@@ -423,12 +468,17 @@ contains
     real(dp), intent(inout) :: g(n,n,n,n)
     real(dp), allocatable :: h(:,:,:,:)
     integer :: i,j,k,l
+    ! Copy to temp and eight-fold symmetrize in-place.
+    ! The temporary h is unavoidable: the symmetrization reads and writes
+    ! every element, so a pure in-place update would read already-averaged
+    ! values for the second half of the quartet loop.
     allocate(h(n,n,n,n))
     h = g
     do i=1,n; do j=1,n; do k=1,n; do l=1,n
       g(i,j,k,l) = 0.125_dp*(h(i,j,k,l)+h(j,i,k,l)+h(i,j,l,k)+h(j,i,l,k) &
                               +h(k,l,i,j)+h(l,k,i,j)+h(k,l,j,i)+h(l,k,j,i))
     end do; end do; end do; end do
+    deallocate(h)
   end subroutine symmetrize_eri_density
 
 !###############################################################################
