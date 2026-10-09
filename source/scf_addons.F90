@@ -1827,10 +1827,13 @@ contains
     ! stability-stage fail-safe applies here as well.
     call get_sym_atom_weight(infos, sym_atom_weight, sym_active)
 
+    ! xi^alpha in the tau slot: make the libxc derivatives consistent with its
+    ! Fermi-hole-curvature input clamp (see functionals::fhc_clamp_chain_rule)
+    infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
+
     ! Calculate exchange-correlation based on SCF type
     if (sym_active) then
       if (scf_type == scf_rhf) then
-        infos%functional%fhc_chain_rule = (infos%dft%xi_mode /= 0)
     call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
                       nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
       else if (scf_type == scf_uhf) then
