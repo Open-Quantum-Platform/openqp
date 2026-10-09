@@ -121,7 +121,15 @@ REGISTRY = (
     # sidecar. 'hess' is the raw matrix (mapped from sidecar 'hessian').
     RegKey('hess', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            sidecar_field='hessian'),
-    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar'),
+    # Frequencies of 10^3-10^4 cm^-1 under the absolute round(diff,4) gate
+    # demand ~9 significant figures. A finite-difference Hessian cannot hold
+    # that from run to run: gradient noise at the 1e-10 convergence level
+    # divided by dx moves H2 RPA S1 (4884.88 cm^-1, dx=0.001) by up to 4e-4
+    # cm^-1 between otherwise identical threaded runs. A relative 1e-6
+    # (5e-3 cm^-1 at 5000 cm^-1) is still far below any physically meaningful
+    # or regression-sized change (>= 0.1 cm^-1).
+    RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar',
+           rtol=1e-6),
     # IR intensities and Raman activities are second-order response properties
     # (dipole / polarizability derivatives over the analytic Hessian). They are
     # far more sensitive to the SCF convergence *path* than the energy or the
