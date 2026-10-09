@@ -500,8 +500,7 @@ contains
           cycle
         end if
         pap = dot_product(pv(:,k), ap(:,k))
-        if (.not. ieee_is_finite(pap) .or. pap <= tiny(1.0_dp) .or. &
-            rz(k) <= tiny(1.0_dp)) then
+        if (.not. safe_denominator(pap) .or. .not. safe_denominator(rz(k))) then
           state(k) = FAILED
           cycle
         end if
@@ -521,13 +520,25 @@ contains
           if (.not. all(ieee_is_finite(uvec(:,k)))) state(k) = FAILED
           cycle
         end if
+        if (.not. safe_denominator(err(k))) then
+          state(k) = FAILED
+          cycle
+        end if
         yv(:,k) = p%xminv*r(:,k)
+        if (.not. all(ieee_is_finite(yv(:,k)))) then
+          state(k) = FAILED
+          cycle
+        end if
         rz_new = dot_product(r(:,k), yv(:,k))
-        if (rz_new <= tiny(1.0_dp)) then
+        if (.not. safe_denominator(rz_new)) then
           state(k) = FAILED
           cycle
         end if
         beta = rz_new/rz(k)
+        if (.not. ieee_is_finite(beta)) then
+          state(k) = FAILED
+          cycle
+        end if
         pv(:,k) = yv(:,k) + beta*pv(:,k)
         rz(k) = rz_new
       end do
@@ -548,6 +559,13 @@ contains
       end if
     end do
     deallocate(r, yv, pv, ap, rz, err, state, iters, act)
+  contains
+    !> pcg_t's breakdown test (pcg_safe_positive_denominator): finite and
+    !> |value| >= 1e-24; the sign is not restricted.
+    logical function safe_denominator(value)
+      real(kind=dp), intent(in) :: value
+      safe_denominator = ieee_is_finite(value) .and. abs(value) >= 1.0e-24_dp
+    end function safe_denominator
   end subroutine cphf_block_pcg
 
 !###############################################################################
