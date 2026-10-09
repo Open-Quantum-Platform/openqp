@@ -106,6 +106,10 @@ module mod_dft_gridint
     real(kind=fp) :: xi_alpha = 1.0_fp
     integer :: xi_p = -1
     integer :: xi_scale = 0
+    !< xi_cutoff > 0 (bohr): D^alpha chi of a shell is set to zero at points farther
+    !< than this from the shell centre (an approximation that restores distance
+    !< screening); 0 = exact, every shell at every point.
+    real(kind=fp) :: xi_cutoff = 0.0_fp
     type(response_cache_t), pointer :: response_cache => null()
 
     !< alpha spin wavefunction
@@ -217,6 +221,7 @@ module mod_dft_gridint
     logical :: xiActive = .false.
     integer :: xiDim = 0            !< 1 (p=0, scalar) or 3 (p=1, vector)
     integer :: xiScale = 0
+    real(kind=fp) :: xiCutoff2 = 0.0_fp   !< xi_cutoff**2 (0 = no cutoff)
     type(xi_kernel_t) :: xiK
     integer :: numAOVecsTot = 0     !< numAOVecs + xiDim: vectors actually held in aoMem
     real(kind=fp), allocatable :: xiMoA_(:), xiMoB_(:)
@@ -488,6 +493,7 @@ contains
       end if
       self%xiDim = merge(3, 1, self%xiK%p == 1)
       self%xiScale = xco%xi_scale
+      self%xiCutoff2 = max(0.0_fp, xco%xi_cutoff)**2
     end if
     self%numAOVecsTot = self%numAOVecs + self%xiDim
 
@@ -736,19 +742,36 @@ contains
     self%numLiveAOs = nl
 
     ! xi^alpha decays only algebraically from every basis centre, so the
-    ! Gaussian-range slice prescreen must not discard any shell.  The AO
+    ! Gaussian-range slice prescreen must not discard any shell unless the user
+    ! asked for a cutoff radius: then a shell is live when it is within
+    ! max(Gaussian range, cutoff) of the slice's bounding sphere.  The AO
     ! values/gradients of far shells are still zeroed by aoval (Gaussian).
     if (self%xiActive) then
+      n = 0; nd = 0; nl = 0
       do ish = 1, basis%nshell
-        self%shells_p(ish) = ish
+        off = basis%ao_offset(ish)
+        nao = basis%naos(ish)
+        dmr = max(0.0_fp, &
+                sqrt(sum((basis%atoms%xyz(:3,basis%origin(ish)) - c)**2)) - rad)
+        if (self%xiCutoff2 <= 0.0_fp .or. dmr*dmr <= max(basis%shell_mx_dist2(ish), self%xiCutoff2)) then
+          n = n + 1
+          self%shells_p(n) = ish
+          do i = off, off+nao-1
+            nl = nl + 1
+            self%liveAOs_(nl) = i
+          end do
+          self%aoLive_(off:off+nao-1) = .true.
+        else
+          do i = off, off+nao-1
+            nd = nd + 1
+            self%deadAOs_(nd) = i
+          end do
+          self%aoLive_(off:off+nao-1) = .false.
+        end if
       end do
-      self%numShells_p = basis%nshell
-      self%numDeadAOs = 0
-      self%numLiveAOs = self%numAOs
-      do i = 1, self%numAOs
-        self%liveAOs_(i) = i
-      end do
-      self%aoLive_ = .true.
+      self%numShells_p = n
+      self%numDeadAOs = nd
+      self%numLiveAOs = nl
     end if
 
   end subroutine
@@ -886,12 +909,17 @@ contains
     skip = numAOs_p == 0
     if (skip) return
 
+    ! xi^alpha: an AO with a negligible value may still carry a non-negligible
+    ! D^alpha chi (algebraic tail), so keep every live (in-range) AO.
+    if (self%xiActive) then
+      numAOs_p = self%numLiveAOs
+      self%indices_p(1:numAOs_p) = self%liveAOs_(1:numAOs_p)
+    end if
+
     ! Check if the number of runed AOs is less
     ! than the prune cutoff (approximately 90%); if so, then
     ! grid pruning should be skipped.
     self%skip_p = real(numAOs_p) / real(self%numAOs) > self%ao_sparsity_ratio
-    ! xi^alpha of a pruned-out AO is not negligible (algebraic tail): keep all
-    if (self%xiActive) self%skip_p = .true.
 
     if (self%skip_p) then
       ! Set the full number of AOs since we skip pruning AOs
@@ -997,7 +1025,7 @@ contains
       case (0)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -1008,7 +1036,7 @@ contains
       case (1)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -1023,7 +1051,7 @@ contains
       case (2)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -1041,7 +1069,7 @@ contains
 
       case (3)
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:20) = reorderable_data(indices(1:numAOs_p), :, 1:20)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         self%aoV => self%aoMem(:, :, 1)
         self%aoG1 => self%aoMem(:, :, 2:4)
@@ -1545,7 +1573,7 @@ contains
     real(kind=fp), intent(in) :: xyz(:,:)
 
     integer, parameter :: NMAX = BAS_MXANG + 2
-    integer :: np, iPt, ish, ityp, ix, iy, iz, n, k1, k2, ig, am, off, nc, ns, v, iatm
+    integer :: np, iPt, ish, ishl, ityp, ix, iy, iz, n, k1, k2, ig, am, off, nc, ns, v, iatm
     real(kind=fp) :: zeta, cc, s0p, s2p
     real(kind=fp) :: pw(-1:NMAX, 3)
     real(kind=fp) :: cv(NUM_CART_BF(BAS_MXANG), 3)
@@ -1560,7 +1588,8 @@ contains
     pw(0,:) = 1.0_fp
 
     iatm = -1
-    do ish = 1, basis%nshell
+    do ishl = 1, self%numShells_p
+      ish = self%shells_p(ishl)
       am = basis%am(ish)
       off = basis%ao_offset(ish)
       k1 = basis%g_offset(ish)
@@ -2823,6 +2852,7 @@ contains
       numAOVecs_c = numAOVecs_c + merge(3, 1, max(0, merge(xc_opts%xi_p, ceiling(xc_opts%xi_alpha), xc_opts%xi_p >= 0)) == 1)
       ghash = ieor(ghash, int(transfer(xc_opts%xi_alpha, 0_i8b), i8b))
       ghash = ieor(ghash, int(1000003*(xc_opts%xi_p + 7) + 7919*xc_opts%xi_scale + 104729*xc_opts%xi_mode, i8b))
+      ghash = ieor(ghash, int(transfer(xc_opts%xi_cutoff, 0_i8b), i8b))
     end if
     call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
              xc_opts%molGrid%nMolPts, xc_opts%numAOs, &

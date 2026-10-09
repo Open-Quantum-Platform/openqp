@@ -454,6 +454,7 @@ OQP_CONFIG_SCHEMA = {
         'xi_alpha': {'type': float, 'default': '1.0'},
         'xi_p': {'type': int, 'default': '-1'},
         'xi_scale': {'type': int, 'default': '0'},
+        'xi_cutoff': {'type': float, 'default': '0.0'},
     },
     'tdhf': {
         'type': {'type': string, 'default': 'rpa'},
@@ -1074,6 +1075,7 @@ class OQPData:
             "xi_alpha": "set_dftgrid_xi_alpha",
             "xi_p": "set_dftgrid_xi_p",
             "xi_scale": "set_dftgrid_xi_scale",
+            "xi_cutoff": "set_dftgrid_xi_cutoff",
         },
         "tdhf": {
             "type": "set_tdhf_type",
@@ -1877,6 +1879,13 @@ class OQPData:
         if xi_scale not in (0, 1):
             raise ValueError('dftgrid.xi_scale must be 0 or 1')
         self._data.dft.xi_scale = xi_scale
+
+    def set_dftgrid_xi_cutoff(self, xi_cutoff):
+        """xi^alpha cutoff radius in bohr (D^alpha chi zeroed beyond it); 0 = exact"""
+        xi_cutoff = float(xi_cutoff)
+        if xi_cutoff < 0.0:
+            raise ValueError('dftgrid.xi_cutoff must be >= 0')
+        self._data.dft.xi_cutoff = xi_cutoff
 
     def set_system(self, system):
         """Set up atomic data"""

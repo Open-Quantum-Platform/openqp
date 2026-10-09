@@ -380,6 +380,7 @@ contains
     xc_opts%xi_alpha = infos%dft%xi_alpha
     xc_opts%xi_p = int(infos%dft%xi_p)
     xc_opts%xi_scale = int(infos%dft%xi_scale)
+    xc_opts%xi_cutoff = infos%dft%xi_cutoff
     xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
     ! skip ao_prune_grid if it is pruned grid (SG1)
     if(infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_fp
@@ -502,6 +503,7 @@ contains
     xc_opts%xi_alpha = infos%dft%xi_alpha
     xc_opts%xi_p = int(infos%dft%xi_p)
     xc_opts%xi_scale = int(infos%dft%xi_scale)
+    xc_opts%xi_cutoff = infos%dft%xi_cutoff
     xc_opts%ao_sparsity_ratio = 0.0_fp
 
     if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight

@@ -92,6 +92,7 @@ struct dft_parameters {
     double xi_alpha;
     int64_t xi_p;
     int64_t xi_scale;
+    double xi_cutoff;
 };
 
 struct tddft_parameters {
