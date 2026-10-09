@@ -331,7 +331,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    ! Get beta-spin tag arrays if needed
+    ! Get beta-spin tag arrays if needed.  For RHF they stay disassociated,
+    ! so passing them to an optional dummy argument means "absent".
+    nullify(fock_b, dmat_b, mo_energy_b, mo_b)
     if (nfocks > 1) then
       call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
@@ -929,7 +931,7 @@ contains
           mo_b = mo_a
           mo_energy_b = mo_energy_a
         end if
-        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
         ! TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
         ! the converged Fock so post-SCF properties and analytic gradients receive
         ! canonical MOs and orbital energies (same density/energy at the stationary
@@ -956,7 +958,7 @@ contains
               call apply_mom(infos, mo_b_prev, mo_e_b_prev, mo_b, mo_energy_b, &
                              smat_full, nelec_b, "Beta", work1, work2)
             end if
-            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+            call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
           else
             call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
             if (scf_type == scf_uhf .and. nelec_b /= 0) &
@@ -1222,9 +1224,16 @@ contains
       ! Build New Density Matrix from Updated Orbitals
       !----------------------------------------------------------------------------
       if (int2_driver%pe%rank == 0) then
-        if (do_pfon) call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
-        if (.not. do_pfon) &
-        call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        if (do_pfon) then
+          ! pdmat has a beta column only for UHF/ROHF.
+          if (nfocks > 1) then
+            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon, pdmat(:,2), mo_b)
+          else
+            call pfon%build_density(pdmat(:,1), mo_a, work1, work2, do_pfon)
+          end if
+        else
+          call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
+        end if
       end if
       call int2_driver%pe%bcast(pdmat, size(pdmat))
 
@@ -1436,8 +1445,12 @@ contains
     integer,          intent(in)            :: scf_type, nelec_a, nelec_b, nbf, nbf_tri
     real(dp),         intent(inout)         :: pfock(:,:)        ! (nbf, 2)
     real(dp),         intent(inout)         :: rohf_bak(:,:)     ! (nbf, 2)
-    real(dp),         intent(inout)         :: mo_a(:,:), mo_b(:,:)
-    real(dp),         intent(inout)         :: mo_energy_a(:), mo_energy_b(:)
+    real(dp),         intent(inout)         :: mo_a(:,:)
+    real(dp),         intent(inout)         :: mo_energy_a(:)
+    ! Beta MOs exist only for UHF/ROHF; for RHF the caller's pointers are
+    ! unassociated and therefore arrive here as absent.
+    real(dp),         intent(inout), optional :: mo_b(:,:)
+    real(dp),         intent(inout), optional :: mo_energy_b(:)
     real(dp),         intent(inout)         :: qmat(:,:), smat_full(:,:)
     real(dp),         intent(inout)         :: vshift
     real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
@@ -1473,8 +1486,7 @@ contains
     end if
 
     ! Build densities from MOs (both spins)
-    call get_ab_initio_density(dens_prev(:,1), mo_a,                               &
-                               dens_prev(:,2), mo_b, infos, basis)
+    call build_scf_density(dens_prev, mo_a, mo_b, infos, basis)
 
     ! ROHF post-fix based on density delta
     if (scf_type == scf_rohf) then
@@ -1500,6 +1512,29 @@ contains
       pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
     end if
   end subroutine handle_soscf_trah_rohf
+
+  !> @brief Build the SCF density matrices from the current MOs.
+  !> @details The density array has a beta column only for UHF/ROHF
+  !>          (nfocks = 2); for RHF it has one column and no beta MOs exist,
+  !>          so the beta arguments must not be referenced.
+  subroutine build_scf_density(dens, mo_a, mo_b, infos, basis)
+    use precision,   only : dp
+    use types,       only : information
+    use basis_tools, only : basis_set
+    use guess,       only : get_ab_initio_density
+    implicit none
+    real(dp),          intent(inout)           :: dens(:,:)
+    real(dp),          intent(inout)           :: mo_a(:,:)
+    real(dp),          intent(inout), optional :: mo_b(:,:)
+    type(information), intent(in)              :: infos
+    type(basis_set),   intent(in)              :: basis
+
+    if (size(dens, 2) > 1) then
+      call get_ab_initio_density(dens(:,1), mo_a, dens(:,2), mo_b, infos, basis)
+    else
+      call get_ab_initio_density(dens(:,1), mo_a, infos=infos, basis=basis)
+    end if
+  end subroutine build_scf_density
 
   subroutine handle_mom(infos, do_mom, diis_error, scf_type,          &
                         nelec_a, nelec_b,                                          &
