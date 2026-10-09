@@ -7281,6 +7281,11 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     td_nstate = int(_get(config, "tdhf", "nstate", 1))
     functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
+    try:
+        # Raw (un-typed) configs from .inp/.oqp parsing carry "0" as a string.
+        state = int(str(state).strip() or 0)
+    except ValueError:
+        pass
 
     # The native analytic-Hessian derivative-integral machinery now covers the
     # features that were previously gated to the numerical Hessian:
@@ -7477,7 +7482,11 @@ def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
         if not parts:
             continue
         element = parts[0]
-        data = bse.get_basis(basis_name, elements=[element])
+        try:
+            data = bse.get_basis(basis_name, elements=[element])
+        except Exception:
+            # Custom (file:...) or otherwise unknown basis: not inspectable here.
+            return None
         for item in data.get("elements", {}).values():
             for shell in item.get("electron_shells", []):
                 max_l = max(max_l, max(int(l) for l in shell.get("angular_momentum", [])))
