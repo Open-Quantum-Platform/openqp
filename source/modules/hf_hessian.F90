@@ -701,6 +701,7 @@ contains
     real(dp), allocatable :: dpck(:,:), fpck(:,:), gfull(:,:)
     real(dp), allocatable :: Gd0(:,:), Mi(:,:)
     real(dp), allocatable :: A2(:,:), tGP(:,:), hresp(:,:)
+    real(dp), allocatable :: gsao(:,:,:,:)      ! AO G^{s,x} (operator path only)
     type(uhf_spin_t) :: sp(2)
     real(dp) :: hfscale, a1v, a3v, t3a, dcsx
     integer :: nbf, nbf2, natom, ncart, nocca, noccb, nvira, nvirb, la, lb, ltot
@@ -820,7 +821,7 @@ contains
       ! Three blocked derivative-ERI traversals (J^x[Ptot], K^x[Pa], K^x[Pb])
       ! instead of one per occ-vir pair and spin.
       call os_g2e_from_operators(infos, basis, ptot, sp(1)%p, sp(2)%p, hfscale, &
-        sp(1)%mo, sp(1)%nocc, sp(2)%mo, sp(2)%nocc, sp(1)%g2e, sp(2)%g2e)
+        sp(1)%mo, sp(1)%nocc, sp(2)%mo, sp(2)%nocc, sp(1)%g2e, sp(2)%g2e, gsao)
     else
       do s = 1, 2
         allocate(sp(s)%g2e(sp(s)%nocc*sp(s)%nvir, ncart), source=0.0_dp)
@@ -1024,6 +1025,28 @@ contains
     !   A2(x,y)  = sum_s Tr[dP^s,y G^{s,x}[P]]
     !   tGP(x,y) = sum_s Tr[Mi^s,x G^{s,y}[P]],  Mi^s,x = sum_kl s1oo^s,x_kl C^s_k C^s_l^T
     allocate(A2(ncart,ncart), tGP(ncart,ncart), Mi(nbf,nbf), source=0.0_dp)
+    if (allocated(gsao)) then
+      ! Both traces from the stored AO operators: GEMMs, no ERI pass.
+      block
+        real(dp), allocatable :: mall(:,:,:), t(:,:)
+        allocate(mall(nbf,nbf,ncart))
+        do s = 1, 2
+          allocate(t(nbf,sp(s)%nocc))
+          do x = 1, ncart
+            call dgemm('n','n',nbf,sp(s)%nocc,sp(s)%nocc,1.0_dp,sp(s)%mo,nbf, &
+                       sp(s)%s1oo(:,:,x),sp(s)%nocc,0.0_dp,t,nbf)
+            call dgemm('n','t',nbf,nbf,sp(s)%nocc,1.0_dp,t,nbf,sp(s)%mo,nbf, &
+                       0.0_dp,mall(:,:,x),nbf)
+          end do
+          deallocate(t)
+          call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,gsao(:,:,:,s),nbf*nbf, &
+                     sp(s)%dPx,nbf*nbf,1.0_dp,A2,ncart)
+          call dgemm('t','n',ncart,ncart,nbf*nbf,1.0_dp,mall,nbf*nbf, &
+                     gsao(:,:,:,s),nbf*nbf,1.0_dp,tGP,ncart)
+        end do
+      end block
+      deallocate(gsao)
+    else
     do yy = 1, ncart
       do s = 1, 2
         gx = 0.0_dp
@@ -1048,6 +1071,7 @@ contains
         tGP(x,:) = tGP(x,:) + reshape(gx, [ncart])
       end do
     end do
+    end if
 
     ! assemble  H^resp_xy
     allocate(hresp(ncart,ncart), source=0.0_dp)
@@ -3009,7 +3033,7 @@ contains
 !>        as AO operators and transformed to each spin's occ-vir MO block.
 !>        Layout of g2ea/g2eb: ((a-1)*nocc+i, x).
   subroutine os_g2e_from_operators(infos, basis, ptot, pa, pb, hfscale, &
-                                   moa, nocca, mob, noccb, g2ea, g2eb)
+                                   moa, nocca, mob, noccb, g2ea, g2eb, gao)
     use precision, only: dp
     use types, only: information
     use basis_tools, only: basis_set
@@ -3021,6 +3045,9 @@ contains
     real(kind=dp), intent(in) :: moa(:,:), mob(:,:)
     integer, intent(in) :: nocca, noccb
     real(kind=dp), allocatable, intent(out) :: g2ea(:,:), g2eb(:,:)
+    !> optional: keep the AO operators G^{s,x} (s = alpha, beta), normalized so
+    !> that fock_deriv_contract_os(Ptot, P^s, M) = Tr[M G^{s,x}]
+    real(kind=dp), allocatable, intent(out), optional :: gao(:,:,:,:)
     real(kind=dp), allocatable :: eye(:,:), jao(:,:,:), kao(:,:,:)
     integer :: nbf, ncart, k
     nbf = size(moa,1); ncart = 3*size(infos%atoms%xyz,2)
@@ -3032,14 +3059,15 @@ contains
     ! Coulomb only (exchange scale 0) on the total density
     call eri_derivative_operator_mo(infos, eye, ptot, 1, 0.0_dp, jao)
     jao = OS_J_SCALE*jao
-    call spin_block(pa, moa, nocca, g2ea)
-    call spin_block(pb, mob, noccb, g2eb)
+    if (present(gao)) allocate(gao(nbf,nbf,ncart,2))
+    call spin_block(pa, moa, nocca, g2ea, 1)
+    call spin_block(pb, mob, noccb, g2eb, 2)
     call check_os_g2e_operator(infos, basis, ptot, pa, moa, nocca, hfscale, g2ea)
     deallocate(eye, jao, kao)
   contains
-    subroutine spin_block(ps, mo, nocc, g2e)
+    subroutine spin_block(ps, mo, nocc, g2e, ispin)
       real(kind=dp), intent(in) :: ps(:,:), mo(:,:)
-      integer, intent(in) :: nocc
+      integer, intent(in) :: nocc, ispin
       real(kind=dp), allocatable, intent(out) :: g2e(:,:)
       real(kind=dp), allocatable :: g(:,:), t(:,:), gov(:,:)
       integer :: nvir, x, a, i
@@ -3053,6 +3081,7 @@ contains
       end if
       do x = 1, ncart
         g = jao(:,:,x) + OS_K_SCALE*kao(:,:,x)
+        if (present(gao)) gao(:,:,x,ispin) = g
         call dgemm('n','n',nbf,nvir,nbf,1.0_dp,g,nbf,mo(:,nocc+1:),nbf,0.0_dp,t,nbf)
         call dgemm('t','n',nocc,nvir,nbf,1.0_dp,mo(:,1:nocc),nbf,t,nbf,0.0_dp,gov,nocc)
         do a = 1, nvir
