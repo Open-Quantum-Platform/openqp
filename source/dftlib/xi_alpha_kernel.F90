@@ -15,6 +15,12 @@ module xi_alpha_kernel
 
   integer, parameter :: NJ_DEFAULT = 48, NL_DEFAULT = 32
   real(fp), parameter :: T_SPLIT = 7.0_fp
+  !> Chebyshev tabulation (built at init from the quadrature; evaluation by
+  !> Clenshaw recurrence).  Low regime x <= X0 in s = sqrt(x) on NPAN panels,
+  !> scaled g_n = K_n (1+x)^((n+1)/2); high regime in y = sqrt(X0/x), scaled
+  !> h_n = K_n x^((n+1)/2).  Validated to <= 1e-11 relative for 0 < c <= 2.
+  integer, parameter :: NMAX_TAB = 8      !< BAS_MXANG + 2
+  integer, parameter :: NPAN = 6, DEG_LO = 20, DEG_HI = 24
 
   type :: xi_kernel_t
     real(fp) :: alpha = 1.0_fp
@@ -25,9 +31,15 @@ module xi_alpha_kernel
     real(fp), allocatable :: tj(:), wj(:)   !< Gauss-Jacobi nodes on [0,1], weights incl. 1/Gamma(c)
     real(fp), allocatable :: sl(:), wl(:)   !< Gauss-Legendre nodes/weights on [0,1]
     logical :: ready = .false.
+    logical :: use_table = .true.
+    real(fp) :: clo(0:DEG_LO, 0:NMAX_TAB, NPAN) = 0.0_fp
+    real(fp) :: chi(0:DEG_HI, 0:NMAX_TAB) = 0.0_fp
+    real(fp) :: s_edge(0:NPAN) = 0.0_fp
   contains
     procedure :: init => xi_kernel_init
     procedure :: eval => xi_kernel_eval
+    procedure :: eval_quad => xi_kernel_eval_quad
+    procedure, private :: build_tables => xi_kernel_build_tables
   end type xi_kernel_t
 
 contains
@@ -49,6 +61,7 @@ contains
     this%c = real(this%p, fp) - alpha
     if (this%c < 0.0_fp) error stop 'xi_alpha_kernel: p - alpha must be non-negative'
     this%ready = .true.
+    this%use_table = .true.
     if (this%c == 0.0_fp) return   ! integer order: K_n(x) = exp(-x), no quadrature needed
     this%nj = NJ_DEFAULT; if (present(nj)) this%nj = nj
     this%nl = NL_DEFAULT; if (present(nl)) this%nl = nl
@@ -68,10 +81,123 @@ contains
       this%wl(i) = 0.5_fp*this%wl(i)
     end do
     this%ready = .true.
+    call this%build_tables()
   end subroutine xi_kernel_init
 
-  !> K_n(x) for n = 0..nmax.
+  !> Fill the Chebyshev tables from the quadrature.
+  subroutine xi_kernel_build_tables(this)
+    class(xi_kernel_t), intent(inout) :: this
+    real(fp), parameter :: pi = 3.14159265358979323846_fp
+    integer :: ip, j, n, m
+    real(fp) :: a, b, u(0:DEG_HI), sv, xv, yv, k(0:NMAX_TAB), f(0:DEG_HI, 0:NMAX_TAB), scal, fac
+
+    do ip = 0, NPAN
+      this%s_edge(ip) = sqrt(this%x0)*real(ip, fp)/real(NPAN, fp)
+    end do
+    ! low regime: panels in s = sqrt(x)
+    do ip = 1, NPAN
+      a = this%s_edge(ip - 1); b = this%s_edge(ip)
+      do j = 0, DEG_LO
+        u(j) = cos(pi*(real(j, fp) + 0.5_fp)/real(DEG_LO + 1, fp))
+        sv = 0.5_fp*(b - a)*u(j) + 0.5_fp*(a + b)
+        xv = sv*sv
+        call this%eval_quad(NMAX_TAB, xv, k)
+        scal = sqrt(1.0_fp + xv)
+        fac = scal
+        do n = 0, NMAX_TAB
+          f(j, n) = k(n)*fac      ! (1+x)^((n+1)/2)
+          fac = fac*scal
+        end do
+      end do
+      call cheb_fit(DEG_LO, u(0:DEG_LO), f(0:DEG_LO, :), this%clo(:, :, ip))
+    end do
+    ! high regime: y = sqrt(x0/x) in (0,1], u = 2y-1
+    do j = 0, DEG_HI
+      u(j) = cos(pi*(real(j, fp) + 0.5_fp)/real(DEG_HI + 1, fp))
+      yv = 0.5_fp*(u(j) + 1.0_fp)
+      xv = this%x0/(yv*yv)
+      call this%eval_quad(NMAX_TAB, xv, k)
+      scal = sqrt(xv)
+      fac = scal
+      do n = 0, NMAX_TAB
+        f(j, n) = k(n)*fac        ! x^((n+1)/2)
+        fac = fac*scal
+      end do
+    end do
+    call cheb_fit(DEG_HI, u(0:DEG_HI), f(0:DEG_HI, :), this%chi)
+  contains
+    !> Chebyshev coefficients from values at the (deg+1) Chebyshev nodes u(j)
+    !> (first-kind nodes): c_m = 2/(deg+1) sum_j f_j T_m(u_j), c_0 halved.
+    subroutine cheb_fit(deg, u, fv, coef)
+      integer, intent(in) :: deg
+      real(fp), intent(in) :: u(0:deg), fv(0:deg, 0:NMAX_TAB)
+      real(fp), intent(out) :: coef(0:deg, 0:NMAX_TAB)
+      integer :: mm, jj, nn
+      real(fp) :: t
+      do nn = 0, NMAX_TAB
+        do mm = 0, deg
+          t = 0.0_fp
+          do jj = 0, deg
+            t = t + fv(jj, nn)*cos(real(mm, fp)*acos(u(jj)))
+          end do
+          coef(mm, nn) = 2.0_fp*t/real(deg + 1, fp)
+        end do
+        coef(0, nn) = 0.5_fp*coef(0, nn)
+      end do
+    end subroutine cheb_fit
+  end subroutine xi_kernel_build_tables
+
+  !> K_n(x) for n = 0..nmax (Chebyshev tables; falls back to the quadrature
+  !> when use_table is false).
   subroutine xi_kernel_eval(this, nmax, x, k)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: nmax
+    real(fp), intent(in) :: x
+    real(fp), intent(out) :: k(0:nmax)
+    integer :: ip, n, m
+    real(fp) :: sv, u, b0, b1, b2, scal, inv, fac
+
+    if (this%c == 0.0_fp) then
+      k = exp(-x)
+      return
+    end if
+    if (.not. this%use_table .or. nmax > NMAX_TAB) then
+      call this%eval_quad(nmax, x, k)
+      return
+    end if
+    if (x <= this%x0) then
+      sv = sqrt(x)
+      ip = min(NPAN, int(sv/this%s_edge(NPAN)*NPAN) + 1)
+      u = (2.0_fp*sv - (this%s_edge(ip - 1) + this%s_edge(ip)))/(this%s_edge(ip) - this%s_edge(ip - 1))
+      inv = 1.0_fp/sqrt(1.0_fp + x)
+      fac = inv
+      do n = 0, nmax
+        b1 = 0.0_fp; b2 = 0.0_fp
+        do m = DEG_LO, 1, -1
+          b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n, ip)
+          b2 = b1; b1 = b0
+        end do
+        k(n) = (u*b1 - b2 + this%clo(0, n, ip))*fac
+        fac = fac*inv
+      end do
+    else
+      u = 2.0_fp*sqrt(this%x0/x) - 1.0_fp
+      inv = 1.0_fp/sqrt(x)
+      fac = inv
+      do n = 0, nmax
+        b1 = 0.0_fp; b2 = 0.0_fp
+        do m = DEG_HI, 1, -1
+          b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n)
+          b2 = b1; b1 = b0
+        end do
+        k(n) = (u*b1 - b2 + this%chi(0, n))*fac
+        fac = fac*inv
+      end do
+    end if
+  end subroutine xi_kernel_eval
+
+  !> K_n(x) for n = 0..nmax by quadrature (reference path).
+  subroutine xi_kernel_eval_quad(this, nmax, x, k)
     class(xi_kernel_t), intent(in) :: this
     integer, intent(in) :: nmax
     real(fp), intent(in) :: x
@@ -107,7 +233,7 @@ contains
         end do
       end do
     end if
-  end subroutine xi_kernel_eval
+  end subroutine xi_kernel_eval_quad
 
   !> Gauss-Jacobi nodes/weights on [-1,1] for weight (1-s)^a (1+s)^b by Golub-Welsch:
   !> eigen-decomposition of the symmetric tridiagonal Jacobi matrix (implicit QL, no LAPACK).

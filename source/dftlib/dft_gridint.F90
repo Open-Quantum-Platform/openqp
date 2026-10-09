@@ -218,8 +218,9 @@ module mod_dft_gridint
     integer :: xiDim = 0            !< 1 (p=0, scalar) or 3 (p=1, vector)
     integer :: xiScale = 0
     type(xi_kernel_t) :: xiK
-    real(kind=fp), allocatable :: xiMem_(:), xiMoA_(:), xiMoB_(:)
-    real(kind=fp), contiguous, pointer :: xiD(:,:,:) => null()   !< D^alpha chi (numAOs, numPts, xiDim)
+    integer :: numAOVecsTot = 0     !< numAOVecs + xiDim: vectors actually held in aoMem
+    real(kind=fp), allocatable :: xiMoA_(:), xiMoB_(:)
+    real(kind=fp), contiguous, pointer :: xiD(:,:,:) => null()   !< D^alpha chi = aoMem(:,:,numAOVecs+1:numAOVecsTot)
     real(kind=fp), contiguous, pointer :: xiMoA(:,:,:) => null() !< P.D or C^T.D (alpha)
     real(kind=fp), contiguous, pointer :: xiMoB(:,:,:) => null() !< (beta)
 
@@ -474,9 +475,25 @@ contains
     self%numTmpVec = 1
     if (xco%needTau) self%numTmpVec = 4
 
+!   xi^alpha: replace tau by the fractional-derivative ingredient.  Its AO
+!   quantity D^alpha chi lives in aoMem as extra vectors so that the
+!   geometry-only Phi cache stores and replays it like the AO values.
+    self%xiActive = (xco%xi_mode /= 0) .and. xco%needTau
+    self%xiDim = 0
+    if (self%xiActive) then
+      if (xco%xi_p < 0) then
+        call self%xiK%init(xco%xi_alpha)
+      else
+        call self%xiK%init(xco%xi_alpha, p=xco%xi_p)
+      end if
+      self%xiDim = merge(3, 1, self%xiK%p == 1)
+      self%xiScale = xco%xi_scale
+    end if
+    self%numAOVecsTot = self%numAOVecs + self%xiDim
+
 !   Allocate memory for XC calculations
     allocate ( &
-      self%aoMem_(xco%numAOs*self%numAOVecs*xco%maxPts), &
+      self%aoMem_(xco%numAOs*self%numAOVecsTot*xco%maxPts), &
       self%moMemA_(xco%numAOs*self%numAOVecs*xco%maxPts), &
       self%tmpWfAlpha(xco%numAOs*xco%numAOs), &
       self%tmpWfBeta(xco%numAOs*xco%numAOs), &
@@ -514,18 +531,8 @@ contains
       self%compTau => compTauAO
     end if
 
-    ! xi^alpha: replace tau by the fractional-derivative ingredient
-    self%xiActive = (xco%xi_mode /= 0) .and. xco%needTau
     if (self%xiActive) then
-      if (xco%xi_p < 0) then
-        call self%xiK%init(xco%xi_alpha)
-      else
-        call self%xiK%init(xco%xi_alpha, p=xco%xi_p)
-      end if
-      self%xiDim = merge(3, 1, self%xiK%p == 1)
-      self%xiScale = xco%xi_scale
-      allocate(self%xiMem_(xco%numAOs*self%xiDim*xco%maxPts), &
-               self%xiMoA_(xco%numAOs*self%xiDim*xco%maxPts))
+      allocate(self%xiMoA_(xco%numAOs*self%xiDim*xco%maxPts))
       if (xco%hasBeta) allocate(self%xiMoB_(xco%numAOs*self%xiDim*xco%maxPts))
       if (self%isWFVecs) then
         self%compTau => compXiTauMO
@@ -599,7 +606,7 @@ contains
               , numAOVecs => self%numAOVecs &
         )
 
-      self%aoMem(1:numAOs, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
+      self%aoMem(1:numAOs, 1:numPts, 1:self%numAOVecsTot) => self%aoMem_(1:)
       self%moMemA(1:numAOs, 1:numPts, 1:numAOVecs) => self%moMemA_(1:)
 
       if (self%hasBeta) then
@@ -607,7 +614,7 @@ contains
       end if
 
       if (self%xiActive) then
-        self%xiD(1:numAOs, 1:numPts, 1:self%xiDim) => self%xiMem_(1:)
+        self%xiD => self%aoMem(:, :, numAOVecs+1:self%numAOVecsTot)
         self%xiMoA(1:numAOs, 1:numPts, 1:self%xiDim) => self%xiMoA_(1:)
         if (self%hasBeta) self%xiMoB(1:numAOs, 1:numPts, 1:self%xiDim) => self%xiMoB_(1:)
       end if
@@ -945,7 +952,8 @@ contains
       if (do_gather) reorderable_data => self%aoMem(:, :, :)
 
       ! Update pointers with pruned AOs
-      self%aoMem(1:numAOs_p, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
+      self%aoMem(1:numAOs_p, 1:numPts, 1:self%numAOVecsTot) => self%aoMem_(1:)
+      if (self%xiActive) self%xiD => self%aoMem(:, :, numAOVecs+1:self%numAOVecsTot)
 
       if (isWFVecs) then
 
@@ -2793,10 +2801,15 @@ contains
     if (xc_opts%isGGA .or. xc_opts%needTau) nAODer_c = nAODer_c + 1
     numAOVecs_c = nAOVecs_tbl(nAODer_c)
     cache_on = xc_opts%use_phi_cache
-    ! the Phi cache does not carry the xi^alpha arrays
-    if (xc_opts%xi_mode /= 0 .and. xc_opts%needTau) cache_on = .false.
     ghash = 0_i8b
     if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
+    if (xc_opts%xi_mode /= 0 .and. xc_opts%needTau) then
+      ! xi^alpha: D^alpha chi is cached together with the AO block (extra
+      ! vectors); fold the ingredient parameters into the cache key.
+      numAOVecs_c = numAOVecs_c + merge(3, 1, max(0, merge(xc_opts%xi_p, ceiling(xc_opts%xi_alpha), xc_opts%xi_p >= 0)) == 1)
+      ghash = ieor(ghash, int(transfer(xc_opts%xi_alpha, 0_i8b), i8b))
+      ghash = ieor(ghash, int(1000003*(xc_opts%xi_p + 7) + 7919*xc_opts%xi_scale + 104729*xc_opts%xi_mode, i8b))
+    end if
     call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
              xc_opts%molGrid%nMolPts, xc_opts%numAOs, &
              numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
