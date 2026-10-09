@@ -228,6 +228,7 @@ module scf_addons
   public :: calc_jk_xc
   public :: get_response_packed
   public :: get_scf_name
+  public :: calc_dft_xc_density   ! used by tests/fortran/xi_fock_selftest.F90
   integer, parameter, public :: scf_rhf  = 1  ! Restricted HF
   integer, parameter, public :: scf_uhf  = 2  ! Unrestricted HF
   integer, parameter, public :: scf_rohf = 3  ! ROHF
