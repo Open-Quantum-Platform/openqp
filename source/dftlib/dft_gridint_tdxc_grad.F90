@@ -1390,7 +1390,7 @@ contains
   subroutine tddft_xc_gradient(basis, molGrid, dedft, &
                   da, pa, xa, &
                   nMtx, threshold, infos, include_weight_derivative, &
-                  include_ground_state, cache)
+                  include_ground_state, cache, dedft_mtx)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -1415,6 +1415,9 @@ contains
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
     type(response_cache_t), target, intent(inout), optional :: cache
+    !> optional per-matrix gradients (3,natom,nMtx), as in utddft_xc_gradient;
+    !> dedft still receives their sum
+    real(kind=fp), intent(inout), optional :: dedft_mtx(:,:,:)
 
     integer :: i, j, imtx, nbf, nxcder
     logical :: doFxc, doWeight
@@ -1529,6 +1532,14 @@ contains
             2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
           dedft(3,atom) = dedft(3,atom) - &
             2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          if (present(dedft_mtx)) then
+            dedft_mtx(1,atom,imtx) = dedft_mtx(1,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,1,imtx,1))
+            dedft_mtx(2,atom,imtx) = dedft_mtx(2,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
+            dedft_mtx(3,atom,imtx) = dedft_mtx(3,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          end if
         end do
       end associate
     end do
@@ -1536,7 +1547,11 @@ contains
     ! The partition-weight probe is already spin summed by grad_v_xc_np and
     ! grad_f_xc_np.  The restricted factor for owner motion is applied where
     ! that one-spin AO contribution enters nucGrad.
-    if (dat%do_weight_derivative) dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
+    if (dat%do_weight_derivative) then
+      dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
+      if (present(dedft_mtx)) dedft_mtx = dedft_mtx + &
+        dat%nucGrad(:,1:infos%mol_prop%natom,1:nMtx,1)
+    end if
 
     call dat%clean()
   end subroutine

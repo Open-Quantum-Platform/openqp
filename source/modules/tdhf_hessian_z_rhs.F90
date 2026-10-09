@@ -137,7 +137,9 @@ contains
     real(dp),allocatable,target::p(:,:,:),xp(:,:,:),dxc(:,:)
     real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:), &
       gp(:,:),gm(:,:),xcval(:)
-    integer::i,j,k,nbf,ncart,nocc,blk
+    integer::i,j,k,nbf,ncart,nocc,blk,npair,nbatch,k0,k1,m,kk
+    integer,allocatable::pair_i(:),pair_j(:)
+    real(dp),allocatable::pbat(:,:,:),xbat(:,:,:),gmtx(:,:,:)
     logical::poison
     character(len=8)::envs
     real(dp)::scale_exch
@@ -196,6 +198,8 @@ contains
       poison=.false.
       call get_environment_variable('OQP_TDHESS_POISON_UNPROBED',envs,status=k)
       if(k==0) poison=(trim(adjustl(envs))=='1')
+      ! Pairs inside the requested blocks; the rest is left ERI-only (or NaN).
+      npair=0
       do j=1,nbf; do i=1,j
         if(.not.xc_block_needed(i,j,nocc,blk)) then
           if(poison) then
@@ -204,18 +208,47 @@ contains
           end if
           cycle
         end if
-        probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
-        quse=0.5_dp*(probe+transpose(probe))
-        xp(:,:,1)=buse+quse; gp=0.0_dp
-        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos, &
-          include_weight_derivative=.true.,include_ground_state=.false.)
-        xp(:,:,1)=buse-quse; gm=0.0_dp
-        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos, &
-          include_weight_derivative=.true.,include_ground_state=.false.)
-        xcval=reshape(0.25_dp*(gp-gm),[ncart])
-        result(i,j,:)=result(i,j,:)+xcval
-        if(i/=j) result(j,i,:)=result(j,i,:)+xcval
+        npair=npair+1
       end do; end do
+      allocate(pair_i(npair),pair_j(npair))
+      npair=0
+      do j=1,nbf; do i=1,j
+        if(.not.xc_block_needed(i,j,nocc,blk)) cycle
+        npair=npair+1; pair_i(npair)=i; pair_j(npair)=j
+      end do; end do
+      ! Evaluate the +q / -q polarization densities of a batch of pairs in one
+      ! grid traversal (per-matrix gradients via dedft_mtx): the AO values and
+      ! partition-weight derivatives at each point are shared by the batch.
+      nbatch=16
+      call get_environment_variable('OQP_TDHESS_XC_BATCH',envs,status=k)
+      if(k==0) then
+        read(envs,*,iostat=k) nbatch
+        if(k/=0 .or. nbatch<1) nbatch=16
+      end if
+      nbatch=max(1,min(nbatch,npair))
+      allocate(pbat(nbf,nbf,2*nbatch),xbat(nbf,nbf,2*nbatch),gmtx(3,ncart/3,2*nbatch))
+      do k0=1,npair,nbatch
+        k1=min(npair,k0+nbatch-1); m=k1-k0+1
+        pbat(:,:,1:2*m)=0.0_dp
+        do kk=1,m
+          i=pair_i(k0+kk-1); j=pair_j(k0+kk-1)
+          probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+          quse=0.5_dp*(probe+transpose(probe))
+          xbat(:,:,2*kk-1)=buse+quse
+          xbat(:,:,2*kk)=buse-quse
+        end do
+        gmtx(:,:,1:2*m)=0.0_dp; gp=0.0_dp
+        call tddft_xc_gradient(basis,grid,gp,dxc,pbat(:,:,1:2*m),xbat(:,:,1:2*m),2*m, &
+          1.0e-14_dp,infos,include_weight_derivative=.true.,include_ground_state=.false., &
+          dedft_mtx=gmtx(:,:,1:2*m))
+        do kk=1,m
+          i=pair_i(k0+kk-1); j=pair_j(k0+kk-1)
+          xcval=reshape(0.25_dp*(gmtx(:,:,2*kk-1)-gmtx(:,:,2*kk)),[ncart])
+          result(i,j,:)=result(i,j,:)+xcval
+          if(i/=j) result(j,i,:)=result(j,i,:)+xcval
+        end do
+      end do
+      deallocate(pair_i,pair_j,pbat,xbat,gmtx)
       call dftclean(infos)
       deallocate(p,xp,dxc,probe,quse,gp,gm,xcval)
     end if
