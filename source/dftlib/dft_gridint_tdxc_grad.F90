@@ -197,9 +197,10 @@ contains
     real(kind=fp), intent(out), pointer, optional :: tmpV(:,:,:,:,:)
     real(kind=fp), intent(out), pointer, optional :: tmpG1(:,:,:,:,:,:)
     integer, intent(in) :: myThread
-    integer :: nSpin
+    integer :: nSpin, nDeriv
 
     nspin = merge(2, 1, xce%hasBeta)
+    nDeriv = merge(2, 1, self%do_fxc)
     associate ( numAOs => xce%numAOs_p &  ! number of pruned AOs
               , numPts => xce%numPts &
               , nMtx   => self%nMtx &
@@ -211,21 +212,16 @@ contains
       tmpGrad(1:numAOs,1:3,1:nMtx) => &
         self%tmpGrad_(1:numAOs*3*nMtx,myThread)
 
+      ! Map all derivative slots (1, plus 2 for f_xc) in one remap over the
+      ! thread's contiguous slab.  Remapping slot 2 separately would replace
+      ! the slot-1 association and leave tmpV(..., 1) out of bounds.
       if (present(tmpV)) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:1) => &
-           self%tmpV_(1:numAOs*numPts*nMtx*nspin, 1, myThread)
+        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+           self%tmpV_(:, :, myThread)
 
       if (present(tmpG1)) &
-        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:1) => &
-          self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 1, mythread)
-
-      if (present(tmpV) .and. self%do_fxc) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 2:2) => &
-          self%tmpV_(1:numAOs*numPts*nMtx*nspin, 2, myThread)
-
-      if (present(tmpG1) .and. self%do_fxc) &
-          tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 2:2) => &
-            self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 2, mythread)
+        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+          self%tmpG1_(:, :, mythread)
 
     end associate
 

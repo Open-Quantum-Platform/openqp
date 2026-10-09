@@ -1598,9 +1598,17 @@ contains
 
     dedft = 0
     totele = 0
-    call derexc_blk(basis,molGrid,tda,tdb,dedft, &
-                    totele,totkin, &
-                    nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+    ! tdb is allocated only for UHF/ROHF; derexc_blk reads db only when
+    ! urohf, so RHF passes tda in its place (as hf_hessian does).
+    if (urohf) then
+      call derexc_blk(basis,molGrid,tda,tdb,dedft, &
+                      totele,totkin, &
+                      nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+    else
+      call derexc_blk(basis,molGrid,tda,tda,dedft, &
+                      totele,totkin, &
+                      nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+    end if
 
     infos%atoms%grad(:,:nat) = infos%atoms%grad(:,:nat)+dedft(:,:nat)
 
