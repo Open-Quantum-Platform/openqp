@@ -40,7 +40,7 @@ contains
     use tdhf_hessian_rows_mod, only: build_tdhf_response_rows_hf
     use tdhf_hessian_xc_mod, only: build_tdhf_xc_fixed_hessian, &
       add_tdhf_xc_response_rows
-    use hf_hessian_mod, only: hf_hessian
+    use hf_hessian_mod, only: hf_hessian, hess_tick
     use io_constants, only: iw
     use parallel, only: par_env_t
     use messages, only: show_message, WITH_ABORT
@@ -105,20 +105,28 @@ contains
     ! second block in the A+B channel.  OpenQP tags these as X-Y and X+Y,
     ! respectively.
     allocate(u0(nexc),v0(nexc),z0(nexc)); u0=xmy(:,target); v0=xpy(:,target); z0=zstore; omega=energies(target)
+    call hess_tick('start', infos%log_filename)
     allocate(amb(nexc,nexc),apb(nexc,nexc)); call build_tdhf_response_matrices(infos,amb,apb)
+    call hess_tick('TD dense A-B/A+B build', infos%log_filename)
     allocate(sx(nbf,nbf,ncart),umat(nbf,nbf,ncart),deps(nbf,ncart), &
       dground(nbf,nbf,ncart),dxc_skeleton(nbf,nbf,ncart))
     call build_tdhf_ground_orbital_response(infos,sx,umat,deps,dground,dxc_skeleton)
+    call hess_tick('TD ground orbital response', infos%log_filename)
     allocate(dambu(nexc,ncart),dapbv(nexc,ncart)); call build_tdhf_amplitude_derivative_actions( &
       infos,umat,deps,dground,u0,v0,dambu,dapbv)
+    call hess_tick('TD amplitude derivative actions', infos%log_filename)
     allocate(du(nexc,ncart),dv(nexc,ncart),domega(ncart))
     call solve_tdhf_amplitude_response(amb,apb,omega,u0,v0,dambu,dapbv,du,dv,domega,amp_res,status)
     if(status/=0) call show_message('TDHF amplitude response did not converge.',WITH_ABORT)
+    call hess_tick('TD amplitude response solve', infos%log_filename)
     allocate(drhs(nexc,ncart)); call build_tdhf_z_rhs_derivative(infos,umat,v0,u0,dv,du,drhs)
+    call hess_tick('TD Z right-hand side derivative', infos%log_filename)
     allocate(dapbz(nexc,ncart),dummy(nexc,ncart)); call build_tdhf_amplitude_derivative_actions( &
       infos,umat,deps,dground,u0*0.0_dp,z0,dummy,dapbz)
+    call hess_tick('TD Z operator derivative actions', infos%log_filename)
     allocate(dz(nexc,ncart)); call solve_tdhf_z_response(apb,drhs,dapbz,dz,z_res,status)
     if(status/=0) call show_message('TDHF derivative Z-vector did not converge.',WITH_ABORT)
+    call hess_tick('TD Z response solve', infos%log_filename)
     allocate(dprel(nbf,nbf,ncart),dw(nbf,nbf,ncart),dua(nbf,nbf,ncart),dva(nbf,nbf,ncart))
     allocate(umat_ao(nbf,nbf,ncart),deps_ao(nbf,ncart)); umat_ao=umat; deps_ao=deps
     ! This historical minimal-basis shortcut is not valid for KS response:
@@ -138,21 +146,27 @@ contains
       dground=0.0_dp
     end if
     call build_tdhf_relaxed_density_derivatives(infos,umat_ao,deps_ao,omega,domega,v0,u0,dv,du,z0,dz,dprel,dw,dua,dva)
+    call hess_tick('TD relaxed density derivatives', infos%log_filename)
     allocate(hfixed(ncart,ncart),hground_fixed(ncart,ncart),hxc(ncart,ncart), &
       rows(ncart,ncart),rowsxc(ncart,ncart),rows_one(ncart,ncart), &
       rows_two(ncart,ncart),htotal(ncart,ncart)); hxc=0.0_dp
     call build_tdhf_fixed_density_hessian(infos,hfixed,hground_fixed)
+    call hess_tick('TD fixed-density Hessian', infos%log_filename)
     if(infos%control%hamilton==20) call build_tdhf_xc_fixed_hessian(infos,hxc)
+    call hess_tick('TD XC fixed Hessian', infos%log_filename)
     call build_tdhf_response_rows_hf(infos,umat,deps,dground,dprel,dw,dua,dva, &
       dxc_skeleton,rows,rows_one,rows_two)
+    call hess_tick('TD response rows', infos%log_filename)
     rowsxc=0.0_dp
     if(infos%control%hamilton==20) call add_tdhf_xc_response_rows(infos,dground,dprel,dua,rowsxc)
+    call hess_tick('TD XC response rows', infos%log_filename)
     rows=rows+rowsxc
     ! Replace the ground-state fixed-density skeleton by the complete native
     ! RHF Hessian.  The remaining fixed and response terms are strictly the
     ! excitation-energy contribution, avoiding both omission and double count
     ! of the ground-state CPHF response.
     call hf_hessian(infos)
+    call hess_tick('TD ground-state hf_hessian', infos%log_filename)
     call tagarray_get_data(infos%dat,OQP_hf_hessian,hground)
     if (.not.zero_orbital_connection) hfixed=hfixed-hground_fixed+hground
     call assemble_tdhf_cartesian_hessian(hfixed,hxc,rows,htotal,asym,status)

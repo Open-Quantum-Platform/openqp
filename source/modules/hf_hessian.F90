@@ -3195,19 +3195,28 @@ contains
 
 !> @brief Opt-in wall-clock section timer (OQP_HESS_TIMERS=1): prints the time
 !>        since the previous call; label 'start' only resets the clock.
-  subroutine hess_tick(label)
+  subroutine hess_tick(label, logfile)
     use io_constants, only: iw
     character(len=*), intent(in) :: label
+    !> log to append to when unit iw is not open (callers outside hf_hessian)
+    character(len=*), intent(in), optional :: logfile
     integer(8), save :: last = -1_8
     integer(8) :: now, rate
     character(len=8) :: envs
     integer :: st
+    logical :: opened, mine
     call get_environment_variable('OQP_HESS_TIMERS', envs, status=st)
     if (st /= 0) return
     if (trim(adjustl(envs)) /= '1') return
     call system_clock(now, rate)
-    if (label /= 'start' .and. last >= 0_8) &
-      write(iw,'(A,A40,F10.3,A)') '  hess timer: ', label, real(now-last,8)/real(rate,8), ' s'
+    if (label /= 'start' .and. last >= 0_8) then
+      inquire(unit=iw, opened=opened)
+      mine = .not. opened .and. present(logfile)
+      if (mine) open(unit=iw, file=logfile, position='append')
+      if (opened .or. mine) write(iw,'(A,A40,F10.3,A)') '  hess timer: ', label, &
+        real(now-last,8)/real(rate,8), ' s'
+      if (mine) close(iw)
+    end if
     last = now
   end subroutine hess_tick
 
