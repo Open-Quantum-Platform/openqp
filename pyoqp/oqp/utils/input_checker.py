@@ -2067,6 +2067,54 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
         )
 
 
+def _check_xi(config: dict[str, Any], report: CheckReport) -> None:
+    """[dftgrid] xi_* : fractional-derivative ingredient xi^alpha in the tau slot."""
+    ok, mode = _parse_int_literal(_get(config, "dftgrid", "xi_mode", 0))
+    if not ok or mode == 0:
+        return
+    if mode != 1:
+        report.add("ERROR", "dftgrid.xi_mode", "Unknown xi_mode.", value=mode,
+                   expected="0 (off) or 1 (xi^alpha replaces tau)", action="Set xi_mode=0 or 1.")
+        return
+    try:
+        alpha = float(_get(config, "dftgrid", "xi_alpha", 1.0))
+    except (TypeError, ValueError):
+        alpha = math.nan
+    okp, p = _parse_int_literal(_get(config, "dftgrid", "xi_p", -1))
+    if not math.isfinite(alpha) or alpha > 1.0:
+        report.add("ERROR", "dftgrid.xi_alpha", "xi_alpha must be a finite number <= 1.",
+                   value=alpha, action="Choose alpha in (-inf, 1].")
+    elif okp and p in (0, 1):
+        if p == 0 and alpha > 0.0:
+            report.add("ERROR", "dftgrid.xi_p",
+                       "xi_p=0 (fractional integral) requires xi_alpha <= 0.",
+                       value=f"xi_p={p}, xi_alpha={alpha}", action="Use xi_p=1 for 0 < alpha <= 1, or xi_p=-1 (auto).")
+        if p == 1 and alpha <= -1.0:
+            report.add("WARNING", "dftgrid.xi_p",
+                       "xi_p=1 with alpha <= -1 integrates a derivative with a strongly singular weight; xi_p=0 is the usual choice.",
+                       value=f"xi_p={p}, xi_alpha={alpha}")
+    elif okp and p not in (-1, 0, 1):
+        report.add("ERROR", "dftgrid.xi_p", "xi_p must be -1 (auto), 0 or 1.", value=p)
+    try:
+        cutoff = float(_get(config, "dftgrid", "xi_cutoff", 0.0))
+    except (TypeError, ValueError):
+        cutoff = math.nan
+    if not math.isfinite(cutoff) or cutoff < 0.0:
+        report.add("ERROR", "dftgrid.xi_cutoff", "xi_cutoff must be >= 0 (bohr; 0 = exact).", value=cutoff)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if runtype != "energy" or method != "hf":
+        report.add("ERROR", "dftgrid.xi_mode",
+                   "The xi^alpha ingredient is implemented for single-point HF/DFT energies only "
+                   "(no nuclear gradients, Hessians, TDDFT/response or properties yet).",
+                   value=f"runtype={runtype}, method={method}", expected="runtype=energy, method=hf",
+                   action="Set xi_mode=0 for this run type, or run a single-point energy.")
+    functional = str(_get(config, "input", "functional", "")).strip()
+    if not functional:
+        report.add("ERROR", "dftgrid.xi_mode", "xi_mode=1 needs a meta-GGA functional (xi^alpha replaces tau).",
+                   action="Set [input] functional to a meta-GGA, e.g. m06-2x, tpss, scan.")
+
+
 def _check_d4(config: dict[str, Any], report: CheckReport) -> None:
     keys = ("s6", "s8", "s9", "a1", "a2", "alp")
     raw = {key: _get(config, "d4", key, "") for key in keys}
@@ -8133,6 +8181,7 @@ def check_input_values(
     _check_qmmm_active_selection(config, report)
     _check_xtb(config, report)
     _check_d4(config, report)
+    _check_xi(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

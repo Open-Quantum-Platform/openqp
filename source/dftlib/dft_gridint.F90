@@ -1626,6 +1626,14 @@ contains
           end if
         end do
       end if
+      ! cutoff radius: D^alpha chi is zero at points farther than xi_cutoff from the centre
+      if (self%xiCutoff2 > 0.0_fp) then
+        do iPt = 1, np
+          if (rsq(iPt) > self%xiCutoff2) then
+            s0(iPt) = 0.0_fp; s2(iPt) = 0.0_fp
+          end if
+        end do
+      end if
 
       nc = NUM_CART_BF(am)
       ns = NUM_SPH_BF(am)

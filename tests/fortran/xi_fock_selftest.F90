@@ -45,7 +45,8 @@ contains
       urohf = infos%control%scftype /= scf_rhf
       nspin = merge(2, 1, urohf)
 
-      call dft_initialize(infos, basis, molgrid)
+      ! grid only: the functional attached by the SCF is reused (no second libxc instance)
+      call dft_initialize(infos, basis, molgrid, need_functional=.false.)
 
       call tagarray_get_data(infos%dat, OQP_DM_A, dm_a)
       allocate(dmat(ntri, nspin), delta(ntri, nspin), dpert(ntri, nspin), pfxc(ntri, nspin))
