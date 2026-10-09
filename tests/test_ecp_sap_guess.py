@@ -25,6 +25,10 @@ HBr/LANL2DZ covers a tabulated ECP atom (Br, Z = 35, 28 core electrons),
 where Z_eff is capped at Z_val: SAP and Hueckel give the same energy and the
 pi pair of the valence shell is degenerate.
 
+All-electron IF/3-21G covers an element beyond the table without an ECP (bare
+-Z/r).  Running it before and after the ECP case in one process checks that
+no ECP state leaks between guesses.
+
 Skipped unless the compiled OpenQP runtime is importable.
 """
 
@@ -62,7 +66,7 @@ system=
 charge=0
 runtype=energy
 method=hf
-basis=def2-svp
+basis={basis}
 ispher=true
 [guess]
 type={guess}
@@ -126,7 +130,7 @@ class EcpSapGuess(unittest.TestCase):
         system = "\n".join(f"   {z}  {x:.12f}  {y:.12f}  {w:.12f}"
                            for z, (x, y, w) in zip(ZNUC, coords))
         inp = cls.workdir / f"{tag}.inp"
-        inp.write_text(INPUT_TMPL.format(system=system, guess=guess))
+        inp.write_text(INPUT_TMPL.format(system=system, guess=guess, basis="def2-svp"))
         runner = Runner(project=f"if_{tag}", input_file=str(inp),
                         log=str(cls.workdir / f"{tag}.log"), silent=1, usempi=False)
         runner.run()
@@ -188,6 +192,33 @@ class EcpSapGuessTabulated(unittest.TestCase):
             e_huckel, _ = self._run("huckel", tmp)
         self.assertAlmostEqual(e_sap, e_huckel, delta=1.0e-8)
         self.assertEqual(int(np.sum(np.diff(mo) < 1.0e-6)), 1)
+
+
+def _if_energy(workdir, basis, guess, tag):
+    from oqp.pyoqp import Runner
+
+    system = "\n".join(f"   {z}  {x:.12f}  {y:.12f}  {w:.12f}"
+                       for z, (x, y, w) in zip(ZNUC, COORDS))
+    inp = Path(workdir) / f"{tag}.inp"
+    inp.write_text(INPUT_TMPL.format(system=system, guess=guess, basis=basis))
+    runner = Runner(project=tag, input_file=str(inp),
+                    log=str(Path(workdir) / f"{tag}.log"), silent=1, usempi=False)
+    runner.run()
+    return float(runner.mol.mol_energy.energy)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
+class SapGuessAllElectronSequence(unittest.TestCase):
+    def test_all_electron_beyond_table_and_no_stale_ecp_state(self):
+        with tempfile.TemporaryDirectory(prefix="oqp_sap_seq_") as tmp:
+            ae_first = _if_energy(tmp, "3-21g", "sap", "ae_sap_1")
+            ae_huckel = _if_energy(tmp, "3-21g", "huckel", "ae_huckel")
+            ecp = _if_energy(tmp, "def2-svp", "sap", "ecp_sap")
+            ecp_huckel = _if_energy(tmp, "def2-svp", "huckel", "ecp_huckel")
+            ae_again = _if_energy(tmp, "3-21g", "sap", "ae_sap_2")
+        self.assertAlmostEqual(ae_first, ae_huckel, delta=1.0e-8)
+        self.assertAlmostEqual(ecp, ecp_huckel, delta=1.0e-8)
+        self.assertAlmostEqual(ae_again, ae_first, delta=1.0e-10)
 
 
 if __name__ == "__main__":
