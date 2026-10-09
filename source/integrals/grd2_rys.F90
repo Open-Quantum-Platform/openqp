@@ -85,6 +85,13 @@ module grd2_rys
     type, abstract :: grd2_operator_consumer_t
     contains
       procedure(grd2_operator_accumulate_if), deferred :: accumulate
+      !> Bytes of private accumulation buffer one OpenMP thread needs; 0 (the
+      !> default) means the consumer is not thread-safe and runs serially.
+      procedure :: thread_buffer_bytes => grd2_operator_thread_buffer_bytes
+      !> Redirect this (per-thread) copy to its own zeroed buffer.
+      procedure :: thread_begin => grd2_operator_thread_begin
+      !> Add a per-thread copy's buffer into this (shared) consumer.
+      procedure :: thread_merge => grd2_operator_thread_merge
     end type grd2_operator_consumer_t
 
     abstract interface
@@ -152,6 +159,21 @@ type soc2e_int_data_t
     public :: grd2_rys_hess_compute
 
 contains
+
+  integer(8) function grd2_operator_thread_buffer_bytes(this) result(nbytes)
+    class(grd2_operator_consumer_t), intent(in) :: this
+    nbytes = 0_8
+  end function grd2_operator_thread_buffer_bytes
+
+  subroutine grd2_operator_thread_begin(this)
+    class(grd2_operator_consumer_t), target, intent(inout) :: this
+  end subroutine grd2_operator_thread_begin
+
+  subroutine grd2_operator_thread_merge(this, other)
+    class(grd2_operator_consumer_t), intent(inout) :: this
+    class(grd2_operator_consumer_t), intent(in) :: other
+  end subroutine grd2_operator_thread_merge
+
 
   subroutine gdat_init(gdat, maxang, nder, &
                         dtol, dabcut, &

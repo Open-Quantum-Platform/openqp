@@ -15,12 +15,16 @@ module tdhf_hessian_z_rhs_mod
   type, extends(grd2_operator_consumer_t) :: tdhf_channel_operator_consumer_t
     real(dp), pointer :: base(:,:) => null()
     real(dp), pointer :: operator(:,:,:) => null()
+    real(dp), allocatable :: own(:,:,:)      ! per-thread buffer (thread_begin)
     integer, allocatable :: cart_off(:)
     integer :: channel = 0
     real(dp) :: coulscale = 1.0_dp
     real(dp) :: hfscale = 1.0_dp
   contains
     procedure :: accumulate => accumulate_tdhf_channel_operator
+    procedure :: thread_buffer_bytes => tdhf_channel_buffer_bytes
+    procedure :: thread_begin => tdhf_channel_thread_begin
+    procedure :: thread_merge => tdhf_channel_thread_merge
   end type tdhf_channel_operator_consumer_t
 
   ! Exact-match memo for explicit_channel_derivative_matrix. The Z-vector RHS
@@ -275,6 +279,29 @@ contains
     nullify(consumer%base,consumer%operator)
     deallocate(bwork,base_cart,operator_cart,operator_ao,work)
   end subroutine eri_derivative_operator_mo
+
+  integer(8) function tdhf_channel_buffer_bytes(this) result(nbytes)
+    class(tdhf_channel_operator_consumer_t), intent(in) :: this
+    nbytes = 0_8
+    if (associated(this%operator)) nbytes = 8_8*int(size(this%operator),8)
+  end function tdhf_channel_buffer_bytes
+
+  subroutine tdhf_channel_thread_begin(this)
+    class(tdhf_channel_operator_consumer_t), target, intent(inout) :: this
+    allocate(this%own(size(this%operator,1),size(this%operator,2), &
+                      size(this%operator,3)), source=0.0_dp)
+    this%operator => this%own
+  end subroutine tdhf_channel_thread_begin
+
+  subroutine tdhf_channel_thread_merge(this, other)
+    use grd2_rys, only: grd2_operator_consumer_t
+    class(tdhf_channel_operator_consumer_t), intent(inout) :: this
+    class(grd2_operator_consumer_t), intent(in) :: other
+    select type (other)
+    class is (tdhf_channel_operator_consumer_t)
+      this%operator = this%operator + other%own
+    end select
+  end subroutine tdhf_channel_thread_merge
 
   subroutine accumulate_tdhf_channel_operator(this,basis,shell_ids,atom_ids, &
                                                local_ids,derivative)
