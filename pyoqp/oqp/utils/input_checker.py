@@ -7371,6 +7371,61 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     return "unsupported_method", f"Analytic Hessian does not support input.method={method}."
 
 
+def resolve_hessian_type(config: dict[str, Any]) -> tuple[str, str]:
+    """Resolve ``[hess] type`` to ``analytical`` or ``numerical`` with a reason.
+
+    An explicit ``analytical`` or ``numerical`` is returned unchanged. ``auto``
+    (the default) selects the native analytic Hessian only for the ground-state
+    HF/DFT kernel and only when the run uses nothing that kernel does not
+    differentiate; anything else -- excited states, solvent, QM/MM, scalar
+    relativity, meta-GGA or double-hybrid functionals, fractional occupations,
+    g or higher functions, an uninspectable basis, or a numerical-only option --
+    stays on the finite-difference Hessian, which differentiates whatever the
+    gradient contains.
+    """
+
+    hess_type = _as_lower(_get(config, "hess", "type", "auto"))
+    if hess_type in {"analytical", "numerical"}:
+        return hess_type, f"[hess] type={hess_type} requested explicitly."
+
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "hf":
+        return "numerical", f"auto: input.method={method} uses the numerical Hessian."
+    capability, reason = analytic_hessian_capability(config)
+    if capability != "supported":
+        return "numerical", f"auto: {reason}"
+
+    functional = _as_lower(_get(config, "input", "functional", ""))
+    blockers = []
+    if functional in _UMRSF_META_GGA_FUNCTIONALS:
+        blockers.append(f"meta-GGA functional {functional}")
+    if functional in _UMRSF_DOUBLE_HYBRID_FUNCTIONALS:
+        blockers.append(f"double-hybrid functional {functional}")
+    if _is_true(_get(config, "pcm", "enabled", False)):
+        blockers.append("PCM solvent")
+    if _is_true(_get(config, "input", "qmmm_flag", False)):
+        blockers.append("QM/MM embedding")
+    if _is_true(_get(config, "odp", "enabled", False)):
+        blockers.append("ODP bias")
+    try:
+        if int(_get(config, "scf", "scal_rel", 0) or 0) != 0:
+            blockers.append("scalar-relativistic Hamiltonian")
+    except (TypeError, ValueError):
+        blockers.append("unparsed scf.scal_rel")
+    if _is_true(_get(config, "scf", "pfon", False)):
+        blockers.append("fractional occupations (pfon)")
+    if _is_true(_get(config, "hess", "symmetry_unique", False)):
+        blockers.append("hess.symmetry_unique (numerical-only option)")
+    max_l = _basis_max_angular_momentum(config)
+    if max_l is None:
+        blockers.append("basis angular momentum could not be inspected")
+    elif max_l >= 4:
+        blockers.append(f"basis max L={max_l} (analytic limit L<=3)")
+    if blockers:
+        return "numerical", "auto: numerical Hessian because of " + ", ".join(blockers) + "."
+    return "analytical", "auto: native ground-state analytic Hessian."
+
+
 def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
     """Return max L in the configured basis, or None if it cannot be inspected."""
     try:
@@ -7432,22 +7487,25 @@ def _basis_max_angular_momentum(config: dict[str, Any]) -> int | None:
 def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     state = _get(config, "hess", "state", 0)
-    hess_type = _as_lower(_get(config, "hess", "type", "numerical"))
+    requested_type = _as_lower(_get(config, "hess", "type", "auto"))
+    hess_type = requested_type
     read = _get(config, "hess", "read", False)
     restart = _get(config, "hess", "restart", False)
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
-    if hess_type not in {"numerical", "analytical"}:
+    if hess_type not in {"auto", "numerical", "analytical"}:
         report.add(
             "ERROR",
             "hess.type",
             "Unknown Hessian type.",
             value=hess_type,
-            expected="numerical or analytical",
-            action="Set [hess] type=numerical or type=analytical.",
+            expected="auto, numerical or analytical",
+            action="Set [hess] type=auto, type=numerical or type=analytical.",
         )
         return
+    if hess_type == "auto":
+        hess_type, _ = resolve_hessian_type(config)
 
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)

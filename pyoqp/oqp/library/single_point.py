@@ -1798,7 +1798,11 @@ class Hessian(Calculator):
     def __init__(self, mol):
         super().__init__(mol)
         self.mol = mol
-        self.hess_type = mol.config['hess']['type']
+        self.hess_type = str(mol.config['hess']['type']).strip().lower()
+        self.hess_type_reason = f'[hess] type={self.hess_type} requested explicitly.'
+        if self.hess_type == 'auto':
+            from oqp.utils.input_checker import resolve_hessian_type
+            self.hess_type, self.hess_type_reason = resolve_hessian_type(mol.config)
         self.state = mol.config['hess']['state']
         self.read = mol.config['hess']['read']
         self.restart = mol.config['hess']['restart']
@@ -1860,6 +1864,8 @@ class Hessian(Calculator):
         workflow unchanged.
         """
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
+        if not self.read:
+            dump_log(self.mol, title=f'PyOQP: Hessian type {self.hess_type} -- {self.hess_type_reason}')
 
         if self.read:
             # read .hess file
@@ -2008,6 +2014,31 @@ class Hessian(Calculator):
         self._collect_native_fort6_logs(runner.mol, append_to_log=False)
         return dipole, alpha
 
+    def _collect_analytic_property_derivatives(self):
+        """Pick up the dipole (and polarizability) nuclear derivatives the
+        native analytic Hessian stores, as (3, 3N) and (3, 3, 3N) arrays."""
+
+        self._analytic_dipole_derivs = None
+        self._analytic_polar_derivs = None
+        try:
+            ncoord = np.asarray(self.mol.get_system(), dtype=float).size
+        except (AttributeError, TypeError, ValueError):
+            return
+        for tag, shape, attr in (
+                ('OQP::hf_dipole_derivatives', (3, ncoord), '_analytic_dipole_derivs'),
+                ('OQP::hf_polarizability_derivatives', (3, 3, ncoord), '_analytic_polar_derivs')):
+            try:
+                raw = np.array(self.mol.data[tag], dtype=np.float64)
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            # tagarray hands Fortran (3,3N) / (3,3,3N) arrays back with the
+            # dimensions reversed; the flat Fortran order is coordinate-slowest.
+            if raw.size != int(np.prod(shape)):
+                continue
+            arr = raw.reshape(-1, order='C').reshape(shape[::-1]).T
+            if np.all(np.isfinite(arr)):
+                setattr(self, attr, np.ascontiguousarray(arr))
+
     def _compute_vibrational_intensities(self, modes):
         """Compute IR/Raman intensities using native OpenQP property kernels."""
 
@@ -2022,10 +2053,14 @@ class Hessian(Calculator):
             return
 
         displacement = 1.0e-3
+        analytic_dip = getattr(self, '_analytic_dipole_derivs', None)
+        analytic_pol = getattr(self, '_analytic_polar_derivs', None)
+        if self.hess_type != 'analytical':
+            analytic_dip = analytic_pol = None
         dipole_derivs = np.zeros((3, ncoord), dtype=np.float64)
         polar_derivs = np.zeros((3, 3, ncoord), dtype=np.float64)
         flat0 = coord0.reshape(-1)
-        for idx in range(ncoord):
+        for idx in range(ncoord if analytic_dip is None or analytic_pol is None else 0):
             disp = np.zeros(ncoord, dtype=float)
             disp[idx] = displacement
             try:
@@ -2040,6 +2075,15 @@ class Hessian(Calculator):
                 return
             dipole_derivs[:, idx] = (dip_plus - dip_minus) / (2.0 * displacement)
             polar_derivs[:, :, idx] = (polar_plus - polar_minus) / (2.0 * displacement)
+        if analytic_dip is not None:
+            dipole_derivs = np.ascontiguousarray(analytic_dip)
+        if analytic_pol is not None:
+            polar_derivs = np.ascontiguousarray(analytic_pol)
+        backend = {
+            (True, True): 'native_openqp_analytic',
+            (True, False): 'native_openqp_analytic_dipole_finite_difference_polarizability',
+            (False, False): 'native_openqp_finite_difference',
+        }[(analytic_dip is not None, analytic_pol is not None and analytic_dip is not None)]
 
         nmode = modes.shape[0]
         ir = np.zeros(nmode, dtype=np.float64)
@@ -2065,9 +2109,9 @@ class Hessian(Calculator):
         self.mol.raman_mode_polarizability_derivatives = mode_polars
         self.mol.vibrational_intensity_metadata = {
             'status': 'computed',
-            'backend': 'native_openqp_finite_difference',
+            'backend': backend,
             'property_kernels': 'electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native',
-            'displacement_bohr': float(displacement),
+            'displacement_bohr': float(displacement) if backend != 'native_openqp_analytic' else 0.0,
             'ir_units': 'km/mol',
             'raman_units': 'a.u.',
         }
@@ -2116,6 +2160,7 @@ class Hessian(Calculator):
             raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
 
         hessian = self.mol.set_hessian_result(raw_hessian)
+        self._collect_analytic_property_derivatives()
 
         # The native electronic Hessian excludes the empirical dftd4 dispersion
         # term.  The numerical Hessian includes it implicitly (each displaced

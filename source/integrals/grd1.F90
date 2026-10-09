@@ -15,7 +15,7 @@ module grd1
        comp_coulomb_der1, comp_coulomb_helfeyder1, comp_kinetic_der1, &
        comp_overlap_der1, &
        comp_overlap_der2, comp_kinetic_der2, comp_coulomb_der2_braC, &
-       comp_overlap_der1_block, comp_kinetic_der1_block, &
+       comp_overlap_der1_block, comp_kinetic_der1_block, comp_dipole_der1_block, &
        comp_coulomb_der1_block, comp_coulomb_helfeyder1_block, &
        comp_ewaldlr_der1
 
@@ -39,6 +39,7 @@ module grd1
    public hess_ee_kinetic
    public hess_en
    public der_overlap_matrix
+   public der_dipole_matrix
    public der_overlap_matrix_ket
    public der_kinetic_matrix
    public der_nucattr_matrix
@@ -880,6 +881,76 @@ contains
         END DO
     END DO
  END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Nuclear first derivatives of the AO dipole integral matrices.
+!> @details dD(u,v,c,A,a) = d<chi_u|(r-O)_a|chi_v>/dR_{A,c} for a fixed origin
+!>   O. The bra-center block comes from comp_dipole_der1_block; the ket-center
+!>   one from translational invariance of the integral together with the
+!>   origin, d/dA + d/dB + d/dO = 0 with d/dO_c <u|(r-O)_a|v> = -delta_ac S_uv.
+!>   Same unnormalized convention as der_overlap_matrix: contract with a
+!>   bfnrm-normalized density, or scale by bfnrm(u)*bfnrm(v).
+ SUBROUTINE der_dipole_matrix(basis, origin, dD, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: origin(3)
+    real(kind=dp), intent(out) :: dD(:,:,:,:,:)   ! (nbf, nbf, 3, natom, 3)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, a, c, i, j, gi, gj, A_at, B_at, oi, oj
+    REAL(kind=dp) :: tol
+    REAL(kind=dp), ALLOCATABLE :: dblk(:,:,:,:), sraw(:,:), raw3(:,:,:), rd(:,:,:,:), rs(:,:,:), red(:,:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    dD = 0.0d0
+
+    CALL cntp%alloc(basis)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        A_at = shi%atid
+        oi = basis%ao_offset(ii) - 1
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            B_at = shj%atid
+            oj = basis%ao_offset(jj) - 1
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+            allocate(dblk(cntp%inao, cntp%jnao, 3, 3), sraw(cntp%inao, cntp%jnao), source=0.0d0)
+            CALL comp_dipole_der1_block(cntp, origin, dblk, sraw)
+            allocate(rd(basis%naos(ii), basis%naos(jj), 3, 3))
+            DO a = 1, 3
+                CALL reduce_der1_shell_block(basis, ii, jj, dblk(:,:,:,a), red)
+                rd(:,:,:,a) = red
+                deallocate(red)
+            END DO
+            allocate(raw3(cntp%inao, cntp%jnao, 3), source=0.0d0)
+            raw3(:,:,1) = sraw
+            CALL reduce_der1_shell_block(basis, ii, jj, raw3, rs)
+            DO a = 1, 3
+                DO c = 1, 3
+                    DO i = 1, basis%naos(ii)
+                        gi = oi + i
+                        DO j = 1, basis%naos(jj)
+                            gj = oj + j
+                            dD(gi, gj, c, A_at, a) = dD(gi, gj, c, A_at, a) + rd(i,j,c,a)
+                            dD(gi, gj, c, B_at, a) = dD(gi, gj, c, B_at, a) - rd(i,j,c,a)
+                            if (a == c) dD(gi, gj, c, B_at, a) = dD(gi, gj, c, B_at, a) + rs(i,j,1)
+                        END DO
+                    END DO
+                END DO
+            END DO
+            deallocate(dblk, sraw, rd, raw3, rs)
+        END DO
+    END DO
+ END SUBROUTINE der_dipole_matrix
 
 !-------------------------------------------------------------------------------
 
