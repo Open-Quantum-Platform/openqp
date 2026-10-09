@@ -1582,24 +1582,22 @@ contains
     call hf_dipder_store(infos, dmu)
     deallocate(dipf, dmu, dptx)
 
-    ! analytic polarizability derivatives (Raman activities); ECP systems
-    ! keep the finite-difference path
-    if (all(basis%ecp_zn_num == 0)) then
-      block
-        use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
-        real(dp), allocatable :: dpol(:,:,:), fa_ao(:,:), fb_ao(:,:)
-        real(dp), contiguous, pointer :: pstore(:,:,:)
-        allocate(dpol(3,3,ncart), fa_ao(nbf,nbf), fb_ao(nbf,nbf))
-        call unpack_matrix(focka, fa_ao)
-        call unpack_matrix(fockb, fb_ao)
-        call hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
-                            dSa, dTa + dVa, uvec, hfscale, dpol)
-        call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
-          description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
-        pstore = dpol
-        deallocate(dpol, fa_ao, fb_ao)
-      end block
-    end if
+    ! analytic polarizability derivatives (Raman activities); the ECP enters
+    ! only through h^x (ecp_deriv_ints is folded into dVa above)
+    block
+      use oqp_tagarray_driver, only: OQP_hf_polarizability_derivatives
+      real(dp), allocatable :: dpol(:,:,:), fa_ao(:,:), fb_ao(:,:)
+      real(dp), contiguous, pointer :: pstore(:,:,:)
+      allocate(dpol(3,3,ncart), fa_ao(nbf,nbf), fb_ao(nbf,nbf))
+      call unpack_matrix(focka, fa_ao)
+      call unpack_matrix(fockb, fb_ao)
+      call hf_polder_rohf(infos, mo, fa_ao, fb_ao, pa, pb, nocca, noccb, &
+                          dSa, dTa + dVa, uvec, hfscale, dpol)
+      call infos%dat%alloc_or_die(OQP_hf_polarizability_derivatives, (/ 3, 3, ncart /), pstore, &
+        description='Analytic nuclear derivatives of the static polarizability (a.u.), (3,3,3N)')
+      pstore = dpol
+      deallocate(dpol, fa_ao, fb_ao)
+    end block
 
     ! The central difference of the ELECTRONIC gradient over geometry AND the
     ! relaxed orbital path already contains the full electronic Hessian (skeleton
