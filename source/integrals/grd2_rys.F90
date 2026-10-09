@@ -1473,6 +1473,12 @@ contains
                   f2_33, f2_34, f2_44, den, fd2)
 !   Contract the 1D first/second derivative arrays with the 2-body density to
 !   form the per-quartet second-derivative block fd2(a1,c1,a2,c2).
+!
+!   fd2 is symmetric under (a1,c1) <-> (a2,c2), so only its 78 unique
+!   elements are formed per AO quartet: 30 same-direction elements
+!   (second-derivative factor times the two other direction factors) and 48
+!   mixed-direction ones (two first-derivative factors times the third
+!   direction factor).  The 1D vectors of a quartet are gathered once.
     implicit none
     type(grd2_int_data_t) :: gdat
     integer :: ngnr
@@ -1486,43 +1492,85 @@ contains
     real(kind=dp) :: f2_44(ngnr,3,*)
     real(kind=dp) :: fd2(3,4,3,4)
 
-    integer :: i, j, k, l
+    integer :: i, j, k, l, n
     integer :: noff(3)
-    integer :: c1, c2, a1, a2, a3, o1, o2
+    integer :: c1, c2, a1, a2, a3, o1, o2, ip
     real(kind=dp) :: df, val
     real(kind=dp), pointer :: pd(:,:,:,:)
+    ! per-quartet gathered 1D factors
+    ! (heap, not automatic: OpenMP worker stacks are small on macOS)
+    real(kind=dp), allocatable :: w(:,:)     ! product of the two other direction factors
+    real(kind=dp), allocatable :: f1(:,:,:)  ! first-derivative factor of center c, direction a
+    real(kind=dp), allocatable :: f2(:,:,:)  ! second-derivative factor of center pair, direction a
+    real(kind=dp), allocatable :: t(:,:)
+    real(kind=dp) :: acc(3,4,3,4)
+    integer, parameter :: pair(4,4) = reshape([1,2,3,4, 2,5,6,7, 3,6,8,9, 4,7,9,10], [4,4])
 
     pd(1:gdat%nbf(4), 1:gdat%nbf(3), 1:gdat%nbf(2), 1:gdat%nbf(1)) => den(1:product(gdat%nbf))
 
+    allocate(w(ngnr,3), f1(ngnr,4,3), f2(ngnr,10,3), t(ngnr,4))
+    acc = 0.0_dp
     do i = 1, gdat%nbf(1)
       do j = 1, gdat%nbf(2)
         do k = 1, gdat%nbf(3)
           do l = 1, gdat%nbf(4)
+            df = pd(l,k,j,i)
+            if (df == 0.0_dp) cycle
             noff(1) = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
             noff(2) = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
             noff(3) = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
-            df = pd(l,k,j,i)
 
-            do c1 = 1, 4
-             do a1 = 1, 3
-              do c2 = 1, 4
-               do a2 = 1, 3
-                if (a1 == a2) then
-                  ! both derivatives act on the same 1D direction factor
-                  o1 = mod(a1,  3) + 1
-                  o2 = mod(a1+1,3) + 1
-                  val = df * sum( f2pick(c1,c2,a1,noff(a1)) &
-                                * g0(:,o1,noff(o1)) * g0(:,o2,noff(o2)) )
-                else
-                  ! different direction factors: product of first derivatives
-                  a3 = 6 - a1 - a2
-                  val = df * sum( f1pick(c1,a1,noff(a1)) &
-                                * f1pick(c2,a2,noff(a2)) * g0(:,a3,noff(a3)) )
-                end if
-                fd2(a1,c1,a2,c2) = fd2(a1,c1,a2,c2) + val
-               end do
+            do a1 = 1, 3
+              o1 = mod(a1,  3) + 1
+              o2 = mod(a1+1,3) + 1
+              w(:,a1) = g0(:,o1,noff(o1))*g0(:,o2,noff(o2))
+              f1(:,1,a1) = fi(:,a1,noff(a1))
+              f1(:,2,a1) = fj(:,a1,noff(a1))
+              f1(:,3,a1) = fk(:,a1,noff(a1))
+              f1(:,4,a1) = fl(:,a1,noff(a1))
+              f2(:, 1,a1) = f2_11(:,a1,noff(a1))
+              f2(:, 2,a1) = f2_12(:,a1,noff(a1))
+              f2(:, 3,a1) = f2_13(:,a1,noff(a1))
+              f2(:, 4,a1) = f2_14(:,a1,noff(a1))
+              f2(:, 5,a1) = f2_22(:,a1,noff(a1))
+              f2(:, 6,a1) = f2_23(:,a1,noff(a1))
+              f2(:, 7,a1) = f2_24(:,a1,noff(a1))
+              f2(:, 8,a1) = f2_33(:,a1,noff(a1))
+              f2(:, 9,a1) = f2_34(:,a1,noff(a1))
+              f2(:,10,a1) = f2_44(:,a1,noff(a1))
+            end do
+
+            ! same direction: 10 center pairs x 3 directions
+            do a1 = 1, 3
+              do c1 = 1, 4
+                do c2 = c1, 4
+                  ip = pair(c2,c1)
+                  val = 0.0_dp
+                  do n = 1, ngnr
+                    val = val + f2(n,ip,a1)*w(n,a1)
+                  end do
+                  acc(a1,c1,a1,c2) = acc(a1,c1,a1,c2) + df*val
+                end do
               end do
-             end do
+            end do
+
+            ! mixed directions a1 < a2 (a3 the third): 16 center pairs each
+            do a1 = 1, 2
+              do a2 = a1+1, 3
+                a3 = 6 - a1 - a2
+                do c1 = 1, 4
+                  t(:,c1) = f1(:,c1,a1)*g0(:,a3,noff(a3))
+                end do
+                do c2 = 1, 4
+                  do c1 = 1, 4
+                    val = 0.0_dp
+                    do n = 1, ngnr
+                      val = val + t(n,c1)*f1(n,c2,a2)
+                    end do
+                    acc(a1,c1,a2,c2) = acc(a1,c1,a2,c2) + df*val
+                  end do
+                end do
+              end do
             end do
 
           end do
@@ -1530,37 +1578,25 @@ contains
       end do
     end do
 
-  contains
-
-    function f1pick(c, d, o) result(v)
-      integer, intent(in) :: c, d, o
-      real(kind=dp) :: v(ngnr)
-      select case (c)
-      case (1); v = fi(:,d,o)
-      case (2); v = fj(:,d,o)
-      case (3); v = fk(:,d,o)
-      case (4); v = fl(:,d,o)
-      end select
-    end function f1pick
-
-    function f2pick(ca, cb, d, o) result(v)
-      integer, intent(in) :: ca, cb, d, o
-      real(kind=dp) :: v(ngnr)
-      integer :: lo, hi
-      lo = min(ca,cb); hi = max(ca,cb)
-      select case (lo*10+hi)
-      case (11); v = f2_11(:,d,o)
-      case (12); v = f2_12(:,d,o)
-      case (13); v = f2_13(:,d,o)
-      case (14); v = f2_14(:,d,o)
-      case (22); v = f2_22(:,d,o)
-      case (23); v = f2_23(:,d,o)
-      case (24); v = f2_24(:,d,o)
-      case (33); v = f2_33(:,d,o)
-      case (34); v = f2_34(:,d,o)
-      case (44); v = f2_44(:,d,o)
-      end select
-    end function f2pick
+    ! complete the symmetric block: fd2(a1,c1,a2,c2) = fd2(a2,c2,a1,c1)
+    do a1 = 1, 3
+      do c1 = 1, 4
+        do c2 = c1, 4
+          fd2(a1,c1,a1,c2) = fd2(a1,c1,a1,c2) + acc(a1,c1,a1,c2)
+          if (c2 /= c1) fd2(a1,c2,a1,c1) = fd2(a1,c2,a1,c1) + acc(a1,c1,a1,c2)
+        end do
+      end do
+    end do
+    do a1 = 1, 2
+      do a2 = a1+1, 3
+        do c2 = 1, 4
+          do c1 = 1, 4
+            fd2(a1,c1,a2,c2) = fd2(a1,c1,a2,c2) + acc(a1,c1,a2,c2)
+            fd2(a2,c2,a1,c1) = fd2(a2,c2,a1,c1) + acc(a1,c1,a2,c2)
+          end do
+        end do
+      end do
+    end do
 
   end subroutine compute_der2_ijkl
 
