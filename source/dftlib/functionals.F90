@@ -298,7 +298,7 @@ contains
           call xc_f03_mgga_exc_vxc(this%functionals_list(i), libxc_int, rho, sigma, lapl, tau, &
             tmp_energy, tmp_dedrho, tmp_dedsigma, tmp_dedlapl, tmp_dedtau)
           if (this%fhc_chain_rule .and. &
-              iand(int(xc_f03_func_info_get_flags(this%functionals_info(i))), XC_FLAGS_ENFORCE_FHC) /= 0) &
+              iand(xc_f03_func_info_get_flags(this%functionals_info(i)), XC_FLAGS_ENFORCE_FHC) /= 0) &
             call fhc_clamp_chain_rule(npoints, rho, sigma, tau, tmp_dedrho, tmp_dedsigma, tmp_dedtau)
           energy   (1:1*npoints) = energy   (1:1*npoints) + tmp_energy   * coefficient
           dedrho   (1:2*npoints) = dedrho   (1:2*npoints) + tmp_dedrho   * coefficient
