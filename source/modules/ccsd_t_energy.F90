@@ -20,6 +20,25 @@ module ccsd_t_energy_mod
 
   character(len=*), parameter :: module_name = "ccsd_t_energy_mod"
 
+  !> Memory footprint notes
+  !> ======================
+  !> The closed-shell CCSD(T) allocates three classes of O(nbf^4) storage:
+  !>
+  !>   1. Packed AO integrals `gao(cc_packed_length(nbf))` ≈ nbf⁴/8 doubles.
+  !>   2. Half-transformed MO intermediates (oooo/ooov/oovv/ovov/ovvv/vvvv)
+  !>      which are nbf⁴/4 in the worst case (vvvv block).
+  !>   3. The ladder-contraction thread blocks, up to nv⁴ per thread.
+  !>
+  !> The memory guard (`ccsd_t_energy.F90:458`) compares the peak against
+  !> available memory and refuses jobs that do not fit.  The auto route
+  !> selects Cholesky decomposition when the explicit v⁴ route cannot fit
+  !> (line 166-180), but the packed AO store remains as the source of the
+  !> Cholesky vectors and is still nbf⁴/8.
+  !>
+  !> Both the MP2 gradient (mp2_gradient.F90) and the CCSD(T) gradient
+  !> (not yet implemented) share the same dense ERI bottleneck; a future
+  !> density-fitting or Cholesky-only storage would remove it.
+
 contains
 
   !> C-bound entry point: `[input] method = ccsd(t)` dispatches here.

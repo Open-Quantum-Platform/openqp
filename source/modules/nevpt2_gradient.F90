@@ -41,6 +41,11 @@
 !> validation-grade system sizes SC-NEVPT2 itself is limited to, and it can be
 !> replaced by a factorized or streamed density without changing this entry
 !> point's contract.
+!>
+!> At nbf=500 this single allocation would be ~500 GiB for the 2-RDM alone,
+!> so the SC-NEVPT2 gradient will not begin to scale to large systems until
+!> this routine receives a factorised 2-RDM (the CASSCF AO gradient already
+!> uses one; the same separation approach applies here).
 module nevpt2_gradient_mod
 
   use precision, only: dp

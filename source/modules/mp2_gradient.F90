@@ -29,6 +29,17 @@ module mp2_gradient_mod
   character(len=*), parameter :: module_name = 'mp2_gradient_mod'
   integer, parameter :: DEFAULT_MAX_NBF = 60
 
+  !> The dense O(nbf^4) MO ERI tensor, the t2/l2 amplitude arrays and the
+  !> MP2 two-particle density all allocate as full nbf^4 buffers on every
+  !> call.  `OQP_MP2_GRAD_MAX_NBF` (default 60) exists as a hard guard.
+  !> Systems above this threshold refuse the analytic gradient; users should
+  !> raise the env var only on machines with sufficient memory, or use a
+  !> density-fitting / Cholesky-decomposed ERI route.
+  !>
+  !> The MP2 energy (mp2_energy.F90, via mp2_lib) is separately guarded by
+  !> OQP_MP2_MAX_JBUILDS, which is a per-MO-pair Coulomb-build size bound
+  !> and is independent of this gradient guard.
+
   public :: mp2_gradient
 
   ! The derivative-ERI consumer.  d0 is the converged RHF spin-summed density,

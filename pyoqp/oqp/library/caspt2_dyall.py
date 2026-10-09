@@ -815,7 +815,10 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
         # two-electron operator is nonzero, so _diagonal_zeroth_order declines
         # and the second branch below always runs -- keeps gspin and hfull LIVE
         # while building gspin0 and a second dense H0.  Count the pair when the
-        # zeroth order cannot be diagonal.
+        # zeroth order cannot be diagonal.  This means NEVPT2 (Dyall H0)
+        # needs roughly 2x the memory of CASPT2 (Fock H0) for the same active
+        # space, because two ndet x ndet Hamiltonian matrices are live
+        # simultaneously.
         _pairs = 2 if str(h0).strip().lower() == "dyall" else 1
         # _ZerothOrder._build_eigenbasis extracts a dense H0[external, external]
         # while both full operators are still live, and the external block

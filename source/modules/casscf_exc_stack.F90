@@ -25,6 +25,13 @@
 !> [nact,nact,ndet,ndet] with the last index fastest, matching the NumPy array
 !> the caller allocates.  Note that array is nact^2 * ndet^2 doubles, which the
 !> caller is expected to have size-guarded before calling.
+!>
+!> The stack is extremely sparse: each column has at most ~2*nact^2 non-zero
+!> entries out of ndet*nact^2 slots.  At CAS(12,6) — ndet ~4900, nact=12 —
+!> it stores ~3.5 GiB of doubles while carrying only ~14 MiB of actual
+!> information.  A coordinate-list (COO) or on-the-fly evaluation in the
+!> Hessian kernel would remove this dense output entirely and is the
+!> recommended path for larger active spaces.
 module casscf_exc_stack_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
   implicit none

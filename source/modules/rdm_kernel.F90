@@ -28,6 +28,14 @@
 !> norb..2norb-1; requires nspin <= 63).  Outputs are C-order: D1 is
 !> [nspin,nspin] and D2 is [nspin,nspin,nspin,nspin] with the last index
 !> fastest, matching the numpy arrays the caller allocates.
+!>
+!> NOTE on D2 scaling: the output buffer is (2*norb)^4 doubles, which is
+!> an O(norb^4) dense tensor.  At norb=50 this is 2*(2*50)^4 ≈ 1.6 GiB.
+!> The kernel itself is determinant-walk-based and O(ndet * norb^2) internally,
+!> but the output the caller receives is always the full dense (2*norb)^4
+!> array — callers like CASPT2/NEVPT2 that need only selected blocks of the
+!> 2-RDM should request spatial RDMs (rdm1_spatial/rdm2_spatial) or use the
+!> factorised multi-reference path directly.
 module rdm_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
   implicit none
