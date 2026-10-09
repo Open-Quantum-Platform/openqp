@@ -1,0 +1,580 @@
+!> Numerical kernel for the fractional-derivative (Caputo) ingredient xi^alpha.
+!>
+!> K_n(x) = 1/Gamma(c) * int_0^1 (1-t)^(c-1) t^n exp(-x t^2) dt,   c = p - alpha > 0,
+!> x = zeta*|r - R_i|^2 >= 0, n = 0..nmax (Cartesian power sum of the primitive, +2 for the
+!> derivative branch).  Two regimes: Gauss-Jacobi on [0,1] with the (1-t)^(c-1) weight for
+!> x <= T^2, and Gauss-Legendre on [0, T/sqrt(x)] (Gaussian-peak region, weight regular) for
+!> x > T^2.  Validated to <1e-11 relative against the exact 2F2 form
+!>   Gamma(n+1)/Gamma(n+1+c) 2F2((n+1)/2,(n+2)/2; (n+1+c)/2,(n+2+c)/2; -x)
+!> for 0 < c <= 2 (see sessions/20261009_fracderiv_functional/kernel_proto.py).
+module xi_alpha_kernel
+  use precision, only: fp
+  implicit none
+  private
+  public :: xi_kernel_t
+
+  integer, parameter :: NJ_DEFAULT = 48, NL_DEFAULT = 32
+  real(fp), parameter :: T_SPLIT = 7.0_fp
+  !> Chebyshev tabulation (built at init from the quadrature; evaluation by
+  !> Clenshaw recurrence).  Low regime x <= X0 in s = sqrt(x) on NPAN panels,
+  !> scaled g_n = K_n (1+x)^((n+1)/2); high regime in y = sqrt(X0/x), scaled
+  !> h_n = K_n x^((n+1)/2).  Validated to <= 1e-11 relative for 0 < c <= 2.
+  integer, parameter :: NMAX_TAB = 8      !< BAS_MXANG + 2
+  integer, parameter :: NPAN = 6, DEG_LO = 20, DEG_HI = 24
+
+  type :: xi_kernel_t
+    real(fp) :: alpha = 1.0_fp
+    integer  :: p = 1          !< integer order of the inner derivative (0 or 1)
+    real(fp) :: c = 0.0_fp     !< p - alpha
+    real(fp) :: x0 = T_SPLIT**2
+    integer  :: nj = 0, nl = 0
+    real(fp), allocatable :: tj(:), wj(:)   !< Gauss-Jacobi nodes on [0,1], weights incl. 1/Gamma(c)
+    real(fp), allocatable :: sl(:), wl(:)   !< Gauss-Legendre nodes/weights on [0,1]
+    logical :: ready = .false.
+    logical :: use_table = .true.
+    real(fp) :: clo(0:DEG_LO, 0:NMAX_TAB, NPAN) = 0.0_fp
+    real(fp) :: chi(0:DEG_HI, 0:NMAX_TAB) = 0.0_fp
+    real(fp) :: s_edge(0:NPAN) = 0.0_fp
+    real(fp) :: pan_scale = 0.0_fp          !< NPAN/sqrt(x0)
+    integer  :: mlo(0:NMAX_TAB, NPAN) = DEG_LO  !< effective Chebyshev degree per (n, panel)
+    integer  :: mhi(0:NMAX_TAB) = DEG_HI
+  contains
+    procedure :: init => xi_kernel_init
+    procedure :: eval => xi_kernel_eval
+    procedure :: eval_pair => xi_kernel_eval_pair
+    procedure :: eval_pair_block => xi_kernel_eval_pair_block
+    procedure :: eval_quad => xi_kernel_eval_quad
+    procedure, private :: build_tables => xi_kernel_build_tables
+  end type xi_kernel_t
+
+contains
+
+  !> Prepare quadrature rules for a given fractional order alpha (<1).
+  subroutine xi_kernel_init(this, alpha, p, nj, nl)
+    class(xi_kernel_t), intent(inout) :: this
+    real(fp), intent(in) :: alpha
+    integer, intent(in), optional :: p, nj, nl
+    integer :: i
+    real(fp) :: lg
+
+    this%alpha = alpha
+    if (present(p)) then
+      this%p = p
+    else
+      this%p = max(0, ceiling(alpha))
+    end if
+    this%c = real(this%p, fp) - alpha
+    if (this%c < 0.0_fp) error stop 'xi_alpha_kernel: p - alpha must be non-negative'
+    this%ready = .true.
+    this%use_table = .true.
+    if (this%c == 0.0_fp) return   ! integer order: K_n(x) = exp(-x), no quadrature needed
+    this%nj = NJ_DEFAULT; if (present(nj)) this%nj = nj
+    this%nl = NL_DEFAULT; if (present(nl)) this%nl = nl
+    if (allocated(this%tj)) deallocate(this%tj, this%wj, this%sl, this%wl)
+    allocate(this%tj(this%nj), this%wj(this%nj), this%sl(this%nl), this%wl(this%nl))
+
+    call gauss_jacobi(this%nj, this%c - 1.0_fp, 0.0_fp, this%tj, this%wj)
+    call gauss_legendre(this%nl, this%sl, this%wl)
+    ! map [-1,1] -> [0,1]:  (1-t)^(c-1) dt = 2^(-c) (1-s)^(c-1) ds
+    lg = log_gamma(this%c)
+    do i = 1, this%nj
+      this%tj(i) = 0.5_fp*(this%tj(i) + 1.0_fp)
+      this%wj(i) = this%wj(i) * exp(-this%c*log(2.0_fp) - lg)
+    end do
+    do i = 1, this%nl
+      this%sl(i) = 0.5_fp*(this%sl(i) + 1.0_fp)
+      this%wl(i) = 0.5_fp*this%wl(i)
+    end do
+    this%ready = .true.
+    call this%build_tables()
+  end subroutine xi_kernel_init
+
+  !> Fill the Chebyshev tables from the quadrature.
+  subroutine xi_kernel_build_tables(this)
+    class(xi_kernel_t), intent(inout) :: this
+    real(fp), parameter :: pi = 3.14159265358979323846_fp
+    integer :: ip, j, n, m
+    real(fp) :: a, b, u(0:DEG_HI), sv, xv, yv, k(0:NMAX_TAB), f(0:DEG_HI, 0:NMAX_TAB), scal, fac
+
+    do ip = 0, NPAN
+      this%s_edge(ip) = sqrt(this%x0)*real(ip, fp)/real(NPAN, fp)
+    end do
+    ! low regime: panels in s = sqrt(x)
+    do ip = 1, NPAN
+      a = this%s_edge(ip - 1); b = this%s_edge(ip)
+      do j = 0, DEG_LO
+        u(j) = cos(pi*(real(j, fp) + 0.5_fp)/real(DEG_LO + 1, fp))
+        sv = 0.5_fp*(b - a)*u(j) + 0.5_fp*(a + b)
+        xv = sv*sv
+        call this%eval_quad(NMAX_TAB, xv, k)
+        scal = sqrt(1.0_fp + xv)
+        fac = scal
+        do n = 0, NMAX_TAB
+          f(j, n) = k(n)*fac      ! (1+x)^((n+1)/2)
+          fac = fac*scal
+        end do
+      end do
+      call cheb_fit(DEG_LO, u(0:DEG_LO), f(0:DEG_LO, :), this%clo(:, :, ip))
+    end do
+    ! high regime: y = sqrt(x0/x) in (0,1], u = 2y-1
+    do j = 0, DEG_HI
+      u(j) = cos(pi*(real(j, fp) + 0.5_fp)/real(DEG_HI + 1, fp))
+      yv = 0.5_fp*(u(j) + 1.0_fp)
+      xv = this%x0/(yv*yv)
+      call this%eval_quad(NMAX_TAB, xv, k)
+      scal = sqrt(xv)
+      fac = scal
+      do n = 0, NMAX_TAB
+        f(j, n) = k(n)*fac        ! x^((n+1)/2)
+        fac = fac*scal
+      end do
+    end do
+    call cheb_fit(DEG_HI, u(0:DEG_HI), f(0:DEG_HI, :), this%chi)
+    ! adaptive truncation: drop trailing coefficients below 1e-15 of the leading one
+    this%pan_scale = real(NPAN, fp)/sqrt(this%x0)
+    do ip = 1, NPAN
+      do n = 0, NMAX_TAB
+        m = DEG_LO
+        do while (m > 2 .and. abs(this%clo(m, n, ip)) < 1.0e-15_fp*abs(this%clo(0, n, ip)) &
+                  .and. abs(this%clo(m-1, n, ip)) < 1.0e-15_fp*abs(this%clo(0, n, ip)))
+          m = m - 1
+        end do
+        this%mlo(n, ip) = m
+      end do
+    end do
+    do n = 0, NMAX_TAB
+      m = DEG_HI
+      do while (m > 2 .and. abs(this%chi(m, n)) < 1.0e-15_fp*abs(this%chi(0, n)) &
+                .and. abs(this%chi(m-1, n)) < 1.0e-15_fp*abs(this%chi(0, n)))
+        m = m - 1
+      end do
+      this%mhi(n) = m
+    end do
+  contains
+    !> Chebyshev coefficients from values at the (deg+1) Chebyshev nodes u(j)
+    !> (first-kind nodes): c_m = 2/(deg+1) sum_j f_j T_m(u_j), c_0 halved.
+    subroutine cheb_fit(deg, u, fv, coef)
+      integer, intent(in) :: deg
+      real(fp), intent(in) :: u(0:deg), fv(0:deg, 0:NMAX_TAB)
+      real(fp), intent(out) :: coef(0:deg, 0:NMAX_TAB)
+      integer :: mm, jj, nn
+      real(fp) :: t
+      do nn = 0, NMAX_TAB
+        do mm = 0, deg
+          t = 0.0_fp
+          do jj = 0, deg
+            t = t + fv(jj, nn)*cos(real(mm, fp)*acos(u(jj)))
+          end do
+          coef(mm, nn) = 2.0_fp*t/real(deg + 1, fp)
+        end do
+        coef(0, nn) = 0.5_fp*coef(0, nn)
+      end do
+    end subroutine cheb_fit
+  end subroutine xi_kernel_build_tables
+
+  !> K_n(x) for n = 0..nmax (Chebyshev tables; falls back to the quadrature
+  !> when use_table is false).
+  subroutine xi_kernel_eval(this, nmax, x, k)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: nmax
+    real(fp), intent(in) :: x
+    real(fp), intent(out) :: k(0:nmax)
+    integer :: ip, n, m
+    real(fp) :: sv, u, b0, b1, b2, scal, inv, fac
+
+    if (this%c == 0.0_fp) then
+      k = exp(-x)
+      return
+    end if
+    if (.not. this%use_table .or. nmax > NMAX_TAB) then
+      call this%eval_quad(nmax, x, k)
+      return
+    end if
+    if (x <= this%x0) then
+      sv = sqrt(x)
+      ip = min(NPAN, int(sv/this%s_edge(NPAN)*NPAN) + 1)
+      u = (2.0_fp*sv - (this%s_edge(ip - 1) + this%s_edge(ip)))/(this%s_edge(ip) - this%s_edge(ip - 1))
+      inv = 1.0_fp/sqrt(1.0_fp + x)
+      fac = inv
+      do n = 0, nmax
+        b1 = 0.0_fp; b2 = 0.0_fp
+        do m = this%mlo(n, ip), 1, -1
+          b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n, ip)
+          b2 = b1; b1 = b0
+        end do
+        k(n) = (u*b1 - b2 + this%clo(0, n, ip))*fac
+        fac = fac*inv
+      end do
+    else
+      u = 2.0_fp*sqrt(this%x0/x) - 1.0_fp
+      inv = 1.0_fp/sqrt(x)
+      fac = inv
+      do n = 0, nmax
+        b1 = 0.0_fp; b2 = 0.0_fp
+        do m = this%mhi(n), 1, -1
+          b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n)
+          b2 = b1; b1 = b0
+        end do
+        k(n) = (u*b1 - b2 + this%chi(0, n))*fac
+        fac = fac*inv
+      end do
+    end if
+  end subroutine xi_kernel_eval
+
+  !> K_n(x) and K_(n+2)(x) only (what the derivative branch needs): same tables,
+  !> no intermediate orders.
+  subroutine xi_kernel_eval_pair(this, n, x, kn, kn2)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: n
+    real(fp), intent(in) :: x
+    real(fp), intent(out) :: kn, kn2
+    integer :: ip, m
+    real(fp) :: sv, u, b0, b1, b2, inv, fac, k(0:1)
+    real(fp) :: kk(0:n+2)
+
+    if (this%c == 0.0_fp) then
+      kn = exp(-x); kn2 = kn
+      return
+    end if
+    if (.not. this%use_table .or. n + 2 > NMAX_TAB) then
+      call this%eval_quad(n + 2, x, kk)
+      kn = kk(n); kn2 = kk(n + 2)
+      return
+    end if
+    if (x <= this%x0) then
+      sv = sqrt(x)
+      ip = min(NPAN, int(sv*this%pan_scale) + 1)
+      u = (2.0_fp*sv - (this%s_edge(ip - 1) + this%s_edge(ip)))/(this%s_edge(ip) - this%s_edge(ip - 1))
+      inv = 1.0_fp/sqrt(1.0_fp + x)
+      fac = inv**(n + 1)
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mlo(n, ip), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n, ip); b2 = b1; b1 = b0
+      end do
+      k(0) = (u*b1 - b2 + this%clo(0, n, ip))*fac
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mlo(n + 2, ip), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%clo(m, n + 2, ip); b2 = b1; b1 = b0
+      end do
+      k(1) = (u*b1 - b2 + this%clo(0, n + 2, ip))*fac*inv*inv
+    else
+      u = 2.0_fp*sqrt(this%x0/x) - 1.0_fp
+      inv = 1.0_fp/sqrt(x)
+      fac = inv**(n + 1)
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mhi(n), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n); b2 = b1; b1 = b0
+      end do
+      k(0) = (u*b1 - b2 + this%chi(0, n))*fac
+      b1 = 0.0_fp; b2 = 0.0_fp
+      do m = this%mhi(n + 2), 1, -1
+        b0 = 2.0_fp*u*b1 - b2 + this%chi(m, n + 2); b2 = b1; b1 = b0
+      end do
+      k(1) = (u*b1 - b2 + this%chi(0, n + 2))*fac*inv*inv
+    end if
+    kn = k(0); kn2 = k(1)
+  end subroutine xi_kernel_eval_pair
+
+  !> Block version of eval_pair: K_n(x_i), K_(n+2)(x_i) for np points.  Points are
+  !> grouped by Chebyshev panel so that each Clenshaw recurrence runs as a
+  !> branch-free loop over contiguous points (SIMD).  Work arrays are the
+  !> caller's (size >= np): ug, b1, b2, idx.
+  subroutine xi_kernel_eval_pair_block(this, n, np, x, kn, kn2, ug, b1, b2, idx)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: n, np
+    real(fp), intent(in) :: x(np)
+    real(fp), intent(out) :: kn(np), kn2(np)
+    real(fp), intent(inout) :: ug(np), b1(np), b2(np)
+    integer, intent(inout) :: idx(np)
+    integer :: i, j, g, ng, m, ip, cnt(0:NPAN), start(0:NPAN+1), pos(0:NPAN)
+    real(fp) :: sv, inv, fac, cm, c0, kk(0:n+2)
+
+    if (this%c == 0.0_fp) then
+      do i = 1, np
+        kn(i) = exp(-x(i)); kn2(i) = kn(i)
+      end do
+      return
+    end if
+    if (.not. this%use_table .or. n + 2 > NMAX_TAB) then
+      do i = 1, np
+        call this%eval_quad(n + 2, x(i), kk)
+        kn(i) = kk(n); kn2(i) = kk(n + 2)
+      end do
+      return
+    end if
+    ! panel of each point: 1..NPAN low regime, 0 = high regime
+    cnt = 0
+    do i = 1, np
+      if (x(i) <= this%x0) then
+        ip = min(NPAN, int(sqrt(x(i))*this%pan_scale) + 1)
+      else
+        ip = 0
+      end if
+      idx(i) = ip                      ! temporary: panel id
+      cnt(ip) = cnt(ip) + 1
+    end do
+    start(0) = 1
+    do ip = 0, NPAN
+      start(ip + 1) = start(ip) + cnt(ip)
+    end do
+    pos = start(0:NPAN)
+    ! counting sort of point indices by panel; b2 temporarily holds the panel id
+    do i = 1, np
+      b2(i) = real(idx(i), fp)
+    end do
+    do i = 1, np
+      ip = int(b2(i))
+      idx(pos(ip)) = i
+      pos(ip) = pos(ip) + 1
+    end do
+    do ip = 0, NPAN
+      ng = cnt(ip)
+      if (ng == 0) cycle
+      g = start(ip)
+      if (ip == 0) then
+        do j = 0, ng - 1
+          ug(j + 1) = 2.0_fp*sqrt(this%x0/x(idx(g + j))) - 1.0_fp
+        end do
+        ! K_n
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mhi(n), 1, -1
+          cm = this%chi(m, n)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%chi(0, n)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(x(i))
+          kn(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 1)
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mhi(n + 2), 1, -1
+          cm = this%chi(m, n + 2)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%chi(0, n + 2)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(x(i))
+          kn2(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 3)
+        end do
+      else
+        fac = 1.0_fp/(this%s_edge(ip) - this%s_edge(ip - 1))
+        cm = this%s_edge(ip - 1) + this%s_edge(ip)
+        do j = 0, ng - 1
+          ug(j + 1) = (2.0_fp*sqrt(x(idx(g + j))) - cm)*fac
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mlo(n, ip), 1, -1
+          cm = this%clo(m, n, ip)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%clo(0, n, ip)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(1.0_fp + x(i))
+          kn(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 1)
+        end do
+        b1(1:ng) = 0.0_fp; b2(1:ng) = 0.0_fp
+        do m = this%mlo(n + 2, ip), 1, -1
+          cm = this%clo(m, n + 2, ip)
+          do j = 1, ng
+            sv = 2.0_fp*ug(j)*b1(j) - b2(j) + cm
+            b2(j) = b1(j); b1(j) = sv
+          end do
+        end do
+        c0 = this%clo(0, n + 2, ip)
+        do j = 0, ng - 1
+          i = idx(g + j)
+          inv = 1.0_fp/sqrt(1.0_fp + x(i))
+          kn2(i) = (ug(j + 1)*b1(j + 1) - b2(j + 1) + c0)*inv**(n + 3)
+        end do
+      end if
+    end do
+  end subroutine xi_kernel_eval_pair_block
+
+  !> K_n(x) for n = 0..nmax by quadrature (reference path).
+  subroutine xi_kernel_eval_quad(this, nmax, x, k)
+    class(xi_kernel_t), intent(in) :: this
+    integer, intent(in) :: nmax
+    real(fp), intent(in) :: x
+    real(fp), intent(out) :: k(0:nmax)
+    integer :: i, n
+    real(fp) :: tc, t, f, tn, lg
+
+    k = 0.0_fp
+    if (this%c == 0.0_fp) then
+      k = exp(-x)
+      return
+    end if
+    if (x <= this%x0) then
+      do i = 1, this%nj
+        t = this%tj(i)
+        f = this%wj(i) * exp(-x*t*t)
+        tn = f
+        do n = 0, nmax
+          k(n) = k(n) + tn
+          tn = tn * t
+        end do
+      end do
+    else
+      tc = T_SPLIT / sqrt(x)
+      lg = log_gamma(this%c)
+      do i = 1, this%nl
+        t = this%sl(i) * tc
+        f = this%wl(i) * tc * exp((this%c - 1.0_fp)*log(1.0_fp - t) - x*t*t - lg)
+        tn = f
+        do n = 0, nmax
+          k(n) = k(n) + tn
+          tn = tn * t
+        end do
+      end do
+    end if
+  end subroutine xi_kernel_eval_quad
+
+  !> Gauss-Jacobi nodes/weights on [-1,1] for weight (1-s)^a (1+s)^b by Golub-Welsch:
+  !> eigen-decomposition of the symmetric tridiagonal Jacobi matrix (implicit QL, no LAPACK).
+  subroutine gauss_jacobi(n, a, b, x, w)
+    integer, intent(in) :: n
+    real(fp), intent(in) :: a, b
+    real(fp), intent(out) :: x(n), w(n)
+    real(fp) :: d(n), e(n), z(n, n), ab, k, mu0
+    integer :: i
+
+    ab = a + b
+    do i = 1, n
+      k = real(i - 1, fp)
+      if (i == 1) then
+        d(i) = (b - a)/(ab + 2.0_fp)
+      else
+        d(i) = (b*b - a*a)/((2.0_fp*k + ab)*(2.0_fp*k + ab + 2.0_fp))
+      end if
+    end do
+    e(1) = 0.0_fp
+    do i = 2, n
+      k = real(i - 1, fp)
+      if (i == 2) then
+        e(i) = sqrt(4.0_fp*(1.0_fp + a)*(1.0_fp + b)/((ab + 2.0_fp)**2*(ab + 3.0_fp)))
+      else
+        e(i) = sqrt(4.0_fp*k*(k + a)*(k + b)*(k + ab)/ &
+                    ((2.0_fp*k + ab)**2*(2.0_fp*k + ab + 1.0_fp)*(2.0_fp*k + ab - 1.0_fp)))
+      end if
+    end do
+    z = 0.0_fp
+    do i = 1, n
+      z(i, i) = 1.0_fp
+    end do
+    call tridiag_ql(n, d, e, z)
+    mu0 = exp((ab + 1.0_fp)*log(2.0_fp) + log_gamma(a + 1.0_fp) + log_gamma(b + 1.0_fp) - log_gamma(ab + 2.0_fp))
+    do i = 1, n
+      x(i) = d(i)
+      w(i) = mu0*z(1, i)**2
+    end do
+  end subroutine gauss_jacobi
+
+  !> Implicit QL with eigenvectors for a symmetric tridiagonal matrix
+  !> (diagonal d, sub-diagonal e(2:n)); on exit d holds ascending eigenvalues
+  !> and the columns of z the eigenvectors.
+  subroutine tridiag_ql(n, d, e, z)
+    integer, intent(in) :: n
+    real(fp), intent(inout) :: d(n), e(n), z(n, n)
+    integer :: i, iter, k, l, m
+    real(fp) :: b, c, dd, f, g, p, r, s, t
+
+    do i = 2, n
+      e(i - 1) = e(i)
+    end do
+    e(n) = 0.0_fp
+    do l = 1, n
+      iter = 0
+      do
+        do m = l, n - 1
+          dd = abs(d(m)) + abs(d(m + 1))
+          if (abs(e(m)) <= epsilon(1.0_fp)*dd) exit
+        end do
+        if (m == l) exit
+        iter = iter + 1
+        if (iter > 60) error stop 'xi_alpha_kernel: tridiag_ql did not converge'
+        g = (d(l + 1) - d(l))/(2.0_fp*e(l))
+        r = hypot(g, 1.0_fp)
+        g = d(m) - d(l) + e(l)/(g + sign(r, g))
+        s = 1.0_fp; c = 1.0_fp; p = 0.0_fp
+        do i = m - 1, l, -1
+          f = s*e(i); b = c*e(i)
+          r = hypot(f, g)
+          e(i + 1) = r
+          if (r == 0.0_fp) then
+            d(i + 1) = d(i + 1) - p
+            e(m) = 0.0_fp
+            exit
+          end if
+          s = f/r; c = g/r
+          g = d(i + 1) - p
+          r = (d(i) - g)*s + 2.0_fp*c*b
+          p = s*r
+          d(i + 1) = g + p
+          g = c*r - b
+          do k = 1, n
+            f = z(k, i + 1)
+            z(k, i + 1) = s*z(k, i) + c*f
+            z(k, i) = c*z(k, i) - s*f
+          end do
+        end do
+        if (r == 0.0_fp .and. i >= l) cycle
+        d(l) = d(l) - p
+        e(l) = g
+        e(m) = 0.0_fp
+      end do
+    end do
+    ! sort ascending
+    do i = 1, n - 1
+      k = i; p = d(i)
+      do m = i + 1, n
+        if (d(m) < p) then
+          k = m; p = d(m)
+        end if
+      end do
+      if (k /= i) then
+        d(k) = d(i); d(i) = p
+        do m = 1, n
+          t = z(m, i); z(m, i) = z(m, k); z(m, k) = t
+        end do
+      end if
+    end do
+  end subroutine tridiag_ql
+
+  !> Gauss-Legendre nodes/weights on [-1,1].
+  subroutine gauss_legendre(n, x, w)
+    integer, intent(in) :: n
+    real(fp), intent(out) :: x(n), w(n)
+    real(fp), parameter :: pi = 3.14159265358979323846_fp, eps = 1.0e-15_fp
+    integer :: i, j, m, its
+    real(fp) :: z, z1, p1, p2, p3, pp
+    m = (n + 1)/2
+    do i = 1, m
+      z = cos(pi*(i - 0.25_fp)/(n + 0.5_fp))
+      do its = 1, 100
+        p1 = 1.0_fp; p2 = 0.0_fp
+        do j = 1, n
+          p3 = p2; p2 = p1
+          p1 = ((2*j - 1)*z*p2 - (j - 1)*p3)/j
+        end do
+        pp = n*(z*p1 - p2)/(z*z - 1.0_fp)
+        z1 = z; z = z1 - p1/pp
+        if (abs(z - z1) <= eps) exit
+      end do
+      x(i) = -z; x(n + 1 - i) = z
+      w(i) = 2.0_fp/((1.0_fp - z*z)*pp*pp); w(n + 1 - i) = w(i)
+    end do
+  end subroutine gauss_legendre
+
+end module xi_alpha_kernel

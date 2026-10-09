@@ -331,6 +331,7 @@ GENERIC_SCHEMA_KEYS = {
     "dftgrid": _keys("""
         hfscale cam_flag cam_alpha cam_beta cam_mu rad_type rad_npts ang_npts
         partfun pruned grid_ao_pruned grid_ao_threshold grid_ao_sparsity_ratio
+        xi_mode xi_alpha xi_p xi_scale xi_cutoff
     """),
     "tdhf": _keys("""
         maxit maxit_zv conv nstate_s nstate_t zvconv nvdav tlf hfscale

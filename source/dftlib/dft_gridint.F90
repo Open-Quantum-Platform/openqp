@@ -12,6 +12,7 @@ module mod_dft_gridint
   use parallel, only: par_env_t
   use mod_dft_gridint_response_cache, only: response_cache_t, cache_hash
   use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash
+  use xi_alpha_kernel, only: xi_kernel_t
   implicit none
 
 !###############################################################################
@@ -95,6 +96,20 @@ module mod_dft_gridint
     !< Opt-in to the cross-iteration collocation-Phi cache (Opt 1). Only the
     !< repeated SCF energy/Fock build sets this; gated further by env at runtime.
     logical :: use_phi_cache = .false.
+
+    !< Fractional-derivative ingredient xi^alpha (Leonov, Gerasimov et al.):
+    !< xi_mode = 0 off; 1 = feed xi^alpha to the functional in place of tau.
+    !< xi_alpha = order (<= 1); xi_p = inner integer order (0/1, -1 = auto =
+    !< max(0,ceiling(alpha))); xi_scale = 0 path normalised to [0,1] (paper),
+    !< 1 physical path length (D multiplied by |r-R_i|^(p-alpha)).
+    integer :: xi_mode = 0
+    real(kind=fp) :: xi_alpha = 1.0_fp
+    integer :: xi_p = -1
+    integer :: xi_scale = 0
+    !< xi_cutoff > 0 (bohr): D^alpha chi of a shell is set to zero at points farther
+    !< than this from the shell centre (an approximation that restores distance
+    !< screening); 0 = exact, every shell at every point.
+    real(kind=fp) :: xi_cutoff = 0.0_fp
     type(response_cache_t), pointer :: response_cache => null()
 
     !< alpha spin wavefunction
@@ -170,6 +185,10 @@ module mod_dft_gridint
     !< consumer update so consumers can associate points with their owning
     !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
     integer :: currAtom = 0
+    !< Index of the current grid slice (molGrid slice numbering); set by the
+    !< slice driver together with currAtom so consumers can address points
+    !< deterministically across repeated runs on the same grid.
+    integer :: currSlice = 0
     ! Atom owning the current atom-centred grid slice.  run_xc uses a
     ! thread-private engine, so consumers may safely use this as slice
     ! context (e.g. for fuzzy-cell weight derivatives).
@@ -202,8 +221,21 @@ module mod_dft_gridint
     procedure(compute_density_grad), pointer, pass :: compDRho => null()
     procedure(compute_density_tau), pointer, pass :: compTau => null()
 
+    !< xi^alpha fractional-derivative ingredient (replaces tau when active)
+    logical :: xiActive = .false.
+    integer :: xiDim = 0            !< 1 (p=0, scalar) or 3 (p=1, vector)
+    integer :: xiScale = 0
+    real(kind=fp) :: xiCutoff2 = 0.0_fp   !< xi_cutoff**2 (0 = no cutoff)
+    type(xi_kernel_t) :: xiK
+    integer :: numAOVecsTot = 0     !< numAOVecs + xiDim: vectors actually held in aoMem
+    real(kind=fp), allocatable :: xiMoA_(:), xiMoB_(:)
+    real(kind=fp), contiguous, pointer :: xiD(:,:,:) => null()   !< D^alpha chi = aoMem(:,:,numAOVecs+1:numAOVecsTot)
+    real(kind=fp), contiguous, pointer :: xiMoA(:,:,:) => null() !< P.D or C^T.D (alpha)
+    real(kind=fp), contiguous, pointer :: xiMoB(:,:,:) => null() !< (beta)
+
   contains
     procedure :: init
+    procedure :: compXiAOs
     procedure :: echo => echoVars
     procedure :: getStats
     procedure :: resetPointers
@@ -452,9 +484,26 @@ contains
     self%numTmpVec = 1
     if (xco%needTau) self%numTmpVec = 4
 
+!   xi^alpha: replace tau by the fractional-derivative ingredient.  Its AO
+!   quantity D^alpha chi lives in aoMem as extra vectors so that the
+!   geometry-only Phi cache stores and replays it like the AO values.
+    self%xiActive = (xco%xi_mode /= 0) .and. xco%needTau
+    self%xiDim = 0
+    if (self%xiActive) then
+      if (xco%xi_p < 0) then
+        call self%xiK%init(xco%xi_alpha)
+      else
+        call self%xiK%init(xco%xi_alpha, p=xco%xi_p)
+      end if
+      self%xiDim = merge(3, 1, self%xiK%p == 1)
+      self%xiScale = xco%xi_scale
+      self%xiCutoff2 = max(0.0_fp, xco%xi_cutoff)**2
+    end if
+    self%numAOVecsTot = self%numAOVecs + self%xiDim
+
 !   Allocate memory for XC calculations
     allocate ( &
-      self%aoMem_(xco%numAOs*self%numAOVecs*xco%maxPts), &
+      self%aoMem_(xco%numAOs*self%numAOVecsTot*xco%maxPts), &
       self%moMemA_(xco%numAOs*self%numAOVecs*xco%maxPts), &
       self%tmpWfAlpha(xco%numAOs*xco%numAOs), &
       self%tmpWfBeta(xco%numAOs*xco%numAOs), &
@@ -490,6 +539,16 @@ contains
       self%compRho => compRhoAO
       self%compDRho => compDRhoAO
       self%compTau => compTauAO
+    end if
+
+    if (self%xiActive) then
+      allocate(self%xiMoA_(xco%numAOs*self%xiDim*xco%maxPts))
+      if (xco%hasBeta) allocate(self%xiMoB_(xco%numAOs*self%xiDim*xco%maxPts))
+      if (self%isWFVecs) then
+        self%compTau => compXiTauMO
+      else
+        self%compTau => compXiTauAO
+      end if
     end if
 
     if (self%hasBeta) then
@@ -557,11 +616,17 @@ contains
               , numAOVecs => self%numAOVecs &
         )
 
-      self%aoMem(1:numAOs, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
+      self%aoMem(1:numAOs, 1:numPts, 1:self%numAOVecsTot) => self%aoMem_(1:)
       self%moMemA(1:numAOs, 1:numPts, 1:numAOVecs) => self%moMemA_(1:)
 
       if (self%hasBeta) then
         self%moMemB(1:numAOs, 1:numPts, 1:numAOVecs) => self%moMemB_(1:)
+      end if
+
+      if (self%xiActive) then
+        self%xiD => self%aoMem(:, :, numAOVecs+1:self%numAOVecsTot)
+        self%xiMoA(1:numAOs, 1:numPts, 1:self%xiDim) => self%xiMoA_(1:)
+        if (self%hasBeta) self%xiMoB(1:numAOs, 1:numPts, 1:self%xiDim) => self%xiMoB_(1:)
       end if
 
     end associate
@@ -679,6 +744,39 @@ contains
     self%numShells_p = n
     self%numDeadAOs = nd
     self%numLiveAOs = nl
+
+    ! xi^alpha decays only algebraically from every basis centre, so the
+    ! Gaussian-range slice prescreen must not discard any shell unless the user
+    ! asked for a cutoff radius: then a shell is live when it is within
+    ! max(Gaussian range, cutoff) of the slice's bounding sphere.  The AO
+    ! values/gradients of far shells are still zeroed by aoval (Gaussian).
+    if (self%xiActive) then
+      n = 0; nd = 0; nl = 0
+      do ish = 1, basis%nshell
+        off = basis%ao_offset(ish)
+        nao = basis%naos(ish)
+        dmr = max(0.0_fp, &
+                sqrt(sum((basis%atoms%xyz(:3,basis%origin(ish)) - c)**2)) - rad)
+        if (self%xiCutoff2 <= 0.0_fp .or. dmr*dmr <= max(basis%shell_mx_dist2(ish), self%xiCutoff2)) then
+          n = n + 1
+          self%shells_p(n) = ish
+          do i = off, off+nao-1
+            nl = nl + 1
+            self%liveAOs_(nl) = i
+          end do
+          self%aoLive_(off:off+nao-1) = .true.
+        else
+          do i = off, off+nao-1
+            nd = nd + 1
+            self%deadAOs_(nd) = i
+          end do
+          self%aoLive_(off:off+nao-1) = .false.
+        end if
+      end do
+      self%numShells_p = n
+      self%numDeadAOs = nd
+      self%numLiveAOs = nl
+    end if
 
   end subroutine
 
@@ -815,6 +913,13 @@ contains
     skip = numAOs_p == 0
     if (skip) return
 
+    ! xi^alpha: an AO with a negligible value may still carry a non-negligible
+    ! D^alpha chi (algebraic tail), so keep every live (in-range) AO.
+    if (self%xiActive) then
+      numAOs_p = self%numLiveAOs
+      self%indices_p(1:numAOs_p) = self%liveAOs_(1:numAOs_p)
+    end if
+
     ! Check if the number of runed AOs is less
     ! than the prune cutoff (approximately 90%); if so, then
     ! grid pruning should be skipped.
@@ -879,7 +984,8 @@ contains
       if (do_gather) reorderable_data => self%aoMem(:, :, :)
 
       ! Update pointers with pruned AOs
-      self%aoMem(1:numAOs_p, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
+      self%aoMem(1:numAOs_p, 1:numPts, 1:self%numAOVecsTot) => self%aoMem_(1:)
+      if (self%xiActive) self%xiD => self%aoMem(:, :, numAOVecs+1:self%numAOVecsTot)
 
       if (isWFVecs) then
 
@@ -923,7 +1029,7 @@ contains
       case (0)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -934,7 +1040,7 @@ contains
       case (1)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -949,7 +1055,7 @@ contains
       case (2)
         ! Compress array
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -967,7 +1073,7 @@ contains
 
       case (3)
         if (do_gather) &
-          self%aoMem(1:numAOs_p, :, 1:20) = reorderable_data(indices(1:numAOs_p), :, 1:20)
+          self%aoMem(1:numAOs_p, :, 1:self%numAOVecsTot) = reorderable_data(indices(1:numAOs_p), :, 1:self%numAOVecsTot)
 
         self%aoV => self%aoMem(:, :, 1)
         self%aoG1 => self%aoMem(:, :, 2:4)
@@ -1008,16 +1114,24 @@ contains
 
       if (isWFVecs) then
         call mo_tran_gemm_(nAlpha, numAOs_p, nVecs, nPts, numAOs, self%wfAlpha_p, self%aoMem, self%moMemA)
+        if (self%xiActive) &
+          call mo_tran_gemm_(nAlpha, numAOs_p, self%xiDim, nPts, numAOs, self%wfAlpha_p, self%xiD, self%xiMoA)
       else
         call mo_tran_symm_(numAOs_p, nVecs, nPts, self%wfAlpha_p, self%aoMem, self%moMemA)
+        if (self%xiActive) &
+          call mo_tran_symm_(numAOs_p, self%xiDim, nPts, self%wfAlpha_p, self%xiD, self%xiMoA)
       end if
 
       if (.not. hasBeta) return
 
       if (isWFVecs) then
         call mo_tran_gemm_(nBeta, numAOs_p, nVecs, nPts, numAOs, self%wfBeta_p, self%aoMem, self%moMemB)
+        if (self%xiActive) &
+          call mo_tran_gemm_(nBeta, numAOs_p, self%xiDim, nPts, numAOs, self%wfBeta_p, self%xiD, self%xiMoB)
       else
         call mo_tran_symm_(numAOs_p, nVecs, nPts, self%wfBeta_p, self%aoMem, self%moMemB)
+        if (self%xiActive) &
+          call mo_tran_symm_(numAOs_p, self%xiDim, nPts, self%wfBeta_p, self%xiD, self%xiMoB)
       end if
 
     end associate
@@ -1437,6 +1551,177 @@ contains
     end do
 
   end subroutine
+
+!###############################################################################
+
+!###############################################################################
+
+!> @brief Evaluate the directional Caputo fractional derivative D^alpha chi_i
+!>   of every (contracted, possibly spherical) AO at the slice points.
+!> @details For a primitive x^k y^l z^m exp(-zeta r^2) centred at R_i and
+!>   u = r - R_i, n = k+l+m, x = zeta |u|^2, K_n(x) = xi_kernel:
+!>     p = 0 :  D chi   = u_x^k u_y^l u_z^m K_n(x)
+!>     p = 1 :  D_v chi = [k_v u_v^(k_v-1) K_n(x) - 2 zeta u_v^(k_v+1) K_(n+2)(x)]
+!>                         * prod_(w/=v) u_w^(k_w)
+!>   i.e. (1/Gamma(p-alpha)) int_0^1 (1-t)^(p-alpha-1) d^p/dr_v^p chi(R_i + t u) dt,
+!>   the convention of the MultiWFN reference implementation (SI eq. S5/S13).
+!>   With xiScale = 1 the result is multiplied by |u|^(p-alpha) (Caputo
+!>   derivative in physical path length).  No distance screening is applied:
+!>   K_n decays only algebraically.  Contraction coefficients and the
+!>   Cartesian->spherical transform are linear, so they are applied as in aoval.
+  subroutine compXiAOs(self, basis, xyz)
+    use constants, only: BAS_MXANG, NUM_CART_BF, NUM_SPH_BF, cart_X, cart_Y, cart_Z, HARMONIC_ACTIVE
+    use cart2sph, only: cart2sph_vec
+    class(xc_engine_t) :: self
+    type(basis_set), intent(in) :: basis
+    real(kind=fp), intent(in) :: xyz(:,:)
+
+    integer, parameter :: NMAX = BAS_MXANG + 2
+    integer :: np, iPt, ish, ishl, ityp, ix, iy, iz, n, k1, k2, ig, am, off, nc, ns, v, iatm
+    real(kind=fp) :: zeta, cc, s0p, s2p
+    real(kind=fp) :: pw(-1:NMAX, 3)
+    real(kind=fp) :: cv(NUM_CART_BF(BAS_MXANG), 3)
+    real(kind=fp) :: sv(NUM_SPH_BF(BAS_MXANG))
+    ! per-point work (thread-private engine): displacement, |u|^2, kernel sums
+    real(kind=fp), allocatable :: u(:,:), rsq(:), xx(:), kn(:), kn2(:), s0(:), s2(:), ug(:), b1(:), b2(:)
+    integer, allocatable :: idx(:)
+
+    np = ubound(xyz, 1)
+    allocate(u(3, np), rsq(np), xx(np), kn(np), kn2(np), s0(np), s2(np), ug(np), b1(np), b2(np), idx(np))
+    pw(-1,:) = 0.0_fp
+    pw(0,:) = 1.0_fp
+
+    iatm = -1
+    do ishl = 1, self%numShells_p
+      ish = self%shells_p(ishl)
+      am = basis%am(ish)
+      off = basis%ao_offset(ish)
+      k1 = basis%g_offset(ish)
+      k2 = k1 + basis%ncontr(ish) - 1
+      n = am
+      if (basis%origin(ish) /= iatm) then
+        iatm = basis%origin(ish)
+        do iPt = 1, np
+          u(:, iPt) = xyz(iPt, 1:3) - basis%atoms%xyz(:3, iatm)
+          rsq(iPt) = u(1, iPt)**2 + u(2, iPt)**2 + u(3, iPt)**2
+        end do
+      end if
+
+      ! contracted kernel sums over the slice: s0 = sum cc K_n, s2 = sum cc zeta K_(n+2)
+      s0 = 0.0_fp
+      s2 = 0.0_fp
+      do ig = k1, k2
+        zeta = basis%ex(ig)
+        cc = basis%cc(ig)
+        xx = zeta*rsq
+        call self%xiK%eval_pair_block(n, np, xx, kn, kn2, ug, b1, b2, idx)
+        if (self%xiDim == 1) then
+          s0 = s0 + cc*kn
+        else
+          s0 = s0 + cc*kn
+          s2 = s2 + (cc*zeta)*kn2
+        end if
+      end do
+      if (self%xiScale == 1 .and. self%xiK%c > 0.0_fp) then
+        do iPt = 1, np
+          if (rsq(iPt) > 0.0_fp) then
+            s0(iPt) = s0(iPt)*rsq(iPt)**(0.5_fp*self%xiK%c)
+            s2(iPt) = s2(iPt)*rsq(iPt)**(0.5_fp*self%xiK%c)
+          end if
+        end do
+      end if
+      ! cutoff radius: D^alpha chi is zero at points farther than xi_cutoff from the centre
+      if (self%xiCutoff2 > 0.0_fp) then
+        do iPt = 1, np
+          if (rsq(iPt) > self%xiCutoff2) then
+            s0(iPt) = 0.0_fp; s2(iPt) = 0.0_fp
+          end if
+        end do
+      end if
+
+      nc = NUM_CART_BF(am)
+      ns = NUM_SPH_BF(am)
+      do iPt = 1, np
+        s0p = s0(iPt); s2p = s2(iPt)
+        do v = 1, am + 1
+          pw(v, :) = pw(v - 1, :)*u(:, iPt)
+        end do
+        do ityp = 1, nc
+          ix = cart_x(ityp, am); iy = cart_y(ityp, am); iz = cart_z(ityp, am)
+          if (self%xiDim == 1) then
+            cv(ityp, 1) = pw(ix, 1)*pw(iy, 2)*pw(iz, 3)*s0p
+          else
+            cv(ityp, 1) = (ix*pw(ix - 1, 1)*s0p - 2.0_fp*pw(ix + 1, 1)*s2p)*pw(iy, 2)*pw(iz, 3)
+            cv(ityp, 2) = (iy*pw(iy - 1, 2)*s0p - 2.0_fp*pw(iy + 1, 2)*s2p)*pw(ix, 1)*pw(iz, 3)
+            cv(ityp, 3) = (iz*pw(iz - 1, 3)*s0p - 2.0_fp*pw(iz + 1, 3)*s2p)*pw(ix, 1)*pw(iy, 2)
+          end if
+        end do
+        if (HARMONIC_ACTIVE .and. basis%harmonic(ish) == 1) then
+          do v = 1, self%xiDim
+            call cart2sph_vec(cv(1:nc, v), sv(1:ns), am)
+            self%xiD(off:off + ns - 1, iPt, v) = sv(1:ns)
+          end do
+        else
+          do v = 1, self%xiDim
+            self%xiD(off:off + nc - 1, iPt, v) = cv(1:nc, v)
+          end do
+        end if
+      end do
+    end do
+
+  end subroutine compXiAOs
+
+!###############################################################################
+
+!> @brief xi^alpha = 1/2 sum_ij P_ij D_i . D_j, density-driven (replaces tau)
+  subroutine compXiTauAO(self, tau)
+    class(xc_engine_t) :: self
+    real(kind=fp), intent(out) :: tau(:,:)
+    real(kind=fp) :: ta, tb
+    integer :: i, j, m
+
+    m = self%numAOs_p
+    do i = 1, self%numPts
+      ta = 0.0_fp
+      tb = 0.0_fp
+      do j = 1, self%xiDim
+        ta = ta + oqp_ddot(m, self%xiD(:,i,j), 1, self%xiMoA(:,i,j), 1)
+        if (self%hasBeta) tb = tb + oqp_ddot(m, self%xiD(:,i,j), 1, self%xiMoB(:,i,j), 1)
+      end do
+      if (self%hasBeta) then
+        tau(1,i) = 0.5_fp*ta
+        tau(2,i) = 0.5_fp*tb
+      else
+        tau(1,i) = 0.25_fp*ta   ! P is the total density
+        tau(2,i) = tau(1,i)
+      end if
+    end do
+  end subroutine compXiTauAO
+
+!> @brief xi^alpha = 1/2 sum_k f_k |D phi_k|^2, MO-driven (replaces tau)
+  subroutine compXiTauMO(self, tau)
+    class(xc_engine_t) :: self
+    real(kind=fp), intent(out) :: tau(:,:)
+    real(kind=fp) :: ta, tb
+    integer :: i, j, noa, nob
+
+    noa = self%numOccAlpha
+    nob = self%numOccBeta
+    do i = 1, self%numPts
+      ta = 0.0_fp
+      tb = 0.0_fp
+      do j = 1, self%xiDim
+        ta = ta + oqp_ddot(noa, self%xiMoA(:,i,j), 1, self%xiMoA(:,i,j), 1)
+        if (self%hasBeta) tb = tb + oqp_ddot(nob, self%xiMoB(:,i,j), 1, self%xiMoB(:,i,j), 1)
+      end do
+      tau(1,i) = 0.5_fp*ta
+      if (self%hasBeta) then
+        tau(2,i) = 0.5_fp*tb
+      else
+        tau(2,i) = tau(1,i)
+      end if
+    end do
+  end subroutine compXiTauMO
 
 !###############################################################################
 
@@ -2573,6 +2858,14 @@ contains
     cache_on = xc_opts%use_phi_cache
     ghash = 0_i8b
     if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
+    if (xc_opts%xi_mode /= 0 .and. xc_opts%needTau) then
+      ! xi^alpha: D^alpha chi is cached together with the AO block (extra
+      ! vectors); fold the ingredient parameters into the cache key.
+      numAOVecs_c = numAOVecs_c + merge(3, 1, max(0, merge(xc_opts%xi_p, ceiling(xc_opts%xi_alpha), xc_opts%xi_p >= 0)) == 1)
+      ghash = ieor(ghash, int(transfer(xc_opts%xi_alpha, 0_i8b), i8b))
+      ghash = ieor(ghash, int(1000003*(xc_opts%xi_p + 7) + 7919*xc_opts%xi_scale + 104729*xc_opts%xi_mode, i8b))
+      ghash = ieor(ghash, int(transfer(xc_opts%xi_cutoff, 0_i8b), i8b))
+    end if
     call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
              xc_opts%molGrid%nMolPts, xc_opts%numAOs, &
              numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
@@ -2581,6 +2874,8 @@ contains
     response_on=.false.
     kernel_on=.false.
     if(associated(xc_opts%response_cache)) then
+      if (xc_opts%xi_mode /= 0 .and. xc_opts%needTau) &
+        error stop 'xi^alpha ingredient: response/gradient paths are not implemented'
       rcache=>xc_opts%response_cache
       ! AO values and spatial derivatives are reusable for all consumers.
       ! Compact XC data is currently restricted to LDA/GGA second derivatives.
@@ -2714,6 +3009,7 @@ contains
           end do
 
           call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+          if (xce%xiActive) call xce%compXiAOs(basis, xce%xyzw(:numNzPts,:3))
 
           call xce%pruneAOs(skip)
 
@@ -2738,6 +3034,7 @@ contains
 !$      end if
 
         xce%currAtom = iAtom
+        xce%currSlice = iSlice
 
         if(kernel_on) then
           call response_comp_xc(xce,rcache,iSlice,xc_opts%functional,skip)
@@ -2916,6 +3213,7 @@ contains
         IF (skip) CYCLE
 
         xce%currAtom = iAtom
+        xce%currSlice = iSlice
 
         call xc_dat%update(xce, myThread)
 

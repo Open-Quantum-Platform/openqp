@@ -414,6 +414,9 @@ contains
 
     nat = infos%mol_prop%natom
 
+    if (infos%dft%xi_mode /= 0 .and. infos%functional%needTau) &
+      error stop 'xi^alpha ingredient: nuclear gradients are not implemented yet'
+
     allocate (da2(nbf, nbf))
     do j = 1, nbf
       da2(:, j) = da(:, j)*basis%bfnrm(j)*basis%bfnrm(1:nbf)

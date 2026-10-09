@@ -171,6 +171,18 @@ contains
 
       ! metaGGA case
       if (xce%funTyp == OQP_FUNTYP_MGGA) then
+        if (xce%xiActive) then
+          ! xi^alpha in the tau slot: tau_sigma = 1/2 sum_ij P_ij D_i.D_j
+          do i = 1, numPts
+            tmp(:,i,2:1+xce%xiDim) = d1dt(ta,i)*xce%xiD(:,i,1:xce%xiDim)
+          end do
+          do j = 1, xce%xiDim
+            call dsyr2k('U', 'N', numAOs, numPts, 0.25_fp, &
+                                xce%xiD(:,:,j), numAOs, &
+                                tmp(:,:,j+1), numAOs, &
+                        1.0_fp, focks(:,:,1), numAOs)
+          end do
+        else
         do i = 1, numPts
           tmp(:,i,2:4) = d1dt(ta,i)*aoG1(:,i,1:3)
         end do
@@ -181,6 +193,7 @@ contains
                               tmp(:,:,j+1), numAOs, &
                       1.0_fp, focks(:,:,1), numAOs)
         end do
+        end if
       end if
 
       if (xce%hasBeta) then
@@ -207,6 +220,17 @@ contains
 
         ! metaGGA case
         if (xce%funTyp == OQP_FUNTYP_MGGA) then
+          if (xce%xiActive) then
+            do i = 1, numPts
+              tmp(:,i,2:1+xce%xiDim) = d1dt(tb,i)*xce%xiD(:,i,1:xce%xiDim)
+            end do
+            do j = 1, xce%xiDim
+              call dsyr2k('U', 'N', numAOs, numPts, 0.25_fp, &
+                                  xce%xiD(:,:,j), numAOs, &
+                                  tmp(:,:,j+1), numAOs, &
+                          1.0_fp, focks(:,:,2), numAOs)
+            end do
+          else
           do i = 1, numPts
             tmp(:,i,2:4) = d1dt(tb,i)*aoG1(:,i,1:3)
           end do
@@ -217,6 +241,7 @@ contains
                                 tmp(:,:,j+1), numAOs, &
                         1.0_fp, focks(:,:,2), numAOs)
           end do
+          end if
         end if
       end if
 
@@ -351,6 +376,11 @@ contains
     xc_opts%molGrid => molGrid
     xc_opts%dft_threshold = dft_threshold
     xc_opts%ao_threshold = infos%dft%grid_ao_threshold
+    xc_opts%xi_mode = int(infos%dft%xi_mode)
+    xc_opts%xi_alpha = infos%dft%xi_alpha
+    xc_opts%xi_p = int(infos%dft%xi_p)
+    xc_opts%xi_scale = int(infos%dft%xi_scale)
+    xc_opts%xi_cutoff = infos%dft%xi_cutoff
     xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
     ! skip ao_prune_grid if it is pruned grid (SG1)
     if(infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_fp
@@ -469,6 +499,11 @@ contains
     xc_opts%molGrid => molGrid
     xc_opts%dft_threshold = dft_threshold
     xc_opts%ao_threshold = infos%dft%grid_ao_threshold
+    xc_opts%xi_mode = int(infos%dft%xi_mode)
+    xc_opts%xi_alpha = infos%dft%xi_alpha
+    xc_opts%xi_p = int(infos%dft%xi_p)
+    xc_opts%xi_scale = int(infos%dft%xi_scale)
+    xc_opts%xi_cutoff = infos%dft%xi_cutoff
     xc_opts%ao_sparsity_ratio = 0.0_fp
 
     if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight
