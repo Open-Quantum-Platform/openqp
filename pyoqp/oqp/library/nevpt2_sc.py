@@ -312,10 +312,22 @@ def _fold_h1e(h1e, h2e):
 
     Several NEVPT2 intermediates (a17, a19) contract this folded h1e rather
     than the bare one-body Hamiltonian, because the direct-Coulomb hole
-    potential is absorbed into the one-particle operator.  The NumPy reference
-    applies the fold inline; this helper makes it available to the Python
-    wrapper so that the Fortran kernel also receives the correct argument.
+    potential is absorbed into the one-particle operator.  The liboqp engine (nevpt2_fold_h1e) does the same fold as a simple n^2 loop; the
+    NumPy einsum below stays as the fallback.
     """
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_fold_h1e"):
+            n = int(h1e.shape[0])
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            out = np.empty((n, n), dtype=np.float64)
+            lib.nevpt2_fold_h1e(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
+            return out
     return h1e - np.einsum('mjjn->mn', h2e, optimize='optimal')
 
 def _a16(h1e, h2e, dm3, f3ca, f3ac):

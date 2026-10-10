@@ -972,3 +972,11 @@ void espf_op_corr(struct oqp_handle_t *inf);
 void form_esp_charges(struct oqp_handle_t *inf);
 void grad_esp_qmmm(struct oqp_handle_t *inf);
 void grad_esp_qmmm_excited(struct oqp_handle_t *inf);
+
+/* Fold the two-electron trace into the one-body Hamiltonian for NEVPT2
+ * Koopmans intermediates.
+ * h1e_folded[m,n] = h1e[m,n] - sum_j h2e[m,j,j,n]
+ * All arrays are [nact,nact] (h1e, h1e_folded) or [nact,nact,nact,nact] (h2e)
+ * in C order.  Declared in source/modules/nevpt2_koopmans.F90. */
+void nevpt2_fold_h1e(int32_t nact, const double *h1e, const double *h2e,
+                     double *h1e_folded);

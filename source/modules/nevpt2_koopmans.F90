@@ -66,7 +66,7 @@ module nevpt2_koopmans_mod
 
   public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
   public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
-  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir, nevpt2_sr, nevpt2_si
+  public :: nevpt2_fold_h1e, nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir, nevpt2_sr, nevpt2_si
 
 contains
 
@@ -2242,5 +2242,26 @@ subroutine nevpt2_si(ncore, nact, &
   end do
   !$omp end parallel do
 end subroutine nevpt2_si
+
+
+!> Fold the two-electron trace into the one-body Hamiltonian.
+!> h1e_folded[m,n] = h1e[m,n] - sum_j h2e[m,j,j,n]
+subroutine nevpt2_fold_h1e(nact, h1e, h2e, h1e_folded) &
+    bind(C, name="nevpt2_fold_h1e")
+  integer(c_int32_t), value :: nact
+  real(dp), intent(in) :: h1e(0:*), h2e(0:*)
+  real(dp), intent(inout) :: h1e_folded(0:*)
+  integer :: m, n, j
+  real(dp) :: acc
+  do n = 0, nact - 1
+    do m = 0, nact - 1
+      acc = h1e(m + n*nact)
+      do j = 0, nact - 1
+        acc = acc - h2e(((m*nact + j)*nact + j)*nact + n)
+      end do
+      h1e_folded(m + n*nact) = acc
+    end do
+  end do
+end subroutine nevpt2_fold_h1e
 
 end module nevpt2_koopmans_mod

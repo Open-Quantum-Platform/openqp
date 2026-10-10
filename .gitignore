@@ -69,3 +69,11 @@ tools/nac_validation/data_snapshots/*.molden
 
 # Generated Python packaging metadata
 *.egg-info/
+
+# Build and venv directories
+.build-*/
+.venv-*/
+
+# Audit and worktree artifacts
+audits/
+worktrees/
