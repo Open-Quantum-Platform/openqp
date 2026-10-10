@@ -142,6 +142,7 @@ contains
     real(dp) :: acc
     logical :: merged
     real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:), sblk(:)
+    integer(i8) :: status
 
     na = int(nact)
     np = int(npar)

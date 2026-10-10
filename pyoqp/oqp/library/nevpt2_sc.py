@@ -921,7 +921,9 @@ def _srs_lib(h2e_v, rm2, a7, e_virt):
     nv2 = nvirt * nvirt
     norm_ptr = ffi.new("double[%d]" % nv2)
     energy_ptr = ffi.new("double[%d]" % nv2)
-    lib.nevpt2_srs(nact, nvirt, cast(h2e_v), cast(rm2), cast(a7),
+    # h2e_v has phys'd layout [nvirt, nvirt, nact, nact] from _blocks;
+    # Fortran expects [nvirt, nact, nvirt, nact] (undo phys)
+    lib.nevpt2_srs(nact, nvirt, cast(h2e_v.transpose(0, 2, 1, 3)), cast(rm2), cast(a7),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
     h = np.frombuffer(ffi.buffer(energy_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
@@ -945,7 +947,9 @@ def _sij_lib(h2e_v, hdm2, a9, e_core):
     nc2 = ncore * ncore
     norm_ptr = ffi.new("double[%d]" % nc2)
     energy_ptr = ffi.new("double[%d]" % nc2)
-    lib.nevpt2_sij(nact, ncore, cast(h2e_v), cast(hdm2), cast(a9),
+    # h2e_v has phys'd layout [nact, nact, ncore, ncore] from _blocks;
+    # Fortran expects [nact, ncore, nact, ncore] (undo phys)
+    lib.nevpt2_sij(nact, ncore, cast(h2e_v.transpose(0, 2, 1, 3)), cast(hdm2), cast(a9),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
     h = np.frombuffer(ffi.buffer(energy_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)

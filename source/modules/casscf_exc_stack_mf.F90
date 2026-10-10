@@ -88,7 +88,8 @@ contains
     real(dp), intent(inout) :: wmat(0:*)
 
     integer :: na
-    integer(i8) :: n2, col, det, det_u, det_tu, ubit, tbit, row
+    integer(i8) :: n2, col, det, det_t, det_u, det_tu, ubit, tbit, row
+    integer(i8) :: det_col, col_sorted
     integer :: off, ioff, t, u, phase_u, phase_t, offs(2)
     real(dp) :: ci
 

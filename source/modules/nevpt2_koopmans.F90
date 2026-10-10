@@ -1566,8 +1566,9 @@ subroutine nevpt2_sijrs(ncore, nvirt, g, e_core, e_virt, norm, energy) &
   use, intrinsic :: iso_c_binding
   implicit none
   integer(c_int32_t), value :: ncore, nvirt
-  real(c_double), intent(in)  :: g(ncore, nvirt, ncore, nvirt)
-  real(c_double), intent(in)  :: e_core(ncore), e_virt(nvirt)
+  ! C-order [ncore, nvirt, ncore, nvirt] passed as flat 1-D
+  real(c_double), intent(in)  :: g(0:*)
+  real(c_double), intent(in)  :: e_core(0:*), e_virt(0:*)
   real(c_double), intent(out) :: norm, energy
 
   real(c_double), parameter :: eps = 1.0e-12_c_double
@@ -1587,12 +1588,13 @@ subroutine nevpt2_sijrs(ncore, nvirt, g, e_core, e_virt, norm, energy) &
   !$omp shared(ncore, nvirt, g, e_core, e_virt) &
   !$omp private(i, j, a, b, gi, gj_ab_swapped, theta, denom, t2i) &
   !$omp reduction(+:norm, energy)
-  do i = 1, ncore
-    do j = 1, ncore
-      do a = 1, nvirt
-        do b = 1, nvirt
-          gi = g(i, a, j, b)
-          gj_ab_swapped = g(i, b, j, a)
+  do i = 0, ncore - 1
+    do j = 0, ncore - 1
+      do a = 0, nvirt - 1
+        do b = 0, nvirt - 1
+          ! C-order flat offset: ((i*nvirt + a)*ncore + j)*nvirt + b
+          gi = g(((i*nvirt + a)*ncore + j)*nvirt + b)
+          gj_ab_swapped = g(((i*nvirt + b)*ncore + j)*nvirt + a)
           theta = 2.0_c_double * gi - gj_ab_swapped
           norm = norm + gi * theta
           denom = e_core(i) - e_virt(a) + e_core(j) - e_virt(b)
@@ -1622,34 +1624,45 @@ subroutine nevpt2_srs(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
   use, intrinsic :: iso_c_binding
   implicit none
   integer(c_int32_t), value :: nact, nvirt
-  real(c_double), intent(in)  :: h2e_v(nvirt, nact, nvirt, nact)
-  real(c_double), intent(in)  :: rm2(nact, nact, nact, nact)
-  real(c_double), intent(in)  :: a7(nact, nact, nact, nact)
-  real(c_double), intent(out) :: norm(nvirt, nvirt), energy(nvirt, nvirt)
+  ! All arrays are C-order, passed as flat 1-D:
+  !   h2e_v: [nvirt, nact, nvirt, nact]
+  !   rm2, a7: [nact, nact, nact, nact]
+  !   norm, energy: [nvirt, nvirt]
+  real(c_double), intent(in)  :: h2e_v(0:*)
+  real(c_double), intent(in)  :: rm2(0:*), a7(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
 
   real(c_double), parameter :: half = 0.5_c_double
   integer :: p, q, r, s, a, b
   real(c_double) :: h2e_rsqp, h2e_rsba, rm2_pqba, a7_pqab
+  ! stride helpers for h2e_v
+  integer :: snva, sna2
+  snva = nvirt * nact   ! stride for dim 2 of h2e_v (nvirt * nact)
+  sna2 = snva * nvirt   ! stride for dim 3 of h2e_v (nvirt * nact * nvirt)
 
-  norm = 0.0_c_double
-  energy = 0.0_c_double
+  norm(0:nvirt*nvirt - 1) = 0.0_c_double
+  energy(0:nvirt*nvirt - 1) = 0.0_c_double
   if (nvirt <= 0 .or. nact <= 0) return
 
   !$omp parallel do collapse(2) default(none) &
-  !$omp shared(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
+  !$omp shared(nact, nvirt, h2e_v, rm2, a7, norm, energy, snva, sna2) &
   !$omp private(r, s, p, q, a, b, h2e_rsqp, h2e_rsba, rm2_pqba, a7_pqab)
-  do r = 1, nvirt
-    do s = 1, nvirt
-      do p = 1, nact
-        do q = 1, nact
-          h2e_rsqp = h2e_v(r, s, q, p)  ! h2e_v(r,s,q,p)
-          do a = 1, nvirt
-            do b = 1, nvirt
-              h2e_rsba = h2e_v(r, s, b, a)  ! h2e_v(r,s,b,a)
-              rm2_pqba = rm2(p, q, b, a)    ! rm2(p,q,b,a)
-              a7_pqab  = a7(p, q, a, b)     ! a7(p,q,a,b)
-              norm(r, s)    = norm(r, s)   + half * h2e_rsqp * h2e_rsba * rm2_pqba
-              energy(r, s)  = energy(r, s) + half * h2e_rsqp * h2e_rsba * a7_pqab
+  do r = 0, nvirt - 1
+    do s = 0, nvirt - 1
+      do p = 0, nact - 1
+        do q = 0, nact - 1
+          ! h2e_v[r, s, q, p]  C-order: ((r*nact + s)*nvirt + q)*nact + p
+          h2e_rsqp = h2e_v(((r*nact + s)*nvirt + q)*nact + p)
+          do a = 0, nvirt - 1
+            do b = 0, nvirt - 1
+              ! h2e_v[r, s, b, a]  C-order
+              h2e_rsba = h2e_v(((r*nact + s)*nvirt + b)*nact + a)
+              ! rm2[p, q, b, a]  C-order: (((p*nact + q)*nact + b)*nact + a
+              rm2_pqba = rm2(((p*nact + q)*nact + b)*nact + a)
+              ! a7[p, q, a, b]  C-order
+              a7_pqab  = a7(((p*nact + q)*nact + a)*nact + b)
+              norm(r*nvirt + s)   = norm(r*nvirt + s)   + half * h2e_rsqp * h2e_rsba * rm2_pqba
+              energy(r*nvirt + s) = energy(r*nvirt + s) + half * h2e_rsqp * h2e_rsba * a7_pqab
             end do
           end do
         end do
@@ -1674,34 +1687,41 @@ subroutine nevpt2_sij(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
   use, intrinsic :: iso_c_binding
   implicit none
   integer(c_int32_t), value :: nact, ncore
-  real(c_double), intent(in)  :: h2e_v(nact, ncore, nact, ncore)
-  real(c_double), intent(in)  :: hdm2(nact, nact, nact, nact)
-  real(c_double), intent(in)  :: a9(nact, nact, nact, nact)
-  real(c_double), intent(out) :: norm(ncore, ncore), energy(ncore, ncore)
+  ! All arrays are C-order, passed as flat 1-D:
+  !   h2e_v: [nact, ncore, nact, ncore]
+  !   hdm2, a9: [nact, nact, nact, nact]
+  !   norm, energy: [ncore, ncore]
+  real(c_double), intent(in)  :: h2e_v(0:*)
+  real(c_double), intent(in)  :: hdm2(0:*), a9(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
 
   real(c_double), parameter :: half = 0.5_c_double
   integer :: p, q, a, b, i, j
   real(c_double) :: h2e_qpij, h2e_baij, hdm2_pqab, a9_pqab
 
-  norm = 0.0_c_double
-  energy = 0.0_c_double
+  norm(0:ncore*ncore - 1) = 0.0_c_double
+  energy(0:ncore*ncore - 1) = 0.0_c_double
   if (ncore <= 0 .or. nact <= 0) return
 
   !$omp parallel do collapse(2) default(none) &
   !$omp shared(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
   !$omp private(i, j, p, q, a, b, h2e_qpij, h2e_baij, hdm2_pqab, a9_pqab)
-  do i = 1, ncore
-    do j = 1, ncore
-      do p = 1, nact
-        do q = 1, nact
-          h2e_qpij = h2e_v(q, p, i, j)  ! h2e_v(q,p,i,j)
-          do a = 1, nact
-            do b = 1, nact
-              h2e_baij = h2e_v(b, a, i, j)  ! h2e_v(b,a,i,j)
-              hdm2_pqab = hdm2(p, q, a, b)  ! hdm2(p,q,a,b)
-              a9_pqab   = a9(p, q, a, b)    ! a9(p,q,a,b)
-              norm(i, j)   = norm(i, j)   + half * h2e_qpij * h2e_baij * hdm2_pqab
-              energy(i, j) = energy(i, j) + half * h2e_qpij * h2e_baij * a9_pqab
+  do i = 0, ncore - 1
+    do j = 0, ncore - 1
+      do p = 0, nact - 1
+        do q = 0, nact - 1
+          ! h2e_v[q, p, i, j]  C-order: (((q*ncore + p)*nact + i)*ncore + j)
+          h2e_qpij = h2e_v((((q*ncore + p)*nact + i)*ncore + j))
+          do a = 0, nact - 1
+            do b = 0, nact - 1
+              ! h2e_v[b, a, i, j]  C-order
+              h2e_baij = h2e_v((((b*ncore + a)*nact + i)*ncore + j))
+              ! hdm2[p, q, a, b]  C-order: (((p*nact + q)*nact + a)*nact + b)
+              hdm2_pqab = hdm2((((p*nact + q)*nact + a)*nact + b))
+              ! a9[p, q, a, b]  C-order
+              a9_pqab   = a9((((p*nact + q)*nact + a)*nact + b))
+              norm(i*ncore + j)   = norm(i*ncore + j)   + half * h2e_qpij * h2e_baij * hdm2_pqab
+              energy(i*ncore + j) = energy(i*ncore + j) + half * h2e_qpij * h2e_baij * a9_pqab
             end do
           end do
         end do
