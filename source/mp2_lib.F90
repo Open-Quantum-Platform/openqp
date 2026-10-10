@@ -106,6 +106,7 @@ contains
             mo_b_sc, e_b_sc, noccb, virb, mo_b_sc, e_b_sc, noccb, virb, &
             mo_a_sc, e_a_sc, nocca, vira, &
             same_spin=.true., do_opposite=.false., &
+            restricted_ref=restricted_ref, &
             e_same=e_bb, e_opp=e_opp_scratch, success=n5_ok)
       end if
       if (n5_ok) computed = .true.
