@@ -1598,10 +1598,8 @@ subroutine nevpt2_sijrs(ncore, nvirt, g, e_core, e_virt, norm, energy) &
           theta = 2.0_c_double * gi - gj_ab_swapped
           norm = norm + gi * theta
           denom = e_core(i) - e_virt(a) + e_core(j) - e_virt(b)
-          if (abs(denom) > eps) then
-            t2i = gi / denom
-            energy = energy + t2i * theta
-          end if
+          t2i = gi / denom
+          energy = energy + t2i * theta
         end do
       end do
     end do
