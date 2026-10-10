@@ -43,6 +43,7 @@ _REQUIRED_NEVPT2 = [
     'nevpt2_sijrs', 'nevpt2_srs', 'nevpt2_sij',
     'nevpt2_sijr', 'nevpt2_srsi', 'nevpt2_sir',
     'nevpt2_sr', 'nevpt2_si',
+    'nevpt2_fold_h1e',
     'nevpt2_make_rdms', 'nevpt2_make_f3',
 ]
 _REQUIRED_PT2 = [
@@ -104,6 +105,11 @@ def _symmetric_eri(nbf, rng):
 pt2_only = pytest.mark.skipif(
     not _has("pt2_effective_fock", cp._pt2_lib),
     reason="liboqp pt2_kernel engine unavailable",
+)
+
+_skip_if_no_koopmans = pytest.mark.skipif(
+    not _has("nevpt2_fold_h1e", sc._koopmans_lib),
+    reason="NEVPT2 Koopmans Fortran kernels not loaded",
 )
 
 
@@ -338,4 +344,91 @@ def test_a13_matches_python(n):
     native, python = _both(
         sc, "_koopmans_lib", lambda: sc._a13(h1e, h2e, dm1, dm2, dm3))
     assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+# ---- Additional Koopmans intermediate kernel tests (post-PR470) ----
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_hdm1_matches_python(n):
+    _h1e, _h2e, dm1, _dm2, _dm3, _dm4 = _koopmans_operands(n, 131 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._hdm1(dm1))
+    assert native.shape == (n, n)
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_hdm2_matches_python(n):
+    _h1e, _h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 139 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._hdm2(dm1, dm2))
+    assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a17_matches_python(n):
+    h1e, h2e, _dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 149 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._a17(h1e, h2e, dm2, dm3))
+    assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a19_matches_python(n):
+    h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 157 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._a19(h1e, h2e, dm1, dm2))
+    assert native.shape == (n, n)
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a23_matches_python(n):
+    h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 163 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._a23(h1e, h2e, dm1, dm2, dm3))
+    assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a25_matches_python(n):
+    h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 173 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._a25(h1e, h2e, dm1, dm2))
+    assert native.shape == (n, n)
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a3_matches_python(n):
+    h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 179 + n)
+    hdm1 = sc._hdm1(dm1)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._a3(h1e, h2e, dm1, dm2, hdm1))
+    assert native.shape == (n, n)
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_k27_matches_python(n):
+    h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 191 + n)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._k27(h1e, h2e, dm1, dm2))
+    assert native.shape == (n, n)
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@_skip_if_no_koopmans
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_fold_h1e_matches_python(n):
+    rng = np.random.default_rng(197 + n)
+    h1e = rng.standard_normal((n, n))
+    h1e = 0.5 * (h1e + h1e.T)
+    h2e = rng.standard_normal((n, n, n, n)) * 0.1
+    h2e = h2e + h2e.transpose(3, 2, 1, 0)
+    native, python = _both(sc, "_koopmans_lib", lambda: sc._fold_h1e(h1e, h2e))
+    assert native.shape == (n, n)
     assert np.max(np.abs(native - python)) < 1e-11

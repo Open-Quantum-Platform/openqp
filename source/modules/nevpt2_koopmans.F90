@@ -1365,7 +1365,7 @@ contains
           do p = 0, n - 1
             s = 0.0_dp
             do i = 0, n - 1
-              s = s - h1e(p + i*n) * dm2((((c*n + a)*n + b)*n + i))
+              s = s - h1e(i + p*n) * dm2((((c*n + a)*n + b)*n + i))
             end do
             do i = 0, n - 1
               do j = 0, n - 1
@@ -1395,7 +1395,7 @@ contains
       do p = 0, n - 1
         s = 0.0_dp
         do i = 0, n - 1
-          s = s - h1e(p + i*n) * dm1(a + i*n)
+          s = s - h1e(i + p*n) * dm1(i + a*n)
         end do
         do i = 0, n - 1
           do j = 0, n - 1
@@ -1425,7 +1425,7 @@ contains
           do p = 0, n - 1
             s = 0.0_dp
             do i = 0, n - 1
-              s = s - h1e(i + p*n) * dm2((((c*n + a)*n + i)*n + b))
+              s = s - h1e(p + i*n) * dm2((((c*n + a)*n + i)*n + b))
             end do
             do i = 0, n - 1
               do j = 0, n - 1
@@ -1435,7 +1435,7 @@ contains
                 end do
               end do
             end do
-            s = s + 2.0_dp * h1e(b + p*n) * dm1(c + a*n)
+            s = s + 2.0_dp * h1e(p + b*n) * dm1(a + c*n)
             do i = 0, n - 1
               do k = 0, n - 1
                 s = s + 2.0_dp * h2e(((p*n + i)*n + b)*n + k) &
@@ -1462,7 +1462,7 @@ contains
       do p = 0, n - 1
         s = 0.0_dp
         do i = 0, n - 1
-          s = s - h1e(p + i*n) * dm1(a + i*n)
+          s = s - h1e(i + p*n) * dm1(i + a*n)
         end do
         do i = 0, n - 1
           do j = 0, n - 1
@@ -1476,7 +1476,7 @@ contains
         do i = 0, n - 1
           do j = 0, n - 1
             s = s + 2.0_dp * h2e(((p*n + i)*n + a)*n + j) &
-                * dm1(i + j*n)
+                * dm1(j + i*n)
           end do
         end do
         a25(p + a*n) = s
@@ -1497,11 +1497,11 @@ contains
       do a = 0, n - 1
         s = 0.0_dp
         do i = 0, n - 1
-          s = s + h1e(i + a*n) * hdm1(i + p*n)
+          s = s + h1e(a + i*n) * hdm1(p + i*n)
         end do
         do i = 0, n - 1
           do k = 0, n - 1
-            s = s + 2.0_dp * h2e(((i*n + p)*n + k)*n + a) * dm1(i + k*n)
+            s = s + 2.0_dp * h2e(((i*n + p)*n + k)*n + a) * dm1(k + i*n)
           end do
         end do
         do i = 0, n - 1
@@ -1512,7 +1512,7 @@ contains
             end do
           end do
         end do
-        a3(p + a*n) = s
+        a3(a + p*n) = s
       end do
     end do
   end subroutine nevpt2_a3
@@ -1530,7 +1530,7 @@ contains
       do a = 0, n - 1
         s = 0.0_dp
         do i = 0, n - 1
-          s = s - h1e(a + i*n) * dm1(p + i*n)
+          s = s - h1e(i + a*n) * dm1(i + p*n)
         end do
         do i = 0, n - 1
           do j = 0, n - 1
@@ -1542,10 +1542,10 @@ contains
         end do
         do j = 0, n - 1
           do i = 0, n - 1
-            s = s + h2e(((i*n + a)*n + j)*n + i) * dm1(p + j*n)
+            s = s + h2e(((i*n + a)*n + j)*n + i) * dm1(j + p*n)
           end do
         end do
-        k27(p + a*n) = s
+        k27(a + p*n) = s
       end do
     end do
   end subroutine nevpt2_k27
