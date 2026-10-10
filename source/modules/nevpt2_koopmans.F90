@@ -66,7 +66,7 @@ module nevpt2_koopmans_mod
 
   public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
   public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
-  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij
+  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir
 
 contains
 
