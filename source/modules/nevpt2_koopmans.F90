@@ -66,7 +66,7 @@ module nevpt2_koopmans_mod
 
   public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
   public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
-  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir
+  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir, nevpt2_sr, nevpt2_si
 
 contains
 
@@ -1793,7 +1793,7 @@ subroutine nevpt2_sijr(nvirt, ncore, nact, h2e_v, hdm1, a3, norm, energy) &
   end do
   !$omp end parallel do
 
-  ! Symmetrise (r,i,j) += (r,j,i) and halve diagonal
+  ! Symmetrise (r,i,j) += (r,j,i) — diagonal not halved (no prior += transpose)
   do r = 0, nvirt - 1
     do i = 0, ncore - 1
       do j = i + 1, ncore - 1
@@ -1802,8 +1802,6 @@ subroutine nevpt2_sijr(nvirt, ncore, nact, h2e_v, hdm1, a3, norm, energy) &
         energy(r*nc2 + i*ncore + j) = energy(r*nc2 + i*ncore + j) + energy(r*nc2 + j*ncore + i)
         energy(r*nc2 + j*ncore + i) = energy(r*nc2 + i*ncore + j)
       end do
-      norm(r*nc2 + i*ncore + i) = norm(r*nc2 + i*ncore + i) * 0.5_c_double
-      energy(r*nc2 + i*ncore + i) = energy(r*nc2 + i*ncore + i) * 0.5_c_double
     end do
   end do
 end subroutine nevpt2_sijr
@@ -1867,7 +1865,7 @@ subroutine nevpt2_srsi(nvirt, ncore, nact, h2e_v, dm1, k27, norm, energy) &
   end do
   !$omp end parallel do
 
-  ! Symmetrise (s,r,i) += (r,s,i) and halve diagonal virt pairs
+  ! Symmetrise (s,r,i) += (r,s,i) — diagonal not halved (no prior += transpose)
   do r = 0, nvirt - 1
     do s = r + 1, nvirt - 1
       do i = 0, ncore - 1
@@ -1876,10 +1874,6 @@ subroutine nevpt2_srsi(nvirt, ncore, nact, h2e_v, dm1, k27, norm, energy) &
         energy((s*nvirt + r)*ncore + i) = energy((s*nvirt + r)*ncore + i) + energy((r*nvirt + s)*ncore + i)
         energy((r*nvirt + s)*ncore + i) = energy((s*nvirt + r)*ncore + i)
       end do
-    end do
-    do i = 0, ncore - 1
-      norm((r*nvirt + r)*ncore + i) = norm((r*nvirt + r)*ncore + i) * 0.5_c_double
-      energy((r*nvirt + r)*ncore + i) = energy((r*nvirt + r)*ncore + i) * 0.5_c_double
     end do
   end do
 end subroutine nevpt2_srsi
@@ -2013,5 +2007,242 @@ subroutine nevpt2_sir(nvirt, ncore, nact, &
   end do
   !$omp end parallel do
 end subroutine nevpt2_sir
+
+
+
+! nevpt2_sr — Sr subspace (virt,active,active,active) SC-NEVPT2 final contraction.
+!
+! Computes per-virtual-orbital norm and energy as:
+!
+!   ener[i] = sum_{pqrabc} h2e_v[i,p,q,r] * a16[p,q,r,a,b,c] * h2e_v[i,a,b,c]
+!           + 2 * sum_{pqra}  h2e_v[i,p,q,r] * a17[p,q,r,a] * h1e_v[i,a]
+!           +     sum_{pa}    h1e_v[i,p] * a19[p,a] * h1e_v[i,a]
+!
+!   norm[i] = sum_{pqrabc} h2e_v[i,p,q,r] * dm3[p,q,r,a,b,c] * h2e_v[i,a,b,c]
+!           + 2 * sum_{pqra}  h2e_v[i,p,q,r] * dm2[p,q,r,a] * h1e_v[i,a]
+!           +     sum_{pa}    h1e_v[i,p] * dm1[p,a] * h1e_v[i,a]
+!
+! h2e_v: C-order [nvirt, nact, nact, nact] — physics-ordered <V|A,A,A>
+! h1e_v: C-order [nvirt, nact]
+! a16, dm3: C-order [nact,nact,nact,nact,nact,nact]
+! a17, dm2: C-order [nact,nact,nact,nact]
+! a19, dm1: C-order [nact,nact]
+! norm, energy: C-order [nvirt]
+subroutine nevpt2_sr(nvirt, nact, &
+    h2e_v, h1e_v, &
+    a16, a17, a19, &
+    dm3, dm2, dm1, &
+    norm, energy) &
+    bind(C, name="nevpt2_sr")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nvirt, nact
+  real(c_double), intent(in)  :: h2e_v(0:*), h1e_v(0:*)
+  real(c_double), intent(in)  :: a16(0:*), a17(0:*), a19(0:*)
+  real(c_double), intent(in)  :: dm3(0:*), dm2(0:*), dm1(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
+
+  integer :: i, p, q, r, a, b, c, na, na2, na3, na4, na5
+  real(c_double) :: h2e_ipqr, h2e_iabc
+  real(c_double) :: a16_val, dm3_val, t_en, t_no
+
+  na = nact
+  na2 = na * na
+  na3 = na2 * na
+  na4 = na3 * na
+  na5 = na4 * na
+
+  norm(0:nvirt - 1) = 0.0_c_double
+  energy(0:nvirt - 1) = 0.0_c_double
+  if (nvirt <= 0 .or. nact <= 0) return
+
+  !$omp parallel do default(none) &
+  !$omp shared(nvirt, na, na2, na3, na4, na5, h2e_v, h1e_v, &
+  !$omp        a16, a17, a19, dm3, dm2, dm1, norm, energy) &
+  !$omp private(i, p, q, r, a, b, c, h2e_ipqr, h2e_iabc, a16_val, dm3_val, t_en, t_no)
+  do i = 0, nvirt - 1
+
+    ! --- ener term1 & norm term1: 6-index contraction ---
+    do p = 0, na - 1
+      do q = 0, na - 1
+        do r = 0, na - 1
+          h2e_ipqr = h2e_v(((i*na + p)*na + q)*na + r)
+          t_en = 0.0_c_double
+          t_no = 0.0_c_double
+          do a = 0, na - 1
+            do b = 0, na - 1
+              do c = 0, na - 1
+                h2e_iabc = h2e_v(((i*na + a)*na + b)*na + c)
+                ! a16[p,q,r,a,b,c]
+                a16_val = a16(((((p*na + q)*na + r)*na + a)*na + b)*na + c)
+                t_en = t_en + a16_val * h2e_iabc
+                ! dm3[r,p,q,b,a,c]  (rpqbac ordering, differs from a16's pqrabc)
+                dm3_val = dm3((((((r*na + p)*na + q)*na + b)*na + a)*na + c))
+                t_no = t_no + dm3_val * h2e_iabc
+              end do
+            end do
+          end do
+          energy(i) = energy(i) + h2e_ipqr * t_en
+          norm(i) = norm(i) + h2e_ipqr * t_no
+        end do
+      end do
+    end do
+
+    ! --- ener term2: 2 * h2e_v[i,p,q,r] * a17[p,q,r,a] * h1e_v[i,a] ---
+    do p = 0, na - 1
+      do q = 0, na - 1
+        do r = 0, na - 1
+          h2e_ipqr = h2e_v(((i*na + p)*na + q)*na + r)
+          t_en = 0.0_c_double
+          do a = 0, na - 1
+            t_en = t_en + a17((((p*na + q)*na + r)*na + a)) * h1e_v(i*na + a)
+          end do
+          energy(i) = energy(i) + 2.0_c_double * h2e_ipqr * t_en
+        end do
+      end do
+    end do
+
+    ! --- norm term2: 2 * h2e_v[i,p,q,r] * dm2[p,q,r,a] * h1e_v[i,a] ---
+    do p = 0, na - 1
+      do q = 0, na - 1
+        do r = 0, na - 1
+          h2e_ipqr = h2e_v(((i*na + p)*na + q)*na + r)
+          t_no = 0.0_c_double
+          do a = 0, na - 1
+            t_no = t_no + dm2((((p*na + q)*na + r)*na + a)) * h1e_v(i*na + a)
+          end do
+          norm(i) = norm(i) + 2.0_c_double * h2e_ipqr * t_no
+        end do
+      end do
+    end do
+
+    ! --- ener term3: h1e_v[i,p] * a19[p,a] * h1e_v[i,a] ---
+    do p = 0, na - 1
+      do a = 0, na - 1
+        energy(i) = energy(i) + h1e_v(i*na + p) * a19(p*na + a) * h1e_v(i*na + a)
+      end do
+    end do
+
+    ! --- norm term3: h1e_v[i,p] * dm1[p,a] * h1e_v[i,a] ---
+    do p = 0, na - 1
+      do a = 0, na - 1
+        norm(i) = norm(i) + h1e_v(i*na + p) * dm1(p*na + a) * h1e_v(i*na + a)
+      end do
+    end do
+
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_sr
+
+subroutine nevpt2_si(ncore, nact, &
+    h2e_v, h1e_v, &
+    a22, a23, a25, &
+    dm3_h, dm2_h, dm1_h, &
+    norm, energy) &
+    bind(C, name="nevpt2_si")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: ncore, nact
+  real(c_double), intent(in)  :: h2e_v(0:*), h1e_v(0:*)
+  real(c_double), intent(in)  :: a22(0:*), a23(0:*), a25(0:*)
+  real(c_double), intent(in)  :: dm3_h(0:*), dm2_h(0:*), dm1_h(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
+
+  integer :: i, p, q, r, a, b, c, na, na2, na3, na4, na5
+  real(c_double) :: h2e_qpir, h2e_baic
+  real(c_double) :: a22_val, dm3_val, t_en, t_no
+
+  na = nact
+  na2 = na * na
+  na3 = na2 * na
+  na4 = na3 * na
+  na5 = na4 * na
+
+  norm(0:ncore - 1) = 0.0_c_double
+  energy(0:ncore - 1) = 0.0_c_double
+  if (ncore <= 0 .or. nact <= 0) return
+
+  !$omp parallel do default(none) &
+  !$omp shared(ncore, na, na2, na3, na4, na5, h2e_v, h1e_v, &
+  !$omp        a22, a23, a25, dm3_h, dm2_h, dm1_h, norm, energy) &
+  !$omp private(i, p, q, r, a, b, c, h2e_qpir, h2e_baic, a22_val, dm3_val, t_en, t_no)
+  do i = 0, ncore - 1
+
+    ! --- ener term1 & norm term1: 6-index contraction ---
+    ! h2e_v[q][p][i][r] flat: ((q*na + p)*ncore + i)*na + r (C-order [na,na,ncore,na])
+    ! h2e_v[b][a][i][c] flat: ((b*na + a)*ncore + i)*na + c (C-order [na,na,ncore,na])
+    do q = 0, na - 1
+      do p = 0, na - 1
+        do r = 0, na - 1
+          h2e_qpir = h2e_v((((q*na + p)*ncore + i)*na + r))
+          t_en = 0.0_c_double
+          t_no = 0.0_c_double
+          do a = 0, na - 1
+            do b = 0, na - 1
+              do c = 0, na - 1
+                h2e_baic = h2e_v((((b*na + a)*ncore + i)*na + c))
+                ! a22[p,q,r,a,b,c]
+                a22_val = a22((((((p*na + q)*na + r)*na + a)*na + b)*na + c))
+                t_en = t_en + a22_val * h2e_baic
+                ! dm3_h[r,p,q,b,a,c]  (rpqbac ordering, differs from a22's pqrabc)
+                dm3_val = dm3_h((((((r*na + p)*na + q)*na + b)*na + a)*na + c))
+                t_no = t_no + dm3_val * h2e_baic
+              end do
+            end do
+          end do
+          energy(i) = energy(i) + h2e_qpir * t_en
+          norm(i) = norm(i) + h2e_qpir * t_no
+        end do
+      end do
+    end do
+
+    ! --- ener term2: 2 * h2e_v[q,p,i,r] * a23[p,q,r,a] * h1e_v[a,i] ---
+    ! a23[p,q,r,a]: flat ((((p*na + q)*na + r)*na + a)
+    ! h1e_v[a,i]: flat a*ncore + i  (since h1e_v is [nact, ncore], C-order)
+    do q = 0, na - 1
+      do p = 0, na - 1
+        do r = 0, na - 1
+          h2e_qpir = h2e_v((((q*na + p)*ncore + i)*na + r))
+          t_en = 0.0_c_double
+          do a = 0, na - 1
+            t_en = t_en + a23((((p*na + q)*na + r)*na + a)) * h1e_v(a*ncore + i)
+          end do
+          energy(i) = energy(i) + 2.0_c_double * h2e_qpir * t_en
+        end do
+      end do
+    end do
+
+    ! --- norm term2: 2 * h2e_v[q,p,i,r] * dm2_h[p,q,r,a] * h1e_v[a,i] ---
+    do q = 0, na - 1
+      do p = 0, na - 1
+        do r = 0, na - 1
+          h2e_qpir = h2e_v((((q*na + p)*ncore + i)*na + r))
+          t_no = 0.0_c_double
+          do a = 0, na - 1
+            t_no = t_no + dm2_h((((p*na + q)*na + r)*na + a)) * h1e_v(a*ncore + i)
+          end do
+          norm(i) = norm(i) + 2.0_c_double * h2e_qpir * t_no
+        end do
+      end do
+    end do
+
+    ! --- ener term3: h1e_v[p,i] * a25[p,a] * h1e_v[a,i] ---
+    ! h1e_v is [nact, ncore] flat p*ncore + i (C-order)
+    do p = 0, na - 1
+      do a = 0, na - 1
+        energy(i) = energy(i) + h1e_v(p*ncore + i) * a25(p*na + a) * h1e_v(a*ncore + i)
+      end do
+    end do
+
+    ! --- norm term3: h1e_v[p,i] * dm1_h[p,a] * h1e_v[a,i] ---
+    do p = 0, na - 1
+      do a = 0, na - 1
+        norm(i) = norm(i) + h1e_v(p*ncore + i) * dm1_h(p*na + a) * h1e_v(a*ncore + i)
+      end do
+    end do
+
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_si
 
 end module nevpt2_koopmans_mod

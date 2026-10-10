@@ -1,0 +1,188 @@
+{
+  "atoms": [
+    6,
+    8,
+    7,
+    1,
+    1,
+    1
+  ],
+  "coord": [
+    -4.616951765963132,
+    -2.064604562936881,
+    7.196834925016744,
+    -6.138593766265022,
+    -2.6861953606226043,
+    5.580248639219748,
+    -4.5728955407172265,
+    -2.9382024944342895,
+    9.582294281569935,
+    -3.3083155590233186,
+    -2.3254573388836963,
+    10.824390207874915,
+    -5.883865047817144,
+    -4.1621850522050625,
+    10.13864222744346,
+    -3.1287495357672026,
+    -0.6993263413366578,
+    6.737275966490193
+  ],
+  "energy": -168.92711964486315,
+  "symmetry_metadata": {
+    "status": "enabled",
+    "enabled": true,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "c1",
+    "subgroup": "c1",
+    "detected_point_group": "c1",
+    "detected_subgroup": "c1",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": true,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "true",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "true",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    },
+    "detection": {
+      "point_group": "c1",
+      "abelian_subgroup": "c1",
+      "origin": [
+        -5.1031642100128485,
+        -2.667472097540394,
+        7.74355767010038
+      ],
+      "orientation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "operations": [
+        {
+          "name": "E",
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "permutation": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "matrix_input_frame": [
+            [
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0
+            ]
+          ]
+        }
+      ],
+      "irreps": [
+        "a"
+      ],
+      "character_table": {
+        "a": [
+          1
+        ]
+      },
+      "tolerance": 1e-05,
+      "n_atoms": 6
+    },
+    "requested_matches_detected": true
+  },
+  "td_energies": [
+    0
+  ],
+  "grad": [
+    [
+      0.00012731975582594914,
+      -0.000333153096041753,
+      0.0006868273226397107
+    ],
+    [
+      0.0016449773000750555,
+      0.0007582564597195175,
+      0.0015039318893336838
+    ],
+    [
+      0.0004212371529759563,
+      -0.00013183233409145683,
+      -0.0005776543781112918
+    ],
+    [
+      0.0018042637897940307,
+      0.0013069454068478058,
+      0.0004542889863974002
+    ],
+    [
+      -0.0006933739770628558,
+      -0.0003634078331131729,
+      -0.0004004744624210241
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "json": {
+    "scf_type": "rhf",
+    "basis": "6-31g",
+    "library": "",
+    "ispher": "auto",
+    "nbf": 33,
+    "nbf_cartesian": 33,
+    "spherical_harmonics": false
+  }
+}

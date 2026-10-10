@@ -1,0 +1,42 @@
+diff --git a/src/ddx_cinterface.f90 b/src/ddx_cinterface.f90
+index 9530e53..7c9d6e2 100644
+--- a/src/ddx_cinterface.f90
++++ b/src/ddx_cinterface.f90
+@@ -38,7 +38,7 @@ function ddx_supported_lebedev_grids(n, grids) result(c_ngrids) bind(C)
+     integer(c_int), intent(in), value ::  n
+     integer(c_int), intent(out) :: grids(n)
+     integer(c_int) :: c_ngrids
+-    c_ngrids = min(n, nllg)
++    c_ngrids = int(min(int(n), nllg), c_int)
+     grids(1:c_ngrids) = ng0(1:c_ngrids)
+ end
+ 
+@@ -92,7 +92,7 @@ function ddx_get_error_flag(c_error) result(has_error) bind(C)
+     type(ddx_error_type), pointer :: ddx_error
+     integer(c_int) :: has_error
+     call c_f_pointer(c_error, ddx_error)
+-    has_error = ddx_error%flag
++    has_error = int(ddx_error%flag, c_int)
+ end
+ 
+ subroutine ddx_get_error_message(c_error, message, maxlen) bind(C)
+@@ -199,15 +199,15 @@ function ddx_allocate_model(model, enable_force, solvent_epsilon, solvent_kappa,
+     ! Convert to Fortran objects
+     passproc = n_proc
+     logfile = ''
+-    do i = 1, min(length_logfile, 255)
++    do i = 1, min(int(length_logfile), 255)
+         if (c_logfile(i) .ne. c_null_char) then
+             logfile(i:i) = c_logfile(i)
+         endif
+     enddo
+ 
+-    call params_init(model, enable_force, solvent_epsilon, solvent_kappa, eta, se, lmax, &
+-        & n_lebedev, incore, maxiter, jacobi_n_diis, enable_fmm, &
+-        & fmm_multipole_lmax, fmm_local_lmax, passproc, n_spheres, &
++    call params_init(int(model), int(enable_force), solvent_epsilon, solvent_kappa, eta, se, int(lmax), &
++        & int(n_lebedev), int(incore), int(maxiter), int(jacobi_n_diis), int(enable_fmm), &
++        & int(fmm_multipole_lmax), int(fmm_local_lmax), passproc, int(n_spheres), &
+         & sphere_centres, sphere_radii, logfile, ddx_model%params, ddx_error)
+     if (ddx_error%flag .ne. 0) then
+         return

@@ -1,0 +1,1463 @@
+module tdhf_mrsf_energy_mod
+
+  implicit none
+
+  character(len=*), parameter :: module_name = "tdhf_mrsf_energy_mod"
+
+contains
+
+  subroutine tdhf_mrsf_energy_C(c_handle) bind(C, name="tdhf_mrsf_energy")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    inf%tddft%umrsf = .false.
+    call tdhf_mrsf_energy_with_restart(inf)
+  end subroutine tdhf_mrsf_energy_C
+
+  subroutine tdhf_umrsf_energy_C(c_handle) bind(C, name="tdhf_umrsf_energy")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    logical :: previous_umrsf
+    inf => oqp_handle_get_info(c_handle)
+    previous_umrsf = inf%tddft%umrsf
+    inf%tddft%umrsf = .true.
+    call tdhf_mrsf_energy_with_restart(inf)
+    inf%tddft%umrsf = previous_umrsf
+  end subroutine tdhf_umrsf_energy_C
+
+  ! Run the MRSF Davidson and, if it fails to converge, auto-restart with a
+  ! larger subspace (maxvec) and more iterations (maxit_dav).  Re-invoking the
+  ! driver reallocates a fresh, larger Krylov subspace, so no inner-loop state
+  ! is reused.  The user's maxvec/maxit_dav are restored afterwards.
+  subroutine tdhf_mrsf_energy_with_restart(infos)
+    use types, only: information
+    use io_constants, only: iw
+    type(information), intent(inout) :: infos
+    integer, parameter :: max_restarts = 2
+    integer :: attempt, maxvec0, maxit0
+    maxvec0 = infos%tddft%maxvec
+    maxit0  = infos%control%maxit_dav
+    do attempt = 0, max_restarts
+      call tdhf_mrsf_energy(infos)
+      if (infos%mol_energy%Davidson_converged) exit
+      if (attempt < max_restarts) then
+        infos%tddft%maxvec      = 2 * infos%tddft%maxvec
+        infos%control%maxit_dav = 2 * infos%control%maxit_dav
+        ! The energy routine closes the log on exit; reopen to record the restart.
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/,2X,"MRSF Davidson not converged; auto-restart #",I0, &
+                 &" with larger subspace (maxvec=",I0,", maxit_dav=",I0,")"/)') &
+          attempt + 1, infos%tddft%maxvec, infos%control%maxit_dav
+        close(iw)
+      end if
+    end do
+    infos%tddft%maxvec      = maxvec0
+    infos%control%maxit_dav = maxit0
+  end subroutine tdhf_mrsf_energy_with_restart
+
+!###############################################################################
+
+  subroutine mrsf_matvec_apply_C(c_handle) bind(C, name="mrsf_matvec_apply")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_matvec_apply(inf)
+  end subroutine mrsf_matvec_apply_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_response_C(c_handle) bind(C, name="mrsf_nac_response")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    logical :: log_was_open
+
+    inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
+    call mrsf_nac_response(inf)
+    if (.not. log_was_open) close(iw)
+  end subroutine mrsf_nac_response_C
+
+!> @brief Apply the full ground-state Fock response kernel for analytic NAC.
+!> @detail Reads packed first-order alpha/beta densities from
+!>   OQP::nac_dm1_a/b and writes the corresponding packed JK+XC response
+!>   matrices to OQP::nac_v1_a/b.  Unlike the old DM-only finite-difference
+!>   probe, this route calls get_response_packed, so a DFT calculation includes
+!>   the explicit f_xc P^(1) contribution evaluated on the reference grid.
+!>   OQP::nac_vxc_a/b additionally expose the XC-only difference for the v20
+!>   response audit.  Production consumes the resident full-MO orbital source
+!>   OQP::nac_mt_response, avoiding AO packing and MO transforms in Python.
+  subroutine mrsf_nac_response(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: with_abort
+    use precision, only: dp
+    use mod_dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_addons, only: get_response_packed
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_response"
+    character(len=*), parameter :: OQP_nac_dm1_a = "OQP::nac_dm1_a"
+    character(len=*), parameter :: OQP_nac_dm1_b = "OQP::nac_dm1_b"
+    character(len=*), parameter :: OQP_nac_v1_a = "OQP::nac_v1_a"
+    character(len=*), parameter :: OQP_nac_v1_b = "OQP::nac_v1_b"
+    character(len=*), parameter :: OQP_nac_vxc_a = "OQP::nac_vxc_a"
+    character(len=*), parameter :: OQP_nac_vxc_b = "OQP::nac_vxc_b"
+    character(len=*), parameter :: OQP_nac_mt_response = &
+      "OQP::nac_mt_response"
+    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
+      OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_nac_dm1_a, OQP_nac_dm1_b /)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    type(dft_grid_t) :: molGrid
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), dm1_a(:), dm1_b(:)
+    real(kind=dp), pointer :: nac_v1_a(:), nac_v1_b(:), nac_vxc_a(:), &
+                              nac_vxc_b(:), nac_mt_response(:)
+    real(kind=dp), allocatable :: dm1(:,:), v1(:,:), vjk(:,:), &
+                                  mo_a_work(:,:), mo_b_work(:,:), vmo_packed(:), &
+                                  vmo_a(:,:), vmo_b(:,:), mt_response(:,:)
+    integer :: nbf, nbf2, nocca, noccb, q
+    logical :: dft
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    dft = infos%control%hamilton == 20
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_a, dm1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_b, dm1_b)
+
+    allocate(dm1(nbf2,2), v1(nbf2,2), vjk(nbf2,2), &
+             mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), vmo_packed(nbf2), &
+             vmo_a(nbf,nbf), vmo_b(nbf,nbf), mt_response(nbf,nbf), &
+             source=0.0_dp)
+    dm1(:,1) = dm1_a
+    dm1(:,2) = dm1_b
+    mo_a_work = mo_a
+    mo_b_work = mo_b
+
+    if (dft) then
+      ! get_response_packed is a reusable public NAC kernel and may follow a
+      ! displaced SCF/DFT worker in the same process.  Reset libxc before
+      ! initialization so the functional list cannot be appended twice.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid, verbose=.false.)
+    end if
+    ! Capture the JK-only diagnostic from the response kernel's own integral
+    ! pass.  Calling fock_jk separately here used to evaluate the identical
+    ! pair density twice for every state pair.
+    call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, &
+                             mo_b_work, vjk)
+    if (dft) call dftclean(infos)
+
+    ! Transform the full response potential to the reference MO basis and
+    ! form exactly the orbital source used by the MRSF pair Lagrangian:
+    !   M_response(p,q) = 2 [V1_a(p,q) n_a(q) + V1_b(p,q) n_b(q)].
+    ! This used to be rebuilt in Python for every ordered state pair.
+    block
+      use mathlib, only: orthogonal_transform_sym, unpack_matrix
+      call orthogonal_transform_sym(nbf, nbf, v1(:,1), mo_a, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_a)
+      call orthogonal_transform_sym(nbf, nbf, v1(:,2), mo_b, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_b)
+      mt_response = 0.0_dp
+      do q = 1, nocca
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_a(:,q)
+      end do
+      do q = 1, noccb
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_b(:,q)
+      end do
+    end block
+
+    call infos%dat%erase((/ character(len=80) :: &
+      OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b, &
+      OQP_nac_mt_response /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mt_response, ta_type_real64, &
+         nbf*nbf, (/ nbf*nbf /), &
+         comment='ordered MRSF full ground-state response orbital source')
+    call tagarray_get_data(infos%dat, OQP_nac_v1_a, nac_v1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_v1_b, nac_v1_b)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_a, nac_vxc_a)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_b, nac_vxc_b)
+    call tagarray_get_data(infos%dat, OQP_nac_mt_response, nac_mt_response)
+    nac_v1_a = v1(:,1)
+    nac_v1_b = v1(:,2)
+    nac_vxc_a = v1(:,1) - vjk(:,1)
+    nac_vxc_b = v1(:,2) - vjk(:,2)
+    nac_mt_response = reshape(mt_response, (/ nbf*nbf /))
+
+  end subroutine mrsf_nac_response
+
+!> @brief NAC Phase 11 diagnostic. Apply the MRSF Davidson matvec A (TDA) to a
+!>   single trial amplitude (OQP::td_bvec_mo column 1) using the CURRENT
+!>   orbitals VEC_MO_A/B but the FROZEN AO Fock FOCK_A/B (rebuilt as the MO
+!>   Fock C^T F_AO C from the given orbitals). Writes A.x to OQP::nac_mvax.
+!>   Driving this from Python with orbital-rotated VEC_MO_A/B (FOCK_A/B held
+!>   fixed) yields a frozen-Fock finite-difference reconstruction of the
+!>   amplitude-term orbital gradient X_I^T(d_theta A)X_J, the matvec-derived
+!>   Z-vector RHS that must replace the gradient chain (sfrorhs) off-diagonal.
+  subroutine mrsf_matvec_apply(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use precision, only: dp
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfmntoia, mrsfesum
+    use tdhf_lib, only: iatogen
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix, orthogonal_transform
+    use iso_c_binding, only: c_f_pointer, c_int
+
+    implicit none
+    character(len=*), parameter :: subroutine_name = "mrsf_matvec_apply"
+    character(len=*), parameter :: OQP_nac_mvax = "OQP::nac_mvax"
+    character(len=*), parameter :: OQP_nac_gmo = "OQP::nac_gmo"
+    character(len=*), parameter :: OQP_nac_fa = "OQP::nac_fa"
+    character(len=*), parameter :: OQP_nac_fb = "OQP::nac_fb"
+    character(len=*), parameter :: OQP_nac_gchan = "OQP::nac_gchan"
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
+                                          mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
+    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:), nac_fa(:), nac_fb(:), nac_gchan(:)
+    real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
+    real(kind=dp), allocatable :: gmo(:,:), gchan(:,:,:)
+    integer :: ich
+    real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    type(int2_compute_t) :: int2_driver
+    type(int2_mrsf_data_t), target :: int2_data_st
+    integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, iter, diag_index
+    integer(c_int), pointer :: ixcore_ptr(:)
+    real(kind=dp) :: scale_exch, hfs
+    logical :: dft
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_td_bvec_mo /)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb
+    xvec_dim = nocca*nvirb
+    mrst = infos%tddft%mult
+    dft = infos%control%hamilton == 20
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%tddft%hfscale
+    hfs = infos%tddft%hfscale
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    if (.not. (infos%tddft%ixcore_len == 0)) &
+      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
+
+    allocate(fa(nbf,nbf), fb(nbf,nbf), scr(nbf2), wrk1(nbf,nbf), &
+             mrsf_density(1,7,nbf,nbf), amo(xvec_dim,1), gmo(nbf,nbf), source=0.0_dp)
+
+    ! MO Fock from the FROZEN AO Fock and the (possibly rotated) orbitals
+    call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
+    if (.not. (infos%tddft%ixcore_len == 0)) then
+      do iter = 1, noccb
+        if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
+          diag_index = (iter + 1) * iter / 2
+          scr(diag_index) = -1.0d6
+        end if
+      end do
+    end if
+    call unpack_matrix(scr, fa)
+    call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, scr)
+    call unpack_matrix(scr, fb)
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+
+    ! A . x   (TDA),  x = bvec_mo(:,1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(1,:,:,:))
+    call int2_data_st%clean()
+    int2_data_st%d3 => mrsf_density(:1,:,:,:)
+    int2_data_st%tamm_dancoff = .true.
+    int2_data_st%scale_exchange = scale_exch
+    int2_data_st%scale_coulomb = scale_exch
+    call int2_driver%run(int2_data_st, &
+      cam = dft .and. infos%dft%cam_flag, &
+      alpha = infos%tddft%cam_alpha, alpha_coulomb = infos%tddft%cam_alpha, &
+      beta = infos%tddft%cam_beta, beta_coulomb = infos%tddft%cam_beta, &
+      mu = infos%tddft%cam_mu)
+    fmrst2 => int2_data_st%f3(:,:,:,:,1)
+    if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+    if (infos%tddft%spc_coco /= hfs) &
+      fmrst2(:,6,:,:) = fmrst2(:,6,:,:)*infos%tddft%spc_coco/hfs
+    if (infos%tddft%spc_ovov /= hfs) &
+      fmrst2(:,5,:,:) = fmrst2(:,5,:,:)*infos%tddft%spc_ovov/hfs
+    if (infos%tddft%spc_coov /= hfs) &
+      fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
+
+    ! NAC Phase 11: export the FULL-MO 2e kernel of the matvec, G_MO =
+    ! mo_a^T * agdlr^AO * mo_a (channel-7 AO Fock back-transformed to MO space),
+    ! identical to the production z-vector's wrk2 (tdhf_mrsf_z_vector.F90:1707).
+    ! With G_MO in hand the orbital-rotation z-vector RHS hxa/hxb can be built
+    ! ANALYTICALLY from the INPUT-folded amplitude (mrsfxvec) in Python, avoiding
+    ! both the finite-difference and mrsfesum's output-side SOMO fold (the FD
+    ! artifact diagnosed in PHASE11_fd_findings.md).
+    call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), gmo)
+
+    ! NAC Phase 11: also export the SIX spin-pair channel MO kernels
+    ! gchan(:,:,ich) = mo_a^T * channel_ich^AO * mo_a (ich=1..6: ado2v, ado1v,
+    ! adco1, adco2, ao21v, aco12), AFTER the triplet flip + spc rescale, exactly
+    ! as mrsfmntoia/mrsfsp consume them. With these fixed MO kernels the matvec's
+    ! full 2e back-transform (mrsfmntoia sections 3-6 + the SOMO output fold) can
+    ! be reconstructed at any rotated C in Python (U^T gchan U) and its rotation
+    ! gradient L^mntoia compared to the gradient chain [G_MO + mrsfsp] -- the
+    ! discriminating test for the O==M^T output-fold-transpose deficiency.
+    allocate(gchan(nbf,nbf,6), source=0.0_dp)
+    do ich = 1, 6
+      call orthogonal_transform('n', nbf, mo_a, fmrst2(1,ich,:,:), gchan(:,:,ich))
+    end do
+
+    call mrsfmntoia(infos, fmrst2(1,:,:,:), amo, mo_a, mo_b, 1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfesum(infos, wrk1, fa, fb, amo, 1)
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_mvax /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
+    call tagarray_get_data(infos%dat, OQP_nac_mvax, nac_ax)
+    nac_ax = amo(:,1)
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gmo /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_gmo, nac_gmo)
+    nac_gmo = reshape(gmo, (/ nbf*nbf /))
+
+    ! NAC Phase 11: also export the frozen-Fock MO Fock matrices fa,fb
+    ! (= mo_a^T F_AO_a mo_a and mo_b^T F_AO_b mo_b, F_AO frozen, incl. any
+    ! ixcore level shift) that mrsfesum contracts with the amplitude. Lets the
+    ! interstate relaxation term be built analytically in Python with the
+    ! bit-identical Fock (no packed-triangular reconstruction).
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fa /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fa, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fa, nac_fa)
+    nac_fa = reshape(fa, (/ nbf*nbf /))
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_fb /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fb, nac_fb)
+    nac_fb = reshape(fb, (/ nbf*nbf /))
+
+    call infos%dat%erase((/ character(len=80) :: OQP_nac_gchan /))
+    call tagarray_reserve_data(infos%dat, OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
+    call tagarray_get_data(infos%dat, OQP_nac_gchan, nac_gchan)
+    nac_gchan = reshape(gchan, (/ nbf*nbf*6 /))
+
+    call int2_driver%clean()
+
+  end subroutine mrsf_matvec_apply
+
+  subroutine tdhf_mrsf_energy(infos)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    use types, only: information
+    use strings, only: cstring, fstring
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use util, only: measure_time
+
+    use precision, only: dp
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, int2_umrsf_data_t
+    use tdhf_lib, only: sym_response_project, &
+      int2_td_data_t
+    use tdhf_lib, only: &
+      iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
+      rpaechk, rpanewb, &
+      rpaprint, inivec
+    use tdhf_sf_lib, only: sfresvec, sfqvec, sfdmat, trfrmb, &
+      get_transition_density, get_transitions, &
+      get_transition_dipole, print_results, get_spin_square
+    use tdhf_mrsf_lib, only: &
+      mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
+      mrsfqroesum, get_mrsf_transitions, &
+      get_mrsf_transition_density, get_umrsf_transition_dipole, &
+      get_jacobi, umrsfssqu, mrsf_set_fp32, mrsf_check_block_representation
+    use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
+      unpack_matrix
+    use routec_sig, only: routec_sig_available, routec_sig_begin, &
+      routec_sig_apply, routec_sig_end
+    use oqp_linalg
+    use int1, only: multipole_integrals
+    use printing, only: print_module_info
+    use iso_c_binding, only: c_f_pointer, c_int
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "tdhf_mrsf_energy"
+
+    type(basis_set), pointer :: basis
+    type(information), target, intent(inout) :: infos
+
+    integer :: s_size, ok
+
+    real(kind=dp), allocatable :: scr2(:),scr3(:)
+    real(kind=dp), allocatable :: wrk1(:,:), qvec(:,:)
+    real(kind=dp), allocatable :: sym_ritz(:,:)
+    !> Trial vectors mrinivec handed to each symmetry block.  Left unallocated
+    !> for a quintet solve (inivec) or when no pair-irrep table is staged, and
+    !> the post-solve representation check is then inert.
+    integer, allocatable :: seeds_per_irrep(:)
+    real(kind=dp), allocatable :: amo(:,:), wrk2(:,:)
+    real(kind=dp), allocatable :: squared_S(:)
+    real(kind=dp), allocatable :: amb(:,:), apb(:,:), smat_full(:,:)
+    real(kind=dp), allocatable, target :: vl(:), vr(:)
+    real(kind=dp), pointer :: vl_p(:,:), vr_p(:,:)
+    real(kind=dp), allocatable :: xm(:), scr(:)
+    real(kind=dp), allocatable :: bvec_mo(:,:), for_trnsf_b_vec(:,:)
+    real(kind=dp), allocatable, dimension(:,:) :: fa, fb
+    real(kind=dp), allocatable, dimension(:) :: rnorm
+    real(kind=dp), allocatable, dimension(:) :: mo_energy_work_a, mo_energy_work_b
+    real(kind=dp), allocatable, dimension(:,:,:,:) :: trden
+    integer, allocatable, dimension(:,:) :: trans
+    real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    real(kind=dp), allocatable, target :: fmrq1(:,:,:)
+    real(kind=dp), allocatable :: dip(:,:,:), bvec_mo_tmp(:), eex(:)
+    integer(c_int) , pointer :: ixcore_ptr(:)
+    ! misc-excited-analysis: tagarray exposure of the MRSF densities / dipoles
+    real(kind=dp), pointer :: trden_store(:,:,:), dip_store(:,:,:), dipao_store(:,:)
+    real(kind=dp), allocatable :: mints_exp(:,:)
+    real(kind=dp) :: com_exp(3)
+
+    integer :: nocca, nvira, noccb, nvirb
+    integer :: nbf, nbf2, xvec_dim
+    integer :: mxvec, ist, jst, iend, nvec, novec
+    integer :: iter, nv, iv, ivec
+    !> Deterministic-phase pinning for the reported response vectors.
+    integer :: iphase_pin, iphase_pair
+    real(kind=dp) :: phase_amax
+    !> Two amplitudes this close in magnitude are treated as tied and the lower
+    !> index wins.  Same value as FCI_PHASE_TIE_RTOL / _CI_PHASE_TIE_RTOL.
+    real(kind=dp), parameter :: MRSF_PHASE_TIE_RTOL = 1.0e-8_dp
+    integer :: diag_index, i
+    integer :: mxiter
+    logical :: tamm_dancoff
+    integer :: imax
+    integer :: ierr
+    logical :: converged
+    real(kind=dp) :: rc_save, rc_new
+    real(kind=dp) :: mxerr, cnvtol, scale_exch
+    real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
+    integer :: maxvec, mrst, nstates, target_state
+    !> Reported states (nstates) and the strictly wider window the Davidson
+    !> actually tracks and expands on (nsolve = nstates + nextra).
+    integer :: nsolve, nextra
+    integer(8), contiguous, pointer :: pair_irrep_probe(:)
+    integer(4) :: pair_irrep_stat
+    logical :: roref
+    logical :: uhfref
+    logical :: debug_mode
+
+    type(int2_compute_t) :: int2_driver
+    type(int2_mrsf_data_t), target :: int2_data_st
+    type(int2_umrsf_data_t), target :: int2_udata_st
+
+    type(int2_td_data_t), target :: int2_data_q
+
+    logical :: dft = .false.
+    integer :: scf_type, mol_mult
+    character(len=16) :: method_name
+
+    logical :: umrsf
+
+    ! OQP_ROUTEC_SIG seam: when .true., the per-vector sigma triple (mrsfcbc ->
+    ! int2 -> mrsfmntoia+mrsfesum) is replaced by a device-resident sigma-session
+    ! call that returns amo(:,ist:iend) = (A-B).X directly. Decided ONCE pre-loop.
+    logical :: use_sig, sig_done
+    integer :: sig_ierr
+
+    ! tagarray
+    real(kind=dp), contiguous, pointer :: &
+      fock_a(:), dmat_a(:), mo_A(:,:), mo_energy_a(:), &
+      fock_b(:), dmat_b(:), mo_b(:,:), mo_energy_b(:), &
+      smat(:), ta(:), tb(:), td_t(:,:), bvec_mo_out(:,:), &
+      mrsf_energies(:)
+    character(len=*), parameter :: tags_alloc(3) = (/ character(len=80) :: &
+      OQP_td_bvec_mo, OQP_td_t, OQP_td_energies /)
+    character(len=*), parameter :: tags_required(9) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B, OQP_SM /)
+
+  ! Readings
+  ! Files open
+  ! 3. LOG: Write: Main output file
+    open (unit=iw, file=infos%log_filename, position="append")
+
+    umrsf = infos%tddft%umrsf
+    dft = infos%control%hamilton == 20 ! dft or hf
+  !
+    if (umrsf) then
+      if (dft) then
+        method_name = 'UMRSF-TDDFT'
+      else
+        method_name = 'UMRSF-TDHF'
+      end if
+      call print_module_info('UMRSF_TDHF_Energy','Computing Energy of '//trim(method_name))
+    else
+      if (dft) then
+        method_name = 'MRSF-TDDFT'
+      else
+        method_name = 'MRSF-TDHF'
+      end if
+      call print_module_info('MRSF_TDHF_Energy','Computing Energy of '//trim(method_name))
+    end if
+
+  ! Load basis set
+    basis => infos%basis
+    basis%atoms => infos%atoms
+
+  ! Get Fortran pointer ixcore_ptr from C pointer
+    if (.not. (infos%tddft%ixcore_len == 0)) &
+    call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
+
+   ! Input parameters
+    mrst = infos%tddft%mult
+    nstates = infos%tddft%nstate
+    target_state = infos%tddft%target_state
+    maxvec = infos%tddft%maxvec
+    cnvtol = infos%tddft%cnvtol
+    debug_mode = infos%tddft%debug_mode
+
+    mol_mult = infos%mol_prop%mult
+    if (umrsf) then
+      if (mol_mult/=3) call show_message('UMRSF requires a triplet UHF internal reference (mult=3).',with_abort)
+    else
+      if (mol_mult/=3) call show_message('MRSF requires a triplet ROHF internal reference (mult=3).',with_abort)
+    end if
+    scf_type = infos%control%scftype
+    roref = .not. umrsf .and. scf_type == 3
+    uhfref = umrsf
+
+    if (umrsf .and. scf_type/=2) then
+      call show_message('UMRSF requires a UHF internal reference (SCFTYPE=2).',with_abort)
+    end if
+
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    s_size = (basis%nshell**2+basis%nshell)/2
+
+    tamm_dancoff = .true.  ! tamm_dancoff: 0/1 means not doing/doing Tamm/Dancoff run
+
+    nocca = infos%mol_prop%nelec_a
+    nvira = nbf-nocca
+    noccb = infos%mol_prop%nelec_b
+    nvirb = nbf-noccb
+
+
+    if (mrst==1 .or. mrst==3 ) then
+      xvec_dim = nocca*nvirb
+    else if (mrst==5) then
+      xvec_dim = noccb*nvira
+    end if
+
+
+    if (mrst==1 ) then
+      nstates = min(nstates, xvec_dim-1)
+    else if (mrst==3) then
+      nstates = min(nstates, xvec_dim-3)
+    else if (mrst==5) then
+      nstates = min(nstates, xvec_dim)
+    end if
+
+    infos%tddft%nstate = nstates
+
+    ! The Davidson expands only on the residuals of the roots it TRACKS.  When
+    ! the tracked set is the reported set, a symmetry block whose crude
+    ! diagonal estimate starts just above the reported window is never enriched:
+    ! its subspace stays at the dimension it was seeded with, its Rayleigh
+    ! quotient never descends, and a root that physically belongs inside the
+    ! window is simply absent while the run converges and exits 0 (issue #327).
+    !
+    ! Separating the two removes the mechanism: track nsolve = nstates + nextra
+    ! roots, expand on all of them, and report the lowest nstates.  Convergence
+    ! is still tested on the reported roots only, so the extra window costs
+    ! subspace but cannot turn a converging run into a non-converging one.
+    !
+    ! Measured minimum window needed for a correct reported set (GCC/OpenBLAS,
+    ! this tree): CH2O 6-31G MRSF singlet nstate=3 needs 4; the same deck as a
+    ! triplet at nstate=6 needs 8; CH3Br-BHHLYP-SOC nstate=8 needs 10.  The
+    ! default below covers all three with margin.
+    nextra = max(3, nstates/4)
+
+    ! Two independent mechanisms lose a root, and they need different remedies.
+    ! A block that is SEEDED but starts above the reported window is fixed by
+    ! the window slack above.  A block that is never seeded at all is not: the
+    ! guess picks the nvec smallest diagonal estimates, and a block whose
+    ! diagonal estimates are all large gets nothing, however wide the window.
+    ! mrinivec repairs that from the pair-irrep table, so when the repair does
+    ! not run the window has to absorb the job instead, and it takes a wider
+    ! one.  The table being staged is NOT the same as the repair running -- it
+    ! is staged by pyoqp whenever symmetry detection produced usable labels,
+    ! independently of this solve.  The repair is skipped in three cases:
+    !
+    !   * no table at all              -- [symmetry] enabled=false;
+    !   * ixcore_len /= 0              -- mrinivec exits its seed-coverage
+    !                                     block outright for an XAS solve;
+    !   * mrst == 5                    -- the quintet path goes through inivec,
+    !                                     which never sees the table.
+    !
+    ! Measured on CH2O 6-31G MRSF with symmetry off: a slack of 6 is the
+    ! smallest that recovers the 1B1 root at every nstate from 3 upward; 5
+    ! still loses it at nstate=3.
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep_probe, &
+                           status=pair_irrep_stat)
+    if (pair_irrep_stat /= TA_OK &
+        .or. infos%tddft%ixcore_len /= 0 &
+        .or. mrst == 5) nextra = max(nextra, 6)
+
+    if (mrst==1 ) then
+      nsolve = min(nstates + nextra, xvec_dim-1)
+      mxvec = min(maxvec*nsolve, xvec_dim-1, infos%control%maxit_dav*nsolve)
+    else if (mrst==3) then
+      nsolve = min(nstates + nextra, xvec_dim-3)
+      mxvec = min(maxvec*nsolve, xvec_dim-3, infos%control%maxit_dav*nsolve)
+    else if (mrst==5) then
+      nsolve = min(nstates + nextra, xvec_dim)
+      mxvec = min(maxvec*nsolve, xvec_dim, infos%control%maxit_dav*nsolve)
+    end if
+    nsolve = max(nstates, min(nsolve, mxvec))
+
+    ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
+    ! Every attempt to enlarge it perturbed converged results.  Raising the
+    ! floor to 16 moved four example references; reserving just nirr-1 extra
+    ! vectors still moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to
+    ! 5.224000 eV, fully converged and wrong -- and there with NO substitution
+    ! taking place, so the trial-set size alone was responsible.
+    !
+    ! Symmetry-block coverage is therefore handled inside mrinivec, which
+    ! reassigns vectors within this fixed set rather than asking for more.  It
+    ! is NOT restricted to the room beyond the requested states: an earlier
+    ! version of this comment claimed that, and measuring it showed the
+    ! restriction costs more than it buys.  Since nvec = min(max(nstates,6),
+    ! mxvec) there is no such room for any nstate >= 6, which is exactly where
+    ! blocks go unseeded -- CH2O 6-31G at nstate=6 loses its 5.788160 eV state
+    ! outright under the restriction and reports all six correctly without it,
+    ! while both SOC anchors reproduce their references either way (CH3Br
+    ! 9.8e-10, H2O 1.6e-13).  See the victim-selection comment in mrinivec.
+    nvec = min(max(nsolve,6), mxvec)
+
+    call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
+    call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
+    call infos%dat%alloc_or_die(OQP_td_energies, (/ nstates /), mrsf_energies, description=OQP_td_energies_comment)
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_SM, smat)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+
+
+  ! Allocate temporary matrices for diagonalization
+    allocate (fa(nbf,nbf), &
+              fb(nbf,nbf), &
+              stat=ok)
+    if( ok/=0 ) call show_message('Cannot allocate memory',with_abort)
+
+  ! Allocate TDDFT variables
+    allocate(xm(xvec_dim),  &
+             bvec_mo(xvec_dim,mxvec), &
+             trden(nbf,nbf,nstates,nstates), &
+             wrk1(nbf,nbf), &
+             wrk2(nbf,nbf), &
+             smat_full(nbf,nbf), &
+             amo(xvec_dim,mxvec), &
+             EEX(mxvec), &
+             squared_S(nstates), &
+             APB(mxvec,mxvec), &
+             AMB(mxvec,mxvec), &
+             VR(mxvec*mxvec), &
+             VL(mxvec*mxvec), &
+             for_trnsf_b_vec(mxvec,mxvec), & !
+             dip(3,nstates,nstates), &
+             scr(nbf2), &
+             bvec_mo_tmp(xvec_dim), &
+             scr2(mxvec*mxvec), &
+             scr3(nocca), &
+             qvec(xvec_dim,nsolve), &
+             RNORM(nsolve), &
+             source=0.0_dp,stat=ok)
+    if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
+    allocate(trans(xvec_dim,2), &
+             source=0, stat=ok)
+    if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
+
+    mo_energy_work_a = mo_energy_a
+    mo_energy_work_b = mo_energy_b
+  ! MO rotations (Jacobi)
+    if (umrsf) then
+      call unpack_matrix(smat, smat_full, nbf, 'U')
+      call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
+      call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 1)
+    end if
+
+    ta => td_t(:,1)
+    tb => td_t(:,2)
+
+    if (mrst==1 .or. mrst==3 ) then
+      if (umrsf) then
+        allocate(mrsf_density(nvec,11,nbf,nbf), &
+                 source=0.0_dp, &
+                 stat=ok)
+      else
+        allocate(mrsf_density(nvec,7,nbf,nbf), &
+                 source=0.0_dp, &
+                 stat=ok)
+      end if
+    else if( mrst==5  )then
+
+      allocate(fmrq1(nbf,nbf,nvec), &
+               source=0.0_dp, &
+               stat=ok)
+
+    end if
+
+    if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
+
+    scale_exch = 1.0_dp
+    if (infos%tddft%HFscale == -1.0_dp) &
+          infos%tddft%HFscale = infos%dft%HFscale
+
+    if (infos%dft%cam_flag) then
+      if (infos%tddft%cam_alpha == -1.0_dp) &
+            infos%tddft%cam_alpha = infos%dft%cam_alpha
+      infos%tddft%HFscale = infos%tddft%cam_alpha
+      if (infos%tddft%cam_beta == -1.0_dp) &
+            infos%tddft%cam_beta = infos%dft%cam_beta
+      if (infos%tddft%cam_mu == -1.0_dp) &
+            infos%tddft%cam_mu = infos%dft%cam_mu
+    end if
+    if (dft) scale_exch = infos%tddft%HFscale
+    ! Pure HF reference (no DFT functional): the effective exact-exchange scale
+    ! is 1.0. Without a DFT functional infos%dft%HFscale is left at the -1.0
+    ! sentinel, so the response HFscale (and hence the spin-pair coupling below)
+    ! would inherit -1.0. The energy tolerates this (the fmrst2 rescale is
+    ! skipped because spc == HFscale either way), but the MRSF gradient uses the
+    ! spin-pair coupling values directly and needs the correct +1.0.
+    if (.not. dft) infos%tddft%HFscale = 1.0_dp
+    ! set spin-pair coupling
+    if (infos%tddft%spc_coco==-1.0_dp) &
+          infos%tddft%spc_coco = infos%tddft%HFscale
+    if (infos%tddft%spc_ovov==-1.0_dp) &
+          infos%tddft%spc_ovov = infos%tddft%HFscale
+    if (infos%tddft%spc_coov==-1.0_dp) &
+          infos%tddft%spc_coov = infos%tddft%HFscale
+
+    if(debug_mode)then
+      write(*,'(/,5x,"Input parameters:")')
+      write(*,'(5x,"Number of states:                 ",1x,I0)') nstates
+      write(*,'(5x,"Number of single excitations:     ",1x,I0)') xvec_dim
+      write(*,'(5x,"Number of atomic orbitals:        ",1x,I0)') nbf
+      write(*,'(5x,"Number of electrons:              ",1x,I0)') nocca+noccb
+      write(*,'(5x,"Number of occupied alpha orbitals:",1x,I0)') nocca
+      write(*,'(5x,"Number of occupied beta orbitals: ",1x,I0)') noccb
+      write(*,'(5x,"Number of virtual alpha orbitals: ",1x,I0)') nvira
+      write(*,'(5x,"Number of virtual beta orbitals:  ",1x,I0)') nvirb
+      write(*,'(5x,"Maximum vectors:                  ",1x,I0)') mxvec
+      write(*,'(5x,"Initial vectors:                  ",1x,I0)') nvec
+      if (.not. (infos%tddft%ixcore_len == 0)) &
+        write(*,'(5x,"Ixcore (MO index):                ",1x,I0)') ixcore_ptr
+      write(*, '(/7x,"Fitting parameters for ",A)') trim(method_name)
+      if (.not.infos%dft%cam_flag) then
+        write(*, '(10x,"Exact HF exchange:")')
+        write(*, '(5x,"Reference: |", t20, f6.3, t29, "|")') infos%dft%HFscale
+        write(*, '(5x,"Response:  |", t20, f6.3, t29, "|")') infos%tddft%HFscale
+      else
+        write(*, '(10x,"CAM parametres:")')
+        write(*, '(16x,"|   alpha   |    beta   |     mu    |")')
+        write(*, '(5x,"Reference: |", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
+           infos%dft%cam_alpha, infos%dft%cam_beta, infos%dft%cam_mu
+        write(*, '(5x,"Response:  |", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
+           infos%tddft%cam_alpha, infos%tddft%cam_beta, infos%tddft%cam_mu
+      end if
+      write(*, '(10x,"Spin-pair coupling parametres:")')
+      write(*, '(16x,"|   CO-CO   |   OV-OV   |   CO-OV   |")')
+      write(*, '(16x,"|", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
+         infos%tddft%spc_coco, infos%tddft%spc_ovov, infos%tddft%spc_coov
+    end if
+
+    write(*,'(/,5x,46("="))')
+    if (mrst==1) write(*,'(  5X,"Davidson algorithm for Singlet response states")')
+    if (mrst==3) write(*,'(  5x,"Davidson algorithm for Triplet response states")')
+    if (mrst==5) write(*,'(  5x,"Davidson algorithm for Quintet response states")')
+    write(*,'(5x,46("="))')
+
+    ! Loosen the 2e integral cutoff for the MRSF RESPONSE build only. The
+    ! response is built on the converged orbitals, so it tolerates a far looser
+    ! cutoff than the SCF default (5e-11). DEFAULT 1e-8 -- measured exact to the
+    ! printed precision (<<1 ueV, far below the ~5e-5 regression tolerance and
+    ! the iterative conv tolerance) -- removes integrals the response cannot
+    ! resolve, cutting the integral COUNT (eval + digestion) for a modest free
+    ! speedup that grows with system size. Override via env OQP_MRSF_RESP_CUTOFF
+    ! (a.u.): set looser (e.g. 1e-7/1e-6) for more speed at ueV cost, or set to
+    ! the SCF cutoff (5e-11) to recover the previous exact-tight behavior.
+    ! max(SCF cutoff, requested) never goes tighter than the SCF integrals.
+    ! Restored after the response so SCF / later steps are unaffected.
+    ! Response 2e cutoff from [tdhf] resp_cutoff (infos%control%mrsf_resp_cutoff,
+    ! default 1e-8). max(SCF cutoff, requested) never goes tighter than SCF.
+    rc_save = infos%control%int2e_cutoff
+    rc_new = infos%control%mrsf_resp_cutoff
+    if (rc_new <= 0.0_dp) rc_new = 1.0e-8_dp
+    infos%control%int2e_cutoff = max(rc_save, rc_new)
+
+    ! FP32 response digestion from [tdhf] fp32 (infos%control%mrsf_fp32). Also
+    ! reaches the z-vector gradient, which reuses the same process-global flag.
+    call mrsf_set_fp32(int(infos%control%mrsf_fp32))
+
+    ! Initialize ERI (Electron Repulsion Integrals) calculations
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+    call flush(iw)
+
+  ! Prepare for ROHF
+    if ((roref .and. .not. umrsf) .or. (uhfref .and. umrsf)) then
+  !   Alpha
+      call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
+
+      ! shift Fock in MO basis here except MOs listed in ixcores
+      if (.not. (infos%tddft%ixcore_len == 0)) then
+        Do iter = 1, noccb
+            if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
+                diag_index = (iter + 1) * iter / 2
+                scr(diag_index) = -1.0d6
+            end if
+        End Do
+      end if
+
+      call unpack_matrix(scr,fa)
+
+  !   Beta
+      call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, scr)
+      call unpack_matrix(scr,fb)
+    end if
+
+    if (umrsf) then
+      do i = 1, nbf
+        mo_energy_work_a(i) = fa(i,i)
+        mo_energy_work_b(i) = fb(i,i)
+      end do
+    end if
+
+
+  ! Construct TD trial vector
+    !
+    ! PASSING THE SAME ARRAY AS BOTH ea AND eb ON THE ROHF PATH IS DELIBERATE
+    ! AND IS THE BETTER CHOICE.  Issue #328 proposed replacing it with the
+    ! alpha/beta Fock diagonals, as the UMRSF branch above does; measurement
+    ! rejects that.  Do not apply it.  What follows is the measurement.
+    !
+    ! xm both orders the seeds and preconditions the Davidson residuals, so
+    ! what it has to approximate is the DIAGONAL OF THE OPERATOR, A(ij,ij) --
+    ! not the one-electron part of it.  The two candidates are
+    !
+    !   xm_1e(i,j) = fb(j,j) - fa(i,i)                    [exact 1e diagonal]
+    !   xm_rohf    = eps(j) - eps(i)
+    !              = xm_1e - 0.5*[ (fb-fa)(i,i) + (fb-fa)(j,j) ]
+    !
+    ! because the ROHF canonical eigenvalues ARE the Guest-Saunders average,
+    ! eps(p) = 0.5*(fa(p,p) + fb(p,p)); fitting eps(j)-eps(i) to an additive
+    ! a(i)+b(j) form over all 53 (H2O) and 134 (CH2O) non-open-open amplitudes
+    ! reproduces it to 1e-10.
+    !
+    ! xm_1e really is the exact one-electron diagonal of mrsfesum: contraction
+    ! 1 there contributes fb(j,j)*X(i,j), contraction 2 contributes
+    ! -fa(i,i)*X(i,j), and the folded open-open branch contributes
+    ! 0.5*[(fb-fa)(O1,O1) + (fb-fa)(O2,O2)]*X(O1,O1) -- exactly mrinivec's two
+    ! formulas.  But the full diagonal also carries the spin-flip exchange
+    ! -c_H*(ij|ji) (JCP 149, 104101 Eq. 2.25), which xm omits on every path,
+    ! and that omitted term is NOT a small correction: hole and particle both
+    ! sit on or next to the two SOMOs, and at the folded open-open slot they
+    ! are the SAME spatial orbital, making it the SOMO self-repulsion, O(1 Eh).
+    !
+    ! The Guest-Saunders subtraction is a surrogate for precisely that omitted
+    ! exchange -- (fb-fa)(p,p) = c_H*[K(p,O1) + K(p,O2)] + dVxc(p,p) -- and a
+    ! good one.  Applying the production sigma to unit vectors gives the exact
+    ! A(ij,ij) (sigma = A e_ij on iteration 1); over 45 of the 54 amplitudes of
+    ! H2O/6-31G, triplet ROHF reference, triplet target:
+    !
+    !                    |xm_rohf - A_diag|        |xm_1e - A_diag|
+    !     MRSF-TDHF      MAE 0.315  max 0.685     MAE 0.542  max 1.133
+    !     MRSF/BHHLYP    MAE 0.142  max 0.311     MAE 0.272  max 0.567
+    !
+    ! and xm_rohf is closer on 45 amplitudes out of 45, in both.  At the folded
+    ! open-open slot it is not merely closer, it is EXACT for pure HF: the
+    ! one-electron part c_H*[0.5*(K11+K22) + K12] is cancelled term by term by
+    ! the response exchange, leaving 0.5*[dVxc(O1,O1) + dVxc(O2,O2)], which is
+    ! identically zero without a functional.  Measured A(OO,OO) = 0.0000000000
+    ! (HF) and 0.0317175663 (BHHLYP), against xm_rohf = 0 and xm_1e = 0.609 /
+    ! 0.337.  The "identically zero" open-open entry is the right answer, not
+    ! an artefact of ea == eb.
+    !
+    ! Measured consequences of substituting xm_1e:
+    !   - examples/MRSF-TDDFT/CH2O_MRSFTDDFT_SYMMETRY_BLOCK_COVERAGE LOSES its
+    !     2.039974 eV triplet.  The reordered xm drops the seed that reaches
+    !     that block and T1 is reported as 4.782 eV -- converged, silent, wrong.
+    !   - h2o_rohf_mrsf-t_6-31g_{bhhlyp,cam-b3lyp} stop converging.  Not a
+    !     divergence: the residual reaches 5.9e-08 / 8.5e-08 against a 1e-08
+    !     threshold and the run exits on "nvec = mxvec".  Both decks have
+    !     xvec_dim = 54, so mxvec = xvec_dim-3 = 51 caps the subspace and the
+    !     auto-restart above cannot rescue it -- the degraded preconditioner
+    !     needs more expansion vectors than the whole space has.
+    !
+    ! The other observation in #328 is real but belongs to a different
+    ! mechanism: H2O_BHHLYP_SOC at nstate=12 is missing the physical root at
+    ! 0.60340875 Eh (1A'', dark).  That is a trial-set COVERAGE limit, not a
+    ! diagonal one -- the shipped diagonal finds that root, unchanged, at
+    ! nstate=20 and nstate=30 (energies equal to 4.6e-14, eigenvector overlap
+    ! 1 - 7.2e-10 at conv=1e-10).  See the seed-coverage block in mrinivec.
+    if (mrst==1 .or. mrst==3) then
+      if (.not. umrsf) then
+        ! ROHF: mo_energy_work_a holds the Guest-Saunders spin average and goes
+        ! in as BOTH ea and eb on purpose -- see the measurement above.
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
+      else
+        ! UHF reference: genuine alpha/beta eigenvalues, no spin average to undo.
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec, &
+                      seeds_per_irrep=seeds_per_irrep)
+      end if
+
+    else if (mrst==5) then
+      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec,infos)
+    end if
+
+    ! ---- OQP_ROUTEC_SIG pre-loop gate (decide use_sig ONCE) ----------------
+    ! Activate the device sigma-session only for the MRSF S/T flagship the v3
+    ! engine supports: mrst in {1,3}, non-UMRSF, no CAM, no spin-pair rescale
+    ! (all spc_* == HFscale). fa/fb are the unpacked MO Fock built above;
+    ! scale_exch is finalized above. Any failure => pure native path.
+    use_sig = .false.
+    if ((mrst==1 .or. mrst==3) .and. .not. umrsf) then
+      if (infos%tddft%spc_coco == infos%tddft%hfscale .and. &
+          infos%tddft%spc_ovov == infos%tddft%hfscale .and. &
+          infos%tddft%spc_coov == infos%tddft%hfscale .and. &
+          .not. (dft .and. infos%dft%cam_flag)) then
+        if (routec_sig_available()) then
+          sig_ierr = routec_sig_begin(nbf, mo_a, mo_b, fa, fb, &
+                                      nocca, noccb, mrst, scale_exch)
+          use_sig = (sig_ierr == 0)
+          if (.not. use_sig) write(*,'(2x,a,i0,a)') &
+            'routec_sig: sig_begin returned ', sig_ierr, &
+            ' -> using native MRSF sigma path'
+        end if
+      end if
+    end if
+
+    ist = 1
+    iend = nvec
+    iter = 0
+    mxiter = infos%control%maxit_dav
+    ierr = 0
+
+    do iter = 1, mxiter
+      nv = iend-ist+1
+
+      sig_done = .false.
+      if (use_sig) then
+      ! ---- OQP_ROUTEC_SIG fast path: amo(:,ist:iend) = (A-B).X on device ----
+      ! Replaces the whole 6a (mrsfcbc) -> 6b (int2) -> 6c (mrsfmntoia+mrsfesum)
+      ! triple for the new trial columns. bvec_mo/amo are already the MO occ-virt
+      ! parameterization (ntrial = nocca*(nbf-noccb), col-major i-fast), so the
+      ! slices drop straight in with no reshape or AO traffic.
+      ! A mid-run decline (device error / OOM / unsupported batch) is
+      ! recoverable: switch the session off and compute this and every later
+      ! slice through the native path instead of aborting the run.
+        if (routec_sig_apply(bvec_mo(:,ist:iend), nv, amo(:,ist:iend))) then
+          sig_done = .true.
+        else
+          use_sig = .false.
+          write(*, '(2x,a)') &
+            'routec_sig: sig_iter declined mid-run -> reverting to native sigma path'
+        end if
+      end if
+
+      if (.not. sig_done) then
+
+      if( mrst==1 .or. mrst==3 ) then
+
+        mrsf_density = 0.0_dp   ! bo2v, bo1v, bco1, bco2, o21v, co12, ball
+
+      else if( mrst==5 ) then
+
+        fmrq1 = 0.0_dp
+
+      end if
+
+      do ivec = ist, iend
+
+        iv = ivec-ist+1
+
+        if (mrst==1 .or. mrst==3) then
+
+          call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
+          if (umrsf) then
+            call umrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          else
+            call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          end if
+
+        else if (mrst==5) then
+
+          call iatogen(bvec_mo(:,ivec), wrk1, noccb, nocca)
+          call orthogonal_transform('t', nbf, mo_a, wrk1, fmrq1(:,:,iv), wrk2)
+
+        end if
+
+      end do
+
+      if (mrst==1 .or. mrst==3) then
+
+        if (umrsf) then
+          call int2_udata_st%clean()
+          int2_udata_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_udata_st%tamm_dancoff = tamm_dancoff
+          int2_udata_st%scale_exchange = scale_exch
+          int2_udata_st%scale_coulomb = scale_exch
+
+          call int2_driver%run( &
+            int2_udata_st, &
+            cam = dft.and.infos%dft%cam_flag, &
+            alpha = infos%tddft%cam_alpha, &
+            alpha_coulomb = infos%tddft%cam_alpha, &
+            beta = infos%tddft%cam_beta, &
+            beta_coulomb = infos%tddft%cam_beta, &
+            mu = infos%tddft%cam_mu)
+
+          fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
+        else
+          call int2_data_st%clean()
+          int2_data_st%d3 => mrsf_density(:iv,:,:,:)
+          int2_data_st%tamm_dancoff = tamm_dancoff
+          int2_data_st%scale_exchange = scale_exch
+          int2_data_st%scale_coulomb = scale_exch
+
+        call int2_driver%run( &
+          int2_data_st, &
+          cam = dft.and.infos%dft%cam_flag, &
+          alpha = infos%tddft%cam_alpha, &
+          alpha_coulomb = infos%tddft%cam_alpha, &
+          beta = infos%tddft%cam_beta, &
+          beta_coulomb = infos%tddft%cam_beta, &
+          mu = infos%tddft%cam_mu)
+
+        fmrst2 => int2_data_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
+        endif
+
+        ! Scaling factor if triplet
+        if (umrsf .and. mrst==3) then
+          fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
+        else if (mrst==3) then
+          fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+        endif
+
+        ! Spin pair coupling
+        if (umrsf) then
+          if (abs(infos%tddft%hfscale) > epsilon(1.0_dp)) then
+            if (infos%tddft%spc_coco /= infos%tddft%hfscale) then
+              spc_scale_coco = infos%tddft%spc_coco / infos%tddft%hfscale
+              fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * spc_scale_coco
+            end if
+            if (infos%tddft%spc_ovov /= infos%tddft%hfscale) then
+              spc_scale_ovov = infos%tddft%spc_ovov / infos%tddft%hfscale
+              fmrst2(:,9,:,:) = fmrst2(:,9,:,:) * spc_scale_ovov
+            end if
+            if (infos%tddft%spc_coov /= infos%tddft%hfscale) then
+              spc_scale_coov = infos%tddft%spc_coov / infos%tddft%hfscale
+              fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * spc_scale_coov
+            end if
+          else if (infos%tddft%spc_coco /= 0.0_dp .or. &
+                   infos%tddft%spc_ovov /= 0.0_dp .or. &
+                   infos%tddft%spc_coov /= 0.0_dp) then
+            call show_message('UMRSF-TDDFT spin-pair coupling overrides require nonzero HFscale.', with_abort)
+          end if
+        else
+          if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
+             fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
+          if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
+             fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
+          if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
+             fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+        endif
+
+      else if (mrst==5) then
+
+        int2_data_q = int2_td_data_t( &
+          d2=fmrq1(:,:,:iv), &
+          int_apb = .false., &
+          int_amb = .false., &
+          tamm_dancoff = tamm_dancoff, &
+          scale_exchange = scale_exch)
+        call int2_driver%run( &
+          int2_data_q, &
+          cam = dft.and.infos%dft%cam_flag, &
+          alpha = infos%tddft%cam_alpha, &
+          beta = infos%tddft%cam_beta,&
+          mu = infos%tddft%cam_mu)
+
+      end if
+
+      do ivec = ist, iend
+
+        iv = ivec-ist+1
+
+        if (mrst==1 .or. mrst==3) then
+
+          ! Product (A-B)*X
+          if (umrsf) then
+            call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          else
+            call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          end if
+
+          call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
+
+          call mrsfesum(infos, wrk1, fa, fb, amo, ivec)
+
+        else if( mrst==5 )then
+
+          call mntoia(int2_data_q%amb(:,:,iv,1), amo(:,ivec), mo_a, mo_b, noccb, nocca)
+
+          ! Z(I+,A-)
+          call iatogen(bvec_mo(:,ivec),wrk1,noccb,nocca)
+
+          ! FB(I+,J+)*Z(J+,A-)
+          call dgemm('n','n',noccb,nbf,noccb, &
+                     1.0_dp,fb,nbf, &
+                            wrk1,nbf, &
+                     0.0_dp,wrk2,noccb)
+
+          ! Z(I+,B-)*FA(B-,A-)
+          call dgemm('n','n',noccb,nbf,nbf, &
+                     1.0_dp,wrk1,nbf, &
+                            fa,nbf, &
+                    -1.0_dp,wrk2,noccb)
+
+          call mrsfqroesum(wrk2,amo, &
+                           nocca,noccb,nbf,ivec)
+
+        end if
+      end do
+
+      end if   ! use_sig / native sigma path
+
+      vl_p(1:nvec, 1:nvec) => vl(1:nvec*nvec)
+      vr_p(1:nvec, 1:nvec) => vr(1:nvec*nvec)
+      call rparedms(bvec_mo,amo,amo,apb,amb,nvec,tamm_dancoff=.true.)
+      call rpaeig(eex,vl_p,vr_p,apb,amb,scr2,tamm_dancoff=.true.)
+      call rpavnorm(vr_p,vl_p,tamm_dancoff=.true.)
+      call rpaechk(eex,nvec,nsolve,imax,tamm_dancoff=.true.)
+
+      for_trnsf_b_vec = vr_p
+!     Residuals and preconditioned corrections for the whole TRACKED window,
+!     not just the reported one: this is what keeps a block that starts above
+!     the reported window being enriched until its root descends into it.
+      call sfresvec(qvec,bvec_mo,amo,vr_p,eex,nvec,rnorm,nsolve)
+      call sfqvec(qvec,xm,eex,nsolve)
+
+!     Response-space symmetry blocking (no-op unless staged by pyoqp):
+!     confine each root's update to the dominant irrep of its Ritz vector.
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nsolve))
+      call sym_response_project(infos, sym_ritz, qvec, nsolve)
+      if (infos%control%verbose >= 1) call rpaprint(eex, rnorm, cnvtol, iter, imax, nsolve, do_neg=.true.)
+
+!     Convergence is judged on the REPORTED roots -- demanding that every extra
+!     tracked root converge too would turn a converging run into a
+!     non-converging one for no gain.  But an extra pair sitting above the
+!     reporting boundary may still descend past it, and exiting while it can
+!     would recreate exactly the loss this change removes.  For a symmetric
+!     operator the eigenvalue a Ritz pair approximates lies within ||r|| of its
+!     Ritz value, so a pair whose Ritz value is further than ||r|| above the
+!     boundary cannot cross it; anything closer keeps the loop alive.
+!     rnorm holds ||r||^2 (sfresvec stores dot_product(q,q)).
+      mxerr = maxval(rnorm(1:nstates))
+      do ivec = nstates + 1, nsolve
+        if (eex(ivec) - sqrt(rnorm(ivec)) <= eex(nstates)) &
+          mxerr = max(mxerr, rnorm(ivec))
+      end do
+
+!     Check convergence
+      converged = mxerr<=cnvtol
+      if (converged) exit
+
+!     No space left for new vectors, exit
+      if (nvec==mxvec) ierr = 1
+      if (ierr/=0) exit
+
+      call rpanewb(nsolve,bvec_mo,qvec,novec,nvec,ierr,tamm_dancoff=.true.)
+
+  !   ierr=1 nvec over mxvec: not converged case
+      if (ierr/=0) exit
+
+      ist = novec+1
+      iend = nvec
+
+    end do
+
+    if (iter >= mxiter .and. .not. converged) ierr = -1
+
+    select case (ierr)
+    case (-1)
+      write(*,'(/,2X,"MRSF-TD-DFT energies NOT CONVERGED after ",I4," iterations"/)') mxiter
+      infos%mol_energy%Davidson_converged=.false.
+    case (0)
+      write(*,'(/,2X,"MRSF-TD-DFT energies converged in ",I4," iterations"/)') iter
+      infos%mol_energy%Davidson_converged=.true.
+    case (1)
+      write(*,'(/,2X,"..something is wrong.. nvec = mxvec")')
+      infos%mol_energy%Davidson_converged=.false.
+    case (2)
+      write(*,'(/,2x,"..something is wrong..  nvec > mxvec")')
+      write(*,'(3x,"nvec/mxvec =",I4,"/",I4)') nvec, mxvec
+      infos%mol_energy%Davidson_converged=.false.
+    case (3)
+      write(*,'(/,2x,"..something is wrong.. No vectors were added")')
+      infos%mol_energy%Davidson_converged=.false.
+    end select
+
+    ! A converged spectrum can still be missing a root whose symmetry block
+    ! WAS seeded -- mrinivec's nmiss counter cannot see that case, because it
+    ! counts blocks that got no seed at all.  sym_ritz holds the converged
+    ! Ritz vectors (it is rebuilt every iteration, and the loop exits right
+    ! after).  Only checked on a converged solve: an unconverged one already
+    ! says so, louder.
+    if (ierr == 0 .and. allocated(sym_ritz)) &
+      call mrsf_check_block_representation(infos, sym_ritz, nstates, &
+                                           seeds_per_irrep)
+
+    ! The reported window can still cut a near-degenerate manifold in half.
+    ! That is not a solver defect, but "state N" is then not a well-separated
+    ! label: any change to the guess can swap which member lands in slot N
+    ! while both stay converged.  CH3Br-BHHLYP-SOC nstate=6 is exactly this --
+    ! its 6th and 7th singlets sit 9.4 meV apart.  Say so rather than let a
+    ! single scalar be treated as a stable reference.
+    if (ierr == 0 .and. nsolve > nstates .and. nstates >= 1) then
+      if (abs(eex(nstates+1) - eex(nstates)) < 1.0e-3_dp) then
+        write(iw,'(/,2X,"MRSF WARNING: the reported window ends inside a ", &
+          &"near-degenerate manifold: state ",I0," (",F14.8,") and the first ", &
+          &"unreported root (",F14.8,") differ by ",ES10.3," Hartree.  Which ", &
+          &"member occupies slot ",I0," is not robust against a change of ", &
+          &"initial guess; request more states, or match this manifold by ", &
+          &"overlap or irrep rather than by root index.",/)') &
+          nstates, eex(nstates), eex(nstates+1), &
+          abs(eex(nstates+1)-eex(nstates)), nstates
+      end if
+    end if
+
+    call flush(iw)
+
+    call trfrmb(bvec_mo, for_trnsf_b_vec, nvec, nstates)
+
+!   Give each reported response vector a deterministic sign.  Nothing in the
+!   solve fixes the sign of an eigenvector, so every quantity built from one --
+!   transition dipoles, NACs, SOC matrix elements -- carries a sign that is not
+!   a property of the calculation: it changes with the BLAS, the thread count
+!   and the machine.  Measured on C4H6_BHHLYP_UMRSFTDDFT_ENERGY, where rerunning
+!   an unmodified tree reproduces every |mu| to 1e-9 while the stored vectors
+!   come back sign-flipped (max|d mu| = 4.658 against the committed file).
+!
+!   The rule is the largest-magnitude amplitude positive, with near-ties
+!   resolved by the LOWEST index: an exact tie is measure-zero, but two
+!   amplitudes agreeing to round-off are not, and picking by index keeps the
+!   choice stable across platforms where argmax alone would not be.
+!
+!   The tie window matches MRSF_PHASE_TIE_RTOL below, which is the value the CI
+!   convention already uses (FCI_PHASE_TIE_RTOL in fci_driver.F90,
+!   _CI_PHASE_TIE_RTOL in fci.py).  A narrower window was tried first and is not
+!   enough: at 1e-10 the same deck built against MKL ILP64 and against
+!   OpenBLAS64 -- same compiler, BLAS the only difference -- picked different
+!   largest amplitudes and so fixed opposite signs, magnitudes agreeing to
+!   4.2e-11 while the raw vectors differed by 4.651.
+    do ist = 1, nstates
+      phase_amax = maxval(abs(bvec_mo(:,ist)))
+      if (phase_amax <= 0.0_dp) cycle
+      iphase_pin = 0
+      do iphase_pair = 1, xvec_dim
+        if (abs(bvec_mo(iphase_pair,ist)) >= phase_amax*(1.0_dp - MRSF_PHASE_TIE_RTOL)) then
+          iphase_pin = iphase_pair
+          exit
+        end if
+      end do
+      if (iphase_pin > 0) then
+        if (bvec_mo(iphase_pin,ist) < 0.0_dp) bvec_mo(:,ist) = -bvec_mo(:,ist)
+      end if
+    end do
+
+    select case (mrst)
+      case(1)
+        if (umrsf) then
+          trden = 0.0_dp
+        else
+          do ist = 1, nstates
+            do jst = ist, nstates
+              call get_mrsf_transition_density(infos,trden(:,:,ist,jst), bvec_mo, ist, jst)
+            end do
+          end do
+        end if
+
+        if (umrsf) then
+          do ist = 1, nstates
+            call umrsfssqu(squared_S(ist), mo_a, mo_b, smat, wrk1, scr3, nbf, nbf2, &
+                           xvec_dim, ist, nbf, bvec_mo, nocca, noccb, &
+                           .true., .false.)
+          end do
+        else
+          squared_S(:) = 0.0_dp
+        end if
+        call get_mrsf_transitions(trans, nocca, noccb, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Spin-adapted spin-flip excitations",/,2x,35("="))')
+      case(3)
+        if (umrsf) then
+          trden = 0.0_dp
+        else
+          do ist = 1, nstates
+            do jst = ist, nstates
+              call get_mrsf_transition_density(infos, trden(:,:,ist,jst), bvec_mo, ist, jst)
+            end do
+          end do
+        end if
+        if (umrsf) then
+          do ist = 1, nstates
+            call umrsfssqu(squared_S(ist), mo_a, mo_b, smat, wrk1, scr3, nbf, nbf2, &
+                           xvec_dim, ist, nbf, bvec_mo, nocca, noccb, &
+                           .false., .true.)
+          end do
+        else
+          squared_S(:) = 2.0_dp
+        end if
+        call get_mrsf_transitions(trans, nocca, noccb, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Spin-adapted spin-flip excitations",/,2x,35("="))')
+      case(5)
+        call get_transition_density(trden, bvec_mo, nbf, noccb, nocca, nstates)
+        squared_S(:) = 6.0_dp
+        call get_transitions(trans, noccb, nocca, nbf)
+        write(*,'(/,2x,35("="),/,2x,&
+            &"Beta -> Alpha spin-flip excitations",/,2x,35("="))')
+      case default
+        error stop "Unknown mrst value"
+    end select
+
+    if (umrsf .and. (mrst==1 .or. mrst==3)) then
+      call get_umrsf_transition_dipole(basis, dip, mo_a, mo_b, bvec_mo, &
+                                       nstates, nocca, noccb, mrst)
+    else
+      call get_transition_dipole(basis, dip, mo_a, trden, nstates)
+    end if
+
+    ! --- misc-excited-analysis: expose the MRSF state-interaction transition /
+    !     state-difference densities (alpha-MO basis), the transition dipoles,
+    !     and the AO electric-dipole integrals for downstream Python analysis.
+    !     Pure write-out; no physics above is altered (ported to the alloc_or_die
+    !     tagarray API of current main).
+    !
+    !     Only the state-interaction DENSITY is MRSF-only: for UMRSF trden stays
+    !     an unpopulated placeholder (set identically to zero above), so
+    !     publishing it would advertise all-zero tags as real densities. The
+    !     transition dipoles are genuine on both paths -- UMRSF gets them from
+    !     the spin-resolved alpha/beta contraction -- so they are exposed for
+    !     UMRSF too. Withholding them would leave the quantity this routine
+    !     computes invisible to downstream analysis and to the regression
+    !     references, which is how the all-zero UMRSF dipoles went unnoticed.
+    if (.not. umrsf) then
+      ! get_mrsf_transition_density / get_transition_dipole only populate the
+      ! upper triangle (ist<=jst). Mirror it into the stored copies so reverse
+      ! state pairs are correct: gamma^{j->i} = (gamma^{i->j})^T and the (real)
+      ! transition dipole mu^{j->i} = mu^{i->j}. The live `dip`/`trden` arrays
+      ! handed to print_results are left untouched.
+      do jst = 1, nstates
+        do ist = jst+1, nstates
+          trden(:,:,ist,jst) = transpose(trden(:,:,jst,ist))
+        end do
+      end do
+
+      call infos%dat%alloc_or_die(OQP_td_trans_density_mo, &
+        (/ nbf, nbf, nstates*nstates /), trden_store, &
+        description=OQP_td_trans_density_mo_comment)
+      trden_store = reshape(trden(:,:,1:nstates,1:nstates), (/ nbf, nbf, nstates*nstates /))
+    end if
+
+    call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
+      dip_store, description=OQP_td_trans_dipole_comment)
+    dip_store = dip(:,1:nstates,1:nstates)
+
+    ! Store a symmetric public transition-dipole tensor. UMRSF computes the
+    ! forward pairs with a spin-resolved contraction, but the reverse pairs are
+    ! the same real transitions up to state phase and should not expose a
+    ! different magnitude to downstream oscillator-strength analysis.
+    do jst = 1, nstates
+      do ist = jst+1, nstates
+        dip_store(:,ist,jst) = dip_store(:,jst,ist)
+      end do
+    end do
+
+    allocate(mints_exp(nbf2,3), source=0.0_dp)
+    com_exp = basis%atoms%center(weight='mass')
+    call multipole_integrals(basis, mints_exp, com_exp, 1)
+    call infos%dat%alloc_or_die(OQP_td_dip_ao, (/ nbf2, 3 /), dipao_store, &
+      description=OQP_td_dip_ao_comment)
+    dipao_store = mints_exp
+    deallocate(mints_exp)
+
+    mrsf_energies = eex(1:nstates)
+    bvec_mo_out = bvec_mo(:,1:nstates)
+    infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
+    call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates, &
+                       physical_mrsf_labels=.true.)
+    call flush(iw)
+
+    call int2_driver%clean()
+    if (use_sig) call routec_sig_end()
+    infos%control%int2e_cutoff = rc_save
+
+    call measure_time(print_total=1, log_unit=iw)
+    close(iw)
+
+  end subroutine tdhf_mrsf_energy
+
+end module tdhf_mrsf_energy_mod

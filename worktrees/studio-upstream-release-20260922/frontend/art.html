@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OQP Studio Art</title>
+    <style>
+      :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      html, body, #stage { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body { background: #111318; color: #e4e7ec; }
+      canvas { display: block; width: 100%; height: 100%; }
+      #toolbar {
+        position: fixed; left: 14px; top: 14px; z-index: 2;
+        display: flex; align-items: end; gap: 10px; flex-wrap: wrap;
+        max-width: calc(100% - 28px); padding: 10px 12px;
+        background: rgba(20, 23, 29, .9); border: 1px solid #343a45;
+        border-radius: 8px; backdrop-filter: blur(8px);
+      }
+      label { display: grid; gap: 3px; color: #9aa3b2; font-size: 11px; }
+      select, input, button {
+        min-height: 32px; border: 1px solid #3a414d; border-radius: 6px;
+        background: #1a1e25; color: #e4e7ec; font: inherit; padding: 4px 8px;
+      }
+      input[type="range"] { width: 110px; padding: 0; }
+      button { cursor: pointer; }
+      button:hover { border-color: #62afe8; color: #7fc4f5; }
+      #progress {
+        position: fixed; left: 14px; bottom: 12px; z-index: 2;
+        padding: 5px 8px; border-radius: 5px; background: rgba(20, 23, 29, .78);
+        color: #aeb7c5; font: 12px ui-monospace, Menlo, monospace;
+      }
+      #empty {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        color: #9aa3b2; pointer-events: none;
+      }
+      @media (max-width: 700px) {
+        #toolbar { right: 10px; left: 10px; top: 10px; gap: 7px; }
+        #toolbar label { flex: 1 1 90px; }
+        select, input, button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="toolbar">
+      <label>Content
+        <select id="content">
+          <option value="molecule">Molecule</option>
+        </select>
+      </label>
+      <label>Quality
+        <select id="quality">
+          <option value="0.55,3">Draft</option>
+          <option value="0.75,5" selected>Studio</option>
+          <option value="1,8">Publication</option>
+        </select>
+      </label>
+      <label>Exposure
+        <input id="exposure" type="range" min="0.5" max="2" value="1.05" step="0.05" />
+      </label>
+      <label>Background
+        <select id="background">
+          <option value="studio" selected>Studio dark</option>
+          <option value="neutral">Neutral gray</option>
+          <option value="white">White</option>
+          <option value="black">Black</option>
+        </select>
+      </label>
+      <label>Depth of field
+        <select id="dof">
+          <option value="0">Off</option>
+          <option value="1">Subtle</option>
+          <option value="2">Strong</option>
+        </select>
+      </label>
+      <label>Surface material
+        <select id="surfaceMaterial">
+          <option value="matte">Matte</option>
+          <option value="gloss" selected>Gloss</option>
+          <option value="glass">Translucent</option>
+        </select>
+      </label>
+      <label>Surface opacity
+        <input id="surfaceOpacity" type="range" min="0.15" max="1" value="1" step="0.05" />
+      </label>
+      <label>Phases
+        <select id="surfacePhases">
+          <option value="inherit" selected>From Analysis</option>
+          <option value="both">Positive and negative</option>
+          <option value="positive">Positive only</option>
+          <option value="negative">Negative only</option>
+        </select>
+      </label>
+      <button id="pause" type="button" title="Pause or resume sample accumulation">Pause</button>
+      <button id="reset" type="button" title="Reset the camera">Reset view</button>
+      <button id="save" type="button" title="Save the accumulated image">PNG</button>
+    </div>
+    <div id="progress">waiting for a structure</div>
+    <div id="empty">Select a project in Analysis, then open Art.</div>
+    <script type="module" src="/src/art.ts"></script>
+  </body>
+</html>

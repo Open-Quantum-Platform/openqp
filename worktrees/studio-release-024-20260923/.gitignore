@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Tauri / Rust
+shell/src-tauri/target/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# OQP Studio runtime data
+jobs_data/
+
+# Sidecar binaries are built in CI
+shell/src-tauri/binaries/*
+!shell/src-tauri/binaries/.gitkeep
+
+# Tauri generated schemas and build target
+shell/src-tauri/gen/
+shell/src-tauri/target/
+backend/*.spec
+
+# Mol* viewer copied from node_modules at build time
+frontend/public/molstar/
+
+# Frontend copied into the Python package at wheel-build time
+backend/oqp_studio/web/
+
+# Public gateway checkout and per-build provenance
+/openqp/
+/engine-source.json
+
+# Isolated icon exporter cache and intermediate assets
+/.cache/
+
+# Per-job CI test reports
+/reports/
+
+# Generated candidate identity and payloads
+backend/oqp_studio/build-identity.json
+/release/
+/shell/src-tauri/engine/

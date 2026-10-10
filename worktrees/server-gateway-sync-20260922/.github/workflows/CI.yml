@@ -1,0 +1,485 @@
+name: CI
+on: [push, pull_request]
+
+# Without this, every push leaves its predecessor running.  On 2026-08-22, 22 of
+# the 34 CI runs that day were still executing when a later push superseded
+# them -- about 1000 run-minutes, and 44 macOS jobs validating code that had
+# already been replaced.  The macOS legs are the scarcest runners in the matrix
+# (measured queue waits that day: 16 to 88 minutes), so that backlog is paid as
+# latency by every other open pull request.
+#
+# The key is the PR number for pull_request events rather than the branch name:
+# these PRs come from forks, and a branch name can repeat across forks while a
+# PR number cannot.  Branch pushes fall back to the ref.  A push to main gets a
+# per-commit group so that landed commits neither cancel nor queue behind each
+# other -- only one run per group may be pending, so grouping them would drop
+# the middle commit's result when three land in quick succession.
+concurrency:
+   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'shared' }}
+   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+   gcc-build:
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            os: [ubuntu-24.04, ubuntu-24.04-arm]
+            version: [14]
+            MPI: [ON, OFF]
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: '3.10'
+            cache: 'pip'
+            cache-dependency-path: pyoqp/requirements.txt
+         # Persist the reusable bundled-externals cache (see external/CMakeLists.txt)
+         # across CI runs. The cache content is keyed internally by toolchain,
+         # compiler flags, build type, BLAS choice, and bundled versions, so a
+         # stale restore is never reused for an incompatible build -- it just
+         # falls back to a cold externals build. The externals do not depend on
+         # MPI, so both MPI matrix legs share one cache entry per OS.
+         #
+         # Any variable that changes the internal externals key MUST also appear
+         # in the outer key, otherwise an unchanged outer key would match exactly
+         # and actions/cache would never SAVE the rebuilt externals, leaving CI
+         # permanently cold. Two such variables: the full compiler version (a
+         # runner image bumping gcc changes the internal key) and the BLAS backend
+         # -- LINALG_LIB=OpenBLAS makes the internal key say "other"/openblas
+         # instead of "NetLib", so the `openblas64` marker below gives those
+         # externals their own cache entry. The restore-keys stay scoped to that
+         # marker so a stale NetLib cache is never dragged back in and re-saved.
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: echo "gcc=$(gfortran-${{ matrix.version }} -dumpfullversion)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/.cache/openqp/externals
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-
+         - name: Install OpenBLAS (ubuntu-latest)
+           if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
+           run: |
+            # ILP64 OpenBLAS (provides openblas64.pc). OpenQP is ILP64-only, so
+            # LINALG_LIB=OpenBLAS resolves this system library and OpenQP (and
+            # ddX) link it directly -- no reference LAPACK is compiled from source.
+            #
+            # Test-what-ships: OpenBLAS ILP64 is exactly the BLAS the Linux PyPI
+            # wheels bundle (build_wheels.yml), so these legs validate the shipped
+            # configuration. The Linux x86_64 SOURCE-build mandate (LINALG_LIB=auto
+            # -> Intel MKL ILP64) is not exercised here -- installing oneAPI on
+            # runners is impractical; it is validated manually on MKL machines.
+            sudo apt-get install libopenblas64-dev
+         - name: Install MPI (ubuntu)
+           if: ${{ contains(matrix.os, 'ubuntu') }}
+           run: |
+            sudo apt-get install libopenmpi-dev
+         - name: Install CMake
+           run: pip install ninja cmake
+         - name: Build & install OpenQP
+           env:
+            CC: gcc-${{ matrix.version }}
+            CXX: g++-${{ matrix.version }}
+            FC: gfortran-${{ matrix.version }}
+           run: |
+            # Build + install from the repo root in one step. scikit-build-core
+            # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
+            # native library, header and share/ data into the installed package,
+            # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
+            # and required runtime deps (numpy/scipy/...) come from pyproject.
+            # geomeTRIC is an optional legacy backend.  The sole constrained
+            # compatibility example is reported as SKIPPED when that extra is
+            # absent, so the native-first CI installation does not require it.
+            # USE_LIBINT/ENABLE_OPENMP are pyproject defaults (ILP64 is
+            # unconditional); CI overrides the build type, the MPI matrix leg,
+            # ENABLE_DDX, and the BLAS/LAPACK choice.
+            #
+            # LINALG_LIB=OpenBLAS links the system ILP64 OpenBLAS installed above
+            # (it bundles LAPACK), so neither OpenQP nor ddX compiles the reference
+            # NetLib LAPACK from source -- that was the slow part of the build.
+            #
+            # ENABLE_DDX=ON builds the optional ddX continuum-solvation backend so
+            # the PCM/ddX (DDPCM) examples actually run below instead of reporting
+            # SKIPPED. ddX is still built from source; the bundled-externals cache
+            # above (keyed on external/CMakeLists.txt) pays that cost once.
+            #
+            # External deps (libxc, libecpint, ...) are fetched via ExternalProject and
+            # the upstream hosts intermittently return HTTP 504. The bundled-
+            # externals cache persists across retries, so a re-run only re-fetches
+            # whatever failed.
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
+                --config-settings=cmake.define.ENABLE_DDX=ON \
+                --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         - name: Check MPI banner single-writer ordering
+           if: ${{ matrix.MPI == 'ON' }}
+           run: |
+            pip install mpi4py
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            if [ -z "$ddx_lib" ]; then
+              echo "::error::libddx.so not found under ~/.cache/openqp; MPI runtime cannot load"
+              exit 1
+            fi
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            test_dir="$(mktemp -d)"
+            cp examples/QUANTUM/h2.inp "$test_dir/banner.inp"
+            mpiexec --oversubscribe -n 2 openqp "$test_dir/banner.inp" --silent
+
+            log="$test_dir/banner.log"
+            count="$(grep -c 'OpenQP: Open Quantum Platform' "$log")"
+            if [ "$count" -ne 1 ]; then
+              echo "::error::expected exactly one MPI banner, found $count"
+              exit 1
+            fi
+            run_line="$(grep -n -m1 'PyOQP LOG | RUN' "$log" | cut -d: -f1)"
+            banner_line="$(grep -n -m1 'OpenQP: Open Quantum Platform' "$log" | cut -d: -f1)"
+            input_line="$(grep -n -m1 'PyOQP LOG | INPUT AND REFERENCE' "$log" | cut -d: -f1)"
+            if [ -z "$run_line" ] || [ -z "$banner_line" ] || [ -z "$input_line" ] \
+               || [ "$run_line" -ge "$banner_line" ] || [ "$banner_line" -ge "$input_line" ]; then
+              echo "::error::MPI banner ordering is corrupt (RUN=$run_line banner=$banner_line INPUT=$input_line)"
+              exit 1
+            fi
+         # Run the full example/reference regression suite. Each test runs in its
+         # own subprocess, so a hard failure in one example cannot abort the rest
+         # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI
+         # leg: the suite is the same code path and running it under both MPI legs
+         # only doubles wall-clock.
+         - name: Locate ddX runtime library
+           # The ENABLE_DDX=ON build links libddx.so, which is installed in the
+           # bundled-externals dir, not next to the installed liboqp.so. For a
+           # plain `pip install .` build the runtime loader cannot find it, so
+           # `import oqp` (hence every `openqp` invocation) fails with
+           # "libddx.so: cannot open shared object file". Put its directory on
+           # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: |
+            lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            if [ -n "$lib" ]; then
+              echo "LD_LIBRARY_PATH=$(dirname "$lib"):${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+              echo "ddX runtime library: $lib"
+            else
+              echo "::error::libddx.so not found under ~/.cache/openqp; ddX build is broken"
+              exit 1
+            fi
+
+         - name: Validate example references
+           # Gate: every example reference must carry the regression values its
+           # runtype/method/properties require (the registry in
+           # oqp/utils/regression.py). Fails loudly if a new example or a newly
+           # registered value lands without its reference value. Exits non-zero
+           # (unlike the piped run_tests below), so it actually blocks CI.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --validate_examples
+
+         - name: Check feature coverage
+           # Gate: every opt-in feature flag in the input schema must be
+           # exercised by at least one example, so a new capability cannot ship
+           # without a test (see EXEMPT_FLAGS / KNOWN_UNCOVERED in
+           # oqp/utils/regression.py). Existing gaps are grandfathered notes.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --check_feature_coverage
+
+         - name: Run example test suite
+           if: ${{ matrix.MPI == 'OFF' }}
+           env:
+            # One OMP thread per test so all runner cores run tests concurrently
+            # (max_workers = cpus // omp_threads); the examples are tiny.
+            OQP_TEST_OMP_THREADS: 1
+           run: |
+            # pipefail: `openqp --run_tests` exits non-zero when any example
+            # fails/errors, but piping to `tee` would otherwise mask that exit
+            # code (the pipeline would report tee's success) and let accuracy
+            # regressions pass CI silently. With pipefail the failure propagates.
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
+            # The tester reports a missing-optional-backend example as SKIPPED
+            # (green), not FAILED. Since this build sets ENABLE_DDX=ON, the DDPCM
+            # examples MUST run -- if any hit the OQP_ENABLE_DDX skip sentinel,
+            # ddX silently did not build and the green suite would be a false pass.
+            # Fail explicitly on that sentinel (see oqp_tester.py
+            # _OPTIONAL_FEATURE_SENTINELS / the "build lacks ..." log line).
+            if grep -q 'OQP_ENABLE_DDX' run_tests.out; then
+              echo "::error::ddX-enabled build skipped a DDPCM example (OQP_ENABLE_DDX sentinel); ddX must be built and the PCM examples must run"
+              exit 1
+            fi
+
+         - name: Check linked TagArray allocation and cleanup
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            CC: gcc-${{ matrix.version }}
+           run: |
+            sudo apt-get update
+            sudo apt-get install -y valgrind
+            python tests/native/run_tagarray_memcheck.py
+         - name: Preserve TagArray memory diagnostics
+           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
+            path: tagarray-memory/
+            if-no-files-found: ignore
+         # The example suite above validates numerical references end to end, but
+         # it never touches the pure-Python layer -- the tests/ pytest suite was
+         # not executed by CI at all, so everything under pyoqp/oqp (the analysis
+         # toolkit, the interop/export APIs, the input handling) could regress
+         # silently. Run it on one leg: it is Python-only, so a second OS or the
+         # MPI leg would re-run identical assertions against the same code.
+         - name: Run Python test suite
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           env:
+            # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
+            # rather than skip, if the extension or its C ABI symbols are absent.
+            OQP_REQUIRE_NATIVE_TESTS: "1"
+            # Opt the analytic-TDHF-Hessian end-to-end gate in. Without this the
+            # only test that actually compares an analytic Hessian against its
+            # finite-difference reference never runs, and the file's remaining
+            # test just re-asserts recorded constants against fixed tolerances,
+            # so a broken or absent Hessian kernel leaves the suite green.
+            # Cost: three analytic + three numerical Hessians on 2-3 atom
+            # STO-3G systems, measured at ~105 s total.
+            OPENQP_RUN_TDHF_HESSIAN_REGRESSION: "1"
+           run: |
+            # --forked is not optional here: 39 test files mutate sys.modules,
+            # and tests/test_analytic_hessian.py replaces the whole `oqp`
+            # package with a stub. Sharing one interpreter lets that leak into
+            # unrelated tests, so the set of failures depends on execution
+            # order. One process per test makes the result deterministic.
+            # xdist on top of it recovers the wall-clock the isolation costs.
+            pip install pytest pytest-xdist pytest-forked
+            # Tests that need a build gate on OPENQP_ROOT. The installed package
+            # self-locates via resolve_oqp_root(), so point the variable at the
+            # package directory to opt those integration tests in rather than
+            # letting them skip silently in the one job that can run them.
+            # `tail -n1`: importing oqp on the non-MPI leg prints "Failed to
+            # import mpi4py" to stdout (pyoqp/oqp/utils/mpi_utils.py), which
+            # would otherwise be captured as a garbage first line of the path.
+            # Take only the last line -- the dirname print -- so the variable
+            # is a clean path, not "Failed to import mpi4py\n<path>".
+            OPENQP_ROOT="$(python -c 'import oqp, os; print(os.path.dirname(oqp.__file__))' | tail -n1)"
+            export OPENQP_ROOT
+            echo "OPENQP_ROOT=$OPENQP_ROOT"
+            # `python -m pytest`, not bare `pytest`: the -m form puts the repo
+            # root on sys.path, and tests/test_periodic_table.py imports
+            # `pyoqp.oqp.periodic_table` through the source tree rather than the
+            # installed `oqp` package. Bare pytest only adds tests/ and the
+            # module fails to import.
+            python -m pytest tests -q -n auto --forked --tb=short -rf
+
+   # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
+   # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),
+   # which the gcc legs above cannot exercise. The compilers and MKL come from
+   # Intel's apt repository (compiler + mkl-devel only, no full Base/HPC kit).
+   # gfortran ignores Intel-specific directives and accepts several non-standard
+   # constructs that ifx rejects, so this leg is what keeps the tree Intel-clean.
+   # MPI and ddX are not exercised here (Intel MPI wrappers and a ddX Intel
+   # build are separate validation items); the PCM/ddX examples report SKIPPED.
+   intel-build:
+      name: Intel oneAPI ifx + MKL ILP64 (ubuntu-24.04)
+      runs-on: ubuntu-24.04
+      # Bounded so a slow Intel mirror fails this leg instead of occupying a
+      # runner for the six-hour default (it once sat in the apt step for over
+      # two hours).
+      timeout-minutes: 120
+      env:
+         ONEAPI_VERSION: "2026.1"
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: '3.11'
+            cache: 'pip'
+            cache-dependency-path: pyoqp/requirements.txt
+         # ~5 GB from Intel's mirror, and its throughput varies a lot; give the
+         # step its own deadline so a bad mirror is a clear failure rather than
+         # a hang.  --no-install-recommends keeps the SYCL extras out.
+         #
+         # The C/C++ compilers cannot be dropped in favour of the runner's GCC:
+         # CMake resolves OpenMP_Fortran to Intel's -fiopenmp and passes it to
+         # the link driver, which g++ rejects, and the result would carry two
+         # OpenMP runtimes.
+         - name: Install Intel oneAPI compilers and MKL
+           timeout-minutes: 45
+           run: |
+            wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+              | sudo gpg --dearmor -o /usr/share/keyrings/oneapi-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+              | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends \
+              intel-oneapi-compiler-fortran-${ONEAPI_VERSION} \
+              intel-oneapi-compiler-dpcpp-cpp-${ONEAPI_VERSION} \
+              intel-oneapi-mkl-devel-${ONEAPI_VERSION}
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            echo "ifx=$(ifx --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/.cache/openqp/externals
+            key: oqp-externals-ubuntu-24.04-ifx${{ steps.toolchain.outputs.ifx }}-mkl-ilp64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-ubuntu-24.04-ifx${{ steps.toolchain.outputs.ifx }}-mkl-ilp64-
+         - name: Install CMake
+           run: pip install ninja cmake
+         - name: Build & install OpenQP (ifx / icx / MKL ILP64)
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            export CC=icx CXX=icpx FC=ifx
+            # LINALG_LIB=auto resolves to Intel MKL ILP64 on Linux x86_64; the
+            # loaded oneAPI MKL (MKLROOT) takes precedence over any distribution
+            # MKL (cmake/oqp_functions.cmake, findBlasLapack).
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.define.LINALG_LIB=auto \
+                --config-settings=cmake.define.ENABLE_MPI=OFF; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         - name: Check that liboqp links the oneAPI MKL
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            lib="$(python -c 'import oqp, os; print(os.path.dirname(oqp.__file__))' | tail -n1)/lib/liboqp.so"
+            ldd "$lib" | tee ldd.out
+            if ! grep -q 'libmkl_intel_ilp64' ldd.out; then
+              echo "::error::liboqp.so is not linked against the MKL ILP64 interface layer"
+              exit 1
+            fi
+         - name: Run example test suite
+           env:
+            OQP_TEST_OMP_THREADS: 1
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
+         - name: Check analytic NAC state and basis dimensions
+           env:
+            OMP_NUM_THREADS: 1
+           run: |
+            source /opt/intel/oneapi/setvars.sh > /dev/null
+            python -m unittest discover -s tests -p test_mrsf_nac_spherical_basis.py -v
+         - name: Preserve failed Intel example diagnostics
+           if: failure()
+           uses: actions/upload-artifact@v4
+           with:
+            name: intel-example-failure-${{ github.run_id }}-${{ github.run_attempt }}
+            retention-days: 7
+            if-no-files-found: ignore
+            path: |
+               run_tests.out
+               openqp_test_tmp_*/**/*.log
+               openqp_test_tmp_*/**/*.crash-stderr.txt
+               openqp_test_tmp_*/**/*.crash-stdout.txt
+
+   # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
+   # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
+   # resolve to Apple Accelerate ILP64 -- OpenQP is ILP64-only, one uniform
+   # 8-byte integer model on all platforms, on macOS via Accelerate's
+   # $NEWLAPACK$ILP64 interface with the post-build alias guard
+   # (cmake/check_accelerate_aliases.cmake) failing the build on any LP64
+   # symbol leak.
+   macos-build:
+      name: macOS Accelerate ILP64 (${{ matrix.os }})
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            # macos-15 = arm64 (Apple Silicon), macos-15-intel = x86_64. Both
+            # matter: past integer-ABI bugs manifested differently per arch
+            # (Apple Silicon ran, Intel crashed on the same build).
+            os: [macos-15, macos-15-intel]
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: '3.12'
+         - name: Install GCC toolchain
+           run: brew install gcc@15
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: echo "gcc=$(gfortran-15 -dumpfullversion)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/Library/Caches/openqp/externals
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-accelerate-lp64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-accelerate-lp64-
+         - name: Build & install OpenQP (pure defaults -> Accelerate ILP64)
+           env:
+            CC: gcc-15
+            CXX: g++-15
+            FC: gfortran-15
+           run: |
+            # No LINALG_LIB: the platform policy must resolve it
+            # (macOS -> Apple Accelerate ILP64). Retry loop as in the Linux
+            # job: external deps are fetched via ExternalProject and upstream
+            # hosts intermittently 504; the externals cache persists across
+            # retries.
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.define.CMAKE_C_COMPILER=gcc-15 \
+                --config-settings=cmake.define.CMAKE_CXX_COMPILER=g++-15 \
+                --config-settings=cmake.define.CMAKE_Fortran_COMPILER=gfortran-15; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         - name: Assert Accelerate is the linked BLAS
+           run: |
+            # The policy's whole point: a defaults build on macOS must link the
+            # system Accelerate framework -- not NetLib, not anything else.
+            # (import oqp prints a benign mpi4py warning line; take the last
+            # stdout line as the path.)
+            LIB=$(python -c "import glob, os, oqp; print(glob.glob(os.path.join(os.path.dirname(oqp.__file__), 'lib', 'liboqp*.dylib'))[0])" | tail -1)
+            echo "liboqp: $LIB"
+            otool -L "$LIB" | grep -q "Accelerate.framework" || {
+              echo "::error::liboqp does not link Accelerate.framework:"; otool -L "$LIB"; exit 1;
+            }
+         - name: Run example test suite
+           env:
+            OQP_TEST_OMP_THREADS: 1
+           run: |
+            # pipefail so a failing suite cannot be masked by tee (see the Linux
+            # job comment). This suite includes the PBE EDIIS/ADIIS examples that
+            # exercise the NLOpt handle path and the molden/basis-export examples
+            # that exercise the oqp_get_basis integer ABI -- the integer-width
+            # regressions this leg exists to catch, now under the ILP64
+            # interposition.
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
+
+# NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
+# the inline comment in each input. The energy-only ddPCM Fock coupling is
+# self-consistent only to ~1e-7, so a tighter target would not converge. The
+# deeper scientific PCM validation gate lives in
+# tests/test_pcm_literature_benchmarks.py.

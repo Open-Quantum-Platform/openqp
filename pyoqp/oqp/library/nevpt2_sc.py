@@ -38,7 +38,6 @@ from oqp.library.rdm import _bit_count
 
 NUMERICAL_ZERO = 1.0e-14
 
-
 def _ein(subscripts, *operands):
     """``np.einsum`` with contraction-order optimization forced on.
 
@@ -57,7 +56,6 @@ def _ein(subscripts, *operands):
     digits.
     """
     return np.einsum(subscripts, *operands, optimize=True)
-
 
 # --------------------------------------------------------------------------- RDMs
 def _Epq_matrix(p, q, det_list, det_index, norb):
@@ -99,7 +97,6 @@ def _Epq_matrix(p, q, det_list, det_index, norb):
         return sparse.csr_matrix((ndet, ndet))
     return sparse.csr_matrix((data, (rows, cols)), shape=(ndet, ndet))
 
-
 def _build_Epq_operators(det_list, det_index, norb):
     """All norb^2 single-excitation operators for one determinant basis."""
     return {
@@ -107,8 +104,6 @@ def _build_Epq_operators(det_list, det_index, norb):
         for p in range(norb)
         for q in range(norb)
     }
-
-
 
 def _lib_make_rdms(ci, norb, det_list, upto):
     """dm1..dm_upto through the Fortran engine, or None when unavailable."""
@@ -135,7 +130,6 @@ def _lib_make_rdms(ci, norb, det_list, upto):
     if int(info) != 0:
         return None
     return tuple(out[:upto])
-
 
 def make_rdms(ci, norb, active_nelec, upto=4):
     """Spin-free density matrices dm1..dm_upto in the PySCF make_dm123/1234
@@ -229,7 +223,6 @@ def make_rdms(ci, norb, active_nelec, upto=4):
                         norb, norb, norb, norb)
     return dm1, dm2, dm3, dm4
 
-
 # ---------------------------------------------------- Koopmans intermediates
 # Ported verbatim from pyscf/mrpt/nevpt2.py.  ``h2e`` is the PHYSICIST-ordered
 # active two-electron tensor (= chemist (pq|rs) transposed (0,2,1,3)).
@@ -240,7 +233,6 @@ def _koopmans_lib():
     except Exception:
         return None
     return _lib_backend()
-
 
 def _lib_make_f3(ci, norb, det_list, h2e):
     """dm1, dm2, dm3 and f3ca/f3ac through the Fortran engine.
@@ -283,7 +275,6 @@ def _lib_make_f3(ci, norb, det_list, h2e):
     f3ac = f3ac.reshape(norb, norb, norb, norb, norb, norb)
     return dm1, dm2, dm3, (f3ca, f3ac)
 
-
 def _f3ca_f3ac(h2e, dm4):
     """The two eri-folded 4-pdm intermediates that PySCF computes via the
     compiled ``NEVPTkern_cedf_aedf`` / ``NEVPTkern_aedf_ecdf`` kernels,
@@ -314,7 +305,6 @@ def _f3ca_f3ac(h2e, dm4):
         np.argsort((1, 2, 0, 4, 3, 5)))
     return f3ca, f3ac
 
-
 def _fold_h1e(h1e, h2e):
     """Fold the two-electron trace into the one-body Hamiltonian.
 
@@ -327,7 +317,6 @@ def _fold_h1e(h1e, h2e):
     wrapper so that the Fortran kernel also receives the correct argument.
     """
     return h1e - np.einsum('mjjn->mn', h2e, optimize='optimal')
-
 
 def _a16(h1e, h2e, dm3, f3ca, f3ac):
     """The a16 intermediate (Sr subspace).
@@ -370,7 +359,6 @@ def _a16(h1e, h2e, dm3, f3ca, f3ac):
     a16 -= _ein('cjka,rpqbjk->pqrabc', h2e, dm3)
     a16 += _ein('jcij,rpqbai->pqrabc', h2e, dm3)
     return a16
-
 
 def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
     """The a22 intermediate (Si subspace).
@@ -425,7 +413,6 @@ def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
         a22[:, i, :, :, i, :] += fdm2 * 2
     return a22
 
-
 def _a17(h1e, h2e, dm2, dm3):
     """The a17 intermediate (Sr subspace).
 
@@ -453,7 +440,6 @@ def _a17(h1e, h2e, dm2, dm3):
     return -_ein('pi,cabi->abcp', h1e_folded, dm2) \
         - _ein('kpij,cabjki->abcp', h2e, dm3)
 
-
 def _a19(h1e, h2e, dm1, dm2):
     """The a19 intermediate (Sr subspace).
 
@@ -480,7 +466,6 @@ def _a19(h1e, h2e, dm1, dm2):
     h1e_folded = _fold_h1e(h1e, h2e)
     return -_ein('pi,ai->ap', h1e_folded, dm1) \
         - _ein('kpij,ajki->ap', h2e, dm2)
-
 
 def _a23(h1e, h2e, dm1, dm2, dm3):
     """The a23 intermediate (Si subspace).
@@ -511,7 +496,6 @@ def _a23(h1e, h2e, dm1, dm2, dm3):
         + 2.0 * _ein('bp,ca->abcp', h1e, dm1) \
         + 2.0 * _ein('pibk,caik->abcp', h2e, dm2)
 
-
 def _a25(h1e, h2e, dm1, dm2):
     """The a25 intermediate (Si subspace).
 
@@ -539,7 +523,6 @@ def _a25(h1e, h2e, dm1, dm2):
         + 2.0 * _ein('ap->pa', h1e) \
         + 2.0 * _ein('piaj,ij->ap', h2e, dm1)
 
-
 def _hdm1(dm1):
     """The hole 1-RDM: 2I - dm1^T (Sijr/Srsi intermediate).
 
@@ -557,7 +540,6 @@ def _hdm1(dm1):
                 ffi.cast("double *", out.ctypes.data))
             return out
     return 2.0 * np.eye(dm1.shape[0]) - dm1.transpose(1, 0)
-
 
 def _hdm2(dm1, dm2):
     """The hole 2-RDM (Sij/Srs intermediate).
@@ -586,7 +568,6 @@ def _hdm2(dm1, dm2):
         - 2.0 * _ein('jl,ki->ijkl', delta, dm1) \
         - 2.0 * _ein('il,jk->ijkl', delta, delta) \
         + 4.0 * _ein('ik,jl->ijkl', delta, delta)
-
 
 def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
     """The hole 3-RDM (Sij subspace).
@@ -624,7 +605,6 @@ def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
         + _ein('ar,pc,bq->pqrabc', delta, delta, dm1) * 2.0 \
         - _ein('ar,bqcp->pqrabc', delta, dm2)
 
-
 def _a3(h1e, h2e, dm1, dm2, hdm1):
     """The a3 intermediate (Sijr subspace).
 
@@ -654,7 +634,6 @@ def _a3(h1e, h2e, dm1, dm2, hdm1):
         + 2.0 * _ein('ijka,pj,ik->pa', h2e, delta, dm1) \
         - _ein('ijka,jpik->pa', h2e, dm2)
 
-
 def _k27(h1e, h2e, dm1, dm2):
     """The k27 intermediate (Srsi subspace).
 
@@ -680,7 +659,6 @@ def _k27(h1e, h2e, dm1, dm2):
     return -_ein('ai,pi->pa', h1e, dm1) \
         - _ein('iajk,pkij->pa', h2e, dm2) \
         + _ein('iaji,pj->pa', h2e, dm1)
-
 
 def _a7(h1e, h2e, dm1, dm2, dm3):
     """The reduced 2-RDM and the a7 intermediate (Srs subspace).
@@ -722,7 +700,6 @@ def _a7(h1e, h2e, dm1, dm2, dm3):
         - _ein('baij,pqij->pqab', h2e, rm2)
     return rm2, a7
 
-
 def _a9(h1e, h2e, hdm1, hdm2, hdm3):
     """The a9 intermediate (Sij subspace).
 
@@ -758,7 +735,6 @@ def _a9(h1e, h2e, hdm1, hdm2, hdm3):
     a9 -= _ein('ijka,pqkjbi->pqab', h2e, hdm3)
     return a9
 
-
 def _a12(h1e, h2e, dm1, dm2, dm3):
     """The a12 intermediate (Sir subspace).
 
@@ -788,7 +764,6 @@ def _a12(h1e, h2e, dm1, dm2, dm3):
         - _ein('kbij,qpajki->pqab', h2e, dm3) \
         - _ein('bjka,qpjk->pqab', h2e, dm2) \
         + _ein('jbij,qpai->pqab', h2e, dm2)
-
 
 def _a13(h1e, h2e, dm1, dm2, dm3):
     """The a13 intermediate (Sir subspace).
@@ -830,12 +805,10 @@ def _a13(h1e, h2e, dm1, dm2, dm3):
     a13 += _ein('ap,lbkl,qk->pqab', delta, h2e, dm1) * 2.0
     return a13
 
-
 def _norm_to_energy(norm, h, diff):
     idx = abs(norm) > NUMERICAL_ZERO
     ener = -(norm[idx] / (diff[idx] + h[idx] / norm[idx])).sum()
     return norm.sum(), ener
-
 
 # --------------------------------------------------------------------- subspaces
 def _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_virt, f3=None):
@@ -843,6 +816,11 @@ def _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_virt, f3=None):
     a16 = _a16(h1e, h2e, dm3, f3ca, f3ac)
     a17 = _a17(h1e, h2e, dm2, dm3)
     a19 = _a19(h1e, h2e, dm1, dm2)
+    nvirt = h2e_v.shape[0]
+    nact = dm1.shape[0]
+    result = _sr_lib(nvirt, nact, h2e_v, h1e_v, a16, a17, a19, dm3, dm2, dm1)
+    if result[0] is not None:
+        return _norm_to_energy(result[0], result[1], e_virt)
     ener = _ein('ipqr,pqrabc,iabc->i', h2e_v, a16, h2e_v) \
         + _ein('ipqr,pqra,ia->i', h2e_v, a17, h1e_v) * 2.0 \
         + _ein('ip,pa,ia->i', h1e_v, a19, h1e_v)
@@ -851,17 +829,21 @@ def _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_virt, f3=None):
         + _ein('ip,pa,ia->i', h1e_v, dm1, h1e_v)
     return _norm_to_energy(norm, ener, e_virt)
 
-
 def _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_core, f3=None):
     f3ca, f3ac = _f3ca_f3ac(h2e, dm4) if f3 is None else f3
     a22 = _a22(h1e, h2e, dm2, dm3, f3ca, f3ac)
     a23 = _a23(h1e, h2e, dm1, dm2, dm3)
     a25 = _a25(h1e, h2e, dm1, dm2)
     ncas = dm1.shape[0]
+    ncore = h1e_v.shape[1]
+    nact = ncas
     delta = np.eye(ncas)
     dm3_h = _ein('abef,cd->abcdef', dm2, delta) * 2 - dm3.transpose(0, 1, 3, 2, 4, 5)
     dm2_h = _ein('ab,cd->abcd', dm1, delta) * 2 - dm2.transpose(0, 1, 3, 2)
     dm1_h = 2 * delta - dm1.transpose(1, 0)
+    result = _si_lib(ncore, nact, h2e_v, h1e_v, a22, a23, a25, dm3_h, dm2_h, dm1_h)
+    if result[0] is not None:
+        return _norm_to_energy(result[0], result[1], -e_core)
     ener = _ein('qpir,pqrabc,baic->i', h2e_v, a22, h2e_v) \
         + _ein('qpir,pqra,ai->i', h2e_v, a23, h1e_v) * 2.0 \
         + _ein('pi,pa,ai->i', h1e_v, a25, h1e_v)
@@ -869,7 +851,6 @@ def _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_core, f3=None):
         + _ein('qpir,rpqa,ai->i', h2e_v, dm2_h, h1e_v) * 2.0 \
         + _ein('pi,pa,ai->i', h1e_v, dm1_h, h1e_v)
     return _norm_to_energy(norm, ener, -e_core)
-
 
 def _Sijrs(e_core, e_virt, g_cvcv):
     """The (core,core;virt,virt) doubly-occupied→virtual SC-NEVPT2 correction.
@@ -895,7 +876,6 @@ def _Sijrs(e_core, e_virt, g_cvcv):
         norm += _ein('jab,jab', gi, theta)
         e += _ein('jab,jab', t2i, theta)
     return norm, e
-
 
 def _Sijr(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
     """The (virt,core,core) virtual→(core,core) SC-NEVPT2 correction.
@@ -931,7 +911,6 @@ def _Sijr(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
                            h[:, ci_triu[0], ci_triu[1]],
                            diff[:, ci_triu[0], ci_triu[1]])
 
-
 def _Srsi(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
     """The (virt,virt,core) (virt,virt)→core SC-NEVPT2 correction.
 
@@ -960,7 +939,6 @@ def _Srsi(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
     diff = e_virt[:, None, None] + e_virt[None, :, None] - e_core[None, None, :]
     return _norm_to_energy(norm[vi_triu], h[vi_triu], diff[vi_triu])
 
-
 def _Srs(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt):
     """The (virt,virt) virtual-virtual subspace SC-NEVPT2 correction.
 
@@ -978,7 +956,6 @@ def _Srs(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt):
     h = 0.5 * _ein('rsqp,rsba,pqab->rs', h2e_v, h2e_v, a7)
     diff = e_virt[:, None] + e_virt[None, :]
     return _norm_to_energy(norm, h, diff)
-
 
 def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
     """The (core,core) core-core subspace SC-NEVPT2 correction.
@@ -1000,7 +977,6 @@ def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
     h = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, a9)
     diff = e_core[:, None] + e_core[None, :]
     return _norm_to_energy(norm, h, -diff)
-
 
 def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
     """The (virt,core) single-index virtual-core SC-NEVPT2 correction.
@@ -1034,7 +1010,6 @@ def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
     diff = e_core[:, None] - e_virt[None, :]
     return _norm_to_energy(norm, h, -diff)
 
-
 # ---------------------------------------------------------------- block builder
 
 def _sijrs_lib(e_core, e_virt, g_cvcv):
@@ -1058,7 +1033,6 @@ def _sijrs_lib(e_core, e_virt, g_cvcv):
                      ffi.cast("double *", e_virt_contig.ctypes.data),
                      norm_ptr, energy_ptr)
     return float(norm_ptr[0]), float(energy_ptr[0])
-
 
 def _srs_lib(h2e_v, rm2, a7, e_virt):
     """Fortran (virt,virt) subspace final contraction, or None.
@@ -1090,7 +1064,6 @@ def _srs_lib(h2e_v, rm2, a7, e_virt):
     h = np.frombuffer(ffi.buffer(energy_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
     return norm, h
 
-
 def _sij_lib(h2e_v, hdm2, a9, e_core):
     """Fortran (core,core) subspace final contraction, or None.
     Returns per-(i,j) norm and h arrays of shape (ncore, ncore)."""
@@ -1121,7 +1094,6 @@ def _sij_lib(h2e_v, hdm2, a9, e_core):
     h = np.frombuffer(ffi.buffer(energy_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
     return norm, h
 
-
 def _sijr_lib(nvirt, ncore, h2e_v, hdm1, a3):
     """Fortran Sijr subspace (virt,core,core) final contraction, or None.
     Returns per-(r,i,j) norm and h arrays of shape (nvirt, ncore, ncore)."""
@@ -1149,7 +1121,40 @@ def _sijr_lib(nvirt, ncore, h2e_v, hdm1, a3):
     norm = np.frombuffer(ffi.buffer(norm_ptr, nr2 * 8), dtype=np.float64).reshape(nvirt, ncore, ncore)
     h = np.frombuffer(ffi.buffer(energy_ptr, nr2 * 8), dtype=np.float64).reshape(nvirt, ncore, ncore)
     return norm, h
-
+def _sr_lib(nvirt, nact, h2e_v, h1e_v, a16, a17, a19, dm3, dm2, dm1):
+    """Fortran Sr subspace final contraction, or None.
+    Returns per-(i) norm and energy arrays of shape (nvirt,)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_sr"):
+        return None, None
+    if nvirt <= 0 or nact <= 0:
+        return np.zeros(nvirt), np.zeros(nvirt)
+    h2e_v_c = np.ascontiguousarray(h2e_v)
+    h1e_v_c = np.ascontiguousarray(h1e_v)
+    a16_c = np.ascontiguousarray(a16)
+    a17_c = np.ascontiguousarray(a17)
+    a19_c = np.ascontiguousarray(a19)
+    dm3_c = np.ascontiguousarray(dm3)
+    dm2_c = np.ascontiguousarray(dm2)
+    dm1_c = np.ascontiguousarray(dm1)
+    norm_ptr = ffi.new("double[%d]" % nvirt)
+    energy_ptr = ffi.new("double[%d]" % nvirt)
+    lib.nevpt2_sr(nvirt, nact,
+                  ffi.cast("double *", h2e_v_c.ctypes.data),
+                  ffi.cast("double *", h1e_v_c.ctypes.data),
+                  ffi.cast("double *", a16_c.ctypes.data),
+                  ffi.cast("double *", a17_c.ctypes.data),
+                  ffi.cast("double *", a19_c.ctypes.data),
+                  ffi.cast("double *", dm3_c.ctypes.data),
+                  ffi.cast("double *", dm2_c.ctypes.data),
+                  ffi.cast("double *", dm1_c.ctypes.data),
+                  norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nvirt * 8), dtype=np.float64).copy()
+    ener = np.frombuffer(ffi.buffer(energy_ptr, nvirt * 8), dtype=np.float64).copy()
+    return norm, ener
 
 def _srsi_lib(nvirt, ncore, h2e_v, dm1, k27):
     """Fortran Srsi subspace (virt,virt,core) final contraction, or None.
@@ -1178,7 +1183,6 @@ def _srsi_lib(nvirt, ncore, h2e_v, dm1, k27):
     norm = np.frombuffer(ffi.buffer(norm_ptr, nv2nc * 8), dtype=np.float64).reshape(nvirt, nvirt, ncore)
     h = np.frombuffer(ffi.buffer(energy_ptr, nv2nc * 8), dtype=np.float64).reshape(nvirt, nvirt, ncore)
     return norm, h
-
 
 def _sir_lib(nvirt, ncore, h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13):
     """Fortran Sir subspace (virt,core) final contraction, or None.
@@ -1211,10 +1215,43 @@ def _sir_lib(nvirt, ncore, h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13):
                    ffi.cast("double *", a12_c.ctypes.data),
                    ffi.cast("double *", a13_c.ctypes.data),
                    norm_ptr, energy_ptr)
-    norm = np.frombuffer(ffi.buffer(norm_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore)
-    h = np.frombuffer(ffi.buffer(energy_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore).T
+    h = np.frombuffer(ffi.buffer(energy_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore).T
     return norm, h
-
+def _si_lib(ncore, nact, h2e_v, h1e_v, a22, a23, a25, dm3_h, dm2_h, dm1_h):
+    """Fortran Si subspace final contraction, or None.
+    Returns per-(i) norm and energy arrays of shape (ncore,)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_si"):
+        return None, None
+    if ncore <= 0 or nact <= 0:
+        return np.zeros(ncore), np.zeros(ncore)
+    h2e_v_c = np.ascontiguousarray(h2e_v)
+    h1e_v_c = np.ascontiguousarray(h1e_v)
+    a22_c = np.ascontiguousarray(a22)
+    a23_c = np.ascontiguousarray(a23)
+    a25_c = np.ascontiguousarray(a25)
+    dm3_h_c = np.ascontiguousarray(dm3_h)
+    dm2_h_c = np.ascontiguousarray(dm2_h)
+    dm1_h_c = np.ascontiguousarray(dm1_h)
+    norm_ptr = ffi.new("double[%d]" % ncore)
+    energy_ptr = ffi.new("double[%d]" % ncore)
+    lib.nevpt2_si(ncore, nact,
+                  ffi.cast("double *", h2e_v_c.ctypes.data),
+                  ffi.cast("double *", h1e_v_c.ctypes.data),
+                  ffi.cast("double *", a22_c.ctypes.data),
+                  ffi.cast("double *", a23_c.ctypes.data),
+                  ffi.cast("double *", a25_c.ctypes.data),
+                  ffi.cast("double *", dm3_h_c.ctypes.data),
+                  ffi.cast("double *", dm2_h_c.ctypes.data),
+                  ffi.cast("double *", dm1_h_c.ctypes.data),
+                  norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, ncore * 8), dtype=np.float64).copy()
+    ener = np.frombuffer(ffi.buffer(energy_ptr, ncore * 8), dtype=np.float64).copy()
+    return norm, ener
 
 def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
     """Build all SC-NEVPT2 integral blocks from the full-MO (semicanonical)
@@ -1252,7 +1289,6 @@ def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
     blocks['e_core'] = np.asarray(eps[:ncore], dtype=float)
     blocks['e_virt'] = np.asarray(eps[nocc:], dtype=float)
     return blocks
-
 
 def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
                      max_memory=None):

@@ -1,0 +1,129 @@
+name: Linux standalone bundle
+# Builds a self-contained Linux distribution: untar and run ./openqp.
+# No Python, no compiler, no BLAS on the user's machine -- the archive carries
+# the interpreter, liboqp.so, the DFT-D4 libraries, an ILP64 OpenBLAS and the
+# GCC Fortran runtime.  Meant for machines without a Python environment, for
+# clusters where pip is not an option, and for embedding in the GUI
+# application.
+#
+# Built inside manylinux_2_28, not on the runner: a bundle linked against
+# ubuntu-24.04's glibc refuses to start on the RHEL/Rocky 8 machines that a lot
+# of clusters still run.  This is the same discipline auditwheel enforces for
+# the wheels.
+on:
+  # Weekly, so a broken engine build surfaces within days rather than at the
+  # next app release, and on demand.  A published OQP Studio release rebuilds
+  # and attaches the archives it ships with.
+  schedule:
+    - cron: "0 3 * * 0"   # Sundays, 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      openqp_ref:
+        description: "Public gateway ref to build (default: main, resolved to a commit)"
+        required: false
+        type: string
+  release:
+    types: [published]
+  workflow_call:
+    secrets:
+      OPENQP_GATEWAY_TOKEN:
+        description: "Read-only access to the private GitLab public gateway"
+        required: true
+    inputs:
+      release_tag:
+        description: "Attach the archive to this already-published release"
+        required: false
+        type: string
+      openqp_ref:
+        description: "Public gateway ref to build (default: main, resolved to a commit)"
+        required: false
+        type: string
+
+# `gh release upload` needs write access to contents, and the default workflow
+# token is read-only.  This is the only write these workflows do -- the archive
+# is attached to an already-published release, nothing else is touched.
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: openqp-linux-${{ matrix.arch }} (standalone)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-24.04
+            image: quay.io/pypa/manylinux_2_28_x86_64
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+            image: quay.io/pypa/manylinux_2_28_aarch64
+    steps:
+      # This repository carries the build script and the composite action the
+      # steps below use, so it has to be on disk; the engine is checked out
+      # separately, into openqp/.
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check out the public OpenQP gateway
+        id: engine
+        env:
+          OPENQP_GATEWAY_TOKEN: ${{ secrets.OPENQP_GATEWAY_TOKEN }}
+          OPENQP_REF: ${{ inputs.openqp_ref }}
+        shell: bash
+        run: python tools/checkout_engine.py --ref "${OPENQP_REF:-main}"
+
+      - name: Cache the OpenBLAS and externals trees
+        uses: actions/cache@v4
+        with:
+          path: .cache/openqp
+          key: oqp-linux-bundle-${{ matrix.arch }}-${{ hashFiles('openqp/external/CMakeLists.txt', 'openqp/CMakeLists.txt') }}
+          restore-keys: |
+            oqp-linux-bundle-${{ matrix.arch }}-
+
+      - name: Build the bundle inside manylinux
+        run: |
+          mkdir -p "$PWD/.cache/openqp" dist
+          # The container builds /src, which is the ENGINE checkout.
+          export ENGINE_SHA=$(git -C openqp rev-parse HEAD)
+          # /src is the engine checkout; the build script lives in THIS
+          # repository, so it is mounted separately rather than expected to be
+          # inside the engine tree (it is not there — this repository owns it).
+          docker run --rm \
+            -v "$PWD/openqp:/src" -v "$PWD/.cache:/host-cache" \
+            -v "$PWD/dist:/out" \
+            -v "$PWD/.github/scripts:/scripts:ro" \
+            -e ARCH='${{ matrix.arch }}' \
+            -e ENGINE_TAG='${{ steps.engine.outputs.tag }}' -e ENGINE_SHA \
+            -e GITHUB_SERVER_URL -e GITHUB_REPOSITORY -e GITHUB_RUN_ID \
+            -e EVENT_NAME='${{ github.event_name }}' \
+            ${{ matrix.image }} bash -euo pipefail /scripts/build_linux_bundle.sh
+
+      - name: Name the archive
+        run: |
+          ver=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('openqp/pyproject.toml').read_text())['project']['version'])")
+          built=$(ls dist/openqp-*.tar.gz)
+          # Artifacts are scoped to this build; the
+          # README inside records the tag, the engine commit and the run.
+          final="dist/openqp-${ver}-linux-${{ matrix.arch }}.tar.gz"
+          [ "$built" = "$final" ] || mv "$built" "$final"
+          echo "BUNDLE_TARBALL=$final" >> "$GITHUB_ENV"
+          ls -lh "$final"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-linux-${{ matrix.arch }}-standalone
+          path: ${{ env.BUNDLE_TARBALL }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release' || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name || inputs.release_tag }}" "$BUNDLE_TARBALL" --clobber

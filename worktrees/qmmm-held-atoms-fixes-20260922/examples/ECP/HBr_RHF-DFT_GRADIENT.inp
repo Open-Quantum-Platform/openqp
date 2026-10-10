@@ -1,0 +1,27 @@
+# DFT/LANL2DZ/BHHLYP/RHF/GRADIENT of HBr
+# Also, different basis sets can be used.
+# For Closed-Shell systems we use RHF, when we use RHF, we have to choose multiplicity=1. 
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation, 
+# we dont need [tdhf] section. 
+[input]
+system=
+   35   0.000000000   0.000000000   0.000000000
+   1    0.000000000   0.000000000   1.407611
+charge=0
+runtype=grad
+functional=bhhlyp
+basis=LANL2DZ
+method=hf
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+multiplicity=1
+type=rhf
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=

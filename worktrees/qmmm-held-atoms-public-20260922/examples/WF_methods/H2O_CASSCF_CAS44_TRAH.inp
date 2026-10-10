@@ -1,0 +1,73 @@
+# RHF/6-31G/CASSCF CAS(4,4) of water with the trust-region augmented-Hessian
+# orbital converger ([casscf] converger=trah).
+#
+# This is the SAME optimizer the SCF `converger_type=trah` uses -- the macro
+# trust-region loop, the Steihaug-Toint preconditioned CG and the stability
+# check now live once, in source/trah_core.F90, and each method supplies the
+# gradient and the Hessian-vector product.  Note that `trah` used to be a mere
+# alias for `converger=ah`; it is now its own converger and `ah` is unchanged.
+#
+# What makes it different from `ah` is that the orbital Hessian is never
+# assembled.  Each CG iteration needs only H.v, and that is the central
+# difference of the ANALYTIC orbital gradient along v: two CI solves, against
+# the 2*n_par = 108 the default finite-difference Hessian costs.  The CI is
+# re-solved at both displaced points, so CI relaxation is exact.
+#
+# Same CASSCF solution as the default two-phase converger and as `ah`
+# (-76.0370420631, all three agreeing to 1e-13), reached in ~14 macroiterations
+# instead of 23 / 19 and at ~190 CI evaluations instead of 1963 for `ah` on the
+# same default FD Hessian: an order of magnitude fewer, and as much faster.
+#
+# Honest caveat.  `[casscf] hessian=analytic` switches this converger to an
+# ASSEMBLED Hessian with free matrix-vector products, and at the sizes reachable
+# in an example that is still the faster arm (H2O/cc-pVTZ CAS(6,6) 6.6 s vs
+# 13.0 s matrix-free).  Each matrix-free product costs two full
+# energy/gradient evaluations, and each of those contains an O(nbf^5) AO->MO
+# transform, so even at the 4-5 CG products per macroiteration this converger
+# now needs it outweighs one Hessian build until n_par grows well past this.
+# What the matrix-free path buys is the scaling and the memory: its cost per
+# macroiteration does not depend on n_par at all, it never stores an n_par^2
+# matrix, and it never meets the analytic builder's dense-spectrum guard.
+[input]
+system=
+   O   0.000000000   0.000000000   0.117300000
+   H   0.000000000   0.757200000  -0.469200000
+   H   0.000000000  -0.757200000  -0.469200000
+charge=0
+runtype=energy
+basis=6-31g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=100
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=3
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+root_tracking=energy
+
+[casscf]
+max_macro_iterations=50
+converger=trah

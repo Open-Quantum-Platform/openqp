@@ -1,0 +1,137 @@
+!> @file guess_json_mod.f90
+!> @brief Module to process stored SCF guess data in JSON format.
+!>
+!> This module provides routines to load the JSON formatted SCF guess,
+!> retrieve basis set and molecular orbital data, compute the initial
+!> density matrix for RHF or ROHF/UHF calculations, and broadcast the
+!> computed data in a parallel environment.
+module guess_json_mod
+
+  implicit none
+
+  character(len=*), parameter :: module_name = "guess_json_mod"
+
+contains
+   !> @brief C binding for the guess_json routine.
+  subroutine guess_json_C(c_handle) bind(C, name="guess_json")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call guess_json(inf)
+  end subroutine guess_json_C
+
+  !> @brief Process SCF guess JSON data.
+  !>
+  !> This subroutine loads JSON data provided by Python via the tagarray interface.
+  !>
+  !> @param[in,out] infos Information object containing the basis set, atomic data,
+  !>                        control parameters, and JSON tag arrays required for processing.
+
+  subroutine guess_json(infos)
+    use precision, only: dp
+    use types, only: information, GUESS_SUPPLIED
+    use io_constants, only: IW
+    use oqp_tagarray_driver
+    use basis_tools, only: basis_set
+    use guess, only: get_ab_initio_density
+    use util, only: measure_time
+    use messages, only: show_message, WITH_ABORT
+    use printing, only: print_module_info
+    use oqp_tagarray_driver
+    use parallel, only: par_env_t
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "guess_json"
+
+    type(information), target, intent(inout) :: infos
+    integer :: i, nbf, nbf2
+
+    type(basis_set), pointer :: basis
+    character(len=:), allocatable :: basis_file
+    logical :: err
+    integer , parameter :: root = 0
+    type(par_env_t) :: pe
+  ! tagarray
+    real(kind=dp), contiguous, pointer :: &
+      Smat(:), &
+      dmat_a(:), mo_a(:,:), mo_energy_a(:), &
+      dmat_b(:), mo_b(:,:), mo_energy_b(:)
+    character(len=*), parameter :: tags_alpha(3) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A /)
+    character(len=*), parameter :: tags_beta(3) = (/ character(len=80) :: &
+      OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B /)
+    character(len=*), parameter :: tags_general(1) = (/ character(len=80) :: &
+      OQP_SM /)
+
+  ! Files open
+  ! 1. XYZ: Read : Geometric data, ATOMS
+  ! 3. LOG: Read Write: Main output file
+  !
+    infos%control%guess = GUESS_SUPPLIED
+    open (unit=IW, file=infos%log_filename, position="append")
+
+    call print_module_info("Loading JSON", "Using stored SCF guess")
+
+  ! load basis set
+    basis => infos%basis
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    basis%atoms => infos%atoms
+  !  Allocate H, S ,T and D matrices
+    nbf = basis%nbf
+    nbf2 =nbf*(nbf+1)/2
+
+    ! load general data
+    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_SM, smat)
+
+    ! load alpha data
+    call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+
+    ! Load beta orbitals from the JSON guess. For ROHF/UHF (scftype >= 2) these
+    ! are the supplied beta guess read by get_ab_initio_density below, so they
+    ! must be retrieved, NOT reallocated (alloc_or_die would discard the guess).
+    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+
+
+  !  For ROHF/UHF
+    if (INFOS%control%scftype == 1) MO_B = MO_A
+
+! Calculate Density Matrix
+    if (pe%rank == root) then
+    ! RHF
+      if (infos%control%scftype == 1) then
+        call get_ab_initio_density(Dmat_A, MO_A, infos=infos, basis=basis)
+    ! ROHF/UHF
+      else
+        call get_ab_initio_density(Dmat_A, MO_A, Dmat_B, MO_B, infos, basis)
+      endif
+    endif
+    ! Broadcast MO and density matrices to all processes
+    call pe%bcast(MO_A, nbf*nbf)
+    if (infos%control%scftype >= 2) then
+      call pe%bcast(MO_B, nbf*nbf)
+    endif
+    ! Broadcast the density matrices to all processes
+    if (infos%control%scftype == 1) then
+      call pe%bcast(Dmat_A, nbf2)
+    else
+      call pe%bcast(Dmat_A, nbf2)
+      call pe%bcast(Dmat_B, nbf2)
+    endif
+    call pe%barrier()
+    write (iw, '(/x,a,/)') '...... End of initial orbital guess ......'
+    call measure_time(print_total=1, log_unit=iw)
+    close(iw)
+  end subroutine guess_json
+
+end module guess_json_mod

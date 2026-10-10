@@ -1,0 +1,1498 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OQP Studio</title>
+    <link rel="icon" type="image/png" href="/studio-icon.png" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #131519;
+        --panel: #1b1e24;
+        --panel-2: #22262e;
+        --border: #2d323c;
+        --text: #dde1e8;
+        --text-dim: #8b93a1;
+        --accent: #5aa9e6;
+        --accent-soft: rgba(90, 169, 230, 0.14);
+        --ok: #5ecf8a;
+        --err: #e66a6a;
+        --radius: 10px;
+        --nav-w: 210px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 34px 1fr 30px;
+        grid-template-columns: var(--nav-w) 1fr;
+        grid-template-areas: "header header" "nav main" "footer footer";
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+      header {
+        grid-area: header;
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        padding: 0 0.4rem;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+        user-select: none;
+      }
+      header .logo {
+        width: 16px; height: 16px; border-radius: 50%; align-self: center;
+        margin: 0 0.5rem 0 0.3rem; flex: none;
+        background: radial-gradient(circle at 35% 35%, #8ec8f5, var(--accent) 60%, #2c6ea6);
+      }
+      header .title { font-weight: 650; letter-spacing: 0.2px; align-self: center;
+                      margin-right: 0.8rem; font-size: 13px; }
+
+      /* Menu bar: File / Molecule / View / Run / Help */
+      .mbar { display: flex; align-items: stretch; }
+      .mbar > .m { position: relative; display: flex; }
+      .mbar .mtitle {
+        background: transparent; border: 0; color: var(--text);
+        font: inherit; font-size: 13px; padding: 0 0.7rem; cursor: pointer;
+        border-radius: 0;
+      }
+      .mbar .m:hover .mtitle, .mbar .m.open .mtitle {
+        background: var(--panel-2); color: var(--accent);
+      }
+      .mbar .mmenu {
+        display: none; position: absolute; left: 0; top: 100%; z-index: 70;
+        min-width: 250px; padding: 0.3rem;
+        background: var(--panel-2); border: 1px solid var(--border);
+        border-radius: 0 0 9px 9px; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      }
+      .mbar .m.open .mmenu { display: block; }
+      .mbar .mmenu.right { left: auto; right: 0; }
+      .msep { height: 1px; margin: 0.3rem 0.4rem; background: var(--border); }
+      .menu-item .tick { color: var(--accent); margin-right: 0.35rem; }
+      #navToggle {
+        background: transparent; border: 0; color: var(--text-dim);
+        font: inherit; font-size: 15px; padding: 0 0.55rem; cursor: pointer;
+      }
+      #navToggle:hover { color: var(--accent); background: var(--panel-2); }
+
+      body.nav-hidden { --nav-w: 0px; }
+      body.nav-hidden nav { display: none; }
+      nav {
+        grid-area: nav;
+        position: relative;
+        overflow: hidden;
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        padding: 0.9rem 0.6rem;
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      nav button {
+        display: flex; align-items: center; gap: 0.65rem;
+        width: 100%; text-align: left;
+        background: transparent; border: 0; border-radius: 8px;
+        color: var(--text-dim); font: inherit; font-weight: 500;
+        padding: 0.6rem 0.8rem; cursor: pointer;
+      }
+      nav button:hover { background: var(--panel-2); color: var(--text); }
+      nav button.active { background: var(--accent-soft); color: var(--accent); }
+      nav .grip {
+        position: absolute; top: 0; right: 0; width: 5px; height: 100%;
+        cursor: col-resize; background: transparent;
+      }
+      nav .grip:hover, nav .grip.dragging { background: var(--accent); }
+      nav .step {
+        width: 21px; height: 21px; border-radius: 50%;
+        border: 1.5px solid currentColor;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11.5px; flex: none;
+      }
+
+      main { grid-area: main; position: relative; overflow: hidden; padding: 0; }
+      .panel {
+        display: block; position: absolute; inset: 1.1rem 1.3rem;
+        visibility: hidden; pointer-events: none; overflow: auto;
+      }
+      .panel.active { visibility: visible; pointer-events: auto; }
+      #panel-art { inset: 0; overflow: hidden; }
+      #panel-art iframe {
+        display: block; width: 100%; height: 100%; border: 0; background: #111318;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: var(--split, 44%) 16px minmax(0, 1fr);
+        gap: 0; height: 100%;
+      }
+      .cols > *:first-child { overflow: auto; min-width: 0; }
+      .cols > *:last-child { min-width: 0; }
+      /* The splitter doubles as the gap between the two columns: it fills the
+         whole track so it is easy to grab, and paints only a thin centre bar. */
+      .splitter {
+        cursor: col-resize; align-self: stretch;
+        width: 100%; position: relative; background: transparent;
+      }
+      .splitter::before {
+        content: ""; position: absolute; top: 0; bottom: 0; left: 6px;
+        width: 4px; border-radius: 3px; background: transparent;
+        transition: background .12s;
+      }
+      .splitter:hover::before, .splitter.dragging::before { background: var(--accent); }
+      /* Swallows pointer events over iframes while a split is being dragged. */
+      #dragShield { position: fixed; inset: 0; z-index: 200; display: none; cursor: col-resize; }
+      #dragShield.on { display: block; }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+      }
+      .card h3 {
+        margin: 0 0 0.8rem;
+        font-size: 12.5px; font-weight: 650;
+        text-transform: uppercase; letter-spacing: 0.8px;
+        color: var(--text-dim);
+      }
+      label { display: block; font-size: 12.5px; color: var(--text-dim); margin: 0.55rem 0 0.25rem; }
+      input[type="text"], input[type="number"], select, textarea {
+        width: 100%;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        padding: 0.5rem 0.65rem;
+        font: inherit;
+      }
+      textarea { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; resize: vertical; }
+      input:focus, select:focus, textarea:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .row { display: flex; gap: 0.7rem; }
+      .row > * { flex: 1; }
+      .actions { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
+
+      button.primary {
+        background: var(--accent); color: #0d1319;
+        border: 0; border-radius: 8px;
+        padding: 0.55rem 1.3rem;
+        font: inherit; font-weight: 650; cursor: pointer;
+      }
+      button.primary:hover { filter: brightness(1.1); }
+      button.ghost {
+        background: var(--panel-2); color: var(--text);
+        border: 1px solid var(--border); border-radius: 8px;
+        padding: 0.5rem 1rem; font: inherit; cursor: pointer;
+      }
+      button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+      button:disabled { opacity: 0.45; cursor: default; }
+
+      iframe.viewer {
+        width: 100%; height: 100%;
+        min-height: 420px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #1b1e24;
+      }
+      pre.log {
+        background: var(--bg);
+        border: 1px solid var(--border); border-radius: 7px;
+        padding: 0.7rem; margin: 0;
+        min-height: 10rem; max-height: 24rem;
+        overflow: auto; white-space: pre-wrap;
+        font: 12px/1.5 ui-monospace, Menlo, monospace;
+        color: var(--text-dim);
+      }
+      table.jobs { width: 100%; border-collapse: collapse; font-size: 13px; }
+      table.jobs th {
+        text-align: left; color: var(--text-dim); font-weight: 500;
+        border-bottom: 1px solid var(--border); padding: 0.35rem 0.5rem;
+      }
+      table.jobs td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
+      table.jobs tr.sel td { background: var(--accent-soft); }
+      table.jobs tr { cursor: pointer; }
+      .badge { padding: 1px 8px; border-radius: 99px; font-size: 11.5px; }
+      .badge.done { background: rgba(94,207,138,.15); color: var(--ok); }
+      .badge.failed { background: rgba(230,106,106,.15); color: var(--err); }
+      .badge.not_converged { background: rgba(234,180,66,.16); color: #eab442; }
+      .badge.cancelled, .badge.cancelling { background: rgba(162,172,195,.16); color: var(--text-dim); }
+      .badge.running, .badge.queued { background: var(--accent-soft); color: var(--accent); }
+      ul.files { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+      ul.files li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+      ul.files a { color: var(--accent); text-decoration: none; margin-left: 0.5rem; }
+
+      .wf-opt { display: none; }
+      .wf-opt.on { display: flex; }
+      .wf-opt.scan-options.on { display: block; }
+      .wf-detail { display: none; }
+      .wf-detail.on { display: block; }
+
+      footer {
+        grid-area: footer;
+        display: flex; align-items: center; gap: 1.2rem;
+        padding: 0 1.2rem;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+        color: var(--text-dim); font-size: 12px;
+      }
+      .hint { color: var(--text-dim); font-size: 12.5px; margin-top: 0.5rem; }
+      .workflow-description { margin-top: 0.55rem; }
+      .workflow-description .summary { color: var(--text); font-size: 13px; }
+      .workflow-description .detail { margin-top: 0.25rem; color: var(--text-dim); font-size: 12.5px; line-height: 1.45; }
+      .recipe-actions { display: flex; gap: .45rem; flex-wrap: wrap; margin-top: .65rem; }
+      .recipe-actions button { flex: 1 1 7rem; }
+      .recipe-code { min-height: 8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .recipe-unavailable { color: #e3ad64; }
+      .path-plot { min-height: 190px; margin-top: .5rem; }
+      .path-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+      .path-axis { stroke: var(--border); stroke-width: 1; }
+      .path-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+      .path-point { fill: var(--panel); stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+      .path-point:hover, .path-point.selected { fill: var(--accent); }
+      .path-label { fill: var(--text-dim); font: 11px system-ui, sans-serif; }
+      .property-scale {
+        height: 10px; margin-top: .7rem; border-radius: 3px;
+        background: linear-gradient(90deg, #3b6fd6, #d9dde4 50%, #d64a3b);
+      }
+      .property-range { display: flex; justify-content: space-between; color: var(--text-dim); font-size: 11px; }
+
+      /* Viewer plus its measurement read-out. */
+      .viewer-wrap { position: relative; min-width: 0; height: 100%; }
+      .viewer-resize-cover {
+        position: absolute; inset: 0; z-index: 20;
+        background: #1b1e24; opacity: 0; visibility: hidden;
+        pointer-events: none;
+      }
+      .viewer-resize-cover.on { opacity: 1; visibility: visible; }
+      .measure {
+        position: absolute; left: 10px; bottom: 10px; right: 10px;
+        display: none; gap: .5rem; align-items: center; flex-wrap: wrap;
+        padding: .4rem .7rem; border-radius: 8px;
+        background: rgba(20, 23, 28, 0.86); border: 1px solid var(--border);
+        font-size: 12.5px; color: var(--text);
+      }
+      .measure.on { display: flex; }
+      .snapshot {
+        position: absolute; right: 10px; top: 10px;
+        padding: .25rem .7rem; font-size: 12px; opacity: .55;
+      }
+      .snapshot:hover { opacity: 1; }
+      .level-line { cursor: pointer; }
+      .level-line:hover { stroke: var(--accent); }
+      .measure .value { font-weight: 650; color: var(--accent); }
+      .measure .picked { color: var(--text-dim); }
+      table.sum { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      table.sum td { padding: .22rem .4rem; border-bottom: 1px solid var(--border); }
+      table.sum td.k { color: var(--text-dim); white-space: nowrap; }
+      table.sum td.v { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+      table.sum th { text-align: left; color: var(--text-dim); font-weight: 500;
+                     padding: .25rem .4rem; border-bottom: 1px solid var(--border); }
+      .sum-title { font-size: 12px; color: var(--text-dim); text-transform: uppercase;
+                   letter-spacing: .7px; margin: .9rem 0 .3rem; }
+      .sum-title:first-child { margin-top: 0; }
+
+      #busy {
+        position: fixed; inset: 0; z-index: 80;
+        display: none; flex-direction: column;
+        align-items: center; justify-content: center; gap: 1.2rem;
+        background: rgba(10, 12, 15, 0.72);
+        backdrop-filter: blur(2px);
+      }
+      #busy.on { display: flex; }
+      #busy .ring {
+        width: 84px; height: 84px; border-radius: 50%;
+        border: 6px solid var(--border);
+        border-top-color: var(--accent);
+        animation: spin 0.9s linear infinite;
+      }
+      #busy .msg { font-size: 15px; font-weight: 600; }
+      #busy .sub { color: var(--text-dim); font-size: 13px; margin-top: -0.7rem; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      #runStatus { font-size: 13px; }
+      #panel-run .cols > .card {
+        display: flex; flex-direction: column;
+        min-height: 0; margin-bottom: 0;
+      }
+      #runLog { flex: 1; min-height: 0; max-height: none; }
+      .menu-item {
+        display: block; width: 100%; text-align: left;
+        background: transparent; border: 0; border-radius: 7px;
+        color: var(--text); font: inherit; padding: .5rem .7rem; cursor: pointer;
+      }
+      .menu-item:hover { background: var(--accent-soft); color: var(--accent); }
+      @media (max-width: 700px) {
+        body {
+          grid-template-columns: 0 1fr;
+          grid-template-rows: 34px minmax(0, 1fr) 30px;
+        }
+        nav { display: none; }
+        header .title { display: none; }
+        header { min-width: 0; overflow-x: auto; }
+        header > * { flex: none; }
+        main .panel { inset: .75rem; overflow: auto; }
+        main #panel-art { inset: 0; }
+        .cols {
+          display: flex;
+          flex-direction: column;
+          height: auto;
+          gap: .75rem;
+        }
+        .cols > *:first-child { overflow: visible; }
+        .splitter { display: none; }
+        .viewer-wrap {
+          flex: none;
+          width: 100%;
+          height: min(65vh, 520px);
+          min-height: 420px;
+        }
+        footer { min-width: 0; overflow-x: auto; white-space: nowrap; }
+        footer > * { flex: none; }
+        #excitedAnalysisCard h3 {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: .5rem;
+        }
+        #excitedAnalysisCard h3 button { float: none !important; flex: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo"></div>
+      <div class="title">OQP Studio</div>
+      <button id="navToggle" title="Show or hide the step sidebar">&#9776;</button>
+
+      <div class="mbar">
+        <div class="m">
+          <button class="mtitle">File</button>
+          <div class="mmenu">
+            <button class="menu-item" data-cmd="open-file">Open structure file…</button>
+            <button class="menu-item" data-cmd="pubchem">Fetch from PubChem…</button>
+            <button class="menu-item" data-cmd="open-results">Open existing results…</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="workspace">Results folder…</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="save-xyz">Save geometry as .xyz…</button>
+            <button class="menu-item" data-cmd="save-oqp">Save input as .oqp…</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="clear-geom">Clear geometry</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="network">Network settings…</button>
+          </div>
+        </div>
+
+        <div class="m">
+          <button class="mtitle">Molecule</button>
+          <div class="mmenu">
+            <button class="menu-item" data-cmd="sketch">Sketch in 2D…</button>
+            <button class="menu-item" data-cmd="preview">Update 3D preview</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="tab-builder">Go to Builder</button>
+            <button class="menu-item" data-cmd="tab-method">Go to Workflow</button>
+          </div>
+        </div>
+
+        <div class="m">
+          <button class="mtitle">View</button>
+          <div class="mmenu">
+            <button class="menu-item" data-cmd="toggle-nav">
+              <span class="tick" data-tick="nav">✓</span>Step sidebar</button>
+            <button class="menu-item" data-cmd="reset-layout">Reset panel sizes</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="tab-builder">1 &nbsp;Builder</button>
+            <button class="menu-item" data-cmd="tab-method">2 &nbsp;Workflow</button>
+            <button class="menu-item" data-cmd="tab-run">3 &nbsp;Execution</button>
+            <button class="menu-item" data-cmd="tab-analysis">4 &nbsp;Analysis</button>
+            <button class="menu-item" data-cmd="tab-art">5 &nbsp;Art</button>
+          </div>
+        </div>
+
+        <div class="m">
+          <button class="mtitle">Execution</button>
+          <div class="mmenu">
+            <button class="menu-item" data-cmd="generate">Generate input from Workflow</button>
+            <button class="menu-item" data-cmd="run">▶ Run the current input</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="engine">Install compute engine…</button>
+            <div class="msep"></div>
+            <button class="menu-item" data-cmd="refresh-jobs">Refresh job list</button>
+            <button class="menu-item" data-cmd="tab-analysis">Open Analysis</button>
+          </div>
+        </div>
+
+        <div class="m">
+          <button class="mtitle">Help</button>
+          <div class="mmenu right">
+            <button class="menu-item" id="updateBtn">⭯ Check for updates…</button>
+            <button class="menu-item" id="releasesBtn">↗ Downloads and release notes</button>
+            <button class="menu-item" data-cmd="docs">↗ OpenQP documentation</button>
+            <button class="menu-item" id="aboutBtn">ⓘ About OQP Studio</button>
+            <div id="menuNote" class="hint" style="padding:.2rem .7rem .5rem"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav id="nav">
+      <button data-tab="builder" class="active"><span class="step">1</span> Builder</button>
+      <button data-tab="method"><span class="step">2</span> Workflow</button>
+      <button data-tab="run"><span class="step">3</span> Execution</button>
+      <button data-tab="analysis"><span class="step">4</span> Analysis</button>
+      <button data-tab="art"><span class="step">5</span> Art</button>
+      <div class="grip" id="navGrip" title="Drag to resize"></div>
+    </nav>
+
+    <main>
+      <!-- 1. Builder -->
+      <section class="panel active" id="panel-builder">
+        <div class="cols">
+          <div>
+            <div class="card">
+              <h3>Molecule source</h3>
+              <div class="row">
+                <div>
+                  <label>Open a file</label>
+                  <input type="file" id="fileInput"
+                         accept=".xyz,.pdb,.ent,.oqp,.inp,.log,.out,.txt,.json,.molden,.trj,.mol,.sdf,.sd,.mol2,.cdxml,.smi,.smiles" />
+                  <div class="hint">OpenQP .oqp/.inp/.log/.json/.molden, NAMD .trj,
+                    XYZ, PDB, MOL/SDF, MOL2, ChemDraw CDXML, SMILES</div>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label for="projectName">Project name</label>
+                  <input type="text" id="projectName" value="water" spellcheck="false" />
+                </div>
+                <div>
+                  <label>Sample</label>
+                  <select id="sample">
+                    <option value="">— choose —</option>
+                  </select>
+                </div>
+                <div>
+                  <label>PubChem (molecule name)</label>
+                  <div class="row" style="gap:0.4rem">
+                    <input type="text" id="pubchemName" placeholder="e.g. caffeine" />
+                    <button class="ghost" id="pubchemFetch" style="flex:none">Fetch</button>
+                  </div>
+                </div>
+                <div>
+                  <label>Protein Data Bank (4-character ID)</label>
+                  <div class="row" style="gap:0.4rem">
+                    <input type="text" id="pdbCode" placeholder="e.g. 1CRN" maxlength="4" />
+                    <button class="ghost" id="pdbFetch" style="flex:none">Fetch</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Coordinates (Å) — element&nbsp;x&nbsp;y&nbsp;z</h3>
+              <textarea id="xyz" rows="14" spellcheck="false"></textarea>
+              <div class="row" id="frameRow" style="display:none">
+                <div>
+                  <label>Frame <span id="frameLabel" class="hint"></span></label>
+                  <input type="range" id="frameRange" min="1" max="1" value="1" />
+                </div>
+              </div>
+              <div class="actions">
+                <button class="ghost" id="sketchBtn">✏️ Sketch 2D…</button>
+                <button class="ghost" id="previewBtn">Update 3D preview</button>
+                <span class="hint" id="builderStatus"></span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Symmetry</h3>
+              <div class="row">
+                <div>
+                  <label>Coordinate tolerance (Å)</label>
+                  <input type="number" id="symmetryTolerance" min="0.0001" max="0.5"
+                         step="0.001" value="0.05" />
+                </div>
+              </div>
+              <div class="actions">
+                <button type="button" id="symmetryAnalyze">Analyze</button>
+                <button type="button" class="ghost" id="symmetryAlign" disabled>Align principal axes</button>
+              </div>
+              <div class="hint" id="symmetryResult"></div>
+            </div>
+            <div class="card" id="qmmmCard" style="display:none">
+              <h3>QM/MM region</h3>
+              <div class="row">
+                <div>
+                  <label>QM atoms</label>
+                  <div class="hint" id="qmSelectionStatus">0 selected</div>
+                </div>
+                <div>
+                  <label>MM force field</label>
+                  <input type="text" id="qmmmForcefield" value="amber14-all.xml" spellcheck="false" />
+                </div>
+              </div>
+              <div class="actions">
+                <button class="ghost" id="clearQmAtoms">Clear QM atoms</button>
+                <span class="hint" id="qmAtomList"></span>
+              </div>
+            </div>
+            <div class="card render-card">
+              <h3>Rendering</h3>
+              <div class="row">
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="occlusion"
+                                checked style="width:auto;margin-right:.4rem" />Ambient occlusion</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="outline"
+                                checked style="width:auto;margin-right:.4rem" />Outline</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="shadow"
+                                style="width:auto;margin-right:.4rem" />Soft shadow</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="depthCue"
+                                checked style="width:auto;margin-right:.4rem" />Depth cue</label>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Edge smoothing</label>
+                  <select class="render-input" data-render="antialiasing">
+                    <option value="smaa">SMAA</option>
+                    <option value="fxaa">FXAA (fast)</option>
+                    <option value="off">Off</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Occlusion quality</label>
+                  <select class="render-input" data-render="occlusionQuality">
+                    <option value="balanced">Balanced</option>
+                    <option value="high">High</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Background</label>
+                  <select class="render-input" data-render="background">
+                    <option value="1b1e24">Studio dark</option>
+                    <option value="000000">Black</option>
+                    <option value="ffffff">White (print)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card display-card">
+              <h3>Display</h3>
+              <div class="row">
+                <div>
+                  <label>Style</label>
+                  <select class="style-input" data-style="type">
+                    <option value="auto">Automatic</option>
+                    <option value="ball-and-stick">Ball &amp; stick</option>
+                    <option value="cartoon">Cartoon (protein)</option>
+                    <option value="spacefill">Space-filling (vdW)</option>
+                    <option value="line">Wireframe</option>
+                    <option value="gaussian-surface">Surface</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Color</label>
+                  <select class="style-input" data-style="color">
+                    <option value="element-symbol">By element</option>
+                    <option value="uniform">Single color</option>
+                    <option value="molecule-type">By molecule</option>
+                    <option value="hydrophobicity">Hydrophobicity</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Labels</label>
+                  <select class="style-input" data-style="labels">
+                    <option value="none">None</option>
+                    <option value="element-symbol">Element</option>
+                    <option value="atom-id">Atom number</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="viewer-wrap">
+            <iframe class="viewer" id="previewFrame" title="3D preview"></iframe>
+            <div class="measure" id="measurePreview"></div>
+            <button class="ghost snapshot" data-frame="previewFrame"
+                    title="Save the 3D view as a PNG image">⤓ PNG</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Method -->
+      <section class="panel" id="panel-method">
+        <div class="cols">
+          <div>
+            <div class="card">
+              <h3>Workflow</h3>
+              <label for="workflowSearch">Search workflows</label>
+              <input id="workflowSearch" type="search" placeholder="energy, spectrum, crossing, NMR…" />
+              <label for="workflowSel">Workflow</label>
+              <select id="workflowSel"></select>
+              <div class="workflow-description" id="workflowDescription">
+                <div class="summary" id="workflowSummary"></div>
+                <div class="detail" id="workflowDetail"></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>End-to-end recipe</h3>
+              <label for="recipeSearch">Search recipes</label>
+              <input id="recipeSearch" type="search" placeholder="absorption, Dyson, IR, shielding…" />
+              <label for="recipeSel">Recipe</label>
+              <select id="recipeSel"><option value="">Choose a recipe…</option></select>
+              <div class="workflow-description">
+                <div class="summary" id="recipeSummary">A recipe preserves calculation, execution, analysis, and Art settings.</div>
+                <div class="detail" id="recipeDetail"></div>
+              </div>
+              <div class="recipe-actions">
+                <button class="primary" id="recipeApply" type="button" disabled>Apply</button>
+                <button class="ghost" id="recipeExport" type="button" disabled>Export</button>
+                <button class="ghost" id="recipeDelete" type="button" disabled>Delete</button>
+                <button class="ghost" id="recipeImport" type="button">Import</button>
+              </div>
+              <input id="recipeFile" type="file" accept="application/json,.json" hidden />
+              <details id="recipePythonReview" style="display:none;margin-top:.8rem">
+                <summary>Review Python</summary>
+                <textarea id="recipePythonSource" class="recipe-code" readonly></textarea>
+                <div class="hint">Trusted Python can access local files and the network. Trust is stored only on this computer and is never exported.</div>
+                <div class="recipe-actions">
+                  <button class="ghost" id="recipeTrust" type="button">Trust and enable</button>
+                </div>
+              </details>
+              <details style="margin-top:.8rem">
+                <summary>Save current settings as a recipe</summary>
+                <label for="recipeName">Name</label>
+                <input id="recipeName" placeholder="My spectroscopy recipe" />
+                <label for="recipeTags">Search tags</label>
+                <input id="recipeTags" placeholder="photochemistry, spectrum" />
+                <label class="check"><input id="recipePythonEnabled" type="checkbox" /> Run Python after a successful calculation</label>
+                <textarea id="recipePython" class="recipe-code" placeholder="# Trusted local code only. JOB_DIR is a pathlib.Path.&#10;print(JOB_DIR)"></textarea>
+                <label class="check"><input id="recipePythonTrust" type="checkbox" /> I trust this Python code to access files and the network</label>
+                <div class="recipe-actions">
+                  <button class="primary" id="recipeSave" type="button">Save recipe</button>
+                </div>
+              </details>
+              <div class="hint" id="recipeStatus" style="margin-top:.55rem"></div>
+            </div>
+            <div class="card" id="optionsCard" style="display:none">
+              <h3>Options <span class="hint" id="wfLabel" style="text-transform:none;letter-spacing:0"></span></h3>
+              <div class="actions" style="margin-top:0;margin-bottom:1rem">
+                <button class="primary" id="generate">Generate input →</button>
+                <span class="hint">writes the .oqp and opens the Execution tab</span>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Method</label>
+                  <select id="theory">
+                    <optgroup label="Single-reference">
+                      <option value="hf">Hartree–Fock</option>
+                      <option value="dft">DFT</option>
+                      <option value="mp2">MP2</option>
+                      <option value="ccsd">CCSD</option>
+                      <option value="ccsd_t">CCSD(T)</option>
+                    </optgroup>
+                    <optgroup label="Excited states">
+                      <option value="tddft">TDDFT</option>
+                      <option value="tda">TDA</option>
+                      <option value="sf">SF-TDDFT</option>
+                      <option value="mrsf" selected>MRSF-TDDFT</option>
+                      <option value="umrsf">UMRSF-TDDFT</option>
+                    </optgroup>
+                    <optgroup label="Multiconfigurational">
+                      <option value="fci">FCI</option>
+                      <option value="casci">CASCI</option>
+                      <option value="casscf">CASSCF</option>
+                      <option value="sa-casscf">SA-CASSCF</option>
+                      <option value="caspt2">CASPT2</option>
+                      <option value="ms-caspt2">MS-CASPT2</option>
+                      <option value="xms-caspt2">XMS-CASPT2</option>
+                      <option value="nevpt2">NEVPT2</option>
+                      <option value="sc-nevpt2">SC-NEVPT2</option>
+                      <option value="mrmp2">MRMP2</option>
+                      <option value="mcqdpt2">MCQDPT2</option>
+                      <option value="xmcqdpt2">XMCQDPT2</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label>Functional</label>
+                  <select id="functional">
+                    <optgroup label="Representative">
+                      <option value="bhhlyp">BHHLYP</option>
+                      <option value="b3lypv5">B3LYP</option>
+                      <option value="pbe">PBE</option>
+                      <option value="pbe0">PBE0</option>
+                      <option value="cam-b3lyp">CAM-B3LYP</option>
+                      <option value="m06-2x">M06-2X</option>
+                      <option value="slater">Slater</option>
+                    </optgroup>
+                    <optgroup label="DTCAM series">
+                      <option value="dtcam-aee">DTCAM-AEE</option>
+                      <option value="dtcam-stg">DTCAM-STG</option>
+                      <option value="dtcam-tune">DTCAM-Tune</option>
+                      <option value="dtcam-vaee">DTCAM-VAEE</option>
+                      <option value="dtcam-vee">DTCAM-VEE</option>
+                      <option value="dtcam-xi">DTCAM-XI</option>
+                      <option value="dtcam-xiv">DTCAM-XIV</option>
+                    </optgroup>
+                    <option value="__custom__">Custom…</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Custom functional</label>
+                  <input type="text" id="functionalCustom" placeholder="OpenQP functional name" disabled />
+                </div>
+                <div></div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Basis set</label>
+                  <select id="basis">
+                    <option>6-31g*</option>
+                    <option>6-31g</option>
+                    <option>6-311g**</option>
+                    <option>cc-pvdz</option>
+                    <option>cc-pvtz</option>
+                    <option>def2-svp</option>
+                    <option value="__custom__">custom…</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Custom basis</label>
+                  <input type="text" id="basisCustom" placeholder="(when custom)" disabled />
+                </div>
+              </div>
+              <div class="row">
+                <div><label>Charge</label><input type="number" id="charge" value="0" /></div>
+                <div><label>Multiplicity</label><input type="number" id="mult" value="1" min="1" /></div>
+                <div><label># excited states</label><input type="number" id="nstate" value="3" min="1" /></div>
+              </div>
+              <div class="row wf-opt" data-for="grad opt scan exgrad exopt ts irc mep neb prop" data-theories="tddft tda sf mrsf umrsf">
+                <div>
+                  <label>Target state</label>
+                  <input type="number" id="targetState" value="1" min="0" />
+                </div>
+                <div></div>
+              </div>
+              <div class="wf-opt scan-options" data-for="scan">
+                <div class="row">
+                  <div><label>Atom A</label><input type="number" id="scanAtomA" value="1" min="1" step="1" /></div>
+                  <div><label>Atom B</label><input type="number" id="scanAtomB" value="2" min="1" step="1" /></div>
+                  <div>
+                    <label>Scan mode</label>
+                    <select id="scanMode">
+                      <option value="relaxed">Relaxed, fixed distance</option>
+                      <option value="rigid">Rigid single points</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div><label>Start distance (Å)</label><input type="number" id="scanStart" value="0.8" min="0.01" step="0.05" /></div>
+                  <div><label>End distance (Å)</label><input type="number" id="scanEnd" value="2.0" min="0.01" step="0.05" /></div>
+                  <div><label>Points</label><input type="number" id="scanPoints" value="7" min="2" max="101" step="1" /></div>
+                </div>
+                <div class="hint">Relaxed scans optimize every structure while OpenQP holds the selected bond distance fixed.</div>
+              </div>
+              <div class="row wf-opt" data-for="hess">
+                <div>
+                  <label>Hessian evaluation</label>
+                  <select id="hessType">
+                    <option value="analytical">Analytical</option>
+                    <option value="numerical">Numerical</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Availability</label>
+                  <span class="hint" id="hessTypeHint"></span>
+                </div>
+              </div>
+              <div class="row wf-opt" data-for="nmr">
+                <div>
+                  <label>NMR gauge</label>
+                  <select id="nmrGauge">
+                    <option value="cgo">Common gauge origin (CGO)</option>
+                    <option value="giao">Gauge-including atomic orbitals (GIAO)</option>
+                  </select>
+                </div>
+                <div><span class="hint">CGO requires a closed-shell RHF reference; GIAO also supports open-shell references.</span></div>
+              </div>
+              <div class="row wf-opt" data-for="meci">
+                <div><label>MECI state A</label><input type="number" id="meciA" value="0" min="0" /></div>
+                <div><label>MECI state B</label><input type="number" id="meciB" value="1" min="0" /></div>
+              </div>
+              <div class="row wf-opt" data-for="mecp">
+                <div><label>MECP state A</label><input type="text" id="mecpA" value="S0" /></div>
+                <div><label>MECP state B</label><input type="text" id="mecpB" value="T0" /></div>
+              </div>
+              <div class="row wf-opt" data-for="tci">
+                <div><label>TCI state A</label><input type="text" id="tciA" value="S0" /></div>
+                <div><label>TCI state B</label><input type="text" id="tciB" value="S1" /></div>
+                <div><label>TCI state C</label><input type="text" id="tciC" value="S2" /></div>
+              </div>
+              <div class="row wf-opt" data-for="nac nacme">
+                <div><label>State A</label><input type="text" id="couplingA" value="S0" /></div>
+                <div><label>State B</label><input type="text" id="couplingB" value="S1" /></div>
+              </div>
+              <div class="row wf-opt" data-for="nacme">
+                <div><label>Previous geometry (.xyz)</label><input type="text" id="nacmeGeometry" placeholder="previous.xyz" /></div>
+                <div><span class="hint">NACME compares this geometry with the current structure.</span></div>
+              </div>
+              <div class="row wf-opt" data-for="neb">
+                <div><label>Product geometry (.xyz)</label><input type="text" id="nebProduct" placeholder="product.xyz" /></div>
+                <div><label>Images</label><input type="number" id="nebImages" value="7" min="2" /></div>
+                <div><label>Spring constant</label><input type="number" id="nebSpring" value="0.1" min="0" step="0.01" /></div>
+              </div>
+              <div class="row wf-opt" data-for="pcm">
+                <div>
+                  <label>SCF reference</label>
+                  <select id="pcmReference"><option value="rhf">RHF</option><option value="rohf">ROHF</option></select>
+                </div>
+                <div>
+                  <label>Solvent</label>
+                  <select id="pcmSolvent">
+                    <option value="water">Water</option>
+                    <option value="acetonitrile">Acetonitrile</option>
+                    <option value="methanol">Methanol</option>
+                    <option value="ethanol">Ethanol</option>
+                    <option value="dimethylsulfoxide">Dimethyl sulfoxide</option>
+                    <option value="dimethylformamide">Dimethylformamide</option>
+                    <option value="acetone">Acetone</option>
+                    <option value="tetrahydrofuran">Tetrahydrofuran</option>
+                    <option value="dichloromethane">Dichloromethane</option>
+                    <option value="chloroform">Chloroform</option>
+                    <option value="diethyl-ether">Diethyl ether</option>
+                    <option value="toluene">Toluene</option>
+                    <option value="benzene">Benzene</option>
+                    <option value="dioxane">1,4-Dioxane</option>
+                    <option value="ethyl-acetate">Ethyl acetate</option>
+                    <option value="__custom__">Custom</option>
+                  </select>
+                </div>
+                <div>
+                  <label>PCM model</label>
+                  <select id="pcmModel"><option value="ddpcm">ddPCM</option><option value="ddcosmo">ddCOSMO</option><option value="ddlpb">ddLPB</option></select>
+                </div>
+                <div><label>Dielectric constant</label><input type="number" id="pcmEpsilon" value="78.3553" min="1" step="0.0001" /></div>
+                <div><label>Cavity radii set</label><input type="text" id="pcmRadii" value="uff" /></div>
+                <div id="pcmCustomSolventWrap" style="display:none"><label>Custom solvent name</label><input type="text" id="pcmSolventCustom" placeholder="solvent" /></div>
+              </div>
+              <div class="row wf-opt" data-for="ekt">
+                <div><label><input type="checkbox" id="ektIp" checked style="width:auto;margin-right:.4rem" />Ionization (IP)</label></div>
+                <div><label><input type="checkbox" id="ektEa" style="width:auto;margin-right:.4rem" />Electron affinity (EA)</label></div>
+              </div>
+              <details class="wf-detail" data-for="*" style="margin-top:1rem">
+                <summary>SCF convergence and stability</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>SCF max iterations</label><input type="number" id="scfMaxit" value="30" min="1" /></div>
+                  <div><label>SCF convergence</label><input type="text" id="scfConv" value="1e-6" /></div>
+                  <div><label>DIIS subspace</label><input type="number" id="scfMaxDiis" value="7" min="1" /></div>
+                  <div><label>DIIS type</label><select id="scfDiisType"><option value="cdiis">CDIIS</option><option value="ediis">EDIIS</option></select></div>
+                  <div><label>Level shift</label><input type="text" id="scfLevelShift" value="0" /></div>
+                </div>
+                <details>
+                  <summary>Converger path and occupation control</summary>
+                  <div class="row" style="margin-top:.8rem">
+                    <div><label>Primary converger</label><select id="scfConverger"><option value="diis">DIIS</option><option value="soscf">SO-SCF</option><option value="trah">TRAH</option></select></div>
+                    <div><label>Fallback converger</label><select id="scfFallback"><option value="trah">TRAH</option><option value="soscf">SO-SCF</option><option value="diis">DIIS</option></select></div>
+                    <div><label>Escalation ladder</label><input type="text" id="scfEscalation" value="diis,soscf,trah" /></div>
+                    <div><label>Stability following</label><select id="scfStability"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>SO-SCF level shift</label><input type="text" id="soscfLevelShift" value="0" /></div>
+                  </div>
+                  <div class="row">
+                    <div><label>MOM</label><select id="scfMom"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>MOM switch</label><input type="text" id="scfMomSwitch" value="0.003" /></div>
+                    <div><label>PFON</label><select id="scfPfon"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>PFON start temperature</label><input type="text" id="scfPfonTemp" value="2000" /></div>
+                    <div><label>PFON cooling rate</label><input type="text" id="scfPfonCooling" value="50" /></div>
+                  </div>
+                </details>
+                <details>
+                  <summary>TRAH trust-region solver</summary>
+                  <div class="row" style="margin-top:.8rem">
+                    <div><label>TRAH stability analysis</label><select id="trahStability"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>TRAH line search</label><select id="trahLineSearch"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>Subsystem solver</label><select id="trahSolver"><option value="davidson">Davidson</option><option value="cg">CG</option></select></div>
+                    <div><label>Initial trust radius</label><input type="text" id="trahRadius" value="0.4" /></div>
+                    <div><label>Maximum microiterations</label><input type="number" id="trahMicro" value="50" min="1" /></div>
+                  </div>
+                  <div class="row">
+                    <div><label>Random trial vectors</label><input type="number" id="trahTrialVectors" value="1" min="0" /></div>
+                    <div><label>Jacobi-Davidson start</label><input type="number" id="trahJdStart" value="30" min="1" /></div>
+                    <div><label>Global reduction</label><input type="text" id="trahGlobalReduction" value="0.001" /></div>
+                    <div><label>Local reduction</label><input type="text" id="trahLocalReduction" value="0.0001" /></div>
+                    <div><label>Implementation</label><select id="trahImplementation"><option value="auto">Automatic</option><option value="native">Native</option><option value="otr">ORCA-style</option></select></div>
+                  </div>
+                </details>
+                <details>
+                  <summary>Initialization, restart, and screening</summary>
+                  <div class="row" style="margin-top:.8rem">
+                    <div><label>Initial SCF</label><select id="scfInitial"><option value="no">No</option><option value="yes">Yes</option></select></div>
+                    <div><label>Initial iterations</label><input type="number" id="scfInitialIt" value="15" min="0" /></div>
+                    <div><label>Initial convergence</label><input type="text" id="scfInitialConv" value="0.001" /></div>
+                    <div><label>Restart CT-MO</label><select id="scfRestart"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>Incremental Fock</label><select id="scfIncremental"><option value="true">On</option><option value="false">Off</option></select></div>
+                  </div>
+                  <div class="row">
+                    <div><label>Prescreening</label><select id="scfPrescreen"><option value="false">Off</option><option value="true">On</option></select></div>
+                    <div><label>Prescreen K</label><input type="text" id="scfPrescreenK" value="1e-2" /></div>
+                    <div><label>Prescreen cap</label><input type="text" id="scfPrescreenCap" value="1e-8" /></div>
+                    <div><label>Prescreen tight</label><input type="text" id="scfPrescreenTight" value="1e-4" /></div>
+                    <div><label>Verbose level</label><input type="number" id="scfVerbose" value="1" min="0" /></div>
+                  </div>
+                </details>
+                <div class="row wf-opt" data-for="opt exopt ts irc mep neb meci mecp tci">
+                  <div><label>Geometry max iterations</label><input type="number" id="geomMaxit" value="100" min="1" /></div>
+                  <div><label>RMS gradient cutoff</label><input type="text" id="rmsdGrad" value="0.003" /></div>
+                  <div><label>Maximum gradient cutoff</label><input type="text" id="maxGrad" value="0.004" /></div>
+                  <div><label>RMS step cutoff</label><input type="text" id="rmsdStep" value="0.004" /></div>
+                  <div><label>Maximum step cutoff</label><input type="text" id="maxStep" value="0.008" /></div>
+                </div>
+                <div class="row wf-opt" data-for="meci mecp tci">
+                  <div><label>Energy shift</label><input type="text" id="energyShift" value="1" /></div>
+                  <div><label>Energy-gap cutoff</label><input type="text" id="energyGap" value="0.002" /></div>
+                  <div><label>Trust radius</label><input type="text" id="trustRadius" value="0.15" /></div>
+                  <div><label>Search algorithm</label><select id="crossingAlgorithm"><option value="penalty">Penalty</option><option value="auglag">Augmented Lagrangian</option><option value="sqp">SQP</option></select></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="energy grad opt hess prop abs exgrad exopt meci mecp tci nac nacme soc ekt namd" data-theories="tddft tda sf mrsf umrsf" style="margin-top:1rem">
+                <summary>Excited-state response and Z-vector</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Response max iterations</label><input type="number" id="responseMaxit" value="50" min="1" /></div>
+                  <div><label>Response cutoff</label><input type="text" id="responseCutoff" value="auto" /></div>
+                  <div><label>Response convergence</label><input type="text" id="responseConv" value="1e-6" /></div>
+                  <div><label>Z-vector max iterations</label><input type="number" id="zvectorMaxit" value="50" min="1" /></div>
+                  <div><label>Z-vector convergence</label><input type="text" id="zvectorConv" value="1e-6" /></div>
+                  <div><label>Davidson subspace</label><input type="number" id="davidsonSubspace" value="50" min="1" /></div>
+                </div>
+                <div class="row">
+                  <div><label>Z-vector solver</label><select id="zvectorSolver"><option value="0">CG</option><option value="2">MINRES</option><option value="3">Automatic</option></select></div>
+                  <div><label>GMRES dimension</label><input type="number" id="gmresDim" value="50" min="1" /></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="hess" style="margin-top:1rem">
+                <summary>Hessian and thermochemistry</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Numerical displacement (Å)</label><input type="text" id="hessDx" value="0.01" /></div>
+                  <div><label>Finite-difference workers</label><input type="number" id="hessNproc" value="1" min="1" /></div>
+                  <div><label>Temperature (K)</label><input type="text" id="hessTemperature" value="298.15" /></div>
+                  <div><label>Symmetry-unique displacements</label><select id="hessSymmetry"><option value="false">No</option><option value="true">Yes</option></select></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="opt exopt ts irc mep neb meci mecp tci" style="margin-top:1rem">
+                <summary>Geometry controls</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Coordinate system</label><select id="geomCoordsys"><option value="dlc">DLC</option><option value="tric">TRIC</option><option value="ric">RIC</option><option value="cart">Cartesian</option></select></div>
+                  <div><label>Initial trust radius</label><input type="text" id="geomTrust" value="0.1" /></div>
+                  <div><label>Maximum trust radius</label><input type="text" id="geomTrustMax" value="0.3" /></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="nac nacme" style="margin-top:1rem">
+                <summary>Nonadiabatic coupling</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Derivative</label><select id="nacType"><option value="numerical">Numerical</option></select></div>
+                  <div><label>Displacement (Å)</label><input type="text" id="nacDx" value="0.0001" /></div>
+                  <div><label>Workers</label><input type="number" id="nacNproc" value="1" min="1" /></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="namd" style="margin-top:1rem">
+                <summary>Surface-hopping dynamics</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Initial state</label><input type="number" id="namdState" value="1" min="1" /></div>
+                  <div><label>Nuclear steps</label><input type="number" id="namdSteps" value="100" min="1" /></div>
+                  <div><label>Time step (fs)</label><input type="text" id="namdDt" value="0.5" /></div>
+                  <div><label>Decoherence</label><select id="namdDecoherence"><option value="edc">EDC</option><option value="off">Off</option></select></div>
+                </div>
+              </details>
+              <details class="wf-detail" data-for="energy grad opt scan hess prop abs exgrad exopt meci mecp tci ts irc mep nac nacme soc ekt" data-theories="fci casci casscf sa-casscf caspt2 ms-caspt2 xms-caspt2 nevpt2 sc-nevpt2 mrmp2 mcqdpt2 xmcqdpt2" style="margin-top:1rem">
+                <summary>Active space and CI solver</summary>
+                <div class="row" style="margin-top:.8rem">
+                  <div><label>Active electrons</label><input type="number" id="activeElectrons" value="0" min="0" /></div>
+                  <div><label>Active orbitals</label><input type="number" id="activeOrbitals" value="0" min="0" /></div>
+                  <div><label>Frozen core orbitals</label><input type="number" id="frozenCore" value="0" min="0" /></div>
+                  <div><label>Roots</label><input type="number" id="ciRoots" value="1" min="1" /></div>
+                </div>
+                <div class="row">
+                  <div><label>CI solver</label><select id="ciSolver"><option value="auto">Automatic</option><option value="davidson">Davidson</option><option value="full">Full diagonalization</option></select></div>
+                  <div><label>CI eigensolver tolerance</label><input type="text" id="ciTolerance" value="1e-10" /></div>
+                  <div><label>Davidson max iterations</label><input type="number" id="ciMaxit" value="100" min="1" /></div>
+                </div>
+              </details>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Input preview (.oqp) <button id="editPreview" type="button" style="float:right">Edit input</button></h3>
+            <pre class="log" id="inpPreview" style="min-height:20rem"></pre>
+            <textarea class="log" id="inpPreviewEditor" spellcheck="false" style="display:none;min-height:20rem;width:100%;box-sizing:border-box"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Run -->
+      <section class="panel" id="panel-run">
+        <div class="cols">
+          <div>
+            <div class="card">
+              <h3>OpenQP input (.oqp — legacy .inp also accepted)</h3>
+              <label for="inputName">Input file name</label>
+              <input id="inputName" value="input.oqp" spellcheck="false" />
+              <textarea id="input" rows="20" spellcheck="false"></textarea>
+              <div class="actions">
+                <button class="primary" id="runBtn" disabled>▶ Run</button>
+                <select id="runner" style="width:auto"></select>
+                <span id="runStatus"></span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Execution host</h3>
+              <div id="hostInfo" class="hint">Reading hardware status…</div>
+              <div class="row" style="margin-top:.75rem">
+                <div>
+                  <label>OpenMP threads</label>
+                  <input type="number" id="threads" value="1" min="1" step="1" />
+                </div>
+                <div>
+                  <label>Memory admission</label>
+                  <div id="memoryInfo" class="hint">Waiting for input…</div>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="ghost" id="hostRefresh">↻ Refresh hardware</button>
+                <button class="ghost" id="executionWorkspace">Results folder…</button>
+                <span id="executionOutputDir" class="hint"></span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Live log</h3>
+            <pre class="log" id="runLog" style="min-height:24rem">(no job yet)</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Analysis -->
+      <section class="panel" id="panel-analysis">
+        <div class="cols">
+          <div>
+            <div class="card">
+              <h3>Jobs
+                <button class="ghost" id="jobsRefresh" style="float:right;padding:0.15rem 0.7rem">↻</button>
+              </h3>
+              <!-- Results computed elsewhere -- on a cluster, by the standalone
+                   command-line engine, or in an earlier session -- are analysed
+                   here exactly like a run this app started. -->
+              <p>
+                <button class="ghost" id="importBtn">Open existing results…</button>
+                <span class="hint" id="importStatus"></span>
+              </p>
+              <input type="file" id="importFiles" multiple
+                     accept=".log,.out,.json,.molden,.xyz,.trj,.cube,.cub,.inp,.oqp,.dat,.txt"
+                     style="display:none" />
+              <table class="jobs">
+                <thead><tr><th>Project</th><th>Runner</th><th>Status</th><th></th></tr></thead>
+                <tbody id="jobsBody"></tbody>
+              </table>
+            </div>
+            <div class="card" id="comparisonCard" style="display:none">
+              <h3>Compare projects</h3>
+              <label>Reference project</label>
+              <select id="comparisonReference"><option value="">Choose a reference…</option></select>
+              <div class="actions"><button id="comparisonRun" type="button" disabled>Compare</button></div>
+              <div id="comparisonBody"></div>
+            </div>
+            <div class="card">
+              <h3>Project files</h3>
+              <ul class="files" id="resultFiles"><li class="hint">select a job</li></ul>
+            </div>
+            <div class="card" id="resultFrameCard" style="display:none">
+              <h3 id="resultFrameTitle">Trajectory</h3>
+              <div id="optimizationStepControls" style="display:none">
+                <label>Optimization structure</label>
+                <select id="optimizationStepSelect"></select>
+                <div class="hint" id="optimizationStepValues" style="margin-top:.65rem"></div>
+              </div>
+              <label>Frame <span id="resultFrameLabel" class="hint"></span></label>
+              <input type="range" id="resultFrameRange" min="1" max="1" value="1" />
+              <div class="actions"><button class="ghost" id="editResultStructure" type="button">Edit in Builder</button></div>
+            </div>
+            <div class="card" id="pathCard" style="display:none">
+              <h3 id="pathTitle">Reaction path</h3>
+              <div class="path-plot" id="pathPlot"></div>
+              <div class="hint" id="pathNote"></div>
+            </div>
+            <div class="card" id="summaryCard" style="display:none">
+              <h3>Results summary</h3>
+              <div id="summaryBody"></div>
+            </div>
+            <div class="card" id="atomicPropertyCard" style="display:none">
+              <h3>3D atomic property</h3>
+              <label>Property</label>
+              <select id="atomicProperty"></select>
+              <div class="actions"><button id="showAtomicProperty" type="button">Show on molecule</button></div>
+              <div id="propertyLegend" style="display:none">
+                <div class="property-scale"></div>
+                <div class="property-range"><span id="propertyMinimum"></span><span id="propertyMaximum"></span></div>
+              </div>
+              <div class="hint" id="propertyStatus"></div>
+            </div>
+            <div class="card" id="surfaceCard" style="display:none">
+              <h3>Volumetric surfaces</h3>
+              <label>Primary cube</label>
+              <select id="surfacePrimary"></select>
+              <div class="row">
+                <div>
+                  <label>Operation</label>
+                  <select id="surfaceOperation">
+                    <option value="display">Display</option>
+                    <option value="difference">Difference (primary − secondary)</option>
+                    <option value="sum">Sum</option>
+                  </select>
+                </div>
+                <div id="surfaceSecondaryWrap" style="display:none">
+                  <label>Secondary cube</label>
+                  <select id="surfaceSecondary"></select>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Isovalue</label>
+                  <input type="number" id="surfaceIso" min="0.0001" step="0.005" value="0.05" />
+                </div>
+                <div>
+                  <label>Sign</label>
+                  <select id="surfaceSides">
+                    <option value="both">Positive and negative</option>
+                    <option value="positive">Positive only</option>
+                    <option value="negative">Negative only</option>
+                  </select>
+                </div>
+              </div>
+              <div class="actions"><button id="surfaceShow" type="button">Show surface</button></div>
+              <div class="hint" id="surfaceStatus"></div>
+            </div>
+            <div class="card" id="spectrumCard" style="display:none">
+              <h3>Spectrum
+                <button class="ghost" id="specCsv"
+                        style="float:right;padding:.15rem .7rem;font-size:12px">Export CSV</button>
+              </h3>
+              <div class="row">
+                <div>
+                  <label>Kind</label>
+                  <select id="specKind"></select>
+                </div>
+                <div>
+                  <label>Line shape</label>
+                  <select id="specShape">
+                    <option value="lorentzian">Lorentzian</option>
+                    <option value="gaussian">Gaussian</option>
+                    <option value="voigt">Pseudo-Voigt</option>
+                  </select>
+                </div>
+                <div id="specStateWrap" style="display:none">
+                  <label>Current excited state</label>
+                  <input type="number" id="specState" value="1" min="1" />
+                </div>
+              </div>
+              <label>Width (FWHM) <span class="hint" id="specWidthLabel"></span></label>
+              <input type="range" id="specWidth" min="1" max="100" step="1" value="20" />
+              <div id="specPlot" style="margin-top:.6rem"></div>
+              <div class="hint" id="specNote"></div>
+            </div>
+            <div class="card" id="excitedAnalysisCard" style="display:none">
+              <h3>Excited-state analysis
+                <button class="ghost" id="excitedReset" type="button"
+                        style="float:right;padding:.15rem .7rem;font-size:12px">Reset map</button>
+              </h3>
+              <div class="row">
+                <div>
+                  <label>Source state</label>
+                  <select id="excitedSource"></select>
+                </div>
+                <div>
+                  <label>Target state</label>
+                  <select id="excitedTarget"></select>
+                </div>
+              </div>
+              <label>Map</label>
+              <select id="excitedMap">
+                <option value="nto_hole">NTO hole</option>
+                <option value="nto_particle">NTO particle</option>
+                <option value="attachment">Attachment density</option>
+                <option value="detachment">Detachment density</option>
+                <option value="difference">Difference density</option>
+                <option value="transition">Transition density</option>
+                <option value="state_density">Target-state density</option>
+              </select>
+              <div id="excitedPairWrap">
+                <label>NTO pair</label>
+                <select id="excitedPair"></select>
+              </div>
+              <div id="excitedMetrics" class="hint" style="margin:.6rem 0"></div>
+              <button id="excitedShow" type="button">Show 3D map</button>
+            </div>
+            <div class="card" id="orbitalCard" style="display:none">
+              <h3>Orbitals and 3D maps <button class="ghost" id="orbitalReset"
+                  type="button" style="float:right;padding:.15rem .7rem;font-size:12px">Reset map</button></h3>
+              <label>Show</label>
+              <select id="mapKind">
+                <option value="mo">SCF molecular orbital</option>
+                <option value="dyson" id="dysonMapKind" hidden>Dyson orbital</option>
+                <option value="density">Electron density</option>
+                <option value="spin">Spin density</option>
+                <option value="esp">Electrostatic potential (MEP)</option>
+              </select>
+              <div id="orbitalPick">
+                <label>Orbital</label>
+                <select id="orbitalSel"><option value="">Choose an orbital…</option></select>
+              </div>
+              <label>Isovalue</label>
+              <input type="range" id="isoRange" min="0.01" max="0.15" step="0.01" value="0.05" />
+              <label>Appearance</label>
+              <select id="moPreset">
+                <option value="studio">OQP Studio (default)</option>
+                <option value="macmolplt">MacMolPlt classic</option>
+                <option value="macmolplt-mesh">MacMolPlt mesh</option>
+                <option value="iqmol">IQmol translucent</option>
+                <option value="print">Print (grey, opaque)</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <div class="row">
+                <div>
+                  <label>Phase colors</label>
+                  <select id="moColors">
+                    <option value="4f8fdd,dd6a4f">Blue / Red</option>
+                    <option value="3b6fd6,e0b93a">Blue / Yellow</option>
+                    <option value="d64a3b,3b6fd6">Red / Blue</option>
+                    <option value="47b07a,9a63c8">Green / Purple</option>
+                    <option value="e08a3c,3fb6c4">Orange / Cyan</option>
+                    <option value="d9dde4,7b8494">Grey pair</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Surface</label>
+                  <select id="moVisual">
+                    <option value="solid">Solid</option>
+                    <option value="wireframe">Mesh</option>
+                    <option value="solid,wireframe">Solid + mesh</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Sign</label>
+                  <select id="moSides">
+                    <option value="both">Positive and negative</option>
+                    <option value="positive">Positive only</option>
+                    <option value="negative">Negative only</option>
+                  </select>
+                </div>
+              </div>
+              <label>Opacity</label>
+              <input type="range" id="moAlpha" min="0.15" max="1" step="0.05" value="0.85" />
+            </div>
+            <div class="card display-card">
+              <h3>Display</h3>
+              <div class="row">
+                <div>
+                  <label>Style</label>
+                  <select class="style-input" data-style="type">
+                    <option value="auto">Automatic</option>
+                    <option value="ball-and-stick">Ball &amp; stick</option>
+                    <option value="cartoon">Cartoon (protein)</option>
+                    <option value="spacefill">Space-filling (vdW)</option>
+                    <option value="line">Wireframe</option>
+                    <option value="gaussian-surface">Surface</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Color</label>
+                  <select class="style-input" data-style="color">
+                    <option value="element-symbol">By element</option>
+                    <option value="uniform">Single color</option>
+                    <option value="molecule-type">By molecule</option>
+                    <option value="hydrophobicity">Hydrophobicity</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Labels</label>
+                  <select class="style-input" data-style="labels">
+                    <option value="none">None</option>
+                    <option value="element-symbol">Element</option>
+                    <option value="atom-id">Atom number</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card render-card">
+              <h3>Rendering</h3>
+              <div class="row">
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="occlusion"
+                                checked style="width:auto;margin-right:.4rem" />Ambient occlusion</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="outline"
+                                checked style="width:auto;margin-right:.4rem" />Outline</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="shadow"
+                                style="width:auto;margin-right:.4rem" />Soft shadow</label>
+                </div>
+                <div>
+                  <label><input type="checkbox" class="render-input" data-render="depthCue"
+                                checked style="width:auto;margin-right:.4rem" />Depth cue</label>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Edge smoothing</label>
+                  <select class="render-input" data-render="antialiasing">
+                    <option value="smaa">SMAA</option>
+                    <option value="fxaa">FXAA (fast)</option>
+                    <option value="off">Off</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Occlusion quality</label>
+                  <select class="render-input" data-render="occlusionQuality">
+                    <option value="balanced">Balanced</option>
+                    <option value="high">High</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Background</label>
+                  <select class="render-input" data-render="background">
+                    <option value="1b1e24">Studio dark</option>
+                    <option value="000000">Black</option>
+                    <option value="ffffff">White (print)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="card" id="modeCard" style="display:none">
+              <h3>Normal modes</h3>
+              <label>Vibration</label>
+              <select id="modeSel"></select>
+              <label>Amplitude</label>
+              <input type="range" id="ampRange" min="0.1" max="1.5" step="0.1" value="0.6" />
+              <div class="row">
+                <button type="button" class="ghost" id="modePlay" title="Play normal-mode animation" aria-label="Play normal-mode animation">Play</button>
+                <button type="button" class="ghost" id="modePause" title="Pause normal-mode animation" aria-label="Pause normal-mode animation">Pause</button>
+                <button type="button" class="ghost" id="modeReset" title="Restore the equilibrium structure" aria-label="Restore the equilibrium structure">Reset</button>
+                <label class="check"><input type="checkbox" id="modeArrows" checked /> Displacement arrows</label>
+              </div>
+            </div>
+          </div>
+          <div class="viewer-wrap">
+            <iframe class="viewer" id="resultFrame" title="analysis viewer"></iframe>
+            <div class="measure" id="measureResult"></div>
+            <button class="ghost snapshot" data-frame="resultFrame"
+                    title="Save the 3D view as a PNG image">⤓ PNG</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Art -->
+      <section class="panel" id="panel-art">
+        <iframe id="artFrame" title="ray-traced molecular artwork"></iframe>
+      </section>
+    </main>
+
+    <div id="dragShield"></div>
+
+    <div id="busy">
+      <div class="ring"></div>
+      <div class="msg" id="busyMsg">Working…</div>
+      <div class="sub" id="busySub"></div>
+    </div>
+
+
+    <div id="networkOverlay" style="display:none;position:fixed;inset:0;z-index:90;
+         background:rgba(0,0,0,.55)">
+      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+           width:min(620px,92vw);background:var(--panel);border:1px solid var(--border);
+           border-radius:12px;padding:1.1rem 1.3rem">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Network settings</strong>
+          <button class="ghost" id="networkClose" style="padding:.2rem .8rem">✕</button>
+        </div>
+        <div class="hint" style="margin-top:.6rem">
+          Campus and company networks often inspect encrypted traffic by re-signing
+          it with their own root certificate. PubChem lookups fail until OQP Studio
+          trusts that root. Sketching and typing coordinates never need the network.
+        </div>
+        <div id="networkStatus" style="margin:.8rem 0"></div>
+        <label>Root certificate file (PEM or CRT)</label>
+        <div class="row" style="gap:.4rem">
+          <input type="text" id="caBundle" placeholder="/path/to/your-network-root.pem" />
+          <button class="ghost" id="caBrowse" style="flex:none">Browse…</button>
+        </div>
+        <input type="file" id="caFile" accept=".pem,.crt,.cer,.cert" style="display:none" />
+        <label style="margin-top:.8rem">
+          <input type="checkbox" id="insecureSsl" style="width:auto;margin-right:.4rem" />
+          Skip certificate verification
+        </label>
+        <div class="hint" style="margin-top:.2rem">
+          Last resort. Traffic stays encrypted, but the app stops checking who it is
+          talking to. Only switch this on for a network you already trust.
+        </div>
+        <div class="actions">
+          <button class="primary" id="networkSave">Save</button>
+          <button class="ghost" id="networkTest">Test connection</button>
+          <span class="hint" id="networkNote"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Where runs write their log, JSON export and molden file. The user's
+         data, so the user picks the folder. -->
+    <div id="workspaceOverlay" style="display:none;position:fixed;inset:0;z-index:90;
+         background:rgba(0,0,0,.55)">
+      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+           width:min(620px,92vw);background:var(--panel);border:1px solid var(--border);
+           border-radius:12px;padding:1.1rem 1.3rem">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Results folder</strong>
+          <button class="ghost" id="workspaceClose" style="padding:.2rem .8rem">✕</button>
+        </div>
+        <div class="hint" style="margin-top:.6rem">
+          Every run gets a folder of its own here, holding its input, log, JSON
+          export and any molden file. Pick somewhere you can find again.
+        </div>
+        <div id="workspaceStatus" style="margin:.8rem 0"></div>
+        <label>Folder</label>
+        <input type="text" id="workspaceDir" placeholder="leave empty to let the app choose" />
+        <div class="actions">
+          <button class="primary" id="workspaceSave">Save</button>
+          <button class="ghost" id="workspaceReveal">Open folder</button>
+          <span class="hint" id="workspaceNote"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="sketchOverlay" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55)">
+      <div style="position:absolute;inset:4% 6%;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 1rem;border-bottom:1px solid var(--border)">
+          <strong>2D Sketcher</strong>
+          <button class="ghost" id="sketchClose" style="padding:.2rem .8rem">✕ Close</button>
+        </div>
+        <iframe id="sketchFrame" style="flex:1;border:0;background:#fff"></iframe>
+      </div>
+    </div>
+
+    <footer>
+      <span id="health">OQP Studio engine: connecting…</span>
+      <span id="runnersInfo"></span>
+      <span id="copyright" style="margin-left:auto"></span>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

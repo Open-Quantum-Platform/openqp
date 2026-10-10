@@ -1,0 +1,421 @@
+! 17 Aug 12 - CHC - Initial program
+! This moldule contains initial guess routines.
+!
+module guess
+    use precision,     only: dp
+    use oqp_linalg
+    implicit none
+
+    private
+    public get_ab_initio_density
+    public get_ab_initio_orbital
+    public corresponding_orbital_projection
+    public mksphar
+
+    ! An eigensolver is free to return either sign for every real eigenvector.
+    ! Keep the tolerance in step with the corresponding CI-vector convention:
+    ! it makes symmetry-related, round-off-level ties select the lowest AO.
+    real(dp), parameter :: ORBITAL_PHASE_TIE_RTOL = 1.0e-8_dp
+
+contains
+
+!> @brief  this will calculatte the density matrix
+subroutine get_ab_initio_density(alpha_density,alpha_orbital,beta_density,beta_orbital, infos, basis)
+   use mathlib, only: orb_to_dens
+   use messages, only: show_message, with_abort
+   use types, only: information
+   use basis_tools, only: basis_set
+   implicit none
+   type(information), intent(in) :: infos
+   type(basis_set), intent(in) :: basis
+   integer    :: ok
+   integer    :: scftype, nocc, na, nb, nbasis, na2
+   real(dp)   :: alpha_density(:), &
+                 alpha_orbital(:,:)
+   real(dp), optional :: beta_density(:), &
+                         beta_orbital(:,:)
+   real(dp), dimension(:), allocatable :: occno
+!
+   scftype = infos%control%scftype
+   na   = infos%mol_prop%nelec_a
+   nb   = infos%mol_prop%nelec_b
+   nbasis = basis%nbf
+   nocc = infos%mol_prop%nocc
+
+   allocate(occno(nocc), stat=ok)
+   if(ok/=0) call show_message('allocation of occno fails', with_abort)
+
+   occno = 2
+   if (scftype/=1) occno = 1
+
+   na2 = nocc
+   if (scftype/=1) na2 = na
+
+!  alpha density is always calculated for RHF/ROHF/UHF
+   call orb_to_dens(alpha_density,alpha_orbital,occno,na2,nbasis,nbasis)
+
+   if (nb == 0) then
+     ! A fully spin-polarized reference has an empty beta density, but it still
+     ! needs a complete beta orbital basis.  In particular, the Hückel driver
+     ! has already copied its projected alpha orbitals to beta for UHF/ROHF.
+     ! Preserve those orbitals and zero only the unoccupied-spin density.
+     if (present(beta_density)) beta_density = 0.0_dp
+
+   else
+     select case (scftype)
+     case (1)
+
+     case (2)
+       call orb_to_dens(beta_density,beta_orbital,occno,nb,nbasis,nbasis)
+
+     case (3)
+       call orb_to_dens(beta_density,alpha_orbital,occno,nb,nbasis,nbasis)
+     end select
+   end if
+
+end subroutine get_ab_initio_density
+
+!> @brief Solve \f$ F C = \eps S C \f$
+ subroutine get_ab_initio_orbital(fock_m, orbitals, orbital_e, q_m)
+   use messages,  only: show_message, WITH_ABORT
+   use mathlib, only: orthogonal_transform
+   use eigen, only: diag_symm_full
+   use mathlib, only: unpack_matrix, pack_matrix
+   implicit none
+!
+   real(kind=dp) :: orbital_e(*)
+   real(kind=dp) :: fock_m(*)
+   real(kind=dp) :: orbitals(:,:), q_m(:,:)
+
+   real(kind=dp), allocatable :: wrk(:,:), f2(:,:), tfock(:,:)
+   integer  :: info, ok, nbf
+
+   nbf = ubound(orbitals, 1)
+   allocate(wrk(nbf,nbf), f2(nbf,nbf), tfock(nbf, nbf), stat=ok)
+   if (ok/=0) call show_message('Cannot allocate memory', WITH_ABORT)
+
+   call unpack_matrix(fock_m, f2)
+
+   ! F = S^{-1/2} * F * S^{-1/2}
+   ! can use orthogonal_transform subroutine, because S^{-1/2} is symmetric
+   call orthogonal_transform('n', nbf, q_m, f2, tfock, wrk)
+   deallocate(f2, wrk)
+
+   ! Get orbitals C' = S^{1/2} C
+   call diag_symm_full(1, nbf, tfock, nbf, orbital_e, info)
+
+   ! Recover orbitals in AO basis
+   ! C = S^{-1/2} * C'
+   call dgemm('n', 'n', nbf, nbf, nbf, &
+              1.0_dp, q_m,      nbf, &
+                      tfock,    nbf, &
+              0.0_dp, orbitals, nbf)
+
+   call canonicalize_orbital_phases(orbitals)
+
+ end subroutine get_ab_initio_orbital
+
+!> @brief Choose a deterministic sign for each real molecular orbital.
+!>
+!> The coefficient of largest magnitude is made positive.  Coefficients within
+!> ORBITAL_PHASE_TIE_RTOL of that magnitude are treated as a tie, resolved by
+!> the lowest AO index.  A wholly zero column is left unchanged.
+ pure subroutine canonicalize_orbital_phases(orbitals)
+   real(dp), intent(inout) :: orbitals(:,:)
+
+   real(dp) :: peak, window
+   integer :: i, j
+
+   do j = 1, size(orbitals, 2)
+     peak = maxval(abs(orbitals(:,j)))
+     if (peak <= 0.0_dp) cycle
+     window = peak * (1.0_dp - ORBITAL_PHASE_TIE_RTOL)
+     do i = 1, size(orbitals, 1)
+       if (abs(orbitals(i,j)) >= window) then
+         if (orbitals(i,j) < 0.0_dp) orbitals(:,j) = -orbitals(:,j)
+         exit
+       end if
+     end do
+   end do
+ end subroutine canonicalize_orbital_phases
+
+!>
+!> @brief Corresponding orbital projection
+!> @param[in]     nproj  number of orbitals from `vb` to projected onto
+!> @param[in]     l0     number of the first orbitals from the `va` space to project `vb` to
+!> @param[in,out] va     `a` orbitals on entry,
+!>                       replaced by corresponding orbitals on exit
+!> @param[in]     vb     `b` orbitals on entry, unchanged on exit
+!> @param[in]     sba    overlap integrals between the two bases,
+!
+!> @note The corresponding orbitals in the `b` basis are not generated.
+!> @note H.F.King, R.E.Stanton, H.Kim, R.E.Wyatt, R.G.Parr J.Chem.Phys. 47, 1936-1941 (1967)
+
+ subroutine corresponding_orbital_projection(vb, sba, va, &
+                   ndoc, nact, nproj, nbf, l1co, l0)
+
+  use messages, only: show_message, WITH_ABORT
+
+  implicit none
+
+  real(kind=dp) :: vb(l1co,nproj), sba(l1co,nbf), va(nbf,l0)
+  integer :: ndoc, nact, nproj, nbf, l1co, l0
+
+  real(kind=dp), allocatable :: &
+        vaco(:,:), rhs(:,:), d(:,:), tmp(:,:), scr(:)
+  integer, allocatable :: iwrk(:)
+  logical, allocatable :: unused(:)
+  integer :: ok
+
+  allocate(vaco(nbf,nbf), &
+           rhs(nbf,nbf), &
+           d(nbf,l0), &
+           tmp(nbf,nbf), &
+           scr(nbf), &
+           source=0.0_dp, &
+           stat=ok)
+  allocate(iwrk(nbf), &
+           source=0, &
+           stat=ok)
+  allocate(unused(nbf), &
+           source=.false., &
+           stat=ok)
+
+! Precompute Vb^T * Sba once for all nproj reference orbitals;
+! each project() call below uses its own row block of it
+  call dgemm('t', 'n', nproj, nbf, l1co, &
+             1.0_dp, vb, l1co, &
+                     sba, l1co, &
+             0.0_dp, rhs, nbf)
+
+! The three orbital subspaces are projected independently and in
+! order, so that each later step works in the orthogonal complement
+! of the previous ones:
+! 1. doubly occupied (core) space
+  call project(va, rhs, 1, ndoc, l0, nbf)
+! 2. singly occupied (active) space, ROHF/UHF only
+  call project(va, rhs, ndoc+1, ndoc+nact, l0, nbf)
+! 3. low virtual space
+  call project(va, rhs, ndoc+nact+1, nproj, l0, nbf)
+
+ contains
+
+  subroutine project(va, rhs, minmo, maxmo, l0, nbf)
+
+    implicit none
+
+    real(kind=dp) :: va(nbf,*), rhs(nbf,*)
+    integer :: minmo, maxmo, l0, nbf
+
+    integer :: i, j
+    integer :: nrest, nmo, nsv, lwork, info
+
+    real(kind=dp), allocatable :: sv(:), vt(:,:), wrk(:)
+    real(kind=dp) :: wrksize(1), udummy(1)
+
+    nrest = l0-minmo+1
+    nmo  = maxmo-minmo+1
+    if (nrest <= 0) return
+    if (nmo == 0) return
+
+!   Overlap between the nmo reference orbitals (b set) and the
+!   nrest orbitals of the active window of the a set:
+!   D = Vb^T * Sab * Va, dimension (nmo x nrest).
+!   rhs already holds Vb^T * Sab for all nproj reference orbitals.
+    call dgemm('n','n', nmo, nrest, nbf, &
+               1.0_dp, rhs(minmo,1), nbf, &
+                       va(1,minmo),nbf, &
+               0.0_dp, d, nbf)
+
+!   We need the `nmo` eigenvectors of D^T * D with the largest
+!   eigenvalues (largest overlap with the `b` set); they are the
+!   leading right singular vectors of D. The thin SVD of the
+!   (nmo x nrest) matrix D delivers them in descending-overlap order
+!   at O(nmo^2*nrest) cost, instead of the O(nrest^3) diagonalization
+!   of D^T * D. We don't need the singular values.
+    nsv = min(nmo, nrest)
+    allocate(sv(nsv), vt(nsv,nrest))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrksize, -1, info)
+    lwork = int(wrksize(1))
+    allocate(wrk(lwork))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrk, lwork, info)
+    if (info /= 0) &
+      call show_message('Corresponding orbital projection: SVD failed', WITH_ABORT)
+    vaco(1:nrest,1:nsv) = transpose(vt(1:nsv,1:nrest))
+    deallocate(sv, vt, wrk)
+
+!   Cannot project more orbitals than the remaining space can hold
+    if (nmo > nrest) &
+      call show_message('Corresponding orbital projection: nmo > nrest', WITH_ABORT)
+
+!   Rotate va to the corresponding orbital set, a' = a*Q, where the
+!   orthogonal Q completes the nmo leading corresponding vectors to a
+!   full basis of the nrest space (the near zero overlap part of the
+!   space is not determined by the SVD; the QR completion provides a
+!   symmetry adapted complement). Q is applied directly from its
+!   Householder reflectors (dgeqrf+dormqr) at O(nbf*nrest*nmo) cost,
+!   instead of forming Q explicitly and multiplying at O(nbf*nrest^2).
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrksize, -1, info)
+    lwork = int(wrksize(1))
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
+    allocate(wrk(lwork))
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrk, lwork, info)
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrk, lwork, info)
+    deallocate(wrk)
+
+!   Get overlap between `b` and the `a'` corresponding set,
+!   D = Vb^T * Sab * VaCO
+!   Only the leading (nmo x nmo) block is used by the pairing below.
+    call dgemm('t', 't', nmo, nmo, nbf, &
+               1.0_dp, va(1,minmo), nbf, &
+                       rhs(minmo,1), nbf, &
+               0.0_dp, tmp, nbf)
+
+!   Pair each projected orbital with the reference orbital it
+!   overlaps most (greedy assignment), so that guess orbital i
+!   corresponds to Huckel/old MO i in order
+    unused(:nmo) = .true.
+    do i = 1, nmo
+      ! mask must conform to the (:nmo) section being searched; passing the
+      ! full-length `unused` is nonconforming Fortran (caught by -fcheck=bounds)
+      j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused(:nmo))
+      iwrk(i) = j
+      unused(j) = .false.
+    end do
+
+    call reorder_columns(va(1,minmo),iwrk,nmo,nbf)
+
+  end subroutine
+
+ end subroutine corresponding_orbital_projection
+
+!> @brief Reorder a set of molecular orbitals
+!> @param[in]     iorder  reordering instructions
+!> @param[in,out] v       matrix (ldv,n) to reorder
+!> @param[in]     ldv     matrix dimension
+!> @param[in]     n       matrix dimension
+ subroutine reorder_columns(v, iorder, n, ldv)
+
+  use messages, only: show_message, WITH_ABORT
+
+  implicit none
+
+  real(kind=dp), intent(inout) :: v(ldv,*)
+  integer, intent(inout) :: iorder(*)
+  integer, intent(in) :: n, ldv
+
+  integer :: i, j, k
+
+  do i = 1, n
+    if (.not. any(iorder(1:n) == i)) then
+      call show_message("(A,I4,A)", "**** Error, element", i, &
+            " is missing from reordering instructions", WITH_ABORT)
+    end if
+  end do
+
+  do i = 1, n
+     j = iorder(i)
+     call dswap(ldv, v(:,i), 1, v(:,j), 1)
+     do k = i+1, n
+        if (iorder(k) == i) iorder(k) = j
+     end do
+  end do
+
+ end subroutine reorder_columns
+
+!
+!> @brief   Generate transformation to spherical harmonics basis
+!>
+!> @details This is used by the MINI basis during the Huckel guess,
+!>          to convert any d or f shells to spherical harmonics.
+!>
+!> @author  MWS: 4/2013 rewrite returns pure s,p,d,f spherical
+      subroutine mksphar(w,l1co,l0co,notsp,basis)
+      use messages, only: show_message, WITH_ABORT
+      use basis_tools, only: basis_set
+!
+      implicit none
+!
+!
+      type(basis_set), intent(in) :: basis
+      logical :: notsp
+      real(kind=dp) :: w(l1co,l1co)
+      integer :: l1co, l0co
+!
+      real(kind=dp), parameter :: RT0304 = SQRT( 3.0D+00/ 4.0D+00)
+      real(kind=dp), parameter :: RT0920 = SQRT( 9.0D+00/20.0D+00)
+      integer :: sph, ncont, n, cart, ndim, l
+!
+!     Transform to spherical harmonic basis
+      w = 0
+      sph = 1
+      ncont = 0
+      notsp = .false.
+      do n = 1, basis%nshell
+         notsp = notsp .or. (basis%am(n) > 1)
+!
+!        S,P,L shell is already spherical harmonics.
+         if (basis%am(n) <= 1) then
+            cart = basis%ao_offset(n)
+            ndim = basis%naos(n)
+            do l = 1, ndim
+              w(cart+l-1, sph+l-1) = 1.0d0
+            enddo
+            sph = sph + ndim
+         end if
+!
+         if (basis%am(n) == 2) then
+            cart = basis%ao_offset(n)
+!           true D orbitals, from eg irrep of Oh
+            w(cart  ,sph  ) =  rt0304
+            w(cart+1,sph  ) = -rt0304
+            w(cart  ,sph+1) = -0.5d0
+            w(cart+1,sph+1) = -0.5d0
+            w(cart+2,sph+1) =  1.0d0
+!           true d orbitals, from t2g irrep of oh
+            w(cart+3,sph+2) =  1.0d0
+            w(cart+4,sph+3) =  1.0d0
+            w(cart+5,sph+4) =  1.0d0
+            ncont = ncont+1
+            sph = sph+5
+         end if
+!
+         if (basis%am(n) == 3) then
+            cart = basis%ao_offset(n)
+!           T1U (IN OH) COMBINATIONS
+            w(cart  ,sph  ) =  1.0d0
+            w(cart+5,sph  ) = -rt0920
+            w(cart+7,sph  ) = -rt0920
+            w(cart+1,sph+1) =  1.0d0
+            w(cart+3,sph+1) = -rt0920
+            w(cart+8,sph+1) = -rt0920
+            w(cart+2,sph+2) =  1.0d0
+            w(cart+4,sph+2) = -rt0920
+            w(cart+6,sph+2) = -rt0920
+!           t2u (in oh) combinations
+            w(cart+5,sph+3) =  rt0304
+            w(cart+7,sph+3) = -rt0304
+            w(cart+3,sph+4) =  rt0304
+            w(cart+8,sph+4) = -rt0304
+            w(cart+4,sph+5) =  rt0304
+            w(cart+6,sph+5) = -rt0304
+!           a2u (in oh) combination
+            w(cart+9,sph+6) =  1.0d0
+            ncont = ncont+3
+            sph = sph+7
+         end if
+!
+         if(basis%am(n) > 3) then
+            CALL show_message('MKSPHAR: CALLED FOR BASIS WITH G/H/I AOS', WITH_ABORT)
+         end if
+      end do
+
+      l0co = l1co - ncont
+
+      end subroutine mksphar
+end module guess

@@ -1,0 +1,43 @@
+# Static OpenQP transcription of the KNU-GAMESS Acrolein S2 NAMD start.
+# The original $DATA coordinates were in Bohr and are converted here to Angstrom.
+# Source SHA256 prefix: 36d63c313761 (Acrolein_SOC_NAMD_ndtlf2.1.inp).
+# Conversion: 1 Bohr = 0.529177210903 Angstrom.
+[input]
+system=
+   6  -3.6996797096  -1.0700298174  -0.0303925523
+   6  -2.5513723058  -0.4641947257  -0.0024006124
+   6  -1.1809671629  -0.9998262581   0.0415521588
+   1  -4.6285199141  -0.5016513174   0.0432449438
+   1  -3.9066155163  -2.0647383497   0.1610883694
+   1  -2.4743032014   0.6100350654   0.0915885629
+   8  -0.1740985086  -0.5188054963  -0.0163784580
+   1  -1.2049637089  -2.2772739097  -0.1404403509
+charge=0
+runtype=energy
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-10
+maxit=150
+
+[tdhf]
+type=mrsf
+multiplicity=1
+nstate=3
+target=3
+tlf=2
+conv=1.0e-10
+maxit=300
+
+[nac]
+type=numerical
+states=1 2, 1 3, 2 3
+dx=0.00025
+nproc=8

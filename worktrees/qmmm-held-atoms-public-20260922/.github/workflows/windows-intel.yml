@@ -1,0 +1,113 @@
+name: Windows Intel
+# Build OpenQP on Windows with Intel oneAPI (ifx + icx) and MKL ILP64.
+on:
+  # Not on every push: this job takes the better part of an hour.  A weekly
+  # run catches a Windows regression within days.
+  schedule:
+    - cron: "0 3 * * 0"   # Sundays, 03:00 UTC
+  workflow_dispatch:
+  # But DO run on a PR that touches the Windows toolchain itself.  Without
+  # this, a change to the oneAPI setup action reaches main unexercised: the
+  # wheel workflow's paths do not list .github/actions/**, and its Windows leg
+  # only runs for releases and dispatches, so nothing else would build Windows
+  # before the merge.
+  pull_request:
+    paths:
+      - ".github/actions/setup-oneapi-windows/**"
+      - ".github/workflows/windows-intel.yml"
+
+
+jobs:
+  windows-intel:
+    name: Windows ifx + icx + MKL ILP64
+    runs-on: windows-2025
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up Intel oneAPI
+        uses: ./.github/actions/setup-oneapi-windows
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cmake ninja numpy cffi scikit-build-core
+      - name: Show toolchain
+        run: |
+          ifx --version
+          icx --version
+          cmake --version
+          ninja --version
+          echo "MKLROOT=$env:MKLROOT"
+          Get-ChildItem "$env:MKLROOT\lib" | Where-Object { $_.Name -like 'mkl_intel_ilp64*' -or $_.Name -like 'mkl_core*' -or $_.Name -like 'mkl_intel_thread*' } | Select-Object -ExpandProperty Name
+      - name: Build & install OpenQP
+        env:
+          CC: icx
+          CXX: icx
+          FC: ifx
+          CMAKE_GENERATOR: Ninja
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+          # Windows caps object-file paths at 250 characters; keep the build
+          # tree and the reusable externals cache near the drive root.
+          OQP_EXTERNALS_ROOT: C:\oqpx
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\oqpx, C:\oqpb | Out-Null
+          python -m pip install -v . --no-build-isolation `
+            --config-settings=build-dir=C:\oqpb `
+            --config-settings=cmake.define.LINALG_LIB=Intel10_64ilp `
+            --config-settings=cmake.define.ENABLE_MPI=OFF `
+            --config-settings=cmake.define.ENABLE_OPENMP=ON `
+            --config-settings=cmake.define.USE_LIBINT=OFF `
+            --config-settings=cmake.define.ENABLE_OPENTRAH=OFF `
+            --config-settings=cmake.define.BUILD_TESTING=OFF
+      - name: Check the DFT-D4 stack shipped
+        run: |
+          $pkg = python -c "import sysconfig; print(sysconfig.get_paths()['purelib'] + '\oqp')"
+          $missing = @()
+          foreach ($dll in 'liboqp.dll','dftd4.dll','multicharge.dll','mctc-lib.dll') {
+            if (-not (Test-Path "$pkg\lib\$dll")) { $missing += $dll }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error "missing from the installed package: $($missing -join ', ')"
+            exit 1
+          }
+          python -c "import oqp; print('oqp_dftd4_disp exported:', hasattr(oqp.lib, 'oqp_dftd4_disp'))"
+      - name: Inspect installed package
+        if: always()
+        run: |
+          $pkg = python -c "import sysconfig; print(sysconfig.get_paths()['purelib'] + '\oqp')"
+          echo "package dir: $pkg"
+          Get-ChildItem -Recurse "$pkg\lib" -ErrorAction SilentlyContinue | Select-Object FullName, Length
+      - name: Import and run H2O RHF
+        run: |
+          python -m pip install scipy basis_set_exchange geometric "numpy<2.2"
+          python -c "import oqp; print('oqp imported from', oqp.__file__)"
+          New-Item -ItemType Directory -Force -Path $env:RUNNER_TEMP\oqp_smoke | Out-Null
+          Copy-Item examples\HF\H2O_RHF-HF_ENERGY.inp $env:RUNNER_TEMP\oqp_smoke\hf.inp
+          Set-Location $env:RUNNER_TEMP\oqp_smoke
+          $env:OMP_NUM_THREADS = "2"
+          openqp hf.inp --nompi
+          Select-String -Path hf.log -Pattern "TOTAL energy"
+      - name: Run example test suite
+        # Informational for now: this is the first Windows build, so record how
+        # far the suite gets instead of gating the job on it.
+        continue-on-error: true
+        env:
+          OQP_TEST_OMP_THREADS: 1
+        run: |
+          openqp --run_tests all 2>&1 | Tee-Object -FilePath run_tests.out
+          Select-String -Path run_tests.out -Pattern "^Total tests|^Passed|^Failed|^Errors|^Skipped"
+      - name: Upload suite log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-run-tests-log
+          path: run_tests.out
+          if-no-files-found: ignore

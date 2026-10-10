@@ -1,0 +1,103 @@
+# feat/hf-dft-analytic-hessian
+
+SHA: `a2e67e99fdcedf1ac0731a4ca11cc075dd081831`  
+판정: **고유 변경·반영 여부 검토**  
+분야: Hessian / frequency (검색용 분류)  
+마지막 commit: 2026-05-29T13:11:18+09:00 / cheolhochoi  
+제목: chore: ignore build/ directory
+
+[검색 가능한 전체 목록](../index.html) · [조사 결과](../README.md)
+
+## 같은 끝점을 가리키는 모든 원본
+
+- [github-personal / feat/hf-dft-analytic-hessian](https://github.com/karmachoi/openqp/tree/a2e67e99fdcedf1ac0731a4ca11cc075dd081831)
+- [github-private / feat/hf-dft-analytic-hessian](https://github.com/karmachoi/openqp-private/tree/a2e67e99fdcedf1ac0731a4ca11cc075dd081831)
+- [gitlab / feat/hf-dft-analytic-hessian](https://qchemlab.knu.ac.kr/open-quantum-platform/internal/openqp/-/tree/a2e67e99fdcedf1ac0731a4ca11cc075dd081831)
+- `local-11 / feat/hf-dft-analytic-hessian`
+
+## 현재 GitLab main과의 비교
+
+- 기준 main: `d8fcc4119c73a2be3c1c7e5f49a934f4d7ccad92`
+- 공통 조상: `6ab4b86701bf972b56acc7c79bd40338a51b13ac`
+- 앞선 커밋 42 / 뒤처진 커밋 748
+- non-merge patch: main과 일치 0, 다름 42
+- merge/empty 등 patch 비교 제외: 0
+- GitLab 어느 브랜치에서도 끝점 도달 가능: True
+- GitLab 전체에서 동일 patch를 못 찾은 커밋: 0
+- 공통 조상 이후 변경 파일: 21; 그중 현재 main과 동일 3, 다름 18
+
+앞선 커밋 수에는 inherited private 작업이 포함될 수 있다. 개수만으로 미반영 기능 수를 판단하지 않는다.
+
+
+## 추가 커밋 전체
+
+| SHA | 날짜 | main patch 판정 | GitLab 전체 patch | 제목 |
+| --- | --- | --- | --- | --- |
+| `a2e67e99fdce` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | chore: ignore build/ directory |
+| `4476613fd1fb` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | test: document HF CPHF Hessian response boundary |
+| `7fc177244572` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | docs: clarify HF Hessian response guard |
+| `6f4ed14d227d` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | feat: scaffold two-electron Hessian driver |
+| `4b119ab5b19b` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | test: validate one-electron Hessian primitives by finite difference |
+| `7e0151ed26b0` | 2026-05-29 | 다름 | commit 보존 또는 비교 제외 | feat: implement Coulomb Hessian block scaffold |
+| `667600342bbf` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: implement kinetic Hessian block scaffold |
+| `5ba9ef7c31e1` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: implement overlap Hessian block scaffold |
+| `dc722106c16d` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: scaffold one-electron Hessian derivatives |
+| `0fa8b31bb84c` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: add native nuclear Hessian block scaffold |
+| `f4fc66ed364b` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | fix: stop using PySCF for production analytic hessians |
+| `c09dbd7d43e6` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: label dft hessian bridge metadata |
+| `d02fe196f8d9` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: validate analytic hessian finite metadata |
+| `9d42ac659ef5` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: include analytic hessian bridge context |
+| `e8a78627352a` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: guard analytic hessian dispatch shape |
+| `e6b5798ba9c9` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: guard hf hessian unconverged pyscf bridge |
+| `80b48aa446f6` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: guard hf hessian nonfinite bridge output |
+| `c7e6e131d8bf` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: summarize hf hessian bridge metadata |
+| `17164976ce01` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: wire guarded hf hessian pyscf bridge |
+| `c3bfcca8d933` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | refactor: split HF DFT analytic hessian scope |
+| `977de410161b` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: summarize analytic hessian tolerance failures |
+| `6a46116a3178` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: record analytic hessian validator hashes |
+| `1a354fb2748e` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: gate analytic hessian asymmetry tolerance |
+| `6fe34dd5d6a9` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: detail analytic hessian tolerance components |
+| `7a6586345923` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: mark analytic hessian validator schema |
+| `d42913ade53a` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: record analytic hessian validator sources |
+| `5548b7ba9f98` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: validate analytic hessian context scalars |
+| `fbe628993904` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: detail analytic hessian tolerance failures |
+| `2d1be6031369` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: fail hessian validator on tolerance misses |
+| `0898c0a5ceef` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: load OpenQP hessian json in validator |
+| `890980b2cfe2` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: require td type in hessian validation context |
+| `6b395738ca68` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: reject nonfinite hessian validator inputs |
+| `72bafc6c7158` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: keep analytic hessian validator dependency-light |
+| `644c9b1ed63d` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: add analytic hessian validation context |
+| `20a19f5ad2a9` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: add analytic hessian validation summary helper |
+| `bce4f86a6ea6` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: scaffold mrsf analytic hessian abi |
+| `bc609c0f0b2f` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | fix: restore hessian metadata on read |
+| `0d9ec7fd51fa` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | test: clarify SF analytic hessian guardrail |
+| `cf302338ac76` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | docs: add MRSF analytic hessian guardrails |
+| `e334ce5044de` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | refactor: split SF hessian dispatch from MRSF guardrail |
+| `83e5fc5d0c13` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | fix: write inertia to hessian JSON output |
+| `f9e8bf35e857` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | feat: scaffold analytic hessians excluding private MRSF |
+
+## 변경 파일 전체
+
+| 상태 | 경로 | 현재 main과 내용 |
+| --- | --- | --- |
+| M | `.gitignore` | 다름 |
+| M | `CMakeLists.txt` | 다름 |
+| A | `docs/analytic_hessian_design.md` | 다름 |
+| A | `examples/HESS/H2O_RHF-DFT_ANA_HESS.inp` | 동일 |
+| M | `include/oqp.h` | 다름 |
+| M | `pyoqp/oqp/library/external.py` | 다름 |
+| M | `pyoqp/oqp/library/single_point.py` | 다름 |
+| M | `pyoqp/oqp/molecule/molecule.py` | 다름 |
+| M | `pyoqp/oqp/utils/input_checker.py` | 다름 |
+| A | `source/integrals/grd2_hessian.F90` | 다름 |
+| M | `source/integrals/mod_1e_primitives.F90` | 다름 |
+| A | `source/modules/hf_cphf_response.F90` | 다름 |
+| A | `source/modules/hf_hessian.F90` | 다름 |
+| A | `tests/fortran/test_1e_der2_fd.F90` | 다름 |
+| A | `tests/test_analytic_hessian.py` | 다름 |
+| A | `tests/test_analytic_hessian_bindings.py` | 다름 |
+| A | `tests/test_analytic_hessian_validator.py` | 동일 |
+| A | `tests/test_hf_hessian_cphf_response.py` | 다름 |
+| A | `tests/test_hf_hessian_one_electron.py` | 다름 |
+| A | `tests/test_hf_hessian_two_electron.py` | 다름 |
+| A | `tools/validate_analytic_hessian.py` | 동일 |

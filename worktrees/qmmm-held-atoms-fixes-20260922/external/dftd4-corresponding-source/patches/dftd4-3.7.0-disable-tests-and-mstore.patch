@@ -1,0 +1,20 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -47,9 +47,10 @@ if(NOT TARGET "mctc-lib::mctc-lib")
+ if(NOT TARGET "mctc-lib::mctc-lib")
+   find_package("mctc-lib")
+ endif()
+ if(NOT TARGET "mstore::mstore")
+-  find_package("mstore")
++  # Disabled by OpenQP: mstore is used only by the omitted upstream tests.
++  # find_package("mstore")
+ endif()
+ if(NOT TARGET "multicharge::multicharge")
+   find_package("multicharge")
+ endif()
+@@ -154,2 +155,3 @@
+ enable_testing()
+-add_subdirectory("test")
++# Disabled by OpenQP: the packaged library build does not configure upstream tests.
++# add_subdirectory("test")

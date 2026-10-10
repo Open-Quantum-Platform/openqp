@@ -1,0 +1,113 @@
+site_name: OpenQP Manual 1.3.0
+site_description: User manual for the Open Quantum Platform
+site_url: https://open-quantum-platform.github.io/openqp-docs/
+repo_url: https://github.com/Open-Quantum-Platform/openqp-docs
+repo_name: Open-Quantum-Platform/openqp-docs
+edit_uri: edit/main/docs/
+
+extra:
+  manual_version: "1.3.0"
+  openqp_version: "1.3.0"
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Build Options: build-options.md
+  - Quickstart: quickstart.md
+  - OQP Studio:
+      - Overview: studio/index.md
+      - Installation: studio/installation.md
+      - Standalone and integrated packages: studio/packages.md
+      - Builder and Workflows: studio/builder-workflows.md
+      - Execution and Projects: studio/execution.md
+      - Analysis: studio/analysis.md
+      - Art Rendering: studio/art.md
+      - Troubleshooting: studio/troubleshooting.md
+  - Input Styles:
+      - .oqp Input: oqp-input.md
+      - Legacy .inp: input-file.md
+  - Capabilities: capabilities.md
+  - Performance: performance.md
+  - Run from Python: python-scripting.md
+  - Workflows:
+      - HF and DFT: workflows/hf-dft.md
+      - MP2: workflows/mp2.md
+      - Coupled Cluster: workflows/coupled-cluster.md
+      - CASSCF Nuclear Gradient: workflows/casscf-gradient.md
+      - CASPT2 Nuclear Gradient: workflows/caspt2-gradient.md
+      - SC-NEVPT2 Nuclear Gradient: workflows/sc-nevpt2-gradient.md
+      - TDDFT and TDHF: workflows/tddft.md
+      - SF-TDDFT: workflows/sf-tddft.md
+      - MRSF-TDDFT: workflows/mrsf-tddft.md
+      - QMRSF-DK: workflows/qmrsf-dk.md
+      - MRSF Analysis and Interoperability: workflows/mrsf-analysis.md
+      - Hessian and Frequencies: workflows/hessian.md
+      - Orbital and Vibrational Output: workflows/orbital-vibrational-output.md
+      - Optimization: workflows/optimization.md
+      - BaekA Multistate MECI: workflows/baeka-multistate-meci.md
+      - Spin-Orbit Coupling: workflows/soc.md
+      - NACME: workflows/nacme.md
+      - SOC-NAMD-QMMM: workflows/soc-namd-qmmm.md
+      - PCM/ddX: workflows/pcm.md
+      - MRSF-EKT: workflows/ekt.md
+      - NMR, IR, and Raman: workflows/nmr-ir-raman.md
+      - Molecular Symmetry: workflows/symmetry.md
+  - Keywords:
+      - Overview: keywords/index.md
+      - input: keywords/input.md
+      - guess: keywords/guess.md
+      - scf: keywords/scf.md
+      - Wavefunction methods: keywords/wavefunction.md
+      - mp2: keywords/mp2.md
+      - cc: keywords/cc.md
+      - dftgrid: keywords/dftgrid.md
+      - tdhf: keywords/tdhf.md
+      - md: keywords/md.md
+      - qmmm: keywords/qmmm.md
+      - properties: keywords/properties.md
+      - hess: keywords/hess.md
+      - nac: keywords/nac.md
+      - ekt: keywords/ekt.md
+      - optimize: keywords/optimize.md
+      - oqp: keywords/oqp.md
+      - geometric (optional legacy .inp/Python): keywords/geometric.md
+      - neb: keywords/neb.md
+      - pcm: keywords/pcm.md
+      - symmetry: keywords/symmetry.md
+      - json: keywords/json.md
+      - tests: keywords/tests.md
+  - References: references.md
+  - Examples: examples/index.md
+  - Troubleshooting: troubleshooting.md
+  - API:
+      - Overview: api/index.md
+      - Python API: api/python-runner.md
+      - Results and Molecule Data: api/results.md
+      - Input Validation: api/input-validation.md
+  - Developer Guide:
+      - Overview: developers/index.md
+      - Contributing to OpenQP: developers/contributing.md
+      - Native Interface: developers/native-interface.md
+      - Data Tags and Tagarray: developers/tagarray.md
+      - Regression References and Registry: developers/regression-references.md

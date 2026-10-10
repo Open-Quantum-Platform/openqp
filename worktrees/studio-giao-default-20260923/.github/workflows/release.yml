@@ -1,0 +1,181 @@
+name: Release installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a release under this tag (e.g. v0.1.0); leave empty to only build artifacts"
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # What tag, if any, this run publishes to. Written once because it was
+  # written five times and four of them were wrong: `inputs.release_tag ||
+  # github.ref_name` falls back to the BRANCH on a dispatch with no tag, so
+  # the engine jobs built perfectly and then tried to upload to a release
+  # called "main".
+  context:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.pick.outputs.tag }}
+      engine_sha: ${{ steps.engine.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve the engine once for all platform builds
+        id: engine
+        env:
+          OPENQP_GATEWAY_TOKEN: ${{ secrets.OPENQP_GATEWAY_TOKEN }}
+        run: python tools/checkout_engine.py
+      - id: pick
+        env:
+          REQUESTED: ${{ inputs.release_tag }}
+        run: |
+          tag="$REQUESTED"
+          if [ -z "$tag" ] && [ "${GITHUB_REF%%/*}" = "refs" ] \
+             && [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            tag="$GITHUB_REF_NAME"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publishing to: ${tag:-(nothing: build only)}"
+
+  # The installer people download in the normal case: small, quick to build,
+  # and it fetches the engine when the user first asks for one.
+  installers:
+    needs: context
+    uses: ./.github/workflows/installers.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.context.outputs.release_tag }}
+
+  # The same installer with the engine inside it, so one download installs an
+  # application that computes -- no second step, and nothing fetched at run
+  # time.  It waits for the engine builds, which is why it lands last.
+  # Nothing here is gated on a release tag: a dispatch with no tag builds
+  # every artifact and publishes none, which is how a change gets verified
+  # before it is released rather than by releasing it and finding out.
+  installers-with-engine:
+    needs: [context, engine-linux, engine-macos, engine-windows]
+    uses: ./.github/workflows/installers.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.context.outputs.release_tag }}
+      with_engine: true
+
+  # `pip install oqp-studio` — the distribution channel that matches this
+  # audience, since OpenQP itself is installed with pip/conda.
+  python-package:
+    needs: context
+    runs-on: ubuntu-latest
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build wheel and sdist
+        working-directory: backend
+        run: |
+          pip install build
+          python build_wheel.py
+
+      - name: Verify the wheel serves the UI
+        run: |
+          python -m venv /tmp/check
+          /tmp/check/bin/pip install backend/dist/*.whl
+          cd /tmp
+          /tmp/check/bin/python -m uvicorn oqp_studio.main:app --port 8821 &
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:8821/api/health && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8821/ -o /dev/null
+          curl -sf http://127.0.0.1:8821/viewer/index.html -o /dev/null
+          echo "wheel serves the UI and viewer"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oqp-studio-python
+          path: backend/dist/*
+          if-no-files-found: error
+
+      - name: Attach the wheel to the GitHub release
+        if: needs.context.outputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.context.outputs.release_tag }}
+          files: backend/dist/*
+
+      # Publishes only when a PyPI token is configured; without it the job
+      # still builds and attaches the wheel to the GitHub release.
+      - name: Publish to PyPI
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && env.PYPI_API_TOKEN != ''
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        working-directory: backend
+        run: |
+          pip install twine
+          twine upload --non-interactive \
+            -u __token__ -p "$PYPI_API_TOKEN" dist/*
+
+  # The compute engine, attached to the same release as the app.
+  #
+  # These take hours where the installers take minutes, so they run as their
+  # own jobs: the installers appear on the release page first and the engine
+  # archives follow. They are called rather than left to their own
+  # `release: published` trigger, because a release created by this workflow's
+  # GITHUB_TOKEN does not raise events — that trigger only fires for a release
+  # a person publishes by hand.
+  #
+  # Each archive is also a standalone download: unzip and run ./openqp, no GUI
+  # and no Python involved.
+  engine-linux:
+    needs: context
+    uses: ./.github/workflows/linux-bundle.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      release_tag: ${{ needs.context.outputs.release_tag }}
+      openqp_ref: ${{ needs.context.outputs.engine_sha }}
+
+  engine-macos:
+    needs: context
+    uses: ./.github/workflows/macos-bundle.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      release_tag: ${{ needs.context.outputs.release_tag }}
+      openqp_ref: ${{ needs.context.outputs.engine_sha }}
+
+  engine-windows:
+    needs: context
+    uses: ./.github/workflows/windows-bundle.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      release_tag: ${{ needs.context.outputs.release_tag }}
+      openqp_ref: ${{ needs.context.outputs.engine_sha }}

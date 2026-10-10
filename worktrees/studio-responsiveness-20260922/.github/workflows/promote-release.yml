@@ -1,0 +1,280 @@
+name: Promote verified release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful Release installers run to promote"
+        required: true
+        type: string
+      release_tag:
+        description: "New release tag (for example, v0.2.3)"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Validate the source run and artifacts
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "source_run_id must contain digits only" >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_tag must be a stable v-prefixed semantic version" >&2
+            exit 1
+          fi
+
+          run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")
+          release_workflow_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml" \
+            --jq '.id')
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --argjson workflow_id "$release_workflow_id" \
+            '.conclusion == "success"
+             and .event == "workflow_dispatch"
+             and .head_branch == "main"
+             and .head_repository.full_name == $repo
+             and .workflow_id == $workflow_id' \
+            <<<"$run_json" >/dev/null || {
+              echo "source run is not a successful main-branch release.yml dispatch" >&2
+              exit 1
+            }
+
+          artifacts_json=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100")
+          expected=$(cat <<'EOF'
+          openqp-linux-aarch64-standalone
+          openqp-linux-x86_64-standalone
+          openqp-macos-arm64-standalone
+          openqp-macos-x86_64-standalone
+          openqp-windows-standalone
+          oqp-studio-macos-15-intel
+          oqp-studio-macos-15-intel-with-engine
+          oqp-studio-macos-latest
+          oqp-studio-macos-latest-with-engine
+          oqp-studio-python
+          oqp-studio-ubuntu-latest
+          oqp-studio-ubuntu-latest-with-engine
+          oqp-studio-windows-latest
+          oqp-studio-windows-latest-with-engine
+          EOF
+          )
+          actual=$(jq -r '.artifacts[] | select(.expired == false) | .name' \
+            <<<"$artifacts_json" | sort)
+          expired=$(jq '[.artifacts[] | select(.expired == true)] | length' \
+            <<<"$artifacts_json")
+          if [[ "$expired" != "0" || "$actual" != "$expected" ]]; then
+            echo "source artifact set is expired or does not match the release contract" >&2
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          fi
+
+          source_sha=$(jq -r '.head_sha' <<<"$run_json")
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "Promoting run $SOURCE_RUN_ID at $source_sha to $RELEASE_TAG"
+
+      - name: Check out the verified source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify the tag matches the application version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_version=${RELEASE_TAG#v}
+          python - "$expected_version" <<'PY'
+          import json
+          import pathlib
+          import sys
+          import tomllib
+
+          expected = sys.argv[1]
+          versions = {
+              "backend/pyproject.toml": tomllib.loads(
+                  pathlib.Path("backend/pyproject.toml").read_text()
+              )["project"]["version"],
+              "shell/src-tauri/Cargo.toml": tomllib.loads(
+                  pathlib.Path("shell/src-tauri/Cargo.toml").read_text()
+              )["package"]["version"],
+              "shell/src-tauri/tauri.conf.json": json.loads(
+                  pathlib.Path("shell/src-tauri/tauri.conf.json").read_text()
+              )["version"],
+          }
+          mismatches = {path: version for path, version in versions.items()
+                        if version != expected}
+          if mismatches:
+              raise SystemExit(
+                  f"release tag expects {expected}, but source versions are {mismatches}"
+              )
+          print(f"source versions all match {expected}")
+          PY
+
+      - name: Download the verified artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          path: release-assets
+
+      - name: Verify release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if find release-assets -type l -print -quit | grep -q .; then
+            echo "release payload contains a symbolic link" >&2
+            exit 1
+          fi
+          if find release-assets -type f -size 0 -print -quit | grep -q .; then
+            echo "release payload contains an empty file" >&2
+            exit 1
+          fi
+          duplicates=$(find release-assets -type f -printf '%f\n' | sort | uniq -d)
+          if [[ -n "$duplicates" ]]; then
+            echo "release assets have duplicate file names:" >&2
+            printf '%s\n' "$duplicates" >&2
+            exit 1
+          fi
+
+          python - "${RELEASE_TAG#v}" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path("release-assets")
+          version = sys.argv[1]
+          exact = {
+              "oqp-studio-macos-latest": {
+                  f"OQP-Studio-{version}-macos-apple-silicon.dmg",
+                  f"OQP-Studio-{version}-macos-apple-silicon.app.tar.gz",
+              },
+              "oqp-studio-macos-latest-with-engine": {
+                  f"OQP-Studio-{version}-macos-apple-silicon-with-engine.dmg",
+                  f"OQP-Studio-{version}-macos-apple-silicon-with-engine.app.tar.gz",
+              },
+              "oqp-studio-macos-15-intel": {
+                  f"OQP-Studio-{version}-macos-intel.dmg",
+                  f"OQP-Studio-{version}-macos-intel.app.tar.gz",
+              },
+              "oqp-studio-macos-15-intel-with-engine": {
+                  f"OQP-Studio-{version}-macos-intel-with-engine.dmg",
+                  f"OQP-Studio-{version}-macos-intel-with-engine.app.tar.gz",
+              },
+              "oqp-studio-ubuntu-latest": {
+                  f"OQP-Studio-{version}-linux-x86_64.AppImage",
+                  f"OQP-Studio-{version}-linux-x86_64.deb",
+              },
+              "oqp-studio-ubuntu-latest-with-engine": {
+                  f"OQP-Studio-{version}-linux-x86_64-with-engine.deb",
+              },
+              "oqp-studio-windows-latest": {
+                  f"OQP-Studio-{version}-windows-x64.msi",
+                  f"OQP-Studio-{version}-windows-x64-setup.exe",
+              },
+              "oqp-studio-windows-latest-with-engine": {
+                  f"OQP-Studio-{version}-windows-x64-with-engine-setup.exe",
+              },
+              "oqp-studio-python": {
+                  f"oqp_studio-{version}-py3-none-any.whl",
+                  f"oqp_studio-{version}.tar.gz",
+              },
+          }
+          patterns = {
+              "openqp-linux-aarch64-standalone": r"openqp-.+-linux-aarch64\.tar\.gz",
+              "openqp-linux-x86_64-standalone": r"openqp-.+-linux-x86_64\.tar\.gz",
+              "openqp-macos-arm64-standalone": r"openqp-.+-macos-arm64\.zip",
+              "openqp-macos-x86_64-standalone": r"openqp-.+-macos-x86_64\.zip",
+              "openqp-windows-standalone": r"openqp-.+-windows-x86_64\.zip",
+          }
+
+          errors = []
+          for artifact, expected in exact.items():
+              actual = {path.name for path in (root / artifact).glob("*") if path.is_file()}
+              if actual != expected:
+                  errors.append(f"{artifact}: expected {sorted(expected)}, got {sorted(actual)}")
+          for artifact, pattern in patterns.items():
+              actual = [path.name for path in (root / artifact).glob("*") if path.is_file()]
+              if len(actual) != 1 or re.fullmatch(pattern, actual[0]) is None:
+                  errors.append(f"{artifact}: expected one file matching {pattern}, got {actual}")
+          if errors:
+              raise SystemExit("release filename contract failed:\n" + "\n".join(errors))
+          print("release filename contract verified")
+          PY
+
+          while IFS= read -r -d '' file; do
+            hash=$(sha256sum "$file" | cut -d ' ' -f 1)
+            printf '%s  %s\n' "$hash" "$(basename "$file")"
+          done < <(find release-assets -type f -print0 | sort -z) \
+            > SHA256SUMS
+          echo "Files prepared for release:"
+          find release-assets -type f -printf '%f\n' | sort
+
+      - name: Create and publish the release
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$RELEASE_TAG" -f sha="$SOURCE_SHA" >/dev/null 2>&1; then
+            existing_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" \
+              --jq '.object.sha')
+            if [[ "$existing_sha" != "$SOURCE_SHA" ]]; then
+              echo "tag $RELEASE_TAG points to $existing_sha, not $SOURCE_SHA" >&2
+              exit 1
+            fi
+          fi
+
+          if release_json=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" 2>/dev/null); then
+            if [[ $(jq -r '.draft' <<<"$release_json") != "true" ]]; then
+              echo "release $RELEASE_TAG already exists and is not a resumable draft" >&2
+              exit 1
+            fi
+            echo "Resuming the existing draft release for $RELEASE_TAG"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "OQP Studio ${RELEASE_TAG#v}" \
+              --generate-notes \
+              --draft
+          fi
+
+          mapfile -d '' files < <(find release-assets -type f -print0 | sort -z)
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "${files[@]}" SHA256SUMS
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --latest

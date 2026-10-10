@@ -1,0 +1,2 @@
+mrsf(nstate=25)/bhhlyp/6-31g* energy(S0) guess(swapmo="2,7,8,21") scf(rstctmo=true) tdhf(ixcore=7)
+geom="../../geometries/CHN-cef1bbffc7f3.xyz"

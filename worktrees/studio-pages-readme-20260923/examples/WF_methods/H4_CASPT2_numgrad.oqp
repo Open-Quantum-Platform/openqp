@@ -1,0 +1,4 @@
+caspt2/sto-3g grad(S0) guess(type=hcore) scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,max_memory=512) ci(solver=dense)
+pt2(reference=casci,variant=caspt2,gradient=numerical)
+geom="../geometries/H4-b9005833d66d.xyz"

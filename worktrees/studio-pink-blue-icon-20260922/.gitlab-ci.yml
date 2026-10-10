@@ -1,0 +1,41 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+stages: [test]
+
+engine-source-tests:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  script:
+    - python -m unittest discover -s tests -v
+
+engine-gateway-check:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  script:
+    - python tools/checkout_engine.py
+    - git -C openqp rev-parse HEAD
+  artifacts:
+    paths: [engine-source.json]
+    expire_in: 1 week
+
+backend-responsiveness:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  script:
+    - pip install -e 'backend[dev]'
+    - python -m pytest backend/tests -q
+
+frontend-responsiveness:
+  stage: test
+  image: node:24-bookworm
+  tags: [small-linux]
+  script:
+    - node --test frontend/tests/responsiveness.test.mjs
+    - npm --prefix frontend ci --no-audit --no-fund
+    - npm --prefix frontend run build

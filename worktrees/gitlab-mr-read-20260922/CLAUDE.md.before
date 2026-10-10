@@ -1,0 +1,124 @@
+# Session output folders (MANDATORY, all sessions, any starting directory)
+
+# Central research operations and scientific-method rules (MANDATORY)
+
+For every durable research, OpenQP, manuscript, administrative, deadline,
+delegation, communication, or human-follow-up obligation, use the global
+`research-operations-chief` skill and treat Ultra as the only writable source of
+truth. The M5 MacBook Air must proxy registry work to Ultra and must not keep a
+writable shadow database.
+
+A Claude task explicitly designated **Claude Chief twin** may serve as an
+alternative professor-facing intake door. It must invoke the
+`research-operations-chief` skill and follow its Multi-Chief arbitration rules.
+All other Claude tasks remain specialists and must not assume Chief ownership.
+
+Give every coding or manuscript chat its own uniquely named Git worktree and
+branch before the first edit. Never let two chats edit the same worktree. Git's
+native worktree and ref locks protect creation; central leases are not required
+for edits inside an isolated worktree.
+
+Use central leases only for operations that can physically collide: heavyweight
+builds, large local-model loads, production calculations, bulk artifact writers,
+shared-cache writes, OpenQP.DB mutations, shared hardware, or an explicitly shared
+non-Git output path. Acquire one atomic bundle containing only the resources
+that actually collide. If Ultra is unreachable, fail closed only for those
+lease-scoped operations. An expired lease is suspect, not free; reconcile its
+process or scheduler job before takeover.
+
+Do not acquire a central lease or capability token solely to fetch, commit, or
+publish GitHub or Overleaf changes from an isolated worktree or branch. Publishing
+must remain a short remote compare-and-swap transaction: obtain separate explicit
+write authority, inspect the intended diff, fetch the live remote ref, require a
+new target branch to be absent or an existing target to be a fast-forward, push,
+and verify the resulting remote SHA. Never use plain force push. Use an exact
+`--force-with-lease=<ref>:<expected-sha>` only after separate per-push approval.
+Registry unavailability must not block this non-colliding publish path.
+
+Skill activation is read-only and does not authorize task creation or an external
+action. Registry mutations require explicit `--write`, unique request IDs, and
+expected task versions. Email/message sending, web submission, GitHub writes,
+deletion, permission changes, and dispatcher/cron activation require separate
+explicit authority.
+
+For any MRSF or MRSF-derived theory, implementation, response property, or
+higher-spin extension, use the global `mrsf-tddft-theory` skill and complete its
+new-method verification protocol before molecular benchmarking. For scientific
+manuscripts, use `chc-scientific-writing-style` together with
+`scientific-language` and `scientific-manuscript-editor`.
+
+# GitLab access for cheol/openqp
+
+- Use the `openqp-gitlab-development` skill for all OpenQP repository work.
+- On this Mac, use `glab --hostname qchemlab.knu.ac.kr` to read and update
+  merge-request discussions in `cheol/openqp`. Its Developer-level project
+  token is stored in the macOS Keychain and expires on 2026-12-20; never ask
+  the user to paste it, print it, or copy it into a repository or settings file.
+- A mode-0600 compatibility copy for tools that require a token file is at
+  `~/.gitlab-qchemlab-token`; read it only for GitLab authentication and never
+  display its contents.
+- Use the configured GitLab SSH remote for Git fetch and push. The API token is
+  limited to `cheol/openqp`; it is not an upstream or instance-wide credential.
+
+If a session starts in a different directory, first `cd /Volumes/OpenQP.DB/claude` and work from there (use absolute paths under it for all file tools).
+
+Every Claude session MUST create its own session folder and write all ad-hoc outputs there, even when the session starts in a different working directory:
+
+```
+/Volumes/OpenQP.DB/claude/sessions/<YYYYMMDD_HHMMSS>_<short-topic>/
+```
+
+- Create it before writing the first loose file (scratch files, benchmark results, reports, downloads, notes, plots).
+- NEVER write ad-hoc files to the root of `/Volumes/OpenQP.DB/claude/` or scatter them in other directories.
+- This keeps outputs from concurrent/past sessions separated.
+
+## Exception
+
+Files that belong to a project repository (e.g. `libintRot/`, `libintRotJK/`, `Spherical_ERI/`, `overleaf_proj/`, OpenQP worktrees) stay inside that repository as usual. The rule applies only to ad-hoc files that have no repository home.
+
+# OpenQP.DB calculation archive (MANDATORY)
+
+- Use the global `openqp-db` skill for OpenQP and quantum-chemistry inputs/results.
+- Run `/Users/cheolhochoi/.claude/skills/openqp-db/scripts/openqp-db doctor` before archive access.
+- After a calculation is confirmed complete, ingest its file or result directory with `--agent claude` and a descriptive `--calculation-id`.
+- Search OpenQP.DB before repeating an expensive calculation when prior results may be reusable.
+- Never create the mount directory manually, edit archive objects/SQLite directly, or modify/move/delete source files during ingest.
+
+# OpenQP builds (MANDATORY)
+
+- Use the global `openqp-build` skill before building or rebuilding OpenQP.
+- OpenQP is ILP64-only on every supported Mac. Apple Silicon (`arm64`) and
+  Intel (`x86_64`) both use Accelerate `$NEWLAPACK$ILP64` on macOS 13.3+.
+- Never pass `LINALG_LIB_INT64=OFF` and never infer LP64 from a Mac host.
+- Require Apple Accelerate ILP64, 8-byte BLAS/LAPACK integers, and the
+  post-build no-LP64-symbol-leak result.
+
+# User global skill synchronization
+
+Treat a user-authored global skill as complete only when the same validated
+content is available to M5 MacBook Air Codex and Claude, Ultra Codex and
+Claude, and M4 Mac mini Codex and Claude. User-authored skills received in
+`/Users/cheolhochoi/.codex/skills/<skill-name>` must also be exposed at
+`/Users/cheolhochoi/.claude/skills/<skill-name>` as a symlink to the Codex copy.
+
+Any of the three machines synchronizes these skills with:
+
+```bash
+/Users/cheolhochoi/.codex/bin/sync-global-skills-everywhere <skill-name>
+```
+
+The tool must detect the current host, select both other machines as peers, and
+reject a same-host loop. Do not claim global completion unless Air, Ultra, and
+M4 mini validation and file-hash comparison succeed. If either peer is
+unavailable, report synchronization as pending. Exclude `.system` and
+plugin-cache skills unless explicitly requested.
+
+# Network path safeguard (MANDATORY, added 2026-09-11)
+
+Before changing any route, tunnel, WireGuard/ipip peer, allowed-address, OSPF, or interface
+list on a CHC router, load `mikrotik-operations` and follow its "Tunnel and route change
+safeguard": map which live traffic (including your own API/control channel) uses the path,
+keep forward and return paths symmetric, add objects disabled with a dated comment, arm a
+scheduled automatic rollback, change one router per approval, verify from both ends within
+60 s, and roll back on any failure. On 2026-09-11 an agent cut its own chatgpt.com path this
+way and every Codex session on Ultra hung.

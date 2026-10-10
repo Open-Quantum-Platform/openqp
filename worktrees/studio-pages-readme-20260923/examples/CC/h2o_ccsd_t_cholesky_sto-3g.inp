@@ -1,0 +1,48 @@
+# CCSD(T) with the ladder integrals held as Cholesky vectors.
+#
+# The particle-particle ladder needs the two-electron integrals over four
+# virtual labels, (ab|cd).  There are v^4 of them, which is the largest array
+# in a coupled-cluster run and the first thing to stop fitting.  Factorising
+# the integrals lets the ladder rebuild each block from a much smaller set of
+# vectors instead, so the v^4 array is never allocated.
+#
+# It is not free: the rebuild costs nchol/no^2 times the ladder contraction it
+# feeds, and nchol grows with the basis while no^2 grows with the correlated
+# electrons.  A small molecule in a large basis is therefore the worst case for
+# it.  That is why the default is [cc] cholesky=auto, which factorises only
+# when the explicit array will not fit; this example sets it explicitly so the
+# route is exercised rather than chosen.
+#
+# cholesky_direct=false builds the vectors from the stored AO integrals.
+# Setting it true builds them from recomputed integrals instead, which never
+# allocates the packed AO store -- slower wherever both fit, so auto takes it
+# only when that store is the thing that does not fit.
+#
+# The energy is the same as the explicit route to within cholesky_tol; compare
+# it against h2o_ccsd_t_6-31g.inp, which takes the explicit route by default.
+#
+# Runs in well under a second.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=sto-3g
+method=ccsd(t)
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+
+[cc]
+nfzc=1
+conv=1.0e-9
+cholesky=true
+cholesky_tol=1.0e-10
+cholesky_direct=false

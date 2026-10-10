@@ -1,0 +1,10 @@
+{
+  "CMakeLists.txt": "8efe640865af0496ebc4a51b04dfa2db13c2657c2a4c32a32dcaab5c06250bb0",
+  "benchmarks/metc/metc_cuda_benchmark.cu": "4d7f1133120cef756709cd93962ea7557dce54c76c676d85188b03c6939a2c73",
+  "include/openqp_gpu/metc.h": "60a7e7c45fbe0eb0b3db90b325727cdee60e941ddb5bf1be547373aa09a2b4e2",
+  "include/openqp_gpu/openqp_gpu.h": "96970211bf630c1f6cac4ebb133b92707811b99079d81973fb4853800f6ccf0e",
+  "job.sh": "2b387f7a8db4b6edcef4d1a0648cf10aa7b10fb71350e7ce6b315cee8c7ff57e",
+  "src/metc/gpu_metc_cuda.cu": "09e5dcde1740a37cc6a2c85b41fbca391747f27637c00d38641582b7fa05a642",
+  "src/metc/gpu_workspace_runtime.c": "969abec5afc9caf076c653c6f9743141deff26b2254624a400fd73c2d5ca3878",
+  "tests/test_gpu_metc_regression.py": "99069504329911022289b251cfccbfaf80e75c9dbec71189b191701014f536a6"
+}

@@ -1,0 +1,94 @@
+# github-private/pull/4/merge
+
+SHA: `cbfba3a5938dcdb8f17fc5f92fae23dd1563c5c0`  
+판정: **고유 변경·반영 여부 검토**  
+분야: SOC / SSC / X2C (검색용 분류)  
+마지막 commit: 2026-06-07T15:57:31+09:00 / Cheol Ho Choi  
+제목: Merge b5371300dc83062992d8363281658a095b30b74a into f60033049b899bb065aef1f1678199f5ef6ea825
+
+[검색 가능한 전체 목록](../index.html) · [조사 결과](../README.md)
+
+## 같은 끝점을 가리키는 모든 원본
+
+- [gitlab / github-private/pull/4/merge](https://qchemlab.knu.ac.kr/open-quantum-platform/internal/openqp/-/tree/cbfba3a5938dcdb8f17fc5f92fae23dd1563c5c0)
+
+## 현재 GitLab main과의 비교
+
+- 기준 main: `d8fcc4119c73a2be3c1c7e5f49a934f4d7ccad92`
+- 공통 조상: `8468cd564e08ddc4f7aa4f28ae62bf6b3d79398e`
+- 앞선 커밋 34 / 뒤처진 커밋 743
+- non-merge patch: main과 일치 8, 다름 22
+- merge/empty 등 patch 비교 제외: 4
+- GitLab 어느 브랜치에서도 끝점 도달 가능: True
+- GitLab 전체에서 동일 patch를 못 찾은 커밋: 0
+- 공통 조상 이후 변경 파일: 19; 그중 현재 main과 동일 3, 다름 16
+
+앞선 커밋 수에는 inherited private 작업이 포함될 수 있다. 개수만으로 미반영 기능 수를 판단하지 않는다.
+
+
+## 남은 non-merge patch 집합이 같은 다른 끝점
+
+- [feat/x2c-scalar](b5371300dc83.md)
+
+## 추가 커밋 전체
+
+| SHA | 날짜 | main patch 판정 | GitLab 전체 patch | 제목 |
+| --- | --- | --- | --- | --- |
+| `cbfba3a5938d` | 2026-06-07 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge b5371300dc83062992d8363281658a095b30b74a into f60033049b899bb065aef1f1678199f5ef6ea825 |
+| `b5371300dc83` | 2026-06-07 | 다름 | commit 보존 또는 비교 제외 | fix: 2e SOC density screening must bound exchange cross blocks |
+| `ce5fe79ad90c` | 2026-06-07 | 다름 | commit 보존 또는 비교 제외 | feat: spin-free X2C-1e scalar relativity (scal_rel=3) |
+| `f60033049b89` | 2026-06-01 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into soc-mrsf |
+| `10987ee82b70` | 2026-06-01 | 다름 | commit 보존 또는 비교 제외 | test: skip phase-dependent SOC/b-vector arrays in reference comparison |
+| `f2071fffba82` | 2026-06-01 | 다름 | commit 보존 또는 비교 제외 | RM: ZEFF, ADD: exclude grad from SOC calc |
+| `d3d409fb0047` | 2026-05-28 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into soc-mrsf |
+| `aa64576ca798` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | input checker: fix input.method |
+| `97a6edb6af70` | 2026-05-28 | 다름 | commit 보존 또는 비교 제외 | input checker: add neb, md mention to solve the conflict |
+| `bbbe1c7ef010` | 2026-05-27 | 다름 | commit 보존 또는 비교 제외 | runfunc .copy() and updated examples JSON |
+| `5d5447027cc3` | 2026-05-27 | 다름 | commit 보존 또는 비교 제외 | OpenMP/MPI inаrastructure |
+| `18fef006fca0` | 2026-05-27 | 다름 | commit 보존 또는 비교 제외 | fix integer4 call in soc_mrsf, updated get_soc(), SOC input help |
+| `f23b97a7e04a` | 2026-05-26 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into soc-mrsf |
+| `ff219f55f6d7` | 2026-05-26 | 다름 | commit 보존 또는 비교 제외 | adding irc to input checker to resolve conflict |
+| `fe016159b777` | 2026-05-26 | 다름 | commit 보존 또는 비교 제외 | PR: Konstantin comments fixes |
+| `1707f3b48453` | 2026-05-20 | 다름 | commit 보존 또는 비교 제외 | Added .JSON output for SOC case, updated examples for SOC |
+| `7beddf61eca4` | 2026-05-19 | 일치 | commit 보존 또는 비교 제외 | Pypi (#129) |
+| `2d895e63b82e` | 2026-05-12 | 다름 | commit 보존 또는 비교 제외 | Fix/basis set (#127) |
+| `c4623fdb2a76` | 2026-05-08 | 다름 | commit 보존 또는 비교 제외 | fix: improve input checker diagnostics (#126) |
+| `9cf7f4281968` | 2026-05-08 | 다름 | commit 보존 또는 비교 제외 | feat: add excited-state electric moments (#124) |
+| `10ca4b05525e` | 2026-01-21 | 일치 | commit 보존 또는 비교 제외 | fix: disable SD in 2nd SCF attempt (#120) |
+| `718d104ec092` | 2026-01-13 | 일치 | commit 보존 또는 비교 제외 | feat: default 2nd SCF converger to TRAH (#113) |
+| `8bc117401154` | 2026-01-13 | 일치 | commit 보존 또는 비교 제외 | Feat/otr update (#118) |
+| `2050140b1638` | 2026-01-10 | 일치 | commit 보존 또는 비교 제외 | fix: basis printing (#117) |
+| `ab3e608f38ee` | 2025-12-18 | 일치 | commit 보존 또는 비교 제외 | UMRSF energy  (#114) |
+| `b0a93e55be65` | 2025-12-10 | 일치 | commit 보존 또는 비교 제외 |  Added comments to mrsfcbc, mrsfmntoia; replaced cycles with DGEMM (#108) |
+| `0f9483c7ae45` | 2025-10-29 | 일치 | commit 보존 또는 비교 제외 | Add MOKIT reference for better initial guess |
+| `331803440ace` | 2026-05-18 | 다름 | commit 보존 또는 비교 제외 | Added SOC state decomposition, updated EXAMPLES/SOC |
+| `dd01e557b58a` | 2026-05-14 | 다름 | commit 보존 또는 비교 제외 | Full 2-e implementation of SOC. Add input parametr soc_2e = 1 for 2e case, 0 for 1e only. |
+| `2bf0b1c52aaf` | 2026-04-03 | 다름 | commit 보존 또는 비교 제외 | Examples commit |
+| `eb8a9cf62095` | 2026-04-03 | 다름 | commit 보존 또는 비교 제외 | Full 1-e implementation of SOC. No switch 1e/2e case yet. |
+| `b0229dbf1148` | 2026-03-12 | 다름 | commit 보존 또는 비교 제외 | Added: full scalar relativistic correction, initial skeleton for SOC |
+| `e1c5932e6f3c` | 2026-03-06 | 다름 | commit 보존 또는 비교 제외 | Revert "Initial Lx, Ly function commit" |
+| `ea1008058274` | 2026-03-05 | 다름 | commit 보존 또는 비교 제외 | Initial Lx, Ly function commit |
+
+## 변경 파일 전체
+
+| 상태 | 경로 | 현재 main과 내용 |
+| --- | --- | --- |
+| A | `docs/soc2e_screening_analysis.md` | 다름 |
+| A | `examples/SOC/CH3Br-BHHLYP-SOC.inp` | 동일 |
+| A | `examples/SOC/CH3Br-BHHLYP-SOC.json` | 다름 |
+| A | `examples/SOC/H2O_BHHLYP_SOC.inp` | 다름 |
+| A | `examples/SOC/H2O_BHHLYP_SOC.json` | 다름 |
+| M | `include/oqp.h` | 다름 |
+| M | `pyoqp/oqp/library/runfunc.py` | 다름 |
+| M | `pyoqp/oqp/molecule/molecule.py` | 다름 |
+| M | `pyoqp/oqp/molecule/oqpdata.py` | 다름 |
+| M | `pyoqp/oqp/utils/input_checker.py` | 다름 |
+| M | `source/integrals/grd2_rys.F90` | 다름 |
+| M | `source/integrals/mod_1e_primitives.F90` | 다름 |
+| A | `source/modules/dk_scalar.F90` | 다름 |
+| M | `source/modules/int1e.F90` | 다름 |
+| A | `source/modules/soc_mrsf.F90` | 다름 |
+| M | `source/physical_constants.F90` | 동일 |
+| M | `source/tagarray_driver.F90` | 다름 |
+| M | `source/types.F90` | 다름 |
+| A | `tests/test_soc_examples.py` | 동일 |

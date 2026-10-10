@@ -1,0 +1,43 @@
+# Legacy-format gas-phase MRSF singlet NAMD with the default [scf]/[tdhf]
+# convergence (1e-6), which the analytic NAC does not accept.  [md] rescale
+# defaults to auto, so this route must select isotropic rescaling at startup
+# instead of failing at the first hop candidate.  Twisted, pyramidalized
+# ethylene has a small S0/S1 gap; seed 663617 draws 1.29e-7 at step 1, far
+# below the S1->S0 hop probability, so an S1->S0 hop occurs at step 1.
+[input]
+system=
+ C          -1.6699351346837055       0.1537249235528157      -1.5459803491111643
+ C          -1.8079415266835852      -0.0386075716896284      -0.1602069788110266
+ H          -2.6609567768367581       0.2572290722092156      -2.0290359598415040
+ H          -1.2898503996116444      -0.7568524635289917      -2.0470428696820342
+ H          -1.3096398768036397       0.6557118321425524       0.5396052278505126
+ H          -2.3820842951209360      -0.7983813277099963       0.4308517619153288
+charge=0
+runtype=namd
+basis=6-31g
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=3
+multiplicity=1
+
+[properties]
+grad=2
+
+[md]
+nstep=2
+dt=0.5
+active=2
+init_temp=300
+seed=663617
+first_hop_step=1
+nve_gate=off

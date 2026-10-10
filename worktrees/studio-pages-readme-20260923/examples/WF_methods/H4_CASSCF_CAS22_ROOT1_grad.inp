@@ -1,0 +1,66 @@
+# RHF/STO-3G/CASSCF analytic nuclear gradient of an EXCITED root of linear H4.
+#
+# Companion to H2O_CASSCF_CAS44_grad.inp, pinning the part of the derivation
+# that is easy to get wrong: [casscf] root selects which root the orbitals are
+# optimized for, and the gradient must follow that root, not root 0.
+#
+# An excited root is still a STATIONARY point of the CASSCF energy -- the CI
+# vector is an eigenvector of the active Hamiltonian, which makes the energy
+# stationary against every CI parameter whether or not the root is the lowest,
+# and the orbital optimizer drives the root-1 orbital gradient to zero.  So the
+# state-specific formula applies unchanged and no Z-vector solve is needed.
+# This is NOT the case for an individual state of a state-AVERAGED run, which
+# is why those are refused.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+grad=0
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+# root=1 needs two roots solved
+nroot=2
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+
+[casscf]
+max_macro_iterations=100
+optimizer=newton
+root=1
+gradient_norm_tol=1.0e-7
+energy_decrease_tol=1.0e-10
+step_norm_tol=1.0e-8
+max_rotation_norm=2.0e-1
+level_shift=1.0e-3
+canonicalize=true

@@ -1,0 +1,97 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+stages: [test]
+
+default:
+  interruptible: true
+  timeout: 30 minutes
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_CACHE_DIR: "1"
+  # Per-checkout package storage avoids concurrent writers on shell runners.
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+
+engine-source-tests:
+  stage: test
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  script:
+    - python -m unittest discover -s tests -v
+
+engine-gateway-check:
+  stage: test
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  script:
+    - python tools/checkout_engine.py
+    - git -C openqp rev-parse HEAD
+  artifacts:
+    paths: [engine-source.json]
+    expire_in: 1 week
+
+.backend:
+  stage: test
+  script:
+    - python tools/ci/backend.py
+  artifacts:
+    when: always
+    reports:
+      junit: reports/backend.xml
+    paths: [reports/]
+    expire_in: 1 week
+
+.frontend:
+  stage: test
+  script:
+    - node tools/ci/frontend.mjs
+  artifacts:
+    paths: [frontend/dist/]
+    expire_in: 1 week
+
+backend:linux:
+  extends: .backend
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  variables:
+    STUDIO_CI_PLATFORM: linux
+
+frontend:linux:
+  extends: .frontend
+  image: node:24-bookworm
+  tags: [small-linux]
+  variables:
+    STUDIO_CI_PLATFORM: linux
+
+# Existing native shell executors; container images do not emulate an OS.
+backend:macos:
+  extends: .backend
+  script:
+    - /opt/homebrew/bin/python3.11 tools/ci/backend.py
+  tags: [macmaster, macos, shell]
+  variables:
+    STUDIO_CI_PLATFORM: macos
+
+frontend:macos:
+  extends: .frontend
+  script:
+    - /opt/homebrew/bin/python3.11 tools/ci/macos_frontend.py
+  tags: [macmaster, macos, shell]
+  variables:
+    STUDIO_CI_PLATFORM: macos
+
+backend:windows:
+  extends: .backend
+  tags: [windows, winserver1, shell]
+  variables:
+    STUDIO_CI_PLATFORM: windows
+
+frontend:windows:
+  extends: .frontend
+  tags: [windows, winserver1, shell]
+  variables:
+    STUDIO_CI_PLATFORM: windows

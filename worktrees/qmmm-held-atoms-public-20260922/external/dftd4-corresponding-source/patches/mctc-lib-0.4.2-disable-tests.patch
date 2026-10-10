@@ -1,0 +1,8 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -122,2 +122,3 @@
+ enable_testing()
+-add_subdirectory("test")
++# Disabled by OpenQP: the packaged library build does not configure upstream tests.
++# add_subdirectory("test")

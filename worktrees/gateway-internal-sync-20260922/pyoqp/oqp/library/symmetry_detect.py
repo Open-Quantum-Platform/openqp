@@ -1,0 +1,890 @@
+"""Backend-free molecular point-group detection for symmetry metadata.
+
+This module detects the full Schoenflies point group of a molecular geometry
+and resolves the largest usable abelian subgroup from the D2h family
+(C1, Ci, Cs, C2, C2v, C2h, D2, D2h) together with a standard orientation and
+per-operation atom permutations.
+
+Detection is geometry-only metadata: it does not change SCF/integral/response
+execution behavior, and all symmetry reductions stay off.
+"""
+
+from __future__ import annotations
+
+from typing import Any, MutableMapping
+
+import numpy as np
+
+# Operations of the D2h family expressed as sign matrices diag(sx, sy, sz)
+# in the standard orientation.
+SIGN_OPERATIONS: dict[str, tuple[int, int, int]] = {
+    'E': (1, 1, 1),
+    'C2z': (-1, -1, 1),
+    'C2y': (-1, 1, -1),
+    'C2x': (1, -1, -1),
+    'i': (-1, -1, -1),
+    'sxy': (1, 1, -1),
+    'sxz': (1, -1, 1),
+    'syz': (-1, 1, 1),
+}
+
+# Operation lists per abelian group (fixed order; character tables use the
+# same op order).
+ABELIAN_GROUP_OPS: dict[str, list[str]] = {
+    'c1': ['E'],
+    'ci': ['E', 'i'],
+    'cs': ['E', 'sxy'],
+    'c2': ['E', 'C2z'],
+    'c2v': ['E', 'C2z', 'sxz', 'syz'],
+    'c2h': ['E', 'C2z', 'i', 'sxy'],
+    'd2': ['E', 'C2z', 'C2y', 'C2x'],
+    'd2h': ['E', 'C2z', 'C2y', 'C2x', 'i', 'sxy', 'sxz', 'syz'],
+}
+
+# Mulliken-convention character tables, rows keyed by irrep label, columns
+# following ABELIAN_GROUP_OPS order.
+CHARACTER_TABLES: dict[str, dict[str, list[int]]] = {
+    'c1': {'a': [1]},
+    'ci': {'ag': [1, 1], 'au': [1, -1]},
+    'cs': {"a'": [1, 1], "a''": [1, -1]},
+    'c2': {'a': [1, 1], 'b': [1, -1]},
+    'c2v': {
+        'a1': [1, 1, 1, 1],
+        'a2': [1, 1, -1, -1],
+        'b1': [1, -1, 1, -1],
+        'b2': [1, -1, -1, 1],
+    },
+    'c2h': {
+        'ag': [1, 1, 1, 1],
+        'bg': [1, -1, 1, -1],
+        'au': [1, 1, -1, -1],
+        'bu': [1, -1, -1, 1],
+    },
+    'd2': {
+        'a': [1, 1, 1, 1],
+        'b1': [1, 1, -1, -1],
+        'b2': [1, -1, 1, -1],
+        'b3': [1, -1, -1, 1],
+    },
+    'd2h': {
+        'ag': [1, 1, 1, 1, 1, 1, 1, 1],
+        'b1g': [1, 1, -1, -1, 1, 1, -1, -1],
+        'b2g': [1, -1, 1, -1, 1, -1, 1, -1],
+        'b3g': [1, -1, -1, 1, 1, -1, -1, 1],
+        'au': [1, 1, 1, 1, -1, -1, -1, -1],
+        'b1u': [1, 1, -1, -1, -1, -1, 1, 1],
+        'b2u': [1, -1, 1, -1, -1, 1, -1, 1],
+        'b3u': [1, -1, -1, 1, -1, 1, 1, -1],
+    },
+}
+
+_MAX_PROPER_ORDER = 8
+
+# Ceiling on the closed operation set; also the highest rotation order any
+# entry point here can report, since a C_n contributes n operations.
+_MAX_GROUP_ORDER = 120
+
+
+def _require_usable_tolerance(tolerance: Any) -> float:
+    """Reject a tolerance that cannot be matched against.
+
+    `_match_permutation` accepts a partner when `dist[j] > tolerance` is false,
+    and every comparison against NaN is false -- so a NaN tolerance makes every
+    candidate operation pass and the detected group is fiction. `nan <= 0` is
+    false too, which is how it used to slip through the positivity test.
+    """
+    value = float(tolerance)
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError('tolerance must be a positive finite number')
+    return value
+
+
+def _normalize(vec: np.ndarray) -> np.ndarray | None:
+    norm = float(np.linalg.norm(vec))
+    if norm < 1.0e-8:
+        return None
+    return vec / norm
+
+
+def _rotation_matrix(axis: np.ndarray, angle: float) -> np.ndarray:
+    """Right-handed rotation by `angle` about unit vector `axis`."""
+    x, y, z = axis
+    c = np.cos(angle)
+    s = np.sin(angle)
+    cc = 1.0 - c
+    return np.array([
+        [c + x * x * cc, x * y * cc - z * s, x * z * cc + y * s],
+        [y * x * cc + z * s, c + y * y * cc, y * z * cc - x * s],
+        [z * x * cc - y * s, z * y * cc + x * s, c + z * z * cc],
+    ])
+
+
+def _reflection_matrix(normal: np.ndarray) -> np.ndarray:
+    n = np.asarray(normal, dtype=float)
+    return np.eye(3) - 2.0 * np.outer(n, n)
+
+
+def _match_permutation(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    transformed: np.ndarray,
+    tolerance: float,
+) -> list[int] | None:
+    """Return permutation p with transformed[i] == coords[p[i]] or None."""
+    natom = coords.shape[0]
+    used = np.zeros(natom, dtype=bool)
+    permutation: list[int] = []
+    for i in range(natom):
+        dist = np.linalg.norm(coords - transformed[i], axis=1)
+        dist[charges != charges[i]] = np.inf
+        dist[used] = np.inf
+        j = int(np.argmin(dist))
+        if dist[j] > tolerance:
+            return None
+        used[j] = True
+        permutation.append(j)
+    return permutation
+
+
+def _candidate_directions(charges: np.ndarray, coords: np.ndarray) -> list[np.ndarray]:
+    """Axis/normal candidates: principal axes, atom vectors, same-element
+    pair sums/differences, and pairwise cross products."""
+    candidates: list[np.ndarray] = []
+
+    inertia = _inertia_tensor(charges, coords)
+    _, axes = np.linalg.eigh(inertia)
+    for k in range(3):
+        candidates.append(axes[:, k])
+
+    vectors = [v for v in (coords[i] for i in range(coords.shape[0]))]
+    for v in vectors:
+        nv = _normalize(v)
+        if nv is not None:
+            candidates.append(nv)
+
+    natom = coords.shape[0]
+    for i in range(natom):
+        for j in range(i + 1, natom):
+            if charges[i] != charges[j]:
+                continue
+            for combo in (coords[i] + coords[j], coords[i] - coords[j]):
+                nv = _normalize(combo)
+                if nv is not None:
+                    candidates.append(nv)
+
+    for i in range(natom):
+        for j in range(i + 1, natom):
+            nv = _normalize(np.cross(coords[i], coords[j]))
+            if nv is not None:
+                candidates.append(nv)
+
+    return _dedupe_directions(candidates)
+
+
+def _dedupe_directions(candidates: list[np.ndarray]) -> list[np.ndarray]:
+    unique: list[np.ndarray] = []
+    for vec in candidates:
+        if all(abs(float(np.dot(vec, u))) < 1.0 - 1.0e-6 for u in unique):
+            unique.append(vec)
+    return unique
+
+
+def _inertia_tensor(charges: np.ndarray, coords: np.ndarray) -> np.ndarray:
+    # Atomic numbers stand in for masses: symmetry-equivalent atoms share Z.
+    r2 = np.sum(coords**2, axis=1)
+    tensor = np.einsum('i,i,jk->jk', charges, r2, np.eye(3))
+    tensor -= np.einsum('i,ij,ik->jk', charges, coords, coords)
+    return tensor
+
+
+def _is_symmetry_op(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    matrix: np.ndarray,
+    tolerance: float,
+) -> bool:
+    transformed = coords @ matrix.T
+    return _match_permutation(charges, coords, transformed, tolerance) is not None
+
+
+def _proper_axis_order(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    axis: np.ndarray,
+    tolerance: float,
+) -> int:
+    """Largest n <= _MAX_PROPER_ORDER with C_n about `axis` a symmetry op."""
+    best = 1
+    for order in range(2, _MAX_PROPER_ORDER + 1):
+        rot = _rotation_matrix(axis, 2.0 * np.pi / order)
+        if _is_symmetry_op(charges, coords, rot, tolerance):
+            best = order
+    return best
+
+
+def _is_linear(coords: np.ndarray, tolerance: float) -> np.ndarray | None:
+    """Return the molecular axis if all atoms are collinear, else None."""
+    axis = None
+    for i in range(coords.shape[0]):
+        axis = _normalize(coords[i])
+        if axis is not None:
+            break
+    if axis is None:  # all atoms at the origin-like degenerate case
+        return np.array([0.0, 0.0, 1.0])
+    for i in range(coords.shape[0]):
+        residual = coords[i] - np.dot(coords[i], axis) * axis
+        if np.linalg.norm(residual) > tolerance:
+            return None
+    return axis
+
+
+def _perpendicular_vector(axis: np.ndarray) -> np.ndarray:
+    trial = np.array([1.0, 0.0, 0.0])
+    if abs(float(np.dot(trial, axis))) > 0.9:
+        trial = np.array([0.0, 1.0, 0.0])
+    perp = trial - np.dot(trial, axis) * axis
+    result = _normalize(perp)
+    assert result is not None
+    return result
+
+
+class _ElementSurvey:
+    """Verified symmetry elements of a centered geometry."""
+
+    def __init__(self, charges: np.ndarray, coords: np.ndarray, tolerance: float):
+        self.charges = charges
+        self.coords = coords
+        self.tolerance = tolerance
+        self.has_inversion = _is_symmetry_op(charges, coords, -np.eye(3), tolerance)
+        self.proper_axes: list[tuple[np.ndarray, int]] = []
+        self.mirror_normals: list[np.ndarray] = []
+
+        for direction in _candidate_directions(charges, coords):
+            order = _proper_axis_order(charges, coords, direction, tolerance)
+            if order > 1:
+                self.proper_axes.append((direction, order))
+            if _is_symmetry_op(charges, coords, _reflection_matrix(direction), tolerance):
+                self.mirror_normals.append(direction)
+
+    @property
+    def c2_axes(self) -> list[np.ndarray]:
+        # A C2 about an axis exists only when its maximal order is even.
+        return [axis for axis, order in self.proper_axes if order % 2 == 0]
+
+    def principal(self) -> tuple[np.ndarray | None, int]:
+        if not self.proper_axes:
+            return None, 1
+        axis, order = max(self.proper_axes, key=lambda item: item[1])
+        return axis, order
+
+
+def _schoenflies_from_survey(survey: _ElementSurvey) -> str:
+    axis, order = survey.principal()
+
+    high_order_axes = [o for _, o in survey.proper_axes if o >= 3]
+    if len(high_order_axes) >= 2:
+        # Cubic/icosahedral families.
+        if any(o >= 5 for o in high_order_axes):
+            return 'ih' if survey.has_inversion else 'i'
+        if any(o == 4 for o in high_order_axes):
+            return 'oh' if survey.has_inversion else 'o'
+        if survey.has_inversion:
+            return 'th'
+        return 'td' if survey.mirror_normals else 't'
+
+    if axis is None:
+        if survey.mirror_normals:
+            return 'cs'
+        return 'ci' if survey.has_inversion else 'c1'
+
+    tol_angle = 1.0e-6
+    perpendicular_c2 = [
+        a for a, o in survey.proper_axes
+        if abs(float(np.dot(a, axis))) < 1.0e-3 and o % 2 == 0
+    ]
+    sigma_h = any(
+        abs(float(np.dot(n, axis))) > 1.0 - tol_angle for n in survey.mirror_normals
+    )
+    sigma_v = [
+        n for n in survey.mirror_normals if abs(float(np.dot(n, axis))) < 1.0e-3
+    ]
+
+    if len(perpendicular_c2) >= order:
+        if sigma_h:
+            return f'd{order}h'
+        if len(sigma_v) >= order:
+            return f'd{order}d'
+        return f'd{order}'
+
+    if sigma_h:
+        return f'c{order}h'
+    if len(sigma_v) >= order:
+        return f'c{order}v'
+
+    improper = _rotation_matrix(axis, np.pi / order) @ _reflection_matrix(axis)
+    if _is_symmetry_op(survey.charges, survey.coords, improper, survey.tolerance):
+        return f's{2 * order}'
+    return f'c{order}'
+
+
+def _orthonormal_frame(z: np.ndarray, x: np.ndarray | None = None) -> np.ndarray:
+    """Rotation matrix with rows (x, y, z) forming a right-handed frame."""
+    if x is None:
+        x = _perpendicular_vector(z)
+    x = x - np.dot(x, z) * z
+    x_unit = _normalize(x)
+    assert x_unit is not None
+    y = np.cross(z, x_unit)
+    return np.vstack([x_unit, y, z])
+
+
+def _verify_group(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    rotation: np.ndarray,
+    group: str,
+    tolerance: float,
+) -> list[dict[str, Any]] | None:
+    """Verify all ops of `group` on the rotated geometry; return op payloads."""
+    rotated = coords @ rotation.T
+    operations: list[dict[str, Any]] = []
+    for name in ABELIAN_GROUP_OPS[group]:
+        matrix = np.diag(SIGN_OPERATIONS[name]).astype(float)
+        permutation = _match_permutation(
+            charges, rotated, rotated @ matrix.T, tolerance,
+        )
+        if permutation is None:
+            return None
+        operations.append({
+            'name': name,
+            'matrix': matrix.tolist(),
+            'permutation': permutation,
+        })
+    return operations
+
+
+def _abelian_resolution(
+    survey: _ElementSurvey,
+    principal_axis: np.ndarray | None,
+) -> tuple[str, np.ndarray, list[dict[str, Any]]]:
+    """Pick the largest verified D2h-family subgroup and standard orientation."""
+    charges, coords, tol = survey.charges, survey.coords, survey.tolerance
+
+    c2_axes = survey.c2_axes
+    mirrors = survey.mirror_normals
+
+    def axis_priority(axis: np.ndarray) -> float:
+        if principal_axis is None:
+            return 0.0
+        return -abs(float(np.dot(axis, principal_axis)))
+
+    candidates: list[tuple[str, np.ndarray]] = []
+
+    # D2h / D2: three mutually perpendicular C2 axes.
+    ordered_axes = sorted(c2_axes, key=axis_priority)
+    for z_axis in ordered_axes:
+        for x_axis in ordered_axes:
+            if abs(float(np.dot(z_axis, x_axis))) > 1.0e-3:
+                continue
+            frame = _orthonormal_frame(z_axis, x_axis)
+            candidates.append(('d2h', frame))
+            candidates.append(('d2', frame))
+
+    # C2h: C2 axis with parallel mirror normal and inversion.
+    if survey.has_inversion:
+        for z_axis in ordered_axes:
+            if any(abs(float(np.dot(n, z_axis))) > 1.0 - 1.0e-6 for n in mirrors):
+                candidates.append(('c2h', _orthonormal_frame(z_axis)))
+
+    # C2v: C2 axis with two perpendicular mirror planes containing it.
+    for z_axis in ordered_axes:
+        containing = [n for n in mirrors if abs(float(np.dot(n, z_axis))) < 1.0e-3]
+        for a in range(len(containing)):
+            for b in range(len(containing)):
+                if a == b:
+                    continue
+                if abs(float(np.dot(containing[a], containing[b]))) > 1.0e-3:
+                    continue
+                # sigma_xz has normal y, sigma_yz has normal x.
+                frame = _orthonormal_frame(z_axis, containing[b])
+                candidates.append(('c2v', frame))
+
+    for z_axis in ordered_axes:
+        candidates.append(('c2', _orthonormal_frame(z_axis)))
+
+    for normal in mirrors:
+        candidates.append(('cs', _orthonormal_frame(normal)))
+
+    if survey.has_inversion:
+        candidates.append(('ci', np.eye(3)))
+
+    candidates.append(('c1', np.eye(3)))
+
+    group_rank = {'d2h': 0, 'd2': 1, 'c2h': 2, 'c2v': 3, 'c2': 4, 'cs': 5, 'ci': 6, 'c1': 7}
+    # Secondary key: prefer frames closest to the identity. This makes the
+    # frame choice deterministic for geometries already in a valid standard
+    # orientation (degenerate axis assignments, e.g. the three C2 axes of
+    # d2h, would otherwise let repeated detections ping-pong between
+    # equivalent frames and the reorientation iteration never converge).
+    candidates.sort(key=lambda item: (
+        group_rank[item[0]],
+        float(np.abs(item[1] - np.eye(3)).max()),
+    ))
+
+    for group, rotation in candidates:
+        operations = _verify_group(charges, coords, rotation, group, tol)
+        if operations is not None:
+            return group, rotation, operations
+
+    # Unreachable: 'c1' always verifies.
+    raise RuntimeError('abelian subgroup resolution failed')
+
+
+def detect_point_group(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+) -> dict[str, Any]:
+    """Detect full point group and abelian (D2h-family) subgroup metadata.
+
+    Parameters
+    ----------
+    atomic_numbers:
+        Per-atom nuclear charges (used as symmetry-equivalence weights).
+    coordinates:
+        Cartesian coordinates, shape (natom, 3) (any consistent length unit).
+    tolerance:
+        Absolute displacement tolerance for accepting a symmetry operation.
+    """
+    tolerance = _require_usable_tolerance(tolerance)
+
+    charges = np.asarray(atomic_numbers, dtype=float).ravel()
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
+    if charges.size != coords.shape[0]:
+        raise ValueError('atomic_numbers and coordinates disagree on atom count')
+    if charges.size == 0:
+        raise ValueError('geometry must contain at least one atom')
+
+    center = np.einsum('i,ij->j', charges, coords) / float(np.sum(charges))
+    coords -= center
+
+    natom = charges.size
+
+    if natom == 1:
+        group = 'kh'
+        rotation = np.eye(3)
+        operations = _verify_group(charges, coords, rotation, 'd2h', tolerance)
+        assert operations is not None
+        subgroup = 'd2h'
+    else:
+        linear_axis = _is_linear(coords, tolerance)
+        if linear_axis is not None:
+            rotation = _orthonormal_frame(linear_axis)
+            if _is_symmetry_op(charges, coords, -np.eye(3), tolerance):
+                group, subgroup = 'dooh', 'd2h'
+            else:
+                group, subgroup = 'coov', 'c2v'
+            operations = _verify_group(charges, coords, rotation, subgroup, tolerance)
+            assert operations is not None
+        else:
+            survey = _ElementSurvey(charges, coords, tolerance)
+            group = _schoenflies_from_survey(survey)
+            principal_axis, _ = survey.principal()
+            subgroup, rotation, operations = _abelian_resolution(survey, principal_axis)
+
+    # Operation matrices conjugated back to the input frame: AO/MO data
+    # produced by the backend lives in input coordinates, not the standard
+    # orientation, so O_input = R^T O_standard R (atom permutations are
+    # frame-independent).
+    for op in operations:
+        standard = np.asarray(op['matrix'])
+        op['matrix_input_frame'] = (rotation.T @ standard @ rotation).tolist()
+
+    return {
+        'point_group': group,
+        'abelian_subgroup': subgroup,
+        'origin': center.tolist(),
+        'orientation': rotation.tolist(),
+        'operations': operations,
+        'irreps': list(CHARACTER_TABLES[subgroup].keys()),
+        'character_table': {
+            irrep: list(row) for irrep, row in CHARACTER_TABLES[subgroup].items()
+        },
+        'tolerance': float(tolerance),
+        'n_atoms': int(natom),
+    }
+
+
+def enumerate_full_group(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+    max_order: int = _MAX_GROUP_ORDER,
+) -> list[dict[str, Any]]:
+    """All point-group operations of a geometry (non-abelian included).
+
+    Seeds the set with every verified rotation power, reflection, and the
+    inversion found by the element survey, then closes it under
+    multiplication (products of symmetry operations are symmetry
+    operations). Returns operation payloads with dense 3x3 matrices and
+    atom permutations, in the frame of the given coordinates.
+    """
+
+    tolerance = _require_usable_tolerance(tolerance)
+
+    charges = np.asarray(atomic_numbers, dtype=float).ravel()
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3).copy()
+    center = np.einsum('i,ij->j', charges, coords) / float(np.sum(charges))
+    coords -= center
+
+    seeds: list[np.ndarray] = [np.eye(3)]
+    if coords.shape[0] == 1:
+        # Single atom: report the D2h-family generators only (Kh is infinite).
+        for signs in SIGN_OPERATIONS.values():
+            seeds.append(np.diag(signs).astype(float))
+    else:
+        linear_axis = _is_linear(coords, tolerance)
+        if linear_axis is not None:
+            # Infinite group: fall back to the abelian-subgroup operations.
+            frame = _orthonormal_frame(linear_axis)
+            for signs in SIGN_OPERATIONS.values():
+                d = np.diag(signs).astype(float)
+                seeds.append(frame.T @ d @ frame)
+        else:
+            survey = _ElementSurvey(charges, coords, tolerance)
+            for axis, order in survey.proper_axes:
+                for k in range(1, order):
+                    seeds.append(_rotation_matrix(axis, 2.0 * np.pi * k / order))
+            for normal in survey.mirror_normals:
+                seeds.append(_reflection_matrix(normal))
+            if survey.has_inversion:
+                seeds.append(-np.eye(3))
+
+    def polish(matrix):
+        """Snap an approximate operation to machine precision.
+
+        The atom permutation is exact (integers); the best orthogonal
+        matrix mapping coords onto coords[perm] is the orthogonal
+        Procrustes solution. Input files often carry only ~6 decimals, so
+        unpolished operations breed near-duplicates under closure.
+        """
+        permutation = _match_permutation(charges, coords, coords @ matrix.T, tolerance)
+        if permutation is None:
+            return None
+        u, _, vt = np.linalg.svd(coords.T @ coords[permutation])
+        # Det-constrained Procrustes: planar/linear geometries leave one
+        # direction undetermined (zero singular value), so enforce the
+        # original operation's proper/improper character explicitly.
+        target_det = 1.0 if np.linalg.det(matrix) > 0 else -1.0
+        d = np.ones(3)
+        d[-1] = target_det * np.linalg.det(u @ vt)
+        polished = (u @ np.diag(d) @ vt).T
+        return polished
+
+    verified = []
+    for m in seeds:
+        polished = polish(m)
+        if polished is not None:
+            verified.append(polished)
+
+    def key(matrix):
+        return tuple(np.round(matrix, 8).ravel())
+
+    group = {key(m): m for m in verified}
+    changed = True
+    while changed and len(group) <= max_order:
+        changed = False
+        mats = list(group.values())
+        for a in mats:
+            for b in mats:
+                product = polish(a @ b)
+                if product is None:
+                    continue
+                k = key(product)
+                if k not in group:
+                    group[k] = product
+                    changed = True
+            if len(group) > max_order:
+                break
+
+    if len(group) > max_order:
+        # Tolerance artifacts can produce runaway closure; bail to seeds.
+        group = {key(m): m for m in verified}
+
+    operations: list[dict[str, Any]] = []
+    for matrix in group.values():
+        permutation = _match_permutation(charges, coords, coords @ matrix.T, tolerance)
+        if permutation is None:
+            continue
+        if np.allclose(matrix, np.eye(3), atol=1.0e-9):
+            name = 'E'
+        elif np.allclose(matrix, -np.eye(3), atol=1.0e-9):
+            name = 'i'
+        elif np.linalg.det(matrix) > 0:
+            name = 'proper'
+        else:
+            name = 'improper'
+        operations.append({
+            'name': name,
+            'matrix': matrix.tolist(),
+            'permutation': permutation,
+        })
+
+    # Identity first, deterministic order after.
+    operations.sort(key=lambda op: (op['name'] != 'E',
+                                    tuple(np.round(op['matrix'], 6).ravel())))
+    return operations
+
+
+def _every_atom_is_its_own_class(
+    charges: np.ndarray,
+    coords: np.ndarray,
+    tolerance: float,
+) -> bool:
+    """True when no atom has a partner it could possibly be mapped onto.
+
+    A symmetry operation sends atom i to an atom j of the *same* nuclear
+    charge lying within ``tolerance`` of ``R r_i`` (that is what
+    ``_match_permutation`` accepts), and a rotation or reflection preserves the
+    distance to the center, so ``abs(|r_j| - |r_i|) <= tolerance``. If no two
+    same-Z atoms have radii that close, every operation of the group fixes
+    every atom.
+
+    Radii are measured about the charge-weighted center ``enumerate_full_group``
+    itself centers on, so the two agree by construction rather than by
+    coincidence.
+
+    Linear -- and NEARLY linear -- geometries are excluded rather than screened:
+    a rotation about the molecular axis fixes every atom without being the
+    identity, so the argument above does not close there. Near-linear matters
+    because the match is approximate. A rotation by theta moves an atom by
+    2*sin(theta/2)*d(atom, axis), so every atom within
+    tolerance/(2*sin(theta/2)) of some line is fixed to within tolerance by
+    that rotation. The smallest angle worth guarding against is
+    2*pi/_MAX_GROUP_ORDER: seeds carry order 8 at most, and closure keeps at
+    most _MAX_GROUP_ORDER elements before bailing back to the seeds, so a
+    closed group returned at the default cap has no element of higher order.
+    (A caller passing a larger ``max_order`` to ``enumerate_full_group`` could
+    exceed it; ``rotational_symmetry_number`` never does.)
+
+    That test is made on the off-axis extent of the geometry rather than with
+    `_is_linear`, which takes its axis from the first atom with a non-negligible
+    position: for a nearly linear geometry whose first atom sits close to the
+    center, that axis can point anywhere and the residuals it reports are
+    meaningless. sqrt(s2^2 + s3^2), from the singular values of the centered
+    coordinates, is the smallest achievable root-sum-square distance to any
+    line through the center and needs no axis estimate. The max distance about
+    the best line is at least that over sqrt(natom), which is where the
+    sqrt(natom) below comes from.
+    """
+
+    if charges.size != coords.shape[0] or coords.shape[0] < 2:
+        return False
+    total_charge = float(np.sum(charges))
+    if not np.isfinite(total_charge) or total_charge == 0.0:
+        return False
+
+    # Ten times the matching tolerance for the radius test: erring towards
+    # "these two could be partners" only costs the slow path, while erring the
+    # other way would silently drop a real sigma -- the exact bias this module
+    # exists to remove.
+    margin = max(10.0 * float(tolerance), 1.0e-8)
+
+    centered = coords - np.einsum('i,ij->j', charges, coords) / total_charge
+
+    # Decline on anything collinear enough that a rotation about that line
+    # could fix every atom to within tolerance -- see the docstring for where
+    # the two factors come from.
+    # svd returns min(natom, 3) values, so a diatomic yields two: pad to three
+    # rather than index off the end.
+    singular = np.linalg.svd(centered, compute_uv=False)
+    singular = np.pad(singular, (0, 3 - singular.size))
+    off_axis = float(np.hypot(singular[1], singular[2]))
+    collinear_limit = (np.sqrt(coords.shape[0]) * float(tolerance)
+                       / (2.0 * np.sin(np.pi / _MAX_GROUP_ORDER)))
+    if not np.isfinite(off_axis) or off_axis <= collinear_limit:
+        return False
+
+    radii = np.linalg.norm(centered, axis=1)
+    # Coordinates large enough to overflow the norm make every subsequent
+    # comparison false, which would read as "no atom has a partner" and screen
+    # a symmetric molecule down to sigma = 1. Decline instead.
+    if not bool(np.all(np.isfinite(radii))):
+        return False
+    order = np.lexsort((radii, charges))
+    charges_sorted = charges[order]
+    radii_sorted = radii[order]
+    neighbours = np.diff(radii_sorted) <= margin
+    same_element = charges_sorted[:-1] == charges_sorted[1:]
+    return not bool(np.any(neighbours & same_element))
+
+
+def rotational_symmetry_number(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+) -> int:
+    """Rotational symmetry number sigma for rigid-rotor thermochemistry.
+
+    sigma is the order of the *rotational* subgroup -- the number of proper
+    operations (det = +1) -- and it divides the rotational partition function.
+    Omitting it inflates S_rot by R*ln(sigma): 1.38 cal/mol/K for water,
+    4.94 for benzene or methane.
+
+    Deliberately computed from the geometry here rather than read out of
+    ``symmetry_metadata``: that block is forced to C1 whenever ``[symmetry]``
+    is not enabled, and detection is skipped entirely, so a metadata-sourced
+    sigma would silently be 1 on a default run -- reproducing the bug this
+    exists to fix. Thermochemistry needs no reorientation and no petite maps,
+    so it has no reason to inherit that gate.
+
+    Linear molecules need no special case: the seed set collapses to the two
+    permutation classes a linear geometry admits, giving 2 proper operations
+    for D-inf-h and 1 for C-inf-v.
+
+    On failure returns 1, which reproduces today's (over-counted) entropy
+    rather than inventing symmetry. Because that failure is silent and biases
+    G, callers are expected to *print* the value they got.
+
+    Two documented limits, both of which under-count sigma (i.e. fall back
+    towards today's behaviour) rather than inventing symmetry:
+
+    **Isotopes.** Atom equivalence is keyed on nuclear charge, so this is exact
+    only while every same-Z atom carries the same mass. An isotopologue such as
+    HDO would be given the parent molecule's sigma. Unreachable today -- both
+    geometry readers compute mass as a pure Z-indexed table lookup and there is
+    no isotope symbol or per-atom mass input -- but the Fortran ABI already
+    accepts per-atom masses, so adding such an input must revisit this
+    function. The repair is small: enumerate_full_group already returns a
+    permutation per operation, so skip any operation that does not preserve
+    the mass vector (use a tolerance near 1e-3 amu, not equality -- the QM/MM
+    path mixes link-atom H at 1.00782503223 with force-field H at 1.007947).
+
+    **Proper axes above order 8.** The element survey only tries orders 2..8,
+    so a C10 axis is recorded as C5 and a C11 as C1. In practice group closure
+    recovers them: two perpendicular C2 axes, or two mirror planes, separated
+    by pi/n multiply to C_n, so any molecule with a C_n axis and any second
+    element regenerates the whole C_n. Measured -- a D10h decagon returns
+    sigma = 20, ferrocene 10, and D9h/D11h/D12h/D16h rings 18/22/24/32, all
+    correct. The gap is a CHIRAL C_n (n > 8) with no mirror and no
+    perpendicular C2, where closure has nothing to work with; such a molecule
+    gets a divisor of n.
+
+    **Cost.** A same-element/same-radius screen (see
+    ``_every_atom_is_its_own_class``) answers 1 without touching the detector
+    whenever nothing can be permuted, which is the common large-molecule case
+    and keeps the `hess.read` path cheap. A large molecule that really is
+    symmetric still pays the detector's O(N^4) element survey; that cost lives
+    in the shared detector, not here, and reducing it would move the standard
+    orientation and the petite list too.
+    """
+
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)
+    if coords.shape[0] < 2:
+        return 1
+
+    # A tolerance that is not a positive finite number cannot be matched
+    # against: `_match_permutation` accepts a partner when `dist[j] > tolerance`
+    # is false, and every comparison against NaN is false, so the detector
+    # accepts geometrically invalid operations. Measured on 40 random asymmetric
+    # geometries with tolerance=nan, 12 came back with sigma = 2 instead of 1 --
+    # a Gibbs energy wrong by R*T*ln(2) = 0.41 kcal/mol. The detector entry
+    # points now reject it too, but this one returns 1 instead of raising,
+    # because it is the failure policy the whole function is written to.
+    try:
+        tolerance = _require_usable_tolerance(tolerance)
+    except (TypeError, ValueError):
+        return 1
+
+    # Cheap exact screen before the detector. This runs on EVERY Hessian
+    # analysis, including the otherwise cheap `hess.read` path, and the element
+    # survey is not cheap for a large molecule: _candidate_directions builds one
+    # direction per atom pair and _dedupe_directions compares each against every
+    # direction kept so far, so a geometry with no symmetry -- where none of
+    # them dedupe away -- costs O(N^4). Measured here before this screen
+    # existed: 1.7 s for a random 50-atom geometry and 7.1 s for a 75-atom one,
+    # both to return sigma = 1.
+    #
+    # The screen is a necessary condition, so it can only skip work, never
+    # change an answer: if no atom has a same-element partner at the same
+    # radius, every operation fixes every atom, and for a nonlinear geometry the
+    # only proper operation that does so is the identity. (A planar molecule
+    # also admits its own mirror plane, but that is improper and sigma counts
+    # proper operations only.)
+    try:
+        charges = np.asarray(atomic_numbers, dtype=float).ravel()
+        if _every_atom_is_its_own_class(charges, coords, tolerance):
+            return 1
+    except Exception:
+        pass  # fall through to the detector rather than invent an answer
+
+    try:
+        operations = enumerate_full_group(atomic_numbers, coords,
+                                          tolerance=tolerance)
+    except Exception:
+        return 1
+    rotations = [np.asarray(op['matrix'], dtype=float) for op in operations
+                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
+    if not rotations:
+        return 1
+
+    # sigma is the ORDER OF A GROUP, so the set it is counted from has to be
+    # one. enumerate_full_group does not always return a closed set: when
+    # closure runs past max_order -- tolerance artifacts can make it run away --
+    # it falls back to the unclosed seed list. Counting that gives a number
+    # that is not a group order at all, and sigma appears in G as R*T*ln(sigma),
+    # so a wrong one is a wrong free energy rather than a caught error.
+    #
+    # Verify closure of the proper subset directly. Rotations are closed under
+    # multiplication among themselves (det is multiplicative), so the product
+    # of any two must already be present.
+    stack = np.asarray(rotations)
+    for a in rotations:
+        products = np.einsum('ij,kjl->kil', a, stack)
+        # Nearest stored element, per product. Compared with a tolerance, not
+        # by exact keys: the elements are built by different multiplication
+        # orders, so a genuinely closed group still differs in the last bits.
+        gaps = np.max(np.abs(products[:, None, :, :] - stack[None, :, :, :]),
+                      axis=(2, 3))
+        if float(np.max(np.min(gaps, axis=1))) > 1.0e-6:
+            return 1
+
+    return max(1, len(rotations))
+
+
+def attach_detection_metadata(
+    symmetry_metadata: MutableMapping[str, Any],
+    atomic_numbers: Any,
+    coordinates: Any,
+) -> MutableMapping[str, Any]:
+    """Run detection and record results in `symmetry_metadata` in place.
+
+    Metadata-only: resolves 'auto' point-group/subgroup requests against the
+    detected values and never enables symmetry reductions.
+    """
+    tolerance = float(symmetry_metadata.get('tolerance', 1.0e-5))
+    detection = detect_point_group(atomic_numbers, coordinates, tolerance=tolerance)
+
+    symmetry_metadata['detected_point_group'] = detection['point_group']
+    symmetry_metadata['detected_subgroup'] = detection['abelian_subgroup']
+    symmetry_metadata['detection'] = detection
+
+    requested_group = str(symmetry_metadata.get('requested_point_group', 'auto')).lower()
+    requested_subgroup = str(symmetry_metadata.get('requested_subgroup', 'auto')).lower()
+
+    if requested_group == 'auto':
+        symmetry_metadata['point_group'] = detection['point_group']
+    if requested_subgroup == 'auto':
+        symmetry_metadata['subgroup'] = detection['abelian_subgroup']
+
+    symmetry_metadata['requested_matches_detected'] = (
+        requested_group in ('auto', detection['point_group'])
+        and requested_subgroup in ('auto', detection['abelian_subgroup'])
+    )
+
+    # Reduction flags are policy-controlled by the input checker (integral:
+    # experimental opt-in; response: rejected); detection only defaults them.
+    symmetry_metadata.setdefault('use_integral_symmetry', False)
+    symmetry_metadata.setdefault('use_response_symmetry', False)
+
+    return symmetry_metadata

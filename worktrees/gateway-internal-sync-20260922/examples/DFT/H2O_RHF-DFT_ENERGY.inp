@@ -1,0 +1,28 @@
+# DFT/6-31G*/BHHLYP/RHF/ENERGY of H2O
+# For Closed-Shell systems we use RHF, when we use RHF, we have to choose multiplicity=1. 
+# Since this is a DFT calculation, we have to set method=hf. Because DFT calculation, 
+# we dont need [tdhf] section. 
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+functional=bhhlyp
+basis=6-31g*
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+# Progressive (iteration-dependent) integral screening: opt-in perf path, default off.
+# Energy-neutral -- the convergence tail is pinned to the tight int2e_cutoff -- so this
+# example's reference is unchanged; it exercises the scf.pscreen feature-coverage gate.
+pscreen=True
+
+[dftgrid]
+rad_type=becke

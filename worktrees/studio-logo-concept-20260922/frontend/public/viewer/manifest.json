@@ -1,0 +1,18 @@
+{
+  "name": "OpenqpView",
+  "short_name": "OpenqpView",
+  "description": "A responsive OpenQP molecular viewer for web pages.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#071113",
+  "theme_color": "#132d2f",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api" && $STUDIO_RELEASE_CANDIDATE == "1"'
+
+stages: [test, package]
+
+default:
+  interruptible: true
+  timeout: 30 minutes
+
+variables:
+  # Cargo dependency paths exceed Windows MAX_PATH during checkout cleanup.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: core.longpaths
+  GIT_CONFIG_VALUE_0: "true"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_CACHE_DIR: "1"
+  # Per-checkout package storage avoids concurrent writers on shell runners.
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+
+engine-source-tests:
+  stage: test
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  script:
+    - python -m unittest discover -s tests -v
+
+engine-gateway-check:
+  stage: test
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  script:
+    - python tools/checkout_engine.py
+    - git -C openqp rev-parse HEAD
+  artifacts:
+    paths: [engine-source.json]
+    expire_in: 1 week
+
+.backend:
+  stage: test
+  script:
+    - python tools/ci/backend.py
+  artifacts:
+    when: always
+    reports:
+      junit: reports/backend.xml
+    paths: [reports/]
+    expire_in: 1 week
+
+.frontend:
+  stage: test
+  script:
+    - node tools/ci/frontend.mjs
+  artifacts:
+    paths: [frontend/dist/]
+    expire_in: 1 week
+
+backend:linux:
+  extends: .backend
+  image: python:3.12-bookworm
+  tags: [small-linux]
+  variables:
+    STUDIO_CI_PLATFORM: linux
+
+frontend:linux:
+  extends: .frontend
+  image: node:24-bookworm
+  tags: [small-linux]
+  variables:
+    STUDIO_CI_PLATFORM: linux
+
+# Existing native shell executors; container images do not emulate an OS.
+backend:macos:
+  extends: .backend
+  script:
+    - /opt/homebrew/bin/python3.11 tools/ci/backend.py
+  tags: [macmaster, macos, shell]
+  variables:
+    STUDIO_CI_PLATFORM: macos
+
+frontend:macos:
+  extends: .frontend
+  script:
+    - /opt/homebrew/bin/python3.11 tools/ci/macos_frontend.py
+  tags: [macmaster, macos, shell]
+  variables:
+    STUDIO_CI_PLATFORM: macos
+
+backend:windows:
+  extends: .backend
+  tags: [windows, winserver1, shell]
+  variables:
+    STUDIO_CI_PLATFORM: windows
+
+frontend:windows:
+  extends: .frontend
+  tags: [windows, winserver1, shell]
+  variables:
+    STUDIO_CI_PLATFORM: windows
+
+# Candidate packaging consumes the exact prequalified private engine artifact.
+# The release operator admits the native host before starting these manual jobs.
+.package-candidate:
+  stage: package
+  interruptible: false
+  timeout: 3 hours
+  resource_group: studio-release-$STUDIO_PACKAGE_PLATFORM
+  rules:
+    - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api") && $STUDIO_RELEASE_CANDIDATE == "1"'
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - python tools/release/ci_package.py
+  artifacts:
+    paths: [release/]
+    expire_in: 30 days
+
+package:linux:
+  extends: .package-candidate
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  variables:
+    STUDIO_PACKAGE_PLATFORM: linux-x86_64
+    CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libfuse2
+
+package:macos:
+  extends: .package-candidate
+  tags: [macmaster, macos, shell]
+  variables:
+    STUDIO_PACKAGE_PLATFORM: macos-apple-silicon
+    CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  script:
+    - /opt/homebrew/bin/python3.11 tools/release/ci_package.py
+
+package:windows:
+  extends: .package-candidate
+  tags: [windows, winserver1, shell]
+  variables:
+    STUDIO_PACKAGE_PLATFORM: windows-x64
+    CMAKE_BUILD_PARALLEL_LEVEL: "4"
+  script:
+    - |
+      if ($env:STUDIO_BUILD_ENGINE -eq "1") {
+        & tools/release/windows_engine.ps1
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      } else {
+        python tools/release/ci_package.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      }
+
+# Intel Mac is packaged on the admitted Zeus lane with the same package.py;
+# do not queue it against an Apple Silicon runner or claim an emulated build.

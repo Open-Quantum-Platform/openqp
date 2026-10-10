@@ -1,0 +1,2 @@
+rks/pbe/6-31g scf(conv=1e-8) dftgrid(pruned=SG1,rad_npts=200,rad_type=becke,ang_npts=302)
+geom="../geometries/H2O-0381125c86f2.xyz"

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#132d2f">
+    <title>OpenqpView</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css?v=66">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>OpenqpView</h1>
+            <p>Interactive molecular viewer for the web</p>
+          </div>
+        </div>
+        <div class="top-actions" aria-label="Viewer actions">
+          <button id="resetView" class="icon-button" type="button" title="Reset view" aria-label="Reset view">⟲</button>
+          <button id="toggleSpin" class="icon-button active" type="button" title="Toggle spin" aria-label="Toggle spin">▶</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="viewer-panel" aria-label="Molecule viewer">
+          <div id="volumeHost" class="volume-host" hidden></div>
+          <canvas id="molCanvas" width="1200" height="900"></canvas>
+          <div class="viewer-hud">
+            <div>
+              <strong id="moleculeName">Caffeine</strong>
+              <span id="moleculeFormula">C8H10N4O2</span>
+            </div>
+            <span id="atomCount">24 atoms</span>
+          </div>
+        </section>
+
+        <aside class="control-panel" aria-label="Molecule controls">
+          <section class="panel-section">
+            <h2>Input Data</h2>
+            <div class="data-input-panel file-drop" id="fileDrop">
+              <input id="logFileInput" type="file" accept=".log,.out,.txt,.molden,.cube,.cub,.json,.xyz">
+              <div class="data-input-header">
+                <label class="file-picker-button" for="logFileInput">Choose file</label>
+                <span>or drop/paste OpenQP log, Hessian JSON, XYZ, Molden, or cube data</span>
+              </div>
+              <div class="example-load-grid" aria-label="Actual OpenQP examples">
+                <button id="loadHessianLogSample" class="example-load-button" type="button">Hessian + MO log</button>
+                <button id="loadHessianJsonSample" class="example-load-button" type="button">Hessian + MO JSON</button>
+                <button id="loadHessianMoldenSample" class="example-load-button" type="button">Hessian + MO Molden</button>
+                <button id="loadDysonJsonSample" class="example-load-button" type="button">MRSF-EKT Dyson JSON</button>
+                <button id="loadDysonMoldenSample" class="example-load-button" type="button">MRSF-EKT Dyson Molden</button>
+              </div>
+              <a class="example-download-link" href="samples/water-hessian-mo.log" download="water-hessian-mo.log">Download actual H₂O Hessian log</a>
+              <textarea id="pasteDataInput" class="paste-data-input" spellcheck="false" aria-label="Paste molecular data" placeholder="Paste molecular data here, then click Load pasted data or press Cmd/Ctrl+Enter."></textarea>
+              <div class="paste-actions">
+                <button id="loadPastedData" type="button">Load pasted data</button>
+                <button id="clearPastedData" class="secondary-action" type="button">Clear paste</button>
+              </div>
+              <p class="paste-hint">Files and pasted text are processed locally in this browser; nothing is uploaded to a server.</p>
+            </div>
+            <div class="metadata-grid compact-metadata" hidden>
+              <span id="sourceName">Sample library</span>
+              <span id="sourceMeta">Static molecule</span>
+            </div>
+            <button id="exportXyz" class="secondary-action" type="button">Generate XYZ from current geometry</button>
+          </section>
+
+          <section class="panel-section trajectory-panel" id="trajectoryPanel" hidden>
+            <h2>Optimization</h2>
+            <label class="control-row">
+              <span id="stepLabel">Step 1 / 1</span>
+              <input id="stepRange" type="range" min="0" max="0" value="0" aria-label="Optimization step">
+            </label>
+            <div class="metadata-grid">
+              <span id="energyLabel">Energy unavailable</span>
+              <span id="convergenceLabel">Convergence unavailable</span>
+            </div>
+          </section>
+
+          <section class="panel-section vibration-panel" id="vibrationPanel" hidden>
+            <h2>Frequencies &amp; Normal Modes</h2>
+            <div class="vibration-summary metadata-grid">
+              <span id="vibrationCount">0 modes</span>
+              <span id="imaginaryCount">0 imaginary</span>
+            </div>
+            <div class="frequency-table" role="grid" aria-label="Vibrational frequencies">
+              <div class="frequency-row frequency-header" role="row">
+                <span role="columnheader">Mode</span>
+                <span role="columnheader">cm⁻¹</span>
+                <span role="columnheader">IR</span>
+                <span role="columnheader">Raman</span>
+              </div>
+              <div id="frequencyRows" class="frequency-rows" role="rowgroup"></div>
+            </div>
+            <div class="vibration-actions">
+              <button id="vibrationPlay" type="button">Play</button>
+              <button id="vibrationStop" class="secondary-action" type="button">Stop</button>
+              <button id="vibrationClear" class="secondary-action" type="button" aria-label="Clear vibration">Clear</button>
+            </div>
+            <label class="control-row vibration-toggle">
+              <span>Mode vectors</span>
+              <input id="modeVectorToggle" type="checkbox" checked>
+            </label>
+            <label class="control-row">
+              <span>Amplitude <output id="amplitudeValue">0.35 Å</output></span>
+              <input id="vibrationAmplitude" type="range" min="5" max="90" value="35" aria-label="Normal mode amplitude">
+            </label>
+            <label class="control-row">
+              <span>Speed <output id="speedValue">1.00×</output></span>
+              <input id="vibrationSpeed" type="range" min="25" max="300" value="100" aria-label="Normal mode animation speed">
+            </label>
+            <div class="metadata-grid vibration-details">
+              <span id="frequencyLabel">Frequency unavailable</span>
+              <span id="intensityLabel">Intensity unavailable</span>
+            </div>
+            <p id="vibrationStatus">Load an OpenQP .hess.json file to inspect normal modes.</p>
+          </section>
+
+          <section class="panel-section library-panel" hidden>
+            <h2>Library</h2>
+            <div class="sample-grid" id="sampleGrid" role="list"></div>
+          </section>
+
+          <section class="panel-section">
+            <h2>Style</h2>
+            <div class="segmented" role="group" aria-label="Render style">
+              <button class="style-choice active" type="button" data-style="ball-stick">Ball &amp; Stick</button>
+              <button class="style-choice" type="button" data-style="space-fill">VDW</button>
+              <button class="style-choice" type="button" data-style="wire">Wire</button>
+            </div>
+            <div class="inline-toggles" role="group" aria-label="Atom annotations">
+              <label>
+                <span>Labels</span>
+                <input id="labelToggle" type="checkbox" checked>
+              </label>
+              <label>
+                <span>Numbers</span>
+                <input id="numberToggle" type="checkbox">
+              </label>
+              <label>
+                <span>Axis</span>
+                <input id="axisToggle" type="checkbox">
+              </label>
+            </div>
+            <label class="control-row polish-control">
+              <span>Polish</span>
+              <input id="polishRange" type="range" min="0" max="100" value="0" aria-label="Polish amount">
+            </label>
+            <label class="control-row polish-control">
+              <span>Light</span>
+              <input id="lightRange" type="range" min="0" max="100" value="68" aria-label="Light intensity">
+            </label>
+          </section>
+
+          <section class="panel-section">
+            <h2>Orbitals</h2>
+            <div class="orbital-tools">
+              <select id="orbitalSelect" aria-label="Molecular orbital"></select>
+              <button id="clearOrbital" type="button">Clear</button>
+            </div>
+            <div class="segmented" role="group" aria-label="Orbital surface style">
+              <button class="surface-choice active" type="button" data-surface="transparent">Transparent</button>
+              <button class="surface-choice" type="button" data-surface="solid">Solid</button>
+              <button class="surface-choice" type="button" data-surface="wireframe">Wire</button>
+            </div>
+            <label class="control-row">
+              <span>Isovalue</span>
+              <input id="isoRange" type="range" min="5" max="220" value="70">
+            </label>
+            <label class="control-row">
+              <span>MO size</span>
+              <input id="surfaceSizeRange" type="range" min="10" max="180" value="100">
+            </label>
+            <div class="orbital-tools">
+              <label class="control-row compact-control">
+                <span>Blue α</span>
+                <input id="positiveOpacity" type="range" min="5" max="100" value="52">
+              </label>
+              <label class="control-row compact-control">
+                <span>Pink α</span>
+                <input id="negativeOpacity" type="range" min="5" max="100" value="52">
+              </label>
+            </div>
+            <p id="orbitalStatus">Load OpenQP, Molden, or cube data to inspect structures and orbitals.</p>
+          </section>
+
+          <section class="panel-section">
+            <h2>Log</h2>
+            <div id="logPanel" class="log-panel" role="list" aria-label="Viewer log"></div>
+          </section>
+
+          <section class="panel-section builder-panel" hidden>
+            <h2>Builder</h2>
+            <textarea id="moleculeEditor" spellcheck="false" aria-label="Molecule JSON editor"></textarea>
+            <div class="builder-actions">
+              <button id="applyMolecule" type="button">Apply</button>
+              <button id="exportMolecule" type="button">Export</button>
+            </div>
+            <p id="statusText" role="status">Drag or swipe the model to rotate it.</p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="hessian.js?v=66"></script>
+    <script src="app.js?v=66"></script>
+  </body>
+</html>

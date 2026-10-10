@@ -573,6 +573,18 @@ void nevpt2_sir(int32_t nvirt, int32_t ncore, int32_t nact,
     const double *h2e_v1, const double *h2e_v2, const double *h1e_v,
     const double *dm1, const double *dm2,
     const double *a12, const double *a13, double *norm, double *energy);
+void nevpt2_sr(int32_t nvirt, int32_t nact,
+    const double *h2e_v, const double *h1e_v,
+    const double *a16, const double *a17, const double *a19,
+    const double *dm3, const double *dm2, const double *dm1,
+    double *norm, double *energy);
+void nevpt2_si(int32_t ncore, int32_t nact,
+    const double *h2e_v, const double *h1e_v,
+    const double *a22, const double *a23, const double *a25,
+    const double *dm3_h, const double *dm2_h, const double *dm1_h,
+    double *norm, double *energy);
+
+
 
 
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF

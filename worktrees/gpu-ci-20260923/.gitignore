@@ -1,0 +1,15 @@
+build/
+*.so
+*.o
+*.bin
+!data/routec_tables.bin   # the builder's rotation tables MUST ship
+*.npy
+__pycache__/
+.venv-ci/
+.bootstrap/
+reports/
+*.pyc
+art_w*/
+# large generated files tracked deliberately (needed by builder/gradient):
+# tools/dfbuild/routec_gen*.{inc,cuh}, src/routec_grad_gen*.{inc,cuh}, data/*.bin
+!data/routec_tables.bin   # the builder's rotation tables MUST ship

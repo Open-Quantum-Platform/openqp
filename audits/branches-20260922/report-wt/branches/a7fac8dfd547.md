@@ -1,0 +1,154 @@
+# feat/xtb-qmmm-fullespf
+
+SHA: `a7fac8dfd547f8786ddbea644557e73d5fb74364`  
+판정: **고유 변경·반영 여부 검토**  
+분야: DFTB / xTB / QM/MM (검색용 분류)  
+마지막 commit: 2026-07-18T18:50:37+09:00 / Cheol Ho Choi  
+제목: fix(qmmm): address TB boundary review
+
+[검색 가능한 전체 목록](../index.html) · [조사 결과](../README.md)
+
+## 같은 끝점을 가리키는 모든 원본
+
+- [gitlab / feat/xtb-qmmm-fullespf](https://qchemlab.knu.ac.kr/open-quantum-platform/internal/openqp/-/tree/a7fac8dfd547f8786ddbea644557e73d5fb74364)
+
+## 현재 GitLab main과의 비교
+
+- 기준 main: `d8fcc4119c73a2be3c1c7e5f49a934f4d7ccad92`
+- 공통 조상: `343c2a5a9dd5e4364d7dcb5e6099b6592a7fc2a3`
+- 앞선 커밋 86 / 뒤처진 커밋 645
+- non-merge patch: main과 일치 2, 다름 70
+- merge/empty 등 patch 비교 제외: 14
+- GitLab 어느 브랜치에서도 끝점 도달 가능: True
+- GitLab 전체에서 동일 patch를 못 찾은 커밋: 0
+- 공통 조상 이후 변경 파일: 28; 그중 현재 main과 동일 1, 다름 27
+
+앞선 커밋 수에는 inherited private 작업이 포함될 수 있다. 개수만으로 미반영 기능 수를 판단하지 않는다.
+
+## 이 끝점과 정확히 일치하는 PR/MR
+
+- [upstream PR #270: QM/MM: full-ESPF covalent-boundary embedding under TB dispatch (fixes DFTB link-atom energy conservation, enables xTB QM/MM)](https://github.com/Open-Quantum-Platform/openqp/pull/270) — state=closed; merged=아니오; merge commit in main=False
+
+## 추가 커밋 전체
+
+| SHA | 날짜 | main patch 판정 | GitLab 전체 patch | 제목 |
+| --- | --- | --- | --- | --- |
+| `a7fac8dfd547` | 2026-07-18 | 다름 | commit 보존 또는 비교 제외 | fix(qmmm): address TB boundary review |
+| `b217f46d5785` | 2026-07-11 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge codex/soc-namd-options: full-ESPF covalent-boundary QM/MM under TB dispatch (dftb + xtb) |
+| `1e36572ef2b6` | 2026-07-10 | 다름 | commit 보존 또는 비교 제외 | Add method=xtb: OpenQP-XTB backend adapter, TB dispatch generalization, [xtb] schema |
+| `39bfc439c8d4` | 2026-07-03 | 일치 | commit 보존 또는 비교 제외 | docs(readme): describe SOC-NAMD-QMMM in the Dynamics & QM/MM section |
+| `ad43fae133b2` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | blas: route ESPF dgels through the ILP64 wrapper; fix macOS Accelerate build |
+| `dd930baa374b` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | examples(QMMM): include NAMD-QMMM examples in run_tests all (skip if no OpenMM) |
+| `01828818e980` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | examples(QMMM): add minimal NAMD-QMMM demonstrations (H2CO in water) |
+| `efbdf73e4ff9` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | ci: classify NAMD/QM/MM feature flags and skip QM/MM examples in the full suite |
+| `b88f7d880572` | 2026-07-03 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into codex/soc-namd-options |
+| `ca24242a508f` | 2026-07-03 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into codex/soc-namd-options |
+| `41022c98c887` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | feat(python-api): pythonic QM/MM and NAMD setup on the OpenQP wrapper |
+| `68bbeeabb1a6` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | build: migrate NAMD/QM/MM Fortran to main's tagarray container API |
+| `a841faebff07` | 2026-07-03 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge upstream/main into codex/soc-namd-options |
+| `36e5acea9cb5` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | QM/MM: make full-ESPF the default for electrostatic embedding |
+| `e0f90da90d6f` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | QM/MM full-ESPF: periodic (PBC) support + wire into NAMD / QMMM_MD |
+| `fac2be89cdc0` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | QM/MM full-ESPF: add nuclear-MM energy -> FD-exact covalent-boundary forces |
+| `71e0dc873874` | 2026-07-03 | 다름 | commit 보존 또는 비교 제외 | QM/MM: experimental full-ESPF electrostatics for covalent boundaries (gated) |
+| `b4f91f1359a5` | 2026-07-02 | 다름 | commit 보존 또는 비교 제외 | chore: ignore oqp_project.json run artifact |
+| `471854d47df6` | 2026-07-02 | 다름 | commit 보존 또는 비교 제외 | QM/MM driver: correct ESPF gradient reshape and MM-charge update for natom!=3 QM regions |
+| `5cf137540d19` | 2026-07-02 | 다름 | commit 보존 또는 비교 제외 | QM/MM: link-atom connectivity for bonds cut by the QM/MM boundary |
+| `457a6e0ca897` | 2026-07-02 | 다름 | commit 보존 또는 비교 제외 | Fix QM/MM input validation for .pdb systems and 'None' constraints |
+| `7d23022c34c2` | 2026-06-17 | 다름 | commit 보존 또는 비교 제외 | Drop stale references to removed docs/ files |
+| `d951f152b125` | 2026-06-17 | 일치 | commit 보존 또는 비교 제외 | Remove top-level docs/ folder |
+| `5b19b6d65933` | 2026-06-17 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge upstream/main into codex/soc-namd-options |
+| `f711b4865ed4` | 2026-06-17 | 다름 | commit 보존 또는 비교 제외 | Fix review findings in MRSF NAMD / SOC-NAMD / ESPF QM/MM |
+| `c4bc21fc5026` | 2026-06-14 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into codex/soc-namd-options |
+| `7b1bb7597dea` | 2026-06-13 | 다름 | commit 보존 또는 비교 제외 | Update README for NAMD and native optimizer |
+| `2c16c02ceeba` | 2026-06-13 | 다름 | commit 보존 또는 비교 제외 | Address SOC-QMMM PR review findings |
+| `8efd0b2b8368` | 2026-06-13 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge remote-tracking branch 'upstream/main' into codex/soc-namd-options |
+| `4e627e565f97` | 2026-06-13 | 다름 | commit 보존 또는 비교 제외 | Remove optional DLFIND startup dependency |
+| `a18d7c2ec452` | 2026-06-13 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge remote-tracking branch 'upstream/main' into codex/soc-namd-options |
+| `859837ffc98c` | 2026-06-10 | 다름 | commit 보존 또는 비교 제외 | Document and guard SOC-QMMM production mode |
+| `5055a6284b3f` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | fix(namd): stabilize QMMM PME and overlap tracking |
+| `c06ed963f4a4` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | feat(namd): add SOC MCH-basis option |
+| `8750d7f7ed7c` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | docs(namd): add SOC energy conservation improvement plan |
+| `58b37cb9c6bf` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | docs(namd): recommend thrshe=0.1 Ha for SOC-NAMD in comment |
+| `41fc343becab` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | fix(namd): include ΔE_ESPF in velocity rescaling at ISC hops |
+| `f786cc9d0c24` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | fix(namd): honour ESPF_ROHF=1 in SOC gradient loop |
+| `8c169d2b5b9a` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | feat(qmmm): add ESPF_ROHF=1 mode for GAMESS-comparable validation |
+| `813f98be6976` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | feat(qmmm): add ESPF_GAMESS=1 mode for GAMESS-identical LEBGRD grid |
+| `85cba6e3ebfb` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | ESPF: fix layer-scaled exclusion → stable fixed-scale exclusion |
+| `bd20dd9f9803` | 2026-06-09 | 다름 | commit 보존 또는 비교 제외 | ESPF QM/MM: complete analytic gradient + smooth-switching grid (new default) |
+| `b9924f1ffae6` | 2026-06-08 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge remote-tracking branch 'upstream/main' into namd-qmmm |
+| `f202b0478dac` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | NAMD: optional adaptive (variable) timestep [md] dt_adaptive |
+| `8df0bf0df4ef` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: optional [md] econs - temporary E_tot-conservation rescale |
+| `2bcf38536845` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD-QMMM: continuous diagonal gradient + constrained-start thermalization |
+| `56251e31ebab` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | NAMD QM/MM: SHAKE/RATTLE rigid-water constraints in the velocity-Verlet loop |
+| `010849473844` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: select initial active state by spin character ([md] init_state) |
+| `17d967da1086` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | Fix periodic (PME) QM/MM NAMD energy conservation: zero the buggy POTQM |
+| `032c0b1c9d2f` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | NAMD_SOC_QMMM: borrow SOC helper methods so self-dispatch resolves |
+| `ade35ab1980c` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: correct MRSF root convention (S0 = lowest root, target 1) |
+| `e0963dd3cf1e` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: correct singlet gradient target mapping + S0 guard |
+| `d6ccf8becaae` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: fix active-state handling for the spin-adiabatic manifold |
+| `2e82eba2f92a` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | Add NAMD_SOC_QMMM: SOC-NAMD (ISC) with ESPF QM/MM embedding |
+| `b92660f442e8` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | SOC-NAMD: weighted-MCH diagonal gradient + substep LD propagator |
+| `e38f5700ed3f` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | feat(namd): ISC hopping layer for SOC-NAMD (SHARC, U-phase tracking) |
+| `f06a346c4fee` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | feat(namd): SOC-NAMD (ISC) on the SHARC spin-adiabatic representation |
+| `09205dd7a0c6` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | refactor(namd): generalize FSSH kernel to arbitrary state count (enables ISC) |
+| `0d5e5319658e` | 2026-06-08 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge remote-tracking branch 'upstream/main' into namd-qmmm |
+| `ad4b5da77315` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | feat(namd): norm-preserving interpolation (NPI) time-derivative couplings |
+| `aa9cc5467695` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | wip(namd): add QM-QM Ewald correction force; diagnose periodic drift source |
+| `0c961ed4690e` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | wip(namd): PBC (PME) plumbing for QM/MM NAMD — runs, forces incomplete |
+| `a8a65ea79e7d` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | feat(namd): QM/MM NAMD driver (ESPF electrostatic embedding, non-periodic) |
+| `289eaf16ef98` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | fix(qmmm): non-periodic electrostatic embedding crashed (POTQM missing) |
+| `424d11adf129` | 2026-06-08 | 다름 | commit 보존 또는 비교 제외 | feat(namd): native Tully FSSH nonadiabatic MD (runtype=namd), gas phase |
+| `4c74327a2981` | 2026-06-07 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge mohsenkor/feat/qmmm: ESPF QM/MM foundation for NAMD-QMMM |
+| `d21691903828` | 2026-05-06 | 다름 | commit 보존 또는 비교 제외 | feat:qmmm tdhf calculation |
+| `338cf91fc8d9` | 2026-04-14 | 다름 | commit 보존 또는 비교 제외 | feat:Mulliken population of states |
+| `97afd5765cf0` | 2026-04-02 | 다름 | commit 보존 또는 비교 제외 | feat: simulation manager |
+| `83c9e6ad9340` | 2026-03-24 | 다름 | commit 보존 또는 비교 제외 | add example2 |
+| `3ece116252ae` | 2026-03-24 | 다름 | commit 보존 또는 비교 제외 | add example |
+| `3aa51ea4ead5` | 2026-03-24 | 다름 | commit 보존 또는 비교 제외 | energy convergence |
+| `6fea6e304dd6` | 2025-12-09 | 다름 | commit 보존 또는 비교 제외 | add: qmmm_driver.py |
+| `25a8674a9382` | 2025-12-09 | 다름 | commit 보존 또는 비교 제외 | fix: scf run issue |
+| `fccbcc3baa02` | 2025-12-04 | 다름 | commit 보존 또는 비교 제외 | feat:qmmm using python interface |
+| `26ce6fb68a51` | 2025-11-26 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge pull request #1 from mohsenkor/qmmm_merged |
+| `9f0cca818257` | 2025-11-26 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'qmmm' into qmmm_merged |
+| `21d5a418f3df` | 2025-11-25 | 다름 | commit 보존 또는 비교 제외 | add_potqm_contributions |
+| `2f685c6b8b94` | 2025-03-10 | 다름 | commit 보존 또는 비교 제외 | fix:ttt => ttt(:nat,:npts) |
+| `37c1626af8e8` | 2025-01-22 | merge/empty/비교 제외 | commit 보존 또는 비교 제외 | Merge branch 'main' into qmmm |
+| `7b1422b1d932` | 2024-11-13 | 다름 | commit 보존 또는 비교 제외 | Bug correction for QM/MM MD dynamics with OpenMM |
+| `e17d082b0fc5` | 2024-11-07 | 다름 | commit 보존 또는 비교 제외 | Bug correction for the default forcefield |
+| `2475f6cc1260` | 2024-11-07 | 다름 | commit 보존 또는 비교 제외 | New feature allowing QM/MM MD dynamics using OpenMM as MD engine and OpenQP to compute QM/MM energy and gradient |
+| `f992b337c67b` | 2024-11-07 | 다름 | commit 보존 또는 비교 제외 | Revert "New feature allowing QM/MM MD dynamics using OpenMM as MD engine and OpenQP for computing energy and gradient" |
+| `ab7afca4e86a` | 2024-11-07 | 다름 | commit 보존 또는 비교 제외 | New feature allowing QM/MM MD dynamics using OpenMM as MD engine and OpenQP for computing energy and gradient |
+| `28b109351730` | 2024-11-06 | 다름 | commit 보존 또는 비교 제외 | add qmmm devoloped by Miquel |
+
+## 변경 파일 전체
+
+| 상태 | 경로 | 현재 main과 내용 |
+| --- | --- | --- |
+| A | `docs/qmmm-tb-reconciliation.md` | 다름 |
+| M | `examples/QMMM/README.md` | 다름 |
+| D | `examples/QMMM/ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp` | 다름 |
+| A | `examples/QMMM/alanine_DFTB-QMMM-MD.inp` | 다름 |
+| A | `examples/XTB/xtb_gfn1_c2h4_mrsf_grad.inp` | 다름 |
+| A | `examples/XTB/xtb_gfn1_h2o_mrsf_energy.inp` | 다름 |
+| M | `pyoqp/oqp/library/namd.py` | 다름 |
+| M | `pyoqp/oqp/library/openqp_dftb.py` | 다름 |
+| A | `pyoqp/oqp/library/openqp_xtb.py` | 다름 |
+| M | `pyoqp/oqp/library/qmmm_connectivity.py` | 다름 |
+| M | `pyoqp/oqp/library/qmmm_driver.py` | 다름 |
+| M | `pyoqp/oqp/library/qmmm_md.py` | 다름 |
+| M | `pyoqp/oqp/library/runfunc.py` | 다름 |
+| M | `pyoqp/oqp/library/single_point.py` | 다름 |
+| M | `pyoqp/oqp/molecule/oqpdata.py` | 다름 |
+| M | `pyoqp/oqp/openqp.py` | 다름 |
+| M | `pyoqp/oqp/utils/input_checker.py` | 다름 |
+| M | `pyoqp/oqp/utils/oqp_tester.py` | 다름 |
+| A | `pyoqp/oqp/utils/tb_backends.py` | 동일 |
+| M | `tests/test_openqp_api.py` | 다름 |
+| M | `tests/test_openqp_dftb_schema_hooks.py` | 다름 |
+| A | `tests/test_openqp_xtb_abi.py` | 다름 |
+| A | `tests/test_openqp_xtb_schema_hooks.py` | 다름 |
+| D | `tests/test_qmmm_frontier.py` | 다름 |
+| D | `tests/test_qmmm_frontier_openmm.py` | 다름 |
+| A | `tests/test_qmmm_md_config.py` | 다름 |
+| M | `tests/test_qmmm_qm_atoms_order.py` | 다름 |
+| M | `tests/test_rohf_status_and_interface.py` | 다름 |

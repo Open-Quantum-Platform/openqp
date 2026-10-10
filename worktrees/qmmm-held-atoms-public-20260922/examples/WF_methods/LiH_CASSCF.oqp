@@ -1,0 +1,5 @@
+casscf/sto-3g guess(type=hcore) scf(maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,max_memory=512)
+casscf(max_macro_iterations=50,gradient_norm_tol=1e-12,energy_decrease_tol=0.0,step_norm_tol=0.0)
+ci(solver=dense)
+geom="../geometries/HLi-14ffe169c3ad.xyz"

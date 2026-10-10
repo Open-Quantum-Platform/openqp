@@ -1,0 +1,50 @@
+# RHF/STO-3G/CASSCF analytic state-specific nuclear gradient of LiH.
+# [casscf] root selects the physical root; [properties] grad selects its sole
+# public array row and must therefore be zero.
+[input]
+system=
+   Li  0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   1.600000000
+charge=0
+runtype=grad
+basis=sto-3g
+method=casscf
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+grad=0
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+
+[casscf]
+max_macro_iterations=50
+root=0
+converger=trah
+gradient_norm_tol=1.0e-10
+energy_decrease_tol=1.0e-12
+step_norm_tol=1.0e-10
+max_rotation_norm=2.0e-1
+canonicalize=true

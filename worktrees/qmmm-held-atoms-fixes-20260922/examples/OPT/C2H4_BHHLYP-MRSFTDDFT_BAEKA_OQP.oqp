@@ -1,0 +1,3 @@
+mrsf(nstate=5)/bhhlyp/6-31g* meci(S0,S1,S2,maxit=1,rmsd_grad=0.002,trust=0.15,auto_recovery=false)
+tdhf(maxit=30)
+geom="../geometries/C2H4-41911fceceb6.xyz"

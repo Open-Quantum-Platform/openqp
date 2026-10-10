@@ -1,0 +1,30 @@
+[input]
+system=
+ 1   0.000000000   0.000000000   0.000000000
+ 1   0.000000000   0.000000000   0.740848000
+charge=0
+method=tdhf
+basis=aug-cc-pvdz
+runtype=energy
+functional=
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rohf
+maxit=100
+maxdiis=8
+multiplicity=3
+conv=1.0e-8
+save_molden=False
+
+[tdhf]
+type=mrsf
+maxit=100
+multiplicity=1
+conv=1.0e-8
+nstate=4
+zvconv=1.0e-8

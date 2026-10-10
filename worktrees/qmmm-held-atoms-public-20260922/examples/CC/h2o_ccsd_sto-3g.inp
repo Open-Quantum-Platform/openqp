@@ -1,0 +1,28 @@
+# CCSD without the perturbative triples: method=ccsd stops after the doubles.
+#
+# Same driver as method=ccsd(t); the only difference is that the (T) term is
+# not evaluated and not reported.  Use it when the triples cost is not worth
+# it, or to see the CCSD part on its own.
+#
+# Runs in well under a second.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+basis=sto-3g
+method=ccsd
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+conv=1.0e-10
+
+[cc]
+nfzc=1
+conv=1.0e-9

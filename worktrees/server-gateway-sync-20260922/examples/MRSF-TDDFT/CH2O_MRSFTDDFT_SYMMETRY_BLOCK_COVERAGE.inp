@@ -1,0 +1,78 @@
+# MRSF-TDDFT triplet energies of CH2O, the case that motivates symmetry-block
+# coverage in the Davidson guess.
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype       energy
+#    input           method         tdhf
+#    scf           multiplicity       3
+#    scf              type          rohf
+#    tdhf             type          mrsf
+#    tdhf         multiplicity       3
+#    symmetry       enabled         true
+#
+# WHY THIS EXAMPLE EXISTS
+#
+# The MRSF initial trial vectors are single excitations |Phi_ia> chosen by
+# smallest orbital-energy gap. With point-group symmetry the response matrix is
+# block diagonal by irrep, and Davidson expands with preconditioned residuals,
+# which never leave the block they start in. An irrep that receives no initial
+# trial vector is therefore never reached: its roots are ABSENT rather than
+# unconverged, the surviving Ritz values are renumbered 1, 2, 3, ..., and every
+# state-indexed consumer -- gradients, optimisation, MECP/MECI, the z-vector
+# solve, NAMD, NMR -- silently refers to a different state than was asked for.
+#
+# This deck is the smallest case that exhibits it. Measured three ways:
+#
+#   nstate=20 reference   -0.00500108   0.07496767   0.17574606   0.23436551
+#   this example          -0.00500106   0.07496767   0.17574625
+#   [symmetry] enabled=false
+#                         -0.00500077   0.07496767   0.23436580
+#
+# With coverage the third state is the third root. Without it the third root is
+# never seeded, so "state 3" reports the FOURTH root -- an error of 0.0586 Ha,
+# 1.60 eV, in a run that converges cleanly and looks unremarkable. That silence
+# is the whole point: no warning, no convergence failure, just a different
+# state than the one requested.
+#
+# The reference below therefore only reproduces while the coverage substitution
+# in mrinivec is working. If this example starts failing on the third state,
+# the guess has stopped covering every symmetry block -- do not regenerate the
+# reference to make it pass.
+#
+# Note there is NO functional here: the defect needs the ROHF-reference MRSF
+# path. The same molecule with bhhlyp seeds every block by accident and is
+# insensitive to the fix, which is why an example had to be chosen rather than
+# assumed.
+#
+# [symmetry] enabled is set explicitly rather than left to the default, so the
+# example keeps testing the mechanism if the default is ever revisited. It only
+# annotates: neither use_integral_symmetry nor use_response_symmetry is on, so
+# the geometry is not reoriented and the integral list is the full one.
+[input]
+system=
+   6   0.000000000   0.000000000  -0.522500000
+   8   0.000000000   0.000000000   0.677500000
+   1   0.000000000   0.940300000  -1.104400000
+   1   0.000000000  -0.940300000  -1.104400000
+charge=0
+runtype=energy
+basis=6-31g
+functional=
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-10
+
+[tdhf]
+type=mrsf
+multiplicity=3
+nstate=3
+
+[symmetry]
+enabled=true

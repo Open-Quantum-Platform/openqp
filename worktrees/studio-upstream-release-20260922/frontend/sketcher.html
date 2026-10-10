@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OQP Studio Sketcher</title>
+    <style>
+      html, body, #root { margin: 0; height: 100%; }
+      #root { display: flex; flex-direction: column; }
+      .editor-host { flex: 1; position: relative; min-height: 0; }
+      .bar {
+        display: flex; justify-content: flex-end; gap: 0.6rem;
+        padding: 8px 12px; background: #1b1e24; border-top: 1px solid #2d323c;
+      }
+      .bar button {
+        background: #5aa9e6; color: #0d1319; border: 0; border-radius: 7px;
+        padding: 8px 20px; font: 600 14px system-ui; cursor: pointer;
+      }
+      .bar .status { color: #8b93a1; font: 13px system-ui; align-self: center; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/sketcher.tsx"></script>
+  </body>
+</html>

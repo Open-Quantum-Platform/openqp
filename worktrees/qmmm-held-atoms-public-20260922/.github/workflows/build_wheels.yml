@@ -1,0 +1,1031 @@
+name: Build and release distributions
+
+"on":
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Build artifacts, or publish a verified run to GitHub Release and PyPI"
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - publish_pypi
+      release_tag:
+        description: "Exact published release tag (required for publish_pypi)"
+        required: false
+        type: string
+      release_sha:
+        description: "Exact 40-character commit SHA behind the release tag (required for publish_pypi)"
+        required: false
+        type: string
+      artifacts_run_id:
+        description: "Successful release workflow run containing the artifacts (required for publish_pypi)"
+        required: false
+        type: string
+      confirmation:
+        description: "Type: publish OpenQP to PyPI"
+        required: false
+        type: string
+  # Run the smoke build on pushes to main so the bundled-externals cache is
+  # populated on the DEFAULT branch. GitHub Actions caches are branch-scoped: a
+  # PR branch can only restore caches from its own branch or from main, and the
+  # wheel build otherwise never ran on main -- so every fresh PR cold-rebuilt all
+  # externals (incl. ~15 min of reference LAPACK). Warming it here lets PRs
+  # restore via the restore-keys prefix instead.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
+      - "CMakeLists.txt"
+      - "CONTRIBUTING.md"
+      - "LICENSE"
+      - "LICENSING.md"
+      - "MANIFEST.in"
+      - "SUSTAINABILITY.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "pyproject.toml"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "licenses/**"
+      - "pyoqp/**"
+      - "source/**"
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - ".github/workflows/build_wheels.yml"
+      - ".github/actions/setup-oneapi-windows/**"
+      - "CMakeLists.txt"
+      - "CONTRIBUTING.md"
+      - "LICENSE"
+      - "LICENSING.md"
+      - "MANIFEST.in"
+      - "SUSTAINABILITY.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "pyproject.toml"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "licenses/**"
+      - "pyoqp/**"
+      - "source/**"
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build_sdist:
+    name: Build source distribution
+    if: github.event_name != 'workflow_dispatch' || inputs.action == 'build'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build --sdist --outdir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-sdist
+          path: dist/*
+          if-no-files-found: error
+
+  build_wheel_smoke:
+    name: Build Linux wheel smoke
+    # Runs on PRs, and on pushes to main to warm the bundled-externals cache.
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'pull_request'
+          && !contains(github.event.pull_request.labels.*.name, 'release'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache bundled externals
+        uses: actions/cache@v4
+        with:
+          path: .cache/openqp/externals
+          key: oqp-wheel-externals-linux-x86_64-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml') }}
+          restore-keys: |
+            oqp-wheel-externals-linux-x86_64-
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade cibuildwheel
+
+      # The externals are built INSIDE the cibuildwheel container; without a
+      # bind mount they live only in the container fs (cibuildwheel copies out
+      # just the wheels), so the host .cache that actions/cache saves stays
+      # empty and the cache never works. Create the host dir (runner-owned) and
+      # bind-mount it into the container below so the externals persist.
+      - name: Prepare externals cache mount
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
+
+      - name: Build smoke wheel
+        env:
+          CIBW_PLATFORM: linux
+          CIBW_ARCHS: x86_64
+          CIBW_BUILD: "cp311-*"
+          CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_CONTAINER_ENGINE: >-
+            docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+          # Native-BLAS policy for Linux wheels: bundle an ILP64 OpenBLAS built
+          # here (plain Fortran symbols, INTERFACE64=1, DYNAMIC_ARCH for runtime
+          # CPU dispatch -- the scipy/numpy approach). MKL is the source-build
+          # mandate on Linux x86_64 but cannot ship in PyPI wheels (libmkl_core
+          # alone exceeds PyPI's per-file size limit), so wheels pin OpenBLAS
+          # ILP64 explicitly -- deterministic, and exactly what CI tests.
+          # Installed under the bind-mounted externals cache so actions/cache
+          # persists it; rebuilt only when absent. gcc-toolset (gfortran) already
+          # ships in the manylinux image.
+          CIBW_BEFORE_ALL: |
+            set -e
+            P=/host-cache/openqp/externals/openblas64
+            if [ ! -e "$P/lib/libopenblas.so" ]; then
+              git clone --depth 1 --branch v0.3.30 https://github.com/OpenMathLib/OpenBLAS.git /tmp/OpenBLAS
+              make -C /tmp/OpenBLAS -j"$(nproc)" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 libs netlib shared
+              make -C /tmp/OpenBLAS PREFIX="$P" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 install
+            fi
+          CIBW_ENVIRONMENT: >-
+            XDG_CACHE_HOME=/host-cache
+            PKG_CONFIG_PATH=/host-cache/openqp/externals/openblas64/lib/pkgconfig
+            CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+            -DLINALG_LIB=OpenBLAS"
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            LD_LIBRARY_PATH="oqp/lib:/host-cache/openqp/externals/openblas64/lib:$LD_LIBRARY_PATH"
+            auditwheel repair -w {dest_dir} {wheel}
+          # Real numerical test: RHF/STO-3G h2 with energy + basis-metadata ABI
+          # asserts (see the script header for the failure classes this guards).
+          CIBW_TEST_COMMAND: >-
+            python {project}/.github/scripts/wheel_smoke_test.py {project}
+        run: python -m cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-wheel-smoke-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+  build_wheels:
+    name: Build wheels (${{ matrix.name }})
+    # Full matrix only for releases / a release-labelled PR / manual dispatch --
+    # NOT for plain pushes to main (those only warm the cache via the smoke job).
+    if: >-
+      github.event_name == 'release'
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'release'))
+      || (github.event_name == 'workflow_dispatch' && inputs.action == 'build')
+    runs-on: ${{ matrix.os }}
+    # The Windows leg is still being brought up (the DFT-D4 subprojects need
+    # the OpenBLAS import library forwarded to them there); let it report
+    # without failing a release.
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux wheels bundle an ILP64 OpenBLAS built in CIBW_BEFORE_ALL
+          # (plain Fortran symbols, DYNAMIC_ARCH runtime CPU dispatch; the
+          # scipy/numpy approach), installed under the bind-mounted externals
+          # cache so it persists across runs. MKL is the source-build mandate on
+          # Linux x86_64 but cannot ship in PyPI wheels (libmkl_core alone
+          # exceeds PyPI's per-file size limit), so wheels pin OpenBLAS ILP64
+          # explicitly -- deterministic, and exactly the BLAS that CI tests.
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            platform: linux
+            archs: x86_64
+            cache_path: .cache/openqp/externals
+            # Bind-mount the host cache into the build container so the externals
+            # built inside it persist for actions/cache (see smoke job comment).
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+            before_all: |
+              set -e
+              P=/host-cache/openqp/externals/openblas64
+              if [ ! -e "$P/lib/libopenblas.so" ]; then
+                git clone --depth 1 --branch v0.3.30 https://github.com/OpenMathLib/OpenBLAS.git /tmp/OpenBLAS
+                make -C /tmp/OpenBLAS -j"$(nproc)" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 libs netlib shared
+                make -C /tmp/OpenBLAS PREFIX="$P" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 install
+              fi
+            environment: >-
+              XDG_CACHE_HOME=/host-cache
+              PKG_CONFIG_PATH=/host-cache/openqp/externals/openblas64/lib/pkgconfig
+              CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              -DLINALG_LIB=OpenBLAS"
+            repair: >-
+              LD_LIBRARY_PATH="oqp/lib:/host-cache/openqp/externals/openblas64/lib:$LD_LIBRARY_PATH"
+              auditwheel repair -w {dest_dir} {wheel}
+
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            platform: linux
+            archs: aarch64
+            cache_path: .cache/openqp/externals
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+            before_all: |
+              set -e
+              P=/host-cache/openqp/externals/openblas64
+              if [ ! -e "$P/lib/libopenblas.so" ]; then
+                git clone --depth 1 --branch v0.3.30 https://github.com/OpenMathLib/OpenBLAS.git /tmp/OpenBLAS
+                make -C /tmp/OpenBLAS -j"$(nproc)" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 libs netlib shared
+                make -C /tmp/OpenBLAS PREFIX="$P" INTERFACE64=1 USE_OPENMP=1 DYNAMIC_ARCH=1 NO_STATIC=1 install
+              fi
+            environment: >-
+              XDG_CACHE_HOME=/host-cache
+              PKG_CONFIG_PATH=/host-cache/openqp/externals/openblas64/lib/pkgconfig
+              CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              -DLINALG_LIB=OpenBLAS"
+            repair: >-
+              LD_LIBRARY_PATH="oqp/lib:/host-cache/openqp/externals/openblas64/lib:$LD_LIBRARY_PATH"
+              auditwheel repair -w {dest_dir} {wheel}
+
+          # macOS wheels use the native-BLAS policy backend: Apple Accelerate's
+          # modern ILP64 interface ($NEWLAPACK$ILP64 symbol interposition) --
+          # OpenQP is ILP64-only, one 8-byte integer model everywhere.
+          # Accelerate is a system framework, so delocate does not bundle any
+          # BLAS and the wheels stay small; the ILP64 interface needs
+          # macOS >= 13.3, well below the 15.0 deployment target. LINALG_LIB
+          # is what defaults resolve to on macOS; pinned explicitly so the
+          # shipped artifact never depends on resolution logic.
+          - name: macos-x86_64
+            os: macos-15-intel
+            platform: macos
+            archs: x86_64
+            cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
+            before_all: brew install gcc@15
+            environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
+              CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
+              -DCMAKE_CXX_COMPILER=g++-15
+              -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DLINALG_LIB=Apple"
+            repair: >-
+              delocate-wheel --require-archs {delocate_archs}
+              -w {dest_dir} -v {wheel}
+
+          - name: macos-arm64
+            os: macos-15
+            platform: macos
+            archs: arm64
+            cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
+            before_all: brew install gcc@15
+            environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
+              CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
+              -DCMAKE_CXX_COMPILER=g++-15
+              -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DLINALG_LIB=Apple"
+            repair: >-
+              delocate-wheel --require-archs {delocate_archs}
+              -w {dest_dir} -v {wheel}
+
+          # Windows wheels: Intel oneAPI ifx/icx and MKL ILP64 -- the same
+          # combination the source build and the standalone zip use, and the
+          # one the Windows example suite passes on.  OpenBLAS is not an
+          # option here: built for Windows with this toolchain it exposes only
+          # its CBLAS entry points, so every Fortran BLAS call goes unresolved.
+          #
+          # MKL is too large for PyPI, so the wheel does not carry it: it is
+          # excluded from the repair and declared as the `mkl` runtime
+          # dependency instead (pyproject.toml), which pip installs alongside.
+          # The Intel Fortran runtime is small and IS bundled; libiomp5md is
+          # left to the `intel-openmp` package that `mkl` pulls in, so the
+          # process ends up with exactly one OpenMP runtime.
+          - name: windows-x86_64
+            os: windows-2025
+            platform: windows
+            archs: AMD64
+            cache_path: C:\oqpx
+            container_engine: "docker"
+            # Built in a dedicated, cached step below rather than here, so its
+            # log is legible and it is not repeated per interpreter.
+            before_all: ""
+            # Set in the step below instead: the compiler paths are only known
+            # once the oneAPI setup action has run, and cibuildwheel's build
+            # environment does not inherit its PATH.
+            environment: ""
+            repair: >-
+              delvewheel repair --add-path "{package}/oqp/lib"
+              --exclude "mkl_*.dll" --exclude "libiomp5md.dll"
+              -w {dest_dir} {wheel}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache bundled externals
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cache_path }}
+          key: oqp-wheel-externals-${{ matrix.name }}-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml') }}
+          restore-keys: |
+            oqp-wheel-externals-${{ matrix.name }}-
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade cibuildwheel
+
+      # Windows: the toolchain the wheels are compiled with, the pkg-config
+      # implementation the BLAS lookup needs, and the repair tool that bundles
+      # the runtime DLLs into the wheel.
+      - name: Set up Intel oneAPI (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        uses: ./.github/actions/setup-oneapi-windows
+
+      - name: Install delvewheel (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        run: python -m pip install --upgrade delvewheel
+
+      # oneAPI lives under "C:\Program Files (x86)\...".  Passing those paths
+      # through CIBW_ENVIRONMENT -> CMAKE_ARGS means two rounds of shell-style
+      # splitting, which turns them into "C:Program".  A toolchain file at a
+      # space-free path carries them verbatim instead.
+      - name: Write the Intel toolchain file (windows)
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\oqptc | Out-Null
+          $c = ($env:CMPLR_ROOT -replace '\\','/')
+          @(
+            "set(CMAKE_C_COMPILER       `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_CXX_COMPILER     `"$c/bin/icx.exe`" CACHE FILEPATH `"`")"
+            "set(CMAKE_Fortran_COMPILER `"$c/bin/ifx.exe`" CACHE FILEPATH `"`")"
+          ) | Set-Content -Encoding ASCII C:\oqptc\intel.cmake
+          Get-Content C:\oqptc\intel.cmake
+
+      # Linux legs bind-mount the host cache into the build container (see the
+      # smoke job); create the host dir runner-owned first. No-op on macOS.
+      - name: Prepare externals cache mount
+        if: ${{ matrix.platform == 'linux' }}
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
+
+      - name: Build wheels
+        env:
+          CIBW_PLATFORM: ${{ matrix.platform }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_CONTAINER_ENGINE: ${{ matrix.container_engine }}
+          CIBW_BEFORE_ALL: ${{ matrix.before_all }}
+          CIBW_ENVIRONMENT: ${{ matrix.environment }}
+          CIBW_REPAIR_WHEEL_COMMAND: ${{ matrix.repair }}
+          # Real numerical test on every wheel: RHF/STO-3G h2 with energy and
+          # basis-metadata integer-ABI asserts (see the script header for the
+          # two failure classes this guards -- both previously shipped in wheels
+          # while a bare `import oqp` still succeeded).
+          CIBW_TEST_COMMAND: >-
+            python {project}/.github/scripts/wheel_smoke_test.py {project}
+          # The BLAS lookup asks pkg-config for the openblas64 module, so the
+          # per-interpreter build environment needs a pkg-config of its own
+          # (the one on the host is not on cibuildwheel's PATH).
+          CIBW_BEFORE_BUILD_WINDOWS: python -m pip install pkgconf
+          # Windows only.  CIBW_ENVIRONMENT_WINDOWS overrides CIBW_ENVIRONMENT
+          # for this platform, and unlike the matrix value it is evaluated
+          # after the oneAPI setup step, so ${{ env.CMPLR_ROOT }} is known.
+          # The compilers are given as absolute paths (forward slashes, which
+          # CMake accepts) because cibuildwheel's isolated build environment
+          # does not carry the toolchain's PATH.
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CMAKE_GENERATOR=Ninja
+            CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=C:/oqptc/intel.cmake
+            -DOQP_REUSE_EXTERNALS=ON
+            -DOQP_EXTERNALS_ROOT=C:/oqpx
+            -DLINALG_LIB=Intel10_64ilp
+            -DENABLE_MPI=OFF
+            -DUSE_LIBINT=OFF
+            -DENABLE_OPENTRAH=OFF
+            -DBUILD_TESTING=OFF"
+        run: python -m cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-wheels-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  verify_release_version:
+    name: Verify release tag matches pyproject version
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check tag and package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          expected = f"v{version}"
+          if tag != expected:
+              raise SystemExit(
+                  f"Release tag {tag!r} does not match pyproject.toml version {version!r}. "
+                  f"Expected {expected!r}."
+              )
+          print(f"Release tag matches OpenQP version {version}.")
+          PY
+
+  verify_release_artifacts:
+    name: Verify release distributions
+    if: github.event_name == 'release'
+    needs:
+      - build_sdist
+      - build_wheels
+      - verify_release_version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: openqp-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify versions and packaged license files
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import glob
+          import os
+          import re
+          import tarfile
+          import tomllib
+          import zipfile
+          from email import policy
+          from email.parser import BytesParser
+          from pathlib import Path, PurePosixPath
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          version = project["version"]
+          expected_tag = f"v{version}"
+          if os.environ["RELEASE_TAG"] != expected_tag:
+              raise SystemExit(f"Release tag must be {expected_tag!r}")
+
+          patterns = project.get("license-files")
+          if not isinstance(patterns, list) or not patterns:
+              raise SystemExit("project.license-files must declare every shipped license/notice file")
+
+          license_files = {}
+          for pattern in patterns:
+              for raw_path in glob.glob(pattern, recursive=True):
+                  path = Path(raw_path)
+                  if path.is_file():
+                      license_files[path.as_posix()] = path.read_bytes()
+
+          mandatory = {"LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"}
+          missing = mandatory - license_files.keys()
+          if missing:
+              raise SystemExit(
+                  "project.license-files does not include required files: "
+                  + ", ".join(sorted(missing))
+              )
+          if any(not content for content in license_files.values()):
+              raise SystemExit("Declared license/notice files must not be empty")
+
+          def validate_metadata(data, archive_name):
+              metadata = BytesParser(policy=policy.default).parsebytes(data)
+              normalized_name = re.sub(r"[-_.]+", "-", metadata.get("Name", "")).lower()
+              if normalized_name != "openqp":
+                  raise SystemExit(f"{archive_name}: unexpected project name {metadata.get('Name')!r}")
+              if metadata.get("Version") != version:
+                  raise SystemExit(
+                      f"{archive_name}: metadata version {metadata.get('Version')!r} "
+                      f"does not match {version!r}"
+                  )
+              if metadata.get("License-Expression") != "LicenseRef-OpenQP-Research-1.0":
+                  raise SystemExit(
+                      f"{archive_name}: License-Expression must be "
+                      "'LicenseRef-OpenQP-Research-1.0'"
+                  )
+              recorded = {PurePosixPath(value).as_posix() for value in metadata.get_all("License-File", [])}
+              unrecorded = set(license_files) - recorded
+              if unrecorded:
+                  raise SystemExit(
+                      f"{archive_name}: missing License-File metadata for "
+                      + ", ".join(sorted(unrecorded))
+                  )
+
+          dist = Path("dist")
+          sdists = sorted(dist.glob("*.tar.gz"))
+          wheels = sorted(dist.glob("*.whl"))
+          unexpected = sorted(
+              path.name for path in dist.iterdir()
+              if path.is_file() and path not in sdists and path not in wheels
+          )
+          if unexpected:
+              raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
+          if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
+              raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
+          expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # Windows is a supported target, not a bonus: a release that is
+          # missing its wheels is incomplete, so require them like the rest.
+          expected_platform_tags = {
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
+          }
+
+          def wheel_key(wheel):
+              _, python_tag, abi_tag, platform_tag = wheel.name[:-4].rsplit("-", 3)
+              if python_tag != abi_tag or python_tag not in expected_python_tags:
+                  raise SystemExit(f"{wheel.name}: unexpected interpreter/ABI tags")
+              if "manylinux" in platform_tag and platform_tag.endswith("_x86_64"):
+                  platform = "linux-x86_64"
+              elif "manylinux" in platform_tag and platform_tag.endswith("_aarch64"):
+                  platform = "linux-aarch64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_x86_64"):
+                  platform = "macos-x86_64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
+                  platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
+              else:
+                  raise SystemExit(f"{wheel.name}: unexpected platform tag")
+              return python_tag, platform
+
+          observed_wheels = {}
+          for wheel in wheels:
+              key = wheel_key(wheel)
+              if key in observed_wheels:
+                  raise SystemExit(
+                      f"Duplicate wheel target {key}: "
+                      f"{observed_wheels[key].name}, {wheel.name}"
+                  )
+              observed_wheels[key] = wheel
+          expected_wheels = {
+              (python_tag, platform)
+              for python_tag in expected_python_tags
+              for platform in expected_platform_tags
+          }
+          missing_wheels = sorted(expected_wheels - observed_wheels.keys())
+          extra_wheels = sorted(observed_wheels.keys() - expected_wheels)
+          if missing_wheels or extra_wheels:
+              raise SystemExit(
+                  f"Incomplete configured wheel matrix; missing={missing_wheels}, "
+                  f"extra={extra_wheels}"
+              )
+          bad_wheel_names = [
+              wheel.name for wheel in wheels
+              if not wheel.name.lower().startswith(f"openqp-{version}-")
+          ]
+          if bad_wheel_names:
+              raise SystemExit(
+                  "Wheel filename version does not match release: "
+                  + ", ".join(bad_wheel_names)
+              )
+
+          sdist = sdists[0]
+          prefix = f"openqp-{version}/"
+          with tarfile.open(sdist, "r:gz") as archive:
+              members = {member.name: member for member in archive.getmembers() if member.isfile()}
+              metadata_name = prefix + "PKG-INFO"
+              if metadata_name not in members:
+                  raise SystemExit(f"{sdist.name}: missing {metadata_name}")
+              validate_metadata(archive.extractfile(members[metadata_name]).read(), sdist.name)
+              for relative_path, expected_content in license_files.items():
+                  member_name = prefix + relative_path
+                  if member_name not in members:
+                      raise SystemExit(f"{sdist.name}: missing {relative_path}")
+                  actual = archive.extractfile(members[member_name]).read()
+                  if actual != expected_content:
+                      raise SystemExit(f"{sdist.name}: {relative_path} differs from the tagged source")
+
+          for wheel in wheels:
+              with zipfile.ZipFile(wheel) as archive:
+                  names = set(archive.namelist())
+                  metadata_names = [
+                      name for name in names if name.endswith(".dist-info/METADATA")
+                  ]
+                  if len(metadata_names) != 1:
+                      raise SystemExit(f"{wheel.name}: expected exactly one METADATA file")
+                  validate_metadata(archive.read(metadata_names[0]), wheel.name)
+                  dist_info = metadata_names[0].removesuffix("METADATA")
+                  for relative_path, expected_content in license_files.items():
+                      member_name = dist_info + "licenses/" + relative_path
+                      if member_name not in names:
+                          raise SystemExit(f"{wheel.name}: missing {member_name}")
+                      if archive.read(member_name) != expected_content:
+                          raise SystemExit(
+                              f"{wheel.name}: {relative_path} differs from the tagged source"
+                          )
+
+          print(
+              f"Verified OpenQP {version}: {len(wheels)} wheels, one sdist, and "
+              f"{len(license_files)} license/notice files."
+          )
+          PY
+
+      - name: Check distribution metadata rendering
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+  manual_pypi_preflight:
+    name: Verify an explicit PyPI publication request
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'publish_pypi'
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      version: ${{ steps.release.outputs.version }}
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate exact tag, commit, release, and source workflow run
+        id: release
+        env:
+          ARTIFACTS_RUN_ID: ${{ inputs.artifacts_run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          confirmation = os.environ["CONFIRMATION"]
+          dispatch_ref = os.environ["DISPATCH_REF"]
+          dispatch_sha = os.environ["DISPATCH_SHA"].lower()
+          release_sha = os.environ["RELEASE_SHA"]
+          release_tag = os.environ["RELEASE_TAG"]
+          run_id = os.environ["ARTIFACTS_RUN_ID"]
+          if confirmation != "publish OpenQP to PyPI":
+              raise SystemExit('confirmation must exactly equal "publish OpenQP to PyPI"')
+          if not re.fullmatch(r"[0-9a-f]{40}", release_sha):
+              raise SystemExit("release_sha must be an exact lowercase 40-character commit SHA")
+          if not re.fullmatch(r"[0-9]+", run_id):
+              raise SystemExit("artifacts_run_id must contain digits only")
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          expected_tag = f"v{version}"
+          if release_tag != expected_tag:
+              raise SystemExit(
+                  f"release_tag {release_tag!r} does not match package version {version!r}; "
+                  f"expected {expected_tag!r}"
+              )
+          if dispatch_ref != f"refs/tags/{release_tag}":
+              raise SystemExit(
+                  f"Run this manual workflow from the exact {release_tag!r} tag, "
+                  f"not {dispatch_ref!r}"
+              )
+          if dispatch_sha != release_sha:
+              raise SystemExit(
+                  f"Manual workflow ref resolves to {dispatch_sha}, not {release_sha}"
+              )
+          checkout_sha = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip().lower()
+          if checkout_sha != release_sha:
+              raise SystemExit(
+                  f"Checked out {checkout_sha}, not requested release SHA {release_sha}"
+              )
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"release_tag={release_tag}", file=output)
+              print(f"release_sha={release_sha}", file=output)
+              print(f"version={version}", file=output)
+          PY
+
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          test "$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")" = "${RELEASE_SHA}" || {
+            echo "Release tag does not resolve to the requested commit SHA."
+            exit 1
+          }
+
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            > "${RUNNER_TEMP}/release.json"
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACTS_RUN_ID}" \
+            > "${RUNNER_TEMP}/source-run.json"
+
+          RELEASE_JSON="${RUNNER_TEMP}/release.json" \
+          RUN_JSON="${RUNNER_TEMP}/source-run.json" \
+          python - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["RELEASE_JSON"]) as handle:
+              release = json.load(handle)
+          with open(os.environ["RUN_JSON"]) as handle:
+              run = json.load(handle)
+
+          expected_tag = os.environ["RELEASE_TAG"]
+          expected_sha = os.environ["RELEASE_SHA"].lower()
+          if (
+              release.get("tag_name") != expected_tag
+              or release.get("draft")
+              or not release.get("published_at")
+          ):
+              raise SystemExit("The requested tag is not an exact published GitHub Release")
+          if run.get("event") != "release" or run.get("conclusion") != "success":
+              raise SystemExit("Artifact source must be a successful release-event workflow run")
+          if str(run.get("head_sha", "")).lower() != expected_sha:
+              raise SystemExit("Artifact workflow run SHA does not match release_sha")
+          workflow_path = str(run.get("path", "")).split("@", 1)[0]
+          if workflow_path != ".github/workflows/build_wheels.yml":
+              raise SystemExit(
+                  f"Artifacts came from unexpected workflow {run.get('path')!r}"
+              )
+          print("Exact release tag, SHA, and artifact workflow run verified.")
+          PY
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: openqp-*
+          path: dist
+          merge-multiple: true
+          run-id: ${{ inputs.artifacts_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify downloaded versions and packaged license files
+        run: |
+          python - <<'PY'
+          import glob
+          import re
+          import tarfile
+          import tomllib
+          import zipfile
+          from email import policy
+          from email.parser import BytesParser
+          from pathlib import Path, PurePosixPath
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          version = project["version"]
+          patterns = project.get("license-files")
+          if not isinstance(patterns, list) or not patterns:
+              raise SystemExit("project.license-files must declare every shipped license/notice file")
+
+          license_files = {}
+          for pattern in patterns:
+              for raw_path in glob.glob(pattern, recursive=True):
+                  path = Path(raw_path)
+                  if path.is_file():
+                      license_files[path.as_posix()] = path.read_bytes()
+
+          mandatory = {"LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md"}
+          missing = mandatory - license_files.keys()
+          if missing:
+              raise SystemExit(
+                  "project.license-files does not include required files: "
+                  + ", ".join(sorted(missing))
+              )
+          if any(not content for content in license_files.values()):
+              raise SystemExit("Declared license/notice files must not be empty")
+
+          def validate_metadata(data, archive_name):
+              metadata = BytesParser(policy=policy.default).parsebytes(data)
+              normalized_name = re.sub(r"[-_.]+", "-", metadata.get("Name", "")).lower()
+              if normalized_name != "openqp":
+                  raise SystemExit(f"{archive_name}: unexpected project name {metadata.get('Name')!r}")
+              if metadata.get("Version") != version:
+                  raise SystemExit(
+                      f"{archive_name}: metadata version {metadata.get('Version')!r} "
+                      f"does not match {version!r}"
+                  )
+              if metadata.get("License-Expression") != "LicenseRef-OpenQP-Research-1.0":
+                  raise SystemExit(
+                      f"{archive_name}: License-Expression must be "
+                      "'LicenseRef-OpenQP-Research-1.0'"
+                  )
+              recorded = {PurePosixPath(value).as_posix() for value in metadata.get_all("License-File", [])}
+              unrecorded = set(license_files) - recorded
+              if unrecorded:
+                  raise SystemExit(
+                      f"{archive_name}: missing License-File metadata for "
+                      + ", ".join(sorted(unrecorded))
+                  )
+
+          dist = Path("dist")
+          sdists = sorted(dist.glob("*.tar.gz"))
+          wheels = sorted(dist.glob("*.whl"))
+          unexpected = sorted(
+              path.name for path in dist.iterdir()
+              if path.is_file() and path not in sdists and path not in wheels
+          )
+          if unexpected:
+              raise SystemExit("Unexpected release artifacts: " + ", ".join(unexpected))
+          if [path.name for path in sdists] != [f"openqp-{version}.tar.gz"]:
+              raise SystemExit(f"Expected exactly openqp-{version}.tar.gz, found {sdists}")
+          expected_python_tags = {"cp39", "cp310", "cp311", "cp312", "cp313", "cp314"}
+          # Windows is a supported target, not a bonus: a release that is
+          # missing its wheels is incomplete, so require them like the rest.
+          expected_platform_tags = {
+              "linux-x86_64", "linux-aarch64", "macos-x86_64", "macos-arm64",
+              "windows-x86_64"
+          }
+
+          def wheel_key(wheel):
+              _, python_tag, abi_tag, platform_tag = wheel.name[:-4].rsplit("-", 3)
+              if python_tag != abi_tag or python_tag not in expected_python_tags:
+                  raise SystemExit(f"{wheel.name}: unexpected interpreter/ABI tags")
+              if "manylinux" in platform_tag and platform_tag.endswith("_x86_64"):
+                  platform = "linux-x86_64"
+              elif "manylinux" in platform_tag and platform_tag.endswith("_aarch64"):
+                  platform = "linux-aarch64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_x86_64"):
+                  platform = "macos-x86_64"
+              elif platform_tag.startswith("macosx") and platform_tag.endswith("_arm64"):
+                  platform = "macos-arm64"
+              elif platform_tag == "win_amd64":
+                  platform = "windows-x86_64"
+              else:
+                  raise SystemExit(f"{wheel.name}: unexpected platform tag")
+              return python_tag, platform
+
+          observed_wheels = {}
+          for wheel in wheels:
+              key = wheel_key(wheel)
+              if key in observed_wheels:
+                  raise SystemExit(
+                      f"Duplicate wheel target {key}: "
+                      f"{observed_wheels[key].name}, {wheel.name}"
+                  )
+              observed_wheels[key] = wheel
+          expected_wheels = {
+              (python_tag, platform)
+              for python_tag in expected_python_tags
+              for platform in expected_platform_tags
+          }
+          missing_wheels = sorted(expected_wheels - observed_wheels.keys())
+          extra_wheels = sorted(observed_wheels.keys() - expected_wheels)
+          if missing_wheels or extra_wheels:
+              raise SystemExit(
+                  f"Incomplete configured wheel matrix; missing={missing_wheels}, "
+                  f"extra={extra_wheels}"
+              )
+          bad_wheel_names = [
+              wheel.name for wheel in wheels
+              if not wheel.name.lower().startswith(f"openqp-{version}-")
+          ]
+          if bad_wheel_names:
+              raise SystemExit(
+                  "Wheel filename version does not match release: "
+                  + ", ".join(bad_wheel_names)
+              )
+
+          sdist = sdists[0]
+          prefix = f"openqp-{version}/"
+          with tarfile.open(sdist, "r:gz") as archive:
+              members = {member.name: member for member in archive.getmembers() if member.isfile()}
+              metadata_name = prefix + "PKG-INFO"
+              if metadata_name not in members:
+                  raise SystemExit(f"{sdist.name}: missing {metadata_name}")
+              validate_metadata(archive.extractfile(members[metadata_name]).read(), sdist.name)
+              for relative_path, expected_content in license_files.items():
+                  member_name = prefix + relative_path
+                  if member_name not in members:
+                      raise SystemExit(f"{sdist.name}: missing {relative_path}")
+                  actual = archive.extractfile(members[member_name]).read()
+                  if actual != expected_content:
+                      raise SystemExit(f"{sdist.name}: {relative_path} differs from the tagged source")
+
+          for wheel in wheels:
+              with zipfile.ZipFile(wheel) as archive:
+                  names = set(archive.namelist())
+                  metadata_names = [
+                      name for name in names if name.endswith(".dist-info/METADATA")
+                  ]
+                  if len(metadata_names) != 1:
+                      raise SystemExit(f"{wheel.name}: expected exactly one METADATA file")
+                  validate_metadata(archive.read(metadata_names[0]), wheel.name)
+                  dist_info = metadata_names[0].removesuffix("METADATA")
+                  for relative_path, expected_content in license_files.items():
+                      member_name = dist_info + "licenses/" + relative_path
+                      if member_name not in names:
+                          raise SystemExit(f"{wheel.name}: missing {member_name}")
+                      if archive.read(member_name) != expected_content:
+                          raise SystemExit(
+                              f"{wheel.name}: {relative_path} differs from the tagged source"
+                          )
+
+          print(
+              f"Verified OpenQP {version}: {len(wheels)} wheels, one sdist, and "
+              f"{len(license_files)} license/notice files."
+          )
+          PY
+
+      - name: Check distribution metadata rendering
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+      - name: Seal verified distributions for the approval job
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-openqp-pypi-${{ steps.release.outputs.version }}-${{ github.run_id }}
+          path: dist/*
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  publish_to_pypi:
+    name: Publish approved distributions to GitHub and PyPI
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.action == 'publish_pypi'
+      && needs.manual_pypi_preflight.result == 'success'
+    needs: manual_pypi_preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openqp
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-openqp-pypi-${{ needs.manual_pypi_preflight.outputs.version }}-${{ github.run_id }}
+          path: dist
+
+      - name: Revalidate release tag and GitHub Release after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.manual_pypi_preflight.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.manual_pypi_preflight.outputs.release_tag }}
+        run: |
+          test "$(gh api "/repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')" = "${RELEASE_SHA}" || {
+            echo "Release tag moved after preflight approval."
+            exit 1
+          }
+          gh api \
+            "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            > "${RUNNER_TEMP}/approved-release.json"
+          RELEASE_JSON="${RUNNER_TEMP}/approved-release.json" python - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["RELEASE_JSON"]) as handle:
+              release = json.load(handle)
+          if (
+              release.get("tag_name") != os.environ["RELEASE_TAG"]
+              or release.get("draft")
+              or not release.get("published_at")
+          ):
+              raise SystemExit(
+                  "GitHub Release changed or is no longer published after approval"
+              )
+          print("Release tag and published GitHub Release revalidated after approval.")
+          PY
+
+      - name: Attach approved artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.manual_pypi_preflight.outputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
