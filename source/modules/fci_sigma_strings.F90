@@ -30,6 +30,7 @@ module fci_sigma_strings_mod
 
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
 !$ use omp_lib
+  use blas_thread, only: blas_thread_count, blas_thread_set
   implicit none
   private
   ! bind(C) entry points must stay public: GCC 16.2 hides PRIVATE ones (GCC PR126872)
@@ -305,7 +306,7 @@ contains
     real(dp), intent(inout) :: d1(*), d2(*)
     integer :: status
 
-    integer :: na, nb, nkl, nlink_a, nthr, maxper_b
+    integer :: na, nb, nkl, nlink_a, nthr, maxper_b, nblas_save
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
@@ -324,6 +325,11 @@ contains
     real(dp), allocatable :: sgn_bk(:, :)
     real(dp), allocatable :: tmat(:, :), gram(:, :)
 
+    ! Pin BLAS to one thread: rdm12_strings manages its own OpenMP
+    ! parallelism and calls BLAS from inside it.  Threaded BLAS would
+    ! oversubscribe.  Restore the caller's setting on exit.
+    nblas_save = blas_thread_count()
+    if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
     status = 1
     if (norb <= 0 .or. ndet <= 0_i8) return
     na = popcnt(iand(dets(1), shiftl(1_i8, norb) - 1_i8))
@@ -505,6 +511,8 @@ contains
 
     deallocate(astr, bstr, ntab_a, kl_a, src_a, sgn_a, &
                cnt_b, tgt_b, src_bk, sgn_bk, tmat, gram)
+    ! Restore caller BLAS threading
+    if (nblas_save > 0) call blas_thread_set(nblas_save)
     status = 0
   end function rdm12_strings
 
