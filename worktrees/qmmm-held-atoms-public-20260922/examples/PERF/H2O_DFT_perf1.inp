@@ -1,0 +1,19 @@
+# Water B3LYP/6-31G* energy at the recommended production preset (perf=1).
+[input]
+system=
+   8   0.000000   0.000000   0.117300
+   1   0.000000   0.757200  -0.469200
+   1   0.000000  -0.757200  -0.469200
+charge=0
+runtype=energy
+functional=b3lypv5
+basis=6-31g*
+method=hf
+perf=1
+[guess]
+type=huckel
+[scf]
+multiplicity=1
+type=rhf
+maxit=100
+conv=1.0e-6

@@ -1,0 +1,6 @@
+! Static S0/S1 analytic NAC. The static driver evaluates all retained pairs.
+! NAC Vector is h_ij = (E_j-E_i) d_ij; DC Vector is d_ij.
+mrsf(nstate=2)/bhhlyp/6-31g nac(S0,S1,type=analytical)
+geom="../geometries/H2O-0381125c86f2.xyz"
+scf(conv=1e-10,maxit=200)
+tdhf(conv=1e-10,maxit=100)

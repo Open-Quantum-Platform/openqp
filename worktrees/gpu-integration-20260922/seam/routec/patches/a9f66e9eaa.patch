@@ -1,0 +1,324 @@
+From a9f66e9eaae41f25c42ae4f502c3f57fbf52e290 Mon Sep 17 00:00:00 2001
+From: Cheol Ho Choi <cheolho.choi@gmail.com>
+Date: Thu, 11 Jun 2026 22:12:26 +0900
+Subject: [PATCH] feat: MRSF gradient through the Route-C bridge (G-5)
+
+Two additions on top of the APIV2 response bridge:
+
+1. int2_routec: dispatch the int2_tdgrd_data_t consumer (MRSF/SF/TD
+   Z-vector iteration + relaxed-density builds). Verified table (G-5
+   phase A(i), numpy Z-vector port vs native relaxed densities, td_p/WAO
+   rebuilt to ~2e-8, wrong-prefactor controls fail at 1e-2..1e0):
+     apb_s = c*J(Ms_1 + Ms_2) - x*K(Ms_s),  Ms_s = d2_s + d2_s^T
+   (Coulomb of the spin-summed symmetrized density in BOTH slots,
+   exchange spin-diagonal); amb slot 1 only, as TD RPA. One-time stderr
+   notices record which consumers were diverted in a run.
+
+2. routec_bridge + tdhf_mrsf_gradient: optional external supplier for the
+   MRSF 2e ERI-derivative contraction. $OQP_ROUTEC_GRAD_LIB ->
+   routec_grad2_mrsf(d, p, spc, xyz, de, nbf, natm, hfscale, hfscale2,
+   coulscale, spcscale, mrst, info) bind(C); mrsf_2e_grad passes the RAW
+   alpha/beta SCF + relaxed densities and the 7 MRSF response densities
+   (before the grd2 init() sum/diff transform), no CAM, rank-0 compute
+   with broadcast, info/=0 falls back to the native grd2 path unchanged.
+
+Gates (H2O/6-31G* MRSF mult-3 ROHF, target S1; libintRot
+test/routec_oqp_grad.cpp + sessions/20260612_grad_g5):
+ - exact-Cholesky-B full-bridge run reproduces native relaxed densities
+   (td_p 6e-10, WAO 3e-11) and the S1 gradient to 3e-11;
+ - injected DF 2e gradient: end-to-end kernel consistency 1.6e-10;
+   injected-vs-native = DF physics 4.8e-6 (HF) / 6.4e-6 (BHHLYP) Ha/bohr;
+ - FD referee (Richardson): native analytic vs FD 3.9e-9 (HF); the
+   BHHLYP 5.5e-5 residual is XC grid quadrature (1.1e-6 on a 99,590
+   unpruned grid), identical for native and injected;
+ - CH2O S1 optimization demo: native and injected reach the same minimum
+   to 4.8e-5 bohr (interatomic distances), dE = -2.9e-9 Ha.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ source/integrals/int2_routec.F90      | 76 +++++++++++++++++++++++++--
+ source/modules/tdhf_mrsf_gradient.F90 | 31 +++++++++++
+ source/scf_addons.F90                 | 53 ++++++++++++++++++-
+ 3 files changed, 154 insertions(+), 6 deletions(-)
+
+diff --git a/source/integrals/int2_routec.F90 b/source/integrals/int2_routec.F90
+index aa8551f063..628ff6d0ae 100644
+--- a/source/integrals/int2_routec.F90
++++ b/source/integrals/int2_routec.F90
+@@ -8,9 +8,10 @@
+ !>   void routec_jkm_apply(const double* x, const int* nbf, const int* nvec,
+ !>                         double* jm, double* km, int* info); // info 0 = ok
+ !>
+-!> then int2_run diverts the int2_td_data_t / int2_mrsf_data_t consumers
+-!> (EXACT dynamic types only — int2_tdgrd_data_t / int2_umrsf_data_t fall
+-!> through to the native quartet loop) to batched RAW J(M)/K(M) contractions
++!> then int2_run diverts the int2_td_data_t / int2_tdgrd_data_t /
++!> int2_mrsf_data_t consumers (EXACT dynamic types only —
++!> int2_umrsf_data_t / int2_rpagrd_data_t fall through to the native
++!> quartet loop) to batched RAW J(M)/K(M) contractions
+ !> of the trial densities, with
+ !>
+ !>   J(M)_ab = (ab|kl) M_kl ,  K(M)_ab = (ak|bl) M_kl   (M non-symmetric).
+@@ -22,6 +23,8 @@
+ !>             (parallel_stop applies A := A + A^T, diagonal included);
+ !>             amb deposit = x*[K(d2)^T - K(d2)]            (full value)
+ !>   TD TDA  : amb deposit = 2c*J(d2)*[tdc] - x*K(d2)       (full value)
++!>   TDGRD   : (d2 = alpha/beta pair, G-5 verified) apb_s deposit = half of
++!>             [c*J(Ms_1+Ms_2) - x*K(Ms_s)]; amb slot 1 only, as TD RPA
+ !>   MRSF    : f3 slot m deposit = c*J(D_m)*[m<=4] - x*K(D_m) (full value)
+ !> using the single-apply identities J(Ms) = 2 J(d2), K(Ms) = K(d2)+K(d2)^T.
+ !>
+@@ -112,7 +115,7 @@ contains
+ 
+   !> Hook called from int2_run (non-CAM path only). .true. = handled.
+   module function int2_routec_response(this, int2_consumer) result(done)
+-    use tdhf_lib, only: int2_td_data_t
++    use tdhf_lib, only: int2_td_data_t, int2_tdgrd_data_t
+     use tdhf_mrsf_lib, only: int2_mrsf_data_t
+     class(int2_compute_t), intent(inout) :: this
+     class(int2_compute_data_t), intent(inout) :: int2_consumer
+@@ -120,6 +123,8 @@ contains
+     done = .false.
+     if (this%attenuated) return
+     select type (c => int2_consumer)
++    type is (int2_tdgrd_data_t)
++      done = rtc_tdgrd(this, c)
+     type is (int2_td_data_t)
+       done = rtc_td(this, c)
+     type is (int2_mrsf_data_t)
+@@ -127,6 +132,67 @@ contains
+     end select
+   end function int2_routec_response
+ 
++  !> int2_tdgrd_data_t (Z-vector / gradient response builds): d2(nbf,nbf,2)
++  !> alpha/beta trial pair. Verified table (G-5 phase A(i), probe
++  !> g5_probeA_zvec.py, relaxed density + W rebuilt to ~2e-8 with
++  !> wrong-prefactor controls failing at 1e-2..1e0):
++  !>   apb_s = c*J(Ms_1 + Ms_2) - x*K(Ms_s),  Ms_s := d2_s + d2_s^T
++  !> (Coulomb of the spin-SUMMED symmetrized density deposited in BOTH
++  !> slots; exchange spin-diagonal). Deposit halves, A := A + A^T applied
++  !> in parallel_stop. amb (int_amb, written for slot 1 only in the native
++  !> update) = x*[K(d2_1)^T - K(d2_1)], full value, not symmetrized.
++  logical function rtc_tdgrd(driver, dat)
++    use tdhf_lib, only: int2_tdgrd_data_t
++    class(int2_compute_t), intent(inout) :: driver
++    type(int2_tdgrd_data_t), intent(inout) :: dat
++    integer :: nbf, s
++    integer(c_int) :: nbf_c, nvec_c, info
++    real(c_double), allocatable, target :: x(:,:,:), jm(:,:,:), km(:,:,:)
++    real(kind=dp) :: cc, xx
++    rtc_tdgrd = .false.
++    if (size(dat%d2, 3) /= 2) return     ! native update hardcodes 2 slots
++    if (dat%tamm_dancoff) return         ! no TDA branch in the native update
++    nbf = driver%basis%nbf
++    if (.not. rtc_session(nbf)) return
++    call dat%parallel_start(driver%basis, 1)
++    if (driver%pe%rank == 0) then
++      allocate(x(nbf,nbf,2), jm(nbf,nbf,2), km(nbf,nbf,2))
++      x = dat%d2(:,:,1:2)
++      nbf_c = int(nbf, c_int)
++      nvec_c = 2_c_int
++      info = 1_c_int
++      call rtc_apply(c_loc(x), nbf_c, nvec_c, c_loc(jm), c_loc(km), info)
++      if (info /= 0_c_int) return   ! fall back natively
++      cc = dat%scale_coulomb
++      xx = dat%scale_exchange
++      if (dat%int_apb) then
++        do s = 1, 2   ! half of c*J(Mtot) - x*K(Ms_s); A+A^T downstream
++          dat%apb(:,:,s,1) = cc*(jm(:,:,1) + jm(:,:,2)) &
++                           - 0.5_dp*xx*(km(:,:,s) + transpose(km(:,:,s)))
++        end do
++      end if
++      if (dat%int_amb) &
++        dat%amb(:,:,1,1) = xx*(transpose(km(:,:,1)) - km(:,:,1))
++    end if
++    call dat%pe%init(driver%pe%comm, driver%pe%use_mpi)
++    call dat%parallel_stop()
++    rtc_tdgrd = .true.
++    call rtc_note_once(1, 'tdgrd')
++  end function rtc_tdgrd
++
++  !> One-time stderr notice per consumer kind (positive evidence which
++  !> seams fired in a given run).
++  subroutine rtc_note_once(kind, name)
++    use, intrinsic :: iso_fortran_env, only: error_unit
++    integer, intent(in) :: kind
++    character(len=*), intent(in) :: name
++    logical, save :: noted(3) = .false.
++    if (noted(kind)) return
++    noted(kind) = .true.
++    write(error_unit, '(a)') &
++      ' [int2_routec] '//name//' consumer diverted to external J/K'
++  end subroutine rtc_note_once
++
+   !> int2_td_data_t: d2(nbf,nbf,nvec) trial densities, one J+K apply of the
+   !> raw d2 batch; deposits per the Stage-0 table (see header).
+   logical function rtc_td(driver, dat)
+@@ -170,6 +236,7 @@ contains
+     call dat%pe%init(driver%pe%comm, driver%pe%use_mpi)
+     call dat%parallel_stop()
+     rtc_td = .true.
++    call rtc_note_once(2, 'td')
+   end function rtc_td
+ 
+   !> int2_mrsf_data_t: d3(nvec,7,nbf,nbf), vector index FIRST — gather to
+@@ -219,6 +286,7 @@ contains
+     call dat%pe%init(driver%pe%comm, driver%pe%use_mpi)
+     call dat%parallel_stop()
+     rtc_mrsf = .true.
++    call rtc_note_once(3, 'mrsf')
+   end function rtc_mrsf
+ 
+ end submodule int2_routec
+diff --git a/source/modules/tdhf_mrsf_gradient.F90 b/source/modules/tdhf_mrsf_gradient.F90
+index b1ff769ce1..a2c7ac1b49 100644
+--- a/source/modules/tdhf_mrsf_gradient.F90
++++ b/source/modules/tdhf_mrsf_gradient.F90
+@@ -195,6 +195,8 @@ contains
+     use precision, only: dp
+     use messages, only: show_message, WITH_ABORT
+     use types, only: information
++    use parallel, only: par_env_t
++    use routec_bridge, only: routec_try_grad2_mrsf
+ 
+     implicit none
+ 
+@@ -210,6 +212,10 @@ contains
+     real(kind=dp), allocatable :: de(:,:)
+     class(grd2_compute_data_t), allocatable :: gcomp
+ 
++    ! Route-C external MRSF 2e-gradient seam
++    type(par_env_t) :: pe
++    integer :: ok_ext
++
+     dft = infos%control%hamilton == 20 ! dft or hf
+     urohf = infos%control%scftype >= 2
+ 
+@@ -244,6 +250,31 @@ contains
+     write(*, '(16x,"|", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
+        infos%tddft%spc_coco, infos%tddft%spc_ovov, infos%tddft%spc_coov
+ 
++    ! Route-C external MRSF DF 2e-gradient (inert unless $OQP_ROUTEC_GRAD_LIB
++    ! exposes routec_grad2_mrsf). No CAM (the attenuated short-range pass
++    ! stays native); d/p/spc passed RAW (before the init() sum/diff
++    ! transform). Rank 0 computes, result broadcast; declined -> native.
++    if (.not. (dft .and. infos%dft%cam_flag)) then
++      call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
++      ok_ext = 0
++      if (pe%rank == 0) then
++        if (routec_try_grad2_mrsf(d, p, spc, infos%atoms%xyz, de, &
++                                  basis%nbf, ubound(infos%atoms%zn,1), &
++                                  scale_exch, scale_exch2, 1.0d0, &
++                                  [infos%tddft%spc_coco, &
++                                   infos%tddft%spc_ovov, &
++                                   infos%tddft%spc_coov], &
++                                  infos%tddft%mult)) ok_ext = 1
++      end if
++      call pe%bcast(ok_ext, 1)
++      if (ok_ext == 1) then
++        call pe%bcast(de, size(de))
++        infos%atoms%grad = infos%atoms%grad + de
++        return
++      end if
++      de = 0.0d0
++    end if
++
+     gcomp = grd2_mrsf_compute_data_t( d2 = d &
+                                     , p2 = p &
+                                     , spc2 = spc &
+diff --git a/source/scf_addons.F90 b/source/scf_addons.F90
+index c56ca44164..2c2fb45ba8 100644
+--- a/source/scf_addons.F90
++++ b/source/scf_addons.F90
+@@ -235,6 +235,7 @@ module routec_bridge
+   public :: routec_try_fock_jk
+   public :: routec_try_vxc
+   public :: routec_try_grad2
++  public :: routec_try_grad2_mrsf
+ 
+   abstract interface
+     subroutine routec_fock_jk_i(d, f, nbf, nfocks, se, sc, info) bind(C)
+@@ -263,6 +264,20 @@ module routec_bridge
+       real(c_double), intent(in) :: hfscale, coulscale
+       integer(c_int), intent(out) :: info
+     end subroutine
++    subroutine routec_grad2_mrsf_i(d, p, spc, xyz, de, nbf, natm, hfscale, &
++                                   hfscale2, coulscale, spcscale, mrst, &
++                                   info) bind(C)
++      import :: c_double, c_int
++      real(c_double), intent(in) :: d(*)        ! (nbf,nbf,2) Da/Db full sq
++      real(c_double), intent(in) :: p(*)        ! (nbf,nbf,2) Pa/Pb relaxed
++      real(c_double), intent(in) :: spc(*)      ! (7,nbf,nbf) td_mrsf_density
++      real(c_double), intent(in) :: xyz(*)
++      real(c_double), intent(inout) :: de(*)
++      integer(c_int), intent(in) :: nbf, natm, mrst
++      real(c_double), intent(in) :: hfscale, hfscale2, coulscale
++      real(c_double), intent(in) :: spcscale(*) ! (3) coco, ovov, coov
++      integer(c_int), intent(out) :: info
++    end subroutine
+   end interface
+ 
+   interface
+@@ -287,6 +302,7 @@ module routec_bridge
+   procedure(routec_fock_jk_i), pointer :: ext_jk => null()
+   procedure(routec_vxc_i), pointer :: ext_vxc => null()
+   procedure(routec_grad2_i), pointer :: ext_grad2 => null()
++  procedure(routec_grad2_mrsf_i), pointer :: ext_grad2_mrsf => null()
+ 
+ contains
+ 
+@@ -348,9 +364,12 @@ contains
+     if (.not. c_associated(fp)) then
+       write(error_unit, '(a)') &
+         ' routec_bridge: routec_grad2 symbol not found in '//trim(path)
+-      return
++    else
++      call c_f_procpointer(fp, ext_grad2)
+     end if
+-    call c_f_procpointer(fp, ext_grad2)
++    ! optional MRSF 2e-gradient entry in the same dylib (G-5)
++    fp = c_dlsym(h, "routec_grad2_mrsf"//c_null_char)
++    if (c_associated(fp)) call c_f_procpointer(fp, ext_grad2_mrsf)
+   end subroutine routec_grad_init
+ 
+   function routec_try_fock_jk(d, f, nbf, nfocks, se, sc) result(done)
+@@ -415,6 +434,36 @@ contains
+     done = (info == 0_c_int)
+   end function routec_try_grad2
+ 
++  !> @brief Try the external MRSF-TDDFT DF 2e-gradient supplier (G-5).
++  !> @detail d/p: (nbf,nbf,2) RAW alpha/beta SCF and relaxed difference
++  !>         densities (full square, BEFORE the grd2_mrsf init() sum/diff
++  !>         transform); spc: (7,nbf,nbf) MRSF response densities
++  !>         (td_mrsf_density layout, slot 7 = ball); xyz: (3,natm) Bohr;
++  !>         de: (3,natm) receives the full explicit 2e ERI-derivative
++  !>         term of the MRSF gradient. Returns .false. (caller uses the
++  !>         native grd2 contraction) when absent or declined.
++  function routec_try_grad2_mrsf(d, p, spc, xyz, de, nbf, natm, hfscale, &
++                                 hfscale2, coulscale, spcscale, mrst) &
++      result(done)
++    real(c_double), intent(in) :: d(*), p(*), spc(*)
++    real(c_double), intent(in) :: xyz(*)
++    real(c_double), intent(inout) :: de(*)
++    integer, intent(in) :: nbf, natm, mrst
++    real(c_double), intent(in) :: hfscale, hfscale2, coulscale
++    real(c_double), intent(in) :: spcscale(3)
++    logical :: done
++    integer(c_int) :: info, nbf_c, natm_c, mrst_c
++    done = .false.
++    if (.not. tried_grad) call routec_grad_init()
++    if (.not. associated(ext_grad2_mrsf)) return
++    nbf_c = int(nbf, c_int); natm_c = int(natm, c_int)
++    mrst_c = int(mrst, c_int)
++    info = 1_c_int
++    call ext_grad2_mrsf(d, p, spc, xyz, de, nbf_c, natm_c, hfscale, &
++                        hfscale2, coulscale, spcscale, mrst_c, info)
++    done = (info == 0_c_int)
++  end function routec_try_grad2_mrsf
++
+ end module routec_bridge
+ 
+ module scf_addons
+-- 
+2.50.1 (Apple Git-155)
+

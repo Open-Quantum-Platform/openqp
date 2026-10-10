@@ -1,0 +1,552 @@
+{
+  "atoms": [
+    8,
+    1,
+    1
+  ],
+  "coord": [
+    -0.0,
+    0.0,
+    -0.07759509131153179,
+    -1.0075912537694984,
+    1.0075912537694984,
+    -1.1611785434815982,
+    1.0075912537694984,
+    -1.0075912537694984,
+    -1.1611785434815982
+  ],
+  "mass": [
+    15.99491,
+    1.007825,
+    1.007825
+  ],
+  "energy": -76.36093649269999,
+  "hessian_cache_version": 2,
+  "state": 1,
+  "hessian_request": {
+    "version": 2,
+    "state": 1,
+    "model_config": {
+      "input": {
+        "basis": "6-31g*",
+        "charge": 0,
+        "d4": false,
+        "functional": "bhhlyp",
+        "ispher": "auto",
+        "library": "",
+        "method": "tdhf",
+        "perf": 1,
+        "qmmm_flag": false,
+        "soc_2e": 1
+      },
+      "mp2": {
+        "opposite_spin_scale": 1.0,
+        "same_spin_scale": 1.0,
+        "variant": "mp2"
+      },
+      "guess": {
+        "continue_geom": false,
+        "file": "",
+        "file2": "",
+        "save_mol": false,
+        "swapmo": "",
+        "type": "huckel"
+      },
+      "pcm": {
+        "backend": "ddx",
+        "enabled": false,
+        "epsilon": 78.3553,
+        "mode": "reference_scf",
+        "model": "ddpcm",
+        "radii": "uff",
+        "solvent": "water"
+      },
+      "dftb": {
+        "backend": "native",
+        "cam_alpha": 0.0,
+        "cam_beta": 1.0,
+        "executable": "",
+        "lc_gamma": "yukawa",
+        "lc_ground_state": false,
+        "library_path": "",
+        "max_scc_iterations": 1200,
+        "mrsf_shift_co": 0.0,
+        "mrsf_shift_cv": 0.0,
+        "mrsf_shift_oo": 0.0,
+        "mrsf_shift_ov": 0.0,
+        "omega": 0.3,
+        "parameter_path": "",
+        "reference_multiplicity": 0,
+        "response_max_iterations": 50,
+        "response_max_subspace": 100,
+        "response_solver": "auto",
+        "response_tolerance": 1e-06,
+        "scc_history": 12,
+        "scc_max_step": 0.5,
+        "scc_mixer": "auto",
+        "scc_mixing": 0.35,
+        "scc_tolerance": 1e-08,
+        "spc": 0.5,
+        "spc_coco": -999.0,
+        "spc_coov": -999.0,
+        "spc_ovov": -999.0,
+        "spin_complete": true,
+        "target_multiplicity": 1,
+        "timeout": 300,
+        "type": "auto",
+        "zvector": true
+      },
+      "symmetry": {
+        "enabled": "false",
+        "label_mo": true,
+        "label_modes": true,
+        "label_states": true,
+        "point_group": "auto",
+        "strict": false,
+        "subgroup": "auto",
+        "tolerance": 1e-05,
+        "use_integral_symmetry": "false",
+        "use_response_symmetry": false
+      },
+      "scf": {
+        "alternative_scf": "trah",
+        "cdiis_switch": 0.3,
+        "conv": 1e-06,
+        "converger_type": "diis",
+        "diis_reset_conv": 0.005,
+        "diis_reset_mod": 10,
+        "diis_type": "cdiis",
+        "escalation": "",
+        "forced_attempt": 2,
+        "grad_cutoff": "1.0d-10",
+        "incremental": true,
+        "init_basis": "none",
+        "init_conv": 0.001,
+        "init_converger": "none",
+        "init_it": 15,
+        "init_library": "",
+        "init_scf": "no",
+        "maxdiis": 7,
+        "maxit": 30,
+        "mom": false,
+        "mom_switch": 0.003,
+        "multiplicity": 3,
+        "pfon": false,
+        "pfon_cooling_rate": 50.0,
+        "pfon_nsmear": 5.0,
+        "pfon_start_temp": 2000.0,
+        "pscreen": false,
+        "pscreen_cap": 1e-08,
+        "pscreen_grid_ang": 0,
+        "pscreen_grid_rad": 0,
+        "pscreen_k": 0.01,
+        "pscreen_tight": 0.0001,
+        "pscreen_xc_aocut": 0.0,
+        "pscreen_xc_dcut": 0.0,
+        "rstctmo": false,
+        "save_molden": true,
+        "scal_rel": 0,
+        "soscf_lvl_shift": 0.0,
+        "stability": false,
+        "trh_gred": 0.001,
+        "trh_impl": "auto",
+        "trh_jd_start": 30,
+        "trh_lred": 0.0001,
+        "trh_ls": false,
+        "trh_nmic": 50,
+        "trh_nrtv": 1,
+        "trh_r0": 0.4,
+        "trh_stab": false,
+        "trh_sub_solver": "davidson",
+        "type": "rohf",
+        "vdiis_vshift_switch": 0.003,
+        "verbose": 1,
+        "vshift": 0.0,
+        "xc_c2f": "off",
+        "xc_incdft": "off",
+        "xc_phi_cache": "off"
+      },
+      "dftgrid": {
+        "ang_npts": 302,
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_flag": false,
+        "cam_mu": -1.0,
+        "grid_ao_pruned": true,
+        "grid_ao_sparsity_ratio": 0.9,
+        "grid_ao_threshold": 1e-15,
+        "hfscale": -1.0,
+        "partfun": "ssf",
+        "pruned": "sg2",
+        "rad_npts": 96,
+        "rad_type": "ta"
+      },
+      "tdhf": {
+        "cam_alpha": -1.0,
+        "cam_beta": -1.0,
+        "cam_mu": -1.0,
+        "conf_threshold": 0.05,
+        "conv": 1e-06,
+        "fp32": "off",
+        "gmres_dim": 50,
+        "hfscale": -1.0,
+        "ixcore": "-1",
+        "maxit": 50,
+        "maxit_zv": 50,
+        "multiplicity": 1,
+        "nstate": 2,
+        "nstate_s": 0,
+        "nstate_t": 0,
+        "nvdav": 50,
+        "resp_cutoff": "1e-8",
+        "spc_coco": -1.0,
+        "spc_coov": -1.0,
+        "spc_ovov": -1.0,
+        "target": 1,
+        "tlf": 2,
+        "type": "mrsf",
+        "z_solver": 0,
+        "zv_warmstart": "on",
+        "zvconv": 1e-06
+      },
+      "qmmm": {
+        "barostat_interval": 25,
+        "constraints": "None",
+        "cutoff": "NoCutoff",
+        "embedding": "electrostatic",
+        "energy_file": "",
+        "ensemble": "nve",
+        "forcefield": [
+          "amber14-all.xml",
+          "amber14/tip3p.xml"
+        ],
+        "forcefield_files": "",
+        "friction": 1.0,
+        "frontier_scheme": "none",
+        "istate": 0,
+        "log_file": "",
+        "n_steps": 1000,
+        "nonbondedmethod": "NoCutoff",
+        "nsteps": 1,
+        "pdb_file": "",
+        "pressure": 1.0,
+        "qm_atoms": "",
+        "qm_atoms_xyz": "",
+        "qm_list": "",
+        "report_interval": 1,
+        "rigidwater": false,
+        "temperature": 300.0,
+        "timestep": 1.0,
+        "trajectory_file": "",
+        "trajectory_format": "pdb"
+      }
+    }
+  },
+  "hessian": [
+    [
+      0.317059700219295,
+      -0.3183045119221375,
+      -2.4249874112673907e-13,
+      -0.1587187390775,
+      0.1592370206054825,
+      -0.17119482906759498,
+      -0.1587187390781275,
+      0.15923702060513,
+      0.171194829066455
+    ],
+    [
+      -0.3183045119221375,
+      0.31705970021706,
+      -2.498960120252997e-15,
+      0.1592370206048025,
+      -0.158718739076695,
+      0.1711948290672,
+      0.15923702060532496,
+      -0.158718739076595,
+      -0.17119482906558503
+    ],
+    [
+      -2.4249874112673907e-13,
+      -2.498960120252997e-15,
+      0.5184706029958149,
+      -0.1568220167794625,
+      0.15682201677923502,
+      -0.2594184628120325,
+      0.156822016779485,
+      -0.15682201678006247,
+      -0.2594184628124725
+    ],
+    [
+      -0.1587187390775,
+      0.1592370206048025,
+      -0.1568220167794625,
+      0.189637347852535,
+      -0.1898910090041725,
+      0.164133162077575,
+      -0.030729758640429997,
+      0.0305692731724075,
+      -0.007191285202514998
+    ],
+    [
+      0.1592370206054825,
+      -0.158718739076695,
+      0.15682201677923502,
+      -0.1898910090041725,
+      0.18963734785261,
+      -0.16413316207773498,
+      0.030569273171577496,
+      -0.0307297586409775,
+      0.007191285202545
+    ],
+    [
+      -0.17119482906759498,
+      0.1711948290672,
+      -0.2594184628120325,
+      0.164133162077575,
+      -0.16413316207773498,
+      0.221828959531655,
+      0.007191285203555,
+      -0.007191285202857501,
+      0.037772664129855
+    ],
+    [
+      -0.1587187390781275,
+      0.15923702060532496,
+      0.156822016779485,
+      -0.030729758640429997,
+      0.030569273171577496,
+      0.007191285203555,
+      0.18963734785303,
+      -0.1898910090043225,
+      -0.16413316207754497
+    ],
+    [
+      0.15923702060513,
+      -0.158718739076595,
+      -0.15682201678006247,
+      0.0305692731724075,
+      -0.0307297586409775,
+      -0.007191285202857501,
+      -0.1898910090043225,
+      0.189637347852635,
+      0.16413316207718498
+    ],
+    [
+      0.171194829066455,
+      -0.17119482906558503,
+      -0.2594184628124725,
+      -0.007191285202514998,
+      0.007191285202545,
+      0.037772664129855,
+      -0.16413316207754497,
+      0.16413316207718498,
+      0.22182895953060003
+    ]
+  ],
+  "hessian_metadata": {},
+  "freqs": [
+    1770.9293086951957,
+    3771.8134539819575,
+    4010.6393817104386
+  ],
+  "modes": [
+    [
+      -9.826385079332411e-14,
+      9.827646071889891e-14,
+      0.0674595801850806,
+      0.29448458522401094,
+      -0.29448458522401105,
+      -0.5353161083007748,
+      -0.29448458522245147,
+      0.29448458522245163,
+      -0.5353161083024519
+    ],
+    [
+      0.04807729681538761,
+      -0.048077296815387575,
+      -1.63359513788063e-14,
+      -0.381510696599942,
+      0.3815106965999424,
+      -0.4102841068904534,
+      -0.3815106966036513,
+      0.3815106966036513,
+      0.4102841068907131
+    ],
+    [
+      1.4994003720546184e-13,
+      -1.4988548978290083e-13,
+      0.04945818545241747,
+      -0.40166872901772793,
+      0.4016687290177281,
+      -0.39246854616491245,
+      0.4016687290153483,
+      -0.4016687290153484,
+      -0.3924685461623533
+    ]
+  ],
+  "frequency_modes": {
+    "frequencies_cm-1": [
+      1770.9293086951957,
+      3771.8134539819575,
+      4010.6393817104386
+    ],
+    "normal_mode_eigenvectors": [
+      [
+        -9.826385079332411e-14,
+        9.827646071889891e-14,
+        0.0674595801850806,
+        0.29448458522401094,
+        -0.29448458522401105,
+        -0.5353161083007748,
+        -0.29448458522245147,
+        0.29448458522245163,
+        -0.5353161083024519
+      ],
+      [
+        0.04807729681538761,
+        -0.048077296815387575,
+        -1.63359513788063e-14,
+        -0.381510696599942,
+        0.3815106965999424,
+        -0.4102841068904534,
+        -0.3815106966036513,
+        0.3815106966036513,
+        0.4102841068907131
+      ],
+      [
+        1.4994003720546184e-13,
+        -1.4988548978290083e-13,
+        0.04945818545241747,
+        -0.40166872901772793,
+        0.4016687290177281,
+        -0.39246854616491245,
+        0.4016687290153483,
+        -0.4016687290153484,
+        -0.3924685461623533
+      ]
+    ],
+    "normal_mode_eigenvectors_units": "Cartesian displacement, mass-unweighted, row-major by vibrational mode"
+  },
+  "inertia": [
+    2.1018147495702832,
+    4.092737554906417,
+    6.194552304476701
+  ],
+  "infrared_intensities": [
+    3.1559778269612204,
+    648.9758756240403,
+    7.815318140233287
+  ],
+  "raman_activities": [
+    5698.242288163865,
+    185.62561492400695,
+    53.80619530736941
+  ],
+  "vibrational_intensity_metadata": {
+    "status": "computed",
+    "backend": "native_openqp_finite_difference",
+    "property_kernels": "electric_dipole_au,cphf_static_polarizability,vibrational_intensities_native",
+    "displacement_bohr": 0.001,
+    "ir_units": "km/mol",
+    "raman_units": "a.u."
+  },
+  "infrared_mode_dipole_derivatives": [
+    [
+      5.6663731691091834e-11,
+      -5.4646322278696054e-11,
+      0.27329262911381774
+    ],
+    [
+      2.7711512204839033,
+      -2.7711512204816224,
+      3.107058049866051e-12
+    ],
+    [
+      9.353876825395954e-11,
+      -9.470705331982168e-11,
+      -0.4300651762894776
+    ]
+  ],
+  "raman_mode_polarizability_derivatives": [
+    [
+      [
+        -10.998200713749679,
+        10.945035028695335,
+        5.013521656264413e-09
+      ],
+      [
+        10.945035029053514,
+        -10.998200714082154,
+        -4.748106674232274e-09
+      ],
+      [
+        2.64005535550624e-10,
+        -2.625286233622051e-10,
+        1.9663056696064356
+      ]
+    ],
+    [
+      [
+        -1.633822823610867e-09,
+        1.6575556987143319e-09,
+        -2.102298146843661
+      ],
+      [
+        1.7236875238438094e-09,
+        -1.731075048324708e-09,
+        2.1022981468286064
+      ],
+      [
+        -2.2205920442075353,
+        2.220592044203955,
+        -1.1628908747526421e-11
+      ]
+    ],
+    [
+      [
+        0.09243355111810928,
+        -1.0067982607391244,
+        3.7183686189141392e-09
+      ],
+      [
+        -1.0067982608692596,
+        0.09243355121663792,
+        -3.5243164873535427e-09
+      ],
+      [
+        2.084230272633287e-10,
+        -2.0520126944881825e-10,
+        1.6174052214866024
+      ]
+    ]
+  ],
+  "symmetry_metadata": {
+    "status": "disabled",
+    "enabled": false,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "c1",
+    "subgroup": "c1",
+    "detected_point_group": "c1",
+    "detected_subgroup": "c1",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": false,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "false",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "false",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    }
+  }
+}

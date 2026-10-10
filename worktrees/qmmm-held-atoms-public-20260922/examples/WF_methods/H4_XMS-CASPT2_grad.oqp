@@ -1,0 +1,6 @@
+xms-caspt2/sto-3g grad(S0) guess(type=hcore)
+scf(conv=1e-10,maxit=80,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,frozen_core=1,max_memory=512)
+ci(nroot=2,solver=dense,target_spin=singlet)
+pt2(reference=casci,variant=xms-caspt2,target_roots="0,1",nroot=2,gradient=analytic)
+geom="../geometries/H4-b9005833d66d.xyz"

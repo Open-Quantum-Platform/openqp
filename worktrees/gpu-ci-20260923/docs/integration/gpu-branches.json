@@ -1,0 +1,457 @@
+[
+  {
+    "sha": "c03b17e83566b4a6b10f94dd2d93038adc611f00",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-personal/feat/gpu-xc-response",
+        "source": "github-personal",
+        "name": "feat/gpu-xc-response",
+        "sha": "c03b17e83566b4a6b10f94dd2d93038adc611f00",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-xc-response",
+        "source": "gitlab",
+        "name": "feat/gpu-xc-response",
+        "sha": "c03b17e83566b4a6b10f94dd2d93038adc611f00",
+        "archive": false
+      }
+    ],
+    "decision": "Later scaffold retained under experimental/xc_response, excluded from production targets; planning in python/openqp_gpu/gpu.py."
+  },
+  {
+    "sha": "7f9eda08b20886137eadf8c7466158097196e057",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-personal/feat/gpu-xc-response-rebase",
+        "source": "github-personal",
+        "name": "feat/gpu-xc-response-rebase",
+        "sha": "7f9eda08b20886137eadf8c7466158097196e057",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-xc-response-rebase",
+        "source": "github-private",
+        "name": "feat/gpu-xc-response-rebase",
+        "sha": "7f9eda08b20886137eadf8c7466158097196e057",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-xc-response-rebase",
+        "source": "gitlab",
+        "name": "feat/gpu-xc-response-rebase",
+        "sha": "7f9eda08b20886137eadf8c7466158097196e057",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-07/feat/gpu-xc-response-rebase",
+        "source": "local-07",
+        "name": "feat/gpu-xc-response-rebase",
+        "sha": "7f9eda08b20886137eadf8c7466158097196e057",
+        "archive": false
+      }
+    ],
+    "decision": "Later scaffold retained under experimental/xc_response, excluded from production targets; planning in python/openqp_gpu/gpu.py."
+  },
+  {
+    "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-personal/feat/routec-dfjk-bridge",
+        "source": "github-personal",
+        "name": "feat/routec-dfjk-bridge",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/routec-dfjk-bridge",
+        "source": "gitlab",
+        "name": "feat/routec-dfjk-bridge",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/claude/condescending-maxwell-3d664c",
+        "source": "local-11",
+        "name": "claude/condescending-maxwell-3d664c",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/claude/festive-tu-dbc4ca",
+        "source": "local-11",
+        "name": "claude/festive-tu-dbc4ca",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/claude/gifted-montalcini-51ed09",
+        "source": "local-11",
+        "name": "claude/gifted-montalcini-51ed09",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/claude/jolly-bell-068a3f",
+        "source": "local-11",
+        "name": "claude/jolly-bell-068a3f",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/claude/vigorous-elion-dd912c",
+        "source": "local-11",
+        "name": "claude/vigorous-elion-dd912c",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-11/feat/dftd4-native",
+        "source": "local-11",
+        "name": "feat/dftd4-native",
+        "sha": "4d8afd6e122fe5435f263eb2cf5ffa7b41d9d3dc",
+        "archive": false
+      }
+    ],
+    "decision": "Host bridge preserved in seam/routec; DF GPU implementations already in src. Local tip adds README only."
+  },
+  {
+    "sha": "b450528167680c702b90fc323462c5b20c0e69f9",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-personal/gpu-mrsf-seam",
+        "source": "github-personal",
+        "name": "gpu-mrsf-seam",
+        "sha": "b450528167680c702b90fc323462c5b20c0e69f9",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/gpu-mrsf-seam",
+        "source": "gitlab",
+        "name": "gpu-mrsf-seam",
+        "sha": "b450528167680c702b90fc323462c5b20c0e69f9",
+        "archive": false
+      }
+    ],
+    "decision": "Already merged upstream PR265; existing seam/mrsf and src/sigma.cu retained."
+  },
+  {
+    "sha": "fb8309e167257d81e314510b340737069142d175",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-personal/perf/gpu-metc-persistent-buffers",
+        "source": "github-personal",
+        "name": "perf/gpu-metc-persistent-buffers",
+        "sha": "fb8309e167257d81e314510b340737069142d175",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/perf/gpu-metc-persistent-buffers",
+        "source": "gitlab",
+        "name": "perf/gpu-metc-persistent-buffers",
+        "sha": "fb8309e167257d81e314510b340737069142d175",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "5e4b23eba181a0e92b0a7e43c34392e63655f0c6",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-metc",
+        "source": "github-private",
+        "name": "feat/gpu-metc",
+        "sha": "5e4b23eba181a0e92b0a7e43c34392e63655f0c6",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-metc",
+        "source": "gitlab",
+        "name": "feat/gpu-metc",
+        "sha": "5e4b23eba181a0e92b0a7e43c34392e63655f0c6",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "a3b8a4a6791404f275aeb15a8ae5b7919cb6871f",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-metc-accumulation-layout",
+        "source": "github-private",
+        "name": "feat/gpu-metc-accumulation-layout",
+        "sha": "a3b8a4a6791404f275aeb15a8ae5b7919cb6871f",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-metc-accumulation-layout",
+        "source": "gitlab",
+        "name": "feat/gpu-metc-accumulation-layout",
+        "sha": "a3b8a4a6791404f275aeb15a8ae5b7919cb6871f",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "c03935a17b6e469917ee4b54725aaf9b3ff277c3",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-metc-atomics-v2",
+        "source": "github-private",
+        "name": "feat/gpu-metc-atomics-v2",
+        "sha": "c03935a17b6e469917ee4b54725aaf9b3ff277c3",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-metc-atomics-v2",
+        "source": "gitlab",
+        "name": "feat/gpu-metc-atomics-v2",
+        "sha": "c03935a17b6e469917ee4b54725aaf9b3ff277c3",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "70220d95deeb752bbaa50c42c890012059ede77a",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-metc-kernel-efficiency",
+        "source": "github-private",
+        "name": "feat/gpu-metc-kernel-efficiency",
+        "sha": "70220d95deeb752bbaa50c42c890012059ede77a",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-metc-kernel-efficiency",
+        "source": "gitlab",
+        "name": "feat/gpu-metc-kernel-efficiency",
+        "sha": "70220d95deeb752bbaa50c42c890012059ede77a",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-metc-two-phase-accum",
+        "source": "github-private",
+        "name": "feat/gpu-metc-two-phase-accum",
+        "sha": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-metc-two-phase-accum",
+        "source": "gitlab",
+        "name": "feat/gpu-metc-two-phase-accum",
+        "sha": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "ffabe60cb2f41d2f99f419b546e08d62cb84e329",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-porting-unified",
+        "source": "github-private",
+        "name": "feat/gpu-porting-unified",
+        "sha": "ffabe60cb2f41d2f99f419b546e08d62cb84e329",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-porting-unified",
+        "source": "gitlab",
+        "name": "feat/gpu-porting-unified",
+        "sha": "ffabe60cb2f41d2f99f419b546e08d62cb84e329",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-07/feat/gpu-porting-unified",
+        "source": "local-07",
+        "name": "feat/gpu-porting-unified",
+        "sha": "ffabe60cb2f41d2f99f419b546e08d62cb84e329",
+        "archive": false
+      }
+    ],
+    "decision": "Documentation only; retained in docs/history."
+  },
+  {
+    "sha": "1cacad57621f5076c55541a6b7ebf9db1c604701",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-profile-breakdown",
+        "source": "github-private",
+        "name": "feat/gpu-profile-breakdown",
+        "sha": "1cacad57621f5076c55541a6b7ebf9db1c604701",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/feat/gpu-profile-breakdown",
+        "source": "gitlab",
+        "name": "feat/gpu-profile-breakdown",
+        "sha": "1cacad57621f5076c55541a6b7ebf9db1c604701",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "763665403a4bff90f114c76c81fd70f2c30f06fb",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/feat/gpu-xc-response",
+        "source": "github-private",
+        "name": "feat/gpu-xc-response",
+        "sha": "763665403a4bff90f114c76c81fd70f2c30f06fb",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/github-private/feat/gpu-xc-response",
+        "source": "gitlab",
+        "name": "github-private/feat/gpu-xc-response",
+        "sha": "763665403a4bff90f114c76c81fd70f2c30f06fb",
+        "archive": false
+      }
+    ],
+    "decision": "Later scaffold retained under experimental/xc_response, excluded from production targets; planning in python/openqp_gpu/gpu.py."
+  },
+  {
+    "sha": "dd4f63515d10ac3d9af9fb119389b951401ece72",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/perf/gpu-metc-persistent-buffers",
+        "source": "github-private",
+        "name": "perf/gpu-metc-persistent-buffers",
+        "sha": "dd4f63515d10ac3d9af9fb119389b951401ece72",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/github-private/perf/gpu-metc-persistent-buffers",
+        "source": "gitlab",
+        "name": "github-private/perf/gpu-metc-persistent-buffers",
+        "sha": "dd4f63515d10ac3d9af9fb119389b951401ece72",
+        "archive": false
+      }
+    ],
+    "decision": "Represented by two-phase tip beb51a2617ad: src/metc, Python planning, seam/metc tools. All earlier selectable kernel variants retained."
+  },
+  {
+    "sha": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+    "aliases": [
+      {
+        "ref": "refs/remotes/local-07/feat/gpu-metc-regression-test",
+        "source": "local-07",
+        "name": "feat/gpu-metc-regression-test",
+        "sha": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+        "archive": false
+      }
+    ],
+    "decision": "Numerical regression and benchmark ported; tests now target standalone METC and fail on CUDA errors."
+  },
+  {
+    "sha": "6413215eeb41ba63452ba641661acc9713f6af23",
+    "aliases": [
+      {
+        "ref": "refs/remotes/local-07/feat/gpu-workspace-manager",
+        "source": "local-07",
+        "name": "feat/gpu-workspace-manager",
+        "sha": "6413215eeb41ba63452ba641661acc9713f6af23",
+        "archive": false
+      }
+    ],
+    "decision": "Distinct planning API retained as workspace_legacy.py with its tests; canonical gpu_workspace.py uses later residency contract."
+  },
+  {
+    "sha": "d9a752d4002a0a6dc4f5a19d1313fc087390f5a1",
+    "aliases": [
+      {
+        "ref": "refs/remotes/local-11/feat/routec-dfjk-bridge",
+        "source": "local-11",
+        "name": "feat/routec-dfjk-bridge",
+        "sha": "d9a752d4002a0a6dc4f5a19d1313fc087390f5a1",
+        "archive": false
+      }
+    ],
+    "decision": "Host bridge preserved in seam/routec; DF GPU implementations already in src. Local tip adds README only."
+  },
+  {
+    "sha": "a1c4f06de592238ec26249e20252bc1e9f284c30",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/claude/elegant-hypatia-wZpoB",
+        "source": "github-private",
+        "name": "claude/elegant-hypatia-wZpoB",
+        "sha": "a1c4f06de592238ec26249e20252bc1e9f284c30",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/claude/elegant-hypatia-wZpoB",
+        "source": "gitlab",
+        "name": "claude/elegant-hypatia-wZpoB",
+        "sha": "a1c4f06de592238ec26249e20252bc1e9f284c30",
+        "archive": false
+      }
+    ],
+    "decision": "Earlier METC implementation subsumed by beb51a; unique Fortran/CUDA contraction-equivalence test recovered with immutable CPU excerpts."
+  },
+  {
+    "sha": "9636a98b85dc9dbeea649629018757161d8a52f9",
+    "aliases": [
+      {
+        "ref": "refs/remotes/github-private/rot-seam-v12",
+        "source": "github-private",
+        "name": "rot-seam-v12",
+        "sha": "9636a98b85dc9dbeea649629018757161d8a52f9",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/gitlab/rot-seam-v12",
+        "source": "gitlab",
+        "name": "rot-seam-v12",
+        "sha": "9636a98b85dc9dbeea649629018757161d8a52f9",
+        "archive": false
+      },
+      {
+        "ref": "refs/remotes/local-07/rot-seam-v12",
+        "source": "local-07",
+        "name": "rot-seam-v12",
+        "sha": "9636a98b85dc9dbeea649629018757161d8a52f9",
+        "archive": false
+      }
+    ],
+    "decision": "CPU rotation host seam belongs in internal OpenQP/libintRot. All seven CUDA/reference headers already byte-identical in tools/dfbuild/sph_eri; no duplicate kernel import."
+  },
+  {
+    "sha": "3d4984f8c2d5638a52930affe0449d9a624342eb",
+    "aliases": [
+      {
+        "ref": "refs/remotes/local-07/mac-rot-seam",
+        "source": "local-07",
+        "name": "mac-rot-seam",
+        "sha": "3d4984f8c2d5638a52930affe0449d9a624342eb",
+        "archive": false
+      }
+    ],
+    "decision": "CPU rotation host seam belongs in internal OpenQP/libintRot. All seven CUDA/reference headers already byte-identical in tools/dfbuild/sph_eri; no duplicate kernel import."
+  },
+  {
+    "sha": "901c3e2bc723c2a1bc8496fd265ba84d80d44aac",
+    "aliases": [
+      {
+        "ref": "refs/remotes/local-10/fix/oqp-timer-parser-blockers",
+        "source": "local-10",
+        "name": "fix/oqp-timer-parser-blockers",
+        "sha": "901c3e2bc723c2a1bc8496fd265ba84d80d44aac",
+        "archive": false
+      }
+    ],
+    "decision": "GPU benchmark timer parser and captured-log regression imported; no host timer code changed."
+  }
+]

@@ -1,0 +1,20 @@
+[package]
+name = "oqp-studio"
+version = "0.2.5"
+description = "OQP Studio desktop shell"
+edition = "2021"
+license-file = "../../LICENSE"
+repository = "https://github.com/Open-Quantum-Platform/oqp-studio"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+strip = true
+lto = true

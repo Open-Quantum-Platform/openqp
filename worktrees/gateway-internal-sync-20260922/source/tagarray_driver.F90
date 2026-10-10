@@ -1,0 +1,435 @@
+#include "tagarray.fh"
+module oqp_tagarray_driver
+  use tagarray
+
+  use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_char, c_ptr, c_null_ptr, c_bool
+
+  implicit none
+  private
+  character(len=*), parameter, private :: module_name = "oqp_tagarray_driver"
+  public :: tagarray_get_cptr
+  character(len=*), parameter, public :: OQP_prefix = "OQP::"
+  character(len=*), parameter, public :: OQP_DM_A = OQP_prefix // "DM_A"
+  character(len=*), parameter, public :: OQP_DM_B = OQP_prefix // "DM_B"
+  character(len=*), parameter, public :: OQP_FOCK_A = OQP_prefix // "FOCK_A"
+  character(len=*), parameter, public :: OQP_FOCK_B = OQP_prefix // "FOCK_B"
+  character(len=*), parameter, public :: OQP_E_MO_A = OQP_prefix // "E_MO_A"
+  character(len=*), parameter, public :: OQP_E_MO_B = OQP_prefix // "E_MO_B"
+  character(len=*), parameter, public :: OQP_VEC_MO_A = OQP_prefix // "VEC_MO_A"
+  character(len=*), parameter, public :: OQP_VEC_MO_B = OQP_prefix // "VEC_MO_B"
+  character(len=*), parameter, public :: OQP_Hcore = OQP_prefix // "Hcore"
+  character(len=*), parameter, public :: OQP_SM = OQP_prefix // "SM"
+  character(len=*), parameter, public :: OQP_QMAT = OQP_prefix // "QMAT"
+  character(len=*), parameter, public :: OQP_TM = OQP_prefix // "TM"
+  character(len=*), parameter, public :: OQP_ERI_AO = OQP_prefix // "ERI_AO"
+  character(len=*), parameter, public :: OQP_ERI_AO_comment = &
+    "Two-electron repulsion integrals (mu nu|la si) in AO basis, chemist "// &
+    "notation, full nbf**4 array stored C-contiguous with si fastest"
+  character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
+  character(len=*), parameter, public :: OQP_AO_ERI = OQP_prefix // "AO_ERI"
+  character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
+  character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
+  character(len=*), parameter, public :: OQP_td_mrsf_density = OQP_prefix // "td_mrsf_density"
+  character(len=*), parameter, public :: OQP_td_p = OQP_prefix // "td_p"
+  character(len=*), parameter, public :: OQP_td_t = OQP_prefix // "td_t"
+  character(len=*), parameter, public :: OQP_td_z = OQP_prefix // "td_z"
+  character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
+  character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
+  character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_t = OQP_prefix // "td_bvec_mo_t"                  !new
+  character(len=*), parameter, public :: OQP_nmr_shielding = OQP_prefix // "nmr_shielding"
+  character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
+    "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
+    "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
+  character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
+    "Mulliken atomic partial charges (e), one per atom"
+  character(len=*), parameter, public :: OQP_lowdin_charges = OQP_prefix // "lowdin_charges"
+  character(len=*), parameter, public :: OQP_lowdin_charges_comment = &
+    "Lowdin atomic partial charges (e), one per atom"
+  ! NB: identifier differs from the subroutine oqp_resp_charges (Fortran is
+  ! case-insensitive); the JSON key is still "resp_charges".
+  character(len=*), parameter, public :: OQP_resp_chg = OQP_prefix // "resp_charges"
+  character(len=*), parameter, public :: OQP_resp_chg_comment = &
+    "RESP/ESP-fitted atomic partial charges (e), one per atom"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_orbitals_mo = OQP_prefix // "mrsf_ekt_orbitals_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_eigenvalues = OQP_prefix // "mrsf_ekt_eigenvalues"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_strengths = OQP_prefix // "mrsf_ekt_strengths"
+  character(len=*), parameter, public :: OQP_hf_hessian = OQP_prefix // "hf_hessian"
+  character(len=*), parameter, public :: OQP_tdhf_hessian = OQP_prefix // "tdhf_hessian"
+  character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
+  character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
+  character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
+! Used to compute properties between two geometries
+  character(len=*), parameter, public :: OQP_xyz_old = OQP_prefix // "xyz_old"
+  character(len=*), parameter, public :: OQP_overlap_ao = OQP_prefix // "overlap_ao_non_orthogonal"
+  character(len=*), parameter, public :: OQP_overlap_mo = OQP_prefix // "overlap_mo_non_orthogonal"
+  character(len=*), parameter, public :: OQP_E_MO_A_old = OQP_prefix // "E_MO_A_old"
+  character(len=*), parameter, public :: OQP_E_MO_B_old = OQP_prefix // "E_MO_B_old"
+  character(len=*), parameter, public :: OQP_VEC_MO_A_old = OQP_prefix // "VEC_MO_A_old"
+  character(len=*), parameter, public :: OQP_VEC_MO_B_old = OQP_prefix // "VEC_MO_B_old"
+  character(len=*), parameter, public :: OQP_td_bvec_mo_old = OQP_prefix // "td_bvec_mo_old"
+  character(len=*), parameter, public :: OQP_td_energies_old = OQP_prefix // "td_energies_old"
+  character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
+  character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
+  character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  character(len=*), parameter, public :: OQP_mm_potential = OQP_prefix // "mm_potential"
+  character(len=*), parameter, public :: OQP_Hqmmm = OQP_prefix // "hamiltonian_qmmm"
+  character(len=*), parameter, public :: OQP_partial_charges = OQP_prefix // "partial_charges"
+  character(len=*), parameter, public :: OQP_mm_energy = OQP_prefix // "mm_energy"
+  character(len=*), parameter, public :: OQP_mm_gradient = OQP_prefix // "mm_gradient"
+  character(len=*), parameter, public :: OQP_ESPF_CORR = OQP_prefix // "ESPF_CORR"
+  character(len=*), parameter, public :: OQP_POTQM = OQP_prefix // "POTQM"
+  character(len=*), parameter, public :: OQP_POTMM = OQP_prefix // "POTMM"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD = OQP_prefix // "ESPF_GRAD"
+
+  ! NAMD (Tully FSSH) state exchanged with the Python trajectory driver
+  character(len=*), parameter, public :: OQP_namd_coef     = OQP_prefix // "namd_coef"
+  character(len=*), parameter, public :: OQP_namd_velocity = OQP_prefix // "namd_velocity"
+  character(len=*), parameter, public :: OQP_namd_params   = OQP_prefix // "namd_params"
+  character(len=*), parameter, public :: OQP_namd_results  = OQP_prefix // "namd_results"
+  character(len=*), parameter, public :: OQP_namd_tdc      = OQP_prefix // "namd_tdc"
+  character(len=*), parameter, public :: OQP_namd_eabs     = OQP_prefix // "namd_eabs"
+  character(len=*), parameter, public :: OQP_namd_stas     = OQP_prefix // "namd_stas"
+  character(len=*), parameter, public :: OQP_namd_dcv      = OQP_prefix // "namd_dcv"
+
+  ! MRSF spin-orbit coupling (from upstream SOC merge)
+  character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
+  character(len=*), parameter, public :: OQP_soc_evec_re = OQP_prefix // "soc_evec_re"
+  character(len=*), parameter, public :: OQP_soc_evec_im = OQP_prefix // "soc_evec_im"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re = OQP_prefix // "soc_hsoc_re"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
+
+  ! misc-excited-analysis: MRSF state-interaction transition/state densities and
+  ! dipole intermediates exposed for downstream Python excited-state analysis
+  ! (NTOs / attach-detach / cubes / descriptors). Written at the end of the MRSF
+  ! energy driver; read read-only from Python via the tagarray bridge.
+  character(len=*), parameter, public :: OQP_td_trans_density_mo = OQP_prefix // "td_trans_density_mo"
+  character(len=*), parameter, public :: OQP_td_trans_dipole = OQP_prefix // "td_trans_dipole"
+  character(len=*), parameter, public :: OQP_td_dip_ao = OQP_prefix // "td_dip_ao"
+  character(len=*), parameter, public :: OQP_td_trans_density_mo_comment = &
+    "MRSF state-interaction 1-TDM (off-diag) / difference 1-RDM (diag) in the "// &
+    "alpha-MO basis; shape (nbf,nbf,nstates*nstates), pair k=ist+(jst-1)*nstates"
+  character(len=*), parameter, public :: OQP_td_trans_dipole_comment = &
+    "MRSF transition dipoles (a.u.) at center of mass; shape (3,nstates,nstates)"
+  character(len=*), parameter, public :: OQP_td_dip_ao_comment = &
+    "AO electric-dipole integrals (a.u.) at center of mass; packed L-triangle (nbf*(nbf+1)/2,3)"
+
+  ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
+  ! is enabled)
+  character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
+  character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
+  character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
+  character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
+  character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
+  character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_resp_proj = OQP_prefix // "sym_response_project_enable"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
+  character(len=*), parameter, public :: OQP_sym_nonabelian = OQP_prefix // "sym_nonabelian"
+  ! Per-MO abelian irrep index (1-based; 0 = not classifiable). Written by
+  ! pyoqp whenever MO labels exist, so any correlated method can block its
+  ! amplitudes, CI vectors or integral blocks by irrep. Unlike the petite
+  ! list this is DESCRIPTIVE: reading it changes nothing on its own.
+  character(len=*), parameter, public :: OQP_sym_mo_irrep_a = OQP_prefix // "sym_mo_irrep_a"
+  character(len=*), parameter, public :: OQP_sym_mo_irrep_b = OQP_prefix // "sym_mo_irrep_b"
+  ! XOR code per irrep index (element 0 unused, so it is indexed by the
+  ! 1-based irrep index directly). Abelian characters are +-1, so the code is
+  ! the bitmask of operations with character -1 and the direct product is a
+  ! bitwise XOR of codes.
+  character(len=*), parameter, public :: OQP_sym_irrep_xor = OQP_prefix // "sym_irrep_xor"
+
+  character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
+  character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
+  character(len=*), parameter, public :: OQP_FOCK_A_comment = "Alpha-spin triangle Fock matrix"
+  character(len=*), parameter, public :: OQP_FOCK_B_comment = "Beta-spin triangle Fock matrix"
+  character(len=*), parameter, public :: OQP_E_MO_A_comment = "Energies of alpha molecular orbitals"
+  character(len=*), parameter, public :: OQP_E_MO_B_comment = "Energies of beta molecular orbitals"
+  character(len=*), parameter, public :: OQP_VEC_MO_A_comment = "Coefficients of alpha molecular orbitals"
+  character(len=*), parameter, public :: OQP_VEC_MO_B_comment = "Coefficients of beta molecular orbitals"
+  character(len=*), parameter, public :: OQP_Hcore_comment = "triangle core Hamiltonian matrix"
+  character(len=*), parameter, public :: OQP_AO_ERI_comment = "Dense AO two-electron integrals in chemists notation"
+  character(len=*), parameter, public :: OQP_SM_comment = "triangle Overlap matrix"
+  character(len=*), parameter, public :: OQP_QMAT_comment = "canonical orthogonalizer Q = S^(-1/2), full (nbf x nbf)"
+  character(len=*), parameter, public :: OQP_TM_comment = "triangle Kinetic-Energy matrix"
+  character(len=*), parameter, public :: OQP_WAO_comment = "??? WAO ???"
+  character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
+  character(len=*), parameter, public :: OQP_td_bvec_mo_comment = "??? td_bvec_mo ???"
+  character(len=*), parameter, public :: OQP_td_mrsf_density_comment = "??? td_mrsf_density ???"
+  character(len=*), parameter, public :: OQP_td_p_comment = "??? td_p ???"
+  character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
+  character(len=*), parameter, public :: OQP_td_z_comment = &
+    "TDHF/TDDFT orbital-relaxation Z vector for the target state"
+  character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
+  character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
+  character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
+  character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
+  character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"
+  character(len=*), parameter, public :: OQP_mm_gradient_comment = "MM gradient"
+  character(len=*), parameter, public :: OQP_Hqmmm_comment = "triangle QM/MM Hamiltonian matrix"
+  character(len=*), parameter, public :: OQP_espf_corr_comment = "ESPF one-electron operators for each QM atom"
+  character(len=*), parameter, public :: OQP_log_filename_comment = OQP_prefix // "log filename"
+  character(len=*), parameter, public :: OQP_potqm_comment = OQP_prefix // "Quantum contribution to the potential"
+  character(len=*), parameter, public :: OQP_potmm_comment = OQP_prefix // "MM contribution to the potential"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD_comment = OQP_prefix // "ESP contribution to the gradient"
+  character(len=*), parameter, public :: OQP_basis_filename_comment = OQP_prefix // "basis filename"
+  character(len=*), parameter, public :: OQP_hbasis_filename_comment = OQP_prefix // "Huckel basis_filename for Huckel Guess"
+  character(len=*), parameter, public :: OQP_nac_comment = OQP_prefix // "nonadiabatic coupling nstates x nstates"
+  character(len=*), parameter, public :: OQP_overlap_mo_comment = OQP_prefix // "overlap between MOs of geo1 and geo2"
+  character(len=*), parameter, public :: OQP_overlap_ao_comment = OQP_prefix // "overlap between geo1 and geo2"
+  character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
+  character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
+  character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
+  character(len=*), parameter, public :: OQP_namd_coef_comment = OQP_prefix // "NAMD electronic amplitudes (2 x nstate: re,im)"
+  character(len=*), parameter, public :: OQP_namd_velocity_comment = OQP_prefix // "NAMD nuclear velocities (3 x natom, a.u.)"
+  character(len=*), parameter, public :: OQP_namd_params_comment = OQP_prefix // "NAMD packed scalar parameters/state"
+  character(len=*), parameter, public :: OQP_namd_results_comment = OQP_prefix // "NAMD per-step diagnostics (hop prob + flags)"
+  character(len=*), parameter, public :: OQP_namd_tdc_comment = OQP_prefix // "NAMD time-derivative coupling matrix (nstate x nstate)"
+  character(len=*), parameter, public :: OQP_namd_eabs_comment = OQP_prefix // "NAMD absolute state energies (Hartree)"
+  character(len=*), parameter, public :: OQP_namd_stas_comment = OQP_prefix // "NAMD state overlap matrix (flat n*n) for trivial-crossing"
+  character(len=*), parameter, public :: OQP_namd_dcv_comment = OQP_prefix // "NAMD analytic derivative couplings (3*natom*nstate*nstate)"
+  character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
+  character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
+
+  character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
+    OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
+    OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, OQP_AO_ERI, &
+    OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, OQP_td_z, &
+    OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
+    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, &
+    OQP_hf_hessian, OQP_tdhf_hessian, &
+    OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
+    OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
+    OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
+    OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
+    OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
+    OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &
+    OQP_namd_tdc, OQP_namd_eabs, OQP_namd_stas, OQP_namd_dcv /)
+
+  interface tagarray_get_data
+    module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
+    module procedure tagarray_get_data_real64_val, tagarray_get_data_real64_1d, tagarray_get_data_real64_2d, tagarray_get_data_real64_3d
+    module procedure tagarray_get_data_char8_val, tagarray_get_data_char8_1d
+  end interface
+  interface data_has_tags
+    module procedure data_has_tags_location, data_has_tags_ms
+  end interface
+  public :: data_has_tags, check_status
+  public :: tagarray_get_data
+  public :: tagarray_reserve_data
+  public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
+  public :: ta_ok
+contains
+
+  ! Compatibility adapter for resident NAC records written against the
+  ! pre-1.0 TagArray reserve_data interface.  TagArray 1.0 replaces that
+  ! interface with container%create/alloc; override=.true. preserves the old
+  ! replace-existing-record semantics without changing the stored shape.
+  subroutine tagarray_reserve_data(container, tag, type_id, data_size, shape, comment)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(c_int32_t), intent(in) :: type_id
+    integer, intent(in) :: data_size
+    integer, intent(in) :: shape(:)
+    character(len=*), optional, intent(in) :: comment
+    integer(c_int32_t) :: status
+    integer(c_int64_t) :: shape64(size(shape))
+
+    shape64 = int(shape, c_int64_t)
+    if (int(data_size, c_int64_t) /= product(shape64)) then
+      error stop "tagarray_reserve_data: data_size does not match shape"
+    end if
+    if (present(comment)) then
+      status = container%create(tag, type_id, shape64, description=comment, &
+                                override=.true.)
+    else
+      status = container%create(tag, type_id, shape64, override=.true.)
+    end if
+    call check_status(status, module_name, "tagarray_reserve_data", tag, .true.)
+  end subroutine tagarray_reserve_data
+
+    function tagarray_get_cptr(container, tag, ptr, type_id, ndims, dims, data_size) result(res)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    type(c_ptr), intent(out) :: ptr
+    integer(c_int64_t) :: res
+    integer(c_int32_t), optional, intent(out) :: type_id
+    integer(c_int32_t), optional, intent(out) :: ndims
+    integer(c_int64_t), optional, intent(out) :: dims(:)
+    integer(c_int64_t), optional, intent(out) :: data_size
+
+    type(recordinfo_t) :: record_info
+
+    ptr = c_null_ptr
+    res = TA_CONTAINER_RECORD_NOT_FOUND
+    if (.not. container%contains(tag)) return
+
+    record_info = container%get(tag)
+    ptr = record_info%data
+    res = record_info%count
+    if (present(type_id)) type_id = record_info%type_id
+    if (present(ndims  )) ndims   = int(record_info%ndims, c_int32_t)
+    ! record_info%dims is a pointer of extent ndims (null for scalar records);
+    ! slice both sides so the assignment conforms for every ndims, incl. 0
+    if (present(dims) .and. record_info%ndims > 0) &
+      dims(1:record_info%ndims) = record_info%dims(1:record_info%ndims)
+    if (present(data_size   )) data_size = record_info%count
+
+  end function tagarray_get_cptr
+
+
+  subroutine data_has_tags_location(container, tags, location, abort, status)
+    use messages, only: show_message, WITHOUT_ABORT
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tags(:)
+    character(len=*), intent(in) :: location
+    logical, optional, intent(in) :: abort
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: tag_id, status_
+    logical :: abort_
+    abort_ = WITHOUT_ABORT
+    if (present(abort)) abort_ = abort
+    status_ = TA_OK
+    if (.not. container%contains(tags, tag_id)) then
+      status_ = TA_CONTAINER_RECORD_NOT_FOUND
+      call show_message( &
+          location // ": " // get_status_message(status_, trim(tags(tag_id))), &
+          abort_)
+    end if
+    if (present(status)) status = status_
+  end subroutine data_has_tags_location
+  subroutine data_has_tags_ms(container, tags, modulename, subroutinename, abort, status)
+    use messages, only: show_message, WITHOUT_ABORT
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tags(:)
+    character(len=*), intent(in) :: modulename, subroutinename
+    logical, optional, intent(in) :: abort
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: tag_id, status_
+    logical :: abort_
+    abort_ = WITHOUT_ABORT
+    if (present(abort)) abort_ = abort
+    status_ = TA_OK
+    if (.not. container%contains(tags, tag_id)) then
+      status_ = TA_CONTAINER_RECORD_NOT_FOUND
+      call show_message( &
+          modulename // "::" // subroutinename // ": " // get_status_message(status_, trim(tags(tag_id))), &
+          abort_)
+    end if
+    if (present(status)) status = status_
+  end subroutine data_has_tags_ms
+  subroutine check_status(status, modulename, subroutinename, tag, abort)
+    use messages, only: show_message, WITHOUT_ABORT
+    integer(c_int32_t), intent(in) :: status
+    character(len=*), intent(in) :: modulename, subroutinename, tag
+    logical, optional, intent(in) :: abort
+    logical :: abort_
+    abort_ = WITHOUT_ABORT
+    if (present(abort)) abort_ = abort
+    if (status /= TA_OK) call show_message( &
+        modulename // "::" // subroutinename // ": " // get_status_message(status, trim(tag)), &
+        abort_)
+  end subroutine check_status
+  subroutine tagarray_get_data_int64_val(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(8), pointer :: ptr
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_int64_val
+  subroutine tagarray_get_data_int64_1d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(8), pointer :: ptr(:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_int64_1d
+  subroutine tagarray_get_data_int64_2d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(8), pointer :: ptr(:,:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_int64_2d
+  subroutine tagarray_get_data_int64_3d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    integer(8), pointer :: ptr(:,:,:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_int64_3d
+  subroutine tagarray_get_data_real64_val(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    real(8), pointer :: ptr
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_real64_val
+  subroutine tagarray_get_data_real64_1d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    real(8), pointer :: ptr(:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_real64_1d
+  subroutine tagarray_get_data_real64_2d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    real(8), pointer :: ptr(:,:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_real64_2d
+  subroutine tagarray_get_data_real64_3d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    real(8), pointer :: ptr(:,:,:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_real64_3d
+
+  subroutine tagarray_get_data_char8_val(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    character(len=*, kind=c_char), pointer :: ptr
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_char8_val
+
+  subroutine tagarray_get_data_char8_1d(container, tag, ptr, status)
+    type(container_t), intent(inout) :: container
+    character(len=*), intent(in) :: tag
+    character(len=*, kind=c_char), pointer :: ptr(:)
+    integer(c_int32_t), optional, intent(out) :: status
+    integer(c_int32_t) :: status_
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    if (present(status)) status = status_
+  end subroutine tagarray_get_data_char8_1d
+end module oqp_tagarray_driver

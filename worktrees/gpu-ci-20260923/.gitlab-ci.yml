@@ -1,0 +1,117 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+stages: [test, build, gpu]
+
+default:
+  interruptible: true
+  retry:
+    max: 1
+    when: [runner_system_failure]
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUTF8: "1"
+  OMP_NUM_THREADS: "2"
+  OPENBLAS_NUM_THREADS: "1"
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+
+.test-reports:
+  artifacts:
+    when: always
+    expire_in: 14 days
+    reports:
+      junit: reports/*.xml
+    paths: [reports/]
+
+linux-host:
+  extends: .test-reports
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  timeout: 10m
+  before_script:
+    - python -m venv .venv-ci
+    - .venv-ci/bin/python -m pip install -r ci/requirements.txt
+  script:
+    - .venv-ci/bin/python ci/run_tests.py host
+    - .venv-ci/bin/python -m compileall -q python/openqp_gpu ci
+
+# Windows checks the portable Python control code, not CUDA execution or the
+# Linux C shared-library ABI. The native backend currently targets Linux.
+windows-python:
+  extends: .test-reports
+  stage: test
+  tags: [windows, winserver1]
+  timeout: 15m
+  script:
+    - |
+      $ErrorActionPreference = 'Stop'
+      & 'C:\Program Files\Python311\python.exe' -m venv .venv-ci
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & .\.venv-ci\Scripts\python.exe -m pip install -r ci/requirements.txt
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & .\.venv-ci\Scripts\python.exe ci/run_tests.py python
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      & .\.venv-ci\Scripts\python.exe -m compileall -q python/openqp_gpu ci
+      exit $LASTEXITCODE
+
+.cuda-environment:
+  image: nvidia/cuda:12.6.3-devel-ubuntu24.04
+  before_script:
+    - apt-get update
+    - >-
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+      build-essential cmake ninja-build libopenblas-dev ca-certificates
+
+linux-cuda-build:
+  extends: .cuda-environment
+  stage: build
+  dependencies: []
+  tags: [small-linux]
+  timeout: 90m
+  script:
+    - bash ci/build_cuda.sh
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - reports/
+      - build/libopenqp_gpu*.so
+      - build/openqp_gpu_build_df
+      - build/install/
+
+# Required, never a successful skip: without an assigned GPU runner this job
+# remains pending and blocks a green pipeline. Do not tag a CPU runner as GPU.
+linux-cuda-regression:
+  extends:
+    - .cuda-environment
+    - .test-reports
+  stage: gpu
+  tags: [linux, nvidia-gpu]
+  needs:
+    - job: linux-cuda-build
+      artifacts: true
+  resource_group: openqp-gpu-cuda-regression
+  timeout: 30m
+  variables:
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    OPENQP_GPU_METC_REQUIRE: "1"
+  script:
+    - set -euo pipefail
+    - mkdir -p reports
+    - nvidia-smi | tee reports/nvidia-smi.txt
+    - cd build && sha256sum --check ../reports/cuda-libraries.sha256 && cd ..
+    - apt-get install -y --no-install-recommends python3-venv
+    - python3 -m venv .bootstrap
+    - .bootstrap/bin/python -m pip install uv==0.8.22
+    - .bootstrap/bin/uv venv --python 3.11 .venv-ci
+    - .bootstrap/bin/uv pip install --python .venv-ci/bin/python -r ci/requirements.txt
+    - export OPENQP_GPU_METC_LIB="$CI_PROJECT_DIR/build/libopenqp_gpu_metc.so"
+    - .venv-ci/bin/python ci/run_tests.py cuda

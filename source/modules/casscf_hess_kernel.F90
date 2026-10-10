@@ -54,6 +54,7 @@
 !> what lets each contraction above be a GEMM with no repacking.
 module casscf_hess_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+  use casscf_exc_stack_mf_mod, only: mf_bsearch
   implicit none
   private
 
@@ -75,6 +76,7 @@ module casscf_hess_kernel_mod
   integer, parameter :: merge_min_pairs = 16
 
   public :: casscf_hess_amp, casscf_hess_wmat, casscf_hess_relax
+  public :: casscf_hess_amp_mf  ! matrix-free (no dense stack)
 
 contains
 
@@ -140,13 +142,14 @@ contains
     real(dp) :: acc
     logical :: merged
     real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:), sblk(:)
+    integer(i8) :: status
 
     na = int(nact)
     np = int(npar)
     nd = int(ndet)
     na2 = na * na
     na4 = na2 * na2
-    if (np <= 0 .or. nd <= 0 .or. na <= 0) return
+    if (np <= 0 .or. nd <= 0 .or. na <= 0) then; status = -1_i8; return; end if
 
     ! Chunk the pair index so the x buffer stays inside its budget, but never
     ! fewer than one pair per chunk.
@@ -241,6 +244,172 @@ contains
     deallocate(sigma, xbuf, gtr)
     if (allocated(sblk)) deallocate(sblk)
   end subroutine casscf_hess_amp
+
+
+  !> Matrix-free variant of casscf_hess_amp — replaces the dense stack with
+  !> on-the-fly evaluation of the excitation-matrix products.
+  !>
+  !> Steps 1–3 and 5 are identical to the dense version.  Step 4
+  !> (sigma += 0.5 * stack^T @ xbuf) is replaced by a determinant walk that
+  !> enumerates only the non-zero entries of E_tu, avoiding the entire
+  !> O(nact² × ndet²) stack allocation.  Memory drops from nact²×ndet² doubles
+  !> to O(2×nact²×ndet) for skeys/sperm; the arithmetic is unchanged.
+  !>
+  !> @param[in]  nact   active orbitals
+  !> @param[in]  ndet   determinants
+  !> @param[in]  npar   non-redundant rotation pairs
+  !> @param[in]  dets   determinant keys in CI order, [ndet]
+  !> @param[in]  skeys  sorted determinant keys, [ndet]
+  !> @param[in]  sperm  map sorted→CI position, [ndet]
+  !> @param[in]  fder   folded one-body derivative integrals, C-order [npar,nact,nact]
+  !> @param[in]  gder   folded two-body derivative integrals, C-order [npar,nact,nact,nact,nact]
+  !> @param[in]  wmat   E_tu applied to the reference CI vector, C-order [nact,nact,ndet]
+  !> @param[in]  vecs   active-Hamiltonian eigenvectors, C-order [ndet,ndet]
+  !> @param[out] amp    projected amplitudes, C-order [npar,ndet]
+  function casscf_hess_amp_mf(nact, ndet, npar, dets, skeys, sperm, &
+                                fder, gder, wmat, vecs, amp) &
+      result(status) bind(C, name="casscf_hess_amp_mf")
+    integer(c_int32_t), value :: nact, npar
+    integer(i8), value :: ndet
+    integer(i8), intent(in) :: dets(0:*), skeys(0:*), sperm(0:*)
+    real(dp), intent(in) :: fder(0:*), gder(0:*), wmat(0:*), vecs(0:*)
+    real(dp), intent(inout) :: amp(0:*)
+    integer(c_int64_t) :: status
+
+    integer :: na, na2, na4, np, nd, nb, ncols, kbase, nchunk
+    integer :: chunk, kk, t, u, w, ierr
+    integer(i8) :: need
+    real(dp) :: acc
+    real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:)
+
+    na = int(nact)
+    np = int(npar)
+    nd = int(ndet)
+    na2 = na * na
+    na4 = na2 * na2
+    if (np <= 0 .or. nd <= 0 .or. na <= 0) then; status = -1_i8; return; end if
+
+    ! Chunk the pair index so the x buffer stays inside its budget.
+    need = int(na2, i8) * int(nd, i8)
+    nb = int(max(1_i8, min(int(np, i8), x_budget / max(1_i8, need))))
+    nchunk = (np + nb - 1) / nb
+
+    allocate(sigma(0:nd-1, 0:nb-1), stat=ierr)
+    if (ierr /= 0) then; status = -1_i8; return; end if
+    allocate(xbuf(0:need*int(nb, i8) - 1_i8), stat=ierr)
+    if (ierr /= 0) then; status = -1_i8; return; end if
+    allocate(gtr(0:int(na2, i8)*int(nb, i8) - 1_i8), stat=ierr)
+    if (ierr /= 0) then; status = -1_i8; return; end if
+
+    do chunk = 0, nchunk - 1
+      kbase = chunk * nb
+      ncols = min(nb, np - kbase)
+
+      ! ---- 1. sigma(a,k) = sum_(t,u) W(a,(t,u)) f^(k)((t,u))
+      call dgemm('N', 'N', nd, ncols, na2, 1.0_dp, &
+                 wmat, nd, fder(int(kbase, i8)*int(na2, i8)), na2, &
+                 0.0_dp, sigma, nd)
+
+      ! ---- 3. sigma -= 1/2 sum_(t,w) W(a,(t,w)) gtr^(k)(t,w),
+      !         gtr^(k)_tw = sum_u g^(k)_tuuw
+      do kk = 0, ncols - 1
+        do t = 0, na - 1
+          do w = 0, na - 1
+            acc = 0.0_dp
+            do u = 0, na - 1
+              acc = acc + gder((((int(kbase + kk, i8)*int(na, i8) + int(t, i8)) &
+                                 *int(na, i8) + int(u, i8)) &
+                                 *int(na, i8) + int(u, i8)) &
+                                 *int(na, i8) + int(w, i8))
+            end do
+            gtr(int(t*na + w, i8) + int(kk, i8)*int(na2, i8)) = acc
+          end do
+        end do
+      end do
+      call dgemm('N', 'N', nd, ncols, na2, -0.5_dp, &
+                 wmat, nd, gtr, na2, 1.0_dp, sigma, nd)
+
+      ! ---- 2. x(b,(k,t,u)) = sum_(v,w) W(b,(v,w)) g^(k)((t,u),(v,w))
+      call dgemm('N', 'N', nd, ncols*na2, na2, 1.0_dp, &
+                 wmat, nd, gder(int(kbase, i8)*int(na4, i8)), na2, &
+                 0.0_dp, xbuf, nd)
+
+      ! ---- 4. sigma += 0.5 * stack^T @ xbuf, on the fly (sparse apply).
+      call mf_apply_step4(na, ndet, ncols, na2, dets, skeys, sperm, xbuf, sigma)
+
+      ! ---- 5. amp(j,k) = sum_a vecs(j,a) sigma(a,k)
+      call dgemm('N', 'N', nd, ncols, nd, 1.0_dp, &
+                 vecs, nd, sigma, nd, &
+                 0.0_dp, amp(int(kbase, i8)*int(nd, i8)), nd)
+    end do
+
+    status = 0_i8
+    deallocate(sigma, xbuf, gtr)
+  end function casscf_hess_amp_mf
+
+
+  !> On-the-fly sigma += 0.5 * stack^T * x (step 4), enumerating every non-zero
+  !> entry of E_tu without storing the dense tensor.
+  !>
+  !> For each E_tu(b,a) = ±1, accumulates sigma(a,k) += 0.5 * ±1 * x(k,tu,b).
+  !> sigma is Fortran [ndet, ncols].  xbuf is C-order [ncols,nact,nact,ndet].
+  subroutine mf_apply_step4(na, nd, ncols, na2, dets, skeys, sperm, xbuf, sigma)
+    integer, intent(in) :: na, ncols, na2
+    integer(i8), intent(in) :: nd
+    integer(i8), intent(in) :: dets(0:nd-1), skeys(0:nd-1), sperm(0:nd-1)
+    real(dp), intent(in) :: xbuf(0:*)
+    real(dp), intent(inout) :: sigma(0:nd-1, 0:ncols-1)
+
+    integer :: off, t, u, kk, ioff, offs(2), phase_u, phase_t
+    integer(i8) :: col, det, det_u, det_tu, ubit, tbit, row, xbase
+    real(dp) :: half, phase
+
+    if (na <= 0 .or. nd <= 0_i8 .or. ncols <= 0) return
+    if (2 * na > 62) return
+
+    offs(1) = 0
+    offs(2) = na
+    half = 0.5_dp
+
+    !$omp parallel do default(shared) schedule(static) if(nd >= 64_i8) &
+    !$omp   private(col, det, ioff, off, u, ubit, det_u, t, tbit, det_tu, &
+    !$omp           row, phase_u, phase_t, phase, kk, xbase)
+    do col = 0_i8, nd - 1_i8
+      det = dets(col)
+      do ioff = 1, 2
+        off = offs(ioff)
+        do u = 0, na - 1
+          ubit = ishft(1_i8, u + off)
+          if (iand(det, ubit) == 0_i8) cycle
+          phase_u = 1
+          if (mod(popcnt(iand(det, ubit - 1_i8)), 2) /= 0) phase_u = -1
+          det_u = ieor(det, ubit)
+          do t = 0, na - 1
+            tbit = ishft(1_i8, t + off)
+            if (iand(det_u, tbit) /= 0_i8) cycle
+            phase_t = 1
+            if (mod(popcnt(iand(det_u, tbit - 1_i8)), 2) /= 0) phase_t = -1
+            det_tu = ior(det_u, tbit)
+            call mf_bsearch(nd, skeys, det_tu, row)
+            if (row < 0_i8) cycle
+            row = sperm(row)
+            phase = real(phase_u * phase_t, dp)
+            ! DGEMM('T'): A_f(ket_row, bra_col) = E_tu(bra=col, ket=row) → C(bra=j,kk)
+            ! C(bra=row, kk) = 0.5*sum_ket E_tu(bra=row, ket) * xbuf[kk, tu, bra=ket]
+            ! sigma(bra=row, kk) += 0.5 * phase * xbuf[kk*na2*nd + tu*nd + bra=col]
+            xbase = int(t*na + u, i8) * nd + col
+            do kk = 0, ncols - 1
+              !$omp atomic update
+              sigma(row, kk) = sigma(row, kk) &
+                  + half * phase * xbuf(int(kk, i8)*int(na2, i8)*nd + xbase)
+            end do
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+  end subroutine mf_apply_step4
+
 
   !> CI-relaxation accumulation for one averaged root.
   !>
@@ -349,5 +518,6 @@ contains
 
     deallocate(factors)
   end function casscf_hess_relax
+
 
 end module casscf_hess_kernel_mod

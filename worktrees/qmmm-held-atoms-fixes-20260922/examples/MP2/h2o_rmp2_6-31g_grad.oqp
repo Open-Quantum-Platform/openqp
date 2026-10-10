@@ -1,0 +1,3 @@
+mp2/6-31g grad(S0) symmetry(enabled=false,use_integral_symmetry=false)
+scf(maxit=50,conv=1e-10,incremental=false,save_molden=false)
+geom="../geometries/H2O-0381125c86f2.xyz"

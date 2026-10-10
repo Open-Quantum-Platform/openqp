@@ -1,0 +1,178 @@
+From 8b3b5ab481220a256faee544c535db37b1f7b191 Mon Sep 17 00:00:00 2001
+From: Cheol Ho Choi <cheolho.choi@gmail.com>
+Date: Thu, 11 Jun 2026 17:48:44 +0900
+Subject: [PATCH] feat: optional external GauXC Vxc supplier in calc_jk_xc
+ (Route-C XC bridge)
+
+Second env-gated seam beside the fock_jk DF-JK diversion: if
+$OQP_ROUTEC_XC_LIB names a dylib exposing routec_vxc(d, fxc, nbf, nfocks,
+eexc, totele, info) bind(C), calc_jk_xc diverts the ground-state semilocal
+Vxc build there (RHF only, packed total density in / packed Vxc out /
+semilocal Exc + grid-N_el out), falling back to the native dftexcor grid
+code when the symbol is absent or declines. Inert when the env var is
+unset. The supplier lives in libintRot/test/routec_oqp_vxc.cpp (GauXC CUDA,
+persistent integrator).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ source/scf_addons.F90 | 88 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 82 insertions(+), 6 deletions(-)
+
+diff --git a/source/scf_addons.F90 b/source/scf_addons.F90
+index b6f3c1296d..1ea447d48b 100644
+--- a/source/scf_addons.F90
++++ b/source/scf_addons.F90
+@@ -210,17 +210,24 @@
+ !   the `form_rohf_fock` function in the `scf` module.
+ !
+ !===============================================================================
+-!> @brief Optional external DF-JK supplier (Route-C bridge, OPENQP_BRIDGE.md
+-!>        Stage 2). If $OQP_ROUTEC_LIB names a dylib exposing
++!> @brief Optional external DF-JK / XC suppliers (Route-C bridge,
++!>        OPENQP_BRIDGE.md Stage 2 + GauXC Vxc seam).
++!>        If $OQP_ROUTEC_LIB names a dylib exposing
+ !>        routec_fock_jk(d, f, nbf, nfocks, scale_exch, scale_coul, info)
+-!>        bind(C), fock_jk diverts its 2e build there. Entirely inert when the
+-!>        environment variable is unset; falls back natively when the external
+-!>        returns info /= 0 (e.g. unsupported nfocks).
++!>        bind(C), fock_jk diverts its 2e build there. If $OQP_ROUTEC_XC_LIB
++!>        names a dylib exposing
++!>        routec_vxc(d, fxc, nbf, nfocks, eexc, totele, info) bind(C),
++!>        calc_jk_xc diverts the ground-state semilocal Vxc build there
++!>        (RHF only; d = packed total density, fxc = packed Vxc out,
++!>        eexc = semilocal XC energy, totele = grid N_el diagnostic).
++!>        Entirely inert when the environment variables are unset; falls back
++!>        natively when an external returns info /= 0.
+ module routec_bridge
+   use, intrinsic :: iso_c_binding
+   implicit none
+   private
+   public :: routec_try_fock_jk
++  public :: routec_try_vxc
+ 
+   abstract interface
+     subroutine routec_fock_jk_i(d, f, nbf, nfocks, se, sc, info) bind(C)
+@@ -231,6 +238,14 @@ module routec_bridge
+       real(c_double), intent(in) :: se, sc
+       integer(c_int), intent(out) :: info
+     end subroutine
++    subroutine routec_vxc_i(d, fxc, nbf, nfocks, eexc, totele, info) bind(C)
++      import :: c_double, c_int
++      real(c_double), intent(in) :: d(*)
++      real(c_double), intent(inout) :: fxc(*)
++      integer(c_int), intent(in) :: nbf, nfocks
++      real(c_double), intent(inout) :: eexc, totele
++      integer(c_int), intent(out) :: info
++    end subroutine
+   end interface
+ 
+   interface
+@@ -250,7 +265,9 @@ module routec_bridge
+ 
+   integer(c_int), parameter :: RTLD_NOW = 2_c_int
+   logical :: tried = .false.
++  logical :: tried_xc = .false.
+   procedure(routec_fock_jk_i), pointer :: ext_jk => null()
++  procedure(routec_vxc_i), pointer :: ext_vxc => null()
+ 
+ contains
+ 
+@@ -269,6 +286,30 @@ contains
+     call c_f_procpointer(fp, ext_jk)
+   end subroutine routec_init
+ 
++  subroutine routec_xc_init()
++    use, intrinsic :: iso_fortran_env, only: error_unit
++    type(c_ptr) :: h
++    type(c_funptr) :: fp
++    character(len=4096) :: path
++    integer :: plen, stat
++    tried_xc = .true.
++    call get_environment_variable("OQP_ROUTEC_XC_LIB", path, plen, stat)
++    if (stat /= 0 .or. plen == 0) return
++    h = c_dlopen(trim(path)//c_null_char, RTLD_NOW)
++    if (.not. c_associated(h)) then
++      write(error_unit, '(a)') &
++        ' routec_bridge: OQP_ROUTEC_XC_LIB set but dlopen failed: '//trim(path)
++      return
++    end if
++    fp = c_dlsym(h, "routec_vxc"//c_null_char)
++    if (.not. c_associated(fp)) then
++      write(error_unit, '(a)') &
++        ' routec_bridge: routec_vxc symbol not found in '//trim(path)
++      return
++    end if
++    call c_f_procpointer(fp, ext_vxc)
++  end subroutine routec_xc_init
++
+   function routec_try_fock_jk(d, f, nbf, nfocks, se, sc) result(done)
+     real(c_double), intent(in) :: d(*)
+     real(c_double), intent(inout) :: f(*)
+@@ -285,6 +326,28 @@ contains
+     done = (info == 0_c_int)
+   end function routec_try_fock_jk
+ 
++  !> @brief Try the external semilocal Vxc supplier (GauXC GPU dylib).
++  !> @detail d: packed lower-tri TOTAL density (RHF, occupation-2);
++  !>         fxc: packed lower-tri semilocal XC matrix out (plain elements);
++  !>         eexc: semilocal XC energy; totele: grid electron count
++  !>         diagnostic. Returns .false. (caller uses native grid code) when
++  !>         the dylib is absent or declines (info /= 0).
++  function routec_try_vxc(d, fxc, nbf, nfocks, eexc, totele) result(done)
++    real(c_double), intent(in) :: d(*)
++    real(c_double), intent(inout) :: fxc(*)
++    integer, intent(in) :: nbf, nfocks
++    real(c_double), intent(inout) :: eexc, totele
++    logical :: done
++    integer(c_int) :: info, nbf_c, nf_c
++    done = .false.
++    if (.not. tried_xc) call routec_xc_init()
++    if (.not. associated(ext_vxc)) return
++    nbf_c = int(nbf, c_int); nf_c = int(nfocks, c_int)
++    info = 1_c_int
++    call ext_vxc(d, fxc, nbf_c, nf_c, eexc, totele, info)
++    done = (info == 0_c_int)
++  end function routec_try_vxc
++
+ end module routec_bridge
+ 
+ module scf_addons
+@@ -1422,6 +1485,7 @@ contains
+     use types,           only : information
+     use mod_dft_molgrid, only : dft_grid_t
+     use mathlib,          only : traceprod_sym_packed
++    use routec_bridge,   only : routec_try_vxc
+     implicit none
+ 
+     type(basis_set),   intent(in)    :: basis
+@@ -1443,6 +1507,7 @@ contains
+     integer :: ii
+     real(dp), allocatable :: pfxc(:,:)
+     logical :: is_dft = .false.
++    logical :: xc_diverted
+ 
+     is_dft = infos%control%hamilton >= 20
+     if (is_dft) then
+@@ -1489,7 +1554,18 @@ contains
+     allocate(pfxc(nbf*(nbf+1)/2, nfocks))
+     pfxc = 0.0_dp
+ 
+-    call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
++    ! Route-C external GPU Vxc (GauXC; inert unless $OQP_ROUTEC_XC_LIB is
++    ! set). RHF-only; falls back to the native grid code when the external
++    ! supplier declines (info /= 0). E%totkin is a grid diagnostic only and
++    ! is left at 0 on the external path; E%totele is supplied by the dylib.
++    xc_diverted = .false.
++    if (nfocks == 1) then
++      xc_diverted = routec_try_vxc(d, pfxc, nbf, nfocks, E%eexc, E%totele)
++      if (xc_diverted) E%totkin = 0.0_dp
++    end if
++    if (.not. xc_diverted) then
++      call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
++    end if
+ 
+     f = f + pfxc
+     E%etot=E%etot + E%eexc
+-- 
+2.50.1 (Apple Git-155)
+

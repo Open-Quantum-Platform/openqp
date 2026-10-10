@@ -411,13 +411,60 @@ contains
 
     select case (ndtlf)
     case(0)
-!     alpha determinant
-      do i1 = 1, noca
-         do i2 = 1, noca
-            call ov_exact(temp1, i1, i2, ia1, ia2, s_mo, 1, noc, 1)
-            s_ij(i1,i2) = temp1
-         end do
-      end do
+!     alpha determinant via LU batch formula:
+!     s_ij(i1,i2) = det(S_occ) * inv(S_occ)(i2,i1).
+      block
+        real(kind=dp) :: lu(noca,noca), det
+        real(kind=dp) :: b(noca,noca)
+        integer :: ipiv(noca), info, j
+        lu(:,:) = s_mo(1:noca,1:noca)
+        call oqp_lu_factor(noca, lu, noca, ipiv, info)
+        if (info == 0) then
+          det = 1.0_dp
+          do j = 1, noca
+            if (ipiv(j) /= j) det = -det
+            det = det * lu(j,j)
+          end do
+          b(:,:) = 0.0_dp
+          do j = 1, noca
+            b(j,j) = 1.0_dp
+          end do
+          call oqp_lu_solve(noca, lu, noca, ipiv, b, noca)
+          do i1 = 1, noca
+            do i2 = 1, noca
+              s_ij(i1,i2) = det * b(i2,i1)
+            end do
+          end do
+        else
+          ! LU factorisation failed (singular or rank-deficient S_occ).
+          ! Fall back to exact cofactor expansion via comp_det.
+          ! tlf_exp(itype=11) uses a diagonal-dominance approximation that is
+          ! wrong for rank-deficient matrices.  Instead compute the cofactor
+          ! C(i1,i2) = (-1)^(i1+i2) * det(S_occ with row i2, col i1 removed)
+          ! directly as the determinant of the (noca-1)x(noca-1) minor.
+          block
+            real(kind=dp) :: minor(noca-1, noca-1)
+            integer :: r, c, rr, cc
+            do i1 = 1, noca
+              do i2 = 1, noca
+                rr = 0
+                do r = 1, noca
+                  if (r == i2) cycle
+                  rr = rr + 1
+                  cc = 0
+                  do c = 1, noca
+                    if (c == i1) cycle
+                    cc = cc + 1
+                    minor(rr, cc) = s_mo(r, c)
+                  end do
+                end do
+                s_ij(i1,i2) = comp_det(minor, noca-1)
+                if (mod(i1+i2, 2) /= 0) s_ij(i1,i2) = -s_ij(i1,i2)
+              end do
+            end do
+          end block
+        end if
+      end block
 
 !     1-2 det
       do j1 = 1, nvirb
@@ -1147,4 +1194,90 @@ contains
 
   end subroutine
 
+
+!> LU factorization with partial pivoting (batch s_ij formula).
+subroutine oqp_lu_factor(n, a, lda, ipiv, info)
+  use precision, only: dp
+  implicit none
+  integer, intent(in) :: n, lda
+  real(kind=dp), intent(inout) :: a(lda,*)
+  integer, intent(out) :: ipiv(*)
+  integer, intent(out) :: info
+  integer :: i, j, k, pivot
+  real(kind=dp) :: tmp, maxv, factor
+  info = 0
+  do k = 1, n
+    pivot = k
+    maxv = abs(a(k,k))
+    do i = k+1, n
+      if (abs(a(i,k)) > maxv) then
+        maxv = abs(a(i,k))
+        pivot = i
+      end if
+    end do
+    ipiv(k) = pivot
+    if (maxv <= 0.0_dp) then
+      info = k
+      return
+    end if
+    if (pivot /= k) then
+      do j = 1, n
+        tmp = a(k,j)
+        a(k,j) = a(pivot,j)
+        a(pivot,j) = tmp
+      end do
+    end if
+    do i = k+1, n
+      factor = a(i,k) / a(k,k)
+      a(i,k) = factor
+      do j = k+1, n
+        a(i,j) = a(i,j) - factor * a(k,j)
+      end do
+    end do
+  end do
+end subroutine oqp_lu_factor
+
+!> Solve A*X = B after LU factorization (batch s_ij formula).
+subroutine oqp_lu_solve(n, a, lda, ipiv, b, ldb)
+  use precision, only: dp
+  implicit none
+  integer, intent(in) :: n, lda, ldb
+  real(kind=dp), intent(in) :: a(lda,*)
+  integer, intent(in) :: ipiv(*)
+  real(kind=dp), intent(inout) :: b(ldb,*)
+  integer :: i, j, k, pivot
+  real(kind=dp) :: factor
+  ! Apply row permutations to all RHS columns
+  do k = 1, n
+    pivot = ipiv(k)
+    if (pivot /= k) then
+      do j = 1, n
+        factor = b(k,j)
+        b(k,j) = b(pivot,j)
+        b(pivot,j) = factor
+      end do
+    end if
+  end do
+  ! Forward substitution: L * Y = B
+  do k = 1, n
+    do i = k+1, n
+      factor = a(i,k)
+      do j = 1, n
+        b(i,j) = b(i,j) - factor * b(k,j)
+      end do
+    end do
+  end do
+  ! Back substitution: U * X = Y
+  do k = n, 1, -1
+    do j = 1, n
+      b(k,j) = b(k,j) / a(k,k)
+    end do
+    do i = 1, k-1
+      factor = a(i,k)
+      do j = 1, n
+        b(i,j) = b(i,j) - factor * b(k,j)
+      end do
+    end do
+  end do
+end subroutine oqp_lu_solve
 end module get_state_overlap_mod

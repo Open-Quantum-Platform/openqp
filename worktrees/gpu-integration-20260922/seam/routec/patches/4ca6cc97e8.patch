@@ -1,0 +1,307 @@
+From 4ca6cc97e8aadb9c188f25850e40496c2b70b477 Mon Sep 17 00:00:00 2001
+From: Cheol Ho Choi <cheolho.choi@gmail.com>
+Date: Thu, 11 Jun 2026 17:10:33 +0900
+Subject: [PATCH] feat: Route-C response bridge in int2_run (APIV2 R3c)
+
+int2_run (non-CAM path) now tries an external batched J(M)/K(M) supplier
+before streaming quartets: when $OQP_ROUTEC_LIB exposes the APIV2 symbols
+routec_jkm_init/routec_jkm_apply, the int2_td_data_t and int2_mrsf_data_t
+consumers (EXACT dynamic types only; tdgrd/umrsf fall through native) are
+satisfied by one batched apply of the raw trial densities, with the
+verified Stage-0 prefactor tables applied at the seam in the
+pre-parallel_stop thread-slot-1 convention:
+
+  TD RPA : apb deposit = half of [2c*J(Ms) - x*K(Ms)], Ms = d2 + d2^T
+           (A := A + A^T downstream); amb = x*[K(d2)^T - K(d2)] full
+  TD TDA : amb = 2c*J(d2)*[tdc] - x*K(d2) full (covers SF and quintet)
+  MRSF   : f3 slot m = c*J(D_m)*[m<=4] - x*K(D_m) full, d3(nvec,7,:,:)
+           gathered vector-first to X(nbf,nbf,7*nvec) and scattered back
+
+Rank-0 compute (other ranks deposit nothing; parallel_stop allreduces).
+CAM passes reach run_generic directly and stay native (no short-range B
+in the CPU engine yet). Implemented as a SUBMODULE of int2_compute
+(int2_routec.F90) so it can use tdhf_lib/tdhf_mrsf_lib without a module
+cycle; entirely inert when the environment variable is unset.
+
+Acceptance (libintRot test/apiv2_acceptance.py, H2O/6-31G*): native vs
+injected exact-Cholesky-B excitations match to 2.2e-10 Ha (TDDFT
+b3lypv1r RPA) and 1.4e-10 Ha (MRSF BHHLYP singlet+triplet); DF B
+(cc-pVDZ-jkfit / def2-universal-jkfit) errors recorded there.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ source/integrals/int2.F90        |  19 ++-
+ source/integrals/int2_routec.F90 | 224 +++++++++++++++++++++++++++++++
+ 2 files changed, 242 insertions(+), 1 deletion(-)
+ create mode 100644 source/integrals/int2_routec.F90
+
+diff --git a/source/integrals/int2.F90 b/source/integrals/int2.F90
+index 47c8d7657b..19ed66d4ce 100644
+--- a/source/integrals/int2.F90
++++ b/source/integrals/int2.F90
+@@ -189,6 +189,19 @@ module int2_compute
+ 
+   end interface
+ 
++!###############################################################################
++! Route-C response bridge (APIV2.md R3c): implemented in the int2_routec
++! submodule (which may use tdhf_lib/tdhf_mrsf_lib without a module cycle).
++! Returns .true. when the consumer build was satisfied externally.
++
++  interface
++    module function int2_routec_response(this, int2_consumer) result(done)
++      class(int2_compute_t), intent(inout) :: this
++      class(int2_compute_data_t), intent(inout) :: int2_consumer
++      logical :: done
++    end function int2_routec_response
++  end interface
++
+ !###############################################################################
+ 
+ contains
+@@ -286,7 +299,11 @@ contains
+           call show_message("No CAM parameters given", WITH_ABORT)
+       end if
+     else
+-      call this%run_generic(int2_consumer)
++      ! Route-C response bridge (APIV2.md): external batched J(M)/K(M) for
++      ! the TD/MRSF consumers when $OQP_ROUTEC_LIB provides routec_jkm_apply.
++      ! CAM passes go through run_cam -> run_generic and stay native.
++      if (.not. int2_routec_response(this, int2_consumer)) &
++        call this%run_generic(int2_consumer)
+     end if
+ 
+   end subroutine int2_run
+diff --git a/source/integrals/int2_routec.F90 b/source/integrals/int2_routec.F90
+new file mode 100644
+index 0000000000..aa8551f063
+--- /dev/null
++++ b/source/integrals/int2_routec.F90
+@@ -0,0 +1,224 @@
++!===============================================================================
++!> @brief Route-C response bridge (APIV2.md R3c, libintRot repo).
++!>
++!> Optional external supplier of the TDDFT/SF/MRSF response J/K builds.
++!> If $OQP_ROUTEC_LIB names a dylib exposing the APIV2 symbols
++!>
++!>   int  routec_jkm_init(const int* nbf);                    // 0 = ok
++!>   void routec_jkm_apply(const double* x, const int* nbf, const int* nvec,
++!>                         double* jm, double* km, int* info); // info 0 = ok
++!>
++!> then int2_run diverts the int2_td_data_t / int2_mrsf_data_t consumers
++!> (EXACT dynamic types only — int2_tdgrd_data_t / int2_umrsf_data_t fall
++!> through to the native quartet loop) to batched RAW J(M)/K(M) contractions
++!> of the trial densities, with
++!>
++!>   J(M)_ab = (ab|kl) M_kl ,  K(M)_ab = (ak|bl) M_kl   (M non-symmetric).
++!>
++!> All consumer prefactors are applied HERE, from the verified Stage-0
++!> tables (OPENQP_BRIDGE.md "Stage 0 RESULTS"), in the PRE-parallel_stop,
++!> thread-slot-1 deposit convention:
++!>   TD RPA  : apb deposit = half of [2c*J(Ms) - x*K(Ms)], Ms = d2 + d2^T
++!>             (parallel_stop applies A := A + A^T, diagonal included);
++!>             amb deposit = x*[K(d2)^T - K(d2)]            (full value)
++!>   TD TDA  : amb deposit = 2c*J(d2)*[tdc] - x*K(d2)       (full value)
++!>   MRSF    : f3 slot m deposit = c*J(D_m)*[m<=4] - x*K(D_m) (full value)
++!> using the single-apply identities J(Ms) = 2 J(d2), K(Ms) = K(d2)+K(d2)^T.
++!>
++!> Compute on rank 0 only (other ranks deposit nothing; parallel_stop
++!> allreduces). CAM passes never reach this hook: int2_run_cam calls
++!> run_generic directly, so attenuated/short-range builds stay native.
++!> Entirely inert when $OQP_ROUTEC_LIB is unset or lacks the symbols; falls
++!> back natively whenever init/apply report failure.
++!>
++!> This is a SUBMODULE of int2_compute so it may use tdhf_lib /
++!> tdhf_mrsf_lib (which themselves use int2_compute) without a module cycle.
++!===============================================================================
++submodule (int2_compute) int2_routec
++  use, intrinsic :: iso_c_binding
++  implicit none
++
++  abstract interface
++    function routec_jkm_init_i(nbf) result(ierr) bind(C)
++      import :: c_int
++      integer(c_int), intent(in) :: nbf
++      integer(c_int) :: ierr
++    end function
++    subroutine routec_jkm_apply_i(x, nbf, nvec, jm, km, info) bind(C)
++      import :: c_ptr, c_int
++      type(c_ptr), value :: x, jm, km
++      integer(c_int), intent(in) :: nbf, nvec
++      integer(c_int), intent(out) :: info
++    end subroutine
++  end interface
++
++  interface
++    function rtc_dlopen(file, mode) bind(C, name="dlopen")
++      import :: c_ptr, c_char, c_int
++      character(kind=c_char), intent(in) :: file(*)
++      integer(c_int), value :: mode
++      type(c_ptr) :: rtc_dlopen
++    end function
++    function rtc_dlsym(handle, name) bind(C, name="dlsym")
++      import :: c_ptr, c_char, c_funptr
++      type(c_ptr), value :: handle
++      character(kind=c_char), intent(in) :: name(*)
++      type(c_funptr) :: rtc_dlsym
++    end function
++  end interface
++
++  integer(c_int), parameter :: RTC_RTLD_NOW = 2_c_int
++  logical :: rtc_tried = .false.
++  integer :: rtc_nbf_ok = -1
++  procedure(routec_jkm_init_i), pointer :: rtc_init => null()
++  procedure(routec_jkm_apply_i), pointer :: rtc_apply => null()
++
++contains
++
++  !> One-time dlopen/dlsym of $OQP_ROUTEC_LIB, then per-nbf session init.
++  logical function rtc_session(nbf)
++    integer, intent(in) :: nbf
++    type(c_ptr) :: h
++    type(c_funptr) :: fp
++    character(len=4096) :: path
++    integer :: plen, stat
++    integer(c_int) :: nbf_c, ierr
++    rtc_session = .false.
++    if (.not. rtc_tried) then
++      rtc_tried = .true.
++      call get_environment_variable("OQP_ROUTEC_LIB", path, plen, stat)
++      if (stat /= 0 .or. plen == 0) return
++      h = rtc_dlopen(trim(path)//c_null_char, RTC_RTLD_NOW)
++      if (.not. c_associated(h)) return
++      fp = rtc_dlsym(h, "routec_jkm_init"//c_null_char)
++      if (.not. c_associated(fp)) return
++      call c_f_procpointer(fp, rtc_init)
++      fp = rtc_dlsym(h, "routec_jkm_apply"//c_null_char)
++      if (.not. c_associated(fp)) then
++        rtc_init => null()
++        return
++      end if
++      call c_f_procpointer(fp, rtc_apply)
++    end if
++    if (.not. associated(rtc_apply)) return
++    if (rtc_nbf_ok /= nbf) then
++      nbf_c = int(nbf, c_int)
++      ierr = rtc_init(nbf_c)
++      if (ierr /= 0_c_int) return
++      rtc_nbf_ok = nbf
++    end if
++    rtc_session = .true.
++  end function rtc_session
++
++  !> Hook called from int2_run (non-CAM path only). .true. = handled.
++  module function int2_routec_response(this, int2_consumer) result(done)
++    use tdhf_lib, only: int2_td_data_t
++    use tdhf_mrsf_lib, only: int2_mrsf_data_t
++    class(int2_compute_t), intent(inout) :: this
++    class(int2_compute_data_t), intent(inout) :: int2_consumer
++    logical :: done
++    done = .false.
++    if (this%attenuated) return
++    select type (c => int2_consumer)
++    type is (int2_td_data_t)
++      done = rtc_td(this, c)
++    type is (int2_mrsf_data_t)
++      done = rtc_mrsf(this, c)
++    end select
++  end function int2_routec_response
++
++  !> int2_td_data_t: d2(nbf,nbf,nvec) trial densities, one J+K apply of the
++  !> raw d2 batch; deposits per the Stage-0 table (see header).
++  logical function rtc_td(driver, dat)
++    use tdhf_lib, only: int2_td_data_t
++    class(int2_compute_t), intent(inout) :: driver
++    type(int2_td_data_t), intent(inout) :: dat
++    integer :: nbf, nvec, v
++    integer(c_int) :: nbf_c, nvec_c, info
++    real(c_double), allocatable, target :: x(:,:,:), jm(:,:,:), km(:,:,:)
++    real(kind=dp) :: cc, xx
++    rtc_td = .false.
++    nbf = driver%basis%nbf
++    nvec = size(dat%d2, 3)
++    if (nvec < 1) return
++    if (.not. rtc_session(nbf)) return
++    call dat%parallel_start(driver%basis, 1)
++    if (driver%pe%rank == 0) then
++      allocate(x(nbf,nbf,nvec), jm(nbf,nbf,nvec), km(nbf,nbf,nvec))
++      x = dat%d2(:,:,1:nvec)
++      nbf_c = int(nbf, c_int)
++      nvec_c = int(nvec, c_int)
++      info = 1_c_int
++      call rtc_apply(c_loc(x), nbf_c, nvec_c, c_loc(jm), c_loc(km), info)
++      if (info /= 0_c_int) return   ! fall back natively (arrays re-zeroed there)
++      cc = dat%scale_coulomb
++      xx = dat%scale_exchange
++      do v = 1, nvec
++        if (dat%tamm_dancoff) then
++          dat%amb(:,:,v,1) = -xx*km(:,:,v)
++          if (dat%tamm_dancoff_coulomb) &
++            dat%amb(:,:,v,1) = dat%amb(:,:,v,1) + 2.0_dp*cc*jm(:,:,v)
++        else
++          if (dat%int_apb) &   ! half of 2c*J(Ms) - x*K(Ms); A+A^T downstream
++            dat%apb(:,:,v,1) = 2.0_dp*cc*jm(:,:,v) &
++                             - 0.5_dp*xx*(km(:,:,v) + transpose(km(:,:,v)))
++          if (dat%int_amb) &
++            dat%amb(:,:,v,1) = xx*(transpose(km(:,:,v)) - km(:,:,v))
++        end if
++      end do
++    end if
++    call dat%pe%init(driver%pe%comm, driver%pe%use_mpi)
++    call dat%parallel_stop()
++    rtc_td = .true.
++  end function rtc_td
++
++  !> int2_mrsf_data_t: d3(nvec,7,nbf,nbf), vector index FIRST — gather to
++  !> X(nbf,nbf,nvec*7), one batched apply, scatter back to f3(nvec,7,:,:,1).
++  logical function rtc_mrsf(driver, dat)
++    use tdhf_mrsf_lib, only: int2_mrsf_data_t
++    class(int2_compute_t), intent(inout) :: driver
++    type(int2_mrsf_data_t), intent(inout) :: dat
++    integer :: nbf, nvec, nmat, v, m, ib
++    integer(c_int) :: nbf_c, nvec_c, info
++    real(c_double), allocatable, target :: x(:,:,:), jm(:,:,:), km(:,:,:)
++    real(kind=dp) :: cc, xx
++    rtc_mrsf = .false.
++    if (.not. dat%tamm_dancoff) return   ! native update is a no-op guard too
++    nbf = driver%basis%nbf
++    nvec = size(dat%d3, 1)
++    nmat = size(dat%d3, 2)
++    if (nvec < 1 .or. nmat /= 7) return
++    if (.not. rtc_session(nbf)) return
++    call dat%parallel_start(driver%basis, 1)
++    if (driver%pe%rank == 0) then
++      allocate(x(nbf,nbf,nvec*nmat), jm(nbf,nbf,nvec*nmat), km(nbf,nbf,nvec*nmat))
++      do m = 1, nmat
++        do v = 1, nvec
++          ib = (m-1)*nvec + v
++          x(:,:,ib) = dat%d3(v,m,:,:)
++        end do
++      end do
++      nbf_c = int(nbf, c_int)
++      nvec_c = int(nvec*nmat, c_int)
++      info = 1_c_int
++      call rtc_apply(c_loc(x), nbf_c, nvec_c, c_loc(jm), c_loc(km), info)
++      if (info /= 0_c_int) return
++      cc = dat%scale_coulomb
++      xx = dat%scale_exchange
++      do m = 1, nmat
++        do v = 1, nvec
++          ib = (m-1)*nvec + v
++          if (m <= 4) then   ! Coulomb loop covers slots 1:4 only
++            dat%f3(v,m,:,:,1) = cc*jm(:,:,ib) - xx*km(:,:,ib)
++          else               ! slots 5-7 exchange-only
++            dat%f3(v,m,:,:,1) = -xx*km(:,:,ib)
++          end if
++        end do
++      end do
++    end if
++    call dat%pe%init(driver%pe%comm, driver%pe%use_mpi)
++    call dat%parallel_stop()
++    rtc_mrsf = .true.
++  end function rtc_mrsf
++
++end submodule int2_routec
+-- 
+2.50.1 (Apple Git-155)
+

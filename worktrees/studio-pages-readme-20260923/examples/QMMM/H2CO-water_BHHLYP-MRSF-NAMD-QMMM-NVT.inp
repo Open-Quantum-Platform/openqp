@@ -1,0 +1,82 @@
+# MRSF-TDDFT NAMD with ESPF QM/MM embedding and a Langevin thermostat.
+#
+# QM  = formaldehyde (H2CO, atoms 0-3), MRSF-TDDFT/BHHLYP/6-31G* on a triplet
+#       ROHF reference.
+# MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
+#
+# This one-step smoke example demonstrates that the finite water-droplet
+# boundary, optional solute COM restraint, and NVT thermostat are independent
+# controls.  The conservative boundary/restraint energies and the thermostat
+# energy exchange are recorded separately.  Requires the optional OpenMM
+# backend and the companion files formaldehyde_water.pdb, formaldehyde.xml,
+# and tip3p.xml (resolved relative to this file).
+[input]
+system=
+   6   0.000000   0.000000   0.000000
+   8   0.000000   0.000000   1.203000
+   1   0.000000   0.943000  -0.589000
+   1   0.000000  -0.943000  -0.589000
+charge=0
+runtype=namd
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=3
+
+[properties]
+grad=1
+
+[md]
+nstep=1
+dt=0.5
+active=1
+substep=50
+init_temp=300
+velocity=maxwell
+seed=3
+rng_stream=1
+first_hop_step=1
+nacme_check=off
+nacme_gate=off
+nve_gate=off
+decoherence=edc
+trivial=True
+soc=False
+ensemble=nvt
+thermostat=langevin
+thermostat_temperature=300
+thermostat_friction=1
+
+[qmmm]
+pdb_file=formaldehyde_water.pdb
+forcefield_files=formaldehyde.xml tip3p.xml
+qm_atoms=0-3
+cutoff=NoCutoff
+embedding=electrostatic
+
+[droplet]
+enabled=True
+center=0,0,0
+radius=3.3
+buffer=1.0
+force_constant=10.0
+target=water_com
+max_penetration=3.0
+
+[solute_com]
+enabled=True
+center=0,0,0
+force_constant=2.0
+atoms=0-3

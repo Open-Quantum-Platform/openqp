@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OQP Studio 3D</title>
+    <link rel="stylesheet" href="/molstar/molstar.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #1b1e24; overflow: hidden; }
+      #app { position: absolute; inset: 0; }
+      #bootCover { position: fixed; inset: 0; z-index: 10; background: #1b1e24; }
+      /* Mol*'s bundled stylesheet uses a light viewport until WebGL paints.
+         Override every layer that can be exposed during a resize. */
+      .msp-plugin,
+      .msp-plugin .msp-layout-standard,
+      .msp-plugin .msp-layout-main,
+      .msp-plugin .msp-viewport,
+      .msp-plugin canvas { background: #1b1e24 !important; }
+      /* Hide Mol* chrome — this page is a pure render surface. */
+      .msp-plugin .msp-layout-expanded { border: none; }
+      .msp-viewport-controls, .msp-traj-controls { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="bootCover" aria-hidden="true"></div>
+    <script src="/molstar/molstar.js"></script>
+    <script>
+      const DARK_BG = 0x1b1e24;
+
+      // Mol* owns this iframe and therefore its volume loader uses the
+      // iframe's fetch. Route API reads through the parent Tauri webview's
+      // sidecar bridge just as the top-level UI does.
+      const parentInvoke = window.parent?.__TAURI__?.core?.invoke;
+      if (parentInvoke) {
+        const browserFetch = window.fetch.bind(window);
+        const decodeBase64 = (value) => {
+          const text = atob(value);
+          const bytes = new Uint8Array(text.length);
+          for (let i = 0; i < text.length; i += 1) bytes[i] = text.charCodeAt(i);
+          return bytes.buffer;
+        };
+        window.fetch = async (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : input, window.location.href);
+          if (!url.pathname.startsWith("/api/")) return browserFetch(input, init);
+          const request = new Request(input, init);
+          const raw = request.method === "GET" || request.method === "HEAD"
+            ? ""
+            : btoa(String.fromCharCode(...new Uint8Array(await request.arrayBuffer())));
+          const response = await parentInvoke("backend_call", {
+            request: {
+              method: request.method,
+              path: url.pathname + url.search,
+              headers: Object.fromEntries(request.headers.entries()),
+              body: raw,
+            },
+          });
+          return new Response(decodeBase64(response.body), {
+            status: response.status,
+            headers: response.headers,
+          });
+        };
+      }
+
+      function sameOriginHref(value) {
+        if (!value) return null;
+        const url = new URL(value, window.location.href);
+        // The parent creates cube blobs after fetching through Tauri IPC.
+        // They are opaque URLs, but remain private to this same webview.
+        if (url.protocol === "blob:") return url.href;
+        return url.origin === window.location.origin ? url.href : null;
+      }
+
+      async function boot() {
+        const viewer = await molstar.Viewer.create("app", {
+          layoutIsExpanded: false,
+          layoutShowControls: false,
+          layoutShowRemoteState: false,
+          layoutShowSequence: false,
+          layoutShowLog: false,
+          layoutShowLeftPanel: false,
+          viewportShowExpand: false,
+          viewportShowSelectionMode: false,
+          viewportShowAnimation: false,
+          pdbProvider: "rcsb",
+        });
+
+        // Studio look: dark ground, soft ambient occlusion, thin outline.
+        const canvas3d = viewer.plugin.canvas3d;
+        if (canvas3d) {
+          canvas3d.setProps({
+            renderer: { backgroundColor: DARK_BG },
+            postprocessing: {
+              occlusion: {
+                name: "on",
+                params: {
+                  samples: 32, multiScale: { name: "off", params: {} },
+                  radius: 5, bias: 0.8, blurKernelSize: 15, blurDepthBias: 0.5,
+                  resolutionScale: 1, color: 0x000000,
+                },
+              },
+              outline: {
+                name: "on",
+                params: { scale: 1, threshold: 0.33, color: 0x000000,
+                          includeTransparent: true },
+              },
+              shadow: { name: "off", params: {} },
+            },
+          });
+        }
+
+        // Mol* creates its canvas with its own default clear colour before
+        // setProps above takes effect. Keep the studio-colour cover in place
+        // for those first frames so resizing never exposes a white flash.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          document.querySelector("#bootCover")?.remove();
+        }));
+
+        // Keep this viewer alive across previews: reloading the page would
+        // re-download Mol* and rebuild the WebGL context on every edit, which
+        // is what made updating the structure feel slow.
+        // The default matches how the app has always looked; the other
+        // choices are additive.
+        let style = { type: "auto", color: "element-symbol", labels: "none" };
+        let last = null;   // { data, format }
+        let lastCube = null;
+        let lastAtomicProperty = null;
+
+        // Mol* labels an element with its atom name, and there is no parameter
+        // to make it print an index instead. An XYZ model has no atom names,
+        // so numbering is done by rewriting the coordinates as a small PDB
+        // whose atom names are the numbers themselves.
+        function numberedPdb(xyz) {
+          const lines = xyz.split("\n");
+          const count = parseInt(lines[0], 10);
+          if (!Number.isFinite(count) || count < 1 || count > 9999) return null;
+          const rows = [];
+          for (let i = 0; i < count; i += 1) {
+            const parts = (lines[i + 2] || "").trim().split(/\s+/);
+            if (parts.length < 4) return null;
+            const [element, x, y, z] = parts;
+            const name = String(i + 1);
+            // Fixed-width PDB columns: serial 7-11, name 13-16, resName
+            // 18-20, chain 22, resSeq 23-26, x/y/z 31-54, element 77-78. A
+            // single column out of place moves every atom.
+            rows.push(
+              "HETATM" +                                  // 1-6
+              String(i + 1).padStart(5) +                  // 7-11
+              " " +                                       // 12
+              name.padEnd(4).slice(0, 4) +                 // 13-16
+              " " +                                       // 17 altLoc
+              "UNL" +                                     // 18-20
+              " " +                                       // 21
+              "A" +                                       // 22 chain
+              "   1" +                                    // 23-26 resSeq
+              " " +                                       // 27 iCode
+              "   " +                                     // 28-30
+              Number(x).toFixed(3).padStart(8) +           // 31-38
+              Number(y).toFixed(3).padStart(8) +           // 39-46
+              Number(z).toFixed(3).padStart(8) +           // 47-54
+              "  1.00" +                                  // 55-60
+              "  0.00" +                                  // 61-66
+              "          " +                              // 67-76
+              element.toUpperCase().padStart(2),           // 77-78
+            );
+          }
+          rows.push("END");
+          return rows.join("\n");
+        }
+
+        // Numbers ride on a second, invisible model rather than replacing the
+        // first: the XYZ model keeps the bonding Mol* derives for it, and the
+        // numbered copy contributes nothing but its labels.
+        async function addNumberLabels(xyz) {
+          const pdb = numberedPdb(xyz);
+          if (!pdb) return;
+          const plugin = viewer.plugin;
+          const raw = await plugin.builders.data.rawData({ data: pdb });
+          const trajectory = await plugin.builders.structure.parseTrajectory(raw, "pdb");
+          const model = await plugin.builders.structure.createModel(trajectory);
+          const structure = await plugin.builders.structure.createStructure(model);
+          const component = await plugin.builders.structure.tryCreateComponentStatic(
+            structure, "all",
+          );
+          if (!component) return;
+          await plugin.builders.structure.representation.addRepresentation(component, {
+            type: "label",
+            typeParams: {
+              level: "element",
+              attachment: "middle-center",
+              sizeFactor: 0.55,
+              backgroundOpacity: 0.4,
+              borderWidth: 0.1,
+            },
+          });
+        }
+
+        async function addAtomicPropertyMap(xyz, values) {
+          const rows = xyz.split("\n");
+          const count = parseInt(rows[0], 10);
+          if (!Number.isFinite(count) || !Array.isArray(values) || values.length !== count) return;
+          const finite = values.map(Number);
+          if (finite.some((value) => !Number.isFinite(value))) return;
+          const minimum = Math.min(...finite);
+          const maximum = Math.max(...finite);
+          const pdb = [];
+          for (let i = 0; i < count; i += 1) {
+            const parts = (rows[i + 2] || "").trim().split(/\s+/);
+            if (parts.length < 4) return;
+            const value = finite[i];
+            const normalized = maximum === minimum ? 50 : 100 * (value - minimum) / (maximum - minimum);
+            const [element, x, y, z] = parts;
+            const label = [value.toFixed(1), value.toFixed(0),
+              value.toExponential(0).replace("e+", "e")].find((text) => text.length <= 4);
+            if (!label) return;
+            pdb.push("HETATM" + String(i + 1).padStart(5) + " " +
+              label.padStart(4) + " MAP A   1    " +
+              Number(x).toFixed(3).padStart(8) + Number(y).toFixed(3).padStart(8) +
+              Number(z).toFixed(3).padStart(8) + "  1.00" + normalized.toFixed(2).padStart(6) +
+              "          " + element.toUpperCase().padStart(2));
+          }
+          pdb.push("END");
+          const plugin = viewer.plugin;
+          const raw = await plugin.builders.data.rawData({ data: pdb.join("\n") });
+          const trajectory = await plugin.builders.structure.parseTrajectory(raw, "pdb");
+          const model = await plugin.builders.structure.createModel(trajectory);
+          const structure = await plugin.builders.structure.createStructure(model);
+          const component = await plugin.builders.structure.tryCreateComponentStatic(structure, "all");
+          if (!component) return;
+          await plugin.builders.structure.representation.addRepresentation(component, {
+            type: "spacefill", color: "uncertainty", typeParams: { sizeFactor: 0.42 },
+          });
+          await plugin.builders.structure.representation.addRepresentation(component, {
+            type: "label", typeParams: { level: "element", attachment: "middle-center", sizeFactor: 0.55, backgroundOpacity: 0.45 },
+          });
+        }
+
+        async function drawAtomicProperty(source, values) {
+          await viewer.plugin.clear();
+          await drawStructure(source.data, source.format);
+          await addAtomicPropertyMap(source.data, values);
+        }
+
+        async function showAtomicProperty(values) {
+          if (!last || last.format !== "xyz") return;
+          const source = { ...last };
+          lastCube = null;
+          lastAtomicProperty = { source, values: [...values] };
+          await drawAtomicProperty(source, values);
+        }
+
+        async function drawStructure(data, format = "xyz") {
+          last = { data, format };
+          // "auto" hands over to Mol*'s own preset, which draws proteins and
+          // nucleic acids as cartoons with ligands in ball-and-stick.
+          if (style.type === "auto") {
+            await viewer.loadStructureFromData(data, format);
+            if (style.labels === "atom-id" && format === "xyz") await addNumberLabels(data);
+            return;
+          }
+          const plugin = viewer.plugin;
+          const raw = await plugin.builders.data.rawData({ data });
+          const trajectory = await plugin.builders.structure.parseTrajectory(raw, format);
+          const model = await plugin.builders.structure.createModel(trajectory);
+          const structure = await plugin.builders.structure.createStructure(model);
+          const component = await plugin.builders.structure.tryCreateComponentStatic(
+            structure, "all",
+          );
+          if (!component) return;
+          await plugin.builders.structure.representation.addRepresentation(component, {
+            type: style.type === "auto" ? "ball-and-stick" : style.type,
+            color: style.color,
+            typeParams: style.type === "spacefill" ? { ignoreLight: false } : {},
+          });
+          if (style.labels === "element-symbol") {
+            await plugin.builders.structure.representation.addRepresentation(component, {
+              type: "label",
+              typeParams: {
+                level: "element",
+                attachment: "middle-center",
+                sizeFactor: 0.55,
+                backgroundOpacity: 0.4,
+                borderWidth: 0.1,
+              },
+            });
+          } else if (style.labels === "atom-id" && format === "xyz") {
+            await addNumberLabels(data);
+          }
+        }
+
+        function trajectoryDataUrl(xyz) {
+          return `data:text/plain;base64,${btoa(unescape(encodeURIComponent(xyz)))}`;
+        }
+
+        let normalMode = null;
+        let normalModePlaying = false;
+        const ELEMENT_COLORS = {
+          H: "#ffffff", C: "#909090", N: "#3050f8", O: "#ff0d0d",
+          F: "#90e050", P: "#ff8000", S: "#ffff30", Cl: "#1ff01f",
+          Br: "#a62929", I: "#940094",
+        };
+
+        function normalModeXyz(mode, amplitude, phase = 0) {
+          const factor = amplitude * Math.sin(phase);
+          const atoms = mode.atoms || [];
+          return `${atoms.length}\nnormal-mode geometry\n` + atoms.map((atom) => {
+            const displacement = atom.displacement || [0, 0, 0];
+            const position = atom.position.map((value, index) => value + factor * displacement[index]);
+            return `${atom.element} ${position.map((value) => value.toFixed(6)).join(" ")}`;
+          }).join("\n") + "\n";
+        }
+
+        function normalModeTrajectory(mode, amplitude) {
+          // Let Mol* animate a single multi-model trajectory. Replacing the
+          // entire scene on a JavaScript timer produces visible steps even at
+          // a modest molecular size.
+          return Array.from({ length: 48 }, (_, frame) =>
+            normalModeXyz(mode, amplitude, (2 * Math.PI * frame) / 48),
+          ).join("");
+        }
+
+        function normalModeSpec(mode, amplitude, showArrows) {
+          const arrows = showArrows ? (mode.atoms || []).map((atom) => {
+            const start = atom.position;
+            const displacement = atom.displacement || [0, 0, 0];
+            const magnitude = Math.hypot(...displacement);
+            if (magnitude < 1e-6) return null;
+            // Start outside the atom sphere; arrows beginning at a nucleus are
+            // hidden by the ball-and-stick representation.
+            const direction = displacement.map((value) => value / magnitude);
+            const offset = atom.element === "H" ? 0.32 : 0.48;
+            const length = Math.max(0.35, Math.min(0.75, 0.65 * amplitude));
+            const arrowStart = start.map((value, index) => value + offset * direction[index]);
+            return {
+              kind: "primitive",
+              params: {
+                kind: "arrow",
+                start: arrowStart,
+                end: arrowStart.map((value, index) => value + length * direction[index]),
+                tube_radius: 0.045,
+                show_end_cap: true,
+                color: "yellow",
+              },
+            };
+          }).filter(Boolean) : [];
+          const colorLayers = [...new Set((mode.atoms || []).map(atom => atom.element))].map(element => ({
+            kind: "color",
+            params: { color: ELEMENT_COLORS[element] || "#b0b0b0", selector: { type_symbol: element } },
+          }));
+          return {
+            kind: "single",
+            metadata: { version: "1.0.0", title: "OQP normal mode" },
+            root: {
+              kind: "root",
+              children: [
+                { kind: "canvas", params: { background_color: "#15191e" } },
+                {
+                  kind: "download",
+                  params: { url: trajectoryDataUrl(normalModeTrajectory(mode, amplitude)) },
+                  children: [{
+                    kind: "parse",
+                    params: { format: "xyz" },
+                    children: [{
+                      kind: "structure",
+                      params: { type: "model" },
+                      children: [
+                        {
+                          kind: "component",
+                          params: { selector: "all" },
+                          children: [{
+                            kind: "representation",
+                            // MVS defaults to unit-radius atoms, which makes
+                            // a normal mode look larger than the molecule it
+                            // overlays. Keep its scale consistent with the
+                            // regular result viewer.
+                            params: { type: "ball_and_stick", size_factor: 0.4 },
+                            children: colorLayers,
+                          }],
+                        },
+                      ],
+                    }],
+                  }],
+                },
+                ...(arrows.length ? [{
+                  kind: "primitives",
+                  params: { opacity: 1.0 },
+                  children: arrows,
+                }] : []),
+              ],
+            },
+          };
+        }
+
+        function stopNormalMode() {
+          normalModePlaying = false;
+          viewer.plugin.managers.animation.stop();
+        }
+
+        async function drawNormalMode() {
+          if (!normalMode) return;
+          await viewer.loadMvsData(
+            JSON.stringify(normalModeSpec(
+              normalMode.mode, normalMode.amplitude, normalMode.arrows,
+            )),
+            "mvsj",
+            { keepCamera: true, doNotReportErrors: false },
+          );
+        }
+
+        async function playNormalMode() {
+          if (!normalMode) return;
+          const animation = viewer.plugin.managers.animation.animations.find(
+            (item) => item.name === "built-in.animate-model-index",
+          );
+          if (!animation) return;
+          normalModePlaying = true;
+          await viewer.plugin.managers.animation.play(animation, {
+            // The coordinates already trace sin(0..2π). A palindrome here
+            // reverses direction at the end of that complete cycle, which
+            // looks like a bounce rather than a normal vibration.
+            mode: { name: "loop", params: { direction: "forward" } },
+            duration: { name: "fixed", params: { durationInS: 2 } },
+          });
+        }
+
+        // Orbital appearance, in the spirit of MacMolPlt and IQmol: a phase
+        // colour pair, an opacity, and solid or mesh surfaces.
+        let orbital = { positive: 0x4f8fdd, negative: 0xdd6a4f, alpha: 0.85,
+                        visuals: ["solid"], sides: "both" };
+
+        const isoSurfaces = (iso, sides = orbital.sides) => {
+          const surfaces = [];
+          if (sides !== "negative") {
+            surfaces.push({ type: "absolute", value: iso,
+                            color: orbital.positive, alpha: 0 });
+          }
+          if (sides !== "positive") {
+            surfaces.push({ type: "absolute", value: -iso,
+                            color: orbital.negative, alpha: 0 });
+          }
+          return surfaces;
+        };
+
+        // ---- induced-current vectors on an ACID isosurface -------------------
+        //
+        // Mol* draws the scalar cube through loadVolumeFromUrl, which is not a
+        // MolViewSpec tree, and arrows only exist as MVS primitives.  Loading an
+        // MVS replaces the scene whatever replaceExisting says, so the two
+        // cannot be combined that way.  What does work is applying the MVS
+        // primitive transformers directly to the live state tree; they are not
+        // reachable by id in this bundle, so capture them once while the scene
+        // is still empty and keep them for the session.
+        const BOHR_TO_ANGSTROM = 0.529177210903;
+        const SHELL_BAND = 3.0;        // arrows sit in [iso, iso*BAND]
+        const SHELL_SCAN_STEPS = 64;   // walk finely enough to find a thin shell
+        const MAX_CURRENT_ARROWS = 900;
+        let mvsPrimitiveTransformers = null;
+        let mvsCaptureInFlight = null;
+
+        function captureMvsPrimitiveTransformers() {
+          if (mvsPrimitiveTransformers) return Promise.resolve(mvsPrimitiveTransformers);
+          // One capture for the page: a second caller must wait on the first,
+          // not start another probe-and-clear of its own.
+          if (!mvsCaptureInFlight) mvsCaptureInFlight = runMvsPrimitiveCapture();
+          return mvsCaptureInFlight;
+        }
+
+        async function runMvsPrimitiveCapture() {
+          if (!molstar.PluginExtensions?.mvs) return null;
+          const probe = {
+            kind: "single",
+            root: { kind: "root", children: [{
+              kind: "primitives", params: { opacity: 1 }, children: [{
+                kind: "primitive",
+                params: { kind: "arrow", start: [0, 0, 0], end: [0, 0, 1e-4],
+                          tube_radius: 1e-4, show_end_cap: false, color: "white" },
+              }],
+            }]},
+            metadata: { version: "1", timestamp: new Date().toISOString() },
+          };
+          try {
+            // viewer.loadMvsData, the same call drawNormalMode uses; the
+            // extension entry point works too, but one spelling per file.
+            await viewer.loadMvsData(JSON.stringify(probe), "mvsj", {});
+            const found = {};
+            viewer.plugin.state.data.cells.forEach((cell) => {
+              const id = cell.transform?.transformer?.id || "";
+              if (id.startsWith("mvs.")) found[id] = cell.transform.transformer;
+            });
+            await viewer.plugin.clear();
+            if (found["mvs.mvs-inline-primitive-data"] && found["mvs.mvs-build-primitive-shape"]
+                && found["mvs.shape-representation-3d"]) {
+              mvsPrimitiveTransformers = found;
+            }
+          } catch (error) {
+            mvsPrimitiveTransformers = null;
+          }
+          return mvsPrimitiveTransformers;
+        }
+
+        // Only what the sampler needs: the grid, the values, and the largest
+        // magnitude.  Mol* parses the same file for the surface; this parse is
+        // for masking and for reading the vectors off the grid.
+        function parseCubeGrid(text) {
+          const lines = text.split(/\r?\n/);
+          const head = lines[2].trim().split(/\s+/);
+          const natom = Math.abs(parseInt(head[0], 10));
+          const origin = [1, 2, 3].map((i) => Number(head[i]));
+          const axes = [];
+          for (let k = 0; k < 3; k += 1) {
+            const f = lines[3 + k].trim().split(/\s+/);
+            axes.push({ count: parseInt(f[0], 10),
+                        vector: [Number(f[1]), Number(f[2]), Number(f[3])] });
+          }
+          const total = axes[0].count * axes[1].count * axes[2].count;
+          const values = new Float64Array(total);
+          let n = 0;
+          for (let i = 6 + natom; i < lines.length && n < total; i += 1) {
+            const row = lines[i];
+            if (!row) continue;
+            const parts = row.trim().split(/\s+/);
+            for (let j = 0; j < parts.length && n < total; j += 1) {
+              const v = Number(parts[j]);
+              if (Number.isFinite(v)) values[n++] = v;
+            }
+          }
+          if (n !== total) throw new Error(`cube has ${n} values, expected ${total}`);
+          let maxAbs = 0;
+          for (let i = 0; i < total; i += 1) {
+            const a = Math.abs(values[i]);
+            if (a > maxAbs) maxAbs = a;
+          }
+          return { origin, axes, values, maxAbs };
+        }
+
+        function gridsAlign(a, b) {
+          if (a.axes.some((axis, i) => axis.count !== b.axes[i].count)) return false;
+          const close = (x, y) => Math.abs(x - y) < 1e-6;
+          return a.origin.every((v, i) => close(v, b.origin[i]))
+            && a.axes.every((axis, i) => axis.vector.every((v, j) => close(v, b.axes[i].vector[j])));
+        }
+
+        // The isovalue the surface is actually drawn at, so the arrows cannot
+        // drift off the shell the viewer is showing.  drawCube hands Mol* the
+        // requested value unchanged, so this is that value and nothing else:
+        // the other viewer floors it at maxAbs*0.0025 because its own renderer
+        // does, and carrying that floor here would mask the arrows above the
+        // surface's threshold and sink them into the interior.
+        function surfaceIsolation(message) {
+          return Math.abs(message.iso) || 0.05;
+        }
+
+        function sampleCurrentVectors(scalar, comps, density, isolation) {
+          const counts = scalar.axes.map((a) => a.count);
+          let maxMagnitude = 0;
+          for (let i = 0; i < comps.x.values.length; i += 1) {
+            const m = Math.hypot(comps.x.values[i], comps.y.values[i], comps.z.values[i]);
+            if (m > maxMagnitude) maxMagnitude = m;
+          }
+          const floor = maxMagnitude * 0.02;
+          const scan = counts.map((c) => Math.max(1, Math.floor(c / SHELL_SCAN_STEPS)));
+          const extent = Math.max(...scalar.axes.map((a) =>
+            (a.count - 1) * Math.hypot(...a.vector)));
+          const separation = Math.max(extent / Math.max(2, density), 1e-6);
+          const buckets = new Map();
+          for (let ix = 0; ix < counts[0]; ix += scan[0]) {
+            for (let iy = 0; iy < counts[1]; iy += scan[1]) {
+              for (let iz = 0; iz < counts[2]; iz += scan[2]) {
+                const index = (ix * counts[1] + iy) * counts[2] + iz;
+                const value = Math.abs(scalar.values[index]);
+                if (value < isolation || value > isolation * SHELL_BAND) continue;
+                const vector = [comps.x.values[index], comps.y.values[index], comps.z.values[index]];
+                const magnitude = Math.hypot(...vector);
+                if (!Number.isFinite(magnitude) || magnitude < floor) continue;
+                const position = [0, 1, 2].map((d) => scalar.origin[d]
+                  + ix * scalar.axes[0].vector[d]
+                  + iy * scalar.axes[1].vector[d]
+                  + iz * scalar.axes[2].vector[d]);
+                const key = position.map((c) => Math.floor(c / separation)).join(",");
+                const held = buckets.get(key);
+                if (!held || magnitude > held.magnitude) {
+                  buckets.set(key, { position, vector, magnitude });
+                }
+              }
+            }
+          }
+          const samples = [...buckets.values()].sort((a, b) => b.magnitude - a.magnitude);
+          return { samples: samples.slice(0, MAX_CURRENT_ARROWS), maxMagnitude, separation };
+        }
+
+        async function drawCurrentVectors(sampled, scaleFactor) {
+          const T = await captureMvsPrimitiveTransformers();
+          if (!T || !sampled.samples.length) return 0;
+          const length = sampled.separation * BOHR_TO_ANGSTROM * 0.8 * scaleFactor;
+          const children = sampled.samples.map(({ position, vector, magnitude }) => {
+            const unit = vector.map((v) => v / magnitude);
+            const start = position.map((c) => c * BOHR_TO_ANGSTROM);
+            return {
+              kind: "primitive",
+              params: {
+                kind: "arrow",
+                start,
+                end: start.map((c, i) => c + length * unit[i]),
+                tube_radius: Math.max(length * 0.08, 0.012),
+                show_end_cap: true,
+                color: "#ffb454",
+              },
+            };
+          });
+          const update = viewer.plugin.state.data.build().toRoot()
+            .apply(T["mvs.mvs-inline-primitive-data"],
+                   { node: { kind: "mvs-primitives", params: { opacity: 1 }, children } })
+            .apply(T["mvs.mvs-build-primitive-shape"], { kind: "mesh" })
+            .apply(T["mvs.shape-representation-3d"], {});
+          await viewer.plugin.runTask(viewer.plugin.state.data.updateTree(update));
+          return children.length;
+        }
+
+        async function addCurrentVectors(message, isovalue) {
+          const urls = message.components;
+          if (!urls || !urls.x || !urls.y || !urls.z) return;
+          const scalarUrl = sameOriginHref(message.cube);
+          const hrefs = ["x", "y", "z"].map((a) => sameOriginHref(urls[a]));
+          if (!scalarUrl || hrefs.some((h) => !h)) return;
+          const [scalarText, ...componentTexts] = await Promise.all(
+            [scalarUrl, ...hrefs].map(async (u) => (await fetch(u)).text()));
+          const scalar = parseCubeGrid(scalarText);
+          const comps = { x: parseCubeGrid(componentTexts[0]),
+                          y: parseCubeGrid(componentTexts[1]),
+                          z: parseCubeGrid(componentTexts[2]) };
+          // Same grid or the arrows belong to another calculation entirely.
+          for (const axis of ["x", "y", "z"]) {
+            if (!gridsAlign(scalar, comps[axis])) {
+              throw new Error(`J${axis} is on a different grid than the ACID cube.`);
+            }
+          }
+          const sampled = sampleCurrentVectors(
+            scalar, comps,
+            Number(message.current_density) || 24,
+            surfaceIsolation(message));
+          const drawn = await drawCurrentVectors(sampled, Number(message.current_scale) || 1);
+          // Say what came out: the density control otherwise moves with no
+          // visible consequence when the shell is thin or the field is weak.
+          window.parent.postMessage({
+            type: "oqp-current-vectors",
+            count: drawn,
+            maxMagnitude: sampled.maxMagnitude,
+          }, window.location.origin);
+          return drawn;
+        }
+
+        async function drawCube(message) {
+          await viewer.plugin.clear();
+          if (message.xyz) await drawStructure(message.xyz);
+          else last = null;
+          const url = sameOriginHref(message.cube);
+          if (!url) return;
+          await viewer.loadVolumeFromUrl(
+            { url, format: "cube", isBinary: false },
+            isoSurfaces(Math.abs(message.iso) || 0.05, message.sides || orbital.sides),
+          );
+          await applyOrbitalVisuals();
+          if (message.components) {
+            try {
+              await addCurrentVectors(message, Math.abs(message.iso) || 0.05);
+            } catch (error) {
+              // The surface is already up; a failed arrow layer must not take
+              // it down with it.
+              console.warn("current vectors:", error);
+            }
+          }
+        }
+
+        // loadVolumeFromUrl first creates a GPU surface, which is intentionally
+        // transparent above. Reveal it only after the smooth CPU replacement is
+        // ready so a coarse intermediate surface never flashes on screen.
+        //
+        // tryUseGpu:false is what keeps the surface smooth. Mol*'s GPU
+        // marching cubes uploads the volume as a byte texture, and quantizing
+        // the field to 256 levels puts a visible orange-peel ripple on every
+        // lobe; the CPU path reads the full-precision grid.
+        async function applyOrbitalVisuals() {
+          const plugin = viewer.plugin;
+          const update = plugin.state.data.build();
+          let touched = false;
+          plugin.state.data.cells.forEach((cell, ref) => {
+            // Skip cells the state has already dropped: a redraw can race with
+            // this update and the stale reference would throw.
+            if (!cell.obj || cell.status !== "ok") return;
+            if (!(cell.transform?.transformer?.id || "").includes("volume-representation-3d")) return;
+            touched = true;
+            update.to(ref).update((old) => ({
+              ...old,
+              type: {
+                ...old.type,
+                params: {
+                  ...old.type.params,
+                  alpha: orbital.alpha,
+                  visuals: orbital.visuals,
+                  tryUseGpu: false,
+                },
+              },
+            }));
+          });
+          if (!touched) return;
+          try {
+            await update.commit();
+          } catch (error) {
+            console.warn("orbital restyle skipped:", error);
+          }
+        }
+
+        function setRendering(options) {
+          const canvas3d = viewer.plugin.canvas3d;
+          if (!canvas3d) return;
+          const post = {};
+          if ("occlusion" in options) {
+            const quality = options.occlusionQuality || "balanced";
+            const samples = quality === "high" ? 64 : quality === "draft" ? 16 : 32;
+            const resolutionScale = quality === "draft" ? 0.5 : 1;
+            post.occlusion = options.occlusion
+              ? { name: "on", params: {
+                    samples, multiScale: { name: "off", params: {} },
+                    radius: 5, bias: 0.8, blurKernelSize: 15, blurDepthBias: 0.5,
+                    resolutionScale, color: 0x000000,
+                    transparentThreshold: 0.4 } }
+              : { name: "off", params: {} };
+          }
+          if ("outline" in options) {
+            post.outline = options.outline
+              ? { name: "on", params: { scale: 1, threshold: 0.33, color: 0x000000,
+                                        includeTransparent: true } }
+              : { name: "off", params: {} };
+          }
+          if ("shadow" in options) {
+            post.shadow = options.shadow
+              ? { name: "on", params: { steps: 16, maxDistance: 7, tolerance: 1.1 } }
+              : { name: "off", params: {} };
+          }
+          if ("antialiasing" in options) {
+            post.antialiasing = options.antialiasing === "off"
+              ? { name: "off", params: {} }
+              : options.antialiasing === "fxaa"
+                ? { name: "fxaa", params: { edgeThresholdMin: 0.0312,
+                    edgeThresholdMax: 0.125, iterations: 12, subpixelQuality: 0.75 } }
+                : { name: "smaa", params: { edgeThreshold: 0.08, maxSearchSteps: 24 } };
+          }
+          const props = {};
+          if (Object.keys(post).length) props.postprocessing = post;
+          if ("depthCue" in options) {
+            props.cameraFog = options.depthCue
+              ? { name: "on", params: { intensity: 18 } }
+              : { name: "off", params: {} };
+          }
+          if ("background" in options) {
+            props.renderer = { backgroundColor: options.background };
+          }
+          canvas3d.setProps(props);
+        }
+
+        // ---- measurements -------------------------------------------------
+        // Clicking atoms measures them, the way MacMolPlt and Avogadro do:
+        // two atoms give a bond length, three an angle, four a dihedral.
+        // A fifth click starts a new measurement.
+        const S = molstar.lib.structure;
+        const picked = [];
+        let qmmmSelection = false;
+        const qmmmAtoms = new Map();
+
+        function report(value) {
+          window.parent.postMessage({
+            type: "oqp-measure",
+            labels: picked.map((p) => p.label),
+            kind: value?.kind ?? null,
+            value: value?.value ?? null,
+            unit: value?.unit ?? null,
+          }, window.location.origin);
+        }
+
+        function atomFromLoci(loci) {
+          const location = S.StructureElement.Loci.getFirstLocation(loci);
+          if (!location) return null;
+          const atom = S.StructureProperties.atom;
+          const symbol = atom.type_symbol(location) || atom.label_atom_id(location) || "?";
+          return {
+            label: `${symbol}${atom.id(location)}`,
+            // Mol*'s atom id is a PDB serial number. OpenQP expects the
+            // zero-based atom position in the PDB file instead.
+            index: location.unit.elements[location.element],
+            position: [atom.x(location), atom.y(location), atom.z(location)],
+          };
+        }
+
+        function reportQmmm() {
+          window.parent.postMessage({
+            type: "oqp-qmmm-selection",
+            atoms: [...qmmmAtoms.entries()].map(([index, label]) => ({ index, label })),
+          }, window.location.origin);
+        }
+
+        const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+        const dot = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+        const cross = (p, q) => [p[1] * q[2] - p[2] * q[1],
+                                 p[2] * q[0] - p[0] * q[2],
+                                 p[0] * q[1] - p[1] * q[0]];
+        const norm = (p) => Math.sqrt(dot(p, p));
+
+        function measure() {
+          const [a, b, c, d] = picked.map((p) => p.position);
+          if (picked.length === 2) {
+            return { kind: "Bond length", value: norm(sub(a, b)), unit: "Å" };
+          }
+          if (picked.length === 3) {
+            const u = sub(a, b), v = sub(c, b);
+            const cosine = dot(u, v) / (norm(u) * norm(v));
+            return { kind: "Angle",
+                     value: Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI,
+                     unit: "°" };
+          }
+          if (picked.length === 4) {
+            const b1 = sub(b, a), b2 = sub(c, b), b3 = sub(d, c);
+            const n1 = cross(b1, b2), n2 = cross(b2, b3);
+            const unit2 = b2.map((v) => v / norm(b2));
+            const m = cross(n1, unit2);
+            return { kind: "Dihedral",
+                     value: Math.atan2(dot(m, n2), dot(n1, n2)) * 180 / Math.PI,
+                     unit: "°" };
+          }
+          return null;
+        }
+
+        window.oqpPlugin = viewer.plugin;   // handy for diagnostics
+        window.oqpViewer = viewer;
+
+
+        // Mol*'s stock click behaviours re-frame the camera on every pick,
+        // which would throw the view around while atoms are being measured.
+        // Measuring is what clicking means in this app, so they are removed.
+        (async () => {
+          const CAMERA_ON_CLICK = ["ms-plugin.camera-focus-loci",
+                                   "ms-plugin.representation-focus-loci"];
+          const state = viewer.plugin.state.behaviors;
+          const update = state.build();
+          let touched = false;
+          state.cells.forEach((cell, ref) => {
+            if (CAMERA_ON_CLICK.includes(cell.transform?.transformer?.id)) {
+              touched = true;
+              update.delete(ref);
+            }
+          });
+          if (touched) await update.commit().catch(() => {});
+        })();
+        viewer.plugin.behaviors.interaction.click.subscribe(({ current, button }) => {
+          const loci = current?.loci;
+          if (qmmmSelection) {
+            if (!loci || loci.kind !== "element-loci") return;
+            const atom = atomFromLoci(loci);
+            if (!atom) return;
+            if (qmmmAtoms.has(atom.index)) {
+              qmmmAtoms.delete(atom.index);
+              viewer.plugin.managers.structure.selection.fromLoci("remove", loci, false);
+            } else {
+              qmmmAtoms.set(atom.index, atom.label);
+              viewer.plugin.managers.structure.selection.fromLoci("add", loci, false);
+            }
+            reportQmmm();
+            return;
+          }
+          // Clicking empty space clears the current measurement.
+          if (!loci || loci.kind !== "element-loci") {
+            picked.length = 0;
+            report();
+            return;
+          }
+          const atom = atomFromLoci(loci);
+          if (!atom) return;
+          if (picked.length >= 4) picked.length = 0;
+          picked.push(atom);
+          report(measure());
+        });
+
+        let renderQueue = Promise.resolve();
+        let newestRenderGeneration = 0;
+
+        window.addEventListener("message", async (event) => {
+          if (event.origin !== window.location.origin) return;
+          const message = event.data || {};
+          if (message.style) style = { ...style, ...message.style };
+          if (message.orbital) orbital = { ...orbital, ...message.orbital };
+          const replacementTypes = new Set([
+            "oqp-structure", "oqp-normal-mode", "oqp-normal-mode-reset", "oqp-file", "oqp-cube",
+          ]);
+          const dependentTypes = new Set([
+            "oqp-atomic-property", "oqp-nmr-shielding", "oqp-normal-mode-play",
+            "oqp-normal-mode-pause", "oqp-normal-mode-arrows", "oqp-style",
+          ]);
+          let releaseRender = null;
+          if (replacementTypes.has(message.type) || dependentTypes.has(message.type)) {
+            const supplied = Number(message.renderGeneration);
+            const generation = dependentTypes.has(message.type)
+              ? newestRenderGeneration
+              : (Number.isFinite(supplied) ? supplied : newestRenderGeneration + 1);
+            if (replacementTypes.has(message.type)) {
+              newestRenderGeneration = Math.max(newestRenderGeneration, generation);
+            }
+            const previousRender = renderQueue;
+            renderQueue = new Promise((resolve) => { releaseRender = resolve; });
+            await previousRender;
+            if (generation !== newestRenderGeneration) {
+              releaseRender();
+              return;
+            }
+          }
+          try {
+          if (message.type === "oqp-structure") {
+            lastCube = null;
+            lastAtomicProperty = null;
+            picked.length = 0;
+            report();
+            await viewer.plugin.clear();
+            await drawStructure(message.xyz);
+          } else if (message.type === "oqp-atomic-property") {
+            await showAtomicProperty(message.values);
+          } else if (message.type === "oqp-nmr-shielding") {
+            await showAtomicProperty((message.shielding || []).map((row) => row.total_coupled));
+          } else if (message.type === "oqp-normal-mode") {
+            lastCube = null;
+            lastAtomicProperty = null;
+            picked.length = 0;
+            report();
+            stopNormalMode();
+            normalMode = { mode: message.mode, amplitude: message.amplitude, arrows: message.arrows };
+            await drawNormalMode();
+            if (message.playing) await playNormalMode();
+          } else if (message.type === "oqp-normal-mode-play") {
+            await playNormalMode();
+          } else if (message.type === "oqp-normal-mode-pause") {
+            stopNormalMode();
+          } else if (message.type === "oqp-normal-mode-arrows") {
+            if (!normalMode) return;
+            // Arrow visibility is a visual overlay. Reload its static overlay
+            // but resume the model-index animation when it was playing.
+            const resume = normalModePlaying;
+            viewer.plugin.managers.animation.stop();
+            normalMode.arrows = !!message.arrows;
+            await drawNormalMode();
+            if (resume) await playNormalMode();
+          } else if (message.type === "oqp-normal-mode-reset") {
+            lastCube = null;
+            lastAtomicProperty = null;
+            stopNormalMode();
+            normalMode = null;
+            picked.length = 0;
+            report();
+            await viewer.plugin.clear();
+            await drawStructure(message.xyz);
+          } else if (message.type === "oqp-file") {
+            lastCube = null;
+            lastAtomicProperty = null;
+            qmmmAtoms.clear();
+            await viewer.plugin.clear();
+            await drawStructure(message.text, message.format);
+          } else if (message.type === "oqp-qmmm-mode") {
+            qmmmSelection = !!message.enabled;
+          } else if (message.type === "oqp-qmmm-clear") {
+            qmmmAtoms.clear();
+            viewer.plugin.managers.structure.selection.clear();
+            reportQmmm();
+          } else if (message.type === "oqp-orbital-style") {
+            orbital = { ...orbital, ...message.orbital };
+            await applyOrbitalVisuals();
+          } else if (message.type === "oqp-rendering") {
+            setRendering(message.rendering || {});
+          } else if (message.type === "oqp-style") {
+            if (lastAtomicProperty) {
+              await drawAtomicProperty(lastAtomicProperty.source, lastAtomicProperty.values);
+            } else if (lastCube) {
+              await drawCube(lastCube);
+            } else if (last) {
+              await viewer.plugin.clear();
+              await drawStructure(last.data, last.format);
+            }
+          } else if (message.type === "oqp-snapshot") {
+            // Mol* draws into its own WebGL canvas, so the image has to come
+            // from the plugin rather than from a screenshot of the DOM.
+            let image = null;
+            try {
+              image = await viewer.plugin.helpers.viewportScreenshot.getImageDataUri();
+            } catch (error) {
+              console.warn("snapshot failed:", error);
+            }
+            window.parent.postMessage({ type: "oqp-snapshot-data", image },
+                                      window.location.origin);
+          } else if (message.type === "oqp-measure-clear") {
+            picked.length = 0;
+            report();
+          } else if (message.type === "oqp-cube") {
+            lastAtomicProperty = null;
+            lastCube = { ...message };
+            await drawCube(lastCube);
+          }
+          } finally {
+            if (releaseRender) releaseRender();
+          }
+        });
+        // Capture the MVS primitive transformers before anything can be put on
+        // screen.  The capture loads a probe scene and clears it, so it has to
+        // finish while the scene is still empty -- announcing readiness first
+        // lets a structure or cube arrive and then be erased by the cleanup.
+        await captureMvsPrimitiveTransformers();
+
+        window.parent.postMessage({ type: "oqp-viewer-ready" }, window.location.origin);
+
+        const params = new URLSearchParams(window.location.search);
+        const sameOrigin = sameOriginHref;
+
+        const load = params.get("load");
+        if (load) {
+          const href = sameOrigin(load);
+          if (href) await viewer.loadStructureFromUrl(href, "xyz", false);
+        }
+
+        // Multi-frame XYZ (normal-mode trajectory) played as an animation.
+        const traj = params.get("traj");
+        if (traj) {
+          const href = sameOrigin(traj);
+          if (href) {
+            // A multi-model XYZ loads as a trajectory with full representations.
+            await viewer.loadStructureFromUrl(href, "xyz", false);
+            const plugin = viewer.plugin;
+            plugin.managers.animation.play(
+              plugin.managers.animation.animations.find(
+                (a) => a.name === "built-in.animate-model-index"
+              ),
+              { mode: { name: "loop", params: { direction: "forward" } },
+                duration: { name: "fixed", params: { durationInS: 2 } } }
+            );
+          }
+        }
+
+        // Orbital / density isosurfaces from a Gaussian cube file.
+        const cube = params.get("cube");
+        if (cube) {
+          const href = sameOrigin(cube);
+          const iso = Math.abs(parseFloat(params.get("iso") || "0.05")) || 0.05;
+          if (href) {
+            await viewer.loadVolumeFromUrl(
+              { url: href, format: "cube", isBinary: false },
+              isoSurfaces(iso, params.get("sides") || orbital.sides),
+            );
+            await applyOrbitalVisuals();
+          }
+        }
+      }
+      boot();
+    </script>
+  </body>
+</html>

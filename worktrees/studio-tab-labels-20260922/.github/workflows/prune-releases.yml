@@ -1,0 +1,67 @@
+name: Prune old releases
+
+# Deletes every release except the one named, for when a run of quick fixes
+# has left a page full of superseded downloads. Manual only, and it will not
+# run without both the tag to keep and a typed confirmation: this destroys
+# published artifacts, and there is no undo.
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "The one release tag to keep (e.g. v0.2.0)"
+        required: true
+        type: string
+      confirm:
+        description: 'Type "delete" to confirm'
+        required: true
+        type: string
+      delete_tags:
+        description: "Also delete the git tag of each removed release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete every release but the one to keep
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ inputs.keep }}
+          CONFIRM: ${{ inputs.confirm }}
+          DELETE_TAGS: ${{ inputs.delete_tags }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "delete" ]; then
+            echo "Not confirmed: type delete to run this." >&2
+            exit 1
+          fi
+          # Refuse rather than empty the releases page over a typo in the tag.
+          if ! gh release view "$KEEP" >/dev/null 2>&1; then
+            echo "The release to keep ($KEEP) does not exist; refusing." >&2
+            exit 1
+          fi
+          tags=$(gh release list --limit 200 --json tagName -q '.[].tagName' \
+                 | grep -vxF "$KEEP" || true)
+          if [ -z "$tags" ]; then
+            echo "Nothing to delete: $KEEP is the only release."
+            exit 0
+          fi
+          echo "Keeping $KEEP. Deleting:"
+          echo "$tags" | sed 's/^/  /'
+          for tag in $tags; do
+            if [ "$DELETE_TAGS" = "true" ]; then
+              gh release delete "$tag" --yes --cleanup-tag
+            else
+              gh release delete "$tag" --yes
+            fi
+            echo "deleted $tag"
+          done
+          echo "Remaining releases:"
+          gh release list --limit 200

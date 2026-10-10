@@ -1,0 +1,4 @@
+casci/sto-3g guess(type=hcore) scf(maxit=60,forced_attempt=3,save_molden=false)
+cas(active_electrons=2,active_orbitals=2,max_det=1000,max_memory=256)
+ci(solver=davidson,davidson_subspace=4)
+geom="../geometries/H2-069e977a383f.xyz"

@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oqp-studio"
+version = "0.2.4"
+description = "Desktop GUI for the Open Quantum Platform: build, run, and visualize OpenQP calculations"
+readme = "README.md"
+license = "LicenseRef-OpenQP-Research-1.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "httpx>=0.27",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "numpy>=1.26",
+    # Verify TLS against the OS trust store so TLS-inspecting campus proxies
+    # do not break outbound lookups.
+    "truststore>=0.9",
+    "python-multipart>=0.0.9",   # file uploads for structure import
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",
+    "ruff>=0.4",
+]
+chem = [
+    "rdkit>=2023.9",
+    "numpy>=1.26",
+]
+
+[project.urls]
+Homepage = "https://open-quantum-platform.github.io/openqp-docs/studio/"
+Documentation = "https://open-quantum-platform.github.io/openqp-docs/studio/"
+
+[tool.setuptools.packages.find]
+include = ["oqp_studio*"]
+
+[tool.setuptools.package-data]
+# The built frontend is copied into oqp_studio/web/ by build_wheel.py so that
+# `pip install oqp-studio` ships the UI and the viewer with the server.
+oqp_studio = ["web/**/*", "build-identity.json"]
+
+[tool.ruff]
+line-length = 100

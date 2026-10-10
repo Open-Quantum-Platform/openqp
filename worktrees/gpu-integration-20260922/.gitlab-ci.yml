@@ -1,0 +1,24 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+stages: [test]
+python-and-workspace:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  timeout: 10m
+  before_script:
+    - python -m pip install 'numpy<2.2'
+  script:
+    - python -m unittest discover -s tests -p 'test_gpu_workspace*.py' -v
+    - python -m unittest discover -s tests -p test_gpu_metc_persistent_buffers.py -v
+    - python -m unittest discover -s tests -p test_gpu_package_import.py -v
+    - python -m unittest discover -s tests -p test_gpu_metc_contraction_equivalence.py -v
+    - python -m unittest discover -s tests -p test_gpu_benchmark_timers.py -v
+    - python -m compileall -q python/openqp_gpu
+# CUDA regression is a separate hardware gate. CPU-only CI is not CUDA proof.
+# See docs/integration/validation for the source-pinned A100 run.

@@ -1,0 +1,130 @@
+From f3c10399b65ac197f71acc0662ad8edfe523d78e Mon Sep 17 00:00:00 2001
+From: Cheol Ho Choi <cheolho.choi@gmail.com>
+Date: Thu, 11 Jun 2026 12:03:27 +0900
+Subject: [PATCH] feat: optional external DF-JK supplier in fock_jk (Route-C
+ bridge Stage 2)
+
+Inert unless OQP_ROUTEC_LIB names a dylib exposing routec_fock_jk bind(C);
+diverts the 2e Fock build there (not for CAM or incremental paths; falls
+back natively on info/=0, e.g. nfocks=2). Validated in-loop: RHF and
+B3LYP(v1r) on H2O/6-31G* match the Python-owned DF reference to 3e-10 Ha;
+deviation from native exact-4c is the pure DF fitting error (~2.3e-5 Ha).
+---
+ source/scf_addons.F90 | 87 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 87 insertions(+)
+
+diff --git a/source/scf_addons.F90 b/source/scf_addons.F90
+index 08e1014778..b6f3c1296d 100644
+--- a/source/scf_addons.F90
++++ b/source/scf_addons.F90
+@@ -210,6 +210,83 @@
+ !   the `form_rohf_fock` function in the `scf` module.
+ !
+ !===============================================================================
++!> @brief Optional external DF-JK supplier (Route-C bridge, OPENQP_BRIDGE.md
++!>        Stage 2). If $OQP_ROUTEC_LIB names a dylib exposing
++!>        routec_fock_jk(d, f, nbf, nfocks, scale_exch, scale_coul, info)
++!>        bind(C), fock_jk diverts its 2e build there. Entirely inert when the
++!>        environment variable is unset; falls back natively when the external
++!>        returns info /= 0 (e.g. unsupported nfocks).
++module routec_bridge
++  use, intrinsic :: iso_c_binding
++  implicit none
++  private
++  public :: routec_try_fock_jk
++
++  abstract interface
++    subroutine routec_fock_jk_i(d, f, nbf, nfocks, se, sc, info) bind(C)
++      import :: c_double, c_int
++      real(c_double), intent(in) :: d(*)
++      real(c_double), intent(inout) :: f(*)
++      integer(c_int), intent(in) :: nbf, nfocks
++      real(c_double), intent(in) :: se, sc
++      integer(c_int), intent(out) :: info
++    end subroutine
++  end interface
++
++  interface
++    function c_dlopen(file, mode) bind(C, name="dlopen")
++      import :: c_ptr, c_char, c_int
++      character(kind=c_char), intent(in) :: file(*)
++      integer(c_int), value :: mode
++      type(c_ptr) :: c_dlopen
++    end function
++    function c_dlsym(handle, name) bind(C, name="dlsym")
++      import :: c_ptr, c_char, c_funptr
++      type(c_ptr), value :: handle
++      character(kind=c_char), intent(in) :: name(*)
++      type(c_funptr) :: c_dlsym
++    end function
++  end interface
++
++  integer(c_int), parameter :: RTLD_NOW = 2_c_int
++  logical :: tried = .false.
++  procedure(routec_fock_jk_i), pointer :: ext_jk => null()
++
++contains
++
++  subroutine routec_init()
++    type(c_ptr) :: h
++    type(c_funptr) :: fp
++    character(len=4096) :: path
++    integer :: plen, stat
++    tried = .true.
++    call get_environment_variable("OQP_ROUTEC_LIB", path, plen, stat)
++    if (stat /= 0 .or. plen == 0) return
++    h = c_dlopen(trim(path)//c_null_char, RTLD_NOW)
++    if (.not. c_associated(h)) return
++    fp = c_dlsym(h, "routec_fock_jk"//c_null_char)
++    if (.not. c_associated(fp)) return
++    call c_f_procpointer(fp, ext_jk)
++  end subroutine routec_init
++
++  function routec_try_fock_jk(d, f, nbf, nfocks, se, sc) result(done)
++    real(c_double), intent(in) :: d(*)
++    real(c_double), intent(inout) :: f(*)
++    integer, intent(in) :: nbf, nfocks
++    real(c_double), intent(in) :: se, sc
++    logical :: done
++    integer(c_int) :: info, nbf_c, nf_c
++    done = .false.
++    if (.not. tried) call routec_init()
++    if (.not. associated(ext_jk)) return
++    nbf_c = int(nbf, c_int); nf_c = int(nfocks, c_int)
++    info = 1_c_int
++    call ext_jk(d, f, nbf_c, nf_c, se, sc, info)
++    done = (info == 0_c_int)
++  end function routec_try_fock_jk
++
++end module routec_bridge
++
+ module scf_addons
+   use precision, only: dp
+ 
+@@ -1064,6 +1141,7 @@ contains
+     use types, only: information
+     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
+                             int2_rhf_data_t, int2_urohf_data_t
++    use routec_bridge, only: routec_try_fock_jk
+ 
+     implicit none
+ 
+@@ -1090,6 +1168,15 @@ contains
+     if (present(scale_coul)) scale_c = scale_coul
+     is_dft = (infos%control%hamilton == 20)
+ 
++    ! Route-C external DF-JK (inert unless $OQP_ROUTEC_LIB is set).
++    ! Not taken for CAM (needs short-range K) or incremental builds
++    ! (difference densities; run with scf incremental=False).
++    if (.not. (is_dft .and. infos%dft%cam_flag) .and. .not. present(f_old)) then
++      if (routec_try_fock_jk(d, f, basis%nbf, ubound(f,2), scale_e, scale_c)) then
++        if (present(nschwz)) nschwz = 0
++        return
++      end if
++    end if
+ 
+     ! Initialize ERI calculations
+     call int2_driver%init(basis, infos)
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,142 @@
+{
+  "merge_request": {
+    "iid": 1,
+    "title": "Draw the induced current on the ACID isosurface",
+    "web_url": "https://qchemlab.knu.ac.kr/open-quantum-platform/oqp-studio/-/merge_requests/1",
+    "state": "opened",
+    "sha": "8115ca60652ca92632a714bb90614921b861ac17",
+    "source_branch": "claude/acid-current-vectors-20260922",
+    "target_branch": "main"
+  },
+  "current_sha": "8115ca60652ca92632a714bb90614921b861ac17",
+  "notes": [
+    {
+      "id": 3374,
+      "type": null,
+      "body": "## Codex automated review\n\nReviewed commit `8115ca60652c` with the official Codex CLI.\n\nCurrent vectors can diverge from the displayed isosurface threshold, and log restoration loses or incorrectly retains the new field state. These affect the correctness of the scientific visualization.\n\nFull review comments:\n\n- [P2] Match the vector mask to the rendered surface threshold — /var/lib/codex-review/work/project-18-mr-1/frontend/public/viewer/app.js:2478-2483\n  When the Surface size control differs from 100%, the arrows are sampled against a different threshold from the visible surface. `setVolume()` divides the isovalue by `surfaceSize` and applies a `maxAbs * 0.0025` minimum, whereas this calculation does neither. For example, at 10% surface size the rendered threshold is ten times the arrow threshold, entirely outside the selected three-times-threshold band. Use the same effective isolation calculation for both so the vectors remain on the displayed ACID shell.\n\n- [P2] Include current-density state in log snapshot restoration — /var/lib/codex-review/work/project-18-mr-1/frontend/public/viewer/app.js:2531-2533\n  Loading an ACID set, loading another molecule, and then clicking the ACID log entry restores only its scalar surface: `createLogSnapshot()` and `restoreLogSnapshot()` never save or restore `currentField`. Conversely, restoring an older scalar cube with the same grid can retain the newer molecule's current vectors because the grid check passes. Include the field and its controls in snapshot capture/restoration, explicitly clearing it for snapshots without current data.\n\n<!-- codex-review-runner sha:8115ca60652ca92632a714bb90614921b861ac17 -->",
+      "author": {
+        "id": 60,
+        "username": "codex-review-bot",
+        "public_email": null,
+        "name": "Codex Review Bot",
+        "state": "active",
+        "locked": false,
+        "avatar_url": "https://secure.gravatar.com/avatar/8084fd5c6d7fda43b8fb78fab1508c355600e2dc33587e44449c856c94164045?s=80&d=identicon",
+        "web_url": "https://qchemlab.knu.ac.kr/codex-review-bot"
+      },
+      "created_at": "2026-09-22T07:11:26.027Z",
+      "updated_at": "2026-09-22T07:11:26.027Z",
+      "system": false,
+      "noteable_id": 413,
+      "noteable_type": "MergeRequest",
+      "project_id": 18,
+      "resolvable": false,
+      "confidential": false,
+      "internal": false,
+      "imported": false,
+      "imported_from": "none",
+      "noteable_iid": 1,
+      "commands_changes": {}
+    },
+    {
+      "id": 3372,
+      "type": null,
+      "body": "assigned to @cheol",
+      "author": {
+        "id": 4,
+        "username": "cheol",
+        "public_email": "",
+        "name": "Cheol Ho Choi",
+        "state": "active",
+        "locked": false,
+        "avatar_url": "https://secure.gravatar.com/avatar/54256dd546e474d1fd686dd8103c638562658a01c477479692c87c29c6e8090d?s=80&d=identicon",
+        "web_url": "https://qchemlab.knu.ac.kr/cheol"
+      },
+      "created_at": "2026-09-22T06:41:25.698Z",
+      "updated_at": "2026-09-22T06:41:25.720Z",
+      "system": true,
+      "noteable_id": 413,
+      "noteable_type": "MergeRequest",
+      "project_id": 18,
+      "resolvable": false,
+      "confidential": false,
+      "internal": false,
+      "imported": false,
+      "imported_from": "none",
+      "noteable_iid": 1,
+      "commands_changes": {}
+    }
+  ],
+  "discussions": [
+    {
+      "id": "b6881778cf8903764e80640382bb36e9599f9120",
+      "individual_note": true,
+      "resolvable": false,
+      "notes": [
+        {
+          "id": 3372,
+          "type": null,
+          "body": "assigned to @cheol",
+          "author": {
+            "id": 4,
+            "username": "cheol",
+            "public_email": "",
+            "name": "Cheol Ho Choi",
+            "state": "active",
+            "locked": false,
+            "avatar_url": "https://secure.gravatar.com/avatar/54256dd546e474d1fd686dd8103c638562658a01c477479692c87c29c6e8090d?s=80&d=identicon",
+            "web_url": "https://qchemlab.knu.ac.kr/cheol"
+          },
+          "created_at": "2026-09-22T06:41:25.698Z",
+          "updated_at": "2026-09-22T06:41:25.720Z",
+          "system": true,
+          "noteable_id": 413,
+          "noteable_type": "MergeRequest",
+          "project_id": 18,
+          "resolvable": false,
+          "confidential": false,
+          "internal": false,
+          "imported": false,
+          "imported_from": "none",
+          "noteable_iid": 1,
+          "commands_changes": {}
+        }
+      ]
+    },
+    {
+      "id": "95980eae9893494acd11986c09036591673244fa",
+      "individual_note": true,
+      "resolvable": false,
+      "notes": [
+        {
+          "id": 3374,
+          "type": null,
+          "body": "## Codex automated review\n\nReviewed commit `8115ca60652c` with the official Codex CLI.\n\nCurrent vectors can diverge from the displayed isosurface threshold, and log restoration loses or incorrectly retains the new field state. These affect the correctness of the scientific visualization.\n\nFull review comments:\n\n- [P2] Match the vector mask to the rendered surface threshold — /var/lib/codex-review/work/project-18-mr-1/frontend/public/viewer/app.js:2478-2483\n  When the Surface size control differs from 100%, the arrows are sampled against a different threshold from the visible surface. `setVolume()` divides the isovalue by `surfaceSize` and applies a `maxAbs * 0.0025` minimum, whereas this calculation does neither. For example, at 10% surface size the rendered threshold is ten times the arrow threshold, entirely outside the selected three-times-threshold band. Use the same effective isolation calculation for both so the vectors remain on the displayed ACID shell.\n\n- [P2] Include current-density state in log snapshot restoration — /var/lib/codex-review/work/project-18-mr-1/frontend/public/viewer/app.js:2531-2533\n  Loading an ACID set, loading another molecule, and then clicking the ACID log entry restores only its scalar surface: `createLogSnapshot()` and `restoreLogSnapshot()` never save or restore `currentField`. Conversely, restoring an older scalar cube with the same grid can retain the newer molecule's current vectors because the grid check passes. Include the field and its controls in snapshot capture/restoration, explicitly clearing it for snapshots without current data.\n\n<!-- codex-review-runner sha:8115ca60652ca92632a714bb90614921b861ac17 -->",
+          "author": {
+            "id": 60,
+            "username": "codex-review-bot",
+            "public_email": null,
+            "name": "Codex Review Bot",
+            "state": "active",
+            "locked": false,
+            "avatar_url": "https://secure.gravatar.com/avatar/8084fd5c6d7fda43b8fb78fab1508c355600e2dc33587e44449c856c94164045?s=80&d=identicon",
+            "web_url": "https://qchemlab.knu.ac.kr/codex-review-bot"
+          },
+          "created_at": "2026-09-22T07:11:26.027Z",
+          "updated_at": "2026-09-22T07:11:26.027Z",
+          "system": false,
+          "noteable_id": 413,
+          "noteable_type": "MergeRequest",
+          "project_id": 18,
+          "resolvable": false,
+          "confidential": false,
+          "internal": false,
+          "imported": false,
+          "imported_from": "none",
+          "noteable_iid": 1,
+          "commands_changes": {}
+        }
+      ]
+    }
+  ]
+}

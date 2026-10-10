@@ -1,0 +1,32 @@
+{
+  "name": "oqp-studio-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "license": "LicenseRef-OpenQP-Research-1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node copy-molstar.mjs && vite",
+    "build": "node copy-molstar.mjs && tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/three": "^0.181.0",
+    "linkedom": "^0.18.13",
+    "molstar": "^5.11.0",
+    "typescript": "^5.5.0",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "ketcher-core": "^3.17.2",
+    "ketcher-react": "^3.17.2",
+    "ketcher-standalone": "^3.17.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.181.1",
+    "three-gpu-pathtracer": "^0.0.24",
+    "three-mesh-bvh": "^0.9.5",
+    "xatlas-web": "^0.1.0"
+  }
+}

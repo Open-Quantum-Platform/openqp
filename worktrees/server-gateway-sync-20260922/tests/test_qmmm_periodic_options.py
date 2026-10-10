@@ -1,0 +1,385 @@
+"""Regression tests for the periodic/embedding QM/MM controls added with the
+link-atom + Ewald work ([qmmm] ewald_tol, lj_switch, h_lj, mm_charge_width) and
+for the review fixes around them:
+
+* lj_switch / h_lj are boolean schema keys (checked from the schema source, no
+  runtime needed);
+* the Ewald branch is entered only for genuinely periodic OpenMM nonbonded
+  methods (PME / Ewald / CutoffPeriodic), never for NoCutoff or
+  CutoffNonPeriodic even when the topology carries box vectors;
+* mm_charge_width / ewald_tol must be finite and positive;
+* h_lj assigns Lennard-Jones parameters to MM hydrogens only, never to QM atoms;
+* the split-embedding NAMD path folds link-atom charges onto their QM hosts
+  (total QM charge conserved) before the MM electrostatics;
+* the WHAM/restart system identity covers the new Hamiltonian options.
+
+Everything below the schema test needs OpenMM (and the oqp package importable).
+"""
+import ast
+import importlib.util
+import os
+import types
+import unittest
+
+import numpy as np
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+_EXAMPLES = os.path.join(_ROOT, 'examples', 'QMMM')
+_SCHEMA = os.path.join(_ROOT, 'pyoqp', 'oqp', 'molecule', 'oqpdata.py')
+
+_HAVE_OPENMM = importlib.util.find_spec('openmm') is not None
+try:
+    from oqp.library.qmmm_driver import OpenQpQMMM
+    from oqp.library.namd import NAMD_QMMM
+    _HAVE_OQP = True
+except Exception:  # pragma: no cover - no compiled runtime / no OpenMM
+    _HAVE_OQP = False
+
+
+def _schema_qmmm_types():
+    with open(_SCHEMA) as fh:
+        tree = ast.parse(fh.read())
+    node = next(n.value for n in ast.walk(tree)
+                if isinstance(n, ast.Assign)
+                and any(getattr(t, 'id', '') == 'OQP_CONFIG_SCHEMA' for t in n.targets))
+    for sk, sv in zip(node.keys, node.values):
+        if ast.literal_eval(sk) != 'qmmm':
+            continue
+        out = {}
+        for ok, ov in zip(sv.keys, sv.values):
+            spec = {ast.literal_eval(k): v for k, v in zip(ov.keys, ov.values)}
+            out[ast.literal_eval(ok)] = (spec['type'].id, ast.literal_eval(spec['default']))
+        return out
+    raise AssertionError('no [qmmm] section in the schema')
+
+
+class TestSchema(unittest.TestCase):
+    def test_periodic_options_types(self):
+        t = _schema_qmmm_types()
+        self.assertEqual(t['lj_switch'], ('bool', 'False'))
+        self.assertEqual(t['h_lj'], ('bool', 'False'))
+        self.assertEqual(t['ewald_tol'][0], 'str')
+        self.assertEqual(t['mm_charge_width'][0], 'str')
+
+    def test_examples_exercise_the_options(self):
+        with open(os.path.join(_EXAMPLES, 'ala-box_BHHLYP-MRSF-NAMD-QMMM-PME.inp')) as fh:
+            deck = fh.read()
+        for key in ('ewald_tol', 'lj_switch', 'h_lj', 'mm_charge_width'):
+            self.assertRegex(deck, r'(?m)^\s*%s\s*=\s*\S' % key)
+        self.assertRegex(deck, r'(?m)^\s*cutoff\s*=\s*PME')
+        self.assertTrue(os.path.exists(os.path.join(_EXAMPLES, 'ala_box.pdb')))
+
+
+@unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP, 'needs OpenMM and the oqp package')
+class TestDriverGates(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import openmm.app as app
+        cls.app = app
+        cls.box = app.PDBFile(os.path.join(_EXAMPLES, 'ala_box.pdb'))
+        cls.cluster = app.PDBFile(os.path.join(_EXAMPLES, 'formaldehyde_water.pdb'))
+
+    def _bare(self, cutoff, topology):
+        d = object.__new__(OpenQpQMMM)
+        d.Cutoff = cutoff
+        d.topology = topology
+        d.qm_atoms = np.array([8, 9, 16, 17, 18])       # ALA C, O, NH2 of the dipeptide
+        d.link_atoms = []
+        return d
+
+    def test_periodic_branch_only_for_periodic_methods(self):
+        app = self.app
+        for cut in (app.NoCutoff, app.CutoffNonPeriodic):
+            d = self._bare(cut, self.box.topology)
+            self.assertFalse(d._is_periodic())
+            self.assertIsNone(d._box_lengths_bohr())     # box vectors present, still a cluster
+        for cut in (app.PME, app.Ewald, app.CutoffPeriodic):
+            d = self._bare(cut, self.box.topology)
+            self.assertTrue(d._is_periodic())
+            np.testing.assert_allclose(d._box_lengths_bohr(), 16.0 * 1.8897259886 * np.ones(3), rtol=1e-9)
+
+    def test_periodic_method_without_box_raises(self):
+        top = self.app.Topology()                    # no CRYST1 -> no box vectors
+        self.assertIsNone(top.getPeriodicBoxVectors())
+        d = self._bare(self.app.PME, top)
+        with self.assertRaisesRegex(ValueError, 'box vectors'):
+            d._box_lengths_bohr()
+        # a cluster PDB that happens to carry a CRYST1 record is still a cluster
+        d = self._bare(self.app.NoCutoff, self.cluster.topology)
+        self.assertIsNotNone(self.cluster.topology.getPeriodicBoxVectors())
+        self.assertIsNone(d._box_lengths_bohr())
+
+    def test_link_atom_follows_the_minimum_image_bond(self):
+        """A frame whose bonded QM and MM hosts are wrapped to opposite sides
+        of the box must place the link hydrogen on the short (bonded) image."""
+        import openmm.unit as unit
+        import types
+        app = self.app
+        d = self._bare(app.PME, self.box.topology)
+        d.link_atoms = [types.SimpleNamespace(qm_index=8, mm_index=7, g=0.7)]
+        pos = [np.array(p.value_in_unit(unit.angstrom), dtype=float) for p in self.box.positions]
+        ref = np.asarray(d._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in pos])[0])
+        wrapped = [p.copy() for p in pos]
+        wrapped[7] = wrapped[7] + np.array([16.0, 0.0, -16.0])   # MM host shifted by box vectors
+        got = np.asarray(d._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in wrapped])[0])
+        np.testing.assert_allclose(got, ref, atol=1e-10)
+        # non-periodic driver: raw bond vector (no imaging)
+        d2 = self._bare(app.NoCutoff, self.box.topology)
+        d2.link_atoms = d.link_atoms
+        raw = np.asarray(d2._link_positions_angstrom(
+            [unit.Quantity(p, unit.angstrom) for p in wrapped])[0])
+        self.assertGreater(np.linalg.norm(raw - ref), 5.0)
+
+    def test_qm_fragment_made_whole_across_the_boundary(self):
+        """A periodic frame that stores bonded QM atoms on opposite sides of
+        the cell must reach the QM code as a whole molecule."""
+        import openmm.unit as unit
+        import types
+        app = self.app
+        d = self._bare(app.PME, self.box.topology)
+        d.qm_atoms = np.array([8, 9, 16, 17, 18])          # ALA C, O, NH2 (bonded chain)
+        d.link_atoms = [types.SimpleNamespace(qm_index=8, mm_index=7, g=0.7)]
+        pos = [np.array(p.value_in_unit(unit.angstrom), dtype=float) for p in self.box.positions]
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in pos]
+        ref = d._qm_center_positions_bohr()
+        wrapped = [p.copy() for p in pos]
+        for i in (16, 17, 18):                              # NH2 group shifted by a box vector
+            wrapped[i] = wrapped[i] + np.array([0.0, 16.0, 0.0])
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        got = d._qm_center_positions_bohr()
+        np.testing.assert_allclose(got, ref, atol=1e-9)
+        # config-mode geometry string uses the same unwrapped coordinates
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        s_wrapped = d._build_xyz_string()
+        d.positions = [unit.Quantity(p, unit.angstrom) for p in pos]
+        self.assertEqual(s_wrapped, d._build_xyz_string())
+        # a cluster driver leaves the raw coordinates alone
+        d2 = self._bare(app.NoCutoff, self.box.topology)
+        d2.qm_atoms, d2.link_atoms = d.qm_atoms, d.link_atoms
+        d2.positions = [unit.Quantity(p, unit.angstrom) for p in wrapped]
+        self.assertGreater(np.abs(d2._qm_center_positions_bohr() - ref).max(), 20.0)
+
+    def test_unwrap_places_disconnected_fragments_by_minimum_image(self):
+        # two QM molecules (0-1 and 2-3) in a 10 A box: fragment B is stored
+        # across the +x face (atom 3 wrapped to x=0.4), and the whole fragment
+        # sits a box length from fragment A in the raw frame
+        d = object.__new__(OpenQpQMMM)
+        d.qm_atoms = np.array([0, 1, 2, 3])
+        d._qm_bond_adjacency = lambda: {0: [1], 1: [0], 2: [3], 3: [2]}
+        raw = {0: np.array([0.5, 5.0, 5.0]), 1: np.array([1.5, 5.0, 5.0]),
+               2: np.array([9.4, 5.0, 5.0]), 3: np.array([0.4, 5.0, 5.0])}
+        box = np.array([10.0, 10.0, 10.0])
+        out = d.unwrap_qm(lambda i: raw[i], box)
+        np.testing.assert_allclose(out[0], raw[0]); np.testing.assert_allclose(out[1], raw[1])
+        np.testing.assert_allclose(out[3] - out[2], [1.0, 0.0, 0.0])      # B whole
+        np.testing.assert_allclose(out[2], [-0.6, 5.0, 5.0])              # B at minimum image from A
+        np.testing.assert_allclose(out[3], [0.4, 5.0, 5.0])
+        # fragments already at minimum image are left alone; no box: raw frame
+        raw2 = dict(raw); raw2[2] = np.array([3.0, 5.0, 5.0]); raw2[3] = np.array([4.0, 5.0, 5.0])
+        out2 = d.unwrap_qm(lambda i: raw2[i], box)
+        for i in raw2:
+            np.testing.assert_allclose(out2[i], raw2[i])
+        out3 = d.unwrap_qm(lambda i: raw[i], None)
+        for i in raw:
+            np.testing.assert_allclose(out3[i], raw[i])
+        # three single-atom fragments at x = 0, 4.9, -4.9 (wrapped to 5.1): the
+        # last two are neighbours across the face (0.2 A apart), each already at
+        # minimum image from the first; placement against the nearest placed
+        # fragment keeps them together instead of 9.8 A apart
+        d3 = object.__new__(OpenQpQMMM)
+        d3.qm_atoms = np.array([0, 1, 2])
+        d3._qm_bond_adjacency = lambda: {0: [], 1: [], 2: []}
+        raw3 = {0: np.array([0.0, 5.0, 5.0]), 1: np.array([4.9, 5.0, 5.0]), 2: np.array([5.1, 5.0, 5.0])}
+        out4 = d3.unwrap_qm(lambda i: raw3[i], box)
+        np.testing.assert_allclose(out4[1], [4.9, 5.0, 5.0])
+        np.testing.assert_allclose(out4[2], [5.1, 5.0, 5.0])
+        raw3[2] = np.array([-4.9, 5.0, 5.0])          # same fragment stored on the other face
+        out5 = d3.unwrap_qm(lambda i: raw3[i], box)
+        np.testing.assert_allclose(out5[2], [5.1, 5.0, 5.0])
+
+    def test_anderson_step_accelerates_a_slow_charge_fixed_point(self):
+        from oqp.library.qmmm_driver import anderson_step
+        rng = np.random.default_rng(1); n = 18
+        Q, _ = np.linalg.qr(rng.normal(size=(n, n)))
+        lam = np.full(n, 0.2); lam[:2] = [0.9, 0.8]        # two slow modes, as for the indole side chain
+        A = Q @ np.diag(lam) @ Q.T; b = 0.05 * rng.normal(size=n)
+        q_star = np.linalg.solve(np.eye(n) - A, b)
+        q = np.zeros(n); qh, fh = [], []
+        for k in range(30):
+            g = A @ q + b; f = g - q; qh.append(q.copy()); fh.append(f)
+            if np.abs(f).max() < 1e-4:
+                break
+            q = g if k == 0 else anderson_step(qh, fh)
+        self.assertLess(k + 1, 10)                          # damped 0.5 mixing needs > 100
+        self.assertLess(np.abs(q - q_star).max(), 1e-6)
+        # short history / oversized extrapolation fall back to the damped step
+        np.testing.assert_allclose(anderson_step([q], [f]), q + 0.5 * f)
+        big = anderson_step([np.zeros(2), np.ones(2)], [np.array([5.0, 5.0]), np.array([4.0, 4.0])], max_step=0.5)
+        np.testing.assert_allclose(big, np.ones(2) + 0.5 * np.array([4.0, 4.0]))
+
+    def test_smeared_kernel_is_finite_at_zero_separation(self):
+        from oqp.library.qmmm_driver import smeared_coulomb
+        mu = 0.53
+        r = np.array([0.0, 1e-10, 0.5, 2.0])
+        phi, force = smeared_coulomb(r, mu)
+        self.assertTrue(np.all(np.isfinite(phi)) and np.all(np.isfinite(force)))
+        self.assertAlmostEqual(phi[0], 2 * mu / np.sqrt(np.pi), places=12)
+        self.assertEqual(force[0], 0.0)
+        from scipy.special import erf
+        self.assertAlmostEqual(phi[2], erf(mu * 0.5) / 0.5, places=12)
+        # point-charge limit
+        phi0, f0 = smeared_coulomb(np.array([2.0]), None)
+        self.assertAlmostEqual(phi0[0], 0.5); self.assertAlmostEqual(f0[0], 0.125)
+
+    def test_option_validation(self):
+        common = dict(positions=None, topology=None, forcefield=None, qm_atoms=[0])
+        for bad in (-0.5, 0.0 + float('nan'), float('inf')):
+            with self.assertRaisesRegex(ValueError, 'mm_charge_width'):
+                OpenQpQMMM(mm_charge_width=bad, **common)
+        for bad in (0.0, -1e-6, float('nan')):
+            with self.assertRaisesRegex(ValueError, 'ewald_tol'):
+                OpenQpQMMM(ewald_tol=bad, **common)
+        # accepted values fall through to the usual "oqp_cfg or mol" check
+        with self.assertRaisesRegex(ValueError, 'oqp_cfg'):
+            OpenQpQMMM(mm_charge_width=0.7, ewald_tol=1e-6, **common)
+        with self.assertRaisesRegex(ValueError, 'oqp_cfg'):
+            OpenQpQMMM(mm_charge_width=0, ewald_tol=None, **common)
+
+    def test_charge_smearing_only_with_full_espf(self):
+        # mol=object() passes the mode check; the guard sits before the
+        # topology-dependent link-atom detection, which then fails on the
+        # None topology for the accepted embedding (any error but ours).
+        common = dict(positions=None, topology=None, forcefield=None, qm_atoms=[0], mol=object())
+        for emb in ('split', 'mechanical'):
+            with self.assertRaisesRegex(ValueError, 'full-ESPF'):
+                OpenQpQMMM(mm_charge_width=0.7, Embedding=emb, **common)
+        with self.assertRaises(Exception) as cm:
+            OpenQpQMMM(mm_charge_width=0.7, Embedding='electrostatic', **common)
+        self.assertNotIn('full-ESPF', str(cm.exception))
+
+    def test_h_lj_leaves_qm_hydrogens_alone(self):
+        import openmm as mm
+        import openmm.unit as unit
+        app = self.app
+        ff = app.ForceField(os.path.join(_EXAMPLES, 'formaldehyde.xml'),
+                            os.path.join(_EXAMPLES, 'tip3p.xml'))
+        pdb = self.cluster
+        d = object.__new__(OpenQpQMMM)
+        d.positions, d.topology, d.forcefield = pdb.positions, pdb.topology, ff
+        d.qm_atoms = np.array([0, 1, 2, 3])          # H2CO: QM hydrogens are atoms 2, 3
+        d.Cutoff = app.NoCutoff
+        d.ewald_tol, d.lj_switch, d.h_lj = None, False, True
+        d.Embedding, d.espf_full = 'electrostatic', True
+        ref = ff.createSystem(pdb.topology, nonbondedMethod=app.NoCutoff,
+                              constraints=None, rigidWater=False)
+        nb_ref = next(f for f in ref.getForces() if isinstance(f, mm.NonbondedForce))
+        systems = d.prepare_mm()
+        nb = next(f for f in systems['sys0'].getForces() if isinstance(f, mm.NonbondedForce))
+        n_mm_h_set = 0
+        for atom in pdb.topology.atoms():
+            if atom.element is None or atom.element.atomic_number != 1:
+                continue
+            _, s0, e0 = nb_ref.getParticleParameters(atom.index)
+            _, s1, e1 = nb.getParticleParameters(atom.index)
+            if atom.index in (2, 3):
+                self.assertEqual(s1, s0)
+                self.assertEqual(e1, e0)             # QM hydrogen untouched
+            elif e0.value_in_unit(unit.kilojoule_per_mole) == 0.0:
+                self.assertGreater(e1.value_in_unit(unit.kilojoule_per_mole), 0.0)
+                n_mm_h_set += 1
+        self.assertEqual(n_mm_h_set, 10)             # 5 TIP3P waters x 2 H
+
+
+@unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP, 'needs OpenMM and the oqp package')
+class TestNamdLinkAtoms(unittest.TestCase):
+    def test_fold_link_charges_conserves_total_charge(self):
+        n = object.__new__(NAMD_QMMM)
+        n.nqm = 3
+        n.link_atoms = [types.SimpleNamespace(host_row=1, g=0.7, qm_index=9, mm_index=8),
+                        types.SimpleNamespace(host_row=2, g=0.7, qm_index=10, mm_index=12)]
+        pchg = np.array([0.10, -0.20, 0.30, 0.05, -0.07])
+        q = n._fold_link_charges(pchg)
+        np.testing.assert_allclose(q, [0.10, -0.15, 0.23])
+        self.assertAlmostEqual(q.sum(), pchg.sum(), places=14)
+        n.link_atoms = []
+        np.testing.assert_array_equal(n._fold_link_charges(pchg[:3]), pchg[:3])
+
+    def test_restart_identity_tracks_periodic_options(self):
+        import openmm as mm
+        import openmm.app as app
+        pdb = app.PDBFile(os.path.join(_EXAMPLES, 'formaldehyde_water.pdb'))
+        ff = app.ForceField(os.path.join(_EXAMPLES, 'formaldehyde.xml'),
+                            os.path.join(_EXAMPLES, 'tip3p.xml'))
+        system = ff.createSystem(pdb.topology, nonbondedMethod=app.NoCutoff)
+        n = object.__new__(NAMD_QMMM)
+        n.pdb, n._mm = pdb, mm
+        n.qm_atoms = np.array([0, 1, 2, 3])
+        n.natom_all = pdb.topology.getNumAtoms()
+        n.m_all = np.ones(n.natom_all)
+        base = {'embedding': 'electrostatic', 'cutoff': 'NoCutoff'}
+        ref = n._qmmm_wham_system_identity(system, dict(base))['sha256']
+        self.assertEqual(n._qmmm_wham_system_identity(system, dict(base))['sha256'], ref)
+        # default-valued new keys (as the schema fills them in) leave the digest
+        # unchanged, so checkpoints written before the keys existed still validate
+        defaults = dict(base, ewald_tol='', lj_switch=False, h_lj='false', mm_charge_width='')
+        self.assertEqual(n._qmmm_wham_system_identity(system, defaults)['sha256'], ref)
+        for key, value in (('mm_charge_width', '0.7'), ('h_lj', True), ('h_lj', 'true'),
+                           ('lj_switch', True), ('ewald_tol', '1e-6')):
+            cfg = dict(base); cfg[key] = value
+            self.assertNotEqual(n._qmmm_wham_system_identity(system, cfg)['sha256'], ref, key)
+        # bool and string spellings of the same setting hash identically
+        self.assertEqual(n._qmmm_wham_system_identity(system, dict(base, h_lj=True))['sha256'],
+                         n._qmmm_wham_system_identity(system, dict(base, h_lj='true'))['sha256'])
+
+    def test_restart_identity_default_keys_are_invisible(self):
+        n = object.__new__(NAMD_QMMM)
+        cfg = {'embedding': 'electrostatic', 'ewald_tol': '', 'lj_switch': False,
+               'h_lj': 'False', 'mm_charge_width': '0', 'pdb_file': 'x.pdb'}
+        self.assertEqual(n._qmmm_identity_config(cfg), {'embedding': 'electrostatic', 'pdb_file': 'x.pdb'})
+        for zero in ('0.0', '0.00', '0e0', 0, 0.0):
+            self.assertEqual(n._qmmm_identity_config(dict(cfg, mm_charge_width=zero)),
+                             {'embedding': 'electrostatic', 'pdb_file': 'x.pdb'}, zero)
+        cfg.update(lj_switch='true', mm_charge_width='0.7', ewald_tol='1e-6')
+        self.assertEqual(n._qmmm_identity_config(cfg),
+                         {'embedding': 'electrostatic', 'pdb_file': 'x.pdb',
+                          'lj_switch': True, 'mm_charge_width': 0.7, 'ewald_tol': 1e-6})
+
+
+@unittest.skipUnless(_HAVE_OQP, 'needs the oqp package')
+class TestSystemPdbFallback(unittest.TestCase):
+    """[input] system = file.pdb <indices>: the PDB is looked up next to the
+    input file when it is not found relative to the working directory."""
+
+    def _mol(self, system, input_file):
+        from oqp.molecule import Molecule
+        m = object.__new__(Molecule)
+        m.config = {'input': {'system': system}}
+        m.input_file = input_file
+        return m
+
+    def test_relative_pdb_resolved_next_to_input(self):
+        deck = os.path.join(_EXAMPLES, 'ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp')
+        cwd = os.getcwd()
+        os.chdir(_HERE)                       # ala.pdb does not exist here
+        try:
+            m = self._mol('ala.pdb 9 10 17 18 19', deck)
+            m._resolve_system_pdb_path()
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(m.config['input']['system'],
+                         os.path.join(_EXAMPLES, 'ala.pdb') + ' 9 10 17 18 19')
+
+    def test_absolute_or_missing_paths_untouched(self):
+        deck = os.path.join(_EXAMPLES, 'ala-dipeptide_BHHLYP-MRSF-NAMD-QMMM-linkatom.inp')
+        for system in ('/abs/nowhere/ala.pdb 1 2', 'no_such_file.pdb 1 2',
+                       '  8 0.0 0.0 0.0\n  1 0.0 0.0 1.0'):
+            m = self._mol(system, deck)
+            m._resolve_system_pdb_path()
+            self.assertEqual(m.config['input']['system'], system)
+
+
+if __name__ == '__main__':
+    unittest.main()

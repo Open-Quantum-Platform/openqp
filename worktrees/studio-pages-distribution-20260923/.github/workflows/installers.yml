@@ -1,0 +1,277 @@
+name: Installers
+
+# One recipe, built twice.  The slim installer downloads the compute engine on
+# demand; the all-in-one carries it, so a single download installs an
+# application that can compute with no network afterwards -- which is what a
+# campus or corporate machine behind a TLS-inspecting proxy actually needs.
+#
+# Keeping both in one reusable workflow is the point: two copies of a
+# 160-line build would drift the first time either was touched.
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Attach the installers to this already-published release"
+        required: false
+        type: string
+        default: ""
+      with_engine:
+        description: "Bundle the OpenQP engine inside the installer"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # bundles_offline is deliberately narrower than bundles: the .deb and
+          # the .msi are the managed-deployment formats, and doubling a 300 MB
+          # download to publish a second way of installing the same thing helps
+          # nobody.  The all-in-one ships the format a person actually clicks.
+          # The all-in-one is a .deb, not an AppImage: linuxdeploy fails on the
+          # 700 MB engine tree (eleven seconds in, before any compression, and
+          # Tauri swallows its output), while the same AppImage builds fine
+          # without it.  A .deb just packages the files, so it does not run
+          # linuxdeploy at all.  Non-Debian distributions still have the slim
+          # AppImage plus the engine archive, which is the same software in two
+          # downloads instead of one.
+          - os: ubuntu-latest
+            bundles: deb,appimage
+            bundles_offline: deb
+            engine_artifact: openqp-linux-x86_64-standalone
+          - os: macos-latest
+            bundles: app,dmg
+            bundles_offline: app,dmg
+            engine_artifact: openqp-macos-arm64-standalone
+          - os: macos-15-intel
+            bundles: app,dmg
+            bundles_offline: app,dmg
+            engine_artifact: openqp-macos-x86_64-standalone
+          - os: windows-latest
+            bundles: nsis,msi
+            bundles_offline: nsis
+            engine_artifact: openqp-windows-standalone
+    runs-on: ${{ matrix.os }}
+    env:
+      WINDOWS_SIGN_COMMAND: ${{ secrets.WINDOWS_SIGN_COMMAND }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            librsvg2-dev patchelf libfuse2
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend sidecar binary
+        shell: bash
+        working-directory: backend
+        run: |
+          pip install -e . rdkit pyinstaller
+          python build_binary.py
+
+      - name: Stage sidecar with target triple
+        shell: bash
+        run: |
+          TRIPLE=$(rustc -Vv | grep '^host:' | cut -d' ' -f2)
+          mkdir -p shell/src-tauri/binaries
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then EXT=".exe"; fi
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            cp "backend/dist/oqp-studio-backend/oqp-studio-backend" \
+               "shell/src-tauri/binaries/oqp-studio-backend-${TRIPLE}"
+            cp -R "backend/dist/oqp-studio-backend/_internal" \
+               "shell/src-tauri/binaries/oqp-studio-backend-runtime"
+          else
+            cp "backend/dist/oqp-studio-backend${EXT}" \
+               "shell/src-tauri/binaries/oqp-studio-backend-${TRIPLE}${EXT}"
+          fi
+
+      # --- all-in-one only -------------------------------------------------
+      # The engine jobs published these earlier in this same run.
+      - name: Fetch the engine built in this run
+        if: inputs.with_engine
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.engine_artifact }}
+          path: engine-archive
+
+      - name: Unpack the engine into the app's resources
+        if: inputs.with_engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p shell/src-tauri/engine
+          archive=$(ls engine-archive/*)
+          echo "staging $archive"
+          case "$archive" in
+            *.zip)    unzip -q "$archive" -d shell/src-tauri/engine ;;
+            *.tar.gz) tar xzf "$archive" -C shell/src-tauri/engine ;;
+            *) echo "unrecognised engine archive: $archive" >&2; exit 1 ;;
+          esac
+          # The archives unpack flat -- openqp next to _internal -- because the
+          # bundle jobs zip the CONTENTS of the frozen directory.  Guard it
+          # anyway: a wrapper directory would put the executable one level too
+          # deep and the app would find nothing.
+          if [ ! -e shell/src-tauri/engine/openqp ] && \
+             [ ! -e shell/src-tauri/engine/openqp.exe ]; then
+            inner=$(ls -d shell/src-tauri/engine/*/ 2>/dev/null | head -1 || true)
+            if [ -n "$inner" ]; then
+              mv "$inner"* shell/src-tauri/engine/ && rmdir "$inner"
+            fi
+          fi
+          ls shell/src-tauri/engine | head
+          test -e shell/src-tauri/engine/openqp || test -e shell/src-tauri/engine/openqp.exe
+          # The executable bit does not survive a zip on every platform.
+          chmod +x shell/src-tauri/engine/openqp 2>/dev/null || true
+          du -sh shell/src-tauri/engine
+
+      - name: Declare the engine as a bundled resource
+        if: inputs.with_engine
+        shell: bash
+        working-directory: shell/src-tauri
+        run: |
+          python - <<'PY'
+          import json
+          config = json.load(open("tauri.conf.json"))
+          # A trailing slash keeps the directory structure, so the engine lands
+          # at $RESOURCE/engine/ -- which is what the shell hands the backend
+          # in OQP_STUDIO_RESOURCES.
+          config["bundle"]["resources"] = ["engine/"]
+          json.dump(config, open("tauri.conf.json", "w"), indent=2)
+          print("engine/ bundled as a resource")
+          PY
+
+      # Signing is optional: with no secrets configured the build produces
+      # unsigned installers exactly as before. Adding the secrets below makes
+      # Tauri sign (and, for macOS, notarize) automatically.
+      #   macOS  : APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+      #            APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID and either
+      #            APPLE_ID + APPLE_APP_PASSWORD (app-specific) or an
+      #            App Store Connect API key.
+      #   Windows: WINDOWS_SIGN_COMMAND, a command that signs "%1" using a
+      #            cloud signing service (Azure Trusted Signing, DigiCert
+      #            KeyLocker, SSL.com eSigner); OV certificates have required
+      #            hardware/HSM storage since 2023, so a plain .pfx in CI is
+      #            no longer an option.
+      - name: Enable Windows signing
+        if: runner.os == 'Windows' && env.WINDOWS_SIGN_COMMAND != ''
+        shell: bash
+        working-directory: shell/src-tauri
+        run: |
+          python - <<'PY'
+          import json, os
+          config = json.load(open("tauri.conf.json"))
+          config["bundle"].setdefault("windows", {})["signCommand"] = os.environ["WINDOWS_SIGN_COMMAND"]
+          json.dump(config, open("tauri.conf.json", "w"), indent=2)
+          print("windows signCommand enabled")
+          PY
+
+      - name: Build installers
+        shell: bash
+        working-directory: shell/src-tauri
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # An unset secret arrives as an empty string, and Tauri treats a
+          # defined-but-empty APPLE_CERTIFICATE as "signing requested" and
+          # fails importing it. Drop the whole group unless a certificate is
+          # actually configured.
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD \
+                  APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+          fi
+          # hdiutil, which bundle_dmg.sh drives, intermittently fails on the
+          # hosted macOS runners; one retry clears it.
+          BUNDLES="${{ matrix.bundles }}"
+          if [ "${{ inputs.with_engine }}" = "true" ]; then
+            BUNDLES="${{ matrix.bundles_offline }}"
+          fi
+          npx --yes @tauri-apps/cli@^2 build --bundles "$BUNDLES" || {
+            echo "bundling failed — retrying once"
+            npx --yes @tauri-apps/cli@^2 build --bundles "$BUNDLES"
+          }
+
+      # Quarantine (and therefore the Gatekeeper block on unsigned apps) is
+      # applied by browsers, not by curl. A plain tarball installed from the
+      # terminal opens with no warning and no certificate.
+      - name: Package .app as a curl-installable tarball
+        if: runner.os == 'macOS'
+        shell: bash
+        working-directory: shell/src-tauri/target/release/bundle/macos
+        run: |
+          if [ ! -d "OQP Studio.app" ]; then
+            echo "no .app bundle here; contents:" && ls -la
+            exit 1
+          fi
+          tar czf "OQP-Studio-${{ matrix.os }}.app.tar.gz" "OQP Studio.app"
+          ls -la *.app.tar.gz
+
+      # Tauri names its output after the architecture only ("_x64-setup.exe"),
+      # which does not say which OS it is for. Republish every installer under
+      # OQP-Studio-<version>-<platform>.<ext>.
+      - name: Collect installers under platform-named files
+        shell: bash
+        run: |
+          case "${{ matrix.os }}" in
+            ubuntu-latest)   PLATFORM=linux-x86_64 ;;
+            macos-latest)    PLATFORM=macos-apple-silicon ;;
+            macos-15-intel)  PLATFORM=macos-intel ;;
+            windows-latest)  PLATFORM=windows-x64 ;;
+            *)               PLATFORM="${{ matrix.os }}" ;;
+          esac
+          VERSION=$(python -c "import json;print(json.load(open('shell/src-tauri/tauri.conf.json'))['version'])")
+          if [ "${{ inputs.with_engine }}" = "true" ]; then
+            PLATFORM="${PLATFORM}-with-engine"
+          fi
+          STEM="OQP-Studio-${VERSION}-${PLATFORM}"
+          mkdir -p release
+          cd shell/src-tauri/target/release/bundle
+          shopt -s nullglob
+          for f in */*.dmg;          do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}.dmg"; done
+          for f in macos/*.app.tar.gz; do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}.app.tar.gz"; done
+          for f in */*.AppImage;     do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}.AppImage"; done
+          for f in */*.deb;          do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}.deb"; done
+          for f in */*.msi;          do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}.msi"; done
+          for f in */*-setup.exe;    do cp "$f" "$GITHUB_WORKSPACE/release/${STEM}-setup.exe"; done
+          ls -la "$GITHUB_WORKSPACE/release"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: oqp-studio-${{ matrix.os }}${{ inputs.with_engine && '-with-engine' || '' }}
+          path: release/*
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: release/*

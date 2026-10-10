@@ -1,0 +1,29 @@
+{
+ "mo_coeff": [
+  [
+   0.23423485549498985,
+   -0.01809057287777327,
+   1.059807771226403,
+   -0.8916486637249795
+  ],
+  [
+   0.40106731885477626,
+   -0.6675129600400109,
+   -0.35699780289831895,
+   1.6700054585130564
+  ],
+  [
+   0.401067318854772,
+   0.024587313614837902,
+   -0.7565820821991475,
+   -1.67000545851306
+  ],
+  [
+   0.23423485549498785,
+   0.9268657394491173,
+   0.5142369899320289,
+   0.8916486637249839
+  ]
+ ],
+ "_comment": "H4/STO-3G RHF orbitals with the CAS(2,2) active pair (MOs 2-3) rotated 30 degrees into each other.  A rotation WITHIN the active space leaves the CASCI energy exactly invariant, so this file must reproduce the orbital_source=rhf energy -- an independently predicted reference, not a self-consistent one."
+}

@@ -1,0 +1,36 @@
+# RHF/STO-3G/FCI/ENERGY of dissociated H2, selecting the triplet of a
+# degenerate singlet/triplet pair (issue #339).
+#
+# At 8 A the two H atoms no longer interact, so the FCI ground state is a
+# singlet and a triplet at the SAME energy to solver precision -- a genuinely
+# degenerate cluster, which no other committed example reaches. Inside such a
+# subspace the eigensolver may return any orthogonal mixture of the two, and a
+# mixture of different-spin states is not an S^2 eigenstate: its <S^2> is a
+# weighted average and the multiplicity read from it can be one no electron
+# count admits. target_spin then selects on a label that means nothing.
+#
+# This input therefore asks the one question that cannot be answered without
+# resolving the cluster: give me the TRIPLET. nroot=1 also makes the requested
+# window end inside the degenerate pair, so the solver has to widen it before
+# the labels can be trusted.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   8.000000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=fci
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=200
+
+[fci]
+nroot=1
+target_spin=triplet
+solver=davidson

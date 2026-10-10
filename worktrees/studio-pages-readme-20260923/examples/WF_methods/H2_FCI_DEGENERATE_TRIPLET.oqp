@@ -1,0 +1,2 @@
+fci/sto-3g guess(type=hcore) scf(maxit=200) fci(target_spin=triplet,solver=davidson)
+geom="../geometries/H2-9debeb0936c9.xyz"

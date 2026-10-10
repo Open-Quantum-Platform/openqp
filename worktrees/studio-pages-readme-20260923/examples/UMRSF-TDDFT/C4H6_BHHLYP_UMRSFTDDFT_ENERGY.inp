@@ -1,0 +1,47 @@
+# Energy Calculation of UMRSF-TDDFT with BHHLYP/6-31G* of butadiene C4H6
+# For UMRSF-TDDFT, we have to set:
+#
+#    group          keyword         value
+#--------------------------------------------
+#    input           runtype       energy
+#    input           method         tdhf
+#    scf           multiplicity       3
+#    scf              type           uhf
+#    tdhf             type          umrsf
+#
+# Since we did not specify multiplicity in [tdhf], OQP assumes singlet state.
+#
+[input]
+system = 
+ 6      -1.901080641      0.114577198      0.000000000
+ 6      -0.574900598     -0.402237631      0.000000000
+ 6       1.901080641     -0.114577198      0.000000000
+ 6       0.574900598      0.402237631      0.000000000
+ 1      -2.755248674     -0.545115910      0.000000000
+ 1      -2.071562576      1.183086840      0.000000000
+ 1       2.755248674      0.545115910      0.000000000
+ 1      -0.441348756     -1.477941036      0.000000000
+ 1       2.071562576     -1.183086840      0.000000000
+ 1       0.441348756      1.477941036      0.000000000
+runtype=energy
+method=tdhf
+functional=bhhlyp
+basis=6-31g*
+
+[guess]
+save_mol=false
+
+[scf]
+type=uhf
+multiplicity=3
+converger_type=diis
+maxit=200
+
+[dftgrid]
+rad_npts=90
+ang_npts=302
+
+[tdhf]
+type=umrsf
+nstate=10
+multiplicity=1

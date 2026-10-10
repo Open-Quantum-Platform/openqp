@@ -1,0 +1,26 @@
+[Unit]
+Description=GitLab OpenQP gateway to private internal synchronization
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=openqp-sync
+Group=openqp-sync
+ExecStart=/usr/bin/python3 /usr/local/libexec/openqp-inbound-sync.py
+StateDirectory=openqp-inbound-sync
+StateDirectoryMode=0700
+UMask=0077
+TimeoutStartSec=12min
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/openqp-inbound-sync
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=1G
+CPUQuota=50%
+Nice=10

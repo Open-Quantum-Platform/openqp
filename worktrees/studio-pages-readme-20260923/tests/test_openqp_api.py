@@ -1,0 +1,2019 @@
+import importlib.util
+import sys
+import types
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _string(value):
+    return str(value).lower()
+
+
+SCHEMA = {
+    "input": {
+        "charge": {"type": int, "default": "0"},
+        "basis": {"type": _string, "default": "6-31g*"},
+        "functional": {"type": _string, "default": ""},
+        "method": {"type": _string, "default": "hf"},
+        "runtype": {"type": _string, "default": "energy"},
+        "soc_2e": {"type": int, "default": "1"},
+        "system": {"type": str, "default": ""},
+        "system2": {"type": str, "default": ""},
+        "library": {"type": str, "default": ""},
+        "ispher": {"type": _string, "default": "auto"},
+        "omp_threads": {"type": int, "default": "0"},
+        "verbose": {"type": int, "default": "1"},
+        "qmmm_flag": {"type": bool, "default": "False"},
+        "d4": {"type": bool, "default": "False"},
+    },
+    "d4": {
+        "s6": {"type": str, "default": ""},
+        "s8": {"type": str, "default": ""},
+        "s9": {"type": str, "default": ""},
+        "a1": {"type": str, "default": ""},
+        "a2": {"type": str, "default": ""},
+        "alp": {"type": str, "default": ""},
+    },
+    "cc": {
+        "maxit": {"type": int, "default": "50"},
+        "conv": {"type": float, "default": "1e-7"},
+        "ndiis": {"type": int, "default": "8"},
+        "nfzc": {"type": int, "default": "0"},
+        "cholesky": {"type": str, "default": "auto"},
+        "cholesky_tol": {"type": float, "default": "1e-10"},
+        "cholesky_direct": {"type": str, "default": "auto"},
+    },
+    "qmmm": {
+        "forcefield_files": {"type": str, "default": ""},
+        "pdb_file": {"type": str, "default": ""},
+        "qm_atoms": {"type": str, "default": ""},
+        "cutoff": {"type": _string, "default": "NoCutoff"},
+        "embedding": {"type": _string, "default": "electrostatic"},
+        "rigidwater": {"type": bool, "default": "False"},
+        "frontier_scheme": {"type": _string, "default": "none"},
+        "constraints": {"type": str, "default": "None"},
+    },
+    "droplet": {
+        "enabled": {"type": bool, "default": "False"},
+        "center": {"type": str, "default": "0.0,0.0,0.0"},
+        "radius": {"type": float, "default": "20.0"},
+        "buffer": {"type": float, "default": "1.0"},
+        "force_constant": {"type": float, "default": "10.0"},
+        "target": {"type": _string, "default": "water_com"},
+        "atoms": {"type": str, "default": ""},
+        "water_resnames": {"type": str, "default": "hoh,wat,sol,tip3,tip3p"},
+        "max_penetration": {"type": float, "default": "10.0"},
+    },
+    "solute_com": {
+        "enabled": {"type": bool, "default": "False"},
+        "center": {"type": str, "default": "0.0,0.0,0.0"},
+        "force_constant": {"type": float, "default": "5.0"},
+        "atoms": {"type": str, "default": ""},
+    },
+    "md": {
+        "nstep": {"type": int, "default": "100"},
+        "dt": {"type": float, "default": "0.5"},
+        "active": {"type": int, "default": "1"},
+        "soc": {"type": bool, "default": "False"},
+        "soc_basis": {"type": _string, "default": "adiabatic"},
+        "init_state": {"type": _string, "default": ""},
+        "thrshe": {"type": float, "default": "0.1"},
+        "init_temp": {"type": float, "default": "300.0"},
+        "seed": {"type": int, "default": "0"},
+        "rng_stream": {"type": int, "default": "1"},
+        "first_hop_step": {"type": int, "default": "1"},
+        "nacme_check": {"type": _string, "default": "baeck_an"},
+        "ba_gap_max": {"type": float, "default": "0.0734986443513"},
+        "nacme_gate": {"type": _string, "default": "off"},
+        "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
+        "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
+        "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
+        "nacme_gate_consecutive": {"type": int, "default": "3"},
+        "nve_gate": {"type": _string, "default": "warn"},
+        "nve_gate_abs_tol": {"type": float, "default": "5.0e-3"},
+        "nve_gate_step_tol": {"type": float, "default": "1.0e-3"},
+        "nve_gate_transition_tol": {"type": float, "default": "1.0e-6"},
+        "nve_gate_consecutive": {"type": int, "default": "3"},
+        "trajectory_interval": {"type": int, "default": "0"},
+        "restart_interval": {"type": int, "default": "0"},
+        "trajectory_file": {"type": _string, "default": ""},
+        "restart_file": {"type": _string, "default": ""},
+    },
+    "odp": {
+        "enabled": {"type": bool, "default": "False"},
+        "cv": {"type": str, "default": ""},
+        "scale": {"type": str, "default": ""},
+        "reference_r": {"type": str, "default": ""},
+        "reference_p": {"type": str, "default": ""},
+        "center": {"type": float, "default": "0.0"},
+        "k_parallel": {"type": float, "default": "0.0"},
+        "k_perpendicular": {"type": float, "default": "0.0"},
+        "window": {"type": int, "default": "0"},
+    },
+    "scf": {
+        "type": {"type": _string, "default": "rhf"},
+        "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
+        "scal_rel": {"type": int, "default": "0"},
+    },
+    "tdhf": {
+        "type": {"type": _string, "default": "rpa"},
+        "nstate": {"type": int, "default": "1"},
+        "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
+    },
+    "dftb": {
+        "backend": {"type": _string, "default": "native"},
+        "type": {"type": _string, "default": "auto"},
+        "parameter_path": {"type": str, "default": ""},
+        "nstate": {"type": int, "default": "3"},
+    },
+    "xtb": {
+        "backend": {"type": _string, "default": "native"},
+        "type": {"type": _string, "default": "auto"},
+        "parameter_path": {"type": str, "default": ""},
+        "model": {"type": _string, "default": "gfn1"},
+        "lc_ground_state": {"type": bool, "default": "False"},
+        "nstate": {"type": int, "default": "3"},
+    },
+    "mp2": {
+        "variant": {"type": _string, "default": "mp2"},
+        "same_spin_scale": {"type": float, "default": "1.0"},
+        "opposite_spin_scale": {"type": float, "default": "1.0"},
+    },
+    "properties": {
+        "grad": {"type": int, "default": "0"},
+        "scf_prop": {"type": _string, "default": ""},
+        "nmr_gauge": {"type": _string, "default": "cgo"},
+        "acid_spacing": {"type": float, "default": "0.2"},
+        "acid_padding": {"type": float, "default": "5.0"},
+    },
+    "hess": {
+        "type": {"type": _string, "default": "numerical"},
+        "state": {"type": int, "default": "0"},
+    },
+    "nac": {
+        "type": {"type": _string, "default": "nacme"},
+        "states": {"type": str, "default": ""},
+    },
+    "ekt": {
+        "ip": {"type": bool, "default": "False"},
+        "ea": {"type": bool, "default": "False"},
+    },
+    "pcm": {
+        "enabled": {"type": bool, "default": "False"},
+        "backend": {"type": _string, "default": "ddx"},
+        "mode": {"type": _string, "default": "reference_scf"},
+        "model": {"type": _string, "default": "ddpcm"},
+        "epsilon": {"type": float, "default": "78.3553"},
+    },
+    "optimize": {
+        "lib": {"type": _string, "default": "oqp"},
+        "istate": {"type": int, "default": "1"},
+        "jstate": {"type": int, "default": "2"},
+        "states": {"type": str, "default": ""},
+        "meci_search": {"type": _string, "default": "penalty"},
+        "pen_sigma": {"type": float, "default": "1.0"},
+        "pen_alpha": {"type": float, "default": "0.0"},
+        "pen_delta": {"type": float, "default": "0.025"},
+        "pen_jump": {"type": str, "default": "10,25"},
+        "energy_gap": {"type": float, "default": "1e-5"},
+        "maxit": {"type": int, "default": "30"},
+        "qmmm_radius": {"type": float, "default": "0.0"},
+        "qmmm_output": {"type": str, "default": ""},
+    },
+    "oqp": {
+        "coordsys": {"type": _string, "default": "tric"},
+        "trust": {"type": float, "default": "0.2"},
+        "auto_recovery": {"type": bool, "default": "True"},
+    },
+    "geometric": {
+        "coordsys": {"type": _string, "default": "tric"},
+        "trust": {"type": float, "default": "0.1"},
+        "constraints_file": {"type": str, "default": ""},
+    },
+    # Wavefunction stack.  Only the keys the API helpers touch; types and
+    # defaults mirror OQP_CONFIG_SCHEMA in oqp/molecule/oqpdata.py.
+    "cas": {
+        "active_electrons": {"type": int, "default": "0"},
+        "active_orbitals": {"type": int, "default": "0"},
+        "frozen_core": {"type": int, "default": "0"},
+        "orbital_source": {"type": _string, "default": "rhf"},
+        "max_det": {"type": int, "default": "5000"},
+    },
+    "ci": {
+        "nroot": {"type": int, "default": "1"},
+        "solver": {"type": _string, "default": "auto"},
+        "eig_tol": {"type": float, "default": "1.0e-10"},
+    },
+    # method=fci reads its own section exclusively (fci._settings_from_config),
+    # so the helper writes here rather than to [cas]+[ci]; the stub needs the
+    # section or section("fci", ...) raises "Unknown OpenQP section".
+    "fci": {
+        "nroot": {"type": int, "default": "1"},
+        "active_electrons": {"type": int, "default": "0"},
+        "active_orbitals": {"type": int, "default": "0"},
+        "frozen_core": {"type": int, "default": "0"},
+        "solver": {"type": _string, "default": "auto"},
+        "eig_tol": {"type": float, "default": "1.0e-10"},
+    },
+    "casscf": {
+        "max_macro_iterations": {"type": int, "default": "20"},
+        "root": {"type": int, "default": "0"},
+        "converger": {"type": _string, "default": "twophase"},
+        "hessian": {"type": _string, "default": "fd"},
+        "gradient_norm_tol": {"type": float, "default": "1.0e-6"},
+        "grad_step": {"type": float, "default": "1.0e-3"},
+        "grad_guess": {"type": _string, "default": "cold"},
+        "grad_gap_warn": {"type": float, "default": "1.0e-5"},
+        "grad_ranks_per_group": {"type": int, "default": "0"},
+        # Which derivative a state-averaged run publishes; the sa_casscf helper
+        # owns it, so the stub schema has to carry it.
+        "gradient_state": {"type": _string, "default": "averaged"},
+        "zvector_tol": {"type": float, "default": "1.0e-8"},
+        "zvector_degeneracy_tol": {"type": float, "default": "1.0e-8"},
+    },
+    "state_average": {
+        "enabled": {"type": bool, "default": "False"},
+        "weights": {"type": str, "default": "1.0"},
+        "nstate": {"type": int, "default": "0"},
+        "target_roots": {"type": str, "default": ""},
+        "equal_weights": {"type": bool, "default": "True"},
+    },
+    "pt2": {
+        "variant": {"type": _string, "default": "auto"},
+        "h0": {"type": _string, "default": "fock"},
+        "contraction": {"type": _string, "default": "uncontracted"},
+        "gradient": {"type": _string, "default": "auto"},
+        "ipea_shift": {"type": float, "default": "0.0"},
+        "imaginary_shift": {"type": float, "default": "0.0"},
+        "level_shift": {"type": float, "default": "0.0"},
+        "edshft": {"type": float, "default": "0.0"},
+        "gradient": {"type": _string, "default": "auto"},
+    },
+}
+
+
+def _load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_openqp_module():
+    stub_names = (
+        "oqp",
+        "oqp.molecule",
+        "oqp.molecule.oqpdata",
+        "oqp.pyoqp",
+        "oqp.utils",
+        "oqp.utils.constants",
+        "oqp.utils.geometry",
+        "oqp.utils.input_parser",
+        "oqp.utils.kword_map",
+        "oqp.utils.tb_backends",
+        "oqp.utils.state_labels",
+        "openqp_under_test",
+    )
+    saved_modules = {name: sys.modules.get(name) for name in stub_names}
+
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
+
+        molecule = types.ModuleType("oqp.molecule")
+        molecule.__path__ = []
+        sys.modules["oqp.molecule"] = molecule
+
+        oqpdata = types.ModuleType("oqp.molecule.oqpdata")
+        setattr(oqpdata, "OQP_CONFIG_SCHEMA", SCHEMA)
+        sys.modules["oqp.molecule.oqpdata"] = oqpdata
+
+        utils = types.ModuleType("oqp.utils")
+        utils.__path__ = []
+        sys.modules["oqp.utils"] = utils
+
+        constants = types.ModuleType("oqp.utils.constants")
+        setattr(constants, "ANGSTROM_TO_BOHR", 0.529177210903)
+        sys.modules["oqp.utils.constants"] = constants
+
+        _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
+        _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
+        _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
+        _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
+        _load_module("oqp.utils.state_labels", ROOT / "pyoqp/oqp/utils/state_labels.py")
+
+        class FakeMol:
+            def __init__(self):
+                self.loaded_configs = []
+
+            def load_config(self, config):
+                self.loaded_configs.append(config)
+
+        class FakeRunner:
+            instances = []
+
+            def __init__(
+                self,
+                project=None,
+                input_file=None,
+                log=None,
+                input_dict=None,
+                silent=0,
+                usempi=True,
+            ):
+                self.project = project
+                self.input_file = input_file
+                self.log = log
+                self.input_dict = input_dict
+                self.silent = silent
+                self.usempi = usempi
+                self.ran = False
+                self.mol = FakeMol()
+                self.__class__.instances.append(self)
+
+            def run(self):
+                self.ran = True
+
+        pyoqp = types.ModuleType("oqp.pyoqp")
+        setattr(pyoqp, "Runner", FakeRunner)
+        sys.modules["oqp.pyoqp"] = pyoqp
+
+        module = _load_module("openqp_under_test", ROOT / "pyoqp/oqp/openqp.py")
+        module.Runner.instances.clear()
+        return module
+    finally:
+        for name, module in saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+class TestOpenQPNativeAPI(unittest.TestCase):
+    def test_d4_exposes_explicit_damping_and_molecular_charge(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="water_cation_d4")
+            .molecule(geometry="water", basis="6-31g*", charge=1)
+            .d4(s6=1.0, s8=0.95948085, s9=1.0,
+                a1=0.38574991, a2=4.80688534, alp=16.0)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["charge"], "1")
+        self.assertEqual(config["input"]["d4"], "True")
+        self.assertEqual(config["d4"]["s8"], "0.95948085")
+        self.assertEqual(config["d4"]["alp"], "16.0")
+
+    def test_odp_section_is_exposed_through_settings_api(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="odp_window")
+        job.settings.odp(
+            enabled=True,
+            cv="distance(1,2);angle(1,2,3)",
+            scale="0.5,1.0",
+            reference_r="2.0,1.5",
+            reference_p="3.0,2.1",
+            center=0.4,
+            k_parallel=0.08,
+            k_perpendicular=0.01,
+            window=7,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["odp"]["enabled"], "True")
+        self.assertEqual(config["odp"]["cv"], "distance(1,2);angle(1,2,3)")
+        self.assertEqual(config["odp"]["scale"], "0.5,1.0")
+        self.assertEqual(config["odp"]["window"], "7")
+
+    def test_builtin_geometry_resolves_common_names(self):
+        openqp = load_openqp_module()
+
+        geometry = openqp.get_geometry("water", source="builtin")
+
+        self.assertIn("\nO ", geometry)
+        self.assertEqual(len(geometry.strip().splitlines()), 3)
+
+    def test_molecule_accepts_named_geometry(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="methane").molecule(geometry="ch4", basis="6-31g*")
+        config = job.to_input_dict()
+
+        self.assertEqual(len(config["input"]["system"].strip().splitlines()), 5)
+        self.assertTrue(config["input"]["system"].startswith("\nC "))
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+
+    def test_static_analytical_nac_is_available_through_workflow_and_settings(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_analytic_nac").molecule(geometry="water")
+        job.theory.mrsf(functional="bhhlyp", basis="6-31g", nstate=2)
+        job.settings.scf(conv=1e-10)
+        job.settings.tdhf(conv=1e-10)
+        job.workflow.nac(type="analytical", states="1 2")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "nac")
+        self.assertEqual(config["nac"]["type"], "analytical")
+        self.assertEqual(config["nac"]["states"], "1 2")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+        self.assertEqual(float(config["scf"]["conv"]), 1e-10)
+        self.assertEqual(float(config["tdhf"]["conv"]), 1e-10)
+
+    def test_molecule_accepts_second_geometry_and_multiplicity(self):
+        openqp = load_openqp_module()
+
+        system = "H 0 0 0; H 0 0 0.74"
+        system2 = "H 0 0 0; H 0 0 0.80"
+        job = openqp.OpenQP(project="h2_nac").molecule(
+            system,
+            system2,
+            charge=0,
+            multiplicity=3,
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["system"], "\nH 0 0 0\nH 0 0 0.74")
+        self.assertEqual(config["input"]["system2"], "\nH 0 0 0\nH 0 0 0.80")
+        self.assertEqual(config["input"]["charge"], "0")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+
+    def test_pubchem_sdf_parser_returns_openqp_geometry(self):
+        openqp = load_openqp_module()
+        sdf = """water
+  OpenQP
+
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0
+    0.7586    0.0000    0.5043 H   0  0  0  0  0  0
+   -0.7586    0.0000    0.5043 H   0  0  0  0  0  0
+M  END
+$$$$
+"""
+
+        geometry = openqp.geometry_from_sdf(sdf, "water")
+
+        self.assertEqual(
+            geometry,
+            "\nO 0 0 0\nH 0.7586 0 0.5043\nH -0.7586 0 0.5043",
+        )
+
+    def test_molecule_and_hf_helpers_build_openqp_input(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2")
+            .control(usempi=False)
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="6-31g*", charge=0)
+            .hf()
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["system"], "\nH 0 0 0\nH 0 0 1.4")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["charge"], "0")
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+    def test_ccsd_helper_sets_method_and_cc_section(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd(reference="rhf", nfzc=1, conv=1.0e-8)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "ccsd")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["cc"]["nfzc"], "1")
+
+    def test_ccsd_helper_routes_the_factorisation_controls_to_cc(self):
+        """The Cholesky controls belong to [cc].  Absent from the helper's own
+        signature they land in **scf_keywords and are applied to [scf], so the
+        call fails on an unknown scf keyword instead of configuring the route
+        it names."""
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd_t_chol")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd_t(reference="rhf", cholesky=False, cholesky_tol=1.0e-8,
+                    cholesky_direct=True)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["cc"]["cholesky"], "False")
+        self.assertEqual(config["cc"]["cholesky_direct"], "True")
+        self.assertNotIn("cholesky", config.get("scf", {}))
+
+    def test_ccsd_t_helper_selects_the_triples_method(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd_t")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd_t(reference="rhf")
+        )
+
+        self.assertEqual(job.to_input_dict()["input"]["method"], "ccsd(t)")
+
+    def test_ccsd_helper_accepts_an_open_shell_reference(self):
+        """UHF and ROHF are supported; they route to the spin-orbital solver."""
+        openqp = load_openqp_module()
+
+        for reference in ("uhf", "rohf"):
+            job = (
+                openqp.OpenQP(project=f"ch2_{reference}")
+                .molecule("C 0 0 0; H 0 0.99 0.33; H 0 -0.99 0.33",
+                          basis="sto-3g", multiplicity=3)
+                .ccsd_t(reference=reference)
+            )
+            config = job.to_input_dict()
+            self.assertEqual(config["input"]["method"], "ccsd(t)")
+            self.assertEqual(config["scf"]["type"], reference)
+
+    def test_ccsd_helper_rejects_a_dft_functional(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
+        with self.assertRaises(ValueError):
+            job.ccsd(functional="pbe")
+
+    def test_dft_helper_sets_functional_separately_from_hf(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_pbe")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe", reference="rhf", runtype="grad", conv=1.0e-7)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "pbe")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["scf"]["conv"], "1e-07")
+
+    def test_hf_helper_clears_prior_dft_functional(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="reuse_as_hf")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe")
+            .hf()
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+    def test_mp2_helper_sets_energy_reference_and_variant(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_mp2")
+            .molecule(geometry="water", basis="6-31g", charge=0, multiplicity=1)
+            .mp2(reference="uhf", variant="scs-mp2", conv=1.0e-10)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["scf"]["conv"], "1e-10")
+        self.assertEqual(config["mp2"]["variant"], "scs-mp2")
+
+    def test_mp2_helper_clears_prior_dft_and_sets_custom_scales(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="reuse_as_mp2")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe", runtype="grad")
+            .mp2(same_spin_scale=0.5, opposite_spin_scale=1.1)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["mp2"]["variant"], "custom")
+        self.assertEqual(config["mp2"]["same_spin_scale"], "0.5")
+        self.assertEqual(config["mp2"]["opposite_spin_scale"], "1.1")
+
+    def test_mp2_helper_accepts_rhf_gradient_and_rejects_open_shell_gradient(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="h2o_mp2_grad").mp2(runtype="grad")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["properties"]["grad"], "0")
+
+        for runtype in ("optimize", "ts", "mep", "irc"):
+            with self.subTest(runtype=runtype):
+                optimize_job = (
+                    openqp.OpenQP(project=f"reuse_as_mp2_{runtype}")
+                    .workflow.optimize(istate=2)
+                    .mp2(runtype=runtype)
+                )
+                optimize_config = optimize_job.to_input_dict()
+                self.assertEqual(optimize_config["optimize"]["istate"], "0")
+
+        with self.assertRaisesRegex(ValueError, "require reference='rhf'"):
+            openqp.OpenQP(project="bad_mp2_grad").mp2(
+                reference="uhf", runtype="grad"
+            )
+
+        with self.assertRaisesRegex(ValueError, "do not pass functional"):
+            openqp.OpenQP(project="bad_mp2_functional").theory("mp2", functional="pbe")
+
+        with self.assertRaisesRegex(ValueError, "variant='custom'"):
+            openqp.OpenQP(project="bad_mp2_scales").mp2(
+                variant="sos-mp2",
+                opposite_spin_scale=1.1,
+            )
+
+    def test_mrsf_helper_uses_openqp_defaults(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2_mrsf").molecule("H 0 0 0; H 0 0 0.74").mrsf(nstate=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+    def test_mrsf_helper_accepts_inline_functional(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_mrsf")
+            .molecule(geometry="water", basis="6-31g*")
+            .mrsf(nstate=5, functional="bhhlyp")
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+
+    def test_mrsf_helper_preserves_existing_functional(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_mrsf")
+            .molecule(geometry="water", basis="6-31g*")
+            .input(functional="pbe0")
+            .mrsf(nstate=4)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["functional"], "pbe0")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+    def test_theory_helper_sets_basis_and_method(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_theory")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "6")
+
+    def test_theory_namespace_helpers_set_models(self):
+        openqp = load_openqp_module()
+
+        dft = (
+            openqp.OpenQP(project="h2o_dft_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.dft(functional="pbe0", basis="6-31g*")
+        )
+        config = dft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "pbe0")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+        mp2 = (
+            openqp.OpenQP(project="h2o_mp2_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.mp2(basis="6-31g", reference="uhf", variant="sos-mp2")
+        )
+        config = mp2.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["mp2"]["variant"], "sos-mp2")
+
+        mrsf = (
+            openqp.OpenQP(project="h2o_mrsf_namespace")
+            .molecule(geometry="water", charge=0)
+            .theory.mrsf(functional="bhhlyp", basis="6-31g*", nstate=4)
+        )
+        config = mrsf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+        tddft = (
+            openqp.OpenQP(project="h2o_tddft_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.tddft(functional="b3lyp5", basis="6-31g*", nstate=2)
+        )
+        config = tddft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "b3lyp5")
+        self.assertEqual(config["tdhf"]["nstate"], "2")
+
+        with self.assertRaisesRegex(ValueError, "DFT theory requires"):
+            openqp.OpenQP(project="bad_dft_namespace").theory.dft()
+
+    def test_theory_helper_sets_response_theories(self):
+        openqp = load_openqp_module()
+
+        tdhf = (
+            openqp.OpenQP(project="h2o_tdhf")
+            .molecule(geometry="water", charge=0)
+            .theory("tdhf", basis="6-31g*", nstate=4)
+        )
+        config = tdhf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+        tddft = (
+            openqp.OpenQP(project="h2o_tddft")
+            .molecule(geometry="water", charge=0)
+            .theory("tddft", functional="b3lyp5", basis="6-31g*", nstate=5)
+        )
+        config = tddft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "b3lyp5")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+
+        sf = (
+            openqp.OpenQP(project="h2o_sf")
+            .molecule(geometry="water", charge=0)
+            .theory("sf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+        config = sf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "sf")
+        self.assertEqual(config["tdhf"]["nstate"], "3")
+
+        mp2 = (
+            openqp.OpenQP(project="h2o_mp2")
+            .molecule(geometry="water", charge=0)
+            .theory("mp2", basis="6-31g", reference="rohf", multiplicity=1)
+        )
+        config = mp2.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
+
+        with self.assertRaisesRegex(ValueError, "TDDFT theory requires"):
+            openqp.OpenQP(project="bad_tddft").theory("tddft")
+        with self.assertRaisesRegex(ValueError, "SF-TDDFT theory requires"):
+            openqp.OpenQP(project="bad_sf").theory("sf-tddft")
+
+    def test_control_sets_the_log_verbosity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_quiet")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(verbose=0, omp_threads=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["verbose"], "0")
+        self.assertEqual(config["input"]["omp_threads"], "4")
+
+    def test_control_sets_runtype_threads_and_optimizer_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_opt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(omp_threads=8, usempi=False)
+        job.workflow.optimize(
+            lib="oqp",
+            maxit=12,
+            coordsys="dlc",
+            trust=0.25,
+        ).theory("dft", functional="bhhlyp", basis="6-31g*")
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["omp_threads"], "8")
+        self.assertFalse(job.usempi)
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["maxit"], "12")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_workflow_optimize_composes_with_qmmm(self):
+        # the QM/MM geometry optimisation through the Python API: job.qmmm(...)
+        # followed by job.workflow.optimize(...) builds the deck the QM/MM
+        # optimiser reads (runtype, flag, selection, movable shell, output,
+        # constraints, native engine controls)
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="ala_qmmm_opt")
+            .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+            .qmmm(forcefield="amber14-all.xml", cutoff="NoCutoff", constraints="HBonds")
+        )
+        job.workflow.optimize(istate=0, maxit=6, qmmm_radius=3.0, qmmm_output="ala_held.pdb",
+                              coordsys="tric", auto_recovery=False)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")      # one-based selector, zero-based list
+        self.assertEqual(config["qmmm"]["forcefield_files"], "amber14-all.xml")
+        self.assertEqual(config["qmmm"]["constraints"], "HBonds")
+        self.assertEqual(config["optimize"]["istate"], "0")
+        self.assertEqual(config["optimize"]["maxit"], "6")
+        self.assertEqual(config["optimize"]["qmmm_radius"], "3.0")
+        self.assertEqual(config["optimize"]["qmmm_output"], "ala_held.pdb")
+        self.assertEqual(config["oqp"]["coordsys"], "tric")
+        self.assertEqual(config["oqp"]["auto_recovery"], "False")
+
+    def test_control_meci_sets_crossing_runtype_and_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_meci")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
+        )
+
+        job.workflow.meci(lib="oqp", istate=1, jstate=2)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "meci")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["istate"], "1")
+        self.assertEqual(config["optimize"]["jstate"], "2")
+
+    def test_meci_public_baeka_aliases_map_to_optimizer_schema(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="baeka").molecule(geometry="water")
+
+        job.workflow.meci(
+            states=[1, 2, 3],
+            algorithm="baeka",
+            sigma=2.0,
+            alpha=0.02,
+            delta_beta=0.05,
+            beta_schedule=[10, 25],
+            gap=1.0e-4,
+        )
+
+        optimize = job.to_input_dict()["optimize"]
+        self.assertEqual(optimize["meci_search"], "baeka")
+        self.assertEqual(optimize["states"], "1,2,3")
+        self.assertEqual(optimize["pen_sigma"], "2.0")
+        self.assertEqual(optimize["pen_alpha"], "0.02")
+        self.assertEqual(optimize["pen_delta"], "0.05")
+        self.assertEqual(optimize["pen_jump"], "10,25")
+        self.assertEqual(optimize["energy_gap"], "0.0001")
+
+    def test_workflow_sublevels_set_runtype_and_sections(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_workflows")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
+        )
+
+        job.workflow.energy()
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
+
+        job.workflow.gradient(state=3)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["properties"]["grad"], "3")
+
+        with self.assertRaisesRegex(ValueError, "either state"):
+            job.workflow.gradient(state=1, grad=1)
+
+        job.workflow.hessian(type="analytical", state=0)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "hess")
+        self.assertEqual(config["hess"]["type"], "analytical")
+        self.assertEqual(config["hess"]["state"], "0")
+
+        job.workflow.nacme(states="1,2")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "nacme")
+        self.assertEqual(config["nac"]["states"], "1,2")
+
+        job.workflow.ekt(ip=True, ea=False)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "ekt")
+        self.assertEqual(config["ekt"]["ip"], "True")
+        self.assertEqual(config["ekt"]["ea"], "False")
+
+        pcm_job = (
+            openqp.OpenQP(project="h2o_pcm")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("hf", basis="6-31g*")
+        )
+        pcm_job.workflow.pcm(
+            enabled=True,
+            backend="ddx",
+            mode="reference_scf",
+            model="ddpcm",
+            epsilon=78.3553,
+        )
+        config = pcm_job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["pcm"]["enabled"], "True")
+        self.assertEqual(config["pcm"]["epsilon"], "78.3553")
+
+    def test_workflow_pcm_requires_reference_scf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_pcm")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+
+        with self.assertRaisesRegex(ValueError, "HF/DFT reference-SCF"):
+            job.workflow.pcm(enabled=True, backend="ddx")
+
+    def test_workflow_pcm_blocks_unsupported_scope(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_pcm_scope")
+            .molecule(geometry="water", charge=0, multiplicity=2)
+            .theory("hf", reference="uhf", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "RHF/ROHF"):
+            job.workflow.pcm(enabled=True, backend="ddx")
+
+        job = (
+            openqp.OpenQP(project="bad_pcm_backend")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("hf", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "backend='ddx'"):
+            job.workflow.pcm(enabled=True, backend="pcmsolver")
+        with self.assertRaisesRegex(ValueError, "mode='reference_scf'"):
+            job.workflow.pcm(enabled=True, backend="ddx", mode="post_state_correction")
+
+    def test_workflow_nmr_requires_reference_scf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_nmr")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+
+        with self.assertRaisesRegex(ValueError, "HF/DFT reference-SCF"):
+            job.workflow.nmr(gauge="cgo")
+
+    def test_workflow_nmr_sets_properties_and_blocks_cgo_open_shell(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_nmr")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+        job.workflow.nmr(gauge="cgo")
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["properties"]["scf_prop"], "nmr")
+        self.assertEqual(config["properties"]["nmr_gauge"], "cgo")
+
+        open_shell = (
+            openqp.OpenQP(project="bad_open_shell_nmr")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("hf", reference="rohf", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "CGO NMR"):
+            open_shell.workflow.nmr(gauge="cgo")
+        open_shell.workflow.nmr(gauge="giao")
+
+    def test_workflow_nmr_acid_flag(self):
+        """ACID rides on the shielding call, so the two have to agree.
+
+        The concise-input tests cover the .oqp spelling; this covers the Python
+        one, where the flag used to be read by plain truthiness and the gauge
+        default differed from the concise surface.
+        """
+        openqp = load_openqp_module()
+
+        def job(name):
+            return (
+                openqp.OpenQP(project=name)
+                .molecule(geometry="water", charge=0, multiplicity=1)
+                .theory("hf", basis="6-31g*")
+            )
+
+        # Asking for ACID without naming a gauge selects GIAO, as the concise
+        # surface does; ordering puts nmr first, which the driver relies on.
+        enabled = job("h2o_acid")
+        enabled.workflow.nmr(acid=True, acid_spacing=0.5, acid_padding=3.0)
+        config = enabled.to_input_dict()
+        self.assertEqual(config["properties"]["scf_prop"], "nmr,acid")
+        self.assertEqual(config["properties"]["nmr_gauge"], "giao")
+        self.assertEqual(str(config["properties"]["acid_spacing"]), "0.5")
+        self.assertEqual(str(config["properties"]["acid_padding"]), "3.0")
+
+        # A plain shielding call is untouched.
+        plain = job("h2o_plain")
+        plain.workflow.nmr(gauge="giao")
+        self.assertEqual(plain.to_input_dict()["properties"]["scf_prop"], "nmr")
+
+        # Config-style spellings are parsed, not trusted: "false" used to be
+        # truthy and silently wrote four cube files.
+        off = job("h2o_off")
+        off.workflow.nmr(gauge="giao", acid="false")
+        self.assertEqual(off.to_input_dict()["properties"]["scf_prop"], "nmr")
+        on = job("h2o_on")
+        on.workflow.nmr(gauge="giao", acid="yes")
+        self.assertEqual(on.to_input_dict()["properties"]["scf_prop"], "nmr,acid")
+        # The grid controls describe an ACID box, so they cannot be honoured
+        # without one; the .oqp modifier refuses the same combination, and
+        # accepting them here would store them, write no cubes and say nothing.
+        for kwargs in ({"acid_spacing": 0.5},
+                       {"acid_padding": 3.0},
+                       {"acid_spacing": 0.5, "acid_padding": 3.0}):
+            with self.assertRaisesRegex(ValueError, "require acid=true"):
+                job("h2o_grid").workflow.nmr(gauge="giao", acid=False, **kwargs)
+        # ...and they are accepted when ACID is actually asked for.
+        sized = job("h2o_sized")
+        sized.workflow.nmr(acid=True, acid_padding=2.5)
+        self.assertEqual(
+            str(sized.to_input_dict()["properties"]["acid_padding"]), "2.5")
+
+        # None is "not asked for"; an empty or unrecognised string is a typo,
+        # and both surfaces have to answer the same way (the .oqp modifier
+        # raises on exactly these).
+        none_given = job("h2o_none")
+        none_given.workflow.nmr(gauge="giao", acid=None)
+        self.assertEqual(
+            none_given.to_input_dict()["properties"]["scf_prop"], "nmr")
+        for typo in ("", "none", "maybe"):
+            with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+                job("h2o_typo").workflow.nmr(gauge="giao", acid=typo)
+
+        with self.assertRaisesRegex(ValueError, "acid expects true or false"):
+            job("h2o_bad").workflow.nmr(gauge="giao", acid="2")
+
+        # ACID exists only on the GIAO path, and naming CGO is refused rather
+        # than quietly overridden.
+        with self.assertRaisesRegex(ValueError, "gauge='giao'"):
+            job("h2o_cgo").workflow.nmr(gauge="cgo", acid=True)
+
+    def test_workflow_ekt_requires_mrsf_and_channel(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_ekt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "MRSF-TDDFT"):
+            job.workflow.ekt(ip=True)
+
+        mrsf = (
+            openqp.OpenQP(project="bad_ekt_channel")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
+        )
+        with self.assertRaisesRegex(ValueError, "requires ip=True"):
+            mrsf.workflow.ekt()
+
+    def test_control_call_remains_compatible_for_explicit_runtype(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_opt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .control(
+                runtype="optimize",
+                omp_threads=8,
+                lib="oqp",
+                maxit=12,
+                coordsys="dlc",
+                trust=0.25,
+            )
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["omp_threads"], "8")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["maxit"], "12")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_control_rejects_optimizer_options_for_nonoptimizer_runtype(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="bad_control").molecule(geometry="water")
+
+        with self.assertRaisesRegex(KeyError, "known workflow"):
+            job.control(runtype="energy", maxit=10)
+
+    def test_soc_helper_sets_soc_without_response_multiplicity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_soc")
+            .molecule(geometry="water", charge=0)
+            .theory(
+                "mrsf-tddft",
+                functional="bhhlyp",
+                basis="6-31G(2df,p)",
+                nstate=12,
+            )
+        )
+        job.workflow.soc(soc_2e=1)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "soc")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["basis"], "6-31G(2df,p)")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["input"]["soc_2e"], "1")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["scf"]["scal_rel"], "2")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "12")
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+        job.workflow.soc(soc_2e=0, scal_rel=1)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["soc_2e"], "0")
+        self.assertEqual(config["scf"]["scal_rel"], "1")
+
+    def test_workflow_soc_requires_mrsf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_soc")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
+            job.workflow.soc(soc_2e=1)
+
+    def test_workflow_soc_rejects_theory_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_soc_options")
+            .molecule(geometry="water", charge=0)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=12)
+        )
+
+        with self.assertRaisesRegex(ValueError, "Move these options"):
+            job.workflow.soc(functional="bhhlyp")
+
+    def test_qmmm_enables_flag_and_section(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="qmmm_energy")
+            .molecule("ala.pdb 9 10 17 18 19", basis="6-31g*")
+            .qmmm(embedding="electrostatic")
+        )
+        job.workflow.energy()
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        # the selector after the PDB path is one-based; [qmmm] qm_atoms is the
+        # zero-based OpenMM selection of the same atoms
+        self.assertEqual(config["qmmm"]["qm_atoms"], "8 9 16 17 18")
+
+    def test_qmmm_inferred_selector_is_shifted_to_zero_based_ranges_too(self):
+        openqp = load_openqp_module()
+        job = (openqp.OpenQP(project="qmmm_infer")
+               .molecule("ala.pdb 9-10 17 18-19", basis="6-31g")
+               .qmmm())
+        self.assertEqual(job.to_input_dict()["qmmm"]["qm_atoms"], "8-9 16 17-18")
+        # an explicit qm_atoms is taken as given (already zero-based)
+        job2 = (openqp.OpenQP(project="qmmm_explicit")
+                .molecule("ala.pdb 9 10 17 18 19", basis="6-31g")
+                .qmmm(qm_atoms=[8, 9, 16, 17, 18]))
+        self.assertEqual(job2.to_input_dict()["qmmm"]["qm_atoms"], "8 9 16 17 18")
+
+    def test_qmmm_frontier_scheme_sets_section_key(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="qmmm_rcd")
+            .molecule("ala.pdb 8 9 16 17 18", basis="6-31g*")
+            .qmmm(pdb_file="ala.pdb", forcefield="amber14-all.xml",
+                  qm_atoms=[8, 9, 16, 17, 18], embedding="electrostatic",
+                  frontier_scheme="rcd")
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["qmmm"]["frontier_scheme"], "rcd")
+
+    def test_qmmm_normalizes_lists_and_rejects_duplicate_forcefield(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="qmmm_md").molecule("m.pdb 0 1 2", basis="6-31g")
+        job.qmmm(
+            forcefield=["amber14-all.xml", "amber14/tip3p.xml"],
+            qm_atoms=[0, 1, 2],
+            cutoff="PME",
+            rigidwater=True,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(
+            config["qmmm"]["forcefield_files"], "amber14-all.xml,amber14/tip3p.xml"
+        )
+        self.assertEqual(config["qmmm"]["pdb_file"], "m.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0 1 2")
+        self.assertEqual(config["qmmm"]["cutoff"], "PME")
+        with self.assertRaisesRegex(ValueError, "either forcefield or forcefield_files"):
+            job.qmmm(forcefield="a.xml", forcefield_files="b.xml")
+
+    def test_workflow_namd_builds_soc_qmmm_deck(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="socnamd_qmmm")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            .qmmm(cutoff="PME")
+        )
+        job.workflow.namd(
+            soc=True,
+            soc_basis="mch",
+            nstep=200,
+            dt=0.5,
+            init_state="S1",
+            seed=20260803,
+            rng_stream=9,
+            first_hop_step=2,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["input"]["runtype"], "namd")
+        self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")   # one-based 1-5 -> zero-based
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["md"]["soc"], "True")
+        self.assertEqual(config["md"]["soc_basis"], "mch")
+        self.assertEqual(config["md"]["nstep"], "200")
+        self.assertEqual(config["md"]["init_state"], "S1")
+        self.assertEqual(config["md"]["seed"], "20260803")
+        self.assertEqual(config["md"]["rng_stream"], "9")
+        self.assertEqual(config["md"]["first_hop_step"], "2")
+        self.assertEqual(config["md"]["nacme_check"], "off")
+
+    def test_namd_droplet_restraint_controls_are_pythonic(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="droplet_namd_qmmm")
+            .molecule("chromo.pdb 1-5", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            .qmmm(cutoff="NoCutoff")
+            .droplet(
+                enabled=True,
+                center="0,0,0",
+                radius=12.0,
+                buffer=1.5,
+                force_constant=8.0,
+                target="water_com",
+                max_penetration=4.0,
+            )
+            .solute_com(
+                enabled=True,
+                center="0,0,0",
+                force_constant=2.0,
+                atoms="0-4",
+            )
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["droplet"]["enabled"], "True")
+        self.assertEqual(config["droplet"]["radius"], "12.0")
+        self.assertEqual(config["droplet"]["target"], "water_com")
+        self.assertEqual(config["solute_com"]["enabled"], "True")
+        self.assertEqual(config["solute_com"]["atoms"], "0-4")
+
+    def test_workflow_namd_rejects_soc_nacme_and_builds_same_spin_gate(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_gate")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        with self.assertRaisesRegex(ValueError, "does not support nacme_check"):
+            job.workflow.namd(soc=True, nacme_check="baeck_an")
+        job.workflow.namd(
+            soc=False,
+            nacme_check="baeck_an",
+            ba_gap_max=0.05,
+            nacme_gate="error",
+            nacme_gate_abs_tol=2.0e-4,
+            nacme_gate_rel_tol=0.5,
+            nacme_gate_consecutive=4,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["soc"], "False")
+        self.assertEqual(config["md"]["nacme_check"], "baeck_an")
+        self.assertEqual(config["md"]["ba_gap_max"], "0.05")
+        self.assertEqual(config["md"]["nacme_gate"], "error")
+        self.assertEqual(config["md"]["nacme_gate_abs_tol"], "0.0002")
+        self.assertEqual(config["md"]["nacme_gate_rel_tol"], "0.5")
+        self.assertEqual(config["md"]["nacme_gate_consecutive"], "4")
+
+    def test_workflow_namd_requires_mrsf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_namd")
+            .molecule(geometry="water")
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
+            job.workflow.namd(nstep=10)
+
+    def test_soc_helper_rejects_response_multiplicity(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_soc").molecule(geometry="water")
+
+        with self.assertRaisesRegex(ValueError, "do not set tdhf.multiplicity"):
+            job.soc(nstate=12, functional="bhhlyp", **{"multiplicity": 3})
+
+        job.soc(nstate=12, functional="bhhlyp", basis="6-31G(2df,p)")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "soc")
+        self.assertEqual(config["input"]["soc_2e"], "1")
+        self.assertEqual(config["scf"]["scal_rel"], "2")
+
+    def test_section_proxy_updates_openqp_keywords(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
+
+        job.input(method="tdhf", runtype="energy")
+        job.scf(type="rohf", multiplicity=3)
+        job.tdhf.type = "mrsf"
+        job.tdhf.nstate = 4
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+        self.assertEqual(job.tdhf.nstate, 4)
+
+    def test_settings_proxy_updates_openqp_keywords(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
+
+        job.settings.input(method="tdhf", basis="6-31g*")
+        job.settings.scf(type="rohf", multiplicity=3)
+        job.settings.tdhf(type="sf", nstate=4)
+        job.settings.tdhf.nstate = 5
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "sf")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+        self.assertEqual(job.settings.tdhf.nstate, 5)
+
+    def test_settings_basis_sets_atom_wise_basis_assignments(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("Br 0 0 0; H 0 0 1.4")
+
+        job.settings.basis(["LANL2DZ", "6-31g*"])
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "LANL2DZ;6-31g*")
+
+        tagged = openqp.OpenQP().molecule(
+            "C 0 0 0 c1; H 0 0 1 h1; H 1 0 0 h1"
+        )
+        tagged.settings.basis(c1="cc-pvdz", h1="6-31g*")
+        config = tagged.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "library")
+        self.assertEqual(config["input"]["library"], "c1 cc-pvdz\nh1 6-31g*")
+
+        with self.assertRaisesRegex(ValueError, "single global basis"):
+            openqp.OpenQP().settings.basis("6-31g*")
+
+    def test_optimize_helper_routes_native_backend_options(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_opt").molecule(geometry="water", basis="6-31g*")
+
+        job.optimize(lib="oqp", istate=0, maxit=10, coordsys="dlc", trust=0.25)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["istate"], "0")
+        self.assertEqual(config["optimize"]["maxit"], "10")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+        self.assertEqual(job.optimize.coordsys, "dlc")
+
+    def test_optimize_helper_routes_geometric_backend_options(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_geometric").molecule(geometry="water", basis="6-31g*")
+
+        job.optimize(
+            lib="geometric",
+            maxit=8,
+            coordsys="tric",
+            trust=0.12,
+            constraints_file="bond.constraints",
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["optimize"]["lib"], "geometric")
+        self.assertEqual(config["optimize"]["maxit"], "8")
+        self.assertEqual(config["geometric"]["coordsys"], "tric")
+        self.assertEqual(config["geometric"]["trust"], "0.12")
+        self.assertEqual(config["geometric"]["constraints_file"], "bond.constraints")
+        self.assertEqual(job.optimize.constraints_file, "bond.constraints")
+
+    def test_run_builds_runner_lazily_and_returns_molecule(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h_atom")
+            .control(usempi=False)
+            .molecule("H 0 0 0", basis="sto-3g")
+        )
+
+        mol = job.run(run_type="grad")
+
+        runner = openqp.Runner.instances[-1]
+        self.assertIs(mol, runner.mol)
+        self.assertIs(job.runner, runner)
+        self.assertTrue(runner.ran)
+        self.assertEqual(runner.project, "h_atom")
+        self.assertEqual(runner.log, "h_atom.log")
+        self.assertEqual(runner.input_dict["input"]["runtype"], "grad")
+        self.assertFalse(runner.usempi)
+
+    def test_from_pyscf_maps_spin_and_bohr_coordinates(self):
+        openqp = load_openqp_module()
+
+        class PySCFMol:
+            atom = [["H", (0, 0, 0)], ["H", (0, 0, 1.0)]]
+            basis = "sto-3g"
+            charge = 1
+            spin = 1
+            unit = "B"
+
+        job = openqp.OpenQP.from_pyscf(PySCFMol())
+        config = job.to_input_dict()
+
+        self.assertEqual(config["input"]["system"], "\nH 0 0 0\nH 0 0 0.529177210903")
+        self.assertEqual(config["input"]["basis"], "sto-3g")
+        self.assertEqual(config["input"]["charge"], "1")
+        self.assertEqual(config["scf"]["multiplicity"], "2")
+
+    def test_legacy_openqp_wrapper_still_constructs_runner_immediately(self):
+        openqp = load_openqp_module()
+
+        wrapper = openqp.OPENQP(
+            {
+                "input.system": "H 0 0 0; H 0 0 0.74",
+                "input.basis": "6-31g*",
+                "input.method": "hf",
+                "input.runtype": "energy",
+                "scf.type": "rhf",
+            }
+        )
+        runner = openqp.Runner.instances[-1]
+
+        self.assertEqual(runner.input_dict["input"]["system"], "\nH 0 0 0\nH 0 0 0.74")
+        self.assertFalse(runner.ran)
+        mol = wrapper.run()
+        self.assertIs(mol, runner.mol)
+        self.assertTrue(runner.ran)
+
+
+    def test_legacy_wrapper_forwards_append_log_only_when_set(self):
+        # the ESPF QM/MM driver builds one OPENQP per geometry; the later ones
+        # append to the run's log instead of truncating it
+        openqp = load_openqp_module()
+        seen = []
+        base = openqp.Runner
+
+        class Capture(base):
+            def __init__(self, **kwargs):
+                seen.append(dict(kwargs))
+                kwargs.pop("append_log", None)
+                super().__init__(**kwargs)
+
+        openqp.Runner = Capture
+        try:
+            cfg = {"input.system": "H 0 0 0; H 0 0 0.74", "input.basis": "sto-3g",
+                   "input.method": "hf", "input.runtype": "energy", "scf.type": "rhf"}
+            openqp.OPENQP(cfg)
+            openqp.OPENQP(cfg, True, append_log=True)
+        finally:
+            openqp.Runner = base
+        self.assertNotIn("append_log", seen[0])
+        self.assertIs(seen[1]["append_log"], True)
+
+    def test_dftb_helper_builds_mrsf_tddftb_input(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g", charge=0)
+            .dftb(runtype="grad", response_type="mrsf", nstate=3,
+                  parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "dftb")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["dftb"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["dftb"]["parameter_path"], "/tmp/minimal_hh.opdftb")
+
+    def test_dftb_tda_alias_canonicalizes_backend_type(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb_tda")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .dftb(response_type="tda", parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        config = job.to_input_dict()
+        # backend method name is canonicalized to tddftb; tdhf.type stays tda.
+        self.assertEqual(config["dftb"]["type"], "tddftb")
+        self.assertEqual(config["tdhf"]["type"], "tda")
+
+    def test_dftb_mrsf_permits_soc_and_namd_workflows(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb_soc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .dftb(response_type="mrsf", parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        # The MRSF-TDDFTB workflow guard must accept SOC/NAMD (they are wired for
+        # method=dftb), matching the input-file validation path.
+        job._require_mrsf_theory_for("SOC")
+        job._require_mrsf_theory_for("NAMD")
+
+    def test_xtb_helper_builds_mrsf_tddftb_input(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g", charge=0)
+            .xtb(runtype="grad", response_type="mrsf", nstate=3,
+                 parameter_path="/tmp/gfn1.opxtb")
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "xtb")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["xtb"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["xtb"]["parameter_path"], "/tmp/gfn1.opxtb")
+
+    def test_xtb_tda_alias_canonicalizes_backend_type(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_tda")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="tda", parameter_path="/tmp/gfn1.opxtb")
+        )
+        config = job.to_input_dict()
+        # backend method name is canonicalized to tddftb; tdhf.type stays tda.
+        self.assertEqual(config["xtb"]["type"], "tddftb")
+        self.assertEqual(config["tdhf"]["type"], "tda")
+
+    def test_xtb_helper_drains_gfn1_model_keyword_into_section(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_lc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="mrsf", parameter_path="/tmp/gfn1.opxtb",
+                 model="gfn1", lc_ground_state=True)
+        )
+        config = job.to_input_dict()
+        # [xtb]-only schema keywords are routed into the [xtb] section rather
+        # than leaking into the [tdhf] response block.
+        self.assertEqual(config["xtb"]["model"], "gfn1")
+        self.assertEqual(config["xtb"]["lc_ground_state"], "True")
+        self.assertNotIn("model", config["tdhf"])
+        self.assertNotIn("lc_ground_state", config["tdhf"])
+
+    def test_xtb_mrsf_permits_soc_and_namd_workflows(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_soc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="mrsf", parameter_path="/tmp/gfn1.opxtb")
+        )
+        # The MRSF-xTB workflow guard must accept SOC/NAMD (they are wired for
+        # method=xtb through the shared TB dispatch), matching the input-file
+        # validation path.
+        job._require_mrsf_theory_for("SOC")
+        job._require_mrsf_theory_for("NAMD")
+
+
+    def test_generic_theory_dispatcher_accepts_the_cc_methods(self):
+        """job.theory("ccsd") must work, not just the named job.theory.ccsd()."""
+        openqp = load_openqp_module()
+
+        for spelling, expected in (("ccsd", "ccsd"),
+                                   ("ccsd(t)", "ccsd(t)"),
+                                   ("ccsd-t", "ccsd(t)"),
+                                   ("ccsdt", "ccsd(t)")):
+            job = (
+                openqp.OpenQP(project="generic")
+                .molecule(geometry="water", basis="sto-3g")
+                .theory(spelling)
+            )
+            self.assertEqual(job.to_input_dict()["input"]["method"], expected,
+                             spelling)
+
+    def test_generic_theory_dispatcher_rejects_a_functional_for_cc(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
+        with self.assertRaises(ValueError):
+            job.theory("ccsd(t)", functional="pbe")
+
+
+
+class TestOpenQPWavefunctionAPI(unittest.TestCase):
+    """The FCI/CAS/PT2 stack through the compact Python API.
+
+    These methods were reachable from input files and from the `.oqp` concise
+    format long before `OpenQP.theory()` knew about them; `job.theory("casscf")`
+    fell through to the unknown-method ValueError.  Each test below pins one
+    helper AND its `theory()` spelling, so the dispatcher cannot drift away
+    from the helper it delegates to."""
+
+    def _job(self, openqp, project):
+        return (openqp.OpenQP(project=project)
+                .molecule(geometry="water", basis="6-31g", charge=0,
+                          multiplicity=1))
+
+    def test_casscf_helper_sets_method_active_space_and_converger(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_casscf")
+                  .casscf(active_electrons=4, active_orbitals=4, frozen_core=1,
+                          nroot=1, converger="trah", hessian="analytic")
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["cas"]["active_electrons"], "4")
+        self.assertEqual(config["cas"]["active_orbitals"], "4")
+        self.assertEqual(config["cas"]["frozen_core"], "1")
+        self.assertEqual(config["ci"]["nroot"], "1")
+        self.assertEqual(config["casscf"]["converger"], "trah")
+        self.assertEqual(config["casscf"]["hessian"], "analytic")
+
+    def test_casscf_helper_selects_the_analytic_gradient_runtype(self):
+        """`job.casscf(runtype="grad")` reaches the analytic state-specific
+        CASSCF nuclear gradient, and `root` selects which state it
+        differentiates."""
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_casscf_grad")
+                  .casscf(active_electrons=4, active_orbitals=4, frozen_core=3,
+                          runtype="grad")
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["casscf"]["root"], "0")
+
+        # An excited root is still a stationary point, so the state-specific
+        # gradient applies to it unchanged; the helper widens [ci] nroot itself.
+        excited = (self._job(openqp, "h2o_casscf_grad_root1")
+                   .casscf(active_electrons=4, active_orbitals=4, frozen_core=3,
+                           root=1, runtype="grad")
+                   .to_input_dict())
+        self.assertEqual(excited["input"]["runtype"], "grad")
+        self.assertEqual(excited["casscf"]["root"], "1")
+        self.assertEqual(excited["ci"]["nroot"], "2")
+        self.assertEqual(excited["properties"]["grad"], "0")
+
+    def test_casscf_helpers_select_gradient_state_and_controls(self):
+        openqp = load_openqp_module()
+        casscf = (self._job(openqp, "h2o_casscf_grad")
+                  .casscf(active_electrons=4, active_orbitals=4, nroot=2,
+                          root=1, runtype="optimize", grad_step=2.0e-3,
+                          grad_guess="warm")
+                  .to_input_dict())
+        # State-specific analytic CASSCF publishes one gradient row.  Root 1
+        # is the physical state in that row; the optimizer must index slot 0.
+        self.assertEqual(casscf["casscf"]["root"], "1")
+        self.assertEqual(casscf["optimize"]["istate"], "0")
+        self.assertEqual(casscf["casscf"]["grad_step"], "0.002")
+        self.assertEqual(casscf["casscf"]["grad_guess"], "warm")
+
+        sa = (self._job(openqp, "h2o_sa_casscf_grad")
+              .sa_casscf(active_electrons=4, active_orbitals=4, nstate=2,
+                         state=1, runtype="grad", grad_ranks_per_group=2)
+              .to_input_dict())
+        self.assertEqual(sa["properties"]["grad"], "1")
+        self.assertEqual(sa["casscf"]["grad_ranks_per_group"], "2")
+
+    def test_theory_dispatches_the_wavefunction_methods(self):
+        openqp = load_openqp_module()
+        for method, expected in (
+            ("casscf", "casscf"),
+            ("sa-casscf", "sa-casscf"),
+            ("casci", "casci"),
+            ("caspt2", "caspt2"),
+            ("ms-caspt2", "ms-caspt2"),
+            ("xms-caspt2", "xms-caspt2"),
+            ("mrmp2", "mrmp2"),
+            ("mcqdpt2", "mcqdpt2"),
+            ("xmcqdpt2", "xmcqdpt2"),
+        ):
+            with self.subTest(method=method):
+                config = (self._job(openqp, "h2o_" + expected)
+                          .theory(method, active_electrons=4,
+                                  active_orbitals=4)
+                          .to_input_dict())
+                self.assertEqual(config["input"]["method"], expected)
+                self.assertEqual(config["cas"]["active_orbitals"], "4")
+
+    def test_theory_fci_needs_no_active_space(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2_fci")
+                  .theory("fci", nroot=2)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "fci")
+        # [fci], not [ci]: fci._settings_from_config reads this section
+        # exclusively, so a value written to [ci] passed preflight and then had
+        # no effect -- the run silently used the default single root.  Pin the
+        # section the runtime actually consumes.
+        self.assertEqual(config["fci"]["nroot"], "2")
+
+    def test_sa_casscf_enables_state_averaging_and_solves_every_root(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa")
+                  .sa_casscf(active_electrons=2, active_orbitals=2, nstate=3)
+                  .to_input_dict())
+
+        self.assertEqual(config["input"]["method"], "sa-casscf")
+        self.assertEqual(config["state_average"]["enabled"], "True")
+        self.assertEqual(config["state_average"]["nstate"], "3")
+        # every averaged root has to be solved for
+        self.assertEqual(config["ci"]["nroot"], "3")
+
+    def test_sa_casscf_sizes_ci_from_the_merged_state_average_block(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa_explicit")
+                  .sa_casscf(
+                      active_electrons=2,
+                      active_orbitals=2,
+                      nstate=2,
+                      state_average={"nstate": 3},
+                  )
+                  .to_input_dict())
+        self.assertEqual(config["state_average"]["nstate"], "3")
+        self.assertEqual(config["ci"]["nroot"], "3")
+
+    def test_fci_clears_reused_state_average_and_triplet_state(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h2_reused")
+        job.sa_casscf(active_electrons=2, active_orbitals=2, nstate=2)
+        job.scf(multiplicity=3)
+        config = job.fci().to_input_dict()
+        self.assertEqual(config["state_average"]["enabled"], "false")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
+
+        explicit = job.fci(
+            multiplicity=3,
+            state_average={"enabled": "true"},
+        ).to_input_dict()
+        self.assertEqual(explicit["state_average"]["enabled"], "true")
+        self.assertEqual(explicit["scf"]["multiplicity"], "3")
+
+    def test_sa_casscf_explicit_weights_turn_off_equal_weighting(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "lih_sa_w")
+                  .sa_casscf(active_electrons=2, active_orbitals=2, nstate=2,
+                             weights="0.7,0.3")
+                  .to_input_dict())
+        self.assertEqual(config["state_average"]["weights"], "0.7,0.3")
+        self.assertEqual(config["state_average"]["equal_weights"], "False")
+
+    def test_nevpt2_names_its_own_method_and_states_its_h0(self):
+        """NEVPT2 is a method name now, and the block still SAYS what it is.
+
+        The emitted [pt2] block keeps h0/contraction rather than leaving them
+        implied: _PT2_OWNED_KEYS seeds every block with h0=fock, so a helper
+        that omitted them would emit a block contradicting its own method
+        name -- which the option reader rejects outright.
+        """
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_nevpt2")
+                  .nevpt2(active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "nevpt2")
+        self.assertEqual(config["pt2"]["h0"], "dyall")
+        self.assertEqual(config["pt2"]["contraction"], "none")
+
+    def test_sc_nevpt2_selects_strong_contraction(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_scnevpt2")
+                  .theory("sc-nevpt2", active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "sc-nevpt2")
+        self.assertEqual(config["pt2"]["h0"], "dyall")
+        self.assertEqual(config["pt2"]["contraction"], "strong")
+
+    def test_nevpt2_gradient_route_defaults_to_auto_and_is_selectable(self):
+        """`gradient` picks the SC-NEVPT2 nuclear-gradient route.
+
+        `auto` takes the analytic derivative where it applies and central
+        differences otherwise, so it is the safe default for every NEVPT2
+        flavour; `analytic` and `numerical` pin the choice.
+        """
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_scnevpt2_grad")
+                  .nevpt2(active_electrons=4, active_orbitals=4,
+                          contraction="strong")
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["gradient"], "auto")
+
+        for route in ("analytic", "numerical"):
+            config = (self._job(openqp, f"h4_scnevpt2_{route}")
+                      .nevpt2(active_electrons=4, active_orbitals=4,
+                              contraction="strong", gradient=route,
+                              runtype="grad")
+                      .to_input_dict())
+            self.assertEqual(config["pt2"]["gradient"], route)
+            self.assertEqual(config["input"]["runtype"], "grad")
+
+    def test_nevpt2_helper_resets_the_gradient_route_it_owns(self):
+        """A helper call is a COMPLETE request, so it must not inherit a route.
+
+        Leaving `gradient=analytic` behind from an earlier call would silently
+        demand the analytic derivative of a later uncontracted NEVPT2 job,
+        which is a different first-order space and therefore a different
+        derivative.
+        """
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_reset")
+        job.nevpt2(active_electrons=4, active_orbitals=4,
+                   contraction="strong", gradient="analytic")
+        config = job.nevpt2(active_electrons=4, active_orbitals=4
+                            ).to_input_dict()
+        self.assertEqual(config["input"]["method"], "nevpt2")
+        self.assertEqual(config["pt2"]["gradient"], "auto")
+        self.assertEqual(config["pt2"]["contraction"], "none")
+
+    def test_multistate_helpers_derive_at_least_two_ci_roots(self):
+        """A default multistate PT2 helper call must produce an input its own
+        preflight accepts.
+
+        The helpers hardcoded nroot=1 and later merely defaulted it to None --
+        which leaves [ci] nroot at the schema default of 1, so the "multistate
+        PT2 needs at least two roots" gate rejected the helper's own output.
+        This pins the DERIVED value for every multistate variant, and that the
+        single-state variants are left alone."""
+        openqp = load_openqp_module()
+        for helper, variant, expected in (
+            ("caspt2", "caspt2", "1"),
+            ("caspt2", "ms-caspt2", "2"),
+            ("caspt2", "xms-caspt2", "2"),
+            ("qdpt2", "mrmp2", "1"),
+            ("qdpt2", "mcqdpt2", "2"),
+            ("qdpt2", "xmcqdpt2", "2"),
+        ):
+            with self.subTest(helper=helper, variant=variant):
+                job = self._job(openqp, f"h4_{variant}")
+                config = getattr(job, helper)(
+                    active_electrons=4, active_orbitals=4,
+                    variant=variant).to_input_dict()
+                self.assertEqual(config["ci"]["nroot"], expected)
+
+        # An explicit request still wins, and a contradictory one is refused.
+        config = (self._job(openqp, "h4_ms3")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          variant="ms-caspt2", nroot=3).to_input_dict())
+        self.assertEqual(config["ci"]["nroot"], "3")
+        with self.assertRaises(ValueError):
+            (self._job(openqp, "h4_ms1")
+             .caspt2(active_electrons=4, active_orbitals=4,
+                     variant="ms-caspt2", nroot=1))
+
+    def test_caspt2_shifts_reach_the_pt2_section(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_caspt2")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          ipea_shift=0.25, imaginary_shift=0.1)
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["ipea_shift"], "0.25")
+        self.assertEqual(config["pt2"]["imaginary_shift"], "0.1")
+
+    def test_caspt2_gradient_route_reaches_the_pt2_section(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_caspt2_grad")
+                  .caspt2(active_electrons=4, active_orbitals=4,
+                          gradient="analytic", runtype="grad")
+                  .to_input_dict())
+        self.assertEqual(config["pt2"]["gradient"], "analytic")
+        self.assertEqual(config["input"]["runtype"], "grad")
+
+    def test_caspt2_gradient_route_defaults_to_auto_and_does_not_leak(self):
+        """A later helper call must not inherit the previous one's route."""
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_caspt2_leak")
+        job.caspt2(active_electrons=4, active_orbitals=4, gradient="numerical")
+        config = job.caspt2(active_electrons=4, active_orbitals=4).to_input_dict()
+        self.assertEqual(config["pt2"]["gradient"], "auto")
+
+    def test_qdpt2_variant_and_isa_shift(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h4_xmcqdpt2")
+                  .qdpt2(active_electrons=4, active_orbitals=4,
+                         variant="xmcqdpt2", edshft=0.02)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "xmcqdpt2")
+        self.assertEqual(config["pt2"]["edshft"], "0.02")
+
+    def test_active_space_is_required_where_it_is_meaningful(self):
+        openqp = load_openqp_module()
+        for method in ("casci", "casscf", "sa_casscf", "caspt2", "nevpt2",
+                       "qdpt2"):
+            with self.subTest(method=method):
+                job = self._job(openqp, "missing_" + method)
+                with self.assertRaises(ValueError):
+                    getattr(job, method)()
+
+    def test_wavefunction_helpers_reject_a_functional(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h2o_bad").dft("bhhlyp")
+        with self.assertRaises(ValueError):
+            job.casscf(active_electrons=4, active_orbitals=4,
+                       functional="bhhlyp")
+
+    def test_casscf_clears_a_functional_left_by_a_prior_dft_setup(self):
+        openqp = load_openqp_module()
+        config = (self._job(openqp, "h2o_after_dft")
+                  .dft("bhhlyp")
+                  .casscf(active_electrons=4, active_orbitals=4)
+                  .to_input_dict())
+        self.assertEqual(config["input"]["method"], "casscf")
+        self.assertEqual(config["input"]["functional"], "")
+
+    def test_qdpt2_rejects_an_unknown_variant(self):
+        openqp = load_openqp_module()
+        job = self._job(openqp, "h4_bad")
+        with self.assertRaises(ValueError):
+            job.qdpt2(active_electrons=4, active_orbitals=4, variant="nope")
+
+
+if __name__ == "__main__":
+    unittest.main()

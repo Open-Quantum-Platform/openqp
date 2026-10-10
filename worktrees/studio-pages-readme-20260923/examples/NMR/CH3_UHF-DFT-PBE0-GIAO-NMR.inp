@@ -1,0 +1,30 @@
+# RKS PBE0/STO-3G GIAO NMR shielding of H2O (open-shell UKS DFT (CH3 radical)).
+# Includes the London (GIAO) derivative of the XC potential (vxc_giao) via the
+# GIAO-weighted XC grid integration (mod_dft_gridint_giao).
+[input]
+system=
+   6   0.000000000   0.000000000   0.000000000
+   1   0.000000000   1.079000000   0.000000000
+   1   0.934000000  -0.539000000   0.000000000
+   1  -0.934000000  -0.539000000   0.000000000
+charge=0
+runtype=energy
+functional=pbe0
+basis=sto-3g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=2
+type=uhf
+
+[dftgrid]
+rad_type=mhl
+rad_npts=99
+ang_npts=302
+
+[properties]
+scf_prop=nmr
+nmr_gauge=giao

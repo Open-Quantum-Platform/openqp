@@ -1,0 +1,92 @@
+{
+  "atoms": [
+    8,
+    1,
+    1,
+    8,
+    1,
+    1
+  ],
+  "coord": [
+    0.8458493521219442,
+    1.1565680955073994,
+    -0.3830155018469843,
+    -0.8488085763057066,
+    1.4740374735127846,
+    -0.8646596330541377,
+    1.8531147880057748,
+    1.8638887175751742,
+    -1.6829182845578796,
+    0.8269520908756867,
+    6.799290303639949,
+    -2.2727416264727545,
+    -0.8299113150594488,
+    7.1432158473900955,
+    -2.754385757679908,
+    1.834217526759517,
+    7.533067091452485,
+    -3.57264440918365
+  ],
+  "energy": -151.74751381782553,
+  "symmetry_metadata": {
+    "status": "disabled",
+    "enabled": false,
+    "requested_point_group": "auto",
+    "requested_subgroup": "auto",
+    "point_group": "c1",
+    "subgroup": "c1",
+    "detected_point_group": "c1",
+    "detected_subgroup": "c1",
+    "label_mo": true,
+    "label_states": true,
+    "label_modes": true,
+    "use_integral_symmetry": false,
+    "use_response_symmetry": false,
+    "strict": false,
+    "tolerance": 1e-05,
+    "raw": {
+      "enabled": "false",
+      "point_group": "auto",
+      "subgroup": "auto",
+      "label_mo": true,
+      "label_states": true,
+      "label_modes": true,
+      "use_integral_symmetry": "false",
+      "use_response_symmetry": false,
+      "strict": false,
+      "tolerance": 1e-05
+    }
+  },
+  "td_energies": [
+    0
+  ],
+  "grad": [
+    -0.00010253650978420126,
+    0.0009888463073557396,
+    0.00012803642985748098,
+    0.00020745905237840034,
+    -4.9224480076826005e-05,
+    -6.3875539222379984e-06,
+    -0.0002528506071923786,
+    0.0005859799965524104,
+    -0.0004537023983715027,
+    -0.04419267997116649,
+    0.06994162104683355,
+    -0.11863579423945747,
+    0.11576237455300964,
+    -0.02230073572556146,
+    0.030908870138152966,
+    -0.07142176651814847,
+    -0.04916648714959049,
+    0.08805897762525383
+  ],
+  "json": {
+    "scf_type": "rohf",
+    "basis": "6-31g*",
+    "library": "",
+    "ispher": "auto",
+    "nbf": 38,
+    "nbf_cartesian": 38,
+    "spherical_harmonics": false
+  }
+}

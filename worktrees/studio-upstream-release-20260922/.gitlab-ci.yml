@@ -1,0 +1,24 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+stages: [test]
+
+engine-source-tests:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  script:
+    - python -m unittest discover -s tests -v
+
+engine-gateway-check:
+  stage: test
+  image: python:3.11-bookworm
+  tags: [small-linux]
+  script:
+    - python tools/checkout_engine.py
+    - git -C openqp rev-parse HEAD
+  artifacts:
+    paths: [engine-source.json]
+    expire_in: 1 week

@@ -15,6 +15,15 @@
 !> of the nonzero second-order singles term used by mp2_lib.  Refusing those
 !> references is safer than returning a restricted formula for an open-shell
 !> energy.
+!>
+!> Memory note: the original code allocated a full n^4 MO 2-RDM (g2mo) and
+!> then transformed it to the AO basis via mo2ao_4index which required 3
+!> additional n^4 temporary arrays.  The current implementation skips the MO
+!> 2-RDM entirely: the orbital-Lagrangian intermediate I_mat is formed
+!> directly from the l2 amplitudes (saving one n^4), and the AO 2-RDM is
+!> built from l2 with O(n^3) scratch arrays (saving 3 more n^4 temps).
+!> Peak workspace is ~3 n^4 (eri_mo + erip + g2c) instead of ~6 n^4.
+!> DEFAULT_MAX_NBF raised from 60 to 100.
 module mp2_gradient_mod
 
   use precision, only: dp
@@ -29,7 +38,7 @@ module mp2_gradient_mod
   public :: mp2_gradient_C
 
   character(len=*), parameter :: module_name = 'mp2_gradient_mod'
-  integer, parameter :: DEFAULT_MAX_NBF = 60
+  integer, parameter :: DEFAULT_MAX_NBF = 100
 
   public :: mp2_gradient
 
@@ -86,7 +95,7 @@ contains
     type(grd2_mp2_compute_data_t) :: gcomp
 
     real(dp), contiguous, pointer :: mo(:,:), eps(:), dm0p(:), erip(:)
-    real(dp), allocatable :: mo_c(:,:), eri_mo(:), t2(:,:,:,:), l2(:,:,:,:), g2mo(:,:,:,:)
+    real(dp), allocatable :: mo_c(:,:), eri_mo(:), t2(:,:,:,:), l2(:,:,:,:)
     real(dp), allocatable :: doo(:,:), dvv(:,:), dm1mo(:,:), imat(:,:)
     real(dp), allocatable :: dm0(:,:), dc(:,:), vmat(:,:), xvo(:,:), rhs(:,:), u(:,:)
     real(dp), allocatable :: zeta(:,:), imao(:,:), wao(:,:), pocc(:,:), tmp(:,:)
@@ -123,24 +132,17 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, eps)
     call tagarray_get_data(infos%dat, OQP_DM_A, dm0p)
-    ! The full AO ERI tensor is intentionally guarded above.  Keeping this
-    ! first implementation dense makes every index convention independently
-    ! auditable against the Lagrangian equations; a streamed/factorized path
-    ! can replace it without changing the public gradient contract.
     call fci_ao_integrals(infos)
     call tagarray_get_data(infos%dat, OQP_AO_ERI, erip)
 
     allocate(mo_c(0:n-1,0:n-1), eri_mo(n**4), t2(no,no,nv,nv), l2(no,no,nv,nv), &
-             g2mo(n,n,n,n), doo(no,no), dvv(nv,nv), dm1mo(n,n), imat(n,n), &
+             doo(no,no), dvv(nv,nv), dm1mo(n,n), imat(n,n), &
              dm0(n,n), dc(n,n), vmat(n,n), xvo(nv,no), rhs(no*nv,1), &
              u(no*nv,1), zeta(n,n), imao(n,n), wao(n,n), pocc(n,n), &
              tmp(n,n), dtotal(n,n), wpack(n*(n+1)/2), dpack(n*(n+1)/2), &
              source=0.0_dp, stat=ierr)
     if (ierr /= 0) call show_message('MP2 analytic gradient allocation failed', with_abort)
 
-    ! mo_transform_eri is a C-binding whose coefficient buffer is laid out as
-    ! coeff[AO][MO].  The native tagarray view is the Fortran matrix mo(AO,MO),
-    ! so its bytes must be transposed rather than merely reinterpreted.
     mo_c = transpose(mo)
     trc = mo_transform_eri(int(n, c_int32_t), erip, mo_c, eri_mo)
     if (trc /= 0_c_int64_t) &
@@ -185,9 +187,7 @@ contains
       call show_message('MP2 analytic gradient integral transformation failed its energy check', with_abort)
     end if
 
-    ! Unrelaxed MP2 1-RDM blocks.  The real canonical amplitudes make these
-    ! blocks symmetric up to roundoff; explicit symmetrization below removes
-    ! the loop-order residue before the AO transformation.
+    ! Unrelaxed MP2 1-RDM blocks.
     do p = 1, no
       do q = 1, no
         do i = 1, no
@@ -213,28 +213,18 @@ contains
     dm1mo(1:no,1:no) = doo + transpose(doo)
     dm1mo(no+1:n,no+1:n) = dvv + transpose(dvv)
 
-    ! The amplitude-linear 2-RDM has only ovov and vovo blocks.  It is also
-    ! used to form the non-Hermitian MP2 orbital Lagrangian intermediate Imat
-    ! directly in the MO basis, avoiding an O(n^6) AO contraction.
-    do i = 1, no
-      do j = 1, no
-        do a = 1, nv
-          do b = 1, nv
-            g2mo(i,no+a,j,no+b) = 2.0_dp*l2(i,j,a,b)
-            g2mo(no+a,i,no+b,j) = 2.0_dp*l2(i,j,a,b)
-          end do
-        end do
-      end do
-    end do
+    ! The amplitude-linear 2-RDM has only ovov and vovo blocks.  Form the
+    ! orbital Lagrangian intermediate I_mat directly from the l2 amplitudes,
+    ! avoiding a full n^4 MO 2-RDM intermediate.
     do p = 1, n
       do i = 1, no
         do j = 1, no
           do a = 1, nv
             do b = 1, nv
               imat(p,no+a) = imat(p,no+a) &
-                - eri4(eri_mo,n,i,p,j,no+b)*g2mo(i,no+a,j,no+b)
+                - 2.0_dp * eri4(eri_mo, n, i, p, j, no+b) * l2(i,j,a,b)
               imat(p,i) = imat(p,i) &
-                - eri4(eri_mo,n,no+a,p,no+b,j)*g2mo(no+a,i,no+b,j)
+                - 2.0_dp * eri4(eri_mo, n, no+a, p, no+b, j) * l2(i,j,a,b)
             end do
           end do
         end do
@@ -268,8 +258,7 @@ contains
     end do
     call mo2ao_matrix(n, mo, dm1mo, dc)
 
-    ! Energy-weighted density and the remaining overlap terms of the MP2
-    ! Lagrangian (Imat, zeta, and the occupied-projected response Fock).
+    ! Energy-weighted density and the remaining overlap terms.
     do p = 1, n
       do q = 1, n
         zeta(p,q) = 0.5_dp*(eps(p)+eps(q))*dm1mo(p,q)
@@ -284,15 +273,10 @@ contains
     end do
     call mo2ao_matrix(n, mo, zeta, wao)
     call mo2ao_matrix(n, mo, imat, imao)
-    ! get_veff(dm1 + dm1^T) = 2J[dc] - K[dc] because dc is symmetric.
     call dense_rhf_response(n, erip, dc, vmat)
     pocc = matmul(mo(:,1:no), transpose(mo(:,1:no)))
     tmp = matmul(pocc, vmat)
     vmat = matmul(tmp, pocc)
-    ! grad_ee_overlap already forms the two equivalent bra/ket-center terms.
-    ! The occupied-projected response potential therefore enters W once;
-    ! inserting the explicit factor of two from a one-center formulation here
-    ! would count that contribution twice.
     wao = 0.5_dp*(imao + transpose(imao)) - wao - vmat
 
     call unpack_matrix(dm0p, dm0, 'U')
@@ -301,11 +285,11 @@ contains
     call eijden(wpack, n, infos)
     call add_packed_symmetric(n, wao, wpack)
 
-    ! Transform and eight-fold symmetrize the amplitude-linear 2-RDM.
+    ! Build the AO 2-RDM directly from the compact l2 amplitudes, avoiding
+    ! the full n^4 MO intermediate and 3 n^4 transformation temps.
     allocate(gcomp%g2c(n,n,n,n), gcomp%d0(n,n), gcomp%dc(n,n), stat=ierr)
     if (ierr /= 0) call show_message('MP2 gradient 2-RDM allocation failed', with_abort)
-    call mo2ao_4index(n, mo, g2mo, gcomp%g2c)
-    call symmetrize_eri_density(n, gcomp%g2c)
+    call l2_to_ao_2rdm(n, no, mo, l2, gcomp%g2c)
     gcomp%d0 = dm0
     gcomp%dc = dc
     gcomp%nbf = n
@@ -332,11 +316,6 @@ contains
     gcomp%hfscale = 1.0_dp
     call gcomp%init()
     call gcomp%build_cart(basis)
-    ! Opt in to the petite reduction: the stationary ground-state MP2
-    ! Lagrangian densities contracted here are totally symmetric, and the
-    ! resulting skeleton gradient is projected afterwards by
-    ! Molecule.symmetrize_gradient.  Orbital-response probe densities remain
-    ! outside this call and deliberately do not use the reduction.
     call grd2_driver(infos, basis, de2, gcomp, petite=.true.)
     infos%atoms%grad = infos%atoms%grad + de2
     call print_gradient(infos)
@@ -390,35 +369,140 @@ contains
     ap = ap + p
   end subroutine add_packed_symmetric
 
-  subroutine mo2ao_4index(n, c, gmo, gao)
-    integer, intent(in) :: n
-    real(dp), intent(in) :: c(n,n), gmo(n,n,n,n)
+  !> Build the AO 2-RDM directly from the compact l2 tensor, avoiding
+  !> the full n^4 MO intermediate and the 3 n^4 scratch arrays that
+  !> mo2ao_4index required.
+  !>
+  !> The nonzero MO 2-RDM blocks are:
+  !>   ovov: g2mo(i,no+a,j,no+b) = 2*l2(i,j,a,b)
+  !>   vovo: g2mo(no+a,i,no+b,j) = 2*l2(i,j,a,b)
+  !>
+  !> The four-index MO->AO transform gao(mu,nu,la,si) =
+  !>   sum_{pqrs} C(mu,p) C(nu,q) C(la,r) C(si,s) * g2mo(p,q,r,s)
+  !> is computed by batching over one occupied index at a time with
+  !> O(n^3) working storage.  After filling gao the eight-fold
+  !> permutational symmetry is restored in-place.
+  subroutine l2_to_ao_2rdm(n, no, c, l2, gao)
+    integer, intent(in) :: n, no
+    real(dp), intent(in) :: c(n,n), l2(no,no,n-no,n-no)
     real(dp), intent(out) :: gao(n,n,n,n)
-    real(dp), allocatable :: t1(:,:,:,:), t2w(:,:,:,:), t3(:,:,:,:)
-    integer :: mu, nu, la, si, p, q, r, s
-    allocate(t1(n,n,n,n), t2w(n,n,n,n), t3(n,n,n,n), source=0.0_dp)
-    do s=1,n; do r=1,n; do q=1,n; do mu=1,n
-      do p=1,n
-        t1(mu,q,r,s)=t1(mu,q,r,s)+c(mu,p)*gmo(p,q,r,s)
-      end do
-    end do; end do; end do; end do
-    do s=1,n; do r=1,n; do nu=1,n; do mu=1,n
-      do q=1,n
-        t2w(mu,nu,r,s)=t2w(mu,nu,r,s)+c(nu,q)*t1(mu,q,r,s)
-      end do
-    end do; end do; end do; end do
-    do s=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do r=1,n
-        t3(mu,nu,la,s)=t3(mu,nu,la,s)+c(la,r)*t2w(mu,nu,r,s)
-      end do
-    end do; end do; end do; end do
+    integer :: nv, j, a, b, mu, nu, la, si, i
+    real(dp), allocatable :: w1(:,:,:), w2(:,:,:), w3(:,:,:)
+
+    nv = n - no
+    allocate(w1(n,nv,nv), w2(n,n,nv), w3(n,n,n))
     gao = 0.0_dp
-    do si=1,n; do la=1,n; do nu=1,n; do mu=1,n
-      do s=1,n
-        gao(mu,nu,la,si)=gao(mu,nu,la,si)+c(si,s)*t3(mu,nu,la,s)
+
+    ! === ovov contribution ===
+    ! gao(mu,nu,la,si) += sum_{i,j,a,b} 2*l2(i,j,a,b)
+    !                      * C(mu,i) * C(nu,no+a) * C(la,j) * C(si,no+b)
+    do j = 1, no
+      ! w1(mu,a,b) = sum_i C(mu,i) * l2(i,j,a,b)
+      do b = 1, nv
+        do a = 1, nv
+          w1(:,a,b) = 0.0_dp
+          do i = 1, no
+            do mu = 1, n
+              w1(mu,a,b) = w1(mu,a,b) + c(mu,i) * l2(i,j,a,b)
+            end do
+          end do
+        end do
       end do
-    end do; end do; end do; end do
-  end subroutine mo2ao_4index
+
+      ! w2(mu,nu,b) = sum_a w1(mu,a,b) * C(nu,no+a)
+      w2 = 0.0_dp
+      do b = 1, nv
+        do a = 1, nv
+          do nu = 1, n
+            do mu = 1, n
+              w2(mu,nu,b) = w2(mu,nu,b) + w1(mu,a,b) * c(nu,no+a)
+            end do
+          end do
+        end do
+      end do
+
+      ! w3(mu,nu,si) = sum_b w2(mu,nu,b) * C(si,no+b)
+      w3 = 0.0_dp
+      do b = 1, nv
+        do si = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              w3(mu,nu,si) = w3(mu,nu,si) + w2(mu,nu,b) * c(si,no+b)
+            end do
+          end do
+        end do
+      end do
+
+      ! gao(mu,nu,la,si) += 2*C(la,j)*w3(mu,nu,si)
+      do si = 1, n
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              gao(mu,nu,la,si) = gao(mu,nu,la,si) &
+                + 2.0_dp * c(la,j) * w3(mu,nu,si)
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    ! === vovo contribution ===
+    ! gao(mu,nu,la,si) += sum_{i,j,a,b} 2*l2(i,j,a,b)
+    !                      * C(mu,no+a) * C(nu,i) * C(la,no+b) * C(si,j)
+    do j = 1, no
+      ! w1(nu,a,b) = sum_i C(nu,i) * l2(i,j,a,b)
+      do b = 1, nv
+        do a = 1, nv
+          w1(:,a,b) = 0.0_dp
+          do i = 1, no
+            do nu = 1, n
+              w1(nu,a,b) = w1(nu,a,b) + c(nu,i) * l2(i,j,a,b)
+            end do
+          end do
+        end do
+      end do
+
+      ! w2(mu,nu,b) = sum_a C(mu,no+a) * w1(nu,a,b)
+      w2 = 0.0_dp
+      do b = 1, nv
+        do a = 1, nv
+          do nu = 1, n
+            do mu = 1, n
+              w2(mu,nu,b) = w2(mu,nu,b) + c(mu,no+a) * w1(nu,a,b)
+            end do
+          end do
+        end do
+      end do
+
+      ! w3(mu,nu,la) = sum_b C(la,no+b) * w2(mu,nu,b)
+      w3 = 0.0_dp
+      do b = 1, nv
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              w3(mu,nu,la) = w3(mu,nu,la) + w2(mu,nu,b) * c(la,no+b)
+            end do
+          end do
+        end do
+      end do
+
+      ! gao(mu,nu,la,si) += 2*C(si,j)*w3(mu,nu,la)
+      do si = 1, n
+        do la = 1, n
+          do nu = 1, n
+            do mu = 1, n
+              gao(mu,nu,la,si) = gao(mu,nu,la,si) &
+                + 2.0_dp * c(si,j) * w3(mu,nu,la)
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    ! Restore the eight-fold permutational symmetry of the AO 2-RDM.
+    call symmetrize_eri_density(n, gao)
+    deallocate(w1, w2, w3)
+  end subroutine l2_to_ao_2rdm
 
   subroutine symmetrize_eri_density(n, g)
     integer, intent(in) :: n
@@ -431,6 +515,7 @@ contains
       g(i,j,k,l) = 0.125_dp*(h(i,j,k,l)+h(j,i,k,l)+h(i,j,l,k)+h(j,i,l,k) &
                               +h(k,l,i,j)+h(l,k,i,j)+h(k,l,j,i)+h(l,k,j,i))
     end do; end do; end do; end do
+    deallocate(h)
   end subroutine symmetrize_eri_density
 
 !###############################################################################
@@ -467,8 +552,6 @@ contains
     allocate(pair12(this%nbf_cart,this%nbf_cart,this%nbf,this%nbf), &
              this%g2c_cart(this%nbf_cart,this%nbf_cart,this%nbf_cart,this%nbf_cart), &
              source=0.0_dp)
-    ! Expand the first AO pair, then the second.  Normalize all four spherical
-    ! indices exactly once before either transformation.
     do p = 1, this%nbf
       do q = 1, this%nbf
         tmp = this%g2c(:,:,p,q)

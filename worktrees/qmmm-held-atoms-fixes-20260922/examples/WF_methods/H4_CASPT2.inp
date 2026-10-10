@@ -1,0 +1,67 @@
+# RHF/STO-3G/CASPT2 of linear H4 with a CASCI reference.
+# Real CASPT2 (Fock one-electron H0); matches OpenMolcas 24.10 CIonly CASPT2
+# (IPEA=0, no shift) to < 1e-4 Eh:
+#   E(CASCI)  = -2.1147334913   (OpenMolcas -2.1147334918)
+#   E(2)      = -0.0184957017   (OpenMolcas -0.0184952337; diff 0.5 uEh)
+#   E(CASPT2) = -2.1332291930
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=any
+
+[pt2]
+# reference: casci (matches OpenMolcas CIonly) or casscf (optimized orbitals)
+reference=casci
+variant=caspt2
+# h0=fock = CASPT2 (default); h0=dyall = NEVPT2 (see H4_NEVPT2.inp).
+h0=fock
+# PT2 frozen core: auto (default) = freeze the standard deep 1s cores (matches
+# OpenMolcas); 0 = correlate all; N = freeze N.  (H4 has no deep core -> auto=0.)
+frozen=auto
+# IPEA shift (Ghigo-Roos-Malmqvist): applied as a 1e diagonal bias on the active
+# H0 diagonal; default 0.0 = standard CASPT2 (no shift).
+ipea_shift=0.0
+# real and imaginary denominator shifts (intruder-state regularization)
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true

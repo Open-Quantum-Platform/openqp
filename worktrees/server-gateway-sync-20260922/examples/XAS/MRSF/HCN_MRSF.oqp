@@ -1,0 +1,2 @@
+mrsf(nstate=70)/bhhlyp/6-31g* energy(S0) tdhf(ixcore=2)
+geom="../../geometries/CHN-cef1bbffc7f3.xyz"

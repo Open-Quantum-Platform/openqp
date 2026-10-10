@@ -1,0 +1,139 @@
+project(pyoqp)
+
+find_package(Python3
+    REQUIRED
+    COMPONENTS
+    #    Interpreter Development
+)
+#find_package(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR} EXACT REQUIRED)
+#find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
+execute_process(
+    COMMAND
+        ${Python3_EXECUTABLE} "-c" "import re, cffi; print(re.compile('/__init__.py.*').sub('',cffi.__file__))"
+    RESULT_VARIABLE _cffi_status
+    OUTPUT_VARIABLE _cffi_location
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if(NOT _cffi_status)
+    set(CFFI ${_cffi_location} CACHE STRING "Location of Python CFFI")
+endif()
+
+execute_process(
+    COMMAND
+        ${Python3_EXECUTABLE} "-c" "import cffi; print(cffi.__version__)"
+    OUTPUT_VARIABLE _cffi_version
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+execute_process(
+    COMMAND
+        ${Python3_EXECUTABLE} "-c" "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
+    OUTPUT_VARIABLE _cffi_ext_suffix
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+#include(FindPackageHandleStandardArgs)
+#find_package_handle_standard_args(CFFI
+#    FOUND_VAR CFFI_FOUND
+#    REQUIRED_VARS CFFI
+#    VERSION_VAR _cffi_version
+#    )
+
+# The compiled cffi extension (_oqp) is the optional API-mode binding.  The
+# default runtime (OQP_RTLD=1) dlopen()s liboqp in ABI mode and never needs it,
+# and building it on Windows would require the MSVC toolchain plus an import
+# library for liboqp, so skip the extension there.  Everything else in this
+# directory -- the basis-set and example data installs -- is platform-neutral
+# and must still run.
+if(NOT WIN32)
+# API mode compiles a real reference for every declaration in oqp.h, so a
+# liboqp built without the DFT-D4 backend must not be described as having it:
+# the extension would fail to link, or import with an undefined symbol.
+if(ENABLE_DFTD4)
+  set(_OQP_CFFI_DFTD4_ARG "")
+else()
+  set(_OQP_CFFI_DFTD4_ARG "--without-dftd4")
+endif()
+
+add_custom_command(
+    OUTPUT
+        ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
+    COMMAND
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/oqp_cffi_build.py -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                        -L ${CMAKE_CURRENT_BINARY_DIR}/../source
+                        -loqp
+                        ${_OQP_CFFI_DFTD4_ARG}
+    DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/oqp_cffi_build.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include/oqp.h
+)
+
+if (WIN32)
+  set(OQP_ABI3_SUFFIX ".dll")
+elseif(UNIX)
+  set(OQP_ABI3_SUFFIX ".so")
+endif()
+
+add_custom_target(liboqp
+    ALL
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different  ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
+                                               ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${OQP_ABI3_SUFFIX}
+                                               #${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${CMAKE_SHARED_LIBRARY_SUFFIX}
+    DEPENDS
+        ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
+)
+
+if(APPLE)
+  add_custom_command(
+    TARGET liboqp
+    POST_BUILD
+    COMMAND install_name_tool -change @rpath/liboqp.dylib
+            @loader_path/liboqp.dylib
+            ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${OQP_ABI3_SUFFIX}
+    COMMENT "Rewriting PyOQP extension load path for package-local liboqp.dylib"
+  )
+endif()
+
+add_dependencies(liboqp oqp)
+
+get_filename_component(OQP_INSTALL ${CMAKE_INSTALL_PREFIX} ABSOLUTE)
+#configure_file(${CMAKE_CURRENT_SOURCE_DIR}/oqp.sh ${CMAKE_CURRENT_BINARY_DIR}/oqp.sh @ONLY)
+
+
+install(
+    #FILES ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${CMAKE_SHARED_LIBRARY_SUFFIX}
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${OQP_ABI3_SUFFIX}
+    #FILES ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+endif()  # NOT WIN32 (cffi API-mode extension)
+
+#install(
+#PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/oqp/oqp_runner.py  ${CMAKE_CURRENT_SOURCE_DIR}/oqp_nac.py
+#    DESTINATION bin
+#)
+
+#install(
+#    PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/oqp_runner.py ${CMAKE_CURRENT_BINARY_DIR}/oqp.sh
+#    DESTINATION bin
+#)
+
+#install(
+#    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+#    DESTINATION lib/oqp
+#)
+
+INSTALL(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/basis_sets/
+    DESTINATION share/basis_sets
+    FILES_MATCHING PATTERN "*.basis" PATTERN "*.dat"
+)
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/examples/
+    DESTINATION share/examples
+)

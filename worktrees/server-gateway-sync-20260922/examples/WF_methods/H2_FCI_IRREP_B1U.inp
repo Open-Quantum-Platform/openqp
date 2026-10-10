@@ -1,0 +1,70 @@
+# RHF/STO-3G/FCI of H2, returning the lowest SINGLET of a REQUESTED spatial
+# irrep -- the [fci] side of irrep selection, and the one branch where the
+# symmetry filter and the spin filter have to agree on a root.
+#
+# H2/STO-3G has two MOs, 1 ag and 2 b1u, so the Ms=0 FCI is four determinants
+# and the whole spectrum can be written down.  With [symmetry] enabled and
+# irrep=any, nroot=4 this deck returns
+#
+#     state 0  -1.1372838347   <S^2> 0   ag     (sigma_g^2)
+#     state 1  -0.5307733644   <S^2> 2   b1u    (sigma_g sigma_u, triplet)
+#     state 2  -0.1683524417   <S^2> 0   b1u    (sigma_g sigma_u, singlet)
+#     state 3   0.4831426574   <S^2> 0   ag     (sigma_u^2)
+#
+# so irrep=b1u with target_spin=singlet and nroot=1 must reproduce
+# -0.1683524417 exactly.  Each filter alone lands somewhere else, which is what
+# makes this deck worth running:
+#
+#   * no filter at all      -> state 0, -1.1372838347
+#   * irrep=b1u only        -> state 1, -0.5307733644 (the triplet)
+#   * target_spin=singlet   -> state 0, -1.1372838347
+#
+# irrep_min_purity is set explicitly rather than left at its 0.5 default: these
+# roots are exact symmetry eigenstates, so a demanding 0.9 threshold is met,
+# and the keyword's parsing and runtime path are covered by a run instead of by
+# a unit test alone.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=fci
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=60
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[fci]
+nroot=1
+active_electrons=0
+active_orbitals=0
+frozen_core=0
+max_det=1000
+max_memory=256
+eig_tol=1.0e-10
+integral_backend=native
+integral_cutoff=5.0e-11
+solver=dense
+davidson_maxiter=100
+davidson_subspace=6
+target_spin=singlet
+irrep=b1u
+irrep_min_purity=0.9
+print_ci_vectors=false
+ci_print_threshold=5.0e-2
+save_ci_vectors=false
+save_rdm=false
+
+[symmetry]
+enabled=true

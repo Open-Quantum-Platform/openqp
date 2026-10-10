@@ -1,0 +1,240 @@
+[
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_metc_cuda.cu",
+    "destination": "src/metc/gpu_metc_cuda.cu",
+    "source_blob_sha256": "3346e14eabb19a9a688c1895b7996bc4d1bfab8306b1ec41b1e8dd95c2492aa8",
+    "integrated_sha256": "09e5dcde1740a37cc6a2c85b41fbca391747f27637c00d38641582b7fa05a642"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_workspace_runtime.c",
+    "destination": "src/metc/gpu_workspace_runtime.c",
+    "source_blob_sha256": "2a15d81aa3dea77e82d11c1c9899f13c3c494c7b7c3f133fc690faab8c3f25e8",
+    "integrated_sha256": "969abec5afc9caf076c653c6f9743141deff26b2254624a400fd73c2d5ca3878"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "pyoqp/oqp/utils/gpu.py",
+    "destination": "python/openqp_gpu/gpu.py",
+    "source_blob_sha256": "333322a068adaf4d87147c059d58220ee0828a1eafdaa3d50f21c5e39f2216cb",
+    "integrated_sha256": "333322a068adaf4d87147c059d58220ee0828a1eafdaa3d50f21c5e39f2216cb"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "pyoqp/oqp/utils/gpu_metc_buffers.py",
+    "destination": "python/openqp_gpu/gpu_metc_buffers.py",
+    "source_blob_sha256": "39de79e95c20b1a5cabdece07dd115250a03c8334a1ba36160329b6a8fb4b159",
+    "integrated_sha256": "39de79e95c20b1a5cabdece07dd115250a03c8334a1ba36160329b6a8fb4b159"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "pyoqp/oqp/utils/gpu_metc_persistent_runtime.py",
+    "destination": "python/openqp_gpu/gpu_metc_persistent_runtime.py",
+    "source_blob_sha256": "7cabd07be4e00ea6e6de09bd3d1b635507a89e9661f2ecf6ef51aa4aa8228d92",
+    "integrated_sha256": "7cabd07be4e00ea6e6de09bd3d1b635507a89e9661f2ecf6ef51aa4aa8228d92"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "pyoqp/oqp/utils/gpu_workspace.py",
+    "destination": "python/openqp_gpu/gpu_workspace.py",
+    "source_blob_sha256": "f8a0207e275b5d6aaa4911529a55c02d49f997c2f30516def6e2f41d7d428b6b",
+    "integrated_sha256": "f8a0207e275b5d6aaa4911529a55c02d49f997c2f30516def6e2f41d7d428b6b"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "pyoqp/oqp/utils/tdhf_xc_response_cache.py",
+    "destination": "python/openqp_gpu/tdhf_xc_response_cache.py",
+    "source_blob_sha256": "42fdc3e967c9f514f145aea4d8d734c6469dc1d4e2a0e10761354e8d544f9006",
+    "integrated_sha256": "42fdc3e967c9f514f145aea4d8d734c6469dc1d4e2a0e10761354e8d544f9006"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tests/test_gpu_workspace.py",
+    "destination": "tests/test_gpu_workspace.py",
+    "source_blob_sha256": "7f57c479d2013b8c17216501ee51220f17169cdd7eb5956debd0ba28cc8a0802",
+    "integrated_sha256": "c243ec61663006fc4914a030f7e32788293df5130d919527a4c1e64b9266f55d"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tests/test_gpu_workspace_runtime.py",
+    "destination": "tests/test_gpu_workspace_runtime.py",
+    "source_blob_sha256": "eb4938056aad119a6ca9fd79a4a44411308e54ac23715d882a319429668b075b",
+    "integrated_sha256": "e159e3cb2c9791d9307dcfac9f23feabd5934d23ccb17d0acdf3bc537c721622"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tests/test_gpu_metc_persistent_buffers.py",
+    "destination": "tests/test_gpu_metc_persistent_buffers.py",
+    "source_blob_sha256": "4b5730d1543429a5d2a93b830e349e784f6a0fce5c84e6eaf52a6e9387029825",
+    "integrated_sha256": "fa4f60fe1bcb1b1f0dc65e4bf8147e3a8d342a0ca72be257633b9baf838631c6"
+  },
+  {
+    "source_commit": "6413215eeb41ba63452ba641661acc9713f6af23",
+    "source_path": "pyoqp/oqp/utils/gpu_workspace.py",
+    "destination": "python/openqp_gpu/workspace_legacy.py",
+    "source_blob_sha256": "7c7e6b2ff134aa36534fba21507631d00062122a35c48207d0521c0b0962aa37",
+    "integrated_sha256": "7c7e6b2ff134aa36534fba21507631d00062122a35c48207d0521c0b0962aa37"
+  },
+  {
+    "source_commit": "6413215eeb41ba63452ba641661acc9713f6af23",
+    "source_path": "tests/test_gpu_workspace_manager.py",
+    "destination": "tests/test_gpu_workspace_legacy.py",
+    "source_blob_sha256": "2fb661df08d18dde3f9cc10818445f039d9260f52704d8b028665216f75db26e",
+    "integrated_sha256": "5490099efbe2d30e2e7071ae5b27f6ed177b397b4899356ffe233940f7632730"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_backend.F90",
+    "destination": "seam/metc/gpu_backend.F90",
+    "source_blob_sha256": "470bf7dd37ff1f7c5ba287274598242f29fde8edf8fdf4c84b32f029f1cc3971",
+    "integrated_sha256": "470bf7dd37ff1f7c5ba287274598242f29fde8edf8fdf4c84b32f029f1cc3971"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_workspace_bridge.F90",
+    "destination": "seam/metc/gpu_workspace_bridge.F90",
+    "source_blob_sha256": "ac3f6e05c0fe51fdce26e52e4f1c6ebb9bb4c4185952a049f5deb4ee127c8766",
+    "integrated_sha256": "ac3f6e05c0fe51fdce26e52e4f1c6ebb9bb4c4185952a049f5deb4ee127c8766"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_xc_response_cuda.cu",
+    "destination": "experimental/xc_response/gpu_xc_response_cuda.cu",
+    "source_blob_sha256": "1eab780174bd73e5e0a82e8fa496170f9e3c7db7ec56198f0aa31b28a969e5fd",
+    "integrated_sha256": "1eab780174bd73e5e0a82e8fa496170f9e3c7db7ec56198f0aa31b28a969e5fd"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "source/gpu_xc_response_backend.F90",
+    "destination": "experimental/xc_response/gpu_xc_response_backend.F90",
+    "source_blob_sha256": "ec9f4b782db5ce1b404f3cb674c0e3a6b10fa67da4b03d0e2801dd9e27457653",
+    "integrated_sha256": "ec9f4b782db5ce1b404f3cb674c0e3a6b10fa67da4b03d0e2801dd9e27457653"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "docs/gpu_metc_validation.md",
+    "destination": "docs/history/gpu_metc_validation.md",
+    "source_blob_sha256": "6d6898dbadffbb9eb762b703d658d5b8a8f225721a06b1eb2b70ca995a3e0d52",
+    "integrated_sha256": "6d6898dbadffbb9eb762b703d658d5b8a8f225721a06b1eb2b70ca995a3e0d52"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "docs/gpu_workspace_design.md",
+    "destination": "docs/history/gpu_workspace_design.md",
+    "source_blob_sha256": "5e8f3b87f9b3ec710589b2b8e36d83b24c16ccbcd38b4d7ce50b6018039058e8",
+    "integrated_sha256": "5e8f3b87f9b3ec710589b2b8e36d83b24c16ccbcd38b4d7ce50b6018039058e8"
+  },
+  {
+    "source_commit": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+    "source_path": "benchmarks/metc_gpu/README.md",
+    "destination": "benchmarks/metc/README.md",
+    "source_blob_sha256": "338e8650614ba40f298a635bc57750557dd5bd8ff10ea2f60d8a3aaab76af5fc",
+    "integrated_sha256": "338e8650614ba40f298a635bc57750557dd5bd8ff10ea2f60d8a3aaab76af5fc"
+  },
+  {
+    "source_commit": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+    "source_path": "benchmarks/metc_gpu/analyze_metc_benchmark.py",
+    "destination": "benchmarks/metc/analyze_metc_benchmark.py",
+    "source_blob_sha256": "1ed560e1330ac375ea1e374f79f25bf97bed591e39795ce713d4e35c4ae9bf5e",
+    "integrated_sha256": "1ed560e1330ac375ea1e374f79f25bf97bed591e39795ce713d4e35c4ae9bf5e"
+  },
+  {
+    "source_commit": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+    "source_path": "benchmarks/metc_gpu/metc_cuda_benchmark.cu",
+    "destination": "benchmarks/metc/metc_cuda_benchmark.cu",
+    "source_blob_sha256": "95fca3bce30c022b1aed8d08e8d0f335eab1d4a1cd3a59f7bd2f4363f896e6b4",
+    "integrated_sha256": "4d7f1133120cef756709cd93962ea7557dce54c76c676d85188b03c6939a2c73"
+  },
+  {
+    "source_commit": "fc92929bbdbbdf6c4afdcfffb851afad7dc63019",
+    "source_path": "tests/test_gpu_metc_regression.py",
+    "destination": "tests/test_gpu_metc_regression.py",
+    "source_blob_sha256": "37de89dc572985d5b748e757d425eba10f6f3abcce233275fe57050b0883998b",
+    "integrated_sha256": "99069504329911022289b251cfccbfaf80e75c9dbec71189b191701014f536a6"
+  },
+  {
+    "source_commit": "d9a752d4002a0a6dc4f5a19d1313fc087390f5a1",
+    "source_path": "source/integrals/int2_routec.F90",
+    "destination": "seam/routec/int2_routec.F90",
+    "source_blob_sha256": "711f3efe2f9ffc482038e75e111a1fe7f9f53d87dd7507d798d393c9c7da7b7c",
+    "integrated_sha256": "711f3efe2f9ffc482038e75e111a1fe7f9f53d87dd7507d798d393c9c7da7b7c"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tools/gpu/accuracy_ladder_metc.py",
+    "destination": "seam/metc/tools/accuracy_ladder_metc.py",
+    "source_blob_sha256": "06026ac3989641e2f6671f2eccaec4adbf88951e459b2fb5613ec75bc9ba4f22",
+    "integrated_sha256": "06026ac3989641e2f6671f2eccaec4adbf88951e459b2fb5613ec75bc9ba4f22"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tools/gpu/profile_breakdown_metc.py",
+    "destination": "seam/metc/tools/profile_breakdown_metc.py",
+    "source_blob_sha256": "8f796b30cb9f459c8afc8d7419a1656eef1a979af13a8ea54aa925e30786007d",
+    "integrated_sha256": "8f796b30cb9f459c8afc8d7419a1656eef1a979af13a8ea54aa925e30786007d"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tools/gpu/polyene_ladder_metc.py",
+    "destination": "seam/metc/tools/polyene_ladder_metc.py",
+    "source_blob_sha256": "71c57e690076c5d96da7d662ea871341a4a9a38afb786a592fa81f244abaac06",
+    "integrated_sha256": "71c57e690076c5d96da7d662ea871341a4a9a38afb786a592fa81f244abaac06"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tools/gpu/benchmark_metc.py",
+    "destination": "seam/metc/tools/benchmark_metc.py",
+    "source_blob_sha256": "0b9e8dc014cf858757a09e59feaed783f9cb212d48cb76f25fd15e3be9b10084",
+    "integrated_sha256": "0b9e8dc014cf858757a09e59feaed783f9cb212d48cb76f25fd15e3be9b10084"
+  },
+  {
+    "source_commit": "beb51a2617ad378e2657e390dde280ef0019c9b6",
+    "source_path": "tools/gpu/validate_metc_cuda.py",
+    "destination": "seam/metc/tools/validate_metc_cuda.py",
+    "source_blob_sha256": "430f74b7a7695deb5c3c749e6a6db5f0ef5cab435549a604711b47af4b76fddd",
+    "integrated_sha256": "430f74b7a7695deb5c3c749e6a6db5f0ef5cab435549a604711b47af4b76fddd"
+  },
+  {
+    "source_commit": "ffabe60cb2f41d2f99f419b546e08d62cb84e329",
+    "source_path": "GPU_PORTING_UNIFIED_HANDOFF.md",
+    "destination": "docs/history/GPU_PORTING_UNIFIED_HANDOFF.md",
+    "source_blob_sha256": "ee2dae60e693a62138f8553e98200e92fe15dbe59b434c5e67b7ac167bc9f0a0",
+    "integrated_sha256": "ee2dae60e693a62138f8553e98200e92fe15dbe59b434c5e67b7ac167bc9f0a0"
+  },
+  {
+    "source_commit": "a1c4f06de592238ec26249e20252bc1e9f284c30",
+    "source_path": "tests/test_gpu_metc_contraction_equivalence.py",
+    "destination": "tests/test_gpu_metc_contraction_equivalence.py",
+    "source_blob_sha256": "a32ec0d8e851b069a4c319b0909fd98249cba8760aa00274c99dfe4ef280e910",
+    "integrated_sha256": "4b41bae64e4e474158df267eb3967663d97194899f793771c9dd4e880956b9c9"
+  },
+  {
+    "source_commit": "a1c4f06de592238ec26249e20252bc1e9f284c30",
+    "source_path": "source/tdhf_mrsf_lib.F90",
+    "destination": "tests/fixtures/tdhf_mrsf_lib.F90",
+    "source_blob_sha256": "bfd489dfc8f94e0ccc5bb61861f52c96b91c6b38ebbdb5606af8f9be35c8df1c",
+    "integrated_sha256": "dc4edf23f9534c4599dc7a7075e9d0b8f5c3ab3a7aeef474cef576fa7c0b2871"
+  },
+  {
+    "source_commit": "901c3e2bc723c2a1bc8496fd265ba84d80d44aac",
+    "source_path": "pyoqp/oqp/utils/tdhf_benchmark_timers.py",
+    "destination": "python/openqp_gpu/tdhf_benchmark_timers.py",
+    "source_blob_sha256": "e951b6b71f6a87acc14f08eaea33c29106bd8b0493178101b357e347a17d35e7",
+    "integrated_sha256": "e951b6b71f6a87acc14f08eaea33c29106bd8b0493178101b357e347a17d35e7"
+  },
+  {
+    "source_commit": "901c3e2bc723c2a1bc8496fd265ba84d80d44aac",
+    "source_path": "tests/test_tdhf_benchmark_timers.py",
+    "destination": "tests/test_gpu_benchmark_timers.py",
+    "source_blob_sha256": "eba3d0a9fe3599cc5f7fd1d565e73d2894c8a6f7319da68ea732c21df1d1f1fe",
+    "integrated_sha256": "c83362efa15ff07ac330c479b43ca2864fb06892da9541ac2b70cea3dea8a32b"
+  },
+  {
+    "source_commit": "901c3e2bc723c2a1bc8496fd265ba84d80d44aac",
+    "source_path": "tests/fixtures/mrsf_tddft_h2o_energy.log",
+    "destination": "tests/fixtures/mrsf_tddft_h2o_energy.log",
+    "source_blob_sha256": "6dcddec096a97922178ff591acb6bd06bc41956742ceecd3801fbc783fea01ea",
+    "integrated_sha256": "6dcddec096a97922178ff591acb6bd06bc41956742ceecd3801fbc783fea01ea"
+  }
+]
