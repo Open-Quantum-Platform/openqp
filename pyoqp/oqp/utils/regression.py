@@ -131,15 +131,16 @@ REGISTRY = (
     RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            rtol=1e-6),
     # IR intensities and Raman activities are second-order response properties
-    # (dipole / polarizability derivatives over the analytic Hessian). They are
-    # far more sensitive to the SCF convergence *path* than the energy or the
-    # Hessian itself: an SCF that converges to the same energy via a different
-    # route (e.g. the coarse->fine XC grid ramp, integral screening, a different
-    # guess/BLAS order) shifts the converged density at ~1e-6 and these
-    # quantities amplify that to ~1e-4 (IR) / ~1e-3 (Raman) -- above the global
-    # round(diff,4) ~5e-5 gate, while the energy stays bit-identical. Compare
-    # them with a small relative tolerance (a genuine regression is orders of
-    # magnitude larger). Same rationale as the SOC rtol below.
+    # (dipole / polarizability derivatives over the analytic Hessian) with
+    # magnitudes up to ~1e3, so the absolute round(diff,4) gate alone would
+    # demand 7-8 significant figures; a different SCF convergence path (XC grid
+    # ramp, integral screening, guess or BLAS order) moves them more than the
+    # energy.  Measured 2026-10-10 on the default path (26 HESS/ECP example
+    # outputs from two zeus x86_64 builds against these references): max
+    # relative drift 3.3e-7 (IR) and 2.1e-7 (Raman).  Both tolerances below
+    # therefore keep a >=300x margin over that drift, while a genuine
+    # regression (a wrong derivative or missing response term) is many orders
+    # of magnitude larger.  Same rationale as the SOC rtol below.
     RegKey('infrared_intensities', runtypes=frozenset({'hess'}),
            required=True, source='sidecar', rtol=1e-3),
     RegKey('raman_activities', runtypes=frozenset({'hess'}),
