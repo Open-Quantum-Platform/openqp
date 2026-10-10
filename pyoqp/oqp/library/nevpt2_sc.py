@@ -397,18 +397,60 @@ def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
 
 
 def _a17(h1e, h2e, dm2, dm3):
+    """The a17 intermediate (Sr subspace).
+
+    The liboqp engine (``nevpt2_a17``) evaluates the same terms as a four-loop
+    contraction; the NumPy assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a17"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm2, dm3)]
+            out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a17(n, *[cast(a) for a in ops], cast(out))
+            return out
     h1e = h1e - _ein('mjjn->mn', h2e)
     return -_ein('pi,cabi->abcp', h1e, dm2) \
         - _ein('kpij,cabjki->abcp', h2e, dm3)
 
 
 def _a19(h1e, h2e, dm1, dm2):
+    """The a19 intermediate (Sr subspace).
+
+    The liboqp engine (``nevpt2_a19``) evaluates the same contraction; the
+    NumPy assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a19"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            out = np.zeros((n, n), dtype=np.float64)
+            lib.nevpt2_a19(n, *[cast(a) for a in ops], cast(out))
+            return out
     h1e = h1e - _ein('mjjn->mn', h2e)
     return -_ein('pi,ai->ap', h1e, dm1) \
         - _ein('kpij,ajki->ap', h2e, dm2)
 
 
 def _a23(h1e, h2e, dm1, dm2, dm3):
+    """The a23 intermediate (Si subspace).
+
+    The liboqp engine (``nevpt2_a23``) evaluates the same terms; the NumPy
+    assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a23"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2, dm3)]
+            out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a23(n, *[cast(a) for a in ops], cast(out))
+            return out
     return -_ein('ip,caib->abcp', h1e, dm2) \
         - _ein('pijk,cajbik->abcp', h2e, dm3) \
         + 2.0 * _ein('bp,ca->abcp', h1e, dm1) \
@@ -416,6 +458,20 @@ def _a23(h1e, h2e, dm1, dm2, dm3):
 
 
 def _a25(h1e, h2e, dm1, dm2):
+    """The a25 intermediate (Si subspace).
+
+    The liboqp engine (``nevpt2_a25``) evaluates the same terms; the NumPy
+    assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a25"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            out = np.zeros((n, n), dtype=np.float64)
+            lib.nevpt2_a25(n, *[cast(a) for a in ops], cast(out))
+            return out
     return -_ein('pi,ai->ap', h1e, dm1) \
         - _ein('pijk,jaik->ap', h2e, dm2) \
         + 2.0 * _ein('ap->pa', h1e) \
@@ -423,6 +479,19 @@ def _a25(h1e, h2e, dm1, dm2):
 
 
 def _hdm1(dm1):
+    """The hole 1-RDM: 2I - dm1^T (Sijr/Srsi intermediate).
+
+    The liboqp engine (``nevpt2_hdm1``) writes the same result as a single
+    n^2 loop; the NumPy expression below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_hdm1"):
+            n = int(dm1.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            out = np.zeros((n, n), dtype=np.float64)
+            lib.nevpt2_hdm1(n, cast(dm1), cast(out))
+            return out
     return 2.0 * np.eye(dm1.shape[0]) - dm1.transpose(1, 0)
 
 
@@ -470,6 +539,20 @@ def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
 
 
 def _a3(h1e, h2e, dm1, dm2, hdm1):
+    """The a3 intermediate (Sijr subspace).
+
+    The liboqp engine (``nevpt2_a3``) evaluates the same contraction; the
+    NumPy assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a3"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2, hdm1)]
+            out = np.zeros((n, n), dtype=np.float64)
+            lib.nevpt2_a3(n, *[cast(a) for a in ops], cast(out))
+            return out
     delta = np.eye(dm2.shape[0])
     return _ein('ia,ip->pa', h1e, hdm1) \
         + 2.0 * _ein('ijka,pj,ik->pa', h2e, delta, dm1) \
@@ -477,6 +560,20 @@ def _a3(h1e, h2e, dm1, dm2, hdm1):
 
 
 def _k27(h1e, h2e, dm1, dm2):
+    """The k27 intermediate (Srsi subspace).
+
+    The liboqp engine (``nevpt2_k27``) evaluates the same contraction; the
+    NumPy assembly below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_k27"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            out = np.zeros((n, n), dtype=np.float64)
+            lib.nevpt2_k27(n, *[cast(a) for a in ops], cast(out))
+            return out
     return -_ein('ai,pi->pa', h1e, dm1) \
         - _ein('iajk,pkij->pa', h2e, dm2) \
         + _ein('iaji,pj->pa', h2e, dm1)

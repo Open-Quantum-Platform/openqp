@@ -539,6 +539,22 @@ void nevpt2_a12(int32_t nact, const double *h1e, const double *h2e,
     const double *dm2, const double *dm3, double *a12);
 void nevpt2_a13(int32_t nact, const double *h1e, const double *h2e,
     const double *dm1, const double *dm2, const double *dm3, double *a13);
+/* Remaining Koopmans intermediates: hdm1 (hole 1-RDM), a17/a19/a23/a25
+ * (Si/Sr/Sij/Srs intermediates), a3 (Sijr), k27 (Srsi). */
+void nevpt2_hdm1(int32_t nact, const double *dm1, double *hdm1);
+void nevpt2_a17(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm2, const double *dm3, double *a17);
+void nevpt2_a19(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *a19);
+void nevpt2_a23(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *dm3, double *a23);
+void nevpt2_a25(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *a25);
+void nevpt2_a3(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *hdm1, double *a3);
+void nevpt2_k27(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *k27);
+
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
  * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
  * Fock above. */
