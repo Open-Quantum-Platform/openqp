@@ -274,6 +274,13 @@ contains
     iter_max = 0
     nconv = 0
 
+    if (.not. cphf_serial_requested()) then
+      ! All right-hand sides advance together: one batched A-matrix action
+      ! (one ERI traversal over every active density, one f_xc pass) per
+      ! iteration instead of one per right-hand side.
+      call cphf_block_pcg(cgdata, scale_exch, nrhs, bvec, uvec, sqrt(abs(cnv)), mxit, &
+                          nconv, iter_min, iter_max, all_converged)
+    else
     do irhs = 1, nrhs
       call system_clock(rhs_clock_start)
       call cpu_time(rhs_cpu_start)
@@ -316,6 +323,7 @@ contains
       end if
       call pcg%clean()
     end do
+    end if
 
     if (present(converged)) converged = all_converged
 
@@ -338,6 +346,230 @@ contains
 !###############################################################################
 
 !> @brief A-matrix action y = (A+B) x, mirroring tdhf_z_vector::compute_apbx.
+!###############################################################################
+
+!> @brief OQP_CPHF_SERIAL=1 selects the one-right-hand-side-at-a-time solver.
+  logical function cphf_serial_requested() result(serial)
+    character(len=8) :: envs
+    integer :: st
+    serial = .false.
+    call get_environment_variable('OQP_CPHF_SERIAL', envs, status=st)
+    if (st == 0) serial = trim(adjustl(envs)) == '1'
+  end function cphf_serial_requested
+
+!###############################################################################
+
+!> @brief Closed-shell A-matrix action on a block of occ-vir vectors:
+!>        y(:,k) = (A+B) x(:,k) for every column, with one ERI traversal over
+!>        all column densities and one f_xc grid pass (same operations, in
+!>        the same order per column, as cphf_apbx).
+  subroutine cphf_apbx_block(p, scale_exch, x, y)
+    use mathlib, only: symmetrize_matrix, orthogonal_transform
+    use mod_dft_gridint_fxc, only: tddft_fxc
+    type(cphf_cg_data), intent(inout) :: p
+    real(kind=dp), intent(in) :: scale_exch
+    real(kind=dp), intent(in) :: x(:,:)
+    real(kind=dp), intent(out) :: y(:,:)
+    real(kind=dp), allocatable, target :: pblk(:,:,:)
+    type(int2_td_data_t), target :: idat
+    real(kind=dp), pointer :: apb(:,:,:)
+    integer :: k, nact
+
+    nact = size(x,2)
+    associate(wrk => p%wrk, nocc => p%nocc, nbf => p%nbf, mo => p%mo, &
+              infos => p%infos, dft => p%dft, xm => p%xm)
+      allocate(pblk(nbf,nbf,nact))
+      do k = 1, nact
+        call iatogen(x(:,k), wrk, nocc, nocc)
+        call symmetrize_matrix(wrk, nbf)
+        call orthogonal_transform('t', nbf, mo, wrk, pblk(:,:,k))
+      end do
+      idat = int2_td_data_t(d2=pblk, int_apb=.true., int_amb=.false., &
+                            tamm_dancoff=.false., scale_exchange=scale_exch)
+      call p%int2_driver%run(idat, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%dft%cam_alpha, beta=infos%dft%cam_beta, mu=infos%dft%cam_mu)
+      apb => idat%apb(:,:,:,1)
+      apb = apb*0.5_dp
+      if (dft) then
+        call tddft_fxc(basis=infos%basis, molGrid=p%molgrid, isVecs=.true., wf=mo, &
+                       fx=apb(:,:,1:nact), dx=pblk(:,:,1:nact), nmtx=nact, &
+                       threshold=0.0d0, infos=infos, cache=p%xc_cache)
+      end if
+      do k = 1, nact
+        call mntoia(apb(:,:,k), y(:,k), mo, mo, nocc, nocc)
+        y(:,k) = y(:,k) + xm*x(:,k)
+      end do
+    end associate
+    nullify(apb)
+  end subroutine cphf_apbx_block
+
+!###############################################################################
+
+!> @brief Block preconditioned CG for nrhs closed-shell CPHF systems.
+!> @details Per right-hand side this is exactly pcg_t with x0 = 0 and the
+!>   diagonal preconditioner: the same recurrences, the same convergence test
+!>   (||r|| <= tol at start, < tol after a step) and the same breakdown checks.
+!>   Only the A-matrix actions of all still-active columns are evaluated
+!>   together, in chunks sized so the per-thread Fock replicas fit
+!>   OQP_CPHF_BLOCK_MEM_MB (default 2048 MiB).
+  subroutine cphf_block_pcg(p, scale_exch, nrhs, bvec, uvec, tol, mxit, &
+                            nconv, iter_min, iter_max, all_converged)
+    type(cphf_cg_data), intent(inout) :: p
+    real(kind=dp), intent(in) :: scale_exch, tol
+    integer, intent(in) :: nrhs, mxit
+    real(kind=dp), intent(in) :: bvec(:,:)
+    real(kind=dp), intent(out) :: uvec(:,:)
+    integer, intent(inout) :: nconv, iter_min, iter_max
+    logical, intent(inout) :: all_converged
+    integer, parameter :: ACTIVE = 0, DONE = 1, FAILED = 2
+    real(kind=dp), allocatable :: r(:,:), yv(:,:), pv(:,:), ap(:,:), rz(:), err(:)
+    integer, allocatable :: state(:), iters(:), act(:)
+    real(kind=dp) :: pap, alpha, beta, rz_new
+    integer :: lexc, k, ic, iter, nact, nb, i0, i1, nthr, st
+    integer(8) :: budget, perv
+    character(len=16) :: envs
+!$  integer, external :: omp_get_max_threads
+
+    lexc = size(bvec,1)
+    allocate(r(lexc,nrhs), yv(lexc,nrhs), pv(lexc,nrhs), ap(lexc,nrhs), &
+             rz(nrhs), err(nrhs), state(nrhs), iters(nrhs), act(nrhs))
+    uvec(:,1:nrhs) = 0.0_dp
+    iters = 0
+    state = ACTIVE
+    do k = 1, nrhs
+      r(:,k) = bvec(:,k)
+      yv(:,k) = p%xminv*r(:,k)
+      pv(:,k) = yv(:,k)
+      rz(k) = dot_product(r(:,k), yv(:,k))
+      err(k) = norm2(r(:,k))
+      if (.not. all(ieee_is_finite(bvec(:,k))) .or. .not. ieee_is_finite(rz(k)) &
+          .or. .not. ieee_is_finite(err(k))) then
+        state(k) = FAILED
+      else if (err(k) <= tol) then
+        state(k) = DONE
+      end if
+      if (p%infos%control%verbose >= 2) &
+        write(iw,'(" INITIAL CPHF ERROR RHS",I5," =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+              k, err(k)**2, tol**2
+    end do
+
+    ! chunk size from the memory budget: AO density + Fock replicas per thread
+    nthr = 1
+!$  nthr = omp_get_max_threads()
+    budget = 2048_8*1024_8*1024_8
+    call get_environment_variable('OQP_CPHF_BLOCK_MEM_MB', envs, status=st)
+    if (st == 0) then
+      read(envs, *, iostat=st) budget
+      if (st == 0) then
+        budget = budget*1024_8*1024_8
+      else
+        budget = 2048_8*1024_8*1024_8
+      end if
+    end if
+    perv = 8_8*int(p%nbf,8)**2*int(nthr+3,8)
+    nb = int(max(1_8, min(int(nrhs,8), budget/max(perv,1_8))))
+
+    do iter = 1, mxit
+      nact = 0
+      do k = 1, nrhs
+        if (state(k) /= ACTIVE) cycle
+        if (.not. all(ieee_is_finite(pv(:,k)))) then
+          state(k) = FAILED
+          cycle
+        end if
+        nact = nact + 1
+        act(nact) = k
+      end do
+      if (nact == 0) exit
+      do i0 = 1, nact, nb
+        i1 = min(nact, i0+nb-1)
+        block
+          real(kind=dp), allocatable :: xin(:,:), yout(:,:)
+          allocate(xin(lexc,i1-i0+1), yout(lexc,i1-i0+1))
+          xin = pv(:,act(i0:i1))
+          call cphf_apbx_block(p, scale_exch, xin, yout)
+          ap(:,act(i0:i1)) = yout
+        end block
+      end do
+      do ic = 1, nact
+        k = act(ic)
+        iters(k) = iter
+        if (.not. all(ieee_is_finite(ap(:,k)))) then
+          state(k) = FAILED
+          cycle
+        end if
+        pap = dot_product(pv(:,k), ap(:,k))
+        if (.not. safe_denominator(pap) .or. .not. safe_denominator(rz(k))) then
+          state(k) = FAILED
+          cycle
+        end if
+        alpha = rz(k)/pap
+        uvec(:,k) = uvec(:,k) + alpha*pv(:,k)
+        r(:,k) = r(:,k) - alpha*ap(:,k)
+        err(k) = norm2(r(:,k))
+        if (p%infos%control%verbose >= 2) &
+          write(iw,'(" CPHF ITER RHS",I5," ITER#",I4," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
+                k, iter, err(k)**2, tol**2
+        if (.not. ieee_is_finite(err(k))) then
+          state(k) = FAILED
+          cycle
+        end if
+        if (err(k) < tol) then
+          state(k) = DONE
+          if (.not. all(ieee_is_finite(uvec(:,k)))) state(k) = FAILED
+          cycle
+        end if
+        if (.not. safe_denominator(err(k))) then
+          state(k) = FAILED
+          cycle
+        end if
+        yv(:,k) = p%xminv*r(:,k)
+        if (.not. all(ieee_is_finite(yv(:,k)))) then
+          state(k) = FAILED
+          cycle
+        end if
+        rz_new = dot_product(r(:,k), yv(:,k))
+        if (.not. safe_denominator(rz_new)) then
+          state(k) = FAILED
+          cycle
+        end if
+        beta = rz_new/rz(k)
+        if (.not. ieee_is_finite(beta)) then
+          state(k) = FAILED
+          cycle
+        end if
+        pv(:,k) = yv(:,k) + beta*pv(:,k)
+        rz(k) = rz_new
+      end do
+    end do
+
+    do k = 1, nrhs
+      iter_min = min(iter_min, iters(k))
+      iter_max = max(iter_max, iters(k))
+      ! same per-RHS line as the one-at-a-time solver (timing is per block)
+      if (p%infos%control%verbose >= 2) &
+        write(iw,'(" CPHF RHS",I5," completed in",I5," iterations;",' // &
+                 '" block solve")') k, iters(k)
+      if (state(k) == DONE) then
+        nconv = nconv + 1
+      else
+        all_converged = .false.
+        write(iw,'(" CPHF RHS",I5," did not converge; block PCG state =",I4)') k, state(k)
+      end if
+    end do
+    deallocate(r, yv, pv, ap, rz, err, state, iters, act)
+  contains
+    !> pcg_t's breakdown test (pcg_safe_positive_denominator): finite and
+    !> |value| >= 1e-24; the sign is not restricted.
+    logical function safe_denominator(value)
+      real(kind=dp), intent(in) :: value
+      safe_denominator = ieee_is_finite(value) .and. abs(value) >= 1.0e-24_dp
+    end function safe_denominator
+  end subroutine cphf_block_pcg
+
+!###############################################################################
+
   subroutine cphf_apbx(y, x, dat)
     use mathlib, only: symmetrize_matrix, orthogonal_transform
     use mod_dft_gridint_fxc, only: tddft_fxc

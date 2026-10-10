@@ -812,6 +812,7 @@ int64_t casscf_ao_gradient(struct oqp_handle_t *inf, int32_t nbf,
     int32_t nvec, const double *lam, const double *avm,
     double *info);
 void hf_hessian(struct oqp_handle_t *inf);
+int oqp_functional_needs_tau(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
 void cholesky_eri_selftest(struct oqp_handle_t *inf);

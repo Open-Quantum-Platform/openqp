@@ -2251,7 +2251,7 @@ def test_misspelled_derivative_types_fail_early():
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
             'nac(S0,S1,type=analytic)'
         )
-    with pytest.raises(OQPInputError, match="type must be numerical or analytical"):
+    with pytest.raises(OQPInputError, match="type must be auto, numerical or analytical"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="h2o.xyz" hess(S0,type=analyticla)'
         )

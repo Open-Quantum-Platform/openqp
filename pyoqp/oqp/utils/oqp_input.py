@@ -2037,8 +2037,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                     raise OQPInputError("soc %s must be a positive integer" % key)
     if driver.name in {"hess", "thermo"} and "type" in driver.kwargs:
         hess_type = str(driver.kwargs["type"]).strip().lower()
-        if hess_type not in {"numerical", "analytical"}:
-            raise OQPInputError("%s type must be numerical or analytical" % driver.name)
+        if hess_type not in {"auto", "numerical", "analytical"}:
+            raise OQPInputError("%s type must be auto, numerical or analytical" % driver.name)
     if driver.name in {"nac", "bp"} and "type" in driver.kwargs:
         nac_type = str(driver.kwargs["type"]).strip().lower()
         if nac_type not in {"numerical", "analytical"}:

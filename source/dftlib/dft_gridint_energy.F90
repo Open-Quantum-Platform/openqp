@@ -111,7 +111,13 @@ contains
         tmp(1:numAOs_p, 1:numPts, 1:TmpVec) => self%tmp_(1:numAOs_p*numPts*TmpVec, myThread)
 
       if (present(fock_a)) fock_a(1:numAOs,1:numAOs) => self%fa2(1:numAOs*numAOs, myThread)
-      if (present(fock_b)) fock_b(1:numAOs,1:numAOs) => self%fb2(1:numAOs*numAOs, myThread)
+      ! fb2 exists only for open-shell (hasBeta) runs; remapping an
+      ! unallocated array is undefined and aborts under -fcheck=bounds
+      if (present(fock_b)) then
+        nullify(fock_b)
+        if (allocated(self%fb2)) &
+          fock_b(1:numAOs,1:numAOs) => self%fb2(1:numAOs*numAOs, myThread)
+      end if
 
     end associate
 

@@ -1,0 +1,2 @@
+rohf/6-31g charge=1 mult=2 hess(S0,type=analytical,clean=true) scf(conv=1e-10)
+geom="../geometries/H2O-95fa99c614ed.xyz"

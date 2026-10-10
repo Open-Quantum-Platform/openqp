@@ -663,7 +663,10 @@ contains
       ! be weighed on its own: CAS(4,24) at one root is ~40.5 MiB of spin tensor
       ! and ~27.9 MiB of workspace, each inside a 64 MiB ceiling that their sum
       ! already breaks.
-      work_bytes = 8_i8 * ndet * int(2 * max_sub + 4 * solve_nroot, i8) &
+      ! ci_davidson holds basis and sigma (2*max_sub), ritz/resid/corr and the
+      ! repack scratch for at most solve_nroot vectors in and out (5*nroot),
+      ! diag and vec (2), plus evecs here (nroot).
+      work_bytes = 8_i8 * ndet * int(2 * max_sub + 6 * solve_nroot + 2, i8) &
                    + live_spin_bytes
       if (work_bytes > budget_bytes) then
         status = FCI_ERR_BUDGET
@@ -810,7 +813,8 @@ contains
              sub(max_sub * max_sub), subv(max_sub * max_sub), theta(max_sub), &
              ritz(ndet, nroot), resid(ndet, nroot), corr(ndet, nroot), &
              vec(ndet), proj(max_sub), rnorm(nroot), order(nroot), &
-             scratch(2_i8 * ndet * int(max_sub, i8)), stat=info)
+             scratch(merge(2_i8 * ndet * int(nroot, i8), 1_i8, mode /= 1)), &
+             stat=info)
     if (info /= 0) then
       ierr = 2
       return

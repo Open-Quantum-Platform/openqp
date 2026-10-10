@@ -804,7 +804,10 @@ OQP_CONFIG_SCHEMA = {
         'optep': {'type': bool, 'default': 'False'},
     },
     'hess': {
-        'type': {'type': string, 'default': 'numerical'},
+        # auto: native analytic Hessian where it is supported (ground-state
+        # HF/DFT without solvent, QM/MM, scalar relativity, meta-GGA, ...;
+        # see input_checker.resolve_hessian_type), numerical otherwise.
+        'type': {'type': string, 'default': 'auto'},
         'state': {'type': int, 'default': '0'},
         'dx': {'type': float, 'default': '0.01'},
         'nproc': {'type': int, 'default': '1'},

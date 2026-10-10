@@ -18,5 +18,6 @@ type=mrsf
 nstate=2
 
 [hess]
+type=numerical
 state=1
 clean=True

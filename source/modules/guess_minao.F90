@@ -40,7 +40,9 @@ contains
 
     type(information), target, intent(inout) :: infos
     integer :: nbf, nbf2, nbf_min, ok, i, j, ish, iat, z, a0, m
-    integer :: bar
+    integer :: bar, ncore
+    real(kind=dp) :: nel_atom
+    character(len=160) :: msg
 
     type(basis_set), pointer :: basis
     type(basis_set) :: min_basis
@@ -53,6 +55,7 @@ contains
     real(kind=dp), allocatable :: dmin(:,:), sco(:,:), qmat(:,:), sfull(:,:)
     real(kind=dp), allocatable :: pmat(:,:), dt(:,:), tmpmn(:,:)
     real(kind=dp), allocatable :: wrk(:,:), occ(:), cno(:,:)
+    real(kind=dp), allocatable :: smin(:,:), dat(:,:)
     integer, allocatable :: at_ao0(:), at_nao(:)
 
     real(kind=dp), contiguous, pointer :: &
@@ -86,15 +89,25 @@ contains
     basis_file = paths(1:bar-1)
     data_file = paths(bar+1:len(paths))
 
-  ! Load the minimal reference basis and the atomic-density table
+  ! Load the atomic-density table and check that every element is tabulated
+  ! before reading the minimal basis (which has no functions beyond it)
+    call minao%load(data_file, err)
+    if (err) call show_message('Guess_MINAO: cannot read MINAO data '//trim(data_file), WITH_ABORT)
+    do iat = 1, infos%mol_prop%natom
+      z = nint(infos%atoms%zn(iat))
+      if (z > minao%zmax) then
+        write (msg, '(a,i0,a,i0,a)') 'Guess_MINAO: no atomic density for Z=', z, &
+          ' (tabulated for Z<=', minao%zmax, '); use guess type sap or huckel'
+        call show_message(trim(msg), WITH_ABORT)
+      end if
+    end do
+
+  ! Load the minimal reference basis
     call min_basis%from_file(basis_file, infos%atoms, err)
     infos%control%basis_set_issue = err
     call pe%bcast(infos%control%basis_set_issue, 1)
     if (err) call show_message('Guess_MINAO: cannot read minimal basis '//trim(basis_file), WITH_ABORT)
     min_basis%atoms => infos%atoms
-
-    call minao%load(data_file, err)
-    if (err) call show_message('Guess_MINAO: cannot read MINAO data '//trim(data_file), WITH_ABORT)
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -110,18 +123,48 @@ contains
       at_nao(iat) = at_nao(iat) + min_basis%naos(ish)
     end do
 
-  ! Assemble block-diagonal minimal-basis density D_min
+  ! Minimal-basis overlap in the normalization of the tabulated densities
+    allocate(smin(nbf_min, nbf_min))
+    call basis_overlap(smin, min_basis, min_basis, tol=log(10.0d0)*tol_int)
+    do i = 1, nbf_min
+      smin(:, i) = smin(:, i) * min_basis%bfnrm(i) * min_basis%bfnrm(:)
+    end do
+
+  ! Assemble block-diagonal minimal-basis density D_min. For an atom with an
+  ! effective core potential the core orbitals are removed from the atomic
+  ! density, which then holds the Z - N_core electrons the ECP leaves.
     allocate(dmin(nbf_min, nbf_min), source=0.0_dp)
+    write (IW, '(/5x,a)') 'Atom    Z  ECP core  Electrons in atomic density'
     do iat = 1, infos%mol_prop%natom
       z = nint(infos%atoms%zn(iat))
       if (z < 1) cycle
-      if (z > minao%zmax) &
-        call show_message('Guess_MINAO: element beyond tabulated range (Z<=36)', WITH_ABORT)
       if (minao%elem(z)%nao /= at_nao(iat)) &
         call show_message('Guess_MINAO: minimal-basis size mismatch for atom', WITH_ABORT)
       a0 = at_ao0(iat)
       m = at_nao(iat)
-      dmin(a0:a0+m-1, a0:a0+m-1) = minao%elem(z)%dm
+      allocate(dat(m, m))
+      dat = minao%elem(z)%dm
+
+    ! The tabulated density must hold Z electrons in this basis; anything else
+    ! means its AO order or normalization differs from the minimal basis
+      nel_atom = sum(dat * smin(a0:a0+m-1, a0:a0+m-1))
+      if (abs(nel_atom - minao%elem(z)%nelec) > 1.0e-6_dp) then
+        write (msg, '(a,i0,a,f12.6,a,f12.6)') 'Guess_MINAO: atomic density for Z=', z, &
+          ' holds ', nel_atom, ' electrons instead of ', minao%elem(z)%nelec
+        call show_message(trim(msg), WITH_ABORT)
+      end if
+
+      ncore = 0
+      if (basis%ecp_params%is_ecp .and. allocated(basis%ecp_zn_num)) ncore = basis%ecp_zn_num(iat)
+      if (ncore > 0) then
+        call remove_ecp_core(dat, smin(a0:a0+m-1, a0:a0+m-1), min_basis, iat, ncore, msg)
+        if (len_trim(msg) > 0) call show_message(trim(msg), WITH_ABORT)
+        nel_atom = sum(dat * smin(a0:a0+m-1, a0:a0+m-1))
+      end if
+      write (IW, '(5x,i4,1x,i4,1x,i9,1x,f15.6)') iat, z, ncore, nel_atom
+
+      dmin(a0:a0+m-1, a0:a0+m-1) = dat
+      deallocate(dat)
     end do
 
   ! Cross-overlap between minimal and target basis, bfnrm-scaled (as proj_dm_newbas)
@@ -201,5 +244,182 @@ contains
     close(IW)
 
   end subroutine guess_minao
+
+!> @brief Remove the core orbitals replaced by an ECP from an atomic density.
+!>
+!> The core subshells are the lowest (n,l) subshells of the minimal basis that
+!> hold N_core electrons (n = l + k for the k-th shell of angular momentum l,
+!> filled in order of n, then l: 2, 10, 18, 28, 36, 46 core electrons). In the
+!> orthonormal basis S^{1/2}, the core orbitals are taken from the doubly
+!> occupied natural orbitals of the atom: the N_core/2 combinations that lie
+!> most within the span of the core basis functions. These lie within it
+!> almost completely (projection > 0.99 for the def2 core of Rb-I, < 0.2 for
+!> the next orbital), so the subtraction removes exactly N_core electrons and
+!> leaves the valence orbitals of the atom unchanged.
+!>
+!> @param[inout] dat   atomic density (m,m) in the minimal basis
+!> @param[in]    sat   atomic overlap (m,m)
+!> @param[in]    min_basis  minimal basis (for the shells of atom iat)
+!> @param[in]    iat   atom index
+!> @param[in]    ncore number of core electrons removed by the ECP
+!> @param[out]   msg   blank on success, otherwise the reason for failure
+  subroutine remove_ecp_core(dat, sat, min_basis, iat, ncore, msg)
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use eigen, only: diag_symm_full
+
+    implicit none
+
+    real(kind=dp), intent(inout) :: dat(:,:)
+    real(kind=dp), intent(in) :: sat(:,:)
+    type(basis_set), intent(in) :: min_basis
+    integer, intent(in) :: iat, ncore
+    character(len=*), intent(out) :: msg
+
+    real(kind=dp), parameter :: occ_tol = 1.0e-3_dp
+    integer, parameter :: maxsh = 64
+    integer :: m, ish, a0, l, nsh, ncsh, i, j, k, n2, nc, ok, nfill
+    integer :: shl(maxsh), shn(maxsh), sh0(maxsh), shnao(maxsh), cnt(0:7)
+    logical :: used(maxsh)
+    integer, allocatable :: cidx(:), idx2(:)
+    real(kind=dp), allocatable :: shalf(:,:), sihalf(:,:), nmat(:,:), occ(:)
+    real(kind=dp), allocatable :: b(:,:), scc(:,:), g(:,:), mmat(:,:), y(:,:), w(:)
+
+    msg = ''
+    m = size(dat, 1)
+
+  ! Shells of this atom with their principal quantum number n = l + k
+    nsh = 0
+    cnt = 0
+    a0 = huge(1)
+    do ish = 1, min_basis%nshell
+      if (min_basis%origin(ish) /= iat) cycle
+      a0 = min(a0, min_basis%ao_offset(ish))
+    end do
+    do ish = 1, min_basis%nshell
+      if (min_basis%origin(ish) /= iat) cycle
+      nsh = nsh + 1
+      l = min_basis%am(ish)
+      cnt(l) = cnt(l) + 1
+      shl(nsh) = l
+      shn(nsh) = l + cnt(l)
+      sh0(nsh) = min_basis%ao_offset(ish) - a0 + 1
+      shnao(nsh) = min_basis%naos(ish)
+    end do
+
+  ! Core subshells: fill in order of n, then l, until N_core electrons
+    used = .false.
+    nfill = 0
+    ncsh = 0
+    do while (nfill < ncore)
+      k = 0
+      do i = 1, nsh
+        if (used(i)) cycle
+        if (k == 0) then
+          k = i
+        else if (shn(i) < shn(k) .or. (shn(i) == shn(k) .and. shl(i) < shl(k))) then
+          k = i
+        end if
+      end do
+      if (k == 0) exit
+      used(k) = .true.
+      ncsh = ncsh + 1
+      nfill = nfill + 2*(2*shl(k) + 1)
+    end do
+    if (nfill /= ncore) then
+      write (msg, '(a,i0,a,i0,a)') 'Guess_MINAO: ECP core of ', ncore, &
+        ' electrons on atom ', iat, ' is not a set of complete subshells'
+      return
+    end if
+
+    nc = 0
+    do i = 1, nsh
+      if (used(i)) nc = nc + shnao(i)
+    end do
+    allocate(cidx(nc))
+    nc = 0
+    do i = 1, nsh
+      if (.not. used(i)) cycle
+      do j = 0, shnao(i) - 1
+        nc = nc + 1
+        cidx(nc) = sh0(i) + j
+      end do
+    end do
+
+  ! S^{1/2} and S^{-1/2}
+    allocate(shalf(m,m), sihalf(m,m))
+    call sym_power(sat, 0.5_dp, shalf)
+    call sym_power(sat, -0.5_dp, sihalf)
+
+  ! Natural orbitals N = S^{1/2} D S^{1/2} = W n W^T
+    allocate(nmat(m,m), occ(m))
+    nmat = matmul(shalf, matmul(dat, shalf))
+    call diag_symm_full(1, m, nmat, m, occ, ok)
+    if (ok /= 0) then
+      msg = 'Guess_MINAO: atomic natural-orbital diagonalization failed'
+      return
+    end if
+
+  ! Doubly occupied natural orbitals
+    n2 = count(occ > 2.0_dp - occ_tol)
+    if (n2 < ncore/2) then
+      write (msg, '(a,i0,a,i0)') 'Guess_MINAO: too few doubly occupied orbitals for the ECP core on atom ', iat, &
+        ': ', n2
+      return
+    end if
+    allocate(idx2(n2))
+    idx2 = pack([(i, i = 1, m)], occ > 2.0_dp - occ_tol)
+
+  ! Core-span projector within them: M = G S_cc^{-1} G^T, G = W2^T S^{1/2} E_c
+    allocate(b(m,nc), scc(nc,nc), g(n2,nc), mmat(n2,n2), w(n2))
+    b = shalf(:, cidx)
+    call sym_power(sat(cidx, cidx), -1.0_dp, scc)
+    g = matmul(transpose(nmat(:, idx2)), b)
+    mmat = matmul(g, matmul(scc, transpose(g)))
+    call diag_symm_full(1, n2, mmat, n2, w, ok)
+    if (ok /= 0) then
+      msg = 'Guess_MINAO: core-projector diagonalization failed'
+      return
+    end if
+    k = ncore/2
+    if (w(n2-k+1) < 0.5_dp .or. (n2 > k .and. w(max(n2-k, 1)) > 0.5_dp)) then
+      write (msg, '(a,i0)') 'Guess_MINAO: core orbitals of the ECP are not separable on atom ', iat
+      return
+    end if
+
+  ! Core orbitals Y = W2 V (top k eigenvectors); N_val = N_full - 2 Y Y^T
+    allocate(y(m,k))
+    y = matmul(nmat(:, idx2), mmat(:, n2-k+1:n2))
+    dat = matmul(shalf, matmul(dat, shalf)) - 2.0_dp*matmul(y, transpose(y))
+    dat = matmul(sihalf, matmul(dat, sihalf))
+
+  end subroutine remove_ecp_core
+
+!> @brief out = A^p for a symmetric positive-definite matrix A
+  subroutine sym_power(a, p, out)
+    use precision, only: dp
+    use eigen, only: diag_symm_full
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    real(kind=dp), intent(in) :: a(:,:), p
+    real(kind=dp), intent(out) :: out(:,:)
+
+    integer :: n, i, ok
+    real(kind=dp), allocatable :: u(:,:), e(:), t(:,:)
+
+    n = size(a, 1)
+    allocate(u(n,n), e(n), t(n,n))
+    u = a
+    call diag_symm_full(1, n, u, n, e, ok)
+    if (ok /= 0 .or. minval(e) <= 0.0_dp) &
+      call show_message('Guess_MINAO: atomic overlap is not positive definite', WITH_ABORT)
+    do i = 1, n
+      t(:, i) = u(:, i) * e(i)**p
+    end do
+    out = matmul(t, transpose(u))
+
+  end subroutine sym_power
 
 end module guess_minao_mod

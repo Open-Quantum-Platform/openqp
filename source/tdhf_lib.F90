@@ -169,7 +169,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, cval2, val2c, cval4, &
                      val, val1, val4c
-    integer :: ifock, mythread
+    integer :: ifock, mythread, iapb, iamb
 
     xval1 = this%scale_exchange
     cval2 = 2 * this%scale_coulomb
@@ -177,9 +177,15 @@ contains
 
     mythread = buf%thread_id
 
+    ! Image slots are taken into locals first: GCC 14/15 with -fcheck=bounds
+    ! miscompile the check for a this%apb(..., size(this%apb, 4)) section in
+    ! an associate and abort with a garbage index (GCC 12/13 are unaffected).
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -257,15 +263,19 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, xval2, &
                      val, val1, val2
-    integer :: mythread
+    integer :: mythread, iapb, iamb
 
     xval1 = 1 * this%scale_exchange
     xval2 = 2 * this%scale_coulomb
     mythread = buf%thread_id
 
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 
@@ -1461,7 +1471,7 @@ contains
     integer :: i, j, k, l, n
     real(kind=dp) :: xval1, cval2, val2c, cval4, &
                      val, val1, val4c
-    integer :: ifock, mythread
+    integer :: ifock, mythread, iapb, iamb
 
     xval1 = this%scale_exchange
     cval2 = 2 * this%scale_coulomb
@@ -1472,11 +1482,15 @@ contains
     bsame=all(shell_block%shells(1:2)==shell_block%shells(3:4))
     mythread = thread_id
 
+    ! Slots in locals: see the GCC 14/15 note in int2_td_data_t_update.
+    iapb = min(mythread, size(this%apb, 4))
+    iamb = min(mythread, size(this%amb, 4))
+
     ! Inactive response images may have only one copy; the guarded branches
     ! below never write those images. Keep their borrowed views in bounds.
     associate (&
-                apb => this%apb(:,:,:,min(mythread,size(this%apb,4))), &
-                amb => this%amb(:,:,:,min(mythread,size(this%amb,4))), &
+                apb => this%apb(:,:,:,iapb), &
+                amb => this%amb(:,:,:,iamb), &
                 d2 => this%d2 &
                 )
 

@@ -439,7 +439,7 @@ contains
     xc_opts%numOccAlpha = infos%mol_prop%nelec_A
     xc_opts%numOccBeta = infos%mol_prop%nelec_B
     xc_opts%wfAlpha => da2
-    xc_opts%wfBeta => db2
+    if (urohf) xc_opts%wfBeta => db2
     xc_opts%dft_threshold = dft_threshold
     xc_opts%molGrid => molGrid
 
