@@ -14,6 +14,7 @@ type=rhf
 multiplicity=1
 
 [hess]
+type=numerical
 state=0
 clean=True
 

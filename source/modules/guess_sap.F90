@@ -32,6 +32,7 @@ contains
     use mod_dft, only: dft_initialize
     use sap_lut, only: sap_table_t
     use mod_dft_gridint_sap, only: sap_potential_matrix
+    use ecp_tool, only: add_ecpint
 
     implicit none
 
@@ -135,6 +136,13 @@ contains
 
   ! Guess Fock = T + V_SAP  (V_SAP already contains the screened nuclear term)
     fock(1:nbf2) = tmat(1:nbf2) + vsap(1:nbf2)
+
+  ! ECP atoms: V_SAP never falls below the valence nucleus -Z_val/r
+  ! (sap_potential_matrix); the core region is described by the ECP, as in Hcore.
+    if (basis%ecp_params%is_ecp) then
+      if (pe%rank == root) call add_ecpint(basis, infos%atoms%xyz, fock)
+      call pe%bcast(fock, nbf2)
+    end if
 
   ! Solve F C = eps S C
     call get_qmat_cached(infos, smat, qmat, nbf)

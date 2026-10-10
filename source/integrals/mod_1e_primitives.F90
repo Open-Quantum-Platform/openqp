@@ -54,6 +54,7 @@ MODULE mod_1e_primitives
  PUBLIC comp_kinetic_der1
  PUBLIC comp_overlap_der1
  PUBLIC comp_overlap_der1_block
+ PUBLIC comp_dipole_der1_block
  PUBLIC comp_kinetic_der1_block
  PUBLIC comp_coulomb_der1_block
  PUBLIC comp_coulomb_helfeyder1_block
@@ -1364,6 +1365,67 @@ END SUBROUTINE
             dblk(i,j,1) = dblk(i,j,1) + ovl_der(jx,ix,1)*ovl_int(jy,iy,2)*ovl_int(jz,iz,3)*pp%expfac
             dblk(i,j,2) = dblk(i,j,2) + ovl_int(jx,ix,1)*ovl_der(jy,iy,2)*ovl_int(jz,iz,3)*pp%expfac
             dblk(i,j,3) = dblk(i,j,3) + ovl_int(jx,ix,1)*ovl_int(jy,iy,2)*ovl_der(jz,iz,3)*pp%expfac
+        END DO
+    END DO
+    END ASSOCIATE
+    END DO
+ END SUBROUTINE
+
+ !> @brief Bra-center first derivatives of the dipole integrals of a shell pair
+!> @details For each primitive pair the 1D moment about @p origin is built from
+!>  1D overlaps with the ket power raised by one,
+!>    <i|x-O|j> = <i|j+1> + (B_x-O_x) <i|j>,
+!>  and differentiated with respect to the bra center A exactly as the overlap.
+!>  Unnormalized Cartesian convention, as comp_overlap_der1_block.
+!> @param[in]    cp      shell pair data
+!> @param[in]    origin  dipole origin
+!> @param[inout] dblk    (inao,jnao,c,a): d<i|(r-O)_a|j>/dA_c (bra center only)
+!> @param[inout] sblk    (inao,jnao): overlap <i|j>, needed for the ket-center
+!>                       derivative through translational invariance
+ SUBROUTINE comp_dipole_der1_block(cp, origin, dblk, sblk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: origin(3)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: dblk(:,:,:,:), sblk(:,:)
+
+    INTEGER :: i, j, k, a, c, d, e(3), f(3)
+    REAL(REAL64) :: fac(3,2,2), prod
+    real(real64) :: ovl_int(0:max_ang+1,0:max_ang+1,3)
+    real(real64) :: mom_int(0:max_ang,0:max_ang+1,3)
+    real(real64) :: ovl_der(0:max_ang,0:max_ang,3)
+    real(real64) :: mom_der(0:max_ang,0:max_ang,3)
+
+    DO k = 1, cp%numpairs
+    ASSOCIATE (pp => cp%p(k), &
+               iang => cp%iang, jang => cp%jang, &
+               inao => cp%inao, jnao => cp%jnao)
+    CALL overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, iang+1, jang+1, ovl_int)
+    DO d = 1, 3
+        mom_int(0:jang,0:iang+1,d) = ovl_int(1:jang+1,0:iang+1,d) &
+            + (cp%rj(d) - origin(d))*ovl_int(0:jang,0:iang+1,d)
+    END DO
+    CALL der_kinovl_xyz(ovl_der, ovl_int, iang, jang, pp%ai)
+    CALL der_kinovl_xyz(mom_der, mom_int, iang, jang, pp%ai)
+    DO i = 1, inao
+        e = [CART_X(i,iang), CART_Y(i,iang), CART_Z(i,iang)]
+        DO j = 1, jnao
+            f = [CART_X(j,jang), CART_Y(j,jang), CART_Z(j,jang)]
+            ! fac(d, moment?, derivative?) for the 1D factor along d
+            DO d = 1, 3
+                fac(d,1,1) = ovl_int(f(d),e(d),d)
+                fac(d,2,1) = mom_int(f(d),e(d),d)
+                fac(d,1,2) = ovl_der(f(d),e(d),d)
+                fac(d,2,2) = mom_der(f(d),e(d),d)
+            END DO
+            sblk(i,j) = sblk(i,j) + fac(1,1,1)*fac(2,1,1)*fac(3,1,1)*pp%expfac
+            DO a = 1, 3
+                DO c = 1, 3
+                    prod = pp%expfac
+                    DO d = 1, 3
+                        prod = prod*fac(d, merge(2,1,d==a), merge(2,1,d==c))
+                    END DO
+                    dblk(i,j,c,a) = dblk(i,j,c,a) + prod
+                END DO
+            END DO
         END DO
     END DO
     END ASSOCIATE
