@@ -13,8 +13,14 @@ runs, so they are checked here against exactly that finite-difference path
     checked with the core-removing ECP derivative integrals in their
     right-hand sides.
 
+  * UHF and ROHF of one-electron H2+ (6-31G): the beta spin has no occupied
+    orbitals, so every zero-sized occupied block (leading dimension 0 in the
+    raw DGEMM calls) is exercised; BLAS rejects such a call without writing
+    its output, which left the previous spin's result in the work arrays.
+
 In addition, closed-shell water run through the UHF and ROHF kernels must
-reproduce the RHF tensors, and the H2O+ UHF and ROHF tensors must rotate with
+reproduce the RHF tensors, the one-electron H2+ UHF and ROHF Hessians and
+tensors must agree (one electron has no spin polarization), and the H2O+ UHF and ROHF tensors must rotate with
 the molecule, sum_A (n x R_A).dalpha/dR_A = [Omega_n, alpha].
 
 Everything runs in one process, one molecule after another, so state left
@@ -42,6 +48,8 @@ WATER = """   8   0.000000000   0.000000000   0.117300000
    1   0.000000000  -0.757200000  -0.469200000"""
 HBR = """   35  0.000000000   0.000000000   0.000000000
     1  0.100000000   0.050000000   1.414000000"""
+H2PLUS = """    1  0.000  0.000  0.000
+    1  0.020  0.010  1.060"""
 CH2BR = """    6  0.000  0.000  0.000
    35  0.050  0.030  1.880
     1  0.930  0.000 -0.520
@@ -53,6 +61,8 @@ FD_CASES = [
     ("rhf_hbr_lanl2dz_ecp", HBR, 0, "lanl2dz", "rhf", 1, ""),
     ("uhf_ch2br_lanl2dz_ecp", CH2BR, 0, "lanl2dz", "uhf", 2, "ispher=true"),
     ("rohf_ch2br_lanl2dz_ecp", CH2BR, 0, "lanl2dz", "rohf", 2, "ispher=true"),
+    ("uhf_h2plus_6-31g_empty_beta", H2PLUS, 1, "6-31g", "uhf", 2, ""),
+    ("rohf_h2plus_6-31g_empty_beta", H2PLUS, 1, "6-31g", "rohf", 2, ""),
 ]
 
 INPUT_TMPL = """[input]
@@ -148,6 +158,17 @@ class AnalyticIrRaman(unittest.TestCase):
                     _, mu_o, al_o = _run(tmp, f"closed_{scftype}", WATER, 0, "6-31g", scftype, 1, "")
                     self.assertLess(np.abs(mu_o - mu_r).max(), 1.0e-4)
                     self.assertLess(np.abs(al_o - al_r).max() / np.abs(al_r).max(), 1.0e-4)
+
+            # one electron: UHF and ROHF are the same wave function
+            with self.subTest(case="h2plus_uhf_vs_rohf"):
+                m_u, mu_u, al_u = _run(tmp, "h2p_uhf", H2PLUS, 1, "6-31g", "uhf", 2, "")
+                h_u = np.array(m_u.hessian, dtype=float)
+                m_o, mu_o, al_o = _run(tmp, "h2p_rohf", H2PLUS, 1, "6-31g", "rohf", 2, "")
+                h_o = np.array(m_o.hessian, dtype=float)
+                self.assertGreater(np.abs(h_u).max(), 1.0e-2)
+                self.assertLess(np.abs(h_u - h_o).max(), 1.0e-6)
+                self.assertLess(np.abs(mu_u - mu_o).max(), 1.0e-5)
+                self.assertLess(np.abs(al_u - al_o).max() / np.abs(al_o).max(), 1.0e-5)
 
             # open-shell tensors rotate with the molecule
             eps = np.zeros((3, 3, 3))

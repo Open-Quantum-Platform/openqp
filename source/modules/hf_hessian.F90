@@ -1113,7 +1113,7 @@ contains
           allocate(t(nbf,sp(s)%nocc))
           do x = 1, ncart
             call dgemm('n','n',nbf,sp(s)%nocc,sp(s)%nocc,1.0_dp,sp(s)%mo,nbf, &
-                       sp(s)%s1oo(:,:,x),sp(s)%nocc,0.0_dp,t,nbf)
+                       sp(s)%s1oo(:,:,x),max(1,sp(s)%nocc),0.0_dp,t,nbf)
             call dgemm('n','t',nbf,nbf,sp(s)%nocc,1.0_dp,t,nbf,sp(s)%mo,nbf, &
                        0.0_dp,mall(:,:,x),nbf)
           end do
@@ -1246,7 +1246,7 @@ contains
             end if
             allocate(tmpn(nbf,sp(ss)%nocc), dFoo(sp(ss)%nocc,sp(ss)%nocc))
             call dgemm('n','n', nbf, sp(ss)%nocc, nbf, 1.0_dp, dFxc, nbf, sp(ss)%mo, nbf, 0.0_dp, tmpn, nbf)
-            call dgemm('t','n', sp(ss)%nocc, sp(ss)%nocc, nbf, 1.0_dp, sp(ss)%mo, nbf, tmpn, nbf, 0.0_dp, dFoo, sp(ss)%nocc)
+            call dgemm('t','n', sp(ss)%nocc, sp(ss)%nocc, nbf, 1.0_dp, sp(ss)%mo, nbf, tmpn, nbf, 0.0_dp, dFoo, max(1,sp(ss)%nocc))
             do x2 = 1, ncart
               do ll2 = 1, sp(ss)%nocc
                 do kk2 = 1, sp(ss)%nocc
@@ -2413,7 +2413,7 @@ contains
     allocate(dpk(nbf2,2), fpk(nbf2,2))
     do a = 1, 3
       do s = 1, 2
-        call dgemm('n','n',nbf,nv(s),no(s),1.0_dp,mo(:,:,s),nbf,us(s)%u(:,:,a),no(s),0.0_dp,scr,nbf)
+        call dgemm('n','n',nbf,nv(s),no(s),1.0_dp,mo(:,:,s),nbf,us(s)%u(:,:,a),max(1,no(s)),0.0_dp,scr,nbf)
         call dgemm('n','t',nbf,nbf,nv(s),1.0_dp,scr,nbf,mo(:,no(s)+1:,s),nbf,0.0_dp,xa(:,:,a,s),nbf)
         pta(:,:,a,s) = xa(:,:,a,s) + transpose(xa(:,:,a,s))
         call pack_matrix(pta(:,:,a,s), dpk(:,s))
@@ -2533,9 +2533,9 @@ contains
       allocate(y(nv(s_),nv(s_)), z(no(s_),no(s_)), t(nbf,max(nv(s_),no(s_))))
       y = matmul(transpose(us(s_)%u(:,:,a_)), us(s_)%u(:,:,b_))
       z = matmul(us(s_)%u(:,:,a_), transpose(us(s_)%u(:,:,b_)))
-      call dgemm('n','n',nbf,nv(s_),nv(s_),1.0_dp,mo(:,no(s_)+1:,s_),nbf,y,nv(s_),0.0_dp,t,nbf)
+      call dgemm('n','n',nbf,nv(s_),nv(s_),1.0_dp,mo(:,no(s_)+1:,s_),nbf,y,max(1,nv(s_)),0.0_dp,t,nbf)
       call dgemm('n','t',nbf,nbf,nv(s_),1.0_dp,t,nbf,mo(:,no(s_)+1:,s_),nbf,0.0_dp,w,nbf)
-      call dgemm('n','n',nbf,no(s_),no(s_),1.0_dp,mo(:,:,s_),nbf,z,no(s_),0.0_dp,t,nbf)
+      call dgemm('n','n',nbf,no(s_),no(s_),1.0_dp,mo(:,:,s_),nbf,z,max(1,no(s_)),0.0_dp,t,nbf)
       call dgemm('n','t',nbf,nbf,no(s_),-1.0_dp,t,nbf,mo(:,:,s_),nbf,1.0_dp,w,nbf)
     end subroutine vv_oo_w
 
@@ -3235,7 +3235,7 @@ contains
         g = jao(:,:,x) + OS_K_SCALE*kao(:,:,x)
         if (present(gao)) gao(:,:,x,ispin) = g
         call dgemm('n','n',nbf,nvir,nbf,1.0_dp,g,nbf,mo(:,nocc+1:),nbf,0.0_dp,t,nbf)
-        call dgemm('t','n',nocc,nvir,nbf,1.0_dp,mo(:,1:nocc),nbf,t,nbf,0.0_dp,gov,nocc)
+        call dgemm('t','n',nocc,nvir,nbf,1.0_dp,mo(:,1:nocc),nbf,t,nbf,0.0_dp,gov,max(1,nocc))
         do a = 1, nvir
           do i = 1, nocc
             g2e((a-1)*nocc+i,x) = gov(i,a)
