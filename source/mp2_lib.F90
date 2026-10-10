@@ -262,13 +262,44 @@ contains
     allocate(eri_mo(nmo,nmo,nmo,nmo), source=0.0_dp, stat=ok)
     if (ok /= 0) return
 
+    ! UHF/ROHF opposite-spin guard.
+    ! The full-MO transform uses cmo_l on all four indices; for UHF/ROHF
+    ! where cmo_l /= cmo_o this is incorrect for opposite-spin (ia|jb).
+    ! When opposite-spin is requested for an unrestricted reference, return
+    ! immediately after computing same-spin (if needed) so the caller falls
+    ! through to the batched half-transform path, which handles opposite-spin
+    ! without double-counting same-spin.
+    if (do_opposite .and. .not. restricted_ref) then
+      if (same_spin) then
+        call cc_build_full_mo(nbf, nmo, cmo_l, cmo_l, g, eri_mo)
+        !$omp parallel do collapse(2) private(i,a,j,b,num,denom) &
+        !$omp   schedule(dynamic,1) reduction(+:e_same)
+        do b = 1, nvir_s
+          do a = 1, nvir_l
+            do j = 1, nocc_s
+              do i = 1, nocc_l
+                denom = e_l(i) + e_s(j) - e_l(nocc_l+a) - e_s(nocc_s+b)
+                if (abs(denom) < 1.0e-10_dp) cycle
+                ! (ia|jb) - (ib|ja)
+                num = eri_mo(i, nocc_l+a, j, nocc_s+b) &
+                    - eri_mo(i, nocc_s+b, j, nocc_l+a)
+                e_same = e_same + 0.25_dp * num * num / denom
+              end do
+            end do
+          end do
+        end do
+        !$omp end parallel do
+        deallocate(eri_mo)
+        ok = 0
+      end if
+      return
+    end if
+
+    ! Normal path: RHF, or same-spin-only, or no opposite-spin.
     ! cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
     ! eri_mo(p,q,r,s) = (pq|rs) in chemist notation.
     ! For RHF (restricted_ref=.true.) cmo_l == cmo_o, so the single transform
     ! is correct for both same-spin and opposite-spin.
-    ! For UHF/ROHF (restricted_ref=.false.) the opposite-spin (ia|jb) needs
-    ! cmo_o on the ket pair; this path handles same-spin only, and opposite-spin
-    ! is computed by the batched half-transform path in the caller.
     call cc_build_full_mo(nbf, nmo, cmo_l, cmo_l, g, eri_mo)
 
     if (same_spin) then
@@ -292,12 +323,6 @@ contains
     end if
 
     if (do_opposite) then
-      if (.not. restricted_ref) then
-        ! UHF/ROHF opposite-spin is computed by the batched path in the caller.
-        ! This guard exists because cc_build_full_mo with cmo_l on all four
-        ! indices is incorrect for opposite-spin when cmo_l != cmo_o.
-        ok = -1; return
-      end if
       !$omp parallel do collapse(2) private(i,a,j,b,num,denom) &
       !$omp   schedule(dynamic,1) reduction(+:e_opp)
       do b = 1, nvir_o

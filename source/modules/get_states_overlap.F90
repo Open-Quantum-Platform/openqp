@@ -437,19 +437,29 @@ contains
           end do
         else
           ! LU factorisation failed (singular or rank-deficient S_occ).
-          ! Fall back to explicit cofactor expansion via tlf_exp (case-1 path).
-          ! This handles rank noca-1 matrices where cofactors are nonzero
-          ! (reviewer's standalone test: max|s_ij| = 0.25 for a rank-3 case).
+          ! Fall back to exact cofactor expansion via comp_det.
+          ! tlf_exp(itype=11) uses a diagonal-dominance approximation that is
+          ! wrong for rank-deficient matrices.  Instead compute the cofactor
+          ! C(i1,i2) = (-1)^(i1+i2) * det(S_occ with row i2, col i1 removed)
+          ! directly as the determinant of the (noca-1)x(noca-1) minor.
           block
-            real(kind=dp) :: precomp
-            precomp = 1.0_dp
-            do j = 1, noca
-              precomp = precomp * s_mo(j,j)
-            end do
+            real(kind=dp) :: minor(noca-1, noca-1)
+            integer :: r, c, rr, cc
             do i1 = 1, noca
               do i2 = 1, noca
-                call tlf_exp(s_ij(i1,i2), 11, i1, i2, s_mo, precomp, noca, nbf)
-                if (i1 /= i2) s_ij(i1,i2) = -s_ij(i1,i2)
+                rr = 0
+                do r = 1, noca
+                  if (r == i2) cycle
+                  rr = rr + 1
+                  cc = 0
+                  do c = 1, noca
+                    if (c == i1) cycle
+                    cc = cc + 1
+                    minor(rr, cc) = s_mo(r, c)
+                  end do
+                end do
+                s_ij(i1,i2) = comp_det(minor, noca-1)
+                if (mod(i1+i2, 2) /= 0) s_ij(i1,i2) = -s_ij(i1,i2)
               end do
             end do
           end block

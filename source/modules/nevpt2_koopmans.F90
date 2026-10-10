@@ -65,7 +65,7 @@ module nevpt2_koopmans_mod
   integer, parameter :: dp = c_double
 
   public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
-  public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27
+  public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
 
 contains
 
@@ -1313,6 +1313,41 @@ contains
       hdm1(a + a*n) = hdm1(a + a*n) + 2.0_dp
     end do
   end subroutine nevpt2_hdm1
+
+  subroutine nevpt2_hdm2(nact, dm1, dm2, hdm2) bind(C, name="nevpt2_hdm2")
+    integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: dm1(0:*), dm2(0:*)
+    real(dp), intent(inout) :: hdm2(0:*)
+    integer :: n, i, j, k, l
+    n = int(nact)
+    if (n <= 0) return
+    !$omp parallel do collapse(2) default(none) shared(n, dm1, dm2, hdm2) private(i,j,k,l)
+    do j = 0, n - 1
+      do i = 0, n - 1
+        do l = 0, n - 1
+          do k = 0, n - 1
+            hdm2(((i*n + j)*n + k)*n + l) = dm2(((k*n + i)*n + l)*n + j)
+            if (j == k) then
+              hdm2(((i*n + j)*n + k)*n + l) = hdm2(((i*n + j)*n + k)*n + l) + dm1(l*n + i)
+            end if
+            if (i == k) then
+              hdm2(((i*n + j)*n + k)*n + l) = hdm2(((i*n + j)*n + k)*n + l) - 2.0_dp * dm1(l*n + j)
+            end if
+            if (j == l) then
+              hdm2(((i*n + j)*n + k)*n + l) = hdm2(((i*n + j)*n + k)*n + l) - 2.0_dp * dm1(k*n + i)
+            end if
+            if (i == l .and. j == k) then
+              hdm2(((i*n + j)*n + k)*n + l) = hdm2(((i*n + j)*n + k)*n + l) - 2.0_dp
+            end if
+            if (i == k .and. j == l) then
+              hdm2(((i*n + j)*n + k)*n + l) = hdm2(((i*n + j)*n + k)*n + l) + 4.0_dp
+            end if
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+  end subroutine nevpt2_hdm2
 
   subroutine nevpt2_a17(nact, h1e, h2e, dm2, dm3, a17) &
       bind(C, name="nevpt2_a17")

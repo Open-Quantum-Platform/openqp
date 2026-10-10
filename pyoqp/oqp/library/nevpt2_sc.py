@@ -264,7 +264,7 @@ def _lib_make_f3(ci, norb, det_list, h2e):
     dm3 = np.zeros(norb**6, dtype=np.float64)
     f3ca = np.zeros(norb**6, dtype=np.float64)
     f3ac = np.zeros(norb**6, dtype=np.float64)
-    lib.nevpt2_make_f3(
+    status = lib.nevpt2_make_f3(
         int(norb), int(dets.size),
         ffi.cast("int64_t *", dets.ctypes.data),
         ffi.cast("double *", civec.ctypes.data),
@@ -274,6 +274,8 @@ def _lib_make_f3(ci, norb, det_list, h2e):
         ffi.cast("double *", dm3.ctypes.data),
         ffi.cast("double *", f3ca.ctypes.data),
         ffi.cast("double *", f3ac.ctypes.data))
+    if int(status) != 0:
+        return None
     dm1 = dm1.reshape(norb, norb)
     dm2 = dm2.reshape(norb, norb, norb, norb)
     dm3 = dm3.reshape(norb, norb, norb, norb, norb, norb)
@@ -496,6 +498,19 @@ def _hdm1(dm1):
 
 
 def _hdm2(dm1, dm2):
+    """The hole 2-RDM (Sij/Srs intermediate).
+
+    The liboqp engine (``nevpt2_hdm2``) writes the same result as n^4
+    parallel loops; the NumPy expression below stays as the fallback."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_hdm2"):
+            n = int(dm1.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            out = np.zeros((n, n, n, n), dtype=np.float64)
+            lib.nevpt2_hdm2(n, cast(dm1), cast(dm2), cast(out))
+            return out
     delta = np.eye(dm2.shape[0])
     dm2 = _ein('ikjl->ijkl', dm2) - _ein('jk,il->ijkl', delta, dm1)
     return _ein('klij->ijkl', dm2) \

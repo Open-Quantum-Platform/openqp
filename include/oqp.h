@@ -542,6 +542,7 @@ void nevpt2_a13(int32_t nact, const double *h1e, const double *h2e,
 /* Remaining Koopmans intermediates: hdm1 (hole 1-RDM), a17/a19/a23/a25
  * (Si/Sr/Sij/Srs intermediates), a3 (Sijr), k27 (Srsi). */
 void nevpt2_hdm1(int32_t nact, const double *dm1, double *hdm1);
+void nevpt2_hdm2(int32_t nact, const double *dm1, const double *dm2, double *hdm2);
 void nevpt2_a17(int32_t nact, const double *h1e, const double *h2e,
     const double *dm2, const double *dm3, double *a17);
 void nevpt2_a19(int32_t nact, const double *h1e, const double *h2e,

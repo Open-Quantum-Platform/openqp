@@ -130,11 +130,14 @@ contains
             ! wmat(tu, bra=row) += E_tu(bra=row, ket=col) * civec(ket=col)
             ! The dense kernel casscf_hess_wmat computes the same contraction:
             !   wmat(tu, a) = (E_tu * civec)(a) = sum_b E_tu(a,b) * civec(b)
-            ! Each (tu,row) slot is written by exactly one thread (the owner of
-            ! the bra index row's column), so no atomic needed.
+            ! Different (col) values can collide on the same (tu,row) slot
+            ! because separate determinants can reach the same target determinant
+            ! via the same excitation operator.  Protect with atomic update.
+            !$omp atomic update
             wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) = &
                 wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) &
                 + real(phase_u * phase_t, dp) * civec(col)
+            !$omp end atomic
           end do
         end do
       end do
