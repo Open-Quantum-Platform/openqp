@@ -7422,6 +7422,10 @@ def resolve_hessian_type(config: dict[str, Any],
         blockers.append("fractional occupations (pfon)")
     if _is_true(_get(config, "hess", "symmetry_unique", False)):
         blockers.append("hess.symmetry_unique (numerical-only option)")
+    # Only the finite-difference driver reads cached displacement gradients;
+    # the analytic kernel would silently ignore a restart request.
+    if _is_true(_get(config, "hess", "restart", False)):
+        blockers.append("hess.restart (numerical-only option)")
     max_l = _basis_max_angular_momentum(config, input_dir)
     if max_l is None:
         blockers.append("basis angular momentum could not be inspected")

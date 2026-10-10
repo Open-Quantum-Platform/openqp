@@ -90,6 +90,19 @@ class CustomBasisHessianCheck(unittest.TestCase):
             # without the input directory the file cannot be found: numerical
             self.assertEqual(self.checker.resolve_hessian_type(cfg)[0], "numerical")
 
+    def test_auto_keeps_a_restart_request_on_the_numerical_hessian(self):
+        # hess.restart resumes cached finite-difference gradients; only the
+        # numerical driver reads them, so auto must not switch to analytic.
+        with tempfile.TemporaryDirectory() as tmp:
+            write_basis(tmp, "spd.json", 2)
+            cfg = config("file:spd.json", "auto")
+            cfg["hess"]["restart"] = True
+            kind, reason = self.checker.resolve_hessian_type(cfg, tmp)
+            self.assertEqual(kind, "numerical")
+            self.assertIn("hess.restart", reason)
+            cfg["hess"]["restart"] = False
+            self.assertEqual(self.checker.resolve_hessian_type(cfg, tmp)[0], "analytical")
+
     def test_explicit_analytical_rejects_g_functions_in_a_custom_basis(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_basis(tmp, "spdfg.json", 4)
