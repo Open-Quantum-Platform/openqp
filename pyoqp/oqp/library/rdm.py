@@ -116,7 +116,8 @@ def _lib_rdm2_spatial(coeff, dets, norb):
         int(norb), int(det_arr.size),
         ffi.cast("int64_t *", det_arr.ctypes.data),
         ffi.cast("double *", civec.ctypes.data),
-        cap, ffi.cast("double *", out.ctypes.data), 0)
+        cap, ffi.cast("double *", out.ctypes.data),
+        _rdm_lib_threads())
     if int(info) != 0:
         return None
     return out

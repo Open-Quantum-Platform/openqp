@@ -315,6 +315,20 @@ def _f3ca_f3ac(h2e, dm4):
     return f3ca, f3ac
 
 
+def _fold_h1e(h1e, h2e):
+    """Fold the two-electron trace into the one-body Hamiltonian.
+
+    ``h1e_folded[m,n] = h1e[m,n] - sum_j h2e[m,j,j,n]``
+
+    Several NEVPT2 intermediates (a17, a19) contract this folded h1e rather
+    than the bare one-body Hamiltonian, because the direct-Coulomb hole
+    potential is absorbed into the one-particle operator.  The NumPy reference
+    applies the fold inline; this helper makes it available to the Python
+    wrapper so that the Fortran kernel also receives the correct argument.
+    """
+    return h1e - np.einsum('mjjn->mn', h2e, optimize='optimal')
+
+
 def _a16(h1e, h2e, dm3, f3ca, f3ac):
     """The a16 intermediate (Sr subspace).
 
@@ -422,20 +436,21 @@ def _a17(h1e, h2e, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a17"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
+            h1e_folded = _fold_h1e(h1e, h2e)
+            h1e_folded_c = np.ascontiguousarray(h1e_folded)
             h2e_c = np.ascontiguousarray(h2e)
             dm2_c = np.ascontiguousarray(dm2)
             dm3_c = np.ascontiguousarray(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a17(n,
-                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h1e_folded_c.ctypes.data),
                 ffi.cast("double *", h2e_c.ctypes.data),
                 ffi.cast("double *", dm2_c.ctypes.data),
                 ffi.cast("double *", dm3_c.ctypes.data),
                 ffi.cast("double *", out.ctypes.data))
             return out
-    h1e = h1e - _ein('mjjn->mn', h2e)
-    return -_ein('pi,cabi->abcp', h1e, dm2) \
+    h1e_folded = _fold_h1e(h1e, h2e)
+    return -_ein('pi,cabi->abcp', h1e_folded, dm2) \
         - _ein('kpij,cabjki->abcp', h2e, dm3)
 
 
@@ -449,20 +464,21 @@ def _a19(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a19"):
             n = int(h1e.shape[0])
-            h1e_c = np.ascontiguousarray(h1e)
+            h1e_folded = _fold_h1e(h1e, h2e)
+            h1e_folded_c = np.ascontiguousarray(h1e_folded)
             h2e_c = np.ascontiguousarray(h2e)
             dm1_c = np.ascontiguousarray(dm1)
             dm2_c = np.ascontiguousarray(dm2)
             out = np.zeros((n, n), dtype=np.float64)
             lib.nevpt2_a19(n,
-                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h1e_folded_c.ctypes.data),
                 ffi.cast("double *", h2e_c.ctypes.data),
                 ffi.cast("double *", dm1_c.ctypes.data),
                 ffi.cast("double *", dm2_c.ctypes.data),
                 ffi.cast("double *", out.ctypes.data))
             return out
-    h1e = h1e - _ein('mjjn->mn', h2e)
-    return -_ein('pi,ai->ap', h1e, dm1) \
+    h1e_folded = _fold_h1e(h1e, h2e)
+    return -_ein('pi,ai->ap', h1e_folded, dm1) \
         - _ein('kpij,ajki->ap', h2e, dm2)
 
 
