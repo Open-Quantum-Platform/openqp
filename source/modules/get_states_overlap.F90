@@ -440,7 +440,7 @@ contains
           ! Fall back to exact cofactor expansion via comp_det.
           ! tlf_exp(itype=11) uses a diagonal-dominance approximation that is
           ! wrong for rank-deficient matrices.  Instead compute the cofactor
-          ! C(i1,i2) = (-1)^(i1+i2) * det(S_occ with row i2, col i1 removed)
+          ! C(i1,i2) = (-1)^(i1+i2) * det(S_occ with row i1, col i2 removed)
           ! directly as the determinant of the (noca-1)x(noca-1) minor.
           block
             real(kind=dp) :: minor(noca-1, noca-1)
@@ -449,11 +449,11 @@ contains
               do i2 = 1, noca
                 rr = 0
                 do r = 1, noca
-                  if (r == i2) cycle
+                  if (r == i1) cycle
                   rr = rr + 1
                   cc = 0
                   do c = 1, noca
-                    if (c == i1) cycle
+                    if (c == i2) cycle
                     cc = cc + 1
                     minor(rr, cc) = s_mo(r, c)
                   end do
