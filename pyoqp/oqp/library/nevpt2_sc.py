@@ -896,10 +896,15 @@ def _sijrs_lib(e_core, e_virt, g_cvcv):
         return None, None
     nc = int(len(e_core))
     nv = int(len(e_virt))
-    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    g_cvcv_c = np.ascontiguousarray(g_cvcv)
+    e_core_c = np.ascontiguousarray(e_core)
+    e_virt_c = np.ascontiguousarray(e_virt)
     norm_ptr = ffi.new("double *")
     energy_ptr = ffi.new("double *")
-    lib.nevpt2_sijrs(nc, nv, cast(g_cvcv), cast(e_core), cast(e_virt),
+    lib.nevpt2_sijrs(nc, nv,
+                     ffi.cast("double *", g_cvcv_c.ctypes.data),
+                     ffi.cast("double *", e_core_c.ctypes.data),
+                     ffi.cast("double *", e_virt_c.ctypes.data),
                      norm_ptr, energy_ptr)
     return float(norm_ptr[0]), float(energy_ptr[0])
 
@@ -917,13 +922,16 @@ def _srs_lib(h2e_v, rm2, a7, e_virt):
     nvirt = int(len(e_virt))
     if nvirt <= 0:
         return np.zeros((0, 0)), np.zeros((0, 0))
-    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    h2e_v_c = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
+    rm2_c = np.ascontiguousarray(rm2)
+    a7_c = np.ascontiguousarray(a7)
     nv2 = nvirt * nvirt
     norm_ptr = ffi.new("double[%d]" % nv2)
     energy_ptr = ffi.new("double[%d]" % nv2)
-    # h2e_v has phys'd layout [nvirt, nvirt, nact, nact] from _blocks;
-    # Fortran expects [nvirt, nact, nvirt, nact] (undo phys)
-    lib.nevpt2_srs(nact, nvirt, cast(h2e_v.transpose(0, 2, 1, 3)), cast(rm2), cast(a7),
+    lib.nevpt2_srs(nact, nvirt,
+                   ffi.cast("double *", h2e_v_c.ctypes.data),
+                   ffi.cast("double *", rm2_c.ctypes.data),
+                   ffi.cast("double *", a7_c.ctypes.data),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
     h = np.frombuffer(ffi.buffer(energy_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
@@ -943,13 +951,16 @@ def _sij_lib(h2e_v, hdm2, a9, e_core):
     ncore = int(len(e_core))
     if ncore <= 0:
         return np.zeros((0, 0)), np.zeros((0, 0))
-    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    h2e_v_c = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
+    hdm2_c = np.ascontiguousarray(hdm2)
+    a9_c = np.ascontiguousarray(a9)
     nc2 = ncore * ncore
     norm_ptr = ffi.new("double[%d]" % nc2)
     energy_ptr = ffi.new("double[%d]" % nc2)
-    # h2e_v has phys'd layout [nact, nact, ncore, ncore] from _blocks;
-    # Fortran expects [nact, ncore, nact, ncore] (undo phys)
-    lib.nevpt2_sij(nact, ncore, cast(h2e_v.transpose(0, 2, 1, 3)), cast(hdm2), cast(a9),
+    lib.nevpt2_sij(nact, ncore,
+                   ffi.cast("double *", h2e_v_c.ctypes.data),
+                   ffi.cast("double *", hdm2_c.ctypes.data),
+                   ffi.cast("double *", a9_c.ctypes.data),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
     h = np.frombuffer(ffi.buffer(energy_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)

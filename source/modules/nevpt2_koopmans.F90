@@ -1652,11 +1652,11 @@ subroutine nevpt2_srs(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
       do p = 0, nact - 1
         do q = 0, nact - 1
           ! h2e_v[r, s, q, p]  C-order: ((r*nact + s)*nvirt + q)*nact + p
-          h2e_rsqp = h2e_v(((r*nact + s)*nvirt + q)*nact + p)
+          h2e_rsqp = h2e_v(((r*nact + q)*nvirt + s)*nact + p)
           do a = 0, nvirt - 1
             do b = 0, nvirt - 1
               ! h2e_v[r, s, b, a]  C-order
-              h2e_rsba = h2e_v(((r*nact + s)*nvirt + b)*nact + a)
+              h2e_rsba = h2e_v(((r*nact + b)*nvirt + s)*nact + a)
               ! rm2[p, q, b, a]  C-order: (((p*nact + q)*nact + b)*nact + a
               rm2_pqba = rm2(((p*nact + q)*nact + b)*nact + a)
               ! a7[p, q, a, b]  C-order
@@ -1711,11 +1711,11 @@ subroutine nevpt2_sij(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
       do p = 0, nact - 1
         do q = 0, nact - 1
           ! h2e_v[q, p, i, j]  C-order: (((q*ncore + p)*nact + i)*ncore + j)
-          h2e_qpij = h2e_v((((q*ncore + p)*nact + i)*ncore + j))
+          h2e_qpij = h2e_v((((q*ncore + i)*nact + p)*ncore + j))
           do a = 0, nact - 1
             do b = 0, nact - 1
               ! h2e_v[b, a, i, j]  C-order
-              h2e_baij = h2e_v((((b*ncore + a)*nact + i)*ncore + j))
+              h2e_baij = h2e_v((((b*ncore + i)*nact + a)*ncore + j))
               ! hdm2[p, q, a, b]  C-order: (((p*nact + q)*nact + a)*nact + b)
               hdm2_pqab = hdm2((((p*nact + q)*nact + a)*nact + b))
               ! a9[p, q, a, b]  C-order

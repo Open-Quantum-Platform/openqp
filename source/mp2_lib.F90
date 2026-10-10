@@ -290,7 +290,7 @@ contains
         end do
         !$omp end parallel do
         deallocate(eri_mo)
-        ok = 0
+        ok = -1
       end if
       return
     end if
