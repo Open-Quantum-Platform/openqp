@@ -482,7 +482,7 @@ void casscf_exc_stack_apply_wmat(int32_t nact, int64_t ndet,
    contract to casscf_hess_amp but skips the dense O(nact^2 * ndet^2) stack.
    `dets`, `skeys`, `sperm` are the determinant list in CI order and its
    sorted-key workspace (same as casscf_anhess_init allocates internally). */
-void casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
+int64_t casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
     const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
     const double *fder, const double *gder, const double *wmat,
     const double *vecs, double *amp);

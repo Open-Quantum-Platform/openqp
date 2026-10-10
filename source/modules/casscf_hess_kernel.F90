@@ -148,7 +148,7 @@ contains
     nd = int(ndet)
     na2 = na * na
     na4 = na2 * na2
-    if (np <= 0 .or. nd <= 0 .or. na <= 0) return
+    if (np <= 0 .or. nd <= 0 .or. na <= 0) then; status = -1_i8; return; end if
 
     ! Chunk the pair index so the x buffer stays inside its budget, but never
     ! fewer than one pair per chunk.
@@ -265,14 +265,15 @@ contains
   !> @param[in]  wmat   E_tu applied to the reference CI vector, C-order [nact,nact,ndet]
   !> @param[in]  vecs   active-Hamiltonian eigenvectors, C-order [ndet,ndet]
   !> @param[out] amp    projected amplitudes, C-order [npar,ndet]
-  subroutine casscf_hess_amp_mf(nact, ndet, npar, dets, skeys, sperm, &
+  function casscf_hess_amp_mf(nact, ndet, npar, dets, skeys, sperm, &
                                 fder, gder, wmat, vecs, amp) &
-      bind(C, name="casscf_hess_amp_mf")
+      result(status) bind(C, name="casscf_hess_amp_mf")
     integer(c_int32_t), value :: nact, npar
     integer(i8), value :: ndet
     integer(i8), intent(in) :: dets(0:*), skeys(0:*), sperm(0:*)
     real(dp), intent(in) :: fder(0:*), gder(0:*), wmat(0:*), vecs(0:*)
     real(dp), intent(inout) :: amp(0:*)
+    integer(c_int64_t) :: status
 
     integer :: na, na2, na4, np, nd, nb, ncols, kbase, nchunk
     integer :: chunk, kk, t, u, w, ierr
@@ -285,7 +286,7 @@ contains
     nd = int(ndet)
     na2 = na * na
     na4 = na2 * na2
-    if (np <= 0 .or. nd <= 0 .or. na <= 0) return
+    if (np <= 0 .or. nd <= 0 .or. na <= 0) then; status = -1_i8; return; end if
 
     ! Chunk the pair index so the x buffer stays inside its budget.
     need = int(na2, i8) * int(nd, i8)
@@ -293,11 +294,11 @@ contains
     nchunk = (np + nb - 1) / nb
 
     allocate(sigma(0:nd-1, 0:nb-1), stat=ierr)
-    if (ierr /= 0) return
+    if (ierr /= 0) then; status = -1_i8; return; end if
     allocate(xbuf(0:need*int(nb, i8) - 1_i8), stat=ierr)
-    if (ierr /= 0) return
+    if (ierr /= 0) then; status = -1_i8; return; end if
     allocate(gtr(0:int(na2, i8)*int(nb, i8) - 1_i8), stat=ierr)
-    if (ierr /= 0) return
+    if (ierr /= 0) then; status = -1_i8; return; end if
 
     do chunk = 0, nchunk - 1
       kbase = chunk * nb
@@ -341,8 +342,9 @@ contains
                  0.0_dp, amp(int(kbase, i8)*int(nd, i8)), nd)
     end do
 
+    status = 0_i8
     deallocate(sigma, xbuf, gtr)
-  end subroutine casscf_hess_amp_mf
+  end function casscf_hess_amp_mf
 
 
   !> On-the-fly sigma += 0.5 * stack^T * x (step 4), enumerating every non-zero

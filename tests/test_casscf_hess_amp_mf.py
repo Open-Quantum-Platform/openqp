@@ -59,7 +59,7 @@ def _mf_hess_amp(dets, f_der, g_der, wmat, vecs):
     vc = _as_f64c(vecs)
 
     amp = np.zeros((npar, ndet), dtype=np.float64)
-    lib.casscf_hess_amp_mf(
+    status = lib.casscf_hess_amp_mf(
         nact, ndet, npar,
         ffi.cast("int64_t *", det_arr.ctypes.data),
         ffi.cast("int64_t *", skeys.ctypes.data),
@@ -70,6 +70,7 @@ def _mf_hess_amp(dets, f_der, g_der, wmat, vecs):
         ffi.cast("double *", vc.ctypes.data),
         ffi.cast("double *", amp.ctypes.data),
     )
+    assert status == 0, f"casscf_hess_amp_mf returned {status}"
     return amp
 
 

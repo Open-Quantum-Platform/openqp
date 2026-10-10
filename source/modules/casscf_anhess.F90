@@ -429,10 +429,14 @@ contains
       if (ctx%use_mf) then
         call casscf_exc_stack_apply_wmat(int(na, c_int32_t), nd, dets, &
                                          ctx%skeys, ctx%sperm, ctx%cvec, ctx%wmat)
-        call casscf_hess_amp_mf(int(na, c_int32_t), nd, int(npar, c_int32_t), &
+        rc = casscf_hess_amp_mf(int(na, c_int32_t), nd, int(npar, c_int32_t), &
                                 dets, ctx%skeys, ctx%sperm, &
                                 ctx%fder, ctx%gder, ctx%wmat, ctx%vt, &
                                 ctx%amp)
+        if (rc /= 0_i8) then
+          status = CAS_HESS_ERR_ALLOC
+          return
+        end if
       else
         call casscf_hess_wmat(int(na, c_int32_t), nd, ctx%stack, ctx%cvec, ctx%wmat)
         call casscf_hess_amp(int(na, c_int32_t), nd, int(npar, c_int32_t), &

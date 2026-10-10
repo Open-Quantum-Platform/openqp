@@ -103,41 +103,39 @@ contains
     ! Zero output (before any early return so wmat is always safe)
     wmat(0:n2*ndet - 1_i8) = 0.0_dp
 
+    ! Bra-side loop: iterate over bra (row), enumerate de-excitations to find
+    ! ket (col).  Each (tu,row) slot is written by exactly one thread (the owner
+    ! of that row), so no atomic update is needed.
     !$omp parallel do default(shared) schedule(static) if(ndet >= 64_i8) &
-    !$omp   private(col, det, ci, ioff, off, u, ubit, phase_u, det_u, &
-    !$omp           t, tbit, phase_t, det_tu, row)
-    do col = 0_i8, ndet - 1_i8
-      ci = civec(col)
-      if (ci == 0.0_dp) cycle
-      det = dets(col)
+    !$omp   private(row, det, ioff, off, t, tbit, phase_t, det_t, &
+    !$omp           u, ubit, phase_u, det_col, col_sorted, col)
+    do row = 0_i8, ndet - 1_i8
+      det = dets(row)
       do ioff = 1, 2
         off = offs(ioff)
-        do u = 0, na - 1
-          ubit = ishft(1_i8, u + off)
-          if (iand(det, ubit) == 0_i8) cycle
-          phase_u = 1
-          if (mod(popcnt(iand(det, ubit - 1_i8)), 2) /= 0) phase_u = -1
-          det_u = ieor(det, ubit)
-          do t = 0, na - 1
-            tbit = ishft(1_i8, t + off)
-            if (iand(det_u, tbit) /= 0_i8) cycle
-            phase_t = 1
-            if (mod(popcnt(iand(det_u, tbit - 1_i8)), 2) /= 0) phase_t = -1
-            det_tu = ior(det_u, tbit)
-            call mf_bsearch(ndet, skeys, det_tu, row)
-            if (row < 0_i8) cycle
-            row = sperm(row)
+        ! Annihilate t from row: t is the creation index of E_tu
+        do t = 0, na - 1
+          tbit = ishft(1_i8, t + off)
+          if (iand(det, tbit) == 0_i8) cycle
+          phase_t = 1
+          if (mod(popcnt(iand(det, tbit - 1_i8)), 2) /= 0) phase_t = -1
+          det_t = ieor(det, tbit)
+          ! Create u in det_t: u is the annihilation index of E_tu
+          do u = 0, na - 1
+            ubit = ishft(1_i8, u + off)
+            if (iand(det_t, ubit) /= 0_i8) cycle
+            phase_u = 1
+            if (mod(popcnt(iand(det_t, ubit - 1_i8)), 2) /= 0) phase_u = -1
+            ! |col> = E_ut|row> = +/- a^+_u a_t |row>
+            det_col = ior(det_t, ubit)
+            call mf_bsearch(ndet, skeys, det_col, col_sorted)
+            if (col_sorted < 0_i8) cycle
+            col = sperm(col_sorted)
             ! wmat(tu, bra=row) += E_tu(bra=row, ket=col) * civec(ket=col)
-            ! The dense kernel casscf_hess_wmat computes the same contraction:
-            !   wmat(tu, a) = (E_tu * civec)(a) = sum_b E_tu(a,b) * civec(b)
-            ! Different (col) values can collide on the same (tu,row) slot
-            ! because separate determinants can reach the same target determinant
-            ! via the same excitation operator.  Protect with atomic update.
-            !$omp atomic update
+            ! Each thread owns its rows, so no atomic needed.
             wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) = &
                 wmat((int(t, i8)*int(na, i8) + int(u, i8))*ndet + row) &
-                + real(phase_u * phase_t, dp) * civec(col)
-            !$omp end atomic
+                + real(phase_t * phase_u, dp) * civec(col)
           end do
         end do
       end do
