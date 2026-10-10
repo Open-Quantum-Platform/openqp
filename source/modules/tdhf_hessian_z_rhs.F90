@@ -269,12 +269,13 @@ contains
   !> term; one MPI rank (grd2_operator_driver).
   !>
   !> Memory: besides the caller's result, the Cartesian operator is held for
-  !> one block of coordinates at a time.  The block holds as many coordinates
-  !> (whole atoms) as fit OQP_HESS_OPERATOR_MEM_MB (default 4096 MiB), at least
-  !> one atom, so small and medium systems take one traversal and a large one
-  !> takes ceil(3N/block) traversals instead of an nwork**2*3N allocation.
-  !> grd2_operator_driver separately caps its thread-private copies of the
-  !> block with OQP_GRD2_OPERATOR_MEM_MB.
+  !> one block of coordinates at a time.  The block holds as many Cartesian
+  !> coordinates as fit OQP_HESS_OPERATOR_MEM_MB (default 4096 MiB), at least
+  !> one, so small and medium systems take one traversal and a large one takes
+  !> ceil(3N/block) traversals instead of an nwork**2*3N allocation.  One
+  !> coordinate (nwork**2 doubles) is the smallest unit; it is always far
+  !> below the caller's nbf**2*3N result.  grd2_operator_driver separately
+  !> caps its thread-private copies of the block with OQP_GRD2_OPERATOR_MEM_MB.
   subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result,coulscale)
     use types, only: information
     use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
@@ -315,8 +316,7 @@ contains
     end if
     budget=budget*1024_8*1024_8
     per_coord=8_8*int(nwork,8)*int(nwork,8)
-    nblock=int(min(int(ncart,8),max(3_8,budget/per_coord)))
-    nblock=max(3,3*(nblock/3))
+    nblock=int(min(int(ncart,8),max(1_8,budget/per_coord)))
     if(nblock<ncart) then
       inquire(unit=iw,opened=opened)
       if(opened) write(iw,'(6x,"derivative operator: ",I6," coordinates in blocks of",I6, &

@@ -3,8 +3,8 @@
 eri_derivative_operator_mo holds the Cartesian operator for one block of
 nuclear coordinates at a time; the block size follows
 OQP_HESS_OPERATOR_MEM_MB.  The default budget keeps a small molecule in one
-block, and OQP_HESS_OPERATOR_MEM_MB=0 forces one atom per block, i.e. one
-derivative-ERI traversal per atom.  Both must give the same analytic RHF and
+block, and OQP_HESS_OPERATOR_MEM_MB=0 forces one Cartesian coordinate per
+block, i.e. one derivative-ERI traversal per coordinate.  Both must give the same analytic RHF and
 UHF/ROHF Hessians (the open-shell paths build J and K operators separately),
 with one and with two OpenMP threads.  The blocked run must report its block
 layout in the calculation log, and no run may leave a stray fort.N file (the
@@ -97,7 +97,7 @@ def _hessian(tmp, case, threads, budget):
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class OperatorCoordinateBlocks(unittest.TestCase):
-    def test_atom_blocks_match_one_block(self):
+    def test_coordinate_blocks_match_one_block(self):
         with tempfile.TemporaryDirectory() as tmp:
             for case in CASES:
                 ref, ref_log = _hessian(tmp, case, 1, None)
@@ -106,7 +106,7 @@ class OperatorCoordinateBlocks(unittest.TestCase):
                 for threads in (1, 2):
                     with self.subTest(case=case, threads=threads):
                         h, log = _hessian(tmp, case, threads, 0)
-                        self.assertIn("derivative operator:      9 coordinates in blocks of     3", log)
+                        self.assertIn("derivative operator:      9 coordinates in blocks of     1", log)
                         self.assertLess(np.abs(h - ref).max(), 1.0e-8)
 
 
