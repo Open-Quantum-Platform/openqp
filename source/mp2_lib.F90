@@ -136,6 +136,7 @@ contains
     e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab + e_s
   end subroutine mp2_correlation
 
+
   !###########################################################################
   ! O(N⁵) path — hybrid full-MO / batched half-transform
   !###########################################################################
@@ -176,9 +177,11 @@ contains
     integer(8) :: packed_len
     integer :: nmo, ok
     logical :: do_full
+    logical :: same_spin_eff
     real(kind=dp), allocatable, target :: g(:)
 
     success = .false.
+    same_spin_eff = same_spin
     nmo = nbf
     packed_len = cc_packed_length(nbf)
 
@@ -216,6 +219,8 @@ contains
           restricted_ref, same_spin, do_opposite, e_same, e_opp, ok)
       if (ok == 0) then
         deallocate(g); success = .true.; return
+      else if (ok == -2) then
+        same_spin_eff = .false.  ! full path computed same-spin
       end if
     end if
 
@@ -224,10 +229,11 @@ contains
         cmo_l, e_l, nocc_l, nvir_l, &
         cmo_s, e_s, nocc_s, nvir_s, &
         cmo_o, e_o, nocc_o, nvir_o, &
-        same_spin, do_opposite, e_same, e_opp, success)
+        same_spin_eff, do_opposite, e_same, e_opp, success)
     deallocate(g)
 
   end subroutine mp2_corr_n5
+
 
   !> @brief Full MO transform path (PySCF-style).
   !>
@@ -256,20 +262,43 @@ contains
     integer :: i, a, j, b
     real(kind=dp) :: num, denom
 
-    ok = -1
+    ok = -2
     allocate(eri_mo(nmo,nmo,nmo,nmo), source=0.0_dp, stat=ok)
     if (ok /= 0) return
 
     ! UHF/ROHF opposite-spin guard.
     ! The full-MO transform uses cmo_l on all four indices; for UHF/ROHF
     ! where cmo_l /= cmo_o this is incorrect for opposite-spin (ia|jb).
-    ! Return without accumulating anything; the caller falls through to
-    ! the batched half-transform path, which handles both same-spin and
-    ! opposite-spin correctly.
+    ! When opposite-spin is requested for an unrestricted reference, return
+    ! immediately after computing same-spin (if needed) so the caller falls
+    ! through to the batched half-transform path, which handles opposite-spin
+    ! without double-counting same-spin.
     if (do_opposite .and. .not. restricted_ref) then
-      ok = -1
+      if (same_spin) then
+        call cc_build_full_mo(nbf, nmo, cmo_l, cmo_l, g, eri_mo)
+        !$omp parallel do collapse(2) private(i,a,j,b,num,denom) &
+        !$omp   schedule(dynamic,1) reduction(+:e_same)
+        do b = 1, nvir_s
+          do a = 1, nvir_l
+            do j = 1, nocc_s
+              do i = 1, nocc_l
+                denom = e_l(i) + e_s(j) - e_l(nocc_l+a) - e_s(nocc_s+b)
+                if (abs(denom) < 1.0e-10_dp) cycle
+                ! (ia|jb) - (ib|ja)
+                num = eri_mo(i, nocc_l+a, j, nocc_s+b) &
+                    - eri_mo(i, nocc_s+b, j, nocc_l+a)
+                e_same = e_same + 0.25_dp * num * num / denom
+              end do
+            end do
+          end do
+        end do
+        !$omp end parallel do
+        deallocate(eri_mo)
+        ok = -2
+      end if
       return
     end if
+
     ! Normal path: RHF, or same-spin-only, or no opposite-spin.
     ! cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
     ! eri_mo(p,q,r,s) = (pq|rs) in chemist notation.
@@ -319,6 +348,7 @@ contains
     deallocate(eri_mo)
     ok = 0
   end subroutine mp2_corr_n5_full
+
 
   !> @brief Memory-save batched half-transform path (same as the earlier
   !>        implementation, retained for large bases).
@@ -429,6 +459,7 @@ contains
     success = .true.
   end subroutine mp2_corr_n5_batched
 
+
   subroutine mp2_n5_second_half(nbf, npair, nov_l, &
       nocc_l, nvir_l, nocc_s, nvir_s, &
       cmo_l, cmo_s, half, prow, pcol, ovov)
@@ -462,6 +493,7 @@ contains
     !$omp end parallel do
     deallocate(e_mat, scr2, vv)
   end subroutine mp2_n5_second_half
+
 
   subroutine mp2_n5_opposite(nbf, npair, nov_l, &
       nocc_l, nvir_l, nocc_o, nvir_o, &
@@ -504,12 +536,14 @@ contains
     deallocate(e_mat, scr2, vv)
   end subroutine mp2_n5_opposite
 
+
   pure integer(8) function mp2_packed_idx(p, q) result(idx)
     integer, intent(in) :: p, q
     integer(8) :: hi, lo
     hi = int(max(p, q), 8); lo = int(min(p, q), 8)
     idx = hi * (hi - 1_8) / 2_8 + lo
   end function mp2_packed_idx
+
 
   !###########################################################################
   ! Original direct-J path (O(N⁶))
