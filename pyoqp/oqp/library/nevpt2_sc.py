@@ -326,15 +326,19 @@ def _a16(h1e, h2e, dm3, f3ca, f3ac):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a16"):
             n = int(h1e.shape[0])
-            h1 = _as_f64c(h1e)
-            g = _as_f64c(h2e)
-            d3 = _as_f64c(dm3)
-            ca = _as_f64c(f3ca)
-            ac = _as_f64c(f3ac)
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm3_c = np.ascontiguousarray(dm3)
+            f3ca_c = np.ascontiguousarray(f3ca)
+            f3ac_c = np.ascontiguousarray(f3ac)
             out = np.zeros((n,) * 6, dtype=np.float64)
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            lib.nevpt2_a16(n, cast(h1), cast(g), cast(d3), cast(ca), cast(ac),
-                           cast(out))
+            lib.nevpt2_a16(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", f3ca_c.ctypes.data),
+                ffi.cast("double *", f3ac_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     a16 = -_ein('ib,rpqiac->pqrabc', h1e, dm3)
     a16 += _ein('ia,rpqbic->pqrabc', h1e, dm3)
@@ -365,11 +369,21 @@ def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a22"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (h1e, h2e, dm2, dm3, f3ca, f3ac)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
+            f3ca_c = np.ascontiguousarray(f3ca)
+            f3ac_c = np.ascontiguousarray(f3ac)
             out = np.zeros((n,) * 6, dtype=np.float64)
-            lib.nevpt2_a22(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a22(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", f3ca_c.ctypes.data),
+                ffi.cast("double *", f3ac_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     a22 = -_ein('pb,kipjac->ijkabc', h1e, dm3)
     a22 -= _ein('pa,kibjpc->ijkabc', h1e, dm3)
@@ -408,10 +422,17 @@ def _a17(h1e, h2e, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a17"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm2, dm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a17(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a17(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     h1e = h1e - _ein('mjjn->mn', h2e)
     return -_ein('pi,cabi->abcp', h1e, dm2) \
@@ -428,10 +449,17 @@ def _a19(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a19"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
             out = np.zeros((n, n), dtype=np.float64)
-            lib.nevpt2_a19(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a19(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     h1e = h1e - _ein('mjjn->mn', h2e)
     return -_ein('pi,ai->ap', h1e, dm1) \
@@ -448,10 +476,19 @@ def _a23(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a23"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2, dm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a23(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a23(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     return -_ein('ip,caib->abcp', h1e, dm2) \
         - _ein('pijk,cajbik->abcp', h2e, dm3) \
@@ -469,10 +506,17 @@ def _a25(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a25"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
             out = np.zeros((n, n), dtype=np.float64)
-            lib.nevpt2_a25(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a25(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     return -_ein('pi,ai->ap', h1e, dm1) \
         - _ein('pijk,jaik->ap', h2e, dm2) \
@@ -490,9 +534,11 @@ def _hdm1(dm1):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm1"):
             n = int(dm1.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            dm1_c = np.ascontiguousarray(dm1)
             out = np.zeros((n, n), dtype=np.float64)
-            lib.nevpt2_hdm1(n, cast(dm1), cast(out))
+            lib.nevpt2_hdm1(n,
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     return 2.0 * np.eye(dm1.shape[0]) - dm1.transpose(1, 0)
 
@@ -507,9 +553,13 @@ def _hdm2(dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm2"):
             n = int(dm1.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
             out = np.zeros((n, n, n, n), dtype=np.float64)
-            lib.nevpt2_hdm2(n, cast(dm1), cast(dm2), cast(out))
+            lib.nevpt2_hdm2(n,
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     delta = np.eye(dm2.shape[0])
     dm2 = _ein('ikjl->ijkl', dm2) - _ein('jk,il->ijkl', delta, dm1)
@@ -535,11 +585,17 @@ def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_hdm3"):
             n = int(dm1.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (dm1, dm2, dm3, hdm2)]
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
+            hdm2_c = np.ascontiguousarray(hdm2)
             out = np.zeros((n,) * 6, dtype=np.float64)
-            lib.nevpt2_hdm3(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_hdm3(n,
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", hdm2_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     delta = np.eye(dm3.shape[0])
     return - _ein('pb,qrac->pqrabc', delta, hdm2) \
@@ -563,10 +619,19 @@ def _a3(h1e, h2e, dm1, dm2, hdm1):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a3"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2, hdm1)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
+            hdm1_c = np.ascontiguousarray(hdm1)
             out = np.zeros((n, n), dtype=np.float64)
-            lib.nevpt2_a3(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a3(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", hdm1_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     delta = np.eye(dm2.shape[0])
     return _ein('ia,ip->pa', h1e, hdm1) \
@@ -584,10 +649,17 @@ def _k27(h1e, h2e, dm1, dm2):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_k27"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a) for a in (h1e, h2e, dm1, dm2)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
             out = np.zeros((n, n), dtype=np.float64)
-            lib.nevpt2_k27(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_k27(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     return -_ein('ai,pi->pa', h1e, dm1) \
         - _ein('iajk,pkij->pa', h2e, dm2) \
@@ -605,13 +677,22 @@ def _a7(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a7"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (h1e, h2e, dm1, dm2, dm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
             rm2 = np.zeros((n,) * 4, dtype=np.float64)
-            a7 = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a7(n, *[cast(a) for a in ops], cast(rm2), cast(a7))
-            return rm2, a7
+            a7_out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a7(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", rm2.ctypes.data),
+                ffi.cast("double *", a7_out.ctypes.data))
+            return rm2, a7_out
     delta = np.eye(dm2.shape[0])
     rm2 = _ein('iljk->ijkl', dm2) - _ein('ik,jl->ijkl', dm1, delta)
     rm3 = _ein('injmkl->ijklmn', dm3) \
@@ -638,11 +719,17 @@ def _a9(h1e, h2e, hdm1, hdm2, hdm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a9"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (h1e, h2e, hdm2, hdm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            hdm2_c = np.ascontiguousarray(hdm2)
+            hdm3_c = np.ascontiguousarray(hdm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a9(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a9(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", hdm2_c.ctypes.data),
+                ffi.cast("double *", hdm3_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     a9 = _ein('ib,pqai->pqab', h1e, hdm2)
     a9 += _ein('ijib,pqaj->pqab', h2e, hdm2) * 2.0
@@ -667,11 +754,17 @@ def _a12(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a12"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (h1e, h2e, dm2, dm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a12(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a12(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     return _ein('ia,qpib->pqab', h1e, dm2) \
         - _ein('bi,qpai->pqab', h1e, dm2) \
@@ -692,11 +785,19 @@ def _a13(h1e, h2e, dm1, dm2, dm3):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a13"):
             n = int(h1e.shape[0])
-            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [_as_f64c(a)
-                   for a in (h1e, h2e, dm1, dm2, dm3)]
+            h1e_c = np.ascontiguousarray(h1e)
+            h2e_c = np.ascontiguousarray(h2e)
+            dm1_c = np.ascontiguousarray(dm1)
+            dm2_c = np.ascontiguousarray(dm2)
+            dm3_c = np.ascontiguousarray(dm3)
             out = np.zeros((n,) * 4, dtype=np.float64)
-            lib.nevpt2_a13(n, *[cast(a) for a in ops], cast(out))
+            lib.nevpt2_a13(n,
+                ffi.cast("double *", h1e_c.ctypes.data),
+                ffi.cast("double *", h2e_c.ctypes.data),
+                ffi.cast("double *", dm1_c.ctypes.data),
+                ffi.cast("double *", dm2_c.ctypes.data),
+                ffi.cast("double *", dm3_c.ctypes.data),
+                ffi.cast("double *", out.ctypes.data))
             return out
     delta = np.eye(dm3.shape[0])
     a13 = -_ein('ia,qbip->pqab', h1e, dm2)
