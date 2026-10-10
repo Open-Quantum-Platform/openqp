@@ -1653,8 +1653,8 @@ subroutine nevpt2_srs(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
         do q = 0, nact - 1
           ! h2e_v[r, s, q, p]  C-order: ((r*nact + s)*nvirt + q)*nact + p
           h2e_rsqp = h2e_v(((r*nact + q)*nvirt + s)*nact + p)
-          do a = 0, nvirt - 1
-            do b = 0, nvirt - 1
+          do a = 0, nact - 1
+            do b = 0, nact - 1
               ! h2e_v[r, s, b, a]  C-order
               h2e_rsba = h2e_v(((r*nact + b)*nvirt + s)*nact + a)
               ! rm2[p, q, b, a]  C-order: (((p*nact + q)*nact + b)*nact + a
