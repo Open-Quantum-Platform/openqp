@@ -755,6 +755,14 @@ def _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_core, f3=None):
 
 
 def _Sijrs(e_core, e_virt, g_cvcv):
+    """The (core,core;virt,virt) doubly-occupied→virtual SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_sijrs``) computes the same quadruple loop
+    as the pure-Python einsum path; the NumPy expression below stays as the
+    fallback."""
+    result = _sijrs_lib(e_core, e_virt, g_cvcv)
+    if result[0] is not None:
+        return result
     ncore = len(e_core)
     nvirt = len(e_virt)
     if ncore == 0 or nvirt == 0:
@@ -814,9 +822,18 @@ def _Srsi(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
 
 
 def _Srs(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt):
+    """The (virt,virt) virtual-virtual subspace SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_srs``) contracts rm2 and a7 from ``_a7``
+    with h2e_v in a single Fortran call; the NumPy fallback is below."""
     if len(e_virt) == 0:
         return 0.0, 0.0
     rm2, a7 = _a7(h1e, h2e, dm1, dm2, dm3)
+    result = _srs_lib(h2e_v, rm2, a7, e_virt)
+    if result[0] is not None:
+        norm, h = result
+        diff = e_virt[:, None] + e_virt[None, :]
+        return _norm_to_energy(norm, h, diff)
     norm = 0.5 * _ein('rsqp,rsba,pqba->rs', h2e_v, h2e_v, rm2)
     h = 0.5 * _ein('rsqp,rsba,pqab->rs', h2e_v, h2e_v, a7)
     diff = e_virt[:, None] + e_virt[None, :]
@@ -824,12 +841,21 @@ def _Srs(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt):
 
 
 def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
+    """The (core,core) core-core subspace SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_sij``) contracts hdm2 and a9 from the
+    Fortran intermediates with h2e_v; the NumPy fallback is below."""
     if len(e_core) == 0:
         return 0.0, 0.0
     hdm1 = _hdm1(dm1)
     hdm2 = _hdm2(dm1, dm2)
     hdm3 = _hdm3(dm1, dm2, dm3, hdm1, hdm2)
     a9 = _a9(h1e, h2e, hdm1, hdm2, hdm3)
+    result = _sij_lib(h2e_v, hdm2, a9, e_core)
+    if result[0] is not None:
+        norm, h = result
+        diff = e_core[:, None] + e_core[None, :]
+        return _norm_to_energy(norm, h, -diff)
     norm = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, hdm2)
     h = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, a9)
     diff = e_core[:, None] + e_core[None, :]
@@ -859,6 +885,74 @@ def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
 
 
 # ---------------------------------------------------------------- block builder
+
+def _sijrs_lib(e_core, e_virt, g_cvcv):
+    """Fortran (core,core;virt,virt) subspace, or None."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_sijrs"):
+        return None, None
+    nc = int(len(e_core))
+    nv = int(len(e_virt))
+    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    norm_ptr = ffi.new("double *")
+    energy_ptr = ffi.new("double *")
+    lib.nevpt2_sijrs(nc, nv, cast(g_cvcv), cast(e_core), cast(e_virt),
+                     norm_ptr, energy_ptr)
+    return float(norm_ptr[0]), float(energy_ptr[0])
+
+
+def _srs_lib(h2e_v, rm2, a7, e_virt):
+    """Fortran (virt,virt) subspace final contraction, or None.
+    Returns per-(r,s) norm and h arrays of shape (nvirt, nvirt)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_srs"):
+        return None, None
+    nact = int(rm2.shape[0])
+    nvirt = int(len(e_virt))
+    if nvirt <= 0:
+        return np.zeros((0, 0)), np.zeros((0, 0))
+    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    nv2 = nvirt * nvirt
+    norm_ptr = ffi.new("double[%d]" % nv2)
+    energy_ptr = ffi.new("double[%d]" % nv2)
+    lib.nevpt2_srs(nact, nvirt, cast(h2e_v), cast(rm2), cast(a7),
+                   norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
+    h = np.frombuffer(ffi.buffer(energy_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
+    return norm, h
+
+
+def _sij_lib(h2e_v, hdm2, a9, e_core):
+    """Fortran (core,core) subspace final contraction, or None.
+    Returns per-(i,j) norm and h arrays of shape (ncore, ncore)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_sij"):
+        return None, None
+    nact = int(hdm2.shape[0])
+    ncore = int(len(e_core))
+    if ncore <= 0:
+        return np.zeros((0, 0)), np.zeros((0, 0))
+    cast = lambda a: ffi.cast("double *", np.ascontiguousarray(a).ctypes.data)
+    nc2 = ncore * ncore
+    norm_ptr = ffi.new("double[%d]" % nc2)
+    energy_ptr = ffi.new("double[%d]" % nc2)
+    lib.nevpt2_sij(nact, ncore, cast(h2e_v), cast(hdm2), cast(a9),
+                   norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
+    h = np.frombuffer(ffi.buffer(energy_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
+    return norm, h
+
+
+
 def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
     """Build all SC-NEVPT2 integral blocks from the full-MO (semicanonical)
     bare one-electron matrix ``h1e_mo`` and chemist two-electron tensor

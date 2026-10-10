@@ -66,6 +66,7 @@ module nevpt2_koopmans_mod
 
   public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
   public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
+  public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij
 
 contains
 
@@ -1548,5 +1549,166 @@ contains
       end do
     end do
   end subroutine nevpt2_k27
+
+! nevpt2_sijrs — Fortran implementation of the Sijrs subspace
+! (core,core;virt,virt) doubly-occupied→virtual SC-NEVPT2 correction.
+!
+! norm and energy for the Sijrs subspace (i/core, j/core, a/virt, b/virt):
+!
+!   norm_i = sum_jab  g_iajb * (2*g_iajb - g_ibja)
+!   e_i    = sum_jab  g_iajb / (e_i - e_a + e_j - e_b) * (2*g_iajb - g_ibja)
+!
+! g(i,a,j,b) = eri_mo(i,a,j,b) in chemist notation (core,virt,core,virt).
+! e_core(i/j) and e_virt(a/b) are semicanonical orbital energies.
+!
+subroutine nevpt2_sijrs(ncore, nvirt, g, e_core, e_virt, norm, energy) &
+    bind(C, name="nevpt2_sijrs")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: ncore, nvirt
+  real(c_double), intent(in)  :: g(ncore, nvirt, ncore, nvirt)
+  real(c_double), intent(in)  :: e_core(ncore), e_virt(nvirt)
+  real(c_double), intent(out) :: norm, energy
+
+  real(c_double), parameter :: eps = 1.0e-12_c_double
+  integer :: i, j, a, b
+  real(c_double) :: gi, gj_ab_swapped, theta, denom, t2i
+
+  if (ncore <= 0 .or. nvirt <= 0) then
+    norm = 0.0_c_double
+    energy = 0.0_c_double
+    return
+  end if
+
+  norm = 0.0_c_double
+  energy = 0.0_c_double
+
+  !$omp parallel do collapse(4) default(none) &
+  !$omp shared(ncore, nvirt, g, e_core, e_virt) &
+  !$omp private(i, j, a, b, gi, gj_ab_swapped, theta, denom, t2i) &
+  !$omp reduction(+:norm, energy)
+  do i = 1, ncore
+    do j = 1, ncore
+      do a = 1, nvirt
+        do b = 1, nvirt
+          gi = g(i, a, j, b)
+          gj_ab_swapped = g(i, b, j, a)
+          theta = 2.0_c_double * gi - gj_ab_swapped
+          norm = norm + gi * theta
+          denom = e_core(i) - e_virt(a) + e_core(j) - e_virt(b)
+          if (abs(denom) > eps) then
+            t2i = gi / denom
+            energy = energy + t2i * theta
+          end if
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_sijrs
+
+
+! nevpt2_srs — Fortran implementation of the Srs subspace final contraction.
+!
+!   norm = 0.5 * sum_{pqrsab}  h2e_v(r,s,q,p) * h2e_v(r,s,b,a) * rm2(p,q,b,a)
+!   h    = 0.5 * sum_{pqrsab}  h2e_v(r,s,q,p) * h2e_v(r,s,b,a) * a7(p,q,a,b)
+!   diff(r,s) = e_virt(r) + e_virt(s)  (computed in Python, used in _norm_to_energy)
+!
+! h2e_v is (nvirt, ncas, nvirt, ncas) = phys-ordered ERI block (V,A,V,A).
+! rm2 and a7 are (ncas, ncas, ncas, ncas) from _a7.
+!
+subroutine nevpt2_srs(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
+    bind(C, name="nevpt2_srs")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nact, nvirt
+  real(c_double), intent(in)  :: h2e_v(nvirt, nact, nvirt, nact)
+  real(c_double), intent(in)  :: rm2(nact, nact, nact, nact)
+  real(c_double), intent(in)  :: a7(nact, nact, nact, nact)
+  real(c_double), intent(out) :: norm(nvirt, nvirt), energy(nvirt, nvirt)
+
+  real(c_double), parameter :: half = 0.5_c_double
+  integer :: p, q, r, s, a, b
+  real(c_double) :: h2e_rsqp, h2e_rsba, rm2_pqba, a7_pqab
+
+  norm = 0.0_c_double
+  energy = 0.0_c_double
+  if (nvirt <= 0 .or. nact <= 0) return
+
+  !$omp parallel do collapse(2) default(none) &
+  !$omp shared(nact, nvirt, h2e_v, rm2, a7, norm, energy) &
+  !$omp private(r, s, p, q, a, b, h2e_rsqp, h2e_rsba, rm2_pqba, a7_pqab)
+  do r = 1, nvirt
+    do s = 1, nvirt
+      do p = 1, nact
+        do q = 1, nact
+          h2e_rsqp = h2e_v(r, s, q, p)  ! h2e_v(r,s,q,p)
+          do a = 1, nvirt
+            do b = 1, nvirt
+              h2e_rsba = h2e_v(r, s, b, a)  ! h2e_v(r,s,b,a)
+              rm2_pqba = rm2(p, q, b, a)    ! rm2(p,q,b,a)
+              a7_pqab  = a7(p, q, a, b)     ! a7(p,q,a,b)
+              norm(r, s)    = norm(r, s)   + half * h2e_rsqp * h2e_rsba * rm2_pqba
+              energy(r, s)  = energy(r, s) + half * h2e_rsqp * h2e_rsba * a7_pqab
+            end do
+          end do
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_srs
+
+
+! nevpt2_sij — Fortran implementation of the Sij subspace final contraction.
+!
+!   norm = 0.5 * sum_{pqijab}  h2e_v(q,p,i,j) * h2e_v(b,a,i,j) * hdm2(p,q,a,b)
+!   h    = 0.5 * sum_{pqijab}  h2e_v(q,p,i,j) * h2e_v(b,a,i,j) * a9(p,q,a,b)
+!   diff(i,j) = e_core(i) + e_core(j)  (computed in Python, used in _norm_to_energy)
+!
+! h2e_v is (ncas, ncore, ncas, ncore) = phys-ordered ERI block (A,C,A,C).
+! hdm2 and a9 are (ncas, ncas, ncas, ncas).
+!
+subroutine nevpt2_sij(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
+    bind(C, name="nevpt2_sij")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nact, ncore
+  real(c_double), intent(in)  :: h2e_v(nact, ncore, nact, ncore)
+  real(c_double), intent(in)  :: hdm2(nact, nact, nact, nact)
+  real(c_double), intent(in)  :: a9(nact, nact, nact, nact)
+  real(c_double), intent(out) :: norm(ncore, ncore), energy(ncore, ncore)
+
+  real(c_double), parameter :: half = 0.5_c_double
+  integer :: p, q, a, b, i, j
+  real(c_double) :: h2e_qpij, h2e_baij, hdm2_pqab, a9_pqab
+
+  norm = 0.0_c_double
+  energy = 0.0_c_double
+  if (ncore <= 0 .or. nact <= 0) return
+
+  !$omp parallel do collapse(2) default(none) &
+  !$omp shared(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
+  !$omp private(i, j, p, q, a, b, h2e_qpij, h2e_baij, hdm2_pqab, a9_pqab)
+  do i = 1, ncore
+    do j = 1, ncore
+      do p = 1, nact
+        do q = 1, nact
+          h2e_qpij = h2e_v(q, p, i, j)  ! h2e_v(q,p,i,j)
+          do a = 1, nact
+            do b = 1, nact
+              h2e_baij = h2e_v(b, a, i, j)  ! h2e_v(b,a,i,j)
+              hdm2_pqab = hdm2(p, q, a, b)  ! hdm2(p,q,a,b)
+              a9_pqab   = a9(p, q, a, b)    ! a9(p,q,a,b)
+              norm(i, j)   = norm(i, j)   + half * h2e_qpij * h2e_baij * hdm2_pqab
+              energy(i, j) = energy(i, j) + half * h2e_qpij * h2e_baij * a9_pqab
+            end do
+          end do
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_sij
 
 end module nevpt2_koopmans_mod

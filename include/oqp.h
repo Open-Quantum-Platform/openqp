@@ -555,6 +555,12 @@ void nevpt2_a3(int32_t nact, const double *h1e, const double *h2e,
     const double *dm1, const double *dm2, const double *hdm1, double *a3);
 void nevpt2_k27(int32_t nact, const double *h1e, const double *h2e,
     const double *dm1, const double *dm2, double *k27);
+void nevpt2_sijrs(int32_t ncore, int32_t nvirt, const double *g,
+    const double *e_core, const double *e_virt, double *norm, double *energy);
+void nevpt2_srs(int32_t nact, int32_t nvirt, const double *h2e_v,
+    const double *rm2, const double *a7, double *norm, double *energy);
+void nevpt2_sij(int32_t nact, int32_t ncore, const double *h2e_v,
+    const double *hdm2, const double *a9, double *norm, double *energy);
 
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
  * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
