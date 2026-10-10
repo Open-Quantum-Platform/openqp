@@ -19,6 +19,10 @@ module mod_dft
   !> capped at max_described_setups entries, so a long-lived process does not accumulate them.
   character(len=1600), allocatable, save :: described_setups(:)
   integer, parameter :: max_described_setups = 256
+  !> LibXC functional caching: last functional name initialized.
+  !> dft_set_options skips the destroy/re-init cycle when the same
+  !> functional is requested again.
+  character(len=512), save :: lxc_last_functional = ""
 
   private
   public dft_initialize
@@ -392,6 +396,7 @@ contains
 !> @brief Forget every set-up description recorded so far (a run starts a new log).
   subroutine dft_forget_setups()
     if (allocated(described_setups)) deallocate(described_setups)
+    lxc_last_functional = ""
   end subroutine dft_forget_setups
 
 
@@ -769,6 +774,7 @@ contains
     use libxc, only: libxc_destroy
     type(information), intent(inout) :: infos
     call libxc_destroy(infos%functional)
+    lxc_last_functional = ""
   end subroutine
 
   subroutine dft_set_options(infos, pruned, need_functional, internal)
@@ -777,7 +783,7 @@ contains
     use messages, only: show_message, WITH_ABORT
     use strings, only: c_f_char
     use types, only: information
-    use libxc, only: libxc_input
+    use libxc, only: libxc_input, libxc_destroy
     use functionals, only: set_announcement_log
 
     implicit none
@@ -1068,12 +1074,23 @@ contains
     if (trim(xc_func_name) /= "") then
       ! save HFscale, or cam_alpha,beta,mu from input
       call saved_HF%save_HF(infos)
-
-      call libxc_input(functional_name=trim(xc_func_name), &
-                       dft_params=infos%dft, &
-                       tddft_params=infos%tddft, &
-                       functional=infos%functional, &
-                       announce=announce)
+      ! Guard: skip LibXC re-init when the same functional was already set up
+      if (infos%functional%can_calculate() .and. &
+          lxc_last_functional /= "" .and. &
+          lxc_last_functional == trim(xc_func_name)) then
+        ! Same functional; LibXC objects are ready, skip destroy/re-init
+      else
+        if (infos%functional%can_calculate()) then
+          ! Different functional: destroy old objects first
+          call libxc_destroy(infos%functional)
+        end if
+        call libxc_input(functional_name=trim(xc_func_name), &
+                         dft_params=infos%dft, &
+                         tddft_params=infos%tddft, &
+                         functional=infos%functional, &
+                         announce=announce)
+        lxc_last_functional = trim(xc_func_name)
+      end if
 
       ! update HFscale, or cam_alpha,beta,mu from input
       if(saved_HF%do) call saved_HF%update_HF(infos, announce)
