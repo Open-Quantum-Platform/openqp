@@ -659,7 +659,7 @@ contains
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used, ierr
     integer :: nn, mmax, m, i, k, info, lwork, n_rtv, j, mw, ssz
-    real(dp) :: theta, rnorm, c0, snorm, php, di, nv, scale
+    real(dp) :: theta, rnorm, c0, snorm, php, di, nv, nv0, scale, gnorm2, eta, rtol
     real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), au(:), r(:), tc(:)
     real(dp), allocatable :: eig(:), work(:), hx(:)
     integer,  allocatable :: seed(:)
@@ -698,6 +698,20 @@ contains
     end do
     deallocate(seed)
 
+    ! Davidson stopping test.  For the normalised Ritz vector u = [c; c*p] the
+    ! tail residual is c*(g + (H - theta) p), so |r| <= eta*c*|g| is the
+    ! inexact-Newton condition |g + H p| <= eta |g| with the same forcing
+    ! sequence eta = min(0.1, sqrt|g|) as `steihaug_cg`; that is what makes the
+    ! macro iteration quadratic.  A fixed absolute tolerance does not scale
+    ! with |g|: once |g| fell below it the start vector [1; -M^{-1} g] already
+    ! passed the test, and every step was the diagonal-preconditioned gradient
+    ! step, which contracts only linearly and stalls where diag(H) is a poor
+    ! model of H (DFT).  The old 1e-6 is kept as the cap, so steps with
+    ! |g| >~ 1e-4 are unchanged; the floor is ten times below the requested
+    ! gradient tolerance (converted to a 2-norm), below which a better step
+    ! cannot change the converged result.
+    gnorm2 = norm2(g)
+    eta    = min(0.1_dp, sqrt(gnorm2))
     used = 0; mw = 0
     do k = 1, mmax
       do while (mw < m)
@@ -724,7 +738,10 @@ contains
       deallocate(Tm)
       r = au - theta*u
       rnorm = norm2(r)
-      if (rnorm < 1.0e-6_dp .or. m == mmax) exit
+      rtol = min(1.0e-6_dp, eta*abs(u(1))*gnorm2)
+      rtol = max(rtol, 0.1_dp*par%conv_tol*abs(u(1)) &
+                       *merge(sqrt(real(n, dp)), 1.0_dp, par%rms_gnorm))
+      if (rnorm < rtol .or. m == mmax) exit
       ! preconditioned correction t = (D - theta)^{-1} r,  D = [0 ; hdiag]
       tc(1) = r(1)/sign(max(abs(0.0_dp-theta),1.0e-6_dp), 0.0_dp-theta)
       do i = 1, n
@@ -732,8 +749,15 @@ contains
         if (abs(di) < 1.0e-6_dp) di = sign(1.0e-6_dp, di)
         tc(1+i) = r(1+i)/di
       end do
-      do i = 1, m
-        tc = tc - dot_product(V(:,i), tc)*V(:,i)
+      ! The correction is proportional to r, so its size says nothing about
+      ! linear dependence; normalise first and test what Gram-Schmidt removes.
+      nv0 = norm2(tc)
+      if (nv0 <= 0.0_dp) exit
+      tc = tc/nv0
+      do j = 1, 2
+        do i = 1, m
+          tc = tc - dot_product(V(:,i), tc)*V(:,i)
+        end do
       end do
       nv = norm2(tc)
       if (nv < 1.0e-8_dp) exit
