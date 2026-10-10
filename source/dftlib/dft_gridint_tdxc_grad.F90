@@ -197,9 +197,10 @@ contains
     real(kind=fp), intent(out), pointer, optional :: tmpV(:,:,:,:,:)
     real(kind=fp), intent(out), pointer, optional :: tmpG1(:,:,:,:,:,:)
     integer, intent(in) :: myThread
-    integer :: nSpin
+    integer :: nSpin, nDeriv
 
     nspin = merge(2, 1, xce%hasBeta)
+    nDeriv = merge(2, 1, self%do_fxc)
     associate ( numAOs => xce%numAOs_p &  ! number of pruned AOs
               , numPts => xce%numPts &
               , nMtx   => self%nMtx &
@@ -211,21 +212,17 @@ contains
       tmpGrad(1:numAOs,1:3,1:nMtx) => &
         self%tmpGrad_(1:numAOs*3*nMtx,myThread)
 
+      ! Remap both derivative slabs (ground state and, with do_fxc, X+Y) in
+      ! one association over the contiguous per-thread block.  Remapping the
+      ! second slab separately as 2:2 replaced the first association, so every
+      ! later tmpV(...,1)/tmpG1(...,1) reference was out of bounds.
       if (present(tmpV)) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:1) => &
-           self%tmpV_(1:numAOs*numPts*nMtx*nspin, 1, myThread)
+        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+           self%tmpV_(:, :, myThread)
 
       if (present(tmpG1)) &
-        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:1) => &
-          self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 1, mythread)
-
-      if (present(tmpV) .and. self%do_fxc) &
-        tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 2:2) => &
-          self%tmpV_(1:numAOs*numPts*nMtx*nspin, 2, myThread)
-
-      if (present(tmpG1) .and. self%do_fxc) &
-          tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 2:2) => &
-            self%tmpG1_(1:numAOs*numPts*3*nMtx*nspin, 2, mythread)
+        tmpG1(1:numAOs, 1:numPts, 1:3, 1:nMtx, 1:nSpin, 1:nDeriv) => &
+          self%tmpG1_(:, :, mythread)
 
     end associate
 
@@ -1393,7 +1390,7 @@ contains
   subroutine tddft_xc_gradient(basis, molGrid, dedft, &
                   da, pa, xa, &
                   nMtx, threshold, infos, include_weight_derivative, &
-                  include_ground_state, cache)
+                  include_ground_state, cache, dedft_mtx)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -1418,6 +1415,9 @@ contains
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
     type(response_cache_t), target, intent(inout), optional :: cache
+    !> optional per-matrix gradients (3,natom,nMtx), as in utddft_xc_gradient;
+    !> dedft still receives their sum
+    real(kind=fp), intent(inout), optional :: dedft_mtx(:,:,:)
 
     integer :: i, j, imtx, nbf, nxcder
     logical :: doFxc, doWeight
@@ -1532,6 +1532,14 @@ contains
             2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
           dedft(3,atom) = dedft(3,atom) - &
             2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          if (present(dedft_mtx)) then
+            dedft_mtx(1,atom,imtx) = dedft_mtx(1,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,1,imtx,1))
+            dedft_mtx(2,atom,imtx) = dedft_mtx(2,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,2,imtx,1))
+            dedft_mtx(3,atom,imtx) = dedft_mtx(3,atom,imtx) - &
+              2*sum(dat%bfGrad(offset:offset+naos-1,3,imtx,1))
+          end if
         end do
       end associate
     end do
@@ -1539,7 +1547,11 @@ contains
     ! The partition-weight probe is already spin summed by grad_v_xc_np and
     ! grad_f_xc_np.  The restricted factor for owner motion is applied where
     ! that one-spin AO contribution enters nucGrad.
-    if (dat%do_weight_derivative) dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
+    if (dat%do_weight_derivative) then
+      dedft = dedft + sum(dat%nucGrad(:,1:infos%mol_prop%natom,:,1), dim=3)
+      if (present(dedft_mtx)) dedft_mtx = dedft_mtx + &
+        dat%nucGrad(:,1:infos%mol_prop%natom,1:nMtx,1)
+    end if
 
     call dat%clean()
   end subroutine

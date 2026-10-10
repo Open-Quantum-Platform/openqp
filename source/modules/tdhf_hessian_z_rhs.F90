@@ -9,17 +9,25 @@ module tdhf_hessian_z_rhs_mod
   public :: differentiated_channel
   public :: explicit_channel_derivative_matrix
   public :: accumulate_tdhf_channel_quartet
+  public :: eri_derivative_operator_mo
   logical, parameter :: enable_tddft_explicit_gxc = .true.
 
   type, extends(grd2_operator_consumer_t) :: tdhf_channel_operator_consumer_t
     real(dp), pointer :: base(:,:) => null()
     real(dp), pointer :: operator(:,:,:) => null()
+    real(dp), allocatable :: own(:,:,:)      ! per-thread buffer (thread_begin)
     integer, allocatable :: cart_off(:)
     integer :: channel = 0
     real(dp) :: coulscale = 1.0_dp
     real(dp) :: hfscale = 1.0_dp
+    ! Cartesian coordinates held in operator(:,:,1:coord_hi-coord_lo+1)
+    integer :: coord_lo = 1
+    integer :: coord_hi = huge(1)
   contains
     procedure :: accumulate => accumulate_tdhf_channel_operator
+    procedure :: thread_buffer_bytes => tdhf_channel_buffer_bytes
+    procedure :: thread_begin => tdhf_channel_thread_begin
+    procedure :: thread_merge => tdhf_channel_thread_merge
   end type tdhf_channel_operator_consumer_t
 
   ! Exact-match memo for explicit_channel_derivative_matrix. The Z-vector RHS
@@ -115,8 +123,7 @@ contains
   subroutine explicit_channel_derivative_matrix(infos, coeff, base, channel, result, blocks)
     use types, only: information
     use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
-    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
-    use grd2, only: grd2_operator_driver
+    use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A
     use mathlib, only: unpack_matrix
     use mod_dft, only: dft_initialize, dftclean
@@ -128,14 +135,14 @@ contains
     real(dp),intent(out)::result(:,:,:)
     integer,intent(in),optional::blocks
     type(basis_set),pointer::basis
-    type(tdhf_channel_operator_consumer_t)::consumer
     type(dft_grid_t)::grid
     real(dp),contiguous,pointer::dpk(:)
     real(dp),allocatable,target::p(:,:,:),xp(:,:,:),dxc(:,:)
-    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
-    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:),operator_ao(:,:,:), &
-      work(:,:),gp(:,:),gm(:,:),xcval(:)
-    integer::i,j,k,nbf,ncart,nwork,nocc,blk
+    real(dp),allocatable::probe(:,:),buse(:,:),quse(:,:), &
+      gp(:,:),gm(:,:),xcval(:)
+    integer::i,j,k,nbf,ncart,nocc,blk,npair,nbatch,k0,k1,m,kk
+    integer,allocatable::pair_i(:),pair_j(:)
+    real(dp),allocatable::pbat(:,:,:),xbat(:,:,:),gmtx(:,:,:)
     logical::poison
     character(len=8)::envs
     real(dp)::scale_exch
@@ -162,34 +169,7 @@ contains
       buse=0.5_dp*(base+transpose(base))
     end if
 
-    ! Match the exact density convention consumed by grd2 under pure
-    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
-    ! Cartesian effective densities.
-    bwork=buse
-    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
-    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
-    consumer%base=>base_cart
-    allocate(operator_cart(nwork,nwork,ncart),source=0.0_dp)
-    consumer%operator=>operator_cart
-    consumer%channel=channel
-    consumer%coulscale=1.0_dp
-    consumer%hfscale=scale_exch
-    call grd2_operator_driver(infos,basis,consumer)
-
-    do k=1,ncart
-      if(channel>0) then
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)+transpose(operator_cart(:,:,k)))
-      else
-        operator_cart(:,:,k)=0.5_dp*(operator_cart(:,:,k)-transpose(operator_cart(:,:,k)))
-      end if
-    end do
-    allocate(operator_ao(nbf,nbf,ncart))
-    call reduce_cartesian_operator(basis,consumer%cart_off,operator_cart,operator_ao)
-    allocate(work(nbf,nbf))
-    do k=1,ncart
-      work=matmul(operator_ao(:,:,k),coeff)
-      result(:,:,k)=matmul(transpose(coeff),work)
-    end do
+    call eri_derivative_operator_mo(infos,coeff,buse,channel,scale_exch,result)
 
     ! The ERI term above is now one blocked quartet traversal.  The XC grid
     ! contribution uses its existing finite-difference oracle independently;
@@ -221,6 +201,8 @@ contains
       poison=.false.
       call get_environment_variable('OQP_TDHESS_POISON_UNPROBED',envs,status=k)
       if(k==0) poison=(trim(adjustl(envs))=='1')
+      ! Pairs inside the requested blocks; the rest is left ERI-only (or NaN).
+      npair=0
       do j=1,nbf; do i=1,j
         if(.not.xc_block_needed(i,j,nocc,blk)) then
           if(poison) then
@@ -229,25 +211,165 @@ contains
           end if
           cycle
         end if
-        probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
-        quse=0.5_dp*(probe+transpose(probe))
-        xp(:,:,1)=buse+quse; gp=0.0_dp
-        call tddft_xc_gradient(basis,grid,gp,dxc,p,xp,1,1.0e-14_dp,infos, &
-          include_weight_derivative=.true.,include_ground_state=.false.)
-        xp(:,:,1)=buse-quse; gm=0.0_dp
-        call tddft_xc_gradient(basis,grid,gm,dxc,p,xp,1,1.0e-14_dp,infos, &
-          include_weight_derivative=.true.,include_ground_state=.false.)
-        xcval=reshape(0.25_dp*(gp-gm),[ncart])
-        result(i,j,:)=result(i,j,:)+xcval
-        if(i/=j) result(j,i,:)=result(j,i,:)+xcval
+        npair=npair+1
       end do; end do
+      allocate(pair_i(npair),pair_j(npair))
+      npair=0
+      do j=1,nbf; do i=1,j
+        if(.not.xc_block_needed(i,j,nocc,blk)) cycle
+        npair=npair+1; pair_i(npair)=i; pair_j(npair)=j
+      end do; end do
+      ! Evaluate the +q / -q polarization densities of a batch of pairs in one
+      ! grid traversal (per-matrix gradients via dedft_mtx): the AO values and
+      ! partition-weight derivatives at each point are shared by the batch.
+      nbatch=16
+      call get_environment_variable('OQP_TDHESS_XC_BATCH',envs,status=k)
+      if(k==0) then
+        read(envs,*,iostat=k) nbatch
+        if(k/=0 .or. nbatch<1) nbatch=16
+      end if
+      nbatch=max(1,min(nbatch,npair))
+      allocate(pbat(nbf,nbf,2*nbatch),xbat(nbf,nbf,2*nbatch),gmtx(3,ncart/3,2*nbatch))
+      do k0=1,npair,nbatch
+        k1=min(npair,k0+nbatch-1); m=k1-k0+1
+        pbat(:,:,1:2*m)=0.0_dp
+        do kk=1,m
+          i=pair_i(k0+kk-1); j=pair_j(k0+kk-1)
+          probe=spread(coeff(:,i),2,nbf)*spread(coeff(:,j),1,nbf)
+          quse=0.5_dp*(probe+transpose(probe))
+          xbat(:,:,2*kk-1)=buse+quse
+          xbat(:,:,2*kk)=buse-quse
+        end do
+        gmtx(:,:,1:2*m)=0.0_dp; gp=0.0_dp
+        call tddft_xc_gradient(basis,grid,gp,dxc,pbat(:,:,1:2*m),xbat(:,:,1:2*m),2*m, &
+          1.0e-14_dp,infos,include_weight_derivative=.true.,include_ground_state=.false., &
+          dedft_mtx=gmtx(:,:,1:2*m))
+        do kk=1,m
+          i=pair_i(k0+kk-1); j=pair_j(k0+kk-1)
+          xcval=reshape(0.25_dp*(gmtx(:,:,2*kk-1)-gmtx(:,:,2*kk)),[ncart])
+          result(i,j,:)=result(i,j,:)+xcval
+          if(i/=j) result(j,i,:)=result(j,i,:)+xcval
+        end do
+      end do
+      deallocate(pair_i,pair_j,pbat,xbat,gmtx)
       call dftclean(infos)
       deallocate(p,xp,dxc,probe,quse,gp,gm,xcval)
     end if
     if (channel > 0) call channel_cache_store(coeff, base, channel, blk, result)
-    nullify(consumer%base,consumer%operator)
-    deallocate(buse,bwork,base_cart,operator_cart,operator_ao,work)
+    deallocate(buse)
   end subroutine explicit_channel_derivative_matrix
+
+  !> ERI part of an explicit nuclear-derivative operator in blocked
+  !> derivative-ERI traversals: result(:,:,x) = coeff^T O^x[base] coeff for all
+  !> 3N Cartesian coordinates x, where O^x is the channel operator assembled by
+  !> accumulate_tdhf_channel_quartet (channel>0: symmetric Coulomb/exchange,
+  !> channel<0: antisymmetric exchange).  `base` must already carry the
+  !> channel's symmetry.  `coulscale` (default 1) scales the Coulomb part, so
+  !> open-shell callers can build J^x[Ptot] and K^x[P_s] separately.  No XC
+  !> term; one MPI rank (grd2_operator_driver).
+  !>
+  !> Memory: besides the caller's result, the Cartesian operator is held for
+  !> one block of coordinates at a time.  The block holds as many Cartesian
+  !> coordinates as fit OQP_HESS_OPERATOR_MEM_MB (default 4096 MiB), at least
+  !> one, so small and medium systems take one traversal and a large one takes
+  !> ceil(3N/block) traversals instead of an nwork**2*3N allocation.  One
+  !> coordinate (nwork**2 doubles) is the smallest unit; it is always far
+  !> below the caller's nbf**2*3N result.  grd2_operator_driver separately
+  !> caps its thread-private copies of the block with OQP_GRD2_OPERATOR_MEM_MB.
+  subroutine eri_derivative_operator_mo(infos,coeff,base,channel,hfscale,result,coulscale)
+    use types, only: information
+    use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+    use grd2, only: grd2_operator_driver
+    use io_constants, only: iw
+    type(information),target,intent(inout)::infos
+    real(dp),intent(in)::coeff(:,:),base(:,:),hfscale
+    integer,intent(in)::channel
+    real(dp),intent(out)::result(:,:,:)
+    real(dp),intent(in),optional::coulscale
+    type(basis_set),pointer::basis
+    type(tdhf_channel_operator_consumer_t)::consumer
+    real(dp),allocatable,target::bwork(:,:),base_cart(:,:),operator_cart(:,:,:)
+    real(dp),allocatable::operator_ao(:,:,:),work(:,:)
+    integer::k,nbf,ncart,nwork,nblock,lo,hi,st
+    integer(8)::budget,per_coord
+    character(len=16)::envs
+    logical::opened
+    basis=>infos%basis; basis%atoms=>infos%atoms
+    nbf=size(coeff,1); ncart=3*size(basis%atoms%xyz,2)
+    ! Match the exact density convention consumed by grd2 under pure
+    ! spherical harmonics: bfnrm folding followed by blockwise expansion to
+    ! Cartesian effective densities.
+    bwork=base
+    call bas_norm_matrix(bwork,basis%bfnrm,nbf)
+    call build_cart_density(basis,bwork,base_cart,consumer%cart_off,nwork)
+    consumer%base=>base_cart
+    consumer%channel=channel
+    consumer%coulscale=1.0_dp
+    if(present(coulscale)) consumer%coulscale=coulscale
+    consumer%hfscale=hfscale
+
+    budget=4096_8
+    call get_environment_variable('OQP_HESS_OPERATOR_MEM_MB',envs,status=st)
+    if(st==0) then
+      read(envs,*,iostat=st) budget
+      if(st/=0 .or. budget<0_8) budget=4096_8
+    end if
+    budget=budget*1024_8*1024_8
+    per_coord=8_8*int(nwork,8)*int(nwork,8)
+    nblock=int(min(int(ncart,8),max(1_8,budget/per_coord)))
+    if(nblock<ncart) then
+      inquire(unit=iw,opened=opened)
+      if(opened) write(iw,'(6x,"derivative operator: ",I6," coordinates in blocks of",I6, &
+        & " (OQP_HESS_OPERATOR_MEM_MB)")') ncart,nblock
+    end if
+
+    allocate(operator_cart(nwork,nwork,nblock),operator_ao(nbf,nbf,1),work(nbf,nbf))
+    do lo=1,ncart,nblock
+      hi=min(ncart,lo+nblock-1)
+      operator_cart(:,:,1:hi-lo+1)=0.0_dp
+      consumer%operator=>operator_cart(:,:,1:hi-lo+1)
+      consumer%coord_lo=lo; consumer%coord_hi=hi
+      call grd2_operator_driver(infos,basis,consumer)
+      do k=lo,hi
+        associate(op=>operator_cart(:,:,k-lo+1))
+          if(channel>0) then
+            op=0.5_dp*(op+transpose(op))
+          else
+            op=0.5_dp*(op-transpose(op))
+          end if
+        end associate
+        call reduce_cartesian_operator(basis,consumer%cart_off, &
+          operator_cart(:,:,k-lo+1:k-lo+1),operator_ao)
+        work=matmul(operator_ao(:,:,1),coeff)
+        result(:,:,k)=matmul(transpose(coeff),work)
+      end do
+    end do
+    nullify(consumer%base,consumer%operator)
+    deallocate(bwork,base_cart,operator_cart,operator_ao,work)
+  end subroutine eri_derivative_operator_mo
+
+  integer(8) function tdhf_channel_buffer_bytes(this) result(nbytes)
+    class(tdhf_channel_operator_consumer_t), intent(in) :: this
+    nbytes = 0_8
+    if (associated(this%operator)) nbytes = 8_8*int(size(this%operator),8)
+  end function tdhf_channel_buffer_bytes
+
+  subroutine tdhf_channel_thread_begin(this)
+    class(tdhf_channel_operator_consumer_t), target, intent(inout) :: this
+    allocate(this%own(size(this%operator,1),size(this%operator,2), &
+                      size(this%operator,3)), source=0.0_dp)
+    this%operator => this%own
+  end subroutine tdhf_channel_thread_begin
+
+  subroutine tdhf_channel_thread_merge(this, other)
+    use grd2_rys, only: grd2_operator_consumer_t
+    class(tdhf_channel_operator_consumer_t), intent(inout) :: this
+    class(grd2_operator_consumer_t), intent(in) :: other
+    select type (other)
+    class is (tdhf_channel_operator_consumer_t)
+      this%operator = this%operator + other%own
+    end select
+  end subroutine tdhf_channel_thread_merge
 
   subroutine accumulate_tdhf_channel_operator(this,basis,shell_ids,atom_ids, &
                                                local_ids,derivative)
@@ -271,7 +393,8 @@ contains
         value=derivative(axis,center)
         if(value==0.0_dp) cycle
         coord=3*(atom_ids(center)-1)+axis
-        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord), &
+        if(coord<this%coord_lo .or. coord>this%coord_hi) cycle
+        call accumulate_tdhf_channel_quartet(this%base,this%operator(:,:,coord-this%coord_lo+1), &
           [gi,gj,gk,gl],this%channel,this%coulscale,this%hfscale,value)
       end do
     end do

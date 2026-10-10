@@ -161,7 +161,7 @@ SCHEMA = {
         "acid_padding": {"type": float, "default": "5.0"},
     },
     "hess": {
-        "type": {"type": _string, "default": "numerical"},
+        "type": {"type": _string, "default": "auto"},
         "state": {"type": int, "default": "0"},
     },
     "nac": {
@@ -1050,6 +1050,23 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["pcm"]["enabled"], "True")
         self.assertEqual(config["pcm"]["epsilon"], "78.3553")
+
+    def test_workflow_hessian_type_defaults_to_auto(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_hess_auto")
+            .molecule(geometry="water", charge=0)
+            .theory("dft", functional="pbe0", basis="def2-svp")
+        )
+        job.workflow.hessian(state=0)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "hess")
+        self.assertEqual(config["hess"]["type"], "auto")
+
+        job.workflow.hessian(type="auto", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "auto")
+        job.workflow.hessian(type="numerical", state=0)
+        self.assertEqual(job.to_input_dict()["hess"]["type"], "numerical")
 
     def test_workflow_pcm_requires_reference_scf_theory(self):
         openqp = load_openqp_module()
