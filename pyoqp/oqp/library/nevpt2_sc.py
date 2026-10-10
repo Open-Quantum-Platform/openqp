@@ -781,11 +781,24 @@ def _Sijrs(e_core, e_virt, g_cvcv):
 
 
 def _Sijr(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
+    """The (virt,core,core) virtual→(core,core) SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_sijr``) contracts pre-computed hdm1 and a3
+    with h2e_v in a single Fortran call; the NumPy fallback is below."""
     if len(e_core) == 0 or len(e_virt) == 0:
         return 0.0, 0.0
     hdm1 = _hdm1(dm1)
     a3 = _a3(h1e, h2e, dm1, dm2, hdm1)
     ncore = len(e_core)
+    nvirt = len(e_virt)
+    result = _sijr_lib(nvirt, ncore, h2e_v, hdm1, a3)
+    if result[0] is not None:
+        norm, h = result
+        ci_triu = np.triu_indices(ncore)
+        diff = e_virt[:, None, None] - e_core[None, :, None] - e_core[None, None, :]
+        return _norm_to_energy(norm[:, ci_triu[0], ci_triu[1]],
+                               h[:, ci_triu[0], ci_triu[1]],
+                               diff[:, ci_triu[0], ci_triu[1]])
     ci_diag = np.diag_indices(ncore)
     ci_triu = np.triu_indices(ncore)
     norm = 2.0 * _ein('rpji,raji,pa->rji', h2e_v, h2e_v, hdm1) \
@@ -803,10 +816,20 @@ def _Sijr(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
 
 
 def _Srsi(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
+    """The (virt,virt,core) (virt,virt)→core SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_srsi``) contracts pre-computed dm1 and k27
+    with h2e_v in a single Fortran call; the NumPy fallback is below."""
     if len(e_core) == 0 or len(e_virt) == 0:
         return 0.0, 0.0
     k27 = _k27(h1e, h2e, dm1, dm2)
     nvirt = len(e_virt)
+    result = _srsi_lib(nvirt, len(e_core), h2e_v, dm1, k27)
+    if result[0] is not None:
+        norm, h = result
+        vi_triu = np.triu_indices(nvirt)
+        diff = e_virt[:, None, None] + e_virt[None, :, None] - e_core[None, None, :]
+        return _norm_to_energy(norm[vi_triu], h[vi_triu], diff[vi_triu])
     vi_diag = np.diag_indices(nvirt)
     vi_triu = np.triu_indices(nvirt)
     norm = 2.0 * _ein('rsip,rsia,pa->rsi', h2e_v, h2e_v, dm1) \
@@ -863,8 +886,21 @@ def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
 
 
 def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
+    """The (virt,core) single-index virtual-core SC-NEVPT2 correction.
+
+    The liboqp engine (``nevpt2_sir``) contracts all intermediates with the
+    integral blocks in a single Fortran call; the NumPy fallback is below."""
     if len(e_core) == 0 or len(e_virt) == 0:
         return 0.0, 0.0
+    a12 = _a12(h1e, h2e, dm1, dm2, dm3)
+    a13 = _a13(h1e, h2e, dm1, dm2, dm3)
+    nvirt = len(e_virt)
+    ncore = len(e_core)
+    result = _sir_lib(nvirt, ncore, h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13)
+    if result[0] is not None:
+        norm, h = result
+        diff = e_core[:, None] - e_virt[None, :]
+        return _norm_to_energy(norm, h, -diff)
     norm = _ein('rpiq,raib,qpab->ir', h2e_v1, h2e_v1, dm2) * 2.0 \
         - _ein('rpiq,rabi,qpab->ir', h2e_v1, h2e_v2, dm2) \
         - _ein('rpqi,raib,qpab->ir', h2e_v2, h2e_v1, dm2) \
@@ -874,8 +910,6 @@ def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
         + _ein('rpiq,ri,qp->ir', h2e_v1, h1e_v, dm1) * 4.0 \
         - _ein('rpqi,ri,qp->ir', h2e_v2, h1e_v, dm1) * 2.0 \
         + _ein('ri,ri->ir', h1e_v, h1e_v) * 2.0
-    a12 = _a12(h1e, h2e, dm1, dm2, dm3)
-    a13 = _a13(h1e, h2e, dm1, dm2, dm3)
     h = _ein('rpiq,raib,pqab->ir', h2e_v1, h2e_v1, a12) * 2.0 \
         - _ein('rpiq,rabi,pqab->ir', h2e_v1, h2e_v2, a12) \
         - _ein('rpqi,raib,pqab->ir', h2e_v2, h2e_v1, a12) \
@@ -896,15 +930,15 @@ def _sijrs_lib(e_core, e_virt, g_cvcv):
         return None, None
     nc = int(len(e_core))
     nv = int(len(e_virt))
-    g_cvcv_c = np.ascontiguousarray(g_cvcv)
-    e_core_c = np.ascontiguousarray(e_core)
-    e_virt_c = np.ascontiguousarray(e_virt)
+    g_contig = np.ascontiguousarray(g_cvcv)
+    e_core_contig = np.ascontiguousarray(e_core)
+    e_virt_contig = np.ascontiguousarray(e_virt)
     norm_ptr = ffi.new("double *")
     energy_ptr = ffi.new("double *")
     lib.nevpt2_sijrs(nc, nv,
-                     ffi.cast("double *", g_cvcv_c.ctypes.data),
-                     ffi.cast("double *", e_core_c.ctypes.data),
-                     ffi.cast("double *", e_virt_c.ctypes.data),
+                     ffi.cast("double *", g_contig.ctypes.data),
+                     ffi.cast("double *", e_core_contig.ctypes.data),
+                     ffi.cast("double *", e_virt_contig.ctypes.data),
                      norm_ptr, energy_ptr)
     return float(norm_ptr[0]), float(energy_ptr[0])
 
@@ -922,16 +956,18 @@ def _srs_lib(h2e_v, rm2, a7, e_virt):
     nvirt = int(len(e_virt))
     if nvirt <= 0:
         return np.zeros((0, 0)), np.zeros((0, 0))
-    h2e_v_c = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
-    rm2_c = np.ascontiguousarray(rm2)
-    a7_c = np.ascontiguousarray(a7)
     nv2 = nvirt * nvirt
     norm_ptr = ffi.new("double[%d]" % nv2)
     energy_ptr = ffi.new("double[%d]" % nv2)
+    # h2e_v has phys'd layout [nvirt, nvirt, nact, nact] from _blocks;
+    # Fortran expects [nvirt, nact, nvirt, nact] (undo phys)
+    h2e_v_contig = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
+    rm2_contig = np.ascontiguousarray(rm2)
+    a7_contig = np.ascontiguousarray(a7)
     lib.nevpt2_srs(nact, nvirt,
-                   ffi.cast("double *", h2e_v_c.ctypes.data),
-                   ffi.cast("double *", rm2_c.ctypes.data),
-                   ffi.cast("double *", a7_c.ctypes.data),
+                   ffi.cast("double *", h2e_v_contig.ctypes.data),
+                   ffi.cast("double *", rm2_contig.ctypes.data),
+                   ffi.cast("double *", a7_contig.ctypes.data),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
     h = np.frombuffer(ffi.buffer(energy_ptr, nv2 * 8), dtype=np.float64).reshape(nvirt, nvirt)
@@ -951,21 +987,116 @@ def _sij_lib(h2e_v, hdm2, a9, e_core):
     ncore = int(len(e_core))
     if ncore <= 0:
         return np.zeros((0, 0)), np.zeros((0, 0))
-    h2e_v_c = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
-    hdm2_c = np.ascontiguousarray(hdm2)
-    a9_c = np.ascontiguousarray(a9)
     nc2 = ncore * ncore
     norm_ptr = ffi.new("double[%d]" % nc2)
     energy_ptr = ffi.new("double[%d]" % nc2)
+    # h2e_v has phys'd layout [nact, nact, ncore, ncore] from _blocks;
+    # Fortran expects [nact, ncore, nact, ncore] (undo phys)
+    h2e_v_contig = np.ascontiguousarray(h2e_v.transpose(0, 2, 1, 3))
+    hdm2_contig = np.ascontiguousarray(hdm2)
+    a9_contig = np.ascontiguousarray(a9)
     lib.nevpt2_sij(nact, ncore,
-                   ffi.cast("double *", h2e_v_c.ctypes.data),
-                   ffi.cast("double *", hdm2_c.ctypes.data),
-                   ffi.cast("double *", a9_c.ctypes.data),
+                   ffi.cast("double *", h2e_v_contig.ctypes.data),
+                   ffi.cast("double *", hdm2_contig.ctypes.data),
+                   ffi.cast("double *", a9_contig.ctypes.data),
                    norm_ptr, energy_ptr)
     norm = np.frombuffer(ffi.buffer(norm_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
     h = np.frombuffer(ffi.buffer(energy_ptr, nc2 * 8), dtype=np.float64).reshape(ncore, ncore)
     return norm, h
 
+
+def _sijr_lib(nvirt, ncore, h2e_v, hdm1, a3):
+    """Fortran Sijr subspace (virt,core,core) final contraction, or None.
+    Returns per-(r,i,j) norm and h arrays of shape (nvirt, ncore, ncore)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_sijr"):
+        return None, None
+    nact = int(hdm1.shape[0])
+    if nvirt <= 0 or ncore <= 0 or nact <= 0:
+        return np.zeros((nvirt, ncore, ncore)), np.zeros((nvirt, ncore, ncore))
+    h2e_v_c = np.ascontiguousarray(h2e_v)
+    hdm1_c = np.ascontiguousarray(hdm1)
+    a3_c = np.ascontiguousarray(a3)
+    nc2 = ncore * ncore
+    nr2 = nvirt * nc2
+    norm_ptr = ffi.new("double[%d]" % nr2)
+    energy_ptr = ffi.new("double[%d]" % nr2)
+    lib.nevpt2_sijr(nvirt, ncore, nact,
+                    ffi.cast("double *", h2e_v_c.ctypes.data),
+                    ffi.cast("double *", hdm1_c.ctypes.data),
+                    ffi.cast("double *", a3_c.ctypes.data),
+                    norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nr2 * 8), dtype=np.float64).reshape(nvirt, ncore, ncore)
+    h = np.frombuffer(ffi.buffer(energy_ptr, nr2 * 8), dtype=np.float64).reshape(nvirt, ncore, ncore)
+    return norm, h
+
+
+def _srsi_lib(nvirt, ncore, h2e_v, dm1, k27):
+    """Fortran Srsi subspace (virt,virt,core) final contraction, or None.
+    Returns per-(r,s,i) norm and h arrays of shape (nvirt, nvirt, ncore)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_srsi"):
+        return None, None
+    nact = int(dm1.shape[0])
+    if nvirt <= 0 or ncore <= 0 or nact <= 0:
+        return np.zeros((nvirt, nvirt, ncore)), np.zeros((nvirt, nvirt, ncore))
+    h2e_v_c = np.ascontiguousarray(h2e_v)
+    dm1_c = np.ascontiguousarray(dm1)
+    k27_c = np.ascontiguousarray(k27)
+    nvnc = nvirt * ncore
+    nv2nc = nvirt * nvirt * ncore
+    norm_ptr = ffi.new("double[%d]" % nv2nc)
+    energy_ptr = ffi.new("double[%d]" % nv2nc)
+    lib.nevpt2_srsi(nvirt, ncore, nact,
+                    ffi.cast("double *", h2e_v_c.ctypes.data),
+                    ffi.cast("double *", dm1_c.ctypes.data),
+                    ffi.cast("double *", k27_c.ctypes.data),
+                    norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nv2nc * 8), dtype=np.float64).reshape(nvirt, nvirt, ncore)
+    h = np.frombuffer(ffi.buffer(energy_ptr, nv2nc * 8), dtype=np.float64).reshape(nvirt, nvirt, ncore)
+    return norm, h
+
+
+def _sir_lib(nvirt, ncore, h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13):
+    """Fortran Sir subspace (virt,core) final contraction, or None.
+    Returns per-(r,i) norm and h arrays of shape (nvirt, ncore)."""
+    backend = _koopmans_lib()
+    if backend is None:
+        return None, None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_sir"):
+        return None, None
+    nact = int(dm1.shape[0])
+    if nvirt <= 0 or ncore <= 0 or nact <= 0:
+        return np.zeros((nvirt, ncore)), np.zeros((nvirt, ncore))
+    h2e_v1_c = np.ascontiguousarray(h2e_v1)
+    h2e_v2_c = np.ascontiguousarray(h2e_v2)
+    h1e_v_c = np.ascontiguousarray(h1e_v)
+    dm1_c = np.ascontiguousarray(dm1)
+    dm2_c = np.ascontiguousarray(dm2)
+    a12_c = np.ascontiguousarray(a12)
+    a13_c = np.ascontiguousarray(a13)
+    nr = nvirt * ncore
+    norm_ptr = ffi.new("double[%d]" % nr)
+    energy_ptr = ffi.new("double[%d]" % nr)
+    lib.nevpt2_sir(nvirt, ncore, nact,
+                   ffi.cast("double *", h2e_v1_c.ctypes.data),
+                   ffi.cast("double *", h2e_v2_c.ctypes.data),
+                   ffi.cast("double *", h1e_v_c.ctypes.data),
+                   ffi.cast("double *", dm1_c.ctypes.data),
+                   ffi.cast("double *", dm2_c.ctypes.data),
+                   ffi.cast("double *", a12_c.ctypes.data),
+                   ffi.cast("double *", a13_c.ctypes.data),
+                   norm_ptr, energy_ptr)
+    norm = np.frombuffer(ffi.buffer(norm_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore)
+    h = np.frombuffer(ffi.buffer(energy_ptr, nr * 8), dtype=np.float64).reshape(nvirt, ncore)
+    return norm, h
 
 
 def _blocks(h1e_mo, eri_mo, ncore, nact, eps):

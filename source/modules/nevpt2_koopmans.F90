@@ -1735,4 +1735,283 @@ subroutine nevpt2_sij(nact, ncore, h2e_v, hdm2, a9, norm, energy) &
   !$omp end parallel do
 end subroutine nevpt2_sij
 
+
+! nevpt2_sijr — Fortran implementation of the Sijr subspace (virt,core,core).
+!
+! h2e_v: C-order [nvirt, nact, ncore, ncore] from blocks['Sijr']
+!   = phys(eri_mo[V, C, A, C]) → eri_mo[V, A, C, C]
+!
+! norm[r,j,i] = sum_{p,a} h2e_v[r,p,j,i] * (2*h2e_v[r,a,j,i] - h2e_v[r,a,i,j]) * hdm1[p,a]
+!
+! Same expression with a3 replacing hdm1 for energy.
+!
+subroutine nevpt2_sijr(nvirt, ncore, nact, h2e_v, hdm1, a3, norm, energy) &
+    bind(C, name="nevpt2_sijr")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nvirt, ncore, nact
+  ! h2e_v: [nvirt, nact, ncore, ncore]; hdm1, a3: [nact, nact]
+  real(c_double), intent(in)  :: h2e_v(0:*), hdm1(0:*), a3(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
+
+  integer :: r, i, j, p, a, nc2, nr2
+  real(c_double) :: h2e_rpji, t
+
+  nc2 = ncore * ncore
+  nr2 = nvirt * nc2
+  norm(0:nr2 - 1) = 0.0_c_double
+  energy(0:nr2 - 1) = 0.0_c_double
+  if (ncore <= 0 .or. nvirt <= 0 .or. nact <= 0) return
+
+  !$omp parallel do collapse(3) default(none) &
+  !$omp shared(nvirt, ncore, nact, h2e_v, hdm1, a3, norm, energy, nc2) &
+  !$omp private(r, i, j, p, a, h2e_rpji, t)
+  do r = 0, nvirt - 1
+    do j = 0, ncore - 1
+      do i = 0, ncore - 1
+        do p = 0, nact - 1
+          h2e_rpji = h2e_v(((r*nact + p)*ncore + j)*ncore + i)
+          t = 0.0_c_double
+          do a = 0, nact - 1
+            ! 2*h2e_v[r,a,j,i] - h2e_v[r,a,i,j]
+            t = t + (2.0_c_double * h2e_v(((r*nact + a)*ncore + j)*ncore + i) &
+                    - h2e_v(((r*nact + a)*ncore + i)*ncore + j)) * hdm1(p*nact + a)
+          end do
+          norm(r*nc2 + j*ncore + i) = norm(r*nc2 + j*ncore + i) + h2e_rpji * t
+        end do
+        do p = 0, nact - 1
+          h2e_rpji = h2e_v(((r*nact + p)*ncore + j)*ncore + i)
+          t = 0.0_c_double
+          do a = 0, nact - 1
+            t = t + (2.0_c_double * h2e_v(((r*nact + a)*ncore + j)*ncore + i) &
+                    - h2e_v(((r*nact + a)*ncore + i)*ncore + j)) * a3(p*nact + a)
+          end do
+          energy(r*nc2 + j*ncore + i) = energy(r*nc2 + j*ncore + i) + h2e_rpji * t
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+
+  ! Symmetrise (r,i,j) += (r,j,i) and halve diagonal
+  do r = 0, nvirt - 1
+    do i = 0, ncore - 1
+      do j = i + 1, ncore - 1
+        norm(r*nc2 + i*ncore + j) = norm(r*nc2 + i*ncore + j) + norm(r*nc2 + j*ncore + i)
+        norm(r*nc2 + j*ncore + i) = norm(r*nc2 + i*ncore + j)
+        energy(r*nc2 + i*ncore + j) = energy(r*nc2 + i*ncore + j) + energy(r*nc2 + j*ncore + i)
+        energy(r*nc2 + j*ncore + i) = energy(r*nc2 + i*ncore + j)
+      end do
+      norm(r*nc2 + i*ncore + i) = norm(r*nc2 + i*ncore + i) * 0.5_c_double
+      energy(r*nc2 + i*ncore + i) = energy(r*nc2 + i*ncore + i) * 0.5_c_double
+    end do
+  end do
+end subroutine nevpt2_sijr
+
+
+! nevpt2_srsi — Fortran implementation of the Srsi subspace (virt,virt,core).
+!
+! h2e_v: C-order [nvirt, nvirt, ncore, nact] from blocks['Srsi']
+!   = phys(eri_mo[V, C, V, A]) → eri_mo[V, V, C, A]
+!
+! norm[r,s,i] = sum_{p,a} h2e_v[r,s,i,p] * (2*h2e_v[r,s,i,a] - h2e_v[s,r,i,a]) * dm1[p,a]
+!
+! Same expression with k27 replacing dm1 for energy.
+!
+subroutine nevpt2_srsi(nvirt, ncore, nact, h2e_v, dm1, k27, norm, energy) &
+    bind(C, name="nevpt2_srsi")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nvirt, ncore, nact
+  ! h2e_v: [nvirt, nvirt, ncore, nact]; dm1, k27: [nact, nact]
+  real(c_double), intent(in)  :: h2e_v(0:*), dm1(0:*), k27(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
+
+  integer :: r, s, i, p, a, nvnc, nv2, nv2nc
+  real(c_double) :: h2e_rsip, t
+
+  nvnc = nvirt * ncore
+  nv2 = nvirt * nvirt
+  nv2nc = nv2 * ncore
+  norm(0:nv2nc - 1) = 0.0_c_double
+  energy(0:nv2nc - 1) = 0.0_c_double
+  if (ncore <= 0 .or. nvirt <= 0 .or. nact <= 0) return
+
+  !$omp parallel do collapse(3) default(none) &
+  !$omp shared(nvirt, ncore, nact, h2e_v, dm1, k27, norm, energy, nvnc) &
+  !$omp private(r, s, i, p, a, h2e_rsip, t)
+  do r = 0, nvirt - 1
+    do s = 0, nvirt - 1
+      do i = 0, ncore - 1
+        do p = 0, nact - 1
+          h2e_rsip = h2e_v(((r*nvirt + s)*ncore + i)*nact + p)
+          t = 0.0_c_double
+          do a = 0, nact - 1
+            ! 2*h2e_v[r,s,i,a] - h2e_v[s,r,i,a]
+            t = t + (2.0_c_double * h2e_v(((r*nvirt + s)*ncore + i)*nact + a) &
+                    - h2e_v(((s*nvirt + r)*ncore + i)*nact + a)) * dm1(p*nact + a)
+          end do
+          norm((r*nvirt + s)*ncore + i) = norm((r*nvirt + s)*ncore + i) + h2e_rsip * t
+        end do
+        do p = 0, nact - 1
+          h2e_rsip = h2e_v(((r*nvirt + s)*ncore + i)*nact + p)
+          t = 0.0_c_double
+          do a = 0, nact - 1
+            t = t + (2.0_c_double * h2e_v(((r*nvirt + s)*ncore + i)*nact + a) &
+                    - h2e_v(((s*nvirt + r)*ncore + i)*nact + a)) * k27(p*nact + a)
+          end do
+          energy((r*nvirt + s)*ncore + i) = energy((r*nvirt + s)*ncore + i) + h2e_rsip * t
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+
+  ! Symmetrise (s,r,i) += (r,s,i) and halve diagonal virt pairs
+  do r = 0, nvirt - 1
+    do s = r + 1, nvirt - 1
+      do i = 0, ncore - 1
+        norm((s*nvirt + r)*ncore + i) = norm((s*nvirt + r)*ncore + i) + norm((r*nvirt + s)*ncore + i)
+        norm((r*nvirt + s)*ncore + i) = norm((s*nvirt + r)*ncore + i)
+        energy((s*nvirt + r)*ncore + i) = energy((s*nvirt + r)*ncore + i) + energy((r*nvirt + s)*ncore + i)
+        energy((r*nvirt + s)*ncore + i) = energy((s*nvirt + r)*ncore + i)
+      end do
+    end do
+    do i = 0, ncore - 1
+      norm((r*nvirt + r)*ncore + i) = norm((r*nvirt + r)*ncore + i) * 0.5_c_double
+      energy((r*nvirt + r)*ncore + i) = energy((r*nvirt + r)*ncore + i) * 0.5_c_double
+    end do
+  end do
+end subroutine nevpt2_srsi
+
+
+! nevpt2_sir — Fortran implementation of the Sir subspace (virt,core).
+!
+! h2e_v1: C-order [nvirt, nact, ncore, nact] from blocks['Sir'][0]
+!   = phys(eri_mo[V, C, A, A]) → eri_mo[V, A, C, A]
+! h2e_v2: C-order [nvirt, nact, nact, ncore] from blocks['Sir'][1]
+!   = phys(eri_mo[V, A, A, C]) → eri_mo[V, A, A, C]
+! h1e_v: C-order [nvirt, ncore] from blocks['Sir'][2]
+!
+! norm[i,r] = sum_{pqab}
+!   2.0 * v1[r,p,i,q] * v1[r,a,i,b] * dm2[q,p,a,b]
+! - 1.0 * v1[r,p,i,q] * v2[r,a,b,i] * dm2[q,p,a,b]
+! - 1.0 * v2[r,p,q,i] * v1[r,a,i,b] * dm2[q,p,a,b]
+! + 2.0 * v2[r,a,q,i] * v2[r,a,b,i] * dm1[q,b]
+! - 1.0 * v2[r,p,q,i] * v2[r,a,b,i] * dm2[q,b,a,p]
+! + 1.0 * v2[r,p,q,i] * v2[r,a,a,i] * dm1[q,p]
+! + 4.0 * v1[r,p,i,q] * h1e_v[r,i] * dm1[q,p]
+! - 2.0 * v2[r,p,q,i] * h1e_v[r,i] * dm1[q,p]
+! + 2.0 * h1e_v[r,i] * h1e_v[r,i]
+!
+! Same expression with a12/a13 replacing dm2/dm1 for energy.
+!
+subroutine nevpt2_sir(nvirt, ncore, nact, &
+    h2e_v1, h2e_v2, h1e_v, dm1, dm2, a12, a13, norm, energy) &
+    bind(C, name="nevpt2_sir")
+  use, intrinsic :: iso_c_binding
+  implicit none
+  integer(c_int32_t), value :: nvirt, ncore, nact
+  ! h2e_v1: [nvirt, nact, ncore, nact]; h2e_v2: [nvirt, nact, nact, ncore]
+  ! h1e_v: [nvirt, ncore]
+  ! dm1, dm2, a12, a13: active-space intermediates
+  real(c_double), intent(in)  :: h2e_v1(0:*), h2e_v2(0:*), h1e_v(0:*)
+  real(c_double), intent(in)  :: dm1(0:*), dm2(0:*), a12(0:*), a13(0:*)
+  real(c_double), intent(out) :: norm(0:*), energy(0:*)
+
+  integer(c_int32_t) :: r, i, p, q, a, b, nr
+  real(c_double) :: h1e_ri, nsum, esum, v2_diag_ri
+  real(c_double) :: v1_rpiq, v2_rpqi, v1_raib, v2_rabi, v2_raqi
+  real(c_double) :: dm1_qp, dm2_qpab, dm2_qbap
+  real(c_double) :: a12_qpab, a13_pqab
+
+  nr = nvirt * ncore
+  norm(0:nr - 1) = 0.0_c_double
+  energy(0:nr - 1) = 0.0_c_double
+  if (ncore <= 0 .or. nvirt <= 0 .or. nact <= 0) return
+
+  !$omp parallel do collapse(2) default(none) &
+  !$omp shared(nvirt, ncore, nact, h2e_v1, h2e_v2, h1e_v, &
+  !$omp        dm1, dm2, a12, a13, norm, energy) &
+  !$omp private(r, i, p, q, a, b, h1e_ri, nsum, esum, v2_diag_ri, &
+  !$omp         v1_rpiq, v2_rpqi, v1_raib, v2_rabi, v2_raqi, &
+  !$omp         dm1_qp, dm2_qpab, dm2_qbap, a12_qpab, a13_pqab)
+  do r = 0, nvirt - 1
+    do i = 0, ncore - 1
+      h1e_ri = h1e_v(r * ncore + i)
+      nsum = 2.0_c_double * h1e_ri * h1e_ri  ! T9
+      esum = 0.0_c_double
+
+      ! Precompute sum_a v2[r,a,a,i] for term 6
+      v2_diag_ri = 0.0_c_double
+      do a = 0, nact - 1
+        v2_diag_ri = v2_diag_ri + h2e_v2(((r * nact + a) * nact + a) * ncore + i)
+      end do
+
+      ! Terms 1,2,3,5,6,7,8 (p,q,a,b) + Energy E1-E4
+      ! T6,T7,T8 only need p,q (not a,b), computed inside the 4-index loop
+      ! T4 needs a,q,b (no p), handled in a separate loop below
+      do p = 0, nact - 1
+        do q = 0, nact - 1
+          dm1_qp = dm1(q * nact + p)
+          v1_rpiq = h2e_v1(((r * nact + p) * ncore + i) * nact + q)
+          v2_rpqi = h2e_v2(((r * nact + p) * nact + q) * ncore + i)
+
+          ! T7 + T8 + T6 (p,q-dependent, no a,b needed)
+          nsum = nsum + (4.0_c_double * v1_rpiq - 2.0_c_double * v2_rpqi) * h1e_ri * dm1_qp
+          nsum = nsum + v2_rpqi * v2_diag_ri * dm1_qp  ! T6
+
+          do a = 0, nact - 1
+            do b = 0, nact - 1
+              v1_raib = h2e_v1(((r * nact + a) * ncore + i) * nact + b)
+              v2_rabi = h2e_v2(((r * nact + a) * nact + b) * ncore + i)
+
+              dm2_qpab = dm2(((q * nact + p) * nact + a) * nact + b)
+              dm2_qbap = dm2(((q * nact + b) * nact + a) * nact + p)
+
+              ! T1: 2*v1_rpiq*v1_raib*dm2_qpab
+              nsum = nsum + 2.0_c_double * v1_rpiq * v1_raib * dm2_qpab
+              ! T2: -v1_rpiq*v2_rabi*dm2_qpab
+              nsum = nsum - v1_rpiq * v2_rabi * dm2_qpab
+              ! T3: -v2_rpqi*v1_raib*dm2_qpab
+              nsum = nsum - v2_rpqi * v1_raib * dm2_qpab
+              ! T5: -v2_rpqi*v2_rabi*dm2_qbap
+              nsum = nsum - v2_rpqi * v2_rabi * dm2_qbap
+
+              ! Energy terms (a12 for dm2-based, a13 for dm1-based)
+              a12_qpab = a12(((q * nact + p) * nact + a) * nact + b)
+              a13_pqab = a13(((p * nact + q) * nact + a) * nact + b)
+
+              ! E1: 2*v1_rpiq*v1_raib*a12_qpab
+              esum = esum + 2.0_c_double * v1_rpiq * v1_raib * a12_qpab
+              ! E2: -v1_rpiq*v2_rabi*a12_qpab
+              esum = esum - v1_rpiq * v2_rabi * a12_qpab
+              ! E3: -v2_rpqi*v1_raib*a12_qpab
+              esum = esum - v2_rpqi * v1_raib * a12_qpab
+              ! E4: +v2_rpqi*v2_rabi*a13_pqab
+              esum = esum + v2_rpqi * v2_rabi * a13_pqab
+            end do
+          end do
+        end do
+      end do
+
+      ! Term 4: 2.0 * sum_{a,q,b} v2[r,a,q,i] * v2[r,a,b,i] * dm1[q,b]
+      ! (no p dependence, separate loop avoids O(nact^5) work)
+      do a = 0, nact - 1
+        do q = 0, nact - 1
+          v2_raqi = h2e_v2(((r * nact + a) * nact + q) * ncore + i)
+          do b = 0, nact - 1
+            v2_rabi = h2e_v2(((r * nact + a) * nact + b) * ncore + i)
+            nsum = nsum + 2.0_c_double * v2_raqi * v2_rabi * dm1(q * nact + b)
+          end do
+        end do
+      end do
+
+      norm(r * ncore + i) = nsum
+      energy(r * ncore + i) = esum
+    end do
+  end do
+  !$omp end parallel do
+end subroutine nevpt2_sir
+
 end module nevpt2_koopmans_mod

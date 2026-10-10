@@ -136,7 +136,6 @@ contains
     e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab + e_s
   end subroutine mp2_correlation
 
-
   !###########################################################################
   ! O(N⁵) path — hybrid full-MO / batched half-transform
   !###########################################################################
@@ -230,7 +229,6 @@ contains
 
   end subroutine mp2_corr_n5
 
-
   !> @brief Full MO transform path (PySCF-style).
   !>
   !> Builds eri_mo(nmo,nmo,nmo,nmo) via cc_build_full_mo, then reads the
@@ -290,11 +288,10 @@ contains
         end do
         !$omp end parallel do
         deallocate(eri_mo)
-        ok = -1
       end if
+      ok = -1
       return
     end if
-
     ! Normal path: RHF, or same-spin-only, or no opposite-spin.
     ! cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
     ! eri_mo(p,q,r,s) = (pq|rs) in chemist notation.
@@ -344,7 +341,6 @@ contains
     deallocate(eri_mo)
     ok = 0
   end subroutine mp2_corr_n5_full
-
 
   !> @brief Memory-save batched half-transform path (same as the earlier
   !>        implementation, retained for large bases).
@@ -455,7 +451,6 @@ contains
     success = .true.
   end subroutine mp2_corr_n5_batched
 
-
   subroutine mp2_n5_second_half(nbf, npair, nov_l, &
       nocc_l, nvir_l, nocc_s, nvir_s, &
       cmo_l, cmo_s, half, prow, pcol, ovov)
@@ -489,7 +484,6 @@ contains
     !$omp end parallel do
     deallocate(e_mat, scr2, vv)
   end subroutine mp2_n5_second_half
-
 
   subroutine mp2_n5_opposite(nbf, npair, nov_l, &
       nocc_l, nvir_l, nocc_o, nvir_o, &
@@ -532,14 +526,12 @@ contains
     deallocate(e_mat, scr2, vv)
   end subroutine mp2_n5_opposite
 
-
   pure integer(8) function mp2_packed_idx(p, q) result(idx)
     integer, intent(in) :: p, q
     integer(8) :: hi, lo
     hi = int(max(p, q), 8); lo = int(min(p, q), 8)
     idx = hi * (hi - 1_8) / 2_8 + lo
   end function mp2_packed_idx
-
 
   !###########################################################################
   ! Original direct-J path (O(N⁶))

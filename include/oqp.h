@@ -562,6 +562,19 @@ void nevpt2_srs(int32_t nact, int32_t nvirt, const double *h2e_v,
 void nevpt2_sij(int32_t nact, int32_t ncore, const double *h2e_v,
     const double *hdm2, const double *a9, double *norm, double *energy);
 
+/* SC-NEVPT2 Koopmans subspace final contractions (nevpt2_koopmans.F90).
+ * Each contracts pre-computed intermediates with two-electron integral blocks.
+ * norm and energy have the shape indicated in each comment. */
+void nevpt2_sijr(int32_t nvirt, int32_t ncore, int32_t nact, const double *h2e_v,
+    const double *hdm1, const double *a3, double *norm, double *energy);
+void nevpt2_srsi(int32_t nvirt, int32_t ncore, int32_t nact, const double *h2e_v,
+    const double *dm1, const double *k27, double *norm, double *energy);
+void nevpt2_sir(int32_t nvirt, int32_t ncore, int32_t nact,
+    const double *h2e_v1, const double *h2e_v2, const double *h1e_v,
+    const double *dm1, const double *dm2,
+    const double *a12, const double *a13, double *norm, double *energy);
+
+
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
  * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
  * Fock above. */
