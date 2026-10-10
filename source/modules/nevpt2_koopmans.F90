@@ -1973,7 +1973,7 @@ subroutine nevpt2_sir(nvirt, ncore, nact, &
               nsum = nsum - v2_rpqi * v2_rabi * dm2_qbap
 
               ! Energy terms (a12 for dm2-based, a13 for dm1-based)
-              a12_qpab = a12(((q * nact + p) * nact + a) * nact + b)
+              a12_qpab = a12(((p * nact + q) * nact + a) * nact + b)
               a13_pqab = a13(((p * nact + q) * nact + a) * nact + b)
 
               ! E1: 2*v1_rpiq*v1_raib*a12_qpab
@@ -2109,7 +2109,7 @@ subroutine nevpt2_sr(nvirt, nact, &
           h2e_ipqr = h2e_v(((i*na + p)*na + q)*na + r)
           t_no = 0.0_c_double
           do a = 0, na - 1
-            t_no = t_no + dm2((((p*na + q)*na + r)*na + a)) * h1e_v(i*na + a)
+            t_no = t_no + dm2((((r*na + p)*na + q)*na + a)) * h1e_v(i*na + a)
           end do
           norm(i) = norm(i) + 2.0_c_double * h2e_ipqr * t_no
         end do
@@ -2219,7 +2219,7 @@ subroutine nevpt2_si(ncore, nact, &
           h2e_qpir = h2e_v((((q*na + p)*ncore + i)*na + r))
           t_no = 0.0_c_double
           do a = 0, na - 1
-            t_no = t_no + dm2_h((((p*na + q)*na + r)*na + a)) * h1e_v(a*ncore + i)
+            t_no = t_no + dm2_h((((r*na + p)*na + q)*na + a)) * h1e_v(a*ncore + i)
           end do
           norm(i) = norm(i) + 2.0_c_double * h2e_qpir * t_no
         end do
