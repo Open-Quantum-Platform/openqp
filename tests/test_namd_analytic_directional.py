@@ -1,7 +1,6 @@
 """Analytic-NAC TDC and directional FSSH rescaling regression gates."""
 
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -9,6 +8,7 @@ import sys
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,11 +79,7 @@ print('DIRECTIONAL=' + json.dumps({
     'zero': zero, 'nonfinite': nonfinite,
 }))
 """
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -665,11 +661,7 @@ print('HT_NATIVE=' + json.dumps({
     'candidate_probability': float(results[2]),
 }))
 """.replace('LOG_PATH', repr(str(tmp_path / 'native_ht_contract.log')))
-    env = os.environ.copy()
-    pythonpath = str(ROOT / 'pyoqp')
-    if env.get('PYTHONPATH'):
-        pythonpath += os.pathsep + env['PYTHONPATH']
-    env['PYTHONPATH'] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, '-c', script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False)

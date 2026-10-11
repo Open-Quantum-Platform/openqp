@@ -9,6 +9,7 @@ and the state labels are unchanged.
 """
 
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -69,7 +70,8 @@ def run_case(workdir, name, content):
 
 
 def main():
-    workdir = sys.argv[1] if len(sys.argv) > 1 else '/tmp/oqp_response_sym'
+    workdir = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix='oqp_response_sym_')
+    print(f'workdir: {workdir}')
     failures = []
 
     for name, (scf, extra, tdhf) in CASES.items():

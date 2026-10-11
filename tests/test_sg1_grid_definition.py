@@ -38,9 +38,7 @@ import os
 import re
 import tempfile
 import unittest
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 
 # rad_grid_type encoding, from OQPData._rad_grid_types / radial_grid_types.F90
 RAD_MHL, RAD_TA, RAD_BECKE = 0, 2, 3
@@ -79,7 +77,6 @@ pruned={pruned}
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         import oqp.library  # noqa: F401

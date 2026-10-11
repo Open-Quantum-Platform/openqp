@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -161,6 +163,7 @@ class SlottedMolEnergy:
 
 class TestSinglePointScfFallback(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_single_point_stubs()
         self.single_point = load_module(
             "single_point_under_test",
@@ -400,6 +403,45 @@ class TestSinglePointScfFallback(unittest.TestCase):
 
         self.assertTrue(calc._run_scf())
         self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_mom_never_escalates_to_trah(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["mom"] = True
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+
+        self.assertFalse(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_mom_disables_requested_trah_stability_pass(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["mom"] = True
+        calc.stability = True
+
+        self.assertTrue(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_ml_selector_never_picks_trah_for_occupation_rule(self):
+        model = types.ModuleType("oqp.library.scf_selector_model")
+        setattr(model, "predict", lambda features: "trah")
+        previous = sys.modules.get("oqp.library.scf_selector_model")
+        sys.modules["oqp.library.scf_selector_model"] = model
+        self.addCleanup(
+            lambda: sys.modules.__setitem__("oqp.library.scf_selector_model", previous)
+            if previous is not None else sys.modules.pop("oqp.library.scf_selector_model", None))
+        for rule in ("mom", "rstctmo"):
+            calc = self.make_calculator()
+            calc.converger_type = "ml"
+            calc.mol.config["scf"]["converger_type"] = "ml"
+            calc.mol.config["scf"][rule] = True
+
+            self.assertTrue(calc._run_scf())
+            self.assertNotIn("trah", calc.mol.data.convergers, rule)
+            self.assertEqual(calc.mol.data.convergers[0], "diis", rule)
 
     def test_ml_selector_maps_diis_subtype_to_native_controls(self):
         # The distilled model labels DIIS variants, while native control uses a
