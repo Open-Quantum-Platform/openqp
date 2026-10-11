@@ -1,8 +1,6 @@
-#ifndef OQP_BLAS_INT
-#define OQP_BLAS_INT 4
-#endif
 module oqp_linalg
-#if OQP_BLAS_INT == 4
+  ! Export the wrappers for every backend integer width. blas_wrap and
+  ! lapack_wrap convert to BLAS_INT; ILP64 still needs their public interface.
   use blas_wrap, only: caxpy      =>  oqp_caxpy_i64
   use blas_wrap, only: ccopy      =>  oqp_ccopy_i64
   use blas_wrap, only: cdotc      =>  oqp_cdotc_i64
@@ -155,8 +153,6 @@ module oqp_linalg
   use lapack_wrap, only: dormqr => oqp_dormqr_i64
   use lapack_wrap, only: dtpttr => oqp_dtpttr_i64
   use lapack_wrap, only: dtrttp => oqp_dtrttp_i64
-#endif
-
   implicit none
 
   public
