@@ -2652,21 +2652,16 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     return ThreadPool(processes=ncpu), ncpu
 
 
-def _process_tree(pid):
-    """``pid`` and its live descendants (POSIX), from one ``ps`` snapshot."""
+def _direct_children(parents):
+    """PIDs whose parent is in ``parents``, from one ``ps`` snapshot (POSIX)."""
     out = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='],
                          capture_output=True, text=True).stdout
-    children = {}
+    found = []
     for line in out.splitlines():
         fields = line.split()
-        if len(fields) == 2:
-            children.setdefault(int(fields[1]), []).append(int(fields[0]))
-    tree, stack = [pid], [pid]
-    while stack:
-        for child in children.get(stack.pop(), []):
-            tree.append(child)
-            stack.append(child)
-    return tree
+        if len(fields) == 2 and int(fields[1]) in parents:
+            found.append(int(fields[0]))
+    return found
 
 
 def _signal_pids(pids, sig):
@@ -2714,20 +2709,21 @@ class _ExternalJobs:
 
     @staticmethod
     def _freeze_tree(proc):
-        """SIGSTOP ``proc`` and all its descendants, top-down; return the
-        descendants, or None when ``proc`` has already been reaped.
+        """SIGSTOP ``proc`` and all its descendants, one generation at a time;
+        return the descendants, or None when ``proc`` has already been reaped.
 
-        Every PID returned is pinned: a stopped process cannot reap its
-        children, so a descendant that exits stays a zombie and its PID cannot
-        be recycled while its parent is frozen.  Signalling the returned PIDs
-        before anything is resumed therefore cannot reach an unrelated process.
+        Only direct children of already-stopped processes are ever signalled.
+        A stopped process cannot reap its children, so each such child -- alive
+        or a zombie -- keeps its PID until its parent is resumed, and signalling
+        it cannot reach a recycled PID.  Deeper generations are discovered only
+        after their parents are stopped.
         """
         proc.send_signal(signal.SIGSTOP)  # a no-op once proc is reaped
         if proc.poll() is not None:
             return None
         frozen = {proc.pid}
         while True:
-            new = [pid for pid in _process_tree(proc.pid) if pid not in frozen]
+            new = [pid for pid in _direct_children(frozen) if pid not in frozen]
             if not new:
                 return sorted(frozen - {proc.pid})
             _signal_pids(new, signal.SIGSTOP)

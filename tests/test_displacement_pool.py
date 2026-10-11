@@ -372,6 +372,7 @@ CTRL_C_DRIVER = textwrap.dedent('''
 STOP_ORDER_DRIVER = textwrap.dedent('''
     import os
     import pathlib
+    import signal
     import subprocess
     import sys
     import threading
@@ -381,10 +382,15 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
 
     work = pathlib.Path(sys.argv[1])
     # The child ignores SIGTERM, so stop() must wait out the grace period and
-    # fall back to SIGKILL; it also has a grandchild.
+    # fall back to SIGKILL; below it are a grandchild and a great-grandchild,
+    # so freezing has to proceed over more than one generation.
+    leaf = "import time; time.sleep(120)"
+    middle = ("import pathlib, subprocess, sys, time; "
+              f"h = subprocess.Popen([sys.executable, '-c', {leaf!r}]); "
+              "pathlib.Path(sys.argv[1]).write_text(str(h.pid)); time.sleep(120)")
     child = ("import os, pathlib, signal, subprocess, sys, time; "
              "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-             "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']); "
+             f"g = subprocess.Popen([sys.executable, '-c', {middle!r}, sys.argv[3]]); "
              "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
              "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
 
@@ -392,8 +398,21 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
     real_signal_pids = single_point._signal_pids
     real_wait = subprocess.Popen.wait
 
+    stopped = set()
+
+    def parent_of(pid):
+        out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
+                             capture_output=True, text=True).stdout.split()
+        return int(out[0]) if out else None
+
     def recording_signal_pids(pids, sig):
         events.append(("raw-signal", sig))
+        if sig == signal.SIGSTOP:
+            # Each PID must be a direct child of an already-stopped process,
+            # which cannot reap it, so the PID cannot have been recycled.
+            for pid in pids:
+                assert parent_of(pid) in stopped, ("parent not frozen", pid, stopped)
+            stopped.update(pids)
         return real_signal_pids(pids, sig)
 
     def recording_wait(self, timeout=None):
@@ -406,12 +425,15 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
 
     jobs = single_point._ExternalJobs()
     worker = threading.Thread(target=jobs.run, args=(
-        [sys.executable, "-c", child, str(work / "child.pid"), str(work / "grandchild.pid")],
+        [sys.executable, "-c", child, str(work / "child.pid"), str(work / "grandchild.pid"),
+         str(work / "great.pid")],
         dict(os.environ)))
     worker.start()
     deadline = time.time() + 60
-    while not (work / "child.pid").exists() and time.time() < deadline:
+    while not ((work / "child.pid").exists() and (work / "great.pid").exists()) \
+            and time.time() < deadline:
         time.sleep(0.05)
+    stopped.add(int((work / "child.pid").read_text()))  # frozen via its Popen handle
     jobs.stop(grace=1.0)
     worker.join(30)
 
@@ -429,13 +451,12 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
             return False
         return True
 
-    pid = int((work / "child.pid").read_text())
-    grandchild = int((work / "grandchild.pid").read_text())
+    tree = [int((work / f).read_text()) for f in ("child.pid", "grandchild.pid", "great.pid")]
     deadline = time.time() + 10
-    while (alive(pid) or alive(grandchild)) and time.time() < deadline:
+    while any(alive(p) for p in tree) and time.time() < deadline:
         time.sleep(0.1)
     assert not worker.is_alive()
-    assert not alive(pid) and not alive(grandchild), (pid, grandchild)
+    assert not any(alive(p) for p in tree), tree
     print("DISPLACEMENT_POOL_OK")
 ''')
 
