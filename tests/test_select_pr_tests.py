@@ -53,6 +53,9 @@ class SelectPrTestsTests(unittest.TestCase):
         self.sel.MAX_SELECTED = 1
         self.assertIsNone(self.sel.select(["tests/test_tdhf_input_checker.py"]))
 
+    def test_unknown_base_falls_back_to_the_full_suite(self):
+        self.assertIsNone(self.sel.changed_files("0" * 40))
+
 
 if __name__ == "__main__":
     unittest.main()

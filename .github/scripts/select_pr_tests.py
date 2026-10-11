@@ -59,8 +59,13 @@ FULL_SUITE_PATTERNS = [
 
 
 def changed_files(base):
+    """Changed paths, or None when the diff cannot be computed (e.g. base not fetched)."""
     out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                         cwd=ROOT, check=True, capture_output=True, text=True)
+                         cwd=ROOT, capture_output=True, text=True)
+    if out.returncode != 0:
+        print(f"select_pr_tests: git diff {base}...HEAD failed: {out.stderr.strip()}",
+              file=sys.stderr)
+        return None
     return [line for line in out.stdout.splitlines() if line]
 
 
@@ -113,7 +118,9 @@ def main():
     if not base:
         print("ALL")
         return
-    chosen = select(changed_files(base))
+    paths = changed_files(base)
+    # Fail safe: without a reliable diff, run everything.
+    chosen = None if paths is None else select(paths)
     print("ALL" if chosen is None else "\n".join(chosen))
 
 

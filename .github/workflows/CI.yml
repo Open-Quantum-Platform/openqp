@@ -40,7 +40,9 @@ jobs:
            uses: actions/checkout@v4
            with:
             # The pytest job diffs the PR against its base to select tests.
-            fetch-depth: ${{ matrix.role == 'pytest' && 0 || 1 }}
+            # String literals: in Actions expressions the number 0 is falsy, so
+            # `cond && 0 || 1` always yields 1 (a shallow clone without the base).
+            fetch-depth: ${{ matrix.role == 'pytest' && '0' || '1' }}
          - name: Setup Python
            uses: actions/setup-python@v5
            with:
@@ -293,6 +295,7 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
+            if [ -n "$BASE_SHA" ]; then git fetch --no-tags --quiet origin "$BASE_SHA" || true; fi
             selection="$(python .github/scripts/select_pr_tests.py)"
             if [ "$selection" = "ALL" ]; then
               echo "Running the full pytest suite"
