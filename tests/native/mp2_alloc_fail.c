@@ -21,7 +21,8 @@ int mp2_test_failures(void) { return atomic_load(&failures); }
 static void *mp2_test_malloc(size_t bytes)
 #else
 void *malloc(size_t bytes)
-#endif {
+#endif
+{
     if (atomic_load(&start_bytes) == bytes) atomic_store(&start_bytes, 0);
     if (atomic_load(&start_bytes) == 0 && bytes == atomic_load(&target_bytes) && atomic_load(&countdown) > 0) {
         if (atomic_fetch_sub(&countdown, 1) == 1) {
