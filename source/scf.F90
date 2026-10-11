@@ -160,6 +160,7 @@ contains
     logical       :: ps_grid_on       ! coarse->fine XC grid ramp active
     type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
     logical       :: ps_force_iter    ! force one pinned full-accuracy iteration before converging
+    logical       :: cold_first_iter  ! convergence on the first Fock build of a model-Hamiltonian guess
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -1066,14 +1067,32 @@ contains
       end if
 
       !----------------------------------------------------------------------------
+      ! Never accept convergence on the first Fock build of a model-Hamiltonian
+      ! guess (Huckel, Hcore, SAP, MINAO, ...). The DIIS loop diagonalises a Fock
+      ! only after the convergence test, so such an exit would publish the guess
+      ! eigenpairs: when the guess density is already exact (e.g. by symmetry in
+      ! H2/STO-3G) every consumer of the orbital energies (TDHF A-matrix
+      ! diagonal, MP2, Koopmans) used guess eigenvalues. Diagonalising F(1) at
+      ! the exit instead would leave the orbitals out of step with the density
+      ! and energy when the guess only meets the tolerance. One more ordinary
+      ! iteration keeps orbitals, density and energy from the same SCF state.
+      ! Not applied when maxit = 1 leaves no iteration to add.
+      !----------------------------------------------------------------------------
+      cold_first_iter = (iter == 1) .and. (maxit > 1) &
+          .and. (infos%control%guess /= GUESS_SUPPLIED) &
+          .and. .not. (use_soscf .or. use_trah)
+
+      !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      ! Convergence guards (both .false. on the default path, so a no-op there):
+      ! Convergence guards (all .false. on the default path, so a no-op there):
       !  - ps_force_iter (progressive screening): never converge on a loose/coarse build.
       !  - xc_reuse_now (IncDFT): never converge on an iteration whose XC was reused
       !    (stale); the next iteration forces a full XC build so the fixed point is exact.
+      !  - cold_first_iter: see above.
       if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
-          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)) then
+          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now) &
+          .and. (.not. cold_first_iter)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
@@ -1083,22 +1102,16 @@ contains
           end if
         else
           if (vshift_last_iter) vshift = 0.0_dp
-          ! The DIIS loop diagonalises a Fock only after this convergence test,
-          ! so on a first-iteration exit no SCF Fock has been diagonalised and
-          ! mo_a/mo_energy_a still belong to the guess Hamiltonian (Huckel,
-          ! Hcore, ...). That happens whenever the guess density is already
-          ! exact, e.g. by symmetry in H2/STO-3G, and every consumer of the
-          ! orbital energies (TDHF A-matrix diagonal, MP2, Koopmans) then used
-          ! guess eigenvalues. Supplied orbitals keep their coefficients,
-          ! occupations and phases; only their energies are refreshed. UHF is
-          ! rediagonalised after the loop.
-          if (iter == 1 .and. .not. (use_soscf .or. use_trah) .and. &
+          ! Supplied orbitals (restarts, MD/NAMD steps) may converge on the
+          ! first build. They define the density, so they are kept with their
+          ! coefficients, occupations and phases -- restart and NAMD phase
+          ! tracking rely on that -- and only their energies, which may be
+          ! stale or from another geometry, are refreshed against this Fock.
+          ! UHF is rediagonalised after the loop.
+          if (iter == 1 .and. infos%control%guess == GUESS_SUPPLIED .and. &
+              .not. (use_soscf .or. use_trah) .and. &
               scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
-            if (infos%control%guess == GUESS_SUPPLIED) then
-              call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
-            else
-              call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            end if
+            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
             if (scf_type == scf_rohf) then
               mo_b = mo_a
               mo_energy_b = mo_energy_a
