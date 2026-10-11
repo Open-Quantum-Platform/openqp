@@ -29,6 +29,8 @@ METHODS = {
 CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
+# runtypes of the closed-shell triplet RPA/TDA (tdhf_energy, tdhf_z_vector, tdhf_gradient)
+TRIPLET_RPA_RUNTYPES = {"energy", "grad", "optimize"}
 MP2_VARIANTS = {
     "mp2", "conventional",
     "scs", "scs-mp2",
@@ -2339,30 +2341,50 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     # The conventional RPA/TDA response builds the closed-shell singlet A and B
-    # matrices (Coulomb term, alpha-plus-beta kernel).  tdhf_energy also has the
-    # closed-shell triplet branch (no Coulomb term, alpha-minus-beta kernel),
-    # but tdhf_z_vector and tdhf_gradient do not: triplets are energy-only and
-    # need the closed-shell RHF/RKS reference.
+    # matrices (Coulomb term, alpha-plus-beta kernel) or, with multiplicity=3,
+    # the closed-shell triplet ones (no Coulomb term, alpha-minus-beta kernel).
+    # tdhf_energy, tdhf_z_vector and tdhf_gradient handle the triplet, so
+    # triplet energies, gradients and geometry optimizations are available on
+    # the closed-shell RHF/RKS reference; Hessians, NACs and crossings are not.
     if td_type in {"rpa", "tda"} and int(td_mult) not in (1, 3):
         report.add(
             "ERROR",
             "tdhf.multiplicity",
-            "Conventional RPA/TDA response computes singlet (1) or, for energies, triplet (3) excited states.",
+            "Conventional RPA/TDA response computes singlet (1) or closed-shell triplet (3) excited states.",
             value=td_mult,
             expected="1 or 3",
             action="Set [tdhf] multiplicity=1 or 3.",
             wiki=WIKI_HELP["tdhf.type"],
         )
-    if td_type in {"rpa", "tda"} and int(td_mult) == 3 and (runtype != "energy" or scf_type != "rhf"):
+    if td_type in {"rpa", "tda"} and int(td_mult) == 3 and (
+            runtype not in TRIPLET_RPA_RUNTYPES or scf_type != "rhf"):
         report.add(
             "ERROR",
             "tdhf.multiplicity",
-            "Closed-shell triplet RPA/TDA is implemented for energies on an RHF/RKS reference only; "
-            "triplet gradients, Z-vectors and open-shell references are not implemented.",
+            "Closed-shell triplet RPA/TDA is implemented for energies, gradients and geometry "
+            "optimizations on an RHF/RKS reference; Hessians, NACs, crossings and open-shell "
+            "references are not implemented.",
             value=f"{runtype}/{scf_type}/{td_mult}",
-            expected="input.runtype=energy and scf.type=rhf",
-            action="Use runtype=energy with scf.type=rhf, or [tdhf] type=mrsf with an ROHF triplet reference "
-                   "for triplet gradients.",
+            expected="input.runtype=energy, grad or optimize, and scf.type=rhf",
+            action="Use runtype=energy, grad or optimize with scf.type=rhf, or [tdhf] type=mrsf "
+                   "with an ROHF triplet reference for other triplet workflows.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+    # The triplet gradient uses the spin-resolved f_xc / g_xc contractions
+    # with a spin-antisymmetric X+Y; their meta-GGA (tau) terms do not
+    # reproduce finite differences for that case (M06-2X: 1.8e-4 Eh/bohr),
+    # while the singlet meta-GGA gradient does.  Same boundary as UMRSF.
+    td_functional = _as_lower(_get(config, "input", "functional", ""))
+    if (td_type in {"rpa", "tda"} and int(td_mult) == 3 and runtype in {"grad", "optimize"}
+            and td_functional in _UMRSF_META_GGA_FUNCTIONALS):
+        report.add(
+            "ERROR",
+            "input.functional",
+            "Closed-shell triplet RPA/TDA gradients do not support meta-GGA functionals.",
+            value=td_functional,
+            expected="LDA, GGA, global-hybrid or range-separated (CAM) functional, or HF",
+            action="Use a non-meta-GGA functional for triplet gradients; meta-GGA triplet "
+                   "energies remain available with runtype=energy.",
             wiki=WIKI_HELP["tdhf.type"],
         )
 

@@ -42,10 +42,11 @@ def tdhf_config(td_type, td_mult, runtype="energy"):
 
 
 class TestConventionalTDHFMultiplicity(unittest.TestCase):
-    """The closed-shell RPA/TDA response has singlet and, for energies only,
-    triplet branches (tdhf_energy: no Coulomb term, alpha-minus-beta kernel).
-    The Z-vector and gradient code has no triplet branch, so triplet gradients,
-    other multiplicities and open-shell references must be rejected.
+    """The closed-shell RPA/TDA response has singlet and triplet branches
+    (no Coulomb term, alpha-minus-beta kernel) in tdhf_energy, tdhf_z_vector
+    and tdhf_gradient: triplet energies, gradients and optimizations are
+    accepted on RHF; Hessians/NACs, other multiplicities and open-shell
+    references are rejected.
     """
 
     def setUp(self):
@@ -60,13 +61,37 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
                 self.input_checker._check_tdhf(tdhf_config(td_type, 3, "energy"), report)
                 self.assertTrue(report.ok, report.to_text())
 
-    def test_rpa_and_tda_reject_triplet_gradient(self):
+    def test_rpa_and_tda_accept_triplet_gradient_and_optimization(self):
         for td_type in ("rpa", "tda"):
-            with self.subTest(td_type=td_type):
+            for runtype in ("grad", "optimize"):
+                with self.subTest(td_type=td_type, runtype=runtype):
+                    report = self.input_checker.CheckReport()
+                    self.input_checker._check_tdhf(tdhf_config(td_type, 3, runtype), report)
+                    self.assertTrue(report.ok, report.to_text())
+
+    def test_triplet_gradient_rejects_meta_gga(self):
+        for runtype in ("grad", "optimize"):
+            with self.subTest(runtype=runtype):
+                config = tdhf_config("rpa", 3, runtype)
+                config["input"]["functional"] = "m06-2x"
                 report = self.input_checker.CheckReport()
-                self.input_checker._check_tdhf(tdhf_config(td_type, 3, "grad"), report)
+                self.input_checker._check_tdhf(config, report)
                 self.assertFalse(report.ok)
-                self.assertIn("energies on an RHF/RKS reference only", report.to_text())
+                self.assertIn("meta-GGA", report.to_text())
+        config = tdhf_config("rpa", 3, "energy")
+        config["input"]["functional"] = "m06-2x"
+        report = self.input_checker.CheckReport()
+        self.input_checker._check_tdhf(config, report)
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_rpa_and_tda_reject_triplet_hessian_and_nac(self):
+        for td_type in ("rpa", "tda"):
+            for runtype in ("hess", "nac"):
+                with self.subTest(td_type=td_type, runtype=runtype):
+                    report = self.input_checker.CheckReport()
+                    self.input_checker._check_tdhf(tdhf_config(td_type, 3, runtype), report)
+                    self.assertFalse(report.ok)
+                    self.assertIn("Hessians, NACs, crossings", report.to_text())
 
     def test_rpa_and_tda_reject_triplet_on_open_shell_reference(self):
         config = tdhf_config("rpa", 3, "energy")
@@ -74,7 +99,7 @@ class TestConventionalTDHFMultiplicity(unittest.TestCase):
         report = self.input_checker.CheckReport()
         self.input_checker._check_tdhf(config, report)
         self.assertFalse(report.ok)
-        self.assertIn("energies on an RHF/RKS reference only", report.to_text())
+        self.assertIn("open-shell", report.to_text())
 
     def test_rpa_and_tda_reject_other_multiplicities(self):
         for td_type in ("rpa", "tda"):
