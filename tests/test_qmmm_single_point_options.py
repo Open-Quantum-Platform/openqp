@@ -5,6 +5,8 @@ import importlib.util
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -12,8 +14,8 @@ def _load_checker():
     """Load the checker module the way tests/test_d4_input_checker.py does:
     a stub oqp.utils.mpi_utils so the module imports without the runtime."""
     import sys, types
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     if "oqp.utils.mpi_utils" not in sys.modules:
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
@@ -32,9 +34,9 @@ def _load_checker():
 
 
 class TestSinglePointQMMMOptions(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.chk = _load_checker()
+    def setUp(self):
+        self.addCleanup(isolate_modules())
+        self.chk = _load_checker()
 
     def _errors(self, qmmm, runtype="energy", md=None):
         cfg = {"input": {"runtype": runtype, "qmmm_flag": True, "method": "hf", "basis": "6-31g",

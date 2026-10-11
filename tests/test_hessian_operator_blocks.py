@@ -24,7 +24,6 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
 
 INPUT = """[input]
 system=
@@ -65,7 +64,6 @@ json.dump(np.asarray(runner.mol.hessian, dtype=float).tolist(), open(out, 'w'))
 
 def _runtime_available():
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
         return True

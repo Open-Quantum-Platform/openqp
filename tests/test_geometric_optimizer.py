@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_OPT = ROOT / "examples" / "OPT"
@@ -22,8 +24,8 @@ def load_module(name, relative_path):
 
 
 def install_minimal_oqp_stubs():
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    oqp_utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp = stub_module("oqp")
+    oqp_utils = stub_module("oqp.utils")
     oqp_utils.__path__ = []
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
     tb_backends = types.ModuleType("oqp.utils.tb_backends")
@@ -41,7 +43,7 @@ def install_minimal_oqp_stubs():
 
 def install_runfunc_stubs():
     install_minimal_oqp_stubs()
-    oqp_library = sys.modules.setdefault("oqp.library", types.ModuleType("oqp.library"))
+    oqp_library = stub_module("oqp.library")
     oqp_library.__path__ = []
 
     single_point = types.ModuleType("oqp.library.single_point")
@@ -225,6 +227,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         )
 
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
 
     def test_constrained_optimization_is_now_a_native_example(self):

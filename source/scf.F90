@@ -198,7 +198,6 @@ contains
     ! MOM (Maximum Overlap Method) Parameters
     !==============================================================================
     logical :: do_mom            ! Flag to enable MOM method
-    logical :: initial_mom_iter  ! Flag for first MOM iteration
     logical :: mom_active        ! Flag indicating MOM is currently active
     real(kind=dp), allocatable :: mo_a_prev(:,:)  ! Previous alpha MO coefficients
     real(kind=dp), allocatable :: mo_e_a_prev(:)  ! Previous alpha orbital energies
@@ -442,17 +441,20 @@ contains
     do_mom = infos%control%mom
 
     if (do_mom) then
-      initial_mom_iter = .true.
       mom_active = .false.
 
-      ! Allocate storage for previous iteration's orbitals
-      allocate(mo_a_prev(nbf,nbf), source=0.0_dp)
-      allocate(mo_e_a_prev(nbf), source=0.0_dp)
+      ! The reference of the first MOM step is the guess: its orbitals built
+      ! the density of the first Fock. Without it the first step had nothing
+      ! to compare with and kept the aufbau fill of iteration 1, which loses
+      ! a non-aufbau guess (swapmo, a supplied excited-state solution) before
+      ! MOM can act on it.
+      allocate(mo_a_prev, source=mo_a)
+      allocate(mo_e_a_prev, source=mo_energy_a)
 
       ! For UHF, we need separate storage for beta orbitals
       if (scf_type == scf_uhf) then
-        allocate(mo_b_prev(nbf,nbf), source=0.0_dp)
-        allocate(mo_e_b_prev(nbf), source=0.0_dp)
+        allocate(mo_b_prev, source=mo_b)
+        allocate(mo_e_b_prev, source=mo_energy_b)
       end if
     end if
     !==============================================================================
@@ -983,29 +985,10 @@ contains
         ! run_trah now always runs the native solver, so a caller setting the C
         ! control field to anything but 1 would otherwise skip canonicalization.
         if (scf_type /= scf_rohf) then
-          if (do_mom) then
-            ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
-            ! state-specific occupation TRAH converged to (TRAH itself preserves
-            ! the occupied space by rotation, so the energy/density built above are
-            ! already on the target). Use the TRAH-converged MOs as the MOM
-            ! reference so the canonical MOs -- and the density rebuilt from them --
-            ! keep the targeted occupied space.
-            mo_a_prev = mo_a; mo_e_a_prev = mo_energy_a
-            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            call apply_mom(infos, mo_a_prev, mo_e_a_prev, mo_a, mo_energy_a, &
-                           smat_full, nelec_a, "Alpha", work1, work2)
-            if (scf_type == scf_uhf .and. nelec_b /= 0) then
-              mo_b_prev = mo_b; mo_e_b_prev = mo_energy_b
-              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-              call apply_mom(infos, mo_b_prev, mo_e_b_prev, mo_b, mo_energy_b, &
-                             smat_full, nelec_b, "Beta", work1, work2)
-            end if
-            call build_scf_density(pdmat, mo_a, mo_b, infos, basis)
-          else
-            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-            if (scf_type == scf_uhf .and. nelec_b /= 0) &
-              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
-          end if
+          ! MOM/rstctmo never reach TRAH (init_scf_converger refuses them).
+          call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+          if (scf_type == scf_uhf .and. nelec_b /= 0) &
+            call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
         end if
       end if
 
@@ -1427,7 +1410,7 @@ contains
                       mo_b, mo_energy_b, mo_a_prev, mo_e_a_prev, &
                       mo_b_prev, mo_e_b_prev,&
                       smat_full, work1, work2,&
-                      mom_active, initial_mom_iter, &
+                      mom_active, &
                       .false., IW)
       !----------------------------------------------------------------------------
       ! Apply XAS if enabled
@@ -1782,7 +1765,7 @@ contains
                         mo_a_prev, mo_e_a_prev,                                    &
                         mo_b_prev, mo_e_b_prev,                                    &
                         smat_full, work1, work2,                                   &
-                        mom_active, initial_mom_iter,                              &
+                        mom_active,                                                &
                         do_print, IW)
     use precision, only : dp
     use types,     only : information
@@ -1796,7 +1779,7 @@ contains
     real(dp),         intent(inout), optional :: mo_b(:,:), mo_energy_b(:)
     real(dp),         intent(in)            :: smat_full(:,:)
     real(dp),         intent(inout)         :: work1(:,:), work2(:,:)
-    logical,          intent(inout)         :: mom_active, initial_mom_iter
+    logical,          intent(inout)         :: mom_active
     logical,          intent(in)            :: do_print
     integer,          intent(in)            :: IW
     real(dp),         intent(inout)         :: mo_a_prev(:,:), mo_e_a_prev(:)
@@ -1811,7 +1794,7 @@ contains
       mom_active = .true.
     end if
 
-    if (mom_active .and. .not. initial_mom_iter) then
+    if (mom_active) then
       ! Alpha
       call apply_mom(infos, mo_a_prev, mo_e_a_prev, &
                      mo_a, mo_energy_a, smat_full, nelec_a, &
@@ -1833,7 +1816,6 @@ contains
       mo_e_b_prev = mo_energy_b
     end if
 
-    initial_mom_iter = .false.
   end subroutine handle_mom
 
 
@@ -1924,6 +1906,7 @@ contains
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, conv_cdiis, conv_ediis, conv_soscf, conv_trah
     use scf_addons, only: scf_diis, scf_bfgs, scf_trah
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
@@ -2004,6 +1987,13 @@ contains
       call set_soscf_parametres(infos, conv)
 
     case (scf_trah) ! TRAH
+      ! TRAH minimises the energy over orbital rotations. A MOM or rstctmo
+      ! target is a non-aufbau stationary point with negative curvature, and
+      ! TRAH (which never re-diagonalises, so neither occupation rule can act)
+      ! descends from it to a lower state while reporting convergence.
+      if (infos%control%mom .or. infos%control%rstctmo) &
+        call show_message('* Error: TRAH cannot keep a MOM/RSTCTMO occupation; '// &
+                          'use converger_type=diis or soscf', WITH_ABORT)
       use_trah = .true.
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
                      maxvec=control_maxit, &
