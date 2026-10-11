@@ -87,7 +87,8 @@ def verdict(arm, positive_owner):
                 "pass": arm["raw_returncode"] == 0 and arm["valgrind_returncode"] == 0
                 and report["non_leak_errors"] == 0
                 and losses["Leak_DefinitelyLost"]["bytes"] == 0
-                and losses["Leak_IndirectlyLost"]["bytes"] == 0}
+                and losses["Leak_IndirectlyLost"]["bytes"] == 0
+                and losses["Leak_PossiblyLost"]["bytes"] == 0}
     expected = CONTROLS[arm["control"]]
     # A raw child rejection and a Valgrind override must remain distinguishable.
     guard = (arm["raw_returncode"] == 3 and arm["valgrind_returncode"] in (3, 97)
@@ -109,7 +110,7 @@ def verdict(arm, positive_owner):
         # These faults clean their owner; incidental memory errors are never accepted.
         result["pass"] = guard and arm["valgrind_returncode"] == 3 and report["non_leak_errors"] == 0
         result["pass"] &= all(report["leaks"][kind]["bytes"] == 0
-                              for kind in ("Leak_DefinitelyLost", "Leak_IndirectlyLost"))
+                              for kind in ("Leak_DefinitelyLost", "Leak_IndirectlyLost", "Leak_PossiblyLost"))
     return result
 
 
@@ -187,7 +188,7 @@ def main():
             vg_argv = ["valgrind", "--tool=memcheck", "--track-origins=yes", "--keep-debuginfo=yes",
                        "--leak-check=full", "--show-leak-kinds=all", "--num-callers=40",
                        "--leak-resolution=high", "--xml=yes", f"--xml-file={folder / 'valgrind.xml'}",
-                       "--errors-for-leak-kinds=definite,indirect", "--error-exitcode=97",
+                       "--errors-for-leak-kinds=definite,indirect,possible", "--error-exitcode=97",
                        f"--log-file={folder / 'valgrind.log'}", *raw_argv]
             (folder / "commands.json").write_text(json.dumps({"raw": raw_argv, "valgrind": vg_argv,
                                                               "control_env": env.get(CONTROL_ENV), "threads": threads}, indent=2) + "\n")

@@ -38,6 +38,24 @@ def _arm(reporter, tmp_path, control="omit-cleanup", *, owner=True, raw=3, vg=97
             "memory": reporter.memory_report(_xml(tmp_path / "report.xml", owner=owner))}
 
 
+@pytest.mark.parametrize("control", ["positive", "missing-owner", "recreated-owner", "missing-record"])
+def test_clean_owner_arms_reject_possibly_lost_memory(tmp_path, control):
+    reporter = _reporter()
+    if control == "positive":
+        arm = {"control": control, "raw_returncode": 0, "valgrind_returncode": 0}
+    else:
+        arm = _arm(reporter, tmp_path, control=control, owner=False, vg=3)
+    arm["memory"] = reporter.memory_report(
+        _xml(tmp_path / "possibly-lost.xml", kind="Leak_PossiblyLost"))
+    # Simulate even an erroneous successful child exit: parsed losses must
+    # independently reject the clean-owner contract.
+    assert arm["memory"]["non_leak_errors"] == 0
+    assert arm["memory"]["leaks"]["Leak_DefinitelyLost"]["bytes"] == 0
+    assert arm["memory"]["leaks"]["Leak_IndirectlyLost"]["bytes"] == 0
+    assert arm["memory"]["leaks"]["Leak_PossiblyLost"]["bytes"] == 102923
+    assert reporter.verdict(arm, {"bytes": 0, "blocks": 0, "records": []})["pass"] is False
+
+
 def test_reachable_counts_without_owner_stacks_are_inconclusive(tmp_path):
     reporter = _reporter()
     arm = _arm(reporter, tmp_path, owner=False)
@@ -136,6 +154,7 @@ def test_main_isolates_controls_and_preserves_outcomes(monkeypatch, tmp_path, br
         calls.append((argv, kwargs["env"].copy()))
         control = kwargs["env"].get(reporter.CONTROL_ENV)
         if argv[0] == "valgrind":
+            assert "--errors-for-leak-kinds=definite,indirect,possible" in argv
             xml = Path(next(arg.split("=", 1)[1] for arg in argv if arg.startswith("--xml-file=")))
             if broken_xml:
                 xml.write_text("<truncated>")
