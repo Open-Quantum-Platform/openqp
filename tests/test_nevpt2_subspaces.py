@@ -11,6 +11,37 @@ from oqp.library import nevpt2_sc as sc
 from oqp.library.fci import _determinants
 
 
+
+@pytest.fixture(scope='module', autouse=True)
+def native_qualification_process_identity():
+    """When CI requests receipts, prove this pytest process uses its exact library."""
+    import hashlib
+    import json
+    import os
+    from pathlib import Path
+    receipt = os.environ.get('OQP_NEVPT2_RECEIPT_DIR')
+    if receipt is None:
+        return
+    import oqp
+    from oqp.library import fci
+    from oqp.runtime import library_path
+    lib, ffi = sc._koopmans_lib()
+    assert lib is oqp.lib and ffi is oqp.ffi
+    library = library_path(oqp.oqp_root, oqp.suffix).resolve()
+    digest = hashlib.sha256(library.read_bytes()).hexdigest()
+    assert str(library) == os.environ['OQP_NEVPT2_EXPECTED_LIBRARY']
+    assert digest == os.environ['OQP_NEVPT2_EXPECTED_LIBRARY_SHA256']
+    assert str(Path(oqp.__file__).resolve().parent) == os.environ['OQP_NEVPT2_EXPECTED_PACKAGE']
+    assert oqp.OMP_THREADS_FROM_ENV
+    assert fci._fci_lib_threads() == int(os.environ['OMP_NUM_THREADS'])
+    (Path(receipt) / 'pytest-runtime.json').write_text(json.dumps({
+        'library': str(library), 'library_sha256': digest,
+        'package': oqp.__file__, 'nevpt2_module': sc.__file__,
+        'omp_requested': os.environ['OMP_NUM_THREADS'],
+        'fci_thread_argument': fci._fci_lib_threads(),
+    }, indent=2) + '\n')
+
+
 SUBSPACES = ('Sr', 'Si', 'Sijrs', 'Sijr', 'Srsi', 'Srs', 'Sij', 'Sir')
 
 
@@ -74,7 +105,77 @@ def test_final_contraction_matches_numpy(monkeypatch, name):
                 name, nc, na, nv, difference)
 
 
-@pytest.mark.parametrize('nact,nelec', [(2, (1, 1)), (3, (2, 1)), (4, (2, 2))])
+@pytest.mark.parametrize('name', SUBSPACES)
+def test_retained_subspace_outputs_survive_later_calls(monkeypatch, name):
+    """Keep the returned arrays, including CFFI-owned views, across later calls."""
+    import gc
+    assert sc._koopmans_lib() is not None, 'Native NEVPT2 backend is required'
+    assert hasattr(sc._koopmans_lib()[0], 'nevpt2_' + name.lower())
+    # Keep the original native result, not the copies used by the numerical pin.
+    monkeypatch.setattr(sc, '_norm_to_energy', lambda norm, h, diff: (norm, h))
+    retained = []
+    helper = '_' + name.lower() + '_lib'
+    native_call = getattr(sc, helper)
+    def retain_native_result(*args):
+        outputs = native_call(*args)
+        if outputs[0] is not None:
+            # Sijr/Srsi take advanced-index copies before _norm_to_energy;
+            # retain their original CFFI views here as well.
+            assert all(np.all(np.isfinite(output)) for output in outputs)
+            retained.append((outputs, tuple(np.array(x, copy=True) for x in outputs)))
+        return outputs
+    monkeypatch.setattr(sc, helper, retain_native_result)
+    for step, (nc, na, nv) in enumerate(((1, 2, 2), (2, 3, 4), (3, 4, 1),
+                                        (1, 2, 2), (0, 2, 3), (2, 2, 0))):
+        B, dms = _subspace_inputs(nc, na, nv, 50470 + step)
+        before = len(retained)
+        outputs = _call_subspace(name, B, dms)
+        if nc > 0 and nv > 0:
+            assert len(retained) == before + 1, 'Native final contraction was bypassed'
+        snapshots = tuple(np.array(output, copy=True) for output in outputs)
+        assert all(np.all(np.isfinite(output)) for output in snapshots)
+        reference = _python(monkeypatch, lambda: _call_subspace(name, B, dms))
+        for output, expected in zip(outputs, reference):
+            np.testing.assert_allclose(output, expected, rtol=0, atol=1e-11)
+        retained.append((outputs, snapshots))
+        del B, dms, outputs, snapshots, reference
+        gc.collect()
+        for previous, expected in retained:
+            for actual, snapshot in zip(previous, expected):
+                np.testing.assert_array_equal(actual, snapshot)
+
+
+def test_retained_fused_outputs_survive_later_calls():
+    """Retain NumPy-owned fused outputs across dimensions, CI vectors and errors."""
+    import gc
+    lib, ffi = sc._koopmans_lib()
+    assert hasattr(lib, 'nevpt2_make_f3')
+    retained = []
+    for step, (nact, nelec) in enumerate(((2, (1, 1)), (3, (2, 1)),
+                                          (4, (2, 2)), (2, (1, 1)))):
+        rng = np.random.default_rng(60470 + step)
+        dets = _determinants(nact, nelec)
+        g = rng.normal(size=(nact,) * 4) * .1
+        for _ in range(2):
+            ci = rng.normal(size=len(dets)); ci /= np.linalg.norm(ci)
+            result = sc._lib_make_f3(ci, nact, dets, g)
+            assert result is not None
+            outputs = (*result[:3], *result[3])
+            snapshots = tuple(output.copy() for output in outputs)
+            assert all(np.all(np.isfinite(output)) for output in snapshots)
+            retained.append((outputs, snapshots))
+            del result, outputs, snapshots, ci
+        # Invalid dimensions must leave earlier valid outputs intact.
+        assert int(lib.nevpt2_make_f3(0, 1, *(ffi.NULL for _ in range(8)))) == -2
+        del g, dets
+        gc.collect()
+        for previous, expected in retained:
+            for actual, snapshot in zip(previous, expected):
+                np.testing.assert_array_equal(actual, snapshot)
+
+
+@pytest.mark.parametrize('nact,nelec', [(2, (1, 1)), (3, (2, 1)), (4, (2, 2))],
+                         ids=('cas2', 'cas3', 'cas4'))
 def test_fused_rdms_and_f3_match_numpy(monkeypatch, nact, nelec):
     backend = sc._koopmans_lib()
     assert backend is not None and hasattr(backend[0], 'nevpt2_make_f3')
@@ -187,7 +288,8 @@ def test_external_workspace_is_admitted_before_packing(monkeypatch):
         sc.sc_nevpt2_energy(h, None, None, 100, 2, (1, 1), None, max_memory=16)
 
 
-@pytest.mark.parametrize('nc,na,nv,nelec', [(1, 2, 2, (1, 1)), (0, 3, 2, (2, 1))])
+@pytest.mark.parametrize('nc,na,nv,nelec', [(1, 2, 2, (1, 1)), (0, 3, 2, (2, 1))],
+                         ids=('core1-cas2-virt2', 'core0-cas3-virt2'))
 def test_whole_energy_matches_backend_unavailable(monkeypatch, nc, na, nv, nelec):
     rng = np.random.default_rng(20470 + na)
     nbf = nc + na + nv
@@ -297,6 +399,19 @@ import ctypes, sys
 import numpy as np
 from oqp.library import nevpt2_sc as sc
 from oqp.library.fci import _determinants
+import hashlib, json, os
+from pathlib import Path
+if 'OQP_NEVPT2_RECEIPT_DIR' in os.environ:
+    import oqp
+    from oqp.runtime import library_path
+    library = library_path(oqp.oqp_root, oqp.suffix).resolve()
+    digest = hashlib.sha256(library.read_bytes()).hexdigest()
+    assert str(library) == os.environ['OQP_NEVPT2_EXPECTED_LIBRARY']
+    assert digest == os.environ['OQP_NEVPT2_EXPECTED_LIBRARY_SHA256']
+    assert str(Path(oqp.__file__).resolve().parent) == os.environ['OQP_NEVPT2_EXPECTED_PACKAGE']
+    (Path(os.environ['OQP_NEVPT2_RECEIPT_DIR']) / 'fault-runtime.json').write_text(
+        json.dumps({'library': str(library), 'library_sha256': digest,
+                    'package': oqp.__file__, 'nevpt2_module': sc.__file__}, indent=2) + '\n')
 fault = ctypes.CDLL(sys.argv[1])
 fault.oqp_test_arm_malloc.argtypes = [ctypes.c_size_t, ctypes.c_int]
 fault.oqp_test_malloc_failures.restype = ctypes.c_int
@@ -341,6 +456,11 @@ fargs = (n, len(dets), ffi.cast('int64_t *', dets.ctypes.data),
          ptr(ci), ptr(g), ptr(d1), ptr(d2), ptr(d3), ptr(fca), ptr(fac))
 assert int(lib.nevpt2_make_f3(*fargs)) == 0
 fused_outputs = (d1, d2, d3, fca, fac)
+owned = sc._lib_make_f3(ci, n, dets, g)
+assert owned is not None
+retained = (*owned[:3], *owned[3])
+retained_expected = tuple(output.copy() for output in retained)
+del owned
 fused_expected = tuple(output.copy() for output in fused_outputs)
 assert all(np.all(np.isfinite(output)) for output in fused_expected)
 fault.oqp_test_arm_malloc(8*n**8, 0)
@@ -351,6 +471,10 @@ for output in fused_outputs:
     output.fill(np.nan)
 assert int(lib.nevpt2_make_f3(*fargs)) == 0
 for actual, expected_output in zip(fused_outputs, fused_expected):
+    np.testing.assert_array_equal(actual, expected_output)
+import gc
+gc.collect()
+for actual, expected_output in zip(retained, retained_expected):
     np.testing.assert_array_equal(actual, expected_output)
 """
     env = os.environ.copy()

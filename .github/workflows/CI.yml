@@ -275,6 +275,27 @@ jobs:
          # toolkit, the interop/export APIs, the input handling) could regress
          # silently. Run it on one leg: it is Python-only, so a second OS or the
          # MPI leg would re-run identical assertions against the same code.
+         - name: Run named NEVPT2 native recovery and lifetime regressions
+           if: ${{ matrix.role == 'pytest' }}
+           env:
+            OMP_DYNAMIC: "FALSE"
+            OMP_MAX_ACTIVE_LEVELS: "1"
+            OPENBLAS_NUM_THREADS: "1"
+            MKL_NUM_THREADS: "1"
+           run: |
+            pip install pytest
+            for threads in 1 4; do
+              OMP_NUM_THREADS="$threads" OQP_FCI_THREADS="$threads" \
+                python tests/native/run_nevpt2_qualification.py \
+                  --threads "$threads" --output "nevpt2-qualification/omp${threads}"
+            done
+         - name: Preserve named NEVPT2 qualification receipts
+           if: ${{ always() && matrix.role == 'pytest' }}
+           uses: actions/upload-artifact@v4
+           with:
+            name: nevpt2-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+            path: nevpt2-qualification/
+            if-no-files-found: error
          - name: Run Python test suite
            if: ${{ matrix.role == 'pytest' }}
            env:
