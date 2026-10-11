@@ -65,6 +65,7 @@ def _call(s):
     ([[1e-153, 0.0], [0.0, 1e-153]], True),
     ([[1e-154, 0.0], [0.0, 1e-154]], False),
     ([[2e154, 0.0], [0.0, 2e154]], False),
+    ([[1e-100, 0., 0.], [0., 1e-150, 0.], [0., 0., 1e-160]], False),
 ])
 def test_actual_mrsf_tlf(s, batch):
     s = np.array(s)
@@ -73,7 +74,8 @@ def test_actual_mrsf_tlf(s, batch):
     # The original comp_det classifies a 1x1 subnormal pivot as zero; retain
     # that convention, while the finite O(1) cofactors must still survive.
     expected = _cofactors(s)
-    expected[np.abs(expected) <= np.finfo(float).tiny] = 0.0
+    if len(s) == 2:
+        expected[np.abs(expected) <= np.finfo(float).tiny] = 0.0
     np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=1e-315)
     np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
 
