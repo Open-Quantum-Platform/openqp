@@ -1,6 +1,10 @@
+#ifndef OQP_BLAS_INT
+#define OQP_BLAS_INT 4
+#endif
 module oqp_linalg
-  ! Export the wrappers for every backend integer width. blas_wrap and
-  ! lapack_wrap convert to BLAS_INT; ILP64 still needs their public interface.
+  ! DGEMM has an explicit public interface on the supported ILP64 backend.
+  use blas_wrap, only: dgemm      =>  oqp_dgemm_i64
+#if OQP_BLAS_INT == 4
   use blas_wrap, only: caxpy      =>  oqp_caxpy_i64
   use blas_wrap, only: ccopy      =>  oqp_ccopy_i64
   use blas_wrap, only: cdotc      =>  oqp_cdotc_i64
@@ -40,7 +44,6 @@ module oqp_linalg
   use blas_wrap, only: dcopy      =>  oqp_dcopy_i64
   use blas_wrap, only: ddot       =>  oqp_ddot_i64
   use blas_wrap, only: dgbmv      =>  oqp_dgbmv_i64
-  use blas_wrap, only: dgemm      =>  oqp_dgemm_i64
   use blas_wrap, only: dgemv      =>  oqp_dgemv_i64
   use blas_wrap, only: dger       =>  oqp_dger_i64
   use blas_wrap, only: drot       =>  oqp_drot_i64
@@ -153,6 +156,8 @@ module oqp_linalg
   use lapack_wrap, only: dormqr => oqp_dormqr_i64
   use lapack_wrap, only: dtpttr => oqp_dtpttr_i64
   use lapack_wrap, only: dtrttp => oqp_dtrttp_i64
+#endif
+
   implicit none
 
   public

@@ -1,6 +1,6 @@
 """Compile the production wrapper modules with the supported ILP64 width."""
-import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_ilp64_dgemm_is_exported_by_oqp_linalg(tmp_path):
-    compiler = os.environ.get('FC') or shutil.which('gfortran-15') or shutil.which('gfortran')
+    compiler = shutil.which('gfortran-15') or shutil.which('gfortran')
     assert compiler, 'GNU Fortran is required to check the ILP64 wrapper interface'
     # Only the diagnostic service is replaced. Integer kinds, wrappers and
     # the public module interface are compiled directly from production source.
@@ -26,11 +26,22 @@ contains
 end module
 ''')
     consumer = tmp_path / 'consumer.f90'
+    source = (ROOT / 'source/modules/casscf_driver.F90').read_text()
+    rotation = re.search(r"      call dgemm\('T', 'N', m, n, m,.*?blk, m\)", source, re.S).group()
     consumer.write_text('''subroutine consumer(a,b,c)
  use oqp_linalg, only: dgemm
  implicit none
  double precision :: a(2,3), b(3,4), c(2,4)
  call dgemm('N','N',2,4,3,1d0,a,2,b,3,0d0,c,2)
+end subroutine
+subroutine rotation(cbuf,sub,blk,n,m,lo,hi)
+ use oqp_linalg, only: dgemm
+ use precision, only: dp
+ implicit none
+ integer :: n,m,lo,hi
+ real(dp), contiguous :: cbuf(0:,0:)
+ real(dp) :: sub(m,m),blk(m,n)
+''' + rotation + '''
 end subroutine
 ''')
     sources = [ROOT / 'source/precision.F90', messages,
