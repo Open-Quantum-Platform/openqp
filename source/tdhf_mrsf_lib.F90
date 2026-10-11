@@ -170,20 +170,16 @@ contains
     if (this%cur_pass /= this%num_passes) return
 
     if (.not.this%shared_exchange) then
-      ! Preserve the full private worker layout; fold only one AO pair at a
-      ! time so conversion and addition do not create another full result.
-      do nu = 1, size(this%f3,4)
-        do mu = 1, size(this%f3,3)
-          do t = 2, size(this%f3,5)
-            this%f3(:,:,mu,nu,1) = this%f3(:,:,mu,nu,1) + this%f3(:,:,mu,nu,t)
-          end do
-          if (allocated(this%f3s)) then
-            do t = 1, size(this%f3s,5)
-              this%f3(:,:,mu,nu,1) = this%f3(:,:,mu,nu,1) + real(this%f3s(:,:,mu,nu,t),dp)
-            end do
-          end if
-        end do
+      ! Keep the established contiguous worker-slab reduction for private
+      ! storage. AO-pair folding below belongs only to the shared option.
+      do t = 2, size(this%f3,5)
+        this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + this%f3(:,:,:,:,t)
       end do
+      if (allocated(this%f3s)) then
+        do t = 1, this%nthreads
+          this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
+        end do
+      end if
       if (allocated(this%f3s)) deallocate(this%f3s)
       call this%pe%allreduce(this%f3(:,:,:,:,1),size(this%f3(:,:,:,:,1)))
       this%nthreads = 1
