@@ -1147,11 +1147,16 @@ contains
       !    zero-VSHIFT build is accepted only when the occupied space is that
       !    of its own Fock (UHF triplet H2O/6-31G PBE, vshift 0.3: alpha b2
       !    held above an empty a1, -75.9351 Eh instead of -76.0144 Eh).
-      !    MOM/rstctmo choose a non-aufbau occupation on purpose and pFON has
-      !    no integer one; TRAH applies no shift.
+      !    MOM/rstctmo choose a non-aufbau occupation on purpose; TRAH applies
+      !    no shift. pFON has no integer occupation while it anneals, but at
+      !    ~1 K (where it may exit) its occupation is the aufbau one of the
+      !    orbital energies it was given, so a shift-held occupation survives
+      !    it too (UHF triplet H2O/6-31G PBE, pfon + vshift 0.3: -75.9351 Eh):
+      !    check it once annealed.
       aufbau_lost = .false.
       if (vshift_last_iter .and. (abs(diis_error) < infos%control%conv) .and. &
-          .not. (do_mom .or. do_rstctmo .or. do_pfon .or. use_trah)) then
+          .not. (do_mom .or. do_rstctmo .or. use_trah) .and. &
+          .not. (do_pfon .and. pfon%temp > 1.0_dp + 1.0e-6_dp)) then
         if (.not. allocated(fock_release)) allocate(fock_release(nbf_tri, nfocks))
         fock_release = pfock(:,1:nfocks)
         ! ROHF: only the DIIS path forms the effective Fock on every build.
