@@ -19,18 +19,41 @@ import sys
 import types
 
 
+def _session_oqp_spec():
+    """Spec of the ``oqp`` package this session uses.
+
+    The loaded package wins.  If none is loaded (or a test's stub stands in
+    for it), resolve ``oqp`` through every meta-path finder, as ``import``
+    would: an editable install is found by its own finder, not by a
+    ``sys.path`` directory, so a ``sys.path``-only search can pick another
+    checkout instead.
+    """
+    module = sys.modules.get("oqp")
+    if module is not None and getattr(module, "__path__", None) \
+            and getattr(module, "__spec__", None) is not None:
+        return module.__spec__
+    for finder in sys.meta_path:
+        find_spec = getattr(finder, "find_spec", None)
+        spec = find_spec("oqp", None) if find_spec is not None else None
+        if spec is not None:
+            return spec
+    return None
+
+
 def child_env(env=None):
     """Environment for a child interpreter that imports the same ``oqp`` as this one.
 
     Prepending ``ROOT/pyoqp`` to the child's ``PYTHONPATH`` made it import the
     unbuilt source tree (no liboqp) instead of the installed package; CI hid
-    that only because it exported ``OPENQP_ROOT``.  This puts the directory
-    holding the session's ``oqp`` first, so the child gets the installed
-    package, or the source tree only where conftest fell back to it.
+    that only because it exported ``OPENQP_ROOT``.  The child is this
+    interpreter, so it already finds an installed or editable ``oqp`` through
+    the same finders; only a plain package directory found on a ``sys.path``
+    entry (conftest's source-tree fallback) needs that entry put first.
     """
     env = dict(os.environ if env is None else env)
-    spec = importlib.machinery.PathFinder.find_spec("oqp", sys.path)
-    if spec is not None and spec.submodule_search_locations:
+    spec = _session_oqp_spec()
+    if spec is not None and spec.submodule_search_locations \
+            and isinstance(spec.loader, importlib.machinery.SourceFileLoader):
         location = os.path.dirname(list(spec.submodule_search_locations)[0])
         env["PYTHONPATH"] = os.pathsep.join(
             p for p in (location, env.get("PYTHONPATH", "")) if p)

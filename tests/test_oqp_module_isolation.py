@@ -1,10 +1,14 @@
 """isolate_modules() and stub_module() must leave real packages as they found them."""
+import importlib.machinery
+import importlib.util
+import os
 import re
+import subprocess
 import sys
 import types
 from pathlib import Path
 
-from oqp_module_isolation import isolate_modules, stub_module
+from oqp_module_isolation import child_env, isolate_modules, stub_module
 
 
 def _package(root, name):
@@ -92,3 +96,54 @@ def test_no_example_rewrites_a_childs_search_path():
                 for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
                 if pattern.search(line)]
     assert not offences, "examples must not edit a search path:\n" + "\n".join(offences)
+
+
+
+def _oqp_checkout(root, label):
+    package = root / label / "oqp"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(f"WHERE = {label!r}\n")
+    return package
+
+
+def test_child_env_follows_the_loaded_oqp_not_another_checkout_on_sys_path(
+        tmp_path, monkeypatch):
+    loaded = _oqp_checkout(tmp_path, "loaded")
+    other = _oqp_checkout(tmp_path, "other")
+    spec = importlib.util.spec_from_file_location(
+        "oqp", loaded / "__init__.py", submodule_search_locations=[str(loaded)])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setitem(sys.modules, "oqp", module)
+    monkeypatch.syspath_prepend(str(other.parent))  # another checkout, searched first
+
+    env = child_env({"PATH": os.environ.get("PATH", "")})
+    child = subprocess.run([sys.executable, "-c", "import oqp; print(oqp.WHERE)"],
+                           env=env, cwd=tmp_path, capture_output=True, text=True,
+                           check=True)
+    assert child.stdout.strip() == "loaded"
+
+
+class _EditableFinder:
+    """Stands in for the meta-path finder an editable install registers."""
+
+    def __init__(self, location):
+        self.location = location
+
+    def find_spec(self, name, path=None, target=None):
+        if name != "oqp":
+            return None
+        spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
+        spec.submodule_search_locations = [str(self.location)]
+        return spec
+
+
+def test_child_env_leaves_an_editable_install_to_its_finder(tmp_path, monkeypatch):
+    other = _oqp_checkout(tmp_path, "other")
+    editable = tmp_path / "editable" / "oqp"
+    monkeypatch.delitem(sys.modules, "oqp", raising=False)
+    monkeypatch.syspath_prepend(str(other.parent))
+    monkeypatch.setattr(sys, "meta_path", [_EditableFinder(editable), *sys.meta_path])
+
+    env = child_env({"PYTHONPATH": "/kept"})
+    assert env["PYTHONPATH"] == "/kept"
