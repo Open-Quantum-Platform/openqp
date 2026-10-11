@@ -9,6 +9,7 @@ import pytest
 
 from oqp.library import nevpt2_sc as sc
 from oqp.library.fci import _determinants
+from tests.native.nevpt2_retained_outputs import RetainedOutputs
 
 
 
@@ -36,9 +37,14 @@ def native_qualification_process_identity():
     assert fci._fci_lib_threads() == int(os.environ['OMP_NUM_THREADS'])
     (Path(receipt) / 'pytest-runtime.json').write_text(json.dumps({
         'library': str(library), 'library_sha256': digest,
-        'package': oqp.__file__, 'nevpt2_module': sc.__file__,
-        'omp_requested': os.environ['OMP_NUM_THREADS'],
+        'package': str(Path(oqp.__file__).resolve()),
+        'nevpt2_module': str(Path(sc.__file__).resolve()),
+        'omp_requested': int(os.environ['OMP_NUM_THREADS']),
         'fci_thread_argument': fci._fci_lib_threads(),
+        'omp_threads_from_env': oqp.OMP_THREADS_FROM_ENV,
+        'thread_environment': {key: os.environ[key] for key in
+            ('OMP_NUM_THREADS', 'OQP_FCI_THREADS', 'OMP_DYNAMIC',
+             'OMP_MAX_ACTIVE_LEVELS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')},
     }, indent=2) + '\n')
 
 
@@ -113,7 +119,7 @@ def test_retained_subspace_outputs_survive_later_calls(monkeypatch, name):
     assert hasattr(sc._koopmans_lib()[0], 'nevpt2_' + name.lower())
     # Keep the original native result, not the copies used by the numerical pin.
     monkeypatch.setattr(sc, '_norm_to_energy', lambda norm, h, diff: (norm, h))
-    retained = []
+    retained = RetainedOutputs()
     helper = '_' + name.lower() + '_lib'
     native_call = getattr(sc, helper)
     def retain_native_result(*args):
@@ -122,7 +128,7 @@ def test_retained_subspace_outputs_survive_later_calls(monkeypatch, name):
             # Sijr/Srsi take advanced-index copies before _norm_to_energy;
             # retain their original CFFI views here as well.
             assert all(np.all(np.isfinite(output)) for output in outputs)
-            retained.append((outputs, tuple(np.array(x, copy=True) for x in outputs)))
+            retained.remember(outputs)
         return outputs
     monkeypatch.setattr(sc, helper, retain_native_result)
     for step, (nc, na, nv) in enumerate(((1, 2, 2), (2, 3, 4), (3, 4, 1),
@@ -137,12 +143,10 @@ def test_retained_subspace_outputs_survive_later_calls(monkeypatch, name):
         reference = _python(monkeypatch, lambda: _call_subspace(name, B, dms))
         for output, expected in zip(outputs, reference):
             np.testing.assert_allclose(output, expected, rtol=0, atol=1e-11)
-        retained.append((outputs, snapshots))
+        retained.remember(outputs)
         del B, dms, outputs, snapshots, reference
         gc.collect()
-        for previous, expected in retained:
-            for actual, snapshot in zip(previous, expected):
-                np.testing.assert_array_equal(actual, snapshot)
+        retained.assert_unchanged()
 
 
 def test_retained_fused_outputs_survive_later_calls():
@@ -150,7 +154,7 @@ def test_retained_fused_outputs_survive_later_calls():
     import gc
     lib, ffi = sc._koopmans_lib()
     assert hasattr(lib, 'nevpt2_make_f3')
-    retained = []
+    retained = RetainedOutputs()
     for step, (nact, nelec) in enumerate(((2, (1, 1)), (3, (2, 1)),
                                           (4, (2, 2)), (2, (1, 1)))):
         rng = np.random.default_rng(60470 + step)
@@ -163,15 +167,15 @@ def test_retained_fused_outputs_survive_later_calls():
             outputs = (*result[:3], *result[3])
             snapshots = tuple(output.copy() for output in outputs)
             assert all(np.all(np.isfinite(output)) for output in snapshots)
-            retained.append((outputs, snapshots))
+            retained.remember(outputs)
             del result, outputs, snapshots, ci
         # Invalid dimensions must leave earlier valid outputs intact.
-        assert int(lib.nevpt2_make_f3(0, 1, *(ffi.NULL for _ in range(8)))) == -2
+        for _ in range(3):
+            assert int(lib.nevpt2_make_f3(0, 1, *(ffi.NULL for _ in range(8)))) == -2
+            retained.assert_unchanged()
         del g, dets
         gc.collect()
-        for previous, expected in retained:
-            for actual, snapshot in zip(previous, expected):
-                np.testing.assert_array_equal(actual, snapshot)
+        retained.assert_unchanged()
 
 
 @pytest.mark.parametrize('nact,nelec', [(2, (1, 1)), (3, (2, 1)), (4, (2, 2))],
@@ -404,6 +408,11 @@ from pathlib import Path
 if 'OQP_NEVPT2_RECEIPT_DIR' in os.environ:
     import oqp
     from oqp.runtime import library_path
+    from oqp.library import fci
+    actual_lib, actual_ffi = sc._koopmans_lib()
+    assert actual_lib is oqp.lib and actual_ffi is oqp.ffi
+    assert oqp.OMP_THREADS_FROM_ENV
+    assert fci._fci_lib_threads() == int(os.environ['OMP_NUM_THREADS'])
     library = library_path(oqp.oqp_root, oqp.suffix).resolve()
     digest = hashlib.sha256(library.read_bytes()).hexdigest()
     assert str(library) == os.environ['OQP_NEVPT2_EXPECTED_LIBRARY']
@@ -411,7 +420,15 @@ if 'OQP_NEVPT2_RECEIPT_DIR' in os.environ:
     assert str(Path(oqp.__file__).resolve().parent) == os.environ['OQP_NEVPT2_EXPECTED_PACKAGE']
     (Path(os.environ['OQP_NEVPT2_RECEIPT_DIR']) / 'fault-runtime.json').write_text(
         json.dumps({'library': str(library), 'library_sha256': digest,
-                    'package': oqp.__file__, 'nevpt2_module': sc.__file__}, indent=2) + '\n')
+                    'package': str(Path(oqp.__file__).resolve()),
+                    'nevpt2_module': str(Path(sc.__file__).resolve()),
+                    'omp_requested': int(os.environ['OMP_NUM_THREADS']),
+                    'fci_thread_argument': fci._fci_lib_threads(),
+                    'omp_threads_from_env': oqp.OMP_THREADS_FROM_ENV,
+                    'thread_environment': {key: os.environ[key] for key in
+                        ('OMP_NUM_THREADS', 'OQP_FCI_THREADS', 'OMP_DYNAMIC',
+                         'OMP_MAX_ACTIVE_LEVELS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')}
+                    }, indent=2) + '\n')
 fault = ctypes.CDLL(sys.argv[1])
 fault.oqp_test_arm_malloc.argtypes = [ctypes.c_size_t, ctypes.c_int]
 fault.oqp_test_malloc_failures.restype = ctypes.c_int
@@ -435,20 +452,21 @@ assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
 expected = fca.copy(), fac.copy()
 assert all(np.all(np.isfinite(output)) for output in expected)
 for ordinal in range(3):
-    fault.oqp_test_arm_malloc(8*n**4, ordinal)
-    # A same-size allocation outside liboqp must not consume the fault ordinal.
-    other = outside.malloc(8*n**4)
-    assert other is not None
-    outside.free(other)
-    assert fault.oqp_test_malloc_failures() == 0
-    assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == -1, ordinal
-    assert fault.oqp_test_malloc_failures() == 1, ordinal
-    fault.oqp_test_arm_malloc(0, -1)
-    # Recovery must rewrite both outputs, including after a partial failure.
-    fca.fill(np.nan); fac.fill(np.nan)
-    assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
-    np.testing.assert_array_equal(fca, expected[0])
-    np.testing.assert_array_equal(fac, expected[1])
+    for repeat in range(2):
+        fault.oqp_test_arm_malloc(8*n**4, ordinal)
+        # A same-size allocation outside liboqp must not consume the fault ordinal.
+        other = outside.malloc(8*n**4)
+        assert other is not None
+        outside.free(other)
+        assert fault.oqp_test_malloc_failures() == 0
+        assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == -1, ordinal
+        assert fault.oqp_test_malloc_failures() == 1, ordinal
+        fault.oqp_test_arm_malloc(0, -1)
+        # Recovery must rewrite both outputs, including after a partial failure.
+        fca.fill(np.nan); fac.fill(np.nan)
+        assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
+        np.testing.assert_array_equal(fca, expected[0])
+        np.testing.assert_array_equal(fac, expected[1])
 dets = np.asarray(_determinants(n, (2, 1)), dtype=np.int64)
 ci = np.ones(len(dets)); ci /= np.linalg.norm(ci)
 d1 = np.empty((n,)*2); d2 = np.empty((n,)*4); d3 = np.empty((n,)*6)
@@ -463,15 +481,20 @@ retained_expected = tuple(output.copy() for output in retained)
 del owned
 fused_expected = tuple(output.copy() for output in fused_outputs)
 assert all(np.all(np.isfinite(output)) for output in fused_expected)
-fault.oqp_test_arm_malloc(8*n**8, 0)
-assert int(lib.nevpt2_make_f3(*fargs)) == -1
-assert fault.oqp_test_malloc_failures() == 1
-fault.oqp_test_arm_malloc(0, -1)
-for output in fused_outputs:
-    output.fill(np.nan)
-assert int(lib.nevpt2_make_f3(*fargs)) == 0
-for actual, expected_output in zip(fused_outputs, fused_expected):
-    np.testing.assert_array_equal(actual, expected_output)
+for repeat in range(3):
+    fault.oqp_test_arm_malloc(8*n**8, 0)
+    assert int(lib.nevpt2_make_f3(*fargs)) == -1
+    assert fault.oqp_test_malloc_failures() == 1
+    for actual, expected_output in zip(retained, retained_expected):
+        np.testing.assert_array_equal(actual, expected_output)
+    fault.oqp_test_arm_malloc(0, -1)
+    for output in fused_outputs:
+        output.fill(np.nan)
+    assert int(lib.nevpt2_make_f3(*fargs)) == 0
+    for actual, expected_output in zip(fused_outputs, fused_expected):
+        np.testing.assert_array_equal(actual, expected_output)
+    for actual, expected_output in zip(retained, retained_expected):
+        np.testing.assert_array_equal(actual, expected_output)
 import gc
 gc.collect()
 for actual, expected_output in zip(retained, retained_expected):
