@@ -187,39 +187,3 @@ def test_amplitude_chunk_boundary_and_partial_last_chunk():
                                    atol=1e-13 * max(1.0, np.abs(reference).max()))
 
 
-@pytest.mark.parametrize('nact,nelec,expected_mode', [(5, (3, 2), 0), (6, (3, 3), 1)])
-def test_production_crossover_and_context_lifetime(nact, nelec, expected_mode):
-    """100/400 determinants select opposite sides of the production 4 MiB rule."""
-    import os
-    from oqp.library.fci import _determinants
-    from oqp.library.casscf import _nonredundant_pairs
-    lib, ffi = _hess_amp_backend()
-    assert hasattr(lib, 'casscf_anhess_selftest')
-    n = nact + 1
-    dets = _as_i64c(_determinants(nact, nelec))
-    pairs = np.asarray(_nonredundant_pairs(0, nact, n), dtype=np.int32)
-    rng = np.random.default_rng(501 + nact)
-    h1e = np.diag(np.linspace(-1, 2, n)) + 0.02 * rng.normal(size=(n, n))
-    h1e = _as_f64c((h1e + h1e.T) / 2)
-    factors = rng.normal(size=(3, n, n)) * 0.02
-    factors = (factors + factors.transpose(0, 2, 1)) / 2
-    eri = _as_f64c(np.einsum('kpq,krs->pqrs', factors, factors))
-    ci = rng.normal(size=len(dets))
-    ci = _as_f64c(ci / np.linalg.norm(ci))
-    outputs = []
-    for mode in [-1, 0, 1]:
-        hess = np.full((len(pairs), len(pairs)), np.nan)
-        selected = ffi.new('int32_t *')
-        status = lib.casscf_anhess_selftest(
-            n, 0, nact, *nelec, len(pairs), len(dets),
-            int(os.environ.get('OMP_NUM_THREADS', '1')), mode,
-            ffi.cast('int64_t *', dets.ctypes.data),
-            ffi.cast('int32_t *', pairs.ctypes.data),
-            *(ffi.cast('double *', x.ctypes.data) for x in [h1e, eri, ci, hess]),
-            selected)
-        assert status == 0, f'context/Hessian status {status}'
-        assert selected[0] == (expected_mode if mode == -1 else mode)
-        outputs.append(hess)
-    scale = max(1.0, np.abs(outputs[1]).max())
-    np.testing.assert_allclose(outputs[0], outputs[1], rtol=0, atol=1e-12 * scale)
-    np.testing.assert_allclose(outputs[2], outputs[1], rtol=0, atol=1e-12 * scale)

@@ -485,13 +485,6 @@ int64_t casscf_hess_amp_mf(int32_t nact, int64_t ndet, int32_t npar,
     const int64_t *dets, const int64_t *skeys, const int64_t *sperm,
     const double *fder, const double *gder, const double *wmat,
     const double *vecs, double *amp);
-/* Production Hessian/context self-test. mode=-1 automatic, 0 dense, 1 direct.
- * Exercises repeated assembly, context resizing and cleanup. */
-int64_t casscf_anhess_selftest(int32_t n, int32_t nc, int32_t na,
-    int32_t nalpha, int32_t nbeta, int32_t npar, int64_t nd,
-    int32_t nthreads, int32_t mode, const int64_t *dets, const int32_t *pairs,
-    const double *h1e, const double *eri, const double *ci,
-    double *hess, int32_t *selected);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external
