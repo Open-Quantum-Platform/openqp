@@ -195,7 +195,8 @@ class BareExitSourceTests(unittest.TestCase):
 def _runtime_available():
     global _RUNTIME_ERROR
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
+        # The installed oqp locates liboqp from its own package; do not point
+        # OPENQP_ROOT at the source tree (it would leak into the whole session).
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
         return True
