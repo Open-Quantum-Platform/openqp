@@ -31,7 +31,7 @@ class SharedMRSFFockTests(unittest.TestCase):
             error, checks, failures = ctypes.c_double(), ctypes.c_int(), ctypes.c_int()
             check(comm, use_mpi, ranks, threads, ctypes.byref(error),
                   ctypes.byref(checks), ctypes.byref(failures))
-            self.assertEqual(checks.value, 24)
+            self.assertEqual(checks.value, 26)
             self.assertEqual(failures.value, 0)
             self.assertEqual(error.value, 0.0)
 

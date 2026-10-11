@@ -282,7 +282,7 @@ end subroutine
 ! every rank contributes a distinct nonzero factor, so a missing allreduce fails.
 subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, checks, failures) bind(C)
   use iso_c_binding, only: c_int,c_double,c_bool
-  use precision, only: dp
+  use precision, only: dp,sp
   use parallel, only: PARALLEL_INT
   use basis_tools, only: basis_set
   use int2_compute, only: int2_storage_t,int2_shell_block_t
@@ -298,6 +298,8 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
   type(int2_shell_block_t), allocatable :: shell(:)
   real(dp), allocatable, target :: density(:,:,:,:),values(:,:,:,:,:)
   real(dp), allocatable :: reference(:,:,:,:)
+  real(sp), allocatable :: reference_sp(:,:,:,:)
+  real(sp) :: xs
   integer :: kind,route,trial,pass,t,ncoul,nmatrix,nbf,nf,flag,v,c,i,j,k,l
   integer :: ao_sizes(3),nf_sizes(3),flags(3),target(2,8),read_at(2,8),a
   real(dp) :: val,xval,cval,global_factor,delta
@@ -341,8 +343,9 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
             if(allocated(data%f3s).neqv.(kind==1.and.flag==1)) failures=failures+1
             if(allocated(data%f3_ex_sp).neqv.(kind==1.and.flag==1)) failures=failures+1
           end if
-          ! Canonical AO quartet; the thread/rank factors create shared contention.
-          i=nbf;j=2;k=2;l=1
+          ! All distinct AO indices when available; small repeated-index case too.
+          i=nbf;j=merge(3,2,nbf>=4);k=2;l=1
+          data%scale_exchange=merge(-0.25_dp,-0.5_dp,pass==1)
           do t=1,threads
             call buf(t)%init(1)
             buf(t)%thread_id=t;buf(t)%ncur=1
@@ -391,6 +394,10 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
             call buf(t)%clean()
             nullify(shell(t)%values)
           end do
+          if(kind==1.and.flag==1.and.pass==1) then
+            if(any(data%f3_ex_shared/=0.0_dp)) failures=failures+1
+            if(.not.any(data%f3_ex_sp/=0.0_sp)) failures=failures+1
+          end if
           call data%parallel_stop()
           checks=checks+1
           if(pass==1) then
@@ -398,6 +405,7 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
           else
             if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
             if(allocated(data%f3_ex_shared).or.allocated(data%f3_ex_sp)) failures=failures+1
+            if(.not.any(reference(:,nmatrix,:,:)/=0.0_dp)) failures=failures+1
             delta=maxval(abs(data%f3(:,:,:,:,1)-reference))
             error=max(error,delta)
             if(delta/=0.0_dp) failures=failures+1
@@ -409,6 +417,53 @@ subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, check
         deallocate(density,reference)
       end do
     end do
+    if(kind==1) then
+      nbf=4;nf=1;nmatrix=7
+      basis%nbf=nbf;basis%nshell=nbf
+      basis%naos=[1,1,1,1];basis%ao_offset=[1,2,3,4]
+      allocate(density(nf,nmatrix,nbf,nbf),reference_sp(nf,3,nbf,nbf))
+      do j=1,nbf
+        do i=1,nbf
+          do c=1,nmatrix
+            density(1,c,i,j)=sin(real(7*i-3*j+5*c,dp))
+          end do
+        end do
+      end do
+      data%d3=>density;data%num_passes=1;data%cur_pass=1
+      data%scale_exchange=-0.3_dp;data%scale_coulomb=0.7_dp
+      call mrsf_set_fp32(1)
+      i=4;j=3;k=2;l=1
+      target=reshape([i,k,k,i,i,l,l,i,j,k,k,j,j,l,l,j],[2,8])
+      read_at=reshape([j,l,l,j,j,k,k,j,i,l,l,i,i,k,k,i],[2,8])
+      do route=1,2
+        call data%parallel_start(basis,int(threads))
+        call buf(1)%init(1);buf(1)%thread_id=1;buf(1)%ncur=1
+        buf(1)%ids(:,1)=[i,j,k,l];buf(1)%ints(1)=0.13_dp
+        shell(1)%shells=[i,j,k,l];shell(1)%dims=1
+        shell(1)%offsets=[i-1,j-1,k-1,l-1]
+        values(1,1,1,1,1)=0.13_dp;shell(1)%values=>values(:,:,:,:,1)
+        reference_sp=0.0_sp
+        xs=real(buf(1)%ints(1)*data%scale_exchange,sp)
+        do c=5,7
+          do a=1,8
+            reference_sp(:,c-4,target(1,a),target(2,a))= &
+              reference_sp(:,c-4,target(1,a),target(2,a))-xs*real(density(:,c,read_at(1,a),read_at(2,a)),sp)
+          end do
+        end do
+        if(route==1) then
+          call data%update(buf(1))
+        else
+          call data%consume_shell(shell(1),1)
+        end if
+        if(any(data%f3_ex_shared/=0.0_dp)) failures=failures+1
+        delta=real(maxval(abs(data%f3_ex_sp-reference_sp)),dp)
+        error=max(error,delta);checks=checks+1
+        if(delta/=0.0_dp) failures=failures+1
+        call data%parallel_stop()
+        call buf(1)%clean();nullify(shell(1)%values)
+      end do
+      nullify(data%d3);deallocate(density,reference_sp)
+    end if
     call data%clean();call data%clean()
     deallocate(data)
   end do
