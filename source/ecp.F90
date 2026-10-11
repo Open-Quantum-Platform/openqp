@@ -1014,7 +1014,8 @@ contains
   !> into hess instead and res is not referenced.
   subroutine ecp_centres(basis, coord, deriv, off, nraw, res, dens, hess)
     use blas_thread, only: blas_thread_count, blas_thread_set
-!$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads, omp_in_parallel
+!$  use omp_lib, only: omp_get_max_threads, omp_set_num_threads, omp_in_parallel, &
+!$                      omp_get_thread_num
     type(basis_set), intent(in) :: basis
     real(dp), intent(in) :: coord(:,:)
     integer, intent(in) :: deriv, nraw
@@ -1026,9 +1027,10 @@ contains
     type(tables_t) :: tab
     type(gtab_t), allocatable :: gt(:)
     integer, allocatable :: toff(:)
-    integer :: natm, nsh, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2
+    integer :: natm, nsh, lbmax, le, lecp, ic, nc, it, iat, iatc, s1, s2, ip, npair, tid
+    integer, allocatable :: ps1(:), ps2(:)
     real(dp) :: c(3)
-    real(dp), allocatable :: hloc(:,:)
+    real(dp), allocatable :: hloc(:,:), hthr(:,:,:)
     logical :: contract
     integer :: nOmpThreads
     integer(c_int64_t) :: nBlasThreads
@@ -1049,9 +1051,26 @@ contains
     contract = present(hess)
     if (contract) then
       allocate(hloc(3*natm, 3*natm), source=0.0_dp)
+      ! One accumulator per thread, summed in thread order after each centre:
+      ! with a fixed assignment of pairs to threads the result is bitwise
+      ! reproducible for a given thread count (an OpenMP reduction combines
+      ! the private copies in unspecified order).
+      allocate(hthr(3*natm, 3*natm, 0:nOmpThreads - 1))
     else
       allocate(hloc(1, 1), source=0.0_dp)
     end if
+
+    ! shell pairs, largest shells first: their pairs are the most expensive
+    npair = nsh*(nsh + 1)/2
+    allocate(ps1(npair), ps2(npair))
+    ip = 0
+    do s1 = nsh, 1, -1
+      do s2 = 1, s1
+        ip = ip + 1
+        ps1(ip) = s1
+        ps2(ip) = s2
+      end do
+    end do
 
     nc = size(basis%ecp_params%n_expo)
     allocate(toff(nc + 1))
@@ -1087,17 +1106,29 @@ contains
 
       call build_gtabs(tab, basis, coord, c, lecp, deriv, gt)
 
-      ! largest shells first: their pairs are the most expensive (load balance)
       if (contract) then
-        !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2) reduction(+:hloc)
-        do s1 = nsh, 1, -1
-          do s2 = 1, s1
-            call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
-                            deriv, gt, s1, s2, off, nraw, natm, res, dens, hloc)
-          end do
+        ! Round-robin (static, 1) over the largest-first pair list keeps the
+        ! load balanced and makes the pairs each thread adds, and their order,
+        ! independent of scheduling.  schedule(dynamic) with reduction(+:hloc)
+        ! summed a run-dependent subset of pairs per thread and combined the
+        ! copies in run-dependent order, so repeated calls differed in the
+        ! last bits.
+        hthr = 0.0_dp
+        !$omp parallel num_threads(nOmpThreads) private(ip, tid)
+        tid = 0
+!$      tid = omp_get_thread_num()
+        !$omp do schedule(static, 1)
+        do ip = 1, npair
+          call shell_pair(tab, basis, coord, c, iatc, toff(ic) + 1, toff(ic + 1), lecp, &
+                          deriv, gt, ps1(ip), ps2(ip), off, nraw, natm, res, dens, hthr(:, :, tid))
         end do
-        !$omp end parallel do
+        !$omp end do
+        !$omp end parallel
+        do tid = 0, nOmpThreads - 1
+          hloc = hloc + hthr(:, :, tid)
+        end do
       else
+        ! largest shells first: their pairs are the most expensive (load balance)
         !$omp parallel do num_threads(nOmpThreads) schedule(dynamic) private(s1, s2)
         do s1 = nsh, 1, -1
           do s2 = 1, s1
