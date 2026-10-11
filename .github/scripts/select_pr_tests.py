@@ -20,6 +20,7 @@ depends on: the test harness (conftest, shared helpers, known_failures), this
 script or the workflows, the build (CMakeLists, pyproject, cmake/, external/),
 or when the selection would exceed ``MAX_SELECTED`` files anyway.
 """
+import ast
 import os
 import re
 import subprocess
@@ -91,22 +92,62 @@ def tests_naming(words, sources):
     return hits
 
 
+def public_names(path):
+    """Top-level public names a module defines (classes, functions, assignments).
+
+    Tests often reach a module through a package re-export
+    (``from oqp.interop import MRSFExcitedStates``) without naming the module,
+    so the names it defines are searched for as well.
+    """
+    try:
+        tree = ast.parse((ROOT / path).read_text(errors="ignore"))
+    except (OSError, SyntaxError):
+        return set()
+    names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    return {n for n in names if not n.startswith("_")}
+
+
+# Paths that cannot change what a pytest test observes.
+NO_TEST_IMPACT = (r"\.md$", r"^docs/", r"^LICENSE", r"^\.gitignore$", r"^CITATION")
+
+
 def select(paths):
+    """Return the selected test files, or None for the full suite.
+
+    Conservative: a changed path that is neither known to be test-neutral nor
+    mapped to at least one test file selects the full suite.
+    """
     if any(needs_full_suite(p) for p in paths):
         return None
     sources = test_sources()
     selected = set()
     for p in paths:
-        if re.match(r"^tests/test_[^/]+\.py$", p) and (ROOT / p).exists():
-            selected.add(ROOT / p)
-        elif p.startswith("pyoqp/oqp/") and p.endswith(".py"):
+        if any(re.search(rx, p) for rx in NO_TEST_IMPACT):
+            continue
+        if re.match(r"^tests/test_[^/]+\.py$", p):
+            if (ROOT / p).exists():
+                selected.add(ROOT / p)
+            continue
+        if p.startswith("pyoqp/oqp/") and p.endswith(".py"):
             mod = p[len("pyoqp/"):-len(".py")].replace("/", ".")
             if mod.endswith(".__init__"):
                 mod = mod[: -len(".__init__")]
-            words = {mod, mod.rsplit(".", 1)[-1]}
-            selected |= tests_naming(words, sources)
-        elif p.startswith(("source/", "include/")):
-            selected |= tests_naming({Path(p).stem}, sources)
+            words = {mod, mod.rsplit(".", 1)[-1]} | public_names(p)
+        elif p.startswith(("source/", "include/", "tests/")):
+            # native sources, and test data/drivers in tests/ subdirectories
+            # (tests/fortran/x.F90 is driven by the test file that names x)
+            words = {Path(p).stem}
+        else:
+            return None  # unclassified path (Docker, lock files, examples, ...)
+        hits = tests_naming(words, sources)
+        if not hits:
+            return None  # nothing maps to it: run everything
+        selected |= hits
     selected |= {ROOT / s for s in SMOKE if (ROOT / s).exists()}
     if len(selected) > MAX_SELECTED:
         return None

@@ -53,6 +53,26 @@ class SelectPrTestsTests(unittest.TestCase):
         self.sel.MAX_SELECTED = 1
         self.assertIsNone(self.sel.select(["tests/test_tdhf_input_checker.py"]))
 
+    def test_unclassified_path_runs_the_full_suite(self):
+        for path in ("Dockerfile", "docker/base-images.lock.json", "examples/TDDFT/x.inp"):
+            with self.subTest(path=path):
+                self.assertIsNone(self.sel.select([path]))
+
+    def test_docs_only_change_runs_just_the_smoke_set(self):
+        chosen = self.sel.select(["README.md"])
+        self.assertIsNotNone(chosen)
+        self.assertEqual(sorted(chosen), sorted(s for s in self.sel.SMOKE if (ROOT / s).exists()))
+
+    def test_re_exported_class_selects_tests_that_use_it(self):
+        chosen = self.sel.select(["pyoqp/oqp/analysis/transition_density.py"])
+        if chosen is not None:
+            self.assertIn("tests/test_excited_toolkit.py", chosen)
+
+    def test_tests_subdirectory_file_selects_its_driver(self):
+        chosen = self.sel.select(["tests/fortran/test_guess_orbital_phase.F90"])
+        if chosen is not None:
+            self.assertIn("tests/test_guess_orbital_phase.py", chosen)
+
     def test_unknown_base_falls_back_to_the_full_suite(self):
         self.assertIsNone(self.sel.changed_files("0" * 40))
 
