@@ -79,6 +79,8 @@ contains
     use tdhf_lib, only: int2_rpagrd_data_t
     use pcg_mod
     use printing, only: print_module_info
+    use population_analysis, only: mulliken_excited
+    use qmmm_mod, only: form_esp_charges_excited
 
     implicit none
 
@@ -399,6 +401,15 @@ contains
     call infos%dat%alloc_or_die(OQP_WAO, (/ nbf2 /), wao, description=OQP_WAO_comment)
     call pack_matrix(wmo, wao)
     wao = wao*0.5_dp
+
+    ! QM/MM (ESPF): relaxed Mulliken and ESP charges of the target state, which
+    ! the MM electrostatic-embedding forces use (as in the MRSF z-vector).
+    ! Without them the QM/MM excited-state forces on MM atoms were built from
+    ! the ground-state charges.
+    if (infos%control%qmmm_flag) then
+      call mulliken_excited(infos)
+      call form_esp_charges_excited(infos)
+    end if
 
     ! Cleanup
     call int2_driver%clean()
