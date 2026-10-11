@@ -690,7 +690,9 @@ contains
     integer, intent(in) :: norb, nelec
     integer(i8), intent(in) :: nstr
     integer(i8), intent(out) :: out(nstr)
-    integer :: c(max(nelec, 1)), i, j
+    ! A string contains at most BIT_SIZE occupied positions. A fixed local
+    ! array avoids GCC lowering an automatic array to an unchecked malloc.
+    integer :: c(bit_size(0_i8)), i, j
     integer(i8) :: idx, key
 
     if (nelec == 0) then
