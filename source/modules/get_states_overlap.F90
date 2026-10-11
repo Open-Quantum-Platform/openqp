@@ -595,6 +595,10 @@ contains
       if (safe) then
         cofactors = det * transpose(inverse)
         safe = all(ieee_is_finite(cofactors))
+        ! A tiny minor pivot can occur even when S itself is well conditioned.
+        ! Recompute subnormal/underflowed products using comp_det's convention.
+        safe = safe .and. .not. any(cofactors /= 0.0_dp .and. abs(cofactors) <= tiny(1.0_dp))
+        safe = safe .and. .not. any(transpose(inverse) /= 0.0_dp .and. cofactors == 0.0_dp)
         if (safe) then
           if (present(used_lu)) used_lu = .true.
           return
