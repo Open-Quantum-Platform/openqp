@@ -637,11 +637,11 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     stats)`` or ``None`` -- a missing symbol, an unsupported option
     combination, or a negative driver status other than allocation failure --
     in which case the caller runs
-    the Python optimizer, which remains the numerical pin.  Two of those
-    negative statuses are refusals rather than fallbacks (a root degeneracy
-    with live coupling, and an excitation stack past the memory guard); the
-    Python path re-raises their messages, which is why they come back as
-    ``None``. Allocation failure raises ``MemoryError`` without another optimizer."""
+    the Python optimizer, which remains the numerical pin. Root degeneracy
+    with live coupling and an excitation stack past the memory guard are
+    Hessian refusals. The retry raises the provider's message only if it
+    reaches the same condition; it may stop before another Hessian build.
+    Allocation failure raises ``MemoryError`` without another optimizer."""
     backend = _casscf_energy_backend()
     if backend is None:
         return None

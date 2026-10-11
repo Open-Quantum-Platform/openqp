@@ -71,16 +71,14 @@
 !> declined run -- the same `_gfock_backend()` pattern the rest of the stack
 !> uses.
 !>
-!> Any negative status means "could not do it here" and the caller re-runs the
-!> Python optimizer, which is still the numerical pin (see
-!> tests/test_casscf_energy.py, which compares the two arms in the same
-!> process so both use identical integrals and identical CI solves).  Two of
-!> those statuses are REFUSALS, not fallbacks -- `CAS_ERR_DEGEN` (a root
-!> degeneracy with live orbital coupling: the state-averaged objective is not
-!> smooth and no orbital Hessian is defined) and `CAS_ERR_STACK` (an excitation
-!> stack past the dense-spectrum memory guard).  Returning a finite Hessian in
-!> the first case would be wrong, so the Python path re-runs and raises its own
-!> message rather than the driver inventing one.
+!> Allocation failure raises Python MemoryError without retry. Other negative
+!> statuses request the Python optimizer, which remains the numerical pin
+!> (tests/test_casscf_energy.py compares both arms in the same process).
+!> CAS_ERR_DEGEN denotes a root degeneracy with live orbital coupling, for
+!> which the state-averaged objective has no orbital Hessian. CAS_ERR_STACK
+!> denotes an excitation stack past the dense-spectrum memory guard. A retry
+!> raises the provider's refusal only if it reaches the same condition; it may
+!> stop before another Hessian build and need not reproduce the same message.
 !>
 !> Option schema
 !> -------------
