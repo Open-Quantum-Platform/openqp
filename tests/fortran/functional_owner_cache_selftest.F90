@@ -36,7 +36,7 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   saved_ta=ia%tddft; saved_tb=ib%tddft
   error=0; failed=0
   call dftclean(ia); call dftclean(ib)
-  do step=1,26
+  do step=1,27
     infos=>ia
     if (step==2.or.step==12) infos=>ib
     name='BHHLYP'
@@ -94,6 +94,8 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     if (step==24) infos%tddft%spc_coco=0.21_dp
     if (step==25) infos%tddft%spc_coov=0.23_dp
     if (step==26) infos%tddft%spc_ovov=0.27_dp
+    ! Change only this predicate; the functional and every CAM value are kept.
+    if (step==27) infos%dft%cam_flag=.not.infos%dft%cam_flag
     basis=infos%basis; basis%atoms=>infos%atoms
     previous_revision=infos%functional%cache_revision
     call dft_initialize(infos,basis,grid,verbose=.false.)
