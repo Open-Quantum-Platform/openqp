@@ -80,3 +80,15 @@ def test_no_test_puts_the_source_tree_on_a_search_path():
     assert not offences, (
         "use oqp_module_isolation.child_env() for a child's environment instead of "
         "the source pyoqp directory:\n" + "\n".join(offences))
+
+
+def test_no_example_rewrites_a_childs_search_path():
+    # Examples are installed with the package and run against it; a child they
+    # start is the same interpreter and finds the same oqp without help.
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    pattern = re.compile(r"""['"]PYTHONPATH['"]\s*\]\s*=|sys\.path\.(insert|append)\(""")
+    offences = [f"{path.relative_to(examples)}:{number}: {line.strip()}"
+                for path in sorted(examples.rglob("*.py"))
+                for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+                if pattern.search(line)]
+    assert not offences, "examples must not edit a search path:\n" + "\n".join(offences)
