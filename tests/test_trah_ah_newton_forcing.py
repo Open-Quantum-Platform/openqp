@@ -71,11 +71,12 @@ def _runtime_available():
 
 
 @pytest.mark.skipif(not _runtime_available(), reason='compiled OpenQP runtime unavailable')
-@pytest.mark.parametrize('scftype,mult', [('rhf', 1), ('rohf', 3)])
+@pytest.mark.parametrize('scftype,mult', [('rhf', 1), ('rohf', 3), ('uhf', 3)])
 def test_trah_converges_dft_to_tight_gradient(tmp_path, scftype, mult):
     """CH2O/BLYP/6-31G*: with the absolute Davidson stop TRAH reached
-    |g| = 2.3e-8 (RKS) and 1.2e-8 (ROKS triplet) and gave up after 31-32
-    refinement steps; Newton steps reach 1e-11 in a couple of steps."""
+    |g| = 2.3e-8 (RKS), 1.2e-8 (ROKS triplet) and 3.6e-8 (UKS triplet) and
+    gave up after 22-32 refinement steps; Newton steps reach 1e-11 in a couple
+    of steps."""
     import re
     import sys
     deck = tmp_path / 'ch2o_trah.inp'
