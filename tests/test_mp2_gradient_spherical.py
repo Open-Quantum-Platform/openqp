@@ -1,5 +1,6 @@
 """Spherical and core-removing ECP MP2 gradients against energy derivatives."""
 import configparser
+import json
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,12 @@ def test_spherical_and_ecp_gradient_matches_central_difference(tmp_path, case):
     runner = _run(tmp_path, case, "analytic")
     x = np.asarray(runner.mol.get_system(), dtype=float).reshape(-1).copy()
     grad = np.asarray(runner.mol.grads[0], dtype=float).reshape(-1)
+    reference = json.loads((ROOT / "examples" / (case + ".json")).read_text())
+    assert abs(float(runner.mol.energies[0]) - reference["energy"]) < 1e-8
+    np.testing.assert_allclose(grad, reference["grad"], atol=1e-8, rtol=0)
+    if case.startswith("MP2/"):
+        expected_nbf = 58 if "cc-pvtz" in case else 24
+        assert int(runner.mol.data.get_basis()["nbf"]) == expected_nbf
     # All components, including symmetry zeros, use the energy derivative.
     step = 1e-3  # Bohr
     for k in range(x.size):
