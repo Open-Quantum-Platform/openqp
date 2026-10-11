@@ -1,12 +1,16 @@
 name: CI
 on:
    pull_request:
+   push:
+      branches: [main]
    workflow_dispatch:
 
-# Pull requests are the only automatic trigger. Protected main receives changes
-# through reviewed PRs, so also running the same matrix for every feature-branch
-# push and again after merge only duplicates the exact validation. A manual run
-# remains available for diagnostics.
+# Pull requests run the full build/example matrix but only the pytest files the
+# change can affect (.github/scripts/select_pr_tests.py) plus a smoke set; the
+# complete pytest suite runs once after every merge to main (push trigger).
+# Feature-branch pushes are not a trigger.  cancel-in-progress keeps only the
+# newest run per PR and per branch, so a burst of merges to main validates the
+# last state once.  A manual run (workflow_dispatch) always runs the full suite.
 concurrency:
    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
    cancel-in-progress: true
@@ -20,9 +24,25 @@ jobs:
             os: [ubuntu-24.04, ubuntu-24.04-arm]
             version: [14]
             MPI: [ON, OFF]
+            role: [build]
+            # The pytest suite runs in its own job, in parallel with the
+            # example suite of the ubuntu-24.04 MPI=OFF leg (it used to run
+            # after it in the same job: 2.8 min build + 16 min examples +
+            # 21 min pytest).  The extra build costs ~3 min with the externals
+            # cache.
+            include:
+               - os: ubuntu-24.04
+                 version: 14
+                 MPI: 'OFF'
+                 role: pytest
       steps:
          - name: Checkout code
            uses: actions/checkout@v4
+           with:
+            # The pytest job diffs the PR against its base to select tests.
+            # String literals: in Actions expressions the number 0 is falsy, so
+            # `cond && 0 || 1` always yields 1 (a shallow clone without the base).
+            fetch-depth: ${{ matrix.role == 'pytest' && '0' || '1' }}
          - name: Setup Python
            uses: actions/setup-python@v5
            with:
@@ -52,9 +72,11 @@ jobs:
            uses: actions/cache@v4
            with:
             path: ~/.cache/openqp/externals
-            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ hashFiles('external/CMakeLists.txt') }}
+            # Debug (arm) keeps the original key, so it reuses the existing cache.
+            # (An empty string is falsy in expressions, so the empty branch goes last.)
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ !contains(matrix.os, 'arm') && 'relwithdebinfo-' || '' }}${{ hashFiles('external/CMakeLists.txt') }}
             restore-keys: |
-               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ !contains(matrix.os, 'arm') && 'relwithdebinfo-' || '' }}
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
@@ -80,6 +102,11 @@ jobs:
             CC: gcc-${{ matrix.version }}
             CXX: g++-${{ matrix.version }}
             FC: gfortran-${{ matrix.version }}
+            # The arm legs stay Debug: on the hosted arm runner the optimized
+            # externals build went silent for ~15 min and the runner was shut
+            # down (exit 143) three times (runs 38119612878, 38121150488), also
+            # with 3 parallel jobs.  The arm legs run only the example suite.
+            OQP_CI_BUILD_TYPE: ${{ contains(matrix.os, 'arm') && 'Debug' || 'RelWithDebInfo' }}
            run: |
             # Build + install from the repo root in one step. scikit-build-core
             # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
@@ -108,7 +135,7 @@ jobs:
             # whatever failed.
             n=0
             until pip install -v . \
-                --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.build-type="$OQP_CI_BUILD_TYPE" \
                 --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \
                 --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
@@ -161,7 +188,9 @@ jobs:
            # plain `pip install .` build the runtime loader cannot find it, so
            # `import oqp` (hence every `openqp` invocation) fails with
            # "libddx.so: cannot open shared object file". Put its directory on
-           # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
+           # LD_LIBRARY_PATH so the validate, example and pytest steps below can
+           # load liboqp.  The pytest role builds with ENABLE_DDX=ON too, so it
+           # needs this step even though it skips the example steps.
            if: ${{ matrix.MPI == 'OFF' }}
            run: |
             lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
@@ -179,7 +208,7 @@ jobs:
            # oqp/utils/regression.py). Fails loudly if a new example or a newly
            # registered value lands without its reference value. Exits non-zero
            # (unlike the piped run_tests below), so it actually blocks CI.
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            run: openqp --validate_examples
 
          - name: Check feature coverage
@@ -187,11 +216,11 @@ jobs:
            # exercised by at least one example, so a new capability cannot ship
            # without a test (see EXEMPT_FLAGS / KNOWN_UNCOVERED in
            # oqp/utils/regression.py). Existing gaps are grandfathered notes.
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            run: openqp --check_feature_coverage
 
          - name: Run example test suite
-           if: ${{ matrix.MPI == 'OFF' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.role != 'pytest' }}
            env:
             # One OMP thread per test so all runner cores run tests concurrently
             # (max_workers = cpus // omp_threads); the examples are tiny.
@@ -215,7 +244,7 @@ jobs:
             fi
 
          - name: Check linked TagArray allocation and cleanup
-           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' && matrix.role != 'pytest' }}
            env:
             CC: gcc-${{ matrix.version }}
            run: |
@@ -223,7 +252,7 @@ jobs:
             sudo apt-get install -y valgrind
             python tests/native/run_tagarray_memcheck.py
          - name: Preserve TagArray memory diagnostics
-           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ always() && matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' && matrix.role != 'pytest' }}
            uses: actions/upload-artifact@v4
            with:
             name: tagarray-memory-${{ github.run_id }}-${{ github.run_attempt }}
@@ -236,8 +265,11 @@ jobs:
          # silently. Run it on one leg: it is Python-only, so a second OS or the
          # MPI leg would re-run identical assertions against the same code.
          - name: Run Python test suite
-           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ matrix.role == 'pytest' }}
            env:
+            # Pull requests: the files select_pr_tests.py chooses (or ALL).
+            # Pushes to main and manual runs: always the full suite.
+            BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
             # This is a post-build job.  Native EDIIS/A-DIIS tests must fail,
             # rather than skip, if the extension or its C ABI symbols are absent.
             OQP_REQUIRE_NATIVE_TESTS: "1"
@@ -250,6 +282,8 @@ jobs:
             # STO-3G systems, measured at ~105 s total.
             OPENQP_RUN_TDHF_HESSIAN_REGRESSION: "1"
            run: |
+            # A selector failure must not be hidden by the path-filter pipe.
+            set -o pipefail
             # --forked is not optional here: 39 test files mutate sys.modules,
             # and tests/test_analytic_hessian.py replaces the whole `oqp`
             # package with a stub. Sharing one interpreter lets that leak into
@@ -274,9 +308,22 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+            if [ -n "$BASE_SHA" ]; then git fetch --no-tags --quiet origin "$BASE_SHA" || true; fi
+            # MP2 has its own single-interpreter OMP1/4 step below. Exclude it
+            # from both full-suite collection and explicitly selected paths.
+            selection="$(python .github/scripts/select_pr_tests.py | sed '\|^tests/test_mp2_dispatch.py$|d')"
+            if [ "$selection" = "ALL" ]; then
+              echo "Running the full pytest suite (MP2 runs separately)"
+              OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+                python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+            else
+              echo "Running $(echo "$selection" | wc -l) selected test files (MP2 runs separately):"
+              echo "$selection"
+              OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+                python -m pytest $selection -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+            fi
          - name: Check MP2 transforms and thread restoration
-           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           if: ${{ matrix.role == 'pytest' }}
            run: |
             for width in 1 4; do
               OMP_NUM_THREADS="$width" OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
@@ -485,7 +532,16 @@ jobs:
             # regressions this leg exists to catch, now under the ILP64
             # interposition.
             set -o pipefail
-            openqp --run_tests all | tee run_tests.out
+            # macos-15-intel is the slowest runner (full suite ~14 min).  On a
+            # pull request it runs the examples this leg exists for -- the SCF
+            # set (PBE EDIIS/ADIIS through NLOpt, molden output) and the basis
+            # export -- and the full suite runs after every merge to main.
+            if [ "${{ github.event_name }}" = pull_request ] && [ "${{ matrix.os }}" = macos-15-intel ]; then
+              openqp --run_tests SCF | tee run_tests.out
+              openqp --run_tests examples/HESS/H2O_RHF-DFT_VIEWER_EXPORT.inp | tee -a run_tests.out
+            else
+              openqp --run_tests all | tee run_tests.out
+            fi
 
 # NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
 # the inline comment in each input. The energy-only ddPCM Fock coupling is
