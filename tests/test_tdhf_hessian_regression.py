@@ -250,8 +250,9 @@ def test_live_analytic_hessian_refuses_one_root_of_a_larger_space(tmp_path):
     """nstate=1 is enough only when the response space holds one root.
 
     H2O/STO-3G has 10 occupied-virtual pairs; with one computed root the
-    isolation of the lowest root cannot be checked, so the run must abort
-    (it aborts the process, hence the subprocess).
+    isolation of the lowest root cannot be checked.  The input checker
+    counts the pairs from the basis and refuses the run before any SCF work
+    (tdhf_hessian_lowest_root_is_isolated is the runtime guard behind it).
     """
     inp = tmp_path / "h2o.inp"
     inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1,
@@ -263,8 +264,41 @@ def test_live_analytic_hessian_refuses_one_root_of_a_larger_space(tmp_path):
     log = (tmp_path / "h2o.log").read_text() if (tmp_path / "h2o.log").exists() else ""
     text = log + proc.stdout + proc.stderr
     assert proc.returncode != 0, text[-2000:]
-    # The message must reach the user, not a stray fort.6 file.
-    assert "requires an isolated lowest root" in text, text[-2000:]
+    # Refused by the input check, with a message that reaches the user.
+    assert "tdhf.nstate>=2" in text, text[-2000:]
+    assert "Final RHF energy" not in text
+    assert not (tmp_path / "fort.6").exists()
+
+
+@pytest.mark.skipif(
+    not RUNTIME_AVAILABLE,
+    reason=(
+        "set OPENQP_RUN_TDHF_HESSIAN_REGRESSION=1 and use a built OpenQP "
+        "runtime to run TDHF Hessians"
+    ),
+)
+def test_runtime_isolation_guard_message_reaches_stderr(tmp_path):
+    """The native guard behind the input check must abort visibly.
+
+    The input check is bypassed (as an API caller that skips it would) so the
+    run reaches tdhf_hessian with one root of a 10-pair space.  show_message
+    then writes while the log unit is closed; it used to land in a stray
+    fort.6 file in the working directory, now it goes to stderr.
+    """
+    inp = tmp_path / "h2o.inp"
+    inp.write_text(INPUT.format(system=CASES["h2o"].system, charge=0, nstate=1,
+                                hess_type="analytical"))
+    script = (
+        "import sys, oqp.pyoqp as P\n"
+        "P.check_input_values = lambda *a, **k: None\n"
+        "P.Runner(project='h2o', input_file=sys.argv[1], log=sys.argv[2]).run()\n"
+    )
+    env = dict(os.environ, OMP_NUM_THREADS="1")
+    env.setdefault("OPENQP_ROOT", str(ROOT))
+    proc = subprocess.run([sys.executable, "-c", script, str(inp), str(tmp_path / "h2o.log")],
+                          cwd=tmp_path, env=env, capture_output=True, text=True, timeout=600)
+    assert proc.returncode != 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    assert "requires an isolated lowest root" in proc.stderr, proc.stderr[-2000:]
     assert not (tmp_path / "fort.6").exists()
 
 

@@ -454,28 +454,37 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("only the lowest excited root", report.to_text())
 
-    def test_one_root_analytic_rpa_hessian_is_left_to_the_runtime_check(self):
-        # Root isolation needs a second computed root only when the response
-        # space has one (nocc*nvir > 1), which the input does not determine:
-        # H2/STO-3G has a single root.  The runtime check
-        # (tdhf_hessian_lowest_root_is_isolated) decides; see
-        # tests/test_tdhf_hessian_regression.py for both outcomes.
+    def _one_root_report(self, system, basis="sto-3g", charge=0):
         config = {
-            "input": {"method": "tdhf", "runtype": "hess",
-                      "system": "\nH 0 0 -0.37\nH 0 0 0.37",
-                      "basis": "sto-3g"},
+            "input": {"method": "tdhf", "runtype": "hess", "system": system,
+                      "basis": basis, "charge": charge},
             "scf": {"type": "rhf", "multiplicity": 1},
             "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
             "hess": {"type": "analytical", "state": 1, "nproc": 1,
                      "temperature": [298.15]},
         }
-
-        report = self.input_checker.check_input_values(
+        return self.input_checker.check_input_values(
             config, raise_error=False, emit=False,
         )
 
-        self.assertNotIn("tdhf.nstate", report.to_text())
-        self.assertNotIn("hess.type", {issue.path for issue in report.errors})
+    def test_one_pair_response_space_accepts_a_single_computed_root(self):
+        # H2 and HeH+ in STO-3G: one occupied and one virtual orbital, so the
+        # only root has no partner to be degenerate with.
+        for system, charge in (("\nH 0 0 -0.37\nH 0 0 0.37", 0),
+                               ("\nHe 0 0 -0.4\nH 0 0 0.4", 1)):
+            report = self._one_root_report(system, charge=charge)
+            self.assertNotIn("tdhf.nstate", report.to_text())
+            self.assertNotIn("hess.type", {issue.path for issue in report.errors})
+
+    def test_larger_response_space_still_requires_two_computed_roots(self):
+        # H2 in 6-31G (4 basis functions) and H2O in STO-3G have several
+        # pairs: one computed root cannot show the lowest one is isolated, so
+        # the input fails here instead of after the SCF and TDHF work.
+        for system, basis in (("\nH 0 0 -0.37\nH 0 0 0.37", "6-31g"),
+                              ("\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3", "sto-3g")):
+            report = self._one_root_report(system, basis=basis)
+            self.assertFalse(report.ok, basis)
+            self.assertIn("tdhf.nstate>=2", report.to_text())
 
     def test_mrsf_analytical_hessian_is_rejected_explicitly_not_silently_numerical(self):
         config = {
