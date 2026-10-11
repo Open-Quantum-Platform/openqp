@@ -221,3 +221,30 @@ def test_explicit_fortran_refuses_missing_kernel(tmp_path, monkeypatch):
         _run_caspt2(tmp_path, "missing_native", system=_H4, basis="sto-3g",
                     cas=_CAS, pt2={"reference": "casci", "engine": "fortran",
                                   "nproc": "1"})
+
+
+def test_caspt2_numpy_process_pool_matches_dense(tmp_path, monkeypatch):
+    from oqp.library import qdpt2_direct
+
+    original = qdpt2_direct._stream_all
+    selected = []
+
+    def record(*args):
+        # The production reference must reach the actual process-pool branch,
+        # rather than the small-support serial fallback.
+        selected.append((args[6].size, args[8]))
+        return original(*args)
+
+    monkeypatch.setattr(qdpt2_direct, "_stream_all", record)
+    cas = {**_CAS, "active_electrons": "4", "active_orbitals": "4",
+           "frozen_core": "0"}
+    energies = []
+    for route, workers in (("dense", "1"), ("direct", "1"), ("direct", "2")):
+        runner = _run_caspt2(tmp_path, f"pool_{route}_{workers}", system=_H4,
+                             basis="6-31g", cas=cas,
+                             pt2={"reference": "casci", "engine": route,
+                                  "nproc": workers, "frozen": "0"})
+        energies.append(np.asarray(runner.mol.energies, dtype=float))
+    assert any(support >= 8 and workers == 2 for support, workers in selected)
+    np.testing.assert_allclose(energies[1], energies[0], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(energies[2], energies[0], rtol=0, atol=1e-9)
