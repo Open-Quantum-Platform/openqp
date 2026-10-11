@@ -318,6 +318,7 @@ ptr = lambda a: ffi.cast('double *', a.ctypes.data)
 args = (n, ptr(g), ptr(d4), ptr(fca), ptr(fac))
 assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
 expected = fca.copy(), fac.copy()
+assert all(np.all(np.isfinite(output)) for output in expected)
 for ordinal in range(3):
     fault.oqp_test_arm_malloc(8*n**4, ordinal)
     # A same-size allocation outside liboqp must not consume the fault ordinal.
@@ -328,6 +329,8 @@ for ordinal in range(3):
     assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == -1, ordinal
     assert fault.oqp_test_malloc_failures() == 1, ordinal
     fault.oqp_test_arm_malloc(0, -1)
+    # Recovery must rewrite both outputs, including after a partial failure.
+    fca.fill(np.nan); fac.fill(np.nan)
     assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
     np.testing.assert_array_equal(fca, expected[0])
     np.testing.assert_array_equal(fac, expected[1])
@@ -336,11 +339,19 @@ ci = np.ones(len(dets)); ci /= np.linalg.norm(ci)
 d1 = np.empty((n,)*2); d2 = np.empty((n,)*4); d3 = np.empty((n,)*6)
 fargs = (n, len(dets), ffi.cast('int64_t *', dets.ctypes.data),
          ptr(ci), ptr(g), ptr(d1), ptr(d2), ptr(d3), ptr(fca), ptr(fac))
+assert int(lib.nevpt2_make_f3(*fargs)) == 0
+fused_outputs = (d1, d2, d3, fca, fac)
+fused_expected = tuple(output.copy() for output in fused_outputs)
+assert all(np.all(np.isfinite(output)) for output in fused_expected)
 fault.oqp_test_arm_malloc(8*n**8, 0)
 assert int(lib.nevpt2_make_f3(*fargs)) == -1
 assert fault.oqp_test_malloc_failures() == 1
 fault.oqp_test_arm_malloc(0, -1)
+for output in fused_outputs:
+    output.fill(np.nan)
 assert int(lib.nevpt2_make_f3(*fargs)) == 0
+for actual, expected_output in zip(fused_outputs, fused_expected):
+    np.testing.assert_array_equal(actual, expected_output)
 """
     env = os.environ.copy()
     env['LD_PRELOAD'] = str(malloc_fault_shim)
