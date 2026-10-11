@@ -126,11 +126,12 @@ def test_allocator_failure_runs_real_fallback(tmp_path, stage):
     the actual allocation failure and the subsequent production path.
     """
     fixture = Path(__file__).with_name('native') / 'mp2_alloc_fail.c'
-    assert sys.platform == 'darwin', 'allocator fixture currently requires macOS dyld interposition'
-    library = tmp_path / 'mp2_alloc_fail.dylib'
-    subprocess.run(['cc', '-dynamiclib', '-O2', str(fixture), '-o', str(library)], check=True)
+    assert sys.platform in ('darwin', 'linux'), 'allocator fixture supports macOS and Linux/glibc'
+    library = tmp_path / ('mp2_alloc_fail.dylib' if sys.platform == 'darwin' else 'mp2_alloc_fail.so')
+    flags = ['-dynamiclib'] if sys.platform == 'darwin' else ['-shared', '-fPIC']
+    subprocess.run(['cc', *flags, '-O2', str(fixture), '-o', str(library)], check=True)
     env = os.environ.copy()
-    env['DYLD_INSERT_LIBRARIES'] = str(library)
+    env['DYLD_INSERT_LIBRARIES' if sys.platform == 'darwin' else 'LD_PRELOAD'] = str(library)
     child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                             str(tmp_path), stage, str(library)], env=env,
                            text=True, capture_output=True, timeout=900)

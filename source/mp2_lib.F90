@@ -15,7 +15,6 @@ module mp2_lib
   use parallel, only: par_env_t
   use blas_thread, only: blas_thread_count, blas_thread_set
   use, intrinsic :: iso_c_binding, only: c_int64_t
-  use omp_lib, only: omp_get_max_threads, omp_get_thread_num
   implicit none
 
   private
@@ -230,9 +229,9 @@ contains
     ! AO store and per-worker scratch, checked before touching the AO store.
     packed_bytes = 8.0_dp*real(cc_packed_length(nbf),dp)
     half_bytes = 8.0_dp*real(npair,dp)*nocc_l*nvir_l
-    first_bytes = 8.0_dp*omp_get_max_threads()*(real(nbf,dp)**2 + &
+    first_bytes = 8.0_dp*mp2_thread_count()*(real(nbf,dp)**2 + &
                   real(nbf,dp)*nvir_l + real(nocc_l,dp)*nvir_l)
-    second_bytes = 8.0_dp*omp_get_max_threads()*(real(nbf,dp)**2 + &
+    second_bytes = 8.0_dp*mp2_thread_count()*(real(nbf,dp)**2 + &
                    real(nbf,dp)*max(nocc_l,nocc_o) + &
                    real(max(nocc_l,nocc_o),dp)*max(nvir_l,nvir_o))
     if (same_spin) second_bytes = second_bytes + 8.0_dp*(real(nocc_l,dp)*nvir_l)**2
@@ -256,7 +255,7 @@ contains
     ! Estimated bytes: full tensor, packed half-transform, pair tables and
     ! three AO matrices per OpenMP worker. The AO store is already resident.
     full_gb = (8.0_dp*(real(nbf,dp)**4 + real(npair,dp)**2 + &
-              3.0_dp*real(nbf,dp)**2*omp_get_max_threads()) + &
+              3.0_dp*real(nbf,dp)**2*mp2_thread_count()) + &
               16.0_dp*npair) / 1.073741824e9_dp
     avail_gb = oqp_available_memory_gb()
     do_full = avail_gb > 0.0_dp .and. full_gb < 0.25_dp*OQP_MEMORY_SAFETY_FRACTION*avail_gb
@@ -302,7 +301,7 @@ contains
     real(dp) :: denom, num
 
     success = .false.; e_same = 0.0_dp; e_opp = 0.0_dp
-    nt = omp_get_max_threads()
+    nt = mp2_thread_count()
     allocate(eri(nbf,nbf,nbf,nbf), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     allocate(half(npair,npair), prow(npair), pcol(npair), &
@@ -311,7 +310,7 @@ contains
     call mp2_pair_table(nbf, npair, prow, pcol)
     !$omp parallel do default(shared) private(pq,ip,p,q,tid) schedule(static)
     do pq = 1, npair
-      tid = omp_get_thread_num()+1
+      tid = mp2_thread_id()
       do ip = 1, npair
         p = prow(ip); q = pcol(ip)
         d(p,q,tid) = g(mp2_packed_idx(ip,pq))
@@ -328,7 +327,7 @@ contains
     !$omp end parallel do
     !$omp parallel do default(shared) private(pq,ip,p,q,tid) schedule(static)
     do pq = 1, npair
-      tid = omp_get_thread_num()+1
+      tid = mp2_thread_id()
       do ip = 1, npair
         p = prow(ip); q = pcol(ip)
         d(p,q,tid) = half(pq,ip)
@@ -382,14 +381,14 @@ contains
     logical :: transformed
 
     e_same = 0.0_dp; e_opp = 0.0_dp; success = .false.
-    nt = omp_get_max_threads()
+    nt = mp2_thread_count()
     allocate(prow(npair), pcol(npair), half(npair,nocc_l*nvir_l), &
              d(nbf,nbf,nt), scr(nbf,nvir_l,nt), m(nocc_l,nvir_l,nt), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     call mp2_pair_table(nbf, npair, prow, pcol)
     !$omp parallel do default(shared) private(q,ip,mu,nu,a,i,tid) schedule(static)
     do q = 1, npair
-      tid = omp_get_thread_num()+1
+      tid = mp2_thread_id()
       do ip = 1, npair
         mu = prow(ip); nu = pcol(ip)
         d(mu,nu,tid) = g(mp2_packed_idx(ip,q))
@@ -454,13 +453,13 @@ contains
     real(dp) :: denom
 
     success = .false.; e_opp = 0.0_dp
-    nt = omp_get_max_threads()
+    nt = mp2_thread_count()
     allocate(mat(nbf,nbf,nt), scr(nocc_o,nbf,nt), vv(nocc_o,nvir_o,nt), stat=ok)
     if (.not. mp2_all_ok(pe,ok)) return
     !$omp parallel do default(shared) private(idx,i,a,j,b,q,mu,nu,tid,denom) &
     !$omp schedule(static) reduction(+:e_opp)
     do idx = 1, nocc_l*nvir_l
-      tid = omp_get_thread_num()+1
+      tid = mp2_thread_id()
       i = (idx-1)/nvir_l+1; a = mod(idx-1,nvir_l)+1
       do q = 1, npair
         mu = prow(q); nu = pcol(q)
@@ -488,6 +487,18 @@ contains
   end subroutine mp2_n5_second_half
 
   !> Agree on recoverable failures before the next integral-driver collective.
+  integer function mp2_thread_count() result(n)
+    !$ use omp_lib, only: omp_get_max_threads
+    n = 1
+    !$ n = omp_get_max_threads()
+  end function mp2_thread_count
+
+  integer function mp2_thread_id() result(n)
+    !$ use omp_lib, only: omp_get_thread_num
+    n = 1
+    !$ n = omp_get_thread_num()+1
+  end function mp2_thread_id
+
   logical function mp2_all_ok(pe, status) result(ok)
     type(par_env_t), intent(inout) :: pe
     integer, intent(in) :: status
