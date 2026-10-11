@@ -53,10 +53,16 @@ end subroutine
                ROOT / 'source/mathlib/mathlib_types.F90',
                ROOT / 'source/mathlib/blas_wrap.F90',
                ROOT / 'source/mathlib/lapack_wrap.F90',
-               ROOT / 'source/mathlib/oqp_linalg.F90', consumer]
+               ROOT / 'source/mathlib/oqp_linalg.F90']
     result = subprocess.run(
         [compiler, '-cpp', '-DOQP_BLAS_INT=8', '-fdefault-integer-8',
-         '-fcheck=all', '-Warray-temporaries', '-c', *map(str, sources)], cwd=tmp_path, capture_output=True, text=True)
+         '-fcheck=all', '-c', *map(str, sources)], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    # The packing contract belongs to the changed CASSCF operand, not
+    # unchanged wrappers such as DGETRI's legacy pivot association.
+    result = subprocess.run([compiler, '-fdefault-integer-8', '-fcheck=all',
+                             '-Warray-temporaries', '-c', str(consumer)],
+                            cwd=tmp_path, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'array temporary' not in result.stderr.lower(), result.stderr
     return compiler, tmp_path / 'consumer.o'
