@@ -72,9 +72,9 @@ jobs:
            uses: actions/cache@v4
            with:
             path: ~/.cache/openqp/externals
-            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ hashFiles('external/CMakeLists.txt') }}
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-relwithdebinfo-${{ hashFiles('external/CMakeLists.txt') }}
             restore-keys: |
-               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-relwithdebinfo-
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
@@ -128,7 +128,7 @@ jobs:
             # whatever failed.
             n=0
             until pip install -v . \
-                --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.build-type=RelWithDebInfo \
                 --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \
                 --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
