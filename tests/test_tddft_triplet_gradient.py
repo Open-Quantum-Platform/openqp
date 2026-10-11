@@ -40,9 +40,11 @@ def _runtime_available():
         return False
 
 
-def _deck(geom, functional, td_type, mult, runtype):
+def _deck(geom, functional, td_type, mult, runtype, basis="6-31g*", ispher=None):
     system = "".join(f"   {a} {x:.8f} {y:.8f} {z:.8f}\n" for a, x, y, z in geom)
-    s = (f"[input]\nsystem=\n{system}charge=0\nruntype={runtype}\nbasis=6-31g*\nmethod=tdhf\n")
+    s = (f"[input]\nsystem=\n{system}charge=0\nruntype={runtype}\nbasis={basis}\nmethod=tdhf\n")
+    if ispher is not None:
+        s += f"ispher={'true' if ispher else 'false'}\n"
     if functional:
         s += f"functional={functional}\n"
     s += ("\n[guess]\ntype=huckel\nsave_mol=true\n\n"
@@ -69,14 +71,30 @@ def _run(text, env_extra=None):
         return proc.returncode, res, log[-2500:]
 
 
-def _gradient(functional, td_type, mult, env_extra=None):
-    rc, res, log = _run(_deck(GEOM, functional, td_type, mult, "grad"), env_extra)
+def _gradient(functional, td_type, mult, env_extra=None, geom=None, **basis):
+    rc, res, log = _run(_deck(geom or GEOM, functional, td_type, mult, "grad", **basis), env_extra)
     return rc, (res or {}).get("grad"), log
 
 
-def _state_energy(geom, functional, td_type, mult):
-    rc, res, log = _run(_deck(geom, functional, td_type, mult, "energy"))
+def _state_energy(geom, functional, td_type, mult, **basis):
+    rc, res, log = _run(_deck(geom, functional, td_type, mult, "energy", **basis))
     return rc, ((res or {}).get("energies") or [None, None])[1], log
+
+
+def _finite_difference(geom, atom, xyz, functional, td_type, mult, **basis):
+    energies = []
+    for sign in (1, -1):
+        shifted = [list(g) for g in geom]
+        shifted[atom][1 + xyz] += sign * STEP
+        rc, e, log = _state_energy(shifted, functional, td_type, mult, **basis)
+        if rc != 0 or e is None:
+            raise AssertionError(log)
+        energies.append(e)
+    return (energies[0] - energies[1]) / (2 * STEP / BOHR)
+
+
+# HBr with the core-removing LANL2DZ ECP on Br (spherical), as the ECP examples
+HBR = [("Br", 0.0, 0.0, 0.0), ("H", 0.0, 0.0, 1.407611)]
 
 
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
@@ -114,6 +132,32 @@ class TestTripletGradient(unittest.TestCase):
                         fd = (energies[0] - energies[1]) / (2 * STEP / BOHR)
                         self.assertAlmostEqual(grad[3 * atom + xyz], fd, delta=tol,
                                                msg=f"atom {atom} xyz {xyz}")
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestTripletGradientBasisAndEcp(unittest.TestCase):
+    """Spherical d shells (HARMONIC_ACTIVE: Cartesian-effective offsets in the
+    two-electron digest) and a core-removing ECP."""
+
+    def _check(self, geom, func, td, components, tol, **basis):
+        rc, grad, log = _gradient(func, td, 3, geom=geom, **basis)
+        self.assertEqual(rc, 0, log)
+        self.assertIsNotNone(grad, log)
+        for atom, xyz in components:
+            fd = _finite_difference(geom, atom, xyz, func, td, 3, **basis)
+            self.assertAlmostEqual(grad[3 * atom + xyz], fd, delta=tol,
+                                   msg=f"atom {atom} xyz {xyz}")
+
+    def test_spherical_cc_pvdz_triplet_gradient_equals_finite_differences(self):
+        for func, td in ((None, "rpa"), ("b3lypv5", "tda")):
+            with self.subTest(functional=func or "hf", td=td):
+                self._check(GEOM, func, td, [(0, 2), (2, 1)], 2e-5,
+                            basis="cc-pvdz", ispher=True)
+
+    def test_ecp_lanl2dz_triplet_gradient_equals_finite_differences(self):
+        for func, td in ((None, "tda"), ("b3lypv5", "rpa")):
+            with self.subTest(functional=func or "hf", td=td):
+                self._check(HBR, func, td, [(1, 2)], 2e-5, basis="lanl2dz", ispher=True)
 
 
 if __name__ == "__main__":
