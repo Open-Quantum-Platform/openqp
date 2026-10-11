@@ -1,24 +1,12 @@
-import importlib
 import re
-import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-def _use_real_oqp_package():
-    # Several lightweight unit tests stub oqp.* modules in sys.modules. The FCI
-    # tests exercise the real installed package, so they must not inherit those
-    # stubs when the whole suite runs in filename order.
-    for name in list(sys.modules):
-        if name == "oqp" or name.startswith("oqp."):
-            sys.modules.pop(name, None)
-    importlib.invalidate_caches()
-
 
 def _backend_available() -> bool:
     """True when the compiled liboqp backend loaded (required for Runner tests)."""
-    _use_real_oqp_package()
     import oqp
 
     return bool(getattr(oqp, "BACKEND_AVAILABLE", False))
@@ -119,7 +107,6 @@ def _assert_spin_spectrum_matches(energies, s2, ref_energies, ref_s2):
 
 
 def test_compute_s2_for_analytic_high_spin_determinant():
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, compute_s2, fci_spin_diagnostics
 
     dets = _determinants(2, (2, 0))
@@ -141,7 +128,6 @@ def test_compute_s2_for_analytic_high_spin_determinant():
     ],
 )
 def test_compute_s2_rejects_nonreal_ci_vectors(ci_vector, message):
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, compute_s2
 
     dets = _determinants(2, (2, 0))
@@ -159,7 +145,6 @@ def test_compute_s2_rejects_nonreal_ci_vectors(ci_vector, message):
     ],
 )
 def test_fci_spin_diagnostics_rejects_nonreal_ci_vectors(ci_vectors):
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, fci_spin_diagnostics
 
     dets = _determinants(2, (2, 0))
@@ -183,7 +168,6 @@ def test_target_spin_named_multiplicities_are_canonicalized(
     canonical,
     multiplicity,
 ):
-    _use_real_oqp_package()
     from oqp.library.fci import _target_spin_multiplicity, _target_spin_setting
 
     normalized = _target_spin_setting(target_spin, "target_spin")
@@ -193,7 +177,6 @@ def test_target_spin_named_multiplicities_are_canonicalized(
 
 
 def test_target_spin_filter_accepts_named_higher_multiplicity():
-    _use_real_oqp_package()
     from oqp.library.fci import _filter_roots_by_target_spin
 
     energies, coeffs, s2, multiplicity, root_indices = _filter_roots_by_target_spin(
@@ -215,7 +198,6 @@ def test_target_spin_filter_accepts_named_higher_multiplicity():
 
 
 def test_solve_fci_filters_named_target_spin_roots():
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, fci_spin_diagnostics, solve_fci
 
     h1e = np.diag([0.0, 1.0])
@@ -246,7 +228,6 @@ def test_solve_fci_filters_named_target_spin_roots():
 
 
 def test_solve_fci_davidson_target_spin_expands_past_subspace_override():
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, fci_spin_diagnostics, solve_fci
 
     h1e = np.diag([0.0, 1.0])
@@ -278,7 +259,6 @@ def test_solve_fci_davidson_target_spin_expands_past_subspace_override():
 
 
 def test_solve_fci_target_spin_reports_no_matching_roots():
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e = np.diag([0.0, 1.0])
@@ -301,7 +281,6 @@ def test_solve_fci_target_spin_ignores_ambiguous_roots_above_the_selection():
     # determinants labelled "doublet" (impossible for two electrons), but the
     # requested singlet ground state at E=0 is pure and unambiguous, so the
     # mislabelled roots above the selection window must not abort the solve.
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e = np.diag([0.0, 1.0])
@@ -326,7 +305,6 @@ def test_solve_fci_target_spin_still_refuses_ambiguity_inside_the_selection():
     # Asking for two singlets pushes the selection window past the mislabelled
     # degenerate pair at E=1; the labels then decide the answer and the solve
     # must refuse rather than silently return energies of spin mixtures.
-    _use_real_oqp_package()
     from oqp.library.fci import SpinLabelAmbiguityError, solve_fci
 
     h1e = np.diag([0.0, 1.0])
@@ -346,7 +324,6 @@ def test_solve_fci_target_spin_still_refuses_ambiguity_inside_the_selection():
 
 
 def test_ci_vector_log_entries_apply_threshold_and_active_labels():
-    _use_real_oqp_package()
     from oqp.library.fci import _ci_vector_log_entries, _determinants
 
     determinants = _determinants(2, (1, 1))
@@ -397,7 +374,6 @@ def test_ci_vector_log_entries_rejects_non_native_diagnostic_inputs(
     root_indices,
     message,
 ):
-    _use_real_oqp_package()
     from oqp.library.fci import _ci_vector_log_entries, _determinants
 
     determinants = _determinants(2, (1, 1))
@@ -414,7 +390,6 @@ def test_ci_vector_log_entries_rejects_non_native_diagnostic_inputs(
 
 
 def test_dump_log_renders_fci_ci_vector_rows(tmp_path):
-    _use_real_oqp_package()
     from oqp.utils.file_utils import dump_log
 
     class FakeData:
@@ -497,7 +472,6 @@ def test_dump_log_renders_fci_ci_vector_rows(tmp_path):
 
 
 def test_dump_log_renders_state_specific_casscf_macroiteration_summary(tmp_path):
-    _use_real_oqp_package()
     from oqp.utils.file_utils import dump_log
 
     class FakeData:
@@ -573,7 +547,6 @@ def test_dump_log_renders_state_specific_casscf_macroiteration_summary(tmp_path)
 
 
 def test_fci_energy_saves_ci_vector_npz_artifact(tmp_path, monkeypatch):
-    _use_real_oqp_package()
     import oqp.library.fci as fci_module
 
     class FakeFCI(fci_module.FCI):
@@ -621,7 +594,6 @@ def test_fci_energy_saves_ci_vector_npz_artifact(tmp_path, monkeypatch):
 
 
 def test_fci_energy_saves_rdm_npz_artifact(tmp_path, monkeypatch):
-    _use_real_oqp_package()
     import oqp.library.fci as fci_module
 
     class FakeFCI(fci_module.FCI):
@@ -691,7 +663,6 @@ def test_fci_energy_saves_rdm_npz_artifact(tmp_path, monkeypatch):
 
 
 def test_ci_energy_stores_fixed_orbital_state_average(monkeypatch):
-    _use_real_oqp_package()
     import oqp.library.fci as fci_module
 
     class FakeEnergy:
@@ -833,7 +804,6 @@ def test_state_average_payload_rejects_non_native_direct_values(
     root_indices,
     message,
 ):
-    _use_real_oqp_package()
     from oqp.library.fci import FCISettings, _state_average_payload
 
     settings_options = {
@@ -849,7 +819,6 @@ def test_state_average_payload_rejects_non_native_direct_values(
 
 
 def test_h2_closed_shell_ground_state_is_singlet():
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, fci_spin_diagnostics, solve_fci
 
     h1e, eri, nelec, ecore, _ = _pyscf_reference("H 0 0 0; H 0 0 0.740")
@@ -863,7 +832,6 @@ def test_h2_closed_shell_ground_state_is_singlet():
 
 
 def test_h2_full_spin_spectrum_matches_live_pyscf_spin_reference():
-    _use_real_oqp_package()
     from oqp.library.fci import _determinants, fci_spin_diagnostics, solve_fci
 
     nroots = 4
@@ -897,7 +865,6 @@ def test_h2_full_spin_spectrum_matches_live_pyscf_spin_reference():
     ],
 )
 def test_dense_fci_solver_matches_live_pyscf_reference(atom, charge, expected):
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e, eri, nelec, ecore, energy_ref = _pyscf_reference(atom, charge=charge)
@@ -916,7 +883,6 @@ def test_dense_fci_solver_matches_live_pyscf_reference(atom, charge, expected):
 
 
 def test_input_checker_accepts_fci_energy():
-    _use_real_oqp_package()
     from oqp.utils.input_checker import check_input_values
 
     report = check_input_values(
@@ -1184,7 +1150,6 @@ def test_active_space_with_dropped_virtuals_matches_casci():
     pytest.importorskip("pyscf")
     from pyscf import ao2mo, gto, mcscf, scf
 
-    _use_real_oqp_package()
     from oqp.library.fci import FCISettings, _active_space, solve_fci
 
     mol = gto.Mole()
@@ -1236,7 +1201,6 @@ def test_active_space_with_dropped_virtuals_matches_casci():
     ],
 )
 def test_active_space_rejects_non_native_numeric_inputs(target, value, message):
-    _use_real_oqp_package()
     from oqp.library.fci import FCISettings, _active_space
 
     h1e = np.zeros((2, 2), dtype=float)
@@ -1257,7 +1221,6 @@ def test_active_space_rejects_non_native_numeric_inputs(target, value, message):
 
 
 def test_solver_rejects_oversized_determinant_space():
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     norb = 8  # (4 alpha, 4 beta) -> C(8,4)^2 = 4900 determinants
@@ -1268,7 +1231,6 @@ def test_solver_rejects_oversized_determinant_space():
 
 
 def test_solver_rejects_oversized_dense_hamiltonian():
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     norb = 8  # 4900 determinants -> dense H ~ 192 MiB; cap the budget at 1 MiB.
@@ -1301,7 +1263,6 @@ def test_solver_rejects_oversized_dense_hamiltonian():
     ],
 )
 def test_solve_fci_rejects_invalid_option_literals(kwargs, message):
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     norb = 2
@@ -1326,7 +1287,6 @@ def test_solve_fci_rejects_invalid_option_literals(kwargs, message):
     ],
 )
 def test_solve_fci_rejects_non_native_electron_counts(nelec):
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e = np.zeros((2, 2), dtype=float)
@@ -1348,7 +1308,6 @@ def test_solve_fci_rejects_non_native_electron_counts(nelec):
     ],
 )
 def test_solve_fci_rejects_nonreal_integral_arrays(target, value, message):
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e = np.zeros((2, 2), dtype=float)
@@ -1377,7 +1336,6 @@ def test_solve_fci_rejects_nonreal_integral_arrays(target, value, message):
     ],
 )
 def test_input_checker_rejects_invalid_fci(override, bad_path):
-    _use_real_oqp_package()
     from oqp.utils.input_checker import check_input_values
 
     config = {
@@ -1402,7 +1360,6 @@ def test_input_checker_rejects_invalid_fci(override, bad_path):
 
 
 def test_input_checker_warns_fci_scf_properties_are_reference_only():
-    _use_real_oqp_package()
     from oqp.utils.input_checker import check_input_values
 
     report = check_input_values(
@@ -1437,7 +1394,6 @@ def test_input_checker_warns_fci_scf_properties_are_reference_only():
     ],
 )
 def test_davidson_solver_matches_live_pyscf_reference(atom, charge, expected):
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e, eri, nelec, ecore, energy_ref = _pyscf_reference(atom, charge=charge)
@@ -1453,7 +1409,6 @@ def test_dense_and_davidson_agree_for_h2o():
     """H2O/STO-3G full FCI (441 determinants) exercises the real Davidson
     iteration; both solvers must agree with each other and with PySCF."""
     pytest.importorskip("pyscf")
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     atom = (
@@ -1473,7 +1428,6 @@ def test_dense_and_davidson_agree_for_h2o():
 
 def test_davidson_multiroot_matches_dense():
     pytest.importorskip("pyscf")
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e, eri, nelec, ecore, _ = _pyscf_reference("H 0 0 0; H 0 0 0.740")
@@ -1484,7 +1438,6 @@ def test_davidson_multiroot_matches_dense():
 
 
 def test_solve_fci_passes_davidson_subspace_to_backend(monkeypatch):
-    _use_real_oqp_package()
     import oqp.library.fci as fci_module
 
     h1e = np.zeros((2, 2), dtype=float)
@@ -1527,7 +1480,6 @@ def test_solve_fci_passes_davidson_subspace_to_backend(monkeypatch):
 
 
 def test_solve_fci_rejects_davidson_subspace_smaller_than_nroot():
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     h1e = np.zeros((2, 2), dtype=float)
@@ -1549,7 +1501,6 @@ def test_auto_solver_crosses_dense_memory_wall():
     """With a tiny max_memory the dense path is rejected, but solver=auto must
     fall back to Davidson (sparse) and still return the correct energy."""
     pytest.importorskip("pyscf")
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     atom = (
@@ -1571,7 +1522,6 @@ def test_auto_solver_crosses_dense_memory_wall():
 
 
 def test_dense_solver_counts_all_live_eigensolver_matrices():
-    _use_real_oqp_package()
     from oqp.library.fci import solve_fci
 
     # CAS(4e,12o) has 4356 determinants.  Two dense matrices fit below
@@ -1602,7 +1552,6 @@ def test_dense_solver_counts_all_live_eigensolver_matrices():
     ],
 )
 def test_input_checker_rejects_invalid_solver_options(override, bad_path):
-    _use_real_oqp_package()
     from oqp.utils.input_checker import check_input_values
 
     config = {
@@ -1628,7 +1577,6 @@ def test_input_checker_rejects_invalid_solver_options(override, bad_path):
 
 @pytest.mark.parametrize("target_spin", ["triplet", "quintet"])
 def test_input_checker_accepts_fci_target_spin_filter(target_spin):
-    _use_real_oqp_package()
     from oqp.utils.input_checker import check_input_values
 
     config = {
@@ -1654,7 +1602,6 @@ def test_input_checker_accepts_fci_target_spin_filter(target_spin):
 def test_spin_orbital_integrals_match_element_reference(norb):
     """The strided spin-block build is a permuted copy of the same spatial
     tensor, so it must reproduce the element-by-element reference bit for bit."""
-    _use_real_oqp_package()
     from oqp.library.fci import (
         _spin_orbital_integrals,
         _spin_orbital_integrals_reference,
@@ -1677,7 +1624,6 @@ def test_davidson_reaches_the_requested_residual_tolerance():
     on it must be relative.  With an absolute 1e-8 cutoff the iteration used to
     discard every correction once the residual reached ~1e-8 and returned
     silently unconverged, three orders of magnitude short of eig_tol."""
-    _use_real_oqp_package()
     from oqp.library.fci import _davidson, _DenseMatrixOperator
 
     rng = np.random.default_rng(5)
@@ -1701,7 +1647,6 @@ def test_davidson_reaches_the_requested_residual_tolerance():
 def test_dense_solver_lowest_roots_shortcut_matches_the_full_solve():
     """solve_fci's dense path extracts only the roots it returns; the result
     must equal the full ndet-root LAPACK solve in energy and in CI vector."""
-    _use_real_oqp_package()
     import oqp.library.fci as fci
 
     rng = np.random.default_rng(41)
@@ -1746,7 +1691,6 @@ def test_lowest_dense_roots_declines_small_and_wide_windows():
     """The shortcut is a cost optimization, not a semantic change: below the
     measured crossover, and when the window is a large fraction of the
     spectrum, it declines so the caller keeps the full solve."""
-    _use_real_oqp_package()
     from oqp.library.fci import _lowest_dense_roots
 
     rng = np.random.default_rng(9)

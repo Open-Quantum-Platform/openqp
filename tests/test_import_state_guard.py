@@ -80,6 +80,12 @@ def test_rebinds_numpy_scalar_type():
     numpy.int32 = type("int32", (), {})
 
 
+def test_purges_and_reimports_real_oqp():
+    for name in [n for n in sys.modules if n == "oqp" or n.startswith("oqp.")]:
+        del sys.modules[name]
+    import oqp  # noqa: F401  -- a second copy of the package
+
+
 def test_importing_a_real_submodule_is_allowed():
     import oqp.utils.helper  # binds built-in sys/time, which have no __file__
 
@@ -150,6 +156,7 @@ def test_rebinding_real_module_attributes_fails(tmp_path):
         ("test_rebinds_real_oqp_through_setdefault", "'oqp.ffi'"),
         ("test_binds_stub_on_real_package", "'oqp.utils.mpi_utils (bound to a stub)'"),
         ("test_rebinds_numpy_scalar_type", "'numpy.int32'"),
+        ("test_purges_and_reimports_real_oqp", "real oqp modules were removed or re-imported"),
     ):
         assert f"ERROR test_child_rebinding.py::{name}" in out, out
         assert reason in out, out

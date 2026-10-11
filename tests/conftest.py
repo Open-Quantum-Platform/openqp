@@ -107,6 +107,8 @@ def _import_state():
         "OPENQP_ROOT": os.environ.get("OPENQP_ROOT"),
         "numpy": sys.modules.get("numpy"),
         "bindings": _bindings(),
+        "real_oqp": {name: module for name, module in _oqp_namespace()
+                     if _from_selected_package(module)},
     }
 
 
@@ -133,6 +135,13 @@ def _import_state_violations(before):
     if foreign:
         problems.append(f"sys.modules holds oqp modules not from {_OQP_PACKAGE_DIR}: "
                         f"{foreign}; restore every stub in teardown")
+    # Popping oqp modules and importing again yields a second copy (a new cffi
+    # FFI, new classes) while earlier tests' objects still use the first.
+    replaced = sorted(name for name, module in before["real_oqp"].items()
+                      if sys.modules.get(name) is not module)
+    if replaced:
+        problems.append(f"real oqp modules were removed or re-imported: {replaced}; "
+                        "do not purge sys.modules")
     if before["numpy"] is not None and after["numpy"] is not before["numpy"]:
         problems.append("sys.modules['numpy'] was replaced")
     rebound = []
@@ -160,6 +169,7 @@ def _restore_import_state(state):
     for name, module in _oqp_namespace():
         if not _from_selected_package(module):
             del sys.modules[name]
+    sys.modules.update(state["real_oqp"])
     if state["numpy"] is not None:
         sys.modules["numpy"] = state["numpy"]
     for (module, attr), value in state["bindings"].items():
