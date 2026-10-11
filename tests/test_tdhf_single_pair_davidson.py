@@ -131,6 +131,27 @@ nstate=1
 conv=1.0e-10
 """
 
+# One-electron UHF reference (H2+ doublet): the density is fixed by symmetry
+# and the alpha virtual is empty, so a level shift on it is visible.
+H2P_UHF = """\
+[input]
+system=
+   1   0.000000000   0.000000000   0.000000000
+   1   0.000000000   0.000000000   0.740848000
+charge=1
+runtype=energy
+basis=sto-3g
+method=hf
+
+[guess]
+type={guess}
+
+[scf]
+multiplicity=2
+type=uhf
+conv=1.0e-10
+"""
+
 SUMMARY_ROOT = re.compile(r"^\s*0 -> 1\s+(-?\d+\.\d+)", re.MULTILINE)
 ALPHA_EPS = re.compile(
     r"Alpha Orbitals -+\s*\n\s*1\s+2\s*\n\s*(-?\d+\.\d+)\s+(-?\d+\.\d+)")
@@ -251,7 +272,7 @@ def test_loose_first_iteration_keeps_orbitals_and_density_together(tmp_path):
 
 
 @pytest.mark.parametrize("route", ["cold", "supplied"])
-@pytest.mark.parametrize("ref", ["rhf", "rohf"])
+@pytest.mark.parametrize("ref", ["rhf", "rohf", "uhf"])
 def test_level_shift_never_reaches_published_orbital_energies(tmp_path, ref, route):
     """V-DIIS adds its level shift to the first Fock before switching it off.
 
@@ -261,8 +282,9 @@ def test_level_shift_never_reaches_published_orbital_energies(tmp_path, ref, rou
     same orbital energies as a run without any shift (a shifted virtual would
     read 0.7703 instead of 0.6703 Eh for RHF H2).
     """
-    deck = (H2.format(td="rpa", guess="huckel", nstate=1) if ref == "rhf"
-            else H2_ROHF_MRSF.format(guess="huckel"))
+    deck = {"rhf": H2.format(td="rpa", guess="huckel", nstate=1),
+            "rohf": H2_ROHF_MRSF.format(guess="huckel"),
+            "uhf": H2P_UHF.format(guess="huckel")}[ref]
     plain = deck.replace("type=huckel\n", "type=huckel\nsave_mol=True\n")
     proc, log = _run(tmp_path, f"{ref}_plain", plain)
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
@@ -281,6 +303,25 @@ def test_level_shift_never_reaches_published_orbital_energies(tmp_path, ref, rou
     assert re.search(rf"after\s+{expected_iters} iterations", log), log[-3000:]
     eps = [float(e) for e in ALPHA_EPS.findall(log)[-1]]
     assert eps == pytest.approx(eps_plain, abs=1e-8)
+
+
+def test_cold_guess_is_not_accepted_without_an_scf_iteration(tmp_path):
+    """With [scf] maxit=1 there is no iteration left to diagonalise an SCF Fock.
+
+    The exact H2 guess density meets the tolerance on the first build, but its
+    orbitals are the guess Hamiltonian's.  That SCF must not be reported as
+    converged; if the run recovers (the TRAH escalation), whatever it finally
+    publishes must be the Fock eigenvalues, never the guess eigenvalues.
+    """
+    deck = H2.format(td="rpa", guess="huckel", nstate=1).replace(
+        "type=rhf\nconv=1.0e-10\n", "type=rhf\nconv=1.0e-10\nmaxit=1\n")
+    proc, log = _run(tmp_path, "h2_maxit1", deck)
+    assert "SCF did not converge" in log, log[-3000:]
+    eps = ALPHA_EPS.findall(log)
+    assert eps, log[-3000:]
+    assert [float(e) for e in eps[-1]] != pytest.approx([-1.0720752606, 0.0720752606], abs=1e-6)
+    if proc.returncode == 0:
+        assert [float(e) for e in eps[-1]] == pytest.approx(EPS_REFERENCE, abs=1e-7)
 
 
 def test_one_iteration_rohf_is_guess_independent(tmp_path):

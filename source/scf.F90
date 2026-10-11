@@ -1090,13 +1090,14 @@ contains
       ! the exit instead would leave the orbitals out of step with the density
       ! and energy when the guess only meets the tolerance. One more ordinary
       ! iteration keeps orbitals, density and energy from the same SCF state.
-      ! Not applied when maxit = 1 leaves no iteration to add.
+      ! With maxit = 1 there is no iteration to add; the guess is still not
+      ! accepted, and iteration exhaustion reports non-convergence.
       ! A level shift (vshift, or V-DIIS before it switches the shift off) is
       ! already inside pfock here; the orbitals of the extra iteration, and the
       ! energies refreshed for supplied orbitals, are taken from the unshifted
       ! first build (fock_noshift) so no shifted virtual energy is published.
       !----------------------------------------------------------------------------
-      cold_first_iter = (iter == 1) .and. (maxit > 1) &
+      cold_first_iter = (iter == 1) &
           .and. (infos%control%guess /= GUESS_SUPPLIED) &
           .and. .not. (use_soscf .or. use_trah)
       cold_held = cold_first_iter .and. (abs(diis_error) < infos%control%conv) &
@@ -1122,6 +1123,13 @@ contains
           end if
         else
           if (vshift_last_iter) vshift = 0.0_dp
+          ! A first-iteration exit (supplied orbitals; cold guesses are held
+          ! above) may carry the V-DIIS level shift in pfock. Restore the
+          ! unshifted build so every consumer -- the energy refresh below, the
+          ! UHF rediagonalisation after the loop and the saved final Fock --
+          ! sees the SCF Fock, not the shifted one.
+          if (iter == 1 .and. shift_applied .and. .not. (use_soscf .or. use_trah)) &
+            pfock = fock_noshift
           ! Supplied orbitals (restarts, MD/NAMD steps) may converge on the
           ! first build. They define the density, so they are kept with their
           ! coefficients, occupations and phases -- restart and NAMD phase
@@ -1131,11 +1139,7 @@ contains
           if (iter == 1 .and. infos%control%guess == GUESS_SUPPLIED .and. &
               .not. (use_soscf .or. use_trah) .and. &
               scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
-            if (shift_applied) then
-              call fock_diagonal_energies(fock_noshift(:,1), mo_a, mo_energy_a, nbf)
-            else
-              call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
-            end if
+            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
             if (scf_type == scf_rohf) then
               mo_b = mo_a
               mo_energy_b = mo_energy_a
