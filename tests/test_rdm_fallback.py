@@ -369,19 +369,22 @@ class FailRDM:
         # Pin recovery to the same SCF orbitals. Independent threaded SCF
         # runs need not return bit-identical orbitals or final energies.
         initial_mo = current_runner.mol.data["OQP::VEC_MO_A"].copy()
+        assert lib.casscf_energy(*args) == 0
+        reference_energy = bytes(ffi.buffer(args[5], 8))
+        current_runner.mol.data["OQP::VEC_MO_A"][...] = initial_mo
         shim.rdm_fail_strings_allocation(1)
         status = int(lib.casscf_energy(*args))
         count = shim.rdm_allocation_count()
         assert count == 1, (status, count)
         assert status == -2, (status, count)
-        assert np.array_equal(current_runner.mol.data["OQP::VEC_MO_A"], initial_mo)
+        assert current_runner.mol.data["OQP::VEC_MO_A"].tobytes() == initial_mo.tobytes()
         recovered = []
         for repeat in range(2):
             # Reacquire the borrowed record after each native call.
             current_runner.mol.data["OQP::VEC_MO_A"][...] = initial_mo
             assert lib.casscf_energy(*args) == 0
             recovered.append(bytes(ffi.buffer(args[5], 8)))
-        assert recovered[0] == recovered[1], recovered
+        assert recovered[0] == recovered[1] == reference_energy, recovered
         current_runner.mol.data["OQP::VEC_MO_A"][...] = initial_mo
         seen.append(status)
         return status
