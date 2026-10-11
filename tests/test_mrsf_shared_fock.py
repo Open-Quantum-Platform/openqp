@@ -8,6 +8,7 @@ import os
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class SharedMRSFFockTests(unittest.TestCase):
@@ -82,7 +83,7 @@ class SharedMRSFFockTests(unittest.TestCase):
             from mpi4py import MPI
             comm, ranks = MPI.COMM_WORLD.py2f(), MPI.COMM_WORLD.size
             self.assertGreaterEqual(ranks, 2, "multirank gate needs at least two ranks")
-        threads = int(os.environ["OMP_NUM_THREADS"])
+        threads = int(os.environ.get("OMP_NUM_THREADS", "1"))
         self.assertGreater(threads, 0, "native oracle requires a positive worker count")
         for _ in range(2):
             error = oqp.ffi.new("double *")
@@ -91,6 +92,17 @@ class SharedMRSFFockTests(unittest.TestCase):
             self.assertEqual(checks[0], 78)
             self.assertEqual(failures[0], 0)
             self.assertEqual(error[0], 0.0)
+
+    def test_unset_worker_count_executes_the_serial_oracle(self):
+        with patch.dict(os.environ):
+            os.environ.pop("OMP_NUM_THREADS", None)
+            self.test_signed_channels_fp32_cam_resize_and_cleanup()
+
+    def test_nonpositive_worker_count_is_rejected(self):
+        for value in ("0", "-1"):
+            with self.subTest(value=value), patch.dict(os.environ, {"OMP_NUM_THREADS": value}):
+                with self.assertRaisesRegex(AssertionError, "positive worker count"):
+                    self.test_signed_channels_fp32_cam_resize_and_cleanup()
 
 
 if __name__ == "__main__":

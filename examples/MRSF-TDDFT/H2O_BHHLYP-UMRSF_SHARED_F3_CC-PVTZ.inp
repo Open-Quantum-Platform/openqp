@@ -1,0 +1,33 @@
+[input]
+system = 
+	8   0.000000000   0.000000000  -0.041061554
+	1  -0.533194329   0.533194329  -0.614469223
+	1   0.533194329  -0.533194329  -0.614469223
+runtype = energy
+method = tdhf
+functional = bhhlyp
+basis = cc-pVTZ
+omp_threads = 2
+ispher = true
+
+[guess]
+save_mol = false
+
+[scf]
+type = uhf
+multiplicity = 3
+converger_type = diis
+maxit = 200
+conv = 1e-10
+
+[dftgrid]
+rad_npts = 90
+ang_npts = 302
+
+[tdhf]
+shared_f3 = True
+type = umrsf
+nstate = 3
+multiplicity = 1
+conv = 1e-9
+
