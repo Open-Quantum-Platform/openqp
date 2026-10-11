@@ -426,7 +426,7 @@ if(BUILD_TESTING)
   # Run these context tests while the exact build and module files still exist.
   add_custom_command(TARGET oqp_test_casscf_anhess POST_BUILD
     COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR}
-      --output-on-failure --verbose -R "^oqp_casscf_anhess_(1|4)$"
+      -C $<CONFIG> --output-on-failure --verbose -R "^oqp_casscf_anhess_(1|4)$"
     VERBATIM)
   add_executable(oqp_test_int2_rys_pure tests/fortran/int2_pure_driver.F90)
   target_compile_definitions(oqp_test_int2_rys_pure PRIVATE OQP_ERI_SELFTEST=oqp_test_int2_rys_pure)
