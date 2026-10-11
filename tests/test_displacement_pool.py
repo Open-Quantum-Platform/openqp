@@ -399,6 +399,7 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
     real_wait = subprocess.Popen.wait
 
     stopped = set()
+    violations = []
 
     def parent_of(pid):
         out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
@@ -410,8 +411,10 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
         if sig == signal.SIGSTOP:
             # Each PID must be a direct child of an already-stopped process,
             # which cannot reap it, so the PID cannot have been recycled.
+            # Recorded rather than raised, so stop() still finishes its cleanup.
             for pid in pids:
-                assert parent_of(pid) in stopped, ("parent not frozen", pid, stopped)
+                if parent_of(pid) not in stopped:
+                    violations.append(("parent not frozen", pid, sorted(stopped)))
             stopped.update(pids)
         return real_signal_pids(pids, sig)
 
@@ -437,6 +440,7 @@ STOP_ORDER_DRIVER = textwrap.dedent('''
     jobs.stop(grace=1.0)
     worker.join(30)
 
+    assert not violations, violations
     kinds = [kind for kind, _ in events]
     assert "grace-wait" in kinds, events
     first_wait = kinds.index("grace-wait")
