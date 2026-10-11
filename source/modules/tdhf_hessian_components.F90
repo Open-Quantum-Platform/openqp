@@ -133,10 +133,20 @@ contains
 
 !###############################################################################
 
-  pure logical function tdhf_hessian_lowest_root_is_isolated(energies,tol) result(isolated)
+  !> The lowest root must be separated from the next root by more than tol.
+  !> A response space of one occupied-virtual pair (nexc = 1, e.g. H2 or
+  !> HeH+ in a minimal basis) holds a single root, which has no partner to
+  !> be degenerate with; any other space needs a second computed root.
+  pure logical function tdhf_hessian_lowest_root_is_isolated(energies,tol,nexc) result(isolated)
     real(kind=dp), intent(in) :: energies(:),tol
-    isolated = size(energies)>=2 .and. tol>=0.0_dp
-    if(isolated) isolated=abs(energies(2)-energies(1))>tol
+    integer, intent(in) :: nexc
+    isolated = .false.
+    if(tol<0.0_dp .or. size(energies)<1) return
+    if(nexc==1) then
+      isolated = .true.
+    else if(size(energies)>=2) then
+      isolated = abs(energies(2)-energies(1))>tol
+    end if
   end function tdhf_hessian_lowest_root_is_isolated
 
 end module tdhf_hessian_components_mod

@@ -1684,6 +1684,12 @@ contains
     !   tmp = adco2^T * C^alpha_HOMO-1 + ao21v^T * C^alpha_HOMO
     !   F^MO_(HOMO-1,a) += C^beta_a^T * tmp  (for a in virt_beta)
     !
+    ! Sections 5-6 project onto the beta virtual block (noca+1:nbf). With no
+    ! virtual orbital above the open shells (nbf == noca, e.g. the H2/STO-3G
+    ! triplet reference) that block is empty and DGEMM would receive
+    ! M = LDC = nbf-noca = 0, an argument error that Apple Accelerate rejects
+    ! (the process aborts after SCF). Skip it, as umrsfmntoia already does.
+    if (nbf > noca) then
     ! Step 1: Contract adco2^T with HOMO-1_alpha MO coefficient
     !   tmp_mu = sum_nu P^adco2_(nu,mu) * C^alpha_(nu,HOMO-1)
     call dgemm('t','n',nbf,1,nbf, &
@@ -1736,6 +1742,7 @@ contains
                one, vb(:,noca+1), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+    end if  ! nbf > noca
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1,O1) diagonal element (OO block)
