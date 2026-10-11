@@ -31,6 +31,7 @@ Evaluated to 1e-10 from the analytic integrals: eps = (-0.57820302,
 0.67026784), J_gu = 0.663564, K_gu = 0.181258, E_SCF = -1.1167143238 Eh.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -102,9 +103,39 @@ maxit=1
 conv=1.0e-30
 """
 
+# Triplet ROHF reference for MRSF.  Both STO-3G orbitals are singly occupied,
+# so the density is fixed by symmetry and every guess converges on the first
+# Fock build -- the case where the guess orbital energies used to survive.
+H2_ROHF_MRSF = """\
+[input]
+system=
+   1   0.000000000   0.000000000   0.000000000
+   1   0.000000000   0.000000000   0.740848000
+charge=0
+runtype=energy
+basis=sto-3g
+method=tdhf
+
+[guess]
+type={guess}
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-10
+
+[tdhf]
+type=mrsf
+multiplicity=1
+nstate=1
+conv=1.0e-10
+"""
+
 SUMMARY_ROOT = re.compile(r"^\s*0 -> 1\s+(-?\d+\.\d+)", re.MULTILINE)
 ALPHA_EPS = re.compile(
     r"Alpha Orbitals -+\s*\n\s*1\s+2\s*\n\s*(-?\d+\.\d+)\s+(-?\d+\.\d+)")
+# Davidson progress lines; the last occurrence of each root is its final value.
+DAVIDSON_STATE = re.compile(r"State\s+(\d+)\s+E =\s+(-?\d+\.\d+) eV")
 
 
 def _have_native_oqp():
@@ -146,6 +177,61 @@ def test_one_iteration_scf_publishes_fock_eigenvalues(tmp_path, guess):
     eps = ALPHA_EPS.findall(log)
     assert eps, log[-3000:]
     assert [float(e) for e in eps[-1]] == pytest.approx(EPS_REFERENCE, abs=1e-7)
+
+
+def test_one_iteration_scf_refreshes_supplied_orbital_energies(tmp_path):
+    """Supplied orbitals keep coefficients and phases; their energies are refreshed.
+
+    The supplied JSON carries the converged H2 orbitals with deliberately wrong
+    orbital energies and the virtual orbital's sign flipped.  The SCF converges
+    on its first Fock build, so before the fix the wrong energies were published
+    and fed the response; the orbitals themselves must not be rotated or
+    re-phased (restart, MD and NAMD phase tracking rely on that).
+    """
+    first = H2.format(td="rpa", guess="huckel", nstate=1).replace(
+        "type=huckel\n", "type=huckel\nsave_mol=True\n")
+    proc, _ = _run(tmp_path, "h2_first", first)
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    data = json.loads((tmp_path / "h2_first.json").read_text())
+    vec = [list(row) for row in data["OQP::VEC_MO_A"]]
+    vec[1] = [-c for c in vec[1]]
+    data["OQP::VEC_MO_A"] = vec
+    data["OQP::E_MO_A"] = [9.0, 11.0]
+    (tmp_path / "supplied.json").write_text(json.dumps(data))
+
+    second = H2.format(td="rpa", guess="json", nstate=1).replace(
+        "type=json\n", "type=json\nfile=supplied.json\nsave_mol=True\n")
+    proc, log = _run(tmp_path, "h2_supplied", second)
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    assert re.search(r"after\s+1 iterations", log), log[-3000:]
+    out = json.loads((tmp_path / "h2_supplied.json").read_text())
+    assert out["OQP::E_MO_A"] == pytest.approx(EPS_REFERENCE, abs=1e-7)
+    flat = [c for row in out["OQP::VEC_MO_A"] for c in row]
+    assert flat == pytest.approx([c for row in vec for c in row], abs=1e-12)
+    omega = float(SUMMARY_ROOT.findall(log)[-1]) / HARTREE_EV
+    assert omega == pytest.approx(REFERENCE["rpa"], abs=1e-6)
+
+
+def test_one_iteration_rohf_is_guess_independent(tmp_path):
+    results = {}
+    for guess in ("huckel", "hcore"):
+        proc, log = _run(tmp_path, f"h2_rohf_{guess}",
+                         H2_ROHF_MRSF.format(guess=guess))
+        assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+        assert re.search(r"ROHF energy is\s+\S+\s+after\s+1 iterations", log), \
+            log[-3000:]
+        eps = [float(e) for e in ALPHA_EPS.findall(log)[-1]]
+        assert "energies converged" in log, log[-3000:]
+        states = {int(n): float(e) for n, e in DAVIDSON_STATE.findall(log)}
+        assert states, log[-3000:]
+        results[guess] = (eps, states)
+    (eps_h, st_h), (eps_c, st_c) = results["huckel"], results["hcore"]
+    # The ROHF orbitals of this reference are the same whatever the guess, so
+    # their energies, and every MRSF state built on them, must be too.
+    assert eps_h == pytest.approx(eps_c, abs=1e-8)
+    assert sorted(st_h) == sorted(st_c)
+    for n in st_h:
+        assert st_h[n] == pytest.approx(st_c[n], abs=1e-6)  # eV, printed to 1e-6
 
 
 @pytest.mark.parametrize("threads", [1, 4])
