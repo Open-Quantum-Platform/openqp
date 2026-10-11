@@ -834,7 +834,10 @@ contains
       end do
     end if
 
-!   Norms of W
+!   Norms of W.
+!   errors(ivec) is the true squared residual norm. A large residual keeps
+!   the root unconverged and still yields a preconditioned correction; it is
+!   never reset, because the caller decides convergence from these values.
     errors = 0.0_dp
 
     if (tamm_dancoff) then
@@ -850,7 +853,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error right =",1X,1P,E10.3)') errors(ivec)
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -876,7 +878,6 @@ contains
           write(*,'(4X,"Large error detected")')
           write(*,'(4X,"State#=",I4)') ivec
           write(*,'(4X,"Error left/right =",1X,1P,E10.3,"/",1X,1P,E10.3)') er_l, er_r
-          errors(ivec) = 0.0_dp
         end if
 
 !       Get new vectors Q
@@ -892,6 +893,22 @@ contains
     end if
 
   end subroutine rparesvec
+
+!> @brief Largest squared residual norm among the roots Davidson converges
+!> @details Roots 1..imax have negative eigenvalues and are excluded, as in
+!>  rparesvec. Returns zero when no root remains.
+  pure function rpa_max_residual(errors, imax, ndsr) result(mxerr)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: errors(:)
+    integer, intent(in) :: imax, ndsr
+    real(kind=dp) :: mxerr
+
+    mxerr = 0.0_dp
+    if (imax < ndsr) mxerr = maxval(errors(imax+1:ndsr))
+  end function rpa_max_residual
 
   subroutine apply_davidson_preconditioner(qout, residual, energy, abd)
     use precision, only: dp

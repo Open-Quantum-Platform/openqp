@@ -57,10 +57,10 @@ contains
       int2_td_data_t
     use tdhf_lib, only: &
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
-      rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
+      rpaechk, rpaprint, rparesvec, rpa_max_residual, rpaexpndv, rpanewb, esum, &
       tdhf_unrelaxed_density
     use mod_dft, only: dft_initialize, dftclean
-    use mod_dft_gridint_fxc, only: tddft_fxc, xc_consumer_tde_t
+    use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc, xc_consumer_tde_t
     use mod_dft_gridint_response_cache, only: response_cache_t
     use util, only: measure_time
     use mathlib, only: symmetrize_matrix, orthogonal_transform
@@ -99,7 +99,12 @@ contains
     integer :: iter, istart, nv, iv, ivec
     integer :: mxiter
     logical :: do_apb,do_amb, tamm_dancoff   ! SWITCH FOR a-b, a+b, tANDAMM COFF
-    integer :: imax
+    logical :: triplet, xc_unrestricted, xc_antisym
+    real(kind=dp) :: xc_beta_sign
+    real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:), fxb(:,:,:)
+    character(len=8) :: envval
+    integer :: envlen, envstat
+    integer :: imax, nimag
     logical :: converged
     integer :: ierr
     real(kind=dp) :: mxerr, cnvtol, scale_exch, norm
@@ -117,9 +122,9 @@ contains
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
       mo_energy_a(:), mo_a(:,:), td_t(:,:), &
-      xpy(:,:), xmy(:,:), td_energies(:)
-    character(len=*), parameter :: tags_alloc(4) = (/ character(len=80) :: &
-      OQP_td_t, OQP_td_xpy, OQP_td_xmy, OQP_td_energies /)
+      xpy(:,:), xmy(:,:), td_energies(:), td_imaginary(:)
+    character(len=*), parameter :: tags_alloc(5) = (/ character(len=80) :: &
+      OQP_td_t, OQP_td_xpy, OQP_td_xmy, OQP_td_energies, OQP_td_imaginary /)
     character(len=*), parameter :: tags_alpha(2) = (/ character(len=80) :: &
       OQP_E_MO_A, OQP_VEC_MO_A /)
 
@@ -209,6 +214,26 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
 
+  ! Closed-shell triplet response: the spin-antisymmetric transition density
+  ! (alpha = +D, beta = -D) has no Coulomb potential, and its XC response is
+  ! f_aa - f_ab, obtained from the unrestricted kernel contraction with
+  ! dxa = D, dxb = -D (alpha Fock-like block; for a closed-shell reference the
+  ! beta block is its negative).  The singlet uses the restricted contraction,
+  ! which equals the unrestricted one with dxa = dxb = D; the developer switch
+  ! OQP_TDDFT_XC_UNRESTRICTED=1 routes the singlet through that unrestricted
+  ! path so the identity can be tested.  For the triplet the beta half is the
+  ! exact negative of the alpha half and is not computed (spin_antisymmetric);
+  ! OQP_TDDFT_TRIPLET_FULL_UXC=1 computes both halves so this can be tested.
+  ! Both variables are internal test hooks (tests/test_tddft_closed_shell_triplet.py),
+  ! not user options; unset, the production paths above are used.
+    triplet = infos%tddft%mult == 3
+    xc_beta_sign = merge(-1.0_dp, 1.0_dp, triplet)
+    call get_environment_variable('OQP_TDDFT_XC_UNRESTRICTED', envval, length=envlen, status=envstat)
+    xc_unrestricted = triplet .or. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
+    call get_environment_variable('OQP_TDDFT_TRIPLET_FULL_UXC', envval, length=envlen, status=envstat)
+    xc_antisym = triplet .and. .not. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
+    if (triplet) write(iw,'(/5x,"Closed-shell TDDFT: triplet excited states (no Coulomb term, f_aa - f_ab kernel)")')
+
   ! Construct TD trial vector
     call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,nocc,nocc,nvec,infos)
 
@@ -216,6 +241,8 @@ contains
     istart = 1
     iend = nvec
     iter = 0
+    imax = 0
+    converged = .false.
     mxiter = infos%control%maxit_dav
     ierr = 0
 
@@ -234,14 +261,20 @@ contains
 
       int2_data = int2_td_data_t(d2=bvec(:,:,:nv), &
               int_apb=do_apb, int_amb=do_amb, tamm_dancoff=tamm_dancoff, &
-              tamm_dancoff_coulomb=.true., &
+              tamm_dancoff_coulomb=.not.triplet, &
               scale_exchange=scale_exch)
+      if (triplet) int2_data%scale_coulomb = 0.0_dp
 
+      ! int2_run_cam takes the Coulomb scale of each pass from its arguments
+      ! and resets the consumer's scale_coulomb, so the triplet's zero Coulomb
+      ! term has to be passed explicitly (regular pass 1 or 0, attenuated pass 0).
       call int2_driver%run(int2_data, &
                 cam=dft.and.infos%dft%cam_flag, &
                 alpha=infos%dft%cam_alpha, &
                 beta=infos%dft%cam_beta,&
-                mu=infos%dft%cam_mu)
+                mu=infos%dft%cam_mu, &
+                alpha_coulomb=merge(0.0_dp, 1.0_dp, triplet), &
+                beta_coulomb=0.0_dp)
       ab1 => int2_data%apb(:,:,:,1)
       ab2 => int2_data%amb(:,:,:,1)
 
@@ -250,16 +283,34 @@ contains
           iv = ivec-ist+1
           call symmetrize_matrix(bvec(:,:,iv), nbf)
         end do
-        call tddft_fxc(basis=basis, &
-               molGrid=molGrid, &
-               isVecs=.true., &
-               wf=mo_a, &
-               fx=ab1(:,:,:iv), &
-               dx=bvec(:,:,:iv), &
-               nmtx=iv, &
-               !threshold=1.0d-15, &
-               threshold=0.0d0, &
-               infos=infos, cache=xc_cache, consumer=xc_consumer)
+        if (xc_unrestricted) then
+          allocate(dxa(nbf,nbf,iv), dxb(nbf,nbf,iv), fxb(nbf,nbf,iv))
+          dxa = bvec(:,:,:iv)
+          dxb = xc_beta_sign*bvec(:,:,:iv)
+          fxb = 0.0_dp
+          ! utddft_fxc leaves the consumer's parallel environment to the
+          ! caller (some callers run it on a rank subset). This driver runs on
+          ! the world communicator, like tddft_fxc, so distribute the grid
+          ! slices over all ranks; parallel_stop reduces the Fock matrices.
+          call xc_consumer%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+          call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+                 wfa=mo_a, wfb=mo_a, fxa=ab1(:,:,:iv), fxb=fxb, &
+                 dxa=dxa, dxb=dxb, nMtx=iv, threshold=0.0d0, infos=infos, &
+                 cache=xc_cache, consumer=xc_consumer, &
+                 spin_antisymmetric=xc_antisym)
+          deallocate(dxa, dxb, fxb)
+        else
+          call tddft_fxc(basis=basis, &
+                 molGrid=molGrid, &
+                 isVecs=.true., &
+                 wf=mo_a, &
+                 fx=ab1(:,:,:iv), &
+                 dx=bvec(:,:,:iv), &
+                 nmtx=iv, &
+                 !threshold=1.0d-15, &
+                 threshold=0.0d0, &
+                 infos=infos, cache=xc_cache, consumer=xc_consumer)
+        end if
       end if
 
 !$omp parallel private(iv,ivec)
@@ -294,6 +345,10 @@ contains
       call rpaexpndv(vr_p,vl_p,abp_r,abm_l,ab1_mo,ab2_mo,ndsr,tamm_dancoff)
 
       call rpaechk(eex,nvec,ndsr,imax,tamm_dancoff)
+!     Only RPA roots with omega^2 < 0 are imaginary and cannot be converged.
+!     A negative TDA eigenvalue is a real (negative) excitation energy: keep
+!     it in the residual and convergence test like every other root.
+      if (tamm_dancoff) imax = 0
 !     Residual vectors W
 !     Get perturbed vectors Q if required
       call rparesvec(scr3,abp_r,abm_l,vlo,vro,eex,xm,ndsr,errors,cnvtol,imax,tamm_dancoff)
@@ -306,9 +361,14 @@ contains
           ierr = 4
           exit
         end if
-        mxerr = maxval(errors(imax+1:ndsr))
-      else
-        mxerr = 0.0_dp
+      end if
+      mxerr = rpa_max_residual(errors, imax, ndsr)
+
+!     rparesvec skips roots 1:imax (omega^2 < 0), so if every requested RPA
+!     root is imaginary there is nothing left to converge and mxerr is 0.
+      if (.not. tamm_dancoff .and. imax >= ndsr) then
+        ierr = 5
+        exit
       end if
 
       if (infos%control%verbose >= 1) call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
@@ -358,11 +418,29 @@ contains
       call measure_time(print_total=1, log_unit=iw)
       close(iw)
       return
+    case (5)
+      write(*,'(/,2X,"TD-DFT Davidson breakdown: all ",G0," requested RPA roots have omega^2 < 0",/,&
+              &4X,"(imaginary excitation energies; the SCF reference is unstable).",/,&
+              &4X,"Imaginary roots are not converged by the solver; request more roots",/,&
+              &4X,"(nstate) or use a stable reference.",/)') ndsr
+      infos%mol_energy%Davidson_converged=.false.
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
     end select
 
     call get_td_transition_dipole(basis, dip, mo_a, vro, vlo, nstates, nocc)
+  ! A singlet-to-triplet transition carries no spin-free transition dipole.
+    if (triplet) dip = 0.0_dp
 
-    call td_print_results(eex, dip, nstates)
+    ! RPA roots with omega^2 < 0 (unstable reference) come first; rpaechk
+    ! keeps |omega| in eex, so they are flagged rather than reported as
+    ! ordinary excitation energies.  TDA keeps the sign of its eigenvalues.
+    nimag = 0
+    if (.not. tamm_dancoff) nimag = min(imax, nstates)
+    call td_print_results(eex, dip, nstates, nimag)
 
     call measure_time(print_total=1, log_unit=iw)
 
@@ -391,6 +469,11 @@ contains
     xmy = vlo(:,:nstates)
 
     td_energies = eex(:nstates)
+
+    call infos%dat%alloc_or_die(OQP_td_imaginary, (/ nstates /), td_imaginary, &
+            description=OQP_td_imaginary_comment)
+    td_imaginary = 0.0_dp
+    td_imaginary(1:nimag) = 1.0_dp
     ! Bound the index; the gradient rejects a target above the solved roots.
     infos%mol_energy%excited_energy = td_energies(max(1, min(int(infos%tddft%target_state), nstates)))
 
@@ -472,7 +555,7 @@ contains
 
   end subroutine
 
-  subroutine td_print_results(energies, dip, nstates)
+  subroutine td_print_results(energies, dip, nstates, nimag)
 
     use io_constants, only: iw
     use physical_constants, only: UNITS_EV
@@ -482,6 +565,8 @@ contains
     real(kind=8) :: dip(:,:)
     real(kind=8) :: f
     integer :: nstates
+    !> Leading roots with omega^2 < 0; energies(1:nimag) hold |omega|
+    integer, intent(in) :: nimag
 
     integer :: i
     write(iw,'(/x,78("^"))')
@@ -489,9 +574,20 @@ contains
     write(iw,'(A12,A16,3A12,a14)') 'Transition', 'dE(eV)', 'DX', 'DY', 'DZ', 'Osc.str.'
 
     do i = 1, nstates
-      f = 2.0d0 / 3.0d0 * energies(i) * dot_product(dip(:,i), dip(:,i))
-      write(iw,'(3X,"0 -> ",G0,t15,F15.6, 4F12.4)') i, energies(i)/UNITS_EV, dip(1:3,i), f
+      if (i <= nimag) then
+        ! omega^2 < 0: the solver excludes these roots from its convergence
+        ! test, so no excitation energy or oscillator strength is reported.
+        write(iw,'(3X,"0 -> ",G0,t15,a15)') i, 'imaginary'
+      else
+        f = 2.0d0 / 3.0d0 * energies(i) * dot_product(dip(:,i), dip(:,i))
+        write(iw,'(3X,"0 -> ",G0,t15,F15.6, 4F12.4)') i, energies(i)/UNITS_EV, dip(1:3,i), f
+      end if
     end do
+    if (nimag > 0) then
+      write(iw,'(/3X,"WARNING: ",G0," root(s) imaginary (reference unstable): omega^2 < 0.")') nimag
+      write(iw,'(3X,"         They are not converged and are not reported. Check the stability")')
+      write(iw,'(3X,"         of the SCF reference.")')
+    end if
     write(iw,'(x,78("=")/)')
 
   end subroutine
