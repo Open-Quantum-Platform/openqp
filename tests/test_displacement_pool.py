@@ -231,9 +231,10 @@ TERMINATE_DRIVER = textwrap.dedent('''
 ''')
 
 
-STOP_RUNNING_DRIVER = textwrap.dedent('''
+WAIT_RUNNING_DRIVER = textwrap.dedent('''
     import os
     import pathlib
+    import subprocess
     import sys
     import time
 
@@ -263,21 +264,17 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
     runner.run()
 
     pid_file = work / "child.pid"
-    grandchild_pid_file = work / "grandchild.pid"
     returned = work / "worker1.returned"
-    # The child starts a grandchild of its own, as [dftb] backend=probe does,
-    # and both sleep: stopping only the direct child would orphan the other.
-    child = ("import os, pathlib, subprocess, sys, time; "
-             "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)']); "
-             "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
-             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
+    # Stands in for a displaced OpenQP job that is still running when another
+    # worker fails: it writes into the scratch directory after 3 s.
+    child = ("import os, pathlib, sys, time; "
+             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(3); "
+             "pathlib.Path(sys.argv[2]).write_text('late write')")
 
     def worker(task):
         if task["idx"] == 1:
-            # Stands in for a displaced OpenQP job: a long-running child
-            # started through the driver's job registry.
-            task["jobs"].run([sys.executable, "-c", child, str(pid_file),
-                              str(grandchild_pid_file)], dict(os.environ))
+            subprocess.run([sys.executable, "-c", child, str(pid_file),
+                            str(work / "late.txt")])
             returned.touch()
             return task["idx"], None, "failed", None
         if task["idx"] == 0:
@@ -288,33 +285,17 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
         return task["idx"], None, "computed", None
 
     single_point.grad_wrapper = worker
-    start = time.time()
     try:
         single_point.Hessian(runner.mol).numerical_hess()
     except RuntimeError as exc:
         assert "displacement worker failure" in str(exc)
     else:
         raise AssertionError("worker exception did not reach numerical_hess")
-    elapsed = time.time() - start
-    def alive(pid):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        return True
-
-    # Both processes sleep 120 s: an un-stopped one is still alive here, and a
-    # driver that does not wait for its workers raises before they return.
-    # The grandchild is not ours to reap, so give init a moment to collect it.
-    pid = int(pid_file.read_text())
-    grandchild = int(grandchild_pid_file.read_text())
-    deadline = time.time() + 10
-    while alive(grandchild) and time.time() < deadline:
-        time.sleep(0.1)
-    assert not alive(pid), f"displacement child {pid} outlived the failed driver"
-    assert not alive(grandchild), f"grandchild {grandchild} outlived the failed driver"
+    # The running job must have finished -- including its last write -- before
+    # the failure reached the caller, so a caller that retries or cleans up
+    # cannot race with it.
     assert returned.exists(), "driver raised before its active worker returned"
-    assert elapsed < 60, elapsed
+    assert (work / "late.txt").exists(), "a displaced job was still running"
     print("DISPLACEMENT_POOL_OK")
 ''')
 
@@ -322,6 +303,7 @@ STOP_RUNNING_DRIVER = textwrap.dedent('''
 CTRL_C_DRIVER = textwrap.dedent('''
     import os
     import pathlib
+    import subprocess
     import sys
     import time
 
@@ -357,8 +339,8 @@ CTRL_C_DRIVER = textwrap.dedent('''
 
     def worker(task):
         if task["idx"] == 1:
-            task["jobs"].run([sys.executable, "-c", child, str(work / "child.pid"),
-                              str(work / "grandchild.pid")], dict(os.environ))
+            subprocess.run([sys.executable, "-c", child, str(work / "child.pid"),
+                            str(work / "grandchild.pid")])
         else:
             time.sleep(120)
         return task["idx"], None, "computed", None
@@ -366,121 +348,6 @@ CTRL_C_DRIVER = textwrap.dedent('''
     single_point.grad_wrapper = worker
     (work / "driver.pid").write_text(str(os.getpid()))
     single_point.Hessian(runner.mol).numerical_hess()
-''')
-
-
-STOP_ORDER_DRIVER = textwrap.dedent('''
-    import os
-    import pathlib
-    import signal
-    import subprocess
-    import sys
-    import threading
-    import time
-
-    from oqp.library import single_point
-
-    work = pathlib.Path(sys.argv[1])
-    # The child ignores SIGTERM, so stop() must wait out the grace period and
-    # fall back to SIGKILL; below it are a grandchild and a great-grandchild,
-    # so freezing has to proceed over more than one generation.
-    leaf = "import time; time.sleep(120)"
-    middle = ("import pathlib, subprocess, sys, time; "
-              f"h = subprocess.Popen([sys.executable, '-c', {leaf!r}]); "
-              "pathlib.Path(sys.argv[1]).write_text(str(h.pid)); time.sleep(120)")
-    child = ("import os, pathlib, signal, subprocess, sys, time; "
-             "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-             f"g = subprocess.Popen([sys.executable, '-c', {middle!r}, sys.argv[3]]); "
-             "pathlib.Path(sys.argv[2]).write_text(str(g.pid)); "
-             "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(120)")
-
-    events = []
-    real_signal_pids = single_point._signal_pids
-
-    stopped = set()
-    violations = []
-
-    def parent_of(pid):
-        out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
-                             capture_output=True, text=True).stdout.split()
-        return int(out[0]) if out else None
-
-    def state_of(pid):
-        out = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
-                             capture_output=True, text=True).stdout.split()
-        return out[0][0] if out else None
-
-    def recording_signal_pids(pids, sig):
-        events.append(("raw-signal", sig))
-        if sig == signal.SIGSTOP:
-            # Each PID must be a direct child of an already-stopped process,
-            # which cannot reap it, so the PID cannot have been recycled.
-            # Recorded rather than raised, so stop() still finishes its cleanup.
-            for pid in pids:
-                parent = parent_of(pid)
-                if parent not in stopped:
-                    violations.append(("parent not frozen", pid, sorted(stopped)))
-                elif state_of(parent) not in ("T", "t"):
-                    # Signalled, but not yet observed stopped: it could
-                    # still fork or reap.
-                    violations.append(("parent not yet stopped", pid, parent))
-            stopped.update(pids)
-        return real_signal_pids(pids, sig)
-
-    real_await_exit = single_point._ExternalJobs._await_exit
-    real_freeze_tree = single_point._ExternalJobs._freeze_tree
-
-    def recording_await_exit(self, procs, grace):
-        events.append(("grace-wait", None))
-        return real_await_exit(self, procs, grace)
-
-    def recording_freeze_tree(proc):
-        # The child must not be reapable (by the worker's poll) while its
-        # tree is frozen and signalled, or its PID could be reused meanwhile.
-        if not jobs._lock.locked():
-            violations.append(("freeze without the reap lock", proc.pid))
-        return real_freeze_tree(proc)
-
-    single_point._signal_pids = recording_signal_pids
-    single_point._ExternalJobs._await_exit = recording_await_exit
-    single_point._ExternalJobs._freeze_tree = staticmethod(recording_freeze_tree)
-
-    jobs = single_point._ExternalJobs()
-    worker = threading.Thread(target=jobs.run, args=(
-        [sys.executable, "-c", child, str(work / "child.pid"), str(work / "grandchild.pid"),
-         str(work / "great.pid")],
-        dict(os.environ)))
-    worker.start()
-    deadline = time.time() + 60
-    while not ((work / "child.pid").exists() and (work / "great.pid").exists()) \
-            and time.time() < deadline:
-        time.sleep(0.05)
-    stopped.add(int((work / "child.pid").read_text()))  # frozen via its Popen handle
-    jobs.stop(grace=1.0)
-    worker.join(30)
-
-    assert not violations, violations
-    kinds = [kind for kind, _ in events]
-    assert "grace-wait" in kinds, events
-    first_wait = kinds.index("grace-wait")
-    # A raw PID signalled after a wait could belong to a reaped and recycled
-    # process; every raw signal must precede the first wait.
-    assert "raw-signal" not in kinds[first_wait:], events
-
-    def alive(pid):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        return True
-
-    tree = [int((work / f).read_text()) for f in ("child.pid", "grandchild.pid", "great.pid")]
-    deadline = time.time() + 10
-    while any(alive(p) for p in tree) and time.time() < deadline:
-        time.sleep(0.1)
-    assert not worker.is_alive()
-    assert not any(alive(p) for p in tree), tree
-    print("DISPLACEMENT_POOL_OK")
 ''')
 
 
@@ -514,12 +381,8 @@ class DisplacementPoolTests(unittest.TestCase):
     def test_failed_worker_stops_queued_displacements(self):
         self._run(TERMINATE_DRIVER, timeout=120)
 
-    def test_failed_worker_stops_running_displacement_jobs(self):
-        self._run(STOP_RUNNING_DRIVER, timeout=180)
-
-    @unittest.skipUnless(os.name == "posix", "process-tree stop is POSIX here")
-    def test_stop_signals_no_raw_pid_after_waiting(self):
-        self._run(STOP_ORDER_DRIVER, timeout=120)
+    def test_failed_driver_waits_for_running_displacement_jobs(self):
+        self._run(WAIT_RUNNING_DRIVER, timeout=180)
 
     @unittest.skipUnless(os.name == "posix", "terminal process groups are POSIX")
     def test_ctrl_c_reaches_running_displacement_jobs(self):

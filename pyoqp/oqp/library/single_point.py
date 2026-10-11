@@ -6,11 +6,9 @@ import json
 import copy
 import time
 import shutil
-import signal
 import hashlib
 import platform
 import subprocess
-import threading
 import numpy as np
 from multiprocessing.pool import ThreadPool
 from numpy import linalg as la
@@ -2516,7 +2514,6 @@ class Hessian(Calculator):
         run_signature = _displacement_run_signature(
             origin_coord, atoms, dx,
             self.mol._hessian_request_signature(self.state))
-        jobs = _ExternalJobs()
         variables_wrapper = [
             {
                 'idx': idx,
@@ -2535,7 +2532,6 @@ class Hessian(Calculator):
                 'guess_file': guess_file,
                 'state': self.state,
                 'restart': self.restart,
-                'jobs': jobs,
             }
             for idx, coord in enumerate(shifted_coord)
         ]
@@ -2562,7 +2558,7 @@ class Hessian(Calculator):
                     dump_log(self.mol, title=None, section='hess_worker', info=[n, idx, flag, timing])
                     dump_data(self.mol, (n, idx, np.sum(grad ** 2) ** 2, timing), title='NUM_HESS', fpath=self.mol.log_path)
         except BaseException:
-            _abort_displacements(pool, jobs)
+            _abort_displacements(pool)
             raise
 
         pool.close()
@@ -2642,8 +2638,8 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     reaches the caller instead of being swallowed.
 
     When that exception propagates, callers must call ``_abort_displacements``
-    so that no queued displacement starts and no running one outlives the
-    driver.
+    so that no queued displacement starts and no running one is still active
+    when the exception reaches the caller.
     """
     if mpi_manager.use_mpi:
         ncpu = int(min(ntask, mpi_manager.comm.size))
@@ -2652,177 +2648,21 @@ def _displacement_pool(mpi_manager, ntask, nproc):
     return ThreadPool(processes=ncpu), ncpu
 
 
-def _direct_children(parents):
-    """PIDs whose parent is in ``parents``, from one ``ps`` snapshot (POSIX)."""
-    out = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='],
-                         capture_output=True, text=True).stdout
-    found = []
-    for line in out.splitlines():
-        fields = line.split()
-        if len(fields) == 2 and int(fields[1]) in parents:
-            found.append(int(fields[0]))
-    return found
+def _abort_displacements(pool):
+    """Stop a displacement driver after a worker raised.
 
-
-def _wait_until_stopped(pids, timeout=5.0):
-    """Wait until every PID in ``pids`` is observed stopped, a zombie, or gone.
-
-    SIGSTOP is delivered asynchronously: until ``ps`` reports the process in
-    state T (or Z, or no longer present) it may still fork or reap, so its
-    children cannot yet be treated as pinned.
+    ``terminate()`` drops the queued displacements; ``join()`` then waits for
+    the ones already running to finish, so no displaced job is still writing
+    into the driver's scratch directory when the exception reaches the
+    caller.  Nothing is signalled: the jobs stay in the driver's process
+    group, so a Ctrl-C or a supervisor's killpg reaches them as before, and a
+    job is never killed by a PID that might have been reused.
     """
-    pending = set(pids)
-    deadline = time.time() + timeout
-    while pending:
-        out = subprocess.run(['ps', '-o', 'pid=,stat=', '-p',
-                              ','.join(str(pid) for pid in sorted(pending))],
-                             capture_output=True, text=True).stdout
-        running = set()
-        for line in out.splitlines():
-            fields = line.split()
-            if len(fields) == 2 and fields[1][0] not in 'TtZ':
-                running.add(int(fields[0]))
-        pending = running
-        if not pending or time.time() > deadline:
-            return not pending
-        time.sleep(0.01)
-    return True
-
-
-def _signal_pids(pids, sig):
-    for pid in pids:
-        try:
-            os.kill(pid, sig)
-        except (ProcessLookupError, PermissionError):
-            pass
-
-
-def _process_state(pid):
-    """First letter of ``ps`` STAT for ``pid`` (R, S, T, Z, ...), or None."""
-    out = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
-                         capture_output=True, text=True).stdout.split()
-    return out[0][0] if out else None
-
-
-class _ExternalJobs:
-    """Child OpenQP processes started by one finite-difference driver.
-
-    ``ThreadPool.terminate()`` only drops queued tasks: a worker thread already
-    blocked on its child keeps waiting, and the child keeps writing into the
-    driver's scratch directory after the driver has raised.  The driver passes
-    one of these to every worker so that, on failure, it can stop the children
-    that are running and refuse to start new ones.
-
-    The children stay in the driver's process group, so a terminal Ctrl-C --
-    which ``Runner`` leaves at SIG_DFL so that it stops long native calls at
-    once -- and a supervisor's ``killpg`` reach them exactly as they reach the
-    driver.  ``stop`` therefore cannot signal a group of its own; it kills each
-    child's process tree instead, because a displaced job can start processes
-    of its own (``[dftb] backend=probe`` runs an external executable) that
-    would otherwise be orphaned.
-
-    PID identity: a child is reaped only under ``_lock`` (``run`` polls rather
-    than blocking in ``wait``), and ``stop`` holds ``_lock`` for its whole
-    raw-signal phase, so a child's PID cannot be released and reused while it
-    is being signalled.  Its descendants are signalled only while their parent
-    is observed stopped (see ``_freeze_tree``).
-    """
-
-    _POLL = 0.05
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._procs = set()
-        self._stopped = False
-
-    def run(self, cmd, env):
-        with self._lock:
-            if self._stopped:
-                return
-            proc = subprocess.Popen(cmd, env=env)
-            self._procs.add(proc)
-        while True:
-            with self._lock:
-                if proc.poll() is not None:
-                    self._procs.discard(proc)
-                    return
-            time.sleep(self._POLL)
-
-    @staticmethod
-    def _freeze_tree(proc):
-        """SIGSTOP ``proc`` and all its descendants, one generation at a time;
-        return the descendants, or None when ``proc`` has already exited.
-
-        Called with ``_lock`` held, so ``proc`` cannot be reaped meanwhile.
-        Only direct children of processes observed in the stopped state are
-        ever signalled.  A stopped process cannot reap its children, so each
-        such child -- alive or a zombie -- keeps its PID until its parent is
-        resumed, and signalling it cannot reach a recycled PID.  Deeper
-        generations are discovered only after their parents are stopped.
-        """
-        if proc.returncode is not None or _process_state(proc.pid) in (None, 'Z'):
-            return None
-        os.kill(proc.pid, signal.SIGSTOP)
-        _wait_until_stopped([proc.pid])
-        if _process_state(proc.pid) not in ('T', 't'):
-            return None  # exited before it stopped: nothing left to traverse
-        frozen = {proc.pid}
-        while True:
-            new = [pid for pid in _direct_children(frozen) if pid not in frozen]
-            if not new:
-                return sorted(frozen - {proc.pid})
-            _signal_pids(new, signal.SIGSTOP)
-            # Only list their children once they are observed stopped.
-            _wait_until_stopped(new)
-            frozen.update(new)
-
-    def _signal_trees(self, procs):
-        """Raw-signal phase; must run with ``_lock`` held."""
-        for proc in procs:
-            if os.name != 'posix':
-                subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)],
-                               capture_output=True)
-                continue
-            descendants = self._freeze_tree(proc)
-            if descendants is None:
-                continue
-            # Descendants (e.g. a [dftb] backend=probe executable) die while
-            # frozen; only the direct child gets SIGTERM and a grace period.
-            _signal_pids(descendants, signal.SIGKILL)
-            os.kill(proc.pid, signal.SIGTERM)
-            os.kill(proc.pid, signal.SIGCONT)
-
-    def _await_exit(self, procs, grace):
-        """Grace phase: no raw PID is signalled here, only Popen handles."""
-        deadline = time.time() + grace
-        for proc in procs:
-            while True:
-                with self._lock:
-                    if proc.poll() is not None:
-                        break
-                if time.time() > deadline:
-                    proc.kill()  # Popen never signals a process it has reaped
-                    proc.wait()
-                    break
-                time.sleep(self._POLL)
-
-    def stop(self, grace=10.0):
-        with self._lock:
-            self._stopped = True
-            procs = list(self._procs)
-            self._signal_trees(procs)
-        self._await_exit(procs, grace)
-
-
-def _abort_displacements(pool, jobs):
-    """Stop a displacement driver after a worker raised: drop queued tasks,
-    stop running child jobs, and wait for every worker to return."""
     pool.terminate()
-    jobs.stop()
     pool.join()
 
 
-def _run_oqp_external(inp, env_overrides=None, jobs=None):
+def _run_oqp_external(inp, env_overrides=None):
     # Run a calculation in a fresh process. Prefer the installed `openqp`
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
@@ -2844,10 +2684,7 @@ def _run_oqp_external(inp, env_overrides=None, jobs=None):
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
-    if jobs is None:
-        subprocess.run(cmd, env=env)
-    else:
-        jobs.run(cmd, env)
+    subprocess.run(cmd, env=env)
 
 
 def grad_wrapper(key_dict):
@@ -2926,7 +2763,7 @@ def grad_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run grad calculation externally
-            _run_oqp_external(inp, jobs=key_dict.get('jobs'))
+            _run_oqp_external(inp)
         else:
             # run grad calculation internally
             start_time = time.time()
@@ -3769,7 +3606,6 @@ class NAC(Calculator):
         self.mpi_manager.barrier()
         atoms = self.mol.get_atoms()
         guess_file = self.mol.log.replace('.log', '.json')
-        jobs = _ExternalJobs()
         variables_wrapper = [
             {
                 'idx': idx,
@@ -3782,7 +3618,6 @@ class NAC(Calculator):
                 'config': copy.deepcopy(self.mol.config),
                 'guess_file': guess_file,
                 'restart': self.restart,
-                'jobs': jobs,
             }
             for idx, coord in enumerate(shifted_coord)
         ]
@@ -3809,7 +3644,7 @@ class NAC(Calculator):
                     dump_log(self.mol, title=None, section='nacv_worker', info=[n, idx, flag, timing])
                     dump_data(self.mol, (n, idx, np.sum(dcme ** 2) ** 2, timing), title='NUM_NACV', fpath=self.mol.log_path)
         except BaseException:
-            _abort_displacements(pool, jobs)
+            _abort_displacements(pool)
             raise
 
         pool.close()
@@ -3906,7 +3741,7 @@ def nacme_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run nac calculation externally
-            _run_oqp_external(inp, {'OQP_NUM_NAC_WORKER': '1'}, jobs=key_dict.get('jobs'))
+            _run_oqp_external(inp, {'OQP_NUM_NAC_WORKER': '1'})
         else:
             # run nac calculation internally
             start_time = time.time()
