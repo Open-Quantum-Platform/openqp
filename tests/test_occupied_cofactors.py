@@ -103,10 +103,11 @@ def test_direct_wrappers_return_pivots_and_solve():
     np.testing.assert_allclose(actual, previous, atol=1e-15)
 
 
-@pytest.mark.parametrize("rcond,batch", [(0.016, False), (0.020, True)])
+@pytest.mark.parametrize("rcond,batch", [(0.016, False), (0.020, False), (0.024, True)])
 def test_accuracy_guard_boundary_on_nonsymmetric_overlap(rcond, batch):
     # For this triangular matrix, ||S||_1=1 and ||S^-1||_1=1.25/d,
-    # hence rcond=0.8*d. The cases straddle the n=2 accuracy guard.
+    # hence rcond=0.8*d. At 0.020 the per-entry floor also rejects every
+    # cofactor; at 0.024 at least one cofactor retains the LU result.
     s = np.array([[1.0, 0.25], [0.0, rcond / 0.8]])
     actual, previous, used = _call(s)
     assert used is batch
@@ -128,8 +129,10 @@ def test_near_dependent_nonsymmetric_overlap_uses_exact_minors():
 
 def test_accuracy_guard_accounts_for_matrix_dimension():
     s = np.eye(3)
-    s[:2, :2] = [[1.0, 0.25], [0.0, 0.025]]
-    # The same rcond=0.020 accepted at n=2 exceeds the n=3 error budget.
+    s[:2, :2] = [[1.0, 0.25], [0.0, 0.030]]
+    # The same rcond=0.024 accepted at n=2 exceeds the n=3 error budget.
+    _, _, used_small = _call(s[:2, :2])
+    assert used_small
     actual, previous, used = _call(s)
     assert not used
     np.testing.assert_array_equal(actual, previous)
@@ -186,5 +189,16 @@ def test_cancellation_sensitive_cofactor_preserves_previous_minor(s, perturbatio
     actual, previous, used = _call(s)
     # Keep the old minor's floating-point convention, including any vendor
     # residue: mathematical zero alone is not its numerical contract.
+    assert not used
+    assert actual[0, 0] == previous[0, 0]
+    np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
+
+
+@pytest.mark.parametrize("perturbation", [0.0, 2.0**-40, 2.0**-28])
+def test_hybrid_lu_and_cancellation_minor(perturbation):
+    s = np.array([[1.0, 1.0, 0.0], [0.0, 0.5, 0.7], [1.0, 0.5, 0.7]])
+    s[1, 2] += perturbation
+    actual, previous, used = _call(s)
+    assert used
     assert actual[0, 0] == previous[0, 0]
     np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
