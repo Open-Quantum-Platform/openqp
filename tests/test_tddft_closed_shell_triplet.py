@@ -251,6 +251,41 @@ class TestImaginaryRpaRoots(unittest.TestCase):
                 self.assertNotIn("imaginary", log)
 
 
+H2O_STRETCHED = ("   O 0.000000 0.000000 0.230000\n   H 0.000000 1.550000 -0.920000\n"
+                 "   H 0.000000 -1.550000 -0.920000\n")
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestNegativeTdaTripletRoot(unittest.TestCase):
+    """H2O with both O-H bonds stretched to ~1.8 A: the RHF reference is
+    triplet-unstable and the lowest HF triplet TDA roots are negative.  A
+    negative TDA eigenvalue is a real
+    root: it must be converged and agree with the independent closed-shell
+    SF-TDA code (same matrix eps_a - eps_i - (ij|ab)), also when it is the
+    only requested root.  They used to be excluded from the convergence
+    test, so nstate=1 reported the first Ritz value (-1.3636 eV instead of
+    -1.4793 eV) as converged."""
+
+    def test_negative_triplet_tda_root_equals_spin_flip_tda(self):
+        for nstate in (1, 3):
+            with self.subTest(nstate=nstate):
+                rct, et, dt = run(deck(H2O_STRETCHED, "cc-pvdz", None, "tda", 3, nstate))
+                sf = deck(H2O_STRETCHED, "cc-pvdz", None, "sf", 3, nstate).replace("type=rhf", "type=rohf")
+                with tempfile.TemporaryDirectory() as tmp:
+                    (Path(tmp) / "job.inp").write_text(sf)
+                    env = dict(os.environ, OMP_NUM_THREADS="2")
+                    proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
+                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+                    log = (Path(tmp) / "job.log").read_text(errors="ignore")
+                esf = [float(x) for x in re.findall(r"State #\s+\d+\s+Energy =\s+(-?[\d.]+) eV", log)]
+                self.assertEqual(rct, 0, dt)
+                self.assertEqual(proc.returncode, 0, log[-3000:])
+                self.assertEqual(len(et), nstate, dt)
+                self.assertLess(et[0], 0.0, dt)
+                for a, b in zip(et, esf[:nstate]):
+                    self.assertAlmostEqual(a, b, delta=2e-6)
+
+
 @unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
 class TestClosedShellTripletThreads(unittest.TestCase):
     def test_triplet_energies_independent_of_thread_count(self):

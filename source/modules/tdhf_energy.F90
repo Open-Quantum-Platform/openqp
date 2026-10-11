@@ -229,6 +229,7 @@ contains
     iend = nvec
     iter = 0
     imax = 0
+    converged = .false.
     mxiter = infos%control%maxit_dav
     ierr = 0
 
@@ -331,6 +332,10 @@ contains
       call rpaexpndv(vr_p,vl_p,abp_r,abm_l,ab1_mo,ab2_mo,ndsr,tamm_dancoff)
 
       call rpaechk(eex,nvec,ndsr,imax,tamm_dancoff)
+!     Only RPA roots with omega^2 < 0 are imaginary and cannot be converged.
+!     A negative TDA eigenvalue is a real (negative) excitation energy: keep
+!     it in the residual and convergence test like every other root.
+      if (tamm_dancoff) imax = 0
 !     Residual vectors W
 !     Get perturbed vectors Q if required
       call rparesvec(scr3,abp_r,abm_l,vlo,vro,eex,xm,ndsr,errors,cnvtol,imax,tamm_dancoff)
