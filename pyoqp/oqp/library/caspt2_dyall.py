@@ -268,11 +268,17 @@ def _caspt2_options(config: dict) -> CASPT2Options:
         engine = "direct"       # alias: NumPy streaming engine
     if engine not in {"auto", "direct", "fortran", "dense"}:
         raise ValueError("pt2.engine must be auto, fortran, direct (python), or dense")
-    if engine in {"direct", "fortran"} and family != "qdpt":
+    caspt2_direct = (
+        family == "caspt2" and variant == "caspt2" and h0 == "fock"
+        and contraction == "none"
+        and float(raw.get("ipea_shift", 0.0)) == 0.0
+        and str(config.get("input", {}).get("runtype", "energy")).lower() == "energy"
+    )
+    if engine in {"direct", "fortran"} and family != "qdpt" and not caspt2_direct:
         raise ValueError(
             "pt2.engine=direct/fortran requires the diagonal-Fock QDPT family "
-            "(mrmp2/mcqdpt2/xmcqdpt2); the CASPT2/NEVPT2 H0 is not diagonal "
-            "in the determinant basis."
+            "or single-state CASPT2 energy with h0=fock, contraction=none "
+            "and ipea_shift=0. Use engine=dense for other CASPT2/NEVPT2 requests."
         )
     return CASPT2Options(
         reference=reference,
@@ -1483,7 +1489,17 @@ def native_caspt2_energy(mol, ref_energy=None):
     # singles/doubles interacting space streamed from the reference support.
     # auto = the NumPy streaming path (measured fastest at scale); the liboqp
     # hash kernel is the explicit engine=fortran opt-in (see qdpt2_direct.py).
-    use_direct = options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    # CASPT2 uses this existing diagonal-Fock contraction only by explicit
+    # request. Its auto engine retains the dense path, including the full
+    # external-space denominator diagnostics. Strong contraction must never
+    # enter this uncontracted calculation.
+    use_direct = (
+        options.family == "qdpt" and options.engine in {"auto", "direct", "fortran"}
+    ) or (
+        options.family == "caspt2" and options.variant == "caspt2"
+        and options.h0 == "fock" and options.contraction == "none"
+        and options.ipea_shift == 0.0 and options.engine in {"direct", "fortran"}
+    )
 
     if options.variant == "caspt2":
         # `roots` came from _reference_roots, which honours [pt2] target_roots;
@@ -1509,7 +1525,8 @@ def native_caspt2_energy(mol, ref_energy=None):
             _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                        e_casci, e2, e_caspt2, res["n_external"], e_casci,
                        float(res["min_denoms"][0]), float(s2[_root]),
-                       int(mult[_root]), time.time() - t0, root=_root)
+                       int(mult[_root]), time.time() - t0, root=_root,
+                       direct_engine=options.engine if options.family == "caspt2" else None)
         else:
             _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                                  nbf, enuc, h1e, eri, coeffs, energies, dets, eps, D_sa,
@@ -1704,7 +1721,7 @@ def _header(mol, options, ref_energy, settings, ncore, nact, active_nelec, ref_l
 
 def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
                e_casci, e2, e_caspt2, n_external, e_ref_check, min_denom, s2, mult, wall,
-               sc_components=None, root=None):
+               sc_components=None, root=None, direct_engine=None):
     ref_label = "CASSCF" if options.reference == "casscf" else "CASCI"
     if options.contraction == "strong":
         method_name, title = "SC-NEVPT2", "SC-NEVPT2 (strongly contracted, Dyall zeroth order)"
@@ -1727,7 +1744,13 @@ def _write_log(mol, ref_energy, options, settings, ncore, nact, active_nelec,
         for key in ("Sr", "Si", "Sijrs", "Sijr", "Srsi", "Srs", "Sij", "Sir"):
             _log(mol, f"      {key:7s} {sc_components[key]:18.10f}")
     else:
-        _log(mol, f"   PyOQP external (first-order) space:  {n_external}")
+        if direct_engine is not None:
+            implementation = "NumPy" if direct_engine == "direct" else "Fortran"
+            _log(mol, f"   PyOQP PT2 engine:                  {direct_engine} ({implementation})")
+            _log(mol, "   PyOQP denominator scope:           generated external singles/doubles")
+            _log(mol, f"   PyOQP generated external space:     {n_external}")
+        else:
+            _log(mol, f"   PyOQP external (first-order) space:  {n_external}")
         _log(mol, f"   PyOQP smallest denominator:         {min_denom:12.4e}{_intruder_note(min_denom, options)}")
     _log(mol, f"   PyOQP reference <S^2> / mult:        {s2:8.6f} / {mult}")
     ref_drift = abs(e_ref_check - e_casci)

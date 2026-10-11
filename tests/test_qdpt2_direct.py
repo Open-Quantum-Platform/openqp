@@ -212,7 +212,7 @@ def test_direct_engine_nproc_parallel_matches_serial(tmp_path):
         np.testing.assert_array_equal(s_arr, p_arr)
 
 
-def test_dense_engine_rejects_caspt2_direct_request(tmp_path):
+def test_dense_engine_rejects_caspt2_direct_dyall_request(tmp_path):
     """engine=direct with a non-diagonal H0 family must be refused."""
     if not _backend_available():
         pytest.skip("native OQP backend not built")
@@ -220,7 +220,7 @@ def test_dense_engine_rejects_caspt2_direct_request(tmp_path):
     from oqp.library.caspt2_dyall import _caspt2_options
     with pytest.raises(ValueError, match="diagonal"):
         _caspt2_options({"input": {"method": "caspt2"},
-                         "pt2": {"engine": "direct"}})
+                         "pt2": {"engine": "direct", "h0": "dyall"}})
 
 
 # --------------------------------------------------------------------------- Fortran kernel
