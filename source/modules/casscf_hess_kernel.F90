@@ -288,6 +288,7 @@ contains
     status = -1_i8
     if (np <= 0 .or. ndet <= 0_i8 .or. na <= 0 .or. na > 31) return
     if (ndet > int(huge(nd), i8) / (int(na, i8)**2 * int(np, i8))) return
+    if (any(sperm(0:ndet-1) < 0_i8) .or. any(sperm(0:ndet-1) >= ndet)) return
     nd = int(ndet)
     na2 = na * na
     na4 = na2 * na2

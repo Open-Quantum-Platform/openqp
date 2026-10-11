@@ -75,6 +75,7 @@ contains
     if (na <= 0 .or. na > 31 .or. ndet <= 0_i8) return
     n2 = int(na, i8) * int(na, i8)
     if (ndet > huge(ndet) / n2) return
+    if (any(sperm(0:ndet-1) < 0_i8) .or. any(sperm(0:ndet-1) >= ndet)) return
 
     offs(1) = 0
     offs(2) = na

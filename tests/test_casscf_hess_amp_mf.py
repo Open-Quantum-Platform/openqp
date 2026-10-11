@@ -149,6 +149,20 @@ def test_invalid_w_dimensions_return_status_without_writing(nact, ndet):
     np.testing.assert_array_equal(values, np.full_like(values, 123.0))
 
 
+@pytest.mark.parametrize('position', [-1, 1])
+def test_one_based_or_negative_permutation_is_rejected(position):
+    lib, ffi = _hess_amp_backend()
+    keys = np.zeros(1, dtype=np.int64)
+    perm = np.array([position], dtype=np.int64)
+    values = np.full(16, 123.0)
+    kp = ffi.cast('int64_t *', keys.ctypes.data)
+    pp = ffi.cast('int64_t *', perm.ctypes.data)
+    vp = ffi.cast('double *', values.ctypes.data)
+    assert lib.casscf_exc_stack_apply_wmat(1, 1, kp, kp, pp, vp, vp) == -1
+    assert lib.casscf_hess_amp_mf(1, 1, 1, kp, kp, pp, vp, vp, vp, vp, vp) == -1
+    np.testing.assert_array_equal(values, np.full_like(values, 123.0))
+
+
 def test_w_encoding_limit_and_reordered_determinants():
     det = np.array([(1 << 30) | (1 << 61)], dtype=np.int64)
     actual = _mf_wmat(31, det, np.array([0.7]))

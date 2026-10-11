@@ -105,7 +105,7 @@ module casscf_anhess_mod
     real(dp), allocatable :: vecs(:,:), vt(:,:)
     real(dp), allocatable :: ovl(:,:), cir(:,:)
     real(dp), allocatable :: wmat(:), amp(:), cvec(:), hc(:)
-    integer(i8), allocatable :: skeys(:), sperm(:)
+    integer(i8), allocatable :: skeys(:), sperm(:), mfperm(:)
   end type cas_anhess_ctx_t
 
 contains
@@ -214,6 +214,15 @@ contains
         call cas_anhess_free(ctx)
         return
       end if
+    else
+      ! fci_sort_dets returns 1-based CI positions; the C products require
+      ! a separate 0-based map. Preserve the FCI map for its own callers.
+      allocate(ctx%mfperm(nd), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_HESS_ERR_ALLOC
+        call cas_anhess_free(ctx)
+        return
+      end if
     end if
   end function cas_anhess_init
 
@@ -244,6 +253,7 @@ contains
     if (allocated(ctx%hc)) deallocate(ctx%hc)
     if (allocated(ctx%skeys)) deallocate(ctx%skeys)
     if (allocated(ctx%sperm)) deallocate(ctx%sperm)
+    if (allocated(ctx%mfperm)) deallocate(ctx%mfperm)
     ctx%use_mf = .false.
     ctx%n = 0
     ctx%nc = 0
@@ -389,6 +399,7 @@ contains
     call fci_sort_dets(nd, dets, ctx%skeys, ctx%sperm)
     call fci_dense_build(2 * na, nd, dets, ctx%skeys, ctx%sperm, ctx%hspin, &
                          ctx%gspin, 0.0_dp, ctx%hact, ctx%nthreads)
+    if (ctx%use_mf) ctx%mfperm = ctx%sperm - 1_i8
 
     ! hact is symmetric, so its C-order buffer and its column-major view are
     ! the same matrix and DSYEVD may read the copy in place.
@@ -434,13 +445,13 @@ contains
 
       if (ctx%use_mf) then
         rc = casscf_exc_stack_apply_wmat(int(na, c_int32_t), nd, dets, &
-                                         ctx%skeys, ctx%sperm, ctx%cvec, ctx%wmat)
+                                         ctx%skeys, ctx%mfperm, ctx%cvec, ctx%wmat)
         if (rc /= 0_i8) then
           status = CAS_HESS_ERR_INPUT
           return
         end if
         rc = casscf_hess_amp_mf(int(na, c_int32_t), nd, int(npar, c_int32_t), &
-                                dets, ctx%skeys, ctx%sperm, &
+                                dets, ctx%skeys, ctx%mfperm, &
                                 ctx%fder, ctx%gder, ctx%wmat, ctx%vt, &
                                 ctx%amp)
         if (rc /= 0_i8) then

@@ -68,6 +68,10 @@ program casscf_anhess_selftest
         if (mode==2 .and. (merge(1,0,ctx%use_mf)/=expected)) error stop 'automatic mode'
         status=cas_anhess_build(ctx,pairs,weights,roots,1,dets,h1,eri,ci,hess)
         if (status/=0_i8) error stop 'Hessian build'
+        if (ctx%use_mf) then
+          if (any(ctx%mfperm/=ctx%sperm-1_i8)) error stop 'permutation origin'
+          if (any(ctx%mfperm<0_i8) .or. any(ctx%mfperm>=int(nd,i8))) error stop 'permutation bounds'
+        end if
         if (pass==1) then
           first=hess
         else
