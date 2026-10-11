@@ -31,6 +31,19 @@ module messages
   end interface show_message
   public show_message, with_abort, without_abort
 contains
+  !> @brief   Unit that shows a message to the user
+  !> @details OpenQP modules open the log on write_unit only while they
+  !>          write to it.  A message issued while it is closed went to a
+  !>          file fort.6 that gfortran creates in the working directory,
+  !>          where nobody looks (the analytic TD Hessian aborted that way).
+  !>          Use standard error until the log is open again.
+  integer function message_unit() result(unit)
+    use, intrinsic :: iso_fortran_env, only: error_unit
+    logical :: connected
+    inquire (unit=write_unit, opened=connected)
+    unit = write_unit
+    if (.not. connected) unit = error_unit
+  end function message_unit
   !> @brief   Print simple message
   !> @author  Igor S. Gerasimov
   !> @date    July, 2021 - Initial release -
@@ -40,15 +53,17 @@ contains
     character(len=*), intent(in) :: message
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) &
 #endif
-      write (write_unit, "(A)") message
+      write (u, "(A)") message
     call abort(stopmode_)
   end subroutine show_message_text
   !> @brief   Print simple message
@@ -65,15 +80,17 @@ contains
     integer, intent(in) :: value
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) &
 #endif
-      write (write_unit, format) message, value
+      write (u, format) message, value
     call abort(stopmode_)
   end subroutine show_message_with_integer
   !> @brief   Print simple message
@@ -90,15 +107,17 @@ contains
     real(dp), intent(in) :: value
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) &
 #endif
-      write (write_unit, format) message, value
+      write (u, format) message, value
     call abort(stopmode_)
   end subroutine show_message_with_double
   !> @brief   Print simple message
@@ -116,15 +135,17 @@ contains
     real(kind=dp), intent(in) :: value
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) &
 #endif
-      write (write_unit, format) message1, value, message2
+      write (u, format) message1, value, message2
     call abort(stopmode_)
   end subroutine show_message_with_double_and_text
   !> @brief   Print simple message
@@ -142,15 +163,17 @@ contains
     integer, intent(in) :: value
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) &
 #endif
-      write (write_unit, format) message1, value, message2
+      write (u, format) message1, value, message2
     call abort(stopmode_)
   end subroutine show_message_with_integer_and_text
   !> @brief   Print simple message
@@ -168,16 +191,18 @@ contains
     character(len=*), intent(in), optional :: keys(:)
     logical, intent(in), optional :: stopmode
     logical :: stopmode_
+    integer :: u
     if (.not. present(stopmode)) then
       stopmode_ = WITHOUT_ABORT
     else
       stopmode_ = stopmode
     end if
+    u = message_unit()
 #ifndef OQP
     if (master_worker) then
 #endif
-      write (write_unit, "(A)") message
-      write (write_unit, format) keys
+      write (u, "(A)") message
+      write (u, format) keys
 #ifndef OQP
     end if
 #endif
@@ -185,7 +210,9 @@ contains
   end subroutine show_message_with_keys
   subroutine abort(stopmode)
     logical, intent(in) :: stopmode
-    flush(write_unit)
+    integer :: u
+    u = message_unit()
+    flush(u)
     if (stopmode) then
 #ifdef OQP
 #ifdef __GFORTRAN__

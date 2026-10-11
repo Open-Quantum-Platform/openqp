@@ -14,7 +14,8 @@ import unittest
 
 import numpy as np
 
-from oqp.library.single_point import _displacement_run_signature
+from oqp.library.single_point import (_displacement_run_signature,
+                                      _with_child_response_tolerances)
 
 
 class ScratchGradientsBelongToOneRun(unittest.TestCase):
@@ -88,6 +89,25 @@ class ScratchGradientsBelongToOneRun(unittest.TestCase):
         self.assertNotEqual(
             self.signature(),
             self.signature(model_signature=self.MODEL(basis='cc-pvdz')))
+
+    def test_child_response_tolerances_are_part_of_the_signature(self):
+        """Scratch gradients written before the children's TD/Z-vector
+        tolerances were tightened (signed on the parent only) must not be
+        reused: they carry ~1e-6 gradient errors that the tightening removes."""
+        config = {'hess': {'dx': 0.001}, 'tdhf': {'conv': '1e-10', 'zvconv': '1e-10'}}
+        tightened = _with_child_response_tolerances(self.MODEL(), config)
+        self.assertEqual(tightened['fd_child_tdhf'],
+                         {'zvconv': '1.000e-16', 'conv': '1.000e-16'})
+        self.assertNotEqual(self.signature(),
+                            self.signature(model_signature=tightened))
+        # A user value tighter than the target is kept, and changes the name.
+        tighter = dict(config, tdhf={'conv': '1e-18', 'zvconv': '1e-18'})
+        self.assertNotEqual(
+            self.signature(model_signature=tightened),
+            self.signature(model_signature=_with_child_response_tolerances(
+                self.MODEL(), tighter)))
+        # The parent signature itself is not modified.
+        self.assertNotIn('fd_child_tdhf', self.MODEL())
 
 
 class ReorientationRollbackLeavesADetectionThatDescribesUs(unittest.TestCase):

@@ -618,8 +618,10 @@ contains
     if (tamm_dancoff) then
 
   !   Diagonailze A: VR
+  !   A 1x1 reduced matrix is its own eigenvalue. The Ritz value is A(1,1),
+  !   held in apb; vr is only the output eigenvector.
       if (nvec==1) then
-        ee(1) = vr(1,1)
+        ee(1) = apb(1,1)
         vr(1,1) = 1.0_dp
       else
         call dtrttp('u', nvec, apb, nvec, scr, ierr)
