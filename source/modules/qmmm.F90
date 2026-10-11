@@ -87,8 +87,11 @@ module qmmm_mod
     real(dp), contiguous, pointer :: dmat_a(:), dmat_b(:), partial_charges(:)
     real(dp), contiguous, pointer :: td_p(:,:)
 
-    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
-         OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_SM /)
+    ! OQP::DM_B exists only for ROHF/UHF references; requested where read.
+    character(len=*), parameter :: tags_required(3) = (/ character(len=80) :: &
+         OQP_DM_A, OQP_TD_P, OQP_SM /)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+         OQP_DM_B /)
 
     character(len=*), parameter :: tags_qmmm(1) = (/ character(len=80) :: &
          OQP_partial_charges /)
@@ -129,6 +132,7 @@ module qmmm_mod
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     tmp = dmat_a
     if (urohf) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       tmp = tmp + dmat_b
     end if

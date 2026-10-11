@@ -27,6 +27,9 @@ Tests:
   the restricted path used before) is violated by much more than the
   tolerance, so the test sees missing relaxed charges.  The RPA check is
   repeated without input.qmmm_flag in the config: the driver must set it.
+* ``MissingBetaDensityTests``: an RHF reference has no OQP::DM_B (the guess
+  routines allocate it only for ROHF/UHF); with it deleted, the Z-vector's
+  QM/MM charge step and the relaxed dipole must still run.
 """
 import json
 import os
@@ -149,6 +152,26 @@ print("RESULT " + json.dumps({"dm_a": dma.tolist(), "td_p": tdp.tolist(),
 """
 
 
+# RHF reference without OQP::DM_B: the guess routines allocate DM_B only for
+# ROHF/UHF (the Python guess() copies it for RHF, so the normal pipeline hides
+# the case).  Delete it, switch qmmm_flag on so tdhf_z_vector calls
+# mulliken_excited and form_esp_charges_excited, then the relaxed dipole.
+_NO_BETA_DRIVER = r"""
+import json, sys
+import numpy as np
+import oqp
+from oqp.pyoqp import Runner
+r = Runner(project="grad", input_file=sys.argv[1], log="grad.log", silent=1, usempi=False)
+r.run()
+del r.mol.data["OQP::DM_B"]
+r.mol.data.set_qmmm_flag(True)
+oqp.tdhf_z_vector(r.mol)
+oqp.electric_moments_excited(r.mol)
+q = np.asarray(r.mol.data["OQP::partial_charges"], dtype=float).ravel().tolist()
+print("RESULT " + json.dumps({"zv": bool(r.mol.mol_energy.Z_Vector_converged), "espf": q}))
+"""
+
+
 def _packed_trace(m_packed, d_packed, nbf):
     """traceprod_sym_packed: sum_ij M_ij D_ij for packed L-triangles."""
     import numpy as np
@@ -251,6 +274,36 @@ class GasPhaseTdPropTests(unittest.TestCase):
 
     def test_tda_td_prop_relaxed_dipole(self):
         self._check("tda")
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
+class MissingBetaDensityTests(unittest.TestCase):
+    def test_rhf_consumers_do_not_need_beta_density(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        work = tmp.name
+        inp = os.path.join(work, "grad.inp")
+        with open(inp, "w") as fh:
+            fh.write(RESTRICTED_GRAD_INPUT.format(geom=H2O, td="rpa")
+                     .replace("td_prop=true", "td_prop=false"))
+        env = dict(os.environ)
+        env.setdefault("OMP_NUM_THREADS", "1")
+        proc = subprocess.run([sys.executable, "-c", _NO_BETA_DRIVER, inp],
+                              cwd=work, env=env, capture_output=True, text=True, timeout=900)
+        detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
+                  f"\n--- stderr ---\n{proc.stderr[-3000:]}")
+        self.assertEqual(proc.returncode, 0, detail)
+        lines = [l for l in proc.stdout.splitlines() if l.startswith("RESULT ")]
+        self.assertEqual(len(lines), 1, detail)
+        d = json.loads(lines[0][7:])
+        self.assertTrue(d["zv"])
+        q = d["espf"]
+        self.assertEqual(len(q), 3)
+        self.assertAlmostEqual(sum(q), 0.0, places=8)   # neutral molecule
+        with open(os.path.join(work, "grad.log"), errors="replace") as fh:
+            log = fh.read()
+        self.assertIn("Using RELAXED excited-state density for ESPF charges", log)
+        self.assertIsNotNone(_excited_dipole_from_log(log))
 
 
 def _water_dimer():

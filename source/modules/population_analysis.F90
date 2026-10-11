@@ -101,10 +101,13 @@ contains
 !    character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
 !      OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
 !      OQP_td_energies /)
-    ! OQP::td_abxc is needed only by the unrelaxed branch (requested there);
-    ! restricted TDHF/TDDFT does not create it.
-    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
-      OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_SM /)
+    ! OQP::DM_B exists only for ROHF/UHF references (the guess routines
+    ! allocate it when scftype >= 2) and OQP::td_abxc only for SF/MRSF; each is
+    ! requested in the branch that reads it.
+    character(len=*), parameter :: tags_required(3) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_TD_P, OQP_SM /)
+    character(len=*), parameter :: tags_beta(1) = (/ character(len=80) :: &
+      OQP_DM_B /)
     character(len=*), parameter :: tags_unrelaxed(1) = (/ character(len=80) :: &
       OQP_TD_ABXC /)
 
@@ -139,6 +142,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     tmp = dmat_a
     if (urohf) then
+      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
       call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
       tmp = tmp + dmat_b
     end if
