@@ -34,6 +34,9 @@ class Case:
     charge: int
     validated_max_abs: float
     validated_rms: float
+    # H2 and HeH+ in STO-3G have one occupied and one virtual orbital, so the
+    # response space holds exactly one root; TDHF refuses nstate > nocc*nvir.
+    nstate: int = 2
 
 
 CASES = {
@@ -44,6 +47,7 @@ CASES = {
         charge=0,
         validated_max_abs=5.667895902894404e-7,
         validated_rms=1.9155628621431792e-7,
+        nstate=1,
     ),
     "hehplus": Case(
         system="""\
@@ -52,6 +56,7 @@ CASES = {
         charge=1,
         validated_max_abs=1.1985536660930052e-6,
         validated_rms=4.3440667358826373e-7,
+        nstate=1,
     ),
     "h2o": Case(
         system="""\
@@ -102,7 +107,7 @@ conv=1.0e-10
 [tdhf]
 type=rpa
 multiplicity=1
-nstate=2
+nstate={nstate}
 conv=1.0e-10
 zvconv=1.0e-10
 
@@ -132,6 +137,7 @@ def _run_hessian(case: Case, hess_type: str, workdir: Path) -> np.ndarray:
         INPUT.format(
             system=case.system,
             charge=case.charge,
+            nstate=case.nstate,
             hess_type=hess_type,
         )
     )
@@ -170,7 +176,8 @@ def test_live_dft_hessian_consumers_stay_inside_their_probed_blocks(tmp_path, mo
     workdir.mkdir()
     inp = workdir / "svwn.inp"
     inp.write_text(
-        INPUT.format(system=CASES["h2o"].system, charge=0, hess_type="analytical")
+        INPUT.format(system=CASES["h2o"].system, charge=0, nstate=CASES["h2o"].nstate,
+                     hess_type="analytical")
         .replace("functional=\n", "functional=svwn\n")
     )
     assert "functional=svwn" in inp.read_text()

@@ -245,30 +245,51 @@ def test_one_iteration_scf_refreshes_supplied_orbital_energies(tmp_path):
     assert omega == pytest.approx(REFERENCE["rpa"], abs=1e-6)
 
 
-def test_loose_first_iteration_keeps_orbitals_and_density_together(tmp_path):
+def _occupied_density(vec, nocc, factor):
+    nbf = len(vec[0])
+    return [factor * sum(vec[k][i] * vec[k][j] for k in range(nocc))
+            for i in range(nbf) for j in range(i + 1)]
+
+
+# scf type -> (multiplicity, [(density key, orbital key, occupied, factor)])
+LOOSE_REFS = {
+    "rhf": (1, [("OQP::DM_A", "OQP::VEC_MO_A", 5, 2.0)]),
+    "uhf": (1, [("OQP::DM_A", "OQP::VEC_MO_A", 5, 1.0),
+                ("OQP::DM_B", "OQP::VEC_MO_B", 5, 1.0)]),
+    "rohf": (3, [("OQP::DM_A", "OQP::VEC_MO_A", 6, 1.0),
+                 ("OQP::DM_B", "OQP::VEC_MO_A", 4, 1.0)]),
+}
+
+
+@pytest.mark.parametrize("converger", ["diis", "soscf", "trah"])
+@pytest.mark.parametrize("ref", ["rhf", "uhf", "rohf"])
+def test_loose_convergence_keeps_orbitals_and_density_together(tmp_path, ref, converger):
     """A guess that only meets a loose tolerance must not split the SCF state.
 
-    Water/STO-3G with a Huckel guess and conv=1.0: the first Fock build (DIIS error 0.73) passes
-    the tolerance although the guess is not self-consistent.  Whatever is
+    Water/STO-3G with a Huckel guess and conv=1.0: the first Fock build (DIIS
+    error 0.73 for RHF) passes the tolerance although the guess is not
+    self-consistent, and the run exits on an early iteration.  Whatever is
     published, the stored density must be the one built from the stored
-    occupied orbitals; diagonalising F(1) at the exit would replace the
-    orbitals while keeping the guess density.
+    occupied orbitals.  Diagonalising the Fock at the exit replaced the
+    orbitals while keeping the density: DIIS on iteration 1, the SOSCF/TRAH
+    exit handler and the UHF publication after the loop on any iteration.
     """
+    mult, checks = LOOSE_REFS[ref]
+    extra = "" if converger == "diis" else f"converger_type={converger}\n"
     deck = H2O_UNCONVERGED.replace("basis=6-31g", "basis=sto-3g").replace(
         "type=huckel\n", "type=huckel\nsave_mol=True\n").replace(
         "[scf]\nmultiplicity=1\ntype=rhf\n",
-        "[scf]\nmultiplicity=1\ntype=rhf\nconv=1.0\n").replace(
-        "maxit=1\nconv=1.0e-30\n", "")
+        f"[scf]\nmultiplicity={mult}\ntype={ref}\nconv=1.0\n" + extra)
+    deck = deck.replace("method=tdhf", "method=hf")
+    deck = deck[:deck.index("[tdhf]")]
     proc, log = _run(tmp_path, "h2o_loose", deck)
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
-    assert _diis_errors(log)[0] < 1.0, log[-3000:]
+    if ref == "rhf" and converger != "trah":
+        assert _diis_errors(log)[0] < 1.0, log[-3000:]
     data = json.loads((tmp_path / "h2o_loose.json").read_text())
-    vec = data["OQP::VEC_MO_A"]                      # rows are MOs
-    nbf, nocc = len(vec[0]), 5
-    dm = [[2.0 * sum(vec[k][i] * vec[k][j] for k in range(nocc))
-           for j in range(nbf)] for i in range(nbf)]
-    packed = [dm[i][j] for i in range(nbf) for j in range(i + 1)]
-    assert data["OQP::DM_A"] == pytest.approx(packed, abs=1e-10)
+    for dkey, vkey, nocc, factor in checks:
+        packed = _occupied_density(data[vkey], nocc, factor)     # rows are MOs
+        assert data[dkey] == pytest.approx(packed, abs=1e-10), (dkey, vkey)
 
 
 @pytest.mark.parametrize("route", ["cold", "supplied"])

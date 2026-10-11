@@ -130,12 +130,10 @@ def test_uhf_rstctmo_core_hole_orbitals_span_density(tmp_path, threads, mult, sw
     assert e_a.min() not in e_a[:nalpha]
 
 
-# TRAH is left out for UHF/ROHF: it does not apply rstctmo/MOM and descends to
-# the ground state from these saddle points (with consistent orbitals).  The
-# RHF TRAH restart exits on its first gradient check and must keep the state.
+# TRAH is left out: the input checker refuses it together with rstctmo/MOM.
 @pytest.mark.parametrize("scf,converger", [
     ("uhf", "diis"), ("uhf", "soscf"),
-    ("rhf", "diis"), ("rhf", "soscf"), ("rhf", "trah"),
+    ("rhf", "diis"), ("rhf", "soscf"),
     ("rohf", "diis"), ("rohf", "soscf"),
 ])
 def test_json_restart_keeps_restricted_mo_state(tmp_path, scf, converger):
@@ -162,14 +160,34 @@ def test_uhf_mom_soscf_restart_keeps_core_hole(tmp_path):
     assert again["energy"] == pytest.approx(first["energy"], abs=1e-6)
 
 
-def test_uhf_mom_orbitals_follow_density_not_supplied_order(tmp_path):
-    # swapmo reorders the supplied orbitals but not the supplied density; the
-    # SCF converges on its first build to the density's (ground) state.  The
-    # published orbitals must describe that density, not the swapped order.
+# A JSON guess whose alpha O 1s and LUMO rows are exchanged in the file.  For
+# UHF the JSON guess rebuilds the densities from the stored orbitals, and
+# swapmo now rebuilds a supplied density as well, so orbitals and
+# density of a supplied guess always agree: both name the core hole.  With and
+# without MOM the SCF must keep that state and publish orbitals that build the
+# stored density -- the same state as the swapmo route.
+@pytest.mark.parametrize("mom", [False, True])
+def test_uhf_reordered_json_orbitals_keep_their_state(tmp_path, mom):
     ground, js = _run(tmp_path, "ground",
                       H2O.format(guess="type=huckel", scf="uhf", mult=1, extra=""))
+    # Reference: the same swap made with swapmo, which rebuilds the density.
+    hole, _ = _run(tmp_path, "hole",
+                   H2O.format(guess=f"type=json\nfile={js}\nswapmo=1,6", scf="uhf", mult=1,
+                              extra="mom=True\nmom_switch=1.0\nconverger_type=soscf"))
+    data = json.loads(js.read_text())
+    vec = np.array(data["OQP::VEC_MO_A"], dtype=float)          # rows are MOs
+    vec[[0, 5]] = vec[[5, 0]]
+    data["OQP::VEC_MO_A"] = vec.tolist()
+    e_a = np.array(data["OQP::E_MO_A"], dtype=float)
+    flat = e_a.reshape(-1)
+    flat[[0, 5]] = flat[[5, 0]]
+    data["OQP::E_MO_A"] = flat.reshape(e_a.shape).tolist()
+    mixed = tmp_path / "mixed.json"
+    mixed.write_text(json.dumps(data))
+    extra = "mom=True\nmom_switch=1.0\n" if mom else ""
     again, _ = _run(tmp_path, "again",
-                    H2O.format(guess=f"type=json\nfile={js}\nswapmo=1,6", scf="uhf",
-                               mult=1, extra="mom=True\nmom_switch=1.0\nconverger_type=soscf"))
+                    H2O.format(guess=f"type=json\nfile={mixed}", scf="uhf", mult=1,
+                               extra=extra + "converger_type=soscf"))
     _check_state(again, "uhf")
-    assert again["energy"] == pytest.approx(ground["energy"], abs=1e-6)
+    assert again["energy"] == pytest.approx(hole["energy"], abs=1e-6)
+    assert again["energy"] > ground["energy"] + 10.0
