@@ -581,6 +581,10 @@ contains
       ! An underflowed determinant times a large inverse loses finite minors.
       safe = logdet > log(tiny(1.0_dp)) .and. logdet < log(huge(1.0_dp))
     end if
+    ! Normalized orbital overlaps are bounded by one. Larger arbitrary input
+    ! scales can underflow inverse entries before determinant multiplication;
+    ! use minors there (allow a factor of two for roundoff/test matrices).
+    safe = safe .and. maxval(abs(s)) <= 2.0_dp
     if (safe) then
       ! Form the magnitude from its logarithm to avoid intermediate underflow.
       det = exp(logdet)
