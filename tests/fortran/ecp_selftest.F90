@@ -25,7 +25,9 @@
 !>   err(8), err(9)  as err(4), err(5) for system 2
 !>   err(10) max over both systems of |ecp_hess_contract - explicit contraction
 !>           of the stored second-derivative matrices| / max |Hessian|, for a
-!>           fixed symmetric density
+!>           fixed symmetric density; it also takes the difference between the
+!>           default and a 2-pair batching of the contraction (several batches
+!>           per ECP centre), which must be exactly zero
 module ecp_selftest_mod
   use ecp_tool, only: ecp_raw_ints, ecp_hess_start, ecp_hess_contract
   use basis_tools, only: basis_set
@@ -165,7 +167,7 @@ contains
     type(basis_set), intent(in) :: b
     real(dp), intent(in) :: coord(:,:)
     real(dp), intent(out) :: e
-    real(dp), allocatable :: d2(:), dens(:,:), ref(:,:), h(:,:)
+    real(dp), allocatable :: d2(:), dens(:,:), ref(:,:), h(:,:), h2(:,:)
     integer :: natm, nraw, i, j, ia, ib, k, kb, gi, gj, mat
     integer(8) :: nn
     real(dp) :: val
@@ -175,7 +177,7 @@ contains
     nraw = sum([(merge(3, merge(1, (b%am(i) + 1)*(b%am(i) + 2)/2, b%am(i) == 0), &
                  b%am(i) == 1), i = 1, b%nshell)])
     nn = int(nraw, 8)*nraw
-    allocate(dens(nraw, nraw), ref(3*natm, 3*natm), h(3*natm, 3*natm))
+    allocate(dens(nraw, nraw), ref(3*natm, 3*natm), h(3*natm, 3*natm), h2(3*natm, 3*natm))
     do j = 1, nraw
       do i = 1, nraw
         dens(i, j) = 1.0_dp/real(i + j - 1, dp) + 0.1_dp*cos(real(i*j, dp))
@@ -205,6 +207,9 @@ contains
     h = 0.0_dp
     call ecp_hess_contract(b, coord, dens, h)
     e = maxval(abs(h - ref))/max(1.0_dp, maxval(abs(ref)))
+    h2 = 0.0_dp
+    call ecp_hess_contract(b, coord, dens, h2, pair_block=2)
+    e = max(e, maxval(abs(h2 - h)))
   end subroutine contract_check
 
   !> Five-point finite differences (h = 1e-3 bohr) of the value and of the
