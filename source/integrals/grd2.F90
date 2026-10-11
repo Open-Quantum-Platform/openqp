@@ -678,7 +678,7 @@ contains
     ! invariant explicit so a future caller cannot silently mix regular and
     ! attenuated probes, or attenuated probes with different range parameters.
     do iprobe = 2, nprobe
-      if (gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated .or. &
+      if ((gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated) .or. &
           (gcomps(1)%attenuated .and. &
            gcomps(iprobe)%mu /= gcomps(1)%mu)) then
         call show_message( &
