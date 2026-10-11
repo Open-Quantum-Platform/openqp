@@ -199,6 +199,8 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     interposer = ctypes.CDLL(library)
     interposer.mp2_test_arm.argtypes = [ctypes.c_size_t, ctypes.c_int, ctypes.c_size_t]
     interposer.mp2_test_failures.restype = ctypes.c_int
+    interposer.mp2_test_select_n5.argtypes = []
+    interposer.mp2_test_selector_calls.restype = ctypes.c_int
     rank = 0 if comm is None else comm.Get_rank()
     native = _native_thread_controls()
     def components():
@@ -216,26 +218,13 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     npair = nbf * (nbf + 1) // 2
     nocca, noccb = 2, 1
     nt = int(os.environ.get('OMP_NUM_THREADS', '1'))
-    # Full scratch failure falls back to occupied-virtual. Other failures
-    # are induced at n5 even with an affordable direct-J fallback by using
-    # the real >120 default crossover on a 127-AO Li basis.
+    # Keep the actual default >120-AO crossover in its separate test. Here
+    # the existing cap selects n5 on the small production input, then permits
+    # direct-J only after a real failure. The interposer controls configuration
+    # queries, never a numerical result or a Fortran allocation status.
     if stage != 'full_scratch':
-        # The 127-AO default crossover leaves the direct-J guard affordable.
-        # Li has nonzero alpha SS and OS terms, with an actual beta trial.
-        runner, log = _run(tmp_path, 'alloc_large_' + stage, scf, mult, atoms,
-                           basis='aug-cc-pv5z', method='hf', usempi=comm is not None)
-        nbf = int(runner.mol.data.get_basis()['nbf'])
-        assert nbf > 120
-        npair = nbf * (nbf + 1) // 2
-        scf_energy = runner.mol.data._data.mol_energy.energy
-        # First run supplies the no-failure n5 reference. The independent
-        # production-input pin and baseline gate check its numerical value.
-        runner.mol.data.set_mp2_same_spin_scale(1)
-        runner.mol.data.set_mp2_opposite_spin_scale(1)
-        before = _counts(native)
-        oqp.mp2_energy(runner.mol)
-        assert _counts(native) == before
-        reference = components()
+        assert nbf < 120
+        assert abs(reference[0]) > 1e-8, 'alpha rollback must exceed the 1e-9 comparison tolerance'
     runner.mol.data._data.mol_energy.energy = scf_energy
     runner.mol.data._data.mol_energy.etot = scf_energy
     if rank == 0:
@@ -255,14 +244,40 @@ def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
         size, occurrence = 8*npair*(npair+1)//2, 2
     else:
         size, occurrence = 8*npair*noccb*(nbf-noccb), 1
-        os.environ['OQP_MEMORY_LIMIT_GB'] = '2'
+        # Both replicated occupied-virtual stores fit, while even one full
+        # tensor exceeds its quarter-budget rule. This makes beta scratch an
+        # actual batched allocation at either supported OpenMP width.
+        def batch_bytes(nocc, partner):
+            nvir = nbf - nocc
+            first = 8*nt*(nbf**2 + nbf*nvir + nocc*nvir)
+            second = 8*nt*(nbf**2 + nbf*max(nocc, partner)
+                           + max(nocc, partner)*max(nvir, nbf-partner))
+            second += 8*(nocc*nvir)**2
+            return (8*npair*(npair+1)//2 + 8*npair*nocc*nvir
+                    + max(first, second) + 16*npair)
+        ranks = 1 if comm is None else comm.Get_size()
+        budget_bytes = 1.5*ranks*max(batch_bytes(nocca, noccb),
+                                    batch_bytes(noccb, nocca))
+        full_bytes = (8*(nbf**4 + npair**2 + 3*nbf**2*nt)
+                      + 16*npair + 8*npair*(npair+1)//2)
+        assert full_bytes > .25*budget_bytes
+        os.environ['OQP_MEMORY_LIMIT_GB'] = str(budget_bytes / (.9*2**30))
     native.oqp_blas_thread_set(2)
     native.oqp_omp_set_num_threads(nt)
     before = _counts(native)
+    if stage != 'full_scratch':
+        # Every rank makes both cap queries, including the rank whose malloc
+        # succeeds: it must follow the collective failure into direct-J too.
+        interposer.mp2_test_select_n5()
     if comm is None or rank == fault_rank:
         interposer.mp2_test_arm(size, occurrence, 8*npair*(npair+1)//2)
     oqp.mp2_energy(runner.mol)
     assert _counts(native) == before
+    if stage != 'full_scratch':
+        calls = interposer.mp2_test_selector_calls()
+        assert calls == 2, 'n5 selection and affordable fallback must both execute'
+        if comm is not None:
+            assert comm.allgather(calls) == [2]*comm.Get_size()
     failures = interposer.mp2_test_failures()
     if comm is None:
         assert failures == 1
