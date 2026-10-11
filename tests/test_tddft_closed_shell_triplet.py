@@ -257,6 +257,9 @@ class TestImaginaryRpaRoots(unittest.TestCase):
         self.assertNotEqual(rc, 0, log[-3000:])
         self.assertIn("all 1 requested RPA roots have omega^2 < 0", log)
         self.assertNotIn("TD-DFT energies converged", log)
+        # reported as a TD convergence failure, not as a missing output tag
+        self.assertIn("TD energy is not converged", log)
+        self.assertNotIn("not found in QOP data", log)
 
     def test_tda_and_stable_reference_are_not_marked(self):
         for geom, td_type in ((C2H4, "tda"), (H2O, "rpa")):

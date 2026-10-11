@@ -1204,6 +1204,21 @@ class SinglePoint(Calculator):
             self.mol.stage_response_symmetry()
 
         self.tddft()
+
+        # Check convergence before reading the TD output tags: a Davidson
+        # breakdown returns before OQP::td_energies is written.
+        td_flag = self.mol.mol_energy.Davidson_converged
+
+        if self.method != 'hf' and not td_flag:
+            dump_log(self.mol, title='PyOQP: TD energy is not converged', section='end')
+
+            if self.exception is True:
+                raise TDnotConverged()
+            # A bare exit() raises SystemExit(None), i.e. process status 0,
+            # so a failed Davidson looked like a successful run.
+            raise RuntimeError("TD Davidson did not converge — stopping current run.")
+
+
         energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
         # RPA roots with omega^2 < 0 (unstable reference): td_energies holds
@@ -1217,18 +1232,6 @@ class SinglePoint(Calculator):
                 flags = ()
             self.mol.td_imaginary_states = tuple(
                 n + 1 for n, flag in enumerate(flags) if flag > 0.5)
-
-        # check convergence
-        td_flag = self.mol.mol_energy.Davidson_converged
-
-        if self.method != 'hf' and not td_flag:
-            dump_log(self.mol, title='PyOQP: TD energy is not converged', section='end')
-
-            if self.exception is True:
-                raise TDnotConverged()
-            # A bare exit() raises SystemExit(None), i.e. process status 0,
-            # so a failed Davidson looked like a successful run.
-            raise RuntimeError("TD Davidson did not converge — stopping current run.")
 
         self.mol.energies = energies
 
