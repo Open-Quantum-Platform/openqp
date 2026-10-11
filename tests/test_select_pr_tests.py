@@ -84,6 +84,21 @@ class SelectPrTestsTests(unittest.TestCase):
         if chosen is not None:
             self.assertIn("tests/test_guess_orbital_phase.py", chosen)
 
+    def test_every_grd2_digest_source_selects_the_spherical_basis_detector(self):
+        # AGENTS.md rule 6: tests/test_mrsf_nac_spherical_basis.py is the
+        # detector for every grd2 digest, whether or not a test names the file.
+        import re
+        digest = re.compile(r"extends\s*\(\s*grd2_\w+_t\s*\)", re.IGNORECASE)
+        sources = sorted(p for p in (ROOT / "source").rglob("*.F90")
+                         if digest.search(p.read_text(errors="ignore")))
+        self.assertTrue(sources)
+        for path in [ROOT / "source/integrals/grd2.F90", *sources]:
+            rel = str(path.relative_to(ROOT))
+            with self.subTest(path=rel):
+                chosen = self.sel.select([rel])
+                if chosen is not None:
+                    self.assertIn("tests/test_mrsf_nac_spherical_basis.py", chosen)
+
     def test_unknown_base_falls_back_to_the_full_suite(self):
         self.assertIsNone(self.sel.changed_files("0" * 40))
 
