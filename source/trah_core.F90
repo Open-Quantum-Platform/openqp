@@ -707,9 +707,10 @@ contains
     ! passed the test, and every step was the diagonal-preconditioned gradient
     ! step, which contracts only linearly and stalls where diag(H) is a poor
     ! model of H (DFT).  The old 1e-6 is kept as the cap, so steps with
-    ! |g| >~ 1e-4 are unchanged; the floor is ten times below the requested
-    ! gradient tolerance (converted to a 2-norm), below which a better step
-    ! cannot change the converged result.
+    ! |g| >~ 1e-4 are unchanged and no step is solved more loosely than
+    ! before; the floor is ten times below the requested gradient tolerance
+    ! (converted to a 2-norm), below which a better step cannot change the
+    ! converged result.
     gnorm2 = norm2(g)
     eta    = min(0.1_dp, sqrt(gnorm2))
     used = 0; mw = 0
@@ -738,9 +739,12 @@ contains
       deallocate(Tm)
       r = au - theta*u
       rnorm = norm2(r)
-      rtol = min(1.0e-6_dp, eta*abs(u(1))*gnorm2)
-      rtol = max(rtol, 0.1_dp*par%conv_tol*abs(u(1)) &
-                       *merge(sqrt(real(n, dp)), 1.0_dp, par%rms_gnorm))
+      ! The floor never lifts the stop above the old 1e-6: with the SCF
+      ! default conv = 1e-6 (RMS) it is 0.1*conv*sqrt(n) ~ 4e-6 already for
+      ! n ~ 1700, which would loosen every step relative to the old solver.
+      rtol = max(eta*abs(u(1))*gnorm2, 0.1_dp*par%conv_tol*abs(u(1)) &
+                 *merge(sqrt(real(n, dp)), 1.0_dp, par%rms_gnorm))
+      rtol = min(1.0e-6_dp, rtol)
       if (rnorm < rtol .or. m == mmax) exit
       ! preconditioned correction t = (D - theta)^{-1} r,  D = [0 ; hdiag]
       tc(1) = r(1)/sign(max(abs(0.0_dp-theta),1.0e-6_dp), 0.0_dp-theta)
