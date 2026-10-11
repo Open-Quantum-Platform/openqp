@@ -34,6 +34,7 @@ module trah_native
   use guess,            only: get_ab_initio_density
   use basis_tools,      only: basis_set
   use io_constants,     only: IW
+  use parallel,         only: par_env_t
   use trah_core_mod,    only: trah_provider_t, trah_params_t, trah_result_t, trah_run
 
   implicit none
@@ -48,6 +49,17 @@ module trah_native
     type(scf_energy_t), pointer :: energy => null()
     integer :: model_builds = 0
     logical :: full_fock = .false.
+    !> Every rank runs the trust-region and Davidson logic on its own copy of
+    !> the optimizer state. The response and Fock builds are reduced over the
+    !> ranks, but per-rank OpenMP work after the reduction is not bitwise
+    !> reproducible, so the ranks' gradients and Hessian products can differ in
+    !> the last digits. Near convergence the |g|-scaled Davidson stop amplifies
+    !> that into different steps on different ranks, and the reduced Fock of
+    !> inconsistent orbitals is meaningless (ROKS/6-31G* CH2O, mpiexec -n 2,
+    !> OMP_NUM_THREADS=2: -114.34 -> -153.03 Eh). Rank 0's values are therefore
+    !> broadcast before the optimizer uses them, as the DIIS path does with its
+    !> rank-0 diagonalisation.
+    type(par_env_t) :: pe
   contains
     procedure :: grad_hdiag   => scf_grad_hdiag
     procedure :: hess_vec     => scf_hess_vec
@@ -85,6 +97,7 @@ contains
     prov%molgrid => molgrid
     prov%conv    => conv
     prov%energy  => energy
+    call prov%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     par%nmac       = int(infos%control%maxit)
     par%nmic       = int(infos%control%trh_nmic)
@@ -217,12 +230,14 @@ contains
     call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
                          this%conv%mo_a, this%conv%mo_b, g, hdiag, e, &
                          this%full_fock .or. mod(this%model_builds, 10) == 0)
+    call sync_model(this%pe, g, hdiag, e)
     ! Match the DIIS refresh threshold. Once in the tight tail, both the
     ! model and every trial energy must use full-density Fock builds.
     if (.not. this%full_fock .and. sqrt(dot_product(g,g)/real(max(1,size(g)),dp)) < 1.0e-4_dp) then
       this%full_fock = .true.
       call build_fock_grad(this%infos, this%molgrid, this%conv, this%energy, &
                            this%conv%mo_a, this%conv%mo_b, g, hdiag, e, .true.)
+      call sync_model(this%pe, g, hdiag, e)
     end if
   end subroutine scf_grad_hdiag
 
@@ -250,6 +265,7 @@ contains
     end if
     call this%conv%calc_h_op(this%infos, v/vnorm, hv)
     hv = (2.0_dp*vnorm) * hv
+    call this%pe%bcast(hv, size(hv))
   end subroutine scf_hess_vec
 
   !> Energy at a trial step p, evaluated on copies of the orbitals.
@@ -268,6 +284,7 @@ contains
     call rebuild_fock(this%infos, this%molgrid, this%conv, this%energy, ma, mb, nschwz, this%full_fock)
     ep => this%energy
     e = compute_energy(ep)
+    call this%pe%bcast(e, 1)
     deallocate(ma, mb)
   end subroutine scf_trial_energy
 
@@ -279,6 +296,16 @@ contains
     ierr = 0
     call rotate_mo(this%conv, this%infos%control%scftype, p, this%conv%mo_a, this%conv%mo_b)
   end subroutine scf_apply_step
+
+  !> Make the gradient, Hessian diagonal and energy identical on all ranks
+  !> (rank 0's values); see scf_trah_provider_t%pe.
+  subroutine sync_model(pe, g, hdiag, e)
+    type(par_env_t), intent(inout) :: pe
+    real(dp), intent(inout) :: g(:), hdiag(:), e
+    call pe%bcast(g, size(g))
+    call pe%bcast(hdiag, size(hdiag))
+    call pe%bcast(e, 1)
+  end subroutine sync_model
 
   ! ----------------------------------------------------------- SCF machinery
   subroutine compute_native_mo_energies(nbf, fock, mo_coeffs, mo_energies, work_1, work_2)
