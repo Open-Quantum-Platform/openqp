@@ -250,6 +250,39 @@ def test_loose_first_iteration_keeps_orbitals_and_density_together(tmp_path):
     assert data["OQP::DM_A"] == pytest.approx(packed, abs=1e-10)
 
 
+@pytest.mark.parametrize("route", ["cold", "supplied"])
+@pytest.mark.parametrize("ref", ["rhf", "rohf"])
+def test_level_shift_never_reaches_published_orbital_energies(tmp_path, ref, route):
+    """V-DIIS adds its level shift to the first Fock before switching it off.
+
+    The first build already meets the tolerance, so the published orbital
+    energies come either from the extra iteration a cold guess takes or from
+    the refresh of supplied orbitals.  Both must use the unshifted Fock: the
+    same orbital energies as a run without any shift (a shifted virtual would
+    read 0.7703 instead of 0.6703 Eh for RHF H2).
+    """
+    deck = (H2.format(td="rpa", guess="huckel", nstate=1) if ref == "rhf"
+            else H2_ROHF_MRSF.format(guess="huckel"))
+    plain = deck.replace("type=huckel\n", "type=huckel\nsave_mol=True\n")
+    proc, log = _run(tmp_path, f"{ref}_plain", plain)
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    eps_plain = [float(e) for e in ALPHA_EPS.findall(log)[-1]]
+
+    shifted = deck.replace(f"type={ref}\nconv=1.0e-10\n",
+                           f"type={ref}\nconv=1.0e-10\ndiis_type=vdiis\nvshift=0.1\n")
+    assert shifted != deck
+    if route == "supplied":
+        shifted = shifted.replace(
+            "type=huckel\n", f"type=json\nfile={ref}_plain.json\n")
+    proc, log = _run(tmp_path, f"{ref}_{route}_vdiis", shifted)
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    assert _diis_errors(log)[0] < 1e-10, log[-3000:]
+    expected_iters = 1 if route == "supplied" else 2
+    assert re.search(rf"after\s+{expected_iters} iterations", log), log[-3000:]
+    eps = [float(e) for e in ALPHA_EPS.findall(log)[-1]]
+    assert eps == pytest.approx(eps_plain, abs=1e-8)
+
+
 def test_one_iteration_rohf_is_guess_independent(tmp_path):
     results = {}
     for guess in ("huckel", "hcore"):

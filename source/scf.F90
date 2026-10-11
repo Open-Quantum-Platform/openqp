@@ -161,6 +161,9 @@ contains
     type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
     logical       :: ps_force_iter    ! force one pinned full-accuracy iteration before converging
     logical       :: cold_first_iter  ! convergence on the first Fock build of a model-Hamiltonian guess
+    logical       :: cold_held        ! cold_first_iter withheld a convergence this iteration
+    logical       :: shift_applied    ! a level shift was added to this iteration's Fock
+    real(kind=dp), allocatable :: fock_noshift(:,:) ! iteration-1 Fock without the level shift
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -694,6 +697,7 @@ contains
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
+      shift_applied = .false.
       if (do_rstctmo) then
         mo_energy_a_for_rstctmo = mo_energy_a
         mo_a_for_rstctmo = mo_a
@@ -817,6 +821,13 @@ contains
         ! Apply the Guest-Saunders ROHF Fock transformation
         call form_rohf_fock(pfock(:,1),pfock(:,2), mo_a, smat_full, &
                                 nelec_a, nelec_b, nbf, vshift, work1, work2)
+        shift_applied = (vshift /= 0.0_dp)
+        ! Unshifted effective Fock of the first build (see cold_first_iter).
+        if (iter == 1 .and. shift_applied) then
+          fock_noshift = rohf_bak
+          call form_rohf_fock(fock_noshift(:,1), fock_noshift(:,2), mo_a, smat_full, &
+                              nelec_a, nelec_b, nbf, 0.0_dp, work1, work2)
+        end if
         ! Combine alpha and beta densities for ROHF
         pdmat(:,1) = pdmat(:,1) + pdmat(:,2)
       end if
@@ -827,6 +838,9 @@ contains
       if (vshift > 0.0_dp .and. scf_type /= scf_rohf) then
         ! Turn off level shifting for the final iteration if requested
         if (vshift_last_iter) vshift = 0.0_dp
+        shift_applied = (vshift > 0.0_dp)
+        ! Keep the unshifted first build (see cold_first_iter).
+        if (iter == 1 .and. shift_applied) fock_noshift = pfock
 
         ! Apply level shifting based on SCF type
         select case (scf_type)
@@ -1077,10 +1091,16 @@ contains
       ! and energy when the guess only meets the tolerance. One more ordinary
       ! iteration keeps orbitals, density and energy from the same SCF state.
       ! Not applied when maxit = 1 leaves no iteration to add.
+      ! A level shift (vshift, or V-DIIS before it switches the shift off) is
+      ! already inside pfock here; the orbitals of the extra iteration, and the
+      ! energies refreshed for supplied orbitals, are taken from the unshifted
+      ! first build (fock_noshift) so no shifted virtual energy is published.
       !----------------------------------------------------------------------------
       cold_first_iter = (iter == 1) .and. (maxit > 1) &
           .and. (infos%control%guess /= GUESS_SUPPLIED) &
           .and. .not. (use_soscf .or. use_trah)
+      cold_held = cold_first_iter .and. (abs(diis_error) < infos%control%conv) &
+          .and. (vshift == 0.0_dp) .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)
 
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
@@ -1111,7 +1131,11 @@ contains
           if (iter == 1 .and. infos%control%guess == GUESS_SUPPLIED .and. &
               .not. (use_soscf .or. use_trah) .and. &
               scf_type /= scf_uhf .and. int2_driver%pe%rank == 0) then
-            call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            if (shift_applied) then
+              call fock_diagonal_energies(fock_noshift(:,1), mo_a, mo_energy_a, nbf)
+            else
+              call fock_diagonal_energies(pfock(:,1), mo_a, mo_energy_a, nbf)
+            end if
             if (scf_type == scf_rohf) then
               mo_b = mo_a
               mo_energy_b = mo_energy_a
@@ -1214,6 +1238,12 @@ contains
             call fock_diagonal_energies(pfock(:,2), mo_b, mo_energy_b, nbf)
           if (int2_driver%pe%rank == 0) &
             write(IW,"(10x,'Second-order converger starts from the supplied orbitals.')")
+        else if (int2_driver%pe%rank == 0 .and. cold_held .and. shift_applied) then
+           ! Withheld cold first-iteration convergence: diagonalise the
+           ! unshifted first build (see cold_first_iter).
+           call get_ab_initio_orbital(fock_noshift(:,1), mo_a, mo_energy_a, qmat)
+           if (scf_type == scf_uhf .and. nelec_b /= 0) &
+              call get_ab_initio_orbital(fock_noshift(:,2), mo_b, mo_energy_b, qmat)
         else if (int2_driver%pe%rank == 0) then
            ! Compute New Alpha Orbitals
            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
