@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -157,8 +158,7 @@ print('DROPLET=' + json.dumps({
     'finite': bool(np.isfinite(force).all() and np.isfinite(cf).all()),
 }))
 '''
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -219,8 +219,7 @@ print('THERMOSTAT=' + json.dumps({
     'finite': bool(np.isfinite(a[1]).all() and np.isfinite(a[2])),
 }))
 '''
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -315,8 +314,7 @@ print('SMOKE='+json.dumps({
                       for x in nvt)),
 }))
 '''
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, env=env,
         capture_output=True, text=True, check=False,
@@ -382,8 +380,7 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
     env = os.environ.copy()
     env["OPENQP_ROOT"] = str(ROOT)
     env["OMP_NUM_THREADS"] = "2"
-    env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get(
-        "PYTHONPATH", "")
+    env = child_env(env)
 
     for ensemble, driver in drivers.items():
         input_file = tmp_path / f"{ensemble}.oqp"

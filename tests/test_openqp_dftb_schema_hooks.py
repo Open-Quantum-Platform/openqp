@@ -7,9 +7,6 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PYOQP = ROOT / "pyoqp"
-if PYOQP.is_dir() and str(PYOQP) not in sys.path:
-    sys.path.insert(0, str(PYOQP))
 
 
 def _import_or_skip(module_name):

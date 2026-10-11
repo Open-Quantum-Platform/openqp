@@ -6,35 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 ROOT = Path(__file__).resolve().parents[1]
-
-STUB_MODULES = [
-    "oqp",
-    "oqp.molecule",
-    "oqp.utils",
-    "oqp.utils.constants",
-    "oqp.utils.mpi_utils",
-    "oqp.utils.matrix",
-    "oqp.utils.file_utils",
-    "oqp.library",
-    "oqp.library.frequency",
-    "oqp.library.openqp_dftb",
-    "oqp.utils.state_labels",
-    "oqp.utils.qmmm",
-    "oqp.periodic_table",
-]
-
-
-def snapshot_modules(names=STUB_MODULES):
-    return {name: sys.modules.get(name) for name in names}
-
-
-def restore_modules(snapshot):
-    for name, module in snapshot.items():
-        if module is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = module
 
 
 def load_module(name, relative_path):
@@ -47,7 +21,7 @@ def load_module(name, relative_path):
 
 class AnalyticHessianNativeDispatchTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
+        self.addCleanup(isolate_modules())
         oqp_stub = types.ModuleType("oqp")
         self.native_calls = []
 
@@ -59,7 +33,7 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         molecule_mod = types.ModuleType("oqp.molecule")
         setattr(molecule_mod, "Molecule", object)
         sys.modules["oqp.molecule"] = molecule_mod
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:
@@ -121,7 +95,6 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("single_point_analytic_hess_dispatch", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_reads_native_fortran_hessian_without_external_backend(self):
         class Mol:
@@ -206,9 +179,9 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
     def setUp(self):
-        self._module_snapshot = snapshot_modules()
-        sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-        sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+        self.addCleanup(isolate_modules())
+        stub_module("oqp")
+        stub_module("oqp.utils")
         mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
         class MPIManager:
@@ -221,7 +194,6 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("input_checker_analytic_hess", None)
-        restore_modules(self._module_snapshot)
 
     def test_hf_analytical_hessian_is_allowed_by_capability_matrix(self):
         config = {

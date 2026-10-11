@@ -2,6 +2,7 @@ module qmmm_mod
 
   use oqp_linalg
   use resp_mod, only: add_atom_grid
+  use selftest_output, only: selftest_output_path
   implicit none
 
   character(len=*), parameter :: module_name = "qmmm_mod"
@@ -1696,7 +1697,7 @@ module qmmm_mod
       if (st_k == 0 .and. trim(env_k) == '1') then
         block
           integer :: ud
-          open(newunit=ud, file='/tmp/espf_npts.txt', position='append', action='write')
+          open(newunit=ud, file=selftest_output_path('espf_npts.txt'), position='append', action='write')
           if (hard_grid_mode) then
             write(ud,'(a,i7)') 'hard-grid nptcur=', nptcur
           else if (smooth) then

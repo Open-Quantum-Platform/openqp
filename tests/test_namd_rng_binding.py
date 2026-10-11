@@ -2,13 +2,13 @@
 
 import json
 import math
-import os
 from pathlib import Path
 import subprocess
 import sys
 
 import pytest
 
+from oqp_module_isolation import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -51,11 +51,7 @@ print('NAMD_RNG=' + json.dumps({
     'normal0_repeat': normal0_repeat.tolist(),
 }))
 """
-    env = os.environ.copy()
-    pythonpath = str(ROOT / "pyoqp")
-    if env.get("PYTHONPATH"):
-        pythonpath += os.pathsep + env["PYTHONPATH"]
-    env["PYTHONPATH"] = pythonpath
+    env = child_env()
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=ROOT,
