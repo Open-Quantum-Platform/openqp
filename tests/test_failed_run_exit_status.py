@@ -23,6 +23,12 @@ Two guards:
   the good gradient again, and requires the good results to equal fresh-process
   runs bit for bit (at one thread): a caught failure must leave native and
   Python state reusable, with the basis growing and shrinking between calls.
+* ``SameObjectRetryTests`` uses the legacy ``oqp.openqp.OPENQP`` API, which
+  re-runs the same ``Runner``/``Molecule``: on ONE object, a Z-vector failure,
+  ``set()`` back to good settings and a successful gradient, then a TD Davidson
+  failure and another successful gradient. Both successes must equal a fresh
+  object's run bit for bit (at one thread), so stale per-molecule settings,
+  buffers or partial response state left by a caught failure are detected.
 * ``SetBasisFailureTests`` drives ``set_basis`` with the native basis loader
   mocked to report ``basis_set_issue`` and asserts a ``RuntimeError``, not a
   ``SystemExit``.
@@ -139,6 +145,40 @@ for name, expect in json.loads(sys.argv[1]):
         rec["energies"] = [float(e) for e in np.ravel(r.mol.energies)]
         grads = getattr(r.mol, "grads", None)
         rec["grads"] = None if grads is None else [float(g) for g in np.ravel(grads)]
+        rec["error"] = None
+    except Exception as exc:
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+        rec["trace"] = traceback.format_exc()[-2000:]
+    out.append(rec)
+print("RESULT " + json.dumps(out))
+"""
+
+
+# Same-object retry (legacy OPENQP API).  cc-pVDZ so that the TD Davidson
+# failure is real (see DAVIDSON_TDA_INPUT); good settings are the base values.
+RETRY_BASE_INPUT = (GRAD_RPA_INPUT.replace("basis=sto-3g\n", "basis=cc-pvdz\n")
+                    .replace("conv=1.0e-8\nmaxit_zv=1\nzvconv=1.0e-30\n",
+                             "conv=1.0e-8\nmaxit=50\nmaxit_zv=50\nzvconv=1.0e-10\n"))
+
+_OPENQP_RETRY_DRIVER = r"""
+import configparser, json, sys, traceback
+import numpy as np
+from oqp.openqp import OPENQP
+base_text, steps = sys.argv[1], json.loads(sys.argv[2])
+ini = configparser.ConfigParser(interpolation=None)
+ini.optionxform = str
+ini.read_string(base_text)
+cfg = {f"{sec}.{opt}": val for sec in ini.sections() for opt, val in ini[sec].items()}
+op = OPENQP(cfg, silent=True)
+out = []
+for overrides in steps:
+    rec = {"overrides": overrides}
+    try:
+        if overrides:
+            op.set(**overrides)
+        mol = op.run()
+        rec["energies"] = [float(e) for e in np.ravel(mol.energies)]
+        rec["grads"] = [float(g) for g in np.ravel(mol.grads)]
         rec["error"] = None
     except Exception as exc:
         rec["error"] = f"{type(exc).__name__}: {exc}"
@@ -321,6 +361,47 @@ class SameProcessRecoveryTests(unittest.TestCase):
             self.assertSame(res[key]["grads"], ref_grad["grads"], f"{key} gradient")
         self.assertSame(res[(3, "tda_good")]["energies"], ref_tda["energies"],
                         "TDA energies after failures")
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
+class SameObjectRetryTests(unittest.TestCase):
+    ZV_FAIL = {"tdhf.maxit_zv": "1", "tdhf.zvconv": "1.0e-30"}
+    ZV_GOOD = {"tdhf.maxit_zv": "50", "tdhf.zvconv": "1.0e-10"}
+    DAV_FAIL = {"tdhf.maxit": "1", "tdhf.conv": "1.0e-30"}
+    DAV_GOOD = {"tdhf.maxit": "50", "tdhf.conv": "1.0e-8"}
+
+    def _drive(self, steps):
+        import json
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        env = dict(os.environ)
+        env["OMP_NUM_THREADS"] = "1"   # bit identity; see SameProcessRecoveryTests
+        proc = subprocess.run(
+            [sys.executable, "-c", _OPENQP_RETRY_DRIVER, RETRY_BASE_INPUT, json.dumps(steps)],
+            cwd=tmp.name, env=env, capture_output=True, text=True, timeout=900)
+        lines = [l for l in proc.stdout.splitlines() if l.startswith("RESULT ")]
+        detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
+                  f"\n--- stderr ---\n{proc.stderr[-3000:]}")
+        self.assertEqual(proc.returncode, 0, detail)
+        self.assertEqual(len(lines), 1, detail)
+        return json.loads(lines[0][7:])
+
+    def test_retry_on_the_object_that_failed(self):
+        ref = self._drive([{}])[0]
+        self.assertIsNone(ref["error"], ref.get("trace"))
+
+        res = self._drive([self.ZV_FAIL, self.ZV_GOOD, self.DAV_FAIL, self.DAV_GOOD])
+        self.assertIn("RuntimeError: TD Z-vector did not converge", res[0]["error"] or "")
+        self.assertIn("RuntimeError: TD Davidson did not converge", res[2]["error"] or "")
+        for i in (1, 3):
+            self.assertIsNone(res[i]["error"], res[i].get("trace"))
+            for key in ("energies", "grads"):
+                got, want = res[i][key], ref[key]
+                self.assertEqual(len(got), len(want), f"step {i} {key}")
+                diff = max(abs(a - b) for a, b in zip(got, want))
+                self.assertEqual(got, want,
+                                 f"step {i} {key} after a caught failure on the same "
+                                 f"object: not bit-identical, max |diff| = {diff:.3e}")
 
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
