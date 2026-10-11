@@ -276,3 +276,141 @@ subroutine int2_td_shell_images_selftest(error, checks, failures) bind(C)
   call old%clean();call new%clean()
   call old%clean();call new%clean()
 end subroutine
+
+! Independent signed-channel oracle for the shared MRSF/UMRSF accumulator.
+! Dyadic, nonsymmetric inputs preserve exact FP32 arithmetic as well as FP64;
+! every rank contributes a distinct nonzero factor, so a missing allreduce fails.
+subroutine int2_mrsf_shared_selftest(comm, use_mpi, ranks, threads, error, checks, failures) bind(C)
+  use iso_c_binding, only: c_int,c_double,c_bool
+  use precision, only: dp
+  use parallel, only: PARALLEL_INT
+  use basis_tools, only: basis_set
+  use int2_compute, only: int2_storage_t,int2_shell_block_t
+  use tdhf_mrsf_lib, only: int2_mrsf_data_t,int2_umrsf_data_t,mrsf_set_fp32
+  implicit none
+  integer(c_int), value :: comm,ranks,threads
+  logical(c_bool), value :: use_mpi
+  real(c_double), intent(out) :: error
+  integer(c_int), intent(out) :: checks,failures
+  class(int2_mrsf_data_t), allocatable :: data
+  type(basis_set) :: basis
+  type(int2_storage_t), allocatable :: buf(:)
+  type(int2_shell_block_t), allocatable :: shell(:)
+  real(dp), allocatable, target :: density(:,:,:,:),values(:,:,:,:,:)
+  real(dp), allocatable :: reference(:,:,:,:)
+  integer :: kind,route,trial,pass,t,ncoul,nmatrix,nbf,nf,flag,v,c,i,j,k,l
+  integer :: ao_sizes(3),nf_sizes(3),flags(3),target(2,8),read_at(2,8),a
+  real(dp) :: val,xval,cval,global_factor,delta
+  ao_sizes=[4,8,3]; nf_sizes=[2,3,1]; flags=[1,0,1]
+  error=0;checks=0;failures=0
+  allocate(buf(threads),shell(threads),values(1,1,1,1,threads))
+  do kind=1,2
+    if(kind==1)then
+      allocate(int2_mrsf_data_t::data)
+    else
+      allocate(int2_umrsf_data_t::data)
+    end if
+    call data%pe%init(int(comm,PARALLEL_INT),use_mpi)
+    if(data%pe%size/=ranks) failures=failures+1
+    if(data%pe%use_mpi.neqv.use_mpi) failures=failures+1
+    ncoul=merge(4,8,kind==1);nmatrix=ncoul+3
+    do route=1,2
+      do trial=1,3
+        nbf=ao_sizes(trial);nf=nf_sizes(trial);flag=flags(trial)
+        call mrsf_set_fp32(flag)
+        basis%nbf=nbf;basis%nshell=nbf
+        basis%naos=spread(1,1,nbf);basis%ao_offset=[(i,i=1,nbf)]
+        allocate(density(nf,nmatrix,nbf,nbf),reference(nf,nmatrix,nbf,nbf),source=0.0_dp)
+        do j=1,nbf
+          do i=1,nbf
+            do c=1,nmatrix
+              do v=1,nf
+                density(v,c,i,j)=real(modulo(7*i-3*j+5*c+v,31)-15,dp)/16.0_dp
+              end do
+            end do
+          end do
+        end do
+        data%d3=>density
+        data%num_passes=2
+        data%scale_coulomb=0.5_dp;data%scale_exchange=-0.25_dp
+        do pass=1,2
+          data%cur_pass=pass
+          call data%parallel_start(basis,int(threads))
+          if(size(data%f3,2)/=ncoul.or.size(data%f3,5)/=threads) failures=failures+1
+          if(pass==1) then
+            if(allocated(data%f3s).neqv.(kind==1.and.flag==1)) failures=failures+1
+            if(allocated(data%f3_ex_sp).neqv.(kind==1.and.flag==1)) failures=failures+1
+          end if
+          ! Canonical AO quartet; the thread/rank factors create shared contention.
+          i=nbf;j=2;k=2;l=1
+          do t=1,threads
+            call buf(t)%init(1)
+            buf(t)%thread_id=t;buf(t)%ncur=1
+            buf(t)%ids(:,1)=[i,j,k,l]
+            val=real((data%pe%rank+1)*t*(3-2*pass),dp)/8.0_dp
+            buf(t)%ints(1)=val
+            shell(t)%shells=[i,j,k,l];shell(t)%dims=1
+            shell(t)%offsets=[i-1,j-1,k-1,l-1]
+            values(1,1,1,1,t)=val;shell(t)%values=>values(:,:,:,:,t)
+          end do
+          !$omp parallel do num_threads(threads) default(shared) private(t) schedule(static)
+          do t=1,threads
+            if(route==1) then
+              call data%update(buf(t))
+            else
+              call data%consume_shell(shell(t),t)
+            end if
+          end do
+          !$omp end parallel do
+          ! Oracle: full old image, independently assembled with all eight ERI
+          ! permutations rather than the production's folded Coulomb slab.
+          global_factor=real(ranks*(ranks+1)/2,dp)
+          do t=1,threads
+            val=global_factor*real(t*(3-2*pass),dp)/8.0_dp
+            xval=val*data%scale_exchange;cval=val*data%scale_coulomb
+            target=reshape([i,k,k,i,i,l,l,i,j,k,k,j,j,l,l,j],[2,8])
+            read_at=reshape([j,l,l,j,j,k,k,j,i,l,l,i,i,k,k,i],[2,8])
+            do c=1,nmatrix
+              if(pass==2.and.c/=nmatrix) cycle
+              if(pass==1.and.c<=ncoul) then
+                reference(:,c,i,j)=reference(:,c,i,j)+cval*(density(:,c,k,l)+density(:,c,l,k))
+                reference(:,c,j,i)=reference(:,c,j,i)+cval*(density(:,c,k,l)+density(:,c,l,k))
+                reference(:,c,k,l)=reference(:,c,k,l)+cval*(density(:,c,i,j)+density(:,c,j,i))
+                reference(:,c,l,k)=reference(:,c,l,k)+cval*(density(:,c,i,j)+density(:,c,j,i))
+              end if
+              do a=1,8
+                if(kind==2.and.c>=9.and.c<=10) then
+                  reference(:,c,target(1,a),target(2,a))= &
+                    reference(:,c,target(1,a),target(2,a))-xval*density(:,c,read_at(2,a),read_at(1,a))
+                else
+                  reference(:,c,target(1,a),target(2,a))= &
+                    reference(:,c,target(1,a),target(2,a))-xval*density(:,c,read_at(1,a),read_at(2,a))
+                end if
+              end do
+            end do
+            call buf(t)%clean()
+            nullify(shell(t)%values)
+          end do
+          call data%parallel_stop()
+          checks=checks+1
+          if(pass==1) then
+            if(.not.allocated(data%f3_ex_shared)) failures=failures+1
+          else
+            if(size(data%f3,2)/=nmatrix.or.size(data%f3,5)/=1) failures=failures+1
+            if(allocated(data%f3_ex_shared).or.allocated(data%f3_ex_sp)) failures=failures+1
+            delta=maxval(abs(data%f3(:,:,:,:,1)-reference))
+            error=max(error,delta)
+            if(delta/=0.0_dp) failures=failures+1
+          end if
+        end do
+        ! Deliberately re-enter without clean: next start must resize/reset all
+        ! owned images and clear a previous FP32 mode. d3 remains borrowed.
+        nullify(data%d3)
+        deallocate(density,reference)
+      end do
+    end do
+    call data%clean();call data%clean()
+    deallocate(data)
+  end do
+  call mrsf_set_fp32(0)
+end subroutine int2_mrsf_shared_selftest

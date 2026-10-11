@@ -12,6 +12,10 @@ void oqp_simplex_qp_solve_avoid(int64_t n, const double *h, const double *g,
 /* Internal ECP-integral self-test: err[0..9] (see tests/fortran/ecp_selftest.F90). */
 void oqp_ecp_selftest(double *err);
 
+/* Signed-channel regression; MPI communicator is the Fortran handle. */
+void int2_mrsf_shared_selftest(int comm, bool use_mpi, int ranks, int threads,
+                             double *error, int *checks, int *failures);
+
 typedef double xyz_t[3];
 
 typedef struct oqp_handle_t {

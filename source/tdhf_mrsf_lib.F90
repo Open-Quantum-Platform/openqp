@@ -7,7 +7,14 @@ module tdhf_mrsf_lib
 
     type, extends(int2_fock_data_t) :: int2_mrsf_data_t
 
+      ! Per-thread Fock accumulator: only the density-dependent components
+      ! (1:4 for MRSF, 1:8 for UMRSF).  Exchange-only components (ao21v,
+      ! aco12, agdlr) go to f3_ex_shared to avoid per-thread replication.
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
+      ! Shared exchange-only Fock accumulator (single copy across all threads,
+      ! updated with !$OMP ATOMIC); storage is independent of thread count.
+      real(kind=dp), allocatable :: f3_ex_shared(:,:,:,:)
+      real(kind=sp), allocatable :: f3_ex_sp(:,:,:,:) !< shared FP32 exchange image
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
       real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4 MRSF, 1:8 UMRSF), precomputed once
       real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
@@ -85,9 +92,17 @@ contains
       if (allocated(this%f3)) deallocate(this%f3)
       if (allocated(this%dsh)) deallocate(this%dsh)
 
-      allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), &
-               this%dsh(nsh,nsh), &
-               source=0.0d0)
+      ncoul = nmatrix - 3
+      allocate(this%f3(this%nfocks, ncoul, nbf, nbf, nthreads), &
+               this%dsh(nsh,nsh), source=0.0_dp)
+      if (allocated(this%f3_ex_shared)) deallocate(this%f3_ex_shared)
+      allocate(this%f3_ex_shared(this%nfocks, 3, nbf, nbf), source=0.0_dp)
+
+      ! Invalidate FP32 images even when this call switches FP32 off.
+      if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+      if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+      if (allocated(this%f3s)) deallocate(this%f3s)
+      if (allocated(this%f3_ex_sp)) deallocate(this%f3_ex_sp)
 
       ! Precompute the symmetrized Coulomb density ds(:,c,mu,nu)=d3(mu,nu)+d3(nu,mu)
       ! for the Coulomb components once per run (1:4 for MRSF, the alpha/beta
@@ -116,14 +131,12 @@ contains
       if (g_mrsf_fp32 /= 0) then
         select type (this)
         type is (int2_mrsf_data_t)
-          if (allocated(this%ds_sp)) deallocate(this%ds_sp)
-          if (allocated(this%d3_sp)) deallocate(this%d3_sp)
-          if (allocated(this%f3s))   deallocate(this%f3s)
           allocate(this%ds_sp(this%nfocks, 4, nbf, nbf), &
                    this%d3_sp(this%nfocks, nmatrix, nbf, nbf))
           this%ds_sp = real(this%ds, sp)
           this%d3_sp = real(this%d3, sp)
-          allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+          allocate(this%f3s(this%nfocks, 4, nbf, nbf, nthreads), &
+                   this%f3_ex_sp(this%nfocks, 3, nbf, nbf), source=0.0_sp)
         end select
       end if
     end if
@@ -138,27 +151,37 @@ contains
 
     implicit none
 
-    integer :: t
+    integer :: t, ncoul, nmatrix
+    real(kind=dp), allocatable :: tmp(:,:,:,:,:)
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
-    ! Reduce the FP64 accumulator across threads first. This holds the pass-2
-    ! (CAM short-range exchange) contributions, and is zero in the FP32
-    ! pass-1-only case -- so the subsequent add is exact in both cases.
-    ! Each vector/component/AO slab is contiguous; stream whole thread slabs.
+    ncoul = size(this%f3,2)
+    nmatrix = size(this%d3,2)
     do t = 2, size(this%f3,5)
       this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + this%f3(:,:,:,:,t)
     end do
-    ! Then add the FP32 per-thread accumulator (folded to FP64) when present.
     if (allocated(this%f3s)) then
-      do t = 1, this%nthreads
+      do t = 1, size(this%f3s,5)
         this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
       end do
+      this%f3_ex_shared = this%f3_ex_shared + real(this%f3_ex_sp, dp)
     end if
 
-    call this%pe%allreduce(this%f3(:,:,:,:,1), &
-              size(this%f3(:,:,:,:,1)))
+    ! Both MRSF and UMRSF need every rank's private and shared images.
+    call this%pe%allreduce(this%f3(:,:,:,:,1), size(this%f3(:,:,:,:,1)))
+    call this%pe%allreduce(this%f3_ex_shared, size(this%f3_ex_shared))
+
+    ! Preserve the public seven/eleven-channel layout after the last CAM pass.
+    ! Consumers borrow f3 only after the driver returns; no borrowed view is
+    ! retained while move_alloc replaces this owned accumulator.
+    allocate(tmp(this%nfocks, nmatrix, size(this%f3,3), size(this%f3,4), 1))
+    tmp(:,1:ncoul,:,:,1) = this%f3(:,:,:,:,1)
+    tmp(:,ncoul+1:nmatrix,:,:,1) = this%f3_ex_shared
+    call move_alloc(tmp, this%f3)
+    deallocate(this%f3_ex_shared)
+    if (allocated(this%f3_ex_sp)) deallocate(this%f3_ex_sp)
     this%nthreads = 1
 
   end subroutine
@@ -172,6 +195,8 @@ contains
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (allocated(this%f3)) deallocate(this%f3)
+    if (allocated(this%f3_ex_shared)) deallocate(this%f3_ex_shared)
+    if (allocated(this%f3_ex_sp)) deallocate(this%f3_ex_sp)
     if (allocated(this%dsh)) deallocate(this%dsh)
     if (allocated(this%ds)) deallocate(this%ds)
     if (allocated(this%ds_sp)) deallocate(this%ds_sp)
@@ -272,26 +297,29 @@ contains
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
                 ds => this%ds, &
+                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
-      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! f3(nF,1:4,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2
+      ! f3_ex(nF,1:3,:,:) !> 1=ao21v, 2=aco12, 3=agdlr  (shared, !$OMP ATOMIC)
       ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
       ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
 
       if (this%cur_pass==1 .and. allocated(this%f3s)) then
         ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
         ! path below but operands/accumulator are single precision. Folded back
-        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        ! to FP64 in parallel_stop. Comps 5-7 use the shared FP32 exchange image.
         block
           real(kind=sp) :: cs, xs
           associate (f3s => this%f3s(:,:,:,:,mythread), &
-                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp, f3_exs => this%f3_ex_sp)
           do n = 1, buf%ncur
             i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
             val = buf%ints(n)
             cs = real(val*this%scale_coulomb, sp)
             xs = real(val*this%scale_exchange, sp)
+            ! Coulomb+exchange comps 1:4 in FP32 per-thread f3s
             do c = 1, 4
               do v = 1, nf
                 f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
@@ -300,7 +328,7 @@ contains
                 f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
               end do
             end do
-            do c = 1, 7
+            do c = 1, 4
               do v = 1, nf
                 f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
                 f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
@@ -310,6 +338,27 @@ contains
                 f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
                 f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
                 f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+            ! Exchange-only comps 5:7 retain FP32 operands and accumulation.
+            do c = 5, 7
+              do v = 1, nf
+                !$omp atomic update
+                f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                !$omp atomic update
+                f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                !$omp atomic update
+                f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                !$omp atomic update
+                f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                !$omp atomic update
+                f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                !$omp atomic update
+                f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                !$omp atomic update
+                f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                !$omp atomic update
+                f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
               end do
             end do
           end do
@@ -323,7 +372,7 @@ contains
           xval = val * this%scale_exchange
           cval = val * this%scale_coulomb
 
-          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! Coulomb (components 1:4, per-thread): the 8 permutational contributions collapse
           ! to 4 distinct Fock targets, each reading one symmetric ds slab.
           ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
           do c = 1, 4
@@ -334,8 +383,8 @@ contains
               f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
             end do
           end do
-          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
-          do c = 1, 7
+          ! Exchange (components 1:4, per-thread): 8 distinct targets (no symmetry to fold).
+          do c = 1, 4
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -347,21 +396,54 @@ contains
               f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
             end do
           end do
+          ! Exchange-only components 5:7 (ao21v, aco12, agdlr): accumulate into
+          ! the SHARED buffer with ATOMIC updates.  These are exchange-only
+          ! against the shared d3 density, so no per-thread replica is needed.
+          do c = 5, 7
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+              !$omp atomic update
+              f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+              !$omp atomic update
+              f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+              !$omp atomic update
+              f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+              !$omp atomic update
+              f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+              !$omp atomic update
+              f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+              !$omp atomic update
+              f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+              !$omp atomic update
+              f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
         end do
 
       else if (this%cur_pass==2) then
         do n = 1, buf%ncur
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
+          ! Pass 2 updates only the general component agdlr (d3 channel 7,
+          ! mapped to f3_ex_shared index 3). CAM short-range exchange.
           do v = 1, nf
-            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
-            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
-            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
-            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
-            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
-            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
-            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
-            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
           end do
         end do
       end if
@@ -391,15 +473,13 @@ contains
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
                 ds => this%ds, &
+                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
-      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
-      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! f3(nF,1:8,:,:): 1:8 alpha/beta pairs (per-thread).
+      ! f3_ex(nF,1:3,:,:): 9=ao21v_ab, 10=aco12_ab, 11=agdlr (shared, atomic).
       ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
-      ! Explicit loops with the stride-1 v index innermost: the former
-      ! whole-slice assignments read the pointer d3, which the compiler cannot
-      ! prove disjoint from f3, so each of them could build an array temporary.
 
       if (this%cur_pass==1) then
         do n = 1, buf%ncur
@@ -408,9 +488,8 @@ contains
           xval = val * this%scale_exchange
           cval = val * this%scale_coulomb
 
-          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
-          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
-          ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
+          ! Coulomb (columns 1:8, per-thread): 8 permutational contributions
+          ! collapse to 4 distinct Fock targets.
           do c = 1, 8
             do v = 1, nf
               f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
@@ -420,7 +499,7 @@ contains
             end do
           end do
 
-          ! Exchange (columns 1:8 and the general column 11).
+          ! Exchange (columns 1:8, per-thread).
           do c = 1, 8
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
@@ -433,48 +512,72 @@ contains
               f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
             end do
           end do
+
+          ! Exchange-only channel 11 (agdlr) — shared atomic.
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
           end do
 
-          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
-          ! exchange permutation for UMRSF open-shell pair densities.
+          ! Mixed alpha/beta spin-pair channels (9:10) — shared atomic.
           do c = 9, 10
             do v = 1, nf
-              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
-              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
-              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
-              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
-              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
-              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
-              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
-              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+              !$omp atomic update
+              f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+              !$omp atomic update
+              f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+              !$omp atomic update
+              f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+              !$omp atomic update
+              f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+              !$omp atomic update
+              f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+              !$omp atomic update
+              f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+              !$omp atomic update
+              f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+              !$omp atomic update
+              f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
             end do
           end do
         end do
 
       else if (this%cur_pass==2) then
-        ! In pass 2 only the general component agdlr (column 11) is updated,
-        ! as in the MRSF version (column 7 there).
+        ! In pass 2 only the general component agdlr (column 11) is updated.
         do n = 1, buf%ncur
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           xval = buf%ints(n) * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
           end do
         end do
       end if
@@ -4034,21 +4137,23 @@ contains
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
                 ds => this%ds, &
+                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
-      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! f3(nF,1:4,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2 (per-thread)
+      ! f3_ex(nF,1:3,:,:) !> 1=ao21v, 2=aco12, 3=agdlr (shared, !$OMP ATOMIC)
       ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
       ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
 
       if (this%cur_pass==1 .and. allocated(this%f3s)) then
         ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
         ! path below but operands/accumulator are single precision. Folded back
-        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        ! to FP64 in parallel_stop. Comps 5-7 use the shared FP32 exchange image.
         block
           real(kind=sp) :: cs, xs
           associate (f3s => this%f3s(:,:,:,:,mythread), &
-                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp, f3_exs => this%f3_ex_sp)
         bnij=0
         do ba=1,shell_block%dims(1)
           bmaxb=shell_block%dims(2)
@@ -4086,6 +4191,7 @@ contains
 
             cs = real(val*this%scale_coulomb, sp)
             xs = real(val*this%scale_exchange, sp)
+            ! Coulomb (columns 1:4, FP32 per-thread)
             do c = 1, 4
               do v = 1, nf
                 f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
@@ -4094,7 +4200,8 @@ contains
                 f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
               end do
             end do
-            do c = 1, 7
+            ! Exchange (columns 1:4, FP32 per-thread)
+            do c = 1, 4
               do v = 1, nf
                 f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
                 f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
@@ -4104,6 +4211,27 @@ contains
                 f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
                 f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
                 f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+            ! Exchange-only comps 5:7 retain FP32 operands and accumulation.
+            do c = 5, 7
+              do v = 1, nf
+                !$omp atomic update
+                f3_exs(v,c-4,i,k) = f3_exs(v,c-4,i,k) - xs*d3_sp(v,c,j,l)
+                !$omp atomic update
+                f3_exs(v,c-4,k,i) = f3_exs(v,c-4,k,i) - xs*d3_sp(v,c,l,j)
+                !$omp atomic update
+                f3_exs(v,c-4,i,l) = f3_exs(v,c-4,i,l) - xs*d3_sp(v,c,j,k)
+                !$omp atomic update
+                f3_exs(v,c-4,l,i) = f3_exs(v,c-4,l,i) - xs*d3_sp(v,c,k,j)
+                !$omp atomic update
+                f3_exs(v,c-4,j,k) = f3_exs(v,c-4,j,k) - xs*d3_sp(v,c,i,l)
+                !$omp atomic update
+                f3_exs(v,c-4,k,j) = f3_exs(v,c-4,k,j) - xs*d3_sp(v,c,l,i)
+                !$omp atomic update
+                f3_exs(v,c-4,j,l) = f3_exs(v,c-4,j,l) - xs*d3_sp(v,c,i,k)
+                !$omp atomic update
+                f3_exs(v,c-4,l,j) = f3_exs(v,c-4,l,j) - xs*d3_sp(v,c,k,i)
               end do
             end do
               end do
@@ -4163,8 +4291,8 @@ contains
               f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
             end do
           end do
-          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
-          do c = 1, 7
+          ! Exchange (components 1:4, per-thread): 8 distinct targets (no symmetry to fold).
+          do c = 1, 4
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
               f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
@@ -4174,6 +4302,29 @@ contains
               f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
               f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
               f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+          ! Exchange-only components 5:7 (ao21v, aco12, agdlr): accumulate into
+          ! the SHARED buffer with ATOMIC updates.  These are exchange-only
+          ! against the shared d3 density, so no per-thread replica is needed.
+          do c = 5, 7
+            do v = 1, nf
+              !$omp atomic update
+              f3_ex(v,c-4,i,k) = f3_ex(v,c-4,i,k) - xval*d3(v,c,j,l)
+              !$omp atomic update
+              f3_ex(v,c-4,k,i) = f3_ex(v,c-4,k,i) - xval*d3(v,c,l,j)
+              !$omp atomic update
+              f3_ex(v,c-4,i,l) = f3_ex(v,c-4,i,l) - xval*d3(v,c,j,k)
+              !$omp atomic update
+              f3_ex(v,c-4,l,i) = f3_ex(v,c-4,l,i) - xval*d3(v,c,k,j)
+              !$omp atomic update
+              f3_ex(v,c-4,j,k) = f3_ex(v,c-4,j,k) - xval*d3(v,c,i,l)
+              !$omp atomic update
+              f3_ex(v,c-4,k,j) = f3_ex(v,c-4,k,j) - xval*d3(v,c,l,i)
+              !$omp atomic update
+              f3_ex(v,c-4,j,l) = f3_ex(v,c-4,j,l) - xval*d3(v,c,i,k)
+              !$omp atomic update
+              f3_ex(v,c-4,l,j) = f3_ex(v,c-4,l,j) - xval*d3(v,c,k,i)
             end do
           end do
               end do
@@ -4219,14 +4370,22 @@ contains
 
           xval = val * this%scale_exchange
           do v = 1, nf
-            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
-            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
-            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
-            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
-            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
-            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
-            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
-            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,7,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,7,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,7,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,7,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,7,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,7,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,7,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,7,k,i)
           end do
               end do
             end do
@@ -4263,15 +4422,13 @@ contains
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
                 ds => this%ds, &
+                f3_ex => this%f3_ex_shared, &
                 nf => this%nfocks &
       )
 
-      ! f3/d3(nF,1:11,:,:): 1:8 alpha/beta pairs of the MRSF Coulomb+exchange
-      ! columns, 9:10 mixed alpha/beta spin-pair channels, 11 = agdlr.
+      ! f3(nF,1:8,:,:): 1:8 alpha/beta pairs (per-thread).
+      ! f3_ex(nF,1:3,:,:): 9=ao21v_ab, 10=aco12_ab, 11=agdlr (shared, atomic).
       ! ds(nF,1:8,:,:) = d3+d3^T for the Coulomb columns, precomputed once.
-      ! Explicit loops with the stride-1 v index innermost: the former
-      ! whole-slice assignments read the pointer d3, which the compiler cannot
-      ! prove disjoint from f3, so each of them could build an array temporary.
 
       if (this%cur_pass==1) then
         bnij=0
@@ -4312,8 +4469,8 @@ contains
           xval = val * this%scale_exchange
           cval = val * this%scale_coulomb
 
-          ! Coulomb (columns 1:8): the 8 permutational contributions collapse
-          ! to 4 distinct Fock targets, each reading one symmetric ds slab:
+          ! Coulomb (columns 1:8, per-thread): the 8 permutational contributions
+          ! collapse to 4 distinct Fock targets, each reading one symmetric ds slab:
           ! f(ij)+=c[d(kl)+d(lk)], f(ji) likewise, f(kl)+=c[d(ij)+d(ji)], f(lk) likewise.
           do c = 1, 8
             do v = 1, nf
@@ -4324,7 +4481,7 @@ contains
             end do
           end do
 
-          ! Exchange (columns 1:8 and the general column 11).
+          ! Exchange (columns 1:8, per-thread).
           do c = 1, 8
             do v = 1, nf
               f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
@@ -4337,29 +4494,46 @@ contains
               f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
             end do
           end do
+
+          ! Exchange-only channel 11 (agdlr) — shared atomic.
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
           end do
 
-          ! Mixed alpha/beta spin-pair channels use the GAMESS-compatible
-          ! exchange permutation for UMRSF open-shell pair densities.
+          ! Mixed alpha/beta spin-pair channels (9:10) — shared atomic.
           do c = 9, 10
             do v = 1, nf
-              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,k,j)
-              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,j,k)
-              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,i,l)
-              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,l,i)
-              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,l,j)
-              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,j,l)
-              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,i,k)
-              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,k,i)
+              !$omp atomic update
+              f3_ex(v,c-8,i,l) = f3_ex(v,c-8,i,l) - xval*d3(v,c,k,j)
+              !$omp atomic update
+              f3_ex(v,c-8,l,i) = f3_ex(v,c-8,l,i) - xval*d3(v,c,j,k)
+              !$omp atomic update
+              f3_ex(v,c-8,k,j) = f3_ex(v,c-8,k,j) - xval*d3(v,c,i,l)
+              !$omp atomic update
+              f3_ex(v,c-8,j,k) = f3_ex(v,c-8,j,k) - xval*d3(v,c,l,i)
+              !$omp atomic update
+              f3_ex(v,c-8,i,k) = f3_ex(v,c-8,i,k) - xval*d3(v,c,l,j)
+              !$omp atomic update
+              f3_ex(v,c-8,k,i) = f3_ex(v,c-8,k,i) - xval*d3(v,c,j,l)
+              !$omp atomic update
+              f3_ex(v,c-8,l,j) = f3_ex(v,c-8,l,j) - xval*d3(v,c,i,k)
+              !$omp atomic update
+              f3_ex(v,c-8,j,l) = f3_ex(v,c-8,j,l) - xval*d3(v,c,k,i)
             end do
           end do
               end do
@@ -4407,14 +4581,22 @@ contains
 
           xval = val * this%scale_exchange
           do v = 1, nf
-            f3(v,11,i,k) = f3(v,11,i,k) - xval*d3(v,11,j,l)
-            f3(v,11,k,i) = f3(v,11,k,i) - xval*d3(v,11,l,j)
-            f3(v,11,i,l) = f3(v,11,i,l) - xval*d3(v,11,j,k)
-            f3(v,11,l,i) = f3(v,11,l,i) - xval*d3(v,11,k,j)
-            f3(v,11,j,k) = f3(v,11,j,k) - xval*d3(v,11,i,l)
-            f3(v,11,k,j) = f3(v,11,k,j) - xval*d3(v,11,l,i)
-            f3(v,11,j,l) = f3(v,11,j,l) - xval*d3(v,11,i,k)
-            f3(v,11,l,j) = f3(v,11,l,j) - xval*d3(v,11,k,i)
+            !$omp atomic update
+            f3_ex(v,3,i,k) = f3_ex(v,3,i,k) - xval*d3(v,11,j,l)
+            !$omp atomic update
+            f3_ex(v,3,k,i) = f3_ex(v,3,k,i) - xval*d3(v,11,l,j)
+            !$omp atomic update
+            f3_ex(v,3,i,l) = f3_ex(v,3,i,l) - xval*d3(v,11,j,k)
+            !$omp atomic update
+            f3_ex(v,3,l,i) = f3_ex(v,3,l,i) - xval*d3(v,11,k,j)
+            !$omp atomic update
+            f3_ex(v,3,j,k) = f3_ex(v,3,j,k) - xval*d3(v,11,i,l)
+            !$omp atomic update
+            f3_ex(v,3,k,j) = f3_ex(v,3,k,j) - xval*d3(v,11,l,i)
+            !$omp atomic update
+            f3_ex(v,3,j,l) = f3_ex(v,3,j,l) - xval*d3(v,11,i,k)
+            !$omp atomic update
+            f3_ex(v,3,l,j) = f3_ex(v,3,l,j) - xval*d3(v,11,k,i)
           end do
               end do
             end do
