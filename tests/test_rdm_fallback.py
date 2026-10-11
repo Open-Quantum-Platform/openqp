@@ -152,14 +152,16 @@ def test_python_propagates_native_allocation_failure(native, monkeypatch):
 
 @pytest.mark.parametrize("threads", [1, 2])
 def test_overlapping_rdm_calls_restore_blas(native, threads):
-    dets, c = _ci(8, (4, 4))
+    inputs = [_ci(8, (4, 4), seed=742 + i) for i in range(4)]
     with _caller_blas(native):
+        reference = [_strings(native, 8, dets, c, threads) for dets, c in inputs]
         with ThreadPoolExecutor(max_workers=2) as pool:
-            runs = list(pool.map(lambda _: _strings(native, 8, dets, c, threads), range(4)))
+            runs = list(pool.map(lambda pair: _strings(native, 8, *pair, threads), inputs))
     assert all(result[0] == 0 for result in runs)
-    for result in runs[1:]:
-        assert np.array_equal(result[1], runs[0][1])
-        assert np.array_equal(result[2], runs[0][2])
+    assert all(result[0] == 0 for result in reference)
+    for result, ref in zip(runs, reference):
+        assert result[1].tobytes() == ref[1].tobytes()
+        assert result[2].tobytes() == ref[2].tobytes()
 
 
 def test_repeated_dimensions_and_short_final_block(native):
