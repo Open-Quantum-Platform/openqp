@@ -82,7 +82,6 @@ STATE_RE = re.compile(r"^\s+S(\d+)\s+(-\d+\.\d{8,})\s")
 def _runtime_available():
     global _RUNTIME_ERROR
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401

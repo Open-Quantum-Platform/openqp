@@ -33,6 +33,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "giao_current_reference.json"
 
@@ -372,8 +374,7 @@ class AcidCurrentDensityTests(unittest.TestCase):
                 out=str(out)))
             env = dict(os.environ)
             env["OPENQP_ROOT"] = cls.root
-            env["PYTHONPATH"] = os.pathsep.join(
-                p for p in (str(ROOT / "pyoqp"), env.get("PYTHONPATH", "")) if p)
+            env = child_env(env)
             proc = subprocess.run([sys.executable, str(script)], cwd=wd, env=env,
                                   capture_output=True, text=True, timeout=1200)
             if proc.returncode != 0 or not out.exists():

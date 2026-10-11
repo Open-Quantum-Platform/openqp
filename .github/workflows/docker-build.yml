@@ -4,34 +4,10 @@ name: Build Docker Release Candidate
   release:
     types:
       - published
-  pull_request:
-    branches:
-      - main
-    # Building the attested image takes about 18 minutes. Run it only when the
-    # image, packaged application, native sources, or its verifier can change.
-    paths:
-      - ".github/workflows/docker-build.yml"
-      - ".github/scripts/**"
-      - ".dockerignore"
-      - "Dockerfile"
-      - "docker/**"
-      - "CMakeLists.txt"
-      - "MANIFEST.in"
-      - "pyproject.toml"
-      - "LICENSE"
-      - "LICENSING.md"
-      - "SUSTAINABILITY.md"
-      - "THIRD_PARTY_NOTICES.md"
-      - "README.md"
-      - "basis_sets/**"
-      - "cmake/**"
-      - "examples/**"
-      - "external/**"
-      - "include/**"
-      - "licenses/**"
-      - "pyoqp/**"
-      - "source/**"
-      - "tools/**"
+  # On demand only (Actions > Run workflow, or `gh workflow run docker-build.yml
+  # --ref <branch>`).  The attested build takes ~18 min of a hosted runner, and
+  # running it on every pull request held runner slots the CI matrix needed.
+  workflow_dispatch:
 
 # Build-only: no registry credentials, package write permission, login, push,
 # release attachment, retained image artifact, or exported build cache.

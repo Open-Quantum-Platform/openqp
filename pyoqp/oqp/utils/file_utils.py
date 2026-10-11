@@ -495,10 +495,22 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                      if is_mrsf(mol.config) else f'state {n}')
             return final_energy_label(dftb_summary, n, label)
 
+        imaginary = set(getattr(mol, 'td_imaginary_states', ()) or ())
+
+        def state_energy(n, energy):
+            # omega^2 < 0: not converged by the solver, so no energy is shown
+            if n in imaginary:
+                return f'{"imaginary":<16}  (reference unstable)'
+            return format_energy(energy)
+
         for n, energy in enumerate(info['el']):
             annotation = final_energy_annotation(dftb_summary, n)
-            loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
+            loginfo += (f'   PyOQP {energy_label(n):<34} {state_energy(n, energy)}'
                         f'{annotation}\n')
+        if imaginary:
+            loginfo += ('   PyOQP WARNING: state(s) %s have omega^2 < 0 (imaginary excitation '
+                        'energy; the SCF reference is unstable); they are not converged and '
+                        'have no energy.\n' % ', '.join(str(n) for n in sorted(imaginary)))
 
         d4 = float(info['d4'])
         # Without dispersion the corrected list repeats the electronic one.
@@ -510,7 +522,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                             f'{header}\n')
             for n, energy in enumerate(mol.energies):
                 annotation = final_energy_annotation(dftb_summary, n)
-                loginfo += (f'   PyOQP {energy_label(n):<34} {format_energy(energy)}'
+                loginfo += (f'   PyOQP {energy_label(n):<34} {state_energy(n, energy)}'
                             f'{annotation}\n')
 
     if section == 'grad':

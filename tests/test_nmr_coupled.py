@@ -28,6 +28,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import child_env
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "nmr" / "cgo_reference.json"
 
@@ -76,7 +78,7 @@ class CoupledMagneticResponseTests(unittest.TestCase):
         cls.runs = {}
         env = dict(os.environ)
         env["OPENQP_ROOT"] = cls.root
-        env["PYTHONPATH"] = str(ROOT / "pyoqp") + os.pathsep + env.get("PYTHONPATH", "")
+        env = child_env(env)
         for label, functional, _ in CASES:
             with tempfile.TemporaryDirectory() as wd:
                 inp = Path(wd) / "h2o.inp"

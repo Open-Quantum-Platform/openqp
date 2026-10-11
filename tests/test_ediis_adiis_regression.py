@@ -15,7 +15,6 @@ _RUNTIME_ERROR = ""
 def _runtime_available():
     global _RUNTIME_ERROR
     try:
-        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp
         from oqp.utils.oqp_tester import OQPTester  # noqa: F401

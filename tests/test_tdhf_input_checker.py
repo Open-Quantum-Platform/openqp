@@ -4,6 +4,8 @@ import types
 import unittest
 from pathlib import Path
 
+from oqp_module_isolation import isolate_modules, stub_module
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,8 +21,8 @@ def load_input_checker(name):
 
 
 def install_minimal_oqp_stubs():
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    stub_module("oqp")
+    stub_module("oqp.utils")
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -40,28 +42,47 @@ def tdhf_config(td_type, td_mult, runtype="energy"):
 
 
 class TestConventionalTDHFMultiplicity(unittest.TestCase):
-    """The closed-shell RPA/TDA response has no triplet path.
-
-    tdhf_energy always includes the Coulomb term and the alpha-plus-beta XC
-    kernel, so [tdhf] multiplicity=3 used to return the singlet roots under a
-    triplet label.  The input checker must reject it instead.
+    """The closed-shell RPA/TDA response has singlet and, for energies only,
+    triplet branches (tdhf_energy: no Coulomb term, alpha-minus-beta kernel).
+    The Z-vector and gradient code has no triplet branch, so triplet gradients,
+    other multiplicities and open-shell references must be rejected.
     """
 
     def setUp(self):
+        self.addCleanup(isolate_modules())
         install_minimal_oqp_stubs()
         self.input_checker = load_input_checker("input_checker_tdhf_mult_under_test")
 
-    def test_rpa_and_tda_reject_triplet_multiplicity(self):
+    def test_rpa_and_tda_accept_triplet_energy_on_rhf(self):
         for td_type in ("rpa", "tda"):
-            for runtype in ("energy", "grad"):
-                with self.subTest(td_type=td_type, runtype=runtype):
-                    report = self.input_checker.CheckReport()
-                    self.input_checker._check_tdhf(
-                        tdhf_config(td_type, 3, runtype), report
-                    )
-                    self.assertFalse(report.ok)
-                    self.assertIn("tdhf.multiplicity", report.to_text())
-                    self.assertIn("singlet excited states only", report.to_text())
+            with self.subTest(td_type=td_type):
+                report = self.input_checker.CheckReport()
+                self.input_checker._check_tdhf(tdhf_config(td_type, 3, "energy"), report)
+                self.assertTrue(report.ok, report.to_text())
+
+    def test_rpa_and_tda_reject_triplet_gradient(self):
+        for td_type in ("rpa", "tda"):
+            with self.subTest(td_type=td_type):
+                report = self.input_checker.CheckReport()
+                self.input_checker._check_tdhf(tdhf_config(td_type, 3, "grad"), report)
+                self.assertFalse(report.ok)
+                self.assertIn("energies on an RHF/RKS reference only", report.to_text())
+
+    def test_rpa_and_tda_reject_triplet_on_open_shell_reference(self):
+        config = tdhf_config("rpa", 3, "energy")
+        config["scf"] = {"type": "uhf", "multiplicity": 1}
+        report = self.input_checker.CheckReport()
+        self.input_checker._check_tdhf(config, report)
+        self.assertFalse(report.ok)
+        self.assertIn("energies on an RHF/RKS reference only", report.to_text())
+
+    def test_rpa_and_tda_reject_other_multiplicities(self):
+        for td_type in ("rpa", "tda"):
+            with self.subTest(td_type=td_type):
+                report = self.input_checker.CheckReport()
+                self.input_checker._check_tdhf(tdhf_config(td_type, 5, "energy"), report)
+                self.assertFalse(report.ok)
+                self.assertIn("tdhf.multiplicity", report.to_text())
 
     def test_rpa_and_tda_accept_singlet_multiplicity(self):
         for td_type in ("rpa", "tda"):

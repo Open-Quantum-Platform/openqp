@@ -355,8 +355,12 @@ contains
     case ("BHHLYP")
       call functional%add_functional(XC_HYB_GGA_XC_BHANDHLYP, 1.00_fp, hfex=HFEX)
     case ("STG1X")
-      call functional%add_functional(XC_HYB_GGA_XC_BHANDHLYP, 1.00_fp, hfex=HFEX) 
-      hfex=0.85
+      ! STG1X = 0.85 HF + 0.15 B88 exchange + LYP correlation (JPCA 123, 7991).
+      ! Built from its components: BHANDHLYP would add 0.5 B88 on top of the
+      ! 0.85 HF exchange (1.35 in total).
+      HFEX = 0.85_fp
+      call functional%add_functional(XC_GGA_X_B88, 1.00_fp-HFEX)
+      call functional%add_functional(XC_GGA_C_LYP, 1.00_fp)
       tddft_params%spc_coco = 0.5_fp
       tddft_params%spc_ovov = 0.5_fp
       tddft_params%spc_coov = 0.5_fp

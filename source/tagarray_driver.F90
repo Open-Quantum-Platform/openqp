@@ -37,6 +37,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_imaginary = OQP_prefix // "td_imaginary"
   character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
   character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
   character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
@@ -190,7 +191,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
   character(len=*), parameter, public :: OQP_td_bvec_mo_comment = "??? td_bvec_mo ???"
   character(len=*), parameter, public :: OQP_td_mrsf_density_comment = "??? td_mrsf_density ???"
-  character(len=*), parameter, public :: OQP_td_p_comment = "??? td_p ???"
+  character(len=*), parameter, public :: OQP_td_p_comment = &
+    "relaxed difference density (packed L-triangle): 1 column (alpha part of a "// &
+    "closed-shell density) from restricted TDHF/TDDFT, 2 columns (alpha, beta) "// &
+    "from SF/MRSF; spin-sum it with td_p_spin_sum"
   character(len=*), parameter, public :: OQP_umrsf_response_gradient_comment = &
     "UMRSF response-gradient contribution prepared by the UMRSF z-vector stage"
   character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
@@ -199,6 +203,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_td_imaginary_comment = OQP_prefix // "1 for RPA roots with omega^2 < 0 (imaginary, not converged; td_energies holds an unconverged |omega|), else 0"
   character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
   character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
   character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"
@@ -257,6 +262,7 @@ module oqp_tagarray_driver
     module procedure data_has_tags_location, data_has_tags_ms
   end interface
   public :: data_has_tags, check_status
+  public :: td_p_spin_sum
   public :: tagarray_get_data
   public :: tagarray_reserve_data
   public :: TA_TYPE_INT64, TA_TYPE_REAL64, TA_TYPE_CHAR8
@@ -464,4 +470,27 @@ contains
     TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_1d
+  !> Spin-summed relaxed difference density held in OQP::td_p.
+  !>
+  !> The Z-vector solvers store OQP::td_p in two layouts.  Restricted
+  !> TDHF/TDDFT (RPA, TDA; tdhf_z_vector) writes ONE column, the alpha part of
+  !> a closed-shell difference density, so its spin sum is 2*td_p(:,1) -- the
+  !> density tdhf_gradient itself uses (dmat_a + 2*p(:,1)).  SF and MRSF write
+  !> alpha and beta columns, whose spin sum is td_p(:,1) + td_p(:,2).  Adding
+  !> td_p(:,2) to a one-column array reads past its end.
+  function td_p_spin_sum(td_p) result(p)
+    use messages, only: show_message, WITH_ABORT
+    real(8), intent(in) :: td_p(:,:)
+    real(8) :: p(size(td_p, 1))
+    select case (size(td_p, 2))
+    case (1)
+      p = 2*td_p(:,1)
+    case (2)
+      p = td_p(:,1) + td_p(:,2)
+    case default
+      p = 0
+      call show_message(module_name // "::td_p_spin_sum: OQP::td_p must have "// &
+                        "1 (restricted) or 2 (alpha, beta) columns", WITH_ABORT)
+    end select
+  end function td_p_spin_sum
 end module oqp_tagarray_driver
