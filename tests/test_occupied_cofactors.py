@@ -169,3 +169,22 @@ def test_tiny_minor_pivot_preserves_previous_permutation():
     assert actual[0, 2] == previous[0, 2] == 0.0
     np.testing.assert_array_equal(actual, previous)
     np.testing.assert_array_equal(np.diag(actual), np.full(30, 2.0**29))
+
+
+@pytest.mark.parametrize("s", [
+    np.array([-5, 0, -3, 1, 5, 1, 2, 5, 1], dtype=float).reshape(3, 3, order="F") / 3,
+    np.array([[1.0, 0.2, -0.3], [0.1, 1.0, 1.0], [0.4, 0.2, 0.2]]),
+])
+@pytest.mark.parametrize("perturbation", [0.0, 2.0**-40, 2.0**-28])
+def test_cancellation_sensitive_cofactor_preserves_previous_minor(s, perturbation):
+    s = s.copy()
+    s[1, 2] += perturbation
+    # Both fixtures clear the matrix-wide admission rule. The (1,1) minor
+    # cancels exactly, or is small after perturbation, within a sound matrix.
+    rcond = 1.0 / np.linalg.cond(s, 1)
+    assert rcond > 8 * len(s) * np.finfo(float).eps / 2e-13
+    actual, previous, used = _call(s)
+    # Keep the old minor's floating-point convention, including any vendor
+    # residue: mathematical zero alone is not its numerical contract.
+    assert actual[0, 0] == previous[0, 0]
+    np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)

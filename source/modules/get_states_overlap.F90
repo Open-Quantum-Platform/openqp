@@ -544,8 +544,8 @@ contains
     logical, intent(out), optional :: used_lu
     real(dp) :: lu(size(s,1),size(s,1)), inverse(size(s,1),size(s,1))
     real(dp) :: work(4*size(s,1))
-    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j, det_exponent
-    real(dp) :: anorm, rcond, det, det_fraction, product
+    integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j, det_exponent, n_lu
+    real(dp) :: anorm, rcond, det, det_fraction, product, cofactor_floor
     real(dp), parameter :: cofactor_rtol = 2.0e-13_dp
     logical :: safe
 
@@ -613,8 +613,26 @@ contains
         safe = safe .and. .not. any(cofactors /= 0.0_dp .and. abs(cofactors) <= tiny(1.0_dp))
         safe = safe .and. .not. any(transpose(inverse) /= 0.0_dp .and. cofactors == 0.0_dp)
         if (safe) then
-          if (present(used_lu)) used_lu = .true.
-          return
+          ! The normwise estimate must also meet each cofactor's relative
+          ! accuracy budget. Cancellation can make an individual minor small
+          ! within a well-conditioned matrix; preserve ov_exact there.
+          cofactor_floor = (8.0_dp*real(n,dp)*epsilon(1.0_dp)/rcond/cofactor_rtol) &
+                         * abs(det) * maxval(sum(abs(inverse), dim=1))
+          safe = ieee_is_finite(cofactor_floor)
+          if (safe) then
+            n_lu = 0
+            do i = 1, n
+              do j = 1, n
+                if (abs(cofactors(i,j)) <= cofactor_floor) then
+                  call ov_exact(cofactors(i,j), i, j, 0, 0, s, 1, n-1, 1)
+                else
+                  n_lu = n_lu + 1
+                end if
+              end do
+            end do
+            if (present(used_lu)) used_lu = n_lu > 0
+            return
+          end if
         end if
       end if
     end if
