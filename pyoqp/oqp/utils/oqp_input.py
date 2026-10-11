@@ -335,7 +335,7 @@ GENERIC_SCHEMA_KEYS = {
     "tdhf": _keys("""
         maxit maxit_zv conv nstate_s nstate_t zvconv nvdav tlf hfscale
         cam_alpha cam_beta cam_mu spc_coco spc_ovov spc_coov conf_threshold
-        ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart
+        ixcore z_solver gmres_dim resp_cutoff fp32 zv_warmstart shared_f3
     """),
     "ekt": frozenset(),
     "properties": _keys("scf_prop nmr_gauge acid_spacing acid_padding td_prop nac export title back_door"),

@@ -7,6 +7,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parents[1]
 SCHEMA_PATH = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
@@ -236,7 +238,28 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     # 368 with the ACID cube grid controls [properties] acid_spacing and
     # acid_padding.
     # 369 with the DKH decoupling-basis control [scf] scal_rel_decontract.
-    assert len(checked) == 369
+    # 370 with the opt-in shared MRSF/UMRSF exchange accumulator.
+    assert len(checked) == 370
+
+
+@pytest.mark.parametrize("model", ["mrsf", "umrsf"])
+@pytest.mark.parametrize("enabled", [True, False])
+def test_shared_f3_survives_semantic_input_roundtrip(model, enabled):
+    oqp_input = _load_oqp_input()
+    value = "true" if enabled else "false"
+    text = (
+        f'{model}/bhhlyp/6-31g* geom="h2o.xyz" energy '
+        f'tdhf(shared_f3={value})'
+    )
+
+    first = oqp_input.parse_canonical_oqp(text)
+    canonical = oqp_input.render_canonical_oqp(first, strip_defaults=False)
+    reparsed = oqp_input.parse_canonical_oqp(canonical)
+    lowered = oqp_input.lower_to_legacy(reparsed)
+
+    assert oqp_input.SCHEMA_KEY_OWNERS["tdhf"]["shared_f3"] == "generic"
+    # Legacy section values are strings consumed by the schema converter.
+    assert lowered["tdhf"]["shared_f3"] == str(enabled)
 
 
 def test_concise_geometry_drivers_reject_legacy_backend_selectors():
