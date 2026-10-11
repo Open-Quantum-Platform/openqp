@@ -346,6 +346,13 @@ contains
       end if
       mxerr = rpa_max_residual(errors, imax, ndsr)
 
+!     rparesvec skips roots 1:imax (omega^2 < 0), so if every requested RPA
+!     root is imaginary there is nothing left to converge and mxerr is 0.
+      if (.not. tamm_dancoff .and. imax >= ndsr) then
+        ierr = 5
+        exit
+      end if
+
       if (infos%control%verbose >= 1) call rpaprint(eex, errors, cnvtol, iter, imax, ndsr)
 
 !     Check convergence
@@ -387,6 +394,17 @@ contains
       infos%mol_energy%Davidson_converged=.false.
     case (4)
       write(*,'(/,2X,"TD-DFT Davidson breakdown: non-finite residual",/)')
+      infos%mol_energy%Davidson_converged=.false.
+      call int2_driver%clean()
+      if (dft) call dftclean(infos)
+      call measure_time(print_total=1, log_unit=iw)
+      close(iw)
+      return
+    case (5)
+      write(*,'(/,2X,"TD-DFT Davidson breakdown: all ",G0," requested RPA roots have omega^2 < 0",/,&
+              &4X,"(imaginary excitation energies; the SCF reference is unstable).",/,&
+              &4X,"Imaginary roots are not converged by the solver; request more roots",/,&
+              &4X,"(nstate) or use a stable reference.",/)') ndsr
       infos%mol_energy%Davidson_converged=.false.
       call int2_driver%clean()
       if (dft) call dftclean(infos)
@@ -539,17 +557,18 @@ contains
 
     do i = 1, nstates
       if (i <= nimag) then
-        ! Imaginary excitation energy i*|omega|: no oscillator strength
-        write(iw,'(3X,"0 -> ",G0,t15,F15.6,"i",3F12.4,a12)') &
-          i, energies(i)/UNITS_EV, dip(1:3,i), 'imaginary'
+        ! omega^2 < 0: the solver excludes these roots from its convergence
+        ! test, so no excitation energy or oscillator strength is reported.
+        write(iw,'(3X,"0 -> ",G0,t15,a15)') i, 'imaginary'
       else
         f = 2.0d0 / 3.0d0 * energies(i) * dot_product(dip(:,i), dip(:,i))
         write(iw,'(3X,"0 -> ",G0,t15,F15.6, 4F12.4)') i, energies(i)/UNITS_EV, dip(1:3,i), f
       end if
     end do
     if (nimag > 0) then
-      write(iw,'(/3X,"WARNING: ",G0," root(s) imaginary (reference unstable): omega^2 < 0;")') nimag
-      write(iw,'(3X,"         dE shows |omega| with suffix i. Check the stability of the SCF reference.")')
+      write(iw,'(/3X,"WARNING: ",G0," root(s) imaginary (reference unstable): omega^2 < 0.")') nimag
+      write(iw,'(3X,"         They are not converged and are not reported. Check the stability")')
+      write(iw,'(3X,"         of the SCF reference.")')
     end if
     write(iw,'(x,78("=")/)')
 

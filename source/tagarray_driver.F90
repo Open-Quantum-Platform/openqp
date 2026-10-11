@@ -203,7 +203,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
-  character(len=*), parameter, public :: OQP_td_imaginary_comment = OQP_prefix // "1 for RPA roots with omega^2 < 0 (imaginary; td_energies holds |omega|), else 0"
+  character(len=*), parameter, public :: OQP_td_imaginary_comment = OQP_prefix // "1 for RPA roots with omega^2 < 0 (imaginary, not converged; td_energies holds an unconverged |omega|), else 0"
   character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
   character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
   character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"

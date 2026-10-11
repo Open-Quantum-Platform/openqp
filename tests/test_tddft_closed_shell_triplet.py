@@ -223,15 +223,25 @@ class TestImaginaryRpaRoots(unittest.TestCase):
         rc, log = _full_log(self._deck(C2H4, "rpa"))
         self.assertEqual(rc, 0, log[-3000:])
         summary = log.split("Summary of the TD-DFT calculation")[-1]
-        rows = re.findall(r"^\s*0 ->\s*(\d+)\s+(-?[\d.]+)(i?)\s.*$", summary, re.M)
+        rows = re.findall(r"^\s*0 ->\s*(\d+)\s+(\S+)", summary, re.M)
         self.assertEqual(len(rows), 3, summary[:1500])
-        self.assertEqual(rows[0][2], "i", summary[:1500])
-        self.assertEqual([r[2] for r in rows[1:]], ["", ""], summary[:1500])
+        # the imaginary root is not converged, so no magnitude is reported
+        self.assertEqual(rows[0][1], "imaginary", summary[:1500])
+        self.assertTrue(all(float(r[1]) > 8.0 for r in rows[1:]), summary[:1500])
         self.assertIn("root(s) imaginary (reference unstable)", summary)
         state1 = re.search(r"PyOQP state 1\s.*", log).group(0)
         state2 = re.search(r"PyOQP state 2\s.*", log).group(0)
-        self.assertIn("imaginary (reference unstable)", state1)
+        self.assertIn("imaginary", state1)
+        self.assertNotRegex(state1, r"-\d+\.\d+")
         self.assertNotIn("imaginary", state2)
+
+    def test_all_requested_roots_imaginary_is_a_breakdown(self):
+        # nstate=1: the only requested root has omega^2 < 0, so nothing can
+        # be converged; the run must fail instead of reporting it.
+        rc, log = _full_log(self._deck(C2H4, "rpa").replace("nstate=3", "nstate=1"))
+        self.assertNotEqual(rc, 0, log[-3000:])
+        self.assertIn("all 1 requested RPA roots have omega^2 < 0", log)
+        self.assertNotIn("TD-DFT energies converged", log)
 
     def test_tda_and_stable_reference_are_not_marked(self):
         for geom, td_type in ((C2H4, "tda"), (H2O, "rpa")):

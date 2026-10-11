@@ -188,6 +188,15 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         self.assertIn("call int2_driver%clean()", guard_block)
         self.assertIn("if (dft) call dftclean(infos)", guard_block)
         self.assertIn("call measure_time", guard_block)
+
+        # All requested RPA roots imaginary (omega^2 < 0): nothing converges,
+        # so the driver must also stop before any output (ierr 5).
+        self.assertIn("if (.not. tamm_dancoff .and. imax >= ndsr) then", src)
+        imaginary = src.index("case (5)")
+        self.assertLess(imaginary, first_output)
+        imag_block = src[imaginary:first_output]
+        self.assertIn("infos%mol_energy%Davidson_converged=.false.", imag_block)
+        self.assertIn("return", imag_block)
         self.assertRegex(guard_block, r"return\b")
 
 

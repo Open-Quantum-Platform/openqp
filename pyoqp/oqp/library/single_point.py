@@ -1769,6 +1769,13 @@ class Gradient(Calculator):
         if self.nstate < max(self.grads):
             raise ValueError(f'Gradient requested state {max(self.grads)} > the highest computed state {self.nstate}')
 
+        imaginary = set(getattr(self.mol, 'td_imaginary_states', ()) or ())
+        if self.td == 'rpa' and imaginary.intersection(self.grads):
+            raise RuntimeError(
+                'Gradient requested for RPA root(s) %s with omega^2 < 0 (imaginary, '
+                'not converged; the SCF reference is unstable).'
+                % ', '.join(str(i) for i in sorted(imaginary.intersection(self.grads))))
+
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
             target = (public_state_label(self.mol.config, i)
