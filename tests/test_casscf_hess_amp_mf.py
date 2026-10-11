@@ -193,3 +193,25 @@ def test_amplitude_chunk_boundary_and_partial_last_chunk():
         reference = _apply_active_operator(f[k], g[k], stack, reference_w) @ vecs
         np.testing.assert_allclose(actual[k], reference, rtol=0,
                                    atol=1e-13 * max(1.0, np.abs(reference).max()))
+
+
+def test_direct_products_are_bit_identical_across_thread_counts():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    code = """
+import hashlib, runpy, sys
+t = runpy.run_path(sys.argv[1])
+dets, stack, f, g, w, v, nd, ci = t['_case'](6, 3, 3, 31, 637)
+a = t['_mf_hess_amp'](dets, f, g, w, v)
+print(hashlib.sha256(w.tobytes() + a.tobytes()).hexdigest())
+"""
+    digests = []
+    for threads in [1, 4]:
+        env = dict(os.environ, OMP_NUM_THREADS=str(threads),
+                   VECLIB_MAXIMUM_THREADS='1', MKL_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1')
+        result = subprocess.run([sys.executable, '-c', code, str(Path(__file__).resolve())],
+                                env=env, text=True, capture_output=True, check=True)
+        digests.append(result.stdout.strip().splitlines()[-1])
+    assert digests[0] == digests[1]
