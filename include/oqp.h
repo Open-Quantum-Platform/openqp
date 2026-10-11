@@ -503,6 +503,12 @@ void pt2_minor_transform(int32_t norb, int32_t nelec, int64_t nstr,
  * dm3/dm4 the spin-free RDMs in the PySCF make_dm1234 convention. */
 void nevpt2_f3ca_f3ac(int32_t nact, const double *h2e, const double *dm4,
     double *f3ca, double *f3ac);
+/* Status-returning f3 contraction (1 <= nact <= 31):
+ * 0 success, -1 allocation failure, -2 unsupported dimensions.
+ * Outputs must be discarded on failure. */
+int64_t nevpt2_f3ca_f3ac_checked(int32_t nact, const double *h2e,
+    const double *dm4, double *f3ca, double *f3ac);
+
 void nevpt2_a16(int32_t nact, const double *h1e, const double *h2e,
     const double *dm3, const double *f3ca, const double *f3ac, double *a16);
 void nevpt2_a22(int32_t nact, const double *h1e, const double *h2e,

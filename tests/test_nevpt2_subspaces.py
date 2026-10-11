@@ -185,3 +185,125 @@ def test_external_workspace_is_admitted_before_packing(monkeypatch):
     monkeypatch.setattr(sc, '_blocks', should_not_run)
     with pytest.raises(ValueError, match='above the'):
         sc.sc_nevpt2_energy(h, None, None, 100, 2, (1, 1), None, max_memory=16)
+
+
+@pytest.mark.parametrize('nc,na,nv,nelec', [(1, 2, 2, (1, 1)), (0, 3, 2, (2, 1))])
+def test_whole_energy_matches_backend_unavailable(monkeypatch, nc, na, nv, nelec):
+    rng = np.random.default_rng(20470 + na)
+    nbf = nc + na + nv
+    h = rng.normal(size=(nbf, nbf))*.1
+    h = (h+h.T)/2
+    g = rng.normal(size=(nbf,)*4)*.01
+    dets = _determinants(na, nelec)
+    ci = rng.normal(size=len(dets)); ci /= np.linalg.norm(ci)
+    args = (h, g, np.linspace(-3, 3, nbf), nc, na, nelec, ci)
+    native = sc.sc_nevpt2_energy(*args)
+    with monkeypatch.context() as patch:
+        patch.setattr(sc, '_koopmans_lib', lambda: None)
+        patch.setattr(sc, '_lib_make_f3', lambda *args: None)
+        patch.setattr(sc, '_lib_make_rdms', lambda *args: None)
+        reference = sc.sc_nevpt2_energy(*args)
+    assert native[1].keys() == reference[1].keys()
+    np.testing.assert_allclose(native[0], reference[0], rtol=0, atol=1e-11)
+    for name in SUBSPACES:
+        np.testing.assert_allclose(native[1][name], reference[1][name], rtol=0, atol=1e-11)
+
+
+def test_zero_norm_policy_is_shared():
+    norm = np.array([0.0, sc.NUMERICAL_ZERO*.5, 2.0])
+    h = np.array([0.0, 1.0, 4.0])
+    diff = np.array([0.0, -1.0, 3.0])
+    total_norm, energy = sc._norm_to_energy(norm, h, diff)
+    assert total_norm == norm.sum()
+    assert energy == -2.0/5.0
+
+
+@pytest.mark.parametrize('nact', [-1, 0, 32, 2147483647])
+def test_checked_f3_rejects_invalid_dimensions_before_dereference(nact):
+    lib, ffi = sc._koopmans_lib()
+    assert hasattr(lib, 'nevpt2_f3ca_f3ac_checked')
+    assert int(lib.nevpt2_f3ca_f3ac_checked(
+        nact, *(ffi.NULL for _ in range(4)))) == -2
+
+
+@pytest.mark.parametrize('status', [-1, -2])
+def test_checked_f3_failure_reaches_python(monkeypatch, status):
+    _, ffi = sc._koopmans_lib()
+    class Failed:
+        def nevpt2_f3ca_f3ac_checked(self, *args):
+            return status
+    monkeypatch.setattr(sc, '_koopmans_lib', lambda: (Failed(), ffi))
+    with pytest.raises(RuntimeError, match=f'f3ca_f3ac failed with status {status}'):
+        sc._f3ca_f3ac(np.zeros((1,)*4), np.zeros((1,)*8))
+
+
+def test_actual_native_allocation_failures_and_recovery(tmp_path):
+    """Fail each f3 scratch allocation and the fused dm4, then reuse the library."""
+    import os
+    import platform
+    import subprocess
+    import sys
+    from pathlib import Path
+    if sys.platform != 'linux' or platform.libc_ver()[0] != 'glibc':
+        pytest.skip('actual malloc fault injection requires Linux glibc')
+    shim = tmp_path / 'malloc_fault.so'
+    source = Path(__file__).with_name('native_malloc_fault.c')
+    subprocess.run(['cc', '-shared', '-fPIC', '-O0', str(source),
+                    '-o', str(shim)], check=True, capture_output=True)
+    program = r"""
+import ctypes, sys
+import numpy as np
+from oqp.library import nevpt2_sc as sc
+from oqp.library.fci import _determinants
+fault = ctypes.CDLL(sys.argv[1])
+fault.oqp_test_arm_malloc.argtypes = [ctypes.c_size_t, ctypes.c_int]
+fault.oqp_test_malloc_failures.restype = ctypes.c_int
+lib, ffi = sc._koopmans_lib()
+n = 3
+rng = np.random.default_rng(470)
+g = rng.normal(size=(n,)*4)
+d4 = rng.normal(size=(n,)*8)
+fca = np.empty((n,)*6); fac = np.empty_like(fca)
+ptr = lambda a: ffi.cast('double *', a.ctypes.data)
+args = (n, ptr(g), ptr(d4), ptr(fca), ptr(fac))
+assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
+expected = fca.copy(), fac.copy()
+for ordinal in range(3):
+    fault.oqp_test_arm_malloc(8*n**4, ordinal)
+    assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == -1, ordinal
+    assert fault.oqp_test_malloc_failures() == 1, ordinal
+    fault.oqp_test_arm_malloc(0, -1)
+    assert int(lib.nevpt2_f3ca_f3ac_checked(*args)) == 0
+    np.testing.assert_array_equal(fca, expected[0])
+    np.testing.assert_array_equal(fac, expected[1])
+dets = np.asarray(_determinants(n, (2, 1)), dtype=np.int64)
+ci = np.ones(len(dets)); ci /= np.linalg.norm(ci)
+d1 = np.empty((n,)*2); d2 = np.empty((n,)*4); d3 = np.empty((n,)*6)
+fargs = (n, len(dets), ffi.cast('int64_t *', dets.ctypes.data),
+         ptr(ci), ptr(g), ptr(d1), ptr(d2), ptr(d3), ptr(fca), ptr(fac))
+fault.oqp_test_arm_malloc(8*n**8, 0)
+assert int(lib.nevpt2_make_f3(*fargs)) == -1
+assert fault.oqp_test_malloc_failures() == 1
+fault.oqp_test_arm_malloc(0, -1)
+assert int(lib.nevpt2_make_f3(*fargs)) == 0
+"""
+    env = os.environ.copy()
+    env['LD_PRELOAD'] = str(shim)
+    run = subprocess.run([sys.executable, '-c', program, str(shim)],
+                         env=env, text=True, capture_output=True, timeout=60)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_legacy_f3_abi_compatibility(monkeypatch):
+    lib, ffi = sc._koopmans_lib()
+    class Legacy:
+        def nevpt2_f3ca_f3ac(self, *args):
+            lib.nevpt2_f3ca_f3ac(*args)
+    rng = np.random.default_rng(47031)
+    g = rng.normal(size=(3,)*4)
+    d4 = rng.normal(size=(3,)*8)
+    checked = sc._f3ca_f3ac(g, d4)
+    monkeypatch.setattr(sc, '_koopmans_lib', lambda: (Legacy(), ffi))
+    legacy = sc._f3ca_f3ac(g, d4)
+    for actual, expected in zip(legacy, checked):
+        np.testing.assert_array_equal(actual, expected)

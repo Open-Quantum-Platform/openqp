@@ -35,7 +35,7 @@ import oqp.library.nevpt2_sc as sc
 # when the symbol is absent.  These tests are the REQUIRED gate: they exist
 # only to fail when a needed export is missing.
 _REQUIRED_NEVPT2 = [
-    'nevpt2_f3ca_f3ac', 'nevpt2_a16', 'nevpt2_a22',
+    'nevpt2_f3ca_f3ac', 'nevpt2_f3ca_f3ac_checked', 'nevpt2_a16', 'nevpt2_a22',
     'nevpt2_hdm1', 'nevpt2_hdm2', 'nevpt2_hdm3',
     'nevpt2_a9', 'nevpt2_a7', 'nevpt2_a12', 'nevpt2_a13',
     'nevpt2_a17', 'nevpt2_a19', 'nevpt2_a23', 'nevpt2_a25',
@@ -105,11 +105,6 @@ def _symmetric_eri(nbf, rng):
 pt2_only = pytest.mark.skipif(
     not _has("pt2_effective_fock", cp._pt2_lib),
     reason="liboqp pt2_kernel engine unavailable",
-)
-
-_skip_if_no_koopmans = pytest.mark.skipif(
-    not _has("nevpt2_fold_h1e", sc._koopmans_lib),
-    reason="NEVPT2 Koopmans Fortran kernels not loaded",
 )
 
 
@@ -348,7 +343,6 @@ def test_a13_matches_python(n):
 
 # ---- Additional Koopmans intermediate kernel tests (post-PR470) ----
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_hdm1_matches_python(n):
     _h1e, _h2e, dm1, _dm2, _dm3, _dm4 = _koopmans_operands(n, 131 + n)
@@ -357,7 +351,6 @@ def test_hdm1_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_hdm2_matches_python(n):
     _h1e, _h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 139 + n)
@@ -366,7 +359,6 @@ def test_hdm2_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a17_matches_python(n):
     h1e, h2e, _dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 149 + n)
@@ -375,7 +367,6 @@ def test_a17_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a19_matches_python(n):
     h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 157 + n)
@@ -384,7 +375,6 @@ def test_a19_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a23_matches_python(n):
     h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 163 + n)
@@ -393,7 +383,6 @@ def test_a23_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a25_matches_python(n):
     h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 173 + n)
@@ -402,7 +391,6 @@ def test_a25_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a3_matches_python(n):
     h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 179 + n)
@@ -412,7 +400,6 @@ def test_a3_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_k27_matches_python(n):
     h1e, h2e, dm1, dm2, _dm3, _dm4 = _koopmans_operands(n, 191 + n)
@@ -421,7 +408,6 @@ def test_k27_matches_python(n):
     assert np.max(np.abs(native - python)) < 1e-11
 
 
-@_skip_if_no_koopmans
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_fold_h1e_matches_python(n):
     rng = np.random.default_rng(197 + n)

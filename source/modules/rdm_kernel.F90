@@ -639,6 +639,7 @@ contains
   function nevpt2_make_f3(norb, ndet, dets, civec, h2e, &
       dm1, dm2, dm3, f3ca, f3ac) result(info) &
       bind(C, name="nevpt2_make_f3")
+    use nevpt2_koopmans_mod, only: nevpt2_f3ca_f3ac_checked
     integer(c_int64_t) :: info
     integer(c_int32_t), value :: norb
     integer(i8), value :: ndet
@@ -668,20 +669,7 @@ contains
       deallocate(dm4)
       return
     end if
-    ! Contract dm4 to f3ca/f3ac via the existing bind(C) entry point.
-    block
-      interface
-        subroutine nd2f3(nact, h2e_ext, dm4_ext, f3ca_ext, f3ac_ext) &
-            bind(C, name="nevpt2_f3ca_f3ac")
-          use iso_c_binding, only: c_int32_t, c_double
-          implicit none
-          integer(c_int32_t), value :: nact
-          real(c_double), intent(in) :: h2e_ext(0:*), dm4_ext(0:*)
-          real(c_double), intent(inout) :: f3ca_ext(0:*), f3ac_ext(0:*)
-        end subroutine
-      end interface
-      call nd2f3(norb, h2e, dm4, f3ca, f3ac)
-    end block
+    info = nevpt2_f3ca_f3ac_checked(norb, h2e, dm4, f3ca, f3ac)
     deallocate(dm4)
   end function nevpt2_make_f3
 

@@ -41,7 +41,7 @@ module nevpt2_koopmans_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: nevpt2_f3ca_f3ac, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
+  public :: nevpt2_f3ca_f3ac, nevpt2_f3ca_f3ac_checked, nevpt2_a16, nevpt2_a22, nevpt2_hdm1
   public :: nevpt2_a3, nevpt2_a17, nevpt2_a19, nevpt2_a23, nevpt2_a25, nevpt2_k27, nevpt2_hdm2
   public :: nevpt2_sijrs, nevpt2_srs, nevpt2_sij, nevpt2_sijr, nevpt2_srsi, nevpt2_sir, &
           nevpt2_sr, nevpt2_si, nevpt2_fold_h1e
@@ -55,9 +55,23 @@ contains
   !> @param[in]  dm4   spin-free active 4-RDM, C-order [n,n,n,n,n,n,n,n]
   !> @param[out] f3ca  C-order [n,n,n,n,n,n]
   !> @param[out] f3ac  C-order [n,n,n,n,n,n]
+  ! Legacy ABI retained; checked callers use the status-returning entry below.
   subroutine nevpt2_f3ca_f3ac(nact, h2e, dm4, f3ca, f3ac) &
       bind(C, name="nevpt2_f3ca_f3ac")
+    use messages, only: show_message, with_abort
     integer(c_int32_t), value :: nact
+    real(dp), intent(in) :: h2e(0:*), dm4(0:*)
+    real(dp), intent(inout) :: f3ca(0:*), f3ac(0:*)
+    integer(c_int64_t) :: info
+    info = nevpt2_f3ca_f3ac_checked(nact, h2e, dm4, f3ca, f3ac)
+    if (info /= 0) call show_message('NEVPT2 f3 contraction failed', with_abort)
+  end subroutine nevpt2_f3ca_f3ac
+
+  function nevpt2_f3ca_f3ac_checked(nact, h2e, dm4, f3ca, f3ac) &
+      result(info) bind(C, name="nevpt2_f3ca_f3ac_checked")
+    integer(c_int32_t), value :: nact
+    integer(c_int64_t) :: info
+    integer :: ierr
     ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
     real(dp), intent(in) :: h2e(0:*), dm4(0:*)
     real(dp), intent(inout) :: f3ca(0:*), f3ac(0:*)
@@ -67,8 +81,11 @@ contains
     integer(i8) :: n_i, n3_i, n4_i, n5_i, q, qbase, m
     real(dp), allocatable :: bmat(:,:), amat(:,:), spanel(:,:)
 
+    info = 0_c_int64_t
     n = int(nact)
-    if (n <= 0) return
+    if (n <= 0 .or. n > 31) then
+      info = -2_c_int64_t; return
+    end if
     n2 = n * n
     n3 = n2 * n
     n_i = int(n, i8)
@@ -79,7 +96,10 @@ contains
     ! ---- f3ca: one DGEMM, F(o5, P) = sum_m B(o5,m) DM(m, P) ----------------
     ! B(o5, m) = h2e[k, o5, i, j] with m = i + n*k + n^2*j, matching the flat
     ! order of dm4's three fastest axes (j, k, i) -> offset j*n^2 + k*n + i.
-    allocate(bmat(0:n - 1, 0:n3 - 1))
+    allocate(bmat(0:n - 1, 0:n3 - 1), stat=ierr)
+    if (ierr /= 0) then
+      info = -1_c_int64_t; return
+    end if
     do j = 0, n - 1
       do k = 0, n - 1
         do i = 0, n - 1
@@ -99,7 +119,10 @@ contains
 
     ! ---- f3ac: n^4 small GEMMs --------------------------------------------
     ! A(o4, m) = h2e[i, j, k, o4] with m = k + n*i + n^2*j.
-    allocate(amat(0:n - 1, 0:n3 - 1))
+    allocate(amat(0:n - 1, 0:n3 - 1), stat=ierr)
+    if (ierr /= 0) then
+      info = -1_c_int64_t; return
+    end if
     do j = 0, n - 1
       do i = 0, n - 1
         do k = 0, n - 1
@@ -112,7 +135,10 @@ contains
       end do
     end do
 
-    allocate(spanel(0:n3 - 1, 0:n - 1))
+    allocate(spanel(0:n3 - 1, 0:n - 1), stat=ierr)
+    if (ierr /= 0) then
+      info = -1_c_int64_t; return
+    end if
     do q = 0_i8, n4_i - 1_i8
       qbase = q * n4_i
       ! Sp(m, o5) = dm4[Q, j, o5, i, k], m = k + n*i + n^2*j
@@ -135,7 +161,7 @@ contains
     end do
 
     deallocate(amat, spanel)
-  end subroutine nevpt2_f3ca_f3ac
+  end function nevpt2_f3ca_f3ac_checked
 
   !> The a16 Koopmans intermediate (the Sr subspace).
   !>

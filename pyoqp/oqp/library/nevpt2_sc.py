@@ -281,17 +281,24 @@ def _f3ca_f3ac(h2e, dm4):
     backend = _koopmans_lib()
     if backend is not None:
         lib, ffi = backend
-        if hasattr(lib, "nevpt2_f3ca_f3ac"):
+        if (hasattr(lib, "nevpt2_f3ca_f3ac_checked")
+                or hasattr(lib, "nevpt2_f3ca_f3ac")):
             n = int(h2e.shape[0])
             g = _as_f64c(h2e)
             d4 = _as_f64c(dm4)
             f3ca = np.zeros((n,) * 6, dtype=np.float64)
             f3ac = np.zeros((n,) * 6, dtype=np.float64)
-            lib.nevpt2_f3ca_f3ac(
-                n, ffi.cast("double *", g.ctypes.data),
-                ffi.cast("double *", d4.ctypes.data),
-                ffi.cast("double *", f3ca.ctypes.data),
-                ffi.cast("double *", f3ac.ctypes.data))
+            args = (n, ffi.cast("double *", g.ctypes.data),
+                    ffi.cast("double *", d4.ctypes.data),
+                    ffi.cast("double *", f3ca.ctypes.data),
+                    ffi.cast("double *", f3ac.ctypes.data))
+            if hasattr(lib, "nevpt2_f3ca_f3ac_checked"):
+                status = lib.nevpt2_f3ca_f3ac_checked(*args)
+                if int(status) != 0:
+                    raise RuntimeError(f"nevpt2_f3ca_f3ac failed with status {status}")
+            else:
+                # Preserve the existing ABI for older installed libraries.
+                lib.nevpt2_f3ca_f3ac(*args)
             return f3ca, f3ac
     dm4ca = dm4.transpose(0, 1, 4, 5, 6, 7, 2, 3)
     f3ca = _ein('kbij,rpqjkiac->pqrabc', h2e, dm4ca).transpose(
@@ -1315,7 +1322,9 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
     (e2, components) : total SC-NEVPT2 correlation and a dict of the eight
         per-subspace energies.
     """
-    # Conservative workspace estimate, not a measured RSS peak. Both native
+    # Additional numerical workspace estimate, not a measured RSS peak.
+    # Caller-owned full-MO integrals and interpreter storage are outside this bound.
+    # Both native
     # and NumPy implementations still construct the full nact^8 4-RDM.
     # The fused call has two f3 outputs live during native RDM construction.
     # Account for its excitation maps, E1/bras/kets and E2 workspaces as well.
@@ -1342,6 +1351,9 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector,
                 nv*nv*n*n, nc*nc*n*n, 2*nv*nc*n*n, (nv+nc)*n**3)
     _external = 8 * (_pack + 16*(nv*nv*nc + nv*nc*nc + nv*nv + nc*nc + nv*nc + nv+nc)
                      + 4*int(h1e_mo.shape[0])**2 if h1e_mo is not None else _pack)
+    # _blocks keeps heff alive during construction; native f3 also packs h2e.
+    _construction += 8*(n**4 + (4*int(h1e_mo.shape[0])**2
+                              if h1e_mo is not None else 0))
     _live_bytes = max(_construction, _post_bytes + _external)
     _cap = (2 * 1024**3 if max_memory is None
             else max(1, int(max_memory)) * 1024**2)
