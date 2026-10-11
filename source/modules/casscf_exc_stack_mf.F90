@@ -2,7 +2,7 @@
 !> matrices needed for the analytic CASSCF orbital-rotation Hessian.
 !>
 !> The original `casscf_exc_stack.F90` builds the dense `[nact,nact,ndet,ndet]`
-!> stack, O(nact² × ndet²) memory despite density ≈ 2/ndet (~0.04% at ndet=5000).
+!> stack, requiring O(nact² × ndet²) storage.
 !> These routines evaluate the same products without ever storing the full
 !> tensor, by walking the non-zero entries directly.
 !>
@@ -16,34 +16,10 @@ module casscf_exc_stack_mf_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: mf_sort_keys_perm, mf_bsearch
+  public :: mf_bsearch
   public :: casscf_exc_stack_apply_wmat
 
 contains
-
-  !> Shell sort for up to i8-sized arrays, carrying a permutation alongside.
-  subroutine mf_sort_keys_perm(n, keys, perm)
-    integer(i8), intent(in) :: n
-    integer(i8), intent(inout) :: keys(0:), perm(0:)
-    integer(i8) :: gap, i, j, key, pos
-    gap = n / 2_i8
-    do while (gap > 0_i8)
-      do i = gap, n - 1_i8
-        key = keys(i)
-        pos = perm(i)
-        j = i
-        do while (j >= gap)
-          if (keys(j - gap) <= key) exit
-          keys(j) = keys(j - gap)
-          perm(j) = perm(j - gap)
-          j = j - gap
-        end do
-        keys(j) = key
-        perm(j) = pos
-      end do
-      gap = gap / 2_i8
-    end do
-  end subroutine mf_sort_keys_perm
 
   !> Binary search returning position or -1.
   pure subroutine mf_bsearch(n, keys, key, pos)
