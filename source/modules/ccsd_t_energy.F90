@@ -150,8 +150,8 @@ contains
     ! Every closed-shell store this routine sizes below is replicated per rank
     ! while the probe reports the node, so both route decisions and the guard
     ! must charge the node for all the ranks sitting on it. local_size uses
-    ! the whole communicator as a safe upper bound when shared-node discovery
-    ! is unreliable; this can overestimate a multi-node budget. Deciding per rank
+    ! matching processor identities when shared-node discovery is unreliable.
+    ! Duplicate names conservatively overcount distinct nodes. Deciding per rank
     ! and guarding per node made the two disagree: a job whose explicit route
     ! fit one rank but not four kept use_chol false and then aborted at the
     ! guard, instead of factorising and running.

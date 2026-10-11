@@ -222,8 +222,8 @@ contains
 
     success = .false.
     ! The memory probe and explicit budget apply to a node. Each rank owns
-    ! its transformation arrays. local_size supplies a conservative upper
-    ! bound using all communicator ranks, even if shared-node discovery fails.
+    ! its transformation arrays. local_size counts matching processor identities
+    ! across the communicator, even if shared-node discovery fails.
     ! Determine it before every rank-dependent early return.
     local_ranks = driver%pe%local_size()
     if (nocc_l <= 0 .or. nvir_l <= 0 .or. (.not. same_spin .and. .not. do_opposite)) then
@@ -266,7 +266,7 @@ contains
     if (oqp_budget_includes_resident()) full_gb = full_gb + packed_bytes/1.073741824e9_dp
     ! For a live probe the packed stores on ranks on this node are already
     ! resident and subtracted. A flat budget must include them once per rank.
-    ! The communicator-wide multiplier can overestimate a multi-node budget.
+    ! Processor names shared by distinct nodes conservatively overcount them.
     full_gb = real(local_ranks,dp)*full_gb
     do_full = avail_gb > 0.0_dp .and. full_gb < 0.25_dp*OQP_MEMORY_SAFETY_FRACTION*avail_gb
     ! A one-spin full tensor cannot represent distinct alpha/beta orbitals.
