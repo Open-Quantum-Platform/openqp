@@ -60,7 +60,7 @@ def _call(s):
     ([[1e-310, 0.2], [0.0, 1.0]], False),
     ([[1.0, 0.0], [1e-310, 1.0]], False),
     ([[0.0, 0.2], [0.0, 1.0]], False),
-    ([[1.0, 0.0], [0.0, 2e-8]], True),
+    ([[1.0, 0.0], [0.0, 2e-8]], False),
     ([[1.0, 0.0], [0.0, 1e-8]], False),
     ([[1e-153, 0.0], [0.0, 1e-153]], True),
     ([[1e-154, 0.0], [0.0, 1e-154]], False),
@@ -98,6 +98,29 @@ def test_direct_wrappers_return_pivots_and_solve():
     assert used
     np.testing.assert_allclose(actual, [[0.2, -0.4], [-0.7, 0.0]], atol=1e-15)
     np.testing.assert_allclose(actual, previous, atol=1e-15)
+
+
+@pytest.mark.parametrize("rcond,batch", [(0.016, False), (0.020, True)])
+def test_accuracy_guard_boundary_on_nonsymmetric_overlap(rcond, batch):
+    # For this triangular matrix, ||S||_1=1 and ||S^-1||_1=1.25/d,
+    # hence rcond=0.8*d. The cases straddle the n=2 accuracy guard.
+    s = np.array([[1.0, 0.25], [0.0, rcond / 0.8]])
+    actual, previous, used = _call(s)
+    assert used is batch
+    np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
+    np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
+    if not batch:
+        np.testing.assert_array_equal(actual, previous)
+
+
+def test_near_dependent_nonsymmetric_overlap_uses_exact_minors():
+    # The former sqrt(eps) guard admitted this rcond=2e-8 input, although
+    # its eps/rcond estimate exceeds the cofactor tolerance by four orders.
+    s = np.array([[1.0, 0.25], [0.0, 2.5e-8]])
+    actual, previous, used = _call(s)
+    assert not used
+    np.testing.assert_array_equal(actual, previous)
+    np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
 
 
 def test_tiny_minor_pivot_preserves_previous_permutation():

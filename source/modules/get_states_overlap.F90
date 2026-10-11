@@ -546,6 +546,7 @@ contains
     real(dp) :: work(4*size(s,1))
     integer :: piv(size(s,1)), iwork(size(s,1)), n, info, i, j
     real(dp) :: anorm, rcond, det, logdet
+    real(dp), parameter :: cofactor_rtol = 2.0e-13_dp
     logical :: safe
 
     n = size(s,1)
@@ -571,7 +572,10 @@ contains
       anorm = maxval(sum(abs(s), dim=1))
       call dgecon('1', n, lu, n, anorm, rcond, work, iwork, info)
       safe = info == 0 .and. ieee_is_finite(rcond)
-      safe = safe .and. rcond > sqrt(epsilon(1.0_dp))
+      ! Reserve an eightfold margin on the first-order n*eps/rcond error
+      ! estimate for the cofactor accuracy contract. sqrt(eps) alone admits
+      ! an inverse whose error estimate is much larger than that contract.
+      safe = safe .and. rcond > 8.0_dp*real(n,dp)*epsilon(1.0_dp)/cofactor_rtol
     end if
     if (safe) then
       logdet = 0.0_dp
