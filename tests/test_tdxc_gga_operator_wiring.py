@@ -58,9 +58,14 @@ def test_static_plus_channels_include_ground_density_kxc_in_ao_frame():
     assert "call ao_to_mo(dgao,coeff,dgmo(:,:,k),work)" in Z_RHS
 
 
-def test_zero_orbital_connection_shortcut_is_never_applied_to_dft():
-    assert "zero_orbital_connection=infos%control%hamilton<20" in TDHESS
-    assert "zero_orbital_connection = infos%control%hamilton < 20" in RHS
+def test_zero_orbital_connection_shortcut_is_gone():
+    # The HF-only "minimal-basis" shortcut (zero U, d eps and dground; swap
+    # the assembled d(A-B)U, d(A+B)V for moving-frame terms whenever every U
+    # was symmetric) gave the H2/STO-3G TDHF Hessian zz 0.20 instead of
+    # 1.159 Eh/bohr^2 and is removed for HF as well as DFT; see
+    # tests/test_tdhf_hessian_regression.py (state-energy curvature).
+    assert "zero_orbital_connection" not in TDHESS
+    assert "zero_orbital_connection" not in RHS
 
 
 def test_gxc_keeps_cross_sigma_and_self_sigma_in_distinct_arrays():

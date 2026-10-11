@@ -793,12 +793,9 @@ contains
     dat%spin_antisym = .false.
     if (present(spin_antisymmetric)) dat%spin_antisym = spin_antisymmetric
 
-    ! run_xc splits the grid over dat%pe and parallel_stop reduces the
-    ! response over it, as in tddft_fxc. Left at its default (one rank, no
-    ! MPI), every rank integrated the whole grid on its own and the ranks'
-    ! open-shell XC responses differed in the last bits with OpenMP > 1
-    ! (no reduction made them identical), which split TRAH ROKS under MPI.
-    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    ! run_xc splits the grid over dat%pe. Its communicator belongs to the
+    ! caller, which may run this on a rank subset: callers on all ranks
+    ! initialise a consumer on the world communicator and pass it in.
 
     call run_xc(xc_opts, dat, basis)
 
