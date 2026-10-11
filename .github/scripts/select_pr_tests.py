@@ -71,7 +71,9 @@ FULL_SUITE_PATTERNS = [
 
 def changed_files(base):
     """Changed paths, or None when the diff cannot be computed (e.g. base not fetched)."""
-    out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
+    # --no-renames lists a rename as its old and new path, so tests that
+    # still name the old path or import the old module are selected too.
+    out = subprocess.run(["git", "diff", "--name-only", "--no-renames", f"{base}...HEAD"],
                          cwd=ROOT, capture_output=True, text=True)
     if out.returncode != 0:
         print(f"select_pr_tests: git diff {base}...HEAD failed: {out.stderr.strip()}",

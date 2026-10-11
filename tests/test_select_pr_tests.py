@@ -104,6 +104,22 @@ class SelectPrTestsTests(unittest.TestCase):
                 if chosen is not None:
                     self.assertIn("tests/test_mrsf_nac_spherical_basis.py", chosen)
 
+    def test_renamed_file_reports_its_old_path(self):
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            def git(*args):
+                subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                               cwd=tmp, check=True, capture_output=True)
+            git("init", "-q")
+            Path(tmp, "old.md").write_text("x\n" * 20)
+            git("add", "-A")
+            git("commit", "-q", "-m", "base")
+            git("mv", "old.md", "new.md")
+            git("commit", "-q", "-m", "rename")
+            self.sel.ROOT = Path(tmp)
+            self.assertEqual(sorted(self.sel.changed_files("HEAD~1")), ["new.md", "old.md"])
+
     def test_unknown_base_falls_back_to_the_full_suite(self):
         self.assertIsNone(self.sel.changed_files("0" * 40))
 
