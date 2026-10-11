@@ -2357,9 +2357,10 @@ contains
   !> openqp-devkit docs/casscf_orbital_conventions.md (issue #338).
   subroutine canonicalize(ctx, cbuf, status)
     type(cas_ctx_t), intent(inout) :: ctx
-    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    real(dp), contiguous, target, intent(inout) :: cbuf(0:,0:)
     integer(i8), intent(inout) :: status
 
+    real(dp), contiguous, pointer :: cstorage(:)
     real(dp), allocatable :: dmat(:), feff(:), sub(:,:), evals(:), blk(:,:)
     integer :: n, nc, na, i, j, ierr, lo, hi, m, b
     integer(i8) :: rc, jd
@@ -2445,7 +2446,10 @@ contains
       end if
       ! Cnew[:, idx] = C[:, idx] @ V, i.e. in the C-order buffer (MO index
       ! first) blk = V^T * cbuf(lo:hi, :).
-      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cbuf(lo:hi, :), m, &
+      ! Borrow the contiguous storage with its original column stride. The
+      ! view stays inside this call and adds no row-section packing allocation.
+      cstorage(1:n*n) => cbuf
+      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cstorage(lo+1:), n, &
                  0.0_dp, blk, m)
       do i = 1, m
         do j = 0, n - 1
