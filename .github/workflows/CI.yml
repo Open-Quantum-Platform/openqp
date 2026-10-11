@@ -177,6 +177,19 @@ jobs:
               echo "::error::MPI banner ordering is corrupt (RUN=$run_line banner=$banner_line INPUT=$input_line)"
               exit 1
             fi
+         - name: TDDFT response under MPI equals serial
+           # Grid slices of the XC kernel contraction are distributed over the
+           # ranks and reduced afterwards; compare RPA/TDA singlet and triplet
+           # roots at 2 and 4 ranks with the serial run. OQP_REQUIRE_MPI_TESTS
+           # turns a missing MPI runtime into a failure instead of a skip.
+           if: ${{ matrix.MPI == 'ON' }}
+           env:
+            OQP_REQUIRE_MPI_TESTS: 1
+           run: |
+            pip install pytest
+            ddx_lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            export LD_LIBRARY_PATH="$(dirname "$ddx_lib"):${LD_LIBRARY_PATH:-}"
+            python -m pytest -q -p no:cacheprovider tests/test_tddft_mpi.py
          # Run the full example/reference regression suite. Each test runs in its
          # own subprocess, so a hard failure in one example cannot abort the rest
          # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI
