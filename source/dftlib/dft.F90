@@ -1093,7 +1093,7 @@ contains
       if (infos%functional%can_calculate() .and. &
           lxc_last_functional /= "" .and. &
           lxc_last_functional == trim(xc_func_name) .and. &
-          lxc_last_cam_flag .eqv. infos%dft%cam_flag .and. &
+          (lxc_last_cam_flag .eqv. infos%dft%cam_flag) .and. &
           abs(lxc_last_cam_alpha - infos%dft%cam_alpha) < 1.0e-12_dp .and. &
           abs(lxc_last_cam_beta  - infos%dft%cam_beta ) < 1.0e-12_dp .and. &
           abs(lxc_last_cam_mu    - infos%dft%cam_mu   ) < 1.0e-12_dp .and. &
