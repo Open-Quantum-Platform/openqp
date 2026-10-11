@@ -14,8 +14,16 @@ Two guards:
   or a literal ``None``/``0`` argument -- the root cause, independent of which
   branch happens to be reached.
 * ``ZVectorFailureExitStatusTests`` runs ``python -m oqp.pyoqp`` on a gradient
-  input whose Z-vector cannot converge (``maxit_zv=1``, ``zvconv=1e-30``) and
-  asserts a non-zero status, the log marker, and the raised error.
+  input whose Z-vector cannot converge (``maxit_zv=1``, ``zvconv=1e-30``) and on
+  an energy input whose TD Davidson cannot converge (``maxit=1``,
+  ``conv=1e-30``), and asserts a non-zero status, the log marker, and the
+  raised error.
+* ``SetBasisFailureTests`` drives ``set_basis`` with the native basis loader
+  mocked to report ``basis_set_issue`` and asserts a ``RuntimeError``, not a
+  ``SystemExit``.
+
+The QM/MM Z-vector and link-atom branches need OpenMM and are covered by the
+source scan only.
 """
 import ast
 import os
@@ -68,6 +76,41 @@ maxit_zv=1
 zvconv=1.0e-30
 """
 
+
+
+# cc-pVDZ, not STO-3G: the TD Davidson auto-restarts twice with a doubled
+# subspace (maxit 1 -> 2 -> 4).  The STO-3G symmetry blocks hold only one or
+# two singles, so the subspace becomes complete and the solve is exact even at
+# conv=1e-30; with cc-pVDZ (95 singles) the final residual stays ~1e-7.
+DAVIDSON_TDA_INPUT = """[input]
+system=
+  8    0.000000000    0.000000000   -0.041061554
+  1   -0.533194329    0.533194329   -0.614469223
+  1    0.533194329   -0.533194329   -0.614469223
+charge=0
+method=tdhf
+basis=cc-pvdz
+runtype=energy
+functional=
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-8
+save_molden=False
+
+[tdhf]
+type=tda
+multiplicity=1
+nstate=2
+maxit=1
+conv=1.0e-30
+"""
 
 
 def _silent_exit_calls(path):
@@ -158,17 +201,55 @@ class ZVectorFailureExitStatusTests(unittest.TestCase):
         log_text = log.read_text(errors="replace") if log.exists() else ""
         return proc, log_text
 
-    def _assert_zvector_failure(self, proc, log_text):
+    def _assert_failure(self, proc, log_text, log_marker, error_text):
         detail = (f"returncode={proc.returncode}\n--- stdout ---\n{proc.stdout[-3000:]}"
                   f"\n--- stderr ---\n{proc.stderr[-3000:]}")
-        # The run must fail *because of* the Z-vector, not for another reason.
-        self.assertIn("PyOQP: TD Z-vector is not converged", log_text, detail)
-        self.assertIn("TD Z-vector did not converge", proc.stderr, detail)
+        # The run must fail *because of* the intended branch, not another reason.
+        self.assertIn(log_marker, log_text, detail)
+        self.assertIn(error_text, proc.stderr, detail)
         self.assertNotEqual(proc.returncode, 0, detail)
 
     def test_tddft_grad_zvector_failure_is_nonzero(self):
         proc, log_text = self._run("h2o_rpa_grad_zv_fail", GRAD_RPA_INPUT)
-        self._assert_zvector_failure(proc, log_text)
+        self._assert_failure(proc, log_text, "PyOQP: TD Z-vector is not converged",
+                             "TD Z-vector did not converge")
+
+    def test_td_davidson_failure_is_nonzero(self):
+        proc, log_text = self._run("h2o_tda_davidson_fail", DAVIDSON_TDA_INPUT)
+        self._assert_failure(proc, log_text, "PyOQP: TD energy is not converged",
+                             "TD Davidson did not converge")
+
+
+@unittest.skipUnless(RUNTIME_AVAILABLE, "compiled OpenQP runtime not available")
+class SetBasisFailureTests(unittest.TestCase):
+    def _call(self, issue):
+        import importlib
+        from unittest import mock
+        # oqp.library re-exports the set_basis *function* under the module's
+        # name, so import the module itself.
+        sb = importlib.import_module("oqp.library.set_basis")
+
+        class FakeMol:
+            config = {"input": {"basis": "sto-3g"}}
+            data = {"basis_set_issue": issue}
+
+        mol = FakeMol()
+        with mock.patch.object(sb, "BasisData"), \
+                mock.patch.object(sb.oqp, "apply_basis"), \
+                mock.patch.object(sb, "dump_log") as dump_log:
+            try:
+                sb.set_basis(mol)
+            except SystemExit as exc:  # the defect: status-0 SystemExit
+                self.fail(f"set_basis raised SystemExit({exc.code!r})")
+        return dump_log
+
+    def test_basis_set_issue_raises_runtime_error(self):
+        with self.assertRaisesRegex(RuntimeError, "basis set 'sto-3g' is not set properly"):
+            self._call(1)
+
+    def test_no_basis_set_issue_returns_normally(self):
+        dump_log = self._call(0)
+        dump_log.assert_not_called()
 
 
 
