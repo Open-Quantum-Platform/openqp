@@ -731,8 +731,8 @@ class OpenQpQMMM:
 
                     if gradient.exception is True:
                         raise ZVnotConverged()
-                    else:
-                        exit()
+                    # A bare exit() is SystemExit(None): status 0 for a failed run.
+                    raise RuntimeError("TD Z-vector did not converge — stopping current run.")
 
                 gradient.grad_func[gradient.td](gradient.mol)
                 gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
