@@ -18,6 +18,8 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   type(information), pointer :: ia, ib, infos
   type(dft_parameters) :: saved_a, saved_b
   type(tddft_parameters) :: saved_ta, saved_tb
+  type(dft_parameters) :: cached_dft
+  type(tddft_parameters) :: cached_tddft
   type(basis_set) :: basis
   type(dft_grid_t) :: grid
   real(dp), pointer :: packed(:)
@@ -33,12 +35,14 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
   saved_ta=ia%tddft; saved_tb=ib%tddft
   error=0; failed=0
   call dftclean(ia); call dftclean(ib)
-  do step=1,14
+  do step=1,22
     infos=>ia
     if (step==2.or.step==12) infos=>ib
     name='BHHLYP'
     if (step==1) name='SLATER'
     if (step>=6.and.step<=10) name='CAM-B3LYP'
+    if (step==17.or.step==18) name='STG1X'
+    if (step>=19) name='DTCAMVAEE'
     infos%dft%xc_functional_name=c_null_char
     do i=1,len_trim(name)
       infos%dft%xc_functional_name(i)=name(i:i)
@@ -49,6 +53,12 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     if (step==12) then
       infos%dft%grid_rad_size=48
       infos%dft%grid_ang_size=110
+    end if
+    ! A/B/A has identical request metadata but A still owns SLATER at step 3.
+    if (step<=3) then
+      infos%dft%hfscale=0.5_dp
+      infos%dft%cam_flag=.false.
+      infos%dft%cam_alpha=0; infos%dft%cam_beta=0; infos%dft%cam_mu=0
     end if
     if (step==4) infos%dft%hfscale=0.27_dp
     ! A small but real setting change must invalidate, without a tolerance.
@@ -69,6 +79,16 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     if (step==14) then
       call dftclean(infos); call dftclean(infos)
     end if
+    if (step==15) infos%dft%MP2OS_Scale=0.31_dp
+    if (step==16) infos%dft%dh_flag=.true.
+    if (step==18) then
+      infos%tddft%spc_coco=0.21_dp
+      infos%tddft%spc_coov=0.23_dp
+      infos%tddft%spc_ovov=0.27_dp
+    end if
+    if (step==20) infos%tddft%cam_alpha=0.31_dp
+    if (step==21) infos%tddft%cam_beta=0.32_dp
+    if (step==22) infos%tddft%cam_mu=0.33_dp
     basis=infos%basis; basis%atoms=>infos%atoms
     previous_revision=infos%functional%cache_revision
     call dft_initialize(infos,basis,grid,verbose=.false.)
@@ -90,8 +110,17 @@ subroutine functional_owner_cache_compare(a, b, error, failed) bind(C)
     fa=0; fb=0
     call dmatd_density_blk(basis,grid,da,db,fa,fb,energy,electrons,kinetic, &
                           basis%mxam+2,n,1.0e-15_dp,.true.,infos)
+    cached_dft=infos%dft; cached_tddft=infos%tddft
     call dftclean(infos)
     call dft_initialize(infos,basis,grid,verbose=.false.)
+    if (cached_dft%MP2SS_Scale/=infos%dft%MP2SS_Scale.or. &
+        cached_dft%MP2OS_Scale/=infos%dft%MP2OS_Scale) failed=failed+1
+    if (cached_tddft%cam_alpha/=infos%tddft%cam_alpha.or. &
+        cached_tddft%cam_beta/=infos%tddft%cam_beta.or. &
+        cached_tddft%cam_mu/=infos%tddft%cam_mu.or. &
+        cached_tddft%spc_coco/=infos%tddft%spc_coco.or. &
+        cached_tddft%spc_coov/=infos%tddft%spc_coov.or. &
+        cached_tddft%spc_ovov/=infos%tddft%spc_ovov) failed=failed+1
     ra=0; rb=0
     call dmatd_density_blk(basis,grid,da,db,ra,rb,reference,electrons,kinetic, &
                           basis%mxam+2,n,1.0e-15_dp,.true.,infos)

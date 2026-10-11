@@ -28,6 +28,8 @@ module mod_dft
   real(dp), save :: lxc_last_cam_mu    = -1.0_dp
   real(dp), save :: lxc_last_hfscale   = -1.0_dp
   logical,  save :: lxc_last_cam_flag  = .false.
+  logical,  save :: lxc_last_dh_flag   = .false.
+  real(dp), save :: lxc_last_setup(8) = -1.0_dp
   !> cache_revision of the functional_t object when the cache was last populated,
   !> to detect interleaved use of multiple functional owners.
   integer(i8b), save :: lxc_last_cache_revision = -1_i8b
@@ -352,6 +354,16 @@ module mod_dft
 
 contains
 
+!> Settings that libxc_input writes in addition to the DFT exchange mix.
+  function libxc_setup_values(infos) result(values)
+    use types, only: information
+    type(information), intent(in) :: infos
+    real(dp) :: values(8)
+    values = [infos%dft%MP2SS_Scale, infos%dft%MP2OS_Scale, &
+              infos%tddft%cam_alpha, infos%tddft%cam_beta, infos%tddft%cam_mu, &
+              infos%tddft%spc_coco, infos%tddft%spc_coov, infos%tddft%spc_ovov]
+  end function libxc_setup_values
+
 !> @brief Signature of a DFT set-up for the log: functional, grid and exchange mix.
 !> @detail dft_set_options describes a set-up only when no earlier set-up in the
 !>         same log started or ended with its starting signature, so a repeat is
@@ -410,6 +422,8 @@ contains
     lxc_last_cam_mu    = -1.0_dp
     lxc_last_hfscale   = -1.0_dp
     lxc_last_cam_flag  = .false.
+    lxc_last_dh_flag   = .false.
+    lxc_last_setup = -1.0_dp
     lxc_last_cache_revision = -1_i8b
   end subroutine dft_forget_setups
 
@@ -794,6 +808,8 @@ contains
     lxc_last_cam_mu    = -1.0_dp
     lxc_last_hfscale   = -1.0_dp
     lxc_last_cam_flag  = .false.
+    lxc_last_dh_flag   = .false.
+    lxc_last_setup = -1.0_dp
     lxc_last_cache_revision = -1_i8b
   end subroutine
 
@@ -1099,6 +1115,8 @@ contains
           lxc_last_functional /= "" .and. &
           lxc_last_functional == trim(xc_func_name) .and. &
           (lxc_last_cam_flag .eqv. infos%dft%cam_flag) .and. &
+          (lxc_last_dh_flag .eqv. infos%dft%dh_flag) .and. &
+          all(lxc_last_setup == libxc_setup_values(infos)) .and. &
           lxc_last_cam_alpha == infos%dft%cam_alpha .and. &
           lxc_last_cam_beta  == infos%dft%cam_beta .and. &
           lxc_last_cam_mu    == infos%dft%cam_mu .and. &
@@ -1126,6 +1144,8 @@ contains
       lxc_last_cam_mu     = infos%dft%cam_mu
       lxc_last_hfscale    = infos%dft%hfscale
       lxc_last_cam_flag   = infos%dft%cam_flag
+      lxc_last_dh_flag    = infos%dft%dh_flag
+      lxc_last_setup = libxc_setup_values(infos)
       lxc_last_cache_revision = infos%functional%cache_revision
     else if (need_func) then
       call show_message('Please, specify functional in the input file', WITH_ABORT)
