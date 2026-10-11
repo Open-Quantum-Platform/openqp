@@ -186,7 +186,7 @@ class FailRDM:
         return status
 config = {
     "input": {"system": "\nLi 0 0 0\nH 0 0 1.6", "basis": "sto-3g",
-              "method": "casscf", "runtype": "energy", "omp_threads": requested_threads},
+              "method": "casscf", "runtype": "energy", "omp_threads": str(requested_threads)},
     "guess": {"type": "hcore"},
     "scf": {"type": "rhf", "multiplicity": "1", "save_molden": "False"},
     "cas": {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1"},
