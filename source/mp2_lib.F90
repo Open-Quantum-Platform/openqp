@@ -265,6 +265,7 @@ contains
     ok = -2
     allocate(eri_mo(nmo,nmo,nmo,nmo), source=0.0_dp, stat=ok)
     if (ok /= 0) return
+    ok = -2  ! reset: UHF opposite-spin guard may return without computing
 
     ! UHF/ROHF opposite-spin guard.
     ! The full-MO transform uses cmo_l on all four indices; for UHF/ROHF
