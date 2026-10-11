@@ -422,6 +422,12 @@ if(BUILD_TESTING)
     set_tests_properties(oqp_casscf_anhess_${_threads} PROPERTIES
       ENVIRONMENT "OMP_NUM_THREADS=${_threads};VECLIB_MAXIMUM_THREADS=1;MKL_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
   endforeach()
+  # Package builds discard their private CMake directory after installation.
+  # Run these context tests while the exact build and module files still exist.
+  add_custom_command(TARGET oqp_test_casscf_anhess POST_BUILD
+    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR}
+      --output-on-failure --verbose -R "^oqp_casscf_anhess_(1|4)$"
+    VERBATIM)
   add_executable(oqp_test_int2_rys_pure tests/fortran/int2_pure_driver.F90)
   target_compile_definitions(oqp_test_int2_rys_pure PRIVATE OQP_ERI_SELFTEST=oqp_test_int2_rys_pure)
   target_link_libraries(oqp_test_int2_rys_pure PRIVATE oqp)
