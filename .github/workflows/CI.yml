@@ -272,7 +272,20 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            python -m pytest tests -q -n auto --forked --tb=short -rf
+            OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python -m pytest tests -q -n auto --forked --tb=short -rf --ignore=tests/test_mp2_dispatch.py
+         - name: Check MP2 transforms and thread restoration
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           run: |
+            for width in 1 4; do
+              OMP_NUM_THREADS="$width" OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+                python -m pytest tests/test_mp2_dispatch.py -q --tb=short
+            done
+         - name: Check MP2 rank-specific allocation failure consensus
+           if: ${{ matrix.MPI == 'ON' && matrix.os == 'ubuntu-24.04' }}
+           run: |
+            pip install pytest mpi4py
+            test_dir="$(mktemp -d)"
+            python tests/mp2_mpi_regression.py "$test_dir/mp2-mpi"
 
    # Intel oneAPI leg: ifx + icx/icpx + MKL ILP64 on Linux x86_64. This is the
    # LINALG_LIB=auto source-build mandate for Linux x86_64 (Intel MKL ILP64),

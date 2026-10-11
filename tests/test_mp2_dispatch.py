@@ -21,7 +21,7 @@ COMPONENTS = r'E\(MP2, (?:same-spin aa|same-spin bb|opp-spin  ab|correlation|tot
 
 
 def _run(tmp_path, name, scf='rhf', mult=1, atoms=WATER, variant='mp2',
-         basis='cc-pvdz', method='mp2'):
+         basis='cc-pvdz', method='mp2', usempi=False):
     assert oqp.BACKEND_AVAILABLE and hasattr(oqp, 'mp2_energy')
     log = tmp_path / (name + '.log')
     config = {
@@ -34,7 +34,7 @@ def _run(tmp_path, name, scf='rhf', mult=1, atoms=WATER, variant='mp2',
         'tests': {'exception': 'True'},
     }
     runner = Runner(project=name, input_file=None, log=str(log),
-                    input_dict=config, silent=1, usempi=False)
+                    input_dict=config, silent=1, usempi=usempi)
     runner.run()
     return runner, log
 
@@ -143,16 +143,71 @@ def test_allocator_failure_runs_real_fallback(tmp_path, stage):
     assert 'REAL_ALLOCATE_FAILURE_AND_FALLBACK_PASS' in child.stdout
 
 
-def _allocation_child(tmp_path, stage, library):
+def _native_thread_controls():
+    import ctypes
+    from oqp.runtime import library_path, resolve_oqp_root
+    root, suffix = resolve_oqp_root()
+    native = ctypes.CDLL(str(library_path(root, suffix)))
+    native.oqp_blas_thread_count.restype = ctypes.c_int64
+    native.oqp_blas_thread_set.argtypes = [ctypes.c_int64]
+    native.omp_get_max_threads.restype = ctypes.c_int
+    native.oqp_omp_set_num_threads.argtypes = [ctypes.c_int]
+    return native
+
+
+def _counts(native):
+    return native.oqp_blas_thread_count(), native.omp_get_max_threads()
+
+
+@pytest.mark.parametrize('width', [1, 4])
+def test_thread_counts_are_restored_after_repeated_transforms(tmp_path, width):
+    env = os.environ.copy()
+    env['OMP_NUM_THREADS'] = str(width)
+    env['MKL_NUM_THREADS'] = env['OPENBLAS_NUM_THREADS'] = '2'
+    child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                            str(tmp_path), 'threads', str(width)], env=env,
+                           text=True, capture_output=True, timeout=300)
+    assert child.returncode == 0, child.stdout + child.stderr
+    assert 'THREAD_RESTORATION_PASS' in child.stdout
+
+
+def _thread_child(tmp_path, width):
+    native = _native_thread_controls()
+    for scf, mult, atoms in [('rhf', 1, WATER), ('uhf', 2, OH)]:
+        runner, log = _run(tmp_path, 'threads_' + scf, scf, mult, atoms, method='hf')
+        energy = runner.mol.data._data.mol_energy.energy
+        for budget in ['16', '.005', '16']:
+            os.environ['OQP_MP2_MAX_JBUILDS'] = '0'
+            os.environ['OQP_MEMORY_LIMIT_GB'] = budget
+            native.oqp_blas_thread_set(2)
+            native.oqp_omp_set_num_threads(width)
+            before = _counts(native)
+            assert before[1] == width
+            runner.mol.data._data.mol_energy.energy = energy
+            runner.mol.data._data.mol_energy.etot = energy
+            oqp.mp2_energy(runner.mol)
+            assert _counts(native) == before
+    print('THREAD_RESTORATION_PASS')
+
+
+def _allocation_child(tmp_path, stage, library, comm=None, fault_rank=1):
     import ctypes
     interposer = ctypes.CDLL(library)
     interposer.mp2_test_arm.argtypes = [ctypes.c_size_t, ctypes.c_int, ctypes.c_size_t]
     interposer.mp2_test_failures.restype = ctypes.c_int
+    rank = 0 if comm is None else comm.Get_rank()
+    native = _native_thread_controls()
+    def components():
+        value = _components(log) if rank == 0 else None
+        return value if comm is None else comm.bcast(value, root=0)
     scf, mult, atoms = ('rhf', 1, WATER) if stage == 'full_scratch' else ('uhf', 2, 'Li 0 0 0')
     os.environ['OQP_MP2_MAX_JBUILDS'] = '4000'
-    runner, log = _run(tmp_path, 'alloc_' + stage, scf, mult, atoms)
-    reference = _components(log)
-    scf_energy = float(re.findall(r'E\(reference, SCF\)\s*=\s*([-+0-9.eE]+)', log.read_text())[-1])
+    runner, log = _run(tmp_path, 'alloc_' + stage, scf, mult, atoms, method='hf', usempi=comm is not None)
+    scf_energy = runner.mol.data._data.mol_energy.energy
+    runner.mol.data.set_mp2_same_spin_scale(1)
+    runner.mol.data.set_mp2_opposite_spin_scale(1)
+    oqp.mp2_energy(runner.mol)
+    reference = components()
     nbf = int(runner.mol.data.get_basis()['nbf'])
     npair = nbf * (nbf + 1) // 2
     nocca, noccb = 2, 1
@@ -164,20 +219,25 @@ def _allocation_child(tmp_path, stage, library):
         # The 127-AO default crossover leaves the direct-J guard affordable.
         # Li has nonzero alpha SS and OS terms, with an actual beta trial.
         runner, log = _run(tmp_path, 'alloc_large_' + stage, scf, mult, atoms,
-                           basis='aug-cc-pv5z', method='hf')
+                           basis='aug-cc-pv5z', method='hf', usempi=comm is not None)
         nbf = int(runner.mol.data.get_basis()['nbf'])
         assert nbf > 120
         npair = nbf * (nbf + 1) // 2
         scf_energy = runner.mol.data._data.mol_energy.energy
-        # First run is n5 with no failure; it is independently pinned to
-        # the exact baseline by the external measurement gate.
+        # First run supplies the no-failure n5 reference. The independent
+        # production-input pin and baseline gate check its numerical value.
         runner.mol.data.set_mp2_same_spin_scale(1)
         runner.mol.data.set_mp2_opposite_spin_scale(1)
+        before = _counts(native)
         oqp.mp2_energy(runner.mol)
-        reference = _components(log)
+        assert _counts(native) == before
+        reference = components()
     runner.mol.data._data.mol_energy.energy = scf_energy
     runner.mol.data._data.mol_energy.etot = scf_energy
-    log.write_text('')
+    if rank == 0:
+        log.write_text('')
+    if comm is not None:
+        comm.Barrier()
     if stage == 'full_scratch':
         # The packed full-half array is the first allocation of this size.
         os.environ['OQP_MP2_MAX_JBUILDS'] = '0'
@@ -192,15 +252,28 @@ def _allocation_child(tmp_path, stage, library):
     else:
         size, occurrence = 8*npair*noccb*(nbf-noccb), 1
         os.environ['OQP_MEMORY_LIMIT_GB'] = '2'
-    interposer.mp2_test_arm(size, occurrence, 8*npair*(npair+1)//2)
+    native.oqp_blas_thread_set(2)
+    native.oqp_omp_set_num_threads(nt)
+    before = _counts(native)
+    if comm is None or rank == fault_rank:
+        interposer.mp2_test_arm(size, occurrence, 8*npair*(npair+1)//2)
     oqp.mp2_energy(runner.mol)
-    assert interposer.mp2_test_failures() == 1
-    text = log.read_text()
+    assert _counts(native) == before
+    failures = interposer.mp2_test_failures()
+    if comm is None:
+        assert failures == 1
+    else:
+        assert comm.allgather(failures) == [int(r == fault_rank) for r in range(comm.Get_size())]
+        totals = comm.allgather(float(runner.mol.data._data.mol_energy.energy))
+        np.testing.assert_allclose(totals, reference[-1], rtol=0, atol=1e-9)
+    text = log.read_text() if rank == 0 else None
+    if comm is not None:
+        text = comm.bcast(text, root=0)
     expected = 'MP2 path: n5 occupied-virtual' if stage == 'full_scratch' else 'MP2 path: direct-J'
     assert expected in text, text
     if stage != 'full_scratch':
         assert 'discard spin trials before direct-J fallback' in text
-    np.testing.assert_allclose(reference, _components(log), rtol=0, atol=1e-9)
+    np.testing.assert_allclose(reference, components(), rtol=0, atol=1e-9)
     print('REAL_ALLOCATE_FAILURE_AND_FALLBACK_PASS')
 
 
@@ -262,4 +335,7 @@ def test_n5_pin_on_production_integrals(tmp_path, monkeypatch, scf, mult, atoms)
     np.testing.assert_allclose(result[:4], [eaa, ebb, eab, eaa+ebb+eab+sa+sb], rtol=0, atol=1e-9)
 
 if __name__ == '__main__':
-    _allocation_child(Path(sys.argv[1]), sys.argv[2], sys.argv[3])
+    if sys.argv[2] == 'threads':
+        _thread_child(Path(sys.argv[1]), int(sys.argv[3]))
+    else:
+        _allocation_child(Path(sys.argv[1]), sys.argv[2], sys.argv[3])
