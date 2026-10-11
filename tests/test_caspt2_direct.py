@@ -61,8 +61,7 @@ def test_signed_couplings_and_energy_match_dense(tmp_path, monkeypatch, engine, 
 
     assert oqp.BACKEND_AVAILABLE, "this regression requires the installed native backend"
     if engine == "fortran":
-        from oqp.library.casci import _lib_backend
-        lib, _ = _lib_backend()
+        from oqp import lib
         assert hasattr(lib, "qdpt2_stream_kernel"), "explicit Fortran engine must be exported"
     captured = {}
     original = direct.direct_qdpt2
