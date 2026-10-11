@@ -60,7 +60,7 @@ contains
       rpaechk, rpaprint, rparesvec, rpaexpndv, rpanewb, esum, &
       tdhf_unrelaxed_density
     use mod_dft, only: dft_initialize, dftclean
-    use mod_dft_gridint_fxc, only: tddft_fxc, xc_consumer_tde_t
+    use mod_dft_gridint_fxc, only: tddft_fxc, utddft_fxc, xc_consumer_tde_t
     use mod_dft_gridint_response_cache, only: response_cache_t
     use util, only: measure_time
     use mathlib, only: symmetrize_matrix, orthogonal_transform
@@ -99,6 +99,11 @@ contains
     integer :: iter, istart, nv, iv, ivec
     integer :: mxiter
     logical :: do_apb,do_amb, tamm_dancoff   ! SWITCH FOR a-b, a+b, tANDAMM COFF
+    logical :: triplet, xc_unrestricted
+    real(kind=dp) :: xc_beta_sign
+    real(kind=dp), allocatable :: dxa(:,:,:), dxb(:,:,:), fxb(:,:,:)
+    character(len=8) :: envval
+    integer :: envlen, envstat
     integer :: imax
     logical :: converged
     integer :: ierr
@@ -198,6 +203,20 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
 
+  ! Closed-shell triplet response: the spin-antisymmetric transition density
+  ! (alpha = +D, beta = -D) has no Coulomb potential, and its XC response is
+  ! f_aa - f_ab, obtained from the unrestricted kernel contraction with
+  ! dxa = D, dxb = -D (alpha Fock-like block; for a closed-shell reference the
+  ! beta block is its negative).  The singlet uses the restricted contraction,
+  ! which equals the unrestricted one with dxa = dxb = D; the developer switch
+  ! OQP_TDDFT_XC_UNRESTRICTED=1 routes the singlet through that unrestricted
+  ! path so the identity can be tested.
+    triplet = infos%tddft%mult == 3
+    xc_beta_sign = merge(-1.0_dp, 1.0_dp, triplet)
+    call get_environment_variable('OQP_TDDFT_XC_UNRESTRICTED', envval, length=envlen, status=envstat)
+    xc_unrestricted = triplet .or. (envstat == 0 .and. envlen > 0 .and. envval(1:1) == '1')
+    if (triplet) write(iw,'(/5x,"Closed-shell TDDFT: triplet excited states (no Coulomb term, f_aa - f_ab kernel)")')
+
   ! Construct TD trial vector
     call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,nocc,nocc,nvec,infos)
 
@@ -223,8 +242,9 @@ contains
 
       int2_data = int2_td_data_t(d2=bvec(:,:,:nv), &
               int_apb=do_apb, int_amb=do_amb, tamm_dancoff=tamm_dancoff, &
-              tamm_dancoff_coulomb=.true., &
+              tamm_dancoff_coulomb=.not.triplet, &
               scale_exchange=scale_exch)
+      if (triplet) int2_data%scale_coulomb = 0.0_dp
 
       call int2_driver%run(int2_data, &
                 cam=dft.and.infos%dft%cam_flag, &
@@ -239,16 +259,27 @@ contains
           iv = ivec-ist+1
           call symmetrize_matrix(bvec(:,:,iv), nbf)
         end do
-        call tddft_fxc(basis=basis, &
-               molGrid=molGrid, &
-               isVecs=.true., &
-               wf=mo_a, &
-               fx=ab1(:,:,:iv), &
-               dx=bvec(:,:,:iv), &
-               nmtx=iv, &
-               !threshold=1.0d-15, &
-               threshold=0.0d0, &
-               infos=infos, cache=xc_cache, consumer=xc_consumer)
+        if (xc_unrestricted) then
+          allocate(dxa(nbf,nbf,iv), dxb(nbf,nbf,iv), fxb(nbf,nbf,iv))
+          dxa = bvec(:,:,:iv)
+          dxb = xc_beta_sign*bvec(:,:,:iv)
+          fxb = 0.0_dp
+          call utddft_fxc(basis=basis, molGrid=molGrid, isVecs=.true., &
+                 wfa=mo_a, wfb=mo_a, fxa=ab1(:,:,:iv), fxb=fxb, &
+                 dxa=dxa, dxb=dxb, nMtx=iv, threshold=0.0d0, infos=infos)
+          deallocate(dxa, dxb, fxb)
+        else
+          call tddft_fxc(basis=basis, &
+                 molGrid=molGrid, &
+                 isVecs=.true., &
+                 wf=mo_a, &
+                 fx=ab1(:,:,:iv), &
+                 dx=bvec(:,:,:iv), &
+                 nmtx=iv, &
+                 !threshold=1.0d-15, &
+                 threshold=0.0d0, &
+                 infos=infos, cache=xc_cache, consumer=xc_consumer)
+        end if
       end if
 
 !$omp parallel private(iv,ivec)
@@ -350,6 +381,8 @@ contains
     end select
 
     call get_td_transition_dipole(basis, dip, mo_a, vro, vlo, nstates, nocc)
+  ! A singlet-to-triplet transition carries no spin-free transition dipole.
+    if (triplet) dip = 0.0_dp
 
     call td_print_results(eex, dip, nstates)
 

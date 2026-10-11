@@ -1,0 +1,151 @@
+"""Closed-shell triplet RPA/TDA (tdhf_energy, [tdhf] multiplicity=3).
+
+For a closed-shell reference the triplet response has no Coulomb term and the
+f_aa - f_ab XC kernel.  Checks:
+
+* H2O/6-31G*, HF: the triplet TDA roots equal the alpha->beta spin-flip TDA
+  roots of the same closed-shell reference (identical matrix
+  eps_a - eps_i - (ij|ab), independent code), and the printed triplet
+  oscillator strengths vanish.
+* H2O/6-31G*, B3LYP: the singlet routed through the unrestricted XC contraction
+  (OQP_TDDFT_XC_UNRESTRICTED=1, dxa = dxb = D) equals the restricted singlet,
+  which fixes the normalisation that the triplet (dxa = D, dxb = -D) relies on;
+  every triplet lies below the singlet of the same order.
+
+Before the triplet branch existed, [tdhf] multiplicity=3 was rejected by the
+input checker, so every case here fails without it.
+"""
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+EV = 27.211386245988
+
+
+def _runtime_available():
+    try:
+        import oqp  # noqa: F401
+        from oqp.pyoqp import Runner  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+H2O = ("   O 0.000000 0.000000 0.117300\n   H 0.000000 0.757200 -0.469200\n"
+       "   H 0.000000 -0.757200 -0.469200\n")
+# C1 (no symmetry element): unequal OH bonds, out-of-plane displacement, so a
+# transposed index or a sign error in the response cannot cancel by symmetry.
+H2O_C1 = ("   O 0.010000 -0.020000 0.117300\n   H 0.080000 0.770200 -0.449200\n"
+          "   H -0.050000 -0.731200 -0.509200\n")
+
+
+def deck(geom, basis, functional, td_type, mult, nstate):
+    s = f"[input]\nsystem=\n{geom}charge=0\nruntype=energy\nbasis={basis}\nmethod=tdhf\n"
+    if functional:
+        s += f"functional={functional}\n"
+    s += ("\n[guess]\ntype=huckel\n\n[scf]\ntype=rhf\nmultiplicity=1\nmaxit=100\nconv=1e-10\n\n"
+          f"[tdhf]\ntype={td_type}\nnstate={nstate}\nmaxit=100\nconv=1e-10\nmultiplicity={mult}\n")
+    if functional:
+        s += "\n[dftgrid]\nrad_npts=96\nang_npts=302\n"
+    return s
+
+
+def run(text, env_extra=None):
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "job.inp").write_text(text)
+        env = dict(os.environ, OMP_NUM_THREADS="2")
+        env.pop("OQP_TDDFT_XC_UNRESTRICTED", None)
+        env.update(env_extra or {})
+        proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+        log = (Path(tmp) / "job.log").read_text(errors="ignore") if (Path(tmp) / "job.log").exists() else ""
+        summary = log.split("Summary of the TD-DFT calculation")[-1]
+        ev = [float(x) for x in re.findall(r"^\s*0 ->\s*\d+\s+(-?[\d.]+)", summary, re.M)]
+        return proc.returncode, ev, proc.stdout.decode(errors="ignore")[-1500:] + log[-3000:]
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestClosedShellTripletHF(unittest.TestCase):
+    """HF limit: the closed-shell triplet TDA matrix, eps_a - eps_i - (ij|ab),
+    is the alpha->beta spin-flip TDA matrix of the same closed-shell reference,
+    computed by the independent SF-TDA code (tdhf_sf_energy)."""
+
+    def test_triplet_tda_equals_closed_shell_spin_flip_tda(self):
+        for geom in (H2O, H2O_C1):
+            with self.subTest(c1=geom is H2O_C1):
+                self._compare_with_spin_flip(geom)
+
+    def _compare_with_spin_flip(self, geom):
+        rct, et, dt = run(deck(geom, "6-31g*", None, "tda", 3, 4))
+        sf = deck(geom, "6-31g*", None, "sf", 3, 4).replace("type=rhf", "type=rohf")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "job.inp").write_text(sf)
+            env = dict(os.environ, OMP_NUM_THREADS="2")
+            proc = subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+            log = (Path(tmp) / "job.log").read_text(errors="ignore")
+        esf = [float(x) for x in re.findall(r"State #\s+\d+\s+Energy =\s+(-?[\d.]+) eV", log)]
+        self.assertEqual(rct, 0, dt)
+        self.assertEqual(proc.returncode, 0, log[-3000:])
+        self.assertEqual(len(et), 4, dt)
+        self.assertEqual(len(esf), 4, log[-3000:])
+        for a, b in zip(et, esf):
+            self.assertAlmostEqual(a, b, delta=2e-6)
+
+    def test_triplet_oscillator_strengths_vanish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "job.inp").write_text(deck(H2O, "6-31g*", None, "tda", 3, 4))
+            env = dict(os.environ, OMP_NUM_THREADS="2")
+            subprocess.run([sys.executable, "-m", "oqp.pyoqp", "job.inp"], cwd=tmp, env=env,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+            log = (Path(tmp) / "job.log").read_text(errors="ignore")
+        summary = log.split("Summary of the TD-DFT calculation")[-1]
+        osc = [float(x) for x in re.findall(r"^\s*0 ->\s*\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)", summary, re.M)]
+        self.assertEqual(len(osc), 4, summary[:1500])
+        self.assertTrue(all(abs(f) < 1e-12 for f in osc), osc)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestClosedShellTripletDFT(unittest.TestCase):
+    def test_unrestricted_xc_path_reproduces_the_restricted_singlet(self):
+        for td in ("tda", "rpa"):
+            with self.subTest(td=td):
+                rc0, e0, d0 = run(deck(H2O_C1, "6-31g*", "b3lypv5", td, 1, 4))
+                rc1, e1, d1 = run(deck(H2O_C1, "6-31g*", "b3lypv5", td, 1, 4), {"OQP_TDDFT_XC_UNRESTRICTED": "1"})
+                self.assertEqual(rc0, 0, d0)
+                self.assertEqual(rc1, 0, d1)
+                self.assertEqual(len(e0), len(e1))
+                for a, b in zip(e0, e1):
+                    self.assertAlmostEqual(a, b, delta=1e-6)
+
+    def test_triplets_lie_below_singlets(self):
+        for td in ("tda", "rpa"):
+            with self.subTest(td=td):
+                rcs, es, ds = run(deck(H2O, "6-31g*", "b3lypv5", td, 1, 4))
+                rct, et, dt = run(deck(H2O, "6-31g*", "b3lypv5", td, 3, 4))
+                self.assertEqual(rcs, 0, ds)
+                self.assertEqual(rct, 0, dt)
+                self.assertLess(et[0], es[0])
+                self.assertNotEqual([round(x, 4) for x in et], [round(x, 4) for x in es], dt)
+
+
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime unavailable")
+class TestClosedShellTripletThreads(unittest.TestCase):
+    def test_triplet_energies_independent_of_thread_count(self):
+        for td in ("tda", "rpa"):
+            with self.subTest(td=td):
+                r1, e1, d1 = run(deck(H2O_C1, "6-31g*", "b3lypv5", td, 3, 4), {"OMP_NUM_THREADS": "1"})
+                r4, e4, d4 = run(deck(H2O_C1, "6-31g*", "b3lypv5", td, 3, 4), {"OMP_NUM_THREADS": "4"})
+                self.assertEqual(r1, 0, d1)
+                self.assertEqual(r4, 0, d4)
+                self.assertEqual(len(e1), 4, d1)
+                for a, b in zip(e1, e4):
+                    self.assertAlmostEqual(a, b, delta=1e-6)
+
+
+if __name__ == "__main__":
+    unittest.main()
