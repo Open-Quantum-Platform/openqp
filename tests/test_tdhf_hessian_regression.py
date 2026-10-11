@@ -64,6 +64,19 @@ CASES = {
         validated_rms=4.3440667358826373e-7,
         nstate=1,
     ),
+    # Linear H3+: two response roots.  Its numerical Hessian was 1.4e-3 off
+    # (zz 0.26306 vs 0.26447) because the displaced gradients met only the
+    # default squared-residual Z-vector tolerance; see
+    # _finite_difference_response_tolerances in single_point.py.
+    "h3plus": Case(
+        system="""\
+  H  0.0000000000  0.0000000000 -0.8500000000
+  H  0.0000000000  0.0000000000  0.0000000000
+  H  0.0000000000  0.0000000000  0.8500000000""",
+        charge=1,
+        validated_max_abs=1.4069516913323143e-6,
+        validated_rms=2.149666497298211e-7,
+    ),
     "h2o": Case(
         system="""\
   O  0.0000000000  0.0000000000  0.0000000000
