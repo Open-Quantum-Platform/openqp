@@ -190,12 +190,15 @@ contains
         select type(new)
         type is(int2_mrsf_data_t)
           delta=maxval(abs(old%f3-new%f3))
+          if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
           if (allocated(old%f3s)) delta=max(delta,real(maxval(abs(old%f3s-new%f3s)),dp))
+          if (allocated(old%f3_ex_sp)) delta=max(delta,real(maxval(abs(old%f3_ex_sp-new%f3_ex_sp)),dp))
         end select
       type is(int2_umrsf_data_t)
         select type(new)
         type is(int2_umrsf_data_t)
           delta=maxval(abs(old%f3-new%f3))
+          if (size(old%f3_private)>0) delta=max(delta,maxval(abs(old%f3_private-new%f3_private)))
         end select
       end select
     end subroutine
