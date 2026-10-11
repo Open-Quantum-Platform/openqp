@@ -14,6 +14,9 @@ void oqp_ecp_selftest(double *err);
 /* Internal mrsf_tlf regression shim; no additional overlap product API. */
 void occupied_cofactors_selftest(int64_t n, const double *s, double *actual,
                                double *previous, int *used_lu);
+/* Internal guard regression shim; bypasses only the production size dispatch. */
+void occupied_cofactors_batch_selftest(int64_t n, const double *s, double *actual,
+                                     double *previous, int *used_lu);
 
 typedef double xyz_t[3];
 

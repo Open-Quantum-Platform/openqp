@@ -31,10 +31,12 @@ def _cofactors(s):
     return result
 
 
-def _call(s):
+def _call(s, *, force_batch=False):
     root, source = runtime.resolve_oqp_root()
     lib = ctypes.CDLL(runtime.library_path(root, source))
-    fn = lib.occupied_cofactors_selftest  # Missing shim is a failure, never a skip.
+    # Both entry points are mandatory: missing symbols fail rather than skip.
+    fn = (lib.occupied_cofactors_batch_selftest if force_batch
+          else lib.occupied_cofactors_selftest)
     p = ctypes.POINTER(ctypes.c_double)
     fn.argtypes = [ctypes.c_int64, p, p, p, ctypes.POINTER(ctypes.c_int)]
     fn.restype = None
@@ -73,10 +75,15 @@ def _call(s):
     ([[1e100, 0., 0.], [1e-150, 1e100, 0.], [0., 0., 1e100]], False),
     ([[1e-100, 0., 0.], [0., 1e-150, 0.], [0., 0., 1e-160]], False),
 ])
-def test_actual_mrsf_tlf(s, batch):
+@pytest.mark.parametrize("force_batch", [False, True], ids=["production", "guarded"])
+def test_actual_mrsf_tlf(s, batch, force_batch):
     s = np.array(s)
-    actual, previous, used = _call(s)
-    assert used is batch
+    actual, previous, used = _call(s, force_batch=force_batch)
+    if force_batch:
+        assert used is batch
+    else:
+        assert not used
+        np.testing.assert_array_equal(actual, previous)
     # The original comp_det classifies a 1x1 subnormal pivot as zero; retain
     # that convention, while the finite O(1) cofactors must still survive.
     expected = _cofactors(s)
@@ -89,7 +96,7 @@ def test_actual_mrsf_tlf(s, batch):
 def test_repeated_dimensions_and_nonsymmetric_occupied_overlap():
     for n in (6, 2, 0, 5, 1, 3, 6):
         s = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
-        actual, previous, used = _call(s)
+        actual, previous, used = _call(s, force_batch=True)
         assert used is (n > 1)
         np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-15)
         np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
@@ -97,7 +104,7 @@ def test_repeated_dimensions_and_nonsymmetric_occupied_overlap():
 
 def test_direct_wrappers_return_pivots_and_solve():
     """The mrsf_tlf row-exchange case must differ from a transposed answer."""
-    actual, previous, used = _call([[0.0, 0.7], [0.4, 0.2]])
+    actual, previous, used = _call([[0.0, 0.7], [0.4, 0.2]], force_batch=True)
     assert used
     np.testing.assert_allclose(actual, [[0.2, -0.4], [-0.7, 0.0]], atol=1e-15)
     np.testing.assert_allclose(actual, previous, atol=1e-15)
@@ -109,7 +116,7 @@ def test_accuracy_guard_boundary_on_nonsymmetric_overlap(rcond, batch):
     # hence rcond=0.8*d. At 0.020 the per-entry floor also rejects every
     # cofactor; at 0.024 at least one cofactor retains the LU result.
     s = np.array([[1.0, 0.25], [0.0, rcond / 0.8]])
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert used is batch
     np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
     np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
@@ -121,7 +128,7 @@ def test_near_dependent_nonsymmetric_overlap_uses_exact_minors():
     # The former sqrt(eps) guard admitted this rcond=2e-8 input, although
     # its eps/rcond estimate exceeds the cofactor tolerance by four orders.
     s = np.array([[1.0, 0.25], [0.0, 2.5e-8]])
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert not used
     np.testing.assert_array_equal(actual, previous)
     np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
@@ -131,9 +138,9 @@ def test_accuracy_guard_accounts_for_matrix_dimension():
     s = np.eye(3)
     s[:2, :2] = [[1.0, 0.25], [0.0, 0.030]]
     # The same rcond=0.024 accepted at n=2 exceeds the n=3 error budget.
-    _, _, used_small = _call(s[:2, :2])
+    _, _, used_small = _call(s[:2, :2], force_batch=True)
     assert used_small
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert not used
     np.testing.assert_array_equal(actual, previous)
     np.testing.assert_allclose(actual, _cofactors(s), rtol=2e-13, atol=1e-315)
@@ -142,7 +149,7 @@ def test_accuracy_guard_accounts_for_matrix_dimension():
 def test_small_pivot_product_does_not_accumulate_logarithm_error():
     n = 20
     pivot = 1e-15
-    actual, previous, used = _call(pivot * np.eye(n))
+    actual, previous, used = _call(pivot * np.eye(n), force_batch=True)
     assert used
     with localcontext() as ctx:
         ctx.prec = 80
@@ -157,7 +164,7 @@ def test_tiny_minor_pivot_preserves_previous_permutation():
     # Leibniz cofactor is subnormal. Keep the existing numerical contract.
     s = np.eye(3)
     s[1, 0] = s[2, 1] = 1e-155
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert not used
     assert _cofactors(s)[0, 2] > 0.0
     assert actual[0, 2] == previous[0, 2] == 0.0
@@ -167,7 +174,7 @@ def test_tiny_minor_pivot_preserves_previous_permutation():
     # normal cofactor. Detect the inverse entry before that multiplication.
     s = 2.0 * np.eye(30)
     s[1, 0] = s[2, 1] = 1e-155
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert not used
     assert actual[0, 2] == previous[0, 2] == 0.0
     np.testing.assert_array_equal(actual, previous)
@@ -186,7 +193,7 @@ def test_cancellation_sensitive_cofactor_preserves_previous_minor(s, perturbatio
     # cancels exactly, or is small after perturbation, within a sound matrix.
     rcond = 1.0 / np.linalg.cond(s, 1)
     assert rcond > 8 * len(s) * np.finfo(float).eps / 2e-13
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     # Keep the old minor's floating-point convention, including any vendor
     # residue: mathematical zero alone is not its numerical contract.
     assert not used
@@ -198,7 +205,31 @@ def test_cancellation_sensitive_cofactor_preserves_previous_minor(s, perturbatio
 def test_hybrid_lu_and_cancellation_minor(perturbation):
     s = np.array([[1.0, 1.0, 0.0], [0.0, 0.5, 0.7], [1.0, 0.5, 0.7]])
     s[1, 2] += perturbation
-    actual, previous, used = _call(s)
+    actual, previous, used = _call(s, force_batch=True)
     assert used
     assert actual[0, 0] == previous[0, 0]
     np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-315)
+
+
+@pytest.mark.parametrize("n", [6, 7])
+def test_production_size_dispatch_boundary(n):
+    s = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
+    assert not np.array_equal(s, s.T)
+    actual, previous, used = _call(s)
+    assert used is (n > 6)
+    expected = _cofactors(s)
+    assert not np.allclose(expected, expected.T, rtol=2e-13, atol=1e-15)
+    np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=1e-15)
+    np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
+    if n <= 6:
+        np.testing.assert_array_equal(actual, previous)
+
+
+def test_repeated_production_dispatch_dimensions():
+    for n in (6, 7, 6, 0, 1, 7, 2):
+        s = np.eye(n) + np.arange(n*n).reshape(n, n) * 0.002
+        actual, previous, used = _call(s)
+        assert used is (n > 6)
+        np.testing.assert_allclose(actual, previous, rtol=2e-13, atol=1e-15)
+        if n <= 6:
+            np.testing.assert_array_equal(actual, previous)

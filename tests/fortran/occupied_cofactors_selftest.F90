@@ -52,3 +52,26 @@ subroutine occupied_cofactors_selftest(n, s, actual, previous, used_lu) bind(C)
     end do
   end do
 end subroutine occupied_cofactors_selftest
+
+! Test-only C shim: bypass size dispatch while retaining every numerical guard.
+subroutine occupied_cofactors_batch_selftest(n, s, actual, previous, used_lu) bind(C)
+  use, intrinsic :: iso_c_binding, only: c_int64_t, c_int, c_double
+  use precision, only: dp
+  use get_state_overlap_mod, only: occupied_cofactors_lu, ov_exact
+  implicit none
+  integer(c_int64_t), value :: n
+  real(c_double), intent(in) :: s(n,n)
+  real(c_double), intent(out) :: actual(n,n), previous(n,n)
+  integer(c_int), intent(out) :: used_lu
+  logical :: batch
+  integer :: i, j
+
+  call occupied_cofactors_lu(s, actual, batch)
+  used_lu = 0_c_int
+  if (batch) used_lu = 1_c_int
+  do j = 1, n
+    do i = 1, n
+      call ov_exact(previous(i,j), i, j, 0, 0, s, 1, int(n)-1, 1)
+    end do
+  end do
+end subroutine occupied_cofactors_batch_selftest

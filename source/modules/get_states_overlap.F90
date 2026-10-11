@@ -536,6 +536,34 @@ contains
 
   subroutine occupied_cofactors(s, cofactors, used_lu)
     use precision, only: dp
+    implicit none
+    real(dp), intent(in) :: s(:,:)
+    real(dp), intent(out) :: cofactors(:,:)
+    logical, intent(out), optional :: used_lu
+    integer :: n, i, j
+
+    n = size(s,1)
+    if (present(used_lu)) used_lu = .false.
+    if (n <= 6) then
+      ! Small occupied overlaps can need almost every exact minor after LU.
+      ! Select the previous loop before allocating any LU scratch. Six is the
+      ! measured small-case restriction, not an optimal general crossover.
+      if (n == 1) then
+        cofactors(1,1) = 1.0_dp
+        return
+      end if
+      do i = 1, n
+        do j = 1, n
+          call ov_exact(cofactors(i,j), i, j, 0, 0, s, 1, n-1, 1)
+        end do
+      end do
+    else
+      call occupied_cofactors_lu(s, cofactors, used_lu)
+    end if
+  end subroutine occupied_cofactors
+
+  subroutine occupied_cofactors_lu(s, cofactors, used_lu)
+    use precision, only: dp
     use oqp_linalg, only: dgetrf, dgecon, dgetrs
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     implicit none
@@ -645,7 +673,7 @@ contains
         call ov_exact(cofactors(i,j), i, j, 0, 0, s, 1, n-1, 1)
       end do
     end do
-  end subroutine occupied_cofactors
+  end subroutine occupied_cofactors_lu
 
   subroutine ov_exact(temp1, i1, i2, ia1, ia2, s_mo, ilow, noc, itype)
 
