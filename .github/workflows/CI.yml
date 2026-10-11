@@ -212,6 +212,10 @@ jobs:
               exit 1
             fi
 
+         - name: Check MP2 density allocation failures
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           run: python tests/native/run_mp2_density_allocation_failure.py
+
          - name: Check linked TagArray allocation and cleanup
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            env:
