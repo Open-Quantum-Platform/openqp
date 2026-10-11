@@ -471,6 +471,12 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
  * determinant encoding, in which case the caller falls back to Python. */
 int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
     double *stack);
+/* Spin-free active-space density-matrix engine: dm1, dm2, dm3, and the
+   contracted f3ca/f3ac intermediates from one CI vector (rdm_kernel.F90).
+   dm4 is freed before return.  Returns 0 on success. */
+int64_t nevpt2_make_f3(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, const double *h2e, double *dm1, double *dm2,
+    double *dm3, double *f3ca, double *f3ac);
 /* Determinant-space bookkeeping and mean-field Fock of the PT2 path
  * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
  * 2*norb <= 62.  pt2_external_indices returns the number of external
@@ -518,6 +524,51 @@ void nevpt2_a12(int32_t nact, const double *h1e, const double *h2e,
     const double *dm2, const double *dm3, double *a12);
 void nevpt2_a13(int32_t nact, const double *h1e, const double *h2e,
     const double *dm1, const double *dm2, const double *dm3, double *a13);
+/* Remaining Koopmans intermediates: hdm1 (hole 1-RDM), a17/a19/a23/a25
+ * (Si/Sr/Sij/Srs intermediates), a3 (Sijr), k27 (Srsi). */
+void nevpt2_hdm1(int32_t nact, const double *dm1, double *hdm1);
+void nevpt2_hdm2(int32_t nact, const double *dm1, const double *dm2, double *hdm2);
+void nevpt2_a17(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm2, const double *dm3, double *a17);
+void nevpt2_a19(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *a19);
+void nevpt2_a23(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *dm3, double *a23);
+void nevpt2_a25(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *a25);
+void nevpt2_a3(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *hdm1, double *a3);
+void nevpt2_k27(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, double *k27);
+void nevpt2_sijrs(int32_t ncore, int32_t nvirt, const double *g,
+    const double *e_core, const double *e_virt, double *norm, double *energy);
+void nevpt2_srs(int32_t nact, int32_t nvirt, const double *h2e_v,
+    const double *rm2, const double *a7, double *norm, double *energy);
+void nevpt2_sij(int32_t nact, int32_t ncore, const double *h2e_v,
+    const double *hdm2, const double *a9, double *norm, double *energy);
+
+/* SC-NEVPT2 Koopmans subspace final contractions (nevpt2_koopmans.F90).
+ * Each contracts pre-computed intermediates with two-electron integral blocks.
+ * norm and energy have the shape indicated in each comment. */
+void nevpt2_sijr(int32_t nvirt, int32_t ncore, int32_t nact, const double *h2e_v,
+    const double *hdm1, const double *a3, double *norm, double *energy);
+void nevpt2_srsi(int32_t nvirt, int32_t ncore, int32_t nact, const double *h2e_v,
+    const double *dm1, const double *k27, double *norm, double *energy);
+void nevpt2_sir(int32_t nvirt, int32_t ncore, int32_t nact,
+    const double *h2e_v1, const double *h2e_v2, const double *h1e_v,
+    const double *dm1, const double *dm2,
+    const double *a12, const double *a13, double *norm, double *energy);
+void nevpt2_sr(int32_t nvirt, int32_t nact,
+    const double *h2e_v, const double *h1e_v,
+    const double *a16, const double *a17, const double *a19,
+    const double *dm3, const double *dm2, const double *dm1,
+    double *norm, double *energy);
+void nevpt2_si(int32_t ncore, int32_t nact,
+    const double *h2e_v, const double *h1e_v,
+    const double *a22, const double *a23, const double *a25,
+    const double *dm3_h, const double *dm2_h, const double *dm1_h,
+    double *norm, double *energy);
+
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
  * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
  * Fock above. */
@@ -904,3 +955,11 @@ void espf_op_corr(struct oqp_handle_t *inf);
 void form_esp_charges(struct oqp_handle_t *inf);
 void grad_esp_qmmm(struct oqp_handle_t *inf);
 void grad_esp_qmmm_excited(struct oqp_handle_t *inf);
+
+/* Fold the two-electron trace into the one-body Hamiltonian for NEVPT2
+ * Koopmans intermediates.
+ * h1e_folded[m,n] = h1e[m,n] - sum_j h2e[m,j,j,n]
+ * All arrays are [nact,nact] (h1e, h1e_folded) or [nact,nact,nact,nact] (h2e)
+ * in C order.  Declared in source/modules/nevpt2_koopmans.F90. */
+void nevpt2_fold_h1e(int32_t nact, const double *h1e, const double *h2e,
+                     double *h1e_folded);
