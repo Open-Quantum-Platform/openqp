@@ -120,29 +120,33 @@ contains
   end subroutine par_env_t_init
 
 !##################################
-!> @brief How many ranks of this communicator share the caller's node.
+!> @brief Conservative rank count for replicated-memory budgets.
 !>
 !> Anything that sizes a replicated allocation against the machine's memory
 !> needs this: available memory is reported per node, but a replicated array
 !> is paid for once per rank on that node, so a per-rank estimate compared
 !> against a node-wide limit passes on every rank at once and still exceeds
-!> the node.  Returns 1 without MPI, or when MPI cannot answer.
+!> the node. Use the whole communicator as an upper bound: a shared-memory
+!> split can incorrectly report singleton groups for co-located ranks. On
+!> multiple nodes this can overestimate memory and refuse a feasible allocation.
+!> Returns 1 without MPI; failure to determine the MPI size is fatal.
   function par_env_t_local_size(self) result(n)
     class(par_env_t), intent(inout) :: self
     integer :: n
 #ifdef ENABLE_MPI
-    integer(PARALLEL_INT) :: node_comm, local_n, ierr
+    integer(PARALLEL_INT) :: world_n, ierr, abort_ierr
 #endif
     n = 1
 #ifdef ENABLE_MPI
     if (.not. self%use_mpi) return
-    call MPI_Comm_split_type(self%comm, MPI_COMM_TYPE_SHARED, &
-                             int(0, kind=PARALLEL_INT), MPI_INFO_NULL, &
-                             node_comm, ierr)
-    if (ierr /= 0) return
-    call MPI_Comm_size(node_comm, local_n, ierr)
-    if (ierr == 0 .and. local_n >= 1) n = int(local_n)
-    call MPI_Comm_free(node_comm, ierr)
+    world_n = 0
+    call MPI_Comm_size(self%comm, world_n, ierr)
+    if (ierr /= MPI_SUCCESS .or. world_n < 1) then
+      ! self%comm may itself be invalid; terminate the valid world group.
+      call MPI_Abort(MPI_COMM_WORLD, int(1, kind=PARALLEL_INT), abort_ierr)
+      error stop 'cannot determine MPI rank count for memory accounting'
+    end if
+    n = int(world_n)
 #endif
   end function par_env_t_local_size
 !##################################
