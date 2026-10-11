@@ -163,6 +163,30 @@ def test_w_encoding_limit_and_reordered_determinants():
                                expected, rtol=0, atol=1e-14)
 
 
+def test_amplitude_chunk_boundary_and_partial_last_chunk():
+    """Cross the real 128 MiB x budget with 36 determinants, not a large CAS."""
+    nact = 4
+    dets, stack = _excitation_matrices_python(nact, 2, 2)
+    ndet = len(dets)
+    chunk_pairs = 16777216 // (nact * nact * ndet)
+    npar = chunk_pairs + 1
+    rng = np.random.default_rng(718)
+    ci = rng.normal(size=ndet)
+    ci /= np.linalg.norm(ci)
+    wmat = _mf_wmat(nact, dets, ci)
+    f = rng.normal(size=(npar, nact, nact))
+    g = rng.normal(size=(npar,) + (nact,) * 4)
+    vecs = np.linalg.qr(rng.normal(size=(ndet, ndet)))[0]
+    actual = _mf_hess_amp(dets, f, g, wmat, vecs)
+    dense = _lib_hess_amp(stack, f, g, wmat, vecs)
+    np.testing.assert_allclose(actual, dense, rtol=0, atol=1e-13 * np.abs(dense).max())
+    reference_w = np.tensordot(stack, ci, axes=([3], [0]))
+    for k in [0, chunk_pairs - 1, chunk_pairs]:
+        reference = _apply_active_operator(f[k], g[k], stack, reference_w) @ vecs
+        np.testing.assert_allclose(actual[k], reference, rtol=0,
+                                   atol=1e-13 * max(1.0, np.abs(reference).max()))
+
+
 @pytest.mark.parametrize('nact,nelec,expected_mode', [(5, (3, 2), 0), (6, (3, 3), 1)])
 def test_production_crossover_and_context_lifetime(nact, nelec, expected_mode):
     """100/400 determinants select opposite sides of the production 4 MiB rule."""
@@ -172,7 +196,7 @@ def test_production_crossover_and_context_lifetime(nact, nelec, expected_mode):
     lib, ffi = _hess_amp_backend()
     assert hasattr(lib, 'casscf_anhess_selftest')
     n = nact + 1
-    dets = _as_i64c(_determinants(nact, *nelec))
+    dets = _as_i64c(_determinants(nact, nelec))
     pairs = np.asarray(_nonredundant_pairs(0, nact, n), dtype=np.int32)
     rng = np.random.default_rng(501 + nact)
     h1e = np.diag(np.linspace(-1, 2, n)) + 0.02 * rng.normal(size=(n, n))

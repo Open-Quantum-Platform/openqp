@@ -47,7 +47,7 @@ contains
 
   !> Binary search returning position or -1.
   pure subroutine mf_bsearch(n, keys, key, pos)
-    integer(i8), intent(in) :: n, keys(0:), key
+    integer(i8), intent(in) :: n, keys(0:n-1), key
     integer(i8), intent(out) :: pos
     integer(i8) :: lo, hi, mid
     lo = 0_i8
